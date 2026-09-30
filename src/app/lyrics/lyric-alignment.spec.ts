@@ -1,4 +1,4 @@
-import { alignLyrics, basicNormalize, guessLanguage, TimedWord } from './lyric-alignment';
+import { alignLyrics, basicNormalize, guessLanguage, TimedWord, trimLongOnsets, wordsToCues } from './lyric-alignment';
 
 /** One word per char, 0.3s each, starting at `start`. */
 const heard = (text: string, start: number): TimedWord[] =>
@@ -63,6 +63,27 @@ describe('guessLanguage', () => {
 });
 
 describe('alignLyrics with misheard passages', () => {
+  it('does not compress a misheard chorus when later lyrics extend past the preview', () => {
+    const prefix = ['abcdefghijklmnop', '副歌甲句', '副歌乙句'];
+    const words = [...heard(prefix[0], 2), ...heard('012345678901', 20)];
+    const lines = [...prefix, ...Array(10).fill('這是預覽結束之後才會唱到的段落')];
+    const cues = alignLyrics(lines, words, basicNormalize, { start: 0, end: 60 });
+    expect(cues[0].start).toBeCloseTo(1.7);
+    expect(cues[1].start).toBeCloseTo(19.7);
+    expect(cues[2].start).toBeCloseTo(20.9);
+    expect(cues[1].end).toBeGreaterThan(cues[1].start);
+    expect(cues[2].end).toBeGreaterThan(cues[2].start);
+    expect(cues[4].start).toBeGreaterThanOrEqual(60);
+  });
+
+  it('does not reuse the last heard character for extra trailing lines', () => {
+    const cues = alignLyrics(['abcdefgh', '甲', '乙', '丙'], [...heard('abcdefgh', 2), ...heard('01', 20)], basicNormalize, { start: 0, end: 60 });
+    expect(cues[1].start).toBeCloseTo(19.7);
+    expect(cues[2].start).toBeCloseTo(20);
+    expect(cues[2].end).toBeGreaterThan(cues[2].start);
+    expect(cues[3].start).toBeGreaterThanOrEqual(60);
+  });
+
   it('maps unmatched trailing lines onto the vocals that were heard instead of pushing them out', () => {
     const lines = ['大膽的愛勇敢的愛', '手心貼手心', '一起心電心', '街上的情侶'];
     // Chorus 2..4 misheard as unrelated characters, but the voice is clearly there from 20s on.
@@ -90,5 +111,35 @@ describe('alignLyrics across an instrumental break', () => {
     const words = [...heard('第一句歌詞', 3), { text: '嗯', start: 20, end: 20.3 }, ...heard('第三句歌詞', 30)];
     const cues = alignLyrics(lines, words, basicNormalize, { start: 0, end: 60 });
     expect(cues[1].start).toBeGreaterThanOrEqual(19.5);
+  });
+});
+
+describe('wordsToCues', () => {
+  const w = (text: string, start: number, end: number) => ({ text, start, end });
+
+  it('breaks lines on pauses and joins spaced words verbatim', () => {
+    const cues = wordsToCues([w(' Hello', 1, 1.4), w(' world', 1.5, 2), w(' again', 4, 4.5), w(' ...', 4.6, 4.7)], { start: 0, end: 10 });
+    expect(cues).toEqual([
+      { start: 0.7, end: 2, text: 'Hello world' },
+      { start: 3.7, end: 4.5, text: 'again' },
+    ]);
+  });
+
+  it('caps CJK line width and clamps to the window', () => {
+    const chars = Array.from('一二三四五六七八九十一二三四五六', (ch, i) => w(ch, 10 + i * 0.2, 10.2 + i * 0.2));
+    const cues = wordsToCues(chars, { start: 10, end: 13 });
+    expect(cues.map((c) => c.text)).toEqual(['一二三四五六七八九十一二三四', '五六']);
+    expect(cues[0].start).toBe(10);
+    expect(cues[1].end).toBe(13);
+  });
+});
+
+describe('trimLongOnsets', () => {
+  it('pulls a word stretched over an instrumental intro back to near its end', () => {
+    const w = (text: string, start: number, end: number) => ({ text, start, end });
+    const [first, second] = trimLongOnsets([w("You're", 5.12, 16.94), w('just', 16.94, 17.46)]);
+    expect(first.start).toBeCloseTo(15.94);
+    expect(first.end).toBe(16.94);
+    expect(second).toEqual(w('just', 16.94, 17.46));
   });
 });

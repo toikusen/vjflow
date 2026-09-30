@@ -9,5 +9,6 @@ export interface WhisperRequest {
 
 export type WhisperResponse =
   | { id: number; type: 'progress'; stage: 'download' | 'transcribe'; progress?: number }
-  | { id: number; type: 'result'; words: TimedWord[] }
+  /** `language` is the one actually used (detected when the request had none). */
+  | { id: number; type: 'result'; words: TimedWord[]; language: string }
   | { id: number; type: 'error'; message: string };

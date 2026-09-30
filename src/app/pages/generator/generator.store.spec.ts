@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { AudioAnalysis } from '../../audio/audio-analysis.model';
+import { LoadedAudio } from '../../audio/audio-loader.service';
+import { LyricAlignerService } from '../../lyrics/lyric-aligner.service';
 import { GENERATION_POLICY, GenerationPolicy, GenerationQuote, openAccessPolicy } from '../../vj/generation-policy';
 import { GeneratorStore } from './generator.store';
 
@@ -63,5 +65,37 @@ describe('GeneratorStore generation length', () => {
     await store.generate();
     expect(calls.filter((c) => c.mode === 'full')).toHaveLength(1);
     expect(store.quotes()!.full.credits).toBe(3);
+  });
+});
+
+describe('GeneratorStore automatic lyrics', () => {
+  function setupWithAligner() {
+    const align = vi.fn(async () => [{ start: 1, end: 2, text: '聽到的歌詞' }]);
+    TestBed.configureTestingModule({
+      providers: [GeneratorStore, { provide: GENERATION_POLICY, useValue: openAccessPolicy }, { provide: LyricAlignerService, useValue: { align, cancel: vi.fn() } }],
+    });
+    const store = TestBed.inject(GeneratorStore);
+    store.audio.set({ buffer: {} } as LoadedAudio);
+    store.analysis.set(analysis);
+    store.state.set('READY');
+    return { store, align };
+  }
+
+  it('recognizes lyrics from the vocals when none are entered', async () => {
+    const { store, align } = setupWithAligner();
+    await store.generate();
+    await vi.waitFor(() => expect(store.lyricTiming()).toBe('transcribed'));
+    expect(align).toHaveBeenCalledWith(expect.anything(), expect.anything(), [], expect.anything(), expect.any(Function));
+    expect(store.project()!.lyrics!.map((c) => c.text)).toEqual(['聽到的歌詞']);
+    await store.generate();
+    expect(align).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips recognition when turned off', async () => {
+    const { store, align } = setupWithAligner();
+    store.autoLyrics.set(false);
+    await store.generate();
+    expect(align).not.toHaveBeenCalled();
+    expect(store.lyricTiming()).toBeNull();
   });
 });

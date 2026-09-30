@@ -20,6 +20,18 @@ const DISPLAY_LEAD = 0.3;
 /** A misheard (substituted) char may define a line edge only this close to the nearest exact match. */
 const MAX_SUBSTITUTION_REACH = 3;
 
+/** Longest plausible time from a word's onset; held notes stretch the end, not the start. */
+const MAX_ONSET_SECONDS = 1;
+
+/**
+ * Whisper often stretches the first word after an instrumental passage back to the chunk start
+ * (e.g. 5.1 s → 16.9 s for a word sung at 16.4 s), which would show the line during the intro.
+ * ponytail: fixed cap; use a vocal-activity detector if held-from-onset words show up late.
+ */
+export function trimLongOnsets(words: TimedWord[]): TimedWord[] {
+  return words.map((w) => (w.end - w.start > MAX_ONSET_SECONDS ? { ...w, start: w.end - MAX_ONSET_SECONDS } : w));
+}
+
 /** Lowercase and drop everything except letters/digits (any script). */
 export const basicNormalize: Normalizer = (text) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
 
@@ -121,9 +133,6 @@ function overlapAlign(a: string[], b: string[]): { paired: Int32Array; exact: Ui
 
 type HeardChar = { ch: string; start: number; end: number };
 
-/** Trailing lines may claim at most this many lyric chars per heard char before spilling past the window. */
-const TAIL_CAPACITY = 1.25;
-
 /**
  * Places lines the alignment couldn't trust. Where the recognizer still heard *something* (misheard
  * words are real vocal onsets), lines are mapped onto those heard chars by character position;
@@ -159,10 +168,12 @@ function fillGaps(
     // Only trust heard chars as a map if they actually span the gap; sparse blips would crush lines together.
     const spansGap = voice.length >= 2 && (trailing || voice[voice.length - 1].start - voice[0].start >= (to - from) * 0.5);
     if (spansGap) {
-      const scale = trailing ? voice.length / Math.max(total, voice.length) : voice.length / total;
+      // ponytail: without a following anchor, assume one heard char per lyric char;
+      // use phoneme alignment if misrecognition changes the syllable count substantially.
+      const scale = trailing ? 1 : voice.length / total;
       let cum = 0;
       for (const i of run) {
-        if (trailing && cum >= voice.length * TAIL_CAPACITY) {
+        if (trailing && cum >= voice.length) {
           overflowAt = i;
           break;
         }
@@ -199,4 +210,31 @@ function fillGaps(
     const end = Math.max(Math.min(next, ownEnd), Math.min(next, starts[i] + 1));
     return { start: starts[i], end, text };
   });
+}
+
+/** A pause this long between recognized words starts a new line. */
+const LINE_BREAK_GAP = 0.7;
+/** Visual width cap per line: CJK chars count 2, others 1. */
+const MAX_LINE_WIDTH = 28;
+
+/**
+ * Builds lyric lines straight from ASR words (no user lyrics): breaks on pauses or when a line
+ * gets too wide. Word texts carry their own leading spaces for spaced languages.
+ */
+export function wordsToCues(words: TimedWord[], window: { start: number; end: number }): LyricCue[] {
+  const width = (text: string) => Array.from(text).reduce((n, ch) => n + (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(ch) ? 2 : 1), 0);
+  const lines: TimedWord[][] = [];
+  for (const w of [...words].sort((a, b) => a.start - b.start)) {
+    if (!basicNormalize(w.text)) continue;
+    const line = lines.at(-1);
+    const prev = line?.at(-1);
+    const text = line?.map((x) => x.text).join('') ?? '';
+    if (line && prev && w.start - prev.end < LINE_BREAK_GAP && width(text + w.text) <= MAX_LINE_WIDTH) line.push(w);
+    else lines.push([w]);
+  }
+  return lines.map((line) => ({
+    start: Math.max(window.start, line[0].start - DISPLAY_LEAD),
+    end: Math.min(window.end, line[line.length - 1].end),
+    text: line.map((w) => w.text).join('').trim(),
+  }));
 }

@@ -6,9 +6,10 @@ export interface LyricCue {
 
 /**
  * 'timestamped' = from LRC tags; 'aligned' = automatic alignment to the vocals;
+ * 'transcribed' = no lyrics given, text and timing both recognized from the vocals;
  * 'provisional' = evenly spread placeholder (fallback when alignment is unavailable).
  */
-export type LyricTiming = 'timestamped' | 'aligned' | 'provisional';
+export type LyricTiming = 'timestamped' | 'aligned' | 'transcribed' | 'provisional';
 
 export interface ParsedLyrics {
   cues: LyricCue[];

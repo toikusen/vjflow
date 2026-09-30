@@ -55,6 +55,8 @@ export class GeneratorStore {
   });
   readonly lyricsText = signal('');
   readonly lyricPreset = signal<LyricPreset | 'auto'>('auto');
+  /** With no lyrics entered, recognize them from the vocals. */
+  readonly autoLyrics = signal(true);
   readonly lyricTiming = signal<LyricTiming | null>(null);
   readonly alignment = signal<AlignmentStatus>({ status: 'idle' });
   readonly project = signal<VJProject | null>(null);
@@ -73,6 +75,7 @@ export class GeneratorStore {
     this.project.set(null);
     this.error.set(null);
     this.alignRun++;
+    this.aligner.cancel();
     this.alignedFor = '';
     this.lyricCues = undefined;
     this.lyricTiming.set(null);
@@ -112,17 +115,20 @@ export class GeneratorStore {
       const lyrics = text ? this.lyricParser.parse(text, analysis.duration) : null;
       const key = `${this.audioKey}|${text}`;
       const inFlight = this.alignment().status === 'running' && this.aligningFor === key && covers(this.aligningRange, this.range);
-      const reuseAligned = inFlight || (this.alignedFor === key && this.lyricTiming() === 'aligned' && covers(this.alignedRange, this.range));
-      const needsAlignment = !reuseAligned && lyrics?.timing === 'provisional' && lyrics.cues.length > 0;
+      const wantsAsr = lyrics ? lyrics.timing === 'provisional' && lyrics.cues.length > 0 : this.autoLyrics();
+      const done = this.lyricTiming() === 'aligned' || this.lyricTiming() === 'transcribed';
+      const reuseAligned = wantsAsr && (inFlight || (this.alignedFor === key && done && covers(this.alignedRange, this.range)));
+      const needsAlignment = wantsAsr && !reuseAligned;
       if (!reuseAligned) {
         this.alignRun++;
+        this.aligner.cancel();
         this.lyricCues = needsAlignment ? undefined : lyrics?.cues;
         this.lyricTiming.set(needsAlignment ? null : lyrics?.cues.length ? lyrics.timing : null);
         this.alignment.set({ status: 'idle' });
       }
       this.rebuildProject();
       this.state.set(wasPlaying ? 'PLAYING' : 'PREVIEW_READY');
-      if (needsAlignment) void this.alignLyrics(text, lyrics.cues.map((c) => c.text));
+      if (needsAlignment) void this.alignLyrics(text, lyrics?.cues.map((c) => c.text) ?? []);
     } catch (err) {
       this.fail(err);
     }
@@ -144,7 +150,7 @@ export class GeneratorStore {
     this.project.set(this.engine.createProject({ analysis, styleId: this.styleId(), lyrics: this.lyricCues, lyricPreset: this.lyricPreset(), mode: this.mode(), range: this.range }));
   }
 
-  /** Runs automatic alignment in the background; the preview keeps playing meanwhile. */
+  /** Runs automatic alignment (or, with no `lines`, recognition) in the background; the preview keeps playing meanwhile. */
   private async alignLyrics(text: string, lines: string[]): Promise<void> {
     const audio = this.audio();
     const analysis = this.analysis();
@@ -160,15 +166,15 @@ export class GeneratorStore {
       });
       if (run !== this.alignRun) return;
       this.lyricCues = cues;
-      this.lyricTiming.set('aligned');
+      this.lyricTiming.set(lines.length ? 'aligned' : 'transcribed');
       this.alignedFor = `${this.audioKey}|${text}`;
       this.alignedRange = range;
       this.alignment.set({ status: 'done' });
     } catch (err) {
       if (run !== this.alignRun) return;
       console.error('[lyrics] alignment failed, falling back to provisional timing', err);
-      this.lyricCues = this.lyricParser.parse(lines.join('\n'), analysis.duration).cues;
-      this.lyricTiming.set('provisional');
+      this.lyricCues = lines.length ? this.lyricParser.parse(lines.join('\n'), analysis.duration).cues : undefined;
+      this.lyricTiming.set(lines.length ? 'provisional' : null);
       this.alignment.set({ status: 'error', message: err instanceof Error ? err.message : String(err) });
     }
     // Swapping the project mid-export would restart the recording's visuals; the next Generate picks it up.

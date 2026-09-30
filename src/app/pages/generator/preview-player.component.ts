@@ -83,12 +83,7 @@ export class PreviewPlayerComponent {
 
   private onTick(ticks: number): void {
     if (!this.ready()) return;
-    const { end } = this.range();
-    if (!this.audio.paused && this.audio.currentTime >= end) {
-      this.pause();
-      this.audio.currentTime = end;
-      if (this.exporting()) this.exporter.stop();
-    }
+    if (this.audio.ended || this.audio.currentTime >= this.range().end) this.onRangeEnd();
     this.time.set(this.audio.paused ? this.renderer.currentTime : this.audio.currentTime);
     if (this.debug && ticks % 3 === 0) this.stats.set({ ...this.renderer.stats });
   }
@@ -123,6 +118,18 @@ export class PreviewPlayerComponent {
     this.store.volume.set(Number((event.target as HTMLInputElement).value));
   }
 
+  /**
+   * Single place that handles reaching the end of the play range — by polling or the `ended` event.
+   * When the range ends at the track end the element pauses itself, so this must not require `!paused`.
+   */
+  protected onRangeEnd(): void {
+    const recording = this.exporting();
+    if (this.audio.paused && !recording && this.store.state() !== 'PLAYING') return;
+    this.pause();
+    if (!this.audio.ended) this.audio.currentTime = this.range().end;
+    if (recording) this.exporter.stop();
+  }
+
   /** Native pause (e.g. media ended, OS media keys) must stop the visuals too. */
   protected onAudioPaused(): void {
     if (this.store.state() === 'PLAYING') this.pause();
@@ -134,12 +141,24 @@ export class PreviewPlayerComponent {
     this.pause();
     this.exportCancelled = false;
     this.store.setExporting(true);
+    // Every await below is a point where the user may have pressed Cancel.
+    const abortIfCancelled = () => {
+      if (!this.exportCancelled) return false;
+      this.exporter.stop();
+      this.audio.pause();
+      this.renderer.pause();
+      this.store.setExporting(false);
+      return true;
+    };
     try {
       const { start } = this.range();
       await this.seekAudio(start);
+      if (abortIfCancelled()) return;
       this.renderer.seek(start);
       const { done, format } = await this.exporter.start(canvas, this.audio, this.store.volume());
+      if (abortIfCancelled()) return;
       await this.audio.play();
+      if (abortIfCancelled()) return;
       this.renderer.play();
       const blob = await done;
       if (!this.exportCancelled) this.download(blob, `vjflow-${this.project().styleId}-${this.project().mode}.${format.ext}`);

@@ -69,6 +69,10 @@
         }
       </select>
     </label>
+    <label class="inline">
+      <input type="checkbox" [checked]="store.autoLyrics()" (change)="store.autoLyrics.set($any($event.target).checked)" />
+      沒填歌詞時自動辨識
+    </label>
   </div>
   @switch (store.alignment().status) {
     @case ('running') {
@@ -76,15 +80,23 @@
         <p class="hint">首次使用：正在下載語音辨識模型（約 250 MB，之後會快取）… {{ alignProgress() | percent }}</p>
         <div class="progress"><div class="bar" [style.width.%]="alignProgress() * 100"></div></div>
       } @else {
-        <p class="hint">🎤 正在聆聽歌聲並自動對齊歌詞（{{ scopeLabel() }}），完成後會自動套用…</p>
+        <p class="hint">🎤 正在聆聽歌聲並{{ store.lyricsText().trim() ? '自動對齊歌詞' : '辨識歌詞' }}（{{ scopeLabel() }}），完成後會自動套用…</p>
         <div class="progress indeterminate"><div class="bar"></div></div>
       }
     }
     @case ('done') {
-      <p class="hint ok">✓ 歌詞時間已依歌聲自動對齊。</p>
+      @if (store.lyricTiming() === 'transcribed') {
+        <p class="hint">已從歌聲自動辨識歌詞，可能有錯字；要修正請把正確歌詞貼上再生成一次。</p>
+      } @else {
+        <p class="hint">歌詞時間已自動安排；辨識不清楚的段落會估算時間，請播放確認。</p>
+      }
     }
     @case ('error') {
-      <p class="hint warn">自動對齊失敗，暫以平均分配時間顯示。（{{ alignError() }}）</p>
+      @if (store.lyricTiming() === 'provisional') {
+        <p class="hint warn">自動對齊失敗，暫以平均分配時間顯示。（{{ alignError() }}）</p>
+      } @else {
+        <p class="hint warn">自動辨識歌詞失敗。（{{ alignError() }}）</p>
+      }
     }
   }
   @if (store.lyricTiming() === 'timestamped') {

@@ -1,0 +1,89 @@
+:host {
+  display: grid;
+  gap: 14px;
+}
+
+.stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: #000;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgb(0 0 0 / 0.5);
+}
+
+.stage-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.debug {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  font: 12px/1.4 ui-monospace, Menlo, monospace;
+  color: #7fffb2;
+  background: rgb(0 0 0 / 0.65);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+.controls,
+.export {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.clock {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-width: 88px;
+}
+
+.seek {
+  flex: 1;
+  min-width: 160px;
+  accent-color: var(--accent);
+}
+
+.progress {
+  flex: 1;
+  min-width: 160px;
+  height: 8px;
+  background: var(--surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+
+  .bar {
+    height: 100%;
+    background: var(--accent);
+  }
+}
+
+.volume {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  input {
+    width: 90px;
+    accent-color: var(--accent);
+  }
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 13px;
+
+  &.warn {
+    color: var(--warn);
+  }
+}

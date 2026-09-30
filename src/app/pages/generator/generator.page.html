@@ -1,0 +1,139 @@
+<header class="hero">
+  <h1>VJFlow</h1>
+  <p>上傳音樂、選擇風格，自動生成跟著節奏變化的 Live House VJ。所有處理都在你的瀏覽器內完成。</p>
+</header>
+
+@if (store.error(); as error) {
+  <div class="alert" role="alert">
+    <strong>發生錯誤：</strong> {{ error }}
+  </div>
+}
+
+<section class="panel">
+  <h2><span class="step">1</span> 上傳音檔</h2>
+  <label
+    class="drop"
+    [class.disabled]="!store.canUpload()"
+    (dragover)="$event.preventDefault()"
+    (drop)="onDrop($event)"
+  >
+    <input type="file" accept=".mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/mp4,audio/x-m4a" (change)="onFileChange($event)" [disabled]="!store.canUpload()" />
+    <span>將 MP3／WAV／M4A 拖曳到這裡，或<u>點此選擇檔案</u></span>
+  </label>
+
+  @switch (store.state()) {
+    @case ('AUDIO_LOADING') {
+      <p class="status">正在解碼音檔…</p>
+    }
+    @case ('ANALYZING') {
+      <p class="status">正在分析歌曲… {{ store.analysisProgress() | percent }}</p>
+      <div class="progress"><div class="bar" [style.width.%]="store.analysisProgress() * 100"></div></div>
+    }
+  }
+
+  @if (store.audio(); as audio) {
+    <div class="file">
+      <div>
+        <div class="filename">{{ audio.file.name }}</div>
+        <div class="meta">
+          {{ formatDuration(audio.duration) }}
+          @if (store.analysis(); as a) {
+            · 約 {{ a.tempo | number: '1.0-0' }} BPM · {{ a.sections.length }} 個段落 · {{ a.beats.length }} 個節拍
+          }
+        </div>
+      </div>
+      <audio #sourceAudio controls [src]="audio.url" [volume]="store.volume()" (volumechange)="store.volume.set(sourceAudio.volume)"></audio>
+    </div>
+  }
+</section>
+
+<section class="panel">
+  <h2><span class="step">2</span> VJ 風格</h2>
+  <app-style-picker [selected]="store.styleId()" [disabled]="store.state() === 'EXPORTING'" (select)="store.selectStyle($event)" />
+</section>
+
+<section class="panel">
+  <h2><span class="step">3</span> 歌詞 <small>（選填）</small></h2>
+  <textarea
+    rows="5"
+    placeholder="貼上歌詞（選填）— 純文字，或 LRC 格式如 [00:12.50]Hello"
+    [value]="store.lyricsText()"
+    (input)="onLyricsInput($event)"
+  ></textarea>
+  <div class="row">
+    <label class="inline">
+      歌詞樣式
+      <select [value]="store.lyricPreset()" (change)="onLyricPresetChange($event)">
+        @for (p of lyricPresets; track p.id) {
+          <option [value]="p.id">{{ p.label }}</option>
+        }
+      </select>
+    </label>
+  </div>
+  @switch (store.alignment().status) {
+    @case ('running') {
+      @if (alignStage() === 'download') {
+        <p class="hint">首次使用：正在下載語音辨識模型（約 250 MB，之後會快取）… {{ alignProgress() | percent }}</p>
+        <div class="progress"><div class="bar" [style.width.%]="alignProgress() * 100"></div></div>
+      } @else {
+        <p class="hint">🎤 正在聆聽歌聲並自動對齊歌詞（{{ scopeLabel() }}），完成後會自動套用…</p>
+        <div class="progress indeterminate"><div class="bar"></div></div>
+      }
+    }
+    @case ('done') {
+      <p class="hint ok">✓ 歌詞時間已依歌聲自動對齊。</p>
+    }
+    @case ('error') {
+      <p class="hint warn">自動對齊失敗，暫以平均分配時間顯示。（{{ alignError() }}）</p>
+    }
+  }
+  @if (store.lyricTiming() === 'timestamped') {
+    <p class="hint ok">✓ 使用 LRC 時間標記。</p>
+  }
+</section>
+
+<section class="panel generate">
+  @if (store.quotes(); as q) {
+    <div class="modes" role="radiogroup" aria-label="生成長度">
+      <button
+        type="button"
+        role="radio"
+        class="mode"
+        [class.selected]="store.mode() === 'preview'"
+        [attr.aria-checked]="store.mode() === 'preview'"
+        [disabled]="!store.canGenerate() && !!store.project()"
+        (click)="store.selectMode('preview')"
+      >
+        <span class="mode-title">前 {{ freeSeconds }} 秒預覽</span>
+        <span class="mode-meta">{{ formatDuration(q.preview.seconds) }} · {{ priceLabel(q.preview) }}</span>
+      </button>
+      <button
+        type="button"
+        role="radio"
+        class="mode"
+        [class.selected]="store.mode() === 'full'"
+        [attr.aria-checked]="store.mode() === 'full'"
+        [disabled]="q.full.seconds <= q.preview.seconds || (!store.canGenerate() && !!store.project())"
+        (click)="store.selectMode('full')"
+      >
+        <span class="mode-title">整首歌</span>
+        <span class="mode-meta">{{ formatDuration(q.full.seconds) }} · {{ priceLabel(q.full) }}</span>
+      </button>
+    </div>
+  }
+  <button type="button" class="btn primary big" (click)="store.generate()" [disabled]="!store.canGenerate()">
+    @if (store.state() === 'GENERATING') {
+      生成中…
+    } @else {
+      生成預覽
+    }
+  </button>
+  <span class="hint">切換風格或長度會立即重新生成，不需要重新分析音檔。</span>
+</section>
+
+@if (store.project(); as project) {
+  <section class="panel">
+    <h2><span class="step">4</span> 預覽 · {{ styleName() }} · {{ project.mode === 'full' ? '整首歌' : '前 ' + freeSeconds + ' 秒' }}</h2>
+    <app-preview-player [project]="project" [audioUrl]="store.audio()!.url" />
+  </section>
+}

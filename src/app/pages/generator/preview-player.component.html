@@ -1,0 +1,61 @@
+<div class="stage" #stage>
+  @if (!ready()) {
+    <div class="stage-loading">正在啟動繪圖引擎…</div>
+  }
+  @if (debug && stats(); as s) {
+    <pre class="debug">FPS     {{ s.fps }}
+time    {{ s.time | number: '1.2-2' }}
+energy  {{ s.energy | number: '1.2-2' }}
+bass    {{ s.bass | number: '1.2-2' }}
+mid     {{ s.mid | number: '1.2-2' }}
+treble  {{ s.treble | number: '1.2-2' }}
+scene   {{ s.scene }}</pre>
+  }
+</div>
+
+<audio #audio [src]="audioUrl()" preload="auto" [volume]="store.volume()" (pause)="onAudioPaused()"></audio>
+
+<div class="controls">
+  <button type="button" class="btn" (click)="play()" [disabled]="!ready() || playing() || exporting()">▶ 播放</button>
+  <button type="button" class="btn" (click)="pause()" [disabled]="!playing()">❚❚ 暫停</button>
+  <span class="clock">{{ format(time()) }} / {{ format(range().end) }}</span>
+  <input
+    class="seek"
+    type="range"
+    aria-label="預覽進度"
+    [min]="range().start"
+    [max]="range().end"
+    step="0.01"
+    [value]="time()"
+    [disabled]="!ready() || exporting()"
+    (input)="onSeekInput($event)"
+  />
+  <label class="volume">
+    🔊
+    <input
+      type="range"
+      aria-label="音量"
+      min="0"
+      max="1"
+      step="0.01"
+      [value]="store.volume()"
+      [disabled]="exporting()"
+      (input)="onVolumeInput($event)"
+    />
+  </label>
+</div>
+
+<div class="export">
+  @if (exporting()) {
+    <div class="progress" role="progressbar" [attr.aria-valuenow]="exportProgress() * 100">
+      <div class="bar" [style.width.%]="exportProgress() * 100"></div>
+    </div>
+    <span class="hint">即時錄製中… {{ exportProgress() * 100 | number: '1.0-0' }}%</span>
+    <button type="button" class="btn ghost" (click)="cancelExport()">取消</button>
+  } @else if (exportFormat) {
+    <button type="button" class="btn primary" (click)="exportPreview()" [disabled]="!ready()">⬇ 下載預覽（{{ exportFormat.ext.toUpperCase() }}）</button>
+    <span class="hint">即時錄製 {{ format(range().end - range().start) }}（需等同樣長的時間），含原始音訊。</span>
+  } @else {
+    <span class="hint warn">此瀏覽器無法錄製影片（不支援 MediaRecorder），請改用 Chrome、Edge 或 Firefox。</span>
+  }
+</div>

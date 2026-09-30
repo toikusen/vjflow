@@ -40,3 +40,33 @@ describe('analyzeAudio', () => {
     expect(getFeaturesAt(a, 30).energy).toBeGreaterThan(getFeaturesAt(a, 10).energy);
   });
 });
+
+/** Sum of sines, constant loudness. */
+function toneTrack(freqs: number[], seconds = 6, sampleRate = 22050): AudioBufferLike {
+  const data = new Float32Array(seconds * sampleRate);
+  for (let i = 0; i < data.length; i++) {
+    const t = i / sampleRate;
+    data[i] = freqs.length ? freqs.reduce((sum, f) => sum + Math.sin(2 * Math.PI * f * t), 0) / freqs.length : 0;
+  }
+  return { sampleRate, length: data.length, numberOfChannels: 1, getChannelData: () => data };
+}
+
+describe('analyzeAudio summary', () => {
+  it('puts a pure A4 into pitch class A', async () => {
+    const { chroma } = (await analyzeAudio(toneTrack([440]))).summary;
+    expect(chroma.indexOf(1)).toBe(9);
+  });
+
+  it('reports a higher centroid for brighter audio', async () => {
+    const dark = await analyzeAudio(toneTrack([200]));
+    const bright = await analyzeAudio(toneTrack([3000]));
+    expect(dark.summary.centroidHz).toBeGreaterThan(150);
+    expect(bright.summary.centroidHz).toBeGreaterThan(dark.summary.centroidHz * 5);
+  });
+
+  it('returns finite zeros for silence', async () => {
+    const { summary } = await analyzeAudio(toneTrack([]));
+    expect(summary.centroidHz).toBe(0);
+    expect(summary.chroma.every((v) => v === 0)).toBe(true);
+  });
+});

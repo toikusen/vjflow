@@ -20,6 +20,7 @@ export const ANIME_STYLE: VJStyle = {
     { type: 'flash', weight: 2 },
     { type: 'zoom', weight: 2 },
     { type: 'glitch', weight: 1 },
+    { type: 'fade', weight: 1 },
   ],
   impactTransition: 'flash',
   transitionDuration: 0.45,

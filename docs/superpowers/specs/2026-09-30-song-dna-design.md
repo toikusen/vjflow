@@ -113,10 +113,10 @@ export function computeSongProfile(a: AudioAnalysis): SongProfile;
 
 ```ts
 interface Look {
+  adaptive: boolean;        // false = 中性 Look，編排行為與現在相同
   arousal: number;          // 帶給場景編排算目標能量用
   dynamics: number;
   palettes: Record<EnergyTier, string[][]>;
-  transitionWeights: Record<TransitionType, number>;
   speedScale: number;       // 0.7 .. 1.3
   densityScale: number;     // 0.6 .. 1.4
   sceneLengthScale: number; // 0.7 .. 1.3
@@ -124,7 +124,7 @@ interface Look {
   grade: { saturation: number; contrast: number; brightness: number };
 }
 export function deriveLook(profile: SongProfile, style: VJStyle): Look;
-export const NEUTRAL_LOOK: (style: VJStyle) => Look; // 第 1 階段給非 EDM 風格使用
+export function neutralLook(style: VJStyle): Look; // 第 1 階段給非 EDM 風格使用
 export function effectiveHitThreshold(style: VJStyle, look: Look): number;
 ```
 
@@ -136,8 +136,8 @@ export function effectiveHitThreshold(style: VJStyle, look: Look): number;
   - 亮度 ±0.1（依 brightness）。
   - 背景色（palette[0]）只調亮度，維持風格的底色。
   - ponytail：HSL 的色相旋轉在感知上不均勻；若調出來的顏色不好看，再改用 OKLCH。
-- **轉場權重**：固定對照表 `TRANSITION_ENERGY = { fade 0.1, wipe 0.4, zoom 0.6, glitch 0.8, flash 0.9 }`。權重 = 風格原權重 × `fit(TRANSITION_ENERGY[t], arousal)`，其中 `fit(e, target) = max(0.05, exp(−(e − target)² / 0.08))`。
-  - 前提是每個風格都要有 `fade`：**EDM 與 Anime 各加入 `{ type: 'fade', weight: 1 }`**。高 arousal 時 fade 的 fit 很低，所以快歌的轉場大致不變；低 arousal 時 fade 會成為主要轉場。
+- **轉場權重**：固定對照表 `TRANSITION_ENERGY = { fade 0.1, wipe 0.4, zoom 0.6, glitch 0.8, flash 0.9 }`。權重 = 風格原權重 × `fit(TRANSITION_ENERGY[t], target)`，其中 `fit(e, target) = max(0.05, exp(−(e − target)² / 0.08))`。這裡的 `target` 是**每個場景的目標能量**（見第 4 節），不是整首歌的 arousal，所以同一首歌的主歌與副歌也會用不同的轉場。Look 因此不存轉場權重。
+  - 前提是每個風格都要有 `fade`：**EDM 加入 `{ type: 'fade', weight: 2 }`、Anime 加入 `{ type: 'fade', weight: 1 }`**。EDM 用 2 的原因是：flash／glitch 原權重各為 3，即使乘上最低係數 0.05，權重 1 的 fade 在慢歌中只佔約 49%，不夠「以 fade 為主」。高 arousal 時 fade 的 fit 很低，所以快歌的轉場大致不變；低 arousal 時 fade 會成為主要轉場。
 - **impact 門檻**：`effectiveHitThreshold = style.mapping.hitThreshold + look.hitThresholdOffset`。arousal 低時 offset 為正（門檻變高）。場景編排與即時渲染的 `hit` 判斷**都呼叫這個函式**，不可以各自計算。
 - **速度／密度／場景長度**：
   - `speedScale = 0.7 + 0.6·arousal`
@@ -159,7 +159,8 @@ export function effectiveHitThreshold(style: VJStyle, look: Look): number;
 - **轉場**
   - 強拍判斷改用 `effectiveHitThreshold(style, look)`。
   - 強拍時，只有在 `fit(TRANSITION_ENERGY[style.impactTransition], target) ≥ 0.5` 時才使用 `impactTransition`，否則照一般權重挑。慢歌 EDM 因此不會在場景切換時被強制用 flash。
-  - 其他情況用 `look.transitionWeights` 加權挑選。
+  - 其他情況依上述轉場權重挑選。
+- **中性 Look**（`adaptive: false`）：所有 fit 視為 1，tier 維持硬篩選，挑選結果與改動前相同。
 - `sceneLength` 乘上 `sceneLengthScale`。
 - `parameters.speed` 乘上 `speedScale`；新增 `parameters.density = densityScale`。
 

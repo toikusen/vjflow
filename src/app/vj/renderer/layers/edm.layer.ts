@@ -126,7 +126,7 @@ export class EdmLayer extends BaseLayer {
     this.glow.alpha = 0.35 + energy * 0.65;
     this.haze.alpha = 0.1 + bass * 0.25;
 
-    const count = this.sparks.emitCount(treble * treble * 90 * intensity, dt);
+    const count = this.sparks.emitCount(treble * treble * 90 * intensity * this.density, dt);
     for (let i = 0; i < count; i++) {
       const p = this.sparks.spawn();
       if (!p) break;
@@ -153,7 +153,7 @@ export class EdmLayer extends BaseLayer {
     this.each((g, i) => {
       const depth = (i / TUNNEL_RINGS + this.travel * 0.4) % 1;
       g.scale.set((0.05 + depth ** 2.2 * 13) * (1 + bass * 0.12));
-      g.rotation = dir * time * (0.2 + energy * 0.5) + i * 0.18;
+      g.rotation = dir * time * this.speed * (0.2 + energy * 0.5) + i * 0.18;
       g.alpha = depth < 0.1 ? depth * 10 : Math.sqrt(1 - depth);
     });
   }

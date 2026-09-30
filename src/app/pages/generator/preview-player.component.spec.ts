@@ -12,6 +12,7 @@ const analysis: AudioAnalysis = {
   frames: Array.from({ length: 60 }, (_, i) => ({ time: i * 0.5, energy: 0.5, bass: 0.5, mid: 0.5, treble: 0.5, spectralFlux: 0.2 })),
   beats: Array.from({ length: 60 }, (_, i) => i * 0.5),
   tempo: 120,
+  summary: { chroma: new Array(12).fill(0), centroidHz: 0 },
   sections: [{ start: 0, end: 30, energy: 0.5 }],
 };
 

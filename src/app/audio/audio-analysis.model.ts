@@ -17,6 +17,14 @@ export interface AudioSection {
   type?: SectionType;
 }
 
+/** Whole-track timbre/harmony summary used to derive the song profile. */
+export interface AudioSummary {
+  /** Mean magnitude per pitch class (C..B), normalized so max = 1; all zeros for silence. */
+  chroma: number[];
+  /** Mean spectral centroid in Hz over non-silent frames; 0 when the track is silent. */
+  centroidHz: number;
+}
+
 export interface AudioAnalysis {
   duration: number;
   /** Seconds between consecutive frames. */
@@ -27,6 +35,7 @@ export interface AudioAnalysis {
   /** Estimated tempo in BPM. */
   tempo: number;
   sections: AudioSection[];
+  summary: AudioSummary;
 }
 
 /** The subset of AudioBuffer the analyzer needs; lets tests pass synthetic buffers. */

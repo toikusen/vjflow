@@ -1,6 +1,8 @@
 import { inject, Injectable } from '@angular/core';
 import { AudioAnalysis } from '../audio/audio-analysis.model';
+import { computeSongProfile } from '../audio/song-profile';
 import { LyricCue, LyricPreset } from '../lyrics/lyric.model';
+import { deriveLook, neutralLook } from './look';
 import { hashString } from './seeded-random';
 import { VJ_STYLES } from './styles';
 import { GenerationMode, PlayRange, resolveRange } from './generation-policy';
@@ -13,6 +15,9 @@ export function analysisFingerprint(a: AudioAnalysis): number {
   for (let i = 0; i < a.frames.length; i += 16) sum += a.frames[i].energy;
   return hashString(`${a.duration.toFixed(3)}|${a.beats.length}|${sum.toFixed(4)}`);
 }
+
+// ponytail: phase 1 rolls song-adaptive looks out to EDM only; the rest keep their authored look until tuned.
+const ADAPTIVE_STYLES = new Set<VJStyleId>(['edm']);
 
 export interface ProjectInput {
   analysis: AudioAnalysis;
@@ -34,13 +39,17 @@ export class VjEngineService {
     const style = VJ_STYLES[styleId];
     const fingerprint = analysisFingerprint(analysis);
     const seed = hashString(`${fingerprint}|${styleId}|${variation}`);
+    const profile = computeSongProfile(analysis);
+    const look = ADAPTIVE_STYLES.has(styleId) ? deriveLook(profile, style) : neutralLook(style);
     return {
       id: `${fingerprint.toString(36)}-${styleId}-${variation}`,
       duration: analysis.duration,
       analysis,
       styleId,
       seed,
-      scenes: this.timeline.buildScenes(analysis, style, seed),
+      profile,
+      look,
+      scenes: this.timeline.buildScenes(analysis, style, seed, look),
       mode,
       range: range ?? resolveRange(mode, analysis.duration),
       lyrics: lyrics?.length ? lyrics : undefined,

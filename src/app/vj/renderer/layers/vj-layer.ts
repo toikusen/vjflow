@@ -28,6 +28,8 @@ export abstract class BaseLayer implements VjLayer {
   protected readonly colors: number[];
   protected readonly variant: number;
   protected readonly speed: number;
+  /** Multiplier for particle emit rates. */
+  protected readonly density: number;
 
   constructor(protected readonly deps: LayerDeps) {
     this.view.pivot.set(CENTER_X, CENTER_Y);
@@ -35,6 +37,7 @@ export abstract class BaseLayer implements VjLayer {
     this.colors = deps.scene.palette.map((c) => new Color(c).toNumber());
     this.variant = Number(deps.scene.parameters['variant'] ?? 0);
     this.speed = Number(deps.scene.parameters['speed'] ?? 1);
+    this.density = Number(deps.scene.parameters['density'] ?? 1);
   }
 
   abstract update(ctx: FrameContext): void;

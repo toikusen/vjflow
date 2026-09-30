@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { AudioAnalysis } from '../audio/audio-analysis.model';
 import { percentile } from '../audio/audio-analyzer.service';
 import { onsetStrengthAt } from '../audio/audio-features';
+import { effectiveHitThreshold, fit, Look, neutralLook, TRANSITION_ENERGY } from './look';
 import { createRng, pick, pickWeighted, Rng } from './seeded-random';
 import { VJStyle } from './styles/vj-style.interface';
 import { EnergyTier, TransitionType, VJScene } from './vj-project.model';
@@ -12,32 +13,43 @@ interface Segment {
   sectionType?: string;
 }
 
+const TIER_OFFSET: Record<EnergyTier, number> = { low: -1, mid: 0, high: 1 };
+
 /**
- * Deterministic rule-based scene planner: AudioAnalysis + VJStyle + seed → VJScene[].
+ * Deterministic rule-based scene planner: AudioAnalysis + VJStyle + Look + seed → VJScene[].
  * Same inputs always yield the same scenes; change the seed to "regenerate".
+ * Each scene aims at a target energy (song arousal, pushed by its tier as far as the song's
+ * dynamics allow); presets and transitions are weighted by how well they fit that target.
  */
-export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: number): VJScene[] {
+export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: number, look: Look = neutralLook(style)): VJScene[] {
   const rng = createRng(seed);
-  const segments = segmentTrack(analysis, style, rng);
+  const segments = segmentTrack(analysis, style, look, rng);
   const energies = segments.map((s) => segmentEnergy(analysis, s.start, s.end));
   const lowCut = percentile(energies, 0.34);
   const highCut = percentile(energies, 0.67);
   const spread = Math.max(...energies) - Math.min(...energies);
+  const fitTo = (energy: number, target: number) => (look.adaptive ? fit(energy, target) : 1);
+  const hitThreshold = effectiveHitThreshold(style, look);
 
   let prevPreset = '';
   return segments.map((seg, i): VJScene => {
     const e = energies[i];
     const tier: EnergyTier = spread < 0.08 ? 'mid' : e <= lowCut ? 'low' : e >= highCut ? 'high' : 'mid';
     const effectiveTier: EnergyTier = seg.sectionType === 'chorus' && tier === 'low' ? 'mid' : tier;
+    const target = Math.min(1, Math.max(0, look.arousal + TIER_OFFSET[effectiveTier] * (0.1 + 0.4 * look.dynamics)));
 
-    const candidates = style.presets.filter((p) => p.tiers.includes(effectiveTier) && p.id !== prevPreset);
-    const preset = pick(rng, candidates.length ? candidates : style.presets.filter((p) => p.id !== prevPreset)).id;
+    const others = style.presets.filter((p) => p.id !== prevPreset);
+    const weighted = (others.length ? others : style.presets)
+      .map((p) => ({ value: p.id, weight: fitTo(p.energy ?? 0.5, target) * (p.tiers.includes(effectiveTier) ? 1 : look.adaptive ? 0.3 : 0) }))
+      .filter((c) => c.weight > 0);
+    const preset = weighted.length ? pickWeighted(rng, weighted) : pick(rng, others.length ? others : style.presets).id;
     prevPreset = preset;
 
-    const strongHit = i > 0 && onsetStrengthAt(analysis, seg.start, 0.08) >= style.mapping.hitThreshold;
-    const transition: TransitionType = strongHit
-      ? style.impactTransition
-      : pickWeighted(rng, style.transitions.map((t) => ({ weight: t.weight, value: t.type })));
+    const strongHit = i > 0 && onsetStrengthAt(analysis, seg.start, 0.08) >= hitThreshold;
+    const transition: TransitionType =
+      strongHit && fitTo(TRANSITION_ENERGY[style.impactTransition], target) >= 0.5
+        ? style.impactTransition
+        : pickWeighted(rng, style.transitions.map((t) => ({ weight: t.weight * fitTo(TRANSITION_ENERGY[t.type], target), value: t.type })));
     const intensity = Math.min(1, 0.25 + 0.75 * e);
     const durationScale = effectiveTier === 'high' ? 0.7 : effectiveTier === 'low' ? 1.4 : 1;
 
@@ -47,13 +59,15 @@ export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: numbe
       end: seg.end,
       preset,
       intensity,
-      palette: pick(rng, style.palettes[effectiveTier]),
+      palette: pick(rng, look.palettes[effectiveTier]),
       parameters: {
         tier: effectiveTier,
+        target,
         transition,
         transitionDuration: Math.min(style.transitionDuration * durationScale, (seg.end - seg.start) / 3),
         variant: Math.floor(rng() * 4),
-        speed: 0.6 + 0.8 * intensity,
+        speed: (0.6 + 0.8 * intensity) * look.speedScale,
+        density: look.densityScale,
         sectionType: seg.sectionType ?? 'verse',
       },
     };
@@ -61,8 +75,9 @@ export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: numbe
 }
 
 /** Splits analyzer sections into scene-sized pieces, cutting on the strongest nearby beat. */
-function segmentTrack(analysis: AudioAnalysis, style: VJStyle, rng: Rng): Segment[] {
-  const { min, max } = style.sceneLength;
+function segmentTrack(analysis: AudioAnalysis, style: VJStyle, look: Look, rng: Rng): Segment[] {
+  const min = style.sceneLength.min * look.sceneLengthScale;
+  const max = style.sceneLength.max * look.sceneLengthScale;
   const target = min + (max - min) * (0.4 + 0.2 * rng());
   const sections = analysis.sections.length ? analysis.sections : [{ start: 0, end: analysis.duration, energy: 0.5 }];
   const out: Segment[] = [];
@@ -116,7 +131,7 @@ function segmentEnergy(analysis: AudioAnalysis, start: number, end: number): num
 
 @Injectable({ providedIn: 'root' })
 export class VjTimelineService {
-  buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: number): VJScene[] {
-    return buildScenes(analysis, style, seed);
+  buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: number, look?: Look): VJScene[] {
+    return buildScenes(analysis, style, seed, look);
   }
 }

@@ -10,6 +10,7 @@ const analysis: AudioAnalysis = {
   ],
   beats: [0.1, 0.6],
   tempo: 120,
+  summary: { chroma: new Array(12).fill(0), centroidHz: 0 },
   sections: [],
 };
 

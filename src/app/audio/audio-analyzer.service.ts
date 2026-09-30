@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { AudioAnalysis, AudioBufferLike, AudioFeatureFrame, AudioSection, SectionType } from './audio-analysis.model';
+import { AudioAnalysis, AudioBufferLike, AudioFeatureFrame, AudioSection, AudioSummary, SectionType } from './audio-analysis.model';
 import { Fft } from './fft';
 
 const FFT_SIZE = 2048;
@@ -7,6 +7,7 @@ const HOP = 1024;
 const BASS_HZ: [number, number] = [30, 160];
 const MID_HZ: [number, number] = [160, 2500];
 const TREBLE_HZ: [number, number] = [2500, 11000];
+const CHROMA_HZ: [number, number] = [65, 2000];
 const FRAMES_PER_YIELD = 400;
 
 export type ProgressFn = (progress: number) => void;
@@ -32,12 +33,19 @@ export async function analyzeAudio(buffer: AudioBufferLike, onProgress: Progress
   const prevLogMag = new Float64Array(bins);
   const binOf = (hz: number) => Math.min(bins - 1, Math.max(1, Math.round((hz * FFT_SIZE) / sr)));
   const bands = [BASS_HZ, MID_HZ, TREBLE_HZ].map(([lo, hi]) => [binOf(lo), binOf(hi)] as const);
+  const binHz = sr / FFT_SIZE;
+  const pitchClassOf = Int8Array.from({ length: bins }, (_, k) => {
+    const hz = k * binHz;
+    return hz >= CHROMA_HZ[0] && hz <= CHROMA_HZ[1] ? (((Math.round(12 * Math.log2(hz / 440)) + 69) % 12) + 12) % 12 : -1;
+  });
+  const chroma = new Float64Array(12);
 
   const energy = new Float32Array(frameCount);
   const bass = new Float32Array(frameCount);
   const mid = new Float32Array(frameCount);
   const treble = new Float32Array(frameCount);
   const flux = new Float32Array(frameCount);
+  const centroid = new Float32Array(frameCount);
   const inv = 1 / channels.length;
 
   for (let f = 0; f < frameCount; f++) {
@@ -58,14 +66,20 @@ export async function analyzeAudio(buffer: AudioBufferLike, onProgress: Progress
     fft.transform(re, im);
 
     let fx = 0;
+    let weighted = 0;
+    let total = 0;
     for (let k = 1; k < bins; k++) {
       const mag = Math.hypot(re[k], im[k]);
+      if (pitchClassOf[k] >= 0) chroma[pitchClassOf[k]] += mag;
+      weighted += k * mag;
+      total += mag;
       logMag[k] = Math.log1p(100 * mag);
       const d = logMag[k] - prevLogMag[k];
       if (d > 0 && f > 0) fx += d;
       prevLogMag[k] = logMag[k];
     }
     flux[f] = fx;
+    centroid[f] = total > 0 ? (weighted / total) * binHz : 0;
     const bandOut = [bass, mid, treble];
     for (let b = 0; b < 3; b++) {
       const [lo, hi] = bands[b];
@@ -81,6 +95,7 @@ export async function analyzeAudio(buffer: AudioBufferLike, onProgress: Progress
   }
 
   [energy, bass, mid, treble, flux].forEach(normalizeInPlace);
+  const summary = summarize(chroma, centroid, energy);
 
   const tempoPeriod = estimatePeriod(flux, frameInterval);
   const beatFrames = trackBeats(onsetEnvelope(flux), tempoPeriod);
@@ -93,7 +108,21 @@ export async function analyzeAudio(buffer: AudioBufferLike, onProgress: Progress
   const duration = n / sr;
   const sections = detectSections(frames, frameInterval, duration, beats);
   onProgress(1);
-  return { duration, frameInterval, frames, beats, tempo: 60 / (tempoPeriod * frameInterval), sections };
+  return { duration, frameInterval, frames, beats, tempo: 60 / (tempoPeriod * frameInterval), sections, summary };
+}
+
+/** Whole-track chroma (peak = 1) and mean centroid over frames at or above the 20th energy percentile. */
+function summarize(chroma: Float64Array, centroid: Float32Array, energy: Float32Array): AudioSummary {
+  const peak = Math.max(...chroma);
+  const floor = percentile(energy, 0.2);
+  let sum = 0;
+  let count = 0;
+  for (let f = 0; f < centroid.length; f++) {
+    if (energy[f] < floor || centroid[f] <= 0) continue;
+    sum += centroid[f];
+    count++;
+  }
+  return { chroma: Array.from(chroma, (v) => (peak > 0 ? v / peak : 0)), centroidHz: count ? sum / count : 0 };
 }
 
 const yieldToEventLoop = () => new Promise<void>((resolve) => setTimeout(resolve, 0));

@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
-import { autoDetectRenderer, Color, Container, Renderer } from 'pixi.js';
+import { autoDetectRenderer, Color, ColorMatrixFilter, Container, Renderer } from 'pixi.js';
 import { beatIndexAt, emptyFrame, getFeaturesAt, onsetStrengthAt } from '../../audio/audio-features';
+import { effectiveHitThreshold, Look } from '../look';
 import { createRng, hashString } from '../seeded-random';
 import { VJ_STYLES } from '../styles';
 import { VJStyle } from '../styles/vj-style.interface';
@@ -59,6 +60,7 @@ export class VjRendererService {
   private lyricLayer?: LyricLayer;
   private project?: VJProject;
   private style?: VJStyle;
+  private hitThreshold = 1;
   private current: ActiveScene | null = null;
   private previous: ActiveScene | null = null;
   private clock?: () => number;
@@ -113,6 +115,8 @@ export class VjRendererService {
     this.style = VJ_STYLES[project.styleId];
     const m = this.style.mapping;
     this.env = this.createEnvelopes(m.attack, m.decay);
+    this.hitThreshold = effectiveHitThreshold(this.style, project.look);
+    this.applyGrade(project.look.grade);
     this.lyricLayer?.destroy();
     this.lyricLayer = project.lyrics?.length ? new LyricLayer(project.lyrics, project.lyricPreset, this.style.typography) : undefined;
     if (this.lyricLayer) this.stage.addChild(this.lyricLayer.view);
@@ -198,7 +202,7 @@ export class VjRendererService {
     const bi = beatIndexAt(analysis.beats, t);
     ctx.beat = dt > 0 && bi > this.lastBeat;
     const strength = ctx.beat ? onsetStrengthAt(analysis, analysis.beats[bi]) : 0;
-    ctx.hit = strength >= style.mapping.hitThreshold ? strength : 0;
+    ctx.hit = strength >= this.hitThreshold ? strength : 0;
     ctx.beatIndex = bi;
     ctx.beatPulse = bi >= 0 ? Math.exp(-(t - analysis.beats[bi]) / style.mapping.beatDecay) : 0;
     this.lastBeat = bi;
@@ -225,7 +229,20 @@ export class VjRendererService {
     s.bass = ctx.bass;
     s.mid = ctx.mid;
     s.treble = ctx.treble;
-    s.scene = `${idx + 1}/${scenes.length} ${current.scene.preset} (${current.scene.parameters['tier']})`;
+    s.scene = `${idx + 1}/${scenes.length} ${current.scene.preset} (${current.scene.parameters['tier']}, target ${Number(current.scene.parameters['target']).toFixed(2)})`;
+  }
+
+  /** Grades scenes only: the transition overlay and lyrics sit on `stage` and keep their colors. */
+  private applyGrade({ saturation, contrast, brightness }: Look['grade']): void {
+    if (!saturation && !contrast && !brightness) {
+      this.sceneRoot.filters = [];
+      return;
+    }
+    const grade = new ColorMatrixFilter();
+    grade.saturate(saturation, false);
+    grade.contrast(contrast, true);
+    grade.brightness(1 + brightness, true);
+    this.sceneRoot.filters = [grade];
   }
 
   private updateLayer(a: ActiveScene): void {

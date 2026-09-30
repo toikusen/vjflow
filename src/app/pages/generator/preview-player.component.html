@@ -9,7 +9,8 @@ energy  {{ s.energy | number: '1.2-2' }}
 bass    {{ s.bass | number: '1.2-2' }}
 mid     {{ s.mid | number: '1.2-2' }}
 treble  {{ s.treble | number: '1.2-2' }}
-scene   {{ s.scene }}</pre>
+scene   {{ s.scene }}
+@if (project().profile; as p) {song    V {{ p.valence | number: '1.2-2' }} A {{ p.arousal | number: '1.2-2' }} B {{ p.brightness | number: '1.2-2' }} P {{ p.pulse | number: '1.2-2' }} D {{ p.dynamics | number: '1.2-2' }} {{ p.mode }} {{ p.modeConfidence | number: '1.2-2' }}}</pre>
   }
 </div>
 

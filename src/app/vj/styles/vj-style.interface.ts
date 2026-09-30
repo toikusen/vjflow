@@ -3,8 +3,10 @@ import { EnergyTier, TransitionType, VJStyleId } from '../vj-project.model';
 
 export interface PresetDef {
   id: string;
-  /** Energy tiers this preset may be scheduled on. */
+  /** Energy tiers this preset suits best; others are still possible at reduced weight. */
   tiers: EnergyTier[];
+  /** How intense the preset feels, 0..1; matched against the scene's target energy. Defaults to 0.5. */
+  energy?: number;
 }
 
 /** Smoothing time constants in seconds: lower = snappier. */

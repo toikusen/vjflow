@@ -5,6 +5,7 @@ import { AudioLoaderService, LoadedAudio } from '../../audio/audio-loader.servic
 import { LyricCue, LyricPreset, LyricTiming } from '../../lyrics/lyric.model';
 import { AlignProgress, LyricAlignerService } from '../../lyrics/lyric-aligner.service';
 import { LyricParserService } from '../../lyrics/lyric-parser.service';
+import { LyricSearchResult, LyricSearchService } from '../../lyrics/lyric-search.service';
 import { GENERATION_POLICY, GenerationMode, GenerationQuote, PlayRange } from '../../vj/generation-policy';
 import { VjEngineService } from '../../vj/vj-engine.service';
 import { StyleChoice, VJProject } from '../../vj/vj-project.model';
@@ -18,6 +19,9 @@ export type AlignmentStatus =
   | { status: 'done' }
   | { status: 'error'; message: string };
 
+/** Online lyric lookup for the loaded track. */
+export type LyricSearchStatus = { status: 'idle' | 'searching' | 'not-found' } | { status: 'found'; result: LyricSearchResult };
+
 export type GeneratorState = 'EMPTY' | 'AUDIO_LOADING' | 'ANALYZING' | 'READY' | 'GENERATING' | 'PREVIEW_READY' | 'PLAYING' | 'EXPORTING' | 'ERROR';
 
 /** Page-scoped state machine for the generator flow. All audio work stays in the browser. */
@@ -28,6 +32,7 @@ export class GeneratorStore {
   private readonly engine = inject(VjEngineService);
   private readonly lyricParser = inject(LyricParserService);
   private readonly aligner = inject(LyricAlignerService);
+  private readonly lyricSearch = inject(LyricSearchService);
   private readonly policy = inject(GENERATION_POLICY);
   /** `${audioKey}|${mode}` already paid for / unlocked, so style changes never charge twice. */
   private readonly authorized = new Set<string>();
@@ -55,8 +60,11 @@ export class GeneratorStore {
   });
   readonly lyricsText = signal('');
   readonly lyricPreset = signal<LyricPreset | 'auto'>('auto');
-  /** With no lyrics entered, recognize them from the vocals. */
+  /** With no lyrics entered, look them up online, then fall back to recognizing them from the vocals. */
   readonly autoLyrics = signal(true);
+  readonly lyricLookup = signal<LyricSearchStatus>({ status: 'idle' });
+  /** Pending online lookup; Generate waits for it so recognition doesn't start while lyrics may still arrive. */
+  private lookup?: Promise<void>;
   readonly lyricTiming = signal<LyricTiming | null>(null);
   readonly alignment = signal<AlignmentStatus>({ status: 'idle' });
   readonly project = signal<VJProject | null>(null);
@@ -80,6 +88,8 @@ export class GeneratorStore {
     this.lyricCues = undefined;
     this.lyricTiming.set(null);
     this.alignment.set({ status: 'idle' });
+    this.lyricLookup.set({ status: 'idle' });
+    this.lookup = undefined;
     this.analysisProgress.set(0);
     this.state.set('AUDIO_LOADING');
     try {
@@ -90,6 +100,7 @@ export class GeneratorStore {
       const analysis = await this.analyzer.analyze(this.audioKey, audio.buffer, (p) => this.analysisProgress.set(p));
       this.analysis.set(analysis);
       this.state.set('READY');
+      this.lookup = this.lookUpLyrics(file.name, analysis.duration);
     } catch (err) {
       this.fail(err);
     }
@@ -111,6 +122,7 @@ export class GeneratorStore {
         return;
       }
       this.range = quote.range;
+      if (this.lookup && !this.lyricsText().trim()) await this.lookup;
       const text = this.lyricsText().trim();
       const lyrics = text ? this.lyricParser.parse(text, analysis.duration) : null;
       const key = `${this.audioKey}|${text}`;
@@ -131,6 +143,25 @@ export class GeneratorStore {
       if (needsAlignment) void this.alignLyrics(text, lyrics?.cues.map((c) => c.text) ?? []);
     } catch (err) {
       this.fail(err);
+    }
+  }
+
+  /**
+   * Fills the lyrics box from an online database when the user hasn't typed any.
+   * Synced results are used as LRC as-is; plain ones are later aligned to the vocals.
+   */
+  private async lookUpLyrics(fileName: string, duration: number): Promise<void> {
+    if (!this.autoLyrics() || this.lyricsText().trim()) return;
+    const key = this.audioKey;
+    this.lyricLookup.set({ status: 'searching' });
+    const result = await this.lyricSearch.find(fileName, duration);
+    if (key !== this.audioKey) return;
+    // The user may have started typing while we searched; their text wins.
+    if (result && !this.lyricsText().trim()) {
+      this.lyricsText.set(result.text);
+      this.lyricLookup.set({ status: 'found', result });
+    } else {
+      this.lyricLookup.set({ status: result ? 'idle' : 'not-found' });
     }
   }
 

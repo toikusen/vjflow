@@ -1,6 +1,7 @@
 import { Component, effect, ElementRef, inject, viewChild } from '@angular/core';
 import { DecimalPipe, PercentPipe } from '@angular/common';
 import { LyricPreset } from '../../lyrics/lyric.model';
+import { LyricSearchResult } from '../../lyrics/lyric-search.service';
 import { FREE_PREVIEW_DURATION, GenerationQuote } from '../../vj/generation-policy';
 import { VJ_STYLES } from '../../vj/styles';
 import { VJProject } from '../../vj/vj-project.model';
@@ -62,6 +63,12 @@ export class GeneratorPage {
   protected styleName(project: VJProject): string {
     const name = VJ_STYLES[project.styleId].name;
     return project.autoReason ? `自動 → ${name}（${project.autoReason}）` : name;
+  }
+
+  /** The online result, only while the box still holds it unedited. */
+  protected foundLyrics(): LyricSearchResult | null {
+    const lookup = this.store.lyricLookup();
+    return lookup.status === 'found' && lookup.result.text === this.store.lyricsText() ? lookup.result : null;
   }
 
   protected onFileChange(event: Event): void {

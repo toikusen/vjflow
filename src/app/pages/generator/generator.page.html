@@ -71,9 +71,26 @@
     </label>
     <label class="inline">
       <input type="checkbox" [checked]="store.autoLyrics()" (change)="store.autoLyrics.set($any($event.target).checked)" />
-      沒填歌詞時自動辨識
+      沒填歌詞時自動取得（先上網搜尋，找不到再從歌聲辨識）
     </label>
   </div>
+  @switch (store.lyricLookup().status) {
+    @case ('searching') {
+      <p class="hint">🔎 正在網路上搜尋歌詞（只會送出檔名，不會上傳音檔）…</p>
+    }
+    @case ('found') {
+      @if (foundLyrics(); as found) {
+        <p class="hint">
+          歌詞來源：{{ found.provider }} · {{ found.artist }}「{{ found.title }}」{{ found.synced ? '（含時間軸）' : '（無時間軸，生成時會自動對齊歌聲）' }}。若不是這首歌，請改貼正確歌詞。
+        </p>
+      }
+    }
+    @case ('not-found') {
+      @if (!store.lyricsText().trim()) {
+        <p class="hint">網路上找不到這首歌的歌詞，生成時會改從歌聲辨識。</p>
+      }
+    }
+  }
   @switch (store.alignment().status) {
     @case ('running') {
       @if (alignStage() === 'download') {

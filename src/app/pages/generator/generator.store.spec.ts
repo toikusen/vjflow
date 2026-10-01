@@ -1,7 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { AudioAnalysis } from '../../audio/audio-analysis.model';
-import { LoadedAudio } from '../../audio/audio-loader.service';
+import { AudioAnalyzerService } from '../../audio/audio-analyzer.service';
+import { AudioLoaderService, LoadedAudio } from '../../audio/audio-loader.service';
 import { LyricAlignerService } from '../../lyrics/lyric-aligner.service';
+import { LyricSearchResult, LyricSearchService } from '../../lyrics/lyric-search.service';
 import { GENERATION_POLICY, GenerationPolicy, GenerationQuote, openAccessPolicy } from '../../vj/generation-policy';
 import { GeneratorStore } from './generator.store';
 
@@ -110,5 +112,75 @@ describe('GeneratorStore automatic lyrics', () => {
     await store.generate();
     expect(align).not.toHaveBeenCalled();
     expect(store.lyricTiming()).toBeNull();
+  });
+});
+
+describe('GeneratorStore online lyrics', () => {
+  const synced: LyricSearchResult = { text: '[00:01.00] 色褪せた空\n[00:04.00] 星も見えない', synced: true, artist: 'yosugala', title: 'indigo', provider: 'LRCLIB' };
+
+  function setupWithSearch(find: (name: string, duration: number) => Promise<LyricSearchResult | null>) {
+    const align = vi.fn(async () => [{ start: 1, end: 2, text: '聽到的歌詞' }]);
+    TestBed.configureTestingModule({
+      providers: [
+        GeneratorStore,
+        { provide: GENERATION_POLICY, useValue: openAccessPolicy },
+        { provide: AudioLoaderService, useValue: { load: async () => ({ buffer: {}, url: 'blob:x' }), release: vi.fn() } },
+        { provide: AudioAnalyzerService, useValue: { analyze: async () => analysis } },
+        { provide: LyricSearchService, useValue: { find: vi.fn(find) } },
+        { provide: LyricAlignerService, useValue: { align, cancel: vi.fn() } },
+      ],
+    });
+    return { store: TestBed.inject(GeneratorStore), align, search: TestBed.inject(LyricSearchService) };
+  }
+  const file = new File(['x'], 'indigo - yosugala.mp3', { type: 'audio/mpeg' });
+
+  it('uses synced lyrics found online as-is, without recognition', async () => {
+    const { store, align, search } = setupWithSearch(async () => synced);
+    await store.loadFile(file);
+    await store.generate();
+    expect(search.find).toHaveBeenCalledWith('indigo - yosugala.mp3', 180);
+    expect(store.lyricsText()).toBe(synced.text);
+    expect(store.lyricLookup()).toEqual({ status: 'found', result: synced });
+    expect(store.lyricTiming()).toBe('timestamped');
+    expect(store.project()!.lyrics!.map((c) => c.text)).toEqual(['色褪せた空', '星も見えない']);
+    expect(align).not.toHaveBeenCalled();
+  });
+
+  it('falls back to recognizing the vocals when nothing is found', async () => {
+    const { store, align } = setupWithSearch(async () => null);
+    await store.loadFile(file);
+    await store.generate();
+    expect(store.lyricLookup().status).toBe('not-found');
+    await vi.waitFor(() => expect(store.lyricTiming()).toBe('transcribed'));
+    expect(align).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for a pending lookup instead of starting recognition', async () => {
+    let resolve!: (r: LyricSearchResult) => void;
+    const { store, align } = setupWithSearch(() => new Promise((r) => (resolve = r)));
+    await store.loadFile(file);
+    const generating = store.generate();
+    resolve(synced);
+    await generating;
+    expect(store.lyricTiming()).toBe('timestamped');
+    expect(align).not.toHaveBeenCalled();
+  });
+
+  it('keeps lyrics the user typed while the lookup was running', async () => {
+    let resolve!: (r: LyricSearchResult) => void;
+    const { store } = setupWithSearch(() => new Promise((r) => (resolve = r)));
+    await store.loadFile(file);
+    store.lyricsText.set('[00:02.00] 自己的歌詞');
+    resolve(synced);
+    await store.generate();
+    expect(store.lyricsText()).toBe('[00:02.00] 自己的歌詞');
+    expect(store.lyricLookup().status).not.toBe('found');
+  });
+
+  it('does not search when automatic lyrics are off', async () => {
+    const { store, search } = setupWithSearch(async () => synced);
+    store.autoLyrics.set(false);
+    await store.loadFile(file);
+    expect(search.find).not.toHaveBeenCalled();
   });
 });

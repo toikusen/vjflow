@@ -36,6 +36,8 @@ export class PreviewPlayerComponent {
   protected readonly stats = signal<RendererStats | null>(null);
   protected readonly exportFormat = detectRecorderFormat();
   protected readonly range = computed(() => this.project().range);
+  /** Every element the song's scenes use, for comparing songs in the debug panel. */
+  protected readonly motif = computed(() => [...new Set(this.project().scenes.flatMap((s) => s.composition?.map((u) => u.id) ?? []))].join(' '));
   protected readonly playing = computed(() => this.store.state() === 'PLAYING');
   protected readonly exporting = computed(() => this.store.state() === 'EXPORTING');
   protected readonly exportProgress = computed(() => {

@@ -265,3 +265,15 @@ interface ElementUse { id: string; params: Record<string, number | string>; stre
 - 新增：`vj/elements/`（介面、registry，以及約 20 個元件檔）、`vj/motif.ts`、`vj/compose-scene.ts`、`vj/renderer/composite.layer.ts`、`vj/renderer/shaders/`，以及各自的 spec。
 - 修改：`vj-style.interface.ts`、`edm.style.ts`、`cute.style.ts`、`vj-project.model.ts`、`vj-timeline.service.ts`、`vj-engine.service.ts`、`vj-renderer.service.ts`、`layers/index.ts`、debug panel。
 - 刪除：`edm.layer.ts`、`cute.layer.ts`。
+
+## 實作與 spec 的差異（第 1 階段）
+
+| 項目 | spec | 實作 | 原因 |
+|---|---|---|---|
+| figure 數量 | target < 0.35 時 0–1 個 | 至少 1 個 | 0 個時畫面只剩背景，太空 |
+| `bloom` 後製 | 列在拆解清單 | 不做成 post；glow 由 skin 的 `GlowPairs`（模糊的加法複本）處理 | post 只在 target > 0.6 出現，但 EDM 的霓虹光暈應該一直都在 |
+| `kaleidoscope` | 列為「之後」 | 第 1 階段就加入 | 程式很小，而且能大幅增加變化 |
+| EDM 的閃白 | 未列 | 改成 `hitFlash` accent（trait `strobe`） | 讓 Cute 可以用 `forbidden: ['strobe']` 排除 |
+| 跨歌曲差異測試 | 50 首中至少 40 組 figure 組合不同 | 50 首中至少 40 組**完整主題組**不同，且至少 15 組 figure 組合不同 | EDM 有 7 個 figure 取 3 個，最多只有 35 種組合，原本的標準在數學上不可能達成 |
+| shader 編譯失敗的退路 | 退回純色漸層 | 未實作 | PixiJS 延遲到第一次渲染才編譯，建立元件時偵測不到；目前只在 console 顯示錯誤 |
+| shader 精度 | 未提及 | fragment 一律用 `highp`（`filterProgram` helper） | 自訂 fragment 重新宣告 `uInputSize`，WebGL 要求兩個階段的精度一致，否則無法連結 |

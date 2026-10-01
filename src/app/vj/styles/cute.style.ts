@@ -10,11 +10,18 @@ export const CUTE_STYLE: VJStyle = {
     mid: [['#ffc6e3', '#ff7eb9', '#fff58a', '#ffffff'], ['#d9c8ff', '#ff9ad5', '#9ef0ff', '#ffffff']],
     high: [['#ff9fd0', '#ff3d9a', '#fff176', '#ffffff'], ['#b89cff', '#ff5fb7', '#6ef3ff', '#fffbe0']],
   },
-  presets: [
-    { id: 'hearts', tiers: ['mid', 'high'] },
-    { id: 'bubbles', tiers: ['low', 'mid'] },
-    { id: 'starfield', tiers: ['mid', 'high'] },
-  ],
+  presets: [],
+  grammar: {
+    skin: { line: 'pastel', lineWidth: 8, roundness: 1, glow: 0, motion: 'bouncy', blend: 'normal' },
+    elements: {
+      dotPattern: 1.5, shaderFlow: 0.7,
+      orbitIcons: 1.5, concentric: 1.2, ledWall: 0.8, waveform: 0.8, spectrumBars: 0.5,
+      iconBurst: 1.2, bubbles: 1.2, twinkles: 1, orbs: 0.8,
+      kaleidoscope: 1,
+    },
+    forbidden: ['strobe', 'sharp'],
+    maxBusy: 4,
+  },
   transitions: [
     { type: 'fade', weight: 3 },
     { type: 'zoom', weight: 3 },

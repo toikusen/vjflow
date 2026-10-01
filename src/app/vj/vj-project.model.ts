@@ -2,6 +2,7 @@ import { AudioAnalysis } from '../audio/audio-analysis.model';
 import { SongProfile } from '../audio/song-profile';
 import { LyricCue, LyricPreset } from '../lyrics/lyric.model';
 import { GenerationMode, PlayRange } from './generation-policy';
+import { ElementUse } from './compose-scene';
 import { Look } from './look';
 
 export type VJStyleId = 'edm' | 'cute' | 'anime' | 'light' | 'cinematic';
@@ -17,6 +18,8 @@ export interface VJScene {
   preset: string;
   intensity: number;
   palette: string[];
+  /** Elements to draw, for styles that compose scenes; absent for legacy whole-scene presets. */
+  composition?: ElementUse[];
   /** Known keys: transition, transitionDuration, tier, target, variant, speed, density. */
   parameters: Record<string, number | string | boolean>;
 }

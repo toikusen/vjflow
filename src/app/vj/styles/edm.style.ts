@@ -10,11 +10,20 @@ export const EDM_STYLE: VJStyle = {
     mid: [['#05000d', '#ff00d4', '#00e5ff', '#7b2cff'], ['#030008', '#39ff14', '#00b3ff', '#ff2a6d']],
     high: [['#000000', '#ff006e', '#00f0ff', '#fffb00'], ['#050005', '#ff1f1f', '#ff00c8', '#ffffff']],
   },
-  presets: [
-    { id: 'tunnel', tiers: ['mid', 'high'], energy: 0.65 },
-    { id: 'grid', tiers: ['low', 'mid'], energy: 0.3 },
-    { id: 'bars', tiers: ['mid', 'high'], energy: 0.9 },
-  ],
+  presets: [],
+  grammar: {
+    skin: { line: 'neon', lineWidth: 3, roundness: 0, glow: 1, motion: 'snappy', blend: 'add' },
+    elements: {
+      glowHaze: 1, shaderFlow: 1,
+      polyTunnel: 1, perspectiveGrid: 1, spectrumBars: 1, waveform: 1, lasers: 1.2, ledWall: 1, concentric: 0.8,
+      sparks: 1, hitFlash: 1, orbs: 0.8,
+      kaleidoscope: 0.6, feedback: 1,
+    },
+    forbidden: [],
+    // Both recede to a vanishing point; together they read as one idea twice.
+    exclusive: [['polyTunnel', 'perspectiveGrid']],
+    maxBusy: 4,
+  },
   transitions: [
     { type: 'flash', weight: 3 },
     { type: 'glitch', weight: 3 },

@@ -1,4 +1,5 @@
 import { LyricPreset } from '../../lyrics/lyric.model';
+import { Skin, Trait } from '../elements/element';
 import { EnergyTier, TransitionType, VJStyleId } from '../vj-project.model';
 
 export interface PresetDef {
@@ -27,6 +28,19 @@ export interface Typography {
   uppercase: boolean;
 }
 
+/** How a style composes scenes from the shared element pool. */
+export interface StyleGrammar {
+  skin: Skin;
+  /** Element id → weight multiplier; unlisted elements are unavailable to this style. */
+  elements: Record<string, number>;
+  /** Traits this style never shows. */
+  forbidden: Trait[];
+  /** Element pairs that never appear in the same motif. */
+  exclusive?: [string, string][];
+  /** Upper bound of figure + accent elements in one scene. */
+  maxBusy: number;
+}
+
 export interface VJStyle {
   id: VJStyleId;
   name: string;
@@ -34,7 +48,9 @@ export interface VJStyle {
   /** CSS background used by the style card in the UI. */
   cardBackground: string;
   palettes: Record<EnergyTier, string[][]>;
+  /** Legacy whole-scene presets; empty for styles that compose scenes through `grammar`. */
   presets: PresetDef[];
+  grammar?: StyleGrammar;
   transitions: { type: TransitionType; weight: number }[];
   /** Transition used when a scene boundary lands on a strong onset. */
   impactTransition: TransitionType;

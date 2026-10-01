@@ -8,6 +8,7 @@ import { VJStyle } from '../styles/vj-style.interface';
 import { TransitionType, VJProject, VJScene } from '../vj-project.model';
 import { TransitionEffect } from './effects/transition.effect';
 import { CENTER_X, CENTER_Y, clamp01, createFrameContext, Envelope, STAGE_HEIGHT, STAGE_WIDTH } from './frame-context';
+import { CompositeLayer } from './composite.layer';
 import { STYLE_LAYERS } from './layers';
 import { LyricLayer } from './layers/lyric.layer';
 import { VjLayer } from './layers/vj-layer';
@@ -273,12 +274,8 @@ export class VjRendererService {
   private createScene(index: number): ActiveScene {
     const project = this.project!;
     const scene = project.scenes[index];
-    const layer = STYLE_LAYERS[project.styleId]({
-      scene,
-      style: this.style!,
-      textures: this.textures!,
-      rng: createRng(hashString(scene.id) ^ project.seed),
-    });
+    const deps = { scene, style: this.style!, textures: this.textures!, rng: createRng(hashString(scene.id) ^ project.seed), renderer: this.renderer };
+    const layer = scene.composition ? new CompositeLayer(deps) : STYLE_LAYERS[project.styleId]!(deps);
     const slot = new Container();
     slot.pivot.set(CENTER_X, CENTER_Y);
     slot.position.set(CENTER_X, CENTER_Y);

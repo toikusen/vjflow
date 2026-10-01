@@ -16,8 +16,8 @@ export function analysisFingerprint(a: AudioAnalysis): number {
   return hashString(`${a.duration.toFixed(3)}|${a.beats.length}|${sum.toFixed(4)}`);
 }
 
-// ponytail: phase 1 rolls song-adaptive looks out to EDM only; the rest keep their authored look until tuned.
-const ADAPTIVE_STYLES = new Set<VJStyleId>(['edm']);
+// ponytail: phase 1 rolls song-adaptive looks out to EDM and Cute only; the rest keep their authored look until migrated.
+const ADAPTIVE_STYLES = new Set<VJStyleId>(['edm', 'cute']);
 
 export interface ProjectInput {
   analysis: AudioAnalysis;

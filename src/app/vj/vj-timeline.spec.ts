@@ -54,15 +54,14 @@ describe('buildScenes with a song look', () => {
   });
   const scenesFor = (overrides: Partial<SongProfile>) =>
     [1, 2, 3, 4, 5].flatMap((seed) => buildScenes(analysis, EDM_STYLE, seed, deriveLook(profile(overrides), EDM_STYLE)));
-  const share = (scenes: { preset: string; parameters: Record<string, unknown> }[], test: (s: (typeof scenes)[number]) => boolean) =>
+  const share = <T>(scenes: T[], test: (s: T) => boolean) =>
     scenes.filter(test).length / scenes.length;
 
-  it('keeps a calm, flat song away from the most intense preset, even in its loud scenes', () => {
+  it('keeps a calm, flat song away from the most intense figures, even in its loud scenes', () => {
     const scenes = scenesFor({ arousal: 0.1, dynamics: 0.1 });
-    const loud = scenes.filter((s) => s.parameters['tier'] === 'high');
-    expect(loud.length).toBeGreaterThan(0);
-    expect(share(loud, (s) => s.preset === 'grid')).toBeGreaterThan(0);
-    expect(share(scenes, (s) => s.preset === 'bars')).toBeLessThan(share(scenes, (s) => s.preset === 'grid'));
+    const has = (ids: string[]) => (s: { composition?: { id: string }[] }) => !!s.composition?.some((u) => ids.includes(u.id));
+    expect(scenes.every((s) => s.composition?.length)).toBe(true);
+    expect(share(scenes, has(['spectrumBars', 'ledWall']))).toBeLessThan(share(scenes, has(['waveform', 'concentric'])));
   });
 
   it('cuts calm songs mostly with fades and intense songs with hard transitions', () => {

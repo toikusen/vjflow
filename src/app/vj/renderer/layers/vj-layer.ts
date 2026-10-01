@@ -1,4 +1,4 @@
-import { Color, Container, Sprite, Texture } from 'pixi.js';
+import { Color, Container, Renderer, Sprite, Texture } from 'pixi.js';
 import { Rng } from '../../seeded-random';
 import { VJStyle } from '../../styles/vj-style.interface';
 import { VJScene } from '../../vj-project.model';
@@ -17,6 +17,8 @@ export interface LayerDeps {
   style: VJStyle;
   textures: VjTextures;
   rng: Rng;
+  /** For layers that render offscreen (feedback); absent in tests. */
+  renderer?: Renderer;
 }
 
 export type LayerFactory = (deps: LayerDeps) => VjLayer;

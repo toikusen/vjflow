@@ -10,15 +10,16 @@ export const CUTE_STYLE: VJStyle = {
     mid: [['#ffc6e3', '#ff7eb9', '#fff58a', '#ffffff'], ['#d9c8ff', '#ff9ad5', '#9ef0ff', '#ffffff']],
     high: [['#ff9fd0', '#ff3d9a', '#fff176', '#ffffff'], ['#b89cff', '#ff5fb7', '#6ef3ff', '#fffbe0']],
   },
-  presets: [],
+  affinity: { valence: 0.85, arousal: 0.6, brightness: 0.75 },
   grammar: {
     skin: { line: 'pastel', lineWidth: 8, roundness: 1, glow: 0, motion: 'bouncy', blend: 'normal' },
+    // Kawaii vocabulary only: no smoke, mirroring or tech meters (they read as EDM, not cute).
     elements: {
-      dotPattern: 1.5, shaderFlow: 0.7,
-      orbitIcons: 1.5, concentric: 1.2, ledWall: 0.8, waveform: 0.8, spectrumBars: 0.5,
+      dotPattern: 1,
+      orbitIcons: 1.5, concentric: 1,
       iconBurst: 1.2, bubbles: 1.2, twinkles: 1, orbs: 0.8,
-      kaleidoscope: 1,
     },
+    params: { concentric: { sides: { kind: 'range', min: 0, max: 2, int: true } } },
     forbidden: ['strobe', 'sharp'],
     maxBusy: 4,
   },

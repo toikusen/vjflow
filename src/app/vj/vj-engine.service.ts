@@ -2,11 +2,12 @@ import { inject, Injectable } from '@angular/core';
 import { AudioAnalysis } from '../audio/audio-analysis.model';
 import { computeSongProfile } from '../audio/song-profile';
 import { LyricCue, LyricPreset } from '../lyrics/lyric.model';
-import { deriveLook, neutralLook } from './look';
+import { deriveLook } from './look';
 import { hashString } from './seeded-random';
 import { VJ_STYLES } from './styles';
 import { GenerationMode, PlayRange, resolveRange } from './generation-policy';
-import { VJProject, VJStyleId } from './vj-project.model';
+import { describeProfile, rankStyles } from './style-ranking';
+import { StyleChoice, VJProject } from './vj-project.model';
 import { VjTimelineService } from './vj-timeline.service';
 
 /** Stable per-track fingerprint so the same song + style always yields the same scenes. */
@@ -16,12 +17,9 @@ export function analysisFingerprint(a: AudioAnalysis): number {
   return hashString(`${a.duration.toFixed(3)}|${a.beats.length}|${sum.toFixed(4)}`);
 }
 
-// ponytail: phase 1 rolls song-adaptive looks out to EDM and Cute only; the rest keep their authored look until migrated.
-const ADAPTIVE_STYLES = new Set<VJStyleId>(['edm', 'cute']);
-
 export interface ProjectInput {
   analysis: AudioAnalysis;
-  styleId: VJStyleId;
+  styleId: StyleChoice;
   lyrics?: LyricCue[];
   lyricPreset?: LyricPreset | 'auto';
   mode?: GenerationMode;
@@ -35,17 +33,19 @@ export interface ProjectInput {
 export class VjEngineService {
   private readonly timeline = inject(VjTimelineService);
 
-  createProject({ analysis, styleId, lyrics, lyricPreset = 'auto', mode = 'preview', range, variation = 0 }: ProjectInput): VJProject {
+  createProject({ analysis, styleId: choice, lyrics, lyricPreset = 'auto', mode = 'preview', range, variation = 0 }: ProjectInput): VJProject {
+    const profile = computeSongProfile(analysis);
+    const styleId = choice === 'auto' ? rankStyles(profile)[0].styleId : choice;
     const style = VJ_STYLES[styleId];
     const fingerprint = analysisFingerprint(analysis);
     const seed = hashString(`${fingerprint}|${styleId}|${variation}`);
-    const profile = computeSongProfile(analysis);
-    const look = ADAPTIVE_STYLES.has(styleId) ? deriveLook(profile, style) : neutralLook(style);
+    const look = deriveLook(profile, style);
     return {
       id: `${fingerprint.toString(36)}-${styleId}-${variation}`,
       duration: analysis.duration,
       analysis,
       styleId,
+      autoReason: choice === 'auto' ? describeProfile(profile) : undefined,
       seed,
       profile,
       look,

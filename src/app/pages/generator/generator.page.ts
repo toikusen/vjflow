@@ -3,6 +3,7 @@ import { DecimalPipe, PercentPipe } from '@angular/common';
 import { LyricPreset } from '../../lyrics/lyric.model';
 import { FREE_PREVIEW_DURATION, GenerationQuote } from '../../vj/generation-policy';
 import { VJ_STYLES } from '../../vj/styles';
+import { VJProject } from '../../vj/vj-project.model';
 import { GeneratorStore } from './generator.store';
 import { PreviewPlayerComponent } from './preview-player.component';
 import { StylePickerComponent } from './style-picker.component';
@@ -57,8 +58,10 @@ export class GeneratorPage {
     return this.store.mode() === 'full' ? '整首歌' : `前 ${this.freeSeconds} 秒`;
   }
 
-  protected styleName(): string {
-    return VJ_STYLES[this.store.styleId()].name;
+  /** The style actually used; for an automatic choice, which one and why. */
+  protected styleName(project: VJProject): string {
+    const name = VJ_STYLES[project.styleId].name;
+    return project.autoReason ? `自動 → ${name}（${project.autoReason}）` : name;
   }
 
   protected onFileChange(event: Event): void {

@@ -14,6 +14,8 @@ export interface Motif {
   figures: ElementPick[];
   accents: ElementPick[];
   post: ElementPick[];
+  /** The style's fixed overlays (letterbox, grain...), drawn on top of every scene. */
+  overlay: ElementPick[];
 }
 
 export const MOTIF_SIZE: Record<Slot, number> = { field: 2, figure: 3, accent: 2, post: 1 };
@@ -48,12 +50,13 @@ export function pickMotif(mood: { arousal: number; dynamics: number }, grammar: 
       if (!candidates.length) break;
       const d = pickWeighted(rng, candidates.map((c) => ({ value: c, weight: affinity(c) })));
       chosen.push(d);
-      out.push({ id: d.id, params: sampleParams(d.params, rng) });
+      out.push({ id: d.id, params: sampleParams({ ...d.params, ...grammar.params?.[d.id] }, rng) });
     }
     return out;
   };
 
   const field = take('field');
   if (!field.length) field.push({ id: FALLBACK_FIELD, params: sampleParams(ELEMENTS[FALLBACK_FIELD].params, rng) });
-  return { field, figures: take('figure'), accents: take('accent'), post: take('post') };
+  const overlay = (grammar.overlay ?? []).filter((id) => ELEMENTS[id]).map((id) => ({ id, params: sampleParams(ELEMENTS[id].params, rng) }));
+  return { field, figures: take('figure'), accents: take('accent'), post: take('post'), overlay };
 }

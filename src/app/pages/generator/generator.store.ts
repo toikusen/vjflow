@@ -7,7 +7,7 @@ import { AlignProgress, LyricAlignerService } from '../../lyrics/lyric-aligner.s
 import { LyricParserService } from '../../lyrics/lyric-parser.service';
 import { GENERATION_POLICY, GenerationMode, GenerationQuote, PlayRange } from '../../vj/generation-policy';
 import { VjEngineService } from '../../vj/vj-engine.service';
-import { VJProject, VJStyleId } from '../../vj/vj-project.model';
+import { StyleChoice, VJProject } from '../../vj/vj-project.model';
 
 /** Default playback volume (0..1); full scale is too loud for most mastered tracks. */
 export const DEFAULT_VOLUME = 0.4;
@@ -46,7 +46,7 @@ export class GeneratorStore {
   readonly audio = signal<LoadedAudio | null>(null);
   readonly analysis = signal<AudioAnalysis | null>(null);
   readonly analysisProgress = signal(0);
-  readonly styleId = signal<VJStyleId>('edm');
+  readonly styleId = signal<StyleChoice>('edm');
   readonly mode = signal<GenerationMode>('preview');
   /** Price/coverage of each mode for the loaded track, for the mode picker. */
   readonly quotes = computed(() => {
@@ -189,7 +189,7 @@ export class GeneratorStore {
   }
 
   /** Switching style re-plans scenes from the cached analysis; audio is never re-analyzed. */
-  selectStyle(id: VJStyleId): void {
+  selectStyle(id: StyleChoice): void {
     if (this.styleId() === id) return;
     this.styleId.set(id);
     if (this.project()) void this.generate();

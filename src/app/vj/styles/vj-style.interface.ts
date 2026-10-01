@@ -1,14 +1,6 @@
 import { LyricPreset } from '../../lyrics/lyric.model';
-import { Skin, Trait } from '../elements/element';
+import { ParamSpec, Skin, Trait } from '../elements/element';
 import { EnergyTier, TransitionType, VJStyleId } from '../vj-project.model';
-
-export interface PresetDef {
-  id: string;
-  /** Energy tiers this preset suits best; others are still possible at reduced weight. */
-  tiers: EnergyTier[];
-  /** How intense the preset feels, 0..1; matched against the scene's target energy. Defaults to 0.5. */
-  energy?: number;
-}
 
 /** Smoothing time constants in seconds: lower = snappier. */
 export interface AudioMapping {
@@ -39,6 +31,10 @@ export interface StyleGrammar {
   exclusive?: [string, string][];
   /** Upper bound of figure + accent elements in one scene. */
   maxBusy: number;
+  /** Per-element parameter ranges that replace the element's defaults in this style. */
+  params?: Record<string, Record<string, ParamSpec>>;
+  /** Elements drawn on top of every scene regardless of motif (e.g. letterbox and grain). */
+  overlay?: string[];
 }
 
 export interface VJStyle {
@@ -48,9 +44,9 @@ export interface VJStyle {
   /** CSS background used by the style card in the UI. */
   cardBackground: string;
   palettes: Record<EnergyTier, string[][]>;
-  /** Legacy whole-scene presets; empty for styles that compose scenes through `grammar`. */
-  presets: PresetDef[];
-  grammar?: StyleGrammar;
+  grammar: StyleGrammar;
+  /** The song character this style suits best (0..1 each); used by automatic style choice. */
+  affinity: { valence: number; arousal: number; brightness: number };
   transitions: { type: TransitionType; weight: number }[];
   /** Transition used when a scene boundary lands on a strong onset. */
   impactTransition: TransitionType;

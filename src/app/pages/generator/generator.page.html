@@ -145,7 +145,7 @@
 
 @if (store.project(); as project) {
   <section class="panel">
-    <h2><span class="step">4</span> 預覽 · {{ styleName() }} · {{ project.mode === 'full' ? '整首歌' : '前 ' + freeSeconds + ' 秒' }}</h2>
+    <h2><span class="step">4</span> 預覽 · {{ styleName(project) }} · {{ project.mode === 'full' ? '整首歌' : '前 ' + freeSeconds + ' 秒' }}</h2>
     <app-preview-player [project]="project" [audioUrl]="store.audio()!.url" />
   </section>
 }

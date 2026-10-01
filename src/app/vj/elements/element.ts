@@ -21,6 +21,8 @@ export interface Skin {
   glow: number;
   motion: 'snappy' | 'bouncy' | 'smooth' | 'slow';
   blend: 'add' | 'normal' | 'screen';
+  /** 'dolly' = slow push-in and pan over each scene. */
+  camera?: 'still' | 'dolly';
 }
 
 export interface ElementDeps {

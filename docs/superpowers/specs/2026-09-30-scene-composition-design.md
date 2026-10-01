@@ -277,3 +277,13 @@ interface ElementUse { id: string; params: Record<string, number | string>; stre
 | 跨歌曲差異測試 | 50 首中至少 40 組 figure 組合不同 | 50 首中至少 40 組**完整主題組**不同，且至少 15 組 figure 組合不同 | EDM 有 7 個 figure 取 3 個，最多只有 35 種組合，原本的標準在數學上不可能達成 |
 | shader 編譯失敗的退路 | 退回純色漸層 | 未實作 | PixiJS 延遲到第一次渲染才編譯，建立元件時偵測不到；目前只在 console 顯示錯誤 |
 | shader 精度 | 未提及 | fragment 一律用 `highp`（`filterProgram` helper） | 自訂 fragment 重新宣告 `uInputSize`，WebGL 要求兩個階段的精度一致，否則無法連結 |
+
+## 實作與 spec 的差異（第 2 階段）
+
+| 項目 | spec | 實作 | 原因 |
+|---|---|---|---|
+| Cinematic 的電影框 | `filmFrame` 為 post | 文法新增 `overlay`（固定疊層），`filmFrame` 每個場景都會出現，畫在後製與鏡頭之外 | post 只在 target > 0.6 出現，但黑邊與顆粒應該一直都在，也不該被萬花筒處理 |
+| Cinematic 的鏡頭緩推 | 未定 | Skin 新增 `camera: 'dolly'`，由 `CompositeLayer` 推移整個場景主體 | 鏡頭運動屬於風格的動態性格，不屬於任何單一元件 |
+| Anime impact 的畫面震動 | 舊 layer 會震動整個畫面 | 未保留，只保留反相的爆發畫面 | accent 不能移動其他元件；如果需要，之後改成 skin 的鏡頭行為 |
+| 舊的整塊畫面 | 第 2 階段移除 | 已移除 5 個 `*.layer.ts`、`STYLE_LAYERS`、`PresetDef`；`grammar` 改為必填 | — |
+| 自動選風格 | 歌曲 DNA spec 第 2 階段 | `rankStyles`、`describeProfile`、風格卡片「自動」、預覽標題顯示「自動 → 風格（理由）」 | — |

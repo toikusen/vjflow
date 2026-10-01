@@ -10,11 +10,19 @@ export const CINEMATIC_STYLE: VJStyle = {
     mid: [['#0a0908', '#ff8a3d', '#f2e6d0', '#3a5a78'], ['#08090d', '#e0703a', '#e8dcc6', '#2e4a62']],
     high: [['#0c0907', '#ff6a2b', '#fff1d8', '#c43d2b'], ['#0a0a0c', '#ffb057', '#ffffff', '#a23b2a']],
   },
-  presets: [
-    { id: 'drift', tiers: ['low', 'mid'] },
-    { id: 'leak', tiers: ['mid', 'high'] },
-    { id: 'anamorphic', tiers: ['mid', 'high'] },
-  ],
+  affinity: { valence: 0.3, arousal: 0.35, brightness: 0.35 },
+  grammar: {
+    skin: { line: 'film', lineWidth: 2, roundness: 1, glow: 0.6, motion: 'slow', blend: 'add', camera: 'dolly' },
+    elements: {
+      lightLeak: 1.5, shaderFlow: 0.8, aurora: 0.4,
+      anamorphicFlare: 1.5, lightRays: 0.8, waveform: 0.7, concentric: 0.5, halos: 0.5,
+      dust: 1.2, orbs: 1,
+      feedback: 0.7,
+    },
+    forbidden: ['strobe', 'sharp', 'blocky', 'iconic'],
+    overlay: ['filmFrame'],
+    maxBusy: 3,
+  },
   transitions: [
     { type: 'fade', weight: 6 },
     { type: 'wipe', weight: 1 },

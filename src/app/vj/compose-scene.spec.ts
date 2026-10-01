@@ -4,7 +4,7 @@ import { pickMotif } from './motif';
 import { createRng } from './seeded-random';
 import { EDM_STYLE } from './styles/edm.style';
 
-const grammar = EDM_STYLE.grammar!;
+const grammar = EDM_STYLE.grammar;
 const motif = pickMotif({ arousal: 0.5, dynamics: 0.9 }, grammar, 3);
 const slotCount = (uses: ElementUse[], slot: string) => uses.filter((u) => ELEMENTS[u.id].slot === slot).length;
 
@@ -36,6 +36,12 @@ describe('composeScene', () => {
       expect(key).not.toBe(previous);
       previous = key;
     }
+  });
+
+  it('appends overlays last, flagged', () => {
+    const withOverlay = { ...motif, overlay: [{ id: 'filmFrame', params: {} }] };
+    const uses = composeScene(withOverlay, 0.9, 0, '', grammar, createRng(1));
+    expect(uses.at(-1)).toEqual({ id: 'filmFrame', params: {}, strength: 1, overlay: true });
   });
 
   it('shows intense elements faintly in calm scenes', () => {

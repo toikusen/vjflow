@@ -10,11 +10,18 @@ export const LIGHT_STYLE: VJStyle = {
     mid: [['#3b4a7a', '#ffd9a0', '#ffffff', '#b5d3ff'], ['#40306a', '#ffc2d9', '#fff6e8', '#c7f0ff']],
     high: [['#5b6aa8', '#ffe3a3', '#ffffff', '#ffd1f0'], ['#6a4c93', '#ffe8b0', '#ffffff', '#a8e6ff']],
   },
-  presets: [
-    { id: 'rays', tiers: ['mid', 'high'] },
-    { id: 'aurora', tiers: ['low', 'mid'] },
-    { id: 'halo', tiers: ['low', 'high'] },
-  ],
+  affinity: { valence: 0.6, arousal: 0.3, brightness: 0.7 },
+  grammar: {
+    skin: { line: 'soft', lineWidth: 4, roundness: 1, glow: 0.8, motion: 'smooth', blend: 'add' },
+    elements: {
+      skyGradient: 1, aurora: 1.2, shaderFlow: 0.8,
+      lightRays: 1.5, halos: 1.2, concentric: 0.8, waveform: 1,
+      dust: 1.5, orbs: 1.2, twinkles: 0.8,
+      feedback: 0.8, kaleidoscope: 0.5,
+    },
+    forbidden: ['strobe', 'sharp', 'blocky'],
+    maxBusy: 3,
+  },
   transitions: [
     { type: 'fade', weight: 5 },
     { type: 'zoom', weight: 2 },

@@ -4,9 +4,11 @@ import { MAX_FIGURES_PER_TRAIT, Motif, pickMotif } from './motif';
 import { createRng } from './seeded-random';
 import { CUTE_STYLE } from './styles/cute.style';
 import { EDM_STYLE } from './styles/edm.style';
+import { VJ_STYLE_LIST } from './styles';
+import { CINEMATIC_STYLE } from './styles/cinematic.style';
 
-const edm = EDM_STYLE.grammar!;
-const cute = CUTE_STYLE.grammar!;
+const edm = EDM_STYLE.grammar;
+const cute = CUTE_STYLE.grammar;
 const ids = (m: Motif) => [...m.field, ...m.figures, ...m.accents, ...m.post].map((p) => p.id);
 const fullKey = (m: Motif) => ids(m).join('|');
 const jaccard = (a: string[], b: string[]) => {
@@ -31,8 +33,10 @@ describe('pickMotif', () => {
   it('respects forbidden traits, exclusive pairs and the per-trait figure cap', () => {
     for (let seed = 0; seed < 200; seed++) {
       const mood = { arousal: (seed % 10) / 10, dynamics: ((seed * 7) % 10) / 10 };
-      const c = pickMotif(mood, cute, seed);
-      ids(c).forEach((id) => expect(ELEMENTS[id].traits.some((t) => cute.forbidden.includes(t))).toBe(false));
+      for (const { grammar } of VJ_STYLE_LIST) {
+        const m = pickMotif(mood, grammar, seed);
+        [...m.field, ...m.figures, ...m.accents, ...m.post].forEach((p) => expect(ELEMENTS[p.id].traits.some((t) => grammar.forbidden.includes(t))).toBe(false));
+      }
 
       const e = pickMotif(mood, edm, seed);
       const figures = e.figures.map((f) => ELEMENTS[f.id]);
@@ -54,6 +58,29 @@ describe('pickMotif', () => {
     const fast = Array.from({ length: 20 }, (_, i) => pickMotif({ arousal: 0.85, dynamics: 0.3 }, edm, 100 + i).figures.map((f) => f.id));
     const pairs = slow.flatMap((a) => fast.map((b) => jaccard(a, b)));
     expect(pairs.reduce((s, v) => s + v, 0) / pairs.length).toBeLessThan(0.4);
+  });
+
+  it('every style can fill a motif from its own pool', () => {
+    for (const { id, grammar } of VJ_STYLE_LIST) {
+      const m = pickMotif({ arousal: 0.5, dynamics: 0.5 }, grammar, 1);
+      expect(m.figures.length, id).toBeGreaterThanOrEqual(2);
+      expect(m.accents.length, id).toBeGreaterThanOrEqual(1);
+      Object.keys(grammar.elements).forEach((e) => expect(ELEMENTS[e], `${id}: ${e}`).toBeDefined());
+    }
+  });
+
+  it('keeps Cute to its kawaii vocabulary, with round ripples only', () => {
+    const foreign = ['shaderFlow', 'kaleidoscope', 'ledWall', 'spectrumBars', 'waveform'];
+    for (let seed = 0; seed < 100; seed++) {
+      const m = pickMotif({ arousal: (seed % 10) / 10, dynamics: 0.5 }, cute, seed);
+      ids(m).forEach((id) => expect(foreign).not.toContain(id));
+      m.figures.filter((f) => f.id === 'concentric').forEach((f) => expect(f.params['sides']).toBeLessThan(3));
+    }
+  });
+
+  it("carries the style's fixed overlays", () => {
+    expect(pickMotif({ arousal: 0.5, dynamics: 0.5 }, CINEMATIC_STYLE.grammar, 1).overlay.map((o) => o.id)).toEqual(['filmFrame']);
+    expect(pickMotif({ arousal: 0.5, dynamics: 0.5 }, edm, 1).overlay).toEqual([]);
   });
 
   it('gives the same element different song-level parameters across songs', () => {

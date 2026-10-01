@@ -10,7 +10,7 @@ export const EDM_STYLE: VJStyle = {
     mid: [['#05000d', '#ff00d4', '#00e5ff', '#7b2cff'], ['#030008', '#39ff14', '#00b3ff', '#ff2a6d']],
     high: [['#000000', '#ff006e', '#00f0ff', '#fffb00'], ['#050005', '#ff1f1f', '#ff00c8', '#ffffff']],
   },
-  presets: [],
+  affinity: { valence: 0.5, arousal: 0.85, brightness: 0.6 },
   grammar: {
     skin: { line: 'neon', lineWidth: 3, roundness: 0, glow: 1, motion: 'snappy', blend: 'add' },
     elements: {

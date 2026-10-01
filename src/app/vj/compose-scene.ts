@@ -10,6 +10,8 @@ export interface ElementUse {
   id: string;
   params: ParamValues;
   strength: number;
+  /** Drawn above everything, outside the post effect and camera move. */
+  overlay?: boolean;
 }
 
 export const POST_MIN_TARGET = 0.6;
@@ -44,7 +46,14 @@ export function composeScene(motif: Motif, target: number, index: number, previo
     .slice(0, Math.max(0, accentCount));
 
   const post = target > POST_MIN_TARGET ? motif.post.slice(0, 1) : [];
-  return [{ id: field.id, params: field.params, strength: 1 }, ...figures.map((f) => use(f, target)), ...accents.map((a) => use(a, target)), ...post.map((p) => use(p, target))];
+  const overlays = motif.overlay.map((o): ElementUse => ({ id: o.id, params: o.params, strength: 1, overlay: true }));
+  return [
+    { id: field.id, params: field.params, strength: 1 },
+    ...figures.map((f) => use(f, target)),
+    ...accents.map((a) => use(a, target)),
+    ...post.map((p) => use(p, target)),
+    ...overlays,
+  ];
 }
 
 export const figureKey = (figures: { id: string }[]): string =>

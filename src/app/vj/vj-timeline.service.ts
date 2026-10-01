@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { AudioAnalysis } from '../audio/audio-analysis.model';
 import { percentile } from '../audio/audio-analyzer.service';
 import { onsetStrengthAt } from '../audio/audio-features';
-import { compositionKey, composeScene, ElementUse } from './compose-scene';
+import { compositionKey, composeScene } from './compose-scene';
 import { effectiveHitThreshold, fit, Look, neutralLook, TRANSITION_ENERGY } from './look';
 import { pickMotif } from './motif';
 import { createRng, pick, pickWeighted, Rng } from './seeded-random';
@@ -21,7 +21,7 @@ const TIER_OFFSET: Record<EnergyTier, number> = { low: -1, mid: 0, high: 1 };
  * Deterministic rule-based scene planner: AudioAnalysis + VJStyle + Look + seed → VJScene[].
  * Same inputs always yield the same scenes; change the seed to "regenerate".
  * Each scene aims at a target energy (song arousal, pushed by its tier as far as the song's
- * dynamics allow); presets and transitions are weighted by how well they fit that target.
+ * dynamics allow); elements and transitions are weighted by how well they fit that target.
  */
 export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: number, look: Look = neutralLook(style)): VJScene[] {
   const rng = createRng(seed);
@@ -32,8 +32,7 @@ export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: numbe
   const spread = Math.max(...energies) - Math.min(...energies);
   const fitTo = (energy: number, target: number) => (look.adaptive ? fit(energy, target) : 1);
   const hitThreshold = effectiveHitThreshold(style, look);
-  const grammar = style.grammar;
-  const motif = grammar ? pickMotif(look, grammar, seed) : undefined;
+  const motif = pickMotif(look, style.grammar, seed);
 
   let prevPreset = '';
   return segments.map((seg, i): VJScene => {
@@ -42,14 +41,8 @@ export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: numbe
     const effectiveTier: EnergyTier = seg.sectionType === 'chorus' && tier === 'low' ? 'mid' : tier;
     const target = Math.min(1, Math.max(0, look.arousal + TIER_OFFSET[effectiveTier] * (0.1 + 0.4 * look.dynamics)));
 
-    let composition: ElementUse[] | undefined;
-    let preset: string;
-    if (motif && grammar) {
-      composition = composeScene(motif, target, i, prevPreset, grammar, rng);
-      preset = compositionKey(composition);
-    } else {
-      preset = pickLegacyPreset(style, effectiveTier, target, prevPreset, look, rng);
-    }
+    const composition = composeScene(motif, target, i, prevPreset, style.grammar, rng);
+    const preset = compositionKey(composition);
     prevPreset = preset;
 
     const strongHit = i > 0 && onsetStrengthAt(analysis, seg.start, 0.08) >= hitThreshold;
@@ -80,16 +73,6 @@ export function buildScenes(analysis: AudioAnalysis, style: VJStyle, seed: numbe
       },
     };
   });
-}
-
-/** Whole-scene presets for styles not yet migrated to element composition. */
-function pickLegacyPreset(style: VJStyle, tier: EnergyTier, target: number, previous: string, look: Look, rng: Rng): string {
-  const others = style.presets.filter((p) => p.id !== previous);
-  const candidates = others.length ? others : style.presets;
-  const weighted = candidates
-    .map((p) => ({ value: p.id, weight: (look.adaptive ? fit(p.energy ?? 0.5, target) : 1) * (p.tiers.includes(tier) ? 1 : look.adaptive ? 0.3 : 0) }))
-    .filter((c) => c.weight > 0);
-  return weighted.length ? pickWeighted(rng, weighted) : pick(rng, candidates).id;
 }
 
 /** Splits analyzer sections into scene-sized pieces, cutting on the strongest nearby beat. */

@@ -10,11 +10,20 @@ export const ANIME_STYLE: VJStyle = {
     mid: [['#ff4d4d', '#ffb300', '#ffffff', '#111111'], ['#2d6cdf', '#6ee7ff', '#ffffff', '#111111']],
     high: [['#e8113b', '#ffd500', '#ffffff', '#000000'], ['#ff5e00', '#fff200', '#ffffff', '#000000']],
   },
-  presets: [
-    { id: 'speedlines', tiers: ['mid', 'high'] },
-    { id: 'panels', tiers: ['low', 'mid'] },
-    { id: 'burst', tiers: ['high'] },
-  ],
+  affinity: { valence: 0.65, arousal: 0.7, brightness: 0.6 },
+  grammar: {
+    skin: { line: 'ink', lineWidth: 6, roundness: 0, glow: 0, motion: 'snappy', blend: 'normal' },
+    elements: {
+      celBands: 1.5, dotPattern: 0.5, shaderFlow: 0.5,
+      speedLines: 1.5, mangaPanels: 1.2, sunburst: 1.2, concentric: 0.7, spectrumBars: 0.6, ledWall: 0.5, waveform: 0.5, polyTunnel: 0.5,
+      shards: 1.2, impactFrame: 1, sparks: 0.6, iconBurst: 0.4,
+      feedback: 0.6, kaleidoscope: 0.5,
+    },
+    forbidden: [],
+    // Both rush out of a vanishing point.
+    exclusive: [['speedLines', 'polyTunnel']],
+    maxBusy: 4,
+  },
   transitions: [
     { type: 'wipe', weight: 3 },
     { type: 'flash', weight: 2 },

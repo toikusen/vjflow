@@ -69,6 +69,18 @@ describe('GeneratorStore generation length', () => {
   });
 });
 
+describe('GeneratorStore automatic style', () => {
+  it('resolves "auto" to a concrete style and explains the choice', async () => {
+    const store = setup(paidPolicy(false).policy);
+    store.selectStyle('auto');
+    await store.generate();
+    const project = store.project()!;
+    expect(project.styleId).not.toBe('auto');
+    expect(project.autoReason).toMatch(/BPM/);
+    expect(store.styleId()).toBe('auto');
+  });
+});
+
 describe('GeneratorStore automatic lyrics', () => {
   function setupWithAligner() {
     const align = vi.fn(async () => [{ start: 1, end: 2, text: '聽到的歌詞' }]);

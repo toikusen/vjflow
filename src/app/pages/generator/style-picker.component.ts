@@ -1,11 +1,24 @@
 import { Component, input, output } from '@angular/core';
 import { VJ_STYLE_LIST } from '../../vj/styles';
-import { VJStyleId } from '../../vj/vj-project.model';
+import { StyleChoice } from '../../vj/vj-project.model';
 
 @Component({
   selector: 'app-style-picker',
   template: `
     <div class="grid" role="radiogroup" aria-label="VJ 風格">
+      <button
+        type="button"
+        role="radio"
+        class="card"
+        [class.selected]="selected() === 'auto'"
+        [attr.aria-checked]="selected() === 'auto'"
+        [disabled]="disabled()"
+        (click)="select.emit('auto')"
+      >
+        <span class="swatch auto"></span>
+        <span class="name">自動</span>
+        <span class="tagline">依歌曲的情緒、速度與音色挑選風格</span>
+      </button>
       @for (style of styles; track style.id) {
         <button
           type="button"
@@ -34,13 +47,14 @@ import { VJStyleId } from '../../vj/vj-project.model';
     .card.selected { border-color: var(--accent); box-shadow: 0 0 0 4px rgb(255 61 154 / 0.15); }
     .card:disabled { opacity: 0.5; cursor: not-allowed; }
     .swatch { aspect-ratio: 16 / 9; border-radius: 8px; }
+    .swatch.auto { background: conic-gradient(from 200deg, #ff00d4, #ffb3d9, #ffd166, #f2e6d0, #3a5a78, #00e5ff, #ff00d4); }
     .name { font-weight: 700; }
     .tagline { font-size: 12px; color: var(--muted); }
   `,
 })
 export class StylePickerComponent {
-  readonly selected = input.required<VJStyleId>();
+  readonly selected = input.required<StyleChoice>();
   readonly disabled = input(false);
-  readonly select = output<VJStyleId>();
+  readonly select = output<StyleChoice>();
   protected readonly styles = VJ_STYLE_LIST;
 }

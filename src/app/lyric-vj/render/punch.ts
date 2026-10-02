@@ -33,6 +33,7 @@ export const punch: TemplateRenderer = {
     const p = rt.params;
     const group = new THREE.Group();
     group.rotation.z = ((p['tilt'] as number) * Math.PI) / 180;
+    group.position.y = (p['lift'] as number) ?? 0;
 
     // fit the keyword to the requested width
     const probe: GlyphStyle = { family: rt.fonts.display, weight: 400, size: 200 };
@@ -46,11 +47,11 @@ export const punch: TemplateRenderer = {
     const echo = p['outline'] ? makeGlyphs(keyword, { ...kStyle, outline: Math.max(2, size * 0.03) }, color(rt.palette.glow, 1.4)) : [];
     placeRow(echo, 0, 30);
 
-    const sStyle: GlyphStyle = { family: rt.fonts.body, weight: 700, size: 60 };
+    const sStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 84 }; // readable from the back of a live house
     const small: Glyph[][] = [];
     if (before) small.push(makeGlyphs(before.replace(/\s+/g, ' '), sStyle, color(rt.palette.text, 0.95), 6));
     if (after) small.push(makeGlyphs(after.replace(/\s+/g, ' '), sStyle, color(rt.palette.text, 0.95), 6));
-    const gap = size * 0.62 + 46;
+    const gap = size * 0.62 + 64;
     // text before the keyword reads above it, text after it below
     if (before) placeRow(small[0], 0, 30 + gap, 6);
     if (after) placeRow(small[before ? 1 : 0], 0, 30 - gap, 6);
@@ -78,7 +79,7 @@ export const punch: TemplateRenderer = {
         });
         echo.forEach((g) => {
           const m = glyphMotion(rt, g, echo.length, t - 0.07, STAGGER); // trails the fill
-          const off = size * 0.05 * (1 + pulse);
+          const off = size * (keyword.length <= 2 ? 0.02 : 0.05) * (1 + pulse); // dense single kanji blur under a wide echo
           g.mesh.position.set(g.x * drift + m.dx + off, g.y + m.dy - off, 0);
           g.mesh.scale.setScalar(m.scale * hit * drift * 1.04);
           g.mesh.rotation.z = m.rot;

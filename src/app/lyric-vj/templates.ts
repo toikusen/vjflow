@@ -14,6 +14,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       tilt: { type: 'number', min: -12, max: 12, default: 0, description: '整組文字傾斜角度（度）' },
       outline: { type: 'boolean', default: true, description: '關鍵字加描邊殘影' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度（確保可讀）' },
+      lift: { type: 'number', min: -200, max: 260, default: 0, description: '整組文字上移的像素（避開素材主體，例如人物在下方就往上）' },
     },
   },
   'frame-split': {
@@ -29,6 +30,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       drawSec: { type: 'number', min: 0.2, max: 1.2, default: 0.45, description: '框線畫出所需秒數' },
       align: { type: 'enum', values: ['center', 'left', 'right'], default: 'center', description: '框在畫面的位置' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.25, description: '背景壓暗程度' },
+      lift: { type: 'number', min: -200, max: 260, default: 0, description: '框與文字整組上移的像素（避開素材主體）' },
     },
   },
 };

@@ -17,6 +17,7 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' },
     out: { type: 'string' }, refs: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
+    reuse: { type: 'boolean', default: false }, // re-apply an existing review.json without calling the model
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -97,6 +98,11 @@ content.push({ type: 'text', text: `以上是歌詞 VJ 的關鍵畫面與動態�
 【評分標準】\n${RUBRIC}\n\n【企劃】\n${JSON.stringify(t)}\n\n【歌詞時間軸】\n${cuesIn(song, win).map((c) => `${c.id} ${c.start.toFixed(2)}–${c.end.toFixed(2)}s「${c.text}」`).join('\n')}\n\n【自動量測】\n${metrics}\n\n【模板參數範圍】\n${Object.values(TEMPLATES).map((x) => `${x.id}: ${Object.entries(x.params).map(([k, p]) => `${k} ${p.type === 'number' ? `${p.min}–${p.max}` : p.type === 'enum' ? p.values.join('/') : 'bool'}`).join(', ')}`).join('\n')}`});
 
 const began = Date.now();
+let review: ReviewResult;
+let cost = 0;
+if (a.reuse) {
+  review = JSON.parse(readFileSync(join(out, 'review.json'), 'utf8'));
+} else {
 const message = await new Anthropic().beta.messages
   .stream({
     model: a.model!, max_tokens: 32000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
@@ -108,11 +114,22 @@ const message = await new Anthropic().beta.messages
 if (message.stop_reason === 'refusal') throw new Error(`Refused: ${JSON.stringify(message.stop_details)}`);
 const text = message.content.find((b) => b.type === 'text')?.text;
 if (!text) throw new Error(`No text in response (stop_reason ${message.stop_reason})`);
-const review = JSON.parse(text) as ReviewResult;
+review = JSON.parse(text) as ReviewResult;
+cost = (message.usage.input_tokens * 4 + message.usage.output_tokens * 20) / 1e6;
+}
+// a review may only use params the shot's template has; drop the rest instead of failing the whole edit
+const dropped: string[] = [];
+for (const e of review.edits.shots) {
+  const spec = TEMPLATES[t.shots.find((s) => s.id === e.id)?.template ?? ''];
+  for (const k of Object.keys(e.params)) if (!spec || !(k in spec.params)) {
+    dropped.push(`鏡頭 ${e.id} 的參數 ${k} 不屬於其模板，已忽略`);
+    delete e.params[k];
+  }
+}
 const { treatment, ignored } = applyEdits(t, review.edits);
+ignored.push(...dropped);
 const checked = validateTreatment(treatment, song, win, TEMPLATES);
 writeFileSync(join(out, 'treatment.reviewed.json'), JSON.stringify(checked.treatment, null, 1));
-const cost = (message.usage.input_tokens * 4 + message.usage.output_tokens * 20) / 1e6;
 const log = { ...review, ignored, validationErrors: checked.errors, fixes: checked.fixes, images: images.length + refs.length, seconds: Math.round((Date.now() - began) / 1000), costUSD: +cost.toFixed(3) };
 writeFileSync(join(out, 'review.json'), JSON.stringify(log, null, 1));
 console.log(JSON.stringify({ scores: review.scores, issues: review.issues.length, edits: review.edits, assetUnusable: review.assetUnusable, validationErrors: checked.errors, costUSD: log.costUSD }, null, 1));

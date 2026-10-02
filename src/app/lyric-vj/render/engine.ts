@@ -223,7 +223,8 @@ export class LyricVjEngine {
     const sweep = shot.transitionIn === 'wipe' && since >= 0 && since < 0.35 ? since / 0.35 : -1;
 
     const cur = await this.plateTexture(shot, t);
-    const dissolve = prev && shot.transitionIn === 'dissolve' ? clamp01(since / 0.4) : 1;
+    // dissolving a plate into itself at another camera position shows a double image: skip it for the same asset
+    const dissolve = prev && shot.transitionIn === 'dissolve' && prev.asset !== shot.asset ? clamp01(since / 0.4) : 1;
     if (prev && dissolve < 1) {
       const p0 = await this.plateTexture(prev, t);
       this.placePlate(this.plates[0], p0.tex, prev, t, 1);

@@ -12,8 +12,10 @@ const STAGGER = 0.03;
 export function frameBox(params: Record<string, ParamValue>) {
   const w = (params['frameWidth'] as number) * W;
   const h = (params['frameHeight'] as number) * H;
-  const cx = { center: 0, left: -W * 0.16, right: W * 0.16 }[params['align'] as string] ?? 0;
-  return { w, h, cx, cy: 40 };
+  // keep the frame, its brackets and the right-aligned sub rows inside a 90 px safe margin
+  const room = Math.max(0, W / 2 - w / 2 - 90);
+  const cx = { center: 0, left: -room, right: room }[params['align'] as string] ?? 0;
+  return { w, h, cx: Math.sign(cx) * Math.min(Math.abs(cx), W * 0.16), cy: 40 + ((params['lift'] as number) ?? 0) };
 }
 
 /** Rows: explicit break indexes, else split at the first phrase space; spaces are dropped from the glyphs. */
@@ -106,18 +108,18 @@ export const frameSplit: TemplateRenderer = {
       const start = all.join('').indexOf(row);
       return start < 0 ? -1 : [...all.join('').slice(0, start)].length + j;
     };
-    // main row: fit inside the frame (56–108 px); overflow splits it in two
+    // main row: fit inside the frame (76–144 px, sized for a live-house screen); overflow splits it in two
     let mainRows = [rows[0]];
     const fit = (text: string) => {
       const probe: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 100 };
       const w100 = [...text].reduce((s, c) => s + advanceOf(c, probe), 0) || 1;
       return (100 * w * 0.86) / w100;
     };
-    let size = Math.min(108, fit(rows[0]));
-    if (size < 56) {
+    let size = Math.min(144, fit(rows[0]));
+    if (size < 76) {
       const c = [...rows[0]];
       mainRows = [c.slice(0, Math.ceil(c.length / 2)).join(''), c.slice(Math.ceil(c.length / 2)).join('')];
-      size = Math.max(56, Math.min(108, ...mainRows.map(fit)));
+      size = Math.max(76, Math.min(144, ...mainRows.map(fit)));
     }
     const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size };
     const mainGlyphs: Glyph[] = [];
@@ -132,12 +134,12 @@ export const frameSplit: TemplateRenderer = {
       mainGlyphs.push(...gs);
     });
     mainGlyphs.forEach((g, i) => (g.index = i));
-    const subStyle: GlyphStyle = { family: rt.fonts.body, weight: 700, size: 50 };
+    const subStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 70 };
     const subGlyphs: Glyph[] = [];
     rows.slice(1).forEach((row, r) => {
       const gs = makeGlyphs(row, subStyle, color(rt.palette.text, 0.9), 6);
       const rw = rowWidth(gs, 6);
-      placeRow(gs, cx + w / 2 - rw / 2, cy - h / 2 - 64 - r * 62, 6);
+      placeRow(gs, cx + w / 2 - rw / 2, cy - h / 2 - 82 - r * 84, 6);
       subGlyphs.push(...gs);
     });
     subGlyphs.forEach((g, i) => (g.index = mainGlyphs.length + i));

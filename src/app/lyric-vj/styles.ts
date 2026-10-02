@@ -34,10 +34,11 @@ export const STYLES: Record<string, StylePreset> = {
       '字體：關鍵句用 punch 滿版大字，敘事句用 frame-split；兩者交替但不必死板輪流。',
       '配色依歌詞意象決定（例如夜空→靛藍、黃昏→橘紅、雨夜→灰藍），背景暗、文字亮，對比要夠。',
       '色彩要飽和、暗部要深、地平線或光源處有明亮的光帶；不可灰濛濛、低對比。歌詞說「褪色」「黯淡」時，只用在構圖或光量上，不要把整張圖畫成灰色。',
-      '天空要有層次：前景雲、中景雲海、遠景天光；雲要流動、散開或在地平線鋪成雲海，這是這個風格最重要的畫面質感。',
+      '雲的移動是這個風格最重要的畫面質感：影片裡的雲要明顯在動（鏡頭緩慢往地平線推進、雲層被風吹過、雲層散開露出星空），看得出速度與方向；可以有一兩顆流星，但不要變成特效秀。',
+      '構圖參考：上方大片深色天空、下方地平線有發光的城市或景物輪廓，中間留給文字。',
       '文字壓在畫面主體上沒有關係，不需要刻意避開。',
     ],
-    assetSuffix: 'Background art for a lyric video: scenery and atmosphere only, no people or characters in focus, natural subtle motion, painterly anime background style, rich saturated colors, deep shadows, luminous horizon, layered clouds.',
+    assetSuffix: 'Background art for a lyric video: scenery and atmosphere only, no people or characters in focus, natural subtle motion, painterly anime background style, rich saturated colors, deep shadows, luminous horizon, clearly drifting clouds.',
   },
 };
 

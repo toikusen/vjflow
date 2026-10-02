@@ -18,7 +18,7 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
-    stills: { type: 'string' },
+    stills: { type: 'string' }, 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
   },
 });
 const ROOT = process.cwd();
@@ -119,7 +119,7 @@ try {
     await mux(silent, song.audio.mix, vocal, 0, win.start, len);
     const outputs = [vocal];
     let offsetMs: number | undefined;
-    if (song.audio.instrumental) {
+    if (song.audio.instrumental && a['with-instrumental']) {
       const inst = join(out, `lyric-vj_instrumental_${tag}.mp4`);
       await mux(silent, song.audio.instrumental, inst, song.audio.instrumentalOffsetSec ?? 0, win.start, len);
       outputs.push(inst);

@@ -42,13 +42,14 @@ describe('fxAt', () => {
     expect(fx(17).zoom).toBeGreaterThan(fx(16.5).zoom);
     expect(fx(20.05).rays).toBeGreaterThan(0.4);
     expect(fx(20.05).exposure).toBeGreaterThan(fx(19).exposure);
-    expect(fx(23).rays).toBeLessThan(0.05);
+    expect(fx(20.6).zoom).toBeGreaterThan(1.03); // still visibly punched in half a second later
+    expect(fx(26).rays).toBeLessThan(0.05);
   });
 
-  it('stays moderate: no exposure above +45 %, zoom punch under 6 %', () => {
+  it('stays within the caps: exposure ≤ +80 %, zoom ≤ 14 %', () => {
     for (let t = 15; t < 45; t += 0.02) {
-      expect(fx(t).exposure).toBeLessThan(1.45);
-      expect(fx(t).zoom).toBeLessThan(1.06);
+      expect(fx(t).exposure).toBeLessThanOrEqual(1.8);
+      expect(fx(t).zoom).toBeLessThanOrEqual(1.14);
     }
   });
 

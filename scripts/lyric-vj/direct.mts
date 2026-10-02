@@ -116,7 +116,7 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - moments：在段落交界放爆點，at 放在強拍上。
 ${MOMENT_KINDS.map((k) => `  - ${k}：${MOMENT_RULES[k].desc}（dur ${MOMENT_RULES[k].dur[1] ? `${MOMENT_RULES[k].dur[0]}–${MOMENT_RULES[k].dur[1]} 秒` : '填 0'}）`).join('\n')}
 - 每次副歌第一拍放 drop，前面接 2–4 秒的 build；最後一次副歌改用 finale。歌曲有安靜下來的落ちサビ、或最後副歌前能量明顯下降的段落時放 break；最後副歌前可以放 0.5–0.8 秒的 hold（先收再放）。
-- 多次副歌要有遞進：strength 一次比一次高（例如 1.0 → 1.15 → finale）。這個平台的原則是「有感但不誇張」：strength 不要超過 1.2。
+- 多次副歌要有遞進：strength 一次比一次高（例如 1.0 → 1.15 → finale）。strength 0.8–1.3；Live House 大螢幕上爆點要明顯。
 - 有 drop 或 finale 的那個鏡頭不需要再用 transitionIn flash（引擎會略過）。
 - 素材描述用英文，畫面不可有任何文字。這個範圍${TIERS[tier].video ? `要 ${tier === 'rich' ? Math.ceil(scenes * 0.6) : 1}–${scenes} 組素材（每組 1 image + 1 video）` : `要 1–${scenes} 張 image，不要 video`}。`;
 

@@ -121,8 +121,9 @@ export function levelAt(arc: ArcPoint[], moments: Moment[], t: number): number {
 }
 
 /**
- * Effect amounts at time t. Sized for "noticeable, never over the top": exposure stays under +40 %, the zoom
- * punch under 5 %, and nothing is mixed toward white (a white mix reads as grey fog over a dark plate).
+ * Effect amounts at time t. The user found +40 % / 5 % too small and quick (2026-10-03): drops now reach about
+ * +80 % background exposure and a 9–14 % punch-in that settles over ~1.5 s. Nothing is mixed toward white
+ * (a white mix reads as grey fog over a dark plate).
  */
 export function fxAt(t: number, moments: Moment[], arc: ArcPoint[]): MomentFx {
   const level = levelAt(arc, moments, t);
@@ -150,35 +151,35 @@ export function fxAt(t: number, moments: Moment[], arc: ArcPoint[]): MomentFx {
         const p = clamp((t - (m.at - d)) / d, 0, 1);
         if (p <= 0) break;
         // ramps up to the downbeat, then releases over ~0.5 s (the drop's punch takes over, no snap back)
-        const e = dt < 0 ? p * p : Math.exp(-dt * 6);
+        const e = dt < 0 ? p * p : Math.exp(-dt * 3);
         if (dt > 0 && e < 0.002) {
           fx.moteTime += d * 1.5 * s; // the extra mote travel stays after the build
           break;
         }
-        fx.zoom *= 1 + 0.035 * e * s;
-        fx.exposure *= 1 + 0.12 * e * s;
-        fx.saturation *= 1 + 0.08 * e * s;
-        fx.vignette += 0.18 * e * s;
-        fx.bloom += 0.25 * e * s;
+        fx.zoom *= 1 + 0.08 * e * s;
+        fx.exposure *= 1 + 0.25 * e * s;
+        fx.saturation *= 1 + 0.15 * e * s;
+        fx.vignette += 0.35 * e * s;
+        fx.bloom += 0.5 * e * s;
         fx.moteTime += d * p * p * 1.5 * s;
         break;
       }
       case 'drop':
       case 'finale': {
         if (dt < 0) break;
-        const k = (m.kind === 'finale' ? 1.35 : 1) * s;
-        const impact = Math.exp(-dt * 4.5);
-        fx.exposure *= 1 + 0.28 * k * impact;
-        fx.bloom += 0.7 * k * impact;
-        fx.rays = Math.max(fx.rays, Math.min(1, k * (dt < 0.08 ? dt / 0.08 : Math.exp(-(dt - 0.08) * 1.6))));
-        if (dt < 0.9) {
-          fx.shockR = dt / 0.9;
-          fx.shock = Math.max(fx.shock, 0.6 * k * (1 - dt / 0.9));
+        const k = (m.kind === 'finale' ? 1.5 : 1) * s;
+        const impact = Math.exp(-dt * 1.8);
+        fx.exposure *= 1 + 0.5 * k * impact;
+        fx.bloom += 1.3 * k * impact;
+        fx.rays = Math.max(fx.rays, Math.min(1.5, k * (dt < 0.06 ? dt / 0.06 : Math.exp(-(dt - 0.06) * 0.7))));
+        if (dt < 1.4) {
+          fx.shockR = dt / 1.4;
+          fx.shock = Math.max(fx.shock, k * (1 - dt / 1.4));
         }
-        // punch in, then settle back over ~0.6 s
-        fx.zoom = Math.max(fx.zoom, 1 + 0.045 * k * Math.exp(-dt * 6));
-        fx.shake = Math.max(fx.shake, 0.35 * k * Math.exp(-dt * 10));
-        fx.moteBurst = Math.max(fx.moteBurst, (1 - Math.exp(-dt * 5)) * Math.exp(-dt * 0.9) * k);
+        // punch in, then settle back over ~1.5 s
+        fx.zoom = Math.max(fx.zoom, 1 + 0.09 * k * Math.exp(-dt * 1.8));
+        fx.shake = Math.max(fx.shake, 0.8 * k * Math.exp(-dt * 5));
+        fx.moteBurst = Math.max(fx.moteBurst, (1 - Math.exp(-dt * 6)) * Math.exp(-dt * 0.5) * k);
         break;
       }
       case 'break': {
@@ -186,8 +187,8 @@ export function fxAt(t: number, moments: Moment[], arc: ArcPoint[]): MomentFx {
         const inK = smooth(dt / 0.8);
         const outK = 1 - smooth((dt - d + 0.6) / 0.6);
         const q = dt < 0 ? 0 : Math.min(inK, outK) * s;
-        fx.saturation *= 1 - 0.45 * q;
-        fx.exposure *= 1 - 0.18 * q;
+        fx.saturation *= 1 - 0.6 * q;
+        fx.exposure *= 1 - 0.3 * q;
         fx.vignette += 0.12 * q;
         // motes drift at 30 % speed while it is quiet
         fx.moteTime -= 0.7 * clamp(Math.min(dt, d), 0, d);
@@ -197,12 +198,12 @@ export function fxAt(t: number, moments: Moment[], arc: ArcPoint[]): MomentFx {
         const d = m.dur ?? MOMENT_RULES.hold.def;
         const into = t - (m.at - d);
         if (into < 0 || dt >= 0) break;
-        fx.black = Math.max(fx.black, 0.88 * smooth(into / Math.min(0.15, d / 2)) * Math.min(1, s));
+        fx.black = Math.max(fx.black, 0.95 * smooth(into / Math.min(0.15, d / 2)) * Math.min(1, s));
         break;
       }
     }
   }
-  fx.zoom = Math.min(fx.zoom, 1.055);
-  fx.exposure = Math.min(fx.exposure, 1.42);
+  fx.zoom = Math.min(fx.zoom, 1.14);
+  fx.exposure = Math.min(fx.exposure, 1.8);
   return fx;
 }

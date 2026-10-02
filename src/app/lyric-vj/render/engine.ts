@@ -71,19 +71,19 @@ const FINAL_SHADER = {
       vec2 q = (uv - ORIGIN) * vec2(1.7778, 1.0);
       float r = length(q);
       if (uShockR >= 0.0) {                         // shockwave: a thin ring pushes the image outward as it passes
-        float ring = exp(-pow((r - uShockR * 1.3) / 0.035, 2.0));
-        uv += normalize(q + 1e-5) / vec2(1.7778, 1.0) * ring * 0.010 * uShock;
+        float ring = exp(-pow((r - uShockR * 1.6) / 0.06, 2.0));
+        uv += normalize(q + 1e-5) / vec2(1.7778, 1.0) * ring * 0.028 * uShock;
       }
       vec2 d = uv - 0.5;
-      float a = uAberration * (1.0 + 3.0 * uFlash + 4.0 * uShock);
+      float a = uAberration * (1.0 + 3.0 * uFlash + 8.0 * uShock);
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       c *= 1.0 + 0.45 * uHit;         // accent hit: exposure up (highlights bloom), shadows stay dark
       if (uRays > 0.0) {                            // light rays bursting from the horizon, added light only
         float ang = atan(q.y, q.x);
         float k = floor((ang + 3.1416) * 18.0);
         float beam = pow(0.5 + 0.5 * cos(ang * 36.0 + h1(k) * 6.28), 6.0) * (0.4 + 0.6 * h1(k + 7.0));
-        float fall = exp(-r * 2.2) * smoothstep(0.0, 0.08, r);
-        c += uRayColor * (beam * fall * 0.9 + exp(-r * 6.0) * 0.5) * uRays;
+        float fall = exp(-r * 1.1) * smoothstep(0.0, 0.06, r);
+        c += uRayColor * (beam * fall * 1.4 + exp(-r * 4.0) * 0.8) * uRays;
       }
       c *= 1.0 - (0.55 + uVignette) * dot(d, d) * 1.6; // vignette
       c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
@@ -384,7 +384,7 @@ export class LyricVjEngine {
       // after a drop the motes are blown outward from the horizon, then drift back
       const ox = x;
       const oy = y + H * 0.16;
-      const push = 1 + 0.6 * m.moteBurst;
+      const push = 1 + 1.2 * m.moteBurst;
       pos.setXYZ(i, ox * push, oy * push - H * 0.16, 0);
     }
     pos.needsUpdate = true;

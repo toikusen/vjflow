@@ -12,11 +12,14 @@ import { beatsDuring, Shot, TreatmentV3 } from '../treatment';
 import { clamp01, easeOutCubic, hash } from './glyphs';
 import { frameSplit } from './frame-split';
 import { punch } from './punch';
+import { scatter } from './scatter';
+import { typewriter } from './typewriter';
+import { vertical } from './vertical';
 import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit };
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter };
 
 export interface AssetSource {
   kind: 'image' | 'video';

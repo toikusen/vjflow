@@ -28,3 +28,29 @@ export function phrases(text: string): string[] {
   const b = [...phraseBoundaries(text)].sort((x, y) => x - y);
   return b.slice(1).map((e, i) => chars.slice(b[i], e).join('')).filter((p) => p.trim());
 }
+
+const len = (s: string) => [...s].length;
+
+/**
+ * Splits a line into at most `max` chunks for multi-row layouts: spaces first, then phrase boundaries near the middle
+ * of the longest chunk. No chunk cuts a word; chunks shorter than `minLen` are not split further.
+ */
+export function chunks(text: string, max: number, minLen = 4): string[] {
+  const parts = text.split(/[\s　]+/).filter(Boolean);
+  while (parts.length > max) {
+    let i = 0;
+    for (let j = 1; j < parts.length - 1; j++) if (len(parts[j]) + len(parts[j + 1]) < len(parts[i]) + len(parts[i + 1])) i = j;
+    parts.splice(i, 2, parts[i] + parts[i + 1]);
+  }
+  while (parts.length < max) {
+    const i = parts.reduce((best, p, j) => (len(p) > len(parts[best]) ? j : best), 0);
+    const p = parts[i];
+    const n = len(p);
+    if (n < minLen * 2) break;
+    const cut = [...phraseBoundaries(p)].filter((x) => x >= 2 && n - x >= 2).sort((a, b) => Math.abs(a - n / 2) - Math.abs(b - n / 2))[0];
+    if (cut === undefined) break;
+    const cs = [...p];
+    parts.splice(i, 1, cs.slice(0, cut).join(''), cs.slice(cut).join(''));
+  }
+  return parts;
+}

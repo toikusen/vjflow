@@ -46,6 +46,14 @@ describe('checkStyle (emotional)', () => {
     expect(errs).toMatch(/s2 長 2\.0 秒/);
     expect(errs).toMatch(/s1、s2 連續使用 flash/);
   });
+
+  it('asks for template variety', () => {
+    const t = base();
+    t.shots[1].template = 'punch';
+    const errs = checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n');
+    expect(errs).toMatch(/s1、s2 連續使用 punch/);
+    expect(errs).toMatch(/只用了 1 種版型/);
+  });
 });
 
 describe('readable', () => {

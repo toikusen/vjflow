@@ -33,4 +33,42 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '框與文字整組上移的像素（避開素材主體）' },
     },
   },
+  typewriter: {
+    id: 'typewriter',
+    description: '逐字打字：整句以游標逐字打出（在句子前半段打完），長句分兩行、左緣對齊。適合主歌、獨白、安靜的敘事句。進場固定是打字，enter 不影響。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      position: { type: 'enum', values: ['center', 'bottom', 'left'], default: 'center', description: '文字位置' },
+      cursor: { type: 'boolean', default: true, description: '顯示游標（打完後閃爍）' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+      lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
+    },
+  },
+  vertical: {
+    id: 'vertical',
+    description: '直排：日文縱書，句子依詞切成 1–3 欄、由右往左讀，每欄起點逐欄下移；強調範圍的字較大、用強調色。適合抒情句、副歌前的鋪陳、需要留白的畫面。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      position: { type: 'enum', values: ['right', 'center', 'left'], default: 'right', description: '直排欄在畫面的位置' },
+      step: { type: 'number', min: 0, max: 1.5, default: 0.6, description: '每欄起點下移量（字高的倍數）' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+      lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
+    },
+  },
+  scatter: {
+    id: 'scatter',
+    description: '散佈層疊：句子切成 2–3 個詞組沿對角線錯落排列，關鍵字（強調範圍，否則最長的詞組）特大，其餘小字；詞組依序進場，停留時有前後景視差。適合副歌、情緒高點、需要張力但不想每次都用 punch 的句子。',
+    defaultEnter: 'pop',
+    defaultExit: 'fade',
+    params: {
+      direction: { type: 'enum', values: ['down', 'up'], default: 'down', description: 'down：左上往右下；up：左下往右上' },
+      spread: { type: 'number', min: 0.4, max: 1, default: 0.85, description: '詞組分散程度' },
+      tilt: { type: 'number', min: -8, max: 8, default: 0, description: '整組傾斜角度（度）' },
+      flash: { type: 'boolean', default: false, description: '踩拍時亮閃' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+      lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
+    },
+  },
 };

@@ -20,7 +20,7 @@ export const FONTS: FontSpec[] = [
 ];
 
 export type Fonts = { display: string; body: string; script?: string };
-export const DEFAULT_FONTS: Required<Fonts> = { display: 'Dela Gothic One', body: 'Zen Kaku Gothic New', script: 'Klee One' };
+export const DEFAULT_FONTS: Required<Fonts> = { display: 'Dela Gothic One', body: 'Zen Kaku Gothic New', script: 'Zen Kurenaido' };
 
 export const familiesFor = (role: FontRole) => FONTS.filter((f) => f.roles.includes(role)).map((f) => f.family);
 

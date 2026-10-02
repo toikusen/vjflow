@@ -1,19 +1,22 @@
 // Song preparation: audio analysis (the app's own analyzer), lyric timing with a vocal-stem check, instrumental offset.
 // npx tsx --tsconfig tsconfig.json scripts/lyric-vj/song.mts --audio mix.mp3 [--instrumental inst.mp3] --vocals vocals.wav \
 //   [--lrc lyrics.lrc] --title "artist - title" --out out/indigo
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { analyzeAudio } from '../../src/app/audio/audio-analyzer.service';
 import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
-import { alignOffset, checkTiming, downbeats, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
+import { alignLyrics, snapToPhrases } from '../../src/app/lyric-vj/align';
+import { alignOffset, checkTiming, downbeats, phraseStarts, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
   options: {
     audio: { type: 'string' }, instrumental: { type: 'string' }, vocals: { type: 'string' },
     lrc: { type: 'string' }, title: { type: 'string' }, out: { type: 'string' },
+    lyrics: { type: 'string' }, language: { type: 'string', default: 'ja' }, // plain lyrics (one line per line) for Whisper alignment
   },
 });
 if (!a.audio || !a.vocals || !a.out) throw new Error('需要 --audio、--vocals、--out');
@@ -39,10 +42,26 @@ if (a.lrc) {
   check = checkTiming(cues, active);
 } else {
   const hit = await new LyricSearchService().find(a.title ?? basename(a.audio), analysis.duration);
-  if (!hit?.synced) throw new Error(`LRCLIB 沒有帶時間的歌詞（${hit ? '只有純文字' : '找不到'}）；請提供 --lrc（Whisper 對齊尚未接入 Node 流程）`);
-  cues = toCues(hit.text, 'lrclib');
-  check = checkTiming(cues, active);
-  if (!check.passed) throw new Error(`LRCLIB 時間未通過人聲檢查：${JSON.stringify(check)}；請提供 --lrc`);
+  const lrclib = hit?.synced ? toCues(hit.text, 'lrclib') : undefined;
+  const lrclibCheck = lrclib && checkTiming(lrclib, active);
+  if (lrclib && lrclibCheck?.passed) {
+    cues = lrclib;
+    check = lrclibCheck;
+  } else {
+    // no usable synced lyrics: time the known text with Whisper on the vocal stem
+    const text = a.lyrics ? readFileSync(a.lyrics, 'utf8') : hit && !hit.synced ? hit.text : undefined;
+    if (!text) throw new Error(`LRCLIB ${lrclib ? '的時間未通過人聲檢查' : '找不到歌詞'}；請提供 --lrc 或 --lyrics（純文字歌詞）`);
+    const lines = text.split('\n').map((l) => l.replace(/^\[[^\]]*\]/, '').trim()).filter(Boolean);
+    const txt = join(a.out, 'lyrics.txt');
+    writeFileSync(txt, lines.join('\n'));
+    const asrFile = join(a.out, 'asr.json');
+    if (!existsSync(asrFile)) {
+      execFileSync('uv', ['run', '-q', '--with', 'mlx-whisper', 'python', 'scripts/lyric-vj/asr.py', a.vocals, txt, asrFile, '--language', a.language!], { stdio: 'inherit' });
+    }
+    cues = snapToPhrases(alignLyrics(lines, JSON.parse(readFileSync(asrFile, 'utf8')).words, analysis.duration), phraseStarts(active));
+    check = checkTiming(cues, active);
+    console.log(`Whisper 對齊：${cues.filter((c) => c.confidence === 'aligned').length}/${cues.length} 句對上`);
+  }
 }
 
 let instrumentalOffsetSec: number | undefined;

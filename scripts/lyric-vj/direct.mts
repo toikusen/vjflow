@@ -11,6 +11,7 @@ import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
+import { analyzeStructure, describeStructure, suggestMoments } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
 import { jobIdFor, jobStatus } from './status.mts';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
@@ -20,7 +21,7 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, style: { type: 'string', default: '' },
     db: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
-    'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
+    'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, 'exclude-ref': { type: 'string' }, // a database song's own VJ must not be its reference title: { type: 'string' },
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -88,8 +89,13 @@ const cueLines = cues.map((c) => {
 }).join('\n');
 const catalog = Object.values(TEMPLATES).map((t) =>
   `- ${t.id}：${t.description}\n  參數：${Object.entries(t.params).map(([k, p]) => `${k}（${p.description}；${p.type === 'number' ? `${p.min}–${p.max}` : p.type === 'enum' ? p.values.join('/') : 'true/false'}，預設 ${p.default}）`).join('；')}`).join('\n');
-const sections = song.sections.filter((s) => s.end > win.start && s.start < win.end).map((s) => `${s.start.toFixed(1)}–${s.end.toFixed(1)}s ${s.type ?? ''} 能量 ${s.energy.toFixed(2)}`).join('\n');
-const db = a.db ? references(loadDb(a.db), a.style + cues.map((c) => c.text).join('')) : { text: '（無）', ids: [] };
+// structure from lyric repetition + energy (structure.ts); the analyzer's own sections are not reliable enough
+const structure = analyzeStructure(song);
+const inWin = (t: number) => t >= win.start - 0.5 && t <= win.end;
+const sections = structure.sections.filter((s) => s.end > win.start && s.start < win.end).map((s) => `${s.start.toFixed(1)}–${s.end.toFixed(1)}s ${s.kind} 能量 ${s.energy.toFixed(2)}`).join('\n');
+const suggested = suggestMoments(structure);
+const suggestedText = suggested.moments.filter((m) => inWin(m.at)).map((m) => `${m.kind}@${m.at.toFixed(2)}${m.dur ? ` dur ${m.dur.toFixed(1)}` : ''} strength ${m.strength}`).join('；') || '（無）';
+const db = a.db ? references(loadDb(a.db).filter((v) => v.video_id !== a['exclude-ref']), a.style + cues.map((c) => c.text).join('')) : { text: '（無）', ids: [] };
 
 const style = STYLES[a['style-id']!];
 if (!style) throw new Error(`未知風格 ${a['style-id']}`);
@@ -121,7 +127,7 @@ ${MOMENT_KINDS.map((k) => `  - ${k}：${MOMENT_RULES[k].desc}（dur ${MOMENT_RUL
 - 素材描述用英文，畫面不可有任何文字。這個範圍${TIERS[tier].video ? `要 ${tier === 'rich' ? Math.ceil(scenes * 0.6) : 1}–${scenes} 組素材（每組 1 image + 1 video）` : `要 1–${scenes} 張 image，不要 video`}。`;
 
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
-const USER = `【輸出要求】shots 大約 ${expectShots} 個（每個 ${style.shotSec[0]}–${style.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${cues.length} 句。\n\n【這首歌的補充說明】\n${a.style}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
+const USER = `【輸出要求】shots 大約 ${expectShots} 個（每個 ${style.shotSec[0]}–${style.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${cues.length} 句。\n\n【這首歌的說明】\n${a.style ? `${a.style}\n` : ''}${describeStructure(structure)}\n\n【程式建議的爆點】（依結構產生，可以調整強度與長度，位置除非有明確理由不要改）\n${suggestedText}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const client = new Anthropic();

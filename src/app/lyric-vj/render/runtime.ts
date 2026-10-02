@@ -21,6 +21,8 @@ export interface CueRuntime {
   exitDur: number;
   /** Absolute times of the beats this cue hits. */
   accentTimes: number[];
+  /** 0.35..1: motion speed-up for short lines (1 = a line of ≥ 2 s). */
+  pace: number;
 }
 
 /** Per-frame effects templates can request from the post stack. */
@@ -66,13 +68,15 @@ export function emphasisOf(rt: CueRuntime, index: number) {
  * combine them with their own layout. `stagger` is the delay between characters.
  */
 export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stagger: number) {
+  stagger *= rt.pace;
   const start = rt.showFrom + g.index * stagger;
+  const enterSec = 0.32 * rt.pace;
   let scale = 1;
   let opacity = 1;
   let dx = 0;
   let dy = 0;
   let rot = 0;
-  const p = (t - start) / 0.32;
+  const p = (t - start) / enterSec;
   switch (rt.style.enter) {
     case 'slam':
       scale = 1 + 1.4 * (1 - easeOutBack(p));
@@ -117,10 +121,10 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 
 /** When the last character has finished entering (all opaque and within 5 % of final scale). */
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
-  const last = rt.showFrom + (n - 1) * stagger;
-  // seconds per glyph until opaque and back at final scale (back-easing overshoots until the end of its 0.32 s)
+  const last = rt.showFrom + (n - 1) * stagger * rt.pace;
+  // seconds per glyph until opaque and back at final scale (back-easing overshoots until the end of its entrance)
   const settle = { slam: 0.34, pop: 0.34, wipe: 0.2, fade: 0.3, cut: 0 }[rt.style.enter];
-  return last + settle;
+  return last + settle * rt.pace;
 }
 
 export const color = (hex: string, boost = 1) => new THREE.Color(hex).multiplyScalar(boost);

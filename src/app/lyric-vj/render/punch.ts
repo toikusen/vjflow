@@ -58,7 +58,7 @@ export const punch: TemplateRenderer = {
     if (after) placeRow(small[before ? 1 : 0], 0, 30 - gap, 6);
     for (const g of [...echo, ...kw, ...small.flat()]) group.add(g.mesh);
 
-    const smallRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'fade' }, showFrom: rt.showFrom + 0.1 };
+    const smallRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'fade' }, showFrom: rt.showFrom + 0.1 * rt.pace };
     const bounce = p['bounce'] as number;
     const shake = method === 'shake';
 

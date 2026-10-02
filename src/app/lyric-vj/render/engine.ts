@@ -149,14 +149,18 @@ export class LyricVjEngine {
       const shot = treatment.shots.find((s) => s.id === style.shot)!;
       const next = styled[i + 1]?.cue;
       const nextShow = next ? next.start - LEAD : Infinity;
-      const exitAt = Math.min(cue.end, nextShow - EXIT_SEC - 0.02);
+      const len = cue.end - cue.start;
+      const pace = Math.min(1, Math.max(0.35, len / 2)); // short lines enter and leave faster so they stay readable
+      const exitSec = EXIT_SEC * pace;
+      const exitAt = Math.min(cue.end, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
       const rt: CueRuntime = {
         cue, style, shot, params: shot.params, palette: treatment.styleAnchor.palette, fonts,
         showFrom: cue.start - LEAD,
-        exitAt: Math.max(cue.start + 0.3, exitAt),
-        exitDur: Math.max(0.08, Math.min(EXIT_SEC, nextShow - Math.max(cue.start + 0.3, exitAt) - 0.02)),
+        exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
+        exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
         accentTimes: (style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined),
+        pace,
       };
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;

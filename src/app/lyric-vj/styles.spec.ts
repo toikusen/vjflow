@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast, readable } from './render/runtime';
-import { checkStyle, STYLES } from './styles';
+import { assetGroups, checkStyle, STYLES } from './styles';
 import { SongTimeline } from './timeline';
 import { TreatmentV3 } from './treatment';
 
@@ -22,6 +22,14 @@ const base = (): TreatmentV3 => ({
   cues: [],
 });
 
+describe('assetGroups', () => {
+  it('allows one group per 20 s, at most 4', () => {
+    expect(assetGroups(STYLES['emotional'], { start: 0, end: 16 })).toBe(1);
+    expect(assetGroups(STYLES['emotional'], { start: 0, end: 89 })).toBe(4);
+    expect(assetGroups(STYLES['emotional'], { start: 0, end: 230 })).toBe(4);
+  });
+});
+
 describe('checkStyle (emotional)', () => {
   it('accepts a treatment that follows the preset', () => {
     expect(checkStyle(base(), STYLES['emotional'], song, { start: 20, end: 36 })).toEqual([]);
@@ -30,13 +38,13 @@ describe('checkStyle (emotional)', () => {
   it('flags extra videos, missing assets, one-line shots and off-section flashes', () => {
     const t = base();
     t.assets.push({ id: 'v2', kind: 'video', prompt: 'x', from: 'i' });
-    t.shots[1] = { ...t.shots[1], start: 26, end: 28, asset: undefined, transitionIn: 'flash' };
+    t.shots[1] = { ...t.shots[1], start: 26, end: 28, asset: undefined, transitionIn: 'flash' }; // right after s1's flash
     t.shots[2].start = 28;
     const errs = checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n');
-    expect(errs).toMatch(/1–1 段 video/);
+    expect(errs).toMatch(/1–1 段 video/); // 16 s window → one group
     expect(errs).toMatch(/s2 沒有素材/);
     expect(errs).toMatch(/s2 長 2\.0 秒/);
-    expect(errs).toMatch(/s2 用了 flash/);
+    expect(errs).toMatch(/s1、s2 連續使用 flash/);
   });
 });
 

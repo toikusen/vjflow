@@ -90,10 +90,20 @@ for (const img of images) {
   manifest[img.id] = { kind: 'image', url: file };
   console.log(`image ${img.id} → ${file}`);
 }
+const missing: string[] = [];
 for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   const from = manifest[vid.from!];
   if (!from) throw new Error(`影片 ${vid.id} 的 from ${vid.from} 不是已生成的圖片`);
-  const file = await video(vid.id, `${t.styleAnchor.prompt}. ${vid.prompt}. Smooth cinematic motion, seamless, no cuts. ${NO_TEXT}`, from.url);
+  let file: string;
+  try {
+    file = await video(vid.id, `${t.styleAnchor.prompt}. ${vid.prompt}. Smooth cinematic motion, seamless, no cuts. ${NO_TEXT}`, from.url);
+  } catch (e) {
+    // keep going with the still (rendered with camera moves); a later run fills the clip from the cache-miss
+    console.error(`影片 ${vid.id} 生成失敗，先用圖片 ${vid.from} 代替：${(e as Error).message.slice(0, 200)}`);
+    manifest[vid.id] = { kind: 'image', url: from.url };
+    missing.push(vid.id);
+    continue;
+  }
   const dir = file.replace(/\.mp4$/, '_frames');
   if (!existsSync(dir)) {
     mkdirSync(dir);
@@ -104,4 +114,5 @@ for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   console.log(`video ${vid.id} → ${file} (${count} frames)`);
 }
 writeFileSync(join(out, 'assets.json'), JSON.stringify(manifest, null, 1));
-console.log(JSON.stringify({ spentUSD: +spent().toFixed(3), budgetUSD: Number(a.budget), assets: Object.keys(manifest) }, null, 1));
+console.log(JSON.stringify({ spentUSD: +spent().toFixed(3), budgetUSD: Number(a.budget), assets: Object.keys(manifest), stillInsteadOfVideo: missing }, null, 1));
+if (missing.length) process.exitCode = 3;

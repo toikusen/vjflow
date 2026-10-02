@@ -9,7 +9,7 @@ import { parseArgs } from 'node:util';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
-import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
+import { assetGroups, checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { loadDb, references } from './references.mts';
 
 const { values: a } = parseArgs({
@@ -94,9 +94,10 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - 鏡頭邊界放在某句歌詞開始或強拍上；鏡頭必須連續覆蓋整個範圍 ${win.start}–${win.end} 秒。可用的模板只有：${style.templates.join('、')}。
 - 強調範圍用字元索引 [from, to)，選真正的關鍵字；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
-- 素材描述用英文，畫面不可有任何文字。`;
+- 素材描述用英文，畫面不可有任何文字。這個範圍最多 ${assetGroups(style, win)} 組素材（每組 1 image + 1 video）。`;
 
-const USER = `【這首歌的補充說明】\n${a.style}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
+const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
+const USER = `【輸出要求】shots 大約 ${expectShots} 個（每個 ${style.shotSec[0]}–${style.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${cues.length} 句。\n\n【這首歌的補充說明】\n${a.style}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const client = new Anthropic();
@@ -120,6 +121,10 @@ for (let attempt = 0; attempt < 3; attempt++) {
   const draft = JSON.parse(text) as TreatmentV3;
   writeFileSync(join(out, `draft_${attempt}.json`), JSON.stringify(draft, null, 1));
   result = validateTreatment(draft, song, win, TEMPLATES);
+  // a short answer that leaves lines unstyled must be sent back, not silently filled with defaults
+  const styled = new Set(draft.cues.map((c) => c.cueId));
+  const missing = cues.filter((c) => !styled.has(c.id)).map((c) => c.id);
+  if (missing.length) result.errors.push(`這些歌詞沒有樣式，每一句都必須在 cues 裡：${missing.join(', ')}`);
   result.errors.push(...checkStyle(result.treatment, style, song, win));
   console.log(`attempt ${attempt}: ${result.errors.length} errors, ${result.fixes.length} fixes`);
   if (!result.errors.length) break;

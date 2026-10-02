@@ -10,6 +10,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
+import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
 import { jobIdFor, jobStatus } from './status.mts';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
@@ -43,7 +44,7 @@ const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ?
 const str = { type: 'string' };
 const SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues'],
+  required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments'],
   properties: {
     concept: { type: 'string', description: '繁體中文，一兩句：這段畫面的視覺故事' },
     styleAnchor: {
@@ -63,6 +64,11 @@ const SCHEMA = {
           properties: { key: { type: 'string', enum: paramKeys }, value: { type: 'string', description: '數字、true/false 或選項名稱' } } } },
         asset: str,
         camera: { type: 'string', enum: CAMERAS }, transitionIn: { type: 'string', enum: TRANSITIONS } } } },
+    arc: { type: 'array', description: '情緒曲線：每個段落的強度', items: { type: 'object', additionalProperties: false, required: ['start', 'level'],
+      properties: { start: { type: 'number' }, level: { type: 'integer', description: '0 安靜 … 3 最高潮' } } } },
+    moments: { type: 'array', description: '段落交界的爆點', items: { type: 'object', additionalProperties: false, required: ['kind', 'at', 'dur', 'strength'],
+      properties: { kind: { type: 'string', enum: MOMENT_KINDS }, at: { type: 'number' }, dur: { type: 'number', description: 'drop/finale 填 0' },
+        strength: { type: 'number', description: '0.5–1.5，1 為標準' } } } },
     cues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cueId', 'shot', 'enter', 'exit'],
       properties: { cueId: str, shot: str, rows: { type: 'array', items: { type: 'integer' } },
         emphasis: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'to', 'method'],
@@ -104,6 +110,14 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - 鏡頭邊界放在某句歌詞開始或強拍上；鏡頭必須連續覆蓋整個範圍 ${win.start}–${win.end} 秒。可用的模板只有：${style.templates.join('、')}。
 - 強調範圍用字元索引 [from, to)，選真正的關鍵字，而且必須是完整的詞，不可把一個詞切開（切開的會被自動擴展）；短句（12 字以內）不要換行；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
+
+情緒起伏（必須做）：
+- arc：每個段落標強度 0–3（前奏、尾奏 0，主歌 1，導歌 2，副歌 3；安靜的落ちサビ或橋段降到 0–1）。引擎依強度調整背景亮度、飽和度、光暈、光粒子。
+- moments：在段落交界放爆點，at 放在強拍上。
+${MOMENT_KINDS.map((k) => `  - ${k}：${MOMENT_RULES[k].desc}（dur ${MOMENT_RULES[k].dur[1] ? `${MOMENT_RULES[k].dur[0]}–${MOMENT_RULES[k].dur[1]} 秒` : '填 0'}）`).join('\n')}
+- 每次副歌第一拍放 drop，前面接 2–4 秒的 build；最後一次副歌改用 finale。歌曲有安靜下來的落ちサビ、或最後副歌前能量明顯下降的段落時放 break；最後副歌前可以放 0.5–0.8 秒的 hold（先收再放）。
+- 多次副歌要有遞進：strength 一次比一次高（例如 1.0 → 1.15 → finale）。這個平台的原則是「有感但不誇張」：strength 不要超過 1.2。
+- 有 drop 或 finale 的那個鏡頭不需要再用 transitionIn flash（引擎會略過）。
 - 素材描述用英文，畫面不可有任何文字。這個範圍${TIERS[tier].video ? `要 ${tier === 'rich' ? Math.ceil(scenes * 0.6) : 1}–${scenes} 組素材（每組 1 image + 1 video）` : `要 1–${scenes} 張 image，不要 video`}。`;
 
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));

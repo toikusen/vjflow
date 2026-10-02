@@ -13,6 +13,7 @@ import { clamp01, easeOutCubic, hash } from './glyphs';
 import { frameSplit } from './frame-split';
 import { handwrite } from './handwrite';
 import { punch } from './punch';
+import { fxAt, MomentFx } from '../moments';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
@@ -52,17 +53,39 @@ export interface CueMetric {
 }
 
 const FINAL_SHADER = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 } },
+  uniforms: {
+    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 },
+    // section moments (moments.ts)
+    uVignette: { value: 0 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
+    uRayColor: { value: new THREE.Color(1, 1, 1) },
+  },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain;
+    uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
+    const vec2 ORIGIN = vec2(0.5, 0.34);            // the horizon in the emotional style's compositions
     float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime * 37.0) * 43758.5453); }
+    float h1(float x){ return fract(sin(x * 91.3458) * 47453.5453); }
     void main(){
-      vec2 d = vUv - 0.5;
-      float a = uAberration * (1.0 + 3.0 * uFlash);
-      vec3 c = vec3(texture2D(tDiffuse, vUv + d * a).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - d * a).b);
-      c *= 1.0 + 0.45 * uHit;                       // accent hit: exposure up (highlights bloom), shadows stay dark
-      c *= 1.0 - 0.55 * dot(d, d) * 1.6;            // vignette
+      vec2 uv = vUv;
+      vec2 q = (uv - ORIGIN) * vec2(1.7778, 1.0);
+      float r = length(q);
+      if (uShockR >= 0.0) {                         // shockwave: a thin ring pushes the image outward as it passes
+        float ring = exp(-pow((r - uShockR * 1.3) / 0.035, 2.0));
+        uv += normalize(q + 1e-5) / vec2(1.7778, 1.0) * ring * 0.010 * uShock;
+      }
+      vec2 d = uv - 0.5;
+      float a = uAberration * (1.0 + 3.0 * uFlash + 4.0 * uShock);
+      vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
+      c *= 1.0 + 0.45 * uHit;         // accent hit: exposure up (highlights bloom), shadows stay dark
+      if (uRays > 0.0) {                            // light rays bursting from the horizon, added light only
+        float ang = atan(q.y, q.x);
+        float k = floor((ang + 3.1416) * 18.0);
+        float beam = pow(0.5 + 0.5 * cos(ang * 36.0 + h1(k) * 6.28), 6.0) * (0.4 + 0.6 * h1(k + 7.0));
+        float fall = exp(-r * 2.2) * smoothstep(0.0, 0.08, r);
+        c += uRayColor * (beam * fall * 0.9 + exp(-r * 6.0) * 0.5) * uRays;
+      }
+      c *= 1.0 - (0.55 + uVignette) * dot(d, d) * 1.6; // vignette
       c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
       if (uSweep >= 0.0) {                          // light sweep: a soft slanted band crossing left to right
         float x = vUv.x + (vUv.y - 0.5) * 0.25;
@@ -83,10 +106,15 @@ const plateMaterial = () =>
     transparent: true,
     depthTest: false,
     depthWrite: false,
-    uniforms: { map: { value: null }, map2: { value: null }, mixAmt: { value: 0 }, opacity: { value: 1 } },
+    uniforms: { map: { value: null }, map2: { value: null }, mixAmt: { value: 0 }, opacity: { value: 1 }, exposure: { value: 1 }, sat: { value: 1 } },
     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt; uniform float opacity; varying vec2 vUv;
-      void main() { vec3 c = mix(texture2D(map, vUv).rgb, texture2D(map2, vUv).rgb, mixAmt); gl_FragColor = vec4(c, opacity); }`,
+    // exposure/saturation from the emotional arc grade the background only, so lyrics never go grey
+    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt, opacity, exposure, sat; varying vec2 vUv;
+      void main() {
+        vec3 c = mix(texture2D(map, vUv).rgb, texture2D(map2, vUv).rgb, mixAmt) * exposure;
+        c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, sat);
+        gl_FragColor = vec4(c, opacity);
+      }`,
   });
 
 export class LyricVjEngine {
@@ -289,8 +317,11 @@ export class LyricVjEngine {
     const fx: FrameFx = { flash: 0, hit: 0, shake: 0 };
     const since = t - shot.start;
     // a flash is a few frames of white: a slower decay reads as grey fog over a dark plate
-    if (shot.transitionIn === 'flash') fx.flash = Math.max(fx.flash, 0.9 * Math.exp(-since * 24) * (since >= 0 ? 1 : 0));
-    if (shot.transitionIn === 'flash') fx.hit = Math.max(fx.hit, Math.exp(-since * 6) * (since >= 0 ? 1 : 0)); // then glows down
+    // a drop/finale on this cut already is the impact: stacking the white flash on it is too much
+    const momentHere = (this.job.treatment.moments ?? []).some((m) => (m.kind === 'drop' || m.kind === 'finale') && Math.abs(m.at - shot.start) < 0.3);
+    const flashIn = shot.transitionIn === 'flash' && !momentHere;
+    if (flashIn) fx.flash = Math.max(fx.flash, 0.9 * Math.exp(-since * 24) * (since >= 0 ? 1 : 0));
+    if (flashIn) fx.hit = Math.max(fx.hit, Math.exp(-since * 6) * (since >= 0 ? 1 : 0)); // then glows down
     const sweep = shot.transitionIn === 'wipe' && since >= 0 && since < 0.35 ? since / 0.35 : -1;
 
     const cur = await this.plateTexture(shot, t);
@@ -305,10 +336,12 @@ export class LyricVjEngine {
       this.placePlate(this.plates[0], cur.tex, shot, t, 1, cur.next, cur.mix);
       this.plates[1].mesh.material.uniforms['opacity'].value = 0;
     }
-    this.updateMotes(t, fx.hit);
+    const mfx = fxAt(t, this.job.treatment.moments ?? [], this.job.treatment.arc ?? []);
+    this.updateMotes(t + mfx.moteTime, fx.hit, mfx);
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;
     const dimPrev = prev ? ((prev.params['dim'] as number) ?? 0.3) : dimTarget;
-    this.dim.material.opacity = dimPrev + (dimTarget - dimPrev) * easeOutCubic(since / 0.4);
+    // a hold (溜め) darkens the background only: the dim layer sits under the motes (starlight stays) and the text
+    this.dim.material.opacity = Math.max(dimPrev + (dimTarget - dimPrev) * easeOutCubic(since / 0.4), mfx.black);
 
     for (const [id, layer] of this.shotLayers) {
       const s = this.job.treatment.shots.find((x) => x.id === id)!;
@@ -319,28 +352,44 @@ export class LyricVjEngine {
       layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05;
       if (layer.group.visible) layer.update(t, fx);
     }
-    const shake = fx.shake * 10;
+    const shake = Math.max(fx.shake, mfx.shake) * 10;
     this.camera.position.set((hash(t * 30) - 0.5) * shake, (hash(t * 30, 1) - 0.5) * shake, 5);
+    this.camera.zoom = mfx.zoom;
+    this.camera.updateProjectionMatrix();
+    const u = this.finalPass.uniforms;
+    for (const p of this.plates) {
+      p.mesh.material.uniforms['exposure'].value = mfx.exposure;
+      p.mesh.material.uniforms['sat'].value = mfx.saturation;
+    }
+    u['uVignette'].value = mfx.vignette;
+    u['uRays'].value = mfx.rays;
+    u['uShockR'].value = mfx.shockR;
+    u['uShock'].value = mfx.shock;
+    (u['uRayColor'].value as THREE.Color).set(this.job.treatment.styleAnchor.palette.glow).lerp(new THREE.Color(1, 1, 1), 0.45);
     this.finalPass.uniforms['uTime'].value = Math.floor(t * this.job.fps) / this.job.fps;
     this.finalPass.uniforms['uFlash'].value = fx.flash;
     this.finalPass.uniforms['uHit'].value = fx.hit;
-    this.bloom.strength = 0.55 + 0.9 * fx.hit;
+    this.bloom.strength = 0.55 + 0.9 * fx.hit + mfx.bloom;
     this.finalPass.uniforms['uSweep'].value = sweep;
     this.composer.render();
   }
 
   /** Drifting light motes (deterministic in t): keep every shot alive even on a still plate. */
-  private updateMotes(t: number, hit: number) {
+  private updateMotes(t: number, hit: number, m: MomentFx) {
     const pos = this.motes.geometry.getAttribute('position') as THREE.BufferAttribute;
     for (let i = 0; i < pos.count; i++) {
       const sp = 18 + hash(i, 3) * 50;
       const y = ((hash(i, 1) * (H + 200) + t * sp) % (H + 200)) - H / 2 - 100;
       const x = (hash(i, 2) - 0.5) * W + Math.sin(t * 0.4 + i) * 30;
-      pos.setXYZ(i, x, y, 0);
+      // after a drop the motes are blown outward from the horizon, then drift back
+      const ox = x;
+      const oy = y + H * 0.16;
+      const push = 1 + 0.6 * m.moteBurst;
+      pos.setXYZ(i, ox * push, oy * push - H * 0.16, 0);
     }
     pos.needsUpdate = true;
     (this.motes.material as THREE.PointsMaterial).color.set(this.job.treatment.styleAnchor.palette.glow);
-    (this.motes.material as THREE.PointsMaterial).opacity = 0.45 + 0.4 * hit;
+    (this.motes.material as THREE.PointsMaterial).opacity = Math.min(1, (0.45 + 0.4 * hit) * (0.75 + 0.15 * m.level) + 0.3 * m.moteBurst);
   }
 
   private makeGradient(): THREE.Texture {

@@ -1,6 +1,8 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
 import { Fonts } from './fonts';
+import type { ArcPoint, Moment } from './moments';
+import { validateMoments } from './moments';
 import { phraseBoundaries } from './phrases';
 import { SongTimeline } from './timeline';
 
@@ -75,6 +77,10 @@ export interface TreatmentV3 {
   assets: AssetSpec[];
   shots: Shot[];
   cues: CueStyle[];
+  /** Intensity 0..3 through the song (see moments.ts). */
+  arc?: ArcPoint[];
+  /** Build-ups, drops, breaks, holds and the finale at section boundaries. */
+  moments?: Moment[];
 }
 
 export type ParamSpec =
@@ -220,6 +226,11 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     }
   }
   t.cues.sort((a, b) => (cueById.get(a.cueId)?.start ?? 0) - (cueById.get(b.cueId)?.start ?? 0));
+  const mv = validateMoments(t.moments, t.arc, song, win);
+  t.moments = mv.moments;
+  t.arc = mv.arc;
+  errors.push(...mv.errors);
+  fixes.push(...mv.fixes);
   return { treatment: t, errors, fixes };
 }
 

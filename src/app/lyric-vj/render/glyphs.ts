@@ -1,6 +1,7 @@
 // Glyph planes: every character is its own mesh so templates can animate per character (AE-style).
 // Textures are drawn at 2× with Canvas2D and cached per (char, font, size, style).
 import * as THREE from 'three';
+import { nearestWeight } from '../fonts';
 
 export interface GlyphStyle {
   family: string;
@@ -8,6 +9,7 @@ export interface GlyphStyle {
   size: number;
   outline?: number; // stroke width in px; 0/undefined = filled
   shadow?: boolean; // soft dark halo so body text reads over bright plates
+  embolden?: number; // extra stroke width in px: thin handwriting faces read from the back of a live house
 }
 
 export interface Glyph {
@@ -25,7 +27,7 @@ const SS = 2; // supersampling
 const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number }>();
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 
-const fontOf = (s: GlyphStyle, scale = 1) => `${s.weight} ${s.size * scale}px "${s.family}"`;
+const fontOf = (s: GlyphStyle, scale = 1) => `${nearestWeight(s.family, s.weight)} ${s.size * scale}px "${s.family}"`;
 
 export function advanceOf(char: string, s: GlyphStyle): number {
   measureCtx.font = fontOf(s);
@@ -33,7 +35,7 @@ export function advanceOf(char: string, s: GlyphStyle): number {
 }
 
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? 1 : 0}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? 1 : 0}|${s.embolden ?? 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -54,17 +56,24 @@ function texture(char: string, s: GlyphStyle) {
     ctx.strokeStyle = '#fff';
     ctx.strokeText(char, w / 2, h / 2);
   } else {
+    const draw = (style: string) => {
+      ctx.fillStyle = style;
+      ctx.fillText(char, w / 2, h / 2);
+      if (!s.embolden) return;
+      ctx.lineWidth = s.embolden;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = style;
+      ctx.strokeText(char, w / 2, h / 2);
+    };
     if (s.shadow) {
       // the halo is drawn dark, then the white glyph on top; the material colour tints only bright pixels
       ctx.shadowColor = 'rgba(0,0,0,0.85)';
       ctx.shadowBlur = s.size * 0.28;
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      ctx.fillText(char, w / 2, h / 2);
-      ctx.fillText(char, w / 2, h / 2);
+      draw('rgba(0,0,0,0.6)');
+      draw('rgba(0,0,0,0.6)');
       ctx.shadowColor = 'transparent';
     }
-    ctx.fillStyle = '#fff';
-    ctx.fillText(char, w / 2, h / 2);
+    draw('#fff');
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;

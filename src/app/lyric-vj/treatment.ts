@@ -1,5 +1,6 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import { Fonts } from './fonts';
 import { phraseBoundaries } from './phrases';
 import { SongTimeline } from './timeline';
 
@@ -70,7 +71,7 @@ export interface CueStyle {
 
 export interface TreatmentV3 {
   concept: string;
-  styleAnchor: { prompt: string; palette: Palette; fonts: { display: string; body: string } };
+  styleAnchor: { prompt: string; palette: Palette; fonts: Fonts };
   assets: AssetSpec[];
   shots: Shot[];
   cues: CueStyle[];

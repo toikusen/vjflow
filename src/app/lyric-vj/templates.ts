@@ -57,6 +57,18 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
     },
   },
+  handwrite: {
+    id: 'handwrite',
+    description: '手寫：用手寫字型（fonts.script）逐字「寫」出來（每個字由左上往右下顯現），基線微微不齊；長句分兩行、第二行往右錯開。適合抒情、內心獨白、溫柔的句子、歌曲尾聲。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      position: { type: 'enum', values: ['center', 'lower'], default: 'center', description: '文字位置' },
+      weight: { type: 'number', min: 0, max: 0.06, default: 0.035, description: '筆畫加粗（字高的倍數；細字型在大螢幕上要加粗）' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+      lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
+    },
+  },
   scatter: {
     id: 'scatter',
     description: '散佈層疊：句子切成 2–3 個詞組沿對角線錯落排列，關鍵字（強調範圍，否則最長的詞組）特大，其餘小字；詞組依序進場，停留時有前後景視差。適合副歌、情緒高點、需要張力但不想每次都用 punch 的句子。',

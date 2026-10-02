@@ -11,7 +11,9 @@ import { TimelineCue } from '../timeline';
 import { beatsDuring, Shot, TreatmentV3 } from '../treatment';
 import { clamp01, easeOutCubic, hash } from './glyphs';
 import { frameSplit } from './frame-split';
+import { handwrite } from './handwrite';
 import { punch } from './punch';
+import { DEFAULT_FONTS, Fonts, nearestWeight, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
@@ -19,7 +21,7 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter };
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -35,6 +37,8 @@ export interface RenderJob {
   cues: TimelineCue[];
   treatment: TreatmentV3;
   assets: Record<string, AssetSource>;
+  /** The user's font choice; overrides the treatment's. */
+  fonts?: Partial<Fonts>;
 }
 
 export interface CueMetric {
@@ -75,6 +79,7 @@ interface Plate {
 
 export class LyricVjEngine {
   private renderer: THREE.WebGLRenderer;
+  private fonts = DEFAULT_FONTS;
   private scene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, -10, 10);
   private composer: EffectComposer;
@@ -93,6 +98,7 @@ export class LyricVjEngine {
   constructor(canvas: HTMLCanvasElement, private job: RenderJob) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(1);
+    this.renderer.localClippingEnabled = true; // handwrite reveals glyphs with clip planes
     this.renderer.setSize(W, H, false);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -124,9 +130,10 @@ export class LyricVjEngine {
 
   async init() {
     const { treatment, cues } = this.job;
-    const fonts = treatment.styleAnchor.fonts;
+    const fonts = (this.fonts = resolveFonts(this.job.fonts, treatment.styleAnchor.fonts));
     const text = cues.map((c) => c.text).join('');
-    await Promise.all([document.fonts.load(`400 100px "${fonts.display}"`, text), document.fonts.load(`900 100px "${fonts.body}"`, text), document.fonts.load(`700 100px "${fonts.body}"`, text)]);
+    const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400]] as const;
+    await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));
     const loader = new THREE.TextureLoader();
     await Promise.all(
       Object.entries(this.job.assets).map(async ([id, a]) => {
@@ -158,7 +165,7 @@ export class LyricVjEngine {
       const exitAt = Math.min(cue.end, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
       const rt: CueRuntime = {
-        cue, style, shot, params: shot.params, palette: treatment.styleAnchor.palette, fonts,
+        cue, style, shot, params: shot.params, palette: treatment.styleAnchor.palette, fonts: this.fonts,
         showFrom: cue.start - LEAD,
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),

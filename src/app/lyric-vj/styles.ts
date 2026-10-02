@@ -23,7 +23,7 @@ export const STYLES: Record<string, StylePreset> = {
     id: 'emotional',
     name: '情緒型',
     description: '抒情、帶故事感的歌詞 VJ：風景與氛圍為底，大字與框線交替，動態自然、特效對拍。',
-    templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter'],
+    templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite'],
     assets: { perSec: 20, max: 4 },
     shotSec: [3.5, 8],
     rules: [
@@ -32,7 +32,7 @@ export const STYLES: Record<string, StylePreset> = {
       '素材以「組」為單位：每組 1 張 image 加 1 段 video（from 那張 image）。一個音樂段落用一組，同組 video 在段落內重複使用，用 clipStart（影片內開始秒數）與不同運鏡做出變化；副歌的那組在之後的副歌重複使用。組數上限見下方。',
       '一個鏡頭大約涵蓋 2 句歌詞（3.5–8 秒），不要每句換一次版型；整體節奏要有呼吸。',
       'transitionIn 的 flash 只用在段落轉換（例如副歌第一句），大約每個段落一次、不可連續；其他鏡頭用 cut、wipe 或 dissolve。',
-      '版型：關鍵句用 punch 或 scatter，敘事句用 frame-split 或 typewriter，抒情、留白的句子用 vertical 直排。同一首歌要用到至少 4 種版型，相鄰兩個鏡頭不要用同一種；不必死板輪流。',
+      '版型：關鍵句用 punch 或 scatter，敘事句用 frame-split 或 typewriter，抒情、留白的句子用 vertical 直排或 handwrite 手寫。同一首歌要用到至少 4 種版型，相鄰兩個鏡頭不要用同一種；不必死板輪流。',
       '配色依歌詞意象決定（例如夜空→靛藍、黃昏→橘紅、雨夜→灰藍），背景暗、文字亮，對比要夠。',
       '色彩要飽和、暗部要深、地平線或光源處有明亮的光帶；不可灰濛濛、低對比。歌詞說「褪色」「黯淡」時，只用在構圖或光量上，不要把整張圖畫成灰色。',
       '雲的移動是這個風格最重要的畫面質感：影片裡的雲要明顯在動（鏡頭緩慢往地平線推進、雲層被風吹過、雲層散開露出星空），看得出速度與方向；可以有一兩顆流星，但不要變成特效秀。',

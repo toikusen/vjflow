@@ -1,5 +1,6 @@
 // What a template gets per cue, and the motion shared by templates (entrances, exits, emphasis, accents).
 import * as THREE from 'three';
+import { Fonts } from '../fonts';
 import { TimelineCue } from '../timeline';
 import { CueStyle, Palette, ParamValue, Shot } from '../treatment';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, hash } from './glyphs';
@@ -14,7 +15,7 @@ export interface CueRuntime {
   shot: Shot;
   params: Record<string, ParamValue>;
   palette: Palette;
-  fonts: { display: string; body: string };
+  fonts: Required<Fonts>;
   showFrom: number;
   /** Exit animation starts here and lasts `exitDur` (ends before the next cue shows). */
   exitAt: number;

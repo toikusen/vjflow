@@ -18,7 +18,7 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
-    stills: { type: 'string' }, 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
+    stills: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
   },
 });
 const ROOT = process.cwd();
@@ -40,6 +40,7 @@ const job: RenderJob = {
   fps, window: win, beats: song.beats,
   cues: cuesIn(song, win),
   treatment: checked.treatment, assets,
+  fonts: { display: a['font-display'], body: a['font-body'], script: a['font-script'] },
 };
 writeFileSync(join(out, 'job.json'), JSON.stringify(job));
 

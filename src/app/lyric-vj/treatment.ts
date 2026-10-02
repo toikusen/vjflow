@@ -107,7 +107,7 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   const t: TreatmentV3 = structuredClone(input);
   const errors: string[] = [];
   const fixes: string[] = [];
-  const cues = song.cues.filter((c) => c.end > win.start && c.start < win.end);
+  const cues = cuesIn(song, win);
   const cueById = new Map(cues.map((c) => [c.id, c]));
   const assetIds = new Set(t.assets.map((a) => a.id));
 
@@ -231,6 +231,11 @@ function repairParams(shotId: string, params: Record<string, ParamValue>, spec: 
     }
   }
   return out;
+}
+
+/** Cues that start inside the window (a cue ending just after the window start belongs to the previous clip). */
+export function cuesIn(song: SongTimeline, win: Window) {
+  return song.cues.filter((c) => c.start >= win.start - 0.5 && c.start < win.end);
 }
 
 /** Beats inside [start, end), starting with the first beat at or after `start`. */

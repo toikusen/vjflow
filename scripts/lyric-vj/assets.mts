@@ -8,17 +8,18 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { AssetSource } from '../../src/app/lyric-vj/render/engine';
+import { STYLES } from '../../src/app/lyric-vj/styles';
 import { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
 
 const { values: a } = parseArgs({
   options: {
     treatment: { type: 'string' }, out: { type: 'string' }, budget: { type: 'string', default: '10' }, fps: { type: 'string', default: '30' },
-    'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'video-model': { type: 'string', default: 'veo-3.1-fast-generate-preview' },
+    'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'style-id': { type: 'string', default: 'emotional' }, 'video-model': { type: 'string', default: 'veo-3.1-fast-generate-preview' },
   },
 });
 // official list prices (2026-10): Flash Image 2K $0.101/image; Veo 3.1 Fast 1080p $0.12/s
 const PRICE = { image: 0.101, videoPerSec: 0.12 };
-const NO_TEXT = 'Absolutely no text, no letters, no characters, no subtitles, no logos, no watermark.';
+const NO_TEXT = `${STYLES[a['style-id']!]?.assetSuffix ?? ''} Absolutely no text, no letters, no subtitles, no logos, no watermark.`;
 const t: TreatmentV3 = JSON.parse(readFileSync(a.treatment!, 'utf8'));
 const out = a.out!;
 mkdirSync(out, { recursive: true });

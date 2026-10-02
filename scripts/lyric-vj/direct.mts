@@ -9,12 +9,14 @@ import { parseArgs } from 'node:util';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
+import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { loadDb, references } from './references.mts';
 
 const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, style: { type: 'string', default: '' },
     db: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
+    'style-id': { type: 'string', default: 'emotional' },
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -56,7 +58,7 @@ const SCHEMA = {
         from: { type: 'string', description: 'video: id of the image used as its first frame' }, layering: { type: 'string', enum: ['single'] } } } },
     shots: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'start', 'end', 'template', 'params', 'camera', 'transitionIn'],
       properties: { id: str, start: { type: 'number' }, end: { type: 'number' }, template: { type: 'string', enum: Object.keys(TEMPLATES) },
-        params: { type: 'object', additionalProperties: false, properties: paramProps }, asset: str,
+        params: { type: 'object', additionalProperties: false, properties: paramProps }, asset: str, clipStart: { type: 'number', description: 'video: seconds into the clip where this shot starts' },
         camera: { type: 'string', enum: CAMERAS }, transitionIn: { type: 'string', enum: TRANSITIONS } } } },
     cues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cueId', 'shot', 'enter', 'exit'],
       properties: { cueId: str, shot: str, rows: { type: 'array', items: { type: 'integer' } },
@@ -79,20 +81,22 @@ const catalog = Object.values(TEMPLATES).map((t) =>
 const sections = song.sections.filter((s) => s.end > win.start && s.start < win.end).map((s) => `${s.start.toFixed(1)}–${s.end.toFixed(1)}s ${s.type ?? ''} 能量 ${s.energy.toFixed(2)}`).join('\n');
 const db = a.db ? references(loadDb(a.db), a.style + cues.map((c) => c.text).join('')) : { text: '（無）', ids: [] };
 
+const style = STYLES[a['style-id']!];
+if (!style) throw new Error(`未知風格 ${a['style-id']}`);
 const SYSTEM = `你是日本地下偶像 Live House 的歌詞 VJ 導演兼動態設計師。你為一段歌曲寫「企劃 v3」JSON，引擎會照著逐格渲染。
-原則：
+這次的風格是「${style.name}」：${style.description}
+
+風格規則（必須遵守）：
+${style.rules.map((r) => `- ${r}`).join('\n')}
+
+一般原則：
 - 歌詞文字與時間由程式擁有，你只決定呈現方式；cueId 必須來自清單。
-- 鏡頭邊界放在某句歌詞開始或強拍上；鏡頭必須連續覆蓋整個範圍 ${win.start}–${win.end} 秒。
-- 每一幕都要是設計過的版面：依句子性質選模板（短而有力的關鍵句用 punch，敘事或長句用 frame-split），相鄰鏡頭要有對比。
+- 鏡頭邊界放在某句歌詞開始或強拍上；鏡頭必須連續覆蓋整個範圍 ${win.start}–${win.end} 秒。可用的模板只有：${style.templates.join('、')}。
 - 強調範圍用字元索引 [from, to)，選真正的關鍵字；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
-- 畫面要持續有變化：觀眾覺得「人物站著不動、只是慢慢推近」就是失敗。
-- 素材：1 張 image 加 2–3 段 video（都 from 那張 image，各自描述不同的動態，例如流星劃過、光點升起、雲層流動、鏡頭繞行），畫面不可有任何文字。
-  video 分給不同鏡頭，每段最長 8 秒；只用靜態 image 的鏡頭不超過 4 秒，而且要配 pan 或 parallax 運鏡。每個鏡頭都要有素材。素材描述用英文。
-- 文字壓在人物或主體上沒有關係，不需要刻意避開。
-- 配色要讓文字在素材上清楚可讀；背景壓暗參數 dim 依素材亮度調整。`;
+- 素材描述用英文，畫面不可有任何文字。`;
 
-const USER = `【風格需求】\n${a.style}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
+const USER = `【這首歌的補充說明】\n${a.style}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const client = new Anthropic();
@@ -116,6 +120,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   const draft = JSON.parse(text) as TreatmentV3;
   writeFileSync(join(out, `draft_${attempt}.json`), JSON.stringify(draft, null, 1));
   result = validateTreatment(draft, song, win, TEMPLATES);
+  result.errors.push(...checkStyle(result.treatment, style, song, win));
   console.log(`attempt ${attempt}: ${result.errors.length} errors, ${result.fixes.length} fixes`);
   if (!result.errors.length) break;
   messages.push({ role: 'assistant', content: message.content as Anthropic.Beta.Messages.BetaContentBlockParam[] });

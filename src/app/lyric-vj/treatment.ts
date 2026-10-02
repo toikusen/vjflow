@@ -41,6 +41,8 @@ export interface Shot {
   template: string;
   params: Record<string, ParamValue>;
   asset?: string;
+  /** Seconds into a video asset where this shot starts playing (lets several shots reuse one clip differently). */
+  clipStart?: number;
   camera: Camera;
   transitionIn: TransitionIn;
 }
@@ -129,6 +131,7 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     }
     s.params = repairParams(s.id, s.params ?? {}, spec, errors, fixes);
     if (s.asset && !assetIds.has(s.asset)) errors.push(`鏡頭 ${s.id} 引用不存在的素材 ${s.asset}`);
+    if (s.clipStart !== undefined && !(s.clipStart >= 0 && s.clipStart < 8)) errors.push(`鏡頭 ${s.id} 的 clipStart 必須在 0–8 秒之間`);
     if (!CAMERAS.includes(s.camera)) errors.push(`鏡頭 ${s.id} 的 camera 必須是 ${CAMERAS.join('/')}`);
     if (!TRANSITIONS.includes(s.transitionIn)) errors.push(`鏡頭 ${s.id} 的 transitionIn 必須是 ${TRANSITIONS.join('/')}`);
     if (i > 0) {

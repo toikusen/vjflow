@@ -188,7 +188,7 @@ export class LyricVjEngine {
     const a = shot.asset ? this.job.assets[shot.asset] : undefined;
     if (!a) return { tex: this.gradient, fromStill: 0 };
     if (a.kind === 'image' || !a.frames) return { tex: this.images.get(shot.asset!)!, fromStill: 0 };
-    const local = t - shot.start;
+    const local = t - shot.start + (shot.clipStart ?? 0);
     const idx = Math.floor(local * a.frames.fps);
     if (idx >= a.frames.count) return { tex: this.images.get(shot.asset!)!, fromStill: local - a.frames.count / a.frames.fps };
     const url = a.frames.pattern.replace('%05d', String(Math.max(0, idx) + 1).padStart(5, '0'));

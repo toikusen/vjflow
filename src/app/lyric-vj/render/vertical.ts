@@ -29,7 +29,7 @@ export const vertical: TemplateRenderer = {
     const units = Math.max(...cells.map((c, k) => c.reduce((h, x) => h + (x.m ? EMPH : 1) * 1.06, 0) + k * stepK), 1);
     const size = Math.round(Math.max(70, Math.min(132, 860 / units)));
     const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
-    const emStyle: GlyphStyle = { ...style, family: rt.fonts.display, weight: 400, size: Math.round(size * EMPH) };
+    const emStyle: GlyphStyle = { ...style, family: rt.fonts.display, weight: 900, size: Math.round(size * EMPH) };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
 
     const group = new THREE.Group();

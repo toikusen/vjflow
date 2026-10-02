@@ -71,7 +71,7 @@ export interface CueStyle {
 
 export interface TreatmentV3 {
   concept: string;
-  styleAnchor: { prompt: string; palette: Palette; fonts: Fonts };
+  styleAnchor: { prompt: string; palette: Palette; fonts?: Fonts };
   assets: AssetSpec[];
   shots: Shot[];
   cues: CueStyle[];

@@ -1,5 +1,6 @@
 // Font catalog: every family the renderer may use, its roles and weights. All are SIL OFL from Google Fonts
-// (commercial use allowed); the platform's font picker and the director both choose from this list.
+// (commercial use allowed). A video uses ONE family from start to end (switching faces between lines reads as
+// inconsistent); the platform's font picker chooses it, per-role fonts remain for explicit overrides.
 
 export type FontRole = 'display' | 'body' | 'script';
 
@@ -20,7 +21,10 @@ export const FONTS: FontSpec[] = [
 ];
 
 export type Fonts = { display: string; body: string; script?: string };
-export const DEFAULT_FONTS: Required<Fonts> = { display: 'Dela Gothic One', body: 'Zen Kaku Gothic New', script: 'Zen Kurenaido' };
+/** The user's choice: one family for the whole video, or (advanced) a family per role. */
+export type FontChoice = Partial<Fonts> & { family?: string };
+export const DEFAULT_FAMILY = 'Zen Kaku Gothic New';
+export const DEFAULT_FONTS: Required<Fonts> = { display: DEFAULT_FAMILY, body: DEFAULT_FAMILY, script: DEFAULT_FAMILY };
 
 export const familiesFor = (role: FontRole) => FONTS.filter((f) => f.roles.includes(role)).map((f) => f.family);
 
@@ -31,13 +35,15 @@ export function nearestWeight(family: string, weight: number): number {
   return w.reduce((best, x) => (Math.abs(x - weight) < Math.abs(best - weight) ? x : best));
 }
 
+const inCatalog = (f?: string) => f !== undefined && FONTS.some((x) => x.family === f);
+
 /**
- * Resolves fonts in priority order (user choice, then the director's, then defaults); a family that is not in the
- * catalog for that role falls back to the next source.
+ * One family for every role: the user's `family`, else the default. Per-role overrides apply only when given and
+ * valid for that role. Unknown families are ignored.
  */
-export function resolveFonts(...sources: (Partial<Fonts> | undefined)[]): Required<Fonts> {
-  const pick = (role: FontRole) =>
-    sources.map((s) => s?.[role]).find((f) => f !== undefined && familiesFor(role).includes(f)) ?? DEFAULT_FONTS[role];
+export function resolveFonts(choice?: FontChoice): Required<Fonts> {
+  const family = inCatalog(choice?.family) ? choice!.family! : DEFAULT_FAMILY;
+  const pick = (role: FontRole) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : family);
   return { display: pick('display'), body: pick('body'), script: pick('script') };
 }
 

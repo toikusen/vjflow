@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { googleFontsUrl, nearestWeight, resolveFonts } from './fonts';
 
 describe('fonts', () => {
-  it('lets the user override the director, and ignores families outside the catalog or role', () => {
-    const f = resolveFonts({ script: 'Yomogi', body: 'Comic Sans' }, { display: 'Dela Gothic One', body: 'Klee One', script: 'Zen Kurenaido' });
-    expect(f).toEqual({ display: 'Dela Gothic One', body: 'Klee One', script: 'Yomogi' });
-    expect(resolveFonts({ display: 'Yomogi' }).display).toBe('Dela Gothic One'); // Yomogi is script only
+  it('uses one family for the whole video', () => {
+    expect(resolveFonts()).toEqual({ display: 'Zen Kaku Gothic New', body: 'Zen Kaku Gothic New', script: 'Zen Kaku Gothic New' });
+    expect(resolveFonts({ family: 'Zen Kurenaido' })).toEqual({ display: 'Zen Kurenaido', body: 'Zen Kurenaido', script: 'Zen Kurenaido' });
+    expect(resolveFonts({ family: 'Comic Sans' }).body).toBe('Zen Kaku Gothic New');
+  });
+
+  it('keeps valid per-role overrides', () => {
+    expect(resolveFonts({ display: 'Dela Gothic One', script: 'Yomogi' })).toEqual({ display: 'Dela Gothic One', body: 'Zen Kaku Gothic New', script: 'Yomogi' });
+    expect(resolveFonts({ display: 'Yomogi' }).display).toBe('Zen Kaku Gothic New'); // Yomogi is not a display face
   });
 
   it('maps weights to what the family has', () => {

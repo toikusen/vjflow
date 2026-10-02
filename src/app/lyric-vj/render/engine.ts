@@ -13,7 +13,7 @@ import { clamp01, easeOutCubic, hash } from './glyphs';
 import { frameSplit } from './frame-split';
 import { handwrite } from './handwrite';
 import { punch } from './punch';
-import { DEFAULT_FONTS, Fonts, nearestWeight, resolveFonts } from '../fonts';
+import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
@@ -38,7 +38,7 @@ export interface RenderJob {
   treatment: TreatmentV3;
   assets: Record<string, AssetSource>;
   /** The user's font choice; overrides the treatment's. */
-  fonts?: Partial<Fonts>;
+  fonts?: FontChoice;
 }
 
 export interface CueMetric {
@@ -142,7 +142,7 @@ export class LyricVjEngine {
 
   async init() {
     const { treatment, cues } = this.job;
-    const fonts = (this.fonts = resolveFonts(this.job.fonts, treatment.styleAnchor.fonts));
+    const fonts = (this.fonts = resolveFonts(this.job.fonts));
     const text = cues.map((c) => c.text).join('');
     const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400]] as const;
     await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));

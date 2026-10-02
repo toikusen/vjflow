@@ -59,7 +59,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
   },
   handwrite: {
     id: 'handwrite',
-    description: '手寫：用手寫字型（fonts.script，預設 Zen Kurenaido）逐字「寫」出來（每個字由左上往右下顯現），基線微微不齊；長句分兩行、第二行往右錯開。適合抒情、內心獨白、溫柔的句子、歌曲尾聲。',
+    description: '手寫：逐字「寫」出來（每個字由左上往右下顯現），基線微微不齊；長句分兩行、第二行往右錯開。適合抒情、內心獨白、溫柔的句子、歌曲尾聲。',
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {

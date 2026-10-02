@@ -38,10 +38,10 @@ export const scatter: TemplateRenderer = {
     root.position.y = (p['lift'] as number) ?? 0;
     const layers = parts.map((text, i) => {
       const isKey = i === key && n > 1;
-      const probe: GlyphStyle = { family: rt.fonts.display, weight: 400, size: 200 };
+      const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
       const w200 = [...text].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
       const style: GlyphStyle = isKey
-        ? { family: rt.fonts.display, weight: 400, size: Math.round(Math.max(150, Math.min(340, (200 * 0.6 * W) / w200))) }
+        ? { family: rt.fonts.display, weight: 900, size: Math.round(Math.max(150, Math.min(340, (200 * 0.6 * W) / w200))) }
         : { family: rt.fonts.body, weight: 900, size: n === 1 ? 150 : 108, shadow: true };
       const tint = isKey && (method === 'color' || method === 'glow') ? accent : rt.palette.text;
       const glyphs = makeGlyphs(text, style, color(tint, isKey ? 1.15 : 1.0), isKey ? 0 : 6);

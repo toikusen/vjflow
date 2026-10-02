@@ -1,6 +1,7 @@
 // handwrite: a handwriting face revealed character by character with a diagonal wipe, as if being written
 // (database: 47/50 videos use handwritten lettering; ~90 % of those events are the face itself, not true stroke order).
 import * as THREE from 'three';
+import { nearestWeight } from '../fonts';
 import { chunks } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
 import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, TemplateRenderer } from './runtime';
@@ -19,7 +20,9 @@ export const handwrite: TemplateRenderer = {
     const probe: GlyphStyle = { family: rt.fonts.script, weight: 400, size: 100 };
     const widest = Math.max(...rows.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
     const size = Math.round(Math.max(110, Math.min(190, (100 * 0.8 * W) / widest)));
-    const style: GlyphStyle = { family: rt.fonts.script, weight: 400, size, shadow: true, embolden: size * ((p['weight'] as number) ?? 0.03) };
+    // thin single-weight faces need their strokes thickened to read on a big screen; bold families do not
+    const thin = nearestWeight(rt.fonts.script, 900) < 700;
+    const style: GlyphStyle = { family: rt.fonts.script, weight: 900, size, shadow: true, embolden: thin ? size * ((p['weight'] as number) ?? 0.035) : 0 };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
 
     const group = new THREE.Group();

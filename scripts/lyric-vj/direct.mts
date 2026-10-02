@@ -11,7 +11,6 @@ import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
-import { familiesFor, FONTS } from '../../src/app/lyric-vj/fonts';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
 
@@ -47,14 +46,11 @@ const SCHEMA = {
   properties: {
     concept: { type: 'string', description: '繁體中文，一兩句：這段畫面的視覺故事' },
     styleAnchor: {
-      type: 'object', additionalProperties: false, required: ['prompt', 'palette', 'fonts'],
+      type: 'object', additionalProperties: false, required: ['prompt', 'palette'],
       properties: {
         prompt: { type: 'string', description: 'English image-generation style prompt shared by every asset. Must say: no text, no letters, no logos.' },
         palette: { type: 'object', additionalProperties: false, required: ['background', 'text', 'accent', 'line', 'glow'],
           properties: Object.fromEntries(['background', 'text', 'accent', 'line', 'glow'].map((k) => [k, { type: 'string', description: '#rrggbb' }])) },
-        fonts: { type: 'object', additionalProperties: false, required: ['display', 'body', 'script'],
-          properties: Object.fromEntries((['display', 'body', 'script'] as const).map((r) => [r, { type: 'string', enum: familiesFor(r),
-            description: FONTS.filter((f) => f.roles.includes(r)).map((f) => `${f.family}：${f.feel}`).join('；') }])) },
       },
     },
     assets: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'kind', 'prompt'],

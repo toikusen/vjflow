@@ -39,13 +39,13 @@ export const punch: TemplateRenderer = {
     group.position.y = (p['lift'] as number) ?? 0;
 
     // fit the keyword to the requested width
-    const probe: GlyphStyle = { family: rt.fonts.display, weight: 400, size: 200 };
+    const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
     const w200 = [...keyword].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
     const size = Math.max(140, Math.min(440, (200 * (p['keywordWidth'] as number) * W) / w200));
     const method = emphasisOf(rt, k0);
     // 7:1 against the palette background: the plate behind the text is far brighter than that colour
     const kwColor = readable(method === 'color' || method === 'glow' ? rt.palette.accent : rt.palette.text, rt.palette.background, 7);
-    const kStyle: GlyphStyle = { family: rt.fonts.display, weight: 400, size };
+    const kStyle: GlyphStyle = { family: rt.fonts.display, weight: 900, size };
     const kw = makeGlyphs(keyword, kStyle, color(kwColor, method === 'glow' ? 1.8 : 1.15));
     placeRow(kw, 0, 30);
     const echo = p['outline'] ? makeGlyphs(keyword, { ...kStyle, outline: Math.max(2, size * 0.03) }, color(rt.palette.glow, 1.4)) : [];

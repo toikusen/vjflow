@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
+import { jobIdFor, jobStatus } from './status.mts';
 import { parseArgs } from 'node:util';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
@@ -19,7 +20,7 @@ const { values: a } = parseArgs({
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
     stills: { type: 'string' }, font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
-    'no-video': { type: 'boolean', default: false }, // still version: every clip replaced by the image it starts from 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
+    'no-video': { type: 'boolean', default: false }, job: { type: 'string' }, // still version: every clip replaced by the image it starts from 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
   },
 });
 const ROOT = process.cwd();
@@ -86,6 +87,10 @@ try {
     console.log('stills written to', out);
   } else {
     const total = Math.round((win.end - win.start) * fps);
+    const status = jobStatus(a.job ?? jobIdFor(dirname(a.treatment!)));
+    status.stage('render', { state: 'running', done: 0, total, message: a['no-video'] ? '純圖片版本' : undefined });
+    process.on('uncaughtExceptionMonitor', (e) => status.stage('render', { state: 'failed', message: String(e).slice(0, 300) }));
+    let rendered = 0;
     const workers = Math.max(1, Number(a.workers));
     const bounds = Array.from({ length: workers + 1 }, (_, k) => Math.round((total * k) / workers));
     const segDir = join(out, 'segments');
@@ -103,6 +108,7 @@ try {
           if (f % 60 === 0 && statfsSync(out).bavail * statfsSync(out).bsize < 400e6) throw new Error('磁碟可用空間不足 400MB，停止渲染');
           await page.evaluate((x) => window.renderAt(x), win.start + f / fps); // time from the frame index: no drift
           ff.stdin.write(await shoot(page, 'jpeg'));
+          if (++rendered % fps === 0) status.stage('render', { done: rendered });
           if (k === 0 && f % fps === 0) process.stdout.write(`\r  frame ${f}/${f1} (${((Date.now() - began) / 1000).toFixed(0)}s)`);
         }
         ff.stdin.end();
@@ -143,6 +149,11 @@ try {
       fixes: checked.fixes,
     };
     writeFileSync(join(out, 'metrics.json'), JSON.stringify({ ...report, cues: m.cues }, null, 1));
+    status.outputs(outputs);
+    status.stage('render', {
+      state: 'done', done: total,
+      message: report.readable.ok ? undefined : `可讀時間不足：${report.readable.failing.map((c) => c.text).join('、')}`,
+    });
     console.log(JSON.stringify(report, null, 1));
   }
 } finally {

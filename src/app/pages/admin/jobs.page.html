@@ -1,0 +1,97 @@
+<header class="head">
+  <div>
+    <h1>製作進度</h1>
+    <p class="muted">
+      {{ jobs().length }} 個工作 · {{ running() }} 個進行中
+      @if (lastPoll(); as t) {
+        · 每 3 秒更新（{{ t.toLocaleTimeString('zh-TW') }}）
+      }
+    </p>
+  </div>
+  <a class="btn" href="/">回到產生器</a>
+</header>
+
+@if (error(); as e) {
+  <p class="alert">{{ e }}</p>
+}
+
+@for (job of jobs(); track job.id) {
+  <article class="job" [attr.data-state]="state(job)">
+    <div class="job-head">
+      <div>
+        <h2>{{ job.title }}</h2>
+        <p class="muted">
+          {{ job.style ?? '—' }}
+          @if (job.tier) {
+            · <span class="tag">{{ tierName(job.tier) }}</span>
+          }
+          · 費用 US$ {{ cost(job) | number: '1.2-2' }}
+        </p>
+      </div>
+      <div class="overall">
+        <span class="state" [attr.data-state]="state(job)">{{ label[state(job)] }}</span>
+        <strong>{{ progress(job) | percent }}</strong>
+      </div>
+    </div>
+    <div class="bar"><span [style.width.%]="progress(job) * 100"></span></div>
+
+    <ol class="stages">
+      @for (st of stages; track st.id) {
+        @let s = job.stages[st.id];
+        <li [attr.data-state]="s?.state ?? 'pending'">
+          <div class="stage-head">
+            <span>{{ st.name }}</span>
+            <span class="muted">
+              {{ label[s?.state ?? 'pending'] }}
+              @if (s?.total) {
+                · {{ s?.done ?? 0 }}/{{ s?.total }}
+              }
+              @if (duration(s); as d) {
+                · {{ d }}
+              }
+            </span>
+          </div>
+          <div class="bar thin"><span [style.width.%]="stageProgress(s) * 100"></span></div>
+          @if (s?.message) {
+            <p class="note">{{ s?.message }}</p>
+          }
+        </li>
+      }
+    </ol>
+
+    @if (job.stages.assets?.items?.length) {
+      <div class="assets">
+        @for (it of job.stages.assets!.items!; track it.id) {
+          <figure [attr.data-state]="it.state" [title]="it.note ?? ''">
+            @if (it.file && isVideo(it.file)) {
+              <video [src]="file(it.file)" muted loop playsinline preload="metadata" (mouseenter)="$any($event.target).play()" (mouseleave)="$any($event.target).pause()"></video>
+            } @else if (it.file) {
+              <img [src]="file(it.file)" [alt]="it.id" loading="lazy" />
+            } @else {
+              <div class="empty"></div>
+            }
+            <figcaption>
+              <span>{{ it.kind === 'video' ? '影片' : '圖片' }} {{ it.id }}</span>
+              <span class="state" [attr.data-state]="it.state">{{ label[it.state] }}</span>
+            </figcaption>
+            @if (it.note) {
+              <p class="note">{{ it.note }}</p>
+            }
+          </figure>
+        }
+      </div>
+    }
+
+    @if (job.outputs?.length) {
+      <div class="outputs">
+        @for (o of job.outputs; track o) {
+          <video [src]="file(o)" controls preload="metadata"></video>
+        }
+      </div>
+    }
+  </article>
+} @empty {
+  @if (!error()) {
+    <p class="muted">還沒有工作。執行 direct / assets / render 指令碼後會出現在這裡。</p>
+  }
+}

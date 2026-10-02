@@ -11,6 +11,7 @@ import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
+import { jobIdFor, jobStatus } from './status.mts';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
 
@@ -18,7 +19,7 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, style: { type: 'string', default: '' },
     db: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
-    'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' },
+    'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -113,6 +114,9 @@ const client = new Anthropic();
 const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: USER }];
 let usage = { input: 0, output: 0 };
 const began = Date.now();
+const status = jobStatus(a.job ?? jobIdFor(out), { title: a.title ?? `${song.title} ${win.start}–${win.end}s`, tier, style: style.name });
+status.stage('director', { state: 'running', done: 0, total: 3, message: undefined });
+process.on('uncaughtExceptionMonitor', (e) => status.stage('director', { state: 'failed', message: String(e).slice(0, 300) }));
 let result: ReturnType<typeof validateTreatment> | undefined;
 for (let attempt = 0; attempt < 3; attempt++) {
   const message = await client.beta.messages
@@ -140,6 +144,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   if (missing.length) result.errors.push(`這些歌詞沒有樣式，每一句都必須在 cues 裡：${missing.join(', ')}`);
   result.errors.push(...checkStyle(result.treatment, style, song, win, tier));
   console.log(`attempt ${attempt}: ${result.errors.length} errors, ${result.fixes.length} fixes`);
+  status.stage('director', { done: attempt + 1, message: result.errors.length ? `第 ${attempt + 1} 次：${result.errors.length} 個問題，請導演修正` : undefined });
   if (!result.errors.length) break;
   messages.push({ role: 'assistant', content: message.content as Anthropic.Beta.Messages.BetaContentBlockParam[] });
   messages.push({ role: 'user', content: `程式驗證未通過，請修正後輸出完整的企劃 JSON：\n${result.errors.map((e) => `- ${e}`).join('\n')}` });
@@ -149,4 +154,5 @@ writeFileSync(join(out, 'treatment.json'), JSON.stringify(result.treatment, null
 const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
 const report = { model: a.model, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +((usage.input * pin + usage.output * pout) / 1e6).toFixed(3), references: db.ids, fixes: result.fixes };
 writeFileSync(join(out, 'director.json'), JSON.stringify(report, null, 1));
+status.stage('director', { state: 'done', costUSD: report.costUSD, message: undefined });
 console.log(JSON.stringify(report, null, 1));

@@ -6,16 +6,17 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { AssetSource } from '../../src/app/lyric-vj/render/engine';
 import { STYLES } from '../../src/app/lyric-vj/styles';
 import { Tier, TIERS } from '../../src/app/lyric-vj/tiers';
+import { jobIdFor, jobStatus, outPath } from './status.mts';
 import { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
 
 const { values: a } = parseArgs({
   options: {
-    treatment: { type: 'string' }, out: { type: 'string' }, budget: { type: 'string' }, tier: { type: 'string', default: 'standard' }, fps: { type: 'string', default: '30' },
+    treatment: { type: 'string' }, out: { type: 'string' }, budget: { type: 'string' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, fps: { type: 'string', default: '30' },
     'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'style-id': { type: 'string', default: 'emotional' }, 'video-model': { type: 'string' },
     // vertex: Google Cloud project quota (no 10-clips/day cap); gemini: Gemini API key
     'video-backend': { type: 'string' },
@@ -120,12 +121,21 @@ async function video(id: string, prompt: string, first: string): Promise<string>
 
 const manifest: Record<string, AssetSource> = {};
 const images = t.assets.filter((x) => x.kind === 'image');
+const status = jobStatus(a.job ?? jobIdFor(dirname(a.treatment!)), { tier: a.tier, style: STYLES[a['style-id']!]?.name });
+const usdOf = (id: string) => ledger.filter((x) => x.item.endsWith(` ${id}`)).reduce((s, x) => s + x.usd, 0) || undefined;
+status.stage('assets', { state: 'running', done: 0, total: t.assets.length, costUSD: +spent().toFixed(3) });
+for (const x of t.assets) status.item('assets', { id: x.id, kind: x.kind, state: 'pending' });
+// observes (does not handle) crashes, including rejected top-level awaits
+process.on('uncaughtExceptionMonitor', (e) => status.stage('assets', { state: 'failed', message: String(e).slice(0, 300) }));
 let anchor: Buffer | undefined;
 for (const img of images) {
   // the first image is the style anchor; every later image is generated with it as a reference (spec 3.3)
   const prompt = `${t.styleAnchor.prompt}. ${img.prompt}. Cinematic 16:9 background plate for a lyric video, leave calm space for typography. ${NO_TEXT}`;
+  status.item('assets', { id: img.id, kind: 'image', state: 'running' });
   const file = await image(img.id, prompt, anchor);
   anchor ??= readFileSync(file);
+  status.item('assets', { id: img.id, kind: 'image', state: 'done', file: outPath(file), usd: usdOf(img.id) });
+  status.stage('assets', { costUSD: +spent().toFixed(3) });
   manifest[img.id] = { kind: 'image', url: file };
   console.log(`image ${img.id} → ${file}`);
 }
@@ -134,6 +144,7 @@ for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   const from = manifest[vid.from!];
   if (!from) throw new Error(`影片 ${vid.id} 的 from ${vid.from} 不是已生成的圖片`);
   let file: string;
+  status.item('assets', { id: vid.id, kind: 'video', state: 'running', file: outPath(from.url) });
   try {
     file = await video(vid.id, `${t.styleAnchor.prompt}. ${vid.prompt}. Smooth cinematic motion, seamless, no cuts. ${NO_TEXT}`, from.url);
   } catch (e) {
@@ -141,6 +152,7 @@ for (const vid of t.assets.filter((x) => x.kind === 'video')) {
     console.error(`影片 ${vid.id} 生成失敗，先用圖片 ${vid.from} 代替：${(e as Error).message.slice(0, 200)}`);
     manifest[vid.id] = { kind: 'image', url: from.url };
     missing.push(vid.id);
+    status.item('assets', { id: vid.id, kind: 'video', state: 'failed', file: outPath(from.url), note: `改用靜態圖：${(e as Error).message.slice(0, 200)}` });
     continue;
   }
   const dir = file.replace(/\.mp4$/, '_frames');
@@ -151,7 +163,10 @@ for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   const count = readdirSync(dir).filter((f) => f.endsWith('.jpg')).length;
   manifest[vid.id] = { kind: 'video', url: from.url, frames: { pattern: join(dir, '%05d.jpg'), count, fps: Number(a.fps) } };
   console.log(`video ${vid.id} → ${file} (${count} frames)`);
+  status.item('assets', { id: vid.id, kind: 'video', state: 'done', file: outPath(file), usd: usdOf(vid.id) });
+  status.stage('assets', { costUSD: +spent().toFixed(3) });
 }
 writeFileSync(join(out, 'assets.json'), JSON.stringify(manifest, null, 1));
 console.log(JSON.stringify({ spentUSD: +spent().toFixed(3), budgetUSD: Number(a.budget), assets: Object.keys(manifest), stillInsteadOfVideo: missing }, null, 1));
+status.stage('assets', { state: 'done', costUSD: +spent().toFixed(3), message: missing.length ? `${missing.length} 段影片改用靜態圖：${missing.join(', ')}` : undefined });
 if (missing.length) process.exitCode = 3;

@@ -64,18 +64,19 @@ const RUBRIC = `1. 段落與鏡頭邊界落在歌詞句首或明顯的能量變�
 2. 副歌的畫面家族一致而且逐次加強。
 3. 畫面對應歌詞的意象和情緒。
 4. 相鄰鏡頭有足夠對比，整體有起伏。
-5. 歌詞清楚可讀，不被亮處吃掉，也不被主體擋住。
+5. 歌詞清楚可讀，不被亮處吃掉。（文字壓在人物或主體上不算缺點，不要為此移動文字。）
 6. 構圖：主體位置、地平線合理，沒有過曝或全黑。
 7. 每一幕都有設計過的版面，而不是字放在中央。
 8. 素材風格一致（畫風、配色）。
-9. 對照資料庫參考畫面，質感不明顯落後（沒有參考畫面時依一般專業歌詞 VJ 判斷）。`;
+9. 對照資料庫參考畫面，質感不明顯落後（沒有參考畫面時依一般專業歌詞 VJ 判斷）。
+10. 持續動態：畫面不能長時間靜止；靜態插畫只靠慢推鏡、人物不動，視為明顯缺點。不要為了克制而減少閃光、踩拍或動態。`;
 const paramProps: Record<string, object> = {};
 for (const tp of Object.values(TEMPLATES))
   for (const [k, p] of Object.entries(tp.params)) paramProps[k] = p.type === 'number' ? { type: 'number' } : p.type === 'boolean' ? { type: 'boolean' } : { type: 'string', enum: p.values };
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['scores', 'issues', 'edits', 'assetUnusable'],
   properties: {
-    scores: { type: 'object', additionalProperties: false, required: ['1', '2', '3', '4', '5', '6', '7', '8', '9'], properties: Object.fromEntries('123456789'.split('').map((k) => [k, { type: 'integer' }])) },
+    scores: { type: 'object', additionalProperties: false, required: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'], properties: Object.fromEntries(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'].map((k) => [k, { type: 'integer' }])) },
     issues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['target', 'criterion', 'problem'], properties: { target: { type: 'string' }, criterion: { type: 'integer' }, problem: { type: 'string' } } } },
     edits: { type: 'object', additionalProperties: false, required: ['shots', 'cues'], properties: {
       shots: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'params'], properties: { id: { type: 'string' }, params: { type: 'object', additionalProperties: false, properties: paramProps } } } },

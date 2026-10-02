@@ -86,7 +86,10 @@ const SYSTEM = `你是日本地下偶像 Live House 的歌詞 VJ 導演兼動態
 - 每一幕都要是設計過的版面：依句子性質選模板（短而有力的關鍵句用 punch，敘事或長句用 frame-split），相鄰鏡頭要有對比。
 - 強調範圍用字元索引 [from, to)，選真正的關鍵字；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
-- 素材：恰好 1 張 image 與 1 段 video（from 那張 image），畫面不可有任何文字。video 給最需要爆發力的鏡頭，其他鏡頭用 image 或不放素材。素材描述用英文。
+- 畫面要持續有變化：觀眾覺得「人物站著不動、只是慢慢推近」就是失敗。
+- 素材：1 張 image 加 2–3 段 video（都 from 那張 image，各自描述不同的動態，例如流星劃過、光點升起、雲層流動、鏡頭繞行），畫面不可有任何文字。
+  video 分給不同鏡頭，每段最長 8 秒；只用靜態 image 的鏡頭不超過 4 秒，而且要配 pan 或 parallax 運鏡。每個鏡頭都要有素材。素材描述用英文。
+- 文字壓在人物或主體上沒有關係，不需要刻意避開。
 - 配色要讓文字在素材上清楚可讀；背景壓暗參數 dim 依素材亮度調整。`;
 
 const USER = `【風格需求】\n${a.style}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;

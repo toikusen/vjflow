@@ -45,15 +45,16 @@ export interface CueMetric {
 }
 
 const FINAL_SHADER = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 } },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uSweep, uAberration, uGrain; varying vec2 vUv;
+    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain; varying vec2 vUv;
     float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime * 37.0) * 43758.5453); }
     void main(){
       vec2 d = vUv - 0.5;
       float a = uAberration * (1.0 + 3.0 * uFlash);
       vec3 c = vec3(texture2D(tDiffuse, vUv + d * a).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - d * a).b);
+      c *= 1.0 + 0.45 * uHit;                       // accent hit: exposure up (highlights bloom), shadows stay dark
       c *= 1.0 - 0.55 * dot(d, d) * 1.6;            // vignette
       c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
       if (uSweep >= 0.0) {                          // light sweep: a soft slanted band crossing left to right
@@ -75,6 +76,8 @@ export class LyricVjEngine {
   private camera = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, -10, 10);
   private composer: EffectComposer;
   private finalPass: ShaderPass;
+  private bloom: UnrealBloomPass;
+  private motes: THREE.Points;
   private plates: Plate[] = [];
   private dim: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private textRoot = new THREE.Group();
@@ -90,7 +93,8 @@ export class LyricVjEngine {
     this.renderer.setSize(W, H, false);
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.45, 0.8));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.45, 0.8);
+    this.composer.addPass(this.bloom);
     // grade in display (sRGB) space: a 0.2 flash mixed in linear light reads as a ~45 % grey wash
     this.composer.addPass(new OutputPass());
     this.finalPass = new ShaderPass(FINAL_SHADER);
@@ -101,6 +105,12 @@ export class LyricVjEngine {
       this.scene.add(mesh);
       this.plates.push({ mesh });
     }
+    const N = 260;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+    this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ size: 4, color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthTest: false, sizeAttenuation: false }));
+    this.motes.renderOrder = 2.5;
+    this.scene.add(this.motes);
     this.dim = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 1.2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false }));
     this.dim.renderOrder = 2;
     this.scene.add(this.dim);
@@ -203,23 +213,29 @@ export class LyricVjEngine {
     const img = tex.image as { width: number; height: number };
     const cover = Math.max(W / img.width, H / img.height);
     const k = clamp01((t - shot.start) / Math.max(0.1, shot.end - shot.start));
-    let s = 1.04;
+    // stills must keep moving (a slow push alone reads as a frozen picture)
+    const e = 0.5 - 0.5 * Math.cos(Math.PI * k);
+    let s = 1.06;
     let x = 0;
-    if (shot.camera === 'push') s = 1.03 + 0.09 * k;
-    if (shot.camera === 'pan') x = (k - 0.5) * W * 0.05;
-    if (shot.camera === 'parallax') [s, x] = [1.04 + 0.05 * k, (k - 0.5) * W * 0.03];
+    let y = 0;
+    if (shot.camera === 'static') [s, x] = [1.06 + 0.03 * k, Math.sin(t * 0.6) * 12];
+    if (shot.camera === 'push') [s, y] = [1.02 + 0.16 * e, -20 * e];
+    if (shot.camera === 'pan') [s, x] = [1.12, (e - 0.5) * W * 0.1];
+    if (shot.camera === 'parallax') [s, x, y] = [1.08 + 0.1 * e, (e - 0.5) * W * 0.06, -24 * e];
     p.mesh.material.map = tex;
     p.mesh.material.needsUpdate = true;
     p.mesh.scale.set(img.width * cover * s, img.height * cover * s, 1);
-    p.mesh.position.set(x, 0, 0);
+    p.mesh.position.set(x, y, 0);
     p.mesh.material.opacity = opacity;
   }
 
   async renderAt(t: number) {
     const { shot, prev } = this.shotAt(t);
-    const fx: FrameFx = { flash: 0, shake: 0 };
+    const fx: FrameFx = { flash: 0, hit: 0, shake: 0 };
     const since = t - shot.start;
-    if (shot.transitionIn === 'flash') fx.flash = Math.max(fx.flash, 0.9 * Math.exp(-since * 10) * (since >= 0 ? 1 : 0));
+    // a flash is a few frames of white: a slower decay reads as grey fog over a dark plate
+    if (shot.transitionIn === 'flash') fx.flash = Math.max(fx.flash, 0.9 * Math.exp(-since * 24) * (since >= 0 ? 1 : 0));
+    if (shot.transitionIn === 'flash') fx.hit = Math.max(fx.hit, Math.exp(-since * 6) * (since >= 0 ? 1 : 0)); // then glows down
     const sweep = shot.transitionIn === 'wipe' && since >= 0 && since < 0.35 ? since / 0.35 : -1;
 
     const cur = await this.plateTexture(shot, t);
@@ -239,6 +255,7 @@ export class LyricVjEngine {
         this.placePlate(this.plates[1], cur.tex, shot, t, cur.fromStill / 0.5);
       }
     }
+    this.updateMotes(t, fx.hit);
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;
     const dimPrev = prev ? ((prev.params['dim'] as number) ?? 0.3) : dimTarget;
     this.dim.material.opacity = dimPrev + (dimTarget - dimPrev) * easeOutCubic(since / 0.4);
@@ -256,8 +273,24 @@ export class LyricVjEngine {
     this.camera.position.set((hash(t * 30) - 0.5) * shake, (hash(t * 30, 1) - 0.5) * shake, 5);
     this.finalPass.uniforms['uTime'].value = Math.floor(t * this.job.fps) / this.job.fps;
     this.finalPass.uniforms['uFlash'].value = fx.flash;
+    this.finalPass.uniforms['uHit'].value = fx.hit;
+    this.bloom.strength = 0.55 + 0.9 * fx.hit;
     this.finalPass.uniforms['uSweep'].value = sweep;
     this.composer.render();
+  }
+
+  /** Drifting light motes (deterministic in t): keep every shot alive even on a still plate. */
+  private updateMotes(t: number, hit: number) {
+    const pos = this.motes.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) {
+      const sp = 18 + hash(i, 3) * 50;
+      const y = ((hash(i, 1) * (H + 200) + t * sp) % (H + 200)) - H / 2 - 100;
+      const x = (hash(i, 2) - 0.5) * W + Math.sin(t * 0.4 + i) * 30;
+      pos.setXYZ(i, x, y, 0);
+    }
+    pos.needsUpdate = true;
+    (this.motes.material as THREE.PointsMaterial).color.set(this.job.treatment.styleAnchor.palette.glow);
+    (this.motes.material as THREE.PointsMaterial).opacity = 0.45 + 0.4 * hit;
   }
 
   private makeGradient(): THREE.Texture {

@@ -66,7 +66,7 @@ export const punch: TemplateRenderer = {
       update(t: number, fx: FrameFx) {
         const pulse = accentPulse(t, rt.accentTimes);
         // a hit flash, not a white-out: strong values wash the whole frame grey
-        if (p['flash']) fx.flash = Math.max(fx.flash, 0.18 * accentPulse(t, rt.accentTimes, 14));
+        if (p['flash']) fx.hit = Math.max(fx.hit, accentPulse(t, rt.accentTimes, 10));
         if (shake) fx.shake = Math.max(fx.shake, pulse * bounce);
         const hit = 1 + 0.14 * bounce * pulse;
         const drift = 1 + 0.02 * clamp01((t - rt.showFrom) / 4); // slow push while held
@@ -78,12 +78,14 @@ export const punch: TemplateRenderer = {
           g.mesh.material.opacity = m.opacity;
         });
         echo.forEach((g) => {
-          const m = glyphMotion(rt, g, echo.length, t - 0.07, STAGGER); // trails the fill
-          const off = size * (keyword.length <= 2 ? 0.02 : 0.05) * (1 + pulse); // dense single kanji blur under a wide echo
+          const m = glyphMotion(rt, g, echo.length, t, STAGGER);
+          // the echo hugs the glyph and only appears once the fill has landed (no oversized box during the slam)
+          const landed = clamp01((t - (rt.showFrom + g.index * STAGGER + 0.3)) / 0.15);
+          const off = size * (keyword.length <= 2 ? 0.012 : 0.022) * (1 + pulse);
           g.mesh.position.set(g.x * drift + m.dx + off, g.y + m.dy - off, 0);
           g.mesh.scale.setScalar(m.scale * hit * drift * 1.04);
           g.mesh.rotation.z = m.rot;
-          g.mesh.material.opacity = m.opacity * (0.35 + 0.4 * pulse);
+          g.mesh.material.opacity = m.opacity * landed * (0.35 + 0.4 * pulse);
         });
         small.flat().forEach((g, i) => {
           const m = glyphMotion(smallRt, { ...g, index: i }, small.flat().length, t, 0.012);

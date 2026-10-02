@@ -25,7 +25,10 @@ export interface CueRuntime {
 
 /** Per-frame effects templates can request from the post stack. */
 export interface FrameFx {
+  /** Transition white flash (0..1). */
   flash: number;
+  /** Accent hit: brighten and bloom, never a white wash (0..1). */
+  hit: number;
   shake: number;
 }
 

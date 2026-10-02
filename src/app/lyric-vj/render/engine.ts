@@ -74,8 +74,20 @@ const FINAL_SHADER = {
 };
 
 interface Plate {
-  mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
 }
+
+/** A plate draws one frame, or two adjacent frames blended (slowed clips), in a single pass. */
+const plateMaterial = () =>
+  new THREE.ShaderMaterial({
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    uniforms: { map: { value: null }, map2: { value: null }, mixAmt: { value: 0 }, opacity: { value: 1 } },
+    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt; uniform float opacity; varying vec2 vUv;
+      void main() { vec3 c = mix(texture2D(map, vUv).rgb, texture2D(map2, vUv).rgb, mixAmt); gl_FragColor = vec4(c, opacity); }`,
+  });
 
 export class LyricVjEngine {
   private renderer: THREE.WebGLRenderer;
@@ -109,7 +121,7 @@ export class LyricVjEngine {
     this.finalPass = new ShaderPass(FINAL_SHADER);
     this.composer.addPass(this.finalPass);
     for (let i = 0; i < 2; i++) {
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false }));
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), plateMaterial());
       mesh.renderOrder = i;
       this.scene.add(mesh);
       this.plates.push({ mesh });
@@ -248,7 +260,7 @@ export class LyricVjEngine {
     return tex;
   }
 
-  private placePlate(p: Plate, tex: THREE.Texture, shot: Shot, t: number, opacity: number) {
+  private placePlate(p: Plate, tex: THREE.Texture, shot: Shot, t: number, opacity: number, next?: THREE.Texture, mix = 0) {
     const img = tex.image as { width: number; height: number };
     const cover = Math.max(W / img.width, H / img.height);
     const run = this.runOf(shot);
@@ -263,11 +275,13 @@ export class LyricVjEngine {
     if (shot.camera === 'push') [s, y] = [1.02 + 0.16 * e, -20 * e];
     if (shot.camera === 'pan') [s, x] = [1.12, (e - 0.5) * W * 0.1];
     if (shot.camera === 'parallax') [s, x, y] = [1.08 + 0.1 * e, (e - 0.5) * W * 0.06, -24 * e];
-    p.mesh.material.map = tex;
-    p.mesh.material.needsUpdate = true;
+    const u = p.mesh.material.uniforms;
+    u['map'].value = tex;
+    u['map2'].value = next ?? tex;
+    u['mixAmt'].value = next ? mix : 0;
+    u['opacity'].value = opacity;
     p.mesh.scale.set(img.width * cover * s, img.height * cover * s, 1);
     p.mesh.position.set(x, y, 0);
-    p.mesh.material.opacity = opacity;
   }
 
   async renderAt(t: number) {
@@ -284,13 +298,12 @@ export class LyricVjEngine {
     const dissolve = prev && shot.transitionIn === 'dissolve' && prev.asset !== shot.asset ? clamp01(since / 0.4) : 1;
     if (prev && dissolve < 1) {
       const p0 = await this.plateTexture(prev, t);
-      this.placePlate(this.plates[0], p0.tex, prev, t, 1);
-      this.placePlate(this.plates[1], cur.tex, shot, t, dissolve);
+      this.placePlate(this.plates[0], p0.tex, prev, t, 1, p0.next, p0.mix);
+      this.placePlate(this.plates[1], cur.tex, shot, t, dissolve, cur.next, cur.mix);
     } else {
-      this.placePlate(this.plates[0], cur.tex, shot, t, 1);
-      // slowed clips: blend toward the next frame instead of stepping
-      if (cur.next) this.placePlate(this.plates[1], cur.next, shot, t, cur.mix);
-      else this.plates[1].mesh.material.opacity = 0;
+      // slowed clips blend toward the next frame instead of stepping
+      this.placePlate(this.plates[0], cur.tex, shot, t, 1, cur.next, cur.mix);
+      this.plates[1].mesh.material.uniforms['opacity'].value = 0;
     }
     this.updateMotes(t, fx.hit);
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;

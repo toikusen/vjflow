@@ -5,6 +5,7 @@ import { GoogleGenAI } from '@google/genai';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { AssetSource } from '../../src/app/lyric-vj/render/engine';
@@ -14,7 +15,9 @@ import { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
 const { values: a } = parseArgs({
   options: {
     treatment: { type: 'string' }, out: { type: 'string' }, budget: { type: 'string', default: '10' }, fps: { type: 'string', default: '30' },
-    'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'style-id': { type: 'string', default: 'emotional' }, 'video-model': { type: 'string', default: 'veo-3.1-fast-generate-preview' },
+    'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'style-id': { type: 'string', default: 'emotional' }, 'video-model': { type: 'string' },
+    // vertex: Google Cloud project quota (no 10-clips/day cap); gemini: Gemini API key
+    'video-backend': { type: 'string' },
   },
 });
 // official list prices (2026-10): Flash Image 2K $0.101/image; Veo 3.1 Fast 1080p $0.12/s
@@ -35,6 +38,21 @@ const charge = (item: string, usd: number) => {
   writeFileSync(ledgerPath, JSON.stringify(ledger, null, 1));
 };
 const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });
+// Vertex settings (project id, region) live in ~/.config/vjflow/vertex.env; auth is gcloud application-default credentials
+const vertexEnv = join(homedir(), '.config/vjflow/vertex.env');
+if (existsSync(vertexEnv)) {
+  for (const line of readFileSync(vertexEnv, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/);
+    if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
+  }
+}
+const backend = a['video-backend'] ?? (process.env['GOOGLE_CLOUD_PROJECT'] ? 'vertex' : 'gemini');
+const videoModel = a['video-model'] ?? (backend === 'vertex' ? 'veo-3.1-fast-generate-001' : 'veo-3.1-fast-generate-preview');
+const videoAi =
+  backend === 'vertex'
+    ? new GoogleGenAI({ vertexai: true, project: process.env['GOOGLE_CLOUD_PROJECT'], location: process.env['GOOGLE_CLOUD_LOCATION'] ?? 'us-central1' })
+    : ai;
+if (backend === 'vertex' && !process.env['GOOGLE_CLOUD_PROJECT']) throw new Error(`Vertex AI 需要 GOOGLE_CLOUD_PROJECT（寫在 ${vertexEnv}）`);
 const hash = (...parts: string[]) => createHash('sha1').update(parts.join('\u0000')).digest('hex').slice(0, 12);
 
 async function image(id: string, prompt: string, ref?: Buffer): Promise<string> {
@@ -56,22 +74,28 @@ async function image(id: string, prompt: string, ref?: Buffer): Promise<string> 
 }
 
 async function video(id: string, prompt: string, first: string): Promise<string> {
-  const key = hash(a['video-model']!, prompt, hash(readFileSync(first).toString('base64')));
-  const file = join(out, `${id}_${key}.mp4`);
+  const ref = hash(readFileSync(first).toString('base64'));
+  // the same Veo model under its Gemini API (preview) and Vertex (-001) names shares one cache entry
+  const family = videoModel.replace(/-(preview|\d{3})$/, '');
+  const file = join(out, `${id}_${hash(family, prompt, ref)}.mp4`);
   if (existsSync(file)) return file;
+  const legacy = join(out, `${id}_${hash(`${family}-preview`, prompt, ref)}.mp4`);
+  if (existsSync(legacy)) return legacy;
   afford(`video ${id}`, PRICE.videoPerSec * 8);
   let op;
   for (let attempt = 0; ; attempt++) {
     try {
-      op = await ai.models.generateVideos({
-    model: a['video-model']!, prompt,
+      op = await videoAi.models.generateVideos({
+    model: videoModel, prompt,
     image: { imageBytes: readFileSync(first).toString('base64'), mimeType: 'image/jpeg' },
     config: { aspectRatio: '16:9', resolution: '1080p', durationSeconds: 8, negativePrompt: 'text, letters, subtitles, captions, watermark, logo' },
   });
       break;
     } catch (e) {
-      // Tier 1 Veo: 2 requests/min and 10/day. Wait out the minute twice; a third 429 is the daily cap.
-      if (!/429|RESOURCE_EXHAUSTED/.test(String(e)) || attempt >= 2) throw new Error(attempt >= 2 ? `Veo 每日上限（Tier 1 約 10 段／天）：${String(e).slice(0, 120)}` : String(e));
+      // Gemini API Tier 1: 2 requests/min and 10/day; Vertex: per-minute project quota. Wait out the minute twice.
+      if (!/429|RESOURCE_EXHAUSTED/.test(String(e)) || attempt >= 2) {
+        throw new Error(attempt >= 2 ? `Veo 額度用完（${backend === 'vertex' ? 'Vertex 專案配額' : 'Gemini API 每日約 10 段'}）：${String(e).slice(0, 160)}` : String(e));
+      }
       console.log(`  Veo 限流，${65}s 後重試…`);
       await new Promise((r) => setTimeout(r, 65_000));
     }
@@ -79,13 +103,15 @@ async function video(id: string, prompt: string, first: string): Promise<string>
   const began = Date.now();
   while (!op.done) {
     await new Promise((r) => setTimeout(r, 10_000));
-    op = await ai.operations.getVideosOperation({ operation: op });
+    op = await videoAi.operations.getVideosOperation({ operation: op });
     process.stdout.write(`\r  video ${id}: ${Math.round((Date.now() - began) / 1000)}s`);
   }
   console.log();
   const v = op.response?.generatedVideos?.[0]?.video;
   if (!v) throw new Error(`影片 ${id} 沒有產出：${JSON.stringify(op.error ?? op.response).slice(0, 400)}`);
-  await ai.files.download({ file: v, downloadPath: file });
+  // Vertex returns the clip inline (no outputGcsUri); the Gemini API returns a file to download
+  if (v.videoBytes) writeFileSync(file, Buffer.from(v.videoBytes, 'base64'));
+  else await videoAi.files.download({ file: v, downloadPath: file });
   charge(`video ${id}`, PRICE.videoPerSec * 8);
   return file;
 }

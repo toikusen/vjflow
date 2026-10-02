@@ -197,15 +197,40 @@ export class LyricVjEngine {
     return { shot: shots[i] ?? shots[shots.length - 1], prev: shots[i - 1] };
   }
 
-  /** Plate texture for a shot at time t: video frame while the clip lasts, then its first-frame image. */
-  private async plateTexture(shot: Shot, t: number): Promise<{ tex: THREE.Texture; fromStill: number }> {
+  /**
+   * Consecutive shots on the same asset form one run: the clip plays straight through it and the camera move spans it,
+   * so a cut between those shots changes only the text, never jumps the background back.
+   */
+  private runOf(shot: Shot): { start: number; end: number; first: Shot } {
+    const shots = this.job.treatment.shots;
+    let i = shots.indexOf(shot);
+    let j = i;
+    while (i > 0 && shots[i - 1].asset === shot.asset) i--;
+    while (j < shots.length - 1 && shots[j + 1].asset === shot.asset) j++;
+    return { start: shots[i].start, end: shots[j].end, first: shots[i] };
+  }
+
+  /**
+   * Plate frames for a shot at time t. A clip shorter than its run plays slower (down to half speed, adjacent frames
+   * blended), then holds its last frame: it never restarts or falls back to the first-frame still.
+   */
+  private async plateTexture(shot: Shot, t: number): Promise<{ tex: THREE.Texture; next?: THREE.Texture; mix: number }> {
     const a = shot.asset ? this.job.assets[shot.asset] : undefined;
-    if (!a) return { tex: this.gradient, fromStill: 0 };
-    if (a.kind === 'image' || !a.frames) return { tex: this.images.get(shot.asset!)!, fromStill: 0 };
-    const local = t - shot.start + (shot.clipStart ?? 0);
-    const idx = Math.floor(local * a.frames.fps);
-    if (idx >= a.frames.count) return { tex: this.images.get(shot.asset!)!, fromStill: local - a.frames.count / a.frames.fps };
-    const url = a.frames.pattern.replace('%05d', String(Math.max(0, idx) + 1).padStart(5, '0'));
+    if (!a) return { tex: this.gradient, mix: 0 };
+    if (a.kind === 'image' || !a.frames) return { tex: this.images.get(shot.asset!)!, mix: 0 };
+    const run = this.runOf(shot);
+    const from = run.first.clipStart ?? 0;
+    const clipSec = a.frames.count / a.frames.fps;
+    const speed = Math.min(1, Math.max(0.5, (clipSec - from) / Math.max(0.1, run.end - run.start)));
+    const f = Math.min(a.frames.count - 1, Math.max(0, (from + (t - run.start) * speed) * a.frames.fps));
+    const idx = Math.floor(f);
+    const tex = await this.frame(a.frames.pattern, idx);
+    if (idx >= a.frames.count - 1 || speed >= 1) return { tex, mix: 0 };
+    return { tex, next: await this.frame(a.frames.pattern, idx + 1), mix: f - idx };
+  }
+
+  private async frame(pattern: string, idx: number): Promise<THREE.Texture> {
+    const url = pattern.replace('%05d', String(idx + 1).padStart(5, '0'));
     let tex = this.frameCache.get(url);
     if (!tex) {
       const bmp = await createImageBitmap(await (await fetch(url)).blob(), { imageOrientation: 'flipY' });
@@ -220,13 +245,15 @@ export class LyricVjEngine {
         this.frameCache.delete(k);
       }
     }
-    return { tex, fromStill: 0 };
+    return tex;
   }
 
   private placePlate(p: Plate, tex: THREE.Texture, shot: Shot, t: number, opacity: number) {
     const img = tex.image as { width: number; height: number };
     const cover = Math.max(W / img.width, H / img.height);
-    const k = clamp01((t - shot.start) / Math.max(0.1, shot.end - shot.start));
+    const run = this.runOf(shot);
+    const k = clamp01((t - run.start) / Math.max(0.1, run.end - run.start));
+    shot = run.first; // the run keeps its first shot's camera move
     // stills must keep moving (a slow push alone reads as a frozen picture)
     const e = 0.5 - 0.5 * Math.cos(Math.PI * k);
     let s = 1.06;
@@ -261,13 +288,9 @@ export class LyricVjEngine {
       this.placePlate(this.plates[1], cur.tex, shot, t, dissolve);
     } else {
       this.placePlate(this.plates[0], cur.tex, shot, t, 1);
-      this.plates[1].mesh.material.opacity = 0;
-      // after a video clip runs out, its still crossfades in over 0.5 s (spec 3.2)
-      if (cur.fromStill > 0 && cur.fromStill < 0.5) {
-        const last = await this.plateTexture(shot, shot.start + (this.job.assets[shot.asset!].frames!.count - 1) / this.job.assets[shot.asset!].frames!.fps);
-        this.placePlate(this.plates[0], last.tex, shot, t, 1);
-        this.placePlate(this.plates[1], cur.tex, shot, t, cur.fromStill / 0.5);
-      }
+      // slowed clips: blend toward the next frame instead of stepping
+      if (cur.next) this.placePlate(this.plates[1], cur.next, shot, t, cur.mix);
+      else this.plates[1].mesh.material.opacity = 0;
     }
     this.updateMotes(t, fx.hit);
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;

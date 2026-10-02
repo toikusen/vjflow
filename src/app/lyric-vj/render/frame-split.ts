@@ -2,7 +2,7 @@
 // remaining rows in small type outside the frame's lower right.
 import * as THREE from 'three';
 import { advanceOf, clamp01, easeOutBack, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
-import { accentPulse, color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, ShotLayer, TemplateRenderer } from './runtime';
+import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, ShotLayer, TemplateRenderer } from './runtime';
 import { Palette, ParamValue, Shot } from '../treatment';
 
 const W = 1920;
@@ -127,7 +127,7 @@ export const frameSplit: TemplateRenderer = {
       const gs = makeGlyphs(row, style, color(rt.palette.text, 1.05), 4);
       gs.forEach((g, j) => {
         const m = emphasisOf(rt, indexIn(row, j));
-        if (m === 'color' || m === 'glow') g.mesh.material.color = color(rt.palette.accent, m === 'glow' ? 1.8 : 1.1);
+        if (m === 'color' || m === 'glow') g.mesh.material.color = color(readable(rt.palette.accent, rt.palette.background, 7), m === 'glow' ? 1.8 : 1.1);
         if (m === 'scale') g.mesh.userData['emph'] = 1.25;
       });
       placeRow(gs, cx, cy + ((mainRows.length - 1) / 2 - r) * size * 1.15, 4);

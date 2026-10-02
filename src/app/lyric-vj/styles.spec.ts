@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { contrast, readable } from './render/runtime';
 import { checkStyle, STYLES } from './styles';
 import { SongTimeline } from './timeline';
 import { TreatmentV3 } from './treatment';
@@ -36,5 +37,14 @@ describe('checkStyle (emotional)', () => {
     expect(errs).toMatch(/s2 沒有素材/);
     expect(errs).toMatch(/s2 長 2\.0 秒/);
     expect(errs).toMatch(/s2 用了 flash/);
+  });
+});
+
+describe('readable', () => {
+  it('lightens a blue accent until it reads on a dark blue background', () => {
+    expect(contrast('#3b5bff', '#0a1030')).toBeLessThan(4.5);
+    const c = readable('#3b5bff', '#0a1030');
+    expect(contrast(c, '#0a1030')).toBeGreaterThanOrEqual(4.5);
+    expect(readable('#ffffff', '#0a1030')).toBe('#ffffff');
   });
 });

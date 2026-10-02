@@ -1,7 +1,7 @@
 // punch: the emphasised words set huge and hit on the accents; the rest of the line in small type above/below.
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, makeGlyphs, placeRow } from './glyphs';
-import { accentPulse, color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, TemplateRenderer } from './runtime';
+import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const STAGGER = 0.045;
@@ -40,7 +40,8 @@ export const punch: TemplateRenderer = {
     const w200 = [...keyword].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
     const size = Math.max(140, Math.min(440, (200 * (p['keywordWidth'] as number) * W) / w200));
     const method = emphasisOf(rt, k0);
-    const kwColor = method === 'color' || method === 'glow' ? rt.palette.accent : rt.palette.text;
+    // 7:1 against the palette background: the plate behind the text is far brighter than that colour
+    const kwColor = readable(method === 'color' || method === 'glow' ? rt.palette.accent : rt.palette.text, rt.palette.background, 7);
     const kStyle: GlyphStyle = { family: rt.fonts.display, weight: 400, size };
     const kw = makeGlyphs(keyword, kStyle, color(kwColor, method === 'glow' ? 1.8 : 1.15));
     placeRow(kw, 0, 30);

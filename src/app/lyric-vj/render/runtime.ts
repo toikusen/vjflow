@@ -124,3 +124,23 @@ export function settledAt(rt: CueRuntime, n: number, stagger: number) {
 }
 
 export const color = (hex: string, boost = 1) => new THREE.Color(hex).multiplyScalar(boost);
+
+const luminance = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  const f = (c: number) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * f((n >> 16) & 255) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255);
+};
+export const contrast = (a: string, b: string) => {
+  const [x, y] = [luminance(a), luminance(b)];
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+
+/** Lightens a text colour toward white until it reaches WCAG 4.5:1 against the (dark) background colour. */
+export function readable(hex: string, background: string, min = 4.5): string {
+  const n = parseInt(hex.slice(1), 16);
+  for (let k = 0; k <= 1.0001; k += 0.05) {
+    const c = '#' + [16, 8, 0].map((sh) => { const v = (n >> sh) & 255; return Math.round(v + (255 - v) * k).toString(16).padStart(2, '0'); }).join('');
+    if (contrast(c, background) >= min) return c;
+  }
+  return '#ffffff';
+}

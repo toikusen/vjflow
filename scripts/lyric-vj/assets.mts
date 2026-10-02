@@ -10,11 +10,12 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { AssetSource } from '../../src/app/lyric-vj/render/engine';
 import { STYLES } from '../../src/app/lyric-vj/styles';
+import { Tier, TIERS } from '../../src/app/lyric-vj/tiers';
 import { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
 
 const { values: a } = parseArgs({
   options: {
-    treatment: { type: 'string' }, out: { type: 'string' }, budget: { type: 'string', default: '10' }, fps: { type: 'string', default: '30' },
+    treatment: { type: 'string' }, out: { type: 'string' }, budget: { type: 'string' }, tier: { type: 'string', default: 'standard' }, fps: { type: 'string', default: '30' },
     'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'style-id': { type: 'string', default: 'emotional' }, 'video-model': { type: 'string' },
     // vertex: Google Cloud project quota (no 10-clips/day cap); gemini: Gemini API key
     'video-backend': { type: 'string' },
@@ -24,6 +25,7 @@ const { values: a } = parseArgs({
 const PRICE = { image: 0.101, videoPerSec: 0.12 };
 const NO_TEXT = `${STYLES[a['style-id']!]?.assetSuffix ?? ''} Absolutely no text, no letters, no subtitles, no logos, no watermark.`;
 const t: TreatmentV3 = JSON.parse(readFileSync(a.treatment!, 'utf8'));
+a.budget ??= String(TIERS[a.tier as Tier]?.budgetUSD ?? 20);
 const out = a.out!;
 mkdirSync(out, { recursive: true });
 const ledgerPath = join(out, 'costs.json');

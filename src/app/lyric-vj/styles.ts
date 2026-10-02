@@ -1,5 +1,6 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
+import { sceneCount, Tier, TIERS } from './tiers';
 import { SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, Window } from './treatment';
 
@@ -8,8 +9,6 @@ export interface StylePreset {
   name: string;
   description: string;
   templates: string[];
-  /** Image+video groups: one per `perSec` seconds of the window, at most `max` (each group = 1 image + 1 video from it). */
-  assets: { perSec: number; max: number };
   /** Shot length range in seconds. */
   shotSec: [number, number];
   /** Rules written into the director prompt (Traditional Chinese). */
@@ -24,12 +23,10 @@ export const STYLES: Record<string, StylePreset> = {
     name: '情緒型',
     description: '抒情、帶故事感的歌詞 VJ：風景與氛圍為底，大字與框線交替，動態自然、特效對拍。',
     templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite'],
-    assets: { perSec: 20, max: 4 },
     shotSec: [3.5, 8],
     rules: [
       '素材只畫風景與氛圍（天空、雲、光、海、城市、街道、自然景物），依歌詞意象決定場景與時段；不要畫人物，最多只能是很小、靜止的遠景剪影。',
       '影片只要自然的動態：雲流動、星星閃爍、光線變化、雨或霧、鏡頭緩慢推進或平移；不要奇幻特效（電光、爆炸、從手中噴出的光、魔法粒子）。特效由渲染器負責。',
-      '素材以「組」為單位：每組 1 張 image 加 1 段 video（from 那張 image）。一個音樂段落用一組，同組 video 在段落內重複使用，用 clipStart（影片內開始秒數）與不同運鏡做出變化；副歌的那組在之後的副歌重複使用。組數上限見下方。',
       '一個鏡頭大約涵蓋 2 句歌詞（3.5–8 秒），不要每句換一次版型；整體節奏要有呼吸。',
       'transitionIn 的 flash 只用在段落轉換（例如副歌第一句），大約每個段落一次、不可連續；其他鏡頭用 cut、wipe 或 dissolve。',
       '版型：關鍵句用 punch 或 scatter，敘事句用 frame-split 或 typewriter，抒情、留白的句子用 vertical 直排或 handwrite 手寫。同一首歌要用到至少 4 種版型，相鄰兩個鏡頭不要用同一種；不必死板輪流。',
@@ -44,18 +41,17 @@ export const STYLES: Record<string, StylePreset> = {
 };
 
 /** Style-level checks the director must satisfy (counts and pacing); returned as feedback errors. */
-/** How many image+video groups a window may use. */
-export function assetGroups(style: StylePreset, win: Window): number {
-  return Math.max(1, Math.min(style.assets.max, Math.ceil((win.end - win.start) / style.assets.perSec)));
-}
-
-export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimeline, win: Window): string[] {
+export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimeline, win: Window, tier: Tier = 'standard'): string[] {
   const errors: string[] = [];
   const images = t.assets.filter((a) => a.kind === 'image').length;
   const videos = t.assets.filter((a) => a.kind === 'video').length;
-  const g = assetGroups(style, win);
-  if (images < 1 || images > g) errors.push(`風格「${style.name}」在這個長度要 1–${g} 張 image，目前 ${images}`);
-  if (videos < 1 || videos > g) errors.push(`風格「${style.name}」在這個長度要 1–${g} 段 video，目前 ${videos}`);
+  const g = sceneCount(tier, win);
+  const name = TIERS[tier].name;
+  // rich must actually use its scenes: at least 60 % of the allowance
+  const min = tier === 'rich' ? Math.max(1, Math.ceil(g * 0.6)) : 1;
+  if (images < min || images > g) errors.push(`「${name}」版本在這個長度要 ${min}–${g} 張 image，目前 ${images}`);
+  if (TIERS[tier].video && (videos < min || videos > images)) errors.push(`「${name}」版本每張 image 都要有 video（${min}–${images} 段），目前 ${videos}`);
+  if (!TIERS[tier].video && videos > 0) errors.push(`「${name}」版本不可有 video 素材`);
   for (const s of t.shots) {
     if (!style.templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於風格「${style.name}」`);
     if (!s.asset) errors.push(`鏡頭 ${s.id} 沒有素材；這個風格每個鏡頭都要有素材`);

@@ -18,7 +18,8 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
-    stills: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
+    stills: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
+    'no-video': { type: 'boolean', default: false }, // still version: every clip replaced by the image it starts from 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
   },
 });
 const ROOT = process.cwd();
@@ -31,6 +32,9 @@ mkdirSync(join(out, 'render'), { recursive: true });
 const checked = validateTreatment(JSON.parse(readFileSync(a.treatment!, 'utf8')) as TreatmentV3, song, win, TEMPLATES);
 if (checked.errors.length) throw new Error('企劃未通過驗證：\n' + checked.errors.join('\n'));
 const assets: Record<string, AssetSource> = a.assets ? JSON.parse(readFileSync(a.assets, 'utf8')) : {};
+if (a['no-video']) {
+  for (const v of checked.treatment.assets.filter((x) => x.kind === 'video')) if (v.from && assets[v.from]) assets[v.id] = assets[v.from];
+}
 const url = (p: string) => '/' + relative(ROOT, resolve(p)).split('\\').join('/');
 for (const s of Object.values(assets)) {
   s.url = url(s.url);

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contrast, readable } from './render/runtime';
-import { assetGroups, checkStyle, STYLES } from './styles';
+import { checkStyle, STYLES } from './styles';
+import { sceneCount } from './tiers';
 import { SongTimeline } from './timeline';
 import { TreatmentV3 } from './treatment';
 
@@ -22,11 +23,12 @@ const base = (): TreatmentV3 => ({
   cues: [],
 });
 
-describe('assetGroups', () => {
-  it('allows one group per 20 s, at most 4', () => {
-    expect(assetGroups(STYLES['emotional'], { start: 0, end: 16 })).toBe(1);
-    expect(assetGroups(STYLES['emotional'], { start: 0, end: 89 })).toBe(4);
-    expect(assetGroups(STYLES['emotional'], { start: 0, end: 230 })).toBe(4);
+describe('sceneCount', () => {
+  it('scales scenes with the window per tier', () => {
+    expect(sceneCount('standard', { start: 0, end: 16 })).toBe(1);
+    expect(sceneCount('standard', { start: 0, end: 89 })).toBe(5);
+    expect(sceneCount('rich', { start: 0, end: 89 })).toBe(12);
+    expect(sceneCount('rich', { start: 0, end: 600 })).toBe(36);
   });
 });
 
@@ -41,10 +43,15 @@ describe('checkStyle (emotional)', () => {
     t.shots[1] = { ...t.shots[1], start: 26, end: 28, asset: undefined, transitionIn: 'flash' }; // right after s1's flash
     t.shots[2].start = 28;
     const errs = checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n');
-    expect(errs).toMatch(/1–1 段 video/); // 16 s window → one group
+    expect(errs).toMatch(/video（1–1 段）/); // 16 s window → one scene
     expect(errs).toMatch(/s2 沒有素材/);
     expect(errs).toMatch(/s2 長 2\.0 秒/);
     expect(errs).toMatch(/s1、s2 連續使用 flash/);
+  });
+
+  it('enforces the tier: no video in still, most scenes used in rich', () => {
+    expect(checkStyle(base(), STYLES['emotional'], song, { start: 20, end: 36 }, 'still').join('\n')).toMatch(/不可有 video/);
+    expect(checkStyle(base(), STYLES['emotional'], song, { start: 20, end: 36 }, 'rich').join('\n')).toMatch(/要 2–2 張 image/);
   });
 
   it('asks for template variety', () => {

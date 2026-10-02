@@ -91,9 +91,10 @@ export class LyricVjEngine {
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.45, 0.8));
+    // grade in display (sRGB) space: a 0.2 flash mixed in linear light reads as a ~45 % grey wash
+    this.composer.addPass(new OutputPass());
     this.finalPass = new ShaderPass(FINAL_SHADER);
     this.composer.addPass(this.finalPass);
-    this.composer.addPass(new OutputPass());
     for (let i = 0; i < 2; i++) {
       const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ transparent: true, depthTest: false }));
       mesh.renderOrder = i;

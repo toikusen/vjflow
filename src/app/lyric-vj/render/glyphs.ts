@@ -7,6 +7,7 @@ export interface GlyphStyle {
   weight: number;
   size: number;
   outline?: number; // stroke width in px; 0/undefined = filled
+  shadow?: boolean; // soft dark halo so body text reads over bright plates
 }
 
 export interface Glyph {
@@ -32,7 +33,7 @@ export function advanceOf(char: string, s: GlyphStyle): number {
 }
 
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? 1 : 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -53,6 +54,15 @@ function texture(char: string, s: GlyphStyle) {
     ctx.strokeStyle = '#fff';
     ctx.strokeText(char, w / 2, h / 2);
   } else {
+    if (s.shadow) {
+      // the halo is drawn dark, then the white glyph on top; the material colour tints only bright pixels
+      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowBlur = s.size * 0.28;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillText(char, w / 2, h / 2);
+      ctx.fillText(char, w / 2, h / 2);
+      ctx.shadowColor = 'transparent';
+    }
     ctx.fillStyle = '#fff';
     ctx.fillText(char, w / 2, h / 2);
   }

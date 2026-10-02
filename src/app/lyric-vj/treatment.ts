@@ -1,5 +1,6 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import { phraseBoundaries } from './phrases';
 import { SongTimeline } from './timeline';
 
 export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut';
@@ -172,9 +173,23 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
         errors.push(`歌詞 ${cs.cueId} 的強調範圍 [${e.from}, ${e.to}) 超出文字長度 ${len}`);
       }
       if (!EMPHASIS_METHODS.includes(e.method)) errors.push(`歌詞 ${cs.cueId} 的強調方式 ${e.method} 不存在`);
+      // widen a range that cuts a word to the whole phrase(s) it touches
+      const b = [...phraseBoundaries(cue.text)].sort((x, y) => x - y);
+      const from = b.filter((x) => x <= e.from).pop() ?? 0;
+      const to = b.find((x) => x >= e.to) ?? len;
+      if (from !== e.from || to !== e.to) {
+        fixes.push(`歌詞 ${cs.cueId} 的強調範圍 [${e.from}, ${e.to}) 切開了一個詞，擴展為 [${from}, ${to})`);
+        e.from = from;
+        e.to = to;
+      }
     }
     if (cs.rows && !cs.rows.every((r, i) => Number.isInteger(r) && r > 0 && r < len && (i === 0 || r > cs.rows![i - 1]))) {
       errors.push(`歌詞 ${cs.cueId} 的換行位置必須是 1..${len - 1} 之間遞增的整數`);
+    } else if (cs.rows?.some((r) => !phraseBoundaries(cue.text).has(r))) {
+      const b = [...phraseBoundaries(cue.text)].filter((x) => x > 0 && x < len);
+      const rows = [...new Set(cs.rows.map((r) => b.reduce((best, x) => (Math.abs(x - r) < Math.abs(best - r) ? x : best), b[0] ?? r)))];
+      fixes.push(`歌詞 ${cs.cueId} 的換行 ${cs.rows.join(',')} 切開了一個詞，移到 ${rows.join(',')}`);
+      cs.rows = rows.length ? rows : undefined;
     }
     if (cs.accents) {
       const beatsIn = beatsDuring(song.beats, cue.start, cue.end);

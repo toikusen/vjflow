@@ -8,6 +8,9 @@ const STAGGER = 0.045;
 
 /** The keyword range: the first emphasis, else the longest space-separated phrase. */
 export function keywordRange(text: string, rt: Pick<CueRuntime, 'style'>): [number, number] {
+  const chars0 = [...text];
+  // a short line is set whole: splitting a 5-character line into big + small reads as a broken word
+  if (chars0.filter((c) => !/\s/.test(c)).length <= 7) return [0, chars0.length];
   const e = rt.style.emphasis?.[0];
   if (e) return [e.from, e.to];
   const chars = [...text];
@@ -48,11 +51,11 @@ export const punch: TemplateRenderer = {
     const echo = p['outline'] ? makeGlyphs(keyword, { ...kStyle, outline: Math.max(2, size * 0.03) }, color(rt.palette.glow, 1.4)) : [];
     placeRow(echo, 0, 30);
 
-    const sStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 84 }; // readable from the back of a live house
+    const sStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 108, shadow: true }; // readable from the back of a live house
     const small: Glyph[][] = [];
     if (before) small.push(makeGlyphs(before.replace(/\s+/g, ' '), sStyle, color(rt.palette.text, 0.95), 6));
     if (after) small.push(makeGlyphs(after.replace(/\s+/g, ' '), sStyle, color(rt.palette.text, 0.95), 6));
-    const gap = size * 0.62 + 64;
+    const gap = size * 0.62 + 84;
     // text before the keyword reads above it, text after it below
     if (before) placeRow(small[0], 0, 30 + gap, 6);
     if (after) placeRow(small[before ? 1 : 0], 0, 30 - gap, 6);

@@ -60,11 +60,22 @@ async function video(id: string, prompt: string, first: string): Promise<string>
   const file = join(out, `${id}_${key}.mp4`);
   if (existsSync(file)) return file;
   afford(`video ${id}`, PRICE.videoPerSec * 8);
-  let op = await ai.models.generateVideos({
+  let op;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      op = await ai.models.generateVideos({
     model: a['video-model']!, prompt,
     image: { imageBytes: readFileSync(first).toString('base64'), mimeType: 'image/jpeg' },
     config: { aspectRatio: '16:9', resolution: '1080p', durationSeconds: 8, negativePrompt: 'text, letters, subtitles, captions, watermark, logo' },
   });
+      break;
+    } catch (e) {
+      // Tier 1 Veo: 2 requests/min and 10/day. Wait out the minute twice; a third 429 is the daily cap.
+      if (!/429|RESOURCE_EXHAUSTED/.test(String(e)) || attempt >= 2) throw new Error(attempt >= 2 ? `Veo 每日上限（Tier 1 約 10 段／天）：${String(e).slice(0, 120)}` : String(e));
+      console.log(`  Veo 限流，${65}s 後重試…`);
+      await new Promise((r) => setTimeout(r, 65_000));
+    }
+  }
   const began = Date.now();
   while (!op.done) {
     await new Promise((r) => setTimeout(r, 10_000));

@@ -26,6 +26,8 @@ export function splitRows(text: string, rows?: number[]): string[] {
     return cuts.slice(1).map((c, i) => chars.slice(cuts[i], c).join('').trim()).filter(Boolean);
   }
   const parts = text.split(/[\s　]+/).filter(Boolean);
+  // short lines (≤ 12 characters) stay on one row
+  if (parts.join('').length <= 12) return [parts.join(' ')];
   return parts.length > 1 ? [parts[0], parts.slice(1).join(' ')] : parts;
 }
 
@@ -108,20 +110,20 @@ export const frameSplit: TemplateRenderer = {
       const start = all.join('').indexOf(row);
       return start < 0 ? -1 : [...all.join('').slice(0, start)].length + j;
     };
-    // main row: fit inside the frame (76–144 px, sized for a live-house screen); overflow splits it in two
+    // main row: fit inside the frame (88–168 px, sized for a live-house screen); overflow splits it in two
     let mainRows = [rows[0]];
     const fit = (text: string) => {
       const probe: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 100 };
       const w100 = [...text].reduce((s, c) => s + advanceOf(c, probe), 0) || 1;
       return (100 * w * 0.86) / w100;
     };
-    let size = Math.min(144, fit(rows[0]));
-    if (size < 76) {
+    let size = Math.min(168, fit(rows[0]));
+    if (size < 88) {
       const c = [...rows[0]];
       mainRows = [c.slice(0, Math.ceil(c.length / 2)).join(''), c.slice(Math.ceil(c.length / 2)).join('')];
-      size = Math.max(76, Math.min(144, ...mainRows.map(fit)));
+      size = Math.max(88, Math.min(168, ...mainRows.map(fit)));
     }
-    const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size };
+    const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
     const mainGlyphs: Glyph[] = [];
     mainRows.forEach((row, r) => {
       const gs = makeGlyphs(row, style, color(rt.palette.text, 1.05), 4);
@@ -134,12 +136,12 @@ export const frameSplit: TemplateRenderer = {
       mainGlyphs.push(...gs);
     });
     mainGlyphs.forEach((g, i) => (g.index = i));
-    const subStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 70 };
+    const subStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 92, shadow: true };
     const subGlyphs: Glyph[] = [];
     rows.slice(1).forEach((row, r) => {
       const gs = makeGlyphs(row, subStyle, color(rt.palette.text, 0.9), 6);
       const rw = rowWidth(gs, 6);
-      placeRow(gs, cx + w / 2 - rw / 2, cy - h / 2 - 82 - r * 84, 6);
+      placeRow(gs, cx + w / 2 - rw / 2, cy - h / 2 - 100 - r * 108, 6);
       subGlyphs.push(...gs);
     });
     subGlyphs.forEach((g, i) => (g.index = mainGlyphs.length + i));

@@ -10,6 +10,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { assetGroups, checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
+import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
 
 const { values: a } = parseArgs({
@@ -74,7 +75,8 @@ const cues = cuesIn(song, win);
 const beatsIn = (s: number, e: number) => song.beats.filter((b) => b >= s && b < e);
 const cueLines = cues.map((c) => {
   const chars = [...c.text].map((ch, i) => `${i}:${ch}`).join(' ');
-  return `${c.id}｜${c.start.toFixed(2)}–${c.end.toFixed(2)}s｜拍數 ${beatsIn(c.start, c.end).length}｜時間可信度 ${c.confidence}｜「${c.text}」\n    字元索引：${chars}`;
+  const b = [...phraseBoundaries(c.text)].sort((x, y) => x - y).join(',');
+  return `${c.id}｜${c.start.toFixed(2)}–${c.end.toFixed(2)}s｜拍數 ${beatsIn(c.start, c.end).length}｜時間可信度 ${c.confidence}｜「${c.text}」\n    字元索引：${chars}\n    詞：${phrases(c.text).join('／')}（強調與換行只能落在 ${b}）`;
 }).join('\n');
 const catalog = Object.values(TEMPLATES).map((t) =>
   `- ${t.id}：${t.description}\n  參數：${Object.entries(t.params).map(([k, p]) => `${k}（${p.description}；${p.type === 'number' ? `${p.min}–${p.max}` : p.type === 'enum' ? p.values.join('/') : 'true/false'}，預設 ${p.default}）`).join('；')}`).join('\n');
@@ -92,7 +94,7 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 一般原則：
 - 歌詞文字與時間由程式擁有，你只決定呈現方式；cueId 必須來自清單。
 - 鏡頭邊界放在某句歌詞開始或強拍上；鏡頭必須連續覆蓋整個範圍 ${win.start}–${win.end} 秒。可用的模板只有：${style.templates.join('、')}。
-- 強調範圍用字元索引 [from, to)，選真正的關鍵字；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
+- 強調範圍用字元索引 [from, to)，選真正的關鍵字，而且必須是完整的詞，不可把一個詞切開（切開的會被自動擴展）；短句（12 字以內）不要換行；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
 - 素材描述用英文，畫面不可有任何文字。這個範圍最多 ${assetGroups(style, win)} 組素材（每組 1 image + 1 video）。`;
 

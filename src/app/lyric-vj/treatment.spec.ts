@@ -44,6 +44,15 @@ describe('validateTreatment', () => {
     expect(r.treatment.cues.map((c) => c.cueId)).toEqual(['c001', 'c002', 'c003']); // c003 got a default style
   });
 
+  it('widens emphasis that cuts a word to the whole phrase', () => {
+    const t = base();
+    t.cues[0].emphasis = [{ from: 1, to: 2, method: 'scale' }]; // 光[る]星 → 光る
+    const r = validateTreatment(t, song, win, TEMPLATES);
+    expect(r.errors).toEqual([]);
+    expect(r.treatment.cues[0].emphasis![0]).toMatchObject({ from: 0, to: 2 });
+    expect(r.fixes.join('\n')).toMatch(/切開了一個詞/);
+  });
+
   it('reports what the director must fix', () => {
     const t = base();
     t.cues.push({ cueId: 'c999', shot: 's1', enter: 'fade', exit: 'fade' });

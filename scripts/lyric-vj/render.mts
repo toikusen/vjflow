@@ -92,7 +92,8 @@ try {
         const file = join(segDir, `seg_${k}.mp4`);
         const page = await openPage();
         const ff = spawn('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
-          '-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-pix_fmt', 'yuv420p', '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
+          '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-maxrate', '16M', '-bufsize', '32M', '-pix_fmt', 'yuv420p', // grain is incompressible: cap the rate
+           '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
         for (let f = f0; f < f1; f++) {
           if (f % 60 === 0 && statfsSync(out).bavail * statfsSync(out).bsize < 400e6) throw new Error('磁碟可用空間不足 400MB，停止渲染');
           await page.evaluate((x) => window.renderAt(x), win.start + f / fps); // time from the frame index: no drift

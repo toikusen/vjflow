@@ -58,7 +58,10 @@ export const beatCut: TemplateRenderer = {
       const holder = new THREE.Group();
       holder.position.set(cx, lay.y, 0);
       holder.rotation.z = (lay.tilt * Math.PI) / 180;
-      gs.forEach((g) => holder.add(g.mesh));
+      gs.forEach((g) => {
+        g.mesh.position.set(g.x, g.y, 0);
+        holder.add(g.mesh);
+      });
       holder.visible = false;
       group.add(holder);
       return { holder, gs, from: startOf(k), to: k + 1 < pieces.length ? startOf(k + 1) : rt.exitAt };

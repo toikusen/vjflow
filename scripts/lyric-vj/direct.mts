@@ -11,7 +11,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
-import { familiesFor, FONTS } from '../../src/app/lyric-vj/fonts';
+import { FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES } from '../../src/app/lyric-vj/design';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
@@ -52,15 +52,14 @@ mkdirSync(out, { recursive: true });
 // ---- schema (structured output): only vocabulary the engine has
 // params are a list of {key, value} pairs: one optional field per template parameter would exceed the API's limit
 // on optional schema fields; values arrive as strings and are coerced back (the validator checks them per template)
-const paramKeys = [...new Set(Object.values(TEMPLATES).flatMap((t) => Object.keys(t.params)))];
 const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ? false : /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v);
 const str = { type: 'string' };
 // the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
 const DESIGN_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak'],
   properties: {
-    accentFont: { type: 'string', enum: familiesFor('accent'), description: '搭配的英文字型（只用在英文歌詞、歌手名、角落標籤）：' + FONTS.filter((f) => f.roles.includes('accent')).map((f) => `${f.family}：${f.feel}`).join('；') },
-    font: { type: 'string', enum: familiesFor('display'), description: FONTS.filter((f) => f.roles.includes('display')).map((f) => `${f.family}：${f.feel}`).join('；') },
+    accentFont: { type: 'string', description: '搭配的英文字型（清單見設計規則）' },
+    font: { type: 'string', description: '主字型（清單見設計規則）' },
     kanaScale: { type: 'number', description: '平假名相對漢字的大小 0.5–1（明朝、文學感用 0.55–0.7；POP、圓體可用 0.85–1）' },
     grain: { type: 'number', description: '底片顆粒 0–1' },
     paper: { type: 'number', description: '紙紋／印刷質感 0–1' },
@@ -90,7 +89,10 @@ const MOTIF_RULES = `主題物件（motif，必須做）：
 - 沒有歌詞的前奏、間奏、尾奏（沒放標題卡時）一定要用會動的形態（nested、tunnel、shards、bleed，intensity ≥ 0.6），不能只剩背景與靜止的物件。
 - 用 transitionIn wipe 的鏡頭，下一個畫面會從物件的形狀中打開（物件形狀的轉場）。
 - 有物件的段落，背景圖是配角：物件與文字才是主角。`;
+// font lists live in the prompt, not the schema: long enums made the structured-output grammar too large
+const FONT_LIST = `主字型可選：${FONTS.filter((f) => f.roles.includes('display')).map((f) => `${f.family}（${f.feel}）`).join('、')}\n搭配英文字型可選：${FONTS.filter((f) => f.roles.includes('accent')).map((f) => `${f.family}（${f.feel}）`).join('、')}`;
 const DESIGN_RULES = `設計系統（design，必須做；這是每首歌獨特性的關鍵）：
+${FONT_LIST}
 - 搭配字型：選一款英文字型與主字型搭配，只用在英文歌詞、歌手名與角落標籤（例：明朝＋優雅草寫、圓體＋圓潤手寫、點陣＋等寬）。
 - 字型：從清單選一款最符合歌曲情緒與歌詞世界的字型，整首只用這一款。抒情、冷調、文學感選明朝；甜系、可愛選圓體或 POP；電子、遊戲選點陣；和風、熱血選毛筆或古典明朝。不要因為安全就選黑體。
 - 漢字大、假名小：kanaScale 讓平假名縮小，像設計師的排版；明朝體通常 0.55–0.7。
@@ -102,11 +104,9 @@ const DESIGN_RULES = `設計系統（design，必須做；這是每首歌獨特�
 - 文字不要加描邊殘影（punch 的 outline 保持 false），乾淨的字比特效字更像設計師作品。`;
 const SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments', 'design', 'motif'],
+  required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments'],
   properties: {
     concept: { type: 'string', description: '繁體中文，一兩句：這段畫面的視覺故事' },
-    design: DESIGN_SCHEMA,
-    motif: MOTIF_SCHEMA,
     styleAnchor: {
       type: 'object', additionalProperties: false, required: ['prompt', 'palette'],
       properties: {
@@ -121,7 +121,7 @@ const SCHEMA = {
     shots: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'start', 'end', 'template', 'params', 'camera', 'transitionIn'],
       properties: { id: str, start: { type: 'number' }, end: { type: 'number' }, template: { type: 'string', enum: Object.keys(TEMPLATES) },
         params: { type: 'array', description: '只列要改變預設值的參數', items: { type: 'object', additionalProperties: false, required: ['key', 'value'],
-          properties: { key: { type: 'string', enum: paramKeys }, value: { type: 'string', description: '數字、true/false 或選項名稱' } } } },
+          properties: { key: { type: 'string', description: '模板的參數名稱' }, value: { type: 'string', description: '數字、true/false 或選項名稱' } } } },
         asset: str,
         camera: { type: 'string', enum: CAMERAS }, transitionIn: { type: 'string', enum: TRANSITIONS } } } },
     arc: { type: 'array', description: '情緒曲線：每個段落的強度', items: { type: 'object', additionalProperties: false, required: ['start', 'level'],
@@ -191,10 +191,6 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - 強調範圍用字元索引 [from, to)，選真正的關鍵字，而且必須是完整的詞，不可把一個詞切開（切開的會被自動擴展）；短句（12 字以內）不要換行；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
 
-${DESIGN_RULES}
-
-${MOTIF_RULES}
-
 文字動態（必須做）：
 - reveal：主歌、敘事句、慢歌多用 word（字跟著歌聲一個一個出現，像在說話）；副歌的衝擊句可用 line 讓整句砸下。
 - 副歌節奏強烈的句子用 beat-cut（每唱到一個詞就換一個構圖切入），這是設計師「每 1–2 拍換構圖」的手法；一首歌至少要有一段副歌用它。
@@ -220,13 +216,16 @@ const keepText = keep
   : '';
 
 // --design-only <treatment>: keep shots, assets and cue styles; only the design system is (re)written
-if (a['design-only']) {
-  const base: TreatmentV3 = JSON.parse(readFileSync(a['design-only'], 'utf8'));
-  const userD = `為這首歌設計 design 與 motif。現有企劃的鏡頭與畫面不變，只決定字型、假名比例、色彩計畫、質感與主題物件。\n\n${DESIGN_RULES}\n\n${MOTIF_RULES}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
-  // design + motif must also pass the style's motif rules (moving motif over gaps); errors go back once or twice
+/**
+ * The design pass: font, kana scale, colour script, peak style and motif for a treatment whose shots are set. A
+ * separate call (one schema with everything was too large for structured output); motif rules are checked and fed
+ * back up to twice.
+ */
+async function designPass(base: TreatmentV3): Promise<{ checked: ReturnType<typeof validateTreatment>; usage: { input: number; output: number } }> {
+  const userD = `為這首歌設計 design 與 motif。企劃的鏡頭與畫面已定，只決定字型、假名比例、色彩計畫、質感、爆點樣式與主題物件。\n\n${DESIGN_RULES}\n\n${MOTIF_RULES}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【鏡頭】\n${base.shots.map((x) => `${x.id} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s ${x.template}`).join('\n')}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
   const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: userD }];
   let checked!: ReturnType<typeof validateTreatment>;
-  let dUsage = { input: 0, output: 0 };
+  const usage = { input: 0, output: 0 };
   for (let attempt = 0; attempt < 3; attempt++) {
     const msg = await client.beta.messages
       .stream({
@@ -236,7 +235,8 @@ if (a['design-only']) {
         messages: dMessages,
       } as Anthropic.Beta.Messages.MessageStreamParams)
       .finalMessage();
-    dUsage = { input: dUsage.input + msg.usage.input_tokens, output: dUsage.output + msg.usage.output_tokens };
+    usage.input += msg.usage.input_tokens;
+    usage.output += msg.usage.output_tokens;
     const text = msg.content.find((b) => b.type === 'text')?.text;
     if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
     const out2 = JSON.parse(text);
@@ -248,10 +248,14 @@ if (a['design-only']) {
     if (!errs.length) break;
     dMessages.push({ role: 'assistant', content: msg.content as Anthropic.Beta.Messages.BetaContentBlockParam[] }, { role: 'user', content: `請修正後重新輸出：\n${errs.map((e) => `- ${e}`).join('\n')}` });
   }
-  const msg = { usage: { input_tokens: dUsage.input, output_tokens: dUsage.output } };
+  return { checked, usage };
+}
+
+if (a['design-only']) {
+  const { checked, usage: u } = await designPass(JSON.parse(readFileSync(a['design-only'], 'utf8')));
   writeFileSync(join(out, 'treatment.json'), JSON.stringify(checked.treatment, null, 1));
   const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
-  const costUSD = +((msg.usage.input_tokens * pin + msg.usage.output_tokens * pout) / 1e6).toFixed(3);
+  const costUSD = +((u.input * pin + u.output * pout) / 1e6).toFixed(3);
   writeFileSync(join(out, 'director.json'), JSON.stringify({ model: a.model, mode: 'design-only', costUSD, design: checked.treatment.design, motif: checked.treatment.motif, errors: checked.errors, fixes: checked.fixes }, null, 1));
   console.log(JSON.stringify({ costUSD, design: checked.treatment.design, motif: checked.treatment.motif, errors: checked.errors }, null, 1));
   process.exit(0);
@@ -299,6 +303,10 @@ for (let attempt = 0; attempt < 3; attempt++) {
   messages.push({ role: 'user', content: `程式驗證未通過，請修正後輸出完整的企劃 JSON：\n${result.errors.map((e) => `- ${e}`).join('\n')}` });
 }
 if (!result || result.errors.length) throw new Error('導演 3 次仍未通過驗證：\n' + result?.errors.join('\n'));
+// second call: the design system and motif for these shots
+const designed = await designPass(result.treatment);
+usage = { input: usage.input + designed.usage.input, output: usage.output + designed.usage.output };
+result = { ...designed.checked, fixes: [...result.fixes, ...designed.checked.fixes] };
 writeFileSync(join(out, 'treatment.json'), JSON.stringify(result.treatment, null, 1));
 const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
 const report = { model: a.model, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +((usage.input * pin + usage.output * pout) / 1e6).toFixed(3), references: db.ids, fixes: result.fixes };

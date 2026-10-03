@@ -21,7 +21,7 @@ const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, style: { type: 'string', default: '' },
     db: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
-    tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
+    'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
     'exclude-ref': { type: 'string' }, // a database song's own VJ must not be its reference
   },
 });

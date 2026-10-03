@@ -1,7 +1,7 @@
 :host {
   display: grid;
   gap: 16px;
-  max-width: 1200px;
+  max-width: 1500px;
   margin: 0 auto;
   padding: 24px 16px 80px;
 }
@@ -148,23 +148,43 @@ p {
   cursor: ew-resize;
 }
 
+.editor {
+  display: grid;
+  gap: 16px;
+}
+
+.left {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.follow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
 .lines {
   display: grid;
   gap: 4px;
+  align-content: start;
   padding: 0;
   margin: 0;
   list-style: none;
 
   li {
     display: grid;
-    grid-template-columns: 32px minmax(160px, 1fr) auto auto auto minmax(160px, 1.2fr);
+    grid-template-columns: 32px 1fr;
     align-items: center;
-    gap: 10px;
+    gap: 6px 10px;
     padding: 8px 10px;
     background: var(--surface);
     border-left: 4px solid transparent;
     border-radius: 8px;
     font-size: 14px;
+    scroll-margin: 12px;
 
     &[data-status='red'] {
       border-left-color: #ff5c6c;
@@ -174,9 +194,26 @@ p {
       border-left-color: var(--warn);
     }
 
-    &.selected {
-      outline: 1px solid #00e5ff;
+    &.playing {
+      background: var(--surface-2);
     }
+
+    &.selected {
+      outline: 2px solid #00e5ff;
+    }
+  }
+
+  // second row: times and fixes under the lyric
+  .controls {
+    grid-column: 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+
+  .text {
+    font-size: 15px;
   }
 
   .play,
@@ -224,14 +261,23 @@ p {
   }
 }
 
-@media (max-width: 900px) {
-  .lines li {
-    grid-template-columns: 32px 1fr;
+// wide screens: preview + waveform stay put on the left, the lines scroll on their own on the right
+@media (min-width: 1000px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
 
-    label,
-    .nudge,
-    .issue {
-      grid-column: 2;
-    }
+  .left {
+    position: sticky;
+    top: 16px;
+  }
+
+  .lines {
+    position: relative; // offsetTop of the rows is measured from the list
+    max-height: calc(100vh - 150px);
+    overflow-y: auto;
+    padding-right: 4px;
   }
 }
+

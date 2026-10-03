@@ -1,4 +1,4 @@
-import { Component, computed, DestroyRef, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { SongTimeline, TimelineCue, vocalActivity } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
@@ -40,6 +40,11 @@ export class TimingPage {
   protected readonly dirty = signal(false);
   protected readonly message = signal<string | null>(null);
   protected readonly loading = signal<string | null>(null);
+  /** The selection box and the list follow the playing line (like the database viewer). */
+  protected readonly follow = signal(true);
+  private readonly list = viewChild<ElementRef<HTMLElement>>('list');
+  private lastFollow = -1;
+  private userScrollAt = 0;
   private readonly active = signal<boolean[] | null>(null);
   private peaks: Float32Array | null = null; // per 10 ms, max |sample| of the vocal stem
   private readonly audio = new Audio();
@@ -60,6 +65,15 @@ export class TimingPage {
   }));
   /** The line on screen in the lyrics-only preview. */
   protected readonly current = computed(() => this.cues().find((c) => this.time() >= c.start && this.time() < c.end) ?? null);
+  /** The line being sung: the last one that has started (stays on it through short gaps). */
+  protected readonly playingIndex = computed(() => {
+    const t = this.time();
+    let k = -1;
+    this.cues().forEach((c, i) => {
+      if (c.start <= t) k = i;
+    });
+    return k;
+  });
 
   constructor() {
     const raf = { id: 0 };
@@ -72,6 +86,14 @@ export class TimingPage {
     inject(DestroyRef).onDestroy(() => {
       cancelAnimationFrame(raf.id);
       this.audio.pause();
+    });
+    effect(() => {
+      const i = this.playingIndex();
+      if (!this.follow() || !this.playing() || i < 0 || i === this.lastFollow) return;
+      this.lastFollow = i;
+      this.selected.set(i);
+      // leave the list alone for a moment after the user scrolls it themselves
+      if (Date.now() - this.userScrollAt > 2500) this.scrollTo(i);
     });
     this.audio.onplay = () => this.playing.set(true);
     this.audio.onpause = () => this.playing.set(false);
@@ -168,6 +190,19 @@ export class TimingPage {
     if (Number.isFinite(v)) this.setLine(i, { [edge]: v });
   }
 
+  /** Scrolls only the line list (scrollIntoView would scroll the whole page too). */
+  private scrollTo(i: number) {
+    const box = this.list()?.nativeElement;
+    const el = box?.querySelector<HTMLElement>(`[data-index="${i}"]`);
+    if (!box || !el) return;
+    if (box.scrollHeight <= box.clientHeight) return void el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); // narrow layout: the page scrolls
+    box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2, behavior: 'smooth' });
+  }
+
+  protected userScrolled() {
+    this.userScrollAt = Date.now();
+  }
+
   protected playLine(i: number) {
     this.selected.set(i);
     this.audio.currentTime = Math.max(0, this.cues()[i].start - 1);
@@ -187,11 +222,18 @@ export class TimingPage {
     if (e.code === 'Space') this.toggle();
     else if (e.code === 'Enter') {
       this.setNow(i, 'start');
+      this.lastFollow = i; // the line just tapped is now playing: following must not pull the selection back to it
       this.selected.set(Math.min(this.cues().length - 1, i + 1));
+      this.scrollTo(this.selected());
     } else if (e.code === 'ArrowLeft') this.nudge(i, 'start', -NUDGE);
     else if (e.code === 'ArrowRight') this.nudge(i, 'start', NUDGE);
-    else if (e.code === 'ArrowUp') this.selected.set(Math.max(0, i - 1));
-    else if (e.code === 'ArrowDown') this.selected.set(Math.min(this.cues().length - 1, i + 1));
+    else if (e.code === 'ArrowUp') {
+      this.selected.set(Math.max(0, i - 1));
+      this.scrollTo(this.selected());
+    } else if (e.code === 'ArrowDown') {
+      this.selected.set(Math.min(this.cues().length - 1, i + 1));
+      this.scrollTo(this.selected());
+    }
     else return;
     e.preventDefault();
   }

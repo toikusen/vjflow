@@ -13,6 +13,10 @@ export interface TimelineCue {
   text: string;
   timingSource: TimingSource;
   confidence: TimingConfidence;
+  /** Why this line needs a human check in the timing editor (empty/absent = passed the automatic checks). */
+  review?: string[];
+  /** The other aligner's start when the two disagree: a one-click alternative in the editor. */
+  altStart?: number;
 }
 
 export interface SongTimeline {

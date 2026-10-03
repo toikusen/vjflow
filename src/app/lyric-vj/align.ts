@@ -1,7 +1,8 @@
 // Lyric timing from ASR: Whisper word timestamps on the vocal stem, aligned character by character (LCS) to the
 // known lyric lines. Lines with enough matched characters are 'aligned'; the rest are placed between their neighbours
 // ('interpolated').
-import type { TimelineCue } from './timeline';
+import { phraseStarts, TimelineCue } from './timeline';
+import { checkLines, ISSUE_LABEL } from './timing-qa';
 
 /**
  * A lyric line as it should appear on screen: fan calls in brackets marked 📣 (e.g. "(📣はるちゃん)") and part
@@ -145,4 +146,78 @@ export function snapToPhrases(cues: TimelineCue[], phrases: number[]): TimelineC
     c.end = Math.max(c.end, c.start + 0.5);
   }
   return out;
+}
+
+/**
+ * Line ends from the vocal stem: a line stays until its singing stops (+0.3 s hold), never past the next line, and a
+ * raw end that runs into an instrumental is pulled back to where the voice stopped. `active` is 100 fps.
+ */
+export function endsFromVocals<T extends { start: number; end: number }>(cues: T[], active: boolean[], fps = 100): T[] {
+  return cues.map((c, i) => {
+    const next = cues[i + 1]?.start ?? active.length / fps;
+    const limit = Math.min(next, c.end + 1.5);
+    let last = -1;
+    for (let f = Math.floor(c.start * fps); f < Math.floor(limit * fps); f++) if (active[f]) last = f;
+    if (last < 0) return c;
+    const end = Math.min(next, last / fps + 0.3);
+    return { ...c, end: +Math.max(c.start + 0.5, end).toFixed(3) };
+  });
+}
+
+export interface ForcedLine {
+  start: number;
+  end: number;
+  /** Mean word probability from the aligner (0..1). */
+  conf: number;
+}
+
+/** Below this the aligner was guessing: indigo's two misplaced lines scored 0.10 and 0.41, correct ones mostly ≥ 0.7. */
+export const MIN_FORCED_CONF = 0.5;
+
+/**
+ * Line timing from two independent aligners and the vocal stem. Forced alignment (known text placed on the audio)
+ * leads; the transcribe-and-match result (`heard`) backs it up. A line passes on its own only if the aligner was sure,
+ * the two agree (when both have it), the order holds and the vocal stem confirms start and end; otherwise it keeps
+ * the best guess and lists why it needs a human check.
+ */
+export function combineTimings(lines: string[], forced: ForcedLine[], heard: TimelineCue[], active: boolean[], fps = 100): TimelineCue[] {
+  if (forced.length !== lines.length) return heard.map((c) => ({ ...c, review: [...(c.review ?? []), '強制對齊失敗，只有聽寫結果'] }));
+  let prev = -Infinity;
+  const cues: TimelineCue[] = lines.map((text, i) => {
+    const f = forced[i];
+    const h = heard[i];
+    const review: string[] = [];
+    let start = f.start;
+    let end = f.end;
+    const heardOk = h?.confidence === 'aligned';
+    let altStart: number | undefined;
+    if (f.conf < MIN_FORCED_CONF) {
+      review.push('對齊信心低');
+      if (heardOk) [start, end] = [h.start, h.end];
+    } else if (heardOk && Math.abs(h.start - f.start) > 0.8) {
+      review.push('兩種對齊結果不一致');
+      altStart = +h.start.toFixed(3);
+    }
+    if (start <= prev) {
+      review.push('順序錯亂');
+      if (heardOk && h.start > prev) [start, end] = [h.start, h.end];
+    }
+    prev = Math.max(prev, start);
+    return {
+      id: `c${String(i + 1).padStart(3, '0')}`,
+      start: +start.toFixed(3),
+      end: +Math.max(start + 0.5, end).toFixed(3),
+      text,
+      timingSource: 'whisper' as const,
+      confidence: 'aligned' as const,
+      review,
+      ...(altStart !== undefined ? { altStart } : {}),
+    };
+  });
+  const refined = endsFromVocals(snapToPhrases(cues, phraseStarts(active, fps)), active, fps);
+  const checks = checkLines(refined, active);
+  return refined.map((c, i) => {
+    const review = [...(c.review ?? []), ...checks[i].issues.map((k) => ISSUE_LABEL[k])];
+    return review.length ? { ...c, review } : { ...c, review: undefined };
+  });
 }

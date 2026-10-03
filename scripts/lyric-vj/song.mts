@@ -8,7 +8,8 @@ import { parseArgs } from 'node:util';
 import { analyzeAudio } from '../../src/app/audio/audio-analyzer.service';
 import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
-import { alignLyrics, cleanLyricLine, snapToPhrases } from '../../src/app/lyric-vj/align';
+import { alignLyrics, cleanLyricLine, combineTimings, ForcedLine } from '../../src/app/lyric-vj/align';
+import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
 import { alignOffset, checkTiming, downbeats, phraseStarts, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
@@ -45,7 +46,9 @@ if (a.lrc) {
   const lrclib = hit?.synced ? toCues(hit.text, 'lrclib') : undefined;
   const lrclibCheck = lrclib && checkTiming(lrclib, active);
   if (lrclib && lrclibCheck?.passed) {
-    cues = lrclib;
+    // the overall check passed; single lines can still be off and go to the timing editor
+    const lines = checkLines(lrclib, active);
+    cues = lrclib.map((c, i) => (lines[i].ok ? c : { ...c, review: lines[i].issues.map((k) => ISSUE_LABEL[k]) }));
     check = lrclibCheck;
   } else {
     // no usable synced lyrics: time the known text with Whisper on the vocal stem
@@ -54,13 +57,22 @@ if (a.lrc) {
     const lines = text.split('\n').map((l) => cleanLyricLine(l.replace(/^\[[^\]]*\]/, ''))).filter(Boolean);
     const txt = join(a.out, 'lyrics.txt');
     writeFileSync(txt, lines.join('\n'));
+    // two independent aligners: forced alignment of the known text leads, transcribe-and-match backs it up
     const asrFile = join(a.out, 'asr.json');
     if (!existsSync(asrFile)) {
       execFileSync('uv', ['run', '-q', '--with', 'mlx-whisper', 'python', 'scripts/lyric-vj/asr.py', a.vocals, txt, asrFile, '--language', a.language!], { stdio: 'inherit' });
     }
-    cues = snapToPhrases(alignLyrics(lines, JSON.parse(readFileSync(asrFile, 'utf8')).words, analysis.duration), phraseStarts(active));
+    const forceFile = join(a.out, 'force.json');
+    if (!existsSync(forceFile)) {
+      execFileSync('uv', ['run', '-q', '--with', 'stable-ts', 'python', 'scripts/lyric-vj/force_align.py', a.vocals, txt, forceFile, '--language', a.language!], { stdio: ['ignore', 'inherit', 'ignore'] });
+    }
+    const heard = alignLyrics(lines, JSON.parse(readFileSync(asrFile, 'utf8')).words, analysis.duration);
+    const forced: ForcedLine[] = JSON.parse(readFileSync(forceFile, 'utf8')).lines.map((l: { start: number; end: number; words: { p: number }[] }) => ({
+      start: l.start, end: l.end, conf: l.words.reduce((s, w) => s + w.p, 0) / Math.max(1, l.words.length),
+    }));
+    cues = combineTimings(lines, forced, heard, active);
     check = checkTiming(cues, active);
-    console.log(`Whisper 對齊：${cues.filter((c) => c.confidence === 'aligned').length}/${cues.length} 句對上`);
+    console.log(`歌詞時間：${cues.filter((c) => !c.review).length}/${cues.length} 句自動通過，${cues.filter((c) => c.review).length} 句需要在時間校正頁確認`);
   }
 }
 

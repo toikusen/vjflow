@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignLyrics, cleanLyricLine, lcsPairs, snapToPhrases } from './align';
+import { alignLyrics, cleanLyricLine, combineTimings, lcsPairs, snapToPhrases } from './align';
 
 describe('lcsPairs', () => {
   it('finds the common subsequence', () => {
@@ -44,5 +44,29 @@ describe('cleanLyricLine', () => {
     expect(cleanLyricLine('🩷ピンク！(📣はるちゃん)')).toBe('ピンク！');
     expect(cleanLyricLine('💙いつまでも ずっと')).toBe('いつまでも ずっと');
     expect(cleanLyricLine('(📣みるく)')).toBe('');
+  });
+});
+
+describe('combineTimings', () => {
+  // singing 10–12.5, 20–23, 30–33 (100 fps)
+  const active = Array.from({ length: 4000 }, (_, i) => {
+    const t = i / 100;
+    return (t >= 10 && t < 12.5) || (t >= 20 && t < 23) || (t >= 30 && t < 33);
+  });
+  const lines = ['一行目', '二行目', '三行目'];
+  const heard = [
+    { id: 'c001', start: 10, end: 12, text: lines[0], timingSource: 'whisper' as const, confidence: 'aligned' as const },
+    { id: 'c002', start: 20, end: 22, text: lines[1], timingSource: 'whisper' as const, confidence: 'aligned' as const },
+    { id: 'c003', start: 27, end: 29, text: lines[2], timingSource: 'whisper' as const, confidence: 'aligned' as const },
+  ];
+
+  it('trusts a confident forced alignment, falls back to the heard time when unsure, offers the other time when they disagree', () => {
+    const cues = combineTimings(lines, [{ start: 10, end: 12, conf: 0.9 }, { start: 15, end: 16, conf: 0.2 }, { start: 30, end: 32, conf: 0.9 }], heard, active);
+    expect(cues[0]).toMatchObject({ start: 10, review: undefined });
+    expect(cues[0].end).toBeCloseTo(12.8, 1); // held until the voice stops
+    expect(cues[1].start).toBe(20);
+    expect(cues[1].review).toContain('對齊信心低');
+    expect(cues[2]).toMatchObject({ start: 30, altStart: 27 });
+    expect(cues[2].review).toContain('兩種對齊結果不一致');
   });
 });

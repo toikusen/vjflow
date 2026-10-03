@@ -47,10 +47,20 @@ export interface ShotLayer {
   update(t: number, fx: FrameFx): void;
 }
 
+/** What a shot-level layer may need besides its params: fonts and the song's identity (title cards). */
+export interface ShotContext {
+  fonts: Required<Fonts>;
+  meta: { title: string; artist: string };
+  /** The group logo, when one was uploaded. */
+  logo?: THREE.Texture;
+}
+
 export interface TemplateRenderer {
   cue(rt: CueRuntime): CueLayer;
-  /** Optional decoration that lives for the whole shot (frames, lines). */
-  shot?(shot: Shot, params: Record<string, ParamValue>, palette: Palette): ShotLayer;
+  /** Optional decoration that lives for the whole shot (frames, lines, title cards). */
+  shot?(shot: Shot, params: Record<string, ParamValue>, palette: Palette, ctx: ShotContext): ShotLayer;
+  /** The shot layer shows for the whole shot, not only around its lines (title cards have none). */
+  standalone?: boolean;
 }
 
 /** Strength of the most recent accent at time t (exponential decay after each hit). */

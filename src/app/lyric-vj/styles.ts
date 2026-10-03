@@ -1,5 +1,6 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
+import { analyzeStructure, chorusSpans, TitleCards, wantedTitleGaps } from './structure';
 import { sceneCount, Tier, TIERS } from './tiers';
 import { SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, Window } from './treatment';
@@ -22,7 +23,7 @@ export const STYLES: Record<string, StylePreset> = {
     id: 'emotional',
     name: '情緒型',
     description: '抒情、帶故事感的歌詞 VJ：風景與氛圍為底，大字與框線交替，動態自然、特效對拍。',
-    templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite'],
+    templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite', 'title-card'],
     shotSec: [3.5, 8],
     rules: [
       '素材只畫風景與氛圍（天空、雲、光、海、城市、街道、自然景物），依歌詞意象決定場景與時段；不要畫人物，最多只能是很小、靜止的遠景剪影。',
@@ -35,17 +36,20 @@ export const STYLES: Record<string, StylePreset> = {
       '雲的移動是這個風格最重要的畫面質感：影片裡的雲要明顯在動（鏡頭緩慢往地平線推進、雲層被風吹過、雲層散開露出星空），看得出速度與方向；可以有一兩顆流星，但不要變成特效秀。',
       '構圖參考：上方大片深色天空、下方地平線有發光的城市或景物輪廓，中間留給文字。',
       '文字壓在畫面主體上沒有關係，不需要刻意避開。',
+      '重複的段落沿用畫面：第 2 次以後的副歌，至少一半的時間使用第 1 次副歌用過的素材組（可以換 clipStart 與運鏡），升級感靠配色、爆點與版型，不靠新素材。換畫面以段落為單位，不要一句換一個畫面。',
     ],
     assetSuffix: 'Background art for a lyric video: scenery and atmosphere only, no people or characters in focus, natural subtle motion, painterly anime background style, rich saturated colors, deep shadows, luminous horizon, clearly drifting clouds.',
   },
 };
 
 /** Style-level checks the director must satisfy (counts and pacing); returned as feedback errors. */
-export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimeline, win: Window, tier: Tier = 'standard'): string[] {
+export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimeline, win: Window, tier: Tier = 'standard', titleCards: TitleCards = 'ends'): string[] {
   const errors: string[] = [];
   const images = t.assets.filter((a) => a.kind === 'image').length;
   const videos = t.assets.filter((a) => a.kind === 'video').length;
-  const g = sceneCount(tier, win);
+  const spans = chorusSpans(analyzeStructure(song));
+  const repeatSec = spans.slice(1).reduce((s, c) => s + Math.max(0, Math.min(c.end, win.end) - Math.max(c.start, win.start)), 0);
+  const g = sceneCount(tier, win, repeatSec);
   const name = TIERS[tier].name;
   // rich must actually use its scenes: at least 60 % of the allowance
   const min = tier === 'rich' ? Math.max(1, Math.ceil(g * 0.6)) : 1;
@@ -55,6 +59,25 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
   for (const s of t.shots) {
     if (!style.templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於風格「${style.name}」`);
     if (!s.asset) errors.push(`鏡頭 ${s.id} 沒有素材；這個風格每個鏡頭都要有素材`);
+  }
+  // title cards over the gaps the user asked for (a design option, not a rule of the style)
+  if (style.templates.includes('title-card')) {
+    for (const gap of wantedTitleGaps(song, titleCards).filter((x) => x.start >= win.start - 0.5 && x.end <= win.end + 0.5)) {
+      const covered = t.shots.filter((s) => s.template === 'title-card').reduce((sum, s) => sum + Math.max(0, Math.min(s.end, gap.end) - Math.max(s.start, gap.start)), 0);
+      if (covered < 0.5 * (gap.end - gap.start)) errors.push(`${gap.start.toFixed(1)}–${gap.end.toFixed(1)} 秒沒有歌詞（${gap.kind}），要放 title-card 鏡頭`);
+    }
+  }
+  // later choruses reuse the first chorus's scenes for at least half their time
+  const assetsIn = (a: number, b: number) => new Set(t.shots.filter((s) => s.asset && s.end > a && s.start < b).map((s) => s.asset!));
+  const first = spans[0];
+  if (first && first.start >= win.start - 0.5 && first.end <= win.end + 0.5) {
+    const source = assetsIn(first.start, first.end);
+    spans.slice(1).forEach((c, k) => {
+      if (c.start < win.start || c.end > win.end + 0.5) return;
+      let reused = 0;
+      for (const s of t.shots) if (s.asset && source.has(s.asset)) reused += Math.max(0, Math.min(s.end, c.end) - Math.max(s.start, c.start));
+      if (reused < 0.5 * (c.end - c.start)) errors.push(`第 ${k + 2} 次副歌（${c.start.toFixed(1)}–${c.end.toFixed(1)} 秒）只有 ${Math.round((100 * reused) / (c.end - c.start))}% 的時間沿用第 1 次副歌的素材，至少要一半`);
+    });
   }
   // variety: no template twice in a row, and use most of the style's templates over a longer window
   t.shots.forEach((s, i) => {

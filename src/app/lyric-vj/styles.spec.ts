@@ -54,6 +54,13 @@ describe('checkStyle (emotional)', () => {
     expect(checkStyle(base(), STYLES['emotional'], song, { start: 20, end: 36 }, 'rich').join('\n')).toMatch(/要 2–2 張 image/);
   });
 
+  it('asks for title cards only where the user chose them', () => {
+    // the only line starts at 20.5 s: 0–20.5 s is an intro without lyrics
+    const errs = (mode: 'none' | 'ends' | 'all') => checkStyle(base(), STYLES['emotional'], song, { start: 0, end: 36 }, 'standard', mode).join('\n');
+    expect(errs('ends')).toMatch(/0\.0–20\.5 秒沒有歌詞（intro），要放 title-card/);
+    expect(errs('none')).not.toMatch(/title-card/);
+  });
+
   it('asks for template variety', () => {
     const t = base();
     t.shots[1].template = 'punch';

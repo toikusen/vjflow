@@ -12,6 +12,7 @@ import { beatsDuring, Shot, TreatmentV3 } from '../treatment';
 import { clamp01, easeOutCubic, hash } from './glyphs';
 import { frameSplit } from './frame-split';
 import { handwrite } from './handwrite';
+import { titleCard } from './title-card';
 import { punch } from './punch';
 import { fxAt, MomentFx } from '../moments';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
@@ -22,7 +23,7 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite };
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -40,6 +41,8 @@ export interface RenderJob {
   assets: Record<string, AssetSource>;
   /** The user's font choice; overrides the treatment's. */
   fonts?: FontChoice;
+  /** Song identity for title cards; `logo` is an image URL (the group logo upload, later). */
+  meta?: { title: string; artist: string; logo?: string };
 }
 
 export interface CueMetric {
@@ -182,10 +185,13 @@ export class LyricVjEngine {
         this.images.set(id, tex);
       }),
     );
+    const logo = this.job.meta?.logo ? await loader.loadAsync(this.job.meta.logo) : undefined;
+    if (logo) logo.colorSpace = THREE.SRGBColorSpace;
+    const ctx = { fonts: this.fonts, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
     for (const shot of treatment.shots) {
       const r = RENDERERS[shot.template];
       if (r?.shot) {
-        const layer = r.shot(shot, shot.params, treatment.styleAnchor.palette);
+        const layer = r.shot(shot, shot.params, treatment.styleAnchor.palette, ctx);
         layer.group.visible = false;
         this.textRoot.add(layer.group);
         this.shotLayers.set(shot.id, layer);
@@ -347,7 +353,7 @@ export class LyricVjEngine {
       const s = this.job.treatment.shots.find((x) => x.id === id)!;
       // an empty frame during an instrumental reads as a mistake: only draw it around text
       const lines = this.cueLayers.filter((c) => c.rt.shot.id === id);
-      const busy = lines.some(({ rt }) => t >= rt.showFrom - 0.5 && t <= rt.exitAt + rt.exitDur + 0.3);
+      const busy = RENDERERS[s.template]?.standalone || lines.some(({ rt }) => t >= rt.showFrom - 0.5 && t <= rt.exitAt + rt.exitDur + 0.3);
       layer.group.visible = t >= s.start && t < s.end && busy;
       if (layer.group.visible) layer.update(t, fx);
     }

@@ -4,6 +4,7 @@ import { Fonts } from './fonts';
 import type { ArcPoint, Moment } from './moments';
 import { validateMoments } from './moments';
 import { phraseBoundaries } from './phrases';
+import { sameLines } from './structure';
 import { SongTimeline } from './timeline';
 
 export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut';
@@ -226,6 +227,18 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     }
   }
   t.cues.sort((a, b) => (cueById.get(a.cueId)?.start ?? 0) - (cueById.get(b.cueId)?.start ?? 0));
+  // the same words read the same way every time: a repeated line takes its first occurrence's emphasis and breaks
+  const same = sameLines(song);
+  for (const cs of t.cues) {
+    const src = same.get(cs.cueId);
+    const s0 = src && t.cues.find((x) => x.cueId === src);
+    if (!s0) continue;
+    if (JSON.stringify(s0.emphasis ?? null) !== JSON.stringify(cs.emphasis ?? null) || JSON.stringify(s0.rows ?? null) !== JSON.stringify(cs.rows ?? null)) {
+      cs.emphasis = s0.emphasis && structuredClone(s0.emphasis);
+      cs.rows = s0.rows && [...s0.rows];
+      fixes.push(`歌詞 ${cs.cueId} 和 ${src} 相同，沿用它的強調與換行`);
+    }
+  }
   const mv = validateMoments(t.moments, t.arc, song, win);
   t.moments = mv.moments;
   t.arc = mv.arc;

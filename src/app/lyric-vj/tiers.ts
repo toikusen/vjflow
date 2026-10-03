@@ -27,12 +27,12 @@ export const TIERS: Record<Tier, TierSpec> = {
   },
   rich: {
     name: '豐富', video: true, perSec: 8, max: 36, budgetUSD: 60,
-    rule: '素材以「組」為單位：每組 1 張 image 加 1 段 video（from 那張 image），每組是一個不同的構圖或鏡位：遠景全景、仰角天空、地平線特寫、街道或屋頂等細節、俯瞰、逆光剪影、不同高度與方向。一個音樂段落用 2–3 組，在句子或強拍處切換構圖，像剪接換鏡頭；同一組的連續鏡頭背景會連續播放。整首歌要像同一個世界、同一晚（同一座城市、天色隨歌曲推進變化）。之後的副歌可以重用前一次副歌的組，但每次至少加一個新構圖。',
+    rule: '素材以「組」為單位：每組 1 張 image 加 1 段 video（from 那張 image），每組是一個不同的構圖或鏡位：遠景全景、仰角天空、地平線特寫、街道或屋頂等細節、俯瞰、逆光剪影、不同高度與方向。一個音樂段落用 2–3 組，在句子或強拍處切換構圖，像剪接換鏡頭；同一組的連續鏡頭背景會連續播放。整首歌要像同一個世界、同一晚（同一座城市、天色隨歌曲推進變化）。',
   },
 };
 
-/** How many scenes a window may use in a tier. */
-export function sceneCount(tier: Tier, win: Window): number {
+/** How many scenes a window may use in a tier; repeated sections (later choruses) reuse scenes and do not count. */
+export function sceneCount(tier: Tier, win: Window, repeatSec = 0): number {
   const t = TIERS[tier];
-  return Math.max(1, Math.min(t.max, Math.ceil((win.end - win.start) / t.perSec)));
+  return Math.max(1, Math.min(t.max, Math.ceil(Math.max(1, win.end - win.start - repeatSec) / t.perSec)));
 }

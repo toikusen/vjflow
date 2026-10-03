@@ -8,6 +8,7 @@ import { dirname, extname, join, relative, resolve } from 'node:path';
 import { jobIdFor, jobStatus } from './status.mts';
 import { parseArgs } from 'node:util';
 import { timingGate } from '../../src/app/lyric-vj/timing-qa';
+import { splitSongTitle } from '../../src/app/lyric-vj/structure';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
@@ -22,7 +23,7 @@ const { values: a } = parseArgs({
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
     stills: { type: 'string' }, font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
-    'no-video': { type: 'boolean', default: false }, job: { type: 'string' }, // still version: every clip replaced by the image it starts from 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
+    'no-video': { type: 'boolean', default: false }, logo: { type: 'string' }, // group logo image (PNG with alpha) job: { type: 'string' }, // still version: every clip replaced by the image it starts from 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
   },
 });
 const ROOT = process.cwd();
@@ -51,6 +52,7 @@ const job: RenderJob = {
   cues: cuesIn(song, win),
   treatment: checked.treatment, assets,
   fonts: { family: a.font, display: a['font-display'], body: a['font-body'], script: a['font-script'] },
+  meta: { ...splitSongTitle(song.title), logo: a.logo ? url(a.logo) : undefined },
 };
 writeFileSync(join(out, 'job.json'), JSON.stringify(job));
 

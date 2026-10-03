@@ -258,3 +258,48 @@ export function suggestMoments(st: SongStructure): { moments: Moment[]; arc: Arc
   if (st.ochi) moments.push({ kind: 'break', at: st.ochi.start, dur: st.ochi.end - st.ochi.start, strength: 1 });
   return { moments, arc };
 }
+
+/** "Artist - Title" → parts; a title without the separator is all title. */
+export function splitSongTitle(full: string): { artist: string; title: string } {
+  const i = full.indexOf(' - ');
+  return i < 0 ? { artist: '', title: full.trim() } : { artist: full.slice(0, i).trim(), title: full.slice(i + 3).trim() };
+}
+
+/** Gaps without lyrics long enough for a title card: intro ≥ 4 s, interludes and the outro ≥ 6 s. */
+export function titleGaps(song: SongTimeline): { start: number; end: number; kind: 'intro' | 'interlude' | 'outro' }[] {
+  const cues = [...song.cues].sort((a, b) => a.start - b.start);
+  if (!cues.length) return [{ start: 0, end: song.duration, kind: 'intro' }];
+  const out: { start: number; end: number; kind: 'intro' | 'interlude' | 'outro' }[] = [];
+  if (cues[0].start >= 4) out.push({ start: 0, end: cues[0].start, kind: 'intro' });
+  for (let i = 1; i < cues.length; i++) if (cues[i].start - cues[i - 1].end >= 6) out.push({ start: cues[i - 1].end, end: cues[i].start, kind: 'interlude' });
+  const last = cues[cues.length - 1].end;
+  if (song.duration - last >= 6) out.push({ start: last, end: song.duration, kind: 'outro' });
+  return out;
+}
+
+/** Each cue id → the first cue with the same words (only for repeats). */
+export function sameLines(song: SongTimeline): Map<string, string> {
+  const first = new Map<string, string>();
+  const out = new Map<string, string>();
+  for (const c of [...song.cues].sort((a, b) => a.start - b.start)) {
+    const k = norm(c.text);
+    if (!k) continue;
+    const f = first.get(k);
+    if (f) out.set(c.id, f);
+    else first.set(k, c.id);
+  }
+  return out;
+}
+
+/** Chorus spans in order, from each chorus's first line to the end of its section (the first is reused later). */
+export function chorusSpans(st: SongStructure): { start: number; end: number }[] {
+  return st.choruses.map((t) => ({ start: t, end: st.sections.find((s) => s.kind === 'chorus' && s.end > t + 0.5 && s.start <= t + 0.5)?.end ?? t + 15 }));
+}
+
+export type TitleCards = 'none' | 'ends' | 'all';
+export const TITLE_CARDS: Record<TitleCards, string> = { none: '不放標題卡', ends: '前奏與尾奏放標題卡', all: '前奏、間奏、尾奏都放標題卡' };
+
+/** The gaps a title-card setting asks for. */
+export function wantedTitleGaps(song: SongTimeline, mode: TitleCards) {
+  return mode === 'none' ? [] : titleGaps(song).filter((g) => mode === 'all' || g.kind !== 'interlude');
+}

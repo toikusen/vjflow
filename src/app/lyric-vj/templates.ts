@@ -69,6 +69,18 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
     },
   },
+  'title-card': {
+    id: 'title-card',
+    description: '標題卡：歌名（大）與歌手名（小）在兩條細線間逐字浮現，有團體 LOGO 時一起出現。只用在沒有歌詞的前奏、間奏、尾奏。不需要歌詞；若有歌詞落在這個鏡頭，會以小字放在下方。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      layout: { type: 'enum', values: ['center', 'lower-left'], default: 'center', description: 'center：置中大標；lower-left：左下角小標（間奏用，不搶畫面）' },
+      showArtist: { type: 'boolean', default: true, description: '顯示歌手名' },
+      logo: { type: 'boolean', default: true, description: '有上傳 LOGO 時顯示' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度' },
+    },
+  },
   scatter: {
     id: 'scatter',
     description: '散佈層疊：句子切成 2–3 個詞組沿對角線錯落排列，關鍵字（強調範圍，否則最長的詞組）特大，其餘小字；詞組依序進場，停留時有前後景視差。適合副歌、情緒高點、需要張力但不想每次都用 punch 的句子。',

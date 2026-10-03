@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeStructure, lineSimilarity, suggestMoments } from './structure';
+import { analyzeStructure, chorusSpans, lineSimilarity, sameLines, splitSongTitle, suggestMoments, titleGaps, wantedTitleGaps } from './structure';
 import { SongTimeline, TimelineCue } from './timeline';
 
 // verse / chorus ×2 / quiet ochi / last chorus; the shout 「はぁ」 precedes every chorus, a pickup line only some
@@ -42,5 +42,27 @@ describe('analyzeStructure', () => {
   it('suggests builds and drops, a hold and finale for the last chorus, and a break', () => {
     const m = suggestMoments(st).moments.map((x) => `${x.kind}@${x.at}`);
     expect(m).toEqual(['build@30', 'drop@30', 'build@80', 'drop@80', 'build@130', 'hold@130', 'finale@130', 'break@110']);
+  });
+});
+
+describe('repeats and gaps', () => {
+  it('maps repeated lines to their first occurrence', () => {
+    const same = sameLines(song);
+    const first = cues.find((c) => c.text === '光る星 夜空に消えて')!.id;
+    expect([...same].filter(([, src]) => src === first)).toHaveLength(2);
+  });
+  it('lists the gaps without lyrics long enough for a title card', () => {
+    // first line at 10 s, lines every 4 s with 3.6 s duration, last chorus ends 141.6 s, song 160 s
+    const gaps = titleGaps(song);
+    expect(gaps[0]).toEqual({ start: 0, end: 10, kind: 'intro' });
+    expect(gaps[gaps.length - 1]).toMatchObject({ kind: 'outro', end: 160 });
+    expect(gaps.every((g) => g.end - g.start >= (g.kind === 'intro' ? 4 : 6))).toBe(true);
+    expect(wantedTitleGaps(song, 'ends').map((g) => g.kind)).toEqual(['intro', 'outro']);
+    expect(wantedTitleGaps(song, 'none')).toEqual([]);
+  });
+  it('gives the chorus spans in order and splits "Artist - Title"', () => {
+    expect(chorusSpans(analyzeStructure(song)).map((c) => c.start)).toEqual([30, 80, 130]);
+    expect(splitSongTitle('Reol - 第六感')).toEqual({ artist: 'Reol', title: '第六感' });
+    expect(splitSongTitle('indigo')).toEqual({ artist: '', title: 'indigo' });
   });
 });

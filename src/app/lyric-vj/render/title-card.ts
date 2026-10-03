@@ -28,7 +28,7 @@ export const titleCard: TemplateRenderer = {
     const cx = lower ? -W / 2 + 140 : 0;
     const cy = lower ? -300 : 0;
     const tGlyphs = makeGlyphs(title, tStyle, color(palette.text, 1.1), size * 0.04);
-    const aGlyphs = params['showArtist'] !== false && artist ? makeGlyphs(artist.toUpperCase(), aStyle, color(palette.accent, 1.2), aStyle.size * 0.35) : [];
+    const aGlyphs = params['showArtist'] !== false && artist ? makeGlyphs(artist, aStyle, color(palette.accent, 1.2), aStyle.size * 0.35) : [];
     const rowW = (gs: typeof tGlyphs, track: number) => gs.reduce((s, g) => s + g.advance, 0) + track * Math.max(0, gs.length - 1);
     const tW = rowW(tGlyphs, size * 0.04);
     placeRow(tGlyphs, lower ? cx + tW / 2 : cx, cy, size * 0.04);

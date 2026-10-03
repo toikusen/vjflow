@@ -67,13 +67,15 @@ export interface TimingEdit {
 /**
  * Applies the timing editor's lines to a song. Lines must be the song's own lines in order, with finite times inside
  * the song, ascending starts and end > start; an end that runs into the next line is clamped to it. Edited lines
- * become 'verified'. With `confirm`, every review flag is cleared and the song is marked confirmed.
+ * become 'verified', and so do `accepted` lines (the user checked them by ear: the vocal check can mistake humming or
+ * calls for singing). With `confirm`, every review flag is cleared and the song is marked confirmed.
  */
 export function applyTimingEdit<S extends { duration: number; cues: (TimingEdit & { confidence: string; review?: string[] })[]; timingConfirmedAt?: string }>(
   song: S,
   edits: TimingEdit[],
   confirm: boolean,
   now = new Date().toISOString(),
+  accepted: string[] = [],
 ): S {
   if (edits.length !== song.cues.length || edits.some((e, i) => e.id !== song.cues[i].id)) throw new Error('歌詞行數或順序和歌曲不一致');
   edits.forEach((e, i) => {
@@ -85,8 +87,9 @@ export function applyTimingEdit<S extends { duration: number; cues: (TimingEdit 
     const end = Math.min(e.end, edits[i + 1]?.start ?? e.end);
     const changed = Math.abs(e.start - c.start) > 0.0005 || Math.abs(end - c.end) > 0.0005;
     const next = { ...c, start: +e.start.toFixed(3), end: +end.toFixed(3) };
-    if (changed) next.confidence = 'verified';
-    if (changed || confirm) delete next.review;
+    const byUser = changed || accepted.includes(c.id);
+    if (byUser) next.confidence = 'verified';
+    if (byUser || confirm) delete next.review;
     return next;
   });
   return { ...song, cues, ...(confirm ? { timingConfirmedAt: now } : {}) };

@@ -97,6 +97,12 @@
           @if (statuses()[i] === 'yellow') {
             <button class="chip" (click)="accept(i); $event.stopPropagation()">沒問題</button>
           }
+          @if (statuses()[i] === 'red') {
+            <button class="chip" (click)="accept(i); $event.stopPropagation()" title="聽過確認時間是對的（例如誤判的是鼻音、狀聲詞）">我確認沒問題</button>
+          }
+          @if (c.confidence === 'verified' && !checks()[i]?.ok) {
+            <span class="muted">已人工確認</span>
+          }
         </span>
         </div>
       </li>

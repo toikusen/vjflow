@@ -54,6 +54,8 @@ export class TimingPage {
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
   protected readonly statuses = computed<Status[]>(() =>
     this.cues().map((c, i) => {
+      // a line the user changed or vouched for by ear outranks the automatic check
+      if (c.confidence === 'verified' || this.touched().has(c.id)) return 'ok';
       if (this.checks()[i] && !this.checks()[i].ok) return 'red';
       const aligner = (c.review ?? []).filter((r) => !QA_LABELS.has(r));
       return aligner.length && !this.touched().has(c.id) ? 'yellow' : 'ok';
@@ -244,7 +246,7 @@ export class TimingPage {
     const r = await fetch(`/lyric-vj/songs/${encodeURIComponent(id)}/cues`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ cues: this.cues().map(({ id, start, end }) => ({ id, start, end })), confirm }),
+      body: JSON.stringify({ cues: this.cues().map(({ id, start, end }) => ({ id, start, end })), confirm, accepted: [...this.touched()] }),
     });
     const body = await r.json();
     if (!r.ok) return this.message.set(`儲存失敗：${body.error}`);

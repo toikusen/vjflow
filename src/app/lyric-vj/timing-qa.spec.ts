@@ -46,6 +46,7 @@ describe('applyTimingEdit', () => {
     const c = applyTimingEdit(song, song.cues, true, 'T');
     expect(c.cues.every((x) => !x.review)).toBe(true);
     expect(c.timingConfirmedAt).toBe('T');
+    expect(applyTimingEdit(song, song.cues, false, 'T', ['c002']).cues[1]).toEqual({ id: 'c002', start: 13, end: 15, confidence: 'verified' });
   });
 
   it('rejects edits that are not the song’s lines or are out of order', () => {

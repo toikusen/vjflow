@@ -14,6 +14,7 @@ import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES } from '../../src/app/lyric-vj/design';
+import { MEDIA } from '../../src/app/lyric-vj/medium';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
@@ -56,13 +57,14 @@ const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ?
 const str = { type: 'string' };
 // the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
 const DESIGN_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak'],
+  type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak', 'medium'],
   properties: {
     accentFont: { type: 'string', description: '搭配的英文字型（清單見設計規則）' },
     font: { type: 'string', description: '主字型（清單見設計規則）' },
     kanaScale: { type: 'number', description: '平假名相對漢字的大小 0.5–1（明朝、文學感用 0.55–0.7；POP、圓體可用 0.85–1）' },
     grain: { type: 'number', description: '底片顆粒 0–1' },
     paper: { type: 'number', description: '紙紋／印刷質感 0–1' },
+    medium: { type: 'string', enum: Object.keys(MEDIA), description: '整支影片假裝是用什麼材料做的（疊在所有畫面上的後製層）：' + Object.entries(MEDIA).map(([k, v]) => `${k}：${v.label}`).join('；') },
     peak: { type: 'string', enum: Object.keys(PEAK_STYLES), description: '這首歌爆點的樣式（每首不同）：' + Object.entries(PEAK_STYLES).map(([k, v]) => `${k}：${v}`).join('；') },
     colorScript: { type: 'array', description: '依段落的色彩計畫，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'shadow', 'highlight', 'accent', 'duotone', 'image'],
       properties: { start: { type: 'number' }, shadow: { type: 'string', description: '#rrggbb 背景暗部色' }, highlight: { type: 'string', description: '#rrggbb 背景亮部色' },
@@ -99,6 +101,7 @@ ${FONT_LIST}
 - 顏色要和歌曲情緒一致：歡快甜系不要用感傷的夕陽色，冷調內省不要用高飽和粉紫。
 - image：主題物件為主的段落（間奏、副歌高潮）可以把背景圖壓暗到 0.2–0.4，讓圖形與文字撐畫面；主歌可以 0.7–1。
 - peak：依歌曲個性選爆點樣式，不要每首都用放射光（rays）。
+- medium：依歌曲的質地選媒材，它決定整支片「摸起來」是什麼材料，是讓背景不像 AI 插畫的關鍵。不要因為安全就選 clean；只有電子、未來、光感強的歌才用 clean。媒材要和字型、色彩是同一個世界（例：孔版印刷配 POP 字與螢光色；影印拼貼配粗黑體與高反差；紙上手繪配明朝或手寫字）。
 - 文字不要加描邊殘影（punch 的 outline 保持 false），乾淨的字比特效字更像設計師作品。`;
 const SCHEMA = {
   type: 'object', additionalProperties: false,

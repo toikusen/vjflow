@@ -17,6 +17,7 @@ import { titleCard } from './title-card';
 import { punch } from './punch';
 import { fxAt, MomentFx } from '../moments';
 import { colorAt, DEFAULT_DESIGN } from '../design';
+import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
@@ -67,16 +68,44 @@ const FINAL_SHADER = {
     // section moments (moments.ts)
     uVignette: { value: 0 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
     uRayColor: { value: new THREE.Color(1, 1, 1) },
+    // medium (medium.ts)
+    uBoil: { value: 0 }, uBoilSeed: { value: 0 }, uWeave: { value: new THREE.Vector2() }, uFlicker: { value: 1 }, uTooth: { value: 0 },
+    uRiso: { value: 0 }, uXerox: { value: 0 }, uPixel: { value: 0 }, uLift: { value: 0 }, tText: { value: null }, uHasText: { value: 0 },
+    uPaperC: { value: new THREE.Color() }, uInkA: { value: new THREE.Color() }, uInkB: { value: new THREE.Color() },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper, uBeams;
     uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
+    uniform float uBoil, uBoilSeed, uFlicker, uTooth, uRiso, uXerox, uPixel, uLift, uHasText; uniform sampler2D tText; uniform vec2 uWeave; uniform vec3 uPaperC, uInkA, uInkB;
+    const vec2 RES = vec2(1920.0, 1080.0);
+    const vec3 LUMA = vec3(0.299, 0.587, 0.114);
+    const vec2 PIX = vec2(320.0, 180.0);         // the pixel medium's grid (6 px cells)
     const vec2 ORIGIN = vec2(0.5, 0.34);            // the horizon in the emotional style's compositions
     float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime * 37.0) * 43758.5453); }
     float h1(float x){ return fract(sin(x * 91.3458) * 47453.5453); }
+    float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vnoise(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+    }
+    float bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+    float bayer4(vec2 a){ return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+    // one ink's halftone: a rotated dot grid whose dot area follows the coverage
+    float dots(vec2 px, float ang, float cell, float cov){
+      vec2 g = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * px / cell;
+      float r = sqrt(clamp(cov, 0.0, 1.0)) * 0.72;
+      return 1.0 - smoothstep(r - 0.08, r + 0.08, length(fract(g) - 0.5));
+    }
     void main(){
-      vec2 uv = vUv;
+      vec2 uv = vUv + uWeave;                       // gate weave / stop-motion jitter
+      if (uBoil > 0.0) {                            // line boil: coherent ~40 px wobble, redrawn a few times a second
+        vec2 n = vUv * RES / 40.0 + uBoilSeed * 7.31;
+        uv += (vec2(vnoise(n), vnoise(n + 17.3)) - 0.5) * 2.0 * uBoil / RES;
+      }
+      vec2 uvText = uv;                             // lyrics are sampled off the pixel grid
+      if (uPixel > 0.0) uv = mix(uv, (floor(uv * PIX) + 0.5) / PIX, uPixel);
       vec2 q = (uv - ORIGIN) * vec2(1.7778, 1.0);
       float r = length(q);
       if (uShockR >= 0.0) {                         // shockwave: a thin ring pushes the image outward as it passes
@@ -107,6 +136,32 @@ const FINAL_SHADER = {
         float blot = sin(vUv.x * 9.0 + sin(vUv.y * 7.0) * 2.0) * sin(vUv.y * 11.0 + vUv.x * 3.0);
         c *= 1.0 - uPaper * (0.07 * fib + 0.05 * (0.5 + 0.5 * blot));
       }
+      vec2 px = vUv * RES;
+      float lum = dot(c, LUMA);
+      // lyrics (a text-only render, tText) stay crisp under the ink treatments
+      float keep = uHasText > 0.0 ? smoothstep(0.05, 0.5, texture2D(tText, uvText).a) : 0.0;
+      if (uLift > 0.0) {                            // the paper shows through the darks: a warm, fibrous ground
+        float fib = h1(floor(px.x / 3.0) * 7.0 + floor(px.y * 0.7)) * 0.5 + vnoise(px / 90.0) * 0.5;
+        c += vec3(0.91, 0.86, 0.77) * uLift * (0.6 + 0.8 * fib) * (1.0 - lum);
+      }
+      if (uTooth > 0.0) {                           // paper tooth: paint skips the grooves of rough paper
+        float tn = vnoise(px / 2.5) * 0.6 + h2(floor(px / 2.0)) * 0.4;
+        c *= 1.0 - uTooth * 0.55 * smoothstep(0.62, 0.8, tn) * smoothstep(0.1, 0.6, lum) * (1.0 - 0.8 * keep);
+      }
+      if (uRiso > 0.0) {                            // two fluorescent inks on dark stock, halftoned and misregistered
+        vec2 m = vec2(2.5, -1.5) / RES;
+        float ca = dots(px, 0.26, 7.0, smoothstep(0.06, 0.6, dot(texture2D(tDiffuse, uv + m).rgb, LUMA)));
+        float cb = dots(px, 1.31, 7.0, smoothstep(0.3, 0.9, dot(texture2D(tDiffuse, uv - m).rgb, LUMA)));
+        vec3 ink = uPaperC + uInkA * ca * 0.9 + uInkB * cb * 0.75;
+        c = mix(c, mix(ink, c, keep), uRiso);
+      }
+      if (uXerox > 0.0) {                           // photocopy: hard threshold with toner noise, light toner on dark stock
+        float v = smoothstep(0.13, 0.24, lum + (h2(floor(px / 2.0) + uBoilSeed) - 0.5) * 0.12);
+        c = mix(c, mix(mix(uPaperC, uInkB, v), c, keep), uXerox);
+      }
+      if (uPixel > 0.0) c = mix(c, floor(c * 4.0 + bayer4(floor(uv * PIX))) / 4.0, uPixel);
+      if (uPixel > 0.0) c = mix(c, texture2D(tDiffuse, uvText).rgb * (1.0 + 0.45 * uHit), keep * uPixel);
+      c *= uFlicker;
       if (uSweep >= 0.0) {                          // light sweep: a soft slanted band crossing left to right
         float x = vUv.x + (vUv.y - 0.5) * 0.25;
         c += vec3(0.55, 0.7, 1.0) * 0.5 * exp(-pow((x - (uSweep * 1.6 - 0.3)) / 0.035, 2.0)) * (1.0 - uSweep * 0.5);
@@ -362,6 +417,9 @@ export class LyricVjEngine {
 
   async renderAt(t: number) {
     const { shot, prev } = this.shotAt(t);
+    const medium = MEDIA[(this.job.treatment.design ?? DEFAULT_DESIGN).medium ?? 'clean'];
+    // background motion is held to the medium's frame rate (on twos); cuts and lyrics stay on every frame
+    const bt = stepTime(t, medium.step);
     const fx: FrameFx = { flash: 0, hit: 0, shake: 0 };
     const since = t - shot.start;
     // a flash is a few frames of white: a slower decay reads as grey fog over a dark plate
@@ -372,20 +430,20 @@ export class LyricVjEngine {
     if (flashIn) fx.hit = Math.max(fx.hit, Math.exp(-since * 6) * (since >= 0 ? 1 : 0)); // then glows down
     const sweep = shot.transitionIn === 'wipe' && since >= 0 && since < 0.35 ? since / 0.35 : -1;
 
-    const cur = await this.plateTexture(shot, t);
+    const cur = await this.plateTexture(shot, bt);
     // dissolving a plate into itself at another camera position shows a double image: skip it for the same asset
     const dissolve = prev && shot.transitionIn === 'dissolve' && prev.asset !== shot.asset ? clamp01(since / 0.4) : 1;
     if (prev && dissolve < 1) {
-      const p0 = await this.plateTexture(prev, t);
-      this.placePlate(this.plates[0], p0.tex, prev, t, 1, p0.next, p0.mix);
-      this.placePlate(this.plates[1], cur.tex, shot, t, dissolve, cur.next, cur.mix);
+      const p0 = await this.plateTexture(prev, bt);
+      this.placePlate(this.plates[0], p0.tex, prev, bt, 1, p0.next, p0.mix);
+      this.placePlate(this.plates[1], cur.tex, shot, bt, dissolve, cur.next, cur.mix);
     } else {
       // slowed clips blend toward the next frame instead of stepping
-      this.placePlate(this.plates[0], cur.tex, shot, t, 1, cur.next, cur.mix);
+      this.placePlate(this.plates[0], cur.tex, shot, bt, 1, cur.next, cur.mix);
       this.plates[1].mesh.material.uniforms['opacity'].value = 0;
     }
     const mfx = fxAt(t, this.job.treatment.moments ?? [], this.job.treatment.arc ?? []);
-    this.updateMotes(t + mfx.moteTime, fx.hit, mfx);
+    this.updateMotes(bt + mfx.moteTime, fx.hit, mfx);
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;
     const dimPrev = prev ? ((prev.params['dim'] as number) ?? 0.3) : dimTarget;
     // a hold (溜め) darkens the background only: the dim layer sits under the motes (starlight stays) and the text
@@ -442,17 +500,52 @@ export class LyricVjEngine {
       const pal = this.paletteAt(t);
       // a 'wipe' into a shot opens through the motif's shape
       const iris = shot.transitionIn === 'wipe' && since >= 0 && since < 0.6 ? since / 0.6 : -1;
-      this.motif.update(t, Math.max(mfx.rays, mfx.moteBurst) * 0.8, new THREE.Color(pal.line), new THREE.Color(pal.accent), peak === 'burst' ? mfx.rays : 0, iris);
+      this.motif.update(bt, Math.max(mfx.rays, mfx.moteBurst) * 0.8, new THREE.Color(pal.line), new THREE.Color(pal.accent), peak === 'burst' ? mfx.rays : 0, iris);
     }
-    u['uGrain'].value = 0.02 + 0.1 * d.grain;
-    u['uPaper'].value = d.paper;
-    this.finalPass.uniforms['uTime'].value = Math.floor(t * this.job.fps) / this.job.fps;
+    u['uGrain'].value = 0.02 + 0.1 * d.grain + medium.grain;
+    u['uPaper'].value = Math.max(d.paper, medium.paper);
+    const held = Math.floor(t * (medium.step || this.job.fps) + 1e-6);
+    u['uTime'].value = held / (medium.step || this.job.fps); // grain re-seeds once per held frame
+    u['uBoil'].value = medium.boil;
+    u['uBoilSeed'].value = Math.floor(t * medium.boilRate + 1e-6) % 97;
+    (u['uWeave'].value as THREE.Vector2).set(((hash(held, 11) - 0.5) * 2 * medium.weave) / W, ((hash(held, 12) - 0.5) * 2 * medium.weave) / H);
+    u['uFlicker'].value = 1 + (hash(held, 13) - 0.5) * 2 * medium.flicker;
+    u['uTooth'].value = medium.tooth;
+    u['uRiso'].value = medium.riso;
+    u['uXerox'].value = medium.xerox;
+    u['uPixel'].value = medium.pixel;
+    u['uLift'].value = medium.lift;
+    const needsMask = medium.riso + medium.xerox + medium.pixel + medium.tooth > 0;
+    u['uHasText'].value = needsMask ? 1 : 0;
+    if (needsMask) u['tText'].value = this.renderTextMask();
+    // inks come from the section's colours: dark stock = shadow, ink A = accent, ink B = highlight
+    (u['uPaperC'].value as THREE.Color).set(stop.shadow).multiplyScalar(0.6);
+    (u['uInkA'].value as THREE.Color).set(stop.accent);
+    (u['uInkB'].value as THREE.Color).set(stop.highlight);
     this.finalPass.uniforms['uFlash'].value = fx.flash;
     this.finalPass.uniforms['uHit'].value = fx.hit;
     // capped: past this, white lyrics bloom into an unreadable glare
     this.bloom.strength = Math.min(1.2, 0.55 + 0.9 * fx.hit + mfx.bloom);
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
     this.composer.render();
+  }
+
+  private textMask?: THREE.WebGLRenderTarget;
+
+  /** The lyrics alone (alpha = coverage), so ink treatments can leave them crisp. */
+  private renderTextMask(): THREE.Texture {
+    this.textMask ??= new THREE.WebGLRenderTarget(W, H);
+    const shown = this.scene.children.map((o) => o.visible);
+    this.scene.children.forEach((o) => (o.visible = o === this.textRoot));
+    const clear = this.renderer.getClearAlpha();
+    this.renderer.setClearAlpha(0);
+    this.renderer.setRenderTarget(this.textMask);
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.setRenderTarget(null);
+    this.renderer.setClearAlpha(clear);
+    this.scene.children.forEach((o, i) => (o.visible = shown[i]));
+    return this.textMask.texture;
   }
 
   /** Drifting light motes (deterministic in t): keep every shot alive even on a still plate. */

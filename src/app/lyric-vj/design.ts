@@ -3,6 +3,7 @@
 // designer VJs found generic full-colour AI backgrounds and one bold gothic face everywhere to be the main tells.
 import { FONTS } from './fonts';
 import type { Window } from './treatment';
+import { MEDIA, MediumId } from './medium';
 
 export interface ColorStop {
   /** Section start (seconds); the stop holds until the next one. */
@@ -39,6 +40,8 @@ export interface Design {
   paper: number;
   colorScript: ColorStop[];
   peak: PeakStyle;
+  /** The material the video pretends to be made of (medium.ts); older treatments have none = clean. */
+  medium?: MediumId;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -52,6 +55,7 @@ export const DEFAULT_DESIGN: Design = {
   paper: 0,
   colorScript: [{ start: 0, shadow: '#0a0d24', highlight: '#e9ecff', accent: '#6fa8ff', duotone: 0, image: 1 }],
   peak: 'rays',
+  medium: 'clean',
 };
 
 /** Repairs a director's design: known font, numbers in range, valid colours, stops sorted from the window start. */
@@ -69,7 +73,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays' },
+    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean' },
     fixes,
   };
 }

@@ -16,6 +16,8 @@ import { alignOffset, SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import type { AssetSource, RenderJob } from '../../src/app/lyric-vj/render/engine';
 import { decode } from './media.mts';
+import { MEDIA, MediumId } from '../../src/app/lyric-vj/medium';
+import { DEFAULT_DESIGN } from '../../src/app/lyric-vj/design';
 
 const { values: a } = parseArgs({
   options: {
@@ -27,6 +29,8 @@ const { values: a } = parseArgs({
     'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
     job: { type: 'string' },
     logo: { type: 'string' }, // group logo image (PNG with alpha)
+    medium: { type: 'string' }, // override the treatment's medium (medium.ts)
+    clip: { type: 'string' }, // 'a,b': render only this part of the window (previews)
   },
 });
 const ROOT = process.cwd();
@@ -35,12 +39,18 @@ const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
 const gate = timingGate(song);
 if (gate && !a.unconfirmed) throw new Error(gate);
 const win = { start: Number(a.start ?? 0), end: Number(a.end ?? song.duration) };
+const [clipStart, clipEnd] = a.clip ? a.clip.split(',').map(Number) : [win.start, win.end];
+const range = { start: Math.max(win.start, clipStart), end: Math.min(win.end, clipEnd) };
 const out = a.out ?? dirname(a.treatment!);
 const fps = Number(a.fps);
 mkdirSync(join(out, 'render'), { recursive: true });
 
 const checked = validateTreatment(JSON.parse(readFileSync(a.treatment!, 'utf8')) as TreatmentV3, song, win, TEMPLATES);
 if (checked.errors.length) throw new Error('企劃未通過驗證：\n' + checked.errors.join('\n'));
+if (a.medium) {
+  if (!(a.medium in MEDIA)) throw new Error(`沒有 ${a.medium} 這種媒材（可用 ${Object.keys(MEDIA).join('/')}）`);
+  checked.treatment.design = { ...(checked.treatment.design ?? DEFAULT_DESIGN), medium: a.medium as MediumId };
+}
 const assets: Record<string, AssetSource> = a.assets ? JSON.parse(readFileSync(a.assets, 'utf8')) : {};
 if (a['no-video']) {
   for (const v of checked.treatment.assets.filter((x) => x.kind === 'video')) if (v.from && assets[v.from]) assets[v.id] = assets[v.from];
@@ -96,7 +106,7 @@ try {
     }
     console.log('stills written to', out);
   } else {
-    const total = Math.round((win.end - win.start) * fps);
+    const total = Math.round((range.end - range.start) * fps);
     const status = jobStatus(a.job ?? jobIdFor(dirname(a.treatment!)));
     status.stage('render', { state: 'running', done: 0, total, message: a['no-video'] ? '純圖片版本' : undefined });
     process.on('uncaughtExceptionMonitor', (e) => status.stage('render', { state: 'failed', message: String(e).slice(0, 300) }));
@@ -116,7 +126,7 @@ try {
            '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
         for (let f = f0; f < f1; f++) {
           if (f % 60 === 0 && statfsSync(out).bavail * statfsSync(out).bsize < 400e6) throw new Error('磁碟可用空間不足 400MB，停止渲染');
-          await page.evaluate((x) => window.renderAt(x), win.start + f / fps); // time from the frame index: no drift
+          await page.evaluate((x) => window.renderAt(x), range.start + f / fps); // time from the frame index: no drift
           ff.stdin.write(await shoot(page, 'jpeg'));
           if (++rendered % fps === 0) status.stage('render', { done: rendered });
           if (k === 0 && f % fps === 0) process.stdout.write(`\r  frame ${f}/${f1} (${((Date.now() - began) / 1000).toFixed(0)}s)`);
@@ -134,15 +144,15 @@ try {
     await run('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
     rmSync(segDir, { recursive: true });
 
-    const len = win.end - win.start;
-    const tag = `${Math.round(win.start)}-${Math.round(win.end)}s`;
+    const len = range.end - range.start;
+    const tag = `${Math.round(range.start)}-${Math.round(range.end)}s`;
     const vocal = join(out, `lyric-vj_vocal_${tag}.mp4`);
-    await mux(silent, song.audio.mix, vocal, 0, win.start, len);
+    await mux(silent, song.audio.mix, vocal, 0, range.start, len);
     const outputs = [vocal];
     let offsetMs: number | undefined;
     if (song.audio.instrumental && a['with-instrumental']) {
       const inst = join(out, `lyric-vj_instrumental_${tag}.mp4`);
-      await mux(silent, song.audio.instrumental, inst, song.audio.instrumentalOffsetSec ?? 0, win.start, len);
+      await mux(silent, song.audio.instrumental, inst, song.audio.instrumentalOffsetSec ?? 0, range.start, len);
       outputs.push(inst);
       offsetMs = Math.abs(alignOffset(decode(vocal, 22050), decode(inst, 22050), 22050, 0.5)) * 1000;
     }

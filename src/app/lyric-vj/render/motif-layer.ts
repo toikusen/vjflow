@@ -83,8 +83,9 @@ function clock(px: number, font: string, detail: boolean, hands = true): Unit {
   };
 }
 
-/** Regular polygon, flat-topped, built edge by edge (so 'shards' breaks it into its edges), with an inner one. */
-function polygon(px: number, sides: number): Unit {
+/** Regular polygon, flat-topped, with an inner one. Drawn as one ring (clean corners) unless `asEdges`, where it is
+ * built edge by edge so 'shards' can break it apart. */
+function polygon(px: number, sides: number, asEdges = false): Unit {
   const g = new THREE.Group();
   const mats: Mat[] = [];
   const accents: Mat[] = [];
@@ -98,9 +99,17 @@ function polygon(px: number, sides: number): Unit {
       parent.add(e);
     }
   };
-  edges(1, w * 1.4, mats, g);
+  const start = Math.PI / 2 - Math.PI / sides;
   const inner = new THREE.Group();
-  edges(0.86, w, accents, inner);
+  if (asEdges) {
+    edges(1, w * 1.4, mats, g);
+    edges(0.86, w, accents, inner);
+    inner.userData['split'] = true;
+  } else {
+    // one ring: separate bars overlap at the corners and the overlap shows as a darker/brighter joint
+    g.add(ring(1, w * 1.4, sides, mats, start));
+    inner.add(ring(0.86, w, sides, accents, start));
+  }
   g.add(inner);
   return { group: g, mats, accents, tick: (t) => (inner.rotation.z = Math.sin(t * 0.4) * 0.08) };
 }
@@ -145,8 +154,8 @@ export class MotifLayer {
     private readonly beats: number[],
     fonts: { display: string; accent: string },
   ) {
-    const make = (px: number, detail = true, hands = true): Unit =>
-      plan.kind === 'clock' ? clock(px, fonts.display, detail, hands) : plan.kind === 'polygon' ? polygon(px, plan.sides) : orbit(px);
+    const make = (px: number, detail = true, hands = true, edges = false): Unit =>
+      plan.kind === 'clock' ? clock(px, fonts.display, detail, hands) : plan.kind === 'polygon' ? polygon(px, plan.sides, edges) : orbit(px);
     const add = (form: MotifForm, units: Unit[]) => {
       const holder = new THREE.Group();
       units.forEach((u) => holder.add(u.group));
@@ -158,7 +167,7 @@ export class MotifLayer {
     add('bleed', [make(H * 1.15)]);
     add('nested', [0.13, 0.22, 0.32, 0.43, 0.56].map((r) => make(H * r, r > 0.2)));
     add('tunnel', Array.from({ length: 9 }, () => make(H * 0.5, false, false)));
-    add('shards', [make(H * 0.32)]);
+    add('shards', [make(H * 0.32, true, true, true), make(H * 0.32, true, true, true)]);
     add('mask', [make(H * 0.38, false)]);
     // the mask: a dark plate with the motif's outline cut out, so the background only shows through the shape
     const outer = new THREE.Shape([new THREE.Vector2(-W, -H), new THREE.Vector2(W, -H), new THREE.Vector2(W, H), new THREE.Vector2(-W, H)]);
@@ -235,7 +244,7 @@ export class MotifLayer {
     if (this.iris.visible) this.iris.scale.setScalar(Math.max(0.001, easeOutCubic(iris) * 3.2));
     const maskA = cur.form === 'mask' ? easeOutCubic(k) * cur.intensity : prev?.form === 'mask' ? (1 - k) * prev.intensity : 0;
     this.mask.visible = maskA > 0.002;
-    this.mask.material.opacity = 0.88 * maskA;
+    this.mask.material.opacity = 0.7 * maskA;
   }
 
   private place(form: MotifForm, u: Unit, i: number, n: number, t: number, age: number, pulse: number, burst: number) {
@@ -272,19 +281,21 @@ export class MotifLayer {
         break;
       }
       case 'shards': {
-        // pieces burst outward when the form begins, then keep floating and turning around the centre (never still)
+        // pieces (numerals, ticks, hands, edges) burst across the whole frame over ~2.5 s, then keep swirling and
+        // tumbling for the rest of the section — the full-frame motion reads as a set piece
         scale(H * 0.32);
-        const burstOut = easeOutCubic(clamp01(age / 1.4));
-        const parts = g.children.flatMap((c) => (c.children.length && !(c as THREE.Mesh).isMesh ? c.children : [c]));
+        g.rotation.z = i * 0.5;
+        const burstOut = easeOutCubic(clamp01(age / 2.5));
+        const parts = g.children.flatMap((c) => (c.userData['split'] ? c.children : [c]));
         parts.forEach((c, j) => {
           if (c.userData['home'] === undefined) c.userData['home'] = { x: c.position.x, y: c.position.y, r: c.rotation.z };
           const home = c.userData['home'];
-          const ang = Math.atan2(home.y, home.x) + (hash(j, 3) - 0.5) * 0.8 + age * 0.15 * (j % 2 ? 1 : -1);
-          const dist = Math.hypot(home.x, home.y) + burstOut * (0.5 + 0.6 * hash(j, 5)) + 0.12 * Math.sin(age * 0.9 + j);
-          c.position.set(Math.cos(ang) * dist, Math.sin(ang) * dist, 0);
-          c.rotation.z = home.r + burstOut * (hash(j, 7) - 0.5) * 2 + age * 0.3 * (hash(j, 9) - 0.5);
+          const seed = j + i * 97;
+          const ang = Math.atan2(home.y, home.x) + (hash(seed, 3) - 0.5) * 1.6 + age * (0.08 + 0.1 * hash(seed, 11)) * (seed % 2 ? 1 : -1);
+          const dist = Math.hypot(home.x, home.y) * (1 - burstOut) + burstOut * (0.6 + 2.8 * hash(seed, 5)) + 0.15 * Math.sin(age * 0.7 + seed);
+          c.position.set(Math.cos(ang) * dist * 1.6, Math.sin(ang) * dist, 0);
+          c.rotation.z = home.r + burstOut * (hash(seed, 7) - 0.5) * 3 + age * 0.6 * (hash(seed, 9) - 0.5);
         });
-        u.mats.concat(u.accents).forEach((m) => (m.opacity *= 1 - 0.3 * burstOut));
         break;
       }
       case 'mask':

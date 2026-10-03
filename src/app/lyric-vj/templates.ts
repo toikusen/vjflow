@@ -48,7 +48,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
   },
   vertical: {
     id: 'vertical',
-    description: '直排：日文縱書，句子依詞切成 1–3 欄、由右往左讀，每欄起點逐欄下移；強調範圍的字較大、用強調色。適合抒情句、副歌前的鋪陳、需要留白的畫面。',
+    description: '直排：日文縱書，句子依詞切成 1–3 欄、由右往左讀，每欄起點逐欄下移；強調範圍的字較大、用強調色。適合抒情句、副歌前的鋪陳、需要留白的畫面。英文多的句子不要用直排。',
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {

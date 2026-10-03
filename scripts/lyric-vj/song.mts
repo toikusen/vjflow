@@ -10,7 +10,7 @@ import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
 import { alignLyrics, cleanLyricLine, combineTimings, ForcedLine } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
-import { alignOffset, checkTiming, downbeats, phraseStarts, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
@@ -84,6 +84,7 @@ const song: SongTimeline = {
   duration: analysis.duration,
   tempo: analysis.tempo,
   beats: analysis.beats,
+  beatStrength: beatStrengths(mix, SR, analysis.beats),
   downbeats: downbeats(analysis),
   sections: analysis.sections,
   energy,

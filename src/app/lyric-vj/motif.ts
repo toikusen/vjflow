@@ -20,8 +20,8 @@ export const MOTIF_FORMS: Record<MotifForm, string> = {
   bleed: '巨大、超出畫面被裁切，只看得到一部分，當作構圖',
   nested: '同心多層、各層以不同速度旋轉',
   tunnel: '一層層從中心往外放大，像穿越隧道（副歌、高潮）',
-  mask: '背景只從物件的形狀裡露出來，外面壓黑',
-  shards: '碎成片段往外散開（爆點、轉折）',
+  mask: '背景只從物件的形狀裡露出來，外面壓暗（只能用在沒有歌詞的段落，有歌詞時字會看不清楚）',
+  shards: '物件的零件（數字、刻度、邊）飛散到整個畫面並持續旋轉飛舞，全畫面的動態最吸睛（間奏、轉折、爆點後）',
 };
 
 export interface MotifSection {

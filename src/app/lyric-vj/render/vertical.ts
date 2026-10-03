@@ -7,8 +7,11 @@ import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx
 const W = 1920;
 const STAGGER = 0.05;
 const EMPH = 1.3;
-/** Characters drawn rotated in vertical text (long marks and dashes). */
-const ROTATE = /[ー〜～…―‐\-]/;
+/** Characters drawn rotated in vertical text: long marks, dashes and Latin letters/digits (set sideways). */
+const ROTATE = /[ー〜～…―‐\-A-Za-z0-9!?'"&.,:;]/;
+/** Brackets have their own vertical forms (︵︶﹁﹂); horizontal ones stand sideways in a column. */
+const VERTICAL_FORM: Record<string, string> = { '（': '︵', '(': '︵', '）': '︶', ')': '︶', '「': '﹁', '」': '﹂', '『': '﹃', '』': '﹄', '【': '︻', '】': '︼', '〈': '︿', '〉': '﹀' };
+const LATIN = /[A-Za-z0-9!?'"&.,:;]/;
 /** Small marks sit in the upper right of their cell in vertical text. */
 const CORNER = /[、。，．]/;
 
@@ -47,8 +50,9 @@ export const vertical: TemplateRenderer = {
       let y = top - k * step;
       for (const { ch, m } of col) {
         const em = m !== undefined;
-        const [g] = makeGlyphs(ch, em ? emStyle : style, color(em ? accent : rt.palette.text, em && m === 'glow' ? 1.1 : 1.0));
-        const h = em ? cell * EMPH : cell;
+        const [g] = makeGlyphs(VERTICAL_FORM[ch] ?? ch, em ? emStyle : style, color(em ? accent : rt.palette.text, em && m === 'glow' ? 1.1 : 1.0));
+        // a sideways Latin letter takes only its own width down the column; spaces in a Latin run keep a gap
+        const h = LATIN.test(ch) || ch === ' ' ? Math.max(g.advance, size * 0.3) : em ? cell * EMPH : cell;
         g.x = firstX - k * colGap + (CORNER.test(ch) ? size * 0.32 : 0);
         g.y = y - h / 2 + (CORNER.test(ch) ? size * 0.32 : 0);
         g.mesh.rotation.z = ROTATE.test(ch) ? -Math.PI / 2 : 0;

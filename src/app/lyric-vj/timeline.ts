@@ -26,6 +26,8 @@ export interface SongTimeline {
   beats: number[];
   downbeats: number[];
   sections: { start: number; end: number; energy: number; type?: string }[];
+  /** Kick strength per beat 0..1 (beatStrengths), aligned with `beats`. */
+  beatStrength?: number[];
   /** Energy at `energyFps`, 0..1, for the director and the renderer. */
   energy: number[];
   energyFps: number;
@@ -151,4 +153,26 @@ export function alignOffset(ref: Float32Array, other: Float32Array, sampleRate: 
     if (s > best) [fine, best] = [k, s];
   }
   return fine / sampleRate;
+}
+
+/**
+ * How hard each beat hits (0..1): the low-frequency onset (kick drum) at the beat, normalised by the song's
+ * 95th percentile. A one-pole low-pass (~150 Hz) keeps the kick and drops hi-hats and vocals.
+ */
+export function beatStrengths(samples: Float32Array, sampleRate: number, beats: number[]): number[] {
+  const a = 1 - Math.exp((-2 * Math.PI * 150) / sampleRate);
+  const low = new Float32Array(samples.length);
+  let y = 0;
+  for (let i = 0; i < samples.length; i++) low[i] = y += a * (samples[i] - y);
+  const hop = 256;
+  const env = onsetEnvelope(low, hop);
+  const fps = sampleRate / hop;
+  const raw = beats.map((b) => {
+    let m = 0;
+    for (let f = Math.max(0, Math.floor((b - 0.05) * fps)); f <= Math.min(env.length - 1, Math.ceil((b + 0.06) * fps)); f++) m = Math.max(m, env[f]);
+    return m;
+  });
+  const sorted = [...raw].sort((x, z) => x - z);
+  const p95 = sorted[Math.floor(sorted.length * 0.95)] || 1;
+  return raw.map((v) => +Math.min(1, v / p95).toFixed(3));
 }

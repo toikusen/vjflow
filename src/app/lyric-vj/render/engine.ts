@@ -39,6 +39,8 @@ export interface RenderJob {
   fps: number;
   window: { start: number; end: number };
   beats: number[];
+  /** Kick strength per beat (song.beatStrength). */
+  beatStrength?: number[];
   cues: TimelineCue[];
   treatment: TreatmentV3;
   assets: Record<string, AssetSource>;
@@ -400,6 +402,10 @@ export class LyricVjEngine {
       layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05;
       if (layer.group.visible) layer.update(t, fx);
     }
+    // heavy beats in loud sections: the lyrics jump with the kick (strength from the song's kick analysis)
+    const kick = this.kickAt(t, mfx.level);
+    this.textRoot.scale.setScalar(1 + 0.05 * kick);
+    this.textRoot.position.y = 10 * kick;
     const shake = Math.max(fx.shake, mfx.shake) * 10;
     this.camera.position.set((hash(t * 30) - 0.5) * shake, (hash(t * 30, 1) - 0.5) * shake, 5);
     this.camera.zoom = mfx.zoom;
@@ -464,6 +470,23 @@ export class LyricVjEngine {
     pos.needsUpdate = true;
     (this.motes.material as THREE.PointsMaterial).color.set(this.paletteAt(t).glow);
     (this.motes.material as THREE.PointsMaterial).opacity = Math.min(1, (0.45 + 0.4 * hit) * (0.75 + 0.15 * m.level) + 0.3 * m.moteBurst);
+  }
+
+  /** Kick pulse 0..1 at t: only in loud sections (arc level ≥ 2.4), only on beats that really hit (≥ 0.3). */
+  private kickAt(t: number, level: number): number {
+    const strength = this.job.beatStrength;
+    if (!strength || level < 2.4) return 0;
+    const beats = this.job.beats;
+    let lo = 0;
+    let hi = beats.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (beats[mid] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    const i = lo - 1;
+    if (i < 0 || strength[i] < 0.3) return 0;
+    return Math.min(1, strength[i] * 1.4) * Math.exp(-(t - beats[i]) * 9) * Math.min(1, level - 2.4 + 0.4);
   }
 
   /** When a shot is clear of lyrics: after the last line that overlaps it has left the screen (+0.4 s). */

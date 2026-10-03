@@ -81,6 +81,14 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
       if (moving < 0.7 * (gap.end - gap.start)) errors.push(`${gap.start.toFixed(1)}–${gap.end.toFixed(1)} 秒沒有歌詞（${gap.kind}），主題物件要用會動的形態（${MOVING_FORMS.join('/')}，intensity ≥ 0.6），不能只剩背景`);
     }
   }
+  // a mask darkens everything outside the motif: lyrics there become hard to read
+  if (t.motif) {
+    const sung = (a: number, b: number) => song.cues.some((c) => c.start < b && c.end > a);
+    t.motif.sections.forEach((s, i) => {
+      const end = t.motif!.sections[i + 1]?.start ?? win.end;
+      if (s.form === 'mask' && s.intensity > 0 && sung(s.start, end)) errors.push(`主題物件 ${s.start.toFixed(1)}–${end.toFixed(1)} 秒用了 mask，但這段有歌詞；mask 只能用在沒有歌詞的段落`);
+    });
+  }
   // later choruses reuse the first chorus's scenes for at least half their time
   const assetsIn = (a: number, b: number) => new Set(t.shots.filter((s) => s.asset && s.end > a && s.start < b).map((s) => s.asset!));
   const first = spans[0];

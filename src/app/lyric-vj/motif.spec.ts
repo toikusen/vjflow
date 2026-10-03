@@ -9,7 +9,7 @@ describe('validateMotif', () => {
     );
     expect(r.errors).toEqual([]);
     expect(r.motif!.sides).toBe(12);
-    expect(r.motif!.sections).toEqual([{ start: 0, form: 'off', intensity: 0, marquee: 0 }, { start: 30, form: 'tunnel', intensity: 1, marquee: 0 }]);
+    expect(r.motif!.sections).toEqual([{ start: 0, form: 'off', intensity: 0 }, { start: 30, form: 'tunnel', intensity: 1 }]);
     expect(validateMotif({ kind: 'cube' as never, sides: 4, sections: [] }, { start: 0, end: 60 }).errors.length).toBe(2);
   });
 });

@@ -75,9 +75,8 @@ const MOTIF_SCHEMA = {
   properties: {
     kind: { type: 'string', enum: Object.keys(MOTIF_KINDS), description: Object.entries(MOTIF_KINDS).map(([k, v]) => `${k}：${v}`).join('；') },
     sides: { type: 'integer', description: 'polygon 的邊數 3–12（其他物件填 6）' },
-    sections: { type: 'array', description: '依段落的形態，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'form', 'intensity', 'marquee'],
-      properties: { start: { type: 'number' }, form: { type: 'string', enum: Object.keys(MOTIF_FORMS), description: Object.entries(MOTIF_FORMS).map(([k, v]) => `${k}：${v}`).join('；') }, intensity: { type: 'number', description: '0–1' },
-        marquee: { type: 'number', description: '0–1：歌名與關鍵詞做成巨大描邊字，一排排往不同方向捲動，鋪在背景（間奏、副歌加厚畫面；主歌 0）' } } } },
+    sections: { type: 'array', description: '依段落的形態，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'form', 'intensity'],
+      properties: { start: { type: 'number' }, form: { type: 'string', enum: Object.keys(MOTIF_FORMS), description: Object.entries(MOTIF_FORMS).map(([k, v]) => `${k}：${v}`).join('；') }, intensity: { type: 'number', description: '0–1' } } } },
   },
 };
 const MOTIF_RULES = `主題物件（motif，必須做）：
@@ -85,7 +84,6 @@ const MOTIF_RULES = `主題物件（motif，必須做）：
 - 物件要隨段落演變：主歌 center 或 off，副歌前 nested，副歌 tunnel 或 bleed，落ちサビ off 讓畫面休息，最後副歌用最強的形態。不要整首同一種形態。
 - shards（零件飛散到整個畫面持續飛舞）是最吸睛的全畫面動態：間奏、轉折與爆點之後的段落優先使用，可以維持整段。
 - mask 只能用在沒有歌詞的段落（有歌詞時外面壓暗會讓字看不清楚）。
-- marquee（巨大描邊字捲動）只用在沒有歌詞的段落或副歌高潮（0.3–0.6），主歌、安靜段 0；太多會變成混濁的鬼影。
 - 沒有歌詞的前奏、間奏、尾奏（沒放標題卡時）一定要用會動的形態（nested、tunnel、shards、bleed，intensity ≥ 0.6），不能只剩背景與靜止的物件。
 - 用 transitionIn wipe 的鏡頭，下一個畫面會從物件的形狀中打開（物件形狀的轉場）。
 - 有物件的段落，背景圖是配角：物件與文字才是主角。`;
@@ -135,7 +133,7 @@ const SCHEMA = {
           properties: { from: { type: 'integer' }, to: { type: 'integer' }, method: { type: 'string', enum: EMPHASIS_METHODS } } } },
         accents: { type: 'array', items: { type: 'integer' } },
         enter: { type: 'string', enum: ENTER_KINDS }, exit: { type: 'string', enum: EXIT_KINDS },
-        reveal: { type: 'string', enum: ['line', 'word'], description: 'word：字跟著歌聲一個一個出現；line：整句一起進場' } } } },
+        reveal: { type: 'string', enum: ['line', 'word'], description: 'word：字以固定速度依序出現（在句子前段載完，之後整句停留）；line：整句一起進場' } } } },
   },
 };
 
@@ -192,7 +190,7 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
 
 文字動態（必須做）：
-- reveal：主歌、敘事句、慢歌多用 word（字跟著歌聲一個一個出現，像在說話）；副歌的衝擊句可用 line 讓整句砸下。
+- reveal：主歌、敘事句、慢歌多用 word（字以固定速度依序載出，像在說話）；副歌的衝擊句可用 line 讓整句砸下。
 - 副歌節奏強烈的句子用 beat-cut（每唱到一個詞就換一個構圖切入），這是設計師「每 1–2 拍換構圖」的手法；一首歌至少要有一段副歌用它。
 - 重複的歌詞（第 2、3 次副歌）沿用畫面但換版型，讓副歌逐次升級。
 

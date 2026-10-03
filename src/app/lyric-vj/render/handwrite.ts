@@ -51,7 +51,7 @@ export const handwrite: TemplateRenderer = {
     const n = glyphs.length;
     const per = writeSec(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);
     tagSource(glyphs, rt.cue.text, 0);
-    const startOf = (i: number) => (rt.style.reveal === 'word' && rt.cue.charStarts ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per * 0.8);
+    const startOf = (i: number) => (rt.style.reveal === 'word' ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per * 0.8);
     const exitRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'cut' } };
     const world = new THREE.Vector3();
     const corner = new THREE.Vector3();

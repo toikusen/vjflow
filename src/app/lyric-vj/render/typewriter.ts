@@ -54,8 +54,8 @@ export const typewriter: TemplateRenderer = {
     const n = glyphs.length;
     const per = typeInterval(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);
     tagSource(glyphs, rt.cue.text, 0);
-    // word-by-word: each character is typed when it is sung
-    const typedAt = (i: number) => (rt.style.reveal === 'word' && rt.cue.charStarts ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per);
+    // word reveal: steady typing over the first part of the line
+    const typedAt = (i: number) => (rt.style.reveal === 'word' ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per);
     const doneAt = typedAt(n - 1) + 0.06;
     // typing is the entrance; the cue's exit still applies
     const exitRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'cut' } };

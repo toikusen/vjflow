@@ -1,10 +1,10 @@
-// beat-cut: each phrase is cut in huge, alone, the moment it is sung — a new position, size and angle every time —
+// beat-cut: each phrase is cut in huge, alone, one after another — a new position, size and angle every time —
 // while the whole line sits small at the bottom for reading. The designer move of re-composing the frame every 1–2
 // beats in a chorus.
 import * as THREE from 'three';
 import { phrases } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, LEAD, readable, settledAt, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, readable, settledAt, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -35,13 +35,9 @@ export const beatCut: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const text = rt.cue.text;
     const pieces = cutPieces(text);
-    const cs = rt.cue.charStarts;
     const chars = [...text];
-    // when each piece is sung: from per-character times, else spread over the line by length
-    const startOf = (k: number) => {
-      const i = pieces[k].from;
-      return cs?.[i] !== undefined ? cs[i] - LEAD : rt.showFrom + ((rt.cue.end - rt.cue.start) * 0.85 * i) / Math.max(1, chars.length);
-    };
+    // pieces cut in at a steady rate over the first 60 % of the line, so the last one stays up long enough to read
+    const startOf = (k: number) => rt.showFrom + ((rt.exitAt - rt.showFrom) * 0.6 * pieces[k].from) / Math.max(1, chars.length);
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
     const group = new THREE.Group();
     const seed = Math.floor(hash(rt.cue.start, 17) * 4);

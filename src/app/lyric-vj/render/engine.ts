@@ -42,8 +42,6 @@ export interface RenderJob {
   beats: number[];
   /** Kick strength per beat (song.beatStrength). */
   beatStrength?: number[];
-  /** Title and hook words for type patterns (marquee). */
-  keyWords?: string[];
   cues: TimelineCue[];
   treatment: TreatmentV3;
   assets: Record<string, AssetSource>;
@@ -226,7 +224,7 @@ export class LyricVjEngine {
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
     const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
     if (treatment.motif) {
-      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont }, this.job.keyWords ?? []);
+      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
       this.scene.add(this.motif.group);
     }

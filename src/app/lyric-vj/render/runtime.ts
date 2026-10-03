@@ -95,10 +95,21 @@ export function tagSource(glyphs: Glyph[], text: string, from = 0): number {
   return p;
 }
 
-/** When glyph g starts entering: its sung time in word-by-word reveals, else the line's stagger. */
+/**
+ * Word reveal: characters appear at one steady rate over the first 45 % of the line (0.3–1.5 s), then the whole
+ * line holds. Not tied to per-character sung times: those are too imprecise and made reveals stutter and the last
+ * word flash before a cut.
+ */
+export function revealAt(rt: CueRuntime, frac: number): number {
+  const span = Math.min(1.5, Math.max(0.3, 0.45 * (rt.exitAt - rt.showFrom)));
+  return rt.showFrom + clamp01(frac) * span;
+}
+
+const fracOf = (rt: CueRuntime, g: Glyph) => (g.src ?? g.index) / Math.max(1, [...rt.cue.text].length - 1);
+
+/** When glyph g starts entering: its place in the steady word reveal, else the line's stagger. */
 export function enterAt(rt: CueRuntime, g: Glyph, stagger: number): number {
-  const cs = rt.cue.charStarts;
-  if (rt.style.reveal === 'word' && cs && g.src !== undefined && cs[g.src] !== undefined) return Math.max(rt.showFrom, cs[g.src] - LEAD);
+  if (rt.style.reveal === 'word') return revealAt(rt, fracOf(rt, g));
   return rt.showFrom + g.index * stagger;
 }
 
@@ -160,8 +171,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 
 /** When the last character has finished entering (all opaque and within 5 % of final scale). */
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
-  const cs = rt.cue.charStarts;
-  const last = rt.style.reveal === 'word' && cs?.length ? Math.max(rt.showFrom, cs[cs.length - 1] - LEAD) : rt.showFrom + (n - 1) * stagger * rt.pace;
+  const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : rt.showFrom + (n - 1) * stagger * rt.pace;
   // seconds per glyph until opaque and back at final scale (back-easing overshoots until the end of its entrance)
   const settle = { slam: 0.34, pop: 0.34, wipe: 0.2, fade: 0.3, cut: 0 }[rt.style.enter];
   return last + settle * rt.pace;

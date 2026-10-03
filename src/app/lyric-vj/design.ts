@@ -14,7 +14,18 @@ export interface ColorStop {
   accent: string;
   /** 0 = the image's own colours, 1 = pure duotone. */
   duotone: number;
+  /** How much of the background image shows: 1 = full, 0 = a dark textured ground (graphics and type carry it). */
+  image: number;
 }
+
+/** How this song's drops hit (the same radial burst on every song read as a template). */
+export type PeakStyle = 'rays' | 'beams' | 'vacuum' | 'burst';
+export const PEAK_STYLES: Record<PeakStyle, string> = {
+  rays: '地平線放射光：光束從畫面下方中央放射',
+  beams: '斜向平行光束：一束束斜向的光帶掃過畫面，背景轉灰（冷調、俐落）',
+  vacuum: '黑場抽空：爆點前一瞬間全黑，落拍時整個畫面爆亮（衝擊、反差）',
+  burst: '主題物件爆開：物件放大成一層層往外衝的圈（物件為主的歌）',
+};
 
 export interface Design {
   font: string;
@@ -27,6 +38,7 @@ export interface Design {
   /** Paper/print texture amount 0..1. */
   paper: number;
   colorScript: ColorStop[];
+  peak: PeakStyle;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -38,7 +50,8 @@ export const DEFAULT_DESIGN: Design = {
   kanaScale: 1,
   grain: 0.3,
   paper: 0,
-  colorScript: [{ start: 0, shadow: '#0a0d24', highlight: '#e9ecff', accent: '#6fa8ff', duotone: 0 }],
+  colorScript: [{ start: 0, shadow: '#0a0d24', highlight: '#e9ecff', accent: '#6fa8ff', duotone: 0, image: 1 }],
+  peak: 'rays',
 };
 
 /** Repairs a director's design: known font, numbers in range, valid colours, stops sorted from the window start. */
@@ -50,13 +63,13 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   const accentFont = FONTS.some((f) => f.family === d.accentFont && f.roles.includes('accent')) ? d.accentFont : DEFAULT_DESIGN.accentFont;
   const stops = (d.colorScript ?? [])
     .filter((s) => HEX.test(s.shadow) && HEX.test(s.highlight) && HEX.test(s.accent))
-    .map((s) => ({ ...s, start: clamp(s.start, win.start, win.end), duotone: clamp(s.duotone, 0, 1) }))
+    .map((s) => ({ ...s, start: clamp(s.start, win.start, win.end), duotone: clamp(s.duotone, 0, 1), image: clamp(s.image ?? 1, 0, 1) }))
     .sort((a, b) => a.start - b.start);
   if (stops.length !== (d.colorScript ?? []).length) fixes.push('移除顏色格式錯誤的色彩段落');
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops },
+    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays' },
     fixes,
   };
 }
@@ -80,6 +93,7 @@ export function colorAt(script: ColorStop[], t: number, ease = 1): ColorStop {
       highlight: mixHex(cur.highlight, s.highlight, k),
       accent: mixHex(cur.accent, s.accent, k),
       duotone: cur.duotone + (s.duotone - cur.duotone) * k,
+      image: cur.image + (s.image - cur.image) * k,
     };
   }
   return cur;

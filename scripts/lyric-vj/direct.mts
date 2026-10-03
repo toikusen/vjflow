@@ -13,6 +13,7 @@ import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { familiesFor, FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS } from '../../src/app/lyric-vj/motif';
+import { PEAK_STYLES } from '../../src/app/lyric-vj/design';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
@@ -55,31 +56,34 @@ const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ?
 const str = { type: 'string' };
 // the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
 const DESIGN_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript'],
+  type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak'],
   properties: {
     accentFont: { type: 'string', enum: familiesFor('accent'), description: '搭配的英文字型（只用在英文歌詞、歌手名、角落標籤）：' + FONTS.filter((f) => f.roles.includes('accent')).map((f) => `${f.family}：${f.feel}`).join('；') },
     font: { type: 'string', enum: familiesFor('display'), description: FONTS.filter((f) => f.roles.includes('display')).map((f) => `${f.family}：${f.feel}`).join('；') },
     kanaScale: { type: 'number', description: '平假名相對漢字的大小 0.5–1（明朝、文學感用 0.55–0.7；POP、圓體可用 0.85–1）' },
     grain: { type: 'number', description: '底片顆粒 0–1' },
     paper: { type: 'number', description: '紙紋／印刷質感 0–1' },
-    colorScript: { type: 'array', description: '依段落的色彩計畫，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'shadow', 'highlight', 'accent', 'duotone'],
+    peak: { type: 'string', enum: Object.keys(PEAK_STYLES), description: '這首歌爆點的樣式（每首不同）：' + Object.entries(PEAK_STYLES).map(([k, v]) => `${k}：${v}`).join('；') },
+    colorScript: { type: 'array', description: '依段落的色彩計畫，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'shadow', 'highlight', 'accent', 'duotone', 'image'],
       properties: { start: { type: 'number' }, shadow: { type: 'string', description: '#rrggbb 背景暗部色' }, highlight: { type: 'string', description: '#rrggbb 背景亮部色' },
-        accent: { type: 'string', description: '#rrggbb 這段唯一的強調色' }, duotone: { type: 'number', description: '0–1，背景套雙色調的程度' } } } },
+        accent: { type: 'string', description: '#rrggbb 這段唯一的強調色' }, duotone: { type: 'number', description: '0–1，背景套雙色調的程度' },
+        image: { type: 'number', description: '0–1，背景圖露出多少（1 全部；0 暗色質感底，只靠主題物件與文字撐畫面）' } } } },
   },
 };
 const MOTIF_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['kind', 'sides', 'tag', 'sections'],
+  type: 'object', additionalProperties: false, required: ['kind', 'sides', 'sections'],
   properties: {
     kind: { type: 'string', enum: Object.keys(MOTIF_KINDS), description: Object.entries(MOTIF_KINDS).map(([k, v]) => `${k}：${v}`).join('；') },
     sides: { type: 'integer', description: 'polygon 的邊數 3–12（其他物件填 6）' },
-    tag: { type: 'boolean', description: '整首在左下角放一個小小的歌名標籤（品牌記號）' },
     sections: { type: 'array', description: '依段落的形態，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'form', 'intensity'],
       properties: { start: { type: 'number' }, form: { type: 'string', enum: Object.keys(MOTIF_FORMS), description: Object.entries(MOTIF_FORMS).map(([k, v]) => `${k}：${v}`).join('；') }, intensity: { type: 'number', description: '0–1' } } } },
   },
 };
 const MOTIF_RULES = `主題物件（motif，必須做）：
 - 從歌名或核心歌詞轉譯出一個物件，整首貫穿（例：timer → 時鐘、第六感 → 六角形、天文 → 軌道）。物件由程式畫成發光細線，不是圖片。
-- 物件要隨段落演變：主歌用 corner 或 center 低強度，副歌前 nested，副歌用 tunnel、bleed 或 mask，爆點可用 shards 轉換，落ちサビ用 off 或 corner 讓畫面休息，最後副歌用最強的形態。不要整首同一種形態。
+- 物件要隨段落演變：主歌 center 或 off，副歌前 nested，副歌 tunnel、bleed 或 mask，爆點可用 shards 轉換，落ちサビ off 讓畫面休息，最後副歌用最強的形態。不要整首同一種形態。
+- 沒有歌詞的前奏、間奏、尾奏（沒放標題卡時）一定要用會動的形態（nested、tunnel、shards、bleed，intensity ≥ 0.6），不能只剩背景與靜止的物件。
+- 用 transitionIn wipe 的鏡頭，下一個畫面會從物件的形狀中打開（物件形狀的轉場）。
 - 有物件的段落，背景圖是配角：物件與文字才是主角。`;
 const DESIGN_RULES = `設計系統（design，必須做；這是每首歌獨特性的關鍵）：
 - 搭配字型：選一款英文字型與主字型搭配，只用在英文歌詞、歌手名與角落標籤（例：明朝＋優雅草寫、圓體＋圓潤手寫、點陣＋等寬）。
@@ -87,7 +91,10 @@ const DESIGN_RULES = `設計系統（design，必須做；這是每首歌獨特�
 - 漢字大、假名小：kanaScale 讓平假名縮小，像設計師的排版；明朝體通常 0.55–0.7。
 - 色彩計畫：每個段落一組「暗部色＋亮部色」的雙色調加上一個強調色。整體是單色系加一個強調色，不要多色雜亂；段落之間要換色（例如主歌冷灰藍、副歌轉暗底加一個鮮明強調色、落ちサビ降成近黑白）。強調色只用在關鍵詞與線條。
 - 背景圖一律套雙色調（duotone 0.6–1），讓它看起來像設計素材而不是 AI 插畫；顆粒與紙紋依歌曲質感決定（復古、手帳、文學感可加紙紋）。
-- 顏色要和歌曲情緒一致：歡快甜系不要用感傷的夕陽色，冷調內省不要用高飽和粉紫。`;
+- 顏色要和歌曲情緒一致：歡快甜系不要用感傷的夕陽色，冷調內省不要用高飽和粉紫。
+- image：主題物件為主的段落（間奏、副歌高潮）可以把背景圖壓暗到 0.2–0.4，讓圖形與文字撐畫面；主歌可以 0.7–1。
+- peak：依歌曲個性選爆點樣式，不要每首都用放射光（rays）。
+- 文字不要加描邊殘影（punch 的 outline 保持 false），乾淨的字比特效字更像設計師作品。`;
 const SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments', 'design', 'motif'],
@@ -201,20 +208,32 @@ const client = new Anthropic();
 if (a['design-only']) {
   const base: TreatmentV3 = JSON.parse(readFileSync(a['design-only'], 'utf8'));
   const userD = `為這首歌設計 design 與 motif。現有企劃的鏡頭與畫面不變，只決定字型、假名比例、色彩計畫、質感與主題物件。\n\n${DESIGN_RULES}\n\n${MOTIF_RULES}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
-  const msg = await client.beta.messages
-    .stream({
-      model: a.model!, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
-      output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['design', 'motif'], properties: { design: DESIGN_SCHEMA, motif: MOTIF_SCHEMA } } } },
-      system: '你是日本偶像歌詞 VJ 的資深動態設計總監，為每首歌建立獨特的字體與色彩系統。',
-      messages: [{ role: 'user', content: userD }],
-    } as Anthropic.Beta.Messages.MessageStreamParams)
-    .finalMessage();
-  const text = msg.content.find((b) => b.type === 'text')?.text;
-  if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
-  const out2 = JSON.parse(text);
-  base.design = out2.design;
-  base.motif = out2.motif;
-  const checked = validateTreatment(base, song, win, TEMPLATES);
+  // design + motif must also pass the style's motif rules (moving motif over gaps); errors go back once or twice
+  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: userD }];
+  let checked!: ReturnType<typeof validateTreatment>;
+  let dUsage = { input: 0, output: 0 };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const msg = await client.beta.messages
+      .stream({
+        model: a.model!, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+        output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['design', 'motif'], properties: { design: DESIGN_SCHEMA, motif: MOTIF_SCHEMA } } } },
+        system: '你是日本偶像歌詞 VJ 的資深動態設計總監，為每首歌建立獨特的字體與色彩系統。',
+        messages: dMessages,
+      } as Anthropic.Beta.Messages.MessageStreamParams)
+      .finalMessage();
+    dUsage = { input: dUsage.input + msg.usage.input_tokens, output: dUsage.output + msg.usage.output_tokens };
+    const text = msg.content.find((b) => b.type === 'text')?.text;
+    if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
+    const out2 = JSON.parse(text);
+    base.design = out2.design;
+    base.motif = out2.motif;
+    checked = validateTreatment(base, song, win, TEMPLATES);
+    const errs = [...checked.errors, ...checkStyle(checked.treatment, style, song, win, tier, titleCards).filter((e) => e.includes('主題物件'))];
+    console.log(`design attempt ${attempt}: ${errs.length} errors`);
+    if (!errs.length) break;
+    dMessages.push({ role: 'assistant', content: msg.content as Anthropic.Beta.Messages.BetaContentBlockParam[] }, { role: 'user', content: `請修正後重新輸出：\n${errs.map((e) => `- ${e}`).join('\n')}` });
+  }
+  const msg = { usage: { input_tokens: dUsage.input, output_tokens: dUsage.output } };
   writeFileSync(join(out, 'treatment.json'), JSON.stringify(checked.treatment, null, 1));
   const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
   const costUSD = +((msg.usage.input_tokens * pin + msg.usage.output_tokens * pout) / 1e6).toFixed(3);

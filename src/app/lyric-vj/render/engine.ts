@@ -60,14 +60,14 @@ export interface CueMetric {
 
 const FINAL_SHADER = {
   uniforms: {
-    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 },
+    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uBeams: { value: 0 },
     // section moments (moments.ts)
     uVignette: { value: 0 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
     uRayColor: { value: new THREE.Color(1, 1, 1) },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper;
+    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper, uBeams;
     uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     const vec2 ORIGIN = vec2(0.5, 0.34);            // the horizon in the emotional style's compositions
     float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime * 37.0) * 43758.5453); }
@@ -90,6 +90,11 @@ const FINAL_SHADER = {
         float beam = pow(0.5 + 0.5 * cos(ang * 36.0 + h1(k) * 6.28), 6.0) * (0.4 + 0.6 * h1(k + 7.0));
         float fall = exp(-r * 1.1) * smoothstep(0.0, 0.06, r);
         c += uRayColor * (beam * fall * 1.4 + exp(-r * 4.0) * 0.8) * uRays;
+      }
+      if (uBeams > 0.0) {                           // diagonal parallel light beams sweeping across
+        float x = uv.x * 1.7778 + uv.y * 0.9 - uTime * 0.9;
+        float band = pow(0.5 + 0.5 * sin(x * 9.0), 18.0) + 0.6 * pow(0.5 + 0.5 * sin(x * 23.0 + 1.3), 30.0);
+        c += uRayColor * band * uBeams * 0.85;
       }
       c *= 1.0 - (0.55 + uVignette) * dot(d, d) * 1.6; // vignette
       c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
@@ -216,14 +221,14 @@ export class LyricVjEngine {
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
     const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
     if (treatment.motif) {
-      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont }, ctx.meta.title);
+      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
       this.scene.add(this.motif.group);
     }
     for (const shot of treatment.shots) {
       const r = RENDERERS[shot.template];
       if (r?.shot) {
-        const layer = r.shot(shot, shot.params, treatment.styleAnchor.palette, ctx);
+        const layer = r.shot(r.standalone ? { ...shot, start: this.clearOfLines(shot) } : shot, shot.params, treatment.styleAnchor.palette, ctx);
         layer.group.visible = false;
         this.textRoot.add(layer.group);
         this.shotLayers.set(shot.id, layer);
@@ -400,34 +405,46 @@ export class LyricVjEngine {
     this.camera.zoom = mfx.zoom;
     this.camera.updateProjectionMatrix();
     const u = this.finalPass.uniforms;
+    const d = this.job.treatment.design ?? DEFAULT_DESIGN;
+    const stop = colorAt(d.colorScript, t);
+    // the drop's peak style (one per song): rays / diagonal beams / black vacuum then burst / motif rings
+    const peak = d.peak === 'burst' && !this.motif ? 'rays' : d.peak;
+    const beams = peak === 'beams' ? mfx.rays : 0;
     for (const p of this.plates) {
-      p.mesh.material.uniforms['exposure'].value = mfx.exposure;
-      p.mesh.material.uniforms['sat'].value = mfx.saturation;
+      // image < 1 sinks the picture toward a dark ground so graphics and type carry the section
+      p.mesh.material.uniforms['exposure'].value = mfx.exposure * (0.12 + 0.88 * stop.image);
+      p.mesh.material.uniforms['sat'].value = mfx.saturation * (1 - 0.65 * beams);
+    }
+    if (peak === 'vacuum') {
+      const drop = (this.job.treatment.moments ?? []).find((m) => (m.kind === 'drop' || m.kind === 'finale') && t >= m.at - 0.35 && t < m.at);
+      if (drop) this.dim.material.opacity = Math.max(this.dim.material.opacity, 0.96);
     }
     u['uVignette'].value = mfx.vignette;
-    u['uRays'].value = mfx.rays;
+    u['uRays'].value = peak === 'rays' || peak === 'vacuum' ? mfx.rays * (peak === 'vacuum' ? 0.5 : 1) : 0;
+    u['uBeams'].value = beams;
     u['uShockR'].value = mfx.shockR;
     u['uShock'].value = mfx.shock;
-    const stop = colorAt((this.job.treatment.design ?? DEFAULT_DESIGN).colorScript, t);
     (u['uRayColor'].value as THREE.Color).set(this.paletteAt(t).glow).lerp(new THREE.Color(1, 1, 1), 0.45);
     for (const p of this.plates) {
       const pu = p.mesh.material.uniforms;
       (pu['shadowC'].value as THREE.Color).set(stop.shadow);
       (pu['highlightC'].value as THREE.Color).set(stop.highlight);
-      pu['duo'].value = stop.duotone;
+      pu['duo'].value = Math.max(stop.duotone, 1 - stop.image);
     }
-    const d = this.job.treatment.design ?? DEFAULT_DESIGN;
     if (this.motif) {
       const pal = this.paletteAt(t);
-      this.motif.update(t, Math.max(mfx.rays, mfx.moteBurst) * 0.8, new THREE.Color(pal.line), new THREE.Color(pal.accent));
+      // a 'wipe' into a shot opens through the motif's shape
+      const iris = shot.transitionIn === 'wipe' && since >= 0 && since < 0.6 ? since / 0.6 : -1;
+      this.motif.update(t, Math.max(mfx.rays, mfx.moteBurst) * 0.8, new THREE.Color(pal.line), new THREE.Color(pal.accent), peak === 'burst' ? mfx.rays : 0, iris);
     }
     u['uGrain'].value = 0.02 + 0.1 * d.grain;
     u['uPaper'].value = d.paper;
     this.finalPass.uniforms['uTime'].value = Math.floor(t * this.job.fps) / this.job.fps;
     this.finalPass.uniforms['uFlash'].value = fx.flash;
     this.finalPass.uniforms['uHit'].value = fx.hit;
-    this.bloom.strength = 0.55 + 0.9 * fx.hit + mfx.bloom;
-    this.finalPass.uniforms['uSweep'].value = sweep;
+    // capped: past this, white lyrics bloom into an unreadable glare
+    this.bloom.strength = Math.min(1.2, 0.55 + 0.9 * fx.hit + mfx.bloom);
+    this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
     this.composer.render();
   }
 
@@ -447,6 +464,13 @@ export class LyricVjEngine {
     pos.needsUpdate = true;
     (this.motes.material as THREE.PointsMaterial).color.set(this.paletteAt(t).glow);
     (this.motes.material as THREE.PointsMaterial).opacity = Math.min(1, (0.45 + 0.4 * hit) * (0.75 + 0.15 * m.level) + 0.3 * m.moteBurst);
+  }
+
+  /** When a shot is clear of lyrics: after the last line that overlaps it has left the screen (+0.4 s). */
+  private clearOfLines(shot: Shot): number {
+    let t = shot.start;
+    for (const c of this.job.cues) if (c.start < shot.end && c.end + EXIT_SEC > shot.start) t = Math.max(t, c.end + EXIT_SEC + 0.4);
+    return Math.min(t, shot.end - 1);
   }
 
   /** The palette with this section's accent (the colour script's one accent drives key words, lines and glows). */

@@ -1,6 +1,7 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
-import { analyzeStructure, chorusSpans, TitleCards, wantedTitleGaps } from './structure';
+import { MOVING_FORMS, motifStateAt } from './motif';
+import { analyzeStructure, chorusSpans, TitleCards, titleGaps, wantedTitleGaps } from './structure';
 import { sceneCount, Tier, TIERS } from './tiers';
 import { SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, Window } from './treatment';
@@ -65,6 +66,19 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
     for (const gap of wantedTitleGaps(song, titleCards).filter((x) => x.start >= win.start - 0.5 && x.end <= win.end + 0.5)) {
       const covered = t.shots.filter((s) => s.template === 'title-card').reduce((sum, s) => sum + Math.max(0, Math.min(s.end, gap.end) - Math.max(s.start, gap.start)), 0);
       if (covered < 0.5 * (gap.end - gap.start)) errors.push(`${gap.start.toFixed(1)}–${gap.end.toFixed(1)} 秒沒有歌詞（${gap.kind}），要放 title-card 鏡頭`);
+    }
+  }
+  // gaps without lyrics and without a title card must not be dead air: the motif keeps moving there
+  if (t.motif) {
+    for (const gap of titleGaps(song).filter((x) => x.start >= win.start - 0.5 && x.end <= win.end + 0.5)) {
+      const carded = t.shots.some((s) => s.template === 'title-card' && s.start < gap.end && s.end > gap.start);
+      if (carded) continue;
+      let moving = 0;
+      for (let x = gap.start; x < gap.end; x += 0.5) {
+        const st = motifStateAt(t.motif, x).cur;
+        if (MOVING_FORMS.includes(st.form) && st.intensity >= 0.6) moving += 0.5;
+      }
+      if (moving < 0.7 * (gap.end - gap.start)) errors.push(`${gap.start.toFixed(1)}–${gap.end.toFixed(1)} 秒沒有歌詞（${gap.kind}），主題物件要用會動的形態（${MOVING_FORMS.join('/')}，intensity ≥ 0.6），不能只剩背景`);
     }
   }
   // later choruses reuse the first chorus's scenes for at least half their time

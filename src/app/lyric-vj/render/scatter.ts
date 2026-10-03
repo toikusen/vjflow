@@ -46,7 +46,7 @@ export const scatter: TemplateRenderer = {
         ? { family: rt.fonts.display, weight: 900, size: Math.round(Math.max(150, Math.min(340, (200 * 0.6 * W) / w200))) }
         : { family: rt.fonts.body, weight: 900, size: n === 1 ? 150 : 108, shadow: true };
       const tint = isKey && (method === 'color' || method === 'glow') ? accent : rt.palette.text;
-      const glyphs = makeGlyphs(text, style, color(tint, isKey ? 1.15 : 1.0), isKey ? 0 : 6);
+      const glyphs = makeGlyphs(text, style, color(tint, 1.0), isKey ? 0 : 6);
       const rw = rowWidth(glyphs, isKey ? 0 : 6);
       // along the diagonal: first phrase top-left, last bottom-right (or rising with direction 'up')
       const u = n === 1 ? 0 : i / (n - 1) - 0.5;

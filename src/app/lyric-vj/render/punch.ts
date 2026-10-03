@@ -49,7 +49,7 @@ export const punch: TemplateRenderer = {
     // 7:1 against the palette background: the plate behind the text is far brighter than that colour
     const kwColor = readable(method === 'color' || method === 'glow' ? rt.palette.accent : rt.palette.text, rt.palette.background, 7);
     const kStyle: GlyphStyle = { family: rt.fonts.display, weight: 900, size };
-    const kw = makeGlyphs(keyword, kStyle, color(kwColor, method === 'glow' ? 1.8 : 1.15));
+    const kw = makeGlyphs(keyword, kStyle, color(kwColor, method === 'glow' ? 1.1 : 1.0));
     placeRow(kw, 0, 30);
     const echo = p['outline'] ? makeGlyphs(keyword, { ...kStyle, outline: Math.max(2, size * 0.03) }, color(rt.palette.glow, 1.4)) : [];
     placeRow(echo, 0, 30);

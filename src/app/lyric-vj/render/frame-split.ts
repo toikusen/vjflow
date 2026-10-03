@@ -126,10 +126,10 @@ export const frameSplit: TemplateRenderer = {
     const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
     const mainGlyphs: Glyph[] = [];
     mainRows.forEach((row, r) => {
-      const gs = makeGlyphs(row, style, color(rt.palette.text, 1.05), 4);
+      const gs = makeGlyphs(row, style, color(rt.palette.text, 1.0), 4);
       gs.forEach((g, j) => {
         const m = emphasisOf(rt, indexIn(row, j));
-        if (m === 'color' || m === 'glow') g.mesh.material.color = color(readable(rt.palette.accent, rt.palette.background, 7), m === 'glow' ? 1.8 : 1.1);
+        if (m === 'color' || m === 'glow') g.mesh.material.color = color(readable(rt.palette.accent, rt.palette.background, 7), m === 'glow' ? 1.1 : 1.0);
         if (m === 'scale') g.mesh.userData['emph'] = 1.25;
       });
       placeRow(gs, cx, cy + ((mainRows.length - 1) / 2 - r) * size * 1.15, 4);

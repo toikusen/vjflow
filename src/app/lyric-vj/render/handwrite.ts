@@ -32,13 +32,13 @@ export const handwrite: TemplateRenderer = {
     let s = 0;
     const glyphs: Glyph[] = [];
     rows.forEach((row, r) => {
-      const gs = makeGlyphs(row, style, color(rt.palette.text, 1.15), 2);
+      const gs = makeGlyphs(row, style, color(rt.palette.text, 1.0), 2);
       // a second line starts a little to the right, like a hand-written note
       placeRow(gs, r * size * 0.8 - (rows.length - 1) * size * 0.4, ((rows.length - 1) / 2 - r) * lineH, 2);
       for (const g of gs) {
         while (s < src.length && src[s] !== g.char) s++;
         const m = emphasisOf(rt, s++);
-        if (m === 'color' || m === 'glow') g.mesh.material.color = color(accent, m === 'glow' ? 1.6 : 1.2);
+        if (m === 'color' || m === 'glow') g.mesh.material.color = color(accent, m === 'glow' ? 1.1 : 1.0);
         g.index = glyphs.length;
         g.y += (hash(g.index, 11) - 0.5) * size * 0.06; // uneven baseline
         g.mesh.rotation.z = (hash(g.index, 13) - 0.5) * 0.06;

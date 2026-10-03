@@ -26,7 +26,7 @@ export const typewriter: TemplateRenderer = {
     const lineH = size * 1.4;
     const pos = p['position'] as string;
     const cy = pos === 'bottom' ? -330 + ((rows.length - 1) * lineH) / 2 : 0;
-    const rowGlyphs = rows.map((r) => makeGlyphs(r, style, color(rt.palette.text, 1.05), TRACK));
+    const rowGlyphs = rows.map((r) => makeGlyphs(r, style, color(rt.palette.text, 1.0), TRACK));
     const blockW = Math.max(...rowGlyphs.map((g) => rowWidth(g, TRACK)));
     // rows share one left edge, like text typed on a page
     const left = pos === 'left' ? -W / 2 + 160 : -blockW / 2;
@@ -37,7 +37,7 @@ export const typewriter: TemplateRenderer = {
       for (const g of gs) {
         while (srcIndex < [...rt.cue.text].length && [...rt.cue.text][srcIndex] !== g.char) srcIndex++;
         const m = emphasisOf(rt, srcIndex++);
-        if (m === 'color' || m === 'glow') g.mesh.material.color = color(accent, m === 'glow' ? 1.6 : 1.1);
+        if (m === 'color' || m === 'glow') g.mesh.material.color = color(accent, m === 'glow' ? 1.1 : 1.0);
         g.index = glyphs.length;
         glyphs.push(g);
         group.add(g.mesh);

@@ -4,7 +4,9 @@
 import type { Window } from './treatment';
 
 export type MotifKind = 'clock' | 'polygon' | 'orbit';
-export type MotifForm = 'off' | 'center' | 'bleed' | 'nested' | 'tunnel' | 'mask' | 'shards' | 'corner';
+export type MotifForm = 'off' | 'center' | 'bleed' | 'nested' | 'tunnel' | 'mask' | 'shards';
+/** Forms that keep moving: required over instrumental gaps (a still motif over a still plate reads as dead air). */
+export const MOVING_FORMS: MotifForm[] = ['nested', 'tunnel', 'shards', 'bleed'];
 
 export const MOTIF_KINDS: Record<MotifKind, string> = {
   clock: '時鐘：外圈刻度、羅馬數字、時針分針；秒針隨拍跳動。適合時間、魔法、倒數、夜晚、約定',
@@ -20,7 +22,6 @@ export const MOTIF_FORMS: Record<MotifForm, string> = {
   tunnel: '一層層從中心往外放大，像穿越隧道（副歌、高潮）',
   mask: '背景只從物件的形狀裡露出來，外面壓黑',
   shards: '碎成片段往外散開（爆點、轉折）',
-  corner: '縮小放在角落，當作品牌記號（主歌、安靜段）',
 };
 
 export interface MotifSection {
@@ -34,8 +35,6 @@ export interface MotifPlan {
   kind: MotifKind;
   /** polygon: number of sides (3..12). */
   sides: number;
-  /** A small song-title tag in a corner throughout (a designer's brand device). */
-  tag: boolean;
   sections: MotifSection[];
 }
 
@@ -47,6 +46,8 @@ export function validateMotif(m: MotifPlan | undefined, win: Window): { motif?: 
   const fixes: string[] = [];
   if (!(m.kind in MOTIF_KINDS)) errors.push(`主題物件 ${m.kind} 不存在（可用 ${Object.keys(MOTIF_KINDS).join('/')}）`);
   const sections = (m.sections ?? [])
+    // 'corner' was dropped (too small to read): older treatments show nothing there
+    .map((s) => ((s.form as string) === 'corner' ? { ...s, form: 'off' as MotifForm } : s))
     .filter((s) => s.form in MOTIF_FORMS)
     .map((s) => ({ start: clamp(s.start, win.start, win.end), form: s.form, intensity: clamp(s.intensity, 0, 1) }))
     .sort((a, b) => a.start - b.start);
@@ -54,7 +55,7 @@ export function validateMotif(m: MotifPlan | undefined, win: Window): { motif?: 
   if (!sections.length) errors.push('主題物件至少要有一個段落設定');
   else if (sections[0].start > win.start) sections.unshift({ start: win.start, form: 'off', intensity: 0 });
   const sides = Math.round(clamp(m.sides, 3, 12));
-  return { motif: { kind: m.kind, sides, tag: !!m.tag, sections }, fixes, errors };
+  return { motif: { kind: m.kind, sides, sections }, fixes, errors };
 }
 
 /** The form at t and the one before it, with the crossfade progress (0.6 s). */

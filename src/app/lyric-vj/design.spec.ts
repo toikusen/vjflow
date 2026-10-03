@@ -10,9 +10,10 @@ describe('validateDesign', () => {
         kanaScale: 0.2,
         grain: 3,
         paper: 0.5,
+        peak: 'beams',
         colorScript: [
-          { start: 30, shadow: '#101020', highlight: '#f0f0ff', accent: '#ff3366', duotone: 1.4 },
-          { start: 10, shadow: 'red', highlight: '#fff', accent: '#000', duotone: 0.5 },
+          { start: 30, shadow: '#101020', highlight: '#f0f0ff', accent: '#ff3366', duotone: 1.4, image: 1 },
+          { start: 10, shadow: 'red', highlight: '#fff', accent: '#000', duotone: 0.5, image: 1 },
         ],
       },
       { start: 0, end: 60 },
@@ -28,8 +29,8 @@ describe('validateDesign', () => {
 
 describe('colorAt', () => {
   const script = [
-    { start: 0, shadow: '#000000', highlight: '#ffffff', accent: '#ff0000', duotone: 0 },
-    { start: 10, shadow: '#000000', highlight: '#ffffff', accent: '#0000ff', duotone: 1 },
+    { start: 0, shadow: '#000000', highlight: '#ffffff', accent: '#ff0000', duotone: 0, image: 1 },
+    { start: 10, shadow: '#000000', highlight: '#ffffff', accent: '#0000ff', duotone: 1, image: 0 },
   ];
   it('holds a stop and blends into the next over a second', () => {
     expect(colorAt(script, 5).accent).toBe('#ff0000');

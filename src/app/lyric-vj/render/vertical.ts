@@ -47,7 +47,7 @@ export const vertical: TemplateRenderer = {
       let y = top - k * step;
       for (const { ch, m } of col) {
         const em = m !== undefined;
-        const [g] = makeGlyphs(ch, em ? emStyle : style, color(em ? accent : rt.palette.text, em && m === 'glow' ? 1.6 : 1.05));
+        const [g] = makeGlyphs(ch, em ? emStyle : style, color(em ? accent : rt.palette.text, em && m === 'glow' ? 1.1 : 1.0));
         const h = em ? cell * EMPH : cell;
         g.x = firstX - k * colGap + (CORNER.test(ch) ? size * 0.32 : 0);
         g.y = y - h / 2 + (CORNER.test(ch) ? size * 0.32 : 0);

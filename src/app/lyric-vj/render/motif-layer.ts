@@ -6,7 +6,7 @@ import { clamp01, easeOutCubic, GlyphStyle, hash, makeGlyphs, placeRow } from '.
 
 const W = 1920;
 const H = 1080;
-const LINE = 3; // line width in px at 1080p (bloom turns it into a soft neon line)
+const LINE = 5; // line width in px at 1080p: the motif is a main element, not a faint overlay
 
 type Mat = THREE.MeshBasicMaterial;
 const lineMat = () => new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -125,13 +125,15 @@ export class MotifLayer {
   readonly group = new THREE.Group();
   private readonly forms = new Map<MotifForm, { holder: THREE.Group; units: Unit[] }>();
   private readonly mask: THREE.Mesh<THREE.ShapeGeometry, Mat>;
-  private readonly tag?: THREE.Group;
+  /** Rings that rush outward on a 'burst' drop. */
+  private readonly burstRings: Unit[];
+  /** Iris transition: the next shot opens through the motif's shape. */
+  private readonly iris: THREE.Mesh<THREE.ShapeGeometry, Mat>;
 
   constructor(
     private readonly plan: MotifPlan,
     private readonly beats: number[],
     fonts: { display: string; accent: string },
-    title: string,
   ) {
     const make = (px: number, detail = true): Unit =>
       plan.kind === 'clock' ? clock(px, fonts.display, detail) : plan.kind === 'polygon' ? polygon(px, plan.sides) : orbit(px);
@@ -143,7 +145,6 @@ export class MotifLayer {
       this.forms.set(form, { holder, units });
     };
     add('center', [make(H * 0.32)]);
-    add('corner', [make(H * 0.09, false)]);
     add('bleed', [make(H * 1.15)]);
     add('nested', [0.13, 0.22, 0.32, 0.43, 0.56].map((r) => make(H * r, r > 0.2)));
     add('tunnel', Array.from({ length: 9 }, () => make(H * 0.5, false)));
@@ -162,18 +163,12 @@ export class MotifLayer {
     this.mask = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
     this.mask.renderOrder = -1;
     this.group.add(this.mask);
-    if (plan.tag && title) {
-      this.tag = new THREE.Group();
-      const gs = makeGlyphs(title, { family: fonts.accent, weight: 400, size: 30 }, 0xffffff, 3);
-      placeRow(gs, 0, 0, 3);
-      const width = gs.reduce((s, x) => s + x.advance + 3, 0);
-      gs.forEach((x) => {
-        x.mesh.position.set(x.x + width / 2, x.y, 0);
-        this.tag!.add(x.mesh);
-      });
-      this.tag.position.set(-W / 2 + 70, -H / 2 + 60, 0);
-      this.group.add(this.tag);
-    }
+    this.burstRings = Array.from({ length: 5 }, () => make(H * 0.5, false));
+    this.burstRings.forEach((u) => this.group.add(u.group));
+    // the iris: the same cut-out shape, scaled from nothing to past the frame edges at a 'wipe' transition
+    this.iris = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
+    this.iris.renderOrder = -1;
+    this.group.add(this.iris);
   }
 
   private beatIndex(t: number) {
@@ -188,7 +183,7 @@ export class MotifLayer {
   }
 
   /** `burst` 0..1 comes from the drop/finale moments; `line`/`accent` are the section's colours. */
-  update(t: number, burst: number, line: THREE.Color, accent: THREE.Color) {
+  update(t: number, burst: number, line: THREE.Color, accent: THREE.Color, rings = 0, iris = -1) {
     const { cur, prev, k, since } = motifStateAt(this.plan, t);
     const beat = this.beatIndex(t);
     const lastBeat = this.beats[beat - 1] ?? -10;
@@ -200,7 +195,7 @@ export class MotifLayer {
       const age = form === cur.form ? since : since + 1;
       units.forEach((u, i) => {
         u.tick(t + i * 0.7, beat);
-        const opacity = a * (0.55 + 0.35 * pulse + 0.4 * burst);
+        const opacity = a * (0.8 + 0.3 * pulse + 0.4 * burst);
         u.mats.forEach((m) => {
           m.color.copy(line);
           m.opacity = opacity;
@@ -212,16 +207,25 @@ export class MotifLayer {
         this.place(form, u, i, units.length, t, age, pulse, burst);
       });
     }
+    // 'burst' drops: rings rush outward from the centre
+    this.burstRings.forEach((u, i) => {
+      const phase = clamp01(rings > 0 ? (1 - rings) * 1.4 - i * 0.12 : 1);
+      u.group.visible = rings > 0.02 && phase < 1;
+      if (!u.group.visible) return;
+      u.tick(t, beat);
+      u.group.scale.setScalar(H * (0.15 + 2.2 * easeOutCubic(phase)));
+      u.group.rotation.z = i * 0.3 + phase;
+      u.mats.concat(u.accents).forEach((m) => {
+        m.color.copy(i % 2 ? accent : line);
+        m.opacity = (1 - phase) * 0.95;
+      });
+    });
+    // iris: a black frame whose motif-shaped hole grows from nothing (iris 0..1, -1 = off)
+    this.iris.visible = iris >= 0 && iris < 1;
+    if (this.iris.visible) this.iris.scale.setScalar(Math.max(0.001, easeOutCubic(iris) * 3.2));
     const maskA = cur.form === 'mask' ? easeOutCubic(k) * cur.intensity : prev?.form === 'mask' ? (1 - k) * prev.intensity : 0;
     this.mask.visible = maskA > 0.002;
     this.mask.material.opacity = 0.88 * maskA;
-    if (this.tag) {
-      this.tag.children.forEach((c) => {
-        const m = (c as THREE.Mesh<THREE.PlaneGeometry, Mat>).material;
-        m.color.copy(line);
-        m.opacity = 0.7;
-      });
-    }
   }
 
   private place(form: MotifForm, u: Unit, i: number, n: number, t: number, age: number, pulse: number, burst: number) {
@@ -231,12 +235,8 @@ export class MotifLayer {
     g.rotation.z = 0;
     switch (form) {
       case 'center':
-        scale(H * 0.32 * (1 + 0.025 * pulse + 0.12 * burst));
-        g.rotation.z = Math.sin(t * 0.15) * 0.05;
-        break;
-      case 'corner':
-        scale(H * 0.09);
-        g.position.set(W / 2 - 150, H / 2 - 140, 0);
+        scale(H * 0.32 * (1 + 0.06 * pulse + 0.12 * burst));
+        g.rotation.z = t * 0.12 + 0.05 * pulse;
         break;
       case 'bleed':
         scale(H * 1.15 * (1 + 0.02 * pulse));
@@ -246,7 +246,7 @@ export class MotifLayer {
       case 'nested': {
         const r = [0.13, 0.22, 0.32, 0.43, 0.56][i];
         scale(H * r * (1 + 0.04 * pulse * (i % 2 ? 1 : -1)));
-        g.rotation.z = t * (i % 2 ? 0.12 : -0.08) * (1 + i * 0.3);
+        g.rotation.z = t * (i % 2 ? 0.25 : -0.18) * (1 + i * 0.3);
         break;
       }
       case 'tunnel': {

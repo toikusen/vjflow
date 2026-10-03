@@ -57,3 +57,44 @@ export const ISSUE_LABEL: Record<TimingIssue, string> = {
   cut: '還在唱字幕就消失',
   silent: '這段時間沒有歌聲',
 };
+
+export interface TimingEdit {
+  id: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Applies the timing editor's lines to a song. Lines must be the song's own lines in order, with finite times inside
+ * the song, ascending starts and end > start; an end that runs into the next line is clamped to it. Edited lines
+ * become 'verified'. With `confirm`, every review flag is cleared and the song is marked confirmed.
+ */
+export function applyTimingEdit<S extends { duration: number; cues: (TimingEdit & { confidence: string; review?: string[] })[]; timingConfirmedAt?: string }>(
+  song: S,
+  edits: TimingEdit[],
+  confirm: boolean,
+  now = new Date().toISOString(),
+): S {
+  if (edits.length !== song.cues.length || edits.some((e, i) => e.id !== song.cues[i].id)) throw new Error('歌詞行數或順序和歌曲不一致');
+  edits.forEach((e, i) => {
+    if (![e.start, e.end].every(Number.isFinite) || e.start < 0 || e.end > song.duration + 1 || e.end <= e.start) throw new Error(`第 ${i + 1} 行的時間不合法`);
+    if (i > 0 && e.start <= edits[i - 1].start) throw new Error(`第 ${i + 1} 行的開始時間必須晚於上一行`);
+  });
+  const cues = song.cues.map((c, i) => {
+    const e = edits[i];
+    const end = Math.min(e.end, edits[i + 1]?.start ?? e.end);
+    const changed = Math.abs(e.start - c.start) > 0.0005 || Math.abs(end - c.end) > 0.0005;
+    const next = { ...c, start: +e.start.toFixed(3), end: +end.toFixed(3) };
+    if (changed) next.confidence = 'verified';
+    if (changed || confirm) delete next.review;
+    return next;
+  });
+  return { ...song, cues, ...(confirm ? { timingConfirmedAt: now } : {}) };
+}
+
+/** Generation waits until the timing is confirmed in the editor, unless no line needs a check. */
+export function timingGate(song: { cues: { review?: string[] }[]; timingConfirmedAt?: string; title: string }): string | null {
+  if (song.timingConfirmedAt) return null;
+  const n = song.cues.filter((c) => c.review?.length).length;
+  return n ? `「${song.title}」還有 ${n} 行歌詞時間需要確認：請先到 /timing 校正並按「確認時間軸」` : null;
+}

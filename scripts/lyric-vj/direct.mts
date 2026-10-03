@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { timingGate } from '../../src/app/lyric-vj/timing-qa';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
@@ -19,6 +20,7 @@ import { loadDb, references } from './references.mts';
 
 const { values: a } = parseArgs({
   options: {
+    unconfirmed: { type: 'boolean', default: false },
     song: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, style: { type: 'string', default: '' },
     db: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
     'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
@@ -34,6 +36,9 @@ if (!process.env['ANTHROPIC_API_KEY'] && existsSync(env)) {
 }
 const PRICES: Record<string, [number, number]> = { 'claude-opus-5-5': [4, 20], 'claude-fable-5-1': [10, 50] };
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
+// nothing is generated on unchecked lyric timing (the timing editor confirms it); --unconfirmed for internal tests
+const gate = timingGate(song);
+if (gate && !a.unconfirmed) throw new Error(gate);
 const win = { start: Number(a.start), end: Number(a.end) };
 const out = a.out!;
 mkdirSync(out, { recursive: true });

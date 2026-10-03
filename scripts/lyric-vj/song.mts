@@ -89,7 +89,7 @@ const song: SongTimeline = {
   energy,
   energyFps: ENERGY_FPS,
   cues,
-  audio: { mix: a.audio, instrumental: a.instrumental, instrumentalOffsetSec },
+  audio: { mix: a.audio, instrumental: a.instrumental, instrumentalOffsetSec, vocals: a.vocals },
   timingCheck: check,
 };
 writeFileSync(join(a.out, 'song.json'), JSON.stringify(song, null, 1));

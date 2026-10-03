@@ -30,8 +30,10 @@ export interface SongTimeline {
   energy: number[];
   energyFps: number;
   cues: TimelineCue[];
-  audio: { mix: string; instrumental?: string; instrumentalOffsetSec?: number };
+  audio: { mix: string; instrumental?: string; instrumentalOffsetSec?: number; vocals?: string };
   timingCheck?: TimingCheck;
+  /** Set when a person has checked the lyric timing in the timing editor; generation waits for it. */
+  timingConfirmedAt?: string;
 }
 
 /** Bar phase (0..3) whose beats carry the most low end: kick drums land on downbeats in most pop. */

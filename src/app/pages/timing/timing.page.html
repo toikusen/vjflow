@@ -1,0 +1,100 @@
+@if (!song()) {
+  <header class="head">
+    <div>
+      <h1>歌詞時間校正</h1>
+      <p class="muted">選一首歌，先把歌詞時間對好，確認之後才會開始生成 VJ。</p>
+    </div>
+  </header>
+  @if (message(); as m) {
+    <p class="note">{{ m }}</p>
+  }
+  <ul class="songs">
+    @for (s of songs(); track s.id) {
+      <li>
+        <button class="song" (click)="open(s.id)">
+          <strong>{{ s.title }}</strong>
+          <span class="muted">{{ s.lines }} 行</span>
+          @if (s.confirmedAt) {
+            <span class="badge ok">已確認</span>
+          } @else if (s.review) {
+            <span class="badge yellow">{{ s.review }} 行待確認</span>
+          } @else {
+            <span class="badge">未確認</span>
+          }
+        </button>
+      </li>
+    }
+  </ul>
+} @else {
+  <header class="head">
+    <div>
+      <h1>{{ song()!.title }}</h1>
+      <p class="muted">
+        <span class="badge red">{{ counts().red }} 行必須修正</span>
+        <span class="badge yellow">{{ counts().yellow }} 行建議確認</span>
+        @if (song()!.timingConfirmedAt && !dirty()) {
+          <span class="badge ok">已確認</span>
+        }
+      </p>
+    </div>
+    <div class="actions">
+      <a class="btn" href="/timing">其他歌曲</a>
+      <button class="btn" [disabled]="!dirty()" (click)="save(false)">儲存</button>
+      <button class="btn primary" [disabled]="counts().red > 0" (click)="save(true)" [title]="counts().red ? '還有必須修正的行' : ''">確認時間軸</button>
+    </div>
+  </header>
+
+  @if (message(); as m) {
+    <p class="note">{{ m }}</p>
+  }
+  @if (loading(); as l) {
+    <p class="note">{{ l }}</p>
+  }
+
+  <section class="preview">
+    <p class="lyric">{{ current()?.text ?? '' }}</p>
+    <div class="transport">
+      <button class="btn" (click)="toggle()">{{ playing() ? '暫停' : '播放' }}</button>
+      <span class="muted">{{ time() | number: '1.2-2' }} 秒</span>
+      <span class="muted keys">空白鍵 播放／暫停 · Enter 把選取行的開始設為現在並跳下一行 · ←／→ 微調 0.05 秒 · ↑／↓ 選行 · 拖曳波形上的線調整</span>
+    </div>
+  </section>
+
+  <canvas #wave class="wave" (mousedown)="down($event)" (mousemove)="move($event)" (mouseup)="up()" (mouseleave)="up()"></canvas>
+
+  <ol class="lines">
+    @for (c of cues(); track c.id; let i = $index) {
+      <li [attr.data-status]="statuses()[i]" [class.selected]="i === selected()" (click)="selected.set(i)">
+        <button class="play" (click)="playLine(i); $event.stopPropagation()" title="從這行前 1 秒播放">▶</button>
+        <span class="text">{{ c.text }}</span>
+        <label>
+          開始
+          <input type="number" step="0.01" [value]="c.start" (change)="edit(i, 'start', $any($event.target).value)" />
+        </label>
+        <span class="nudge">
+          <button (click)="nudge(i, 'start', -0.05); $event.stopPropagation()">−</button>
+          <button (click)="nudge(i, 'start', 0.05); $event.stopPropagation()">＋</button>
+          <button (click)="setNow(i, 'start'); $event.stopPropagation()" title="設為播放中的時間">現在</button>
+        </span>
+        <label>
+          結束
+          <input type="number" step="0.01" [value]="c.end" (change)="edit(i, 'end', $any($event.target).value)" />
+        </label>
+        <span class="issue">
+          @if (statuses()[i] !== 'ok') {
+            {{ issueText(i) }}
+          }
+          @if (suggested(i); as s) {
+            <button class="chip" (click)="useStart(i, s); $event.stopPropagation()">改成 {{ s | number: '1.2-2' }}</button>
+          }
+          @if (statuses()[i] === 'yellow' && c.altStart !== undefined) {
+            <button class="chip" (click)="useStart(i, c.altStart!); $event.stopPropagation()">試 {{ c.altStart | number: '1.2-2' }}</button>
+          }
+          @if (statuses()[i] === 'yellow') {
+            <button class="chip" (click)="accept(i); $event.stopPropagation()">沒問題</button>
+          }
+        </span>
+      </li>
+    }
+  </ol>
+}

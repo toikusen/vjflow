@@ -7,6 +7,7 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { jobIdFor, jobStatus } from './status.mts';
 import { parseArgs } from 'node:util';
+import { timingGate } from '../../src/app/lyric-vj/timing-qa';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
@@ -17,6 +18,7 @@ import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
   options: {
+    unconfirmed: { type: 'boolean', default: false },
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
     stills: { type: 'string' }, font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
@@ -25,6 +27,9 @@ const { values: a } = parseArgs({
 });
 const ROOT = process.cwd();
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
+// nothing is generated on unchecked lyric timing (the timing editor confirms it); --unconfirmed for internal tests
+const gate = timingGate(song);
+if (gate && !a.unconfirmed) throw new Error(gate);
 const win = { start: Number(a.start ?? 0), end: Number(a.end ?? song.duration) };
 const out = a.out ?? dirname(a.treatment!);
 const fps = Number(a.fps);

@@ -32,7 +32,7 @@ function bar(len: number, w: number, mats: Mat[]): THREE.Mesh {
 }
 
 /** Clock face: rings, 60 ticks, roman numerals, three hands; the second hand jumps one step per beat. */
-function clock(px: number, font: string, detail: boolean): Unit {
+function clock(px: number, font: string, detail: boolean, hands = true): Unit {
   const g = new THREE.Group();
   const mats: Mat[] = [];
   const accents: Mat[] = [];
@@ -70,7 +70,8 @@ function clock(px: number, font: string, detail: boolean): Unit {
   const second = bar(0.85, w, accents);
   for (const [h, len] of [[hour, 0.45], [minute, 0.7], [second, 0.85]] as const) {
     h.geometry.translate(0, len / 2 - 0.06, 0);
-    g.add(h);
+    // tunnel and burst layers are rings only: scaled-up hands read as light rays and pile up in the centre
+    if (hands) g.add(h);
   }
   return {
     group: g, mats, accents,
@@ -82,15 +83,24 @@ function clock(px: number, font: string, detail: boolean): Unit {
   };
 }
 
-/** Regular polygon outline with a fainter inner one, flat-topped. */
+/** Regular polygon, flat-topped, built edge by edge (so 'shards' breaks it into its edges), with an inner one. */
 function polygon(px: number, sides: number): Unit {
   const g = new THREE.Group();
   const mats: Mat[] = [];
   const accents: Mat[] = [];
   const w = LINE / px;
-  const start = Math.PI / 2 - Math.PI / sides;
-  g.add(ring(1, w * 1.4, sides, mats, start));
-  const inner = ring(0.86, w, sides, accents, start);
+  const edges = (r: number, width: number, into: Mat[], parent: THREE.Object3D) => {
+    for (let i = 0; i < sides; i++) {
+      const a = (i + 0.5) * ((Math.PI * 2) / sides) + Math.PI / 2; // edge midpoints, flat top
+      const e = bar(2 * r * Math.sin(Math.PI / sides) + width, width, into);
+      e.position.set(Math.cos(a) * r * Math.cos(Math.PI / sides), Math.sin(a) * r * Math.cos(Math.PI / sides), 0);
+      e.rotation.z = a;
+      parent.add(e);
+    }
+  };
+  edges(1, w * 1.4, mats, g);
+  const inner = new THREE.Group();
+  edges(0.86, w, accents, inner);
   g.add(inner);
   return { group: g, mats, accents, tick: (t) => (inner.rotation.z = Math.sin(t * 0.4) * 0.08) };
 }
@@ -135,8 +145,8 @@ export class MotifLayer {
     private readonly beats: number[],
     fonts: { display: string; accent: string },
   ) {
-    const make = (px: number, detail = true): Unit =>
-      plan.kind === 'clock' ? clock(px, fonts.display, detail) : plan.kind === 'polygon' ? polygon(px, plan.sides) : orbit(px);
+    const make = (px: number, detail = true, hands = true): Unit =>
+      plan.kind === 'clock' ? clock(px, fonts.display, detail, hands) : plan.kind === 'polygon' ? polygon(px, plan.sides) : orbit(px);
     const add = (form: MotifForm, units: Unit[]) => {
       const holder = new THREE.Group();
       units.forEach((u) => holder.add(u.group));
@@ -147,7 +157,7 @@ export class MotifLayer {
     add('center', [make(H * 0.32)]);
     add('bleed', [make(H * 1.15)]);
     add('nested', [0.13, 0.22, 0.32, 0.43, 0.56].map((r) => make(H * r, r > 0.2)));
-    add('tunnel', Array.from({ length: 9 }, () => make(H * 0.5, false)));
+    add('tunnel', Array.from({ length: 9 }, () => make(H * 0.5, false, false)));
     add('shards', [make(H * 0.32)]);
     add('mask', [make(H * 0.38, false)]);
     // the mask: a dark plate with the motif's outline cut out, so the background only shows through the shape
@@ -163,7 +173,7 @@ export class MotifLayer {
     this.mask = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
     this.mask.renderOrder = -1;
     this.group.add(this.mask);
-    this.burstRings = Array.from({ length: 5 }, () => make(H * 0.5, false));
+    this.burstRings = Array.from({ length: 5 }, () => make(H * 0.5, false, false));
     this.burstRings.forEach((u) => this.group.add(u.group));
     // the iris: the same cut-out shape, scaled from nothing to past the frame edges at a 'wipe' transition
     this.iris = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
@@ -213,7 +223,7 @@ export class MotifLayer {
       u.group.visible = rings > 0.02 && phase < 1;
       if (!u.group.visible) return;
       u.tick(t, beat);
-      u.group.scale.setScalar(H * (0.15 + 2.2 * easeOutCubic(phase)));
+      u.group.scale.setScalar(H * (0.4 + 2.0 * easeOutCubic(phase)));
       u.group.rotation.z = i * 0.3 + phase;
       u.mats.concat(u.accents).forEach((m) => {
         m.color.copy(i % 2 ? accent : line);
@@ -256,19 +266,25 @@ export class MotifLayer {
         const r = H * 0.08 * Math.pow(18, phase);
         scale(r);
         g.rotation.z = phase * 1.2 + i * 0.4;
-        u.mats.concat(u.accents).forEach((m) => (m.opacity *= Math.sin(Math.PI * phase)));
+        // fade at the far end, and near the centre where many small layers would pile up into a white hot spot
+        const centre = clamp01((phase - 0.1) / 0.25);
+        u.mats.concat(u.accents).forEach((m) => (m.opacity *= Math.sin(Math.PI * phase) * centre * centre));
         break;
       }
       case 'shards': {
-        // pieces fly outward from the moment the form begins
+        // pieces burst outward when the form begins, then keep floating and turning around the centre (never still)
         scale(H * 0.32);
-        const d = easeOutCubic(clamp01(age / 1.6));
-        g.children.forEach((c, j) => {
-          const ang = hash(j, 3) * Math.PI * 2;
-          c.position.set(Math.cos(ang) * d * (0.6 + hash(j, 5)), Math.sin(ang) * d * (0.6 + hash(j, 5)), 0);
-          c.rotation.z = (hash(j, 7) - 0.5) * 3 * d;
+        const burstOut = easeOutCubic(clamp01(age / 1.4));
+        const parts = g.children.flatMap((c) => (c.children.length && !(c as THREE.Mesh).isMesh ? c.children : [c]));
+        parts.forEach((c, j) => {
+          if (c.userData['home'] === undefined) c.userData['home'] = { x: c.position.x, y: c.position.y, r: c.rotation.z };
+          const home = c.userData['home'];
+          const ang = Math.atan2(home.y, home.x) + (hash(j, 3) - 0.5) * 0.8 + age * 0.15 * (j % 2 ? 1 : -1);
+          const dist = Math.hypot(home.x, home.y) + burstOut * (0.5 + 0.6 * hash(j, 5)) + 0.12 * Math.sin(age * 0.9 + j);
+          c.position.set(Math.cos(ang) * dist, Math.sin(ang) * dist, 0);
+          c.rotation.z = home.r + burstOut * (hash(j, 7) - 0.5) * 2 + age * 0.3 * (hash(j, 9) - 0.5);
         });
-        u.mats.concat(u.accents).forEach((m) => (m.opacity *= 1 - 0.6 * d));
+        u.mats.concat(u.accents).forEach((m) => (m.opacity *= 1 - 0.3 * burstOut));
         break;
       }
       case 'mask':

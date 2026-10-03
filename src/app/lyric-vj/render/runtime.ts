@@ -77,12 +77,38 @@ export function emphasisOf(rt: CueRuntime, index: number) {
 }
 
 /**
+ * Marks which character of `text` each glyph shows, walking forward from `from`; returns where it stopped so the
+ * next part continues from there. Spaces in either string are skipped.
+ */
+export function tagSource(glyphs: Glyph[], text: string, from = 0): number {
+  const src = [...text];
+  let p = from;
+  for (const g of glyphs) {
+    if (/\s/.test(g.char)) continue;
+    let q = p;
+    while (q < src.length && src[q] !== g.char) q++;
+    if (q < src.length) {
+      g.src = q;
+      p = q + 1;
+    }
+  }
+  return p;
+}
+
+/** When glyph g starts entering: its sung time in word-by-word reveals, else the line's stagger. */
+export function enterAt(rt: CueRuntime, g: Glyph, stagger: number): number {
+  const cs = rt.cue.charStarts;
+  if (rt.style.reveal === 'word' && cs && g.src !== undefined && cs[g.src] !== undefined) return Math.max(rt.showFrom, cs[g.src] - LEAD);
+  return rt.showFrom + g.index * stagger;
+}
+
+/**
  * Applies enter/exit motion to one glyph. Returns the scale and opacity multipliers and offsets so templates can
  * combine them with their own layout. `stagger` is the delay between characters.
  */
 export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stagger: number) {
   stagger *= rt.pace;
-  const start = rt.showFrom + g.index * stagger;
+  const start = enterAt(rt, g, stagger);
   const enterSec = 0.32 * rt.pace;
   let scale = 1;
   let opacity = 1;
@@ -105,7 +131,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       dx = (1 - easeOutCubic(p)) * -24;
       break;
     case 'fade':
-      opacity = easeOutCubic((t - rt.showFrom) / 0.3);
+      opacity = easeOutCubic((t - (rt.style.reveal === 'word' ? start : rt.showFrom)) / 0.3);
       break;
     case 'cut':
       opacity = t >= rt.showFrom ? 1 : 0;
@@ -134,7 +160,8 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 
 /** When the last character has finished entering (all opaque and within 5 % of final scale). */
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
-  const last = rt.showFrom + (n - 1) * stagger * rt.pace;
+  const cs = rt.cue.charStarts;
+  const last = rt.style.reveal === 'word' && cs?.length ? Math.max(rt.showFrom, cs[cs.length - 1] - LEAD) : rt.showFrom + (n - 1) * stagger * rt.pace;
   // seconds per glyph until opaque and back at final scale (back-easing overshoots until the end of its entrance)
   const settle = { slam: 0.34, pop: 0.34, wipe: 0.2, fade: 0.3, cut: 0 }[rt.style.enter];
   return last + settle * rt.pace;

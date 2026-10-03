@@ -30,6 +30,7 @@ const { values: a } = parseArgs({
     'exclude-ref': { type: 'string' }, // a database song's own VJ must not be its reference
     'title-cards': { type: 'string', default: 'ends' }, // none | ends | all (the user's choice)
     'design-only': { type: 'string' }, // existing treatment: rewrite only its design system
+    'keep-assets': { type: 'string' }, // existing treatment: rewrite shots/cues/design but keep its generated assets
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -75,8 +76,9 @@ const MOTIF_SCHEMA = {
   properties: {
     kind: { type: 'string', enum: Object.keys(MOTIF_KINDS), description: Object.entries(MOTIF_KINDS).map(([k, v]) => `${k}：${v}`).join('；') },
     sides: { type: 'integer', description: 'polygon 的邊數 3–12（其他物件填 6）' },
-    sections: { type: 'array', description: '依段落的形態，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'form', 'intensity'],
-      properties: { start: { type: 'number' }, form: { type: 'string', enum: Object.keys(MOTIF_FORMS), description: Object.entries(MOTIF_FORMS).map(([k, v]) => `${k}：${v}`).join('；') }, intensity: { type: 'number', description: '0–1' } } } },
+    sections: { type: 'array', description: '依段落的形態，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'form', 'intensity', 'marquee'],
+      properties: { start: { type: 'number' }, form: { type: 'string', enum: Object.keys(MOTIF_FORMS), description: Object.entries(MOTIF_FORMS).map(([k, v]) => `${k}：${v}`).join('；') }, intensity: { type: 'number', description: '0–1' },
+        marquee: { type: 'number', description: '0–1：歌名與關鍵詞做成巨大描邊字，一排排往不同方向捲動，鋪在背景（間奏、副歌加厚畫面；主歌 0）' } } } },
   },
 };
 const MOTIF_RULES = `主題物件（motif，必須做）：
@@ -84,6 +86,7 @@ const MOTIF_RULES = `主題物件（motif，必須做）：
 - 物件要隨段落演變：主歌 center 或 off，副歌前 nested，副歌 tunnel 或 bleed，落ちサビ off 讓畫面休息，最後副歌用最強的形態。不要整首同一種形態。
 - shards（零件飛散到整個畫面持續飛舞）是最吸睛的全畫面動態：間奏、轉折與爆點之後的段落優先使用，可以維持整段。
 - mask 只能用在沒有歌詞的段落（有歌詞時外面壓暗會讓字看不清楚）。
+- marquee（巨大描邊字捲動）用來加厚間奏與副歌的畫面，和物件一起用；主歌、安靜段 0。
 - 沒有歌詞的前奏、間奏、尾奏（沒放標題卡時）一定要用會動的形態（nested、tunnel、shards、bleed，intensity ≥ 0.6），不能只剩背景與靜止的物件。
 - 用 transitionIn wipe 的鏡頭，下一個畫面會從物件的形狀中打開（物件形狀的轉場）。
 - 有物件的段落，背景圖是配角：物件與文字才是主角。`;
@@ -126,12 +129,13 @@ const SCHEMA = {
     moments: { type: 'array', description: '段落交界的爆點', items: { type: 'object', additionalProperties: false, required: ['kind', 'at', 'dur', 'strength'],
       properties: { kind: { type: 'string', enum: MOMENT_KINDS }, at: { type: 'number' }, dur: { type: 'number', description: 'drop/finale 填 0' },
         strength: { type: 'number', description: '0.5–1.5，1 為標準' } } } },
-    cues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cueId', 'shot', 'enter', 'exit'],
+    cues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cueId', 'shot', 'enter', 'exit', 'reveal'],
       properties: { cueId: str, shot: str, rows: { type: 'array', items: { type: 'integer' } },
         emphasis: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'to', 'method'],
           properties: { from: { type: 'integer' }, to: { type: 'integer' }, method: { type: 'string', enum: EMPHASIS_METHODS } } } },
         accents: { type: 'array', items: { type: 'integer' } },
-        enter: { type: 'string', enum: ENTER_KINDS }, exit: { type: 'string', enum: EXIT_KINDS } } } },
+        enter: { type: 'string', enum: ENTER_KINDS }, exit: { type: 'string', enum: EXIT_KINDS },
+        reveal: { type: 'string', enum: ['line', 'word'], description: 'word：字跟著歌聲一個一個出現；line：整句一起進場' } } } },
   },
 };
 
@@ -191,6 +195,11 @@ ${DESIGN_RULES}
 
 ${MOTIF_RULES}
 
+文字動態（必須做）：
+- reveal：主歌、敘事句、慢歌多用 word（字跟著歌聲一個一個出現，像在說話）；副歌的衝擊句可用 line 讓整句砸下。
+- 副歌節奏強烈的句子用 beat-cut（每唱到一個詞就換一個構圖切入），這是設計師「每 1–2 拍換構圖」的手法；一首歌至少要有一段副歌用它。
+- 重複的歌詞（第 2、3 次副歌）沿用畫面但換版型，讓副歌逐次升級。
+
 情緒起伏（必須做）：
 - arc：每個段落標強度 0–3（前奏、尾奏 0，主歌 1，導歌 2，副歌 3；安靜的落ちサビ或橋段降到 0–1）。引擎依強度調整背景亮度、飽和度、光暈、光粒子。
 - moments：在段落交界放爆點，at 放在強拍上。
@@ -205,6 +214,10 @@ const USER = `【輸出要求】shots 大約 ${expectShots} 個（每個 ${style
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const client = new Anthropic();
+const keep: TreatmentV3 | undefined = a['keep-assets'] ? JSON.parse(readFileSync(a['keep-assets'], 'utf8')) : undefined;
+const keepText = keep
+  ? `\n\n【已生成的素材：只能用這些，不可新增或修改素材（assets 欄位照抄即可，程式會沿用原本的）】\n${keep.assets.map((x) => `- ${x.id}（${x.kind}${x.from ? `，from ${x.from}` : ''}）：${x.prompt}`).join('\n')}\n背景風格：${keep.styleAnchor.prompt}`
+  : '';
 
 // --design-only <treatment>: keep shots, assets and cue styles; only the design system is (re)written
 if (a['design-only']) {
@@ -243,7 +256,7 @@ if (a['design-only']) {
   console.log(JSON.stringify({ costUSD, design: checked.treatment.design, motif: checked.treatment.motif, errors: checked.errors }, null, 1));
   process.exit(0);
 }
-const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: USER }];
+const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: USER + keepText }];
 let usage = { input: 0, output: 0 };
 const began = Date.now();
 const status = jobStatus(a.job ?? jobIdFor(out), { title: a.title ?? `${song.title} ${win.start}–${win.end}s`, tier, style: style.name });
@@ -264,6 +277,10 @@ for (let attempt = 0; attempt < 3; attempt++) {
   const text = message.content.find((b) => b.type === 'text')?.text;
   if (!text) throw new Error(`No text in response (stop_reason ${message.stop_reason})`);
   const draft = JSON.parse(text) as TreatmentV3;
+  if (keep) {
+    draft.assets = keep.assets;
+    draft.styleAnchor = keep.styleAnchor;
+  }
   for (const sh of draft.shots) {
     const pairs = sh.params as unknown as { key: string; value: string }[];
     sh.params = Object.fromEntries(pairs.map((x) => [x.key, coerce(x.value)]));

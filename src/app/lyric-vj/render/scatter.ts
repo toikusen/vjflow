@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { chunks } from '../phrases';
 import { advanceOf, clamp01, Glyph, GlyphStyle, hash, makeGlyphs, placeRow, rowWidth } from './glyphs';
-import { accentPulse, color, readable, CueLayer, CueRuntime, FrameFx, glyphMotion, settledAt, TemplateRenderer } from './runtime';
+import { accentPulse, color, readable, CueLayer, CueRuntime, FrameFx, glyphMotion, settledAt, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -38,6 +38,7 @@ export const scatter: TemplateRenderer = {
 
     const root = new THREE.Group();
     root.position.y = (p['lift'] as number) ?? 0;
+    let cursor = 0;
     const layers = parts.map((text, i) => {
       const isKey = i === key && n > 1;
       const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
@@ -47,6 +48,7 @@ export const scatter: TemplateRenderer = {
         : { family: rt.fonts.body, weight: 900, size: n === 1 ? 150 : 108, shadow: true };
       const tint = isKey && (method === 'color' || method === 'glow') ? accent : rt.palette.text;
       const glyphs = makeGlyphs(text, style, color(tint, 1.0), isKey ? 0 : 6);
+      cursor = tagSource(glyphs, rt.cue.text, cursor);
       const rw = rowWidth(glyphs, isKey ? 0 : 6);
       // along the diagonal: first phrase top-left, last bottom-right (or rising with direction 'up')
       const u = n === 1 ? 0 : i / (n - 1) - 0.5;

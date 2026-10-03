@@ -70,7 +70,7 @@ export interface TimingEdit {
  * become 'verified', and so do `accepted` lines (the user checked them by ear: the vocal check can mistake humming or
  * calls for singing). With `confirm`, every review flag is cleared and the song is marked confirmed.
  */
-export function applyTimingEdit<S extends { duration: number; cues: (TimingEdit & { confidence: string; review?: string[] })[]; timingConfirmedAt?: string }>(
+export function applyTimingEdit<S extends { duration: number; cues: (TimingEdit & { confidence: string; review?: string[]; charStarts?: number[] })[]; timingConfirmedAt?: string }>(
   song: S,
   edits: TimingEdit[],
   confirm: boolean,
@@ -87,6 +87,8 @@ export function applyTimingEdit<S extends { duration: number; cues: (TimingEdit 
     const end = Math.min(e.end, edits[i + 1]?.start ?? e.end);
     const changed = Math.abs(e.start - c.start) > 0.0005 || Math.abs(end - c.end) > 0.0005;
     const next = { ...c, start: +e.start.toFixed(3), end: +end.toFixed(3) };
+    // word-by-word times move with the line and stay inside it
+    if (c.charStarts) next.charStarts = c.charStarts.map((t) => +Math.min(end - 0.05, Math.max(e.start, t + e.start - c.start)).toFixed(3));
     const byUser = changed || accepted.includes(c.id);
     if (byUser) next.confidence = 'verified';
     if (byUser || confirm) delete next.review;

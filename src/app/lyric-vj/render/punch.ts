@@ -1,7 +1,7 @@
 // punch: the emphasised words set huge and hit on the accents; the rest of the line in small type above/below.
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, makeGlyphs, placeRow } from './glyphs';
-import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, TemplateRenderer } from './runtime';
+import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const STAGGER = 0.045;
@@ -62,6 +62,10 @@ export const punch: TemplateRenderer = {
     // text before the keyword reads above it, text after it below
     if (before) placeRow(small[0], 0, 30 + gap, 6);
     if (after) placeRow(small[before ? 1 : 0], 0, 30 - gap, 6);
+    tagSource(kw, rt.cue.text, k0);
+    tagSource(echo, rt.cue.text, k0);
+    if (before) tagSource(small[0], rt.cue.text, 0);
+    if (after) tagSource(small[before ? 1 : 0], rt.cue.text, k1);
     for (const g of [...echo, ...kw, ...small.flat()]) group.add(g.mesh);
 
     const smallRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'fade' }, showFrom: rt.showFrom + 0.1 * rt.pace };

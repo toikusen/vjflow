@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { chunks } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
-import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, TemplateRenderer } from './runtime';
+import { accentPulse, color, enterAt, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const TRACK = 6;
@@ -53,7 +53,9 @@ export const typewriter: TemplateRenderer = {
 
     const n = glyphs.length;
     const per = typeInterval(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);
-    const typedAt = (i: number) => rt.showFrom + i * per;
+    tagSource(glyphs, rt.cue.text, 0);
+    // word-by-word: each character is typed when it is sung
+    const typedAt = (i: number) => (rt.style.reveal === 'word' && rt.cue.charStarts ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per);
     const doneAt = typedAt(n - 1) + 0.06;
     // typing is the entrance; the cue's exit still applies
     const exitRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'cut' } };

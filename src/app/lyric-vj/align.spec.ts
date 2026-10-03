@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignLyrics, cleanLyricLine, combineTimings, lcsPairs, snapToPhrases } from './align';
+import { alignLyrics, charStartsFor, cleanLyricLine, combineTimings, lcsPairs, snapToPhrases } from './align';
 
 describe('lcsPairs', () => {
   it('finds the common subsequence', () => {
@@ -68,5 +68,16 @@ describe('combineTimings', () => {
     expect(cues[1].review).toContain('對齊信心低');
     expect(cues[2]).toMatchObject({ start: 30, altStart: 27 });
     expect(cues[2].review).toContain('兩種對齊結果不一致');
+  });
+});
+
+describe('charStartsFor', () => {
+  it('times each character from the aligner, shifted to the line start and kept in order', () => {
+    const words = [{ text: '光る', start: 10.2, end: 10.8 }, { text: '星', start: 11.0, end: 11.4 }];
+    const t = charStartsFor('光る 星', words, 10, 13);
+    expect(t).toHaveLength(4);
+    expect(t[0]).toBe(10); // shifted from 10.2 to the line start
+    expect(t[3]).toBeCloseTo(10.8, 1); // 星 at 11.0 − 0.2
+    expect(t.every((x, i) => i === 0 || x >= t[i - 1])).toBe(true);
   });
 });

@@ -24,6 +24,8 @@ export interface Glyph {
   index: number;
   /** Vertical offset from the row's centre line (smaller kana sit on the baseline). */
   dy?: number;
+  /** Index of this character in the cue text (for word-by-word timing). */
+  src?: number;
 }
 
 const SS = 2; // supersampling

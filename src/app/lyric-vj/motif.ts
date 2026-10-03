@@ -29,6 +29,8 @@ export interface MotifSection {
   form: MotifForm;
   /** 0..1: line brightness and motion amount. */
   intensity: number;
+  /** 0..1: giant outlined key words scrolling in rows behind the lyrics (0 = none). */
+  marquee?: number;
 }
 
 export interface MotifPlan {
@@ -49,11 +51,11 @@ export function validateMotif(m: MotifPlan | undefined, win: Window): { motif?: 
     // 'corner' was dropped (too small to read): older treatments show nothing there
     .map((s) => ((s.form as string) === 'corner' ? { ...s, form: 'off' as MotifForm } : s))
     .filter((s) => s.form in MOTIF_FORMS)
-    .map((s) => ({ start: clamp(s.start, win.start, win.end), form: s.form, intensity: clamp(s.intensity, 0, 1) }))
+    .map((s) => ({ start: clamp(s.start, win.start, win.end), form: s.form, intensity: clamp(s.intensity, 0, 1), marquee: clamp(s.marquee ?? 0, 0, 1) }))
     .sort((a, b) => a.start - b.start);
   if (sections.length !== (m.sections ?? []).length) fixes.push('移除不存在的主題物件形態');
   if (!sections.length) errors.push('主題物件至少要有一個段落設定');
-  else if (sections[0].start > win.start) sections.unshift({ start: win.start, form: 'off', intensity: 0 });
+  else if (sections[0].start > win.start) sections.unshift({ start: win.start, form: 'off', intensity: 0, marquee: 0 });
   const sides = Math.round(clamp(m.sides, 3, 12));
   return { motif: { kind: m.kind, sides, sections }, fixes, errors };
 }

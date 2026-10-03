@@ -2,7 +2,7 @@
 // remaining rows in small type outside the frame's lower right.
 import * as THREE from 'three';
 import { advanceOf, clamp01, easeOutBack, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
-import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, ShotLayer, TemplateRenderer } from './runtime';
+import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, ShotLayer, tagSource, TemplateRenderer } from './runtime';
 import { Palette, ParamValue, Shot } from '../treatment';
 
 const W = 1920;
@@ -136,12 +136,14 @@ export const frameSplit: TemplateRenderer = {
       mainGlyphs.push(...gs);
     });
     mainGlyphs.forEach((g, i) => (g.index = i));
+    let cursor = tagSource(mainGlyphs, rt.cue.text, 0);
     const subStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 92, shadow: true };
     const subGlyphs: Glyph[] = [];
     rows.slice(1).forEach((row, r) => {
       const gs = makeGlyphs(row, subStyle, color(rt.palette.text, 0.9), 6);
       const rw = rowWidth(gs, 6);
       placeRow(gs, cx + w / 2 - rw / 2, cy - h / 2 - 100 - r * 108, 6);
+      cursor = tagSource(gs, rt.cue.text, cursor);
       subGlyphs.push(...gs);
     });
     subGlyphs.forEach((g, i) => (g.index = mainGlyphs.length + i));

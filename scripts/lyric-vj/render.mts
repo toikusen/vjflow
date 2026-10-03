@@ -8,7 +8,7 @@ import { dirname, extname, join, relative, resolve } from 'node:path';
 import { jobIdFor, jobStatus } from './status.mts';
 import { parseArgs } from 'node:util';
 import { timingGate } from '../../src/app/lyric-vj/timing-qa';
-import { splitSongTitle } from '../../src/app/lyric-vj/structure';
+import { keyPhrases, splitSongTitle } from '../../src/app/lyric-vj/structure';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
@@ -52,6 +52,7 @@ for (const s of Object.values(assets)) {
 }
 const job: RenderJob = {
   fps, window: win, beats: song.beats, beatStrength: song.beatStrength,
+  keyWords: [splitSongTitle(song.title).title, ...keyPhrases(song)],
   cues: cuesIn(song, win),
   treatment: checked.treatment, assets,
   fonts: { family: a.font, display: a['font-display'], body: a['font-body'], script: a['font-script'] },

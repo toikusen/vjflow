@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { nearestWeight } from '../fonts';
 import { chunks } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
-import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, TemplateRenderer } from './runtime';
+import { accentPulse, color, enterAt, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const DIAG = new THREE.Vector3(1, -1, 0).normalize(); // writing runs top-left → bottom-right inside each character
@@ -50,7 +50,8 @@ export const handwrite: TemplateRenderer = {
 
     const n = glyphs.length;
     const per = writeSec(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);
-    const startOf = (i: number) => rt.showFrom + i * per * 0.8;
+    tagSource(glyphs, rt.cue.text, 0);
+    const startOf = (i: number) => (rt.style.reveal === 'word' && rt.cue.charStarts ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per * 0.8);
     const exitRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'cut' } };
     const world = new THREE.Vector3();
     const corner = new THREE.Vector3();

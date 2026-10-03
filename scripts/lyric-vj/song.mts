@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util';
 import { analyzeAudio } from '../../src/app/audio/audio-analyzer.service';
 import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
-import { alignLyrics, cleanLyricLine, combineTimings, ForcedLine } from '../../src/app/lyric-vj/align';
+import { alignLyrics, AsrWord, charStartsFor, cleanLyricLine, combineTimings, ForcedLine } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
 import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
@@ -74,6 +74,19 @@ if (a.lrc) {
     check = checkTiming(cues, active);
     console.log(`歌詞時間：${cues.filter((c) => !c.review).length}/${cues.length} 句自動通過，${cues.filter((c) => c.review).length} 句需要在時間校正頁確認`);
   }
+}
+
+// word-by-word reveals need per-character times: forced alignment of the final lines (cached), whatever timed them
+{
+  const forceFile = join(a.out, 'force.json');
+  if (!existsSync(forceFile)) {
+    const txt = join(a.out, 'lyrics.txt');
+    writeFileSync(txt, cues.map((c) => c.text).join('\n'));
+    execFileSync('uv', ['run', '-q', '--with', 'stable-ts', 'python', 'scripts/lyric-vj/force_align.py', a.vocals, txt, forceFile, '--language', a.language!], { stdio: ['ignore', 'inherit', 'ignore'] });
+  }
+  const lines: { words: AsrWord[] }[] = JSON.parse(readFileSync(forceFile, 'utf8')).lines;
+  if (lines.length === cues.length) cues = cues.map((c, i) => ({ ...c, charStarts: charStartsFor(c.text, lines[i].words, c.start, c.end) }));
+  else console.log(`逐字時間略過：對齊結果 ${lines.length} 行，歌詞 ${cues.length} 行`);
 }
 
 let instrumentalOffsetSec: number | undefined;

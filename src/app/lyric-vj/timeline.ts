@@ -17,6 +17,8 @@ export interface TimelineCue {
   review?: string[];
   /** The other aligner's start when the two disagree: a one-click alternative in the editor. */
   altStart?: number;
+  /** When each character (code point of `text`) is sung, for word-by-word reveals. */
+  charStarts?: number[];
 }
 
 export interface SongTimeline {

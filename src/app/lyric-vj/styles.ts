@@ -1,7 +1,7 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
 import { MOVING_FORMS, motifStateAt } from './motif';
-import { analyzeStructure, chorusSpans, TitleCards, titleGaps, wantedTitleGaps } from './structure';
+import { analyzeStructure, chorusSpans, sameLines, TitleCards, titleGaps, wantedTitleGaps } from './structure';
 import { sceneCount, Tier, TIERS } from './tiers';
 import { SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, Window } from './treatment';
@@ -24,7 +24,7 @@ export const STYLES: Record<string, StylePreset> = {
     id: 'emotional',
     name: '情緒型',
     description: '抒情、帶故事感的歌詞 VJ：風景與氛圍為底，大字與框線交替，動態自然、特效對拍。',
-    templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite', 'title-card'],
+    templates: ['punch', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite', 'title-card', 'beat-cut'],
     shotSec: [3.5, 8],
     rules: [
       '素材只畫風景與氛圍（天空、雲、光、海、城市、街道、自然景物），依歌詞意象決定場景與時段；不要畫人物，最多只能是很小、靜止的遠景剪影。',
@@ -88,6 +88,14 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
       const end = t.motif!.sections[i + 1]?.start ?? win.end;
       if (s.form === 'mask' && s.intensity > 0 && sung(s.start, end)) errors.push(`主題物件 ${s.start.toFixed(1)}–${end.toFixed(1)} 秒用了 mask，但這段有歌詞；mask 只能用在沒有歌詞的段落`);
     });
+  }
+  // a repeated line reuses its scene but not its layout: the same words in the same template read as a copy
+  {
+    const same = sameLines(song);
+    const tmpl = (cueId: string) => t.shots.find((s) => s.id === t.cues.find((c) => c.cueId === cueId)?.shot)?.template;
+    const pairs = [...same].filter(([id, src]) => tmpl(id) && tmpl(src));
+    const copies = pairs.filter(([id, src]) => tmpl(id) === tmpl(src));
+    if (pairs.length >= 3 && copies.length > pairs.length / 2) errors.push(`重複的歌詞有 ${copies.length}/${pairs.length} 句用了和第一次相同的版型（${copies.slice(0, 4).map(([id, src]) => `${id}=${src}`).join('、')}）；重複的段落沿用畫面，但版型要換，讓副歌逐次升級`);
   }
   // later choruses reuse the first chorus's scenes for at least half their time
   const assetsIn = (a: number, b: number) => new Set(t.shots.filter((s) => s.asset && s.end > a && s.start < b).map((s) => s.asset!));

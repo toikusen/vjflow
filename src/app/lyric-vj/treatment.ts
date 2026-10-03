@@ -72,6 +72,8 @@ export interface CueStyle {
   enter: EnterKind;
   exit: ExitKind;
   variant?: string;
+  /** 'word': characters appear as they are sung (needs charStarts); 'line' (default): the line enters at once. */
+  reveal?: 'line' | 'word';
 }
 
 export interface TreatmentV3 {

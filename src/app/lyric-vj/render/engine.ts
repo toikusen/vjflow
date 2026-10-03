@@ -11,6 +11,7 @@ import { TimelineCue } from '../timeline';
 import { beatsDuring, Shot, TreatmentV3 } from '../treatment';
 import { clamp01, easeOutCubic, hash, setKanaScale } from './glyphs';
 import { frameSplit } from './frame-split';
+import { beatCut } from './beat-cut';
 import { handwrite } from './handwrite';
 import { titleCard } from './title-card';
 import { punch } from './punch';
@@ -26,7 +27,7 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard };
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -41,6 +42,8 @@ export interface RenderJob {
   beats: number[];
   /** Kick strength per beat (song.beatStrength). */
   beatStrength?: number[];
+  /** Title and hook words for type patterns (marquee). */
+  keyWords?: string[];
   cues: TimelineCue[];
   treatment: TreatmentV3;
   assets: Record<string, AssetSource>;
@@ -223,7 +226,7 @@ export class LyricVjEngine {
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
     const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
     if (treatment.motif) {
-      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
+      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont }, this.job.keyWords ?? []);
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
       this.scene.add(this.motif.group);
     }

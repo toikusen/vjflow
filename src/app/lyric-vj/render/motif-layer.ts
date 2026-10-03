@@ -148,11 +148,15 @@ export class MotifLayer {
   private readonly burstRings: Unit[];
   /** Iris transition: the next shot opens through the motif's shape. */
   private readonly iris: THREE.Mesh<THREE.ShapeGeometry, Mat>;
+  /** Giant outlined key words scrolling in rows (a type pattern behind the lyrics). */
+  private readonly marquee = new THREE.Group();
+  private readonly rows: { group: THREE.Group; width: number; dir: number; mats: Mat[] }[] = [];
 
   constructor(
     private readonly plan: MotifPlan,
     private readonly beats: number[],
     fonts: { display: string; accent: string },
+    words: string[] = [],
   ) {
     const make = (px: number, detail = true, hands = true, edges = false): Unit =>
       plan.kind === 'clock' ? clock(px, fonts.display, detail, hands) : plan.kind === 'polygon' ? polygon(px, plan.sides, edges) : orbit(px);
@@ -188,6 +192,27 @@ export class MotifLayer {
     this.iris = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
     this.iris.renderOrder = -1;
     this.group.add(this.iris);
+    if (words.length) {
+      const line = words.slice(0, 6).join('　・　') + '　・　';
+      for (let r = 0; r < 4; r++) {
+        const gs = makeGlyphs(line.repeat(4), { family: fonts.display, weight: 900, size: 230, outline: 3 }, 0xffffff, 10);
+        placeRow(gs, 0, 0, 10);
+        const group = new THREE.Group();
+        const mats: Mat[] = [];
+        gs.forEach((g) => {
+          g.mesh.position.set(g.x, 0, 0);
+          g.mesh.material.blending = THREE.AdditiveBlending;
+          mats.push(g.mesh.material);
+          group.add(g.mesh);
+        });
+        group.position.y = (1.5 - r) * 300;
+        this.marquee.add(group);
+        this.rows.push({ group, width: gs.reduce((s, g) => s + g.advance + 10, 0) / 4, dir: r % 2 ? 1 : -1, mats });
+      }
+      this.marquee.rotation.z = -0.12;
+      this.marquee.renderOrder = -0.5;
+      this.group.add(this.marquee);
+    }
   }
 
   private beatIndex(t: number) {
@@ -239,6 +264,19 @@ export class MotifLayer {
         m.opacity = (1 - phase) * 0.95;
       });
     });
+    // marquee rows scroll in alternating directions, a little faster on a drop
+    const mq = (cur.marquee ?? 0) * k + (prev?.marquee ?? 0) * (1 - k);
+    this.marquee.visible = mq > 0.01;
+    if (this.marquee.visible) {
+      this.rows.forEach((row, r) => {
+        const x = (((t * (90 + 40 * r) * (1 + burst)) % row.width) + row.width) % row.width;
+        row.group.position.x = row.dir > 0 ? x - row.width * 2 : -x - row.width;
+        row.mats.forEach((m) => {
+          m.color.copy(r % 2 ? accent : line);
+          m.opacity = 0.28 * mq * (1 + 0.5 * pulse);
+        });
+      });
+    }
     // iris: a black frame whose motif-shaped hole grows from nothing (iris 0..1, -1 = off)
     this.iris.visible = iris >= 0 && iris < 1;
     if (this.iris.visible) this.iris.scale.setScalar(Math.max(0.001, easeOutCubic(iris) * 3.2));

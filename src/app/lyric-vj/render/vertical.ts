@@ -49,6 +49,7 @@ export const vertical: TemplateRenderer = {
     const top = (units * size) / 2;
 
     const glyphs: Glyph[] = [];
+    let srcCursor = 0;
     cells.forEach((col, k) => {
       let y = top - k * step;
       for (const { ch, m } of col) {
@@ -60,6 +61,9 @@ export const vertical: TemplateRenderer = {
         g.y = y - h / 2 + (CORNER.test(ch) ? size * 0.32 : 0);
         g.mesh.rotation.z = ROTATE.test(ch) ? -Math.PI / 2 : 0;
         g.mesh.userData['emph'] = em ? 1 : 0;
+        g.src = src.indexOf(ch, srcCursor);
+        if (g.src >= 0) srcCursor = g.src + 1;
+        else delete g.src;
         g.index = glyphs.length;
         glyphs.push(g);
         group.add(g.mesh);

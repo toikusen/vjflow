@@ -333,3 +333,11 @@ export function keyWords(song: SongTimeline): string[] {
 
 /** Share of lines that may change colour (the rest are emphasised by size). */
 export const COLOR_SHARE = 0.2;
+
+/** Readable hook phrases for type patterns: the phrases holding key words, most repeated first (display form). */
+export function keyPhrases(song: SongTimeline, n = 5): string[] {
+  const keys = keyWords(song);
+  const count = new Map<string, number>();
+  for (const c of song.cues) for (const p of phrases(c.text)) if (keys.some((k) => norm(p).includes(k))) count.set(p.trim(), (count.get(p.trim()) ?? 0) + 1);
+  return [...count].sort((a, b) => b[1] - a[1]).map(([p]) => p).filter((p) => [...p].length >= 2).slice(0, n);
+}

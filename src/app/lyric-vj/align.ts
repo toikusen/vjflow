@@ -221,3 +221,31 @@ export function combineTimings(lines: string[], forced: ForcedLine[], heard: Tim
     return review.length ? { ...c, review } : { ...c, review: undefined };
   });
 }
+
+/**
+ * When each character of a line is sung: the aligner's word times, matched character by character (LCS) to the line,
+ * gaps filled from neighbours, shifted so the first character lands on the line's (possibly hand-edited) start and
+ * kept inside the line. Times are per code point of `text`.
+ */
+export function charStartsFor(text: string, words: AsrWord[], start: number, end: number): number[] {
+  const chars = [...text];
+  const heard = asrChars(words);
+  const times: (number | undefined)[] = chars.map(() => undefined);
+  const plain = chars.map((c) => strip(c)[0] ?? '');
+  const idx = plain.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+  for (const [i, j] of lcsPairs(idx.map((i) => plain[i]), heard.map((h) => h.ch))) times[idx[i]] = heard[j].t;
+  // fill unmatched characters by interpolating between matched neighbours (or the line edges)
+  const known = times.map((t, i) => (t === undefined ? -1 : i)).filter((i) => i >= 0);
+  if (!known.length) return chars.map((_, i) => +(start + ((end - start) * 0.8 * i) / Math.max(1, chars.length)).toFixed(3));
+  const shift = start - times[known[0]]!;
+  const out = chars.map((_, i) => {
+    if (times[i] !== undefined) return times[i]! + shift;
+    const a = known.filter((k) => k < i).pop();
+    const b = known.find((k) => k > i);
+    if (a === undefined) return start;
+    if (b === undefined) return times[a]! + shift;
+    return times[a]! + shift + ((times[b]! - times[a]!) * (i - a)) / (b - a);
+  });
+  let prev = start;
+  return out.map((t) => +(prev = Math.min(end - 0.05, Math.max(prev, t))).toFixed(3));
+}

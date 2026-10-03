@@ -70,6 +70,15 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
     },
   },
+  'beat-cut': {
+    id: 'beat-cut',
+    description: '依拍切詞：唱到每個詞時，那個詞單獨以巨大字級切入，每次換位置、大小、角度（置中／左上斜／右下斜／出血），整句以小字放在底部方便閱讀。最適合節奏強烈的副歌、重拍明顯的段落；一句至少要有 2 個詞。',
+    defaultEnter: 'cut',
+    defaultExit: 'cut',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.4, description: '背景壓暗程度' },
+    },
+  },
   'title-card': {
     id: 'title-card',
     description: '標題卡：歌名（大）與歌手名（小）在兩條細線間逐字浮現，有團體 LOGO 時一起出現。只用在沒有歌詞的前奏、間奏、尾奏。不需要歌詞；若有歌詞落在這個鏡頭，會以小字放在下方。',

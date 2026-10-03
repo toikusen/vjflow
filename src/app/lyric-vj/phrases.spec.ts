@@ -17,7 +17,8 @@ describe('phrases', () => {
   it('chunks lines at spaces, then at the phrase nearest the middle', () => {
     expect(chunks('明日を隠す暗闇さえ 背負って', 3)).toEqual(['明日を隠す', '暗闇さえ', '背負って']);
     expect(chunks('上手く 輝けないなら', 2)).toEqual(['上手く', '輝けないなら']);
-    expect(chunks('a b c d', 2)).toEqual(['ab', 'cd']);
+    expect(chunks('a b c d', 2)).toEqual(['a b', 'c d']);
+    expect(chunks('さぁおいでませ誰彼（I got it）', 2)).toEqual(['さぁおいでませ誰彼', '（I got it）']);
     expect(chunks('先にきっと', 3)).toEqual(['先にきっと']); // too short to split
   });
 });

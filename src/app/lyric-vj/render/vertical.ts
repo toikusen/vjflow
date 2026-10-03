@@ -1,6 +1,7 @@
 // vertical: Japanese tategaki, columns read right to left (database: 41/50 videos set lines vertically).
 import * as THREE from 'three';
 import { chunks } from '../phrases';
+import { typewriter } from './typewriter';
 import { clamp01, Glyph, GlyphStyle, makeGlyphs } from './glyphs';
 import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, TemplateRenderer } from './runtime';
 
@@ -17,6 +18,8 @@ const CORNER = /[、。，．]/;
 
 export const vertical: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
+    // English words do not stack in a column (spaces split them across columns): set such a line horizontally
+    if ((rt.cue.text.match(/[A-Za-z]/g) ?? []).length >= 3) return typewriter.cue({ ...rt, params: { ...rt.params, position: 'center', cursor: false } });
     const p = rt.params;
     const src = [...rt.cue.text];
     const cols = chunks(rt.cue.text, 3);

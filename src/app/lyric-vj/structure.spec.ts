@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeStructure, chorusSpans, lineSimilarity, sameLines, splitSongTitle, suggestMoments, titleGaps, wantedTitleGaps } from './structure';
+import { analyzeStructure, chorusSpans, keyWords, lineSimilarity, sameLines, splitSongTitle, suggestMoments, titleGaps, wantedTitleGaps } from './structure';
 import { SongTimeline, TimelineCue } from './timeline';
 
 // verse / chorus ×2 / quiet ochi / last chorus; the shout 「はぁ」 precedes every chorus, a pickup line only some
@@ -64,5 +64,22 @@ describe('repeats and gaps', () => {
     expect(chorusSpans(analyzeStructure(song)).map((c) => c.start)).toEqual([30, 80, 130]);
     expect(splitSongTitle('Reol - 第六感')).toEqual({ artist: 'Reol', title: '第六感' });
     expect(splitSongTitle('indigo')).toEqual({ artist: '', title: 'indigo' });
+  });
+});
+
+describe('keyWords', () => {
+  it('keeps title words and meaningful repeated words, not particles or pronouns', () => {
+    const s = { ...song, title: 'yosugala - indigo', cues: [
+      { id: 'a', start: 0, end: 1, text: '僕らなりの藍を描いてゆこう', timingSource: 'lrclib' as const, confidence: 'verified' as const },
+      { id: 'b', start: 2, end: 3, text: '僕らなりの藍に染めてゆこうか', timingSource: 'lrclib' as const, confidence: 'verified' as const },
+      { id: 'c', start: 4, end: 5, text: '僕は 夜空を見上げた', timingSource: 'lrclib' as const, confidence: 'verified' as const },
+      { id: 'd', start: 6, end: 7, text: '夜空に消えて 僕は', timingSource: 'lrclib' as const, confidence: 'verified' as const },
+    ] };
+    const k = keyWords(s);
+    expect(k).toContain('indigo');
+    expect(k).toContain('藍');
+    expect(k).toContain('夜空');
+    expect(k).not.toContain('僕');
+    expect(k.some((x) => /こう|ゆこう/.test(x))).toBe(false);
   });
 });

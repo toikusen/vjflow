@@ -4,7 +4,7 @@ import { Fonts } from './fonts';
 import type { ArcPoint, Moment } from './moments';
 import { validateMoments } from './moments';
 import { phraseBoundaries } from './phrases';
-import { sameLines } from './structure';
+import { COLOR_SHARE, keyWords, sameLines } from './structure';
 import { SongTimeline } from './timeline';
 
 export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut';
@@ -237,6 +237,25 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       cs.emphasis = s0.emphasis && structuredClone(s0.emphasis);
       cs.rows = s0.rows && [...s0.rows];
       fixes.push(`歌詞 ${cs.cueId} 和 ${src} 相同，沿用它的強調與換行`);
+    }
+  }
+  // colour is for the words that matter (title words, hook words); the rest are emphasised by size only, and at most
+  // COLOR_SHARE of the lines change colour at all
+  const keys = keyWords(song);
+  const budget = Math.max(1, Math.round(COLOR_SHARE * t.cues.length));
+  let coloured = 0;
+  for (const cs of t.cues) {
+    const text = [...(cueById.get(cs.cueId)?.text ?? '')];
+    for (const e of cs.emphasis ?? []) {
+      if (e.method !== 'color' && e.method !== 'glow') continue;
+      const words = text.slice(e.from, e.to).join('');
+      const isKey = keys.some((k) => words.replace(/[\s　]/g, '').toLowerCase().includes(k) || k.includes(words.replace(/[\s　]/g, '').toLowerCase()));
+      if (isKey && coloured < budget) {
+        coloured++;
+        continue;
+      }
+      fixes.push(`歌詞 ${cs.cueId} 的「${words}」${isKey ? '超過換色額度' : '不是關鍵詞'}，改為放大強調`);
+      e.method = 'scale';
     }
   }
   const mv = validateMoments(t.moments, t.arc, song, win);

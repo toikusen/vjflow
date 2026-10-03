@@ -4,6 +4,7 @@
 // ponytail: heuristics tuned on indigo and checked against the database's section labels; a learned segmenter is the
 // upgrade path if these miss too often.
 import type { ArcPoint, Moment } from './moments';
+import { phrases } from './phrases';
 import type { SongTimeline, TimelineCue } from './timeline';
 
 export type SectionKind = 'intro' | 'verse' | 'pre' | 'chorus' | 'ochi' | 'bridge' | 'interlude' | 'outro';
@@ -303,3 +304,32 @@ export const TITLE_CARDS: Record<TitleCards, string> = { none: '不放標題卡'
 export function wantedTitleGaps(song: SongTimeline, mode: TitleCards) {
   return mode === 'none' ? [] : titleGaps(song).filter((g) => mode === 'all' || g.kind !== 'interlude');
 }
+
+/**
+ * Words worth a colour change: phrases of the song title, and phrases (≥ 2 characters) that come back in different
+ * lines — the hook and the song's motifs. Everything else is emphasised by size only.
+ */
+export function keyWords(song: SongTimeline): string[] {
+  // the content of a phrase: trailing particles/okurigana dropped (藍を and 藍に are the same word), and it must carry
+  // meaning — a kanji or katakana, or an English word of 4+ letters (not こうか, だって, the)
+  const content = (p: string) => {
+    const k = norm(p).replace(/[ぁ-ゖ]{1,3}$/u, '');
+    return /[\p{Script=Han}\p{Script=Katakana}]/u.test(k) || /[a-z]{4,}/.test(k) ? k : '';
+  };
+  // ponytail: a short stoplist of pronouns and everyday single kanji; a frequency model is the upgrade if it misses
+  const common = new Set([...'僕君私俺今中見合先進変手世末時日何方言気一人目']);
+  const title = splitSongTitle(song.title).title;
+  const lines = new Map<string, Set<string>>();
+  for (const c of song.cues) {
+    for (const p of phrases(c.text)) {
+      const k = content(p);
+      if (k && !common.has(k)) lines.set(k, (lines.get(k) ?? new Set()).add(norm(c.text)));
+    }
+  }
+  const repeated = [...lines].filter(([, ls]) => ls.size >= 2).map(([k]) => k);
+  const fromTitle = phrases(title).map(content).filter(Boolean);
+  return [...new Set([...fromTitle, ...repeated])];
+}
+
+/** Share of lines that may change colour (the rest are emphasised by size). */
+export const COLOR_SHARE = 0.2;

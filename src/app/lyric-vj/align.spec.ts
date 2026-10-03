@@ -80,4 +80,9 @@ describe('charStartsFor', () => {
     expect(t[3]).toBeCloseTo(10.8, 1); // 星 at 11.0 − 0.2
     expect(t.every((x, i) => i === 0 || x >= t[i - 1])).toBe(true);
   });
+
+  it('does not let one character jump to a far later occurrence', () => {
+    const t = charStartsFor('越えていけ', [{ text: '越えてい', start: 10, end: 10.8 }, { text: 'け', start: 31, end: 31.2 }], 10, 32);
+    expect(t[4]).toBeLessThan(11.5);
+  });
 });

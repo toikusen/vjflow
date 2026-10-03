@@ -194,7 +194,7 @@ export class MotifLayer {
     this.group.add(this.iris);
     if (words.length) {
       const line = words.slice(0, 6).join('　・　') + '　・　';
-      for (let r = 0; r < 4; r++) {
+      for (let r = 0; r < 3; r++) {
         const gs = makeGlyphs(line.repeat(4), { family: fonts.display, weight: 900, size: 230, outline: 3 }, 0xffffff, 10);
         placeRow(gs, 0, 0, 10);
         const group = new THREE.Group();
@@ -205,7 +205,7 @@ export class MotifLayer {
           mats.push(g.mesh.material);
           group.add(g.mesh);
         });
-        group.position.y = (1.5 - r) * 300;
+        group.position.y = (1 - r) * 380;
         this.marquee.add(group);
         this.rows.push({ group, width: gs.reduce((s, g) => s + g.advance + 10, 0) / 4, dir: r % 2 ? 1 : -1, mats });
       }
@@ -273,7 +273,7 @@ export class MotifLayer {
         row.group.position.x = row.dir > 0 ? x - row.width * 2 : -x - row.width;
         row.mats.forEach((m) => {
           m.color.copy(r % 2 ? accent : line);
-          m.opacity = 0.28 * mq * (1 + 0.5 * pulse);
+          m.opacity = 0.13 * mq * (1 + 0.4 * pulse); // a texture, not a second layer of lyrics
         });
       });
     }

@@ -98,7 +98,8 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
   const out: Glyph[] = [];
   let x = 0;
   [...text].forEach((char, index) => {
-    const k = s.kanaScale ?? defaultKana;
+    // the song's kana scale shapes display type (big words); body rows keep even sizes, or the rule shows everywhere
+    const k = s.kanaScale ?? (s.size >= 130 ? defaultKana : 1);
     const small = k < 1 && KANA.test(char);
     const cs = small ? { ...s, size: Math.round(s.size * k), embolden: s.embolden && s.embolden * k } : s;
     const t = texture(char, cs);

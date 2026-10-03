@@ -51,7 +51,8 @@ export const punch: TemplateRenderer = {
     const kStyle: GlyphStyle = { family: rt.fonts.display, weight: 900, size };
     const kw = makeGlyphs(keyword, kStyle, color(kwColor, method === 'glow' ? 1.1 : 1.0));
     placeRow(kw, 0, 30);
-    const echo = p['outline'] ? makeGlyphs(keyword, { ...kStyle, outline: Math.max(2, size * 0.03) }, color(rt.palette.glow, 1.4)) : [];
+    // ponytail: the outline echo read as a template (gold bevel) in every review; the param stays for old treatments
+    const echo: Glyph[] = [];
     placeRow(echo, 0, 30);
 
     const sStyle: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 108, shadow: true }; // readable from the back of a live house

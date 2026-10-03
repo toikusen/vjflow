@@ -246,6 +246,11 @@ export function charStartsFor(text: string, words: AsrWord[], start: number, end
     if (b === undefined) return times[a]! + shift;
     return times[a]! + shift + ((times[b]! - times[a]!) * (i - a)) / (b - a);
   });
+  // a jump of more than 2 s inside a line is a character matched to a later occurrence (け of the next line):
+  // it follows the previous character instead
   let prev = start;
-  return out.map((t) => +(prev = Math.min(end - 0.05, Math.max(prev, t))).toFixed(3));
+  return out.map((t, i) => {
+    const v = i > 0 && t - prev > 2 ? prev + 0.25 : t;
+    return +(prev = Math.min(end - 0.05, Math.max(prev, v))).toFixed(3);
+  });
 }

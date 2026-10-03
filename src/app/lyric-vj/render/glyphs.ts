@@ -10,6 +10,7 @@ export interface GlyphStyle {
   outline?: number; // stroke width in px; 0/undefined = filled
   shadow?: boolean; // soft dark halo so body text reads over bright plates
   embolden?: number; // extra stroke width in px: thin handwriting faces read from the back of a live house
+  kanaScale?: number; // hiragana set this much smaller than kanji/katakana, sitting on the same baseline
 }
 
 export interface Glyph {
@@ -21,9 +22,16 @@ export interface Glyph {
   x: number;
   y: number;
   index: number;
+  /** Vertical offset from the row's centre line (smaller kana sit on the baseline). */
+  dy?: number;
 }
 
 const SS = 2; // supersampling
+let defaultKana = 1;
+/** The song's kana scale, used when a style does not set its own (one design per render page). */
+export const setKanaScale = (k: number) => (defaultKana = k);
+/** Hiragana (and its small forms); katakana and kanji keep full size. */
+const KANA = /[\u3041-\u3096\u309d\u309e]/;
 const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number }>();
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 
@@ -88,10 +96,14 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
   const out: Glyph[] = [];
   let x = 0;
   [...text].forEach((char, index) => {
-    const t = texture(char, s);
+    const k = s.kanaScale ?? defaultKana;
+    const small = k < 1 && KANA.test(char);
+    const cs = small ? { ...s, size: Math.round(s.size * k), embolden: s.embolden && s.embolden * k } : s;
+    const t = texture(char, cs);
     const mat = new THREE.MeshBasicMaterial({ map: t.texture, color, transparent: true, depthTest: false, depthWrite: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.w, t.h), mat);
-    out.push({ char, mesh, advance: t.advance, x: x + t.advance / 2, y: 0, index });
+    // a smaller glyph is centred lower so both sit on one baseline
+    out.push({ char, mesh, advance: t.advance, x: x + t.advance / 2, y: 0, index, dy: small ? -(s.size - cs.size) * 0.42 : 0 });
     x += t.advance + tracking;
   });
   return out;
@@ -107,7 +119,7 @@ export function placeRow(glyphs: Glyph[], cx: number, cy: number, tracking = 0) 
   let x = cx - w / 2;
   for (const g of glyphs) {
     g.x = x + g.advance / 2;
-    g.y = cy;
+    g.y = cy + (g.dy ?? 0);
     x += g.advance + tracking;
   }
 }

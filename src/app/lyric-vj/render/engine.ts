@@ -9,12 +9,14 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { TEMPLATES } from '../templates';
 import { TimelineCue } from '../timeline';
 import { beatsDuring, Shot, TreatmentV3 } from '../treatment';
-import { clamp01, easeOutCubic, hash } from './glyphs';
+import { clamp01, easeOutCubic, hash, setKanaScale } from './glyphs';
 import { frameSplit } from './frame-split';
 import { handwrite } from './handwrite';
 import { titleCard } from './title-card';
 import { punch } from './punch';
 import { fxAt, MomentFx } from '../moments';
+import { colorAt, DEFAULT_DESIGN } from '../design';
+import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
@@ -57,14 +59,14 @@ export interface CueMetric {
 
 const FINAL_SHADER = {
   uniforms: {
-    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 },
+    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 },
     // section moments (moments.ts)
     uVignette: { value: 0 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
     uRayColor: { value: new THREE.Color(1, 1, 1) },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
-    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain;
+    uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper;
     uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     const vec2 ORIGIN = vec2(0.5, 0.34);            // the horizon in the emotional style's compositions
     float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime * 37.0) * 43758.5453); }
@@ -90,6 +92,12 @@ const FINAL_SHADER = {
       }
       c *= 1.0 - (0.55 + uVignette) * dot(d, d) * 1.6; // vignette
       c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
+      if (uPaper > 0.0) {                           // static print/paper texture: fibres and soft blotches
+        vec2 p = vUv * vec2(1920.0, 1080.0);
+        float fib = h1(floor(p.x / 3.0) * 7.0 + floor(p.y * 0.7)) * 0.5 + h1(floor(p.y / 2.0) * 13.0 + floor(p.x * 0.3)) * 0.5;
+        float blot = sin(vUv.x * 9.0 + sin(vUv.y * 7.0) * 2.0) * sin(vUv.y * 11.0 + vUv.x * 3.0);
+        c *= 1.0 - uPaper * (0.07 * fib + 0.05 * (0.5 + 0.5 * blot));
+      }
       if (uSweep >= 0.0) {                          // light sweep: a soft slanted band crossing left to right
         float x = vUv.x + (vUv.y - 0.5) * 0.25;
         c += vec3(0.55, 0.7, 1.0) * 0.5 * exp(-pow((x - (uSweep * 1.6 - 0.3)) / 0.035, 2.0)) * (1.0 - uSweep * 0.5);
@@ -109,12 +117,18 @@ const plateMaterial = () =>
     transparent: true,
     depthTest: false,
     depthWrite: false,
-    uniforms: { map: { value: null }, map2: { value: null }, mixAmt: { value: 0 }, opacity: { value: 1 }, exposure: { value: 1 }, sat: { value: 1 } },
+    uniforms: {
+      map: { value: null }, map2: { value: null }, mixAmt: { value: 0 }, opacity: { value: 1 }, exposure: { value: 1 }, sat: { value: 1 },
+      shadowC: { value: new THREE.Color(0, 0, 0) }, highlightC: { value: new THREE.Color(1, 1, 1) }, duo: { value: 0 },
+    },
     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     // exposure/saturation from the emotional arc grade the background only, so lyrics never go grey
-    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt, opacity, exposure, sat; varying vec2 vUv;
+    // the song's duotone turns any plate into a designed two-colour image (the main AI-look tell is full colour)
+    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt, opacity, exposure, sat, duo; uniform vec3 shadowC, highlightC; varying vec2 vUv;
       void main() {
         vec3 c = mix(texture2D(map, vUv).rgb, texture2D(map2, vUv).rgb, mixAmt) * exposure;
+        float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+        c = mix(c, mix(shadowC, highlightC, smoothstep(0.03, 0.9, l)), duo);
         c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, sat);
         gl_FragColor = vec4(c, opacity);
       }`,
@@ -173,7 +187,9 @@ export class LyricVjEngine {
 
   async init() {
     const { treatment, cues } = this.job;
-    const fonts = (this.fonts = resolveFonts(this.job.fonts));
+    const design = treatment.design ?? DEFAULT_DESIGN;
+    const fonts = (this.fonts = resolveFonts({ ...this.job.fonts, family: this.job.fonts?.family ?? design.font }));
+    setKanaScale(design.kanaScale);
     const text = cues.map((c) => c.text).join('');
     const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400]] as const;
     await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));
@@ -211,7 +227,7 @@ export class LyricVjEngine {
       const exitAt = Math.min(cue.end, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
       const rt: CueRuntime = {
-        cue, style, shot, params: shot.params, palette: treatment.styleAnchor.palette, fonts: this.fonts,
+        cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start), fonts: this.fonts,
         showFrom: cue.start - LEAD,
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
@@ -374,7 +390,17 @@ export class LyricVjEngine {
     u['uRays'].value = mfx.rays;
     u['uShockR'].value = mfx.shockR;
     u['uShock'].value = mfx.shock;
-    (u['uRayColor'].value as THREE.Color).set(this.job.treatment.styleAnchor.palette.glow).lerp(new THREE.Color(1, 1, 1), 0.45);
+    const stop = colorAt((this.job.treatment.design ?? DEFAULT_DESIGN).colorScript, t);
+    (u['uRayColor'].value as THREE.Color).set(this.paletteAt(t).glow).lerp(new THREE.Color(1, 1, 1), 0.45);
+    for (const p of this.plates) {
+      const pu = p.mesh.material.uniforms;
+      (pu['shadowC'].value as THREE.Color).set(stop.shadow);
+      (pu['highlightC'].value as THREE.Color).set(stop.highlight);
+      pu['duo'].value = stop.duotone;
+    }
+    const d = this.job.treatment.design ?? DEFAULT_DESIGN;
+    u['uGrain'].value = 0.02 + 0.1 * d.grain;
+    u['uPaper'].value = d.paper;
     this.finalPass.uniforms['uTime'].value = Math.floor(t * this.job.fps) / this.job.fps;
     this.finalPass.uniforms['uFlash'].value = fx.flash;
     this.finalPass.uniforms['uHit'].value = fx.hit;
@@ -397,8 +423,16 @@ export class LyricVjEngine {
       pos.setXYZ(i, ox * push, oy * push - H * 0.16, 0);
     }
     pos.needsUpdate = true;
-    (this.motes.material as THREE.PointsMaterial).color.set(this.job.treatment.styleAnchor.palette.glow);
+    (this.motes.material as THREE.PointsMaterial).color.set(this.paletteAt(t).glow);
     (this.motes.material as THREE.PointsMaterial).opacity = Math.min(1, (0.45 + 0.4 * hit) * (0.75 + 0.15 * m.level) + 0.3 * m.moteBurst);
+  }
+
+  /** The palette with this section's accent (the colour script's one accent drives key words, lines and glows). */
+  private paletteAt(t: number): Palette {
+    const base = this.job.treatment.styleAnchor.palette;
+    if (!this.job.treatment.design) return base;
+    const stop = colorAt(this.job.treatment.design.colorScript, t);
+    return { ...base, accent: stop.accent, glow: stop.accent, line: stop.highlight };
   }
 
   private makeGradient(): THREE.Texture {

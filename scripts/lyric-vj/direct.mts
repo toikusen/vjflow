@@ -11,6 +11,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
+import { familiesFor, FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
@@ -26,6 +27,7 @@ const { values: a } = parseArgs({
     'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
     'exclude-ref': { type: 'string' }, // a database song's own VJ must not be its reference
     'title-cards': { type: 'string', default: 'ends' }, // none | ends | all (the user's choice)
+    'design-only': { type: 'string' }, // existing treatment: rewrite only its design system
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -50,11 +52,31 @@ mkdirSync(out, { recursive: true });
 const paramKeys = [...new Set(Object.values(TEMPLATES).flatMap((t) => Object.keys(t.params)))];
 const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ? false : /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v);
 const str = { type: 'string' };
+// the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
+const DESIGN_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['font', 'kanaScale', 'grain', 'paper', 'colorScript'],
+  properties: {
+    font: { type: 'string', enum: familiesFor('display'), description: FONTS.filter((f) => f.roles.includes('display')).map((f) => `${f.family}：${f.feel}`).join('；') },
+    kanaScale: { type: 'number', description: '平假名相對漢字的大小 0.5–1（明朝、文學感用 0.55–0.7；POP、圓體可用 0.85–1）' },
+    grain: { type: 'number', description: '底片顆粒 0–1' },
+    paper: { type: 'number', description: '紙紋／印刷質感 0–1' },
+    colorScript: { type: 'array', description: '依段落的色彩計畫，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'shadow', 'highlight', 'accent', 'duotone'],
+      properties: { start: { type: 'number' }, shadow: { type: 'string', description: '#rrggbb 背景暗部色' }, highlight: { type: 'string', description: '#rrggbb 背景亮部色' },
+        accent: { type: 'string', description: '#rrggbb 這段唯一的強調色' }, duotone: { type: 'number', description: '0–1，背景套雙色調的程度' } } } },
+  },
+};
+const DESIGN_RULES = `設計系統（design，必須做；這是每首歌獨特性的關鍵）：
+- 字型：從清單選一款最符合歌曲情緒與歌詞世界的字型，整首只用這一款。抒情、冷調、文學感選明朝；甜系、可愛選圓體或 POP；電子、遊戲選點陣；和風、熱血選毛筆或古典明朝。不要因為安全就選黑體。
+- 漢字大、假名小：kanaScale 讓平假名縮小，像設計師的排版；明朝體通常 0.55–0.7。
+- 色彩計畫：每個段落一組「暗部色＋亮部色」的雙色調加上一個強調色。整體是單色系加一個強調色，不要多色雜亂；段落之間要換色（例如主歌冷灰藍、副歌轉暗底加一個鮮明強調色、落ちサビ降成近黑白）。強調色只用在關鍵詞與線條。
+- 背景圖一律套雙色調（duotone 0.6–1），讓它看起來像設計素材而不是 AI 插畫；顆粒與紙紋依歌曲質感決定（復古、手帳、文學感可加紙紋）。
+- 顏色要和歌曲情緒一致：歡快甜系不要用感傷的夕陽色，冷調內省不要用高飽和粉紫。`;
 const SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments'],
+  required: ['concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments', 'design'],
   properties: {
     concept: { type: 'string', description: '繁體中文，一兩句：這段畫面的視覺故事' },
+    design: DESIGN_SCHEMA,
     styleAnchor: {
       type: 'object', additionalProperties: false, required: ['prompt', 'palette'],
       properties: {
@@ -138,6 +160,8 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - 強調範圍用字元索引 [from, to)，選真正的關鍵字，而且必須是完整的詞，不可把一個詞切開（切開的會被自動擴展）；短句（12 字以內）不要換行；踩拍 accents 是該句開始後第幾拍（0 起算，必須小於該句拍數），挑重拍、不要每拍都踩。
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
 
+${DESIGN_RULES}
+
 情緒起伏（必須做）：
 - arc：每個段落標強度 0–3（前奏、尾奏 0，主歌 1，導歌 2，副歌 3；安靜的落ちサビ或橋段降到 0–1）。引擎依強度調整背景亮度、飽和度、光暈、光粒子。
 - moments：在段落交界放爆點，at 放在強拍上。
@@ -152,6 +176,30 @@ const USER = `【輸出要求】shots 大約 ${expectShots} 個（每個 ${style
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const client = new Anthropic();
+
+// --design-only <treatment>: keep shots, assets and cue styles; only the design system is (re)written
+if (a['design-only']) {
+  const base: TreatmentV3 = JSON.parse(readFileSync(a['design-only'], 'utf8'));
+  const userD = `為這首歌設計 design。現有企劃的概念與畫面不變，只決定字型、假名比例、色彩計畫與質感。\n\n${DESIGN_RULES}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
+  const msg = await client.beta.messages
+    .stream({
+      model: a.model!, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['design'], properties: { design: DESIGN_SCHEMA } } } },
+      system: '你是日本偶像歌詞 VJ 的資深動態設計總監，為每首歌建立獨特的字體與色彩系統。',
+      messages: [{ role: 'user', content: userD }],
+    } as Anthropic.Beta.Messages.MessageStreamParams)
+    .finalMessage();
+  const text = msg.content.find((b) => b.type === 'text')?.text;
+  if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
+  base.design = JSON.parse(text).design;
+  const checked = validateTreatment(base, song, win, TEMPLATES);
+  writeFileSync(join(out, 'treatment.json'), JSON.stringify(checked.treatment, null, 1));
+  const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
+  const costUSD = +((msg.usage.input_tokens * pin + msg.usage.output_tokens * pout) / 1e6).toFixed(3);
+  writeFileSync(join(out, 'director.json'), JSON.stringify({ model: a.model, mode: 'design-only', costUSD, design: checked.treatment.design, fixes: checked.fixes }, null, 1));
+  console.log(JSON.stringify({ costUSD, design: checked.treatment.design }, null, 1));
+  process.exit(0);
+}
 const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: USER }];
 let usage = { input: 0, output: 0 };
 const began = Date.now();

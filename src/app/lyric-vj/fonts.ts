@@ -18,6 +18,17 @@ export const FONTS: FontSpec[] = [
   { family: 'Zen Kurenaido', roles: ['script'], weights: [400], feel: '細毛筆柔和手寫' },
   { family: 'Yomogi', roles: ['script'], weights: [400], feel: '隨性的手寫筆記' },
   { family: 'Yusei Magic', roles: ['script', 'display'], weights: [400], feel: '麥克筆粗手寫，活潑' },
+  // added from the gap analysis: designers set lyrics in mincho, rounded and decorative faces, not one bold gothic
+  { family: 'Shippori Mincho', roles: ['display', 'body'], weights: [400, 500, 700, 800], feel: '端正的明朝體，文學、抒情、冷調' },
+  { family: 'Zen Old Mincho', roles: ['display', 'body'], weights: [400, 700, 900], feel: '古典明朝，粗細對比強，和風、戲劇性' },
+  { family: 'Noto Serif JP', roles: ['display', 'body'], weights: [200, 300, 400, 500, 600, 700, 800, 900], feel: '現代明朝，粗細齊全，乾淨俐落' },
+  { family: 'Hina Mincho', roles: ['body', 'script'], weights: [400], feel: '極細纖細的明朝，安靜、透明、易碎' },
+  { family: 'Kaisei Decol', roles: ['display', 'body'], weights: [400, 500, 700], feel: '帶裝飾的柔和明朝，童話、復古、溫柔' },
+  { family: 'Zen Maru Gothic', roles: ['display', 'body'], weights: [300, 400, 500, 700, 900], feel: '圓體，可愛、甜、親切' },
+  { family: 'M PLUS Rounded 1c', roles: ['display', 'body'], weights: [100, 300, 400, 500, 700, 800, 900], feel: '圓體，活潑、明亮、偶像感' },
+  { family: 'Mochiy Pop One', roles: ['display'], weights: [400], feel: 'POP 粗圓字，元氣、甜系偶像' },
+  { family: 'DotGothic16', roles: ['display', 'body'], weights: [400], feel: '點陣字，遊戲、電子、復古數位' },
+  { family: 'Yuji Syuku', roles: ['display', 'script'], weights: [400], feel: '毛筆書法，和風、熱血、儀式感' },
 ];
 
 export type Fonts = { display: string; body: string; script?: string };

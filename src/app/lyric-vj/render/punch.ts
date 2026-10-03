@@ -42,7 +42,9 @@ export const punch: TemplateRenderer = {
     // fit the keyword to the requested width
     const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
     const w200 = [...keyword].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
-    const size = Math.max(140, Math.min(440, (200 * (p['keywordWidth'] as number) * W) / w200));
+    // bleed: the keyword runs past the frame edges and is cropped, used as a shape (designer VJs do this at peaks)
+    const bleed = !!p['bleed'];
+    const size = bleed ? Math.max(260, Math.min(620, (200 * 1.3 * W) / w200)) : Math.max(140, Math.min(440, (200 * (p['keywordWidth'] as number) * W) / w200));
     const method = emphasisOf(rt, k0);
     // 7:1 against the palette background: the plate behind the text is far brighter than that colour
     const kwColor = readable(method === 'color' || method === 'glow' ? rt.palette.accent : rt.palette.text, rt.palette.background, 7);

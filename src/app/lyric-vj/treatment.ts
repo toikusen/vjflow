@@ -2,6 +2,7 @@
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
 import { Fonts } from './fonts';
 import type { ArcPoint, Moment } from './moments';
+import { Design, validateDesign } from './design';
 import { validateMoments } from './moments';
 import { phraseBoundaries } from './phrases';
 import { COLOR_SHARE, keyWords, sameLines } from './structure';
@@ -82,6 +83,8 @@ export interface TreatmentV3 {
   arc?: ArcPoint[];
   /** Build-ups, drops, breaks, holds and the finale at section boundaries. */
   moments?: Moment[];
+  /** Per-song type and colour system (design.ts). */
+  design?: Design;
 }
 
 export type ParamSpec =
@@ -258,6 +261,9 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       e.method = 'scale';
     }
   }
+  const dv = validateDesign(t.design, win);
+  t.design = dv.design;
+  fixes.push(...dv.fixes);
   const mv = validateMoments(t.moments, t.arc, song, win);
   t.moments = mv.moments;
   t.arc = mv.arc;

@@ -81,7 +81,7 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
   }
   // variety: no template twice in a row, and use most of the style's templates over a longer window
   t.shots.forEach((s, i) => {
-    if (i > 0 && s.template === t.shots[i - 1].template) errors.push(`鏡頭 ${t.shots[i - 1].id}、${s.id} 連續使用 ${s.template}，相鄰鏡頭要換版型`);
+    if (i > 0 && s.template === t.shots[i - 1].template && s.template !== 'title-card') errors.push(`鏡頭 ${t.shots[i - 1].id}、${s.id} 連續使用 ${s.template}，相鄰鏡頭要換版型`);
   });
   const used = new Set(t.shots.map((s) => s.template)).size;
   const want = Math.min(4, style.templates.length, t.shots.length - 1);
@@ -91,6 +91,8 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
     const len = s.end - s.start;
     // the first/last shot may be cut short by the window, never longer than the maximum
     const edge = i === 0 || i === t.shots.length - 1;
+    // a title card spans its whole gap without lyrics, however long
+    if (s.template === 'title-card') return;
     if ((!edge && len < style.shotSec[0] - 0.3) || len > style.shotSec[1] + 0.3) {
       errors.push(`鏡頭 ${s.id} 長 ${len.toFixed(1)} 秒，這個風格要 ${style.shotSec[0]}–${style.shotSec[1]} 秒（約 2 句一個鏡頭）`);
     }

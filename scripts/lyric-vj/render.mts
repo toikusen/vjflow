@@ -23,7 +23,10 @@ const { values: a } = parseArgs({
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
     stills: { type: 'string' }, font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
-    'no-video': { type: 'boolean', default: false }, logo: { type: 'string' }, // group logo image (PNG with alpha) job: { type: 'string' }, // still version: every clip replaced by the image it starts from 'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
+    'no-video': { type: 'boolean', default: false }, // still version: every clip replaced by the image it starts from
+    'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
+    job: { type: 'string' },
+    logo: { type: 'string' }, // group logo image (PNG with alpha)
   },
 });
 const ROOT = process.cwd();

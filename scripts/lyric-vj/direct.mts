@@ -24,7 +24,8 @@ const { values: a } = parseArgs({
     song: { type: 'string' }, start: { type: 'string' }, end: { type: 'string' }, style: { type: 'string', default: '' },
     db: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
     'style-id': { type: 'string', default: 'emotional' }, tier: { type: 'string', default: 'standard' }, job: { type: 'string' }, title: { type: 'string' },
-    'exclude-ref': { type: 'string' }, 'title-cards': { type: 'string', default: 'ends' }, // none | ends | all (the user's choice) // a database song's own VJ must not be its reference
+    'exclude-ref': { type: 'string' }, // a database song's own VJ must not be its reference
+    'title-cards': { type: 'string', default: 'ends' }, // none | ends | all (the user's choice)
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -111,7 +112,7 @@ const titleCards = (a['title-cards'] as TitleCards) in TITLE_CARDS ? (a['title-c
 const gaps = wantedTitleGaps(song, titleCards).filter((g) => g.end > win.start && g.start < win.end);
 const meta = splitSongTitle(song.title);
 const gapText = gaps.length
-  ? `使用者選擇「${TITLE_CARDS[titleCards]}」。這些空白要放 title-card（前奏、尾奏用 center，間奏用 lower-left，起訖對齊空白）：${gaps.map((g) => `${g.start.toFixed(1)}–${g.end.toFixed(1)}s ${g.kind}`).join('；')}（歌名「${meta.title}」${meta.artist ? `、歌手「${meta.artist}」` : ''}）`
+  ? `使用者選擇「${TITLE_CARDS[titleCards]}」。這些空白要放 title-card（前奏、尾奏用 center，間奏用 lower-left；一段空白用一個 title-card 鏡頭從頭蓋到尾，不受鏡頭長度上限限制）：${gaps.map((g) => `${g.start.toFixed(1)}–${g.end.toFixed(1)}s ${g.kind}`).join('；')}（歌名「${meta.title}」${meta.artist ? `、歌手「${meta.artist}」` : ''}）`
   : `使用者選擇「${TITLE_CARDS[titleCards]}」：不要用 title-card。`;
 const suggestedText = suggested.moments.filter((m) => inWin(m.at)).map((m) => `${m.kind}@${m.at.toFixed(2)}${m.dur ? ` dur ${m.dur.toFixed(1)}` : ''} strength ${m.strength}`).join('；') || '（無）';
 const db = a.db ? references(loadDb(a.db).filter((v) => v.video_id !== a['exclude-ref']), a.style + cues.map((c) => c.text).join('')) : { text: '（無）', ids: [] };

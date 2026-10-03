@@ -16,6 +16,7 @@ import { titleCard } from './title-card';
 import { punch } from './punch';
 import { fxAt, MomentFx } from '../moments';
 import { colorAt, DEFAULT_DESIGN } from '../design';
+import { MotifLayer } from './motif-layer';
 import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -134,9 +135,17 @@ const plateMaterial = () =>
       }`,
   });
 
+/** Mostly Latin letters (an English line): set in the accent face. */
+export const isLatinLine = (text: string) => {
+  const letters = [...text].filter((c) => /\p{L}/u.test(c));
+  return letters.length > 0 && letters.filter((c) => /[A-Za-z]/.test(c)).length / letters.length >= 0.7;
+};
+
 export class LyricVjEngine {
   private renderer: THREE.WebGLRenderer;
   private fonts = DEFAULT_FONTS;
+  private accentFont = DEFAULT_DESIGN.accentFont;
+  private motif?: MotifLayer;
   private scene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, -10, 10);
   private composer: EffectComposer;
@@ -190,6 +199,8 @@ export class LyricVjEngine {
     const design = treatment.design ?? DEFAULT_DESIGN;
     const fonts = (this.fonts = resolveFonts({ ...this.job.fonts, family: this.job.fonts?.family ?? design.font }));
     setKanaScale(design.kanaScale);
+    this.accentFont = design.accentFont;
+    await document.fonts.load(`400 100px "${design.accentFont}"`, 'Aa');
     const text = cues.map((c) => c.text).join('');
     const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400]] as const;
     await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));
@@ -203,7 +214,12 @@ export class LyricVjEngine {
     );
     const logo = this.job.meta?.logo ? await loader.loadAsync(this.job.meta.logo) : undefined;
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
-    const ctx = { fonts: this.fonts, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
+    const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
+    if (treatment.motif) {
+      this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont }, ctx.meta.title);
+      this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
+      this.scene.add(this.motif.group);
+    }
     for (const shot of treatment.shots) {
       const r = RENDERERS[shot.template];
       if (r?.shot) {
@@ -227,7 +243,9 @@ export class LyricVjEngine {
       const exitAt = Math.min(cue.end, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
       const rt: CueRuntime = {
-        cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start), fonts: this.fonts,
+        cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start),
+        // an English line is set in the paired Latin face
+        fonts: isLatinLine(cue.text) ? { display: this.accentFont, body: this.accentFont, script: this.accentFont } : this.fonts,
         showFrom: cue.start - LEAD,
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
@@ -399,6 +417,10 @@ export class LyricVjEngine {
       pu['duo'].value = stop.duotone;
     }
     const d = this.job.treatment.design ?? DEFAULT_DESIGN;
+    if (this.motif) {
+      const pal = this.paletteAt(t);
+      this.motif.update(t, Math.max(mfx.rays, mfx.moteBurst) * 0.8, new THREE.Color(pal.line), new THREE.Color(pal.accent));
+    }
     u['uGrain'].value = 0.02 + 0.1 * d.grain;
     u['uPaper'].value = d.paper;
     this.finalPass.uniforms['uTime'].value = Math.floor(t * this.job.fps) / this.job.fps;

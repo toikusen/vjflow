@@ -51,6 +51,8 @@ export interface ShotLayer {
 export interface ShotContext {
   fonts: Required<Fonts>;
   meta: { title: string; artist: string };
+  /** The paired Latin face (artist names, tags). */
+  accentFont: string;
   /** The group logo, when one was uploaded. */
   logo?: THREE.Texture;
 }

@@ -24,7 +24,7 @@ export const titleCard: TemplateRenderer = {
     const w100 = [...title].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
     const size = Math.round(Math.max(90, Math.min(lower ? 150 : 210, (100 * (lower ? 0.5 : 0.7) * W) / w100)));
     const tStyle: GlyphStyle = { family: ctx.fonts.display, weight: 900, size, shadow: true };
-    const aStyle: GlyphStyle = { family: ctx.fonts.body, weight: 700, size: Math.round(size * 0.32), shadow: true };
+    const aStyle: GlyphStyle = { family: ctx.accentFont, weight: 700, size: Math.round(size * 0.32), shadow: true };
     const cx = lower ? -W / 2 + 140 : 0;
     const cy = lower ? -300 : 0;
     const tGlyphs = makeGlyphs(title, tStyle, color(palette.text, 1.1), size * 0.04);

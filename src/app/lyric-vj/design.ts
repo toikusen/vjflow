@@ -18,6 +18,8 @@ export interface ColorStop {
 
 export interface Design {
   font: string;
+  /** Paired Latin face: English lines, the artist name and the corner tag. */
+  accentFont: string;
   /** Hiragana size relative to kanji/katakana (1 = same size; ~0.6 reads as designed type). */
   kanaScale: number;
   /** Film grain amount 0..1. */
@@ -32,6 +34,7 @@ const clamp = (x: number, a: number, b: number) => (Number.isFinite(x) ? Math.mi
 
 export const DEFAULT_DESIGN: Design = {
   font: 'Zen Kaku Gothic New',
+  accentFont: 'Montserrat',
   kanaScale: 1,
   grain: 0.3,
   paper: 0,
@@ -42,8 +45,9 @@ export const DEFAULT_DESIGN: Design = {
 export function validateDesign(d: Design | undefined, win: Window): { design: Design; fixes: string[] } {
   const fixes: string[] = [];
   if (!d) return { design: structuredClone(DEFAULT_DESIGN), fixes: ['沒有設計設定，使用預設'] };
-  const font = FONTS.some((f) => f.family === d.font) ? d.font : DEFAULT_DESIGN.font;
+  const font = FONTS.some((f) => f.family === d.font && f.roles.some((r) => r !== 'accent')) ? d.font : DEFAULT_DESIGN.font; // accent faces have no kana
   if (font !== d.font) fixes.push(`字型 ${d.font} 不在目錄裡，改用 ${font}`);
+  const accentFont = FONTS.some((f) => f.family === d.accentFont && f.roles.includes('accent')) ? d.accentFont : DEFAULT_DESIGN.accentFont;
   const stops = (d.colorScript ?? [])
     .filter((s) => HEX.test(s.shadow) && HEX.test(s.highlight) && HEX.test(s.accent))
     .map((s) => ({ ...s, start: clamp(s.start, win.start, win.end), duotone: clamp(s.duotone, 0, 1) }))
@@ -52,7 +56,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: { font, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops },
+    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops },
     fixes,
   };
 }

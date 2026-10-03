@@ -1,0 +1,281 @@
+// Draws the song's motif (motif.ts) as glowing line art between the background and the lyrics, in the form the
+// director chose for each section, ticking with the beats and opening up on drops. Everything is geometry built here.
+import * as THREE from 'three';
+import { MotifForm, MotifPlan, motifStateAt } from '../motif';
+import { clamp01, easeOutCubic, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
+
+const W = 1920;
+const H = 1080;
+const LINE = 3; // line width in px at 1080p (bloom turns it into a soft neon line)
+
+type Mat = THREE.MeshBasicMaterial;
+const lineMat = () => new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
+
+/** One drawable unit of the motif at radius 1 (scaled per form); `tick` animates it from song time and beat count. */
+interface Unit {
+  group: THREE.Group;
+  mats: Mat[];
+  accents: Mat[];
+  tick(t: number, beat: number): void;
+}
+
+function ring(r: number, w: number, segments: number, mats: Mat[], start = 0): THREE.Mesh {
+  const m = lineMat();
+  mats.push(m);
+  return new THREE.Mesh(new THREE.RingGeometry(r - w, r, segments, 1, start), m);
+}
+
+function bar(len: number, w: number, mats: Mat[]): THREE.Mesh {
+  const m = lineMat();
+  mats.push(m);
+  return new THREE.Mesh(new THREE.PlaneGeometry(w, len), m);
+}
+
+/** Clock face: rings, 60 ticks, roman numerals, three hands; the second hand jumps one step per beat. */
+function clock(px: number, font: string, detail: boolean): Unit {
+  const g = new THREE.Group();
+  const mats: Mat[] = [];
+  const accents: Mat[] = [];
+  const w = LINE / px;
+  g.add(ring(1, w * 1.4, 128, mats), ring(0.93, w, 128, mats));
+  if (detail) {
+    for (let i = 0; i < 60; i++) {
+      const long = i % 5 === 0;
+      const t = bar(long ? 0.07 : 0.035, w * (long ? 1.6 : 1), mats);
+      const a = (i / 60) * Math.PI * 2;
+      t.position.set(Math.sin(a) * (0.93 - (long ? 0.05 : 0.03)), Math.cos(a) * (0.93 - (long ? 0.05 : 0.03)), 0);
+      t.rotation.z = -a;
+      g.add(t);
+    }
+    const romans = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
+    const style: GlyphStyle = { family: font, weight: 400, size: Math.max(12, Math.round(px * 0.11)) };
+    romans.forEach((r, i) => {
+      const gs = makeGlyphs(r, style, 0xffffff, 0);
+      const a = (i / 12) * Math.PI * 2;
+      const holder = new THREE.Group();
+      placeRow(gs, 0, 0, 0);
+      gs.forEach((x) => {
+        x.mesh.position.set(x.x / px, x.y / px, 0);
+        x.mesh.scale.setScalar(1 / px);
+        x.mesh.material.blending = THREE.AdditiveBlending;
+        mats.push(x.mesh.material);
+        holder.add(x.mesh);
+      });
+      holder.position.set(Math.sin(a) * 0.76, Math.cos(a) * 0.76, 0);
+      g.add(holder);
+    });
+  }
+  const hour = bar(0.45, w * 2.2, mats);
+  const minute = bar(0.7, w * 1.6, mats);
+  const second = bar(0.85, w, accents);
+  for (const [h, len] of [[hour, 0.45], [minute, 0.7], [second, 0.85]] as const) {
+    h.geometry.translate(0, len / 2 - 0.06, 0);
+    g.add(h);
+  }
+  return {
+    group: g, mats, accents,
+    tick(t, beat) {
+      second.rotation.z = -(beat % 60) * ((Math.PI * 2) / 60);
+      minute.rotation.z = -t * 0.05;
+      hour.rotation.z = -t * 0.05 / 12 - 1.2;
+    },
+  };
+}
+
+/** Regular polygon outline with a fainter inner one, flat-topped. */
+function polygon(px: number, sides: number): Unit {
+  const g = new THREE.Group();
+  const mats: Mat[] = [];
+  const accents: Mat[] = [];
+  const w = LINE / px;
+  const start = Math.PI / 2 - Math.PI / sides;
+  g.add(ring(1, w * 1.4, sides, mats, start));
+  const inner = ring(0.86, w, sides, accents, start);
+  g.add(inner);
+  return { group: g, mats, accents, tick: (t) => (inner.rotation.z = Math.sin(t * 0.4) * 0.08) };
+}
+
+/** Planet on a tilted elliptical orbit with a moon running around it. */
+function orbit(px: number): Unit {
+  const g = new THREE.Group();
+  const mats: Mat[] = [];
+  const accents: Mat[] = [];
+  const w = LINE / px;
+  const path = ring(1, w * 3, 128, mats);
+  path.scale.y = 0.32;
+  g.add(path);
+  const planetMat = lineMat();
+  accents.push(planetMat);
+  const planet = new THREE.Mesh(new THREE.CircleGeometry(0.22, 64), planetMat);
+  g.add(planet, ring(0.3, w, 96, mats));
+  const moonMat = lineMat();
+  accents.push(moonMat);
+  const moon = new THREE.Mesh(new THREE.CircleGeometry(0.04, 32), moonMat);
+  g.add(moon);
+  return {
+    group: g, mats, accents,
+    tick(t) {
+      moon.position.set(Math.cos(t * 0.6), Math.sin(t * 0.6) * 0.32, 0);
+      g.rotation.z = -0.25;
+    },
+  };
+}
+
+export class MotifLayer {
+  readonly group = new THREE.Group();
+  private readonly forms = new Map<MotifForm, { holder: THREE.Group; units: Unit[] }>();
+  private readonly mask: THREE.Mesh<THREE.ShapeGeometry, Mat>;
+  private readonly tag?: THREE.Group;
+
+  constructor(
+    private readonly plan: MotifPlan,
+    private readonly beats: number[],
+    fonts: { display: string; accent: string },
+    title: string,
+  ) {
+    const make = (px: number, detail = true): Unit =>
+      plan.kind === 'clock' ? clock(px, fonts.display, detail) : plan.kind === 'polygon' ? polygon(px, plan.sides) : orbit(px);
+    const add = (form: MotifForm, units: Unit[]) => {
+      const holder = new THREE.Group();
+      units.forEach((u) => holder.add(u.group));
+      holder.visible = false;
+      this.group.add(holder);
+      this.forms.set(form, { holder, units });
+    };
+    add('center', [make(H * 0.32)]);
+    add('corner', [make(H * 0.09, false)]);
+    add('bleed', [make(H * 1.15)]);
+    add('nested', [0.13, 0.22, 0.32, 0.43, 0.56].map((r) => make(H * r, r > 0.2)));
+    add('tunnel', Array.from({ length: 9 }, () => make(H * 0.5, false)));
+    add('shards', [make(H * 0.32)]);
+    add('mask', [make(H * 0.38, false)]);
+    // the mask: a dark plate with the motif's outline cut out, so the background only shows through the shape
+    const outer = new THREE.Shape([new THREE.Vector2(-W, -H), new THREE.Vector2(W, -H), new THREE.Vector2(W, H), new THREE.Vector2(-W, H)]);
+    const hole = new THREE.Path();
+    const n = plan.kind === 'polygon' ? plan.sides : 96;
+    const r = H * 0.38;
+    for (let i = 0; i <= n; i++) {
+      const a = Math.PI / 2 - Math.PI / n + (i / n) * Math.PI * 2;
+      hole[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r, Math.sin(a) * r * (plan.kind === 'orbit' ? 0.7 : 1));
+    }
+    outer.holes.push(hole);
+    this.mask = new THREE.Mesh(new THREE.ShapeGeometry(outer), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
+    this.mask.renderOrder = -1;
+    this.group.add(this.mask);
+    if (plan.tag && title) {
+      this.tag = new THREE.Group();
+      const gs = makeGlyphs(title, { family: fonts.accent, weight: 400, size: 30 }, 0xffffff, 3);
+      placeRow(gs, 0, 0, 3);
+      const width = gs.reduce((s, x) => s + x.advance + 3, 0);
+      gs.forEach((x) => {
+        x.mesh.position.set(x.x + width / 2, x.y, 0);
+        this.tag!.add(x.mesh);
+      });
+      this.tag.position.set(-W / 2 + 70, -H / 2 + 60, 0);
+      this.group.add(this.tag);
+    }
+  }
+
+  private beatIndex(t: number) {
+    let lo = 0;
+    let hi = this.beats.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.beats[mid] <= t) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  /** `burst` 0..1 comes from the drop/finale moments; `line`/`accent` are the section's colours. */
+  update(t: number, burst: number, line: THREE.Color, accent: THREE.Color) {
+    const { cur, prev, k, since } = motifStateAt(this.plan, t);
+    const beat = this.beatIndex(t);
+    const lastBeat = this.beats[beat - 1] ?? -10;
+    const pulse = Math.exp(-(t - lastBeat) * 7);
+    for (const [form, { holder, units }] of this.forms) {
+      const a = form === cur.form ? easeOutCubic(k) * cur.intensity : form === prev?.form ? (1 - k) * prev.intensity : 0;
+      holder.visible = a > 0.002;
+      if (!holder.visible) continue;
+      const age = form === cur.form ? since : since + 1;
+      units.forEach((u, i) => {
+        u.tick(t + i * 0.7, beat);
+        const opacity = a * (0.55 + 0.35 * pulse + 0.4 * burst);
+        u.mats.forEach((m) => {
+          m.color.copy(line);
+          m.opacity = opacity;
+        });
+        u.accents.forEach((m) => {
+          m.color.copy(accent);
+          m.opacity = Math.min(1, opacity * 1.3);
+        });
+        this.place(form, u, i, units.length, t, age, pulse, burst);
+      });
+    }
+    const maskA = cur.form === 'mask' ? easeOutCubic(k) * cur.intensity : prev?.form === 'mask' ? (1 - k) * prev.intensity : 0;
+    this.mask.visible = maskA > 0.002;
+    this.mask.material.opacity = 0.88 * maskA;
+    if (this.tag) {
+      this.tag.children.forEach((c) => {
+        const m = (c as THREE.Mesh<THREE.PlaneGeometry, Mat>).material;
+        m.color.copy(line);
+        m.opacity = 0.7;
+      });
+    }
+  }
+
+  private place(form: MotifForm, u: Unit, i: number, n: number, t: number, age: number, pulse: number, burst: number) {
+    const g = u.group;
+    const scale = (px: number) => g.scale.setScalar(px);
+    g.position.set(0, 0, 0);
+    g.rotation.z = 0;
+    switch (form) {
+      case 'center':
+        scale(H * 0.32 * (1 + 0.025 * pulse + 0.12 * burst));
+        g.rotation.z = Math.sin(t * 0.15) * 0.05;
+        break;
+      case 'corner':
+        scale(H * 0.09);
+        g.position.set(W / 2 - 150, H / 2 - 140, 0);
+        break;
+      case 'bleed':
+        scale(H * 1.15 * (1 + 0.02 * pulse));
+        g.position.set(W * 0.28, -H * 0.18, 0);
+        g.rotation.z = t * 0.03;
+        break;
+      case 'nested': {
+        const r = [0.13, 0.22, 0.32, 0.43, 0.56][i];
+        scale(H * r * (1 + 0.04 * pulse * (i % 2 ? 1 : -1)));
+        g.rotation.z = t * (i % 2 ? 0.12 : -0.08) * (1 + i * 0.3);
+        break;
+      }
+      case 'tunnel': {
+        // layers move outward continuously (faster on a drop); far layers fade so the tunnel has no edge
+        const speed = 0.18 + 0.5 * burst;
+        const phase = (((t * speed + i / n) % 1) + 1) % 1;
+        const r = H * 0.08 * Math.pow(18, phase);
+        scale(r);
+        g.rotation.z = phase * 1.2 + i * 0.4;
+        u.mats.concat(u.accents).forEach((m) => (m.opacity *= Math.sin(Math.PI * phase)));
+        break;
+      }
+      case 'shards': {
+        // pieces fly outward from the moment the form begins
+        scale(H * 0.32);
+        const d = easeOutCubic(clamp01(age / 1.6));
+        g.children.forEach((c, j) => {
+          const ang = hash(j, 3) * Math.PI * 2;
+          c.position.set(Math.cos(ang) * d * (0.6 + hash(j, 5)), Math.sin(ang) * d * (0.6 + hash(j, 5)), 0);
+          c.rotation.z = (hash(j, 7) - 0.5) * 3 * d;
+        });
+        u.mats.concat(u.accents).forEach((m) => (m.opacity *= 1 - 0.6 * d));
+        break;
+      }
+      case 'mask':
+        scale(H * 0.38 * (1 + 0.02 * pulse));
+        break;
+      case 'off':
+        break;
+    }
+  }
+}

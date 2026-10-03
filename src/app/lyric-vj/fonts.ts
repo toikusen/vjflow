@@ -2,7 +2,7 @@
 // (commercial use allowed). A video uses ONE family from start to end (switching faces between lines reads as
 // inconsistent); the platform's font picker chooses it, per-role fonts remain for explicit overrides.
 
-export type FontRole = 'display' | 'body' | 'script';
+export type FontRole = 'display' | 'body' | 'script' | 'accent';
 
 export interface FontSpec {
   family: string;
@@ -29,6 +29,13 @@ export const FONTS: FontSpec[] = [
   { family: 'Mochiy Pop One', roles: ['display'], weights: [400], feel: 'POP 粗圓字，元氣、甜系偶像' },
   { family: 'DotGothic16', roles: ['display', 'body'], weights: [400], feel: '點陣字，遊戲、電子、復古數位' },
   { family: 'Yuji Syuku', roles: ['display', 'script'], weights: [400], feel: '毛筆書法，和風、熱血、儀式感' },
+  // accent faces (Latin only): English lines, the artist name and the corner tag, paired with the main face
+  { family: 'Great Vibes', roles: ['accent'], weights: [400], feel: '優雅草寫，魔法、浪漫、夜晚' },
+  { family: 'Dancing Script', roles: ['accent'], weights: [400, 700], feel: '輕快手寫，甜、活潑' },
+  { family: 'Cormorant Garamond', roles: ['accent'], weights: [300, 400, 600], feel: '古典襯線，文學、冷調、精緻' },
+  { family: 'Montserrat', roles: ['accent'], weights: [300, 500, 700], feel: '幾何無襯線，都會、俐落、電子' },
+  { family: 'Space Mono', roles: ['accent'], weights: [400, 700], feel: '等寬字，科技、數位、UI 感' },
+  { family: 'Pacifico', roles: ['accent'], weights: [400], feel: '圓潤手寫，可愛、POP' },
 ];
 
 export type Fonts = { display: string; body: string; script?: string };
@@ -54,7 +61,7 @@ const inCatalog = (f?: string) => f !== undefined && FONTS.some((x) => x.family 
  */
 export function resolveFonts(choice?: FontChoice): Required<Fonts> {
   const family = inCatalog(choice?.family) ? choice!.family! : DEFAULT_FAMILY;
-  const pick = (role: FontRole) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : family);
+  const pick = (role: Exclude<FontRole, 'accent'>) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : family);
   return { display: pick('display'), body: pick('body'), script: pick('script') };
 }
 

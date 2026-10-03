@@ -6,6 +6,7 @@ describe('validateDesign', () => {
     const { design, fixes } = validateDesign(
       {
         font: 'Comic Sans',
+        accentFont: 'Papyrus',
         kanaScale: 0.2,
         grain: 3,
         paper: 0.5,

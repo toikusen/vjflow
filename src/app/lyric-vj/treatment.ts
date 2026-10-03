@@ -3,6 +3,7 @@
 import { Fonts } from './fonts';
 import type { ArcPoint, Moment } from './moments';
 import { Design, validateDesign } from './design';
+import { MotifPlan, validateMotif } from './motif';
 import { validateMoments } from './moments';
 import { phraseBoundaries } from './phrases';
 import { COLOR_SHARE, keyWords, sameLines } from './structure';
@@ -85,6 +86,8 @@ export interface TreatmentV3 {
   moments?: Moment[];
   /** Per-song type and colour system (design.ts). */
   design?: Design;
+  /** The song's motif drawn by the engine (motif.ts). */
+  motif?: MotifPlan;
 }
 
 export type ParamSpec =
@@ -261,6 +264,10 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       e.method = 'scale';
     }
   }
+  const mo = validateMotif(t.motif, win);
+  t.motif = mo.motif;
+  errors.push(...mo.errors);
+  fixes.push(...mo.fixes);
   const dv = validateDesign(t.design, win);
   t.design = dv.design;
   fixes.push(...dv.fixes);

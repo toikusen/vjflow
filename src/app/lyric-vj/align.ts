@@ -3,6 +3,18 @@
 // ('interpolated').
 import type { TimelineCue } from './timeline';
 
+/**
+ * A lyric line as it should appear on screen: fan calls in brackets marked 📣 (e.g. "(📣はるちゃん)") and part
+ * markers (member-colour hearts, emoji) are lyric-site annotations, not sung text.
+ */
+export function cleanLyricLine(line: string): string {
+  return line
+    .replace(/[(（][^()（）]*📣[^()（）]*[)）]/gu, '')
+    .replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 export interface AsrWord {
   text: string;
   start: number;

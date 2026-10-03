@@ -11,14 +11,16 @@ const MARGIN = 90;
 const STAGGER = 0.04;
 
 /** The line as phrases, and which one is the keyword: the emphasised one, else the longest. */
+const edge = (s: string) => s.trim().replace(/^[、。，,．.・]+|[、，,]+$/g, '').trim();
+
 export function scatterParts(text: string, emphasis?: { from: number; to: number }): { parts: string[]; key: number } {
   const chars = [...text];
   if (emphasis) {
-    const [b, k, a] = [chars.slice(0, emphasis.from), chars.slice(emphasis.from, emphasis.to), chars.slice(emphasis.to)].map((c) => c.join('').trim());
+    const [b, k, a] = [chars.slice(0, emphasis.from), chars.slice(emphasis.from, emphasis.to), chars.slice(emphasis.to)].map((c) => edge(c.join('')));
     const parts = [b, k, a].filter(Boolean);
     if (parts.length > 1) return { parts, key: parts.indexOf(k) };
   }
-  const parts = chunks(text, chars.length > 4 ? 3 : 1, 2);
+  const parts = chunks(text, chars.length > 4 ? 3 : 1, 2).map(edge).filter(Boolean);
   const key = parts.reduce((best, p, i) => ([...p].length >= [...parts[best]].length ? i : best), 0);
   return { parts, key };
 }

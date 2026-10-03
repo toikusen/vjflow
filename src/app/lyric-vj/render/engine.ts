@@ -345,7 +345,10 @@ export class LyricVjEngine {
 
     for (const [id, layer] of this.shotLayers) {
       const s = this.job.treatment.shots.find((x) => x.id === id)!;
-      layer.group.visible = t >= s.start && t < s.end;
+      // an empty frame during an instrumental reads as a mistake: only draw it around text
+      const lines = this.cueLayers.filter((c) => c.rt.shot.id === id);
+      const busy = lines.some(({ rt }) => t >= rt.showFrom - 0.5 && t <= rt.exitAt + rt.exitDur + 0.3);
+      layer.group.visible = t >= s.start && t < s.end && busy;
       if (layer.group.visible) layer.update(t, fx);
     }
     for (const { rt, layer } of this.cueLayers) {

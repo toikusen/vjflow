@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignLyrics, lcsPairs, snapToPhrases } from './align';
+import { alignLyrics, cleanLyricLine, lcsPairs, snapToPhrases } from './align';
 
 describe('lcsPairs', () => {
   it('finds the common subsequence', () => {
@@ -36,5 +36,13 @@ describe('alignLyrics', () => {
     expect(snapped[0].start).toBe(10.3);
     expect(snapped[2].start).toBe(19.9);
     expect(snapped[1].start).toBe(cues[1].start); // interpolated lines stay
+  });
+});
+
+describe('cleanLyricLine', () => {
+  it('drops fan calls and part-colour emoji', () => {
+    expect(cleanLyricLine('🩷ピンク！(📣はるちゃん)')).toBe('ピンク！');
+    expect(cleanLyricLine('💙いつまでも ずっと')).toBe('いつまでも ずっと');
+    expect(cleanLyricLine('(📣みるく)')).toBe('');
   });
 });

@@ -31,8 +31,9 @@ export const punch: TemplateRenderer = {
     const chars = [...rt.cue.text];
     const [k0, k1] = keywordRange(rt.cue.text, rt);
     const keyword = chars.slice(k0, k1).join('').replace(/\s+/g, '');
-    const before = chars.slice(0, k0).join('').trim();
-    const after = chars.slice(k1).join('').trim();
+    const edge = (s: string) => s.trim().replace(/^[、。，,．.・]+|[、，,]+$/g, '').trim();
+    const before = edge(chars.slice(0, k0).join(''));
+    const after = edge(chars.slice(k1).join(''));
     const p = rt.params;
     const group = new THREE.Group();
     group.rotation.z = ((p['tilt'] as number) * Math.PI) / 180;

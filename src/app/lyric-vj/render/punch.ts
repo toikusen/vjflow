@@ -1,6 +1,6 @@
 // punch: the emphasised words set huge and hit on the accents; the rest of the line in small type above/below.
 import * as THREE from 'three';
-import { advanceOf, clamp01, Glyph, GlyphStyle, makeGlyphs, placeRow } from './glyphs';
+import { advanceOf, clamp01, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
 import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
@@ -50,7 +50,10 @@ export const punch: TemplateRenderer = {
     const kwColor = readable(method === 'color' || method === 'glow' ? rt.palette.accent : rt.palette.text, rt.palette.background, 7);
     const kStyle: GlyphStyle = { family: rt.fonts.display, weight: 900, size };
     const kw = makeGlyphs(keyword, kStyle, color(kwColor, method === 'glow' ? 1.1 : 1.0));
-    placeRow(kw, 0, 30);
+    // left/right: every row shares one edge 140 px in from the frame (off-centre composition)
+    const align = bleed ? 'center' : ((p['align'] as string) ?? 'center');
+    const xOf = (gs: Glyph[], track = 0) => (align === 'left' ? -W / 2 + 140 + rowWidth(gs, track) / 2 : align === 'right' ? W / 2 - 140 - rowWidth(gs, track) / 2 : 0);
+    placeRow(kw, xOf(kw), 30);
     // ponytail: the outline echo read as a template (gold bevel) in every review; the param stays for old treatments
     const echo: Glyph[] = [];
     placeRow(echo, 0, 30);
@@ -61,8 +64,8 @@ export const punch: TemplateRenderer = {
     if (after) small.push(makeGlyphs(after.replace(/\s+/g, ' '), sStyle, color(rt.palette.text, 0.95), 6));
     const gap = size * 0.62 + 84;
     // text before the keyword reads above it, text after it below
-    if (before) placeRow(small[0], 0, 30 + gap, 6);
-    if (after) placeRow(small[before ? 1 : 0], 0, 30 - gap, 6);
+    if (before) placeRow(small[0], xOf(small[0], 6), 30 + gap, 6);
+    if (after) placeRow(small[before ? 1 : 0], xOf(small[before ? 1 : 0], 6), 30 - gap, 6);
     tagSource(kw, rt.cue.text, k0);
     tagSource(echo, rt.cue.text, k0);
     if (before) tagSource(small[0], rt.cue.text, 0);

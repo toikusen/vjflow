@@ -11,6 +11,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
+import { varyComposition } from '../../src/app/lyric-vj/compose';
 import { FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES } from '../../src/app/lyric-vj/design';
@@ -193,6 +194,7 @@ ${style.rules.map((r) => `- ${r}`).join('\n')}
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
 
 文字動態（必須做）：
+- 構圖：不要每個畫面都置中。用 align、position 讓畫面左右輪替，副歌一次比一次大（第一次收斂、最後一次出血）；程式也會自動錯開連續置中的鏡頭。
 - reveal：主歌、敘事句、慢歌多用 word（字以固定速度依序載出，像在說話）；副歌的衝擊句可用 line 讓整句砸下。
 - 副歌節奏強烈的句子用 beat-cut（每唱到一個詞就換一個構圖切入），這是設計師「每 1–2 拍換構圖」的手法；一首歌至少要有一段副歌用它。
 - 重複的歌詞（第 2、3 次副歌）沿用畫面但換版型，讓副歌逐次升級。
@@ -304,6 +306,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   messages.push({ role: 'user', content: `程式驗證未通過，請修正後輸出完整的企劃 JSON：\n${result.errors.map((e) => `- ${e}`).join('\n')}` });
 }
 if (!result || result.errors.length) throw new Error('導演 3 次仍未通過驗證：\n' + result?.errors.join('\n'));
+result.fixes.push(...varyComposition(result.treatment, chorusSpans(structure)));
 // second call: the design system and motif for these shots
 const designed = await designPass(result.treatment);
 usage = { input: usage.input + designed.usage.input, output: usage.output + designed.usage.output };

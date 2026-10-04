@@ -27,6 +27,7 @@ export const handwrite: TemplateRenderer = {
 
     const group = new THREE.Group();
     group.position.y = ((p['lift'] as number) ?? 0) + (p['position'] === 'lower' ? -220 : 0);
+    if (p['position'] === 'left') group.position.x = -W * 0.17;
     const lineH = size * 1.3;
     const src = [...rt.cue.text];
     let s = 0;

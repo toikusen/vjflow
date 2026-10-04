@@ -28,6 +28,7 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
+const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card']);
 const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut };
 
 export interface AssetSource {
@@ -297,11 +298,14 @@ export class LyricVjEngine {
         accentTimes: (style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined),
         pace,
       };
+      // small kana only on the impact templates: on every line it read as an algorithm
+      setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;
       this.textRoot.add(layer.group);
       this.cueLayers.push({ rt, layer });
     });
+    setKanaScale(design.kanaScale);
   }
 
   metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[] } {

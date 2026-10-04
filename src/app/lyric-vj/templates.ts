@@ -13,6 +13,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       flash: { type: 'boolean', default: true, description: '踩拍時白閃' },
       tilt: { type: 'number', min: -12, max: 12, default: 0, description: '整組文字傾斜角度（度）' },
       outline: { type: 'boolean', default: false, description: '關鍵字加描邊殘影（容易有模板感，預設關閉）' },
+      align: { type: 'enum', values: ['center', 'left', 'right'], default: 'center', description: '整組文字靠左／置中／靠右（出血時固定置中）' },
       bleed: { type: 'boolean', default: false, description: '關鍵字放大到超出畫面、被邊緣裁切（當成構圖元素，副歌高潮用；讀不全也沒關係）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度（確保可讀）' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '整組文字上移的像素（避開素材主體，例如人物在下方就往上）' },
@@ -64,7 +65,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {
-      position: { type: 'enum', values: ['center', 'lower'], default: 'center', description: '文字位置' },
+      position: { type: 'enum', values: ['center', 'lower', 'left'], default: 'center', description: '文字位置' },
       weight: { type: 'number', min: 0, max: 0.06, default: 0.035, description: '筆畫加粗（字高的倍數；細字型在大螢幕上要加粗）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },

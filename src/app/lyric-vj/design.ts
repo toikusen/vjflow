@@ -17,8 +17,6 @@ export interface ColorStop {
   duotone: number;
   /** How much of the background image shows: 1 = full, 0 = a dark textured ground (graphics and type carry it). */
   image: number;
-  /** This section's medium when it differs from the song's (a drop switching material); none = the song's. */
-  medium?: MediumId;
 }
 
 /** How this song's drops hit (the same radial burst on every song read as a template). */
@@ -69,7 +67,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   const accentFont = FONTS.some((f) => f.family === d.accentFont && f.roles.includes('accent')) ? d.accentFont : DEFAULT_DESIGN.accentFont;
   const stops = (d.colorScript ?? [])
     .filter((s) => HEX.test(s.shadow) && HEX.test(s.highlight) && HEX.test(s.accent))
-    .map((s): ColorStop => ({ ...s, start: clamp(s.start, win.start, win.end), duotone: clamp(s.duotone, 0, 1), image: clamp(s.image ?? 1, 0, 1), medium: s.medium && s.medium in MEDIA ? s.medium : undefined }))
+    .map((s) => ({ ...s, start: clamp(s.start, win.start, win.end), duotone: clamp(s.duotone, 0, 1), image: clamp(s.image ?? 1, 0, 1) }))
     .sort((a, b) => a.start - b.start);
   if (stops.length !== (d.colorScript ?? []).length) fixes.push('移除顏色格式錯誤的色彩段落');
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
@@ -100,7 +98,6 @@ export function colorAt(script: ColorStop[], t: number, ease = 1): ColorStop {
       accent: mixHex(cur.accent, s.accent, k),
       duotone: cur.duotone + (s.duotone - cur.duotone) * k,
       image: cur.image + (s.image - cur.image) * k,
-      medium: s.medium,
     };
   }
   return cur;

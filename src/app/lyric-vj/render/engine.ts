@@ -417,9 +417,7 @@ export class LyricVjEngine {
 
   async renderAt(t: number) {
     const { shot, prev } = this.shotAt(t);
-    const design = this.job.treatment.design ?? DEFAULT_DESIGN;
-    // a section can switch medium (e.g. the drop turns the film into a photocopy): a hard switch at its start
-    const medium = MEDIA[colorAt(design.colorScript, t).medium ?? design.medium ?? 'clean'];
+    const medium = MEDIA[(this.job.treatment.design ?? DEFAULT_DESIGN).medium ?? 'clean'];
     // background motion is held to the medium's frame rate (on twos); cuts and lyrics stay on every frame
     const bt = stepTime(t, medium.step);
     const fx: FrameFx = { flash: 0, hit: 0, shake: 0 };

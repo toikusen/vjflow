@@ -112,7 +112,7 @@ const SCHEMA = {
     styleAnchor: {
       type: 'object', additionalProperties: false, required: ['prompt', 'palette'],
       properties: {
-        prompt: { type: 'string', description: 'English image-generation style prompt shared by every asset. Must say: no text, no letters, no logos.' },
+        prompt: { type: 'string', description: 'English prompt shared by every asset: palette, light and mood only, never a rendering style (anime, photo, painting: the program adds it from the medium). Must say: no text, no letters, no logos.' },
         palette: { type: 'object', additionalProperties: false, required: ['background', 'text', 'accent', 'line', 'glow'],
           properties: Object.fromEntries(['background', 'text', 'accent', 'line', 'glow'].map((k) => [k, { type: 'string', description: '#rrggbb' }])) },
       },

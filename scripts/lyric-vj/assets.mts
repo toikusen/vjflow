@@ -1,6 +1,7 @@
 // Assets (spec 3.2/3.3): style-anchor image first, other images with it as reference, then Veo clips from their images.
 // Cached by a hash of model + prompt + reference; a per-song budget stops generation before it is exceeded.
 // npx tsx --tsconfig tsconfig.json scripts/lyric-vj/assets.mts --treatment out/indigo/hand/treatment.json --out out/indigo/assets [--budget 10]
+import { MEDIA } from '../../src/app/lyric-vj/medium';
 import { GoogleGenAI } from '@google/genai';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -127,10 +128,12 @@ status.stage('assets', { state: 'running', done: 0, total: t.assets.length, cost
 for (const x of t.assets) status.item('assets', { id: x.id, kind: x.kind, state: 'pending' });
 // observes (does not handle) crashes, including rejected top-level awaits
 process.on('uncaughtExceptionMonitor', (e) => status.stage('assets', { state: 'failed', message: String(e).slice(0, 300) }));
+// the song's medium decides how every picture is rendered (medium.ts)
+const look = MEDIA[t.design?.medium ?? 'clean'].look;
 let anchor: Buffer | undefined;
 for (const img of images) {
   // the first image is the style anchor; every later image is generated with it as a reference (spec 3.3)
-  const prompt = `${t.styleAnchor.prompt}. ${img.prompt}. Cinematic 16:9 background plate for a lyric video, leave calm space for typography. ${NO_TEXT}`;
+  const prompt = `${look}. ${t.styleAnchor.prompt}. ${img.prompt}. 16:9 background plate for a lyric video, leave calm space for typography. ${NO_TEXT}`;
   status.item('assets', { id: img.id, kind: 'image', state: 'running' });
   const file = await image(img.id, prompt, anchor);
   anchor ??= readFileSync(file);
@@ -146,7 +149,7 @@ for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   let file: string;
   status.item('assets', { id: vid.id, kind: 'video', state: 'running', file: outPath(from.url) });
   try {
-    file = await video(vid.id, `${t.styleAnchor.prompt}. ${vid.prompt}. Smooth cinematic motion, seamless, no cuts. ${NO_TEXT}`, from.url);
+    file = await video(vid.id, `${look}. ${t.styleAnchor.prompt}. ${vid.prompt}. Smooth cinematic motion, seamless, no cuts. ${NO_TEXT}`, from.url);
   } catch (e) {
     // keep going with the still (rendered with camera moves); a later run fills the clip from the cache-miss
     console.error(`影片 ${vid.id} 生成失敗，先用圖片 ${vid.from} 代替：${(e as Error).message.slice(0, 200)}`);

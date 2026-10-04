@@ -34,12 +34,13 @@ export const STYLES: Record<string, StylePreset> = {
       '版型：關鍵句用 punch 或 scatter，敘事句用 frame-split 或 typewriter，抒情、留白的句子用 vertical 直排或 handwrite 手寫。同一首歌要用到至少 4 種版型，相鄰兩個鏡頭不要用同一種；不必死板輪流。',
       '配色依歌詞意象決定（例如夜空→靛藍、黃昏→橘紅、雨夜→灰藍），背景暗、文字亮，對比要夠。',
       '色彩要飽和、暗部要深、地平線或光源處有明亮的光帶；不可灰濛濛、低對比。歌詞說「褪色」「黯淡」時，只用在構圖或光量上，不要把整張圖畫成灰色。',
-      '雲的移動是這個風格最重要的畫面質感：影片裡的雲要明顯在動（鏡頭緩慢往地平線推進、雲層被風吹過、雲層散開露出星空），看得出速度與方向；可以有一兩顆流星，但不要變成特效秀。',
-      '構圖參考：上方大片深色天空、下方地平線有發光的城市或景物輪廓，中間留給文字。',
+      '影片要有看得出速度與方向的自然動態（雲被風吹過、光線移動、水面、街上的燈流）；有天空時雲要明顯在動。不要變成特效秀。',
+      '場景要具體到這首歌：從歌詞挑出這首歌獨有的地點與物件（例：施工中的車站、公園的鐘塔、電影院的座位），段落之間換不同的場景與時段；不要每首歌都畫黃昏雲海加城市地平線。構圖留出文字的空間。',
+      '素材描述只寫畫什麼（地點、物件、時段、光線、構圖），不要寫畫風（anime、photo、painting 等）：畫風由程式依這首歌的媒材決定。',
       '文字壓在畫面主體上沒有關係，不需要刻意避開。',
       '重複的段落沿用畫面：第 2 次以後的副歌，至少一半的時間使用第 1 次副歌用過的素材組（可以換 clipStart 與運鏡），升級感靠配色、爆點與版型，不靠新素材。換畫面以段落為單位，不要一句換一個畫面。',
     ],
-    assetSuffix: 'Background art for a lyric video: scenery and atmosphere only, no people or characters in focus, natural subtle motion, painterly anime background style, rich saturated colors, deep shadows, luminous horizon, clearly drifting clouds.',
+    assetSuffix: 'Background art for a lyric video: scenery and atmosphere only, no people or characters in focus, natural subtle motion, rich colors, deep shadows.',
   },
 };
 

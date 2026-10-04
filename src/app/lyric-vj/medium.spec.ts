@@ -9,9 +9,9 @@ describe('medium', () => {
     expect(stepTime(1.26, 0)).toBe(1.26);
   });
 
-  it('every medium has a label and clean adds nothing', () => {
-    expect(Object.values(MEDIA).every((m) => m.label)).toBe(true);
-    const { label, boilRate, ...rest } = MEDIA.clean;
+  it('every medium has a label and a look, and clean adds no post effect', () => {
+    expect(Object.values(MEDIA).every((m) => m.label && m.look)).toBe(true);
+    const { label, look, boilRate, ...rest } = MEDIA.clean;
     expect(Object.values(rest).every((v) => v === 0)).toBe(true);
   });
 

@@ -70,14 +70,14 @@ const FINAL_SHADER = {
     uRayColor: { value: new THREE.Color(1, 1, 1) },
     // medium (medium.ts)
     uBoil: { value: 0 }, uBoilSeed: { value: 0 }, uWeave: { value: new THREE.Vector2() }, uFlicker: { value: 1 }, uTooth: { value: 0 },
-    uRiso: { value: 0 }, uXerox: { value: 0 }, uPixel: { value: 0 }, uLift: { value: 0 }, tText: { value: null }, uHasText: { value: 0 },
+    uRiso: { value: 0 }, uPixel: { value: 0 }, uLift: { value: 0 }, tText: { value: null }, uHasText: { value: 0 },
     uPaperC: { value: new THREE.Color() }, uInkA: { value: new THREE.Color() }, uInkB: { value: new THREE.Color() },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper, uBeams;
     uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
-    uniform float uBoil, uBoilSeed, uFlicker, uTooth, uRiso, uXerox, uPixel, uLift, uHasText; uniform sampler2D tText; uniform vec2 uWeave; uniform vec3 uPaperC, uInkA, uInkB;
+    uniform float uBoil, uBoilSeed, uFlicker, uTooth, uRiso, uPixel, uLift, uHasText; uniform sampler2D tText; uniform vec2 uWeave; uniform vec3 uPaperC, uInkA, uInkB;
     const vec2 RES = vec2(1920.0, 1080.0);
     const vec3 LUMA = vec3(0.299, 0.587, 0.114);
     const vec2 PIX = vec2(320.0, 180.0);         // the pixel medium's grid (6 px cells)
@@ -154,10 +154,6 @@ const FINAL_SHADER = {
         float cb = dots(px, 1.31, 7.0, smoothstep(0.3, 0.9, dot(texture2D(tDiffuse, uv - m).rgb, LUMA)));
         vec3 ink = uPaperC + uInkA * ca * 0.9 + uInkB * cb * 0.75;
         c = mix(c, mix(ink, c, keep), uRiso);
-      }
-      if (uXerox > 0.0) {                           // photocopy: hard threshold with toner noise, light toner on dark stock
-        float v = smoothstep(0.13, 0.24, lum + (h2(floor(px / 2.0) + uBoilSeed) - 0.5) * 0.12);
-        c = mix(c, mix(mix(uPaperC, uInkB, v), c, keep), uXerox);
       }
       if (uPixel > 0.0) c = mix(c, floor(c * 4.0 + bayer4(floor(uv * PIX))) / 4.0, uPixel);
       if (uPixel > 0.0) c = mix(c, texture2D(tDiffuse, uvText).rgb * (1.0 + 0.45 * uHit), keep * uPixel);
@@ -512,10 +508,9 @@ export class LyricVjEngine {
     u['uFlicker'].value = 1 + (hash(held, 13) - 0.5) * 2 * medium.flicker;
     u['uTooth'].value = medium.tooth;
     u['uRiso'].value = medium.riso;
-    u['uXerox'].value = medium.xerox;
     u['uPixel'].value = medium.pixel;
     u['uLift'].value = medium.lift;
-    const needsMask = medium.riso + medium.xerox + medium.pixel + medium.tooth > 0;
+    const needsMask = medium.riso + medium.pixel + medium.tooth > 0;
     u['uHasText'].value = needsMask ? 1 : 0;
     if (needsMask) u['tText'].value = this.renderTextMask();
     // inks come from the section's colours: dark stock = shadow, ink A = accent, ink B = highlight

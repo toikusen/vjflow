@@ -66,10 +66,11 @@ const DESIGN_SCHEMA = {
     paper: { type: 'number', description: '紙紋／印刷質感 0–1' },
     medium: { type: 'string', enum: Object.keys(MEDIA), description: '整支影片假裝是用什麼材料做的（疊在所有畫面上的後製層）：' + Object.entries(MEDIA).map(([k, v]) => `${k}：${v.label}`).join('；') },
     peak: { type: 'string', enum: Object.keys(PEAK_STYLES), description: '這首歌爆點的樣式（每首不同）：' + Object.entries(PEAK_STYLES).map(([k, v]) => `${k}：${v}`).join('；') },
-    colorScript: { type: 'array', description: '依段落的色彩計畫，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'shadow', 'highlight', 'accent', 'duotone', 'image'],
+    colorScript: { type: 'array', description: '依段落的色彩計畫，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'shadow', 'highlight', 'accent', 'duotone', 'image', 'medium'],
       properties: { start: { type: 'number' }, shadow: { type: 'string', description: '#rrggbb 背景暗部色' }, highlight: { type: 'string', description: '#rrggbb 背景亮部色' },
         accent: { type: 'string', description: '#rrggbb 這段唯一的強調色' }, duotone: { type: 'number', description: '0–1，背景套雙色調的程度' },
-        image: { type: 'number', description: '0–1，背景圖露出多少（1 全部；0 暗色質感底，只靠主題物件與文字撐畫面）' } } } },
+        image: { type: 'number', description: '0–1，背景圖露出多少（1 全部；0 暗色質感底，只靠主題物件與文字撐畫面）' },
+        medium: { type: 'string', enum: ['base', ...Object.keys(MEDIA)], description: 'base = 用整首的 medium；只有爆點段落才換成另一種媒材' } } } },
   },
 };
 const MOTIF_SCHEMA = {
@@ -102,6 +103,7 @@ ${FONT_LIST}
 - image：主題物件為主的段落（間奏、副歌高潮）可以把背景圖壓暗到 0.2–0.4，讓圖形與文字撐畫面；主歌可以 0.7–1。
 - peak：依歌曲個性選爆點樣式，不要每首都用放射光（rays）。
 - medium：依歌曲的質地選媒材，它決定整支片「摸起來」是什麼材料，是讓背景不像 AI 插畫的關鍵。不要因為安全就選 clean；只有電子、未來、光感強的歌才用 clean。媒材要和字型、色彩是同一個世界（例：孔版印刷配 POP 字與螢光色；影印拼貼配粗黑體與高反差；紙上手繪配明朝或手寫字）。
+- 爆點換媒材：整首一種「底」媒材（通常較安靜：film、paper、crayon、cutout），副歌爆點（drop、finale）那一段的 colorScript 改用一種強烈媒材（riso、xerox、pixel），爆點結束的下一段回到 base。落拍瞬間整個畫面換材質就是衝擊。底與爆點要有明顯對比，其他段落都填 base。
 - 文字不要加描邊殘影（punch 的 outline 保持 false），乾淨的字比特效字更像設計師作品。`;
 const SCHEMA = {
   type: 'object', additionalProperties: false,

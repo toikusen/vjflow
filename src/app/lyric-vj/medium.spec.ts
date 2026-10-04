@@ -21,3 +21,14 @@ describe('medium', () => {
     expect(validateDesign({ ...validateDesign(undefined, win).design, medium: 'oil' as never }, win).design.medium).toBe('clean');
   });
 });
+
+describe('section medium', () => {
+  it('switches hard at the section start and falls back to the song medium', async () => {
+    const { colorAt } = await import('./design');
+    const base = { shadow: '#000000', highlight: '#ffffff', accent: '#ff0000', duotone: 0, image: 1 };
+    const script = [{ ...base, start: 0 }, { ...base, start: 10, medium: 'xerox' as const }, { ...base, start: 20 }];
+    expect(colorAt(script, 5).medium).toBeUndefined();
+    expect(colorAt(script, 10.01).medium).toBe('xerox');
+    expect(colorAt(script, 21).medium).toBeUndefined();
+  });
+});

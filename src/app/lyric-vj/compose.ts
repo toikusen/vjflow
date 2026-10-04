@@ -1,6 +1,7 @@
 // Composition pass (program, after the director): the gap analysis found nearly every frame centred and every
 // chorus laid out the same. This moves centred shots off-centre so two centred frames never follow each other, and
-// makes the choruses escalate (the first held back, the last bleeding off the frame).
+// makes the choruses escalate (the keyword grows chorus by chorus). Bleed is switched off: every review read the
+// cropped keyword as a layout overflow.
 import type { Shot, TreatmentV3 } from './treatment';
 
 type Anchor = 'L' | 'C' | 'R';
@@ -26,7 +27,7 @@ export function anchorOf(s: Shot): Anchor | undefined {
 
 /**
  * Moves every second centred shot in a run to the side (alternating left/right, away from the previous shot's side)
- * and sets the choruses' keyword size from restrained (first) to bleeding (last). Returns the repairs made.
+ * and sets the choruses' keyword size from restrained (first) to full width (last). Returns the repairs made.
  */
 export function varyComposition(t: TreatmentV3, choruses: { start: number; end: number }[]): string[] {
   const fixes: string[] = [];
@@ -48,13 +49,13 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
     if (a === 'L' || a === 'R') side = a;
     prev = a ?? prev;
   }
-  // choruses escalate: keyword width rises chorus by chorus, only the last one bleeds
+  // choruses escalate: keyword width rises chorus by chorus
   choruses.forEach((c, k) => {
     const last = k === choruses.length - 1;
     const width = choruses.length > 1 ? 0.62 + (0.3 * k) / (choruses.length - 1) : 0.8;
     for (const s of t.shots.filter((x) => x.template === 'punch' && x.start < c.end && x.end > c.start)) {
       s.params['keywordWidth'] = +width.toFixed(2);
-      s.params['bleed'] = last;
+      s.params['bleed'] = false;
       if (last) s.params['align'] = 'center';
     }
   });

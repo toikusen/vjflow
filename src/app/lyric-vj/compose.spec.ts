@@ -21,10 +21,10 @@ describe('varyComposition', () => {
     expect(t.shots.map((s) => s.params['align'] ?? 'center')).toEqual(['center', 'left', 'center', 'right', 'center', 'center']);
   });
 
-  it('escalates choruses: narrow first, bleeding last', () => {
+  it('escalates choruses: narrow first, widest last, never bleeding', () => {
     const t = tr([shot('a', 30, 'punch'), shot('b', 90, 'punch'), shot('c', 150, 'punch', { align: 'left' })]);
     varyComposition(t, [{ start: 29, end: 40 }, { start: 89, end: 100 }, { start: 149, end: 160 }]);
-    expect(t.shots.map((s) => [s.params['keywordWidth'], s.params['bleed']])).toEqual([[0.62, false], [0.77, false], [0.92, true]]);
+    expect(t.shots.map((s) => [s.params['keywordWidth'], s.params['bleed']])).toEqual([[0.62, false], [0.77, false], [0.92, false]]);
     expect(t.shots[2].params['align']).toBe('center');
   });
 });

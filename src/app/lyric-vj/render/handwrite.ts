@@ -27,7 +27,6 @@ export const handwrite: TemplateRenderer = {
 
     const group = new THREE.Group();
     group.position.y = ((p['lift'] as number) ?? 0) + (p['position'] === 'lower' ? -220 : 0);
-    if (p['position'] === 'left') group.position.x = -W * 0.17;
     const lineH = size * 1.3;
     const src = [...rt.cue.text];
     let s = 0;
@@ -48,6 +47,13 @@ export const handwrite: TemplateRenderer = {
         group.add(g.mesh);
       }
     });
+    // keep the block inside the frame (the staggered second row used to run off the left edge); 'left' sets one edge
+    const minX = Math.min(...glyphs.map((g) => g.x - g.advance / 2));
+    const maxX = Math.max(...glyphs.map((g) => g.x + g.advance / 2));
+    const margin = 100;
+    let dx = p['position'] === 'left' ? -W / 2 + 140 - minX : 0;
+    dx = Math.min(W / 2 - margin - maxX, Math.max(-W / 2 + margin - minX, dx));
+    glyphs.forEach((g) => (g.x += dx));
 
     const n = glyphs.length;
     const per = writeSec(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);

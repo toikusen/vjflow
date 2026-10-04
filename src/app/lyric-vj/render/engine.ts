@@ -70,14 +70,13 @@ const FINAL_SHADER = {
     uRayColor: { value: new THREE.Color(1, 1, 1) },
     // medium (medium.ts)
     uBoil: { value: 0 }, uBoilSeed: { value: 0 }, uWeave: { value: new THREE.Vector2() }, uFlicker: { value: 1 }, uTooth: { value: 0 },
-    uRiso: { value: 0 }, uPixel: { value: 0 }, uLift: { value: 0 }, tText: { value: null }, uHasText: { value: 0 },
-    uPaperC: { value: new THREE.Color() }, uInkA: { value: new THREE.Color() }, uInkB: { value: new THREE.Color() },
+    uPixel: { value: 0 }, uLift: { value: 0 }, tText: { value: null }, uHasText: { value: 0 },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper, uBeams;
     uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
-    uniform float uBoil, uBoilSeed, uFlicker, uTooth, uRiso, uPixel, uLift, uHasText; uniform sampler2D tText; uniform vec2 uWeave; uniform vec3 uPaperC, uInkA, uInkB;
+    uniform float uBoil, uBoilSeed, uFlicker, uTooth, uPixel, uLift, uHasText; uniform sampler2D tText; uniform vec2 uWeave;
     const vec2 RES = vec2(1920.0, 1080.0);
     const vec3 LUMA = vec3(0.299, 0.587, 0.114);
     const vec2 PIX = vec2(320.0, 180.0);         // the pixel medium's grid (6 px cells)
@@ -92,12 +91,6 @@ const FINAL_SHADER = {
     }
     float bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
     float bayer4(vec2 a){ return bayer2(0.5 * a) * 0.25 + bayer2(a); }
-    // one ink's halftone: a rotated dot grid whose dot area follows the coverage
-    float dots(vec2 px, float ang, float cell, float cov){
-      vec2 g = mat2(cos(ang), -sin(ang), sin(ang), cos(ang)) * px / cell;
-      float r = sqrt(clamp(cov, 0.0, 1.0)) * 0.72;
-      return 1.0 - smoothstep(r - 0.08, r + 0.08, length(fract(g) - 0.5));
-    }
     void main(){
       vec2 uv = vUv + uWeave;                       // gate weave / stop-motion jitter
       if (uBoil > 0.0) {                            // line boil: coherent ~40 px wobble, redrawn a few times a second
@@ -138,7 +131,7 @@ const FINAL_SHADER = {
       }
       vec2 px = vUv * RES;
       float lum = dot(c, LUMA);
-      // lyrics (a text-only render, tText) stay crisp under the ink treatments
+      // lyrics (a text-only render, tText) stay crisp under pixel dither and paper tooth
       float keep = uHasText > 0.0 ? smoothstep(0.05, 0.5, texture2D(tText, uvText).a) : 0.0;
       if (uLift > 0.0) {                            // the paper shows through the darks: a warm, fibrous ground
         float fib = h1(floor(px.x / 3.0) * 7.0 + floor(px.y * 0.7)) * 0.5 + vnoise(px / 90.0) * 0.5;
@@ -147,13 +140,6 @@ const FINAL_SHADER = {
       if (uTooth > 0.0) {                           // paper tooth: paint skips the grooves of rough paper
         float tn = vnoise(px / 2.5) * 0.6 + h2(floor(px / 2.0)) * 0.4;
         c *= 1.0 - uTooth * 0.55 * smoothstep(0.62, 0.8, tn) * smoothstep(0.1, 0.6, lum) * (1.0 - 0.8 * keep);
-      }
-      if (uRiso > 0.0) {                            // two fluorescent inks on dark stock, halftoned and misregistered
-        vec2 m = vec2(2.5, -1.5) / RES;
-        float ca = dots(px, 0.26, 7.0, smoothstep(0.06, 0.6, dot(texture2D(tDiffuse, uv + m).rgb, LUMA)));
-        float cb = dots(px, 1.31, 7.0, smoothstep(0.3, 0.9, dot(texture2D(tDiffuse, uv - m).rgb, LUMA)));
-        vec3 ink = uPaperC + uInkA * ca * 0.9 + uInkB * cb * 0.75;
-        c = mix(c, mix(ink, c, keep), uRiso);
       }
       if (uPixel > 0.0) c = mix(c, floor(c * 4.0 + bayer4(floor(uv * PIX))) / 4.0, uPixel);
       if (uPixel > 0.0) c = mix(c, texture2D(tDiffuse, uvText).rgb * (1.0 + 0.45 * uHit), keep * uPixel);
@@ -507,16 +493,11 @@ export class LyricVjEngine {
     (u['uWeave'].value as THREE.Vector2).set(((hash(held, 11) - 0.5) * 2 * medium.weave) / W, ((hash(held, 12) - 0.5) * 2 * medium.weave) / H);
     u['uFlicker'].value = 1 + (hash(held, 13) - 0.5) * 2 * medium.flicker;
     u['uTooth'].value = medium.tooth;
-    u['uRiso'].value = medium.riso;
     u['uPixel'].value = medium.pixel;
     u['uLift'].value = medium.lift;
-    const needsMask = medium.riso + medium.pixel + medium.tooth > 0;
+    const needsMask = medium.pixel + medium.tooth > 0;
     u['uHasText'].value = needsMask ? 1 : 0;
     if (needsMask) u['tText'].value = this.renderTextMask();
-    // inks come from the section's colours: dark stock = shadow, ink A = accent, ink B = highlight
-    (u['uPaperC'].value as THREE.Color).set(stop.shadow).multiplyScalar(0.6);
-    (u['uInkA'].value as THREE.Color).set(stop.accent);
-    (u['uInkB'].value as THREE.Color).set(stop.highlight);
     this.finalPass.uniforms['uFlash'].value = fx.flash;
     this.finalPass.uniforms['uHit'].value = fx.hit;
     // capped: past this, white lyrics bloom into an unreadable glare

@@ -17,7 +17,7 @@ describe('medium', () => {
 
   it('design keeps a known medium and falls back to clean', () => {
     const win = { start: 0, end: 10 };
-    expect(validateDesign({ ...validateDesign(undefined, win).design, medium: 'riso' }, win).design.medium).toBe('riso');
+    expect(validateDesign({ ...validateDesign(undefined, win).design, medium: 'paper' }, win).design.medium).toBe('paper');
     expect(validateDesign({ ...validateDesign(undefined, win).design, medium: 'oil' as never }, win).design.medium).toBe('clean');
   });
 });

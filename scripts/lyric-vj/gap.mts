@@ -2,9 +2,10 @@
 // strip around the first drop), scored by Claude per dimension with concrete gaps and techniques to adopt.
 // npx tsx scripts/lyric-vj/gap.mts --plan out/gap/plan.json --out out/gap
 import Anthropic from '@anthropic-ai/sdk';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 
 const { values: a } = parseArgs({
@@ -50,10 +51,29 @@ const SCHEMA = {
 interface Plan { points: [string, number][]; drop: number; ours: string; designer: string }
 const plans: Record<string, Plan> = JSON.parse(readFileSync(a.plan!, 'utf8'));
 const results: Record<string, unknown> = existsSync(join(a.out!, 'scores.json')) ? JSON.parse(readFileSync(join(a.out!, 'scores.json'), 'utf8')) : {};
+/** Frames at the plan's moments (designer | ours per row) and a 7-frame strip around the first drop. */
+function makeSheets(vid: string, p: Plan) {
+  const ff = (args: string[]) => execFileSync('ffmpeg', ['-v', 'error', '-y', ...args]);
+  const grab = (src: string, t: number, w: number, file: string) => existsSync(file) || ff(['-ss', String(t), '-i', src, '-frames:v', '1', '-vf', `scale=${w}:${(w * 9) / 16},setsar=1`, file]);
+  const dDir = join(dirname(a.plan!), '..', vid); // designer frames are shared across runs
+  const oDir = join(a.out!, vid);
+  mkdirSync(dDir, { recursive: true });
+  mkdirSync(oDir, { recursive: true });
+  const motion = Array.from({ length: 7 }, (_, i) => p.drop - 0.5 + i * 0.25);
+  p.points.forEach(([, t], i) => (grab(p.designer, t, 960, join(dDir, `d${i}.jpg`)), grab(p.ours, t, 960, join(oDir, `o${i}.jpg`))));
+  motion.forEach((t, i) => (grab(p.designer, t, 480, join(dDir, `md${i}.jpg`)), grab(p.ours, t, 480, join(oDir, `mo${i}.jpg`))));
+  const rows = p.points.map((_, i) => ['-i', join(dDir, `d${i}.jpg`), '-i', join(oDir, `o${i}.jpg`)]).flat();
+  const n = p.points.length;
+  ff([...rows, '-filter_complex', `${Array.from({ length: n }, (_, i) => `[${2 * i}][${2 * i + 1}]hstack[r${i}]`).join(';')};${Array.from({ length: n }, (_, i) => `[r${i}]`).join('')}vstack=${n},scale=1600:-1`, join(a.out!, `${vid}_sheet.jpg`)]);
+  const strip = (pre: string, dir: string) => motion.map((_, i) => ['-i', join(dir, `${pre}${i}.jpg`)]).flat();
+  ff([...strip('md', dDir), ...strip('mo', oDir), '-filter_complex', `${motion.map((_, i) => `[${i}]`).join('')}hstack=7[a];${motion.map((_, i) => `[${i + 7}]`).join('')}hstack=7[b];[a][b]vstack,scale=1800:-1`, join(a.out!, `${vid}_motion.jpg`)]);
+}
+
 const client = new Anthropic();
 let cost = 0;
 for (const [vid, p] of Object.entries(plans)) {
   if (results[vid]) continue;
+  if (!existsSync(join(a.out!, `${vid}_sheet.jpg`))) makeSheets(vid, p);
   const meta = JSON.parse(readFileSync(join(homedir(), 'vjanalytics/out/results', `${vid}.json`), 'utf8'));
   const img = (f: string) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(join(a.out!, f)).toString('base64') } });
   const content = [

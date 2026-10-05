@@ -10,8 +10,8 @@ describe('fonts', () => {
 
   it('keeps valid per-role overrides', () => {
     expect(resolveFonts({ display: 'Mochiy Pop One', script: 'Yomogi' })).toEqual({ display: 'Mochiy Pop One', body: 'Zen Kaku Gothic New', script: 'Yomogi' });
-    // a display-only family keeps a legible body face for small type
-    expect(resolveFonts({ family: 'Mochiy Pop One' }).body).toBe('Zen Kaku Gothic New');
+    // one family everywhere, even a display-only one
+    expect(resolveFonts({ family: 'Mochiy Pop One' }).body).toBe('Mochiy Pop One');
     expect(resolveFonts({ display: 'Yomogi' }).display).toBe('Zen Kaku Gothic New'); // Yomogi is not a display face
   });
 

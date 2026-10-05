@@ -44,8 +44,12 @@ export function advanceOf(char: string, s: GlyphStyle): number {
   return measureCtx.measureText(char).width;
 }
 
+/** Halo behind shadowed glyphs: dark over pictures, none over a light field (a grey smudge on paper). */
+let halo = 'rgba(0,0,0,0.85)';
+export const setHalo = (rgba: string) => (halo = rgba);
+
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? 1 : 0}|${s.embolden ?? 0}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -77,7 +81,7 @@ function texture(char: string, s: GlyphStyle) {
     };
     if (s.shadow) {
       // the halo is drawn dark, then the white glyph on top; the material colour tints only bright pixels
-      ctx.shadowColor = 'rgba(0,0,0,0.85)';
+      ctx.shadowColor = halo;
       ctx.shadowBlur = s.size * 0.28;
       draw('rgba(0,0,0,0.6)');
       draw('rgba(0,0,0,0.6)');

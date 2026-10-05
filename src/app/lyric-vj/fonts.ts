@@ -62,9 +62,8 @@ const inCatalog = (f?: string) => f !== undefined && FONTS.some((x) => x.family 
  */
 export function resolveFonts(choice?: FontChoice): Required<Fonts> {
   const family = inCatalog(choice?.family) ? choice!.family! : DEFAULT_FAMILY;
-  // small reading type needs a body face: a display-only family (a heavy POP or brush face) clumps at 96 px
-  const fallback = (role: Exclude<FontRole, 'accent'>) => (role === 'body' && !familiesFor('body').includes(family) ? DEFAULT_FAMILY : family);
-  const pick = (role: Exclude<FontRole, 'accent'>) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : fallback(role));
+  // one family for every role: mixing a brush face with a gothic body read as two fonts in one frame
+  const pick = (role: Exclude<FontRole, 'accent'>) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : family);
   return { display: pick('display'), body: pick('body'), script: pick('script') };
 }
 

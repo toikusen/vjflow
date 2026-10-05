@@ -20,12 +20,13 @@ import { quiet, quietFace } from './quiet';
 import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
-import { makeGlyphs, placeRow, advanceOf, Glyph } from './glyphs';
+import { makeGlyphs, placeRow, advanceOf, Glyph, setHalo } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { SYSTEMS } from '../systems';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
+import { drawLook, sectionAt } from './graphics';
 import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -242,6 +243,8 @@ export class LyricVjEngine {
   private plates: Plate[] = [];
   private customScenes: CustomScene[] = [];
   private sceneTarget?: THREE.WebGLRenderTarget;
+  /** The graphic look's canvas, drawn every frame and shown as the background layer. */
+  private gfx?: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; mesh: THREE.Mesh };
   private dim: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** Letterbox bars, closed over quiet spans (the cinema-scope narrowing from the technique library). */
   private bars: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
@@ -282,6 +285,17 @@ export class LyricVjEngine {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
     this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ size: 4, color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthTest: false, sizeAttenuation: false }));
     this.motes.renderOrder = 2.5;
+    if (this.job.treatment.graphics) {
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = H;
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+      mesh.renderOrder = -1; // first: the plates are hidden, everything else (dim, motif, lyrics) draws over it
+      this.scene.add(mesh);
+      this.gfx = { ctx: c.getContext('2d')!, tex, mesh };
+    }
     this.echoRoot.renderOrder = 2.65; // above the dim layer and motes, under the motif and lyrics
     this.scene.add(this.echoRoot);
     this.bars = [1, -1].map((side) => {
@@ -376,6 +390,7 @@ export class LyricVjEngine {
       };
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
+      setHalo(this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, cue.start + 0.3).text ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.85)');
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;
       this.textRoot.add(fitToFrame(layer));
@@ -568,10 +583,25 @@ export class LyricVjEngine {
     }
     const mfx = fxAt(t, this.job.treatment.moments ?? [], this.job.treatment.arc ?? []);
     this.updateMotes(bt + mfx.moteTime, fx.hit, mfx);
+    if (this.gfx) {
+      const beats = this.job.beats;
+      let i = beats.findIndex((b) => b > bt) - 1;
+      if (i < -1) i = beats.length - 1;
+      const since = i >= 0 ? bt - beats[i] : 10;
+      drawLook(this.gfx.ctx, this.job.treatment.graphics!, bt, { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
+        const tex = this.images.get(asset ?? shot.asset ?? '');
+        return tex?.image as CanvasImageSource | undefined;
+      });
+      this.gfx.tex.needsUpdate = true;
+      // the look is the whole background: no full-bleed plates, no generic light motes
+      for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;
+      this.motes.visible = false;
+    }
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;
     const dimPrev = prev ? ((prev.params['dim'] as number) ?? 0.3) : dimTarget;
     // a hold (溜め) darkens the background only: the dim layer sits under the motes (starlight stays) and the text
     this.dim.material.opacity = Math.max(dimPrev + (dimTarget - dimPrev) * easeOutCubic(since / 0.4), mfx.black);
+    if (this.job.treatment.graphics) this.dim.material.opacity = mfx.black; // the look sets its own contrast
 
     for (const [id, layer] of this.shotLayers) {
       const s = this.job.treatment.shots.find((x) => x.id === id)!;
@@ -669,6 +699,8 @@ export class LyricVjEngine {
     this.finalPass.uniforms['uHit'].value = fx.hit;
     // capped: past this, white lyrics bloom into an unreadable glare
     this.bloom.strength = Math.min(1.2, 0.55 + 0.9 * fx.hit + mfx.bloom);
+    // a light field blooms to white: keep only a trace there
+    if (this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, t).text) this.bloom.strength = 0.05;
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
     this.composer.render();
   }
@@ -738,7 +770,8 @@ export class LyricVjEngine {
     const base = this.job.treatment.styleAnchor.palette;
     if (!this.job.treatment.design) return base;
     const stop = colorAt(this.job.treatment.design.colorScript, t);
-    return { ...base, accent: stop.accent, glow: stop.accent, line: stop.highlight };
+    const look = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, t);
+    return { ...base, accent: look?.accent ?? stop.accent, glow: look?.accent ?? stop.accent, line: stop.highlight, text: look?.text ?? base.text, background: look?.text ? '#ffffff' : base.background };
   }
 
   private makeGradient(): THREE.Texture {

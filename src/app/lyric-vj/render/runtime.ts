@@ -195,9 +195,12 @@ export const contrast = (a: string, b: string) => {
 /** Lightens a text colour toward white until it reaches WCAG 4.5:1 against the (dark) background colour. */
 export function readable(hex: string, background: string, min = 4.5): string {
   const n = parseInt(hex.slice(1), 16);
+  const light = contrast(background, '#000000') > contrast(background, '#ffffff');
   for (let k = 0; k <= 1.0001; k += 0.05) {
-    const c = '#' + [16, 8, 0].map((sh) => { const v = (n >> sh) & 255; return Math.round(v + (255 - v) * k).toString(16).padStart(2, '0'); }).join('');
+    // on a light background the colour darkens toward black instead of lightening toward white
+    const toward = light ? 0 : 255;
+    const c = '#' + [16, 8, 0].map((sh) => { const v = (n >> sh) & 255; return Math.round(v + (toward - v) * k).toString(16).padStart(2, '0'); }).join('');
     if (contrast(c, background) >= min) return c;
   }
-  return '#ffffff';
+  return light ? '#000000' : '#ffffff';
 }

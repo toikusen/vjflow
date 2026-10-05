@@ -2,6 +2,7 @@
 // background plus one accent colour, changing by section) with grain and paper texture. The gap analysis against
 // designer VJs found generic full-colour AI backgrounds and one bold gothic face everywhere to be the main tells.
 import { SYSTEMS, SystemId } from './systems';
+import { LANGUAGES, LanguageId } from './languages';
 import { FONTS } from './fonts';
 import type { Window } from './treatment';
 import { MEDIA, MediumId } from './medium';
@@ -44,6 +45,8 @@ export const uses = (d: Pick<Design, 'techniques'> | undefined, id: TechniqueId)
 export interface Design {
   /** The visual language (systems.ts); older treatments have none = stage. */
   system?: SystemId;
+  /** The design language (languages.ts) the song's graphics are built in. */
+  language?: LanguageId;
   /** Techniques this song uses (absent = all, for older treatments). */
   techniques?: TechniqueId[];
   font: string;
@@ -90,7 +93,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined }, fixes),
+    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined, language: d.language && d.language in LANGUAGES ? d.language : undefined }, fixes),
     fixes,
   };
 }

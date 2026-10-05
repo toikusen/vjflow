@@ -23,6 +23,7 @@ import { keywordRange } from './punch';
 import { makeGlyphs, placeRow, advanceOf, Glyph, setHalo } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { SYSTEMS } from '../systems';
+import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
@@ -343,7 +344,7 @@ export class LyricVjEngine {
     const logo = this.job.meta?.logo ? await loader.loadAsync(this.job.meta.logo) : undefined;
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
     const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
-    if (treatment.motif && (!design.system || SYSTEMS[design.system].motif)) {
+    if (treatment.motif && (!design.system || SYSTEMS[design.system].motif) && (!design.language || LANGUAGES[design.language].motif)) {
       this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
       this.scene.add(this.motif.group);

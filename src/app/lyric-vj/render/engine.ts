@@ -17,6 +17,7 @@ import { titleCard } from './title-card';
 import { punch } from './punch';
 import { fxAt, MomentFx, quietSpans } from '../moments';
 import { quiet, quietFace } from './quiet';
+import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
 import { makeGlyphs, placeRow, advanceOf, Glyph } from './glyphs';
@@ -224,6 +225,9 @@ export class LyricVjEngine {
   private bars: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
   private quiet: { start: number; end: number }[] = [];
   /** Keyword flashes on the drops: full-width for a few frames, then the line takes over. */
+  /** Outlined echoes of chorus keywords behind the lines (the library's readable layer + huge echo layer). */
+  private echoes: { rt: CueRuntime; group: THREE.Group; glyphs: Glyph[] }[] = [];
+  private echoRoot = new THREE.Group();
   private flashes: { at: number; glyphs: Glyph[]; group: THREE.Group; cueId: string }[] = [];
   private textRoot = new THREE.Group();
   private shotLayers = new Map<string, ShotLayer>();
@@ -256,6 +260,8 @@ export class LyricVjEngine {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
     this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ size: 4, color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthTest: false, sizeAttenuation: false }));
     this.motes.renderOrder = 2.5;
+    this.echoRoot.renderOrder = 2.65; // above the dim layer and motes, under the motif and lyrics
+    this.scene.add(this.echoRoot);
     this.bars = [1, -1].map((side) => {
       const bar = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 0.2), new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, depthWrite: false }));
       bar.renderOrder = 2.6;
@@ -319,7 +325,11 @@ export class LyricVjEngine {
       .sort((a, b) => a.cue.start - b.cue.start);
     // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
     const lead = this.job.tempo !== undefined && this.job.tempo < 95 ? 0.35 : LEAD;
-    styled.forEach(({ style, cue }, i) => {
+    // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
+    const hook = titleHook(this.job.meta?.title ?? '');
+    styled.forEach(({ style: style0, cue }, i) => {
+      const hooks = hookRanges(cue.text, hook).map(([from, to]) => ({ from, to, method: 'color' as const }));
+      const style = hooks.length ? { ...style0, emphasis: [...hooks, ...(style0.emphasis ?? [])] } : style0;
       const shot = treatment.shots.find((s) => s.id === style.shot)!;
       const next = styled[i + 1]?.cue;
       const nextShow = next ? next.start - lead : Infinity;
@@ -330,7 +340,7 @@ export class LyricVjEngine {
       const exitAt = Math.min(cue.end + HOLD_SEC, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
       const rt: CueRuntime = {
-        cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start),
+        cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
         // an English line is set in the paired Latin face
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: cue.start - lead,
@@ -345,6 +355,10 @@ export class LyricVjEngine {
       layer.group.visible = false;
       this.textRoot.add(layer.group);
       this.cueLayers.push({ rt, layer });
+      if (shot.params['echo']) {
+        const echo = this.makeEcho(rt);
+        if (echo) this.echoes.push(echo);
+      }
     });
     setKanaScale(design.kanaScale);
     this.quiet = quietSpans(treatment.moments ?? []);
@@ -438,6 +452,28 @@ export class LyricVjEngine {
     return tex;
   }
 
+  /** The cue's keyword as large outlined type behind the line, within the frame. */
+  private makeEcho(rt: CueRuntime) {
+    const [k0, k1] = keywordRange(rt.cue.text, rt);
+    const word = [...rt.cue.text].slice(k0, k1).join('').replace(/\s+/g, '');
+    // a long phrase echoed at near text size reads as a doubled line, not a deeper layer
+    if ([...word].length > 5) return undefined;
+    const probe = { family: rt.fonts.display, weight: 900, size: 200 };
+    const w200 = [...word].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
+    const size = Math.round(Math.min(620, (200 * 0.95 * W) / w200));
+    const glyphs = makeGlyphs(word, { family: rt.fonts.display, weight: 900, size, outline: 3 }, new THREE.Color(rt.palette.text));
+    placeRow(glyphs, 0, 30);
+    const group = new THREE.Group();
+    group.renderOrder = 2.65; // a nested group resets three.js's group order
+    for (const g of glyphs) {
+      g.mesh.position.set(g.x, g.y, 0);
+      group.add(g.mesh);
+    }
+    group.visible = false;
+    this.echoRoot.add(group);
+    return { rt, group, glyphs };
+  }
+
   /** Draws a custom scene into its render target; the target's texture then stands in for the plate. */
   private renderCustom(scene: CustomScene, t: number): THREE.Texture {
     this.sceneTarget ??= new THREE.WebGLRenderTarget(W, H);
@@ -519,6 +555,15 @@ export class LyricVjEngine {
       const busy = RENDERERS[s.template]?.standalone || lines.some(({ rt }) => t >= rt.showFrom - 0.5 && t <= rt.exitAt + rt.exitDur + 0.3);
       layer.group.visible = t >= s.start && t < s.end && busy;
       if (layer.group.visible) layer.update(t, fx);
+    }
+    for (const e of this.echoes) {
+      const on = t >= e.rt.showFrom && t <= e.rt.exitAt + e.rt.exitDur;
+      e.group.visible = on;
+      if (!on) continue;
+      const a = clamp01((t - e.rt.showFrom) / 0.6) * (1 - clamp01((t - e.rt.exitAt) / Math.max(0.1, e.rt.exitDur)));
+      // slow drift at a fraction of the text's speed: reads as a deeper layer
+      e.group.position.set(-30 + 60 * clamp01((t - e.rt.showFrom) / 6), 0, 0);
+      for (const g of e.glyphs) g.mesh.material.opacity = 0.2 * a;
     }
     const flash = this.flashes.find((f) => t >= f.at && t < f.at + FLASH_SEC);
     for (const f of this.flashes) {

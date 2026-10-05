@@ -2,7 +2,7 @@
 // while the whole line sits small at the bottom for reading. The designer move of re-composing the frame every 1–2
 // beats in a chorus.
 import * as THREE from 'three';
-import { chunks, phrases } from '../phrases';
+import { phraseBoundaries, phrases } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, readable, settledAt, tagSource, TemplateRenderer } from './runtime';
 
@@ -19,14 +19,20 @@ export function cutPieces(text: string): { text: string; from: number }[] {
   const split = (p: string): string[] => {
     const cs = [...p.trim()];
     if (cs.length <= MAX_PIECE) return [p];
-    const parts = chunks(p.trim(), Math.ceil(cs.length / MAX_PIECE), 2);
-    if (parts.length > 1) return parts.flatMap(split);
-    // no phrase boundary inside: cut nearest the middle, never inside a kanji run (年甲斐ない|ことしたいの)
+    // cut nearest the middle, at a phrase boundary when there is one, never inside a kanji run (六|感 or 年甲|斐)
     const kanji = (c?: string) => !!c && /\p{Script=Han}/u.test(c);
-    const cut = cs.map((_, i) => i).filter((i) => i >= 2 && cs.length - i >= 2 && !(kanji(cs[i - 1]) && kanji(cs[i]))).sort((x, y) => Math.abs(x - cs.length / 2) - Math.abs(y - cs.length / 2))[0];
+    const ok = cs.map((_, i) => i).filter((i) => i >= 2 && cs.length - i >= 2 && !(kanji(cs[i - 1]) && kanji(cs[i])) && !/^[、。，,ーっゃゅょぁぃぅぇぉ]/.test(cs[i]));
+    const bounds = phraseBoundaries(p.trim());
+    const byMiddle = (x: number, y: number) => Math.abs(x - cs.length / 2) - Math.abs(y - cs.length / 2);
+    // prefer where a kanji word ends (六感|またがって), then a phrase boundary, then the middle
+    const cut = ok.filter((i) => kanji(cs[i - 1]) && !kanji(cs[i])).sort(byMiddle)[0] ?? ok.filter((i) => bounds.has(i)).sort(byMiddle)[0] ?? ok.sort(byMiddle)[0];
     return cut === undefined ? [p] : [cs.slice(0, cut).join(''), cs.slice(cut).join('')].flatMap(split);
   };
-  for (const p of phrases(text).flatMap(split)) {
+  // phrases can split a kanji compound (六|感): rejoin pieces that meet kanji to kanji
+  const kanjiEnd = /\p{Script=Han}$/u;
+  const kanjiStart = /^\p{Script=Han}/u;
+  const joined = phrases(text).reduce<string[]>((acc, p) => (acc.length && kanjiEnd.test(acc[acc.length - 1]) && kanjiStart.test(p) ? [...acc.slice(0, -1), acc[acc.length - 1] + p] : [...acc, p]), []);
+  for (const p of joined.flatMap(split)) {
     const from = [...text].indexOf([...p.trim()][0] ?? '', at);
     at = from + [...p].length;
     const prev = out[out.length - 1];

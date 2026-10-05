@@ -16,4 +16,12 @@ describe('cutPieces', () => {
     expect(p.every((x) => [...x.text].length <= 6)).toBe(true);
     expect(p.map((x) => x.text).join('')).toBe('今日は年甲斐ないことしたいの');
   });
+
+  it('never cuts inside a kanji run', () => {
+    const p = cutPieces('今が一番若いの 第六感、六感またがって');
+    expect(p.map((x) => x.text.trim())).toContain('またがって');
+    const kanji = /\p{Script=Han}/u;
+    const joined = p.map((x) => x.text);
+    for (let i = 1; i < joined.length; i++) expect(kanji.test(joined[i - 1].trim().slice(-1)) && kanji.test(joined[i].trim()[0])).toBe(false);
+  });
 });

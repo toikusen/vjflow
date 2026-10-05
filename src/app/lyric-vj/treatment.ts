@@ -285,8 +285,9 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
 }
 
 function repairParams(shotId: string, params: Record<string, ParamValue>, spec: TemplateSpec, errors: string[], fixes: string[]) {
-  const out: Record<string, ParamValue> = {};
-  for (const k of Object.keys(params)) if (!(k in spec.params)) errors.push(`鏡頭 ${shotId}：模板 ${spec.id} 沒有參數 ${k}`);
+  // set by the composition pass, never by the director: kept as is on every template
+  const out: Record<string, ParamValue> = params['echo'] === true ? { echo: true } : {};
+  for (const k of Object.keys(params)) if (!(k in spec.params) && k !== 'echo') errors.push(`鏡頭 ${shotId}：模板 ${spec.id} 沒有參數 ${k}`);
   for (const [k, p] of Object.entries(spec.params)) {
     const v = params[k];
     if (v === undefined) {

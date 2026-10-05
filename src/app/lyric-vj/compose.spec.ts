@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anchorOf, varyComposition } from './compose';
+import { anchorOf, hookRanges, titleHook, varyComposition } from './compose';
 import type { Shot, TreatmentV3 } from './treatment';
 
 const shot = (id: string, start: number, template: string, params: Shot['params'] = {}): Shot =>
@@ -44,5 +44,22 @@ describe('quiet spans', () => {
     varyComposition(t, []);
     expect(t.shots.map((s) => s.template)).toEqual(['punch', 'quiet', 'quiet', 'punch']);
     expect(t.shots.slice(1, 3).map((s) => s.params['position'])).toEqual(['center', 'left']);
+  });
+});
+
+describe('chorus skeleton', () => {
+  it('later choruses reuse the first chorus templates in order, and get an echo', () => {
+    const t = tr([shot('a', 30, 'beat-cut'), shot('b', 35, 'scatter'), shot('c', 90, 'punch'), shot('d', 95, 'vertical'), shot('e', 100, 'typewriter')]);
+    varyComposition(t, [{ start: 30, end: 40 }, { start: 90, end: 105 }]);
+    expect(t.shots.map((s) => s.template)).toEqual(['beat-cut', 'scatter', 'beat-cut', 'scatter', 'scatter']);
+    expect(t.shots.map((s) => !!s.params['echo'])).toEqual([false, true, false, true, true]);
+  });
+});
+
+describe('title hook', () => {
+  it('strips the bracketed subtitle and finds every sung occurrence', () => {
+    expect(titleHook('第六感（THE SIXTH SENSE）')).toBe('第六感');
+    expect(hookRanges('今が一番若いの 第六感、六感またがって第六感', '第六感')).toEqual([[8, 11], [19, 22]]);
+    expect(hookRanges('Sweet Timer again', 'sweet timer')).toEqual([[0, 11]]);
   });
 });

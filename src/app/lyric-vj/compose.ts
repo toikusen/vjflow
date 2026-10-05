@@ -7,6 +7,22 @@ import type { Shot, TreatmentV3 } from './treatment';
 
 type Anchor = 'L' | 'C' | 'R';
 
+/** Shots the chorus skeleton never overwrites. */
+const FIXED = new Set(['title-card', 'quiet']);
+
+/** The song's hook as sung: the title without its bracketed reading or subtitle (第六感（THE SIXTH SENSE） → 第六感). */
+export const titleHook = (title: string) => title.replace(/[（(［\[].*?[）)］\]]/g, '').trim();
+
+/** Character ranges [from, to) where the hook appears in a line (case-insensitive for Latin titles). */
+export function hookRanges(text: string, hook: string): [number, number][] {
+  const chars = [...text.toLowerCase()];
+  const h = [...hook.toLowerCase()];
+  if (h.length < 2) return [];
+  const out: [number, number][] = [];
+  for (let i = 0; i + h.length <= chars.length; i++) if (h.every((c, k) => chars[i + k] === c)) out.push([i, (i += h.length - 1) + 1]);
+  return out;
+}
+
 /** Per template: the param that places it horizontally and its values by anchor (absent = fixed composition). */
 const PLACEMENT: Record<string, { param: string; values: Partial<Record<Anchor, string>> }> = {
   punch: { param: 'align', values: { L: 'left', C: 'center', R: 'right' } },
@@ -50,6 +66,22 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
     if (a === 'L' || a === 'R') side = a;
     prev = a ?? prev;
   }
+  // every chorus keeps the first chorus's skeleton (same templates in the same order); only the escalation below and
+  // the drops' growing strength change, so a returning chorus reads as the same section turned up
+  const inChorus = (c: { start: number; end: number }) => t.shots.filter((x) => x.start >= c.start - 0.5 && x.start < c.end && !FIXED.has(x.template));
+  const skeleton = choruses.length ? inChorus(choruses[0]) : [];
+  choruses.slice(1).forEach((c) => {
+    inChorus(c).forEach((s, i) => {
+      const src = skeleton[Math.min(i, skeleton.length - 1)];
+      if (!src || src.template === s.template) return;
+      s.template = src.template;
+      s.params = { ...structuredClone(src.params), dim: s.params['dim'] ?? src.params['dim'] };
+      fixes.push(`${s.id} 沿用第一次副歌的版型 ${src.template}`);
+    });
+  });
+  // chorus lines carry a large outlined echo of their keyword behind them (except where the type is already huge)
+  // ponytail: only the chorus's first 12 s — an echo on every line becomes the next template look
+  for (const c of choruses) for (const s of inChorus(c)) if (s.template !== 'beat-cut' && s.start < c.start + 12) s.params['echo'] = true;
   // choruses escalate: keyword width rises chorus by chorus
   choruses.forEach((c, k) => {
     const last = k === choruses.length - 1;

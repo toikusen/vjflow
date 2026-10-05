@@ -10,6 +10,12 @@ describe('cutPieces', () => {
     expect(p[0].from).toBe(0);
     expect(p.map((x) => x.text).join('').replace(/\s/g, '')).toBe('今が一番若いの第六感、六感またがって');
   });
+
+  it('splits long phrases so no big piece is longer than 6 characters', () => {
+    const p = cutPieces('今日は年甲斐ないことしたいの');
+    expect(p.every((x) => [...x.text].length <= 6)).toBe(true);
+    expect(p.map((x) => x.text).join('')).toBe('今日は年甲斐ないことしたいの');
+  });
 });
 
 describe('inkOn', () => {

@@ -2,22 +2,35 @@
 // while the whole line sits small at the bottom for reading. The designer move of re-composing the frame every 1–2
 // beats in a chorus.
 import * as THREE from 'three';
-import { phrases } from '../phrases';
+import { chunks, phrases } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, readable, settledAt, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
 
-/** The line as 2–6 pieces of at least 2 characters (particles join the word before them). */
+/** Longest piece cut in big: a longer one cannot be set large enough to read and ran off the frame. */
+export const MAX_PIECE = 6;
+
+/** The line as 2–6 pieces of 2–6 characters (particles join the word before them; long phrases split again). */
 export function cutPieces(text: string): { text: string; from: number }[] {
   const out: { text: string; from: number }[] = [];
   let at = 0;
-  for (const p of phrases(text)) {
+  const split = (p: string): string[] => {
+    const cs = [...p.trim()];
+    if (cs.length <= MAX_PIECE) return [p];
+    const parts = chunks(p.trim(), Math.ceil(cs.length / MAX_PIECE), 2);
+    if (parts.length > 1) return parts.flatMap(split);
+    // no phrase boundary inside: cut nearest the middle, never inside a kanji run (年甲斐ない|ことしたいの)
+    const kanji = (c?: string) => !!c && /\p{Script=Han}/u.test(c);
+    const cut = cs.map((_, i) => i).filter((i) => i >= 2 && cs.length - i >= 2 && !(kanji(cs[i - 1]) && kanji(cs[i]))).sort((x, y) => Math.abs(x - cs.length / 2) - Math.abs(y - cs.length / 2))[0];
+    return cut === undefined ? [p] : [cs.slice(0, cut).join(''), cs.slice(cut).join('')].flatMap(split);
+  };
+  for (const p of phrases(text).flatMap(split)) {
     const from = [...text].indexOf([...p.trim()][0] ?? '', at);
     at = from + [...p].length;
     const prev = out[out.length - 1];
-    if (prev && ([...p.trim()].length < 2 || out.length >= 6)) prev.text += p;
+    if (prev && ([...p.trim()].length < 2 || (out.length >= 6 && [...prev.text].length < MAX_PIECE))) prev.text += p;
     else out.push({ text: p.trim(), from: Math.max(0, from) });
   }
   return out.filter((x) => x.text);
@@ -45,7 +58,8 @@ export const beatCut: TemplateRenderer = {
       const lay = LAYOUTS[(k + seed) % LAYOUTS.length];
       const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
       const w200 = [...piece.text].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
-      const size = Math.round(Math.max(150, Math.min(lay.width > 1 ? 640 : 460, (200 * lay.width * W) / w200)));
+      // fits the layout width, and never wider than the frame (minus margins) even at the floor size
+      const size = Math.round(Math.min((200 * 0.9 * W) / w200, Math.max(150, Math.min(lay.width > 1 ? 640 : 460, (200 * lay.width * W) / w200))));
       const em = emphasisOf(rt, piece.from);
       const gs = makeGlyphs(piece.text, { family: rt.fonts.display, weight: 900, size }, color(em === 'color' || em === 'glow' ? accent : rt.palette.text, 1.0));
       const width = gs.reduce((s, g) => s + g.advance, 0);

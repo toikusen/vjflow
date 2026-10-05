@@ -148,6 +148,9 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       opacity = t >= rt.showFrom ? 1 : 0;
       break;
   }
+  // once landed, each glyph keeps a slight wave so a held line still breathes (designer VJs never freeze type)
+  const held = clamp01((t - start - enterSec) / 0.6);
+  if (held > 0) dy += held * 2.5 * Math.sin((t - start) * 1.7 + g.index * 0.55);
   if (t > rt.exitAt && rt.style.exit !== 'cut') {
     const q = (t - rt.exitAt - g.index * Math.min(0.02, rt.exitDur / Math.max(1, n) / 2)) / rt.exitDur;
     const e = easeInCubic(q);

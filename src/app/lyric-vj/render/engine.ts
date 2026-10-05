@@ -15,6 +15,7 @@ import { beatCut } from './beat-cut';
 import { handwrite } from './handwrite';
 import { titleCard } from './title-card';
 import { punch } from './punch';
+import { block } from './block';
 import { fxAt, MomentFx } from '../moments';
 import { colorAt, DEFAULT_DESIGN } from '../design';
 import { MEDIA, stepTime } from '../medium';
@@ -28,8 +29,8 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
-const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card']);
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut };
+const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card', 'block']);
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, block };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -107,7 +108,7 @@ const FINAL_SHADER = {
         uv += normalize(q + 1e-5) / vec2(1.7778, 1.0) * ring * 0.028 * uShock;
       }
       vec2 d = uv - 0.5;
-      float a = uAberration * (1.0 + 3.0 * uFlash + 3.0 * uShock); // more reads as a template RGB-split effect
+      float a = uAberration * (3.0 * uFlash + 3.0 * uShock); // only on hits: a constant RGB split read as a stock glitch preset
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       c *= 1.0 + 0.45 * uHit;         // accent hit: exposure up (highlights bloom), shadows stay dark
       if (uRays > 0.0) {                            // light rays bursting from the horizon, added light only
@@ -166,14 +167,22 @@ const plateMaterial = () =>
     depthWrite: false,
     uniforms: {
       map: { value: null }, map2: { value: null }, mixAmt: { value: 0 }, opacity: { value: 1 }, exposure: { value: 1 }, sat: { value: 1 },
-      shadowC: { value: new THREE.Color(0, 0, 0) }, highlightC: { value: new THREE.Color(1, 1, 1) }, duo: { value: 0 },
+      shadowC: { value: new THREE.Color(0, 0, 0) }, highlightC: { value: new THREE.Color(1, 1, 1) }, duo: { value: 0 }, soft: { value: 0.0018 },
     },
     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     // exposure/saturation from the emotional arc grade the background only, so lyrics never go grey
     // the song's duotone turns any plate into a designed two-colour image (the main AI-look tell is full colour)
-    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt, opacity, exposure, sat, duo; uniform vec3 shadowC, highlightC; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D map; uniform sampler2D map2; uniform float mixAmt, opacity, exposure, sat, duo, soft; uniform vec3 shadowC, highlightC; varying vec2 vUv;
+      vec3 px(vec2 uv) { return mix(texture2D(map, uv).rgb, texture2D(map2, uv).rgb, mixAmt); }
       void main() {
-        vec3 c = mix(texture2D(map, vUv).rgb, texture2D(map2, vUv).rgb, mixAmt) * exposure;
+        // the plate is softened (a 9-tap ring blur): generated pictures give themselves away in crisp, busy detail,
+        // and a designer keeps the background a supporting layer behind the type
+        vec3 c = px(vUv) * 0.2;
+        for (int i = 0; i < 8; i++) {
+          float a = float(i) * 0.7854;
+          c += px(vUv + vec2(cos(a), sin(a) * 1.7778) * soft) * 0.1;
+        }
+        c *= exposure;
         float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
         c = mix(c, mix(shadowC, highlightC, smoothstep(0.03, 0.9, l)), duo);
         c = mix(vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), c, sat);
@@ -451,6 +460,9 @@ export class LyricVjEngine {
     const kick = this.kickAt(t, mfx.level);
     this.textRoot.scale.setScalar(1 + 0.05 * kick);
     this.textRoot.position.y = 10 * kick;
+    // held lyrics never freeze: the whole type layer drifts a few pixels, like a hand-held camera on a slow move
+    this.textRoot.position.x = 9 * Math.sin(t * 0.31) + 4 * Math.sin(t * 0.83 + 1.7);
+    this.textRoot.position.y += 6 * Math.sin(t * 0.27 + 0.9);
     const shake = Math.max(fx.shake, mfx.shake) * 10;
     this.camera.position.set((hash(t * 30) - 0.5) * shake, (hash(t * 30, 1) - 0.5) * shake, 5);
     this.camera.zoom = mfx.zoom;

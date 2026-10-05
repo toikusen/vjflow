@@ -11,3 +11,11 @@ describe('cutPieces', () => {
     expect(p.map((x) => x.text).join('').replace(/\s/g, '')).toBe('今が一番若いの第六感、六感またがって');
   });
 });
+
+describe('inkOn', () => {
+  it('sets dark ink on light slabs and white on dark ones', async () => {
+    const { inkOn } = await import('./block');
+    expect(inkOn('#ffd27a')).toBe('#0b0a10');
+    expect(inkOn('#2a1430')).toBe('#ffffff');
+  });
+});

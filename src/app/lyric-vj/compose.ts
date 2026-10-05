@@ -17,7 +17,7 @@ const PLACEMENT: Record<string, { param: string; values: Partial<Record<Anchor, 
 
 /** Where a shot sits: diagonal and per-word templates read as off-centre already. */
 export function anchorOf(s: Shot): Anchor | undefined {
-  if (s.template === 'scatter' || s.template === 'beat-cut') return undefined;
+  if (s.template === 'scatter' || s.template === 'beat-cut' || s.template === 'block') return undefined;
   const p = PLACEMENT[s.template];
   if (!p) return 'C';
   const v = s.params[p.param];
@@ -59,5 +59,14 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
       if (last) s.params['align'] = 'center';
     }
   });
+  // leaving a chorus, the next picture opens through the motif's shape (the engine's iris on 'wipe'): the motif
+  // does a job instead of floating over the frame as a watermark
+  for (const c of choruses) {
+    const next = t.shots.find((s) => Math.abs(s.start - c.end) < 1.5 && s.start > c.start);
+    if (next && next.transitionIn !== 'wipe') {
+      next.transitionIn = 'wipe';
+      fixes.push(`${next.id} 用主題物件形狀轉場離開副歌`);
+    }
+  }
   return fixes;
 }

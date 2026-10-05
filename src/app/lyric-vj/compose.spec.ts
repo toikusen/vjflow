@@ -21,6 +21,12 @@ describe('varyComposition', () => {
     expect(t.shots.map((s) => s.params['align'] ?? 'center')).toEqual(['center', 'left', 'center', 'right', 'center', 'center']);
   });
 
+  it('opens the shot after each chorus through the motif (wipe)', () => {
+    const t = tr([shot('a', 30, 'punch'), shot('b', 35, 'typewriter'), shot('c', 40, 'vertical')]);
+    varyComposition(t, [{ start: 29, end: 35.4 }]);
+    expect(t.shots.map((s) => s.transitionIn)).toEqual(['cut', 'wipe', 'cut']);
+  });
+
   it('escalates choruses: narrow first, widest last, never bleeding', () => {
     const t = tr([shot('a', 30, 'punch'), shot('b', 90, 'punch'), shot('c', 150, 'punch', { align: 'left' })]);
     varyComposition(t, [{ start: 29, end: 40 }, { start: 89, end: 100 }, { start: 149, end: 160 }]);

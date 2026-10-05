@@ -19,6 +19,18 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '整組文字上移的像素（避開素材主體，例如人物在下方就往上）' },
     },
   },
+  block: {
+    id: 'block',
+    description: '色塊：強調色的大色塊從一側砸進來蓋住半個畫面，關鍵字以深色巨字壓在色塊上，其餘字以小字排在色塊旁。適合副歌、爆點、關鍵句；用來取代每次都置中的 punch，讓畫面有設計感的分割。',
+    defaultEnter: 'slam',
+    defaultExit: 'cut',
+    params: {
+      side: { type: 'enum', values: ['left', 'right'], default: 'left', description: '色塊從哪一側進來' },
+      cover: { type: 'number', min: 0.38, max: 0.62, default: 0.5, description: '色塊蓋住畫面寬度的比例' },
+      tilt: { type: 'number', min: -8, max: 8, default: -4, description: '色塊邊緣傾斜角度（度）' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+    },
+  },
   'frame-split': {
     id: 'frame-split',
     description: '框線分割：細線框與角括號先畫出，主句在框內，其餘行以小字排在框外下方。適合主歌、敘事句、長句。',

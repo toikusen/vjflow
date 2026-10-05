@@ -207,3 +207,12 @@ export function fxAt(t: number, moments: Moment[], arc: ArcPoint[]): MomentFx {
   fx.exposure = Math.min(fx.exposure, 1.8);
   return fx;
 }
+
+/** Quiet spans: each break until the next build, drop, hold or finale (at most 30 s). */
+export function quietSpans(moments: Moment[]): { start: number; end: number }[] {
+  const sorted = [...moments].sort((a, b) => a.at - b.at);
+  return sorted
+    .filter((m) => m.kind === 'break')
+    .map((m) => ({ start: m.at, end: Math.min(m.at + 30, sorted.find((n) => n.at > m.at + 0.5 && n.kind !== 'break')?.at ?? m.at + 30) }));
+}
+

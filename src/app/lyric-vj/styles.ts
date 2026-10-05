@@ -24,7 +24,7 @@ export const STYLES: Record<string, StylePreset> = {
     id: 'emotional',
     name: '情緒型',
     description: '抒情、帶故事感的歌詞 VJ：風景與氛圍為底，大字與框線交替，動態自然、特效對拍。',
-    templates: ['punch', 'block', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite', 'title-card', 'beat-cut'],
+    templates: ['punch', 'block', 'stair', 'quiet', 'frame-split', 'typewriter', 'vertical', 'scatter', 'handwrite', 'title-card', 'beat-cut'],
     shotSec: [3.5, 8],
     rules: [
       '素材只畫風景與氛圍（天空、雲、光、海、城市、街道、自然景物），依歌詞意象決定場景與時段；不要畫人物，最多只能是很小、靜止的遠景剪影。',

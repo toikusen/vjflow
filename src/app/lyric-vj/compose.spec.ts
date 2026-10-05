@@ -34,3 +34,15 @@ describe('varyComposition', () => {
     expect(t.shots[2].params['align']).toBe('center');
   });
 });
+
+describe('quiet spans', () => {
+  it('sets shots inside a break to the quiet template, alternating centre and left', async () => {
+    const { quietSpans } = await import('./moments');
+    const moments = [{ kind: 'drop' as const, at: 30 }, { kind: 'break' as const, at: 50 }, { kind: 'build' as const, at: 66 }];
+    expect(quietSpans(moments)).toEqual([{ start: 50, end: 66 }]);
+    const t = { ...tr([shot('a', 45, 'punch'), shot('b', 50, 'typewriter'), shot('c', 55, 'vertical'), shot('d', 66, 'punch')]), moments } as TreatmentV3;
+    varyComposition(t, []);
+    expect(t.shots.map((s) => s.template)).toEqual(['punch', 'quiet', 'quiet', 'punch']);
+    expect(t.shots.slice(1, 3).map((s) => s.params['position'])).toEqual(['center', 'left']);
+  });
+});

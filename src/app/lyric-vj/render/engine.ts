@@ -16,7 +16,11 @@ import { handwrite } from './handwrite';
 import { titleCard } from './title-card';
 import { punch } from './punch';
 import { block } from './block';
-import { fxAt, MomentFx } from '../moments';
+import { fxAt, MomentFx, quietSpans } from '../moments';
+import { quiet, quietFace } from './quiet';
+import { stair } from './stair';
+import { keywordRange } from './punch';
+import { makeGlyphs, placeRow, advanceOf, Glyph } from './glyphs';
 import { colorAt, DEFAULT_DESIGN } from '../design';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
@@ -30,8 +34,11 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
+/** How long a drop's keyword flash holds before the line takes over (a few frames). */
+const FLASH_SEC = 0.16;
+const HOLD_SEC = 1.2;
 const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card', 'block']);
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, block };
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, block, quiet, stair };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -46,6 +53,8 @@ export interface RenderJob {
   beats: number[];
   /** Kick strength per beat (song.beatStrength). */
   beatStrength?: number[];
+  /** Song tempo (BPM): slow songs get breathing timing. */
+  tempo?: number;
   cues: TimelineCue[];
   treatment: TreatmentV3;
   assets: Record<string, AssetSource>;
@@ -212,6 +221,11 @@ export class LyricVjEngine {
   private customScenes: CustomScene[] = [];
   private sceneTarget?: THREE.WebGLRenderTarget;
   private dim: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  /** Letterbox bars, closed over quiet spans (the cinema-scope narrowing from the technique library). */
+  private bars: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
+  private quiet: { start: number; end: number }[] = [];
+  /** Keyword flashes on the drops: full-width for a few frames, then the line takes over. */
+  private flashes: { at: number; glyphs: Glyph[]; group: THREE.Group; cueId: string }[] = [];
   private textRoot = new THREE.Group();
   private shotLayers = new Map<string, ShotLayer>();
   private cueLayers: { rt: CueRuntime; layer: CueLayer }[] = [];
@@ -243,6 +257,13 @@ export class LyricVjEngine {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
     this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ size: 4, color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthTest: false, sizeAttenuation: false }));
     this.motes.renderOrder = 2.5;
+    this.bars = [1, -1].map((side) => {
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 0.2), new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, depthWrite: false }));
+      bar.renderOrder = 2.6;
+      bar.userData['side'] = side;
+      this.scene.add(bar);
+      return bar;
+    });
     this.scene.add(this.motes);
     this.dim = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 1.2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false }));
     this.dim.renderOrder = 2;
@@ -262,7 +283,7 @@ export class LyricVjEngine {
     const latin = readingLatin(design.accentFont);
     await Promise.all([700, 900].map((w) => document.fonts.load(`${nearestWeight(latin, w)} 100px "${latin}"`, 'Aa')));
     const text = cues.map((c) => c.text).join('');
-    const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400]] as const;
+    const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400], [quietFace(fonts.display), 500]] as const;
     await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));
     const loader = new THREE.TextureLoader();
     await Promise.all(
@@ -297,20 +318,23 @@ export class LyricVjEngine {
       .map((style) => ({ style, cue: cues.find((c) => c.id === style.cueId)! }))
       .filter((x) => x.cue)
       .sort((a, b) => a.cue.start - b.cue.start);
+    // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
+    const lead = this.job.tempo !== undefined && this.job.tempo < 95 ? 0.35 : LEAD;
     styled.forEach(({ style, cue }, i) => {
       const shot = treatment.shots.find((s) => s.id === style.shot)!;
       const next = styled[i + 1]?.cue;
-      const nextShow = next ? next.start - LEAD : Infinity;
+      const nextShow = next ? next.start - lead : Infinity;
       const len = cue.end - cue.start;
       const pace = Math.min(1, Math.max(0.35, len / 2)); // short lines enter and leave faster so they stay readable
       const exitSec = EXIT_SEC * pace;
-      const exitAt = Math.min(cue.end, nextShow - exitSec - 0.02);
+      // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
+      const exitAt = Math.min(cue.end + HOLD_SEC, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
       const rt: CueRuntime = {
         cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start),
         // an English line is set in the paired Latin face
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
-        showFrom: cue.start - LEAD,
+        showFrom: cue.start - lead,
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
         accentTimes: (style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined),
@@ -324,6 +348,26 @@ export class LyricVjEngine {
       this.cueLayers.push({ rt, layer });
     });
     setKanaScale(design.kanaScale);
+    this.quiet = quietSpans(treatment.moments ?? []);
+    // the drop keyword flash: one per drop/finale (2–4 a song), the line's keyword set full width in the display face
+    for (const m of (treatment.moments ?? []).filter((x) => x.kind === 'drop' || x.kind === 'finale')) {
+      const hit = styled.find(({ cue }) => cue.start >= m.at - 0.4 && cue.start <= m.at + 0.6);
+      if (!hit) continue;
+      const [k0, k1] = keywordRange(hit.cue.text, hit);
+      const word = [...hit.cue.text].slice(k0, k1).join('').replace(/\s+/g, '');
+      const probe = { family: fonts.display, weight: 900, size: 200 };
+      const w200 = [...word].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
+      const glyphs = makeGlyphs(word, { family: fonts.display, weight: 900, size: Math.round(Math.min(700, (200 * 0.9 * W) / w200)) }, new THREE.Color(1, 1, 1));
+      placeRow(glyphs, 0, 20);
+      const group = new THREE.Group();
+      glyphs.forEach((g) => {
+        g.mesh.position.set(g.x, g.y, 0);
+        group.add(g.mesh);
+      });
+      group.visible = false;
+      this.textRoot.add(group);
+      this.flashes.push({ at: m.at, glyphs, group, cueId: hit.cue.id });
+    }
   }
 
   metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[] } {
@@ -477,8 +521,18 @@ export class LyricVjEngine {
       layer.group.visible = t >= s.start && t < s.end && busy;
       if (layer.group.visible) layer.update(t, fx);
     }
+    const flash = this.flashes.find((f) => t >= f.at && t < f.at + FLASH_SEC);
+    for (const f of this.flashes) {
+      f.group.visible = f === flash;
+      if (f !== flash) continue;
+      f.group.scale.setScalar(1.08 - 0.08 * ((t - f.at) / FLASH_SEC));
+    }
+    // letterbox: bars slide in over 0.5 s at a quiet span and snap open on the beat that ends it
+    const q = this.quiet.find((s) => t >= s.start && t < s.end);
+    const close = q ? easeOutCubic(clamp01((t - q.start) / 0.5)) : 0;
+    for (const bar of this.bars) bar.position.y = bar.userData['side'] * (H / 2 + H * 0.1 - close * H * 0.12);
     for (const { rt, layer } of this.cueLayers) {
-      layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05;
+      layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== flash?.cueId;
       if (layer.group.visible) layer.update(t, fx);
     }
     // heavy beats in loud sections: the lyrics jump with the kick (strength from the song's kick analysis)

@@ -61,7 +61,7 @@ for (const s of Object.values(assets)) {
   if (s.frames) s.frames.pattern = url(s.frames.pattern);
 }
 const job: RenderJob = {
-  fps, window: win, beats: song.beats, beatStrength: song.beatStrength,
+  fps, window: win, beats: song.beats, beatStrength: song.beatStrength, tempo: song.tempo,
   cues: cuesIn(song, win),
   treatment: checked.treatment, assets,
   fonts: { family: a.font, display: a['font-display'], body: a['font-body'], script: a['font-script'] },

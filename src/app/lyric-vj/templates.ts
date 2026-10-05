@@ -31,6 +31,26 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
     },
   },
+  stair: {
+    id: 'stair',
+    description: '階梯錯位：句子在語意斷點分成兩行，第一行從畫面一側 36% 處起排，第二行再往內縮排四分之一畫面、晚一拍進場，整組偏離中軸。適合主歌、導歌、敘事句；取代置中排版。',
+    defaultEnter: 'wipe',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right'], default: 'left', description: 'left：由左上往右下排；right：鏡像，由右上往左下' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+    },
+  },
+  quiet: {
+    id: 'quiet',
+    description: '安靜段：細明朝小字（約一般字級的四分之一）、寬字距、大量留白，幾乎不動、只慢慢淡入。用在 break、落ちサビ、橋段等安靜的段落，讓副歌的衝擊靠對比出來。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      position: { type: 'enum', values: ['center', 'left'], default: 'center', description: '文字位置' },
+      dim: { type: 'number', min: 0, max: 0.9, default: 0.7, description: '背景壓暗程度（安靜段要暗）' },
+    },
+  },
   'frame-split': {
     id: 'frame-split',
     description: '框線分割：細線框與角括號先畫出，主句在框內，其餘行以小字排在框外下方。適合主歌、敘事句、長句。',

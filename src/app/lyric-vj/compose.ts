@@ -2,6 +2,7 @@
 // chorus laid out the same. This moves centred shots off-centre so two centred frames never follow each other, and
 // makes the choruses escalate (the keyword grows chorus by chorus). Bleed is switched off: every review read the
 // cropped keyword as a layout overflow.
+import { quietSpans } from './moments';
 import type { Shot, TreatmentV3 } from './treatment';
 
 type Anchor = 'L' | 'C' | 'R';
@@ -17,7 +18,7 @@ const PLACEMENT: Record<string, { param: string; values: Partial<Record<Anchor, 
 
 /** Where a shot sits: diagonal and per-word templates read as off-centre already. */
 export function anchorOf(s: Shot): Anchor | undefined {
-  if (s.template === 'scatter' || s.template === 'beat-cut' || s.template === 'block') return undefined;
+  if (['scatter', 'beat-cut', 'block', 'stair', 'quiet'].includes(s.template)) return undefined;
   const p = PLACEMENT[s.template];
   if (!p) return 'C';
   const v = s.params[p.param];
@@ -59,6 +60,16 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
       if (last) s.params['align'] = 'center';
     }
   });
+  // quiet spans (breaks) drop the type down a register: thin mincho, small, still, left or centred
+  let left = false;
+  for (const q of quietSpans(t.moments ?? [])) {
+    for (const s of t.shots.filter((x) => x.template !== 'title-card' && Math.min(x.end, q.end) - Math.max(x.start, q.start) > 0.6 * (x.end - x.start))) {
+      s.template = 'quiet';
+      s.params = { position: left ? 'left' : 'center', dim: 0.7 };
+      left = !left;
+      fixes.push(`${s.id} 安靜段改用 quiet 版型`);
+    }
+  }
   // leaving a chorus, the next picture opens through the motif's shape (the engine's iris on 'wipe'): the motif
   // does a job instead of floating over the frame as a watermark
   for (const c of choruses) {

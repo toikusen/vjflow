@@ -66,11 +66,15 @@ async function image(id: string, prompt: string, ref?: Buffer): Promise<string> 
   afford(`image ${id}`, PRICE.image);
   const input: object[] = [{ type: 'text', text: prompt }];
   if (ref) input.push({ type: 'image', mime_type: 'image/jpeg', data: ref.toString('base64') });
+  // the model sometimes completes with no picture: ask again (up to three times) before giving up
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const r: any = await (ai as any).interactions.create({
-    model: a['image-model'], input,
-    response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '16:9', image_size: '2K' },
-  });
+  let r: any;
+  for (let tries = 0; tries < 3 && !r?.output_image?.data; tries++)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    r = await (ai as any).interactions.create({
+      model: a['image-model'], input,
+      response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '16:9', image_size: '2K' },
+    });
   if (!r.output_image?.data) throw new Error(`圖片 ${id} 沒有產出：${JSON.stringify(r).slice(0, 400)}`);
   writeFileSync(file, Buffer.from(r.output_image.data, 'base64'));
   charge(`image ${id}`, PRICE.image);

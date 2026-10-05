@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { googleFontsUrl, nearestWeight, resolveFonts } from './fonts';
+import { googleFontsUrl, nearestWeight, readingLatin, resolveFonts } from './fonts';
 
 describe('fonts', () => {
   it('uses one family for the whole video', () => {
     expect(resolveFonts()).toEqual({ display: 'Zen Kaku Gothic New', body: 'Zen Kaku Gothic New', script: 'Zen Kaku Gothic New' });
-    expect(resolveFonts({ family: 'Zen Kurenaido' })).toEqual({ display: 'Zen Kurenaido', body: 'Zen Kurenaido', script: 'Zen Kurenaido' });
+    expect(resolveFonts({ family: 'Klee One' })).toEqual({ display: 'Klee One', body: 'Klee One', script: 'Klee One' });
     expect(resolveFonts({ family: 'Comic Sans' }).body).toBe('Zen Kaku Gothic New');
   });
 
   it('keeps valid per-role overrides', () => {
-    expect(resolveFonts({ display: 'Dela Gothic One', script: 'Yomogi' })).toEqual({ display: 'Dela Gothic One', body: 'Zen Kaku Gothic New', script: 'Yomogi' });
+    expect(resolveFonts({ display: 'Mochiy Pop One', script: 'Yomogi' })).toEqual({ display: 'Mochiy Pop One', body: 'Zen Kaku Gothic New', script: 'Yomogi' });
+    // a display-only family keeps a legible body face for small type
+    expect(resolveFonts({ family: 'Mochiy Pop One' }).body).toBe('Zen Kaku Gothic New');
     expect(resolveFonts({ display: 'Yomogi' }).display).toBe('Zen Kaku Gothic New'); // Yomogi is not a display face
   });
 
@@ -23,5 +25,12 @@ describe('fonts', () => {
     expect(googleFontsUrl()).toContain('family=Zen+Kaku+Gothic+New:wght@700;900');
     expect(googleFontsUrl()).toContain('family=Klee+One:wght@600');
     expect(googleFontsUrl()).toContain('family=Yomogi&');
+  });
+});
+
+describe('readingLatin', () => {
+  it('swaps decorative scripts for a clean sans on English lyric lines', () => {
+    expect(readingLatin('Great Vibes')).toBe('Montserrat');
+    expect(readingLatin('Cormorant Garamond')).toBe('Cormorant Garamond');
   });
 });

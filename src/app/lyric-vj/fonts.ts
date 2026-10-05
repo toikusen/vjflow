@@ -9,10 +9,11 @@ export interface FontSpec {
   roles: FontRole[];
   weights: number[];
   feel: string;
+  /** false: decorative only (script/display flourish), never for reading lines. */
+  legible?: boolean;
 }
 
 export const FONTS: FontSpec[] = [
-  { family: 'Dela Gothic One', roles: ['display'], weights: [400], feel: '極粗黑體，衝擊感' },
   { family: 'Zen Kaku Gothic New', roles: ['body'], weights: [700, 900], feel: '清楚的粗黑體' },
   { family: 'Klee One', roles: ['script', 'body'], weights: [600], feel: '鉛筆／鋼筆楷書手寫，清楚好讀' },
   { family: 'Zen Kurenaido', roles: ['script'], weights: [400], feel: '細毛筆柔和手寫' },
@@ -30,12 +31,12 @@ export const FONTS: FontSpec[] = [
   { family: 'DotGothic16', roles: ['display', 'body'], weights: [400], feel: '點陣字，遊戲、電子、復古數位' },
   { family: 'Yuji Syuku', roles: ['display', 'script'], weights: [400], feel: '毛筆書法，和風、熱血、儀式感' },
   // accent faces (Latin only): English lines, the artist name and the corner tag, paired with the main face
-  { family: 'Great Vibes', roles: ['accent'], weights: [400], feel: '優雅草寫，魔法、浪漫、夜晚' },
-  { family: 'Dancing Script', roles: ['accent'], weights: [400, 700], feel: '輕快手寫，甜、活潑' },
+  { family: 'Great Vibes', roles: ['accent'], weights: [400], feel: '優雅草寫，魔法、浪漫、夜晚（只用在標籤，英文歌詞改用易讀字）', legible: false },
+  { family: 'Dancing Script', roles: ['accent'], weights: [400, 700], feel: '輕快手寫，甜、活潑（只用在標籤，英文歌詞改用易讀字）', legible: false },
   { family: 'Cormorant Garamond', roles: ['accent'], weights: [300, 400, 600], feel: '古典襯線，文學、冷調、精緻' },
   { family: 'Montserrat', roles: ['accent'], weights: [300, 500, 700], feel: '幾何無襯線，都會、俐落、電子' },
   { family: 'Space Mono', roles: ['accent'], weights: [400, 700], feel: '等寬字，科技、數位、UI 感' },
-  { family: 'Pacifico', roles: ['accent'], weights: [400], feel: '圓潤手寫，可愛、POP' },
+  { family: 'Pacifico', roles: ['accent'], weights: [400], feel: '圓潤手寫，可愛、POP（只用在標籤，英文歌詞改用易讀字）', legible: false },
 ];
 
 export type Fonts = { display: string; body: string; script?: string };
@@ -61,9 +62,14 @@ const inCatalog = (f?: string) => f !== undefined && FONTS.some((x) => x.family 
  */
 export function resolveFonts(choice?: FontChoice): Required<Fonts> {
   const family = inCatalog(choice?.family) ? choice!.family! : DEFAULT_FAMILY;
-  const pick = (role: Exclude<FontRole, 'accent'>) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : family);
+  // small reading type needs a body face: a display-only family (a heavy POP or brush face) clumps at 96 px
+  const fallback = (role: Exclude<FontRole, 'accent'>) => (role === 'body' && !familiesFor('body').includes(family) ? DEFAULT_FAMILY : family);
+  const pick = (role: Exclude<FontRole, 'accent'>) => (choice?.[role] && familiesFor(role).includes(choice[role]!) ? choice[role]! : fallback(role));
   return { display: pick('display'), body: pick('body'), script: pick('script') };
 }
+
+/** The Latin face for English lyric lines: the accent face when it reads easily, else a clean sans. */
+export const readingLatin = (accent: string) => (FONTS.find((f) => f.family === accent)?.legible === false ? 'Montserrat' : accent);
 
 /** One Google Fonts stylesheet URL for the whole catalog. */
 export function googleFontsUrl(): string {

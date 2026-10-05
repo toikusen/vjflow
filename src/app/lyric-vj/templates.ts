@@ -21,7 +21,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
   },
   block: {
     id: 'block',
-    description: '色塊：強調色的大色塊從一側砸進來蓋住半個畫面，關鍵字以深色巨字壓在色塊上，其餘字以小字排在色塊旁。適合副歌、爆點、關鍵句；用來取代每次都置中的 punch，讓畫面有設計感的分割。',
+    description: '色塊：取自背景色調的半透明色塊從一側滑進來蓋住半個畫面，關鍵字以深色巨字壓在色塊上，其餘字以小字排在色塊旁。適合副歌、爆點、關鍵句；用來取代每次都置中的 punch，讓畫面有設計感的分割。',
     defaultEnter: 'slam',
     defaultExit: 'cut',
     params: {

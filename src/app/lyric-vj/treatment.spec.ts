@@ -20,7 +20,7 @@ const win = { start: 10, end: 20 };
 function base(): TreatmentV3 {
   return {
     concept: 'c',
-    styleAnchor: { prompt: 'p', palette: { background: '#000000', text: '#ffffff', accent: '#00ffff', line: '#ffffff', glow: '#4488ff' }, fonts: { display: 'Dela Gothic One', body: 'Zen Kaku Gothic New' } },
+    styleAnchor: { prompt: 'p', palette: { background: '#000000', text: '#ffffff', accent: '#00ffff', line: '#ffffff', glow: '#4488ff' }, fonts: { display: 'Mochiy Pop One', body: 'Zen Kaku Gothic New' } },
     assets: [{ id: 'a1', kind: 'image', prompt: 'night sky' }],
     shots: [
       { id: 's1', start: 10, end: 13, template: 'punch', params: {}, asset: 'a1', camera: 'push', transitionIn: 'flash' },

@@ -21,7 +21,7 @@ import { colorAt, DEFAULT_DESIGN } from '../design';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import type { Palette } from '../treatment';
-import { DEFAULT_FONTS, FontChoice, nearestWeight, resolveFonts } from '../fonts';
+import { DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
@@ -256,6 +256,8 @@ export class LyricVjEngine {
     setKanaScale(design.kanaScale);
     this.accentFont = design.accentFont;
     await document.fonts.load(`400 100px "${design.accentFont}"`, 'Aa');
+    const latin = readingLatin(design.accentFont);
+    await Promise.all([700, 900].map((w) => document.fonts.load(`${nearestWeight(latin, w)} 100px "${latin}"`, 'Aa')));
     const text = cues.map((c) => c.text).join('');
     const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400]] as const;
     await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));
@@ -300,7 +302,7 @@ export class LyricVjEngine {
       const rt: CueRuntime = {
         cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start),
         // an English line is set in the paired Latin face
-        fonts: isLatinLine(cue.text) ? { display: this.accentFont, body: this.accentFont, script: this.accentFont } : this.fonts,
+        fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: cue.start - LEAD,
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),

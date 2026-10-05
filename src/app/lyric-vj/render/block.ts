@@ -1,13 +1,16 @@
-// block: a slab of the section's accent colour slams in from one side on the cue and covers that part of the frame;
+// block: a translucent slab in the plate's own colours glides in from one side on the cue and covers that part of the frame;
 // the keyword is set huge in ink on the slab, the rest of the line in small type beside it. The designer chorus
 // move the gap analysis kept asking for instead of the centred small-big-small stack: a colour block that eats the
 // picture and carries the type.
 import * as THREE from 'three';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
 import { keywordRange } from './punch';
-import { accentPulse, color, CueLayer, CueRuntime, FrameFx, glyphMotion, readable, settledAt, tagSource, TemplateRenderer } from './runtime';
+import { accentPulse, color, CueLayer, CueRuntime, FrameFx, glyphMotion, settledAt, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
+const easeInOutCubic = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+const mixHex = (a: string, b: string, k: number) =>
+  '#' + [1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - k) + parseInt(b.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
 const H = 1080;
 const STAGGER = 0.04;
 
@@ -32,12 +35,14 @@ export const block: TemplateRenderer = {
     const rest = [{ text: edge(chars.slice(0, k0).join('')), from: 0 }, { text: edge(chars.slice(k1).join('')), from: k1 }].filter((r) => r.text);
 
     const group = new THREE.Group();
-    const slabColor = readable(rt.palette.accent, rt.palette.background, 3);
+    // the slab takes the plate's own duotone colours (dark ground toward the section highlight), translucent so the
+    // picture shows through: a saturated accent slab read as pasted on, unrelated to the background
+    const slabColor = mixHex(rt.palette.background, rt.palette.line, 0.45);
     const slabW = W * cover;
     // the slab is wider and taller than its visible part so the tilt never shows a corner
     const slab = new THREE.Mesh(
       new THREE.PlaneGeometry(slabW + W * 0.3, H * 1.6),
-      new THREE.MeshBasicMaterial({ color: color(slabColor, 0.92), transparent: true, depthTest: false, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ color: color(slabColor, 1), opacity: 0.78, transparent: true, depthTest: false, depthWrite: false }),
     );
     slab.rotation.z = tilt;
     // cue layers sort at group order 0 with the plates (renderOrder 0/1) and under the dim layer (2): the slab sits
@@ -76,13 +81,12 @@ export const block: TemplateRenderer = {
       update(t: number, fx: FrameFx) {
         const pulse = accentPulse(t, rt.accentTimes);
         fx.hit = Math.max(fx.hit, 0.35 * accentPulse(t, rt.accentTimes, 12));
-        // slab slams in from its side in 0.22 s and leaves the same way
-        const inK = easeOutCubic(clamp01((t - rt.showFrom) / 0.22));
+        // the slab glides in from its side over 0.5 s (a slam read as abrupt) and leaves the same way
+        const inK = easeInOutCubic(clamp01((t - rt.showFrom) / 0.5));
         const outK = t > rt.exitAt ? easeOutCubic(clamp01((t - rt.exitAt) / Math.max(0.08, rt.exitDur))) : 0;
         const off = side * (1 - inK + outK) * (slabW + W * 0.3);
         slab.position.set(slabX + off, 0, 0);
-        slab.scale.setScalar(1 + 0.03 * pulse);
-        slab.material.opacity = t < rt.showFrom || t > rt.exitAt + rt.exitDur ? 0 : 1;
+        slab.material.opacity = t < rt.showFrom || t > rt.exitAt + rt.exitDur ? 0 : 0.78;
         kw.forEach((g) => {
           const m = glyphMotion(rt, g, kw.length, t, STAGGER);
           g.mesh.position.set(g.x + m.dx + off, g.y + m.dy, 0);
@@ -97,7 +101,7 @@ export const block: TemplateRenderer = {
           g.mesh.material.opacity = m.opacity;
         });
       },
-      readable: () => [Math.max(settledAt(rt, kw.length, STAGGER), rt.showFrom + 0.22, settledAt(smallRt, small.flat().length, 0.015)), rt.exitAt],
+      readable: () => [Math.max(settledAt(rt, kw.length, STAGGER), rt.showFrom + 0.5, settledAt(smallRt, small.flat().length, 0.015)), rt.exitAt],
     };
   },
 };

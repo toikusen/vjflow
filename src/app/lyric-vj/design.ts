@@ -28,7 +28,21 @@ export const PEAK_STYLES: Record<PeakStyle, string> = {
   burst: '主題物件爆開：物件放大成一層層往外衝的圈（物件為主的歌）',
 };
 
+/** Optional techniques from the library, picked per song by the director (none is right for every song). */
+export const TECHNIQUES = {
+  echo: '回聲字：副歌開頭在歌詞背後疊一層放大的關鍵字描邊字，慢慢漂移。適合關鍵字短而有力、畫面需要景深的歌；抒情、字少的歌不要用',
+  skeleton: '副歌同骨架：之後每次副歌照第一次副歌的版型順序排，靠色彩與爆點逐次加強。適合副歌重複多次的歌',
+  'title-hook': '曲名字樣：歌詞唱到歌名時每次都用同一個強調色，像商標。適合歌名會在歌詞裡唱出來的歌',
+  flash: '爆點巨字閃現：每次副歌爆點先把關鍵字滿版閃一下再換成整句。適合有明確 drop 的快歌；慢歌不要用',
+  quiet: '安靜段降維：break／落ちサビ改成細明朝小字、大量留白並加上下黑邊。適合有明顯安靜段的歌',
+} as const;
+export type TechniqueId = keyof typeof TECHNIQUES;
+/** Whether a design uses a technique: designs from before the choice existed use them all. */
+export const uses = (d: Pick<Design, 'techniques'> | undefined, id: TechniqueId) => !d?.techniques || d.techniques.includes(id);
+
 export interface Design {
+  /** Techniques this song uses (absent = all, for older treatments). */
+  techniques?: TechniqueId[];
   font: string;
   /** Paired Latin face: English lines, the artist name and the corner tag. */
   accentFont: string;
@@ -73,7 +87,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean' },
+    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES) },
     fixes,
   };
 }

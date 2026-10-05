@@ -2,6 +2,7 @@
 // chorus laid out the same. This moves centred shots off-centre so two centred frames never follow each other, and
 // makes the choruses escalate (the keyword grows chorus by chorus). Bleed is switched off: every review read the
 // cropped keyword as a layout overflow.
+import { uses } from './design';
 import { quietSpans } from './moments';
 import type { Shot, TreatmentV3 } from './treatment';
 
@@ -70,7 +71,7 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
   // the drops' growing strength change, so a returning chorus reads as the same section turned up
   const inChorus = (c: { start: number; end: number }) => t.shots.filter((x) => x.start >= c.start - 0.5 && x.start < c.end && !FIXED.has(x.template));
   const skeleton = choruses.length ? inChorus(choruses[0]) : [];
-  choruses.slice(1).forEach((c) => {
+  if (uses(t.design, 'skeleton')) choruses.slice(1).forEach((c) => {
     inChorus(c).forEach((s, i) => {
       const src = skeleton[Math.min(i, skeleton.length - 1)];
       if (!src || src.template === s.template) return;
@@ -81,7 +82,7 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
   });
   // chorus lines carry a large outlined echo of their keyword behind them (except where the type is already huge)
   // ponytail: only the chorus's first 12 s — an echo on every line becomes the next template look
-  for (const c of choruses) for (const s of inChorus(c)) if (s.template !== 'beat-cut' && s.start < c.start + 12) s.params['echo'] = true;
+  if (uses(t.design, 'echo')) for (const c of choruses) for (const s of inChorus(c)) if (s.template !== 'beat-cut' && s.start < c.start + 12) s.params['echo'] = true;
   // choruses escalate: keyword width rises chorus by chorus
   choruses.forEach((c, k) => {
     const last = k === choruses.length - 1;
@@ -94,7 +95,7 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
   });
   // quiet spans (breaks) drop the type down a register: thin mincho, small, still, left or centred
   let left = false;
-  for (const q of quietSpans(t.moments ?? [])) {
+  for (const q of uses(t.design, 'quiet') ? quietSpans(t.moments ?? []) : []) {
     for (const s of t.shots.filter((x) => x.template !== 'title-card' && Math.min(x.end, q.end) - Math.max(x.start, q.start) > 0.6 * (x.end - x.start))) {
       s.template = 'quiet';
       s.params = { position: left ? 'left' : 'center', dim: 0.7 };

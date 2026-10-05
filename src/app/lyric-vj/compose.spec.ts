@@ -63,3 +63,13 @@ describe('title hook', () => {
     expect(hookRanges('Sweet Timer again', 'sweet timer')).toEqual([[0, 11]]);
   });
 });
+
+describe('per-song techniques', () => {
+  it('skips the echo and skeleton when the design does not pick them', () => {
+    const t = tr([shot('a', 30, 'beat-cut'), shot('b', 35, 'scatter'), shot('c', 90, 'punch')]);
+    t.design = { techniques: ['title-hook'] } as unknown as TreatmentV3['design'];
+    varyComposition(t, [{ start: 30, end: 40 }, { start: 90, end: 105 }]);
+    expect(t.shots[2].template).toBe('punch');
+    expect(t.shots.some((s) => s.params['echo'])).toBe(false);
+  });
+});

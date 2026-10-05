@@ -14,7 +14,7 @@ import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { varyComposition } from '../../src/app/lyric-vj/compose';
 import { FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS } from '../../src/app/lyric-vj/motif';
-import { PEAK_STYLES } from '../../src/app/lyric-vj/design';
+import { PEAK_STYLES, TECHNIQUES } from '../../src/app/lyric-vj/design';
 import { MEDIA } from '../../src/app/lyric-vj/medium';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
@@ -58,8 +58,9 @@ const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ?
 const str = { type: 'string' };
 // the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
 const DESIGN_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak', 'medium'],
+  type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak', 'medium', 'techniques'],
   properties: {
+    techniques: { type: 'array', items: { type: 'string', enum: Object.keys(TECHNIQUES) }, description: '這首歌要用的手法（依這首歌挑，不是每首都全用；不適合就不選）：' + Object.entries(TECHNIQUES).map(([k, v]) => `${k}：${v}`).join('；') },
     accentFont: { type: 'string', description: '搭配的英文字型（清單見設計規則）' },
     font: { type: 'string', description: '主字型（清單見設計規則）' },
     kanaScale: { type: 'number', description: '平假名相對漢字的大小 0.5–1（明朝、文學感用 0.55–0.7；POP、圓體可用 0.85–1）' },

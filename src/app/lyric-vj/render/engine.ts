@@ -21,7 +21,7 @@ import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
 import { makeGlyphs, placeRow, advanceOf, Glyph } from './glyphs';
-import { colorAt, DEFAULT_DESIGN } from '../design';
+import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
@@ -350,7 +350,7 @@ export class LyricVjEngine {
     const lastSung = styled.map(({ cue }) => (cue.charTimed && cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : -Infinity));
     const showAt = styled.map(({ cue }, i) => Math.max(cue.start - lead, Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3)));
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
-    const hook = titleHook(this.job.meta?.title ?? '');
+    const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
     styled.forEach(({ style: style0, cue }, i) => {
       const hooks = hookRanges(cue.text, hook).map(([from, to]) => ({ from, to, method: 'color' as const }));
       const style = hooks.length ? { ...style0, emphasis: [...hooks, ...(style0.emphasis ?? [])] } : style0;
@@ -385,9 +385,9 @@ export class LyricVjEngine {
       }
     });
     setKanaScale(design.kanaScale);
-    this.quiet = quietSpans(treatment.moments ?? []);
+    this.quiet = uses(design, 'quiet') ? quietSpans(treatment.moments ?? []) : [];
     // the drop keyword flash: one per drop/finale (2–4 a song), the line's keyword set full width in the display face
-    for (const m of (treatment.moments ?? []).filter((x) => x.kind === 'drop' || x.kind === 'finale')) {
+    for (const m of (treatment.moments ?? []).filter((x) => uses(design, 'flash') && (x.kind === 'drop' || x.kind === 'finale'))) {
       const hit = styled.find(({ cue }) => cue.start >= m.at - 0.4 && cue.start <= m.at + 0.6);
       if (!hit) continue;
       const [k0, k1] = keywordRange(hit.cue.text, hit);

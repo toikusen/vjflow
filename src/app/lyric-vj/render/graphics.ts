@@ -16,6 +16,13 @@ export interface Beat {
 interface Base {
   /** 0..1, default 1. */
   opacity?: number;
+  /** How the layer lands on the ones below: 'multiply' overprints like translucent ink (risograph). */
+  blend?: 'multiply' | 'screen' | 'lighter';
+  /**
+   * Copies drawn first, offset and in another colour: a misregistered plate (1–4 px, an ink colour) or a hard
+   * offset shadow (8–14 px, near-black). Only for layers with a `color`.
+   */
+  ghosts?: { dx: number; dy: number; color: Rgb }[];
   /** Beat pulse amount (scale or brightness kick), default 0. */
   pulse?: number;
 }
@@ -24,7 +31,7 @@ export type Layer = Base &
   (
     | { kind: 'fill'; color: Rgb; to?: Rgb; angle?: number }
     | { kind: 'paper'; color: Rgb; grain?: number }
-    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone'; color: Rgb; scale?: number; angle?: number; scroll?: number }
+    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves'; color: Rgb; scale?: number; angle?: number; scroll?: number }
     | { kind: 'photo'; mode: 'full' | 'inset' | 'polaroid' | 'band' | 'circle'; asset?: string; x?: number; y?: number; w?: number; h?: number; tilt?: number; tint?: Rgb; frame?: Rgb; drift?: number }
     | { kind: 'frame'; type: 'border' | 'filmstrip' | 'viewfinder' | 'brackets' | 'window'; color: Rgb; inset?: number; label?: string }
     | { kind: 'rings'; x?: number; y?: number; count?: number; color: Rgb; radius?: number; spin?: number; dashed?: boolean }
@@ -33,6 +40,15 @@ export type Layer = Base &
     | { kind: 'band'; type: 'tape' | 'solid' | 'marquee'; color: Rgb; color2?: Rgb; y?: number; angle?: number; height?: number; scroll?: number }
     | { kind: 'shapes'; type: 'circle' | 'diamond' | 'triangle' | 'star' | 'heart' | 'cross'; count?: number; color: Rgb; size?: number; drift?: number; seed?: number; outline?: boolean }
     | { kind: 'blob'; x?: number; y?: number; r?: number; color: Rgb; breathe?: number }
+    | { kind: 'bands'; colors: Rgb[]; from?: number; to?: number }
+    | { kind: 'stamp'; text: string; color: Rgb; x?: number; y?: number; size?: number; tilt?: number; font?: string }
+    | { kind: 'seal'; text: string; color: Rgb; x?: number; y?: number; size?: number; font?: string }
+    | { kind: 'numeral'; text: string; color: Rgb; x?: number; y?: number; size?: number; font?: string; weight?: number }
+    | { kind: 'scanlines'; color?: Rgb; gap?: number; vignette?: number }
+    | { kind: 'chargrid'; color: Rgb; cols?: number; chars?: string; field?: 'noise' | 'radial' | 'rain'; speed?: number }
+    | { kind: 'mist'; color: Rgb; count?: number; y?: number; drift?: number }
+    | { kind: 'speedlines'; color: Rgb; count?: number; inner?: number }
+    | { kind: 'swissgrid'; color: Rgb; cols?: number; bars?: Rgb; signal?: Rgb; seed?: number }
   );
 
 export interface LookSection {
@@ -48,7 +64,7 @@ export interface GraphicsLook {
   sections: LookSection[];
 }
 
-export const LAYER_KINDS = ['fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob'] as const;
+export const LAYER_KINDS = ['fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid'] as const;
 
 const W = 1920;
 const H = 1080;
@@ -74,6 +90,13 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   for (const l of sec.layers) {
     ctx.save();
     ctx.globalAlpha = l.opacity ?? 1;
+    if (l.blend) ctx.globalCompositeOperation = l.blend;
+    for (const g of 'color' in l ? (l.ghosts ?? []) : []) {
+      ctx.save();
+      ctx.translate(g.dx, g.dy);
+      draw(ctx, { ...l, color: g.color } as Layer, t, t - sec.start, beat, image);
+      ctx.restore();
+    }
     draw(ctx, l, t, t - sec.start, beat, image);
     ctx.restore();
   }
@@ -195,6 +218,180 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       }
       return;
     }
+    case 'bands': {
+      // stepped colour bands instead of a gradient (silkscreen skies): each step thinner toward the next colour
+      const y0 = (l.from ?? 0) * H;
+      const y1 = (l.to ?? 1) * H;
+      const n = l.colors.length;
+      const bh = (y1 - y0) / n;
+      l.colors.forEach((c, i) => {
+        ctx.fillStyle = c;
+        ctx.fillRect(0, y0 + i * bh, W, bh + 1);
+        if (i + 1 < n) {
+          // thinning stripes of the next colour at the seam
+          ctx.fillStyle = l.colors[i + 1];
+          for (let k = 0; k < 4; k++) ctx.fillRect(0, y0 + (i + 1) * bh - bh * 0.42 + k * bh * 0.12, W, bh * 0.025 * (k + 1));
+        }
+      });
+      return;
+    }
+    case 'stamp': {
+      const size = l.size ?? 64;
+      ctx.translate(W / 2 + (l.x ?? 0) * W / 2, H / 2 - (l.y ?? 0) * H / 2);
+      ctx.rotate(((l.tilt ?? -8) * Math.PI) / 180);
+      ctx.scale(kick, kick);
+      ctx.font = `900 ${size}px "${l.font ?? 'Zen Kaku Gothic New'}"`;
+      const tw = ctx.measureText(l.text).width;
+      const bw = tw + size * 0.9;
+      const bh = size * 1.6;
+      ctx.strokeStyle = l.color;
+      ctx.fillStyle = l.color;
+      ctx.lineWidth = size * 0.09;
+      roundRect(ctx, -bw / 2, -bh / 2, bw, bh, size * 0.2);
+      ctx.stroke();
+      roundRect(ctx, -bw / 2 + size * 0.16, -bh / 2 + size * 0.16, bw - size * 0.32, bh - size * 0.32, size * 0.12);
+      ctx.lineWidth = size * 0.04;
+      ctx.stroke();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(l.text, 0, size * 0.04);
+      // worn ink: paper-coloured specks knocked out of the stamp
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 160; i++) ctx.fillRect((hash(i, 21) - 0.5) * bw, (hash(i, 22) - 0.5) * bh, 2 + hash(i, 23) * 4, 2 + hash(i, 24) * 3);
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+    case 'seal': {
+      const size = l.size ?? 90;
+      ctx.translate(W / 2 + (l.x ?? 0.85) * W / 2, H / 2 - (l.y ?? -0.8) * H / 2);
+      ctx.fillStyle = l.color;
+      ctx.fillRect(-size / 2, -size / 2, size, size);
+      ctx.globalCompositeOperation = 'destination-out';
+      const chars = [...l.text].slice(0, 4);
+      const cols = chars.length > 2 ? 2 : 1;
+      const rows = Math.ceil(chars.length / cols);
+      ctx.font = `700 ${(size * 0.8) / rows}px "${l.font ?? 'Zen Old Mincho'}"`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // seal text reads top to bottom, right column first
+      chars.forEach((c, i) => {
+        const col = cols - 1 - Math.floor(i / rows);
+        const row = i % rows;
+        ctx.fillText(c, -size / 2 + (size / cols) * (col + 0.5), -size / 2 + (size / rows) * (row + 0.5));
+      });
+      for (let i = 0; i < 40; i++) ctx.fillRect((hash(i, 31) - 0.5) * size, (hash(i, 32) - 0.5) * size, 3, 3);
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+    case 'numeral': {
+      const size = (l.size ?? 0.8) * H;
+      ctx.font = `${l.weight ?? 900} ${size}px "${l.font ?? 'Zen Kaku Gothic New'}"`;
+      ctx.fillStyle = l.color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(l.text, W / 2 + (l.x ?? 0) * W / 2, H / 2 - (l.y ?? 0) * H / 2);
+      return;
+    }
+    case 'scanlines': {
+      ctx.fillStyle = l.color ?? 'rgba(0,0,0,0.35)';
+      const gap = l.gap ?? 4;
+      for (let y = 0; y < H; y += gap) ctx.fillRect(0, y, W, gap / 2);
+      if (l.vignette) {
+        const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, H * 1.05);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(1, `rgba(0,0,0,${l.vignette})`);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, W, H);
+      }
+      return;
+    }
+    case 'chargrid': {
+      // real characters on a monospace grid, chosen by a density field (never an image filter)
+      const cols = l.cols ?? 96;
+      const cw = W / cols;
+      const ch = cw * 2;
+      const rows = Math.ceil(H / ch);
+      const ramp = l.chars ?? ' .:-=+*#%@';
+      ctx.font = `${ch * 0.9}px "Space Mono", monospace`;
+      ctx.fillStyle = l.color;
+      ctx.textBaseline = 'top';
+      const sp = l.speed ?? 0.4;
+      for (let j = 0; j < rows; j++)
+        for (let i = 0; i < cols; i++) {
+          const u = i / cols - 0.5;
+          const v = j / rows - 0.5;
+          let d: number;
+          if (l.field === 'radial') d = 1 - Math.min(1, Math.hypot(u * 1.8, v) * 2 - 0.3 * Math.sin(t * sp * 3 - Math.hypot(u, v) * 12));
+          else if (l.field === 'rain') d = ((hash(i, 41) + t * sp * (0.5 + hash(i, 42)) - j / rows) % 1 + 1) % 1 > 0.85 ? 0.9 : 0.05;
+          else d = 0.5 + 0.5 * Math.sin(u * 9 + t * sp * 2 + Math.sin(v * 7 - t * sp)) * Math.cos(v * 5 + t * sp);
+          d = Math.min(1, Math.max(0, d * (1 + 0.3 * beat.pulse * (l.pulse ?? 0))));
+          const c = ramp[Math.min(ramp.length - 1, Math.floor(d * ramp.length))];
+          if (c !== ' ') ctx.fillText(c, i * cw, j * ch);
+        }
+      return;
+    }
+    case 'mist': {
+      // suyari-gasumi: long rounded flat bands fading at both ends, drifting sideways
+      const n = l.count ?? 4;
+      for (let i = 0; i < n; i++) {
+        const y = H / 2 - (l.y ?? 0) * H / 2 + (i - n / 2) * H * 0.13 + hash(i, 51) * 40;
+        const w = W * (0.35 + hash(i, 52) * 0.4);
+        const x = ((hash(i, 53) * W + t * (l.drift ?? 12) * (i % 2 ? 1 : -1)) % (W + w) + W + w) % (W + w) - w;
+        const h = 34 + hash(i, 54) * 30;
+        const g = ctx.createLinearGradient(x, 0, x + w, 0);
+        g.addColorStop(0, 'rgba(0,0,0,0)');
+        g.addColorStop(0.15, l.color);
+        g.addColorStop(0.85, l.color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = g;
+        roundRect(ctx, x, y, w, h, h / 2);
+        ctx.fill();
+      }
+      return;
+    }
+    case 'speedlines': {
+      // manga focus lines: thin wedges from the frame edge toward an empty centre, re-drawn on every beat
+      const n = l.count ?? 90;
+      const inner = (l.inner ?? 0.42) * H;
+      ctx.fillStyle = l.color;
+      ctx.translate(W / 2, H / 2);
+      for (let i = 0; i < n; i++) {
+        const a = hash(i, 61 + beat.index) * Math.PI * 2;
+        const r0 = inner * (0.9 + hash(i, 62 + beat.index) * 0.5);
+        const wdt = 0.004 + hash(i, 63) * 0.01;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0);
+        ctx.lineTo(Math.cos(a - wdt) * W, Math.sin(a - wdt) * W);
+        ctx.lineTo(Math.cos(a + wdt) * W, Math.sin(a + wdt) * W);
+        ctx.closePath();
+        ctx.fill();
+      }
+      return;
+    }
+    case 'swissgrid': {
+      // 12-column grid in hairlines, black bars snapping to modules on the beat, one signal-colour block
+      const cols = l.cols ?? 12;
+      const m = 96;
+      const cw = (W - 2 * m) / cols;
+      ctx.strokeStyle = l.color;
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= cols; i++) {
+        ctx.beginPath();
+        ctx.moveTo(m + i * cw, 0);
+        ctx.lineTo(m + i * cw, H);
+        ctx.stroke();
+      }
+      const step = Math.max(0, beat.index);
+      for (let k = 0; k < 3; k++) {
+        const seed = (l.seed ?? 0) * 13 + k + Math.floor(step / 4) * 7;
+        const c0 = Math.floor(hash(seed, 71) * (cols - 3));
+        const span = 1 + Math.floor(hash(seed, 72) * 4);
+        const y = Math.floor(hash(seed, 73) * 8) * (H / 9);
+        ctx.fillStyle = k === 0 && l.signal ? l.signal : (l.bars ?? '#111111');
+        ctx.fillRect(m + c0 * cw, y, span * cw, k === 0 ? H / 9 : H / 36);
+      }
+      return;
+    }
     case 'blob': {
       const cx = W / 2 + (l.x ?? 0) * W / 2;
       const cy = H / 2 - (l.y ?? 0) * H / 2;
@@ -242,6 +439,20 @@ function pattern(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'patte
       return;
     case 'checker':
       for (let i = 0; i < span[0]; i++) for (let j = 0; j < span[1]; j++) if ((i + j) % 2) ctx.fillRect(i * s, j * s, s, s);
+      return;
+    case 'waves':
+      // seigaiha: overlapping concentric arcs in rows, each row offset half a module
+      ctx.lineWidth = Math.max(2, s * 0.05);
+      for (let j = 0; j < span[1] * 2; j++)
+        for (let i = -1; i < span[0]; i++) {
+          const cx = i * s + (j % 2 ? s / 2 : 0);
+          const cy = j * s * 0.5;
+          for (let k = 3; k >= 1; k--) {
+            ctx.beginPath();
+            ctx.arc(cx, cy, (s / 2) * (k / 3), Math.PI, 0);
+            ctx.stroke();
+          }
+        }
       return;
     case 'gingham':
       ctx.globalAlpha *= 0.5;
@@ -462,4 +673,14 @@ function shape(ctx: CanvasRenderingContext2D, type: Extract<Layer, { kind: 'shap
   }
   if (outline) ctx.stroke();
   else ctx.fill();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }

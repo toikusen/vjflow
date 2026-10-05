@@ -108,7 +108,7 @@ const FINAL_SHADER = {
         uv += normalize(q + 1e-5) / vec2(1.7778, 1.0) * ring * 0.028 * uShock;
       }
       vec2 d = uv - 0.5;
-      float a = uAberration * (3.0 * uFlash + 3.0 * uShock); // only on hits: a constant RGB split read as a stock glitch preset
+      float a = uAberration * (3.0 * uFlash + uShock); // only on hits, faint on the shockwave: a strong split doubled the drop's type into ghosts
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       c *= 1.0 + 0.45 * uHit;         // accent hit: exposure up (highlights bloom), shadows stay dark
       if (uRays > 0.0) {                            // light rays bursting from the horizon, added light only

@@ -1,5 +1,6 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import type { CustomSceneSpec } from './render/custom-scene';
 import { Fonts } from './fonts';
 import type { ArcPoint, Moment } from './moments';
 import { Design, validateDesign } from './design';
@@ -90,6 +91,8 @@ export interface TreatmentV3 {
   design?: Design;
   /** The song's motif drawn by the engine (motif.ts). */
   motif?: MotifPlan;
+  /** Procedural backgrounds the director wrote for key moments (render/custom-scene.ts); they replace the plate. */
+  scenes?: CustomSceneSpec[];
 }
 
 export type ParamSpec =

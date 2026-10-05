@@ -20,6 +20,7 @@ import { fxAt, MomentFx } from '../moments';
 import { colorAt, DEFAULT_DESIGN } from '../design';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
+import { CustomScene } from './custom-scene';
 import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -208,6 +209,8 @@ export class LyricVjEngine {
   private bloom: UnrealBloomPass;
   private motes: THREE.Points;
   private plates: Plate[] = [];
+  private customScenes: CustomScene[] = [];
+  private sceneTarget?: THREE.WebGLRenderTarget;
   private dim: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   private textRoot = new THREE.Group();
   private shotLayers = new Map<string, ShotLayer>();
@@ -276,6 +279,10 @@ export class LyricVjEngine {
       this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
       this.scene.add(this.motif.group);
+    }
+    for (const spec of treatment.scenes ?? []) {
+      const stop = colorAt(design.colorScript, spec.start + 0.5);
+      this.customScenes.push(new CustomScene(spec, { W, H, start: spec.start, end: spec.end, palette: { shadow: stop.shadow, highlight: stop.highlight, accent: stop.accent }, beats: this.job.beats, beatStrength: this.job.beatStrength ?? [], hash }));
     }
     for (const shot of treatment.shots) {
       const r = RENDERERS[shot.template];
@@ -388,6 +395,17 @@ export class LyricVjEngine {
     return tex;
   }
 
+  /** Draws a custom scene into its render target; the target's texture then stands in for the plate. */
+  private renderCustom(scene: CustomScene, t: number): THREE.Texture {
+    this.sceneTarget ??= new THREE.WebGLRenderTarget(W, H);
+    scene.update(t);
+    this.renderer.setRenderTarget(this.sceneTarget);
+    this.renderer.clear();
+    this.renderer.render(scene.scene, scene.camera);
+    this.renderer.setRenderTarget(null);
+    return this.sceneTarget.texture;
+  }
+
   private placePlate(p: Plate, tex: THREE.Texture, shot: Shot, t: number, opacity: number, next?: THREE.Texture, mix = 0) {
     const img = tex.image as { width: number; height: number };
     const cover = Math.max(W / img.width, H / img.height);
@@ -404,6 +422,10 @@ export class LyricVjEngine {
     if (shot.camera === 'pan') [s, x] = [1.12, (e - 0.5) * W * 0.1];
     if (shot.camera === 'parallax') [s, x, y] = [1.08 + 0.1 * e, (e - 0.5) * W * 0.06, -24 * e];
     const u = p.mesh.material.uniforms;
+    // a custom scene is already composed for the frame: no camera move, no softening
+    const isScene = tex === this.sceneTarget?.texture;
+    if (isScene) [s, x, y] = [1, 0, 0];
+    u['soft'].value = isScene ? 0 : 0.0018;
     u['map'].value = tex;
     u['map2'].value = next ?? tex;
     u['mixAmt'].value = next ? mix : 0;
@@ -427,7 +449,8 @@ export class LyricVjEngine {
     if (flashIn) fx.hit = Math.max(fx.hit, Math.exp(-since * 6) * (since >= 0 ? 1 : 0)); // then glows down
     const sweep = shot.transitionIn === 'wipe' && since >= 0 && since < 0.35 ? since / 0.35 : -1;
 
-    const cur = await this.plateTexture(shot, bt);
+    const custom = this.customScenes.find((s) => s.covers(t));
+    const cur = custom ? { tex: this.renderCustom(custom, bt), mix: 0 } : await this.plateTexture(shot, bt);
     // dissolving a plate into itself at another camera position shows a double image: skip it for the same asset
     const dissolve = prev && shot.transitionIn === 'dissolve' && prev.asset !== shot.asset ? clamp01(since / 0.4) : 1;
     if (prev && dissolve < 1) {
@@ -477,7 +500,8 @@ export class LyricVjEngine {
     const beams = peak === 'beams' ? mfx.rays : 0;
     for (const p of this.plates) {
       // image < 1 sinks the picture toward a dark ground so graphics and type carry the section
-      p.mesh.material.uniforms['exposure'].value = mfx.exposure * (0.12 + 0.88 * stop.image);
+      const isScene = p.mesh.material.uniforms['map'].value === this.sceneTarget?.texture;
+      p.mesh.material.uniforms['exposure'].value = mfx.exposure * (isScene ? 1 : 0.12 + 0.88 * stop.image);
       p.mesh.material.uniforms['sat'].value = mfx.saturation * (1 - 0.65 * beams);
     }
     if (peak === 'vacuum') {
@@ -494,7 +518,7 @@ export class LyricVjEngine {
       const pu = p.mesh.material.uniforms;
       (pu['shadowC'].value as THREE.Color).set(stop.shadow);
       (pu['highlightC'].value as THREE.Color).set(stop.highlight);
-      pu['duo'].value = Math.max(stop.duotone, 1 - stop.image);
+      pu['duo'].value = pu['map'].value === this.sceneTarget?.texture ? 0 : Math.max(stop.duotone, 1 - stop.image);
     }
     if (this.motif) {
       const pal = this.paletteAt(t);

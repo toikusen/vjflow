@@ -2,7 +2,7 @@
 // numbers in range, photo assets that exist, sections sorted from the window start, and lyric colours that read
 // against each section's field.
 import { GraphicsLook, Layer, LAYER_KINDS, LookSection } from './render/graphics';
-import { contrast } from './render/runtime';
+import { contrast } from './contrast';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 

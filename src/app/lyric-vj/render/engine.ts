@@ -285,7 +285,7 @@ export class LyricVjEngine {
     this.echoRoot.renderOrder = 2.65; // above the dim layer and motes, under the motif and lyrics
     this.scene.add(this.echoRoot);
     this.bars = [1, -1].map((side) => {
-      const bar = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 0.2), new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, depthWrite: false }));
+      const bar = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 0.2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false })); // transparent: drawn in the same pass as the plates, so renderOrder holds
       bar.renderOrder = 2.6;
       bar.userData['side'] = side;
       this.scene.add(bar);

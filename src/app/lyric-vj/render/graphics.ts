@@ -496,8 +496,10 @@ function photo(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'photo' 
   const sc = Math.max(bw / iw, bh / ih) * zoom;
   ctx.drawImage(img, -iw * sc / 2 + Math.sin(t * 0.07) * 20 * (l.drift ?? 1), -ih * sc / 2, iw * sc, ih * sc);
   if (l.tint) {
-    // duotone-ish tint: multiply the section colour over the photo
-    ctx.globalCompositeOperation = 'multiply';
+    // tint keeps the photo's light and takes the section's hue ('color' blend): a multiply by a dark colour
+    // blacked the picture out
+    ctx.globalCompositeOperation = 'color';
+    ctx.globalAlpha *= 0.75;
     ctx.fillStyle = l.tint;
     ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
     ctx.globalCompositeOperation = 'source-over';

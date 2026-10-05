@@ -222,7 +222,7 @@ export class MotifLayer {
         });
         u.accents.forEach((m) => {
           m.color.copy(accent);
-          m.opacity = Math.min(1 - 0.7 * textOn, opacity * 1.3);
+          m.opacity = Math.min(1 - 0.92 * textOn, opacity * 1.3); // a filled planet under the lyrics blooms into a glare
         });
         this.place(form, u, i, units.length, t, age, pulse, burst);
       });

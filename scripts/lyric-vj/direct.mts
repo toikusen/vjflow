@@ -64,36 +64,45 @@ mkdirSync(out, { recursive: true });
 const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ? false : /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v);
 const str = { type: 'string' };
 // the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
-// one generic layer object: every property optional, the kind decides which ones mean something (graphics.ts)
-const num = { type: 'number' };
+// one layer object with its parameters as key/value pairs: one optional property per parameter was too many for
+// structured output (the grammar allows 24); values are coerced in toLook()
 const LAYER_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['kind'],
+  type: 'object', additionalProperties: false, required: ['kind', 'params'],
   properties: {
     kind: { type: 'string', enum: [...LAYER_KINDS] },
-    color: str, to: str, color2: str, tint: str, frame: str, bars: str, signal: str,
-    type: { type: 'string', description: 'pattern: grid/dots/stripes/gingham/checker/halftone/waves；frame: border/filmstrip/viewfinder/brackets/window；band: tape/solid/marquee；shapes: circle/diamond/triangle/star/heart/cross' },
-    mode: { type: 'string', enum: ['full', 'inset', 'polaroid', 'band', 'circle'] },
-    field: { type: 'string', enum: ['noise', 'radial', 'rain'] },
-    blend: { type: 'string', enum: ['multiply', 'screen', 'lighter'] },
-    asset: str, text: str, label: str, chars: str, font: str,
-    colors: { type: 'array', items: str },
-    ghosts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['dx', 'dy', 'color'], properties: { dx: num, dy: num, color: str } } },
-    dashed: { type: 'boolean' }, outline: { type: 'boolean' },
-    ...Object.fromEntries(['opacity', 'pulse', 'angle', 'grain', 'scale', 'scroll', 'x', 'y', 'w', 'h', 'tilt', 'drift', 'inset', 'count', 'radius', 'spin', 'size', 'seed', 'rays', 'height', 'r', 'breathe', 'from', 'weight', 'gap', 'vignette', 'cols', 'speed', 'inner'].map((k) => [k, num])),
+    params: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['key', 'value'],
+      properties: { key: { type: 'string' }, value: { type: 'string', description: '數字、true/false、#rrggbb、文字；colors 用逗號分隔；ghosts 用「dx,dy,#色;dx,dy,#色」' } } } },
   },
 };
 const GRAPHICS_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['sections'],
   properties: {
-    sections: { type: 'array', description: '依段落的圖層組合，start 在段落交界（副歌、安靜段要和主歌不同）', items: { type: 'object', additionalProperties: false, required: ['start', 'layers'],
-      properties: { start: num, text: { type: 'string', description: '#rrggbb 這段歌詞的字色（淺色底必填深色）' }, accent: { type: 'string', description: '#rrggbb 強調字色' },
+    sections: { type: 'array', description: '依段落的圖層組合，start 在段落交界（副歌、安靜段要和主歌不同）', items: { type: 'object', additionalProperties: false, required: ['start', 'text', 'accent', 'layers'],
+      properties: { start: { type: 'number' }, text: { type: 'string', description: '#rrggbb 這段歌詞的字色（淺色底必填深色；深色底填空字串）' }, accent: { type: 'string', description: '#rrggbb 強調字色，或空字串' },
         layers: { type: 'array', description: '由下往上畫', items: LAYER_SCHEMA } } } },
   },
 };
+/** Turns the director's key/value layers into graphics.ts layers. */
+function toLook(g: { sections: { start: number; text: string; accent: string; layers: { kind: string; params: { key: string; value: string }[] }[] }[] }) {
+  return {
+    sections: g.sections.map((s) => ({
+      start: s.start, text: s.text || undefined, accent: s.accent || undefined,
+      layers: s.layers.map((l) => ({
+        kind: l.kind,
+        ...Object.fromEntries(l.params.map(({ key, value }) => {
+          if (key === 'colors') return [key, value.split(',').map((x) => x.trim())];
+          if (key === 'ghosts') return [key, value.split(';').map((g) => g.split(',').map((x) => x.trim())).filter((p) => p.length === 3).map(([dx, dy, color]) => ({ dx: Number(dx), dy: Number(dy), color }))];
+          return [key, coerce(value)];
+        })),
+      })),
+    })),
+  };
+}
 const GRAPHICS_RULES = `graphics（圖形層，最重要）：用下列圖層由下往上組出每個段落的畫面，嚴格照設計語言的圖層配方與色彩邏輯。
 - 座標：x、y 為 -1..1（0 是中心，y 往上為正）；w、h、r、radius 是畫面比例；size、height、inset、gap 是像素（1920×1080）。
 - 圖層：fill（純色，to 漸層）、paper（紙，grain）、pattern（type、scale 像素、angle、scroll 每秒像素）、photo（mode、asset 素材 id，不填用當下鏡頭的圖、tint、frame、tilt）、frame（type、label）、rings、sparkles、sunburst（rays、spin）、band（type、y、angle、height、scroll、color2）、shapes（type、count、size、drift、outline）、blob（x、y、r）、bands（colors 階梯色帶，from 與 to 為 0..1）、stamp（text、size、tilt）、seal（text 2–4 字）、numeral（text、size 為畫面高比例）、scanlines（gap、vignette）、chargrid（cols、field、chars）、mist（count、y）、speedlines（count、inner）、swissgrid（color 格線、bars、signal、seed）。
 - 共通：opacity、pulse（拍點跳動 0–1）、blend（multiply 疊印）、ghosts（套印偏移或硬投影的副本，最多 2 個）。
+- 每個圖層的參數寫在 params 的 key/value 裡，例：{kind:'blob', params:[{key:'color',value:'#FBE6B4'},{key:'x',value:'0.5'},{key:'r',value:'0.2'},{key:'ghosts',value:'3,2,#EE9A73'}]}。
 - 每段第一層必須是滿版的 fill 或 paper（或 photo full）。淺色底要設定 text 為深色。
 - 歌詞要清楚：歌詞會出現在畫面中央附近，那一帶不要放高對比的細碎圖案；照片與圖形是配角。
 - 段落：至少 3 種組合（主歌、副歌、安靜段），副歌最強烈；把設計語言的招牌動作放在最後一次副歌。
@@ -309,7 +318,7 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     const out2 = JSON.parse(text);
     base.design = { ...out2.design, language };
     base.motif = sys.motif ? out2.motif : undefined;
-    base.graphics = validateLook(stripNulls(out2.graphics), base.assets.map((x) => x.id), win.start).look;
+    base.graphics = validateLook(toLook(out2.graphics) as never, base.assets.map((x) => x.id), win.start).look;
     checked = validateTreatment(base, song, win, TEMPLATES);
     const usedFonts = recent.map((r) => r.font);
     const errs = [
@@ -388,6 +397,8 @@ for (let attempt = 0; attempt < 3; attempt++) {
 if (!result || result.errors.length) throw new Error('導演 3 次仍未通過驗證：\n' + result?.errors.join('\n'));
 result.fixes.push(...varyComposition(result.treatment, chorusSpans(structure)));
 // second call: the design system and motif for these shots
+// saved so a failed design pass can be retried alone: --design-only <out>/shots.json
+writeFileSync(join(out, 'shots.json'), JSON.stringify({ ...result.treatment, design: { ...result.treatment.design, language: chosen } }, null, 1));
 const designed = await designPass(result.treatment, chosen);
 usage = { input: usage.input + designed.usage.input, output: usage.output + designed.usage.output };
 result = { ...designed.checked, fixes: [...result.fixes, ...designed.checked.fixes] };
@@ -403,7 +414,3 @@ writeFileSync(join(out, 'director.json'), JSON.stringify(report, null, 1));
 status.stage('director', { state: 'done', costUSD: report.costUSD, message: undefined });
 console.log(JSON.stringify(report, null, 1));
 
-/** Drop nulls a structured answer may carry before validating. */
-function stripNulls<T>(x: T): T {
-  return JSON.parse(JSON.stringify(x, (_, v) => (v === null ? undefined : v)));
-}

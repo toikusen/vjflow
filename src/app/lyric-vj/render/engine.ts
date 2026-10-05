@@ -235,6 +235,8 @@ export class LyricVjEngine {
   private accentFont = DEFAULT_DESIGN.accentFont;
   private motif?: MotifLayer;
   private scene = new THREE.Scene();
+  /** Lyrics (and their echoes), rendered after the bloom pass. */
+  private textScene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, -10, 10);
   private composer: EffectComposer;
   private finalPass: ShaderPass;
@@ -270,6 +272,10 @@ export class LyricVjEngine {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.45, 0.8);
     this.composer.addPass(this.bloom);
+    // lyrics are drawn after the bloom: bloomed white type smeared into an unreadable glow
+    const textPass = new RenderPass(this.textScene, this.camera);
+    textPass.clear = false;
+    this.composer.addPass(textPass);
     // grade in display (sRGB) space: a 0.2 flash mixed in linear light reads as a ~45 % grey wash
     this.composer.addPass(new OutputPass());
     this.finalPass = new ShaderPass(FINAL_SHADER);
@@ -297,7 +303,7 @@ export class LyricVjEngine {
       this.gfx = { ctx: c.getContext('2d')!, tex, mesh };
     }
     this.echoRoot.renderOrder = 2.65; // above the dim layer and motes, under the motif and lyrics
-    this.scene.add(this.echoRoot);
+    this.textScene.add(this.echoRoot);
     this.bars = [1, -1].map((side) => {
       const bar = new THREE.Mesh(new THREE.PlaneGeometry(W * 1.2, H * 0.2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false })); // transparent: drawn in the same pass as the plates, so renderOrder holds
       bar.renderOrder = 2.6;
@@ -310,7 +316,7 @@ export class LyricVjEngine {
     this.dim.renderOrder = 2;
     this.scene.add(this.dim);
     this.textRoot.renderOrder = 3;
-    this.scene.add(this.textRoot);
+    this.textScene.add(this.textRoot);
     this.gradient = this.makeGradient();
   }
 
@@ -390,7 +396,10 @@ export class LyricVjEngine {
       };
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
-      setHalo(this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, cue.start + 0.3).text ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,0.85)');
+      // dark type on a light field gets a halo of that field's colour: it then reads over a photo inset as well
+      const sec = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, cue.start + 0.3);
+      const field = sec?.text && sec.layers.find((l) => l.kind === 'paper' || l.kind === 'fill');
+      setHalo(field ? hexToRgba((field as { color: string }).color, 0.95) : 'rgba(0,0,0,0.85)');
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;
       this.textRoot.add(fitToFrame(layer));
@@ -791,3 +800,5 @@ export class LyricVjEngine {
     return tex;
   }
 }
+
+const hexToRgba = (hex: string, a: number) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;

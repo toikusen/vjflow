@@ -20,7 +20,7 @@ if (!process.env['ANTHROPIC_API_KEY'] && existsSync(env))
 
 // what the engine already has, so the library says what is new
 const HAVE = `我們的引擎已有：
-- 版型：punch（置中大字＋上下小字）、block（半透明色塊從側邊滑入、關鍵字壓在色塊上）、frame-split（細框＋角括號）、typewriter（游標打字）、vertical（直排 1–3 欄）、scatter（詞組沿對角線散佈）、handwrite（手寫逐字顯現）、beat-cut（每唱一個詞就以巨字換位置切入、整句小字在底部）、title-card（歌名卡）
+- 版型：punch（置中大字＋上下小字）、frame-split（細框＋角括號）、typewriter（游標打字）、vertical（直排 1–3 欄）、scatter（詞組沿對角線散佈）、handwrite（手寫逐字顯現）、beat-cut（每唱一個詞就以巨字換位置切入、整句小字在底部）、title-card（歌名卡）
 - 文字：一句以固定速度載出、強調詞換色或放大、踩拍彈跳、重拍時整層文字跟著大鼓跳動、字落定後微幅波動
 - 主題物件（程式畫的發光細線：時鐘／多邊形／軌道），形態 center/bleed/nested/tunnel/mask/shards，物件形狀轉場（iris）
 - 爆點：放射光、斜向光束、黑場抽空再爆亮、物件圈爆開；build/drop/break/hold/finale 段落動態；閃白、衝擊波

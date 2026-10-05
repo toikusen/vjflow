@@ -17,11 +17,3 @@ describe('cutPieces', () => {
     expect(p.map((x) => x.text).join('')).toBe('今日は年甲斐ないことしたいの');
   });
 });
-
-describe('inkOn', () => {
-  it('sets dark ink on light slabs and white on dark ones', async () => {
-    const { inkOn } = await import('./block');
-    expect(inkOn('#ffd27a')).toBe('#0b0a10');
-    expect(inkOn('#2a1430')).toBe('#ffffff');
-  });
-});

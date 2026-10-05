@@ -15,7 +15,6 @@ import { beatCut } from './beat-cut';
 import { handwrite } from './handwrite';
 import { titleCard } from './title-card';
 import { punch } from './punch';
-import { block } from './block';
 import { fxAt, MomentFx, quietSpans } from '../moments';
 import { quiet, quietFace } from './quiet';
 import { stair } from './stair';
@@ -37,8 +36,8 @@ const H = 1080;
 /** How long a drop's keyword flash holds before the line takes over (a few frames). */
 const FLASH_SEC = 0.16;
 const HOLD_SEC = 1.2;
-const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card', 'block']);
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, block, quiet, stair };
+const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card']);
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair };
 
 export interface AssetSource {
   kind: 'image' | 'video';

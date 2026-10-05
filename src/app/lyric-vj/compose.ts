@@ -18,7 +18,7 @@ const PLACEMENT: Record<string, { param: string; values: Partial<Record<Anchor, 
 
 /** Where a shot sits: diagonal and per-word templates read as off-centre already. */
 export function anchorOf(s: Shot): Anchor | undefined {
-  if (['scatter', 'beat-cut', 'block', 'stair', 'quiet'].includes(s.template)) return undefined;
+  if (['scatter', 'beat-cut', 'stair', 'quiet'].includes(s.template)) return undefined;
   const p = PLACEMENT[s.template];
   if (!p) return 'C';
   const v = s.params[p.param];

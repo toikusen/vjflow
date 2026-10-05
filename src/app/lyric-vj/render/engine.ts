@@ -34,6 +34,27 @@ import { CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, ShotLayer, TemplateRende
 
 const W = 1920;
 const H = 1080;
+/**
+ * Lyrics always inside the frame: the layer is laid out at its settled moment and, if any glyph would cross the
+ * safe area (48 px side / 40 px top-bottom margin), scaled down about the centre inside a wrapper group.
+ */
+function fitToFrame(layer: CueLayer): THREE.Group {
+  const fit = new THREE.Group();
+  fit.add(layer.group);
+  const [from, to] = layer.readable();
+  const vis = layer.group.visible;
+  layer.group.visible = true;
+  layer.update(Number.isFinite(to) ? (from + to) / 2 : from + 0.5, { flash: 0, hit: 0, shake: 0 });
+  layer.group.visible = vis;
+  fit.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(layer.group);
+  if (box.isEmpty()) return fit;
+  const sx = (W / 2 - 48) / Math.max(Math.abs(box.min.x), Math.abs(box.max.x));
+  const sy = (H / 2 - 40) / Math.max(Math.abs(box.min.y), Math.abs(box.max.y));
+  fit.scale.setScalar(Math.min(1, sx, sy));
+  return fit;
+}
+
 /** How long a drop's keyword flash holds before the line takes over (a few frames). */
 const FLASH_SEC = 0.16;
 const HOLD_SEC = 1.2;
@@ -325,6 +346,9 @@ export class LyricVjEngine {
       .sort((a, b) => a.cue.start - b.cue.start);
     // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
     const lead = this.job.tempo !== undefined && this.job.tempo < 95 ? 0.35 : LEAD;
+    // a line shows ahead of its voice, but never while the previous line's last word is still being sung
+    const lastSung = styled.map(({ cue }) => (cue.charTimed && cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : -Infinity));
+    const showAt = styled.map(({ cue }, i) => Math.max(cue.start - lead, Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3)));
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     const hook = titleHook(this.job.meta?.title ?? '');
     styled.forEach(({ style: style0, cue }, i) => {
@@ -332,7 +356,7 @@ export class LyricVjEngine {
       const style = hooks.length ? { ...style0, emphasis: [...hooks, ...(style0.emphasis ?? [])] } : style0;
       const shot = treatment.shots.find((s) => s.id === style.shot)!;
       const next = styled[i + 1]?.cue;
-      const nextShow = next ? next.start - lead : Infinity;
+      const nextShow = next ? showAt[i + 1] : Infinity;
       const len = cue.end - cue.start;
       const pace = Math.min(1, Math.max(0.35, len / 2)); // short lines enter and leave faster so they stay readable
       const exitSec = EXIT_SEC * pace;
@@ -343,7 +367,7 @@ export class LyricVjEngine {
         cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
         // an English line is set in the paired Latin face
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
-        showFrom: cue.start - lead,
+        showFrom: showAt[i],
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
         accentTimes: (style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined),
@@ -353,7 +377,7 @@ export class LyricVjEngine {
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;
-      this.textRoot.add(layer.group);
+      this.textRoot.add(fitToFrame(layer));
       this.cueLayers.push({ rt, layer });
       if (shot.params['echo']) {
         const echo = this.makeEcho(rt);

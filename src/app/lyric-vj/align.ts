@@ -30,6 +30,8 @@ function asrChars(words: AsrWord[]): { ch: string; t: number }[] {
   return words.flatMap((w) => {
     const cs = strip(w.text);
     const dt = (w.end - w.start) / Math.max(1, cs.length);
+    // a word stretched over silence (the aligner hangs a line's first word on the gap before it) is sung at its end
+    if (dt > 0.8) return cs.map((ch, i) => ({ ch, t: w.end - 0.3 * (cs.length - i) }));
     return cs.map((ch, i) => ({ ch, t: w.start + i * dt }));
   });
 }
@@ -228,6 +230,15 @@ export function combineTimings(lines: string[], forced: ForcedLine[], heard: Tim
  * kept inside the line. Times are per code point of `text`.
  */
 export function charStartsFor(text: string, words: AsrWord[], start: number, end: number): number[] {
+  return charTiming(text, words, start, end).charStarts;
+}
+
+/**
+ * Per-character times from forced-alignment words. When the first sung character lands up to 1 s after the line's
+ * start, the line start moves to it (the line was timed early) instead of the characters shifting back to it.
+ * `trusted`: at least 70 % of the characters were matched to the audio, so word-level cuts can follow them.
+ */
+export function charTiming(text: string, words: AsrWord[], start: number, end: number): { start: number; charStarts: number[]; trusted: boolean } {
   const chars = [...text];
   const heard = asrChars(words);
   const times: (number | undefined)[] = chars.map(() => undefined);
@@ -236,8 +247,11 @@ export function charStartsFor(text: string, words: AsrWord[], start: number, end
   for (const [i, j] of lcsPairs(idx.map((i) => plain[i]), heard.map((h) => h.ch))) times[idx[i]] = heard[j].t;
   // fill unmatched characters by interpolating between matched neighbours (or the line edges)
   const known = times.map((t, i) => (t === undefined ? -1 : i)).filter((i) => i >= 0);
-  if (!known.length) return chars.map((_, i) => +(start + ((end - start) * 0.8 * i) / Math.max(1, chars.length)).toFixed(3));
+  if (!known.length) return { start, trusted: false, charStarts: chars.map((_, i) => +(start + ((end - start) * 0.8 * i) / Math.max(1, chars.length)).toFixed(3)) };
+  const late = times[known[0]]! - start;
+  if (late >= 0 && late <= 1 && times[known[0]]! < end - 0.3) start = times[known[0]]!;
   const shift = start - times[known[0]]!;
+  let jumps = 0;
   const out = chars.map((_, i) => {
     if (times[i] !== undefined) return times[i]! + shift;
     const a = known.filter((k) => k < i).pop();
@@ -249,8 +263,11 @@ export function charStartsFor(text: string, words: AsrWord[], start: number, end
   // a jump of more than 2 s inside a line is a character matched to a later occurrence (け of the next line):
   // it follows the previous character instead
   let prev = start;
-  return out.map((t, i) => {
-    const v = i > 0 && t - prev > 2 ? prev + 0.25 : t;
+  const charStarts = out.map((t, i) => {
+    const jump = i > 0 && t - prev > 2;
+    if (jump) jumps++;
+    const v = jump ? prev + 0.25 : t;
     return +(prev = Math.min(end - 0.05, Math.max(prev, v))).toFixed(3);
   });
+  return { start, charStarts, trusted: jumps === 0 && known.length >= 0.7 * idx.length };
 }

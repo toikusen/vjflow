@@ -42,6 +42,26 @@ export function cutPieces(text: string): { text: string; from: number }[] {
   return out.filter((x) => x.text);
 }
 
+/** A piece must hold this long to be read; shorter ones merge into the next. */
+export const MIN_HOLD = 0.5;
+
+/** Pieces with their sung time (first one at showFrom), merged until each holds at least MIN_HOLD. */
+export function timedPieces(pieces: { text: string; from: number }[], charStarts: number[], showFrom: number, exitAt: number) {
+  const out = pieces.map((p, k) => ({ ...p, at: k === 0 ? showFrom : charStarts[p.from] - 0.05 }));
+  for (let k = 0; k < out.length; ) {
+    const end = k + 1 < out.length ? out[k + 1].at : exitAt;
+    if (end - out[k].at >= MIN_HOLD || out.length === 1) {
+      k++;
+      continue;
+    }
+    // too short: fold into the next piece (or, for the last, into the previous)
+    const [a, b] = k + 1 < out.length ? [k, k + 1] : [k - 1, k];
+    out.splice(a, 2, { text: out[a].text + out[b].text, from: out[a].from, at: out[a].at });
+    k = Math.max(0, a - 1);
+  }
+  return out;
+}
+
 /** Layout variants a piece can take: centre, upper left tilted, lower right tilted, oversized and cropped. */
 const LAYOUTS = [
   { x: 0, y: 40, width: 0.8, tilt: 0, align: 'center' },
@@ -53,15 +73,15 @@ const LAYOUTS = [
 export const beatCut: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const text = rt.cue.text;
-    const pieces = cutPieces(text);
-    const chars = [...text];
-    // pieces cut in at a steady rate over the first 60 % of the line, so the last one stays up long enough to read
-    const startOf = (k: number) => rt.showFrom + ((rt.exitAt - rt.showFrom) * 0.6 * pieces[k].from) / Math.max(1, chars.length);
+    // pieces cut in when they are sung; without audio-matched character times the line is shown whole
+    const pieces = rt.cue.charTimed && rt.cue.charStarts ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [{ text: text.trim(), from: 0, at: rt.showFrom }];
+    const startOf = (k: number) => pieces[k].at;
+    const whole = pieces.length === 1;
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
     const group = new THREE.Group();
     const seed = Math.floor(hash(rt.cue.start, 17) * 4);
     const big = pieces.map((piece, k) => {
-      const lay = LAYOUTS[(k + seed) % LAYOUTS.length];
+      const lay = whole ? LAYOUTS[0] : LAYOUTS[(k + seed) % LAYOUTS.length];
       const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
       const w200 = [...piece.text].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
       // fits the layout width, and never wider than the frame (minus margins) even at the floor size
@@ -83,7 +103,7 @@ export const beatCut: TemplateRenderer = {
       return { holder, gs, from: startOf(k), to: k + 1 < pieces.length ? startOf(k + 1) : rt.exitAt };
     });
     // the whole line, small, at the bottom: readable from the start
-    const small = makeGlyphs(text.replace(/\s+/g, ' '), { family: rt.fonts.body, weight: 700, size: 64, shadow: true }, color(rt.palette.text, 0.95), 4);
+    const small = whole ? [] : makeGlyphs(text.replace(/\s+/g, ' '), { family: rt.fonts.body, weight: 700, size: 64, shadow: true }, color(rt.palette.text, 0.95), 4);
     placeRow(small, 0, -H / 2 + 120, 4);
     tagSource(small, text, 0);
     small.forEach((g, i) => {
@@ -111,7 +131,7 @@ export const beatCut: TemplateRenderer = {
           g.mesh.material.opacity = m.opacity * 0.9;
         });
       },
-      readable: () => [settledAt(smallRt, small.length, 0.01), rt.exitAt],
+      readable: () => [whole ? rt.showFrom + 0.12 : settledAt(smallRt, small.length, 0.01), rt.exitAt],
     };
   },
 };

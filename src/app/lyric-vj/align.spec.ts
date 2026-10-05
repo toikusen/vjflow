@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alignLyrics, charStartsFor, cleanLyricLine, combineTimings, lcsPairs, snapToPhrases } from './align';
+import { alignLyrics, charStartsFor, charTiming, cleanLyricLine, combineTimings, lcsPairs, snapToPhrases } from './align';
 
 describe('lcsPairs', () => {
   it('finds the common subsequence', () => {
@@ -73,12 +73,20 @@ describe('combineTimings', () => {
 
 describe('charStartsFor', () => {
   it('times each character from the aligner, shifted to the line start and kept in order', () => {
-    const words = [{ text: '光る', start: 10.2, end: 10.8 }, { text: '星', start: 11.0, end: 11.4 }];
+    const words = [{ text: '光る', start: 11.6, end: 12.2 }, { text: '星', start: 12.4, end: 12.8 }];
     const t = charStartsFor('光る 星', words, 10, 13);
     expect(t).toHaveLength(4);
-    expect(t[0]).toBe(10); // shifted from 10.2 to the line start
-    expect(t[3]).toBeCloseTo(10.8, 1); // 星 at 11.0 − 0.2
+    expect(t[0]).toBe(10); // more than 1 s late: shifted from 11.6 to the line start
+    expect(t[3]).toBeCloseTo(10.8, 1); // 星 at 12.4 − 1.6
     expect(t.every((x, i) => i === 0 || x >= t[i - 1])).toBe(true);
+  });
+
+  it('moves an early line start to the first sung character, and sings a stretched first word at its end', () => {
+    const r = charTiming('今が一番', [{ text: '今', start: 34.9, end: 37.0 }, { text: 'が', start: 37.06, end: 37.4 }, { text: '一番', start: 37.42, end: 38 }], 36.48, 41);
+    expect(r.start).toBeCloseTo(36.7, 2);
+    expect(r.charStarts[1]).toBe(37.06);
+    expect(r.trusted).toBe(true);
+    expect(charTiming('今が一番', [], 36.48, 41).trusted).toBe(false);
   });
 
   it('does not let one character jump to a far later occurrence', () => {

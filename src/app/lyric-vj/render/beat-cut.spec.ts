@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cutPieces } from './beat-cut';
+import { cutPieces, timedPieces } from './beat-cut';
 
 describe('cutPieces', () => {
   it('cuts a line into sung pieces of two or more characters, with their positions', () => {
@@ -23,5 +23,15 @@ describe('cutPieces', () => {
     const kanji = /\p{Script=Han}/u;
     const joined = p.map((x) => x.text);
     for (let i = 1; i < joined.length; i++) expect(kanji.test(joined[i - 1].trim().slice(-1)) && kanji.test(joined[i].trim()[0])).toBe(false);
+  });
+});
+
+describe('timedPieces', () => {
+  it('cuts each piece in when it is sung and merges pieces too short to read', () => {
+    const pieces = [{ text: '今が', from: 0 }, { text: '一番', from: 2 }, { text: '若いの', from: 4 }];
+    const starts = [10, 10.2, 10.3, 10.5, 11.5, 11.7, 11.9];
+    const p = timedPieces(pieces, starts, 9.9, 13);
+    expect(p.map((x) => x.text)).toEqual(['今が一番', '若いの']); // 一番 held 1.0 s alone would be fine, 今が only 0.35 s
+    expect(p[1].at).toBeCloseTo(11.45, 2);
   });
 });

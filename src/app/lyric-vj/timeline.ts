@@ -19,6 +19,8 @@ export interface TimelineCue {
   altStart?: number;
   /** When each character (code point of `text`) is sung, for word-by-word reveals. */
   charStarts?: number[];
+  /** charStarts come from the audio (forced alignment matched most characters), not interpolation. */
+  charTimed?: boolean;
 }
 
 export interface SongTimeline {

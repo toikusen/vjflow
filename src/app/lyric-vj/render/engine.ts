@@ -22,6 +22,7 @@ import { stair } from './stair';
 import { keywordRange } from './punch';
 import { makeGlyphs, placeRow, advanceOf, Glyph } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
+import { SYSTEMS } from '../systems';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
@@ -322,7 +323,7 @@ export class LyricVjEngine {
     const logo = this.job.meta?.logo ? await loader.loadAsync(this.job.meta.logo) : undefined;
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
     const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
-    if (treatment.motif) {
+    if (treatment.motif && (!design.system || SYSTEMS[design.system].motif)) {
       this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
       this.scene.add(this.motif.group);
@@ -597,7 +598,8 @@ export class LyricVjEngine {
     }
     // letterbox: bars slide in over 0.5 s at a quiet span and snap open on the beat that ends it
     const q = this.quiet.find((s) => t >= s.start && t < s.end);
-    const close = q ? easeOutCubic(clamp01((t - q.start) / 0.5)) : 0;
+    const sys = this.job.treatment.design?.system;
+    const close = sys && SYSTEMS[sys].letterbox ? 1 : q ? easeOutCubic(clamp01((t - q.start) / 0.5)) : 0;
     for (const bar of this.bars) bar.position.y = bar.userData['side'] * (H / 2 + H * 0.1 - close * H * 0.12);
     for (const { rt, layer } of this.cueLayers) {
       layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== flash?.cueId;
@@ -646,7 +648,8 @@ export class LyricVjEngine {
       const pal = this.paletteAt(t);
       // a 'wipe' into a shot opens through the motif's shape
       const iris = shot.transitionIn === 'wipe' && since >= 0 && since < 0.6 ? since / 0.6 : -1;
-      this.motif.update(bt, Math.max(mfx.rays, mfx.moteBurst) * 0.8, new THREE.Color(pal.line), new THREE.Color(pal.accent), peak === 'burst' ? mfx.rays : 0, iris);
+      const textOn = this.cueLayers.some(({ rt }) => t >= rt.showFrom && t <= rt.exitAt + rt.exitDur) ? 1 : 0;
+      this.motif.update(bt, Math.max(mfx.rays, mfx.moteBurst) * 0.8 * (1 - 0.6 * textOn), new THREE.Color(pal.line), new THREE.Color(pal.accent), peak === 'burst' ? mfx.rays : 0, iris, textOn);
     }
     u['uGrain'].value = 0.02 + 0.1 * d.grain + medium.grain;
     u['uPaper'].value = Math.max(d.paper, medium.paper);

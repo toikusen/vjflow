@@ -1,6 +1,7 @@
 // Per-song design system: one font family, how much smaller kana are set, and a colour script (a duotone for the
 // background plus one accent colour, changing by section) with grain and paper texture. The gap analysis against
 // designer VJs found generic full-colour AI backgrounds and one bold gothic face everywhere to be the main tells.
+import { SYSTEMS, SystemId } from './systems';
 import { FONTS } from './fonts';
 import type { Window } from './treatment';
 import { MEDIA, MediumId } from './medium';
@@ -41,6 +42,8 @@ export type TechniqueId = keyof typeof TECHNIQUES;
 export const uses = (d: Pick<Design, 'techniques'> | undefined, id: TechniqueId) => !d?.techniques || d.techniques.includes(id);
 
 export interface Design {
+  /** The visual language (systems.ts); older treatments have none = stage. */
+  system?: SystemId;
   /** Techniques this song uses (absent = all, for older treatments). */
   techniques?: TechniqueId[];
   font: string;
@@ -87,7 +90,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: { font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES) },
+    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined }, fixes),
     fixes,
   };
 }
@@ -115,4 +118,19 @@ export function colorAt(script: ColorStop[], t: number, ease = 1): ColorStop {
     };
   }
   return cur;
+}
+
+/** Holds a design to its system's media, peaks, techniques and picture range. */
+export function fitSystem(d: Design, fixes: string[]): Design {
+  const sys = d.system && SYSTEMS[d.system];
+  if (!sys) return d;
+  const medium = d.medium && sys.media.includes(d.medium) ? d.medium : sys.media[0];
+  const peak = sys.peaks.includes(d.peak) ? d.peak : sys.peaks[0];
+  if (medium !== d.medium || peak !== d.peak) fixes.push(`依「${sys.name}」系統調整媒材／爆點：${medium}、${peak}`);
+  const [lo, hi] = sys.image;
+  return {
+    ...d, medium, peak,
+    techniques: (d.techniques ?? sys.techniques).filter((x) => sys.techniques.includes(x)),
+    colorScript: d.colorScript.map((c) => ({ ...c, image: Math.min(hi, Math.max(lo, c.image)) })),
+  };
 }

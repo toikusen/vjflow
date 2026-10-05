@@ -202,7 +202,7 @@ export class MotifLayer {
   }
 
   /** `burst` 0..1 comes from the drop/finale moments; `line`/`accent` are the section's colours. */
-  update(t: number, burst: number, line: THREE.Color, accent: THREE.Color, rings = 0, iris = -1) {
+  update(t: number, burst: number, line: THREE.Color, accent: THREE.Color, rings = 0, iris = -1, textOn = 0) {
     const { cur, prev, k, since } = motifStateAt(this.plan, t);
     const beat = this.beatIndex(t);
     const lastBeat = this.beats[beat - 1] ?? -10;
@@ -214,14 +214,15 @@ export class MotifLayer {
       const age = form === cur.form ? since : since + 1;
       units.forEach((u, i) => {
         u.tick(t + i * 0.7, beat);
-        const opacity = a * (0.8 + 0.3 * pulse + 0.4 * burst);
+        // while lyrics are up the motif steps back: line art at 40 %, filled shapes (a planet) no brighter than 0.3
+        const opacity = a * (0.8 + 0.3 * pulse + 0.4 * burst) * (1 - 0.6 * textOn);
         u.mats.forEach((m) => {
           m.color.copy(line);
           m.opacity = opacity;
         });
         u.accents.forEach((m) => {
           m.color.copy(accent);
-          m.opacity = Math.min(1, opacity * 1.3);
+          m.opacity = Math.min(1 - 0.7 * textOn, opacity * 1.3);
         });
         this.place(form, u, i, units.length, t, age, pulse, burst);
       });

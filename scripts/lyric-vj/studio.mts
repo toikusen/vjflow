@@ -7,7 +7,7 @@ import { dirname, join, relative } from 'node:path';
 import { phraseBoundaries } from '../../src/app/lyric-vj/phrases';
 import { toLrc, type SongTimeline } from '../../src/app/lyric-vj/timeline';
 
-export type StudioStep = 'make' | 'design' | 'render' | 'layer' | 'lrc';
+export type StudioStep = 'make' | 'design' | 'render' | 'layer' | 'lrc' | 'clip';
 
 export interface StudioRun {
   step: StudioStep;
@@ -46,7 +46,7 @@ export function studioState(songFile: string, outRoot: string) {
 }
 
 /** Starts a step for a song; refuses when one is already running for it. */
-export function startStep(songFile: string, step: StudioStep, opts: { language?: string }): string | undefined {
+export function startStep(songFile: string, step: StudioStep, opts: { language?: string; seconds?: number }): string | undefined {
   if (runs.get(songFile) && !runs.get(songFile)!.endedAt) return '這首歌已經有步驟在執行';
   const song: SongTimeline = JSON.parse(readFileSync(songFile, 'utf8'));
   if (!song.timingConfirmedAt && step !== 'lrc') return '請先在時間編輯器確認歌詞時間';
@@ -76,7 +76,17 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
     ],
     render: [render()],
     layer: [render('text')],
+    clip: [clipCmd()],
   }[step];
+  function clipCmd() {
+    // a short moving preview around the first chorus drop (the moment that sells the design), 15 or 30 s
+    const len = opts.seconds === 30 ? 30 : 15;
+    const t = existsSync(join(dir, 'treatment.json')) ? JSON.parse(readFileSync(join(dir, 'treatment.json'), 'utf8')) : {};
+    const drop = (t.moments ?? []).find((m: { kind: string; at: number }) => m.kind === 'drop')?.at ?? song.duration * 0.3;
+    const from = Math.max(0, Math.min(song.duration - len, drop - (len === 30 ? 10 : 5)));
+    const out = join(dir, `preview_${len}s.mp4`);
+    return `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --clip ${from.toFixed(2)},${(from + len).toFixed(2)} --out ${q(join(dir, 'clip'))} && mv ${q(join(dir, 'clip'))}/lyric-vj_vocal_*.mp4 ${q(out)} && rm -rf ${q(join(dir, 'clip'))}`;
+  }
   // a login shell: the image service keys live in the user's shell profile
   const child = spawn('zsh', ['-ic', cmd.join(' && ')], { cwd: process.cwd() });
   const push = (b: Buffer) => {

@@ -33,6 +33,8 @@
       </div>
       <div class="row buttons">
         <button (click)="run('make')" [disabled]="running() || !s.confirmedAt">產生設計與預覽</button>
+        <button (click)="run('clip', 15)" [disabled]="running() || !state()?.design">15 秒動態預覽</button>
+        <button (click)="run('clip', 30)" [disabled]="running() || !state()?.design">30 秒動態預覽</button>
         <button (click)="run('design')" [disabled]="running() || !state()?.design">只重做設計</button>
         <button (click)="run('render')" [disabled]="running() || !state()?.design">渲染完整影片</button>
         <button (click)="run('layer')" [disabled]="running() || !state()?.design">輸出歌詞透明層</button>
@@ -65,6 +67,11 @@
           <p class="muted">
             自動檢查：{{ c.unreadable.length }} 句停留時間偏短、{{ c.lingering.length }} 句唱完後停留太久
           </p>
+        }
+        @for (o of st.outputs; track o) {
+          @if (name(o).startsWith('preview_')) {
+            <video class="clip" [src]="file(o)" controls></video>
+          }
         }
         @if (st.outputs.length) {
           <ul class="outputs">

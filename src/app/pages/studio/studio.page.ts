@@ -25,7 +25,7 @@ interface StudioState {
 }
 
 const POLL_MS = 3000;
-const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC' };
+const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC' };
 
 /**
  * Studio: one song from confirmed timing to a finished VJ — generate the design (the director picks a design language
@@ -72,14 +72,14 @@ export class StudioPage {
     await this.refresh();
   }
 
-  protected async run(step: string) {
+  protected async run(step: string, seconds?: number) {
     const id = this.selected();
     if (!id) return;
     this.error.set(null);
     const res = await fetch(`/lyric-vj/studio/${encodeURIComponent(id)}/${step}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ language: this.language() || undefined }),
+      body: JSON.stringify({ language: this.language() || undefined, seconds }),
     });
     if (!res.ok) this.error.set(((await res.json()) as { error?: string }).error ?? `失敗（${res.status}）`);
     await this.refresh();

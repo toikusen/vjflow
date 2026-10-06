@@ -112,3 +112,9 @@ p {
     grid-template-columns: 1fr;
   }
 }
+
+.clip {
+  width: 100%;
+  max-width: 960px;
+  border-radius: 8px;
+}

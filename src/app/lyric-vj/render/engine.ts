@@ -27,7 +27,7 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { drawLook, sectionAt } from './graphics';
+import { drawLook, drawNative, sectionAt } from './graphics';
 import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -602,6 +602,9 @@ export class LyricVjEngine {
         const tex = this.images.get(asset ?? shot.asset ?? '');
         return tex?.image as CanvasImageSource | undefined;
       });
+      const lang = this.job.treatment.design?.language;
+      const drop = [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
+      if (lang && drop) drawNative(this.gfx.ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
       this.gfx.tex.needsUpdate = true;
       // the look is the whole background: no full-bleed plates, no generic light motes
       for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;
@@ -673,10 +676,12 @@ export class LyricVjEngine {
       if (drop) this.dim.material.opacity = Math.max(this.dim.material.opacity, 0.96);
     }
     u['uVignette'].value = mfx.vignette;
-    u['uRays'].value = peak === 'rays' || peak === 'vacuum' ? mfx.rays * (peak === 'vacuum' ? 0.5 : 1) : 0;
-    u['uBeams'].value = beams;
+    // a design language brings its own peak move (graphics.ts drawNative): no shared rays, beams or shockwave
+    const own = !!this.job.treatment.design?.language && !!this.gfx;
+    u['uRays'].value = own ? 0 : peak === 'rays' || peak === 'vacuum' ? mfx.rays * (peak === 'vacuum' ? 0.5 : 1) : 0;
+    u['uBeams'].value = own ? 0 : beams;
     u['uShockR'].value = mfx.shockR;
-    u['uShock'].value = mfx.shock;
+    u['uShock'].value = own ? 0 : mfx.shock;
     (u['uRayColor'].value as THREE.Color).set(this.paletteAt(t).glow).lerp(new THREE.Color(1, 1, 1), 0.45);
     for (const p of this.plates) {
       const pu = p.mesh.material.uniforms;

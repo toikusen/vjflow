@@ -82,7 +82,8 @@ function texture(char: string, s: GlyphStyle) {
     if (s.shadow) {
       // the halo is drawn dark, then the white glyph on top; the material colour tints only bright pixels
       ctx.shadowColor = halo;
-      ctx.shadowBlur = s.size * 0.28;
+      // a light halo (dark type on a light field) stays tight: a wide one fogged dark areas it crossed
+      ctx.shadowBlur = s.size * (halo.startsWith('rgba(0,0,0') ? 0.28 : 0.1);
       draw('rgba(0,0,0,0.6)');
       draw('rgba(0,0,0,0.6)');
       ctx.shadowColor = 'transparent';

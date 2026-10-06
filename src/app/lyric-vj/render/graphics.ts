@@ -686,3 +686,143 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
 }
+
+/**
+ * The design language's own peak move (languages.ts `native`), drawn over the look for ~1.5 s after each drop or
+ * finale: it replaces the generic radial glow every song used to share. `since` is seconds since the drop.
+ */
+export function drawNative(ctx: CanvasRenderingContext2D, language: string, since: number, sec: LookSection, beat: Beat) {
+  if (since < 0 || since > 1.6) return;
+  const k = Math.min(1, since / 0.18);
+  const fade = since > 1.1 ? 1 - (since - 1.1) / 0.5 : 1;
+  const accent = sec.accent ?? '#ff3355';
+  const ink = sec.text ?? '#111111';
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, fade);
+  switch (language) {
+    case 'dossier': {
+      // a giant rubber stamp slams down in the centre
+      const s = 2.4 - 1.4 * (1 - (1 - k) ** 3);
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(-0.16);
+      ctx.scale(s, s);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 16;
+      roundRect(ctx, -330, -130, 660, 260, 36);
+      ctx.stroke();
+      ctx.lineWidth = 6;
+      roundRect(ctx, -300, -100, 600, 200, 24);
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'destination-out';
+      for (let i = 0; i < 260; i++) ctx.fillRect((hash(i, 81) - 0.5) * 680, (hash(i, 82) - 0.5) * 280, 3 + hash(i, 83) * 5, 3);
+      break;
+    }
+    case 'ukiyoe': {
+      // a great wave of seigaiha rises from the bottom and falls back
+      const rise = since < 0.5 ? (1 - (1 - since / 0.5) ** 3) : 1 - Math.min(1, (since - 0.5) / 1.0) ** 2;
+      const top = H - rise * H * 0.45; // stays under the lyric band
+      ctx.beginPath();
+      ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 40) ctx.lineTo(x, top + Math.sin(x / 140 + since * 4) * 26);
+      ctx.lineTo(W, H);
+      ctx.closePath();
+      ctx.fillStyle = '#1F3F7A';
+      ctx.fill();
+      ctx.clip();
+      draw(ctx, { kind: 'pattern', type: 'waves', color: '#EFE4CC', scale: 110 }, since, since, beat, () => undefined);
+      break;
+    }
+    case 'swiss': {
+      // the page flips to the signal colour for one beat (the lyrics stay on top, so no true inversion)
+      if (since < 0.45) {
+        ctx.fillStyle = accent;
+        ctx.fillRect(0, 0, W, H);
+      }
+      break;
+    }
+    case 'terminal': {
+      // the character field floods to full density
+      const cols = 96;
+      const cw = W / cols;
+      const ch = cw * 2;
+      ctx.font = `${ch * 0.9}px "Space Mono", monospace`;
+      ctx.fillStyle = '#FFB000';
+      ctx.textBaseline = 'top';
+      const ramp = '.:-=+*#%@';
+      for (let j = 0; j < Math.ceil(H / ch); j++)
+        for (let i = 0; i < cols; i++) {
+          const d = Math.min(1, k * 1.2 - Math.hypot(i / cols - 0.5, j / (H / ch) - 0.5) * (1 - k) * 2);
+          if (d > 0.05) ctx.fillText(ramp[Math.min(ramp.length - 1, Math.floor(d * ramp.length))], i * cw, j * ch);
+        }
+      break;
+    }
+    case 'cel80s': {
+      // tape power-on: a bright line opens into the frame
+      const open = Math.min(1, since / 0.3);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255,240,255,0.9)';
+      const h = 6 + open * H;
+      ctx.globalAlpha *= 1 - open * 0.85;
+      ctx.fillRect(0, H / 2 - h / 2, W, h);
+      break;
+    }
+    case 'gameshow': {
+      // a judgement star bursts from the centre, spinning
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(since * 2.5);
+      const s = (0.3 + 1.2 * k) * H;
+      ctx.fillStyle = accent;
+      ctx.strokeStyle = '#1B1B2F';
+      ctx.lineWidth = 16;
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const r = i % 2 ? s * 0.22 : s / 2;
+        const a = (i / 10) * Math.PI * 2 - Math.PI / 2;
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.globalAlpha *= 0.85;
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 'papercut': {
+      // backlight: warm light glows through the frame
+      const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, H * 0.9);
+      g.addColorStop(0, 'rgba(255,190,90,0.75)');
+      g.addColorStop(1, 'rgba(255,120,40,0)');
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = g;
+      ctx.globalAlpha *= k;
+      ctx.fillRect(0, 0, W, H);
+      break;
+    }
+    case 'silkscreen':
+    case 'risograph': {
+      // a squeegee pull: a band of the accent ink wipes across once
+      const x = -W * 0.2 + Math.min(1, since / 0.35) * W * 1.4;
+      ctx.fillStyle = accent;
+      ctx.globalAlpha *= since < 0.35 ? 0.85 : 0;
+      ctx.fillRect(x - 60, 0, 120, H);
+      break;
+    }
+    case 'crayon': {
+      // a colour wash scribbles over the page
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 60;
+      ctx.lineCap = 'round';
+      ctx.globalAlpha *= 0.35;
+      const n = Math.floor(k * 14);
+      for (let i = 0; i < n; i++) {
+        ctx.beginPath();
+        ctx.moveTo(-50, i * 80 + hash(i, 91) * 40);
+        ctx.lineTo(W + 50, i * 80 + 60 + hash(i, 92) * 40);
+        ctx.stroke();
+      }
+      break;
+    }
+  }
+  ctx.restore();
+  void ink;
+}

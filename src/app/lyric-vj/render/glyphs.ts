@@ -67,6 +67,12 @@ export const setHalo = (rgba: string) => (halo = rgba);
 /** A hard dark copy offset under every glyph, as a fraction of its size (print misregistration, sticker shadows). */
 let ghost: [number, number] = [0, 0];
 export const setGhost = (g: [number, number]) => (ghost = g);
+/**
+ * A misregistered plate in a second ink under dark type (risograph-like): a separate coloured copy, offset, so dark
+ * strokes never merge with a dark shadow. Offsets are fractions of the glyph size.
+ */
+let inkGhost: { dx: number; dy: number; color: THREE.ColorRepresentation } | null = null;
+export const setInkGhost = (g: typeof inkGhost) => (inkGhost = g);
 
 function texture(char: string, s: GlyphStyle) {
   const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}`;
@@ -151,6 +157,15 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
         mesh.add(pm);
         return pm;
       });
+    }
+    if (inkGhost) {
+      // the plate copy has no halo: only the glyph shape, in the second ink, behind the type
+      const plain = texture(char, { ...cs, shadow: false });
+      const gm = new THREE.Mesh(new THREE.PlaneGeometry(plain.w, plain.h), new THREE.MeshBasicMaterial({ map: plain.texture, color: inkGhost.color, transparent: true, depthTest: false, depthWrite: false }));
+      gm.position.set(inkGhost.dx * cs.size, -inkGhost.dy * cs.size, -0.01);
+      gm.renderOrder = -1;
+      mesh.add(gm);
+      mesh.userData['inkGhost'] = gm;
     }
     const advance = t.advance * ts[index].advance;
     const gap = ts[index].gapBefore * s.size;
@@ -295,6 +310,8 @@ function piecesOf(canvas: HTMLCanvasElement, w: number, h: number): Piece[] {
 /** Strokes follow their glyph: same opacity and colour, scattered outward as the glyph fades (assemble / scatter). */
 export function syncPieces(root: THREE.Object3D) {
   root.traverse((o) => {
+    const ink = o.userData['inkGhost'] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> | undefined;
+    if (ink) ink.material.opacity = 0.85 * (o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>).material.opacity;
     const pieces = o.userData['pieces'] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] | undefined;
     if (!pieces || !(o as THREE.Mesh).isMesh) return;
     const m = (o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>).material;

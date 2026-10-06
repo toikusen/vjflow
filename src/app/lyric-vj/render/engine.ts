@@ -20,7 +20,7 @@ import { quiet, quietFace } from './quiet';
 import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
-import { makeGlyphs, placeRow, advanceOf, Glyph, setGhost, setHalo, setPieces, syncPieces } from './glyphs';
+import { makeGlyphs, placeRow, advanceOf, Glyph, setGhost, setHalo, setInkGhost, setPieces, syncPieces } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { SYSTEMS } from '../systems';
 import { LANGUAGES } from '../languages';
@@ -442,17 +442,27 @@ export class LyricVjEngine {
       // with a graphic look the lyric colour comes from what is actually behind the lyrics: the line is laid out once
       // to find where it sits, the look is measured there, and the line is built again in a colour that reads
       let backdrop: string | undefined;
+      let mixed = false;
       if (this.job.treatment.graphics) {
         setHalo('rgba(0,0,0,0)');
         const probe = RENDERERS[shot.template].cue(rt);
         const box = settledBox(probe);
-        backdrop = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), box.isEmpty() ? undefined : box);
+        const measured = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), box.isEmpty() ? undefined : box);
+        backdrop = measured?.mean;
+        mixed = measured?.mixed ?? false;
         rt.palette = this.cuePalette(cue.start + 0.3, backdrop);
       }
       setHalo(backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
-      // the dark offset copy only under light type: under dark heavy type it thickened the strokes into one blob
-      setGhost(luma(rt.palette.text) > 0.5 ? langGhost : [0, 0]);
+      // the dark offset copy goes under light type; dark type gets the offset as a coloured second ink instead (a dark
+      // shadow under dark heavy type merged the strokes into one blob)
+      const darkType = luma(rt.palette.text) <= 0.5;
+      setGhost(darkType ? [0, 0] : langGhost);
+      setInkGhost(darkType && (langGhost[0] || langGhost[1]) ? { dx: langGhost[0] * 1.4, dy: langGhost[1] * 1.4, color: new THREE.Color(rt.palette.accent).lerp(new THREE.Color(1, 1, 1), 0.25) } : null);
       const layer = RENDERERS[shot.template].cue(rt);
+      setInkGhost(null);
+      // a line can straddle light and dark (a photo inset under part of it): each glyph over the opposite tone flips
+      // to the other ink, like type knocked out where it crosses a picture
+      if (mixed) this.knockout(layer, cue.start + Math.min(1, (cue.end - cue.start) / 2), rt.palette.text);
       layer.group.visible = false;
       this.textRoot.add(fitToFrame(layer));
       this.cueLayers.push({ rt, layer });
@@ -885,8 +895,32 @@ export class LyricVjEngine {
     return { ...p, text, background: backdrop };
   }
 
+  /** Flips glyphs whose own backdrop (the look at t, under the glyph's settled position) is the same tone as the type. */
+  private knockout(layer: CueLayer, t: number, text: string) {
+    const fit = new THREE.Group();
+    fit.add(layer.group);
+    settledBox(layer, fit);
+    const dark = luma(text) <= 0.5;
+    const flip = new THREE.Color(dark ? '#f4f2ee' : '#16151a');
+    const v = new THREE.Vector3();
+    layer.group.traverse((o) => {
+      const m = o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+      if (!m.isMesh || !m.material.map || o.parent?.userData['inkGhost'] === o) return;
+      o.getWorldPosition(v);
+      const x = Math.round(v.x + W / 2);
+      const y = Math.round(H / 2 - v.y);
+      if (x < 8 || y < 8 || x > W - 8 || y > H - 8) return;
+      const d = this.probe!.getImageData(x - 8, y - 8, 16, 16).data;
+      let l = 0;
+      for (let i = 0; i < d.length; i += 4) l += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      l /= d.length / 4;
+      if (dark ? l < 0.32 : l > 0.68) m.material.color.copy(flip);
+    });
+    fit.remove(layer.group);
+  }
+
   /** Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. */
-  private backdropAt(t: number, box?: THREE.Box3): string | undefined {
+  private backdropAt(t: number, box?: THREE.Box3): { mean: string; mixed: boolean } | undefined {
     if (!this.job.treatment.graphics) return undefined;
     this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
     const shot = this.shotAt(t).shot;
@@ -895,12 +929,16 @@ export class LyricVjEngine {
       ? [box.min.x + W / 2, H / 2 - box.max.y, box.max.x + W / 2, H / 2 - box.min.y].map((v, i) => Math.max(0, Math.min(i % 2 ? H : W, v)))
       : [W * 0.15, H * 0.28, W * 0.85, H * 0.72];
     const d = this.probe.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0)).data;
-    let r = 0, g = 0, b = 0, n = 0;
+    let r = 0, g = 0, b = 0, n = 0, dark = 0, light = 0;
     for (let i = 0; i < d.length; i += 4 * 97) {
       r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      if (l < 0.3) dark++;
+      else if (l > 0.65) light++;
     }
     const hx = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
-    return `#${hx(r)}${hx(g)}${hx(b)}`;
+    // mixed: a sizeable share of both dark and light under the line — no single type colour reads everywhere
+    return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, mixed: dark / n > 0.06 && light / n > 0.06 };
   }
 
   private paletteAt(t: number): Palette {

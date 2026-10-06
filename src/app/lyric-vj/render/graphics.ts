@@ -49,6 +49,9 @@ export type Layer = Base &
     | { kind: 'mist'; color: Rgb; count?: number; y?: number; drift?: number }
     | { kind: 'speedlines'; color: Rgb; count?: number; inner?: number }
     | { kind: 'swissgrid'; color: Rgb; cols?: number; bars?: Rgb; signal?: Rgb; seed?: number }
+    | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb }
+    | { kind: 'mosaic'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number }
+    | { kind: 'ink'; color: Rgb; count?: number; size?: number; seed?: number }
   );
 
 export interface LookSection {
@@ -64,7 +67,7 @@ export interface GraphicsLook {
   sections: LookSection[];
 }
 
-export const LAYER_KINDS = ['fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid'] as const;
+export const LAYER_KINDS = ['fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid', 'skyline', 'mosaic', 'ink'] as const;
 
 const W = 1920;
 const H = 1080;
@@ -389,6 +392,107 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         const y = Math.floor(hash(seed, 73) * 8) * (H / 9);
         ctx.fillStyle = k === 0 && l.signal ? l.signal : (l.bars ?? '#111111');
         ctx.fillRect(m + c0 * cw, y, span * cw, k === 0 ? H / 9 : H / 36);
+      }
+      return;
+    }
+    case 'skyline': {
+      // layered silhouettes (paper-lantern / cut-paper depth): back layers first, each a flat colour, parallax drift
+      const n = l.colors.length;
+      const top = H * (1 - (l.height ?? 0.45));
+      l.colors.forEach((c, k) => {
+        const depth = (k + 1) / n; // 0 back … 1 front
+        const base = top + (H - top) * (0.15 + 0.5 * depth);
+        const off = (t * (l.drift ?? 6) * (0.3 + depth)) % W;
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.moveTo(-off - 10, H);
+        const seed = (l.seed ?? 0) * 31 + k * 7;
+        const type = l.type ?? 'city';
+        for (let x = -off - 10; x < W + W; ) {
+          const r = hash(Math.floor(x / 40), seed);
+          if (type === 'city') {
+            const w = 40 + r * 90;
+            const h = (H - base) * 0.3 + r * (H - top) * 0.55 * (1 - depth * 0.4);
+            ctx.lineTo(x, base - h);
+            ctx.lineTo(x + w, base - h);
+            x += w;
+          } else if (type === 'trees') {
+            const w = 30 + r * 40;
+            ctx.lineTo(x + w / 2, base - 60 - r * 120);
+            ctx.lineTo(x + w, base);
+            x += w;
+          } else {
+            const w = (type === 'peaks' ? 120 : 260) + r * 200;
+            ctx.quadraticCurveTo(x + w / 2, base - (type === 'peaks' ? 160 : 60) - r * (type === 'peaks' ? 260 : 90), x + w, base - r * 20);
+            x += w;
+          }
+        }
+        ctx.lineTo(W + W, H);
+        ctx.closePath();
+        ctx.fill();
+        // lit windows on the front-most city layer
+        if (type === 'city' && l.windows && k === n - 1) {
+          ctx.fillStyle = l.windows;
+          for (let i = 0; i < 120; i++) {
+            const x = (hash(i, seed + 3) * W * 1.2 - off) % W;
+            const y = base - hash(i, seed + 4) * (H - top) * 0.4;
+            if (hash(i, seed + 5 + Math.floor(t)) > 0.35) ctx.fillRect(x, y, 6, 9);
+          }
+        }
+      });
+      return;
+    }
+    case 'mosaic': {
+      // stained glass: triangulated cells in a few jewel colours, dark leading between them, light breathing through
+      const n = l.cells ?? 9;
+      const cw = W / n;
+      const ch = H / Math.round(n * 0.56);
+      const rows = Math.ceil(H / ch);
+      const pt = (i: number, j: number) => [i * cw + (hash(i, j + 1) - 0.5) * cw * 0.6, j * ch + (hash(j, i + 2) - 0.5) * ch * 0.6];
+      for (let j = 0; j < rows; j++)
+        for (let i = 0; i < n; i++) {
+          const [a, b, c, d] = [pt(i, j), pt(i + 1, j), pt(i, j + 1), pt(i + 1, j + 1)];
+          for (const [tri, k] of [[[a, b, d], 0], [[a, d, c], 1]] as const) {
+            const col = l.colors[Math.floor(hash(i * 3 + k, j + (l.seed ?? 0)) * l.colors.length)];
+            ctx.globalAlpha = (l.opacity ?? 1) * (0.75 + 0.25 * Math.sin(t * 0.8 + hash(i, j) * 6));
+            ctx.fillStyle = col;
+            ctx.beginPath();
+            ctx.moveTo(tri[0][0], tri[0][1]);
+            ctx.lineTo(tri[1][0], tri[1][1]);
+            ctx.lineTo(tri[2][0], tri[2][1]);
+            ctx.closePath();
+            ctx.fill();
+            ctx.globalAlpha = l.opacity ?? 1;
+            ctx.strokeStyle = l.color ?? '#141018';
+            ctx.lineWidth = 7;
+            ctx.stroke();
+          }
+        }
+      return;
+    }
+    case 'ink': {
+      // ink-wash blots: soft overlapping washes with a darker core, growing slowly
+      const n = l.count ?? 5;
+      for (let i = 0; i < n; i++) {
+        const seed = (l.seed ?? 0) * 17 + i;
+        const x = hash(seed, 1) * W;
+        const y = hash(seed, 2) * H;
+        const r = (l.size ?? 220) * (0.5 + hash(seed, 3)) * (1 + 0.05 * Math.sin(t * 0.4 + i));
+        const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
+        g.addColorStop(0, l.color);
+        g.addColorStop(0.55, l.color);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = (l.opacity ?? 1) * (0.35 + 0.4 * hash(seed, 4));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        // ragged edge: a wobbling outline
+        for (let a = 0; a <= 24; a++) {
+          const ang = (a / 24) * Math.PI * 2;
+          const rr = r * (0.82 + 0.18 * hash(seed, a + 10));
+          ctx.lineTo(x + Math.cos(ang) * rr, y + Math.sin(ang) * rr);
+        }
+        ctx.closePath();
+        ctx.fill();
       }
       return;
     }
@@ -844,6 +948,112 @@ export function drawNative(ctx: CanvasRenderingContext2D, language: string, sinc
       ctx.fillStyle = accent;
       ctx.globalAlpha *= since < 0.35 ? 0.85 : 0;
       ctx.fillRect(x - 60, 0, 120, H);
+      break;
+    }
+    case 'art-deco':
+    case 'midcentury': {
+      // a fan of rays opens from the bottom centre (deco gold / atomic starburst)
+      const open = Math.min(1, since / 0.4);
+      ctx.translate(W / 2, H);
+      ctx.fillStyle = language === 'art-deco' ? '#d4af37' : accent;
+      for (let i = 0; i < 13; i++) {
+        const a = Math.PI + (i / 12) * Math.PI;
+        if (i % 2) continue;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(a - 0.06) * H * 1.6 * open, Math.sin(a - 0.06) * H * 1.6 * open);
+        ctx.lineTo(Math.cos(a + 0.06) * H * 1.6 * open, Math.sin(a + 0.06) * H * 1.6 * open);
+        ctx.closePath();
+        ctx.globalAlpha *= 0.9;
+        ctx.fill();
+      }
+      break;
+    }
+    case 'blueprint':
+    case 'hologram': {
+      // a scan sweeps down the frame and a target box locks on the centre
+      const y = Math.min(1, since / 0.5) * H;
+      ctx.fillStyle = language === 'blueprint' ? 'rgba(231,240,249,0.8)' : accent;
+      ctx.fillRect(0, y - 3, W, 6);
+      ctx.strokeStyle = language === 'blueprint' ? '#e7f0f9' : accent;
+      ctx.lineWidth = 4;
+      const s = 520 - 200 * Math.min(1, since / 0.3);
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        ctx.beginPath();
+        ctx.moveTo(W / 2 + dx * s, H / 2 + dy * (s * 0.55 - 60));
+        ctx.lineTo(W / 2 + dx * s, H / 2 + dy * s * 0.55);
+        ctx.lineTo(W / 2 + dx * (s - 60), H / 2 + dy * s * 0.55);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'ink-wash':
+    case 'watercolor': {
+      // a drop of ink (or pigment) blooms out from the centre
+      const r = (1 - (1 - Math.min(1, since / 0.7)) ** 3) * H * 0.9;
+      const g = ctx.createRadialGradient(W / 2, H / 2, r * 0.2, W / 2, H / 2, r);
+      g.addColorStop(0, language === 'ink-wash' ? 'rgba(20,18,16,0.55)' : accent);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha *= 0.6;
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      break;
+    }
+    case 'stained-glass': {
+      // a shaft of sunlight crosses the window
+      const x = -W * 0.3 + Math.min(1, since / 0.9) * W * 1.6;
+      const g = ctx.createLinearGradient(x - 260, 0, x + 260, 0);
+      g.addColorStop(0, 'rgba(255,240,200,0)');
+      g.addColorStop(0.5, 'rgba(255,240,200,0.75)');
+      g.addColorStop(1, 'rgba(255,240,200,0)');
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      break;
+    }
+    case 'spy-titles':
+    case 'woodcut': {
+      // a black silhouette slab wipes across (cut paper / carved block), leaving the frame as it passes
+      const x = -W + Math.min(1, since / 0.45) * W * 2.2;
+      ctx.fillStyle = language === 'woodcut' ? '#0c0b0a' : '#1b1714';
+      ctx.globalAlpha *= since < 0.45 ? 1 : 0;
+      ctx.fillRect(x, 0, W * 0.5, H);
+      break;
+    }
+    case 'pictogram': {
+      // the disc grid flips: every cell pops to the accent for one beat
+      const n = 8;
+      const cw = W / n;
+      ctx.fillStyle = accent;
+      for (let i = 0; i < n; i++)
+        for (let j = 0; j < 5; j++) {
+          const k = Math.min(1, Math.max(0, (since - (i + j) * 0.03) / 0.15));
+          ctx.beginPath();
+          ctx.arc(i * cw + cw / 2, j * (H / 5) + H / 10, (cw * 0.42) * k * (since < 0.6 ? 1 : 0), 0, Math.PI * 2);
+          ctx.fill();
+        }
+      break;
+    }
+    case 'silent-film': {
+      // iris: the frame closes to a circle and opens again
+      const k = since < 0.35 ? 1 - since / 0.35 : Math.min(1, (since - 0.35) / 0.5);
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.rect(0, 0, W, H);
+      ctx.arc(W / 2, H / 2, Math.max(4, k * H * 1.1), 0, Math.PI * 2, true);
+      ctx.fill('evenodd');
+      break;
+    }
+    case 'paper-lantern': {
+      // the lantern brightens: warm light glows through the layers
+      const g = ctx.createRadialGradient(W / 2, H * 0.6, 0, W / 2, H * 0.6, H);
+      g.addColorStop(0, 'rgba(255,184,98,0.7)');
+      g.addColorStop(1, 'rgba(255,140,60,0)');
+      ctx.globalCompositeOperation = 'screen';
+      ctx.fillStyle = g;
+      ctx.globalAlpha *= k;
+      ctx.fillRect(0, 0, W, H);
       break;
     }
     case 'crayon': {

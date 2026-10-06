@@ -20,7 +20,7 @@ import { quiet, quietFace } from './quiet';
 import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
-import { makeGlyphs, placeRow, advanceOf, Glyph, setGhost, setHalo } from './glyphs';
+import { makeGlyphs, placeRow, advanceOf, Glyph, setGhost, setHalo, setPieces, syncPieces } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { SYSTEMS } from '../systems';
 import { LANGUAGES } from '../languages';
@@ -374,6 +374,8 @@ export class LyricVjEngine {
     const lastSung = styled.map(({ cue }) => (cue.charTimed && cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : -Infinity));
     const showAt = styled.map(({ cue }, i) => Math.max(cue.start - lead, Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3)));
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
+    // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
+    setPieces(!!design.techniques?.includes('pieces'));
     setGhost(design.language ? (LANGUAGES[design.language].text?.ghost ?? [0, 0]) : [0, 0]);
     const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
     styled.forEach(({ style: style0, cue }, i) => {
@@ -664,6 +666,7 @@ export class LyricVjEngine {
       layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== flash?.cueId;
       if (layer.group.visible) layer.update(this.koma(t), fx);
     }
+    syncPieces(this.textRoot);
     // heavy beats in loud sections: the lyrics jump with the kick (strength from the song's kick analysis)
     const kick = this.kickAt(t, mfx.level);
     this.textRoot.scale.setScalar(1 + 0.05 * kick);

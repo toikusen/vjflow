@@ -38,9 +38,20 @@ export const setKanaScale = (k: number) => (defaultKana = k);
 /** Japanese typesetting rules (typeset.ts) on or off for the glyphs made next. */
 let typesetOn = true;
 export const setTypeset = (on: boolean) => (typesetOn = on);
+/** Glyphs split into their strokes (connected components) for assemble / scatter motion (after JIZURA, MIT). */
+let piecesOn = false;
+export const setPieces = (on: boolean) => (piecesOn = on);
 /** Hiragana (and its small forms); katakana and kanji keep full size. */
 const KANA = /[\u3041-\u3096\u309d\u309e]/;
-const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number }>();
+/** One stroke of a glyph: its own texture, home offset from the glyph centre and size, in design px. */
+export interface Piece {
+  texture: THREE.CanvasTexture;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number; pieces?: Piece[] }>();
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 
 const fontOf = (s: GlyphStyle, scale = 1) => `${nearestWeight(s.family, s.weight)} ${s.size * scale}px "${s.family}"`;
@@ -58,7 +69,7 @@ let ghost: [number, number] = [0, 0];
 export const setGhost = (g: [number, number]) => (ghost = g);
 
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -107,7 +118,8 @@ function texture(char: string, s: GlyphStyle) {
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
-  const entry = { texture: tex, w, h, advance };
+  const entry: { texture: THREE.CanvasTexture; w: number; h: number; advance: number; pieces?: Piece[] } = { texture: tex, w, h, advance };
+  if (piecesOn) entry.pieces = piecesOf(canvas, w, h);
   cache.set(key, entry);
   return entry;
 }
@@ -127,6 +139,19 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
     const t = texture(char, cs);
     const mat = new THREE.MeshBasicMaterial({ map: t.texture, color, transparent: true, depthTest: false, depthWrite: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.w, t.h), mat);
+    if (t.pieces && t.pieces.length > 1) {
+      // the glyph draws nothing itself; its strokes are children that follow its opacity and colour (syncPieces)
+      mesh.geometry.setDrawRange(0, 0);
+      mesh.userData['pieces'] = t.pieces.map((p, i) => {
+        const pm = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), new THREE.MeshBasicMaterial({ map: p.texture, color, transparent: true, depthTest: false, depthWrite: false }));
+        pm.position.set(p.x, p.y, 0);
+        const a = Math.atan2(p.y, p.x) + (hash(index, i) - 0.5) * 1.2;
+        pm.userData['home'] = [p.x, p.y];
+        pm.userData['dir'] = [Math.cos(a), Math.sin(a), (hash(i, index + 7) - 0.5) * 2];
+        mesh.add(pm);
+        return pm;
+      });
+    }
     const advance = t.advance * ts[index].advance;
     const gap = ts[index].gapBefore * s.size;
     x += gap;
@@ -167,3 +192,120 @@ export const hash = (a: number, b = 0) => {
   const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return s - Math.floor(s);
 };
+
+/**
+ * Splits a glyph texture into strokes: body pixels grouped into connected components (on a 2 px grid), every other
+ * inked pixel (halo, ghost) given to the nearest component, tiny specks merged, at most 10 pieces.
+ */
+function piecesOf(canvas: HTMLCanvasElement, w: number, h: number): Piece[] {
+  const ctx = canvas.getContext('2d')!;
+  const W2 = canvas.width;
+  const H2 = canvas.height;
+  const img = ctx.getImageData(0, 0, W2, H2).data;
+  const step = 2;
+  const gw = Math.ceil(W2 / step);
+  const gh = Math.ceil(H2 / step);
+  const label = new Int32Array(gw * gh).fill(-1);
+  const inked = (i: number, j: number) => img[((j * step) * W2 + i * step) * 4 + 3] > 10;
+  const body = (i: number, j: number) => {
+    const o = ((j * step) * W2 + i * step) * 4;
+    return img[o + 3] > 120 && img[o] > 150;
+  };
+  let n = 0;
+  const sizes: number[] = [];
+  const queue: number[] = [];
+  for (let j = 0; j < gh; j++)
+    for (let i = 0; i < gw; i++) {
+      if (label[j * gw + i] >= 0 || !body(i, j)) continue;
+      label[j * gw + i] = n;
+      let size = 0;
+      const q = [j * gw + i];
+      while (q.length) {
+        const c = q.pop()!;
+        size++;
+        const ci = c % gw;
+        const cj = (c - ci) / gw;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ni = ci + di;
+          const nj = cj + dj;
+          if (ni < 0 || nj < 0 || ni >= gw || nj >= gh || label[nj * gw + ni] >= 0 || !body(ni, nj)) continue;
+          label[nj * gw + ni] = n;
+          q.push(nj * gw + ni);
+        }
+      }
+      sizes.push(size);
+      n++;
+    }
+  if (n < 2) return [];
+  // grow components over halo pixels (multi-source BFS), so each piece keeps its own halo
+  for (let c = 0; c < label.length; c++) if (label[c] >= 0) queue.push(c);
+  for (let qi = 0; qi < queue.length; qi++) {
+    const c = queue[qi];
+    const ci = c % gw;
+    const cj = (c - ci) / gw;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = ci + di;
+      const nj = cj + dj;
+      if (ni < 0 || nj < 0 || ni >= gw || nj >= gh || label[nj * gw + ni] >= 0 || !inked(ni, nj)) continue;
+      label[nj * gw + ni] = label[c];
+      queue.push(nj * gw + ni);
+    }
+  }
+  // merge specks and keep at most 10: the smallest components join the largest
+  const total = sizes.reduce((a, b) => a + b, 0);
+  const order = sizes.map((sz, k) => k).sort((a, b) => sizes[b] - sizes[a]);
+  const keep = new Set(order.filter((k, r) => r < 10 && sizes[k] > total * 0.02));
+  const target = order[0];
+  const map = sizes.map((_, k) => (keep.has(k) ? k : target));
+  const pieces: Piece[] = [];
+  for (const k of keep) {
+    let x0 = gw, y0 = gh, x1 = -1, y1 = -1;
+    for (let c = 0; c < label.length; c++) {
+      if (label[c] < 0 || map[label[c]] !== k) continue;
+      const ci = c % gw;
+      const cj = (c - ci) / gw;
+      x0 = Math.min(x0, ci); y0 = Math.min(y0, cj); x1 = Math.max(x1, ci); y1 = Math.max(y1, cj);
+    }
+    if (x1 < 0) continue;
+    const px0 = x0 * step, py0 = y0 * step, pw = (x1 - x0 + 1) * step, ph = (y1 - y0 + 1) * step;
+    const pc = document.createElement('canvas');
+    pc.width = pw;
+    pc.height = ph;
+    const pctx = pc.getContext('2d')!;
+    const out = pctx.createImageData(pw, ph);
+    for (let y = 0; y < ph; y++)
+      for (let x = 0; x < pw; x++) {
+        const gx = Math.floor((px0 + x) / step);
+        const gy = Math.floor((py0 + y) / step);
+        const l = label[gy * gw + gx];
+        if (l < 0 || map[l] !== k) continue;
+        const si = ((py0 + y) * W2 + (px0 + x)) * 4;
+        const di = (y * pw + x) * 4;
+        out.data[di] = img[si]; out.data[di + 1] = img[si + 1]; out.data[di + 2] = img[si + 2]; out.data[di + 3] = img[si + 3];
+      }
+    pctx.putImageData(out, 0, 0);
+    const tex = new THREE.CanvasTexture(pc);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    // canvas px are SS × design px; texture y runs down, scene y up
+    pieces.push({ texture: tex, x: (px0 + pw / 2) / SS - w / 2, y: h / 2 - (py0 + ph / 2) / SS, w: pw / SS, h: ph / SS });
+  }
+  return pieces;
+}
+
+/** Strokes follow their glyph: same opacity and colour, scattered outward as the glyph fades (assemble / scatter). */
+export function syncPieces(root: THREE.Object3D) {
+  root.traverse((o) => {
+    const pieces = o.userData['pieces'] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] | undefined;
+    if (!pieces || !(o as THREE.Mesh).isMesh) return;
+    const m = (o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>).material;
+    const away = (1 - m.opacity) ** 2;
+    for (const p of pieces) {
+      const [hx, hy] = p.userData['home'];
+      const [dx, dy, spin] = p.userData['dir'];
+      p.material.opacity = m.opacity;
+      p.material.color.copy(m.color);
+      p.position.set(hx + dx * away * 160, hy + dy * away * 160, 0);
+      p.rotation.z = spin * away * 1.5;
+    }
+  });
+}

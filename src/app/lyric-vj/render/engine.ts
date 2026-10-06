@@ -41,16 +41,21 @@ const H = 1080;
  * Lyrics always inside the frame: the layer is laid out at its settled moment and, if any glyph would cross the
  * safe area (48 px side / 40 px top-bottom margin), scaled down about the centre inside a wrapper group.
  */
-function fitToFrame(layer: CueLayer): THREE.Group {
-  const fit = new THREE.Group();
-  fit.add(layer.group);
+/** The layer's settled bounds in frame px (origin at the centre), with the layer laid out at its readable moment. */
+function settledBox(layer: CueLayer, parent?: THREE.Object3D): THREE.Box3 {
   const [from, to] = layer.readable();
   const vis = layer.group.visible;
   layer.group.visible = true;
   layer.update(Number.isFinite(to) ? (from + to) / 2 : from + 0.5, { flash: 0, hit: 0, shake: 0 });
   layer.group.visible = vis;
-  fit.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(layer.group);
+  (parent ?? layer.group).updateMatrixWorld(true);
+  return new THREE.Box3().setFromObject(layer.group);
+}
+
+function fitToFrame(layer: CueLayer): THREE.Group {
+  const fit = new THREE.Group();
+  fit.add(layer.group);
+  const box = settledBox(layer, fit);
   if (box.isEmpty()) return fit;
   const sx = (W / 2 - 48) / Math.max(Math.abs(box.min.x), Math.abs(box.max.x));
   const sy = (H / 2 - 40) / Math.max(Math.abs(box.min.y), Math.abs(box.max.y));
@@ -242,6 +247,7 @@ export class LyricVjEngine {
   private scene = new THREE.Scene();
   /** Lyrics (and their echoes), rendered after the bloom pass. */
   private textScene = new THREE.Scene();
+  private probe?: CanvasRenderingContext2D;
   private ghostA?: THREE.WebGLRenderTarget;
   private ghostB?: THREE.WebGLRenderTarget;
   private ghostPass?: ShaderPass;
@@ -415,6 +421,7 @@ export class LyricVjEngine {
       // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
       const exitAt = Math.min(cue.end + HOLD_SEC, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
+
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
       const rushed = cue.end - cue.start < [...cue.text.replace(/\s/g, '')].length / 12 + 1;
       const rt: CueRuntime = {
@@ -431,9 +438,17 @@ export class LyricVjEngine {
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
       // dark type on a light field gets a halo of that field's colour: it then reads over a photo inset as well
-      const sec = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, cue.start + 0.3);
-      const field = sec?.text && sec.layers.find((l) => l.kind === 'paper' || l.kind === 'fill');
-      setHalo(field ? hexToRgba((field as { color: string }).color, 0.95) : 'rgba(0,0,0,0.85)');
+      // with a graphic look the lyric colour comes from what is actually behind the lyrics: the line is laid out once
+      // to find where it sits, the look is measured there, and the line is built again in a colour that reads
+      let backdrop: string | undefined;
+      if (this.job.treatment.graphics) {
+        setHalo('rgba(0,0,0,0)');
+        const probe = RENDERERS[shot.template].cue(rt);
+        const box = settledBox(probe);
+        backdrop = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), box.isEmpty() ? undefined : box);
+        rt.palette = this.cuePalette(cue.start + 0.3, backdrop);
+      }
+      setHalo(backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;
       this.textRoot.add(fitToFrame(layer));
@@ -857,6 +872,34 @@ export class LyricVjEngine {
   }
 
   /** The palette with this section's accent (the colour script's one accent drives key words, lines and glows). */
+  /** The cue's palette: with a graphic look, dark type over a light backdrop and light type over a dark one. */
+  private cuePalette(t: number, backdrop?: string): Palette {
+    const p = this.paletteAt(t);
+    if (!backdrop) return p;
+    const look = sectionAt(this.job.treatment.graphics!, t);
+    const light = luma(backdrop) > 0.5;
+    const text = light ? (look.text && luma(look.text) < 0.4 ? look.text : '#1a1a1a') : look.text && luma(look.text) > 0.6 ? look.text : '#f4f2ee';
+    return { ...p, text, background: backdrop };
+  }
+
+  /** Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. */
+  private backdropAt(t: number, box?: THREE.Box3): string | undefined {
+    if (!this.job.treatment.graphics) return undefined;
+    this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
+    const shot = this.shotAt(t).shot;
+    drawLook(this.probe, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined);
+    const [x0, y0, x1, y1] = box
+      ? [box.min.x + W / 2, H / 2 - box.max.y, box.max.x + W / 2, H / 2 - box.min.y].map((v, i) => Math.max(0, Math.min(i % 2 ? H : W, v)))
+      : [W * 0.15, H * 0.28, W * 0.85, H * 0.72];
+    const d = this.probe.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0)).data;
+    let r = 0, g = 0, b = 0, n = 0;
+    for (let i = 0; i < d.length; i += 4 * 97) {
+      r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+    }
+    const hx = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
+    return `#${hx(r)}${hx(g)}${hx(b)}`;
+  }
+
   private paletteAt(t: number): Palette {
     const base = this.job.treatment.styleAnchor.palette;
     if (!this.job.treatment.design) return base;
@@ -884,3 +927,9 @@ export class LyricVjEngine {
 }
 
 const hexToRgba = (hex: string, a: number) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+
+/** Relative luminance 0..1 of a #rrggbb colour (rough: for picking dark or light type). */
+const luma = (hex: string) => {
+  const n = parseInt(hex.slice(1, 7), 16);
+  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+};

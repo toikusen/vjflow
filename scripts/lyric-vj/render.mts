@@ -95,6 +95,7 @@ const browser = await chromium.launch({ channel: 'chrome', args: ['--force-devic
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   page.on('pageerror', (e) => console.error('page error:', e.message));
+  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && console.error(m.text()));
   await page.goto(pageUrl);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 120_000 });
   return page;

@@ -19,7 +19,7 @@ export function validateLook(look: GraphicsLook | undefined, assets: string[], s
   const sections = look.sections
     .map((s) => {
       const layers = (s.layers ?? []).filter((l) => {
-        const ok = (LAYER_KINDS as readonly string[]).includes(l.kind);
+        const ok = (LAYER_KINDS as readonly string[]).includes(l.kind) || (l.kind === 'code' && typeof l.src === 'string');
         if (!ok) fixes.push(`移除未知圖層 ${l.kind}`);
         return ok;
       }).map((l) => cleanLayer(l, assets, fixes));

@@ -37,3 +37,22 @@ describe('avoid', () => {
     expect(avoid(free, lyrics)).toBe(free);
   });
 });
+
+describe('code layer', () => {
+  const stub = (calls: string[]) =>
+    new Proxy({} as CanvasRenderingContext2D, { get: (_, k) => (...args: unknown[]) => calls.push(String(k)) && args && undefined, set: () => true });
+
+  it('runs the director\'s drawing with the frame state, and a broken one draws nothing instead of throwing', async () => {
+    const { avoidAll } = await import('./graphics');
+    const seen: unknown[] = [];
+    (globalThis as Record<string, unknown>)['__seen'] = seen;
+    const ok = { kind: 'code' as const, src: 'globalThis.__seen.push([f.t, f.beat.index, f.lyric]); ctx.fillRect(0, 0, f.w, f.h);' };
+    const lyrics = { x0: 1, y0: 2, x1: 3, y1: 4 };
+    const calls: string[] = [];
+    drawLook(stub(calls), { sections: [{ start: 0, layers: [ok] }] }, 5, { since: 0, pulse: 1, index: 9 }, () => undefined, (ls) => avoidAll(ls, lyrics));
+    expect(seen).toEqual([[5, 9, lyrics]]);
+    expect(calls).toContain('fillRect');
+    const broken = { sections: [{ start: 0, layers: [{ kind: 'code' as const, src: 'nope(' }, { kind: 'code' as const, src: 'missing()' }] }] };
+    expect(() => drawLook(stub([]), broken, 1, { since: 0, pulse: 0, index: 0 }, () => undefined)).not.toThrow();
+  });
+});

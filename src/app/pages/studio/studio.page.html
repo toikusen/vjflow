@@ -61,6 +61,9 @@
           <div class="design">
             <p><strong>{{ langName() }}</strong> · {{ d.font }}{{ d.motif ? ' · 主題物件 ' + d.motif : '' }}</p>
             <p class="muted">{{ d.concept }}</p>
+            @if (d.drawing) {
+              <p class="muted">專屬圖層：{{ d.drawing }}</p>
+            }
             <p class="muted">目前費用約 US${{ st.costUSD }}</p>
           </div>
         }

@@ -509,7 +509,7 @@ export class LyricVjEngine {
         const b = settledBox(layer, fit);
         if (!b.isEmpty()) this.lyricRects.push({ from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y } });
       }
-      if (shot.params['echo']) {
+      if (shot.params['echo'] && !this.ownDrawing(cue.start)) {
         const echo = this.makeEcho(rt);
         if (echo) this.echoes.push(echo);
       }
@@ -608,6 +608,12 @@ export class LyricVjEngine {
       }
     }
     return tex;
+  }
+
+  /** Whether the section at t has the director's own drawing (a 'code' layer), which owns the background. */
+  private ownDrawing(t: number) {
+    const g = this.job.treatment.graphics;
+    return !!g && sectionAt(g, t).layers.some((l) => l.kind === 'code');
   }
 
   /** The cue's keyword as large outlined type behind the line, within the frame. */
@@ -727,7 +733,8 @@ export class LyricVjEngine {
       }, (ls) => this.makeRoom(ls, bt));
       const lang = this.job.treatment.design?.language;
       const drop = [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
-      if (lang && drop) drawNative(this.gfx.ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
+      // a song's own code layer brings its own peaks; the language's stock move on top of it read as clutter
+      if (lang && drop && !this.ownDrawing(bt)) drawNative(this.gfx.ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
       this.gfx.tex.needsUpdate = true;
       // the look is the whole background: no full-bleed plates, no generic light motes
       for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;

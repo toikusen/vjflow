@@ -52,6 +52,8 @@ export type Layer = Base &
     | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb }
     | { kind: 'mosaic'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number }
     | { kind: 'ink'; color: Rgb; count?: number; size?: number; seed?: number }
+    // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
+    | { kind: 'code'; src: string; lyric?: Rect }
   );
 
 export interface LookSection {
@@ -106,7 +108,38 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   ctx.restore();
 }
 
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; hash: typeof hash }) => void;
+const compiled = new Map<string, CodeDraw>();
+const reported = new Set<string>();
+/** Reports a code layer's failure or slowness once per message (the render's console, read by codelayer.mts). */
+const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
+
+/** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect }, t: number, age: number, beat: Beat) {
+  let fn = compiled.get(l.src);
+  if (!fn) {
+    try {
+      fn = new Function('ctx', 'f', l.src) as CodeDraw;
+    } catch (e) {
+      fn = () => undefined;
+      report(`syntax: ${(e as Error).message}`);
+    }
+    compiled.set(l.src, fn);
+  }
+  const t0 = performance.now();
+  ctx.save();
+  try {
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, hash });
+  } catch (e) {
+    report(`runtime: ${(e as Error).message}`);
+  }
+  ctx.restore();
+  const ms = performance.now() - t0;
+  if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
+}
+
 function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+  if (l.kind === 'code') return drawCode(ctx, l, t, age, beat);
   const kick = 1 + (l.pulse ?? 0) * beat.pulse;
   switch (l.kind) {
     case 'fill': {
@@ -1199,6 +1232,7 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
   };
   const placed: Rect[] = layers.filter(clear).map(layerRect).filter((r): r is Rect => !!r);
   return layers.map((l) => {
+    if (l.kind === 'code') return { ...l, lyric: lyrics };
     if (clear(l)) return l;
     const out = avoid(l, lyrics, 24, placed);
     const r = layerRect(out);

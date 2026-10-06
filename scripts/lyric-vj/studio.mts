@@ -20,18 +20,18 @@ export interface StudioRun {
   progress?: number;
 }
 
-type Phase = 'director' | 'assets' | 'stills' | 'clip' | 'render';
-const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', assets: '生成背景圖', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
+type Phase = 'director' | 'assets' | 'code' | 'stills' | 'clip' | 'render';
+const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', assets: '生成背景圖', code: '導演繪製專屬圖層', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
 /** Each step's phases and their share of its progress bar (rough time shares). */
 const PLAN: Record<string, [Phase, number][]> = {
-  make: [['director', 0.35], ['assets', 0.3], ['stills', 0.1], ['clip', 0.25]],
-  design: [['director', 0.5], ['stills', 0.15], ['clip', 0.35]],
+  make: [['director', 0.25], ['assets', 0.2], ['code', 0.3], ['stills', 0.05], ['clip', 0.2]],
+  design: [['director', 0.3], ['code', 0.4], ['stills', 0.1], ['clip', 0.2]],
   render: [['render', 1]],
   layer: [['render', 1]],
   clip: [['clip', 1]],
 };
 /** Seconds a phase usually takes when it prints nothing countable (its bar fills by time, never past 95 %). */
-const TYPICAL: Partial<Record<Phase, number>> = { director: 180, stills: 25 };
+const TYPICAL: Partial<Record<Phase, number>> = { director: 180, code: 400, stills: 25 };
 
 const runs = new Map<string, StudioRun>();
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -47,14 +47,17 @@ export function studioState(songFile: string, outRoot: string) {
   const t = read(join(dir, 'treatment.json'));
   const director = read(join(dir, 'director.json'));
   const costs = read(join(dir, 'assets', 'costs.json')) as { usd: number }[] | undefined;
+  const drawing = read(join(dir, 'codelayer.json')) as { idea: string; costUSD: number } | undefined;
+  const drawn = !!t?.graphics?.sections?.some((s: { layers: { kind: string }[] }) => s.layers.some((l) => l.kind === 'code'));
   const list = (d: string, ext: RegExp) => (existsSync(d) ? readdirSync(d).filter((f) => ext.test(f)).sort().map((f) => rel(join(d, f))) : []);
   return {
     run: runs.get(songFile) ?? null,
     design: t && {
       language: t.design?.language ?? null, font: t.design?.font ?? null, concept: t.concept ?? '',
       motif: t.motif ? `${t.motif.kind}${t.motif.variant ? `/${t.motif.variant}` : ''}` : null,
+      drawing: drawn ? (drawing?.idea ?? null) : null,
     },
-    costUSD: +(((director?.costUSD as number) ?? 0) + (costs ?? []).reduce((s, x) => s + x.usd, 0)).toFixed(2),
+    costUSD: +(((director?.costUSD as number) ?? 0) + (costs ?? []).reduce((s, x) => s + x.usd, 0) + (drawn ? (drawing?.costUSD ?? 0) : 0)).toFixed(2),
     previews: list(join(dir, 'preview'), /^still_.*\.png$/),
     check: read(join(dir, 'preview', 'check.json')) ?? null,
     outputs: list(dir, /\.(mp4|mov|lrc)$/),
@@ -80,6 +83,8 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
   const preview = `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --stills ${(song.duration * 0.18).toFixed(2)},${(song.duration * 0.45).toFixed(2)},${(song.duration * 0.8).toFixed(2)} --out ${q(join(dir, 'preview'))}`;
   const render = (layer?: string) => `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --out ${q(dir)}${layer ? ` --layer ${layer}` : ''} && rm -rf ${q(join(dir, 'render'))} ${q(join(dir, 'segments'))}`;
   const mark = (p: Phase) => `echo '##PHASE ${p}'`;
+  // the song's own drawing layer; when it fails the song keeps its library look
+  const code = `(npx tsx scripts/lyric-vj/codelayer.mts --song ${q(songFile)} --dir ${q(dir)} --out ${q(dir)} || echo '專屬圖層失敗，沿用元件庫設計')`;
   const cmd = {
     make: [
       `mkdir -p ${q(dir)}`,
@@ -87,6 +92,8 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --style-id emotional --tier still --history out/design-history.json${lang ? ` --language ${lang}` : ''}`,
       mark('assets'),
       `npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still`,
+      mark('code'),
+      code,
       mark('stills'),
       preview,
       // the moving preview comes with the design: it is what the user judges before paying for the full render
@@ -96,6 +103,8 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
     design: [
       mark('director'),
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --design-only ${q(join(dir, 'shots.json'))} --history out/design-history.json${lang ? ` --design-language ${lang}` : ''}`,
+      mark('code'),
+      code,
       mark('stills'),
       preview,
       mark('clip'),

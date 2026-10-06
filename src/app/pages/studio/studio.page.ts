@@ -17,7 +17,7 @@ interface Language {
 
 interface StudioState {
   run: { step: string; startedAt: string; endedAt?: string; ok?: boolean; log: string[]; phase?: string; progress?: number } | null;
-  design: { language: string | null; font: string | null; concept: string; motif: string | null } | null;
+  design: { language: string | null; font: string | null; concept: string; motif: string | null; drawing: string | null } | null;
   costUSD: number;
   previews: string[];
   check: { unreadable: string[]; lingering: string[] } | null;

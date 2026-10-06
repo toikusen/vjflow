@@ -397,9 +397,32 @@ export class LyricVjEngine {
     for (const shot of treatment.shots) {
       const r = RENDERERS[shot.template];
       if (r?.shot) {
-        const layer = r.shot(r.standalone ? { ...shot, start: this.clearOfLines(shot) } : shot, shot.params, treatment.styleAnchor.palette, ctx);
-        layer.group.visible = false;
-        this.textRoot.add(layer.group);
+        const from = r.standalone ? this.clearOfLines(shot) : shot.start;
+        const make = (palette: Palette) => {
+          const l = r.shot!({ ...shot, start: from }, shot.params, palette, ctx);
+          l.group.visible = false;
+          this.textRoot.add(l.group);
+          return l;
+        };
+        let layer = make(treatment.styleAnchor.palette);
+        if (r.standalone && treatment.graphics) {
+          // measured once it has fully drawn in (glyphs sit at the origin until the first update)
+          const at = Math.min(from + 2.5, shot.end - 1);
+          layer.update(at, { flash: 0, hit: 0, shake: 0 });
+          layer.group.updateMatrixWorld(true);
+          const b = new THREE.Box3().setFromObject(layer.group);
+          if (!b.isEmpty()) {
+            // the title takes dark or light type against what is behind it, like a line, and the background makes room
+            const backdrop = this.backdropAt(at, b)?.mean;
+            const text = backdrop ? this.cuePalette(at, backdrop).text : treatment.styleAnchor.palette.text;
+            if (text !== treatment.styleAnchor.palette.text) {
+              this.textRoot.remove(layer.group);
+              setHalo(luma(backdrop!) > 0.5 ? hexToRgba(backdrop!, 0.95) : 'rgba(0,0,0,0.85)');
+              layer = make({ ...treatment.styleAnchor.palette, text });
+            }
+            this.lyricRects.push({ from, to: shot.end, rect: { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y } });
+          }
+        }
         this.shotLayers.set(shot.id, layer);
       }
     }
@@ -927,10 +950,12 @@ export class LyricVjEngine {
     return Math.min(1, strength[i] * 1.4) * Math.exp(-(t - beats[i]) * 9) * Math.min(1, level - 2.4 + 0.4);
   }
 
-  /** When a shot is clear of lyrics: after the last line that overlaps it has left the screen (+0.4 s). */
+  /** When a shot is clear of lyrics: after the last line that overlaps it has held and left the screen (+0.3 s). */
   private clearOfLines(shot: Shot): number {
     let t = shot.start;
-    for (const c of this.job.cues) if (c.start < shot.end && c.end + EXIT_SEC > shot.start) t = Math.max(t, c.end + EXIT_SEC + 0.4);
+    // a line holds HOLD_SEC after it is sung before it exits: the title waits until it has gone
+    const gone = (c: { end: number }) => c.end + HOLD_SEC + EXIT_SEC + 0.3;
+    for (const c of this.job.cues) if (c.start < shot.end && gone(c) > shot.start) t = Math.max(t, gone(c));
     return Math.min(t, shot.end - 1);
   }
 

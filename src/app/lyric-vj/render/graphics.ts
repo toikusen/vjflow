@@ -83,11 +83,11 @@ export function sectionAt(look: GraphicsLook, t: number): LookSection {
 }
 
 /** Draws the look at t; `image(asset)` returns a loaded picture for photo layers. */
-export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, adjust: (ls: Layer[]) => Layer[] = (ls) => ls) {
   ctx.save();
   ctx.clearRect(0, 0, W, H);
   const sec = sectionAt(look, t);
-  for (const l of sec.layers) {
+  for (const l of adjust(sec.layers)) {
     ctx.save();
     ctx.globalAlpha = l.opacity ?? 1;
     if (l.blend) ctx.globalCompositeOperation = l.blend;
@@ -865,4 +865,134 @@ export function drawNative(ctx: CanvasRenderingContext2D, language: string, sinc
   }
   ctx.restore();
   void ink;
+}
+
+/** A rectangle in frame px, top-left origin. */
+export interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+
+/** The frame area a movable layer covers (photos that are not full frame, blobs, stamps, seals, numerals). */
+export function layerRect(l: Layer): Rect | undefined {
+  const cx = (x?: number) => W / 2 + (x ?? 0) * W / 2;
+  const cy = (y?: number) => H / 2 - (y ?? 0) * H / 2;
+  const box = (x: number, y: number, w: number, h: number): Rect => ({ x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 });
+  switch (l.kind) {
+    case 'photo': {
+      if (l.mode === 'full' || l.mode === 'band') return undefined;
+      const bw = (l.w ?? 0.42) * W;
+      const bh = l.mode === 'circle' ? bw : (l.h ?? 0.5) * H + (l.mode === 'polaroid' ? 110 : 0);
+      return box(cx(l.x), cy(l.y), bw + 44, bh + 44);
+    }
+    case 'blob': {
+      const r = (l.r ?? 0.35) * H;
+      return box(cx(l.x), cy(l.y), 2 * r, 2 * r);
+    }
+    case 'stamp': {
+      const s = l.size ?? 64;
+      return box(cx(l.x), cy(l.y), s * ([...l.text].length + 0.9), s * 1.6);
+    }
+    case 'seal': {
+      const s = l.size ?? 90;
+      return box(cx(l.x ?? 0.85), cy(l.y ?? -0.8), s, s);
+    }
+    case 'numeral': {
+      const s = (l.size ?? 0.8) * H;
+      return box(cx(l.x), cy(l.y), s * 0.62 * [...l.text].length, s);
+    }
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Moves (then, if no place is free, shrinks) a movable layer so it does not cover the lyrics' area: tried in order —
+ * slide sideways to the roomier side, slide up or down, shrink to 75 % and 55 % at each place. Returns the layer
+ * unchanged when it does not overlap or cannot be placed (the type's knockout handles the rest).
+ */
+export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []): Layer {
+  const r = layerRect(l);
+  if (!r) return l;
+  const guard = { x0: lyrics.x0 - margin, y0: lyrics.y0 - margin, x1: lyrics.x1 + margin, y1: lyrics.y1 + margin };
+  if (!overlaps(r, guard)) return l;
+  const clash = (q: Rect) => overlaps(q, guard) || others.some((o) => overlaps(q, o));
+  const w = r.x1 - r.x0;
+  const h = r.y1 - r.y0;
+  const inFrame = (q: Rect) => q.x0 >= 0 && q.y0 >= 0 && q.x1 <= W && q.y1 <= H;
+  for (const k of [1, 0.75, 0.55]) {
+    const ww = w * k;
+    const hh = h * k;
+    const cy0 = (r.y0 + r.y1) / 2;
+    const cx0 = (r.x0 + r.x1) / 2;
+    const roomL = guard.x0;
+    const roomR = W - guard.x1;
+    const spots = [
+      // sideways first, toward the roomier side
+      ...(roomR >= roomL ? [guard.x1 + ww / 2, guard.x0 - ww / 2] : [guard.x0 - ww / 2, guard.x1 + ww / 2]).map((x) => [x, cy0]),
+      [cx0, guard.y0 - hh / 2],
+      [cx0, guard.y1 + hh / 2],
+    ];
+    for (const [x, y] of spots) {
+      // keep it inside the frame along the free axis
+      const fx = Math.min(W - ww / 2, Math.max(ww / 2, x));
+      const fy = Math.min(H - hh / 2, Math.max(hh / 2, y));
+      const q = { x0: fx - ww / 2, y0: fy - hh / 2, x1: fx + ww / 2, y1: fy + hh / 2 };
+      if (!inFrame(q) || clash(q)) continue;
+      return resize({ ...l, x: (fx - W / 2) / (W / 2), y: (H / 2 - fy) / (H / 2) } as Layer, k);
+    }
+  }
+  return l;
+}
+
+function resize(l: Layer, k: number): Layer {
+  if (k === 1) return l;
+  switch (l.kind) {
+    case 'photo':
+      return { ...l, w: (l.w ?? 0.42) * k, h: (l.h ?? 0.5) * k };
+    case 'blob':
+      return { ...l, r: (l.r ?? 0.35) * k };
+    case 'stamp':
+      return { ...l, size: (l.size ?? 64) * k };
+    case 'seal':
+      return { ...l, size: (l.size ?? 90) * k };
+    case 'numeral':
+      return { ...l, size: (l.size ?? 0.8) * k };
+    default:
+      return l;
+  }
+}
+
+/** Interpolates a layer's placement (position and size) from `a` to `b`, k 0..1: objects glide out of the way. */
+export function blendLayer(a: Layer, b: Layer, k: number): Layer {
+  if (a === b || k >= 1) return b;
+  if (k <= 0) return a;
+  const out = { ...b } as Record<string, unknown>;
+  for (const key of ['x', 'y', 'w', 'h', 'r', 'size']) {
+    const va = (a as unknown as Record<string, unknown>)[key];
+    const vb = (b as unknown as Record<string, unknown>)[key];
+    if (typeof va === 'number' && typeof vb === 'number') out[key] = va + (vb - va) * k;
+  }
+  return out as unknown as Layer;
+}
+
+/** Makes room for the lyrics across a section's layers: each movable object avoids the lyrics and the ones placed before it. */
+export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
+  // objects already clear of the lyrics stay where they are and are obstacles for the ones that must move
+  const clear = (l: Layer) => {
+    const r = layerRect(l);
+    return !r || !overlaps(r, { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 });
+  };
+  const placed: Rect[] = layers.filter(clear).map(layerRect).filter((r): r is Rect => !!r);
+  return layers.map((l) => {
+    if (clear(l)) return l;
+    const out = avoid(l, lyrics, 24, placed);
+    const r = layerRect(out);
+    if (r) placed.push(r);
+    return out;
+  });
 }

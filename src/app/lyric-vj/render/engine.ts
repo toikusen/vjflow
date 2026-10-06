@@ -27,7 +27,7 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { drawLook, drawNative, sectionAt } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, Layer, Rect, sectionAt } from './graphics';
 import type { Palette } from '../treatment';
 import { DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -49,7 +49,13 @@ function settledBox(layer: CueLayer, parent?: THREE.Object3D): THREE.Box3 {
   layer.update(Number.isFinite(to) ? (from + to) / 2 : from + 0.5, { flash: 0, hit: 0, shake: 0 });
   layer.group.visible = vis;
   (parent ?? layer.group).updateMatrixWorld(true);
-  return new THREE.Box3().setFromObject(layer.group);
+  // only what is showing at that moment (beat-cut keeps its other pieces hidden)
+  const box = new THREE.Box3();
+  const shown = (o: THREE.Object3D): boolean => o === layer.group || (o.visible && (!o.parent || shown(o.parent)));
+  layer.group.traverse((o) => {
+    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible) box.expandByObject(o);
+  });
+  return box;
 }
 
 function fitToFrame(layer: CueLayer): THREE.Group {
@@ -248,6 +254,8 @@ export class LyricVjEngine {
   /** Lyrics (and their echoes), rendered after the bloom pass. */
   private textScene = new THREE.Scene();
   private probe?: CanvasRenderingContext2D;
+  /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
+  private lyricRects: { from: number; to: number; rect: Rect }[] = [];
   private ghostA?: THREE.WebGLRenderTarget;
   private ghostB?: THREE.WebGLRenderTarget;
   private ghostPass?: ShaderPass;
@@ -464,8 +472,14 @@ export class LyricVjEngine {
       // to the other ink, like type knocked out where it crosses a picture
       if (mixed) this.knockout(layer, cue.start + Math.min(1, (cue.end - cue.start) / 2), rt.palette.text);
       layer.group.visible = false;
-      this.textRoot.add(fitToFrame(layer));
+      const fit = fitToFrame(layer);
+      this.textRoot.add(fit);
       this.cueLayers.push({ rt, layer });
+      if (this.job.treatment.graphics) {
+        // where the line sits on screen, so background objects can make room for it
+        const b = settledBox(layer, fit);
+        if (!b.isEmpty()) this.lyricRects.push({ from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y } });
+      }
       if (shot.params['echo']) {
         const echo = this.makeEcho(rt);
         if (echo) this.echoes.push(echo);
@@ -681,7 +695,7 @@ export class LyricVjEngine {
       drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
         const tex = this.images.get(asset ?? shot.asset ?? '');
         return tex?.image as CanvasImageSource | undefined;
-      });
+      }, (ls) => this.makeRoom(ls, bt));
       const lang = this.job.treatment.design?.language;
       const drop = [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
       if (lang && drop) drawNative(this.gfx.ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
@@ -895,6 +909,27 @@ export class LyricVjEngine {
     return { ...p, text, background: backdrop };
   }
 
+  /**
+   * Background objects make room for the lyrics: moved (or shrunk) off the rectangle of the line on screen, gliding
+   * there over 0.4 s when a new line comes up and back when lines leave.
+   */
+  private makeRoom(ls: Layer[], t: number): Layer[] {
+    const GLIDE = 0.4;
+    const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to).map((r) => r.rect);
+    const union = (rs: Rect[]) => (rs.length ? rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })) : undefined);
+    const placed = (x: number) => {
+      const u = union(at(x));
+      return u ? avoidAll(ls, u) : ls;
+    };
+    // the latest change of the visible set before t: glide from the placement just before it
+    const edges = this.lyricRects.flatMap((r) => [r.from, r.to]).filter((x) => x <= t && x > t - GLIDE);
+    const now = placed(t);
+    if (!edges.length) return now;
+    const e = Math.max(...edges);
+    const before = placed(e - 0.001);
+    return now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE)));
+  }
+
   /** Flips glyphs whose own backdrop (the look at t, under the glyph's settled position) is the same tone as the type. */
   private knockout(layer: CueLayer, t: number, text: string) {
     const fit = new THREE.Group();
@@ -924,7 +959,8 @@ export class LyricVjEngine {
     if (!this.job.treatment.graphics) return undefined;
     this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
     const shot = this.shotAt(t).shot;
-    drawLook(this.probe, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined);
+    const lyric: Rect | undefined = box && !box.isEmpty() ? { x0: box.min.x + W / 2, y0: H / 2 - box.max.y, x1: box.max.x + W / 2, y1: H / 2 - box.min.y } : undefined;
+    drawLook(this.probe, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => (lyric ? avoidAll(ls, lyric) : ls));
     const [x0, y0, x1, y1] = box
       ? [box.min.x + W / 2, H / 2 - box.max.y, box.max.x + W / 2, H / 2 - box.min.y].map((v, i) => Math.max(0, Math.min(i % 2 ? H : W, v)))
       : [W * 0.15, H * 0.28, W * 0.85, H * 0.72];

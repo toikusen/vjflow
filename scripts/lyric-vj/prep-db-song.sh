@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Test songs from the vjanalytics database: audio of the analysed YouTube lyric video → Demucs vocal stem → song.json.
 # Internal testing only; the audio stays under out/db/ (gitignored).
-# usage: scripts/lyric-vj/prep-db-song.sh <video_id>
+# usage: scripts/lyric-vj/prep-db-song.sh <video_id> [language: ja (default) | zh | en | ko]
 set -euo pipefail
 id=$1
+lang=${2:-ja}
 VJA=~/vjanalytics
 d=out/db/$id
 mkdir -p "$d"
@@ -17,4 +18,4 @@ if [ ! -f "$d/vocals.wav" ]; then
 fi
 # the database's lyric lookup (web text, no timing) is the text Whisper aligns when LRCLIB has nothing synced
 python3 -c "import json;open('$d/db-lyrics.txt','w').write('\\n'.join(json.load(open('$VJA/out/lyrics/$id.json')).get('lines') or []))"
-npx tsx scripts/lyric-vj/song.mts --audio "$d/mix.mp3" --vocals "$d/vocals.wav" --title "$meta" --lyrics "$d/db-lyrics.txt" --out "$d"
+npx tsx scripts/lyric-vj/song.mts --audio "$d/mix.mp3" --vocals "$d/vocals.wav" --title "$meta" --lyrics "$d/db-lyrics.txt" --out "$d" --language "$lang"

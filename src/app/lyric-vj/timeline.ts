@@ -204,3 +204,22 @@ export function toLrc(song: Pick<SongTimeline, 'title' | 'cues'>, phraseStarts: 
   });
   return out.join('\n') + '\n';
 }
+
+/**
+ * Low-confidence lines (the aligner was unsure) snap to the voice: when the vocal stem starts a phrase after a
+ * silence within 0.35 s of the line's start, the line (and its character times) moves there. Lines the aligner was
+ * sure of are left alone. Returns the cues and how many moved.
+ */
+export function snapToVoice(cues: TimelineCue[], active: boolean[], fps = 100): { cues: TimelineCue[]; moved: number } {
+  const phrases = phraseStarts(active, fps);
+  let moved = 0;
+  const out = cues.map((c) => {
+    if (!c.review?.includes('對齊信心低')) return c;
+    const near = phrases.filter((p) => Math.abs(p - c.start) <= 0.35).sort((a, b) => Math.abs(a - c.start) - Math.abs(b - c.start))[0];
+    if (near === undefined || Math.abs(near - c.start) < 0.06) return c;
+    const d = near - c.start;
+    moved++;
+    return { ...c, start: near, end: Math.max(near + 0.4, c.end), charStarts: c.charStarts?.map((x) => +(x + d).toFixed(3)) };
+  });
+  return { cues: out, moved };
+}

@@ -67,3 +67,16 @@ describe('toLrc', () => {
     expect(lrc).toBe('[ti:t]\n[00:01.50]<00:01.50>ab <00:02.20>cd\n[00:03.00]\n[01:10.00]ef\n[01:12.00]\n');
   });
 });
+
+describe('snapToVoice', () => {
+  it('moves only low-confidence lines to a nearby vocal phrase start', async () => {
+    const { snapToVoice } = await import('./timeline');
+    const active = Array.from({ length: 400 }, (_, i) => i >= 120); // voice enters at 1.2 s after silence
+    const cue = (id: string, start: number, review?: string[]) => ({ id, start, end: start + 2, text: 'x', timingSource: 'whisper' as const, confidence: 'aligned' as const, review, charStarts: [start] });
+    const r = snapToVoice([cue('a', 1.0, ['對齊信心低']), cue('b', 1.0)], active);
+    expect(r.moved).toBe(1);
+    expect(r.cues[0].start).toBeCloseTo(1.2, 2);
+    expect(r.cues[0].charStarts![0]).toBeCloseTo(1.2, 2);
+    expect(r.cues[1].start).toBe(1.0);
+  });
+});

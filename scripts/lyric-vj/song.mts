@@ -10,7 +10,7 @@ import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
 import { alignLyrics, AsrWord, charTiming, cleanLyricLine, combineTimings, ForcedLine } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
-import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
@@ -91,6 +91,12 @@ if (a.lrc) {
       return { ...c, start: r.start, end: r.end, charStarts: r.charStarts, charTimed: r.trusted };
     });
   else console.log(`逐字時間略過：對齊結果 ${lines.length} 行，歌詞 ${cues.length} 行`);
+}
+// lines the aligner was unsure of snap to where the voice actually enters
+{
+  const snapped = snapToVoice(cues, active);
+  cues = snapped.cues;
+  if (snapped.moved) console.log(`${snapped.moved} 句低信心歌詞對齊到人聲起點`);
 }
 
 let instrumentalOffsetSec: number | undefined;

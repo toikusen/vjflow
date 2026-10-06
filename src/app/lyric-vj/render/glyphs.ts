@@ -47,13 +47,16 @@ export function advanceOf(char: string, s: GlyphStyle): number {
 /** Halo behind shadowed glyphs: dark over pictures, none over a light field (a grey smudge on paper). */
 let halo = 'rgba(0,0,0,0.85)';
 export const setHalo = (rgba: string) => (halo = rgba);
+/** A hard dark copy offset under every glyph, as a fraction of its size (print misregistration, sticker shadows). */
+let ghost: [number, number] = [0, 0];
+export const setGhost = (g: [number, number]) => (ghost = g);
 
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
-  const pad = Math.ceil(s.size * 0.3 + (s.outline ?? 0) * 2);
+  const pad = Math.ceil(s.size * (0.3 + Math.max(Math.abs(ghost[0]), Math.abs(ghost[1]))) + (s.outline ?? 0) * 2);
   const w = Math.ceil(Math.max(advance, s.size * 0.5)) + pad * 2;
   const h = Math.ceil(s.size * 1.3) + pad * 2;
   const canvas = document.createElement('canvas');
@@ -79,6 +82,11 @@ function texture(char: string, s: GlyphStyle) {
       ctx.strokeStyle = style;
       ctx.strokeText(char, w / 2, h / 2);
     };
+    if (ghost[0] || ghost[1]) {
+      // dark pixels are not tinted by the material colour, so the ghost stays ink-dark under any lyric colour
+      ctx.fillStyle = 'rgba(10,10,14,0.92)';
+      ctx.fillText(char, w / 2 + ghost[0] * s.size, h / 2 + ghost[1] * s.size);
+    }
     if (s.shadow) {
       // the halo is drawn dark, then the white glyph on top; the material colour tints only bright pixels
       ctx.shadowColor = halo;

@@ -73,3 +73,12 @@ describe('per-song techniques', () => {
     expect(t.shots.some((s) => s.params['echo'])).toBe(false);
   });
 });
+
+describe('flush-left languages', () => {
+  it('sets every placeable shot left for the swiss language', () => {
+    const t = tr([shot('a', 10, 'punch'), shot('b', 20, 'vertical'), shot('c', 30, 'typewriter')]);
+    t.design = { language: 'swiss' } as unknown as TreatmentV3['design'];
+    varyComposition(t, []);
+    expect(t.shots.map((s) => s.params['align'] ?? s.params['position'])).toEqual(['left', 'left', 'left']);
+  });
+});

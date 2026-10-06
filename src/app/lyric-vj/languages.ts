@@ -24,6 +24,8 @@ export interface DesignLanguage {
   templates: string[];
   /** The medium's own move, saved for the song's peak. */
   native: string;
+  /** Lyric glyph treatment: a hard dark offset copy (fraction of the glyph size); lyrics set flush left. */
+  text?: { ghost?: [number, number]; left?: boolean };
   /** Whether the song's program-drawn motif (motif.ts) belongs in this language. */
   motif: boolean;
   /** What kind of song it suits. */
@@ -32,6 +34,7 @@ export interface DesignLanguage {
 
 export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
   silkscreen: {
+    text: { ghost: [0.025, 0.018] },
     name: '絲網海報',
     essence: '一張正在被印出來的旅行海報：4–6 色不透明平塗油墨，一色一層，天空用「階梯色帶」代替漸層，每層有 1–3 px 套印偏移，紙色本身是最亮的顏色。',
     not: '不是向量插畫加雜訊、不是網點漫畫：不准漸層、不准發光、不准淡入淡出。',
@@ -46,6 +49,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '旅行、季節、城市、青春、晴朗或懷舊的歌',
   },
   risograph: {
+    text: { ghost: [0.04, 0.03] },
     name: '孔版印刷',
     essence: '2–3 色半透明螢光特色墨疊印在暖白紙上：兩色重疊變出第三色，每個版各自偏移幾 px，中間調用網點，大面積平塗與大量留白。',
     not: '不是 CMYK 普普網點、不是不透明的絲網：墨是透明的、會相乘。',
@@ -60,6 +64,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '獨立、可愛、文青、元氣、有點古怪的偶像歌',
   },
   dossier: {
+    text: { ghost: [0.07, 0.06] },
     name: '網點檔案',
     essence: '一份復古印刷的案件檔案：米色檔案紙、2–3 色疊印網點、巨大粗標題帶錯位陰影、橡皮章、編號、檔案標籤。嚴肅的格式，內容可以很荒謬。',
     not: '不是孔版的顆粒拼貼、不是瑞士網格：每一格都要看得到網點、紙和印章。',
@@ -74,6 +79,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '偵探、謎、反抗、口號感、帶點黑色幽默的歌',
   },
   swiss: {
+    text: { left: true },
     name: '瑞士網格',
     essence: '國際主義平面設計在動：白紙、黑字黑條、極淺灰、只有一個飽和的訊號色；一切貼齊 12 欄網格，每個動作落在拍點上，不彈跳。巨大的數字配極小的註記。',
     not: '不是 keynote（沒有漸層、光暈、裝置）、不是會飛會轉的歌詞動畫：字不飛、不轉、不彈。',
@@ -116,6 +122,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '城市流行、復古、夜晚、戀愛、速度感的歌',
   },
   gameshow: {
+    text: { ghost: [0.09, 0.09] },
     name: '節奏綜藝',
     essence: '節奏遊戲綜藝節目的平面向量：糖果色背景、同色系斜紋／圓點／旋轉放射、粗墨線與硬投影；每個動作都在拍上。',
     not: '不是手繪、不是 keynote：沒有漸層、模糊、紋理、柔陰影。',
@@ -144,6 +151,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '和風、四季、祭典、物語、古典感的歌',
   },
   papercut: {
+    text: { ghost: [0.04, 0.04] },
     name: '剪紙',
     essence: '一切都是剪刀剪出來的紙，平貼在另一張紙上：紅紙是主角，細節只來自剪掉的地方，紙有厚度投下細影；夜晚時光從背後透過剪紙。',
     not: '不是皮影戲、不是向量插畫：沒有描邊、沒有漸層。',

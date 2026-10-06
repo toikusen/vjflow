@@ -20,7 +20,7 @@ import { quiet, quietFace } from './quiet';
 import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
-import { makeGlyphs, placeRow, advanceOf, Glyph, setHalo } from './glyphs';
+import { makeGlyphs, placeRow, advanceOf, Glyph, setGhost, setHalo } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { SYSTEMS } from '../systems';
 import { LANGUAGES } from '../languages';
@@ -372,6 +372,7 @@ export class LyricVjEngine {
     const lastSung = styled.map(({ cue }) => (cue.charTimed && cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : -Infinity));
     const showAt = styled.map(({ cue }, i) => Math.max(cue.start - lead, Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3)));
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
+    setGhost(design.language ? (LANGUAGES[design.language].text?.ghost ?? [0, 0]) : [0, 0]);
     const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
     styled.forEach(({ style: style0, cue }, i) => {
       const hooks = hookRanges(cue.text, hook).map(([from, to]) => ({ from, to, method: 'color' as const }));

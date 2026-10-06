@@ -3,6 +3,7 @@
 // makes the choruses escalate (the keyword grows chorus by chorus). Bleed is switched off: every review read the
 // cropped keyword as a layout overflow.
 import { uses } from './design';
+import { LANGUAGES } from './languages';
 import { quietSpans } from './moments';
 import type { Shot, TreatmentV3 } from './treatment';
 
@@ -49,12 +50,19 @@ export function anchorOf(s: Shot): Anchor | undefined {
  */
 export function varyComposition(t: TreatmentV3, choruses: { start: number; end: number }[]): string[] {
   const fixes: string[] = [];
+  // a language that sets type flush left (swiss grid): every placeable template goes left, nothing is centred
+  const flushLeft = !!t.design?.language && !!LANGUAGES[t.design.language].text?.left;
+  if (flushLeft)
+    for (const s of t.shots) {
+      const p = PLACEMENT[s.template];
+      if (p?.values.L) s.params[p.param] = p.values.L;
+    }
   let prev: Anchor | undefined;
   let side: Anchor = 'R';
   for (const s of t.shots) {
     const a = anchorOf(s);
     const place = PLACEMENT[s.template];
-    if (a === 'C' && prev === 'C' && place && !s.params['bleed']) {
+    if (!flushLeft && a === 'C' && prev === 'C' && place && !s.params['bleed']) {
       side = side === 'R' ? 'L' : 'R';
       const want = place.values[side] ?? place.values.L ?? place.values.R;
       if (want) {

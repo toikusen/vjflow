@@ -59,6 +59,7 @@
           <button class="btn" (click)="toggle()">{{ playing() ? '暫停' : '播放' }}</button>
           <span class="muted">{{ time() | number: '1.2-2' }} 秒</span>
           <label class="muted follow"><input type="checkbox" [checked]="follow()" (change)="follow.set($any($event.target).checked)" /> 跟著播放</label>
+          <label class="muted follow" title="改一句的開始時間時，後面還沒改過的句子一起移動同樣的秒數"><input type="checkbox" [checked]="ripple()" (change)="ripple.set($any($event.target).checked)" /> 後面一起移</label>
         </div>
         <p class="muted keys">空白鍵 播放／暫停 · Enter 把選取行的開始設為現在並跳下一行 · ←／→ 微調 0.05 秒 · ↑／↓ 選行 · 拖曳波形上的線調整</p>
       </section>

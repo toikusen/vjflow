@@ -99,3 +99,23 @@ describe('charStartsFor', () => {
     expect(t[4]).toBeLessThan(11.5);
   });
 });
+
+describe('alignMainLines', () => {
+  it('drops asides from alignment and puts shouts on the voice just before the next line', async () => {
+    const { alignMainLines, isShout, withoutAsides } = await import('./align');
+    expect(withoutAsides('最強じゃん? (ふっふー) 優勝じゃん?')).toBe('最強じゃん? 優勝じゃん?');
+    expect(isShout('てぇてぇ～')).toBe(true);
+    expect(isShout('いっぱいたべたごはん')).toBe(false);
+    const cue = (id: string, start: number, text: string) => ({ id, start, end: start + 1, text, timingSource: 'whisper' as const, confidence: 'aligned' as const });
+    const cues = [cue('a', 15.9, 'がんばっちゃった早起き'), cue('b', 18.4, 'てぇてぇ～'), cue('c', 18.9, 'いっぱいたべたごはん')];
+    const main = [
+      { start: 15.9, words: [{ text: 'がんばっちゃった早起き', start: 15.9, end: 17.3 }] },
+      { start: 18.4, words: [{ text: 'いっぱいたべたごはん', start: 18.4, end: 19.8 }] },
+    ];
+    const spans: [number, number][] = [[15.8, 17.3], [17.5, 17.75], [18.35, 19.9]];
+    const r = alignMainLines(cues, main, spans);
+    expect(r.find((c) => c.id === 'b')!.start).toBeCloseTo(17.5, 2);
+    expect(r.find((c) => c.id === 'c')!.start).toBeCloseTo(18.35, 2);
+    expect(r.find((c) => c.id === 'a')!.end).toBeCloseTo(17.5, 2);
+  });
+});

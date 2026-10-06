@@ -275,3 +275,55 @@ export function charTiming(text: string, words: AsrWord[], start: number, end: n
   // only a clear overrun is cut: a held last note (up to ~3 s) keeps the line up
   return { start, end: end - sungEnd > 3 ? Math.max(start + 0.6, sungEnd) : end, charStarts, trusted: jumps === 0 && known.length >= 0.7 * idx.length };
 }
+
+/** A bracketed aside — (ふっふー), （I got it） — is a call or backing part: never fed to the aligner. */
+export const withoutAsides = (text: string) => text.replace(/[（(][^）)]*[）)]/g, ' ').replace(/\s+/g, ' ').trim();
+
+/** A shout between lines (てぇてぇ～, にゃにゃ): at most 5 visible characters once asides are removed. */
+export const isShout = (text: string) => [...withoutAsides(text).replace(/[\s\p{P}～〜ー~♪]/gu, '')].length <= 5;
+
+/**
+ * Times lines from a forced alignment of the MAIN lines only (asides removed, shouts left out: both made the aligner
+ * drift and push every following line late), then:
+ * - each main line starts at the onset of the voiced stretch holding its aligned start (up to 0.3 s earlier);
+ * - each shout takes the last voiced stretch before the next main line, after the previous one;
+ * - lines end where the next one starts (or keep their end before a long gap).
+ * `main` holds one aligned line per main cue, in order; `spans` are the vocal stem's voiced stretches.
+ */
+export function alignMainLines(cues: TimelineCue[], main: { words: AsrWord[]; start: number }[], spans: [number, number][]): TimelineCue[] {
+  const sorted = [...cues].sort((a, b) => a.start - b.start);
+  const mains = sorted.filter((c) => !isShout(c.text));
+  if (mains.length !== main.length) return cues;
+  const timed = new Map<string, { start: number; charStarts: number[]; trusted: boolean; lastEnd: number }>();
+  let prevEnd = 0;
+  mains.forEach((c, i) => {
+    const line = main[i];
+    const s0 = line.words[0]?.start ?? line.start;
+    const holder = spans.filter(([s]) => s <= s0 + 0.1 && s >= s0 - 0.3 && s > prevEnd - 0.05).at(-1);
+    const start = holder ? Math.min(holder[0], s0) : s0;
+    const r = charTiming(c.text, line.words, start, Math.max(start + 0.5, c.end, line.words.at(-1)?.end ?? start + 1));
+    const lastEnd = line.words.at(-1)?.end ?? r.charStarts.at(-1) ?? start;
+    // two main lines landing on one start: the aligner collapsed them — leave it to the editor
+    const collapsed = i > 0 && Math.abs(start - (timed.get(mains[i - 1].id)?.start ?? -9)) < 0.25;
+    timed.set(c.id, { start, charStarts: r.charStarts.map((x) => Math.max(start, x)), trusted: r.trusted && !collapsed, lastEnd });
+    prevEnd = lastEnd;
+  });
+  const out: TimelineCue[] = sorted.map((c, i) => {
+    const t = timed.get(c.id);
+    if (t) return { ...c, start: +t.start.toFixed(3), charStarts: t.charStarts, charTimed: t.trusted, review: t.trusted ? c.review?.filter((x) => x !== '對齊信心低') : [...new Set([...(c.review ?? []), '對齊信心低'])] };
+    const prevMain = sorted.slice(0, i).reverse().find((x) => timed.has(x.id));
+    const nextMain = sorted.slice(i + 1).find((x) => timed.has(x.id));
+    const lo = prevMain ? timed.get(prevMain.id)!.lastEnd : 0;
+    const hi = nextMain ? timed.get(nextMain.id)!.start : Infinity;
+    const span = spans.filter(([s, e]) => e > lo - 0.3 && s < hi - 0.25 && e - s > 0.12).at(-1);
+    const start = span ? Math.max(span[0], lo - 0.3) : c.start;
+    return { ...c, start: +start.toFixed(3), charStarts: undefined, charTimed: false };
+  });
+  // ends: up to the next line, or the line's own end before a long gap
+  return out.map((c, i) => {
+    const next = out[i + 1];
+    const last = c.charStarts?.at(-1) ?? c.start;
+    const end = next && next.start - last < 3 ? next.start : Math.max(last + 0.8, Math.min(c.end, next ? next.start : c.end));
+    return { ...c, end: +Math.max(c.start + 0.3, end).toFixed(3) };
+  });
+}

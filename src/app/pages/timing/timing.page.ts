@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { SongTimeline, TimelineCue, vocalActivity } from '../../lyric-vj/timeline';
+import { SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
 
 interface SongItem {
@@ -42,6 +42,8 @@ export class TimingPage {
   protected readonly loading = signal<string | null>(null);
   /** The selection box and the list follow the playing line (like the database viewer). */
   protected readonly follow = signal(true);
+  /** Moving a line's start moves the lines after it by the same amount, up to the next line the user fixed. */
+  protected readonly ripple = signal(false);
   private readonly list = viewChild<ElementRef<HTMLElement>>('list');
   private lastFollow = -1;
   private userScrollAt = 0;
@@ -158,6 +160,19 @@ export class TimingPage {
     const c = list[i];
     const lo = i > 0 ? list[i - 1].start + 0.05 : 0;
     if (patch.start !== undefined) {
+      const before = c.start;
+      const shift = Math.max(lo, patch.start) - before;
+      // ripple: alignment errors come in runs (one late line pushes every following one), so the lines after move
+      // with it until the next line the user already fixed
+      if (this.ripple() && Math.abs(shift) > 0.001) {
+        c.end += shift;
+        for (let j = i + 1; j < list.length && !this.touched().has(list[j].id); j++) {
+          list[j].start = +(list[j].start + shift).toFixed(3);
+          list[j].end = +(list[j].end + shift).toFixed(3);
+        }
+        const stop = list.findIndex((x, j) => j > i && this.touched().has(x.id));
+        if (stop > 0) list[stop - 1].end = Math.min(list[stop - 1].end, list[stop].start);
+      }
       c.start = Math.max(lo, Math.min(patch.start, c.end - 0.1));
       if (i > 0) list[i - 1].end = Math.min(list[i - 1].end, c.start); // the previous line yields
     }
@@ -174,7 +189,14 @@ export class TimingPage {
   }
 
   protected setNow(i: number, edge: 'start' | 'end') {
-    this.setLine(i, { [edge]: this.audio.currentTime });
+    // a tap lands ~0.12 s after the sound (reaction time); a start then snaps to the voice onset nearby
+    let t = this.audio.currentTime - (edge === 'start' ? 0.12 : 0);
+    const spans = this.active() ? voicedSpans(this.active()!) : [];
+    if (edge === 'start') {
+      const onset = spans.map((x) => x[0]).filter((o) => o >= t - 0.3 && o <= t + 0.15).sort((a, b) => Math.abs(a - t) - Math.abs(b - t))[0];
+      if (onset !== undefined) t = onset;
+    }
+    this.setLine(i, { [edge]: t });
   }
 
   protected useStart(i: number, t: number) {

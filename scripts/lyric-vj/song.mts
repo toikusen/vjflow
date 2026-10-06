@@ -8,9 +8,9 @@ import { parseArgs } from 'node:util';
 import { analyzeAudio } from '../../src/app/audio/audio-analyzer.service';
 import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
-import { alignLyrics, AsrWord, charTiming, cleanLyricLine, combineTimings, ForcedLine } from '../../src/app/lyric-vj/align';
+import { alignLyrics, alignMainLines, AsrWord, charTiming, cleanLyricLine, combineTimings, ForcedLine, isShout, withoutAsides } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
-import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
@@ -76,21 +76,19 @@ if (a.lrc) {
   }
 }
 
-// word-by-word reveals need per-character times: forced alignment of the final lines (cached), whatever timed them
+// word-by-word reveals need per-character times: forced alignment of the MAIN lines (asides removed, shouts left
+// out — both made the aligner drift and push every following line late), then shouts placed on the voice (cached)
 {
-  const forceFile = join(a.out, 'force.json');
+  const forceFile = join(a.out, 'force_main.json');
+  const mains = cues.filter((c) => !isShout(c.text));
   if (!existsSync(forceFile)) {
-    const txt = join(a.out, 'lyrics.txt');
-    writeFileSync(txt, cues.map((c) => c.text).join('\n'));
+    const txt = join(a.out, 'lyrics_main.txt');
+    writeFileSync(txt, mains.map((c) => withoutAsides(c.text) || c.text).join('\n'));
     execFileSync('uv', ['run', '-q', '--with', 'stable-ts', 'python', 'scripts/lyric-vj/force_align.py', a.vocals, txt, forceFile, '--language', a.language!], { stdio: ['ignore', 'inherit', 'ignore'] });
   }
-  const lines: { words: AsrWord[] }[] = JSON.parse(readFileSync(forceFile, 'utf8')).lines;
-  if (lines.length === cues.length)
-    cues = cues.map((c, i) => {
-      const r = charTiming(c.text, lines[i].words, c.start, c.end);
-      return { ...c, start: r.start, end: r.end, charStarts: r.charStarts, charTimed: r.trusted };
-    });
-  else console.log(`逐字時間略過：對齊結果 ${lines.length} 行，歌詞 ${cues.length} 行`);
+  const lines: { words: AsrWord[]; start: number }[] = JSON.parse(readFileSync(forceFile, 'utf8')).lines;
+  if (lines.length === mains.length) cues = alignMainLines(cues, lines, voicedSpans(active));
+  else console.log(`逐字時間略過：對齊結果 ${lines.length} 行，主歌詞 ${mains.length} 行`);
 }
 // lines the aligner was unsure of snap to where the voice actually enters
 {

@@ -223,3 +223,69 @@ export function snapToVoice(cues: TimelineCue[], active: boolean[], fps = 100): 
   });
   return { cues: out, moved };
 }
+
+/** Voiced stretches [start, end) in seconds: activity runs bridged over gaps shorter than `bridge`. */
+export function voicedSpans(active: boolean[], fps = 100, bridge = 0.12): [number, number][] {
+  const out: [number, number][] = [];
+  const g = Math.round(bridge * fps);
+  let i = 0;
+  while (i < active.length) {
+    if (!active[i]) {
+      i++;
+      continue;
+    }
+    let j = i;
+    let quiet = 0;
+    while (j < active.length && quiet <= g) {
+      quiet = active[j] ? 0 : quiet + 1;
+      j++;
+    }
+    out.push([i / fps, (j - quiet) / fps]);
+    i = j;
+  }
+  return out;
+}
+
+const visible = (t: string) => [...t.replace(/[\s\p{P}～〜ー~♪]/gu, '')].length;
+
+/**
+ * Corrects forced alignment with the vocal stem (the aligner places lines late and lets short shouts drift):
+ * - a short line (≤ 5 characters, a shout like てぇてぇ～) takes the voiced stretch between its neighbours nearest
+ *   its aligned start;
+ * - a line starts where its phrase actually begins: the voice onset up to `early` s before its aligned start, after
+ *   the previous line;
+ * - a line ends when the voice stops after its last character (never past the next line).
+ * Character times shift with their line's start.
+ */
+export function refineWithVoice(cues: TimelineCue[], active: boolean[], fps = 100, early = 0.75): TimelineCue[] {
+  const spans = voicedSpans(active, fps);
+  const sorted = [...cues].sort((a, b) => a.start - b.start);
+  const out: TimelineCue[] = [];
+  sorted.forEach((c, i) => {
+    const prev = out[i - 1];
+    const next = sorted[i + 1];
+    const floor = prev ? (prev.charStarts?.at(-1) ?? prev.start) + 0.1 : 0;
+    const ceil = next ? next.start : Infinity;
+    let start = c.start;
+    let end = c.end;
+    if (visible(c.text) <= 5) {
+      const cand = spans.filter(([s, e]) => e > floor && s < ceil && e - s > 0.15);
+      const best = cand.sort((a, b) => Math.abs(a[0] - c.start) - Math.abs(b[0] - c.start))[0];
+      if (best) [start, end] = [Math.max(best[0], floor), Math.min(best[1] + 0.2, ceil)];
+    } else {
+      // the onset of the voiced stretch that holds (or just precedes) the aligned start
+      const holder = spans.filter(([s, e]) => s >= floor && s <= c.start + 0.15 && s >= c.start - early && e > s).sort((a, b) => b[0] - a[0])[0];
+      if (holder) start = holder[0];
+    }
+    const d = start - c.start;
+    const chars = c.charStarts?.map((x) => +Math.max(start, x + d).toFixed(3));
+    const last = chars?.at(-1) ?? start;
+    if (visible(c.text) > 5) {
+      // end with the voice after the last character
+      const stop = spans.find(([s, e]) => e > last && s <= last + 0.3);
+      end = Math.min(ceil, Math.max(last + 0.3, stop ? stop[1] + 0.15 : c.end));
+    }
+    out.push({ ...c, start: +start.toFixed(3), end: +Math.max(start + 0.3, end).toFixed(3), charStarts: chars });
+  });
+  return out;
+}

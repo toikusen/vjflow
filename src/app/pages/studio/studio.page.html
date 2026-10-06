@@ -1,0 +1,81 @@
+<div class="head">
+  <h1>Studio</h1>
+  <p class="muted">選一首歌 → 確認時間 → 產生設計 → 看預覽 → 渲染</p>
+</div>
+@if (error()) {
+  <p class="alert">{{ error() }}</p>
+}
+<div class="layout">
+  <ul class="songs">
+    @for (s of songs(); track s.id) {
+      <li [class.active]="s.id === selected()" (click)="select(s.id)">
+        <span>{{ s.title }}</span>
+        <small class="muted">{{ s.confirmedAt ? '時間已確認' : '時間未確認' }}</small>
+      </li>
+    }
+  </ul>
+  @if (song(); as s) {
+    <section class="panel">
+      <h2>{{ s.title }}</h2>
+      @if (!s.confirmedAt) {
+        <p class="alert">還沒確認歌詞時間。<a [href]="'/timing?song=' + s.id">到時間編輯器確認</a></p>
+      }
+      <div class="row">
+        <label>
+          設計語言
+          <select [value]="language()" (change)="language.set($any($event.target).value)">
+            <option value="">交給導演依歌曲決定</option>
+            @for (l of languages(); track l.id) {
+              <option [value]="l.id">{{ l.name }}（適合：{{ l.suits }}）</option>
+            }
+          </select>
+        </label>
+      </div>
+      <div class="row buttons">
+        <button (click)="run('make')" [disabled]="running() || !s.confirmedAt">產生設計與預覽</button>
+        <button (click)="run('design')" [disabled]="running() || !state()?.design">只重做設計</button>
+        <button (click)="run('render')" [disabled]="running() || !state()?.design">渲染完整影片</button>
+        <button (click)="run('layer')" [disabled]="running() || !state()?.design">輸出歌詞透明層</button>
+        <button (click)="run('lrc')" [disabled]="running()">輸出 LRC</button>
+      </div>
+      @if (state(); as st) {
+        @if (st.run; as r) {
+          <p class="muted">
+            {{ stepLabel[r.step] }}：{{ r.endedAt ? (r.ok ? '完成' : '失敗') : '執行中…' }}
+          </p>
+          @if (!r.ok || !r.endedAt) {
+            <pre class="log">{{ r.log.slice(-12).join('\n') }}</pre>
+          }
+        }
+        @if (st.design; as d) {
+          <div class="design">
+            <p><strong>{{ langName() }}</strong> · {{ d.font }}{{ d.motif ? ' · 主題物件 ' + d.motif : '' }}</p>
+            <p class="muted">{{ d.concept }}</p>
+            <p class="muted">目前費用約 US${{ st.costUSD }}</p>
+          </div>
+        }
+        @if (st.previews.length) {
+          <div class="previews">
+            @for (p of st.previews; track p) {
+              <img [src]="file(p)" alt="預覽畫面" />
+            }
+          </div>
+        }
+        @if (st.check; as c) {
+          <p class="muted">
+            自動檢查：{{ c.unreadable.length }} 句停留時間偏短、{{ c.lingering.length }} 句唱完後停留太久
+          </p>
+        }
+        @if (st.outputs.length) {
+          <ul class="outputs">
+            @for (o of st.outputs; track o) {
+              <li><a [href]="file(o)" target="_blank">{{ name(o) }}</a></li>
+            }
+          </ul>
+        }
+      }
+    </section>
+  } @else {
+    <p class="muted">從左邊選一首歌。</p>
+  }
+</div>

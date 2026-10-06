@@ -1,0 +1,104 @@
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+
+interface SongItem {
+  id: string;
+  title: string;
+  lines: number;
+  review: number;
+  confirmedAt: string | null;
+}
+
+interface Language {
+  id: string;
+  name: string;
+  suits: string;
+  essence: string;
+}
+
+interface StudioState {
+  run: { step: string; startedAt: string; endedAt?: string; ok?: boolean; log: string[] } | null;
+  design: { language: string | null; font: string | null; concept: string; motif: string | null } | null;
+  costUSD: number;
+  previews: string[];
+  check: { unreadable: string[]; lingering: string[] } | null;
+  outputs: string[];
+}
+
+const POLL_MS = 3000;
+const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC' };
+
+/**
+ * Studio: one song from confirmed timing to a finished VJ — generate the design (the director picks a design language
+ * unless the user does), check the preview, redo only the design or switch language, render, export the transparent
+ * lyric layer and LRC. Backed by scripts/lyric-vj/studio.mts through the dev proxy.
+ */
+@Component({
+  selector: 'app-studio-page',
+  templateUrl: './studio.page.html',
+  styleUrl: './studio.page.scss',
+})
+export class StudioPage {
+  protected readonly songs = signal<SongItem[]>([]);
+  protected readonly languages = signal<Language[]>([]);
+  protected readonly selected = signal<string | null>(null);
+  protected readonly state = signal<StudioState | null>(null);
+  protected readonly language = signal<string>('');
+  protected readonly error = signal<string | null>(null);
+  protected readonly running = computed(() => !!this.state()?.run && !this.state()!.run!.endedAt);
+  protected readonly song = computed(() => this.songs().find((s) => s.id === this.selected()) ?? null);
+  protected readonly langName = computed(() => {
+    const id = this.state()?.design?.language;
+    return this.languages().find((l) => l.id === id)?.name ?? id ?? '';
+  });
+  protected readonly stepLabel = STEP_LABEL;
+
+  constructor() {
+    void this.load();
+    const timer = setInterval(() => this.selected() && void this.refresh(), POLL_MS);
+    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+  }
+
+  protected file(path: string) {
+    return `/lyric-vj/files/${path.split('/').map(encodeURIComponent).join('/')}`;
+  }
+
+  protected name(path: string) {
+    return path.split('/').pop() ?? path;
+  }
+
+  protected async select(id: string) {
+    this.selected.set(id);
+    this.state.set(null);
+    await this.refresh();
+  }
+
+  protected async run(step: string) {
+    const id = this.selected();
+    if (!id) return;
+    this.error.set(null);
+    const res = await fetch(`/lyric-vj/studio/${encodeURIComponent(id)}/${step}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ language: this.language() || undefined }),
+    });
+    if (!res.ok) this.error.set(((await res.json()) as { error?: string }).error ?? `失敗（${res.status}）`);
+    await this.refresh();
+  }
+
+  private async load() {
+    try {
+      const [songs, langs] = await Promise.all([fetch('/lyric-vj/songs').then((r) => r.json()), fetch('/lyric-vj/languages').then((r) => r.json())]);
+      this.songs.set(songs);
+      this.languages.set(langs);
+    } catch {
+      this.error.set('連不上後端：請先執行 npx tsx scripts/lyric-vj/dashboard.mts');
+    }
+  }
+
+  private async refresh() {
+    const id = this.selected();
+    if (!id) return;
+    const res = await fetch(`/lyric-vj/studio/${encodeURIComponent(id)}`);
+    if (res.ok) this.state.set(await res.json());
+  }
+}

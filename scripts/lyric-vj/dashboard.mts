@@ -6,11 +6,13 @@ import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import type { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../src/app/lyric-vj/timing-qa';
 import { JOBS_DIR } from './status.mts';
+import { startStep, studioState, StudioStep } from './studio.mts';
+import { LANGUAGES } from '../../src/app/lyric-vj/languages';
 
 const PORT = 4310;
 const OUT_ROOT = resolve('out');
 const TYPES: Record<string, string> = {
-  '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
+  '.json': 'application/json', '.jpg': 'image/jpeg', '.png': 'image/png', '.mp4': 'video/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mov': 'video/quicktime', '.lrc': 'text/plain; charset=utf-8',
 };
 const MAX_BODY = 2_000_000;
 
@@ -81,6 +83,20 @@ createServer(async (req, res) => {
         return { id, title: s.title, lines: s.cues.length, review: s.cues.filter((c) => c.review?.length).length, confirmedAt: s.timingConfirmedAt ?? null };
       });
       return json(res, 200, list.sort((a, b) => a.title.localeCompare(b.title)));
+    }
+    if (path === '/lyric-vj/languages') return json(res, 200, Object.entries(LANGUAGES).map(([id, l]) => ({ id, name: l.name, suits: l.suits, essence: l.essence })));
+    // /lyric-vj/studio/<id> (GET state) and /lyric-vj/studio/<id>/<step> (POST {language?})
+    const st = /^\/lyric-vj\/studio\/([^/]+)(?:\/(make|design|render|layer|lrc))?$/.exec(path);
+    if (st) {
+      const file = songFiles().get(decodeURIComponent(st[1]));
+      if (!file) return json(res, 404, { error: '找不到這首歌' });
+      if (!st[2] && req.method === 'GET') return json(res, 200, studioState(file, OUT_ROOT));
+      if (st[2] && req.method === 'POST') {
+        const body = JSON.parse((await readBody(req)) || '{}') as { language?: string };
+        const err = startStep(file, st[2] as StudioStep, { language: body.language });
+        return err ? json(res, 409, { error: err }) : json(res, 202, { ok: true });
+      }
+      return void res.writeHead(405).end();
     }
     // /lyric-vj/songs/<id>[/audio/<mix|vocals>|/cues]  (id is one URL-encoded segment, e.g. db%2Fyt_x)
     const m = /^\/lyric-vj\/songs\/([^/]+)(\/audio\/(mix|vocals)|\/cues)?$/.exec(path);

@@ -232,7 +232,9 @@ const db = a.db ? references(loadDb(a.db).filter((v) => v.video_id !== a['exclud
 // the songs made before: this one must not look like them (another system, another font and medium)
 const history: DesignRecord[] = existsSync(a.history!) ? JSON.parse(readFileSync(a.history!, 'utf8')) : [];
 const recent = history.filter((r) => r.song !== song.title).slice(-3);
-const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : availableLanguages(recent);
+// languages rotate through the whole catalogue before one repeats (a 3-song window let 第六感's neon stage come back
+// four songs later and read as the same design); fonts and motifs only avoid the last three
+const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : availableLanguages(history.filter((r) => r.song !== song.title).slice(-(Object.keys(LANGUAGES).length - 1)));
 const recentText = recent.length ? recent.map((r) => `- ${r.song}：${r.language ? `${LANGUAGES[r.language].name}（${r.language}）` : r.system}、字型 ${r.font}、媒材 ${r.medium ?? '—'}${r.motif ? `、主題物件 ${r.motif}` : ''}`).join('\n') : '（無）';
 const SYSTEMS_TEXT = `設計語言（language，最重要的決定）：每首歌要像不同設計師做的。先依這首歌的個性選一種設計語言，鏡頭只能用它的模板。
 ${(Object.keys(LANGUAGES) as LanguageId[]).map((k) => `- ${k}（${LANGUAGES[k].name}）${allowedLanguages.includes(k) ? '' : '【最近已用過，這首不可選】'}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}`).join('\n')}

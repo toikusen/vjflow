@@ -1,10 +1,10 @@
-// beat-cut: each phrase is cut in huge, alone, one after another — a new position, size and angle every time —
-// while the whole line sits small at the bottom for reading. The designer move of re-composing the frame every 1–2
-// beats in a chorus.
+// beat-cut: each phrase is cut in huge, alone, one after another — a new position, size and angle every time — and
+// the whole line comes back big once it is sung. The designer move of re-composing the frame every 1–2 beats in a
+// chorus. No small copy of the line underneath: the pieces cycling over it read as the line repeating.
 import * as THREE from 'three';
 import { phraseBoundaries, phrases } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, readable, settledAt, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, readable, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -62,6 +62,17 @@ export function timedPieces(pieces: { text: string; from: number }[], charStarts
   return out;
 }
 
+/**
+ * The big pieces of a line: its sung pieces, then the whole line back big (the recap) once the last word is sung.
+ * A line with no time left for the recap is shown whole instead of cut, as the pieces alone never show the line.
+ */
+export function planCut(text: string, timed: { text: string; from: number; at: number }[], showFrom: number, lastSung: number, exitAt: number) {
+  const recapAt = lastSung + 0.3;
+  const fits = timed.length > 1 && exitAt - recapAt >= 0.9 && recapAt > timed[timed.length - 1].at + MIN_HOLD;
+  if (!fits) return { pieces: [{ text: text.trim(), from: 0, at: showFrom }], cutCount: 1, recapAt: showFrom };
+  return { pieces: [...timed, { text: text.replace(/\s+/g, ' ').trim(), from: 0, at: recapAt }], cutCount: timed.length, recapAt };
+}
+
 /** Layout variants a piece can take: centre, upper left tilted, lower right tilted, oversized and cropped. */
 const LAYOUTS = [
   { x: 0, y: 40, width: 0.8, tilt: 0, align: 'center' },
@@ -74,11 +85,10 @@ export const beatCut: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const text = rt.cue.text;
     // pieces cut in when they are sung; without audio-matched character times the line is shown whole
-    const cut = rt.cue.charTimed && rt.cue.charStarts && !rt.rushed ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [{ text: text.trim(), from: 0, at: rt.showFrom }];
-    // recap: once the last word is sung, the whole line comes back big while it still has time to be read
+    const timed = rt.cue.charTimed && rt.cue.charStarts && !rt.rushed ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [];
     const lastSung = rt.cue.charStarts?.[rt.cue.charStarts.length - 1] ?? rt.exitAt;
-    const recapAt = lastSung + 0.3;
-    const pieces = cut.length > 1 && rt.exitAt - recapAt >= 0.9 && recapAt > cut[cut.length - 1].at + MIN_HOLD ? [...cut, { text: text.replace(/\s+/g, ' ').trim(), from: 0, at: recapAt }] : cut;
+    const { pieces, cutCount: cutLen, recapAt } = planCut(text, timed, rt.showFrom, lastSung, rt.exitAt);
+    const cut = pieces.slice(0, cutLen);
     const startOf = (k: number) => pieces[k].at;
     const whole = pieces.length === 1;
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
@@ -126,15 +136,6 @@ export const beatCut: TemplateRenderer = {
         morphFrom.set(g, { x: wx - last.holder.position.x, y: wy - last.holder.position.y, s: before.size / last.size });
       }
     }
-    // the whole line, small, at the bottom: readable from the start
-    const small = whole ? [] : makeGlyphs(text.replace(/\s+/g, ' '), { family: rt.fonts.body, weight: 700, size: 64, shadow: true }, color(rt.palette.text, 0.95), 4);
-    placeRow(small, 0, -H / 2 + 120, 4);
-    tagSource(small, text, 0);
-    small.forEach((g, i) => {
-      g.index = i;
-      group.add(g.mesh);
-    });
-    const smallRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'fade', reveal: 'line' } };
 
     return {
       group,
@@ -162,13 +163,8 @@ export const beatCut: TemplateRenderer = {
           }
           b.gs.forEach((g) => (g.mesh.material.opacity = Math.min(1, p * 2) * out));
         }
-        small.forEach((g: Glyph) => {
-          const m = glyphMotion(smallRt, g, small.length, t, 0.01);
-          g.mesh.position.set(g.x + m.dx, g.y + m.dy, 0);
-          g.mesh.material.opacity = m.opacity * 0.9;
-        });
       },
-      readable: () => [whole ? rt.showFrom + 0.12 : settledAt(smallRt, small.length, 0.01), rt.exitAt],
+      readable: () => [whole ? rt.showFrom + 0.12 : recapAt, rt.exitAt],
     };
   },
 };

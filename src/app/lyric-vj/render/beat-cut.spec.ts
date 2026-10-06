@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cutPieces, timedPieces } from './beat-cut';
+import { cutPieces, planCut, timedPieces } from './beat-cut';
 
 describe('cutPieces', () => {
   it('cuts a line into sung pieces of two or more characters, with their positions', () => {
@@ -33,5 +33,21 @@ describe('timedPieces', () => {
     const p = timedPieces(pieces, starts, 9.9, 13);
     expect(p.map((x) => x.text)).toEqual(['今が一番', '若いの']); // 一番 held 1.0 s alone would be fine, 今が only 0.35 s
     expect(p[1].at).toBeCloseTo(11.45, 2);
+  });
+});
+
+describe('planCut', () => {
+  const timed = [{ text: '今が一番', from: 0, at: 10 }, { text: '若いの', from: 4, at: 11.45 }];
+
+  it('cuts the sung pieces in, then brings the whole line back big', () => {
+    const p = planCut('今が一番 若いの', timed, 9.9, 12, 14);
+    expect(p.pieces.map((x) => x.text)).toEqual(['今が一番', '若いの', '今が一番 若いの']);
+    expect(p.recapAt).toBeCloseTo(12.3, 5);
+  });
+
+  it('shows the line whole when there is no time to bring it back', () => {
+    const p = planCut('今が一番 若いの', timed, 9.9, 12, 12.8);
+    expect(p.pieces.map((x) => x.text)).toEqual(['今が一番 若いの']);
+    expect(p.recapAt).toBe(9.9);
   });
 });

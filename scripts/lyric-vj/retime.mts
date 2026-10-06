@@ -14,7 +14,7 @@ song.cues = song.cues.map((c: { text: string; start: number; end: number }, i: n
   const r = charTiming(c.text, lines[i].words, c.start, c.end);
   if (Math.abs(r.start - c.start) > 0.01) moved++;
   if (r.trusted) trusted++;
-  return { ...c, start: r.start, charStarts: r.charStarts, charTimed: r.trusted };
+  return { ...c, start: r.start, end: r.end, charStarts: r.charStarts, charTimed: r.trusted };
 });
 writeFileSync(join(dir, 'song.json'), JSON.stringify(song, null, 1));
 console.log(`${dir}: ${moved} line starts moved, ${trusted}/${song.cues.length} lines word-timed`);

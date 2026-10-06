@@ -89,6 +89,11 @@ describe('charStartsFor', () => {
     expect(charTiming('今が一番', [], 36.48, 41).trusted).toBe(false);
   });
 
+  it('ends a line shortly after its last sung character', () => {
+    const r = charTiming('越えていけ', [{ text: '越えてい', start: 179.4, end: 180.3 }, { text: 'け', start: 200.6, end: 201.9 }], 179.4, 201.97);
+    expect(r.end).toBeLessThan(182);
+  });
+
   it('does not let one character jump to a far later occurrence', () => {
     const t = charStartsFor('越えていけ', [{ text: '越えてい', start: 10, end: 10.8 }, { text: 'け', start: 31, end: 31.2 }], 10, 32);
     expect(t[4]).toBeLessThan(11.5);

@@ -88,7 +88,7 @@ if (a.lrc) {
   if (lines.length === cues.length)
     cues = cues.map((c, i) => {
       const r = charTiming(c.text, lines[i].words, c.start, c.end);
-      return { ...c, start: r.start, charStarts: r.charStarts, charTimed: r.trusted };
+      return { ...c, start: r.start, end: r.end, charStarts: r.charStarts, charTimed: r.trusted };
     });
   else console.log(`逐字時間略過：對齊結果 ${lines.length} 行，歌詞 ${cues.length} 行`);
 }

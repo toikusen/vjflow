@@ -26,6 +26,8 @@ export interface DesignLanguage {
   native: string;
   /** Lyric glyph treatment: a hard dark offset copy (fraction of the glyph size); lyrics set flush left. */
   text?: { ghost?: [number, number]; left?: boolean };
+  /** Two time-lagged colour ghosts trailing the lyrics (tape chroma, riso plates); absent = none. */
+  chroma?: [string, string];
   /** Drawings per second for type and graphics motion (12 = on twos): the hand-made feel; absent = every frame. */
   koma?: number;
   /** Whether the song's program-drawn motif (motif.ts) belongs in this language. */
@@ -52,6 +54,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '旅行、季節、城市、青春、晴朗或懷舊的歌',
   },
   risograph: {
+    chroma: ['#FF48B0', '#0078BF'],
     koma: 12,
     text: { ghost: [0.04, 0.03] },
     name: '孔版印刷',
@@ -113,6 +116,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '孤獨、網路、深夜、未來、機械感、內省的歌',
   },
   cel80s: {
+    chroma: ['#FF3AA7', '#3AF0FF'],
     koma: 12,
     name: '80 年代賽璐璐',
     essence: '黃金年代 OVA 的質感：噴槍漸層的夜景背景、霓虹透過光、濕地反射，播放在錄影帶與 CRT 上（色差暈染、掃描線、暗角）。',

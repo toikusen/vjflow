@@ -240,6 +240,9 @@ export class LyricVjEngine {
   private scene = new THREE.Scene();
   /** Lyrics (and their echoes), rendered after the bloom pass. */
   private textScene = new THREE.Scene();
+  private ghostA?: THREE.WebGLRenderTarget;
+  private ghostB?: THREE.WebGLRenderTarget;
+  private ghostPass?: ShaderPass;
   private camera = new THREE.OrthographicCamera(-W / 2, W / 2, H / 2, -H / 2, -10, 10);
   private composer: EffectComposer;
   private finalPass: ShaderPass;
@@ -275,6 +278,26 @@ export class LyricVjEngine {
     this.composer.addPass(new RenderPass(this.scene, this.camera));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.45, 0.8);
     this.composer.addPass(this.bloom);
+    // chroma ghosts of the lyrics (languages with `chroma`), composited before the crisp lyrics
+    if (job.treatment.design?.language && LANGUAGES[job.treatment.design.language].chroma) {
+      this.ghostA = new THREE.WebGLRenderTarget(W, H);
+      this.ghostB = new THREE.WebGLRenderTarget(W, H);
+      this.ghostPass = new ShaderPass({
+        uniforms: { tDiffuse: { value: null }, tA: { value: this.ghostA.texture }, tB: { value: this.ghostB.texture }, uColA: { value: new THREE.Color() }, uColB: { value: new THREE.Color() } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `uniform sampler2D tDiffuse, tA, tB; uniform vec3 uColA, uColB; varying vec2 vUv;
+          void main() {
+            vec4 c = texture2D(tDiffuse, vUv);
+            c.rgb = mix(c.rgb, uColB, texture2D(tB, vUv).a * 0.45);
+            c.rgb = mix(c.rgb, uColA, texture2D(tA, vUv).a * 0.55);
+            gl_FragColor = c;
+          }`,
+      });
+      // ShaderPass clones its uniforms (a cloned texture is no longer the render target's): point them back
+      this.ghostPass.uniforms['tA'].value = this.ghostA.texture;
+      this.ghostPass.uniforms['tB'].value = this.ghostB.texture;
+      this.composer.addPass(this.ghostPass);
+    }
     // lyrics are drawn after the bloom: bloomed white type smeared into an unreadable glow
     const textPass = new RenderPass(this.textScene, this.camera);
     textPass.clear = false;
@@ -536,6 +559,15 @@ export class LyricVjEngine {
     return { rt, group, glyphs };
   }
 
+  /** Shows the lines up at t and moves them; strokes follow their glyphs. */
+  private updateCues(t: number, fx: FrameFx, hidden?: string) {
+    for (const { rt, layer } of this.cueLayers) {
+      layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
+      if (layer.group.visible) layer.update(this.koma(t), fx);
+    }
+    syncPieces(this.textRoot);
+  }
+
   /** Motion time held to the design language's drawings per second (koma); cuts and visibility stay on real time. */
   private koma(t: number): number {
     const k = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].koma;
@@ -662,11 +694,7 @@ export class LyricVjEngine {
     const sys = this.job.treatment.design?.system;
     const close = sys && SYSTEMS[sys].letterbox ? 1 : q ? easeOutCubic(clamp01((t - q.start) / 0.5)) : 0;
     for (const bar of this.bars) bar.position.y = bar.userData['side'] * (H / 2 + H * 0.1 - close * H * 0.12);
-    for (const { rt, layer } of this.cueLayers) {
-      layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== flash?.cueId;
-      if (layer.group.visible) layer.update(this.koma(t), fx);
-    }
-    syncPieces(this.textRoot);
+    this.updateCues(t, fx, flash?.cueId);
     // heavy beats in loud sections: the lyrics jump with the kick (strength from the song's kick analysis)
     const kick = this.kickAt(t, mfx.level);
     this.textRoot.scale.setScalar(1 + 0.05 * kick);
@@ -736,6 +764,24 @@ export class LyricVjEngine {
     // a light field blooms to white: keep only a trace there
     if (this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, t).text) this.bloom.strength = 0.05;
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
+    // chroma ghosts (after JIZURA's ghost passes): the lyrics as they were 1/30 and 1/15 s ago, offset and tinted
+    const chroma = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].chroma;
+    if (chroma && this.ghostPass) {
+      const offset = this.textRoot.position.x;
+      ([[2 / 30, -3.4, this.ghostB!], [1 / 30, 3.2, this.ghostA!]] as const).forEach(([lag, dx, target]) => {
+        this.updateCues(t - lag, { flash: 0, hit: 0, shake: 0 }, flash?.cueId);
+        this.textRoot.position.x = offset + dx;
+        this.renderer.setRenderTarget(target);
+        this.renderer.setClearColor(0x000000, 0);
+        this.renderer.clear();
+        this.renderer.render(this.textScene, this.camera);
+      });
+      this.renderer.setRenderTarget(null);
+      this.textRoot.position.x = offset;
+      this.updateCues(t, fx, flash?.cueId);
+      (this.ghostPass.uniforms['uColA'].value as THREE.Color).set(chroma[0]);
+      (this.ghostPass.uniforms['uColB'].value as THREE.Color).set(chroma[1]);
+    }
     this.composer.render();
   }
 

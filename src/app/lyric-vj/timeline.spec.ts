@@ -56,3 +56,14 @@ describe('alignOffset', () => {
     expect(alignOffset(ref, other, sr)).toBeCloseTo(lag / sr, 3);
   });
 });
+
+describe('toLrc', () => {
+  it('writes line stamps, word stamps for char-timed lines and a blank line before a gap', async () => {
+    const { toLrc } = await import('./timeline');
+    const lrc = toLrc({ title: 't', cues: [
+      { id: 'a', start: 1.5, end: 3, text: 'ab cd', timingSource: 'whisper', confidence: 'aligned', charStarts: [1.5, 1.7, 2, 2.2, 2.4], charTimed: true },
+      { id: 'b', start: 70, end: 72, text: 'ef', timingSource: 'whisper', confidence: 'aligned' },
+    ] }, () => [0, 3]);
+    expect(lrc).toBe('[ti:t]\n[00:01.50]<00:01.50>ab <00:02.20>cd\n[00:03.00]\n[01:10.00]ef\n[01:12.00]\n');
+  });
+});

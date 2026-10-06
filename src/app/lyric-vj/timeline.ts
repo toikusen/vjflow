@@ -180,3 +180,27 @@ export function beatStrengths(samples: Float32Array, sampleRate: number, beats: 
   const p95 = sorted[Math.floor(sorted.length * 0.95)] || 1;
   return raw.map((v) => +Math.min(1, v / p95).toFixed(3));
 }
+
+const lrcTime = (t: number) => {
+  const m = Math.floor(Math.max(0, t) / 60);
+  return `${String(m).padStart(2, '0')}:${(Math.max(0, t) - m * 60).toFixed(2).padStart(5, '0')}`;
+};
+
+/**
+ * The song's lyric timing as LRC: one `[mm:ss.xx]` line per cue, with enhanced-LRC `<mm:ss.xx>` word stamps at each
+ * phrase start when the cue has audio-matched character times. Blank stamped lines mark where a line ends before a gap.
+ */
+export function toLrc(song: Pick<SongTimeline, 'title' | 'cues'>, phraseStarts: (text: string) => number[]): string {
+  const out = [`[ti:${song.title}]`];
+  const cues = [...song.cues].sort((a, b) => a.start - b.start);
+  cues.forEach((c, i) => {
+    const chars = [...c.text];
+    const body = c.charTimed && c.charStarts
+      ? phraseStarts(c.text).map((p, k, all) => ({ p, seg: chars.slice(p, all[k + 1]).join('') })).map(({ p, seg }) => (seg.trim() ? `<${lrcTime(c.charStarts![p])}>${seg}` : seg)).join('')
+      : c.text;
+    out.push(`[${lrcTime(c.start)}]${body}`);
+    const next = cues[i + 1];
+    if (!next || next.start - c.end > 1) out.push(`[${lrcTime(c.end)}]`);
+  });
+  return out.join('\n') + '\n';
+}

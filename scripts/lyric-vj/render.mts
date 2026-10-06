@@ -140,8 +140,15 @@ try {
           ...enc, '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
         for (let f = f0; f < f1; f++) {
           if (f % 60 === 0 && statfsSync(out).bavail * statfsSync(out).bsize < 400e6) throw new Error('磁碟可用空間不足 400MB，停止渲染');
-          await page.evaluate((x) => window.renderAt(x), range.start + f / fps); // time from the frame index: no drift
-          ff.stdin.write(await shoot(page, alpha ? 'png' : 'jpeg'));
+          const t = range.start + f / fps; // time from the frame index: no drift
+          if (alpha) {
+            await page.evaluate((x) => window.renderAt(x), t);
+            ff.stdin.write(await shoot(page, 'png'));
+          } else {
+            // the frame straight from the canvas: a page screenshot went through the compositor and was the bottleneck
+            const url = await page.evaluate((x) => window.grabAt(x, 0.92), t);
+            ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
+          }
           if (++rendered % fps === 0) status.stage('render', { done: rendered });
           if (k === 0 && f % fps === 0) process.stdout.write(`\r  frame ${f}/${f1} (${((Date.now() - began) / 1000).toFixed(0)}s)`);
         }

@@ -6,6 +6,8 @@ declare global {
   interface Window {
     vjReady: Promise<void>;
     renderAt: (t: number) => Promise<void>;
+    /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
+    grabAt: (t: number, quality: number) => Promise<string>;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
   }
 }
@@ -22,6 +24,11 @@ if (job.layer === 'text') document.documentElement.style.background = document.b
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 window.vjReady = engine.init();
 window.renderAt = (t) => engine.renderAt(t);
+const stage = document.getElementById('stage') as HTMLCanvasElement;
+window.grabAt = async (t, quality) => {
+  await engine.renderAt(t);
+  return stage.toDataURL('image/jpeg', quality);
+};
 window.vjMetrics = () => engine.metrics();
 await window.vjReady;
 const t = new URLSearchParams(location.search).get('t');

@@ -407,7 +407,8 @@ export class LyricVjEngine {
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
     setPieces(!!design.techniques?.includes('pieces'));
-    setGhost(design.language ? (LANGUAGES[design.language].text?.ghost ?? [0, 0]) : [0, 0]);
+    const langGhost: [number, number] = design.language ? (LANGUAGES[design.language].text?.ghost ?? [0, 0]) : [0, 0];
+    setGhost(langGhost);
     const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
     styled.forEach(({ style: style0, cue }, i) => {
       const hooks = hookRanges(cue.text, hook).map(([from, to]) => ({ from, to, method: 'color' as const }));
@@ -449,6 +450,8 @@ export class LyricVjEngine {
         rt.palette = this.cuePalette(cue.start + 0.3, backdrop);
       }
       setHalo(backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
+      // the dark offset copy only under light type: under dark heavy type it thickened the strokes into one blob
+      setGhost(luma(rt.palette.text) > 0.5 ? langGhost : [0, 0]);
       const layer = RENDERERS[shot.template].cue(rt);
       layer.group.visible = false;
       this.textRoot.add(fitToFrame(layer));

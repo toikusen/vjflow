@@ -66,6 +66,12 @@ mkdirSync(out, { recursive: true });
 const coerce = (v: string): ParamValue => (v === 'true' ? true : v === 'false' ? false : /^-?\d+(\.\d+)?$/.test(v.trim()) ? Number(v) : v);
 const str = { type: 'string' };
 // the song's design system (design.ts): one font, kana scale, a duotone + one accent per section, texture
+/** Spans of 20 s or more without lyrics (long interludes, humming): the graphics must keep changing there. */
+function lyriclessGaps() {
+  const cs = [...song.cues].sort((x, y) => x.start - y.start);
+  return cs.slice(1).map((c, i) => ({ start: cs[i].end, end: c.start })).filter((g) => g.end - g.start >= 20);
+}
+
 // one layer object with its parameters as key/value pairs: one optional property per parameter was too many for
 // structured output (the grammar allows 24); values are coerced in toLook()
 const LAYER_SCHEMA = {
@@ -107,7 +113,8 @@ const GRAPHICS_RULES = `graphics（圖形層，最重要）：用下列圖層由
 - 每個圖層的參數寫在 params 的 key/value 裡，例：{kind:'blob', params:[{key:'color',value:'#FBE6B4'},{key:'x',value:'0.5'},{key:'r',value:'0.2'},{key:'ghosts',value:'3,2,#EE9A73'}]}。
 - 每段第一層必須是滿版的 fill 或 paper（或 photo full）。淺色底要設定 text 為深色。
 - 歌詞要清楚：歌詞會出現在畫面中央附近，那一帶不要放高對比的細碎圖案；照片與圖形是配角。
-- 段落：至少 3 種組合（主歌、副歌、安靜段），整首最多 14 個 graphics 段落（同類段落重複時直接沿用，不要逐句細分），副歌最強烈；把設計語言的招牌動作放在最後一次副歌。
+- 沒有歌詞的長段（20 秒以上的間奏或哼唱）每 10 秒左右換一次圖層組合，讓畫面持續有變化。
+- 段落：至少 3 種組合（主歌、副歌、安靜段），整首最多 16 個 graphics 段落（同類段落重複時直接沿用，不要逐句細分），副歌最強烈；把設計語言的招牌動作放在最後一次副歌。
 - stamp、seal、numeral 的文字用這首歌的歌名、關鍵詞或編號，不要放無關的字。`;
 const DESIGN_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak', 'medium', 'techniques'],
@@ -332,7 +339,9 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     const errs = [
       ...(!sys.fonts.includes(out2.design.font) ? [`字型必須從「${sys.name}」的字型挑：${sys.fonts.join('、')}`] : []),
       ...(usedFonts.includes(out2.design.font) && sys.fonts.some((f) => !usedFonts.includes(f)) ? [`字型 ${out2.design.font} 最近的歌用過，換一款：${sys.fonts.filter((f) => !usedFonts.includes(f)).join('、')}`] : []),
-      ...(base.motif && recent.some((r) => r.motif === `${base.motif!.kind}/${base.motif!.variant ?? ''}/${base.motif!.render ?? 'neon'}`) ? ['主題物件的種類、造型、畫法和最近的歌完全相同：換一個造型（variant）或畫法（render）'] : []),
+      // a motif shape (kind + variant) is never reused across songs: sweet timer's clock came back in another song
+      ...(base.motif && history.filter((r) => r.song !== song.title).some((r) => (r.motif ?? '').startsWith(`${base.motif!.kind}/${base.motif!.variant ?? ''}/`) || (r.motif === base.motif!.kind && !base.motif!.variant)) ? [`主題物件 ${base.motif!.kind}/${base.motif!.variant ?? ''} 以前的歌用過：換一種物件或造型（已用過：${history.filter((r) => r.motif).map((r) => r.motif).join('、')}）`] : []),
+      ...lyriclessGaps().filter((g) => (base.graphics?.sections ?? []).filter((x) => x.start > g.start + 0.5 && x.start < g.end - 2).length < Math.min(3, Math.floor((g.end - g.start) / 10))).map((g) => `${g.start.toFixed(1)}–${g.end.toFixed(1)} 秒沒有歌詞（間奏或哼唱），graphics 要在裡面換 ${Math.min(3, Math.floor((g.end - g.start) / 10))} 次以上的圖層組合，用設計語言的大型圖形或招牌動作讓畫面有變化`),
       ...(!base.graphics || base.graphics.sections.length < 3 ? ['graphics 至少要有 3 個段落（主歌、副歌、安靜段各有不同的圖層組合）'] : []),
       ...checked.errors, ...checkStyle(checked.treatment, style, song, win, tier, titleCards).filter((e) => e.includes('主題物件'))];
     console.log(`design attempt ${attempt}: ${errs.length} errors`);

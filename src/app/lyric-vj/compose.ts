@@ -130,6 +130,13 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
  */
 export function editorPass(t: TreatmentV3, same: Map<string, string>): string[] {
   const fixes: string[] = [];
+  // a title card needs time to be read as a title: under 6 s the gap stays a graphic beat, no names squeezed in
+  for (const s of t.shots)
+    if (s.template === 'title-card' && s.end - s.start < 6) {
+      s.template = 'quiet';
+      s.params = { position: 'center', dim: 0.5 };
+      fixes.push(`${s.id} 間奏太短，不放歌名卡`);
+    }
   // directional pairs alternate: consecutive stairs step from opposite sides, scatters rise then fall
   let stair: string | undefined;
   let dir: string | undefined;

@@ -98,3 +98,14 @@ describe('editorPass', () => {
     expect(t.cues[2]).toMatchObject({ enter: 'slam', exit: 'cut', reveal: 'line' });
   });
 });
+
+describe('short title cards', () => {
+  it('turns a title card under 6 s into a quiet graphic beat', async () => {
+    const { editorPass } = await import('./compose');
+    const t = tr([shot('a', 10, 'title-card'), shot('b', 14, 'stair')]);
+    t.shots[0].end = 14;
+    t.cues = [];
+    editorPass(t, new Map());
+    expect(t.shots[0].template).toBe('quiet');
+  });
+});

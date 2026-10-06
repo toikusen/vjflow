@@ -24,3 +24,13 @@ describe('motifStateAt', () => {
     expect(s.k).toBeCloseTo(0.5);
   });
 });
+
+describe('motif variants', () => {
+  it('keeps a known variant and render, drops unknown ones', async () => {
+    const { validateMotif } = await import('./motif');
+    const win = { start: 0, end: 60 };
+    const sections = [{ start: 0, form: 'center' as const, intensity: 1 }];
+    expect(validateMotif({ kind: 'orbit', sides: 6, variant: 'saturn', render: 'flat', sections }, win).motif).toMatchObject({ variant: 'saturn', render: 'flat' });
+    expect(validateMotif({ kind: 'orbit', sides: 6, variant: 'roman', render: 'glow' as never, sections }, win).motif).toMatchObject({ variant: undefined, render: undefined });
+  });
+});

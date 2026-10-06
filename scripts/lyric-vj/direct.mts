@@ -13,7 +13,7 @@ import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
 import { varyComposition } from '../../src/app/lyric-vj/compose';
 import { FONTS } from '../../src/app/lyric-vj/fonts';
-import { MOTIF_FORMS, MOTIF_KINDS } from '../../src/app/lyric-vj/motif';
+import { MOTIF_FORMS, MOTIF_KINDS, MOTIF_RENDERS, MOTIF_VARIANTS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES, TECHNIQUES } from '../../src/app/lyric-vj/design';
 import { MEDIA } from '../../src/app/lyric-vj/medium';
 import { LANGUAGES, availableLanguages, LanguageId } from '../../src/app/lyric-vj/languages';
@@ -125,16 +125,19 @@ const DESIGN_SCHEMA = {
   },
 };
 const MOTIF_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['kind', 'sides', 'sections'],
+  type: 'object', additionalProperties: false, required: ['kind', 'variant', 'render', 'sides', 'sections'],
   properties: {
     kind: { type: 'string', enum: Object.keys(MOTIF_KINDS), description: Object.entries(MOTIF_KINDS).map(([k, v]) => `${k}：${v}`).join('；') },
+    variant: { type: 'string', description: '物件的造型：' + Object.entries(MOTIF_VARIANTS).map(([k, v]) => `${k} → ${Object.entries(v).map(([x, d]) => `${x}（${d}）`).join('、')}`).join('；') },
+    render: { type: 'string', enum: Object.keys(MOTIF_RENDERS), description: '線條的畫法：' + Object.entries(MOTIF_RENDERS).map(([k, v]) => `${k}：${v}`).join('；') },
     sides: { type: 'integer', description: 'polygon 的邊數 3–12（其他物件填 6）' },
     sections: { type: 'array', description: '依段落的形態，每個段落一筆', items: { type: 'object', additionalProperties: false, required: ['start', 'form', 'intensity'],
       properties: { start: { type: 'number' }, form: { type: 'string', enum: Object.keys(MOTIF_FORMS), description: Object.entries(MOTIF_FORMS).map(([k, v]) => `${k}：${v}`).join('；') }, intensity: { type: 'number', description: '0–1' } } } },
   },
 };
 const MOTIF_RULES = `主題物件（motif，必須做）：
-- 從歌名或核心歌詞轉譯出一個物件，整首貫穿（例：timer → 時鐘、第六感 → 六角形、天文 → 軌道）。物件由程式畫成發光細線，不是圖片。
+- 從歌名或核心歌詞轉譯出一個物件，整首貫穿（例：timer → 時鐘、第六感 → 六角形、天文 → 軌道）。物件由程式畫成線條，不是圖片。
+- 造型（variant）與畫法（render）要配合設計語言，而且不能和最近做過的歌的主題物件相同（同一種物件時，造型或畫法至少換一個）。
 - 物件要隨段落演變：主歌 center 或 off，副歌前 nested，副歌 tunnel 或 bleed，落ちサビ off 讓畫面休息，最後副歌用最強的形態。不要整首同一種形態。
 - shards（零件飛散到整個畫面持續飛舞）是最吸睛的全畫面動態：間奏、轉折與爆點之後的段落優先使用，可以維持整段。
 - mask 只能用在沒有歌詞的段落（有歌詞時外面壓暗會讓字看不清楚）。
@@ -324,6 +327,7 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     const errs = [
       ...(!sys.fonts.includes(out2.design.font) ? [`字型必須從「${sys.name}」的字型挑：${sys.fonts.join('、')}`] : []),
       ...(usedFonts.includes(out2.design.font) && sys.fonts.some((f) => !usedFonts.includes(f)) ? [`字型 ${out2.design.font} 最近的歌用過，換一款：${sys.fonts.filter((f) => !usedFonts.includes(f)).join('、')}`] : []),
+      ...(base.motif && recent.some((r) => r.motif === `${base.motif!.kind}/${base.motif!.variant ?? ''}/${base.motif!.render ?? 'neon'}`) ? ['主題物件的種類、造型、畫法和最近的歌完全相同：換一個造型（variant）或畫法（render）'] : []),
       ...(!base.graphics || base.graphics.sections.length < 3 ? ['graphics 至少要有 3 個段落（主歌、副歌、安靜段各有不同的圖層組合）'] : []),
       ...checked.errors, ...checkStyle(checked.treatment, style, song, win, tier, titleCards).filter((e) => e.includes('主題物件'))];
     console.log(`design attempt ${attempt}: ${errs.length} errors`);
@@ -408,7 +412,7 @@ const report = { model: a.model, seconds: Math.round((Date.now() - began) / 1000
 writeFileSync(join(out, 'director.json'), JSON.stringify(report, null, 1));
 {
   const d = result.treatment.design!;
-  const rec: DesignRecord = { song: song.title, language: chosen, font: d.font, medium: d.medium, motif: result.treatment.motif?.kind, peak: d.peak };
+  const rec: DesignRecord = { song: song.title, language: chosen, font: d.font, medium: d.medium, motif: result.treatment.motif && `${result.treatment.motif.kind}/${result.treatment.motif.variant ?? ''}/${result.treatment.motif.render ?? 'neon'}`, peak: d.peak };
   writeFileSync(a.history!, JSON.stringify([...history.filter((r) => r.song !== song.title), rec], null, 1));
 }
 status.stage('director', { state: 'done', costUSD: report.costUSD, message: undefined });

@@ -31,8 +31,26 @@ export interface MotifSection {
   intensity: number;
 }
 
+/** How the motif's lines are drawn: one song's planet must not look like another's. */
+export type MotifRender = 'neon' | 'flat' | 'dotted' | 'ink';
+export const MOTIF_RENDERS: Record<MotifRender, string> = {
+  neon: '發光細線（疊加發光，像霓虹管）',
+  flat: '平塗不發光的粗線與實心形狀（像印刷、貼紙）',
+  dotted: '虛線與點線（像星圖、設計圖）',
+  ink: '手畫的抖動墨線，一秒 8 次微抖（像手繪、蠟筆）',
+};
+/** Geometry variants per kind. */
+export const MOTIF_VARIANTS: Record<MotifKind, Record<string, string>> = {
+  clock: { roman: '羅馬數字錶盤、60 刻度、三根指針', minimal: '只有外圈與兩根指針，極簡', pocket: '懷錶：外圈、龍頭、12 個圓點刻度' },
+  polygon: { outline: '多邊形外框加內框', star: '星形多邊形（連線跳一個頂點）', facets: '多邊形加中心放射切面線' },
+  orbit: { atom: '一顆星球、一條傾斜橢圓軌道、一顆衛星', solar: '俯視的太陽系：多條同心軌道、各有一顆行星不同速度', saturn: '土星：星球加一條寬環帶', eclipse: '日蝕：兩個圓緩慢重疊成新月', binary: '雙星：兩顆星互相繞行，留下軌跡' },
+};
+
 export interface MotifPlan {
   kind: MotifKind;
+  /** Geometry variant (MOTIF_VARIANTS[kind]); absent = the first. */
+  variant?: string;
+  render?: MotifRender;
   /** polygon: number of sides (3..12). */
   sides: number;
   sections: MotifSection[];
@@ -55,7 +73,9 @@ export function validateMotif(m: MotifPlan | undefined, win: Window): { motif?: 
   if (!sections.length) errors.push('主題物件至少要有一個段落設定');
   else if (sections[0].start > win.start) sections.unshift({ start: win.start, form: 'off', intensity: 0 });
   const sides = Math.round(clamp(m.sides, 3, 12));
-  return { motif: { kind: m.kind, sides, sections }, fixes, errors };
+  const variant = m.variant && m.variant in (MOTIF_VARIANTS[m.kind] ?? {}) ? m.variant : undefined;
+  const render = m.render && m.render in MOTIF_RENDERS ? m.render : undefined;
+  return { motif: { kind: m.kind, sides, sections, variant, render }, fixes, errors };
 }
 
 /** The form at t and the one before it, with the crossfade progress (0.6 s). */

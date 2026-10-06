@@ -1,7 +1,7 @@
 // Draws the song's motif (motif.ts) as glowing line art between the background and the lyrics, in the form the
 // director chose for each section, ticking with the beats and opening up on drops. Everything is geometry built here.
 import * as THREE from 'three';
-import { MotifForm, MotifPlan, motifStateAt } from '../motif';
+import { MotifForm, MotifPlan, MotifRender, motifStateAt } from '../motif';
 import { clamp01, easeOutCubic, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
 
 const W = 1920;
@@ -9,7 +9,9 @@ const H = 1080;
 const LINE = 5; // line width in px at 1080p: the motif is a main element, not a faint overlay
 
 type Mat = THREE.MeshBasicMaterial;
-const lineMat = () => new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
+/** The plan's line style, set while a MotifLayer builds its geometry. */
+let style: MotifRender = 'neon';
+const lineMat = () => new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false, blending: style === 'neon' ? THREE.AdditiveBlending : THREE.NormalBlending });
 
 /** One drawable unit of the motif at radius 1 (scaled per form); `tick` animates it from song time and beat count. */
 interface Unit {
@@ -19,10 +21,16 @@ interface Unit {
   tick(t: number, beat: number): void;
 }
 
-function ring(r: number, w: number, segments: number, mats: Mat[], start = 0): THREE.Mesh {
+function ring(r: number, w: number, segments: number, mats: Mat[], start = 0): THREE.Object3D {
   const m = lineMat();
   mats.push(m);
-  return new THREE.Mesh(new THREE.RingGeometry(r - w, r, segments, 1, start), m);
+  // flat lines are drawn heavier (print, not light); dotted rings are dashes around the circle
+  const ww = style === 'flat' ? w * 1.6 : w;
+  if (style !== 'dotted' || segments < 24) return new THREE.Mesh(new THREE.RingGeometry(r - ww, r, segments, 1, start), m);
+  const g = new THREE.Group();
+  const dashes = Math.max(12, Math.round(r * 48));
+  for (let i = 0; i < dashes; i++) g.add(new THREE.Mesh(new THREE.RingGeometry(r - ww, r, 6, 1, start + (i / dashes) * Math.PI * 2, (Math.PI * 2) / dashes / 2), m));
+  return g;
 }
 
 function bar(len: number, w: number, mats: Mat[]): THREE.Mesh {
@@ -32,13 +40,25 @@ function bar(len: number, w: number, mats: Mat[]): THREE.Mesh {
 }
 
 /** Clock face: rings, 60 ticks, roman numerals, three hands; the second hand jumps one step per beat. */
-function clock(px: number, font: string, detail: boolean, hands = true): Unit {
+function clock(px: number, font: string, detail: boolean, hands = true, variant = 'roman'): Unit {
   const g = new THREE.Group();
   const mats: Mat[] = [];
   const accents: Mat[] = [];
   const w = LINE / px;
   g.add(ring(1, w * 1.4, 128, mats), ring(0.93, w, 128, mats));
-  if (detail) {
+  if (variant === 'pocket') {
+    // pocket watch: a crown on top and twelve dots instead of numerals
+    const crown = bar(0.12, 0.14, mats);
+    crown.position.set(0, 1.08, 0);
+    g.add(crown);
+    for (let i = 0; i < 12; i++) {
+      const d = new THREE.Mesh(new THREE.CircleGeometry(i % 3 ? 0.025 : 0.045, 24), lineMat());
+      mats.push(d.material);
+      const a = (i / 12) * Math.PI * 2;
+      d.position.set(Math.sin(a) * 0.8, Math.cos(a) * 0.8, 0);
+      g.add(d);
+    }
+  } else if (detail) {
     for (let i = 0; i < 60; i++) {
       const long = i % 5 === 0;
       const t = bar(long ? 0.07 : 0.035, w * (long ? 1.6 : 1), mats);
@@ -85,7 +105,7 @@ function clock(px: number, font: string, detail: boolean, hands = true): Unit {
 
 /** Regular polygon, flat-topped, with an inner one. Drawn as one ring (clean corners) unless `asEdges`, where it is
  * built edge by edge so 'shards' can break it apart. */
-function polygon(px: number, sides: number, asEdges = false): Unit {
+function polygon(px: number, sides: number, asEdges = false, variant = 'outline'): Unit {
   const g = new THREE.Group();
   const mats: Mat[] = [];
   const accents: Mat[] = [];
@@ -110,26 +130,82 @@ function polygon(px: number, sides: number, asEdges = false): Unit {
     g.add(ring(1, w * 1.4, sides, mats, start));
     inner.add(ring(0.86, w, sides, accents, start));
   }
+  const vertex = (i: number, r = 1) => {
+    const a = Math.PI / 2 - Math.PI / sides + (i * Math.PI * 2) / sides; // the ring's own vertices
+    return new THREE.Vector2(Math.cos(a) * r, Math.sin(a) * r);
+  };
+  const line = (p: THREE.Vector2, q: THREE.Vector2, width: number, into: Mat[], parent: THREE.Object3D) => {
+    const e = bar(p.distanceTo(q), width, into);
+    e.position.set((p.x + q.x) / 2, (p.y + q.y) / 2, 0);
+    e.rotation.z = Math.atan2(q.y - p.y, q.x - p.x) - Math.PI / 2;
+    parent.add(e);
+  };
+  // star: chords skipping one vertex; facets: spokes from the centre to every vertex
+  if (variant === 'star' && sides >= 5) for (let i = 0; i < sides; i++) line(vertex(i, 0.86), vertex(i + 2, 0.86), w, accents, inner);
+  if (variant === 'facets') for (let i = 0; i < sides; i++) line(new THREE.Vector2(0, 0), vertex(i, 0.86), w * 0.8, accents, inner);
   g.add(inner);
   return { group: g, mats, accents, tick: (t) => (inner.rotation.z = Math.sin(t * 0.4) * 0.08) };
 }
 
-/** Planet on a tilted elliptical orbit with a moon running around it. */
-function orbit(px: number): Unit {
+const disc = (r: number, into: Mat[]) => {
+  const m = lineMat();
+  into.push(m);
+  return new THREE.Mesh(new THREE.CircleGeometry(r, 64), m);
+};
+
+/** Orbit variants (motif.ts MOTIF_VARIANTS.orbit). */
+function orbit(px: number, variant = 'atom'): Unit {
   const g = new THREE.Group();
   const mats: Mat[] = [];
   const accents: Mat[] = [];
   const w = LINE / px;
+  if (variant === 'solar') {
+    // top-down system: concentric orbits, one planet each at its own speed
+    const planets = [0.32, 0.5, 0.68, 0.86, 1].map((r, i) => {
+      g.add(ring(r, w, 128, mats));
+      const p = disc(0.025 + 0.012 * (i % 3), accents);
+      g.add(p);
+      return { p, r, speed: 0.9 / (1 + i * 0.7), phase: i * 1.7 };
+    });
+    g.add(disc(0.1, accents));
+    return { group: g, mats, accents, tick: (t) => planets.forEach((x) => x.p.position.set(Math.cos(t * x.speed + x.phase) * x.r, Math.sin(t * x.speed + x.phase) * x.r, 0)) };
+  }
+  if (variant === 'saturn') {
+    g.add(disc(0.34, accents), ring(0.36, w, 96, mats));
+    const band = new THREE.Group();
+    band.add(ring(0.95, w * 1.2, 128, mats), ring(0.78, w * 5, 128, mats), ring(0.62, w, 128, mats));
+    band.scale.y = 0.24;
+    g.add(band);
+    return { group: g, mats, accents, tick: (t) => (g.rotation.z = -0.35 + Math.sin(t * 0.2) * 0.05) };
+  }
+  if (variant === 'eclipse') {
+    // a bright disc slowly covered by a dark one: a crescent that grows and thins with the song
+    const sun = disc(0.6, accents);
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.6, 64), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, depthTest: false, depthWrite: false }));
+    g.add(sun, shadow, ring(0.62, w, 128, mats), ring(0.85, w * 0.6, 128, mats));
+    return { group: g, mats, accents, tick: (t) => shadow.position.set(Math.cos(t * 0.12) * 0.32, Math.sin(t * 0.09) * 0.08, 0) };
+  }
+  if (variant === 'binary') {
+    const a = disc(0.12, accents);
+    const b = disc(0.08, accents);
+    const trail = Array.from({ length: 10 }, () => disc(0.02, mats));
+    g.add(a, b, ...trail, ring(0.62, w * 0.6, 128, mats));
+    return {
+      group: g, mats, accents,
+      tick(t) {
+        a.position.set(Math.cos(t * 0.8) * 0.28, Math.sin(t * 0.8) * 0.28, 0);
+        b.position.set(-Math.cos(t * 0.8) * 0.45, -Math.sin(t * 0.8) * 0.45, 0);
+        trail.forEach((d, k) => d.position.set(-Math.cos(t * 0.8 - (k + 1) * 0.12) * 0.45, -Math.sin(t * 0.8 - (k + 1) * 0.12) * 0.45, 0));
+      },
+    };
+  }
+  // atom: planet on a tilted elliptical orbit with a moon running around it
   const path = ring(1, w * 3, 128, mats);
   path.scale.y = 0.32;
   g.add(path);
-  const planetMat = lineMat();
-  accents.push(planetMat);
-  const planet = new THREE.Mesh(new THREE.CircleGeometry(0.22, 64), planetMat);
+  const planet = disc(0.22, accents);
   g.add(planet, ring(0.3, w, 96, mats));
-  const moonMat = lineMat();
-  accents.push(moonMat);
-  const moon = new THREE.Mesh(new THREE.CircleGeometry(0.04, 32), moonMat);
+  const moon = disc(0.04, accents);
   g.add(moon);
   return {
     group: g, mats, accents,
@@ -154,8 +230,9 @@ export class MotifLayer {
     private readonly beats: number[],
     fonts: { display: string; accent: string },
   ) {
+    style = plan.render ?? 'neon';
     const make = (px: number, detail = true, hands = true, edges = false): Unit =>
-      plan.kind === 'clock' ? clock(px, fonts.display, detail, hands) : plan.kind === 'polygon' ? polygon(px, plan.sides, edges) : orbit(px);
+      plan.kind === 'clock' ? clock(px, fonts.display, detail && plan.variant !== 'minimal', hands, plan.variant) : plan.kind === 'polygon' ? polygon(px, plan.sides, edges, plan.variant) : orbit(px, plan.variant);
     const add = (form: MotifForm, units: Unit[]) => {
       const holder = new THREE.Group();
       units.forEach((u) => holder.add(u.group));
@@ -225,6 +302,13 @@ export class MotifLayer {
           m.opacity = Math.min(1 - 0.92 * textOn, opacity * 1.3); // a filled planet under the lyrics blooms into a glare
         });
         this.place(form, u, i, units.length, t, age, pulse, burst);
+        if (this.plan.render === 'ink') {
+          // hand-drawn boil: the drawing shifts a little 8 times a second, like redrawn frames
+          const step = Math.floor(t * 8);
+          u.group.rotation.z += (hash(step, i * 7 + 1) - 0.5) * 0.03;
+          u.group.scale.multiplyScalar(1 + (hash(step, i * 7 + 2) - 0.5) * 0.02);
+          u.group.position.x += (hash(step, i * 7 + 3) - 0.5) * 6;
+        }
       });
     }
     // 'burst' drops: rings rush outward from the centre

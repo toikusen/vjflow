@@ -107,7 +107,7 @@ const GRAPHICS_RULES = `graphics（圖形層，最重要）：用下列圖層由
 - 每個圖層的參數寫在 params 的 key/value 裡，例：{kind:'blob', params:[{key:'color',value:'#FBE6B4'},{key:'x',value:'0.5'},{key:'r',value:'0.2'},{key:'ghosts',value:'3,2,#EE9A73'}]}。
 - 每段第一層必須是滿版的 fill 或 paper（或 photo full）。淺色底要設定 text 為深色。
 - 歌詞要清楚：歌詞會出現在畫面中央附近，那一帶不要放高對比的細碎圖案；照片與圖形是配角。
-- 段落：至少 3 種組合（主歌、副歌、安靜段），副歌最強烈；把設計語言的招牌動作放在最後一次副歌。
+- 段落：至少 3 種組合（主歌、副歌、安靜段），整首最多 14 個 graphics 段落（同類段落重複時直接沿用，不要逐句細分），副歌最強烈；把設計語言的招牌動作放在最後一次副歌。
 - stamp、seal、numeral 的文字用這首歌的歌名、關鍵詞或編號，不要放無關的字。`;
 const DESIGN_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak', 'medium', 'techniques'],
@@ -310,7 +310,7 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
   for (let attempt = 0; attempt < 3; attempt++) {
     const msg = await client.beta.messages
       .stream({
-        model: a.model!, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+        model: a.model!, max_tokens: 48000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
         output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: sys.motif ? ['design', 'graphics', 'motif'] : ['design', 'graphics'], properties: sys.motif ? { design: DESIGN_SCHEMA, graphics: GRAPHICS_SCHEMA, motif: MOTIF_SCHEMA } : { design: DESIGN_SCHEMA, graphics: GRAPHICS_SCHEMA } } } },
         system: '你是日本偶像歌詞 VJ 的資深動態設計總監，為每首歌建立獨特的字體與色彩系統。',
         messages: dMessages,
@@ -320,6 +320,7 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     usage.output += msg.usage.output_tokens;
     const text = msg.content.find((b) => b.type === 'text')?.text;
     if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
+    if (msg.stop_reason === 'max_tokens') throw new Error('設計輸出超過長度上限（graphics 段落太多）');
     const out2 = JSON.parse(text);
     base.design = { ...out2.design, language };
     base.motif = sys.motif ? out2.motif : undefined;

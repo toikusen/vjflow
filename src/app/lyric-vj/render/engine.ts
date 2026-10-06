@@ -96,6 +96,8 @@ export interface CueMetric {
   readableSec: number;
   requiredSec: number;
   ok: boolean;
+  /** Seconds the line stays up after its last sung character (a long one sits over an instrumental). */
+  lingerSec: number;
 }
 
 const FINAL_SHADER = {
@@ -439,8 +441,12 @@ export class LyricVjEngine {
       cues: this.cueLayers.map(({ rt, layer }) => {
         const [from, to] = layer.readable();
         const readableSec = Math.max(0, to - from);
-        const requiredSec = Math.min(1, 0.6 * (rt.cue.end - rt.cue.start));
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec };
+        // reading time: chars / 12 + 1 s (lemo-opuscar's readcheck), but never more than 90 % of the time the line is sung
+        const chars = [...rt.cue.text.replace(/\s/g, '')].length;
+        const requiredSec = Math.min(chars / 12 + 1, 0.9 * (rt.cue.end - rt.cue.start + 0.4));
+        const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
+        const lingerSec = +(rt.exitAt + rt.exitDur - last).toFixed(2);
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec, lingerSec };
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };

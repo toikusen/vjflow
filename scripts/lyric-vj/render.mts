@@ -104,7 +104,14 @@ try {
       await page.evaluate((x) => window.renderAt(x), t);
       writeFileSync(join(out, `still_${t.toFixed(2)}.png`), await shoot(page, 'png'));
     }
-    console.log('stills written to', out);
+    // a pre-render check (no full render needed): lines too short to read, lines left over an instrumental
+    const m = await page.evaluate(() => window.vjMetrics());
+    const check = {
+      unreadable: m.cues.filter((c) => !c.ok).map((c) => `${c.id} ${c.text}（${c.readableSec.toFixed(1)}/${c.requiredSec.toFixed(1)}s）`),
+      lingering: m.cues.filter((c) => c.lingerSec > 4).map((c) => `${c.id} ${c.text}（唱完後還留 ${c.lingerSec.toFixed(1)}s）`),
+    };
+    writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
+    console.log('stills written to', out, JSON.stringify(check));
   } else {
     const total = Math.round((range.end - range.start) * fps);
     const status = jobStatus(a.job ?? jobIdFor(dirname(a.treatment!)));

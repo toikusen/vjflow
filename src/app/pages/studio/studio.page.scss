@@ -118,3 +118,38 @@ p {
   max-width: 960px;
   border-radius: 8px;
 }
+
+.progress {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line, #333);
+  border-radius: 10px;
+
+  .row-between {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .bar {
+    height: 10px;
+    border-radius: 5px;
+    background: var(--surface, #222);
+    overflow: hidden;
+  }
+
+  .fill {
+    height: 100%;
+    background: var(--accent, #6fa8ff);
+    transition: width 0.8s ease;
+  }
+
+  &.done .fill {
+    background: #3ecf6e;
+  }
+
+  &.failed .fill {
+    background: var(--warn, #e0473a);
+  }
+}

@@ -15,7 +15,23 @@ export interface StudioRun {
   endedAt?: string;
   ok?: boolean;
   log: string[];
+  /** What is running now (for the page) and the step's overall progress 0..1. */
+  phase?: string;
+  progress?: number;
 }
+
+type Phase = 'director' | 'assets' | 'stills' | 'clip' | 'render';
+const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', assets: '生成背景圖', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
+/** Each step's phases and their share of its progress bar (rough time shares). */
+const PLAN: Record<string, [Phase, number][]> = {
+  make: [['director', 0.35], ['assets', 0.3], ['stills', 0.1], ['clip', 0.25]],
+  design: [['director', 0.5], ['stills', 0.15], ['clip', 0.35]],
+  render: [['render', 1]],
+  layer: [['render', 1]],
+  clip: [['clip', 1]],
+};
+/** Seconds a phase usually takes when it prints nothing countable (its bar fills by time, never past 95 %). */
+const TYPICAL: Partial<Record<Phase, number>> = { director: 180, stills: 25 };
 
 const runs = new Map<string, StudioRun>();
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -63,38 +79,78 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
   const lang = opts.language && /^[a-z0-9-]+$/.test(opts.language) ? opts.language : undefined;
   const preview = `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --stills ${(song.duration * 0.18).toFixed(2)},${(song.duration * 0.45).toFixed(2)},${(song.duration * 0.8).toFixed(2)} --out ${q(join(dir, 'preview'))}`;
   const render = (layer?: string) => `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --out ${q(dir)}${layer ? ` --layer ${layer}` : ''} && rm -rf ${q(join(dir, 'render'))} ${q(join(dir, 'segments'))}`;
+  const mark = (p: Phase) => `echo '##PHASE ${p}'`;
   const cmd = {
     make: [
       `mkdir -p ${q(dir)}`,
+      mark('director'),
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --style-id emotional --tier still --history out/design-history.json${lang ? ` --language ${lang}` : ''}`,
+      mark('assets'),
       `npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still`,
+      mark('stills'),
       preview,
+      // the moving preview comes with the design: it is what the user judges before paying for the full render
+      mark('clip'),
+      clipCmd(),
     ],
     design: [
+      mark('director'),
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --design-only ${q(join(dir, 'shots.json'))} --history out/design-history.json${lang ? ` --design-language ${lang}` : ''}`,
+      mark('stills'),
       preview,
+      mark('clip'),
+      clipCmd(),
     ],
-    render: [render()],
-    layer: [render('text')],
-    clip: [clipCmd()],
+    render: [mark('render'), render()],
+    layer: [mark('render'), render('text')],
+    clip: [mark('clip'), clipCmd()],
   }[step];
   function clipCmd() {
-    // a short moving preview around the first chorus drop (the moment that sells the design), 15 or 30 s
-    const len = opts.seconds === 30 ? 30 : 15;
-    const t = existsSync(join(dir, 'treatment.json')) ? JSON.parse(readFileSync(join(dir, 'treatment.json'), 'utf8')) : {};
-    const drop = (t.moments ?? []).find((m: { kind: string; at: number }) => m.kind === 'drop')?.at ?? song.duration * 0.3;
-    const from = Math.max(0, Math.min(song.duration - len, drop - (len === 30 ? 10 : 5)));
-    const out = join(dir, `preview_${len}s.mp4`);
-    return `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --clip ${from.toFixed(2)},${(from + len).toFixed(2)} --out ${q(join(dir, 'clip'))} && mv ${q(join(dir, 'clip'))}/lyric-vj_vocal_*.mp4 ${q(out)} && rm -rf ${q(join(dir, 'clip'))}`;
+    // a 30 s moving preview from 10 s before the first chorus drop (the moment that sells the design); the treatment
+    // is read when the command runs, after the director wrote it
+    const len = 30;
+    return `node -e ${q(`const t=require(${JSON.stringify(join(dir, 'treatment.json'))});const d=(t.moments||[]).find(m=>m.kind==='drop');const from=Math.max(0,Math.min(${song.duration}-${len},(d?d.at:${song.duration * 0.3})-10));console.log(from.toFixed(2)+','+(from+${len}).toFixed(2))`)} > ${q(join(dir, 'clip-range.txt'))} && npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${q(join(dir, 'assets', 'assets.json'))} --start 0 --end ${end} --clip $(cat ${q(join(dir, 'clip-range.txt'))}) --out ${q(join(dir, 'clip'))} && mv ${q(join(dir, 'clip'))}/lyric-vj_vocal_*.mp4 ${q(join(dir, `preview_${len}s.mp4`))} && rm -rf ${q(join(dir, 'clip'))}`;
   }
   // a login shell: the image service keys live in the user's shell profile
   const child = spawn('zsh', ['-ic', cmd.join(' && ')], { cwd: process.cwd() });
+  const plan = PLAN[step] ?? [];
+  let phase: Phase | undefined;
+  let phaseAt = Date.now();
+  let images = 0;
+  let imagesDone = 0;
+  const share = (p: Phase) => plan.find(([x]) => x === p)?.[1] ?? 0;
+  const before = (p: Phase) => plan.slice(0, plan.findIndex(([x]) => x === p)).reduce((s, [, w]) => s + w, 0);
+  const setInner = (k: number) => phase && (run.progress = +(before(phase) + share(phase) * Math.min(0.99, Math.max(0, k))).toFixed(3));
   const push = (b: Buffer) => {
-    for (const line of b.toString().split(/\r|\n/)) if (line.trim()) run.log.push(line);
+    for (const line of b.toString().split(/\r|\n/)) {
+      if (!line.trim()) continue;
+      const m = /^##PHASE (\w+)/.exec(line);
+      if (m) {
+        phase = m[1] as Phase;
+        phaseAt = Date.now();
+        run.phase = PHASE_LABEL[phase];
+        setInner(0);
+        if (phase === 'assets') {
+          const t = existsSync(join(dir, 'treatment.json')) ? JSON.parse(readFileSync(join(dir, 'treatment.json'), 'utf8')) : { assets: [] };
+          images = (t.assets ?? []).filter((x: { kind: string }) => x.kind === 'image').length;
+        }
+        continue;
+      }
+      run.log.push(line);
+      if (phase === 'assets' && /^image /.test(line)) setInner(++imagesDone / Math.max(1, images));
+      const f = /frame (\d+)\/(\d+)/.exec(line);
+      if (f && (phase === 'clip' || phase === 'render')) setInner(Number(f[1]) / Math.max(1, Number(f[2])));
+    }
     if (run.log.length > 400) run.log.splice(0, run.log.length - 400);
   };
+  // phases that print nothing countable fill by their usual time
+  const tick = setInterval(() => {
+    if (run.endedAt) return clearInterval(tick);
+    const typical = phase && TYPICAL[phase];
+    if (typical) setInner(Math.min(0.95, (Date.now() - phaseAt) / 1000 / typical));
+  }, 1000);
   child.stdout.on('data', push);
   child.stderr.on('data', push);
-  child.on('close', (code) => Object.assign(run, { endedAt: new Date().toISOString(), ok: code === 0 }));
+  child.on('close', (code) => Object.assign(run, { endedAt: new Date().toISOString(), ok: code === 0, progress: code === 0 ? 1 : run.progress }));
   return undefined;
 }

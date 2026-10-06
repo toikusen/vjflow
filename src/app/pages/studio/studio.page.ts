@@ -16,7 +16,7 @@ interface Language {
 }
 
 interface StudioState {
-  run: { step: string; startedAt: string; endedAt?: string; ok?: boolean; log: string[] } | null;
+  run: { step: string; startedAt: string; endedAt?: string; ok?: boolean; log: string[]; phase?: string; progress?: number } | null;
   design: { language: string | null; font: string | null; concept: string; motif: string | null } | null;
   costUSD: number;
   previews: string[];
@@ -25,7 +25,7 @@ interface StudioState {
 }
 
 const POLL_MS = 3000;
-const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC' };
+const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '30 秒動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC' };
 
 /**
  * Studio: one song from confirmed timing to a finished VJ — generate the design (the director picks a design language
@@ -51,10 +51,19 @@ export class StudioPage {
     return this.languages().find((l) => l.id === id)?.name ?? id ?? '';
   });
   protected readonly stepLabel = STEP_LABEL;
+  protected readonly now = signal(Date.now());
+
+  /** Minutes:seconds since the run started. */
+  protected elapsed(startedAt: string, endedAt?: string) {
+    const s = Math.max(0, Math.round(((endedAt ? Date.parse(endedAt) : this.now()) - Date.parse(startedAt)) / 1000));
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
 
   constructor() {
     void this.load();
     const timer = setInterval(() => this.selected() && void this.refresh(), POLL_MS);
+    const clock = setInterval(() => this.now.set(Date.now()), 1000);
+    inject(DestroyRef).onDestroy(() => clearInterval(clock));
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
   }
 

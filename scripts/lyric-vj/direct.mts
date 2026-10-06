@@ -11,7 +11,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
-import { varyComposition } from '../../src/app/lyric-vj/compose';
+import { editorPass, varyComposition } from '../../src/app/lyric-vj/compose';
 import { FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS, MOTIF_RENDERS, MOTIF_VARIANTS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES, TECHNIQUES } from '../../src/app/lyric-vj/design';
@@ -400,6 +400,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
 }
 if (!result || result.errors.length) throw new Error('導演 3 次仍未通過驗證：\n' + result?.errors.join('\n'));
 result.fixes.push(...varyComposition(result.treatment, chorusSpans(structure)));
+result.fixes.push(...editorPass(result.treatment, sameLines(song)));
 // second call: the design system and motif for these shots
 // saved so a failed design pass can be retried alone: --design-only <out>/shots.json
 writeFileSync(join(out, 'shots.json'), JSON.stringify({ ...result.treatment, design: { ...result.treatment.design, language: chosen } }, null, 1));

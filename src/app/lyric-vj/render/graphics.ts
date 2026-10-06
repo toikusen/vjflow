@@ -31,9 +31,9 @@ export type Layer = Base &
   (
     | { kind: 'fill'; color: Rgb; to?: Rgb; angle?: number }
     | { kind: 'paper'; color: Rgb; grain?: number }
-    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves'; color: Rgb; scale?: number; angle?: number; scroll?: number }
+    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves' | 'genkou'; color: Rgb; scale?: number; angle?: number; scroll?: number }
     | { kind: 'photo'; mode: 'full' | 'inset' | 'polaroid' | 'band' | 'circle'; asset?: string; x?: number; y?: number; w?: number; h?: number; tilt?: number; tint?: Rgb; frame?: Rgb; drift?: number }
-    | { kind: 'frame'; type: 'border' | 'filmstrip' | 'viewfinder' | 'brackets' | 'window'; color: Rgb; inset?: number; label?: string }
+    | { kind: 'frame'; type: 'border' | 'filmstrip' | 'viewfinder' | 'brackets' | 'window' | 'ticket'; color: Rgb; inset?: number; label?: string }
     | { kind: 'rings'; x?: number; y?: number; count?: number; color: Rgb; radius?: number; spin?: number; dashed?: boolean }
     | { kind: 'sparkles'; count?: number; color: Rgb; size?: number; seed?: number }
     | { kind: 'sunburst'; x?: number; y?: number; color: Rgb; rays?: number; spin?: number }
@@ -440,6 +440,15 @@ function pattern(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'patte
     case 'checker':
       for (let i = 0; i < span[0]; i++) for (let j = 0; j < span[1]; j++) if ((i + j) % 2) ctx.fillRect(i * s, j * s, s, s);
       return;
+    case 'genkou':
+      // genkō yōshi (manuscript paper): square cells in vertical columns, a gutter between columns
+      ctx.lineWidth = 2;
+      for (let i = 0; i < span[0]; i++) {
+        const x = i * s * 1.25;
+        ctx.strokeRect(x, 0, s, H * 2 + s * 2);
+        for (let j = 0; j < span[1]; j++) ctx.strokeRect(x, j * s, s, s);
+      }
+      return;
     case 'waves':
       // seigaiha: overlapping concentric arcs in rows, each row offset half a module
       ctx.lineWidth = Math.max(2, s * 0.05);
@@ -561,6 +570,37 @@ function frame(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'frame' 
         ctx.lineTo(W / 2 + s * bw, H / 2 + bh);
         ctx.lineTo(W / 2 + s * (bw - 40), H / 2 + bh);
         ctx.stroke();
+      }
+      return;
+    }
+    case 'ticket': {
+      // a ticket stub: rounded card with notched sides and a perforated line, label printed on the stub
+      const x = m * 2;
+      const y = m * 3;
+      const w = W - 4 * m;
+      const h = H - 6 * m;
+      ctx.lineWidth = 5;
+      roundRect(ctx, x, y, w, h, 28);
+      ctx.stroke();
+      for (const sx of [x, x + w]) {
+        ctx.beginPath();
+        ctx.arc(sx, y + h / 2, 34, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.setLineDash([10, 12]);
+      ctx.beginPath();
+      ctx.moveTo(x + w * 0.78, y + 20);
+      ctx.lineTo(x + w * 0.78, y + h - 20);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (l.label) {
+        ctx.save();
+        ctx.translate(x + w * 0.89, y + h / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.font = '700 40px "Space Mono", monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(l.label, 0, 14);
+        ctx.restore();
       }
       return;
     }

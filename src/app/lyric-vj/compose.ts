@@ -122,3 +122,48 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
   }
   return fixes;
 }
+
+/**
+ * Editor pass after the director (rules after JIZURA's unify mode, MIT): directional pairs alternate, strong
+ * entrances are rationed, and a repeated lyric replays its first occurrence's entrance, exit and reveal. `same` maps a
+ * repeated cue id to its first occurrence (structure.ts sameLines). Returns the repairs made.
+ */
+export function editorPass(t: TreatmentV3, same: Map<string, string>): string[] {
+  const fixes: string[] = [];
+  // directional pairs alternate: consecutive stairs step from opposite sides, scatters rise then fall
+  let stair: string | undefined;
+  let dir: string | undefined;
+  for (const s of t.shots) {
+    if (s.template === 'stair') {
+      if (s.params['side'] === stair) {
+        s.params['side'] = stair === 'left' ? 'right' : 'left';
+        fixes.push(`${s.id} 階梯方向和上一個相反`);
+      }
+      stair = s.params['side'] as string;
+    }
+    if (s.template === 'scatter') {
+      if (s.params['direction'] === dir) s.params['direction'] = dir === 'up' ? 'down' : 'up';
+      dir = s.params['direction'] as string;
+    }
+  }
+  // strong entrances are rationed: two slams/pops in a row only when the second line carries emphasis
+  const start = new Map(t.cues.map((c) => [c.cueId, c]));
+  const strong = (e: string) => e === 'slam' || e === 'pop';
+  let prevStrong = false;
+  for (const c of t.cues) {
+    if (strong(c.enter) && prevStrong && !(c.emphasis ?? []).length && !same.has(c.cueId)) {
+      c.enter = 'wipe';
+      fixes.push(`${c.cueId} 連續強烈進場，改為 wipe`);
+    }
+    prevStrong = strong(c.enter);
+  }
+  // a repeated lyric replays its first occurrence
+  for (const [id, src] of same) {
+    const c = start.get(id);
+    const s0 = start.get(src);
+    if (!c || !s0) continue;
+    if (c.enter !== s0.enter || c.exit !== s0.exit || c.reveal !== s0.reveal) fixes.push(`${id} 重複歌詞沿用 ${src} 的進出場`);
+    Object.assign(c, { enter: s0.enter, exit: s0.exit, reveal: s0.reveal, accents: s0.accents && [...s0.accents] });
+  }
+  return fixes;
+}

@@ -82,3 +82,19 @@ describe('flush-left languages', () => {
     expect(t.shots.map((s) => s.params['align'] ?? s.params['position'])).toEqual(['left', 'left', 'left']);
   });
 });
+
+describe('editorPass', () => {
+  it('alternates stair sides, rations strong entrances, replays repeated lines', async () => {
+    const { editorPass } = await import('./compose');
+    const t = tr([shot('a', 10, 'stair', { side: 'left' }), shot('b', 20, 'stair', { side: 'left' })]);
+    t.cues = [
+      { cueId: 'c1', shot: 'a', enter: 'slam', exit: 'cut', reveal: 'line' },
+      { cueId: 'c2', shot: 'a', enter: 'pop', exit: 'fade', reveal: 'line' },
+      { cueId: 'c3', shot: 'b', enter: 'fade', exit: 'fade', reveal: 'word' },
+    ] as TreatmentV3['cues'];
+    editorPass(t, new Map([['c3', 'c1']]));
+    expect(t.shots.map((s) => s.params['side'])).toEqual(['left', 'right']);
+    expect(t.cues[1].enter).toBe('wipe');
+    expect(t.cues[2]).toMatchObject({ enter: 'slam', exit: 'cut', reveal: 'line' });
+  });
+});

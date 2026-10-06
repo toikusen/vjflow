@@ -105,8 +105,27 @@ export const beatCut: TemplateRenderer = {
       });
       holder.visible = false;
       group.add(holder);
-      return { holder, gs, from: startOf(k), to: k + 1 < pieces.length ? startOf(k + 1) : rt.exitAt };
+      tagSource(gs, text, piece.from);
+      return { holder, gs, from: startOf(k), to: k + 1 < pieces.length ? startOf(k + 1) : rt.exitAt, recap, size, tilt: (lay.tilt * Math.PI) / 180 };
     });
+    // morph into the recap (after JIZURA's morph, MIT): the last word's glyphs glide from where they were into their
+    // place in the whole line; the rest of the line fades in around them
+    const MORPH = 0.35;
+    const last = big[big.length - 1];
+    const before = big[big.length - 2];
+    const morphFrom = new Map<Glyph, { x: number; y: number; s: number }>();
+    if (last?.recap && before) {
+      for (const g of last.gs) {
+        const p = before.gs.find((q) => q.src !== undefined && q.src === g.src);
+        if (!p) continue;
+        // the earlier glyph's position in the recap holder's space (both holders sit in `group`)
+        const c = Math.cos(before.tilt);
+        const sn = Math.sin(before.tilt);
+        const wx = before.holder.position.x + p.x * c - p.y * sn;
+        const wy = before.holder.position.y + p.x * sn + p.y * c;
+        morphFrom.set(g, { x: wx - last.holder.position.x, y: wy - last.holder.position.y, s: before.size / last.size });
+      }
+    }
     // the whole line, small, at the bottom: readable from the start
     const small = whole ? [] : makeGlyphs(text.replace(/\s+/g, ' '), { family: rt.fonts.body, weight: 700, size: 64, shadow: true }, color(rt.palette.text, 0.95), 4);
     placeRow(small, 0, -H / 2 + 120, 4);
@@ -128,6 +147,19 @@ export const beatCut: TemplateRenderer = {
           const p = easeOutCubic(clamp01((t - b.from) / 0.12));
           b.holder.scale.setScalar(1.15 - 0.15 * p);
           const out = t > rt.exitAt ? 1 - clamp01((t - rt.exitAt) / rt.exitDur) : 1;
+          if (b === last && morphFrom.size) {
+            b.holder.scale.setScalar(1);
+            const k = easeOutCubic(clamp01((t - b.from) / MORPH));
+            for (const g of b.gs) {
+              const m0 = morphFrom.get(g);
+              if (m0) {
+                g.mesh.position.set(m0.x + (g.x - m0.x) * k, m0.y + (g.y - m0.y) * k, 0);
+                g.mesh.scale.setScalar(m0.s + (1 - m0.s) * k);
+                g.mesh.material.opacity = out;
+              } else g.mesh.material.opacity = clamp01((t - b.from - MORPH * 0.4) / (MORPH * 0.6)) * out;
+            }
+            continue;
+          }
           b.gs.forEach((g) => (g.mesh.material.opacity = Math.min(1, p * 2) * out));
         }
         small.forEach((g: Glyph) => {

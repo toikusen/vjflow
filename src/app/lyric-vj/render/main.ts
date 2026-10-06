@@ -17,6 +17,8 @@ await new Promise<void>((resolve, reject) => {
 });
 
 const job: RenderJob = await (await fetch(new URLSearchParams(location.search).get('job')!)).json();
+// a transparent page for the lyric layer
+if (job.layer === 'text') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 window.vjReady = engine.init();
 window.renderAt = (t) => engine.renderAt(t);

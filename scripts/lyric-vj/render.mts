@@ -31,6 +31,7 @@ const { values: a } = parseArgs({
     logo: { type: 'string' }, // group logo image (PNG with alpha)
     medium: { type: 'string' }, // override the treatment's medium (medium.ts)
     clip: { type: 'string' }, // 'a,b': render only this part of the window (previews)
+    layer: { type: 'string' }, // text | back: one compositing layer (text = ProRes 4444 with alpha)
   },
 });
 const ROOT = process.cwd();
@@ -66,7 +67,10 @@ const job: RenderJob = {
   treatment: checked.treatment, assets,
   fonts: { family: a.font, display: a['font-display'], body: a['font-body'], script: a['font-script'] },
   meta: { ...splitSongTitle(song.title), logo: a.logo ? url(a.logo) : undefined },
+  layer: a.layer === 'text' || a.layer === 'back' ? a.layer : undefined,
 };
+const alpha = job.layer === 'text';
+const ext = alpha ? 'mov' : 'mp4';
 writeFileSync(join(out, 'job.json'), JSON.stringify(job));
 
 await esbuild.build({
@@ -95,7 +99,7 @@ async function openPage(): Promise<Page> {
   await page.waitForSelector('body[data-ready="1"]', { timeout: 120_000 });
   return page;
 }
-const shoot = (page: Page, type: 'jpeg' | 'png') => page.locator('#stage').screenshot({ type, ...(type === 'jpeg' ? { quality: 92 } : {}) });
+const shoot = (page: Page, type: 'jpeg' | 'png') => page.locator('#stage').screenshot({ type, ...(type === 'jpeg' ? { quality: 92 } : { omitBackground: true }) });
 
 try {
   if (a.stills) {
@@ -126,15 +130,18 @@ try {
     const parts = await Promise.all(
       bounds.slice(0, -1).map(async (f0, k) => {
         const f1 = bounds[k + 1];
-        const file = join(segDir, `seg_${k}.mp4`);
+        const file = join(segDir, `seg_${k}.${ext}`);
         const page = await openPage();
-        const ff = spawn('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
-          '-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-maxrate', '16M', '-bufsize', '32M', '-pix_fmt', 'yuv420p', // grain is incompressible: cap the rate
-           '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
+        // the lyric layer keeps its alpha: PNG frames into ProRes 4444
+        const enc = alpha
+          ? ['-c:v', 'prores_ks', '-profile:v', '4444', '-pix_fmt', 'yuva444p10le']
+          : ['-c:v', 'libx264', '-preset', 'medium', '-crf', '19', '-maxrate', '16M', '-bufsize', '32M', '-pix_fmt', 'yuv420p']; // grain is incompressible: cap the rate
+        const ff = spawn('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', alpha ? 'png' : 'mjpeg', '-i', '-',
+          ...enc, '-r', String(fps), file], { stdio: ['pipe', 'inherit', 'inherit'] });
         for (let f = f0; f < f1; f++) {
           if (f % 60 === 0 && statfsSync(out).bavail * statfsSync(out).bsize < 400e6) throw new Error('磁碟可用空間不足 400MB，停止渲染');
           await page.evaluate((x) => window.renderAt(x), range.start + f / fps); // time from the frame index: no drift
-          ff.stdin.write(await shoot(page, 'jpeg'));
+          ff.stdin.write(await shoot(page, alpha ? 'png' : 'jpeg'));
           if (++rendered % fps === 0) status.stage('render', { done: rendered });
           if (k === 0 && f % fps === 0) process.stdout.write(`\r  frame ${f}/${f1} (${((Date.now() - began) / 1000).toFixed(0)}s)`);
         }
@@ -147,13 +154,13 @@ try {
     console.log();
     const list = join(segDir, 'list.txt');
     writeFileSync(list, parts.map((p) => `file '${resolve(p)}'`).join('\n'));
-    const silent = join(out, 'video_silent.mp4');
+    const silent = join(out, `video_silent.${ext}`);
     await run('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
     rmSync(segDir, { recursive: true });
 
     const len = range.end - range.start;
     const tag = `${Math.round(range.start)}-${Math.round(range.end)}s`;
-    const vocal = join(out, `lyric-vj_vocal_${tag}.mp4`);
+    const vocal = join(out, `lyric-vj_${job.layer ? `${job.layer}_` : ''}vocal_${tag}.${ext}`);
     await mux(silent, song.audio.mix, vocal, 0, range.start, len);
     const outputs = [vocal];
     let offsetMs: number | undefined;
@@ -193,7 +200,7 @@ async function mux(video: string, audio: string, file: string, offset: number, s
   const pre = offset > 0 ? `adelay=${(offset * 1000).toFixed(1)}:all=1,` : '';
   const af = `${pre}atrim=start=${start + Math.max(0, -offset)}:duration=${length},asetpts=PTS-STARTPTS`;
   await run('ffmpeg', ['-loglevel', 'error', '-y', '-i', video, '-i', audio, '-map', '0:v', '-map', '1:a', '-af', af,
-    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-shortest', '-movflags', '+faststart', file]);
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-shortest', ...(file.endsWith('.mp4') ? ['-movflags', '+faststart'] : []), file]);
 }
 
 function run(cmd: string, args: string[]) {

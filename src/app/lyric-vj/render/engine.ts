@@ -86,6 +86,8 @@ export interface RenderJob {
   fonts?: FontChoice;
   /** Song identity for title cards; `logo` is an image URL (the group logo upload, later). */
   meta?: { title: string; artist: string; logo?: string };
+  /** One layer only, for compositing in VJ software: 'text' = lyrics on transparency, 'back' = everything else. */
+  layer?: 'text' | 'back';
 }
 
 export interface CueMetric {
@@ -270,7 +272,7 @@ export class LyricVjEngine {
   private gradient: THREE.Texture;
 
   constructor(canvas: HTMLCanvasElement, private job: RenderJob) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: job.layer === 'text' });
     this.renderer.setPixelRatio(1);
     this.renderer.localClippingEnabled = true; // handwrite reveals glyphs with clip planes
     this.renderer.setSize(W, H, false);
@@ -782,6 +784,15 @@ export class LyricVjEngine {
       (this.ghostPass.uniforms['uColA'].value as THREE.Color).set(chroma[0]);
       (this.ghostPass.uniforms['uColB'].value as THREE.Color).set(chroma[1]);
     }
+    if (this.job.layer === 'text') {
+      // the lyrics alone on transparency (their own colour treatment; grain and grading belong to the back layer)
+      this.renderer.setRenderTarget(null);
+      this.renderer.setClearColor(0x000000, 0);
+      this.renderer.clear();
+      this.renderer.render(this.textScene, this.camera);
+      return;
+    }
+    if (this.job.layer === 'back') this.textRoot.visible = this.echoRoot.visible = false;
     this.composer.render();
   }
 

@@ -38,7 +38,9 @@ const { values: a } = parseArgs({
     'exclude-ref': { type: 'string' }, // a database song's own VJ must not be its reference
     'title-cards': { type: 'string', default: 'ends' }, // none | ends | all (the user's choice)
     'design-only': { type: 'string' }, // existing treatment: rewrite only its design system
-    history: { type: 'string', default: 'out/design-history.json' }, // designs of the songs made before: the next one must differ
+    history: { type: 'string', default: 'out/design-history.json' },
+    language: { type: 'string' }, // the user's pick: build the song in this design language
+    'design-language': { type: 'string' }, // with --design-only: redo the design in another language // designs of the songs made before: the next one must differ
     'keep-assets': { type: 'string' }, // existing treatment: rewrite shots/cues/design but keep its generated assets
   },
 });
@@ -230,7 +232,7 @@ const db = a.db ? references(loadDb(a.db).filter((v) => v.video_id !== a['exclud
 // the songs made before: this one must not look like them (another system, another font and medium)
 const history: DesignRecord[] = existsSync(a.history!) ? JSON.parse(readFileSync(a.history!, 'utf8')) : [];
 const recent = history.filter((r) => r.song !== song.title).slice(-3);
-const allowedLanguages = availableLanguages(recent);
+const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : availableLanguages(recent);
 const recentText = recent.length ? recent.map((r) => `- ${r.song}：${r.language ? `${LANGUAGES[r.language].name}（${r.language}）` : r.system}、字型 ${r.font}、媒材 ${r.medium ?? '—'}${r.motif ? `、主題物件 ${r.motif}` : ''}`).join('\n') : '（無）';
 const SYSTEMS_TEXT = `設計語言（language，最重要的決定）：每首歌要像不同設計師做的。先依這首歌的個性選一種設計語言，鏡頭只能用它的模板。
 ${(Object.keys(LANGUAGES) as LanguageId[]).map((k) => `- ${k}（${LANGUAGES[k].name}）${allowedLanguages.includes(k) ? '' : '【最近已用過，這首不可選】'}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}`).join('\n')}
@@ -339,7 +341,8 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
 
 if (a['design-only']) {
   const prev = JSON.parse(readFileSync(a['design-only'], 'utf8')) as TreatmentV3;
-  const { checked, usage: u } = await designPass(prev, prev.design?.language ?? 'neon-stage');
+  const lang = (a['design-language'] && a['design-language'] in LANGUAGES ? a['design-language'] : prev.design?.language ?? 'neon-stage') as LanguageId;
+  const { checked, usage: u } = await designPass(prev, lang);
   writeFileSync(join(out, 'treatment.json'), JSON.stringify(checked.treatment, null, 1));
   const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
   const costUSD = +((u.input * pin + u.output * pout) / 1e6).toFixed(3);

@@ -6,7 +6,7 @@ import { CueStyle, Palette, ParamValue, Shot } from '../treatment';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, hash } from './glyphs';
 
 /** Text shows this long before the voice so it is readable on the first sung syllable. */
-export const LEAD = 0.12;
+export const LEAD = 0.2; // shown a little before the voice so it is read as it is sung (JIZURA typesetting: 0.2 s)
 export const EXIT_SEC = 0.28;
 
 export interface CueRuntime {

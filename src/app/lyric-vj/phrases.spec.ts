@@ -22,3 +22,11 @@ describe('phrases', () => {
     expect(chunks('先にきっと', 3)).toEqual(['先にきっと']); // too short to split
   });
 });
+
+describe('kinsoku', () => {
+  it('never starts a phrase with small kana or punctuation, never cuts a kanji run', () => {
+    const p = phrases('第六感、六感またがって');
+    expect(p.some((x) => /^[、ー]/.test(x))).toBe(false);
+    expect(p.join('|')).not.toMatch(/六\|感/);
+  });
+});

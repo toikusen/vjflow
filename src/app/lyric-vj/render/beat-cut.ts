@@ -74,14 +74,19 @@ export const beatCut: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const text = rt.cue.text;
     // pieces cut in when they are sung; without audio-matched character times the line is shown whole
-    const pieces = rt.cue.charTimed && rt.cue.charStarts ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [{ text: text.trim(), from: 0, at: rt.showFrom }];
+    const cut = rt.cue.charTimed && rt.cue.charStarts ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [{ text: text.trim(), from: 0, at: rt.showFrom }];
+    // recap: once the last word is sung, the whole line comes back big while it still has time to be read
+    const lastSung = rt.cue.charStarts?.[rt.cue.charStarts.length - 1] ?? rt.exitAt;
+    const recapAt = lastSung + 0.3;
+    const pieces = cut.length > 1 && rt.exitAt - recapAt >= 0.9 && recapAt > cut[cut.length - 1].at + MIN_HOLD ? [...cut, { text: text.replace(/\s+/g, ' ').trim(), from: 0, at: recapAt }] : cut;
     const startOf = (k: number) => pieces[k].at;
     const whole = pieces.length === 1;
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
     const group = new THREE.Group();
     const seed = Math.floor(hash(rt.cue.start, 17) * 4);
     const big = pieces.map((piece, k) => {
-      const lay = whole ? LAYOUTS[0] : LAYOUTS[(k + seed) % LAYOUTS.length];
+      const recap = k === pieces.length - 1 && pieces.length > cut.length;
+      const lay = whole || recap ? LAYOUTS[0] : LAYOUTS[(k + seed) % LAYOUTS.length];
       const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
       const w200 = [...piece.text].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
       // fits the layout width, and never wider than the frame (minus margins) even at the floor size

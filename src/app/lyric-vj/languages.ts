@@ -26,6 +26,8 @@ export interface DesignLanguage {
   native: string;
   /** Lyric glyph treatment: a hard dark offset copy (fraction of the glyph size); lyrics set flush left. */
   text?: { ghost?: [number, number]; left?: boolean };
+  /** Drawings per second for type and graphics motion (12 = on twos): the hand-made feel; absent = every frame. */
+  koma?: number;
   /** Whether the song's program-drawn motif (motif.ts) belongs in this language. */
   motif: boolean;
   /** What kind of song it suits. */
@@ -34,6 +36,7 @@ export interface DesignLanguage {
 
 export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
   silkscreen: {
+    koma: 12,
     text: { ghost: [0.025, 0.018] },
     name: '絲網海報',
     essence: '一張正在被印出來的旅行海報：4–6 色不透明平塗油墨，一色一層，天空用「階梯色帶」代替漸層，每層有 1–3 px 套印偏移，紙色本身是最亮的顏色。',
@@ -49,6 +52,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '旅行、季節、城市、青春、晴朗或懷舊的歌',
   },
   risograph: {
+    koma: 12,
     text: { ghost: [0.04, 0.03] },
     name: '孔版印刷',
     essence: '2–3 色半透明螢光特色墨疊印在暖白紙上：兩色重疊變出第三色，每個版各自偏移幾 px，中間調用網點，大面積平塗與大量留白。',
@@ -64,6 +68,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '獨立、可愛、文青、元氣、有點古怪的偶像歌',
   },
   dossier: {
+    koma: 12,
     text: { ghost: [0.07, 0.06] },
     name: '網點檔案',
     essence: '一份復古印刷的案件檔案：米色檔案紙、2–3 色疊印網點、巨大粗標題帶錯位陰影、橡皮章、編號、檔案標籤。嚴肅的格式，內容可以很荒謬。',
@@ -108,6 +113,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '孤獨、網路、深夜、未來、機械感、內省的歌',
   },
   cel80s: {
+    koma: 12,
     name: '80 年代賽璐璐',
     essence: '黃金年代 OVA 的質感：噴槍漸層的夜景背景、霓虹透過光、濕地反射，播放在錄影帶與 CRT 上（色差暈染、掃描線、暗角）。',
     not: '不是現代萌系動畫、不是向量插畫、不是膠片顆粒（這是錄影帶）。',
@@ -137,6 +143,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '元氣、應援、MIX 多、派對感強的偶像歌',
   },
   ukiyoe: {
+    koma: 12,
     name: '浮世繪',
     essence: '一張江戶木版畫：和紙、細雙框、分版平塗、黑色主版線、輕微套印偏移、天空與水用暈染（bokashi），霞（橫向長帶）分隔遠近，紅色落款。',
     not: '不是水墨、不是動畫賽璐璐：沒有光影立體感，深度只來自橫向分層與霞帶。',
@@ -151,6 +158,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '和風、四季、祭典、物語、古典感的歌',
   },
   papercut: {
+    koma: 12,
     text: { ghost: [0.04, 0.04] },
     name: '剪紙',
     essence: '一切都是剪刀剪出來的紙，平貼在另一張紙上：紅紙是主角，細節只來自剪掉的地方，紙有厚度投下細影；夜晚時光從背後透過剪紙。',
@@ -166,6 +174,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '喜慶、祭典、傳統、熱烈、紅色主題的歌',
   },
   crayon: {
+    koma: 8,
     name: '蠟筆繪本',
     essence: '一頁正在被畫出來的繪本：粗紙上的蠟筆筆觸，水彩薄刷揭露蠟筆藏住的東西，一秒 8–12 張的抖動。',
     not: '不是乾淨向量、不是水彩寫實：線條要抖、紙齒要看得到。',

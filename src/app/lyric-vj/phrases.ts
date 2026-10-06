@@ -19,6 +19,12 @@ export function phraseBoundaries(text: string): Set<number> {
     prevWord = !isSpace;
   }
   out.add(pos);
+  // kinsoku: no phrase starts with small kana, a long mark or closing punctuation, and a kanji run is never cut
+  // (六|感 was a separate "word" to the segmenter)
+  const cs = [...text];
+  const NO_HEAD = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮー〜、。，．,.!?！？）」』】]/;
+  const HAN = /\p{Script=Han}/u;
+  for (const b of [...out]) if (b > 0 && b < cs.length && (NO_HEAD.test(cs[b]) || (HAN.test(cs[b - 1]) && HAN.test(cs[b])))) out.delete(b);
   return out;
 }
 

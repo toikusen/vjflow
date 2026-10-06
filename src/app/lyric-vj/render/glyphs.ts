@@ -2,6 +2,7 @@
 // Textures are drawn at 2× with Canvas2D and cached per (char, font, size, style).
 import * as THREE from 'three';
 import { nearestWeight } from '../fonts';
+import { typeset } from '../typeset';
 
 export interface GlyphStyle {
   family: string;
@@ -26,12 +27,17 @@ export interface Glyph {
   dy?: number;
   /** Index of this character in the cue text (for word-by-word timing). */
   src?: number;
+  /** Extra space before this glyph in px (a Latin↔Japanese switch). */
+  gap?: number;
 }
 
 const SS = 2; // supersampling
 let defaultKana = 1;
 /** The song's kana scale, used when a style does not set its own (one design per render page). */
 export const setKanaScale = (k: number) => (defaultKana = k);
+/** Japanese typesetting rules (typeset.ts) on or off for the glyphs made next. */
+let typesetOn = true;
+export const setTypeset = (on: boolean) => (typesetOn = on);
 /** Hiragana (and its small forms); katakana and kanji keep full size. */
 const KANA = /[\u3041-\u3096\u309d\u309e]/;
 const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number }>();
@@ -110,30 +116,37 @@ function texture(char: string, s: GlyphStyle) {
 export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepresentation, tracking = 0): Glyph[] {
   const out: Glyph[] = [];
   let x = 0;
+  const ts = typesetOn ? typeset(text, s.size >= 110) : [...text].map(() => ({ scale: 1, advance: 1, gapBefore: 0 }));
   [...text].forEach((char, index) => {
     // the song's kana scale shapes display type (big words); body rows keep even sizes, or the rule shows everywhere
     const k = s.kanaScale ?? (s.size >= 130 ? defaultKana : 1);
     const small = k < 1 && KANA.test(char);
-    const cs = small ? { ...s, size: Math.round(s.size * k), embolden: s.embolden && s.embolden * k } : s;
+    // typesetting (typeset.ts) scales particles, a leading kanji and Latin; the kana scale wins where both apply
+    const f = small ? k : ts[index].scale;
+    const cs = f !== 1 ? { ...s, size: Math.round(s.size * f), embolden: s.embolden && s.embolden * f } : s;
     const t = texture(char, cs);
     const mat = new THREE.MeshBasicMaterial({ map: t.texture, color, transparent: true, depthTest: false, depthWrite: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.w, t.h), mat);
-    // a smaller glyph is centred lower so both sit on one baseline
-    out.push({ char, mesh, advance: t.advance, x: x + t.advance / 2, y: 0, index, dy: small ? -(s.size - cs.size) * 0.42 : 0 });
-    x += t.advance + tracking;
+    const advance = t.advance * ts[index].advance;
+    const gap = ts[index].gapBefore * s.size;
+    x += gap;
+    // glyphs of another size are centred so all sit on one baseline
+    out.push({ char, mesh, advance, x: x + advance / 2, y: 0, index, dy: -(s.size - cs.size) * 0.42, gap: gap || undefined });
+    x += advance + tracking;
   });
   return out;
 }
 
 export function rowWidth(glyphs: Glyph[], tracking = 0): number {
-  return glyphs.reduce((w, g) => w + g.advance, 0) + tracking * Math.max(0, glyphs.length - 1);
+  return glyphs.reduce((w, g, i) => w + g.advance + (i ? (g.gap ?? 0) : 0), 0) + tracking * Math.max(0, glyphs.length - 1);
 }
 
 /** Centres a row of glyphs on (cx, cy). */
 export function placeRow(glyphs: Glyph[], cx: number, cy: number, tracking = 0) {
   const w = rowWidth(glyphs, tracking);
   let x = cx - w / 2;
-  for (const g of glyphs) {
+  for (const [i, g] of glyphs.entries()) {
+    if (i) x += g.gap ?? 0;
     g.x = x + g.advance / 2;
     g.y = cy + (g.dy ?? 0);
     x += g.advance + tracking;

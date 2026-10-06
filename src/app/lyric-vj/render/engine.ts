@@ -531,6 +531,12 @@ export class LyricVjEngine {
     return { rt, group, glyphs };
   }
 
+  /** Motion time held to the design language's drawings per second (koma); cuts and visibility stay on real time. */
+  private koma(t: number): number {
+    const k = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].koma;
+    return k ? Math.floor(t * k + 1e-6) / k : t;
+  }
+
   /** Draws a custom scene into its render target; the target's texture then stands in for the plate. */
   private renderCustom(scene: CustomScene, t: number): THREE.Texture {
     this.sceneTarget ??= new THREE.WebGLRenderTarget(W, H);
@@ -605,7 +611,7 @@ export class LyricVjEngine {
       let i = beats.findIndex((b) => b > bt) - 1;
       if (i < -1) i = beats.length - 1;
       const since = i >= 0 ? bt - beats[i] : 10;
-      drawLook(this.gfx.ctx, this.job.treatment.graphics!, bt, { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
+      drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
         const tex = this.images.get(asset ?? shot.asset ?? '');
         return tex?.image as CanvasImageSource | undefined;
       });
@@ -629,7 +635,7 @@ export class LyricVjEngine {
       const lines = this.cueLayers.filter((c) => c.rt.shot.id === id);
       const busy = RENDERERS[s.template]?.standalone || lines.some(({ rt }) => t >= rt.showFrom - 0.5 && t <= rt.exitAt + rt.exitDur + 0.3);
       layer.group.visible = t >= s.start && t < s.end && busy;
-      if (layer.group.visible) layer.update(t, fx);
+      if (layer.group.visible) layer.update(this.koma(t), fx);
     }
     for (const e of this.echoes) {
       const on = t >= e.rt.showFrom && t <= e.rt.exitAt + e.rt.exitDur;
@@ -653,7 +659,7 @@ export class LyricVjEngine {
     for (const bar of this.bars) bar.position.y = bar.userData['side'] * (H / 2 + H * 0.1 - close * H * 0.12);
     for (const { rt, layer } of this.cueLayers) {
       layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== flash?.cueId;
-      if (layer.group.visible) layer.update(t, fx);
+      if (layer.group.visible) layer.update(this.koma(t), fx);
     }
     // heavy beats in loud sections: the lyrics jump with the kick (strength from the song's kick analysis)
     const kick = this.kickAt(t, mfx.level);

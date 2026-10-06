@@ -403,10 +403,37 @@ export class LyricVjEngine {
         this.shotLayers.set(shot.id, layer);
       }
     }
-    const styled = treatment.cues
+    const sorted = treatment.cues
       .map((style) => ({ style, cue: cues.find((c) => c.id === style.cueId)! }))
       .filter((x) => x.cue)
       .sort((a, b) => a.cue.start - b.cue.start);
+    // a line sung again straight away (いつまでも ×3) stays up as one line that pulses on each repeat: three cuts in
+    // three seconds could not be read
+    const norm = (x: string) => x.replace(/[\s、。,.!?！？「」]/g, '');
+    const repeats = new Map<string, number[]>();
+    const styled: typeof sorted = [];
+    for (const x of sorted) {
+      const prev = styled[styled.length - 1];
+      if (prev && norm(prev.cue.text) === norm(x.cue.text) && x.cue.start - prev.cue.end < 0.6) {
+        prev.cue = { ...prev.cue, end: x.cue.end };
+        repeats.set(prev.cue.id, [...(repeats.get(prev.cue.id) ?? []), x.cue.start]);
+      } else styled.push({ ...x });
+    }
+    // two lines sung back to back faster than either can be read are set together as one two-row line: the first
+    // stays up while the second is sung (word reveal follows the voice across both)
+    const quick = (c: TimelineCue) => c.end - c.start < [...c.text.replace(/\s/g, '')].length / 12 + 1;
+    for (let i = 0; i + 1 < styled.length; i++) {
+      const a = styled[i].cue;
+      const b = styled[i + 1].cue;
+      const chars = [...a.text.replace(/\s/g, '')].length + [...b.text.replace(/\s/g, '')].length;
+      if (!quick(a) || !quick(b) || b.start - a.end > 0.35 || chars > 26 || repeats.has(a.id) || repeats.has(b.id)) continue;
+      const aLen = [...a.text].length;
+      styled[i] = {
+        style: { ...styled[i].style, rows: [aLen + 1], reveal: 'word' },
+        cue: { ...a, text: `${a.text} ${b.text}`, end: b.end, charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
+      };
+      styled.splice(i + 1, 1);
+    }
     // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
     const lead = this.job.tempo !== undefined && this.job.tempo < 95 ? 0.35 : LEAD;
     // a line shows ahead of its voice, but never while the previous line's last word is still being sung
@@ -426,7 +453,9 @@ export class LyricVjEngine {
       const nextShow = next ? showAt[i + 1] : Infinity;
       const len = cue.end - cue.start;
       const pace = Math.min(1, Math.max(0.35, len / 2)); // short lines enter and leave faster so they stay readable
-      const exitSec = EXIT_SEC * pace;
+      // a rushed line leaves in a blink: its exit animation would eat the little time it has
+      const rushedLine = len < [...cue.text.replace(/\s/g, '')].length / 12 + 1;
+      const exitSec = rushedLine ? 0.08 : EXIT_SEC * pace;
       // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
       const exitAt = Math.min(cue.end + HOLD_SEC, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
@@ -440,7 +469,7 @@ export class LyricVjEngine {
         showFrom: showAt[i],
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
-        accentTimes: (style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined),
+        accentTimes: [...(style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined), ...(repeats.get(cue.id) ?? [])].sort((a, b) => a - b),
         pace,
         rushed,
       };

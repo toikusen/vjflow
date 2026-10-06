@@ -24,6 +24,8 @@ export interface CueRuntime {
   accentTimes: number[];
   /** 0.35..1: motion speed-up for short lines (1 = a line of ≥ 2 s). */
   pace: number;
+  /** The line is sung faster than it can be read (chars / 12 + 1 s): show it whole at once, no staggering. */
+  rushed?: boolean;
 }
 
 /** Per-frame effects templates can request from the post stack. */

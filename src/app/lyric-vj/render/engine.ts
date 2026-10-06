@@ -388,8 +388,10 @@ export class LyricVjEngine {
       // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
       const exitAt = Math.min(cue.end + HOLD_SEC, nextShow - exitSec - 0.02);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
+      // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
+      const rushed = cue.end - cue.start < [...cue.text.replace(/\s/g, '')].length / 12 + 1;
       const rt: CueRuntime = {
-        cue, style, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
+        cue, style: rushed && style.reveal === 'word' ? { ...style, reveal: 'line' as const } : style, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
         // an English line is set in the paired Latin face
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: showAt[i],
@@ -397,6 +399,7 @@ export class LyricVjEngine {
         exitDur: Math.max(0.08, Math.min(exitSec, nextShow - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
         accentTimes: (style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined),
         pace,
+        rushed,
       };
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);

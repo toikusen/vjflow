@@ -74,7 +74,7 @@ export const beatCut: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const text = rt.cue.text;
     // pieces cut in when they are sung; without audio-matched character times the line is shown whole
-    const cut = rt.cue.charTimed && rt.cue.charStarts ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [{ text: text.trim(), from: 0, at: rt.showFrom }];
+    const cut = rt.cue.charTimed && rt.cue.charStarts && !rt.rushed ? timedPieces(cutPieces(text), rt.cue.charStarts, rt.showFrom, rt.exitAt) : [{ text: text.trim(), from: 0, at: rt.showFrom }];
     // recap: once the last word is sung, the whole line comes back big while it still has time to be read
     const lastSung = rt.cue.charStarts?.[rt.cue.charStarts.length - 1] ?? rt.exitAt;
     const recapAt = lastSung + 0.3;

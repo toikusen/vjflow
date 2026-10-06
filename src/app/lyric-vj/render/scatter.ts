@@ -62,7 +62,7 @@ export const scatter: TemplateRenderer = {
       glyphs.forEach((gl) => g.add(gl.mesh));
       root.add(g);
       // each phrase enters a beat after the previous one
-      const prt: CueRuntime = { ...rt, showFrom: rt.showFrom + i * 0.16 * rt.pace };
+      const prt: CueRuntime = { ...rt, showFrom: rt.showFrom + (rt.rushed ? 0 : i * 0.16 * rt.pace) };
       return { g, glyphs, prt, isKey, x, depth: 0.4 + hash(i, 3) * 0.6 };
     });
 

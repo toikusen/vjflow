@@ -53,7 +53,7 @@ export type Layer = Base &
     | { kind: 'mosaic'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number }
     | { kind: 'ink'; color: Rgb; count?: number; size?: number; seed?: number }
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
-    | { kind: 'code'; src: string; lyric?: Rect }
+    | { kind: 'code'; src: string; lyric?: Rect; cuts?: number[] }
   );
 
 export interface LookSection {
@@ -108,14 +108,26 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   ctx.restore();
 }
 
-type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; hash: typeof hash }) => void;
+/** The camera shot a code layer is in: shots are cut at `cuts` (song seconds), synced with the lyric layouts. */
+export interface CodeCam { index: number; start: number; end: number; progress: number; count: number }
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; cam: CodeCam; hash: typeof hash }) => void;
+
+/** The shot at t among cut times (sorted); before the first cut is shot 0. */
+export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
+  let index = 0;
+  while (index < cuts.length && cuts[index] <= t) index++;
+  const start = index ? cuts[index - 1] : 0;
+  const stop = index < cuts.length ? cuts[index] : end;
+  const span = Number.isFinite(stop) ? stop - start : 1;
+  return { index, start, end: stop, progress: Math.min(1, Math.max(0, (t - start) / Math.max(0.001, span))), count: cuts.length + 1 };
+}
 const compiled = new Map<string, CodeDraw>();
 const reported = new Set<string>();
 /** Reports a code layer's failure or slowness once per message (the render's console, read by codelayer.mts). */
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect }, t: number, age: number, beat: Beat) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; cuts?: number[] }, t: number, age: number, beat: Beat) {
   let fn = compiled.get(l.src);
   if (!fn) {
     try {
@@ -129,7 +141,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect 
   const t0 = performance.now();
   ctx.save();
   try {
-    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, hash });
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, cam: camAt(l.cuts ?? [], t), hash });
   } catch (e) {
     report(`runtime: ${(e as Error).message}`);
   }

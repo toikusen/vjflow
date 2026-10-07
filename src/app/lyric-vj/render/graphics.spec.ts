@@ -56,3 +56,13 @@ describe('code layer', () => {
     expect(() => drawLook(stub([]), broken, 1, { since: 0, pulse: 0, index: 0 }, () => undefined)).not.toThrow();
   });
 });
+
+describe('camAt', () => {
+  it('finds the camera shot and how far into it t is', async () => {
+    const { camAt } = await import('./graphics');
+    expect(camAt([10, 20], 5)).toEqual({ index: 0, start: 0, end: 10, progress: 0.5, count: 3 });
+    expect(camAt([10, 20], 15).index).toBe(1);
+    expect(camAt([10, 20], 25)).toMatchObject({ index: 2, start: 20, progress: 1 });
+    expect(camAt([], 3).count).toBe(1);
+  });
+});

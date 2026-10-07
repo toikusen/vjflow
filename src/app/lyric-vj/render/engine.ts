@@ -412,8 +412,12 @@ export class LyricVjEngine {
           layer.group.updateMatrixWorld(true);
           const b = new THREE.Box3().setFromObject(layer.group);
           if (!b.isEmpty()) {
-            // the title takes dark or light type against what is behind it, like a line, and the background makes room
-            const backdrop = this.backdropAt(at, b)?.mean;
+            // the title takes dark or light type against what is behind it, like a line, and the background makes room;
+            // a long card spans several camera shots, so the backdrop is sampled across it and the type must read on all
+            const samples = [at, (at + shot.end) / 2, shot.end - 1.5].filter((x) => x >= from && x < shot.end).map((x) => this.backdropAt(x, b)?.mean).filter((x): x is string => !!x);
+            const lumas = samples.map(luma);
+            const darkType = Math.min(...lumas) > 1 - Math.max(...lumas);
+            const backdrop = samples.length ? samples[lumas.indexOf(darkType ? Math.min(...lumas) : Math.max(...lumas))] : undefined;
             const text = backdrop ? this.cuePalette(at, backdrop).text : treatment.styleAnchor.palette.text;
             if (text !== treatment.styleAnchor.palette.text) {
               this.textRoot.remove(layer.group);

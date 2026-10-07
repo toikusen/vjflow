@@ -25,10 +25,29 @@ const base = JSON.parse(readFileSync(join(a.dir!, 'treatment.json'), 'utf8'));
 for (const s of base.graphics.sections) s.layers = s.layers.filter((l: { kind: string }) => l.kind !== 'code');
 const sections: { start: number; layers: { kind: string }[]; text?: string }[] = base.graphics.sections;
 
+// camera cuts: with the lyric layouts (the shots), and every two bars through a long stretch without one, so the
+// background is edited like the type rather than one framing per section
+const cuts = (() => {
+  const shotCuts: number[] = base.shots.map((x: { start: number }) => x.start).filter((x: number) => x > 0.5);
+  const bars: number[] = song.downbeats ?? [];
+  const out: number[] = [];
+  const marks = [0, ...shotCuts, song.duration];
+  for (let i = 0; i + 1 < marks.length; i++) {
+    if (i) out.push(marks[i]);
+    if (marks[i + 1] - marks[i] > 6.5) {
+      const inside = bars.filter((b) => b > marks[i] + 2.5 && b < marks[i + 1] - 2.5);
+      for (let k = 3; k < inside.length; k += 4) out.push(inside[k]);
+    }
+  }
+  return out.map((x) => +x.toFixed(2)).sort((x, y) => x - y);
+})();
+
 const brief = {
   title: song.title, duration: +song.duration.toFixed(1), bpm: +song.tempo.toFixed(1),
   concept: base.concept, language: base.design.language, font: base.design.font,
   arc: base.arc, moments: base.moments,
+  cuts: cuts.map((t, i) => ({ shot: i + 1, at: t })),
+  titleCards: base.shots.filter((x: { template: string }) => x.template === 'title-card').map((x: { start: number; end: number }) => ({ from: x.start, to: x.end })),
   sections: sections.map((s, i) => ({ index: i, start: s.start, end: sections[i + 1]?.start ?? +song.duration.toFixed(1), lyricColor: s.text ?? 'auto', layers: s.layers.map((l, j) => ({ index: j, ...l })) })),
   lyrics: song.cues.map((c: { start: number; text: string }) => `${c.start.toFixed(1)} ${c.text}`),
 };
@@ -40,6 +59,7 @@ const RULES = `
 - f.t：歌曲秒數；f.age：本段開始後的秒數；f.w、f.h：1920、1080。
 - f.beat：{ since: 距上一拍秒數, pulse: 1→0 衰減的打拍力道, index: 第幾拍 }。BPM 和段落、高潮時間在下面的資料裡，可以直接寫死在程式裡。
 - f.lyric：此刻歌詞在畫面上的矩形 {x0,y0,x1,y1}（像素），沒有歌詞時是 null。歌詞會畫在你上面。
+- f.cam：此刻的鏡頭 { index, start, end, progress 0→1, count }。鏡頭在 cuts 的時間點硬切（index 0 是第一個切點之前），切點和歌詞版型換版同步。
 - f.hash(a, b)：決定性雜訊 [0,1)。
 規則：
 1. 完全決定性：只依 f 的值畫，不能用 Math.random、Date、requestAnimationFrame、全域狀態累積（每一格可能單獨被畫、也可能跳著畫）。
@@ -48,7 +68,13 @@ const RULES = `
 4. 要和整首歌的概念、語言、配色一致，跟著段落和能量變化：主歌克制、副歌和高潮（moments 的 drop/finale）全開、間奏要有明顯變化。
 5. 不要畫文字標題、歌名、人名。可以有裝飾性的字元或符號。
 6. 每一段決定要保留哪些原本的元件庫圖層（layers 的 index），以及你的圖層放在哪裡：order 是由下到上的順序，-1 代表你的圖層。第一個必須是原本的底色 fill/paper（index 0）。可以拿掉看起來像模板、和你的動畫衝突的圖層。
-7. 避開最常見的「AI 動態設計」樣子：瑞士網格加 UI 雜訊、時間碼、霓虹光暈、粒子場。要像這首歌的設計師才會想到的東西。`;
+7. 避開最常見的「AI 動態設計」樣子：瑞士網格加 UI 雜訊、時間碼、霓虹光暈、粒子場。要像這首歌的設計師才會想到的東西。
+8. 用鏡頭說故事，像設計師剪 MV：每個場景是一個比畫面大的「世界」，每個鏡頭（f.cam.index）用不同的取景看它——遠景交代、特寫一個細節、沿著場景橫移、俯視、推近、從低角度仰看——用 ctx.translate/scale/rotate 做，鏡頭內用 f.cam.progress 做連續的緩動運鏡（推、移、搖），切點上構圖要明顯改變，相鄰鏡頭不要同一種取景。
+9. 一段可以有好幾個鏡頭；長段落或重複的主歌可以換新場景。副歌回到同一個場景是好的記憶點，但每次副歌的鏡頭要不同、逐次加強，不能重複上一次副歌的取景。
+10. 運鏡時歌詞區（f.lyric）依然要清楚：特寫和推近時，細節多的東西放在歌詞區外。
+11. 不要在歌詞後面墊任何底板、卡片、薄霧或光暈（看起來笨重，使用者明確不要）：用構圖和運鏡讓出歌詞的位置。
+12. 轉場不要用滿版的純色卡片、色塊掃過畫面（大色塊會閃）：硬切，或用場景裡的東西帶過去（物件掠過鏡頭、鏡頭甩到下一個場景）。
+13. titleCards 是歌名卡出現的時段：這段時間背景的明暗不能翻轉（不能從深色場景切到淺色場景，反之亦然），否則歌名在某一邊會看不清楚。`;
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['idea', 'src', 'sections'],
@@ -81,8 +107,9 @@ function apply(r: Reply) {
   t.graphics.sections = sections.map((s, i) => {
     const order = r.sections.find((x) => x.index === i)?.order ?? [0, -1, ...s.layers.slice(1).map((_, j) => j + 1)];
     const field = order[0] === 0 ? order : [0, ...order.filter((x) => x !== 0)];
-    const layers = field.map((j) => (j === -1 ? { kind: 'code', src: r.src } : s.layers[j])).filter(Boolean);
-    return { ...s, layers: layers.some((l) => l.kind === 'code') ? layers : [...layers, { kind: 'code', src: r.src }] };
+    const code = { kind: 'code', src: r.src, cuts };
+    const layers = field.map((j) => (j === -1 ? code : s.layers[j])).filter(Boolean);
+    return { ...s, layers: layers.some((l) => l.kind === 'code') ? layers : [...layers, code] };
   });
   return t;
 }
@@ -90,7 +117,11 @@ function apply(r: Reply) {
 // stills across the song: a verse, the first drop, an interlude, the finale
 const drop = base.moments.find((m: { kind: string }) => m.kind === 'drop')?.at ?? song.duration * 0.3;
 const fin = base.moments.find((m: { kind: string }) => m.kind === 'finale')?.at ?? song.duration * 0.75;
-const times = [song.duration * 0.12, drop + 0.6, drop + 6, song.duration * 0.6, fin + 0.6, fin + 8].map((x) => +Math.min(song.duration - 1, x).toFixed(2));
+// review stills: one inside each of 12 shots spread over the song (the drop and finale among them), so the director
+// sees its camera work, not one framing per section
+const mid = (i: number) => { const c = [0, ...cuts, song.duration]; return (c[i] + c[i + 1]) / 2; };
+const picks = [...new Set([...Array.from({ length: 10 }, (_, k) => Math.round((k * cuts.length) / 9)), cuts.findIndex((c) => c > drop), cuts.findIndex((c) => c > fin)].filter((i) => i >= 0 && i <= cuts.length))].sort((x, y) => x - y);
+const times = picks.map((i) => +Math.min(song.duration - 1, mid(i)).toFixed(2));
 
 // pictures may still be generating (Studio runs both at once): test renders go without them then
 const pics = join(a.dir!, 'assets', 'assets.json');
@@ -124,7 +155,7 @@ for (let round = 1; round <= 3; round++) {
   messages.push({
     role: 'user',
     content: [
-      { type: 'text', text: `${r.problems.length ? `渲染時的問題（必須修）：\n${r.problems.join('\n')}\n\n` : '渲染沒有錯誤。\n\n'}以下是成品截圖（歌詞已疊上），時間依序為 ${times.join('、')} 秒。用設計總監的眼光嚴格審視：歌詞是否清楚、和概念是否一致、是否夠獨特有設計感、段落之間有沒有變化、有沒有像模板或 AI 的地方。${round === 2 ? '這是最後一次修改機會。' : ''}如果已經達到你滿意的水準且沒有錯誤，原樣回傳同一份；否則回傳修改後的完整版本。` },
+      { type: 'text', text: `${r.problems.length ? `渲染時的問題（必須修）：\n${r.problems.join('\n')}\n\n` : '渲染沒有錯誤。\n\n'}以下是成品截圖（歌詞已疊上），時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。用設計總監的眼光嚴格審視：歌詞是否清楚、和概念是否一致、是否夠獨特有設計感、鏡頭取景是否真的有變化（遠近、角度、運鏡）、段落之間有沒有變化、有沒有像模板或 AI 的地方。${round === 2 ? '這是最後一次修改機會。' : ''}如果已經達到你滿意的水準且沒有錯誤，原樣回傳同一份；否則回傳修改後的完整版本。` },
       ...r.images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
     ],
   });

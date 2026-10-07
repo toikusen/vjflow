@@ -8,7 +8,7 @@ import { dirname, join, relative } from 'node:path';
 import { phraseBoundaries } from '../../src/app/lyric-vj/phrases';
 import { toLrc, type SongTimeline } from '../../src/app/lyric-vj/timeline';
 
-export type StudioStep = 'make' | 'design' | 'render' | 'layer' | 'lrc' | 'clip' | 'props' | 'revise';
+export type StudioStep = 'make' | 'design' | 'render' | 'layer' | 'lrc' | 'clip' | 'props' | 'revise' | 'draw';
 
 export interface StudioRun {
   step: StudioStep;
@@ -29,6 +29,7 @@ const PLAN: Record<string, [Phase, number][]> = {
   design: [['director', 0.2], ['props', 0.15], ['code', 0.45], ['stills', 0.05], ['clip', 0.15]],
   props: [['props', 1]],
   revise: [['baseline', 0.05], ['code', 0.75], ['stills', 0.05], ['clip', 0.15]],
+  draw: [['code', 0.8], ['stills', 0.05], ['clip', 0.15]],
   render: [['render', 1]],
   layer: [['render', 1]],
   clip: [['clip', 1]],
@@ -143,6 +144,8 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
     layer: [mark('render'), render('text')],
     clip: [mark('clip'), clipCmd()],
     props: [mark('props'), props],
+    // a fresh drawing on the same design and props (after a failed one, or to see another take)
+    draw: [mark('code'), code(), mark('stills'), preview, mark('clip'), clipCmd()],
     revise: [mark('baseline'), baseline, mark('code'), code(` --baseline ${q(baseDir)} --feedback ${q(join(dir, 'feedback.txt'))}`), mark('stills'), preview, mark('clip'), clipCmd()],
   }[step];
   function clipCmd() {

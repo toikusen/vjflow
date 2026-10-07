@@ -86,7 +86,7 @@ createServer(async (req, res) => {
     }
     if (path === '/lyric-vj/languages') return json(res, 200, Object.entries(LANGUAGES).map(([id, l]) => ({ id, name: l.name, suits: l.suits, essence: l.essence })));
     // /lyric-vj/studio/<id> (GET state) and /lyric-vj/studio/<id>/<step> (POST {language?})
-    const st = /^\/lyric-vj\/studio\/([^/]+)(?:\/(make|design|render|layer|lrc|clip|props|revise))?$/.exec(path);
+    const st = /^\/lyric-vj\/studio\/([^/]+)(?:\/(make|design|render|layer|lrc|clip|props|revise|draw))?$/.exec(path);
     if (st) {
       const file = songFiles().get(decodeURIComponent(st[1]));
       if (!file) return json(res, 404, { error: '找不到這首歌' });

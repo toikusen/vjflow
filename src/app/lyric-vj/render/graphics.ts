@@ -51,7 +51,7 @@ export type Layer = Base &
     | { kind: 'swissgrid'; color: Rgb; cols?: number; bars?: Rgb; signal?: Rgb; seed?: number }
     | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb }
     | { kind: 'mosaic'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number }
-    | { kind: 'ink'; color: Rgb; count?: number; size?: number; seed?: number }
+    | { kind: 'ink'; color: Rgb; colors?: Rgb[]; count?: number; size?: number; seed?: number }
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
     | { kind: 'code'; src: string; lyric?: Rect; cuts?: number[] }
   );
@@ -102,7 +102,12 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
       draw(ctx, { ...l, color: g.color } as Layer, t, t - sec.start, beat, image);
       ctx.restore();
     }
-    draw(ctx, l, t, t - sec.start, beat, image);
+    // one layer the director got wrong (a missing colour) draws nothing instead of stopping the whole render
+    try {
+      draw(ctx, l, t, t - sec.start, beat, image);
+    } catch (e) {
+      report(`${l.kind}: ${(e as Error).message}`);
+    }
     ctx.restore();
   }
   ctx.restore();
@@ -525,8 +530,10 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         const y = hash(seed, 2) * H;
         const r = (l.size ?? 220) * (0.5 + hash(seed, 3)) * (1 + 0.05 * Math.sin(t * 0.4 + i));
         const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
-        g.addColorStop(0, l.color);
-        g.addColorStop(0.55, l.color);
+        // a set of washes (colors) takes turns; one color otherwise
+        const ink = l.colors?.length ? l.colors[i % l.colors.length] : l.color;
+        g.addColorStop(0, ink);
+        g.addColorStop(0.55, ink);
         g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.globalAlpha = (l.opacity ?? 1) * (0.35 + 0.4 * hash(seed, 4));
         ctx.fillStyle = g;

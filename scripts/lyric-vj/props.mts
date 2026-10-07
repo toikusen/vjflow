@@ -20,7 +20,8 @@ const out = a.out!;
 mkdirSync(out, { recursive: true });
 const song = JSON.parse(readFileSync(a.song!, 'utf8'));
 const t = JSON.parse(readFileSync(a.treatment!, 'utf8'));
-const client = new Anthropic();
+// overloaded (529) and rate limits: the SDK retries with backoff; a long design run should ride them out
+const client = new Anthropic({ maxRetries: 8 });
 const usage = { input: 0, output: 0, images: 0 };
 
 // the song's palette: its colour script, plus cream and ink for faces and details

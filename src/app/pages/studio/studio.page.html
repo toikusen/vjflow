@@ -39,6 +39,7 @@
         <button (click)="run('make')" [disabled]="running() || (!s.confirmedAt && !unconfirmed())">產生設計與預覽</button>
         <button (click)="run('clip')" [disabled]="running() || !state()?.design">重做動態預覽</button>
         <button (click)="run('design')" [disabled]="running() || !state()?.design">只重做設計</button>
+        <button (click)="run('draw')" [disabled]="running() || !state()?.design">重做專屬圖層</button>
         <button (click)="run('render')" [disabled]="running() || !state()?.design">渲染完整影片</button>
         <button (click)="run('layer')" [disabled]="running() || !state()?.design">輸出歌詞透明層</button>
         <button (click)="run('lrc')" [disabled]="running()">輸出 LRC</button>

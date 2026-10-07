@@ -27,7 +27,7 @@ interface StudioState {
 }
 
 const POLL_MS = 3000;
-const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '30 秒動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC', props: '重畫素材庫', revise: '依意見修改專屬圖層' };
+const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '30 秒動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC', props: '重畫素材庫', revise: '依意見修改專屬圖層', draw: '重做專屬圖層' };
 
 /**
  * Studio: one song from confirmed timing to a finished VJ — generate the design (the director picks a design language

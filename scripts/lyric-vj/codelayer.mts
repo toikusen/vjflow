@@ -97,7 +97,8 @@ const SCHEMA = {
 };
 type Reply = { idea: string; src: string; sections: { index: number; order: number[] }[] };
 
-const client = new Anthropic();
+// overloaded (529) and rate limits: the SDK retries with backoff; a long design run should ride them out
+const client = new Anthropic({ maxRetries: 8 });
 const usage = { input: 0, output: 0 };
 // with a baseline the director refines an approved design instead of inventing a new one: the baseline sets the craft
 // level, and variety comes from the camera rather than from new props

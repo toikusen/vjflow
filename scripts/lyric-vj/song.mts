@@ -18,6 +18,7 @@ const { values: a } = parseArgs({
     audio: { type: 'string' }, instrumental: { type: 'string' }, vocals: { type: 'string' },
     lrc: { type: 'string' }, title: { type: 'string' }, out: { type: 'string' },
     lyrics: { type: 'string' }, language: { type: 'string', default: 'ja' }, // plain lyrics (one line per line) for Whisper alignment
+    'no-lrclib': { type: 'boolean' }, // align the given --lyrics even when LRCLIB has synced lyrics (alignment tests)
   },
 });
 if (!a.audio || !a.vocals || !a.out) throw new Error('需要 --audio、--vocals、--out');
@@ -42,7 +43,7 @@ if (a.lrc) {
   cues = toCues(readFileSync(a.lrc, 'utf8'), 'lrc');
   check = checkTiming(cues, active);
 } else {
-  const hit = await new LyricSearchService().find(a.title ?? basename(a.audio), analysis.duration);
+  const hit = a['no-lrclib'] ? undefined : await new LyricSearchService().find(a.title ?? basename(a.audio), analysis.duration);
   const lrclib = hit?.synced ? toCues(hit.text, 'lrclib') : undefined;
   const lrclibCheck = lrclib && checkTiming(lrclib, active);
   if (lrclib && lrclibCheck?.passed) {
@@ -71,6 +72,7 @@ if (a.lrc) {
       start: l.start, end: l.end, conf: l.words.reduce((s, w) => s + w.p, 0) / Math.max(1, l.words.length),
     }));
     cues = combineTimings(lines, forced, heard, active);
+    if (process.env['DUMP_STAGES']) writeFileSync(join(a.out, 'stage_combined.json'), JSON.stringify(cues));
     check = checkTiming(cues, active);
     console.log(`歌詞時間：${cues.filter((c) => !c.review).length}/${cues.length} 句自動通過，${cues.filter((c) => c.review).length} 句需要在時間校正頁確認`);
   }
@@ -88,6 +90,7 @@ if (a.lrc) {
   }
   const lines: { words: AsrWord[]; start: number }[] = JSON.parse(readFileSync(forceFile, 'utf8')).lines;
   if (lines.length === mains.length) cues = alignMainLines(cues, lines, voicedSpans(active));
+  if (process.env['DUMP_STAGES']) writeFileSync(join(a.out, 'stage_main.json'), JSON.stringify(cues));
   else console.log(`逐字時間略過：對齊結果 ${lines.length} 行，主歌詞 ${mains.length} 行`);
 }
 // lines the aligner was unsure of snap to where the voice actually enters

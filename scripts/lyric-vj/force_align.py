@@ -6,10 +6,11 @@ Unlike transcribe-then-match, every line gets a time from the audio; low word pr
 
 import argparse
 import json
+import os
 
 import stable_whisper
 
-MODEL = "large-v3-turbo"
+MODEL = os.environ.get("FORCE_MODEL", "large-v3-turbo")
 
 
 def main() -> None:
@@ -22,7 +23,9 @@ def main() -> None:
     lines = [l.strip() for l in open(a.lyrics, encoding="utf-8") if l.strip()]
     model = stable_whisper.load_model(MODEL, device="cpu")
     # one segment per lyric line, kept as given
-    r = model.align(a.vocals, "\n".join(lines), language=a.language, original_split=True)
+    # extra stable-ts align options for alignment tests, e.g. FORCE_OPTS='{"vad": true}'
+    opts = json.loads(os.environ.get("FORCE_OPTS", "{}"))
+    r = model.align(a.vocals, "\n".join(lines), language=a.language, original_split=True, **opts)
     out = []
     for seg in r.segments:
         words = [{"text": w.word, "start": round(w.start, 3), "end": round(w.end, 3), "p": round(w.probability or 0, 3)} for w in seg.words]

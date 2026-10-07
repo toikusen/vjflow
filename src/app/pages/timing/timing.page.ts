@@ -1,4 +1,4 @@
-import { moveEdge } from './timing-edit';
+import { moveEdge, snapTo } from './timing-edit';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
@@ -19,6 +19,9 @@ const VIEW_SEC = 16; // seconds visible on the waveform at first; the wheel zoom
 const VIEW_MIN = 2;
 const VIEW_MAX = 60;
 const NUDGE = 0.05;
+const EDGE_LISTEN = 0.5; // Q/W/E/D play this long before/after a line's start or end (after Aegisub)
+const SNAP = 0.15; // Shift while dragging: an edge within this of a beat, a voice onset or a line edge lands on it
+const SPEEDS = [0.5, 0.75, 1];
 
 /**
  * Lyric timing editor: the song plays over a lyrics-only preview while each line's start/end is checked live against
@@ -56,7 +59,18 @@ export class TimingPage {
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('wave');
   /** Seconds the waveform shows (wheel to zoom, to place edges on the beat). */
   protected readonly viewSec = signal(VIEW_SEC);
-  private drag: { index: number; edge: 'start' | 'end' } | null = null;
+  private drag: { index: number; edge: 'start' | 'end'; ripple: boolean } | null = null;
+  /** Undo/redo snapshots of the lines and which were touched. */
+  private undoStack: { cues: TimelineCue[]; touched: Set<string> }[] = [];
+  private redoStack: { cues: TimelineCue[]; touched: Set<string> }[] = [];
+  protected readonly canUndo = signal(false);
+  protected readonly canRedo = signal(false);
+  /** Playback speed (slower to hear where a fast line starts) and looping the selected line. */
+  protected readonly speed = signal(1);
+  protected readonly speeds = SPEEDS;
+  protected readonly loop = signal(false);
+  /** Q/W/E/D play a short piece and stop here. */
+  private stopAt: number | null = null;
 
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
   protected readonly statuses = computed<Status[]>(() =>
@@ -87,6 +101,14 @@ export class TimingPage {
   constructor() {
     const raf = { id: 0 };
     const tick = () => {
+      const now = this.audio.currentTime;
+      if (this.stopAt !== null && now >= this.stopAt) {
+        this.audio.pause();
+        this.stopAt = null;
+      }
+      // loop: past the selected line's end, back to just before its start
+      const sel = this.cues()[this.selected()];
+      if (this.loop() && sel && !this.audio.paused && this.stopAt === null && now > sel.end + 0.3) this.audio.currentTime = Math.max(0, sel.start - 0.5);
       this.time.set(this.audio.currentTime);
       this.draw();
       raf.id = requestAnimationFrame(tick);
@@ -136,6 +158,10 @@ export class TimingPage {
     this.song.set(song);
     this.cues.set(song.cues.map((c) => ({ ...c })));
     this.touched.set(new Set());
+    this.undoStack = [];
+    this.redoStack = [];
+    this.canUndo.set(false);
+    this.canRedo.set(false);
     this.dirty.set(false);
     this.selected.set(Math.max(0, this.statuses().findIndex((s) => s !== 'ok')));
     this.audio.src = `${base}/audio/mix`;
@@ -160,7 +186,8 @@ export class TimingPage {
   }
 
   // ---- editing
-  private setLine(i: number, patch: Partial<Pick<TimelineCue, 'start' | 'end'>>) {
+  private setLine(i: number, patch: Partial<Pick<TimelineCue, 'start' | 'end'>>, ripple = this.ripple(), snapshot = true) {
+    if (snapshot) this.remember();
     const list = this.cues().map((c) => ({ ...c }));
     const c = list[i];
     const lo = i > 0 ? list[i - 1].start + 0.05 : 0;
@@ -169,7 +196,7 @@ export class TimingPage {
       const shift = Math.max(lo, patch.start) - before;
       // ripple: alignment errors come in runs (one late line pushes every following one), so the lines after move
       // with it until the next line the user already fixed
-      if (this.ripple() && Math.abs(shift) > 0.001) {
+      if (ripple && Math.abs(shift) > 0.001) {
         c.end += shift;
         for (let j = i + 1; j < list.length && !this.touched().has(list[j].id); j++) {
           list[j].start = +(list[j].start + shift).toFixed(3);
@@ -187,8 +214,77 @@ export class TimingPage {
     this.dirty.set(true);
   }
 
-  protected nudge(i: number, edge: 'start' | 'end', d: number) {
-    this.setLine(i, { [edge]: this.cues()[i][edge] + d });
+  protected nudge(i: number, edge: 'start' | 'end', d: number, ripple = this.ripple()) {
+    this.setLine(i, { [edge]: this.cues()[i][edge] + d }, ripple);
+  }
+
+  // ---- undo / redo
+  private snapshot() {
+    return { cues: this.cues().map((c) => ({ ...c })), touched: new Set(this.touched()) };
+  }
+
+  private remember() {
+    this.undoStack.push(this.snapshot());
+    if (this.undoStack.length > 200) this.undoStack.shift();
+    this.redoStack = [];
+    this.canUndo.set(true);
+    this.canRedo.set(false);
+  }
+
+  protected undo() {
+    const s = this.undoStack.pop();
+    if (!s) return;
+    this.redoStack.push(this.snapshot());
+    this.cues.set(s.cues);
+    this.touched.set(s.touched);
+    this.dirty.set(true);
+    this.canUndo.set(this.undoStack.length > 0);
+    this.canRedo.set(true);
+  }
+
+  protected redo() {
+    const s = this.redoStack.pop();
+    if (!s) return;
+    this.undoStack.push(this.snapshot());
+    this.cues.set(s.cues);
+    this.touched.set(s.touched);
+    this.dirty.set(true);
+    this.canUndo.set(true);
+    this.canRedo.set(this.redoStack.length > 0);
+  }
+
+  // ---- listening
+  protected setSpeed(v: number) {
+    this.speed.set(v);
+    this.audio.playbackRate = v;
+  }
+
+  /** Plays [from, to] and stops (Q/W/E/D: the half second around a line's start or end). */
+  private playRange(from: number, to: number) {
+    this.audio.currentTime = Math.max(0, from);
+    this.stopAt = to;
+    void this.audio.play();
+  }
+
+  /** The next line still to check (red first, then yellow), after the selected one; wraps around. */
+  protected nextProblem() {
+    const st = this.statuses();
+    const n = st.length;
+    const from = this.selected();
+    const find = (want: Status) => Array.from({ length: n }, (_, k) => (from + 1 + k) % n).find((j) => st[j] === want);
+    const j = find('red') ?? find('yellow');
+    if (j === undefined) return this.message.set('沒有待確認的句子了');
+    this.selected.set(j);
+    this.scrollTo(j);
+    this.audio.currentTime = Math.max(0, this.cues()[j].start - 1);
+  }
+
+  /** Shift-drag: the nearest beat, voice onset or other line edge within SNAP. */
+  private snapped(t: number, index: number): number {
+    const song = this.song()!;
+    const onsets = this.active() ? voicedSpans(this.active()!).map((x) => x[0]) : [];
+    const edges = this.cues().flatMap((c, j) => (j === index ? [] : [c.start, c.end]));
+    return snapTo(t, [...(song.beats ?? []), ...onsets, ...edges], SNAP);
   }
 
   protected setNow(i: number, edge: 'start' | 'end') {
@@ -208,6 +304,7 @@ export class TimingPage {
   }
 
   protected accept(i: number) {
+    this.remember();
     this.touched.update((s) => new Set(s).add(this.cues()[i].id));
     this.dirty.set(true);
   }
@@ -244,16 +341,29 @@ export class TimingPage {
   // tap timing: Space plays/pauses, Enter sets the selected line's start to now and moves on, ←/→ nudge it
   @HostListener('window:keydown', ['$event'])
   protected key(e: KeyboardEvent) {
-    if ((e.target as HTMLElement).tagName === 'INPUT' || !this.song()) return;
+    if (['INPUT', 'SELECT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName) || !this.song()) return;
     const i = this.selected();
-    if (e.code === 'Space') this.toggle();
+    const c = this.cues()[i];
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.code === 'KeyZ') e.shiftKey ? this.redo() : this.undo();
+    else if (mod && e.code === 'KeyY') this.redo();
+    else if (mod) return;
+    else if (e.code === 'KeyQ') this.playRange(c.start - EDGE_LISTEN, c.start);
+    else if (e.code === 'KeyW') this.playRange(c.start, c.start + EDGE_LISTEN);
+    else if (e.code === 'KeyE') this.playRange(c.end - EDGE_LISTEN, c.end);
+    else if (e.code === 'KeyD') this.playRange(c.end, c.end + EDGE_LISTEN);
+    else if (e.code === 'KeyL') this.loop.set(!this.loop());
+    else if (e.code === 'KeyN') this.nextProblem();
+    else if (e.code === 'BracketLeft') this.setSpeed(SPEEDS[Math.max(0, SPEEDS.indexOf(this.speed()) - 1)]);
+    else if (e.code === 'BracketRight') this.setSpeed(SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(this.speed()) + 1)]);
+    else if (e.code === 'Space') this.toggle();
     else if (e.code === 'Enter') {
       this.setNow(i, 'start');
       this.lastFollow = i; // the line just tapped is now playing: following must not pull the selection back to it
       this.selected.set(Math.min(this.cues().length - 1, i + 1));
       this.scrollTo(this.selected());
-    } else if (e.code === 'ArrowLeft') this.nudge(i, 'start', -NUDGE);
-    else if (e.code === 'ArrowRight') this.nudge(i, 'start', NUDGE);
+    } else if (e.code === 'ArrowLeft') this.nudge(i, e.shiftKey ? 'end' : 'start', -NUDGE, e.altKey !== this.ripple());
+    else if (e.code === 'ArrowRight') this.nudge(i, e.shiftKey ? 'end' : 'start', NUDGE, e.altKey !== this.ripple());
     else if (e.code === 'ArrowUp') {
       this.selected.set(Math.max(0, i - 1));
       this.scrollTo(this.selected());
@@ -339,13 +449,17 @@ export class TimingPage {
     const near = (a: number) => Math.abs(a - t) < 6 * px;
     const i = this.cues().findIndex((c) => near(c.start) || near(c.end));
     if (i >= 0) {
-      this.drag = { index: i, edge: near(this.cues()[i].start) ? 'start' : 'end' };
+      // Alt flips "move the rest with it" for this drag; one undo step for the whole drag
+      this.drag = { index: i, edge: near(this.cues()[i].start) ? 'start' : 'end', ripple: e.altKey !== this.ripple() };
+      this.remember();
       this.selected.set(i);
     } else this.audio.currentTime = t; // click empty space to seek
   }
 
   protected move(e: MouseEvent) {
-    if (this.drag) this.setLine(this.drag.index, { [this.drag.edge]: this.timeAt(e) });
+    if (!this.drag) return;
+    const t = this.timeAt(e);
+    this.setLine(this.drag.index, { [this.drag.edge]: e.shiftKey ? this.snapped(t, this.drag.index) : t }, this.drag.ripple, false);
   }
 
   protected up() {

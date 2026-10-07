@@ -19,3 +19,12 @@ describe('moveEdge', () => {
     expect(moveEdge(lines(), 2, 'start', 7, 60).slice(1)).toEqual([{ start: 5, end: 7 }, { start: 7, end: 12 }]);
   });
 });
+
+describe('snapTo', () => {
+  it('lands on the nearest beat or onset within reach, else stays', async () => {
+    const { snapTo } = await import('./timing-edit');
+    expect(snapTo(10.1, [9.5, 10.0, 10.4], 0.15)).toBe(10.0);
+    expect(snapTo(10.2, [9.5, 10.0, 10.45], 0.15)).toBe(10.2);
+    expect(snapTo(3, [], 0.15)).toBe(3);
+  });
+});

@@ -59,9 +59,25 @@
           <button class="btn" (click)="toggle()">{{ playing() ? '暫停' : '播放' }}</button>
           <span class="muted">{{ time() | number: '1.2-2' }} 秒</span>
           <label class="muted follow"><input type="checkbox" [checked]="follow()" (change)="follow.set($any($event.target).checked)" /> 跟著播放</label>
-          <label class="muted follow" title="改一句的開始時間時，後面還沒改過的句子一起移動同樣的秒數"><input type="checkbox" [checked]="ripple()" (change)="ripple.set($any($event.target).checked)" /> 後面一起移</label>
+          <label class="muted follow" title="改一句的開始時間時，後面還沒改過的句子一起移動同樣的秒數（按住 Alt 可臨時反轉）"><input type="checkbox" [checked]="ripple()" (change)="ripple.set($any($event.target).checked)" /> 後面一起移</label>
+          <label class="muted follow" title="L"><input type="checkbox" [checked]="loop()" (change)="loop.set($any($event.target).checked)" /> 循環這一句</label>
+          <label class="muted follow">
+            速度
+            <select [value]="speed()" (change)="setSpeed(+$any($event.target).value)">
+              @for (v of speeds; track v) {
+                <option [value]="v" [selected]="v === speed()">{{ v }}×</option>
+              }
+            </select>
+          </label>
+          <button class="btn" (click)="undo()" [disabled]="!canUndo()" title="Ctrl/⌘+Z">復原</button>
+          <button class="btn" (click)="redo()" [disabled]="!canRedo()" title="Ctrl/⌘+Shift+Z">重做</button>
+          <button class="btn" (click)="nextProblem()" title="N">下一個待確認</button>
         </div>
-        <p class="muted keys">空白鍵 播放／暫停 · Enter 把選取行的開始設為現在並跳下一行 · ←／→ 微調 0.05 秒 · ↑／↓ 選行 · 拖曳波形上的線調整</p>
+        <p class="muted keys">
+          空白鍵 播放／暫停 · Enter 把選取行的開始設為現在並跳下一行 · ←／→ 微調開始 0.05 秒（Shift：微調結束）· ↑／↓ 選行 · N 下一個待確認<br />
+          Q／W 聽開始前／後半秒 · E／D 聽結束前／後半秒 · L 循環這一句 · [ ] 調整速度 · ⌘/Ctrl+Z 復原<br />
+          拖曳波形上的線調整（按住 Shift 吸附到拍點、人聲起音或其他句子的邊界；按住 Alt 臨時切換「後面一起移」）
+        </p>
       </section>
       <canvas #wave class="wave" (mousedown)="down($event)" (mousemove)="move($event)" (mouseup)="up()" (mouseleave)="up()" (wheel)="wheel($event)"></canvas>
       <p class="muted hint">滾輪上下放大縮小（目前 {{ viewSec().toFixed(1) }} 秒）· 左右滑或 Shift＋滾輪前後移動 · 淡線是拍子、亮線是小節</p>

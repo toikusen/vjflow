@@ -31,3 +31,9 @@ export function moveEdge<T extends Span>(list: T[], i: number, edge: 'start' | '
   for (const x of [prev, c, next]) if (x) Object.assign(x, { start: +x.start.toFixed(3), end: +x.end.toFixed(3) });
   return out;
 }
+
+/** The candidate nearest t if it is within `within` seconds, else t (Shift-drag snapping). */
+export function snapTo(t: number, candidates: number[], within: number): number {
+  const near = candidates.reduce((best, x) => (Math.abs(x - t) < Math.abs(best - t) ? x : best), Infinity);
+  return Math.abs(near - t) <= within ? near : t;
+}

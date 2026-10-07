@@ -25,8 +25,8 @@ type Phase = 'director' | 'build' | 'props' | 'baseline' | 'code' | 'stills' | '
 const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', build: '生成背景圖與素材庫', props: '生成素材庫', baseline: '整理目前版本當基準', code: '導演繪製專屬圖層', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
 /** Each step's phases and their share of its progress bar (rough time shares). */
 const PLAN: Record<string, [Phase, number][]> = {
-  make: [['director', 0.2], ['build', 0.15], ['code', 0.45], ['stills', 0.05], ['clip', 0.15]],
-  design: [['director', 0.2], ['props', 0.15], ['code', 0.45], ['stills', 0.05], ['clip', 0.15]],
+  make: [['director', 0.45], ['build', 0.3], ['stills', 0.05], ['clip', 0.2]],
+  design: [['director', 0.45], ['props', 0.3], ['stills', 0.05], ['clip', 0.2]],
   props: [['props', 1]],
   revise: [['baseline', 0.05], ['code', 0.75], ['stills', 0.05], ['clip', 0.15]],
   draw: [['code', 0.8], ['stills', 0.05], ['clip', 0.15]],
@@ -120,8 +120,7 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
       // pictures and props don't depend on each other: both at once; the drawing then acts with the props
       mark('build'),
       `{ ${props} & pp=$!; npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still; ar=$?; wait $pp; [ $ar -eq 0 ]; }`,
-      mark('code'),
-      code(),
+      // the user judges the direction on this preview before the drawing (the expensive part) is made: 'draw'
       mark('stills'),
       preview,
       // the moving preview comes with the design: it is what the user judges before paying for the full render
@@ -133,8 +132,6 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --design-only ${q(join(dir, 'shots.json'))} --history out/design-history.json${lang ? ` --design-language ${lang}` : ''}`,
       mark('props'),
       props,
-      mark('code'),
-      code(),
       mark('stills'),
       preview,
       mark('clip'),

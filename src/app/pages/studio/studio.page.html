@@ -39,7 +39,7 @@
         <button (click)="run('make')" [disabled]="running() || (!s.confirmedAt && !unconfirmed())">產生設計與預覽</button>
         <button (click)="run('clip')" [disabled]="running() || !state()?.design">重做動態預覽</button>
         <button (click)="run('design')" [disabled]="running() || !state()?.design">只重做設計</button>
-        <button (click)="run('draw')" [disabled]="running() || !state()?.design">重做專屬圖層</button>
+        <button (click)="run('draw')" [disabled]="running() || !state()?.design">{{ state()?.design?.drawing ? '重做專屬圖層' : '方向 OK，繪製專屬圖層' }}</button>
         <button (click)="run('render')" [disabled]="running() || !state()?.design">渲染完整影片</button>
         <button (click)="run('layer')" [disabled]="running() || !state()?.design">輸出歌詞透明層</button>
         <button (click)="run('lrc')" [disabled]="running()">輸出 LRC</button>
@@ -61,6 +61,9 @@
           @if (!r.ok || !r.endedAt) {
             <pre class="log">{{ r.log.slice(-12).join('\n') }}</pre>
           }
+        }
+        @if (st.design && !st.design.drawing && !running()) {
+          <p class="alert">先看下面的 30 秒預覽確認方向（元件庫版，還沒有專屬圖層）。方向對了按「方向 OK，繪製專屬圖層」（約 35 分鐘、US$5–6）；不對就按「只重做設計」。</p>
         }
         @if (st.design; as d) {
           <div class="design">

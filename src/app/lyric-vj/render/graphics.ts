@@ -110,7 +110,8 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
 
 /** The camera shot a code layer is in: shots are cut at `cuts` (song seconds), synced with the lyric layouts. */
 export interface CodeCam { index: number; start: number; end: number; progress: number; count: number }
-type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; cam: CodeCam; hash: typeof hash }) => void;
+/** f.img(id): a sprite from the song's library (designed by the image model, keyed), null when it is missing. */
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null }) => void;
 
 /** The shot at t among cut times (sorted); before the first cut is shot 0. */
 export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
@@ -127,7 +128,7 @@ const reported = new Set<string>();
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; cuts?: number[] }, t: number, age: number, beat: Beat) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; cuts?: number[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   let fn = compiled.get(l.src);
   if (!fn) {
     try {
@@ -141,7 +142,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   const t0 = performance.now();
   ctx.save();
   try {
-    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, cam: camAt(l.cuts ?? [], t), hash });
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, cam: camAt(l.cuts ?? [], t), hash, img: (id) => image(`spr:${id}`) ?? null });
   } catch (e) {
     report(`runtime: ${(e as Error).message}`);
   }
@@ -151,7 +152,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
 }
 
 function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
-  if (l.kind === 'code') return drawCode(ctx, l, t, age, beat);
+  if (l.kind === 'code') return drawCode(ctx, l, t, age, beat, image);
   const kick = 1 + (l.pulse ?? 0) * beat.pulse;
   switch (l.kind) {
     case 'fill': {

@@ -15,7 +15,9 @@ interface SongItem {
 type Status = 'red' | 'yellow' | 'ok';
 
 const QA_LABELS = new Set(Object.values(ISSUE_LABEL));
-const VIEW_SEC = 16; // seconds visible on the waveform
+const VIEW_SEC = 16; // seconds visible on the waveform at first; the wheel zooms between these
+const VIEW_MIN = 2;
+const VIEW_MAX = 60;
 const NUDGE = 0.05;
 
 /**
@@ -52,6 +54,8 @@ export class TimingPage {
   private peaks: Float32Array | null = null; // per 10 ms, max |sample| of the vocal stem
   private readonly audio = new Audio();
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('wave');
+  /** Seconds the waveform shows (wheel to zoom, to place edges on the beat). */
+  protected readonly viewSec = signal(VIEW_SEC);
   private drag: { index: number; edge: 'start' | 'end' } | null = null;
 
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
@@ -279,7 +283,7 @@ export class TimingPage {
 
   // ---- waveform
   private viewStart() {
-    return Math.max(0, this.time() - VIEW_SEC * 0.35);
+    return Math.max(0, this.time() - this.viewSec() * 0.35);
   }
 
   private draw() {
@@ -290,11 +294,19 @@ export class TimingPage {
     const h = (cv.height = cv.clientHeight * devicePixelRatio);
     const g = cv.getContext('2d')!;
     const t0 = this.viewStart();
-    const x = (t: number) => ((t - t0) / VIEW_SEC) * w;
+    const view = this.viewSec();
+    const x = (t: number) => ((t - t0) / view) * w;
     g.clearRect(0, 0, w, h);
+    // the beat grid: faint beats, stronger bar lines (edges are placed by ear against the rhythm)
+    const bars = new Set((song.downbeats ?? []).map((b) => b.toFixed(2)));
+    for (const b of song.beats ?? []) {
+      if (b < t0 || b > t0 + view) continue;
+      g.fillStyle = bars.has(b.toFixed(2)) ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.1)';
+      g.fillRect(x(b), 0, devicePixelRatio, h);
+    }
     const st = this.statuses();
     this.cues().forEach((c, i) => {
-      if (c.end < t0 || c.start > t0 + VIEW_SEC) return;
+      if (c.end < t0 || c.start > t0 + view) return;
       g.fillStyle = st[i] === 'red' ? 'rgba(255,92,108,.28)' : st[i] === 'yellow' ? 'rgba(255,200,87,.22)' : 'rgba(123,97,255,.22)';
       g.fillRect(x(c.start), 0, x(c.end) - x(c.start), h);
       g.fillStyle = i === this.selected() ? '#00e5ff' : '#ece9f7';
@@ -306,7 +318,7 @@ export class TimingPage {
       g.fillStyle = 'rgba(236,233,247,.75)';
       const max = 0.0001 + this.peaks.reduce((m, v) => Math.max(m, v), 0) * 0.8;
       for (let px = 0; px < w; px += 2) {
-        const f = Math.floor((t0 + (px / w) * VIEW_SEC) * 100);
+        const f = Math.floor((t0 + (px / w) * view) * 100);
         const v = Math.min(1, (this.peaks[f] ?? 0) / max);
         g.fillRect(px, h / 2 - (v * h) / 2.4, 1.5, (v * h) / 1.2);
       }
@@ -318,12 +330,12 @@ export class TimingPage {
   private timeAt(e: MouseEvent) {
     const cv = this.canvas()!.nativeElement;
     const r = cv.getBoundingClientRect();
-    return this.viewStart() + ((e.clientX - r.left) / r.width) * VIEW_SEC;
+    return this.viewStart() + ((e.clientX - r.left) / r.width) * this.viewSec();
   }
 
   protected down(e: MouseEvent) {
     const t = this.timeAt(e);
-    const px = VIEW_SEC / this.canvas()!.nativeElement.getBoundingClientRect().width;
+    const px = this.viewSec() / this.canvas()!.nativeElement.getBoundingClientRect().width;
     const near = (a: number) => Math.abs(a - t) < 6 * px;
     const i = this.cues().findIndex((c) => near(c.start) || near(c.end));
     if (i >= 0) {
@@ -338,5 +350,18 @@ export class TimingPage {
 
   protected up() {
     this.drag = null;
+  }
+
+  /** Wheel: up/down zooms the waveform, sideways (or Shift) moves through the song. */
+  protected wheel(e: WheelEvent) {
+    e.preventDefault();
+    const sideways = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (sideways) {
+      const d = (e.shiftKey ? e.deltaY : e.deltaX) / 400;
+      this.audio.currentTime = Math.max(0, Math.min(this.song()!.duration, this.audio.currentTime + d * this.viewSec()));
+      return;
+    }
+    this.viewSec.set(Math.min(VIEW_MAX, Math.max(VIEW_MIN, this.viewSec() * Math.exp(e.deltaY / 300))));
+    this.draw();
   }
 }

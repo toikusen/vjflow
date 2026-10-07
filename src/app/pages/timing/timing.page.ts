@@ -1,3 +1,4 @@
+import { moveEdge } from './timing-edit';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
 import { SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
@@ -173,12 +174,10 @@ export class TimingPage {
         const stop = list.findIndex((x, j) => j > i && this.touched().has(x.id));
         if (stop > 0) list[stop - 1].end = Math.min(list[stop - 1].end, list[stop].start);
       }
-      c.start = Math.max(lo, Math.min(patch.start, c.end - 0.1));
-      if (i > 0) list[i - 1].end = Math.min(list[i - 1].end, c.start); // the previous line yields
+      list.splice(0, list.length, ...moveEdge(list, i, 'start', Math.max(lo, patch.start), this.song()!.duration));
     }
-    if (patch.end !== undefined) c.end = Math.max(c.start + 0.1, Math.min(patch.end, list[i + 1]?.start ?? this.song()!.duration));
-    c.start = +c.start.toFixed(3);
-    c.end = +c.end.toFixed(3);
+    // a back-to-back neighbour follows the shared edge (timing-edit.ts)
+    if (patch.end !== undefined) list.splice(0, list.length, ...moveEdge(list, i, 'end', patch.end, this.song()!.duration));
     this.cues.set(list);
     this.touched.update((s) => new Set(s).add(c.id));
     this.dirty.set(true);

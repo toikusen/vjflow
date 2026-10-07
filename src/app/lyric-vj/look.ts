@@ -51,6 +51,8 @@ function cleanLayer(l: Layer, assets: string[], fixes: string[]): Layer {
     if (/^(color|color2|to|tint|frame|bars|signal)$/.test(k) && typeof v === 'string' && !HEX.test(v) && !v.startsWith('rgba')) out[k] = '#808080';
     if (v === null) delete out[k];
   }
+  // a numeral the director wrote as a number (1, not "1") broke every layer that spreads its text
+  if ('text' in out && typeof out['text'] !== 'string') out['text'] = String(out['text'] ?? '');
   if (typeof out['opacity'] === 'number') out['opacity'] = Math.min(1, Math.max(0, out['opacity'] as number));
   if (typeof out['pulse'] === 'number') out['pulse'] = Math.min(1, Math.max(0, out['pulse'] as number));
   if (l.kind === 'photo' && l.asset && !assets.includes(l.asset)) {

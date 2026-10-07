@@ -316,7 +316,7 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       ctx.fillStyle = l.color;
       ctx.fillRect(-size / 2, -size / 2, size, size);
       ctx.globalCompositeOperation = 'destination-out';
-      const chars = [...l.text].slice(0, 4);
+      const chars = [...String(l.text ?? '')].slice(0, 4);
       const cols = chars.length > 2 ? 2 : 1;
       const rows = Math.ceil(chars.length / cols);
       ctx.font = `700 ${(size * 0.8) / rows}px "${l.font ?? 'Zen Old Mincho'}"`;
@@ -1151,7 +1151,7 @@ export function layerRect(l: Layer): Rect | undefined {
     }
     case 'stamp': {
       const s = l.size ?? 64;
-      return box(cx(l.x), cy(l.y), s * ([...l.text].length + 0.9), s * 1.6);
+      return box(cx(l.x), cy(l.y), s * ([...String(l.text ?? '')].length + 0.9), s * 1.6);
     }
     case 'seal': {
       const s = l.size ?? 90;
@@ -1159,7 +1159,7 @@ export function layerRect(l: Layer): Rect | undefined {
     }
     case 'numeral': {
       const s = (l.size ?? 0.8) * H;
-      return box(cx(l.x), cy(l.y), s * 0.62 * [...l.text].length, s);
+      return box(cx(l.x), cy(l.y), s * 0.62 * [...String(l.text ?? '')].length, s);
     }
     default:
       return undefined;

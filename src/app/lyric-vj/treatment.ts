@@ -168,8 +168,14 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   if (t.shots.length) {
     if (t.shots[0].start !== win.start) t.shots[0].start = win.start;
     t.shots.forEach((s, i) => (s.end = i + 1 < t.shots.length ? t.shots[i + 1].start : win.end));
-    const empty = t.shots.filter((s) => s.end - s.start < 0.5);
-    if (empty.length) errors.push(`鏡頭太短（< 0.5 秒）：${empty.map((s) => s.id).join(', ')}`);
+    // a shot squeezed under 0.5 s (two shot starts snapped onto lines retimed close together) joins the one before it
+    const empty = t.shots.filter((s, i) => i > 0 && s.end - s.start < 0.5);
+    if (empty.length) {
+      t.shots = t.shots.filter((s) => !empty.includes(s));
+      t.shots.forEach((s, i) => (s.end = i + 1 < t.shots.length ? t.shots[i + 1].start : win.end));
+      fixes.push(`鏡頭太短（< 0.5 秒），併入前一個鏡頭：${empty.map((s) => s.id).join(', ')}`);
+    }
+    if (t.shots[0].end - t.shots[0].start < 0.5) errors.push(`鏡頭太短（< 0.5 秒）：${t.shots[0].id}`);
   }
   const shotAt = (time: number) => t.shots.find((s) => s.start <= time && time < s.end) ?? t.shots[t.shots.length - 1];
 

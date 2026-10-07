@@ -36,3 +36,11 @@ describe('neededAssets', () => {
     expect([...shotPic].sort()).toEqual(['a', 'b']);
   });
 });
+
+describe('validateLook text', () => {
+  it('turns a numeral written as a number into text', async () => {
+    const { validateLook } = await import('./look');
+    const r = validateLook({ sections: [{ start: 0, layers: [{ kind: 'numeral', text: 1 as unknown as string, color: '#ffffff' }] }] }, [], 0);
+    expect((r.look!.sections[0].layers[0] as { text: string }).text).toBe('1');
+  });
+});

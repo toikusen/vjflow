@@ -55,7 +55,8 @@ const PRICES: Record<string, [number, number]> = { 'claude-opus-5-5': [4, 20], '
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
 // nothing is generated on unchecked lyric timing (the timing editor confirms it); --unconfirmed for internal tests
 const gate = timingGate(song);
-if (gate && !a.unconfirmed) throw new Error(gate);
+// VJ_UNCONFIRMED=1: Studio's "try before the timing is confirmed" (passed down to every render it starts)
+if (gate && !a.unconfirmed && process.env['VJ_UNCONFIRMED'] !== '1') throw new Error(gate);
 const win = { start: Number(a.start), end: Number(a.end) };
 const out = a.out!;
 mkdirSync(out, { recursive: true });

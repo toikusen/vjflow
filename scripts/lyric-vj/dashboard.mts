@@ -92,8 +92,8 @@ createServer(async (req, res) => {
       if (!file) return json(res, 404, { error: '找不到這首歌' });
       if (!st[2] && req.method === 'GET') return json(res, 200, studioState(file, OUT_ROOT));
       if (st[2] && req.method === 'POST') {
-        const body = JSON.parse((await readBody(req)) || '{}') as { language?: string; seconds?: number; feedback?: string };
-        const err = startStep(file, st[2] as StudioStep, { language: body.language, seconds: Number(body.seconds) || undefined, feedback: typeof body.feedback === 'string' ? body.feedback.slice(0, 4000) : undefined });
+        const body = JSON.parse((await readBody(req)) || '{}') as { language?: string; seconds?: number; feedback?: string; unconfirmed?: boolean };
+        const err = startStep(file, st[2] as StudioStep, { language: body.language, seconds: Number(body.seconds) || undefined, feedback: typeof body.feedback === 'string' ? body.feedback.slice(0, 4000) : undefined, unconfirmed: body.unconfirmed === true });
         return err ? json(res, 409, { error: err }) : json(res, 202, { ok: true });
       }
       return void res.writeHead(405).end();

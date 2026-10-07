@@ -48,6 +48,8 @@ export class StudioPage {
   protected readonly error = signal<string | null>(null);
   /** The user's notes for the next revision of the drawing (kept per song once sent). */
   protected readonly feedback = signal('');
+  /** Go ahead before the lyric timing is confirmed (a trial; captions may be off). */
+  protected readonly unconfirmed = signal(false);
   protected readonly running = computed(() => !!this.state()?.run && !this.state()!.run!.endedAt);
   protected readonly song = computed(() => this.songs().find((s) => s.id === this.selected()) ?? null);
   protected readonly langName = computed(() => {
@@ -93,7 +95,7 @@ export class StudioPage {
     const res = await fetch(`/lyric-vj/studio/${encodeURIComponent(id)}/${step}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ language: this.language() || undefined, seconds, feedback: step === 'revise' ? this.feedback() : undefined }),
+      body: JSON.stringify({ language: this.language() || undefined, seconds, feedback: step === 'revise' ? this.feedback() : undefined, unconfirmed: this.unconfirmed() || undefined }),
     });
     if (!res.ok) this.error.set(((await res.json()) as { error?: string }).error ?? `失敗（${res.status}）`);
     await this.refresh();

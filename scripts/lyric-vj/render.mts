@@ -38,7 +38,8 @@ const ROOT = process.cwd();
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
 // nothing is generated on unchecked lyric timing (the timing editor confirms it); --unconfirmed for internal tests
 const gate = timingGate(song);
-if (gate && !a.unconfirmed) throw new Error(gate);
+// VJ_UNCONFIRMED=1: Studio's "try before the timing is confirmed" (passed down to every render it starts)
+if (gate && !a.unconfirmed && process.env['VJ_UNCONFIRMED'] !== '1') throw new Error(gate);
 const win = { start: Number(a.start ?? 0), end: Number(a.end ?? song.duration) };
 const [clipStart, clipEnd] = a.clip ? a.clip.split(',').map(Number) : [win.start, win.end];
 const range = { start: Math.max(win.start, clipStart), end: Math.min(win.end, clipEnd) };

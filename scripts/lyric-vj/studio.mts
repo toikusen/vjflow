@@ -72,10 +72,10 @@ export function studioState(songFile: string, outRoot: string) {
 }
 
 /** Starts a step for a song; refuses when one is already running for it. */
-export function startStep(songFile: string, step: StudioStep, opts: { language?: string; seconds?: number; feedback?: string }): string | undefined {
+export function startStep(songFile: string, step: StudioStep, opts: { language?: string; seconds?: number; feedback?: string; unconfirmed?: boolean }): string | undefined {
   if (runs.get(songFile) && !runs.get(songFile)!.endedAt) return '這首歌已經有步驟在執行';
   const song: SongTimeline = JSON.parse(readFileSync(songFile, 'utf8'));
-  if (!song.timingConfirmedAt && step !== 'lrc') return '請先在時間編輯器確認歌詞時間';
+  if (!song.timingConfirmedAt && step !== 'lrc' && !opts.unconfirmed) return '請先在時間編輯器確認歌詞時間（或勾選「時間還沒確認也先試做」）';
   const dir = studioDir(songFile);
   mkdirSync(dir, { recursive: true });
   const notes = (opts.feedback ?? '').trim();
@@ -152,7 +152,7 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
     return `node -e ${q(`const t=require(${JSON.stringify(join(dir, 'treatment.json'))});const d=(t.moments||[]).find(m=>m.kind==='drop');const from=Math.max(0,Math.min(${song.duration}-${len},(d?d.at:${song.duration * 0.3})-10));console.log(from.toFixed(2)+','+(from+${len}).toFixed(2))`)} > ${q(join(dir, 'clip-range.txt'))} && npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${assets} --start 0 --end ${end} --clip $(cat ${q(join(dir, 'clip-range.txt'))}) --out ${q(join(dir, 'clip'))} && mv ${q(join(dir, 'clip'))}/lyric-vj_vocal_*.mp4 ${q(join(dir, `preview_${len}s.mp4`))} && rm -rf ${q(join(dir, 'clip'))}`;
   }
   // a login shell: the image service keys live in the user's shell profile
-  const child = spawn('zsh', ['-ic', cmd.join(' && ')], { cwd: process.cwd() });
+  const child = spawn('zsh', ['-ic', cmd.join(' && ')], { cwd: process.cwd(), env: { ...process.env, ...(opts.unconfirmed ? { VJ_UNCONFIRMED: '1' } : {}) } });
   const plan = PLAN[step] ?? [];
   let phase: Phase | undefined;
   let phaseAt = Date.now();

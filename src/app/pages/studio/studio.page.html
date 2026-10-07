@@ -19,6 +19,10 @@
       <h2>{{ s.title }}</h2>
       @if (!s.confirmedAt) {
         <p class="alert">還沒確認歌詞時間。<a [href]="'/timing?song=' + s.id">到時間編輯器確認</a></p>
+        <label class="row">
+          <input type="checkbox" [checked]="unconfirmed()" (change)="unconfirmed.set($any($event.target).checked)" />
+          時間還沒確認也先試做（字幕時間可能有誤差，之後確認時間再重新渲染即可）
+        </label>
       }
       <div class="row">
         <label>
@@ -32,7 +36,7 @@
         </label>
       </div>
       <div class="row buttons">
-        <button (click)="run('make')" [disabled]="running() || !s.confirmedAt">產生設計與預覽</button>
+        <button (click)="run('make')" [disabled]="running() || (!s.confirmedAt && !unconfirmed())">產生設計與預覽</button>
         <button (click)="run('clip')" [disabled]="running() || !state()?.design">重做動態預覽</button>
         <button (click)="run('design')" [disabled]="running() || !state()?.design">只重做設計</button>
         <button (click)="run('render')" [disabled]="running() || !state()?.design">渲染完整影片</button>

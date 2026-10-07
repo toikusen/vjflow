@@ -289,3 +289,33 @@ export function refineWithVoice(cues: TimelineCue[], active: boolean[], fps = 10
   });
   return out;
 }
+
+/**
+ * A line before a long gap ends where the voice actually stops: its end was set from the last character's start, so a
+ * held last note (a sustained vowel into an instrumental) lost its caption seconds early. Extends only through voice
+ * (short breaths bridged), never past the next line, at most `maxSec`.
+ */
+export function holdToVoice(cues: TimelineCue[], active: boolean[], fps = 100, maxSec = 8): { cues: TimelineCue[]; held: number } {
+  let held = 0;
+  const sorted = [...cues].sort((a, b) => a.start - b.start);
+  const out = sorted.map((c, i) => {
+    const next = sorted[i + 1]?.start ?? Infinity;
+    if (next - c.end < 1) return c;
+    const limit = Math.min(next - 0.1, c.end + maxSec, active.length / fps);
+    const breath = Math.round(0.3 * fps);
+    let f = Math.round(c.end * fps);
+    if (!active.slice(Math.max(0, f - 5), f + 5).some(Boolean)) return c;
+    let last = f;
+    for (let silent = 0; f < limit * fps && silent <= breath; f++) {
+      if (active[f]) {
+        last = f;
+        silent = 0;
+      } else silent++;
+    }
+    const end = +Math.min(limit, (last + 1) / fps + 0.2).toFixed(3);
+    if (end - c.end < 0.3) return c;
+    held++;
+    return { ...c, end };
+  });
+  return { cues: out, held };
+}

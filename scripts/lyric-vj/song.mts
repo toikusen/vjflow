@@ -10,7 +10,7 @@ import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
 import { alignLyrics, alignMainLines, AsrWord, cleanLyricLine, combineTimings, ForcedLine, isShout, voteStarts, withoutAsides } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
-import { alignOffset, beatStrengths, checkTiming, downbeats, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, beatStrengths, checkTiming, downbeats, holdToVoice, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
@@ -130,6 +130,13 @@ if (!voted) {
   const snapped = snapToVoice(cues, active);
   cues = snapped.cues;
   if (snapped.moved) console.log(`${snapped.moved} 句低信心歌詞對齊到人聲起點`);
+}
+
+// a held last note before a gap keeps its caption until the voice stops
+{
+  const held = holdToVoice(cues, active);
+  cues = held.cues;
+  if (held.held) console.log(`${held.held} 句延長到尾音結束`);
 }
 
 let instrumentalOffsetSec: number | undefined;

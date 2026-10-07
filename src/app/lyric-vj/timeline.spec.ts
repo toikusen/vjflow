@@ -80,3 +80,19 @@ describe('snapToVoice', () => {
     expect(r.cues[1].start).toBe(1.0);
   });
 });
+
+describe('holdToVoice', () => {
+  it('keeps a held last note on screen until the voice stops, never past the next line', async () => {
+    const { holdToVoice } = await import('./timeline');
+    const active = Array.from({ length: 3000 }, (_, f) => f >= 1000 && f < 1900); // voice 10–19 s
+    const cues = [
+      { id: 'a', start: 10, end: 14, text: 'x' },
+      { id: 'b', start: 25, end: 27, text: 'y' },
+    ] as Parameters<typeof holdToVoice>[0];
+    const r = holdToVoice(cues, active);
+    expect(r.cues[0].end).toBeCloseTo(19.2, 1);
+    expect(r.cues[1].end).toBe(27); // no voice at its end: unchanged
+    const tight = holdToVoice([{ ...cues[0] }, { ...cues[1], start: 16 }] as typeof cues, active);
+    expect(tight.cues[0].end).toBeCloseTo(15.9, 1);
+  });
+});

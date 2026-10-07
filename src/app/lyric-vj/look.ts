@@ -61,3 +61,16 @@ function cleanLayer(l: Layer, assets: string[], fixes: string[]): Layer {
   if (l.kind === 'bands' && !(l.colors ?? []).every((c) => HEX.test(c))) out['colors'] = (l.colors ?? []).filter((c) => HEX.test(c));
   return out as unknown as Layer;
 }
+
+/**
+ * The assets a treatment can show. With a graphic look the full-frame plates are hidden, so pictures appear only
+ * through photo layers: their own asset, or the shot's picture when the layer names none (and a video's source still).
+ */
+export function neededAssets(t: { assets: { id: string; kind: string; from?: string }[]; shots: { asset?: string }[]; graphics?: GraphicsLook }): Set<string> {
+  if (!t.graphics?.sections?.length) return new Set(t.assets.map((x) => x.id));
+  const photos = t.graphics.sections.flatMap((s) => s.layers).filter((l): l is Extract<Layer, { kind: 'photo' }> => l.kind === 'photo');
+  const ids = new Set(photos.map((l) => l.asset).filter((x): x is string => !!x));
+  if (photos.some((l) => !l.asset)) for (const s of t.shots) if (s.asset) ids.add(s.asset);
+  for (const x of t.assets) if (x.kind === 'video' && ids.has(x.id) && x.from) ids.add(x.from);
+  return ids;
+}

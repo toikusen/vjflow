@@ -92,13 +92,16 @@ const drop = base.moments.find((m: { kind: string }) => m.kind === 'drop')?.at ?
 const fin = base.moments.find((m: { kind: string }) => m.kind === 'finale')?.at ?? song.duration * 0.75;
 const times = [song.duration * 0.12, drop + 0.6, drop + 6, song.duration * 0.6, fin + 0.6, fin + 8].map((x) => +Math.min(song.duration - 1, x).toFixed(2));
 
+// pictures may still be generating (Studio runs both at once): test renders go without them then
+const pics = join(a.dir!, 'assets', 'assets.json');
+
 function test(r: Reply, round: number) {
   const file = join(work, `treatment_r${round}.json`);
   writeFileSync(file, JSON.stringify(apply(r)));
   const dir = join(work, `stills_r${round}`);
   let log = '';
   try {
-    log = execFileSync('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, '--assets', join(a.dir!, 'assets', 'assets.json'), '--start', '0', '--end', String(song.duration), '--stills', times.join(','), '--out', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    log = execFileSync('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', '0', '--end', String(song.duration), '--stills', times.join(','), '--out', dir], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
     log = String((e as { stderr?: string }).stderr ?? e);
   }

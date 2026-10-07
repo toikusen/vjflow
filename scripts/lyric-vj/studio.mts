@@ -20,18 +20,18 @@ export interface StudioRun {
   progress?: number;
 }
 
-type Phase = 'director' | 'assets' | 'code' | 'stills' | 'clip' | 'render';
-const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', assets: '生成背景圖', code: '導演繪製專屬圖層', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
+type Phase = 'director' | 'build' | 'code' | 'stills' | 'clip' | 'render';
+const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', build: '生成背景圖、導演繪製專屬圖層', code: '導演繪製專屬圖層', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
 /** Each step's phases and their share of its progress bar (rough time shares). */
 const PLAN: Record<string, [Phase, number][]> = {
-  make: [['director', 0.25], ['assets', 0.2], ['code', 0.3], ['stills', 0.05], ['clip', 0.2]],
+  make: [['director', 0.3], ['build', 0.45], ['stills', 0.05], ['clip', 0.2]],
   design: [['director', 0.3], ['code', 0.4], ['stills', 0.1], ['clip', 0.2]],
   render: [['render', 1]],
   layer: [['render', 1]],
   clip: [['clip', 1]],
 };
 /** Seconds a phase usually takes when it prints nothing countable (its bar fills by time, never past 95 %). */
-const TYPICAL: Partial<Record<Phase, number>> = { director: 180, code: 400, stills: 25 };
+const TYPICAL: Partial<Record<Phase, number>> = { director: 240, build: 400, code: 400, stills: 25 };
 
 const runs = new Map<string, StudioRun>();
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
@@ -90,10 +90,10 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
       `mkdir -p ${q(dir)}`,
       mark('director'),
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --style-id emotional --tier still --history out/design-history.json${lang ? ` --language ${lang}` : ''}`,
-      mark('assets'),
-      `npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still`,
-      mark('code'),
-      code,
+      // the pictures and the director's drawing don't depend on each other: both at once (the drawing's test renders
+      // go without pictures, which a graphic look rarely shows); a failed drawing never fails the step
+      mark('build'),
+      `{ ${code} & cp=$!; npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still; ar=$?; wait $cp; [ $ar -eq 0 ]; }`,
       mark('stills'),
       preview,
       // the moving preview comes with the design: it is what the user judges before paying for the full render
@@ -125,8 +125,6 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
   const plan = PLAN[step] ?? [];
   let phase: Phase | undefined;
   let phaseAt = Date.now();
-  let images = 0;
-  let imagesDone = 0;
   const share = (p: Phase) => plan.find(([x]) => x === p)?.[1] ?? 0;
   const before = (p: Phase) => plan.slice(0, plan.findIndex(([x]) => x === p)).reduce((s, [, w]) => s + w, 0);
   const setInner = (k: number) => phase && (run.progress = +(before(phase) + share(phase) * Math.min(0.99, Math.max(0, k))).toFixed(3));
@@ -139,14 +137,9 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
         phaseAt = Date.now();
         run.phase = PHASE_LABEL[phase];
         setInner(0);
-        if (phase === 'assets') {
-          const t = existsSync(join(dir, 'treatment.json')) ? JSON.parse(readFileSync(join(dir, 'treatment.json'), 'utf8')) : { assets: [] };
-          images = (t.assets ?? []).filter((x: { kind: string }) => x.kind === 'image').length;
-        }
         continue;
       }
       run.log.push(line);
-      if (phase === 'assets' && /^image /.test(line)) setInner(++imagesDone / Math.max(1, images));
       const f = /frame (\d+)\/(\d+)/.exec(line);
       if (f && (phase === 'clip' || phase === 'render')) setInner(Number(f[1]) / Math.max(1, Number(f[2])));
     }

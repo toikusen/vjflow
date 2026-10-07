@@ -5,6 +5,7 @@ import { MEDIA } from '../../src/app/lyric-vj/medium';
 import { GoogleGenAI } from '@google/genai';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { neededAssets } from '../../src/app/lyric-vj/look';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -125,6 +126,12 @@ async function video(id: string, prompt: string, first: string): Promise<string>
 }
 
 const manifest: Record<string, AssetSource> = {};
+// with a graphic look the pictures show only through its photo layers (the engine hides the full-frame plates), so
+// only those are generated; a photo layer without an asset shows the shot's picture
+const needed = neededAssets(t);
+const unused = t.assets.filter((x) => !needed.has(x.id)).map((x) => x.id);
+if (unused.length) console.log(`skip ${unused.length} pictures the graphic look never shows: ${unused.join(', ')}`);
+t.assets = t.assets.filter((x) => needed.has(x.id));
 const images = t.assets.filter((x) => x.kind === 'image');
 const status = jobStatus(a.job ?? jobIdFor(dirname(a.treatment!)), { tier: a.tier, style: STYLES[a['style-id']!]?.name });
 const usdOf = (id: string) => ledger.filter((x) => x.item.endsWith(` ${id}`)).reduce((s, x) => s + x.usd, 0) || undefined;

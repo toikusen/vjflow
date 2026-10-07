@@ -22,3 +22,17 @@ describe('validateLook', () => {
     expect(r.look!.sections[1].text).toBeUndefined();
   });
 });
+
+describe('neededAssets', () => {
+  it('keeps only the pictures a graphic look shows through its photo layers', async () => {
+    const { neededAssets } = await import('./look');
+    const assets = [{ id: 'a', kind: 'image' }, { id: 'b', kind: 'image' }, { id: 'v', kind: 'video', from: 'b' }];
+    const shots = [{ asset: 'a' }, { asset: 'b' }];
+    expect([...neededAssets({ assets, shots })].sort()).toEqual(['a', 'b', 'v']);
+    expect(neededAssets({ assets, shots, graphics: { sections: [{ start: 0, layers: [{ kind: 'fill', color: '#000000' }] }] } }).size).toBe(0);
+    const named = neededAssets({ assets, shots, graphics: { sections: [{ start: 0, layers: [{ kind: 'photo', mode: 'inset', asset: 'v' }] }] } });
+    expect([...named].sort()).toEqual(['b', 'v']);
+    const shotPic = neededAssets({ assets, shots, graphics: { sections: [{ start: 0, layers: [{ kind: 'photo', mode: 'inset' }] }] } });
+    expect([...shotPic].sort()).toEqual(['a', 'b']);
+  });
+});

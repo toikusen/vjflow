@@ -16,6 +16,13 @@ if [ ! -f "$d/vocals.wav" ]; then
   mv "$(find "$d/demucs" -name vocals.wav | head -1)" "$d/vocals.wav"
   rm -rf "$d/demucs"
 fi
+# a second separation (Mel-RoFormer, Kim) for the lyric-timing vote in song.mts
+if [ ! -f "$d/vocals_kim.wav" ]; then
+  uv run -q --python 3.11 --with "audio-separator[cpu]" audio-separator "$d/mix.mp3" -m vocals_mel_band_roformer.ckpt \
+    --output_dir "$d/kim" --output_format WAV --model_file_dir ~/.cache/audio-separator > "$d/kim.log" 2>&1
+  mv "$(find "$d/kim" -iname '*(vocals)*.wav' | head -1)" "$d/vocals_kim.wav"
+  rm -rf "$d/kim"
+fi
 # the database's lyric lookup (web text, no timing) is the text Whisper aligns when LRCLIB has nothing synced
 python3 -c "import json;open('$d/db-lyrics.txt','w').write('\\n'.join(json.load(open('$VJA/out/lyrics/$id.json')).get('lines') or []))"
-npx tsx scripts/lyric-vj/song.mts --audio "$d/mix.mp3" --vocals "$d/vocals.wav" --title "$meta" --lyrics "$d/db-lyrics.txt" --out "$d" --language "$lang"
+npx tsx scripts/lyric-vj/song.mts --audio "$d/mix.mp3" --vocals "$d/vocals.wav" --vocals-alt "$d/vocals_kim.wav" --title "$meta" --lyrics "$d/db-lyrics.txt" --out "$d" --language "$lang"

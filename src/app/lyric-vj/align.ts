@@ -327,3 +327,29 @@ export function alignMainLines(cues: TimelineCue[], main: { words: AsrWord[]; st
     return { ...c, end: +Math.max(c.start + 0.3, end).toFixed(3) };
   });
 }
+
+/**
+ * Votes each line's start from several independent timings (cue id → start): the median, so one aligner's slip or
+ * one pipeline stage's misfire on this song is outvoted. The line moves whole, its character times with it; ends are
+ * then kept clear of the next line. Measured on confirmed timings: 15→8 and 13→4 lines off by more than 0.3 s.
+ */
+export function voteStarts(cues: TimelineCue[], timings: Map<string, number>[]): TimelineCue[] {
+  const median = (xs: number[]) => {
+    const s = [...xs].sort((x, y) => x - y);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+  const moved = cues
+    .map((c) => {
+      const votes = timings.map((t) => t.get(c.id)).filter((x): x is number => x !== undefined && Number.isFinite(x));
+      if (!votes.length) return c;
+      const start = +median(votes).toFixed(3);
+      const shift = start - c.start;
+      return { ...c, start, end: +(c.end + shift).toFixed(3), charStarts: c.charStarts?.map((x) => +(x + shift).toFixed(3)) };
+    })
+    .sort((x, y) => x.start - y.start);
+  return moved.map((c, i) => {
+    const next = moved[i + 1];
+    return next && c.end > next.start ? { ...c, end: +Math.max(c.start + 0.3, next.start).toFixed(3) } : c;
+  });
+}

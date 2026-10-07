@@ -119,3 +119,19 @@ describe('alignMainLines', () => {
     expect(r.find((c) => c.id === 'a')!.end).toBeCloseTo(17.5, 2);
   });
 });
+
+describe('voteStarts', () => {
+  it('takes the median start per line, moves the character times along and keeps ends clear of the next line', async () => {
+    const { voteStarts } = await import('./align');
+    const cues = [
+      { id: 'c001', start: 10, end: 12, text: 'あい', charStarts: [10, 11] },
+      { id: 'c002', start: 12, end: 14, text: 'うえ' },
+    ] as Parameters<typeof voteStarts>[0];
+    const t = (a: number, b: number) => new Map([['c001', a], ['c002', b]]);
+    const out = voteStarts(cues, [t(10.4, 12), t(10.5, 30), t(99, 12.2)]);
+    expect(out.map((c) => c.start)).toEqual([10.5, 12.2]);
+    expect(out[0].charStarts).toEqual([10.5, 11.5]);
+    expect(out[0].end).toBe(12.2);
+    expect(voteStarts(cues, [])).toEqual(cues);
+  });
+});

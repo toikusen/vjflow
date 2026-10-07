@@ -22,10 +22,12 @@ interface StudioState {
   previews: string[];
   check: { unreadable: string[]; lingering: string[] } | null;
   outputs: string[];
+  props: { contact: string; sprites: number | null } | null;
+  feedback: string;
 }
 
 const POLL_MS = 3000;
-const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '30 秒動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC' };
+const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip: '30 秒動態預覽', design: '重做設計', render: '渲染完整影片', layer: '輸出歌詞透明層', lrc: '輸出 LRC', props: '重畫素材庫', revise: '依意見修改專屬圖層' };
 
 /**
  * Studio: one song from confirmed timing to a finished VJ — generate the design (the director picks a design language
@@ -44,6 +46,8 @@ export class StudioPage {
   protected readonly state = signal<StudioState | null>(null);
   protected readonly language = signal<string>('');
   protected readonly error = signal<string | null>(null);
+  /** The user's notes for the next revision of the drawing (kept per song once sent). */
+  protected readonly feedback = signal('');
   protected readonly running = computed(() => !!this.state()?.run && !this.state()!.run!.endedAt);
   protected readonly song = computed(() => this.songs().find((s) => s.id === this.selected()) ?? null);
   protected readonly langName = computed(() => {
@@ -79,6 +83,7 @@ export class StudioPage {
     this.selected.set(id);
     this.state.set(null);
     await this.refresh();
+    this.feedback.set(this.state()?.feedback ?? '');
   }
 
   protected async run(step: string, seconds?: number) {
@@ -88,7 +93,7 @@ export class StudioPage {
     const res = await fetch(`/lyric-vj/studio/${encodeURIComponent(id)}/${step}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ language: this.language() || undefined, seconds }),
+      body: JSON.stringify({ language: this.language() || undefined, seconds, feedback: step === 'revise' ? this.feedback() : undefined }),
     });
     if (!res.ok) this.error.set(((await res.json()) as { error?: string }).error ?? `失敗（${res.status}）`);
     await this.refresh();

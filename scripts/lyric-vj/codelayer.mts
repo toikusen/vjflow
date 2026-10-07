@@ -43,7 +43,10 @@ const cuts = (() => {
       for (let k = 3; k < inside.length; k += 4) out.push(inside[k]);
     }
   }
-  return out.map((x) => +x.toFixed(2)).sort((x, y) => x - y);
+  // every cut lands on a beat (the nearest within 0.25 s): edits on the grid read as cut to the music
+  const beats: number[] = song.beats ?? [];
+  const onBeat = (x: number) => { const b = beats.reduce((p, q) => (Math.abs(q - x) < Math.abs(p - x) ? q : p), x); return Math.abs(b - x) <= 0.25 ? b : x; };
+  return [...new Set(out.map((x) => +onBeat(x).toFixed(2)))].sort((x, y) => x - y);
 })();
 
 const brief = {
@@ -69,7 +72,7 @@ const RULES = `
 1. 完全決定性：只依 f 的值畫，不能用 Math.random、Date、requestAnimationFrame、全域狀態累積（每一格可能單獨被畫、也可能跳著畫）。
 2. 效能：每格 10 毫秒內（不要每格建上萬個路徑、不要 getImageData、不要 filter: blur 大面積）。
 3. 歌詞要看得清楚：f.lyric 範圍內（外擴 40px）只能留低對比、低細節的東西，主要的動態避開它或在它後面變安靜。歌詞顏色見每段 lyricColor（auto＝系統依底色挑深或淺）。
-4. 要和整首歌的概念、語言、配色一致，跟著段落和能量變化：主歌克制、副歌和高潮（moments 的 drop/finale）全開、間奏要有明顯變化。
+4. 要和整首歌的概念、語言、配色一致，跟著段落和能量變化：主歌克制、副歌和高潮（moments 的 drop/finale）全開、間奏要有明顯變化。從歌名或概念推出一條貫穿整支片的視覺規則（例如歌名「借一拍」→ 每個畫面先印黑版、紅版晚半拍才套上，並永遠留一點錯位），所有場景都遵守，結尾給它一個呼應；最強烈的手法（衝擊格、集中線、色版錯位）只在副歌和高潮全開。
 5. 不要畫文字標題、歌名、人名。可以有裝飾性的字元或符號。
 6. 每一段決定要保留哪些原本的元件庫圖層（layers 的 index），以及你的圖層放在哪裡：order 是由下到上的順序，-1 代表你的圖層。第一個必須是原本的底色 fill/paper（index 0）。可以拿掉看起來像模板、和你的動畫衝突的圖層。
 7. 避開最常見的「AI 動態設計」樣子：瑞士網格加 UI 雜訊、時間碼、霓虹光暈、粒子場。要像這首歌的設計師才會想到的東西。
@@ -111,13 +114,16 @@ const SPRITE_RULES = `
 ${sprites.map((x) => `${x.id} ${x.w}×${x.h} ${x.what}`).join('\n')}
 23. 具體的東西（人物、貓、冰棒、電車、站牌、螢光棒、勳章、星星、棉花糖、吉祥物）一律用素材庫的圖，不要再用程式畫它們。程式負責背景、天空、地面、雲、光線、圖樣、幾何造型、運鏡、轉場和讓素材「演」：位置、移動路徑、換格、擠壓拉伸（以腳底為軸）、彈跳、出場與退場。
 24. 素材放大不要超過原始像素的 1.3 倍（會糊）；特寫就用原尺寸附近。動作要用換格：走路用 girl.walk1→walk2→walk3 以每秒 8–10 格一頓一頓循環，配合位移；跳躍用 crouch→jump；揮手在 wave 與 stand 間切換。
-25. 角色是故事的主角：少女（girl.*）貫穿全曲，帶出每段歌詞的情境（例如「進んだ一歩」就讓她一步步走），取代腳印這類看不懂的象徵；雲朵吉祥物（cloud.*）只在副歌出現當作那朵大雲的分身。貓、冰棒、電車等道具在對應的段落出場。
+${sprites.some((x) => x.id.startsWith('girl.')) ? `25. 角色是故事的主角：少女（girl.*）貫穿全曲，帶出每段歌詞的情境（例如「進んだ一歩」就讓她一步步走），取代腳印這類看不懂的象徵；雲朵吉祥物（cloud.*）只在副歌出現當作那朵大雲的分身。貓、冰棒、電車等道具在對應的段落出場。` : '25. 不要有人物或吉祥物角色（少量動作格做出的角色動畫看起來單調、不流暢）：每個鏡頭的焦點由道具、場景和運鏡擔任，讓道具自己「演」——出場、聚集、整齊地隨拍子動作。'}
 27. 素材庫優先於基準：基準裡用程式畫的貓、冰棒、電車、站牌、螢光棒、腳印、人物，全部換成素材庫的圖；基準的構圖、場景安排、配色和鏡頭保留。
 26. 素材要和場景印在同一張紙上：腳下用場景的深色畫一個扁平的硬邊影子（不要模糊陰影），必要時整體 globalAlpha 0.95–1；不要加外框。素材上不要寫字；冰棒棒子上的「あたり」用程式在 pop.stick 上寫。`;
 const baseline = a.baseline ? JSON.parse(readFileSync(join(a.baseline, 'codelayer.json'), 'utf8')) as { idea: string; src: string } : undefined;
 const baseStills = a.baseline ? readdirSync(a.baseline).filter((f) => /^still_.*\.jpg$/.test(f)).sort((x, y) => parseFloat(x.slice(6)) - parseFloat(y.slice(6))) : [];
 const notes = a.feedback ? readFileSync(a.feedback, 'utf8').trim() : '';
-const intro = `${RULES}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
+// lessons: the user's notes on earlier songs (Studio appends them), so a new song starts from what was learned
+const lessonsFile = join('out', 'design-lessons.md');
+const lessons = existsSync(lessonsFile) ? readFileSync(lessonsFile, 'utf8').trim().split('\n').slice(-40).join('\n') : '';
+const intro = `${RULES}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
 const spriteSheet = a.sprites
   ? [{ type: 'text' as const, text: '素材庫總覽（每張下面是 id）：' }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(join(a.sprites, 'contact.jpg')).toString('base64') } }]
   : [];
@@ -132,9 +138,10 @@ const messages: Anthropic.Messages.MessageParam[] = [{
     ]
     : [{ type: 'text', text: intro }, ...spriteSheet],
 }];
-async function ask(): Promise<Reply> {
+/** The first draft is planned at high effort; revisions are edits at medium (after skillry's plan/build/judge split). */
+async function ask(effort: 'high' | 'medium' = 'medium'): Promise<Reply> {
   const msg = await client.messages
-    .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } } } as Anthropic.Messages.MessageStreamParams)
+    .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, output_config: { effort, format: { type: 'json_schema', schema: SCHEMA } } } as Anthropic.Messages.MessageStreamParams)
     .finalMessage();
   usage.input += msg.usage.input_tokens;
   usage.output += msg.usage.output_tokens;
@@ -211,11 +218,22 @@ function test(r: Reply, round: number) {
   execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', 'python', 'scripts/lyric-vj/shot_qa.py', qaDir, shotMids.map((x) => x.toFixed(2)).join(','), qaFile], { stdio: ['ignore', 'ignore', 'inherit'] });
   const qa: { shot: number; motion: number; detail: number }[] = JSON.parse(readFileSync(qaFile, 'utf8'));
   const weak = qa.filter((x) => x.motion < 0.02 || x.detail < 0.08).map((x) => `鏡頭 ${x.shot}：${x.motion < 0.02 ? `幾乎不動（${(x.motion * 100).toFixed(1)}% 的畫面在 0.3 秒內有變化）` : ''}${x.detail < 0.08 ? `偏空（只有 ${(x.detail * 100).toFixed(1)}% 的畫面不是底色）` : ''}`);
-  return { file, problems, images, weak };
+  // transitions: three cuts across the song, a strip of frames through each (0.1 s before to 0.45 s after)
+  const tcuts = [cuts[Math.floor(cuts.length * 0.2)], cuts[Math.floor(cuts.length * 0.5)], cuts[Math.floor(cuts.length * 0.8)]].filter((x) => x !== undefined);
+  const offs = [-0.1, 0.1, 0.25, 0.45];
+  const tDir = join(work, `trans_r${round}`);
+  render(tcuts.flatMap((c) => offs.map((o) => c + o)), tDir);
+  const strips = tcuts.map((c) => {
+    const jpg = join(tDir, `strip_${c.toFixed(2)}.jpg`);
+    const ins = offs.flatMap((o) => ['-i', join(tDir, `still_${(c + o).toFixed(2)}.png`)]);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', ...ins, '-filter_complex', `${offs.map((_, i) => `[${i}]scale=480:-1[s${i}]`).join(';')};${offs.map((_, i) => `[s${i}]`).join('')}hstack=${offs.length}`, '-q:v', '4', jpg]);
+    return readFileSync(jpg).toString('base64');
+  });
+  return { file, problems, images, weak, strips, tcuts };
 }
 
 /** A reviewer who did not make it: sees only the stills, the brief and the user's standards. */
-async function review(images: string[], weak: string[]): Promise<Review> {
+async function review(images: string[], weak: string[], strips: string[], tcuts: number[]): Promise<Review> {
   const msg = await client.messages
     .stream({
       model: a.model!, max_tokens: 16000,
@@ -224,9 +242,11 @@ async function review(images: string[], weak: string[]): Promise<Review> {
         role: 'user', content: [
           { type: 'text', text: `這是一首日本偶像歌曲的歌詞 VJ 背景動畫（歌詞疊在上面）。概念：${base.concept}\n使用者的標準：設計師等級（目標 80/100）；歌詞永遠清楚；不要大色塊閃爍、不要歌詞底板；物件和人物要有設計感、不能隨便畫；鏡頭要多且大膽；每首歌獨一無二。${notes ? `\n使用者對上一版的意見：\n${notes}` : ''}\n量測（只看背景）可能有問題的鏡頭：${weak.length ? weak.join('；') : '無'}\n以下截圖時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。列出最重要的問題（最多 10 條，最嚴重的先），每條寫哪個鏡頭、問題、具體怎麼改。` },
           ...images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
+          { type: 'text', text: `以下 ${strips.length} 條是轉場（${tcuts.map((x) => x.toFixed(1)).join('、')} 秒的切點，每條由左到右是切點前 0.1 秒、後 0.1、0.25、0.45 秒）：好的轉場用下一個場景的招牌元素帶出下一場（從畫面裡的物件長出、擴張、甩過去），或是乾淨的硬切；滿版色塊掃過、普通的推入／滑入／淡入淡出都算問題。` },
+          ...strips.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
         ],
       }],
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
+      output_config: { effort: 'high', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
     } as Anthropic.Messages.MessageStreamParams)
     .finalMessage();
   usage.input += msg.usage.input_tokens;
@@ -235,13 +255,13 @@ async function review(images: string[], weak: string[]): Promise<Review> {
 }
 
 const began = Date.now();
-let reply = await ask();
+let reply = await ask('high');
 console.log('idea:', reply.idea);
 for (let round = 1; round <= 3; round++) {
   const r = test(reply, round);
   console.log(`round ${round}: ${r.problems.length ? r.problems.join(' | ') : 'no errors'}; weak shots: ${r.weak.length}`);
   if (round === 3) break;
-  const rv = await review(r.images, r.weak);
+  const rv = await review(r.images, r.weak, r.strips, r.tcuts);
   writeFileSync(join(work, `review_r${round}.json`), JSON.stringify({ ...rv, weak: r.weak }, null, 1));
   console.log(`review ${round}: ${rv.verdict} (${rv.issues.length} issues)`);
   messages.push({

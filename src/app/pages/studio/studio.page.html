@@ -67,6 +67,25 @@
             <p class="muted">目前費用約 US${{ st.costUSD }}</p>
           </div>
         }
+        @if (st.props; as pr) {
+          <div class="props">
+            <div class="row-between">
+              <strong>素材庫{{ pr.sprites ? '（' + pr.sprites + ' 個）' : '' }}</strong>
+              <button (click)="run('props')" [disabled]="running()">重畫素材庫</button>
+            </div>
+            <img [src]="file(pr.contact)" alt="素材庫總覽" />
+            <p class="muted">重畫素材庫之後，按「依意見修改專屬圖層」讓導演用新的素材重新演出。</p>
+          </div>
+        }
+        @if (st.design?.drawing) {
+          <div class="revise">
+            <label>
+              對專屬圖層的意見（會讓導演以目前版本為基準修改，也會記成之後每首歌的參考）
+              <textarea rows="4" [value]="feedback()" (input)="feedback.set($any($event.target).value)" placeholder="例如：中間紫色那段看不出是什麼；貓太小；鏡頭再大膽一點"></textarea>
+            </label>
+            <button (click)="run('revise')" [disabled]="running() || !feedback().trim()">依意見修改專屬圖層</button>
+          </div>
+        }
         @if (st.previews.length) {
           <div class="previews">
             @for (p of st.previews; track p) {

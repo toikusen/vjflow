@@ -86,14 +86,14 @@ createServer(async (req, res) => {
     }
     if (path === '/lyric-vj/languages') return json(res, 200, Object.entries(LANGUAGES).map(([id, l]) => ({ id, name: l.name, suits: l.suits, essence: l.essence })));
     // /lyric-vj/studio/<id> (GET state) and /lyric-vj/studio/<id>/<step> (POST {language?})
-    const st = /^\/lyric-vj\/studio\/([^/]+)(?:\/(make|design|render|layer|lrc|clip))?$/.exec(path);
+    const st = /^\/lyric-vj\/studio\/([^/]+)(?:\/(make|design|render|layer|lrc|clip|props|revise))?$/.exec(path);
     if (st) {
       const file = songFiles().get(decodeURIComponent(st[1]));
       if (!file) return json(res, 404, { error: '找不到這首歌' });
       if (!st[2] && req.method === 'GET') return json(res, 200, studioState(file, OUT_ROOT));
       if (st[2] && req.method === 'POST') {
-        const body = JSON.parse((await readBody(req)) || '{}') as { language?: string; seconds?: number };
-        const err = startStep(file, st[2] as StudioStep, { language: body.language, seconds: Number(body.seconds) || undefined });
+        const body = JSON.parse((await readBody(req)) || '{}') as { language?: string; seconds?: number; feedback?: string };
+        const err = startStep(file, st[2] as StudioStep, { language: body.language, seconds: Number(body.seconds) || undefined, feedback: typeof body.feedback === 'string' ? body.feedback.slice(0, 4000) : undefined });
         return err ? json(res, 409, { error: err }) : json(res, 202, { ok: true });
       }
       return void res.writeHead(405).end();

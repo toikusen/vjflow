@@ -153,3 +153,26 @@ p {
     background: var(--warn, #e0473a);
   }
 }
+
+.props,
+.revise {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+
+  img {
+    width: 100%;
+    border-radius: 8px;
+  }
+
+  textarea {
+    width: 100%;
+    font: inherit;
+  }
+
+  .row-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+}

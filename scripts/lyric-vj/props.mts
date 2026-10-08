@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
 
 const { values: a } = parseArgs({ options: { song: { type: 'string' }, treatment: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' } } });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -58,24 +59,17 @@ Draw the items listed below, each one separate, in a 4 columns x 2 rows grid wit
 Style rules for every item: flat vector shapes only, each area one solid fill, exactly one hard-edged darker shadow tone per colour, simple rounded construction like Japanese character goods, NO outlines or black edges, no gradients, no airbrush, no glow, no glossy highlights, no texture; colours only from: ${palette.join(', ')}. Do not use any green close to #00B140.
 Absolutely no text, letters, numbers or labels anywhere.`);
 const sheetFile = (id: string) => join(out, `${id}.jpg`);
-// the first sheet takes its style from the video itself: a background frame of the design (left alone, the image model
-// drifts to glossy emoji art in colours the video never uses)
-const drop = (t.moments ?? []).find((m: { kind: string }) => m.kind === 'drop')?.at ?? song.duration * 0.3;
-const frameAt = +Math.min(song.duration - 1, drop + 2).toFixed(2);
-const sceneRef = join(out, 'scene.jpg');
-try {
-  execFileSync('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', a.treatment!, '--start', '0', '--end', String(song.duration), '--layer', 'back', '--stills', frameAt.toFixed(2), '--out', join(out, 'scene')], { stdio: 'ignore' });
-  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(out, 'scene', `still_${frameAt.toFixed(2)}.png`), '-vf', 'scale=1280:-1', '-q:v', '3', sceneRef]);
-} catch {
-  console.log('props: no scene frame, the first sheet goes without a style reference');
-}
+// the first sheet takes the video's style from words (a frame of the video as reference made the image model edit that
+// frame instead of drawing a sheet); the later sheets take the first one as their reference
+const lang = t.design?.language ? LANGUAGES[t.design.language as LanguageId] : undefined;
+const styleNote = lang ? ` Art direction of this video: ${lang.name} — ${lang.essence} Colour: ${lang.colour}` : '';
 for (const [k, sheet] of plan.sheets.entries()) {
   const dirs = join(out, `dirs_${sheet.id}.json`);
   writeFileSync(dirs, JSON.stringify([{ id: sheet.id, prompt: sheet.items.map((x, i) => `${i + 1} ${x.what}`).join('; ') }]));
-  const ref = k ? sheetFile(plan.sheets[0].id) : existsSync(sceneRef) ? sceneRef : undefined;
+  const ref = k ? sheetFile(plan.sheets[0].id) : undefined;
   const instr = join(out, `instruction_${k ? 'ref' : 'first'}.txt`);
-  const refNote = k ? ' The reference image is the first prop sheet of this video: match its drawing style, proportions and shading exactly (ignore its content).' : ' The reference image is a frame of this video\'s background: match its palette, flatness and shading level exactly so the props look printed in the same scene (do not draw its content).';
-  writeFileSync(instr, readFileSync(instruction, 'utf8').replace('{REF}', ref ? refNote : ''));
+  const refNote = k ? ' The reference image is the first prop sheet of this video: draw a NEW sheet of different items, matching its drawing style, proportions and shading exactly.' : styleNote;
+  writeFileSync(instr, readFileSync(instruction, 'utf8').replace('{REF}', refNote));
   execFileSync('npx', ['tsx', 'scripts/lyric-vj/character.mts', ...(ref ? ['--ref', ref] : []), '--directions', dirs, '--instruction', instr, '--out', out], { stdio: ['ignore', 'ignore', 'inherit'] });
   if (!existsSync(sheetFile(sheet.id))) throw new Error(`素材表 ${sheet.id} 沒有產出`);
   usage.images++;
@@ -103,6 +97,7 @@ for (const sheet of plan.sheets) {
   names[dir] = Object.fromEntries(named.frames.filter((f) => f.keep && f.n >= 0 && f.n < frames.length && !used.has(f.id) && /^[a-z0-9._-]+$/.test(f.id)).map((f) => (used.add(f.id), [String(f.n), [f.id, f.what]])));
 }
 writeFileSync(join(out, 'names.json'), JSON.stringify(names, null, 1));
+if (!Object.values(names).some((x) => Object.keys(x).length)) throw new Error('素材表裡沒有可用的物件');
 execFileSync('uv', ['run', '-q', '--with', 'pillow', 'python', 'scripts/lyric-vj/sprite_library.py', join(out, 'names.json'), join(out, 'library')], { stdio: ['ignore', 'inherit', 'inherit'] });
 const usd = (usage.input * 4 + usage.output * 20) / 1e6 + usage.images * 0.101;
 writeFileSync(join(out, 'props.json'), JSON.stringify({ sheets: plan.sheets.length, sprites: Object.values(names).reduce((s, x) => s + Object.keys(x).length, 0), ...usage, costUSD: +usd.toFixed(3) }, null, 1));

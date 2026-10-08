@@ -516,7 +516,10 @@ export class LyricVjEngine {
         mixed = measured?.mixed ?? false;
         rt.palette = this.cuePalette(cue.start + 0.3, backdrop);
       }
-      setHalo(backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
+      // a line over light and dark at once (stripes, a photo inset) stays one colour: light type in a dark halo reads
+      // on both; flipping each glyph to the other ink made words change colour for no reason
+      if (mixed) rt.palette = { ...rt.palette, text: '#f4f2ee' };
+      setHalo(mixed ? 'rgba(14,12,18,0.92)' : backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
       // the dark offset copy goes under light type; dark type gets the offset as a coloured second ink instead (a dark
       // shadow under dark heavy type merged the strokes into one blob)
       const darkType = luma(rt.palette.text) <= 0.5;
@@ -524,9 +527,6 @@ export class LyricVjEngine {
       setInkGhost(darkType && (langGhost[0] || langGhost[1]) ? { dx: langGhost[0] * 1.4, dy: langGhost[1] * 1.4, color: new THREE.Color(rt.palette.accent).lerp(new THREE.Color(1, 1, 1), 0.25) } : null);
       const layer = RENDERERS[shot.template].cue(rt);
       setInkGhost(null);
-      // a line can straddle light and dark (a photo inset under part of it): each glyph over the opposite tone flips
-      // to the other ink, like type knocked out where it crosses a picture
-      if (mixed) this.knockout(layer, cue.start + Math.min(1, (cue.end - cue.start) / 2), rt.palette.text);
       layer.group.visible = false;
       const fit = fitToFrame(layer);
       this.textRoot.add(fit);
@@ -994,30 +994,6 @@ export class LyricVjEngine {
     const e = Math.max(...edges);
     const before = placed(e - 0.001);
     return now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE)));
-  }
-
-  /** Flips glyphs whose own backdrop (the look at t, under the glyph's settled position) is the same tone as the type. */
-  private knockout(layer: CueLayer, t: number, text: string) {
-    const fit = new THREE.Group();
-    fit.add(layer.group);
-    settledBox(layer, fit);
-    const dark = luma(text) <= 0.5;
-    const flip = new THREE.Color(dark ? '#f4f2ee' : '#16151a');
-    const v = new THREE.Vector3();
-    layer.group.traverse((o) => {
-      const m = o as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
-      if (!m.isMesh || !m.material.map || o.parent?.userData['inkGhost'] === o) return;
-      o.getWorldPosition(v);
-      const x = Math.round(v.x + W / 2);
-      const y = Math.round(H / 2 - v.y);
-      if (x < 8 || y < 8 || x > W - 8 || y > H - 8) return;
-      const d = this.probe!.getImageData(x - 8, y - 8, 16, 16).data;
-      let l = 0;
-      for (let i = 0; i < d.length; i += 4) l += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
-      l /= d.length / 4;
-      if (dark ? l < 0.32 : l > 0.68) m.material.color.copy(flip);
-    });
-    fit.remove(layer.group);
   }
 
   /** Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. */

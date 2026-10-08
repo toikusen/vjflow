@@ -83,3 +83,18 @@ describe('keyWords', () => {
     expect(k.some((x) => /こう|ゆこう/.test(x))).toBe(false);
   });
 });
+
+describe('colourWords', () => {
+  it('keeps colour for the title and the most repeated words only', async () => {
+    const { colourWords } = await import('./structure');
+    const cue = (text: string, i: number) => ({ id: `c${i}`, start: i, end: i + 1, text });
+    const song = {
+      title: 'X - てぇてぇ',
+      cues: ['てぇてぇ 自分を', '最強 今日も', '最強 自分は', '最強だよ', '今日を'].map(cue),
+    } as unknown as Parameters<typeof colourWords>[0];
+    const w = colourWords(song);
+    expect(w).toContain('てぇてぇ');
+    expect(w).toContain('最強');
+    expect(w).not.toContain('自分');
+  });
+});

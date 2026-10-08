@@ -8,7 +8,7 @@ import { Design, validateDesign } from './design';
 import { MotifPlan, validateMotif } from './motif';
 import { validateMoments } from './moments';
 import { phraseBoundaries } from './phrases';
-import { COLOR_SHARE, keyWords, sameLines } from './structure';
+import { COLOR_SHARE, COLOR_WORDS, colourWords, sameLines } from './structure';
 import { SongTimeline } from './timeline';
 
 export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut';
@@ -261,7 +261,8 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   }
   // colour is for the words that matter (title words, hook words); the rest are emphasised by size only, and at most
   // COLOR_SHARE of the lines change colour at all
-  const keys = keyWords(song);
+  const keys = colourWords(song);
+  const used = new Set<string>();
   const budget = Math.max(1, Math.round(COLOR_SHARE * t.cues.length));
   let coloured = 0;
   for (const cs of t.cues) {
@@ -269,11 +270,14 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     for (const e of cs.emphasis ?? []) {
       if (e.method !== 'color' && e.method !== 'glow') continue;
       const words = text.slice(e.from, e.to).join('');
-      const isKey = keys.some((k) => words.replace(/[\s　]/g, '').toLowerCase().includes(k) || k.includes(words.replace(/[\s　]/g, '').toLowerCase()));
-      if (isKey && coloured < budget) {
+      const plain = words.replace(/[\s　]/g, '').toLowerCase();
+      const key = keys.find((k) => plain.includes(k) || k.includes(plain));
+      if (key && coloured < budget && (used.has(key) || used.size < COLOR_WORDS)) {
+        used.add(key);
         coloured++;
         continue;
       }
+      const isKey = !!key;
       fixes.push(`歌詞 ${cs.cueId} 的「${words}」${isKey ? '超過換色額度' : '不是關鍵詞'}，改為放大強調`);
       e.method = 'scale';
     }

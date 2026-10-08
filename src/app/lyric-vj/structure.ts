@@ -331,8 +331,28 @@ export function keyWords(song: SongTimeline): string[] {
   return [...new Set([...fromTitle, ...repeated])];
 }
 
-/** Share of lines that may change colour (the rest are emphasised by size). */
-export const COLOR_SHARE = 0.2;
+/**
+ * The words that may change colour: the title's, and the song's two most repeated words (in 3+ different lines).
+ * Colouring every repeated word (自分, 今日) read as words changing colour for no reason.
+ */
+export function colourWords(song: SongTimeline): string[] {
+  const title = splitSongTitle(song.title).title;
+  const norm2 = (p: string) => norm(p).replace(/[ぁ-ゖ]{1,3}$/u, '');
+  // the title's words count whatever their script (てぇてぇ is hiragana and the song's whole theme)
+  const fromTitle = [...new Set(phrases(title).flatMap((p) => [norm(p), norm2(p)]).flatMap((k) => k.split(/の|と|に|を|は|が/u)))].filter((k) => [...k].length >= 2);
+  const counts = keyWords(song)
+    .filter((k) => !fromTitle.includes(k))
+    .map((k) => [k, new Set(song.cues.filter((c) => norm(c.text).includes(k)).map((c) => norm(c.text))).size] as const)
+    .filter(([, n]) => n >= 3)
+    .sort((x, y) => y[1] - x[1]);
+  const all = [...new Set([...fromTitle, ...counts.slice(0, 2).map(([k]) => k)])];
+  // 信 inside 信じ is the same word: keep the fuller one
+  return all.filter((k) => !all.some((o) => o !== k && o.includes(k)));
+}
+
+/** Share of lines that may change colour (the rest are emphasised by size), and how many different words may. */
+export const COLOR_SHARE = 0.12;
+export const COLOR_WORDS = 3;
 
 /** Readable hook phrases for type patterns: the phrases holding key words, most repeated first (display form). */
 export function keyPhrases(song: SongTimeline, n = 5): string[] {

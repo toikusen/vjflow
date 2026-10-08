@@ -127,10 +127,27 @@ ${sprites.some((x) => x.id.startsWith('girl.')) ? `25. 角色是故事的主角�
 const baseline = a.baseline ? JSON.parse(readFileSync(join(a.baseline, 'codelayer.json'), 'utf8')) as { idea: string; src: string } : undefined;
 const baseStills = a.baseline ? readdirSync(a.baseline).filter((f) => /^still_.*\.jpg$/.test(f)).sort((x, y) => parseFloat(x.slice(6)) - parseFloat(y.slice(6))) : [];
 const notes = a.feedback ? readFileSync(a.feedback, 'utf8').trim() : '';
+// style recipes (huashu-art-motion, MIT): how to draw an art style in Canvas code — renderers, parameters, pitfalls.
+// The director reads the index, the renderer notes, the transitions, and the full cards mapped to this song's language.
+const recipeDir = join('scripts', 'lyric-vj', 'recipes');
+const recipeMap: Record<string, string[]> = JSON.parse(readFileSync(join(recipeDir, 'recipes.json'), 'utf8'));
+const recipeRead = (f: string) => readFileSync(join(recipeDir, 'huashu', f), 'utf8');
+const cardIds = recipeMap[base.design?.language ?? ''] ?? [];
+const RECIPES = `
+
+畫風配方（取自開源專案 huashu-art-motion，MIT 授權，簡體中文筆記：用 Canvas 程式畫各種藝術風格的渲染器、參數與踩過的坑）。用它們把這首歌的畫風畫得像真的那種材料和技法，而不是扁平的向量圖；配方裡的人物、貓等角色畫法不要照搬（本片不放人物），借的是渲染器、材質、母題動作和轉場的做法。
+${cardIds.length ? `【和這首歌的設計語言最相關的配方卡（完整）】\n${cardIds.map((c) => recipeRead(join('cards', `${c}.md`))).join('\n\n')}` : ''}
+【渲染器速查與五層畫法】
+${recipeRead('renderers.md')}
+【全部 35 種風格索引（需要時借用其中的手法）】
+${recipeRead('INDEX.md')}
+【轉場集】
+${recipeRead('transitions.md')}`;
+
 // lessons: the user's notes on earlier songs (Studio appends them), so a new song starts from what was learned
 const lessonsFile = join('out', 'design-lessons.md');
 const lessons = existsSync(lessonsFile) ? readFileSync(lessonsFile, 'utf8').trim().split('\n').slice(-40).join('\n') : '';
-const intro = `${RULES}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
+const intro = `${RULES}${RECIPES}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
 const spriteSheet = a.sprites
   ? [{ type: 'text' as const, text: '素材庫總覽（每張下面是 id）：' }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(join(a.sprites, 'contact.jpg')).toString('base64') } }]
   : [];

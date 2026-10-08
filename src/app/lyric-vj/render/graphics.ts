@@ -1132,6 +1132,152 @@ export function drawNative(ctx: CanvasRenderingContext2D, language: string, sinc
       }
       break;
     }
+    case 'screentone': {
+      // manga focus lines close in on the centre, then the tone flashes
+      draw(ctx, { kind: 'speedlines', color: ink, count: 90, inner: 0.55 - 0.25 * k }, since, since, beat, () => undefined);
+      if (since < 0.12) {
+        ctx.globalAlpha *= 0.5;
+        draw(ctx, { kind: 'pattern', type: 'halftone', color: ink, scale: 14 }, since, since, beat, () => undefined);
+      }
+      break;
+    }
+    case 'chiyogami': {
+      // a square of patterned paper folds open from the centre like origami
+      const r = (0.1 + 0.9 * k) * H * 0.75;
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(Math.PI / 4 * (1 - k));
+      ctx.beginPath();
+      ctx.rect(-r, -r, r * 2, r * 2);
+      ctx.clip();
+      ctx.fillStyle = accent;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.translate(-W / 2, -H / 2);
+      draw(ctx, { kind: 'pattern', type: 'gingham', color: '#FFFFFF', scale: 60 }, since, since, beat, () => undefined);
+      break;
+    }
+    case 'aizome': {
+      // indigo blooms outward, white resist rings left where it never reached
+      const r = (0.15 + 0.85 * k) * Math.hypot(W, H) * 0.5;
+      ctx.fillStyle = '#1D3461';
+      ctx.beginPath();
+      ctx.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#EEF2F6';
+      for (let i = 1; i <= 5; i++) {
+        ctx.lineWidth = 10 - i;
+        ctx.globalAlpha = Math.max(0, fade) * (0.5 - i * 0.06);
+        ctx.beginPath();
+        ctx.arc(W / 2, H / 2, r * (i / 6), 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'citypop': {
+      // a striped sun rises over the horizon
+      const cy = H * (0.95 - 0.35 * k);
+      const rad = H * 0.32;
+      ctx.beginPath();
+      ctx.arc(W / 2, cy, rad, 0, Math.PI * 2);
+      ctx.clip();
+      for (let i = 0; i < 9; i++) {
+        ctx.fillStyle = i % 2 ? accent : '#FFD27A';
+        ctx.fillRect(W / 2 - rad, cy - rad + (i * rad * 2) / 9, rad * 2, (rad * 2) / 9 - (i > 4 ? (i - 4) * 4 : 0));
+      }
+      break;
+    }
+    case 'y2k': {
+      // a chrome sparkle bursts with a ring of bubbles
+      ctx.translate(W / 2, H / 2);
+      const s = (0.2 + 0.9 * k) * H * 0.4;
+      const g = ctx.createLinearGradient(-s, -s, s, s);
+      g.addColorStop(0, '#FFFFFF');
+      g.addColorStop(0.45, '#B9C6D8');
+      g.addColorStop(0.55, '#FFFFFF');
+      g.addColorStop(1, '#8EA0BC');
+      ctx.fillStyle = g;
+      star4(ctx, 0, 0, s);
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      ctx.lineWidth = 3;
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2 + since;
+        ctx.beginPath();
+        ctx.arc(Math.cos(a) * s * 1.6, Math.sin(a) * s * 1.6, 10 + hash(i, 61) * 24, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'gothic-lolita': {
+      // a crimson cross of light opens through the dark
+      const t = Math.min(1, since / 0.35);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = accent;
+      ctx.globalAlpha *= 0.55;
+      ctx.fillRect(W / 2 - 14 - 30 * t, 0, 28 + 60 * t, H);
+      ctx.fillRect(0, H * 0.38 - 10 - 22 * t, W, 20 + 44 * t);
+      break;
+    }
+    case 'embroidery': {
+      // a stitched heart draws itself, stitch by stitch
+      ctx.translate(W / 2, H / 2);
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 7;
+      ctx.lineCap = 'round';
+      ctx.setLineDash([22, 14]);
+      const n = Math.floor(k * 120);
+      ctx.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const a = (i / 120) * Math.PI * 2;
+        const x = 16 * Math.sin(a) ** 3;
+        const y = -(13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a));
+        if (i) ctx.lineTo(x * 22, y * 22);
+        else ctx.moveTo(x * 22, y * 22);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'chalkboard': {
+      // a chalk star is scribbled in one stroke, dust flying off it
+      ctx.translate(W / 2, H / 2);
+      ctx.strokeStyle = 'rgba(246,244,236,0.9)';
+      ctx.lineWidth = 12;
+      ctx.lineJoin = 'round';
+      const n = Math.floor(k * 5) + 1;
+      const r = H * 0.33;
+      ctx.beginPath();
+      for (let i = 0; i <= n; i++) {
+        const a = -Math.PI / 2 + (i * 4 * Math.PI) / 5;
+        if (i) ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        else ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(246,244,236,0.6)';
+      for (let i = 0; i < 60; i++) ctx.fillRect((hash(i, 71) - 0.5) * r * 2.4 * k, (hash(i, 72) - 0.5) * r * 2.4 * k, 3, 3);
+      break;
+    }
+    case 'cyanotype': {
+      // the print is exposed: a white flash fades back to Prussian blue
+      ctx.fillStyle = '#F1F5F8';
+      ctx.globalAlpha *= Math.max(0, 1 - since / 0.6);
+      ctx.fillRect(0, 0, W, H);
+      break;
+    }
+    case 'claymation': {
+      // a big clay blob squashes onto the stage and springs up
+      const squash = since < 0.25 ? 1 - since / 0.25 : 0;
+      const sx = 1 + 0.35 * squash;
+      const sy = 1 - 0.3 * squash;
+      ctx.translate(W / 2, H * 0.78);
+      ctx.scale(sx * k, sy * k);
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.ellipse(0, -H * 0.18, H * 0.26, H * 0.2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(-H * 0.08, -H * 0.27, H * 0.06, H * 0.035, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
   }
   ctx.restore();
   void ink;

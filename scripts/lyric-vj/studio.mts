@@ -99,7 +99,7 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
   const assets = `$( [ -f ${q(join(dir, 'assets.merged.json'))} ] && echo ${q(join(dir, 'assets.merged.json'))} || echo ${q(join(dir, 'assets', 'assets.json'))} )`;
   const lang = opts.language && /^[a-z0-9-]+$/.test(opts.language) ? opts.language : undefined;
   const preview = `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${assets} --start 0 --end ${end} --stills ${(song.duration * 0.18).toFixed(2)},${(song.duration * 0.45).toFixed(2)},${(song.duration * 0.8).toFixed(2)} --out ${q(join(dir, 'preview'))}`;
-  const render = (layer?: string) => `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${assets} --start 0 --end ${end} --out ${q(dir)}${layer ? ` --layer ${layer}` : ''} && rm -rf ${q(join(dir, 'render'))} ${q(join(dir, 'segments'))}`;
+  const render = (layer?: string) => `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${assets} --start 0 --end ${end} --out ${q(dir)} --fps 60${layer ? ` --layer ${layer}` : ''} && rm -rf ${q(join(dir, 'render'))} ${q(join(dir, 'segments'))}`;
   const mark = (p: Phase) => `echo '##PHASE ${p}'`;
   // the song's own drawing layer; when it fails the song keeps its library look
   const library = join(dir, 'props', 'library');

@@ -87,7 +87,11 @@ const RULES = `
 16. 轉場優先用「下一個場景的招牌元素」：從畫面裡的某個物件長出或帶出下一個場景（例如雲擴張成下一場的天空、電車窗變成下一場的畫面），看得見的時長約 0.4–0.5 秒並落在拍點上；做不到就乾淨硬切。
 17. 鏡頭要大膽：同一場景的相鄰鏡頭，在景別（遠景／中景／特寫）、角度、運鏡方向三者中至少改變兩項。
 17-1. 物件的位置、大小、出現與消失都要連續：除了鏡頭切點（f.cam.index 改變的那一格），任何物件都不能瞬間換位置、換大小、冒出來或消失；出場和退場要有動畫（落下、滑入、長出），讓位要用 f.lyricWeight 漸變，不要寫 if (f.lyric) 直接跳位。
-17-2. 物理要合理：物件放在地面、水面或掛在東西上，不要漂浮；影子是畫在接地點正下方的扁平橢圓（低透明度），不是物件後面的灰色圓盤。`;
+17-2. 物理要合理：物件放在地面、水面或掛在東西上，不要漂浮；影子是畫在接地點正下方的扁平橢圓（低透明度），不是物件後面的灰色圓盤。
+17-3. 動態系統（不像 AI 做的關鍵）：全片只用 3 種緩動曲線，各有用途——進場用減速（ease-out，例如 1-(1-p)^3）、退場用加速（ease-in）、鏡頭用兩端都緩（ease-in-out）；線性只能用在慢慢漂移。回彈（overshoot 1–7%）只給「真的落地或卡上」的那一下，全片最多 2 次，其他動作不准彈。移動距離越長時間越長（約 0.35 秒＋每 1000 像素 1.35 秒，鏡頭 0.6–2.4 秒）；同一時間只有 1 個主要動作＋最多 2 個輔助動作；任何東西每格移動不超過 60–80 像素，更快就改成拍點上的硬切。次要動作在主要動作進行到 55–75% 時才開始，兩者一起停下。鏡頭切點兩側要嘛都靜止，要嘛新鏡頭用舊鏡頭的速度延續。同一個物件不能用兩份交叉淡化，要讓同一個物件變形過去。
+17-4. 一個強調色只代表一件事（例如「命運」「現在」「你」）：平常只佔畫面約 8%，全片最多鋪滿畫面一次（在最大的高潮）。不要到處用。
+17-5. 一個故事物件（一條線、一個信物、一個形狀）貫穿每個鏡頭、在切點也不消失，最後在結尾收成一個畫面——要是這首歌獨有的東西，不要用單純的點、線、方塊敷衍。
+17-6. 轉場：全片用 6–8 種，每種最多 2 次，另外選 1 種從故事物件長出來的「招牌轉場」，在開頭、中段、結尾各用一次；交叉淡化不能當預設，也不要閃白、光斑、故障、漩渦這類現成特效。`;
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['idea', 'src', 'sections'],
@@ -268,6 +272,33 @@ async function review(images: string[], weak: string[], strips: string[], tcuts:
   return JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"verdict":"","issues":[]}');
 }
 
+/**
+ * A second reader tries to refute each review issue against the same frames (after cinetic's verifier): an issue that is
+ * wrong, invisible at normal speed, or whose fix would make things worse is dropped before the director acts on it.
+ */
+async function verify(rv: Review, images: string[], strips: string[]): Promise<Review> {
+  if (!rv.issues.length) return rv;
+  const msg = await client.messages
+    .stream({
+      model: a.model!, max_tokens: 8000,
+      system: '你是審片意見的查核者。你的工作是試著推翻每一條意見：對照截圖，判斷它是否真的存在、正常播放時看不看得出來、照它改會不會更好。只保留站得住的意見。',
+      messages: [{
+        role: 'user', content: [
+          { type: 'text', text: `審片意見（編號從 0 開始）：\n${rv.issues.map((x, i) => `${i}. 鏡頭 ${x.shot}：${x.problem} → ${x.fix}`).join('\n')}\n\n以下是同一批截圖（時間依序 ${times.join('、')} 秒，鏡頭 ${picks.join('、')}）與轉場條。回傳要保留的編號。` },
+          ...[...images, ...strips].map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
+        ],
+      }],
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['keep'], properties: { keep: { type: 'array', items: { type: 'integer' } } } } } },
+    } as Anthropic.Messages.MessageStreamParams)
+    .finalMessage();
+  usage.input += msg.usage.input_tokens;
+  usage.output += msg.usage.output_tokens;
+  const keep = new Set<number>(JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"keep":[]}').keep ?? []);
+  const kept = rv.issues.filter((_, i) => keep.has(i));
+  console.log(`verify: kept ${kept.length}/${rv.issues.length} review issues`);
+  return { ...rv, issues: kept.length ? kept : rv.issues.slice(0, 3) };
+}
+
 const began = Date.now();
 let reply = await ask('high');
 console.log('idea:', reply.idea);
@@ -275,7 +306,8 @@ for (let round = 1; round <= 3; round++) {
   const r = test(reply, round);
   console.log(`round ${round}: ${r.problems.length ? r.problems.join(' | ') : 'no errors'}; weak shots: ${r.weak.length}`);
   if (round === 3) break;
-  const rv = await review(r.images, r.weak, r.strips, r.tcuts);
+  const rv0 = await review(r.images, r.weak, r.strips, r.tcuts);
+  const rv = await verify(rv0, r.images, r.strips);
   writeFileSync(join(work, `review_r${round}.json`), JSON.stringify({ ...rv, weak: r.weak }, null, 1));
   console.log(`review ${round}: ${rv.verdict} (${rv.issues.length} issues)`);
   messages.push({

@@ -369,6 +369,11 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     if (!errs.length) break;
     dMessages.push({ role: 'assistant', content: msg.content as Anthropic.Beta.Messages.BetaContentBlockParam[] }, { role: 'user', content: `請修正後重新輸出：\n${errs.map((e) => `- ${e}`).join('\n')}` });
   }
+  // grain is texture, not a filter: a heavy one greys every frame (LOVE YOU KILL YOU at 0.45); new designs keep it light
+  if (checked.treatment.design && checked.treatment.design.grain > 0.25) {
+    checked.fixes.push(`顆粒 ${checked.treatment.design.grain} 太重，調為 0.25`);
+    checked.treatment.design.grain = 0.25;
+  }
   keepApart(checked.treatment, checked.fixes);
   return { checked, usage };
 }

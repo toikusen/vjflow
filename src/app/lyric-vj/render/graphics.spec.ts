@@ -66,3 +66,16 @@ describe('camAt', () => {
     expect(camAt([], 3).count).toBe(1);
   });
 });
+
+describe('code layer lyric glide', () => {
+  it('moves the lyric box between lines and fades a new one in by weight', async () => {
+    const { blendLayer } = await import('./graphics');
+    const box = (x: number) => ({ x0: x, y0: 0, x1: x + 100, y1: 50 });
+    const code = (lyric?: ReturnType<typeof box>) => ({ kind: 'code' as const, src: '', lyric });
+    const mid = blendLayer(code(box(0)), code(box(200)), 0.5) as { lyric: { x0: number }; lyricWeight: number };
+    expect(mid.lyric.x0).toBe(100);
+    expect((blendLayer(code(), code(box(0)), 0.25) as { lyricWeight: number }).lyricWeight).toBe(0.25);
+    const leaving = blendLayer(code(box(0)), code(), 0.25) as { lyric: { x0: number }; lyricWeight: number };
+    expect([leaving.lyric.x0, leaving.lyricWeight]).toEqual([0, 0.75]);
+  });
+});

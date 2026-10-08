@@ -53,7 +53,7 @@ export type Layer = Base &
     | { kind: 'mosaic'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number }
     | { kind: 'ink'; color: Rgb; colors?: Rgb[]; count?: number; size?: number; seed?: number }
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
-    | { kind: 'code'; src: string; lyric?: Rect; cuts?: number[] }
+    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[] }
   );
 
 export interface LookSection {
@@ -87,8 +87,12 @@ export function sectionAt(look: GraphicsLook, t: number): LookSection {
   return cur;
 }
 
-/** Draws the look at t; `image(asset)` returns a loaded picture for photo layers. */
-export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, adjust: (ls: Layer[]) => Layer[] = (ls) => ls) {
+/**
+ * Draws the look at t; `image(asset)` returns a loaded picture for photo layers. `codeTime` (real time) drives a code
+ * layer when t is held to a language's drawings per second: stepping a camera move at 12 fps read as objects
+ * teleporting.
+ */
+export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, adjust: (ls: Layer[]) => Layer[] = (ls) => ls, codeTime = t) {
   ctx.save();
   ctx.clearRect(0, 0, W, H);
   const sec = sectionAt(look, t);
@@ -104,7 +108,8 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
     }
     // one layer the director got wrong (a missing colour) draws nothing instead of stopping the whole render
     try {
-      draw(ctx, l, t, t - sec.start, beat, image);
+      if (l.kind === 'code') drawCode(ctx, l, codeTime, codeTime - sec.start, beat, image);
+      else draw(ctx, l, t, t - sec.start, beat, image);
     } catch (e) {
       report(`${l.kind}: ${(e as Error).message}`);
     }
@@ -116,7 +121,7 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
 /** The camera shot a code layer is in: shots are cut at `cuts` (song seconds), synced with the lyric layouts. */
 export interface CodeCam { index: number; start: number; end: number; progress: number; count: number }
 /** f.img(id): a sprite from the song's library (designed by the image model, keyed), null when it is missing. */
-type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null }) => void;
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null }) => void;
 
 /** The shot at t among cut times (sorted); before the first cut is shot 0. */
 export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
@@ -133,7 +138,7 @@ const reported = new Set<string>();
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; cuts?: number[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   let fn = compiled.get(l.src);
   if (!fn) {
     try {
@@ -147,7 +152,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   const t0 = performance.now();
   ctx.save();
   try {
-    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, cam: camAt(l.cuts ?? [], t), hash, img: (id) => image(`spr:${id}`) ?? null });
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam: camAt(l.cuts ?? [], t), hash, img: (id) => image(`spr:${id}`) ?? null });
   } catch (e) {
     report(`runtime: ${(e as Error).message}`);
   }
@@ -1234,6 +1239,16 @@ function resize(l: Layer, k: number): Layer {
 export function blendLayer(a: Layer, b: Layer, k: number): Layer {
   if (a === b || k >= 1) return b;
   if (k <= 0) return a;
+  // a code layer's lyric box glides too (its drawing makes room by it): between two boxes it moves, a box that
+  // appears or leaves keeps its place while its weight fades in or out
+  if (a.kind === 'code' && b.kind === 'code') {
+    const ra = a.lyric;
+    const rb = b.lyric;
+    if (ra && rb) return { ...b, lyric: { x0: ra.x0 + (rb.x0 - ra.x0) * k, y0: ra.y0 + (rb.y0 - ra.y0) * k, x1: ra.x1 + (rb.x1 - ra.x1) * k, y1: ra.y1 + (rb.y1 - ra.y1) * k }, lyricWeight: 1 };
+    if (rb) return { ...b, lyricWeight: k };
+    if (ra) return { ...b, lyric: ra, lyricWeight: 1 - k };
+    return b;
+  }
   const out = { ...b } as Record<string, unknown>;
   for (const key of ['x', 'y', 'w', 'h', 'r', 'size']) {
     const va = (a as unknown as Record<string, unknown>)[key];

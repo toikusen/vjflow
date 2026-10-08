@@ -65,7 +65,7 @@ const RULES = `
 - ctx：1920×1080 的 CanvasRenderingContext2D，已經畫好你下面保留的圖層；畫完會自動 restore。
 - f.t：歌曲秒數；f.age：本段開始後的秒數；f.w、f.h：1920、1080。
 - f.beat：{ since: 距上一拍秒數, pulse: 1→0 衰減的打拍力道, index: 第幾拍 }。BPM 和段落、高潮時間在下面的資料裡，可以直接寫死在程式裡。
-- f.lyric：此刻歌詞在畫面上的矩形 {x0,y0,x1,y1}（像素），沒有歌詞時是 null。歌詞會畫在你上面。
+- f.lyric：此刻歌詞在畫面上的矩形 {x0,y0,x1,y1}（像素），沒有歌詞時是 null。歌詞會畫在你上面。f.lyric 換句時會在 0.4 秒內滑到新位置；f.lyricWeight 是 0→1 的讓位權重（歌詞出現時漸增、離開時漸減），讓位的位移和縮放一律乘上它。
 - f.cam：此刻的鏡頭 { index, start, end, progress 0→1, count }。鏡頭在 cuts 的時間點硬切（index 0 是第一個切點之前），切點和歌詞版型換版同步。
 - f.hash(a, b)：決定性雜訊 [0,1)。
 規則：
@@ -85,7 +85,9 @@ const RULES = `
 14. 動畫原則：真實的緩動、預備動作、擠壓拉伸、錯開（stagger）、跟隨與重疊動作。禁止：通用的推入／滑入／旋轉甩入、整屏閃爍、沒有意義的漂浮粒子、只會放大縮小的「呼吸」。
 15. 每個鏡頭＝一個主要動作（落在觀眾視線的焦點上）＋ 2–4 個取自該場景母題的小循環。不能有只剩底色、或只有極淡元素的鏡頭。
 16. 轉場優先用「下一個場景的招牌元素」：從畫面裡的某個物件長出或帶出下一個場景（例如雲擴張成下一場的天空、電車窗變成下一場的畫面），看得見的時長約 0.4–0.5 秒並落在拍點上；做不到就乾淨硬切。
-17. 鏡頭要大膽：同一場景的相鄰鏡頭，在景別（遠景／中景／特寫）、角度、運鏡方向三者中至少改變兩項。`;
+17. 鏡頭要大膽：同一場景的相鄰鏡頭，在景別（遠景／中景／特寫）、角度、運鏡方向三者中至少改變兩項。
+17-1. 物件的位置、大小、出現與消失都要連續：除了鏡頭切點（f.cam.index 改變的那一格），任何物件都不能瞬間換位置、換大小、冒出來或消失；出場和退場要有動畫（落下、滑入、長出），讓位要用 f.lyricWeight 漸變，不要寫 if (f.lyric) 直接跳位。
+17-2. 物理要合理：物件放在地面、水面或掛在東西上，不要漂浮；影子是畫在接地點正下方的扁平橢圓（低透明度），不是物件後面的灰色圓盤。`;
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['idea', 'src', 'sections'],
@@ -230,7 +232,18 @@ function test(r: Reply, round: number) {
     execFileSync('ffmpeg', ['-v', 'error', '-y', ...ins, '-filter_complex', `${offs.map((_, i) => `[${i}]scale=480:-1[s${i}]`).join(';')};${offs.map((_, i) => `[s${i}]`).join('')}hstack=${offs.length}`, '-q:v', '4', jpg]);
     return readFileSync(jpg).toString('base64');
   });
-  return { file, problems, images, weak, strips, tcuts };
+  // jumps: 1/30 s pairs where each lyric line appears (a drawing that makes room by snapping jumps right there)
+  const jDir = join(work, `jump_r${round}`);
+  const jTimes = song.cues.map((c: { start: number }) => +(c.start - 0.2).toFixed(2)).filter((x: number) => x > 0.5 && !cuts.some((c) => Math.abs(c - x) < 0.15));
+  render(jTimes.flatMap((x: number) => [x, x + 0.03]), jDir, ['--layer', 'back']);
+  const jFile = join(jDir, 'jumps.json');
+  try {
+    execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', 'python', 'scripts/lyric-vj/jump_qa.py', jDir, jTimes.map((x: number) => x.toFixed(2)).join(','), jFile], { stdio: ['ignore', 'ignore', 'inherit'] });
+  } catch {
+    /* a missing still: no jump report this round */
+  }
+  const jumps: string[] = existsSync(jFile) ? (JSON.parse(readFileSync(jFile, 'utf8')) as { t: number; diff: number }[]).filter((x) => x.diff > 4).map((x) => `${x.t.toFixed(2)} 秒（一格之內畫面變了 ${x.diff.toFixed(1)}）`) : [];
+  return { file, problems, images, weak: [...weak, ...jumps.map((j) => `歌詞出現時物件瞬間跳動：${j}`)], strips, tcuts };
 }
 
 /** A reviewer who did not make it: sees only the stills, the brief and the user's standards. */

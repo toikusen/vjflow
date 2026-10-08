@@ -757,7 +757,7 @@ export class LyricVjEngine {
       drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
         const tex = this.images.get(asset ?? shot.asset ?? '');
         return tex?.image as CanvasImageSource | undefined;
-      }, (ls) => this.makeRoom(ls, bt));
+      }, (ls) => this.makeRoom(ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
       const lang = this.job.treatment.design?.language;
       const drop = [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
       // a song's own code layer brings its own peaks; the language's stock move on top of it read as clutter
@@ -868,8 +868,9 @@ export class LyricVjEngine {
     this.finalPass.uniforms['uHit'].value = fx.hit;
     // capped: past this, white lyrics bloom into an unreadable glare
     this.bloom.strength = Math.min(1.2, 0.55 + 0.9 * fx.hit + mfx.bloom);
-    // a light field blooms to white: keep only a trace there
-    if (this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, t).text) this.bloom.strength = 0.05;
+    // a light field blooms to white: keep only a trace there; on a dark field a flat graphic look still glows around
+    // every light object (a cream sprite got a white halo), so it stays low there too
+    if (this.job.treatment.graphics) this.bloom.strength = sectionAt(this.job.treatment.graphics, t).text ? 0.05 : Math.min(this.bloom.strength, 0.15);
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
     // chroma ghosts (after JIZURA's ghost passes): the lyrics as they were 1/30 and 1/15 s ago, offset and tinted
     const chroma = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].chroma;

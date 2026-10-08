@@ -16,12 +16,12 @@ import { FONTS } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS, MOTIF_RENDERS, MOTIF_VARIANTS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES, TECHNIQUES } from '../../src/app/lyric-vj/design';
 import { MEDIA } from '../../src/app/lyric-vj/medium';
-import { LANGUAGES, availableLanguages, LanguageId } from '../../src/app/lyric-vj/languages';
+import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
 import { validateLook } from '../../src/app/lyric-vj/look';
 import { LAYER_KINDS } from '../../src/app/lyric-vj/render/graphics';
 
 /** What a song was made with, so the next songs can be told apart from it (older records have a system). */
-interface DesignRecord { song: string; language?: LanguageId; system?: string; font: string; medium?: string; motif?: string; peak?: string }
+interface DesignRecord { song: string; language?: LanguageId; system?: string; font: string; medium?: string; motif?: string; peak?: string; grain?: number; paper?: number }
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
@@ -242,17 +242,13 @@ const history: DesignRecord[] = existsSync(a.history!) ? JSON.parse(readFileSync
 const recent = history.filter((r) => r.song !== song.title).slice(-3);
 // languages rotate through the whole catalogue before one repeats (a 3-song window let 第六感's neon stage come back
 // four songs later and read as the same design); fonts and motifs only avoid the last three
-const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : availableLanguages(history.filter((r) => r.song !== song.title).slice(-(Object.keys(LANGUAGES).length - 1)));
-// the medium is the look's texture (paper fibre, grain): two songs in a row on the same one read as one style, so the
-// last song's medium is not on offer at all (asking nicely let LOVE YOU KILL YOU and 世界のつづき both pick paper)
-const lastMedium = recent.at(-1)?.medium;
-if (lastMedium) {
-  const m = (DESIGN_SCHEMA.properties as Record<string, { enum?: string[] }>)['medium'];
-  if (m.enum && m.enum.length > 2) m.enum = m.enum.filter((x) => x !== lastMedium);
-}
+// every language is on offer (the director picks what suits the song best); the ones used lately are flagged, and a
+// repeat must look different in its settings (keepApart below)
+const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : (Object.keys(LANGUAGES) as LanguageId[]);
+const recentLanguages = new Set(recent.map((r) => r.language).filter(Boolean));
 const recentText = recent.length ? recent.map((r) => `- ${r.song}：${r.language ? `${LANGUAGES[r.language].name}（${r.language}）` : r.system}、字型 ${r.font}、媒材 ${r.medium ?? '—'}${r.motif ? `、主題物件 ${r.motif}` : ''}`).join('\n') : '（無）';
 const SYSTEMS_TEXT = `設計語言（language，最重要的決定）：每首歌要像不同設計師做的。先依這首歌的個性選一種設計語言，鏡頭只能用它的模板。
-${(Object.keys(LANGUAGES) as LanguageId[]).map((k) => `- ${k}（${LANGUAGES[k].name}）${allowedLanguages.includes(k) ? '' : '【最近已用過，這首不可選】'}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}`).join('\n')}
+${(Object.keys(LANGUAGES) as LanguageId[]).map((k) => `- ${k}（${LANGUAGES[k].name}）${recentLanguages.has(k) ? '【最近用過：最適合這首才選，選了就要讓配色、字型、媒材與質感明顯不同】' : ''}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}`).join('\n')}
 最近做過的歌（這首要和它們明顯不同）：
 ${recentText}`;
 const style = STYLES[a['style-id']!];
@@ -310,6 +306,22 @@ const keepText = keep
  * separate call (one schema with everything was too large for structured output); motif rules are checked and fed
  * back up to twice.
  */
+/**
+ * A song on the same medium as a recent one keeps its texture apart: grain and paper close to that song's (both within
+ * 0.1) move by 0.15, so two paper songs never come out with the same speckle.
+ */
+function keepApart(t: TreatmentV3, fixes: string[]) {
+  const d = t.design;
+  if (!d) return;
+  for (const r of recent) {
+    if (r.medium !== d.medium || r.grain === undefined || r.paper === undefined) continue;
+    if (Math.abs(d.grain - r.grain) < 0.1 && Math.abs(d.paper - r.paper) < 0.1) {
+      d.grain = +(d.grain > 0.3 ? d.grain - 0.15 : d.grain + 0.15).toFixed(2);
+      fixes.push(`媒材 ${d.medium} 和「${r.song}」相同且質感太接近，顆粒改為 ${d.grain}`);
+    }
+  }
+}
+
 async function designPass(base: TreatmentV3, language: LanguageId): Promise<{ checked: ReturnType<typeof validateTreatment>; usage: { input: number; output: number } }> {
   const sys = LANGUAGES[language];
   const sysText = `【設計語言】${sys.name}（${language}）
@@ -357,6 +369,7 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     if (!errs.length) break;
     dMessages.push({ role: 'assistant', content: msg.content as Anthropic.Beta.Messages.BetaContentBlockParam[] }, { role: 'user', content: `請修正後重新輸出：\n${errs.map((e) => `- ${e}`).join('\n')}` });
   }
+  keepApart(checked.treatment, checked.fixes);
   return { checked, usage };
 }
 
@@ -437,7 +450,7 @@ const report = { model: a.model, seconds: Math.round((Date.now() - began) / 1000
 writeFileSync(join(out, 'director.json'), JSON.stringify(report, null, 1));
 {
   const d = result.treatment.design!;
-  const rec: DesignRecord = { song: song.title, language: chosen, font: d.font, medium: d.medium, motif: result.treatment.motif && `${result.treatment.motif.kind}/${result.treatment.motif.variant ?? ''}/${result.treatment.motif.render ?? 'neon'}`, peak: d.peak };
+  const rec: DesignRecord = { song: song.title, language: chosen, font: d.font, medium: d.medium, motif: result.treatment.motif && `${result.treatment.motif.kind}/${result.treatment.motif.variant ?? ''}/${result.treatment.motif.render ?? 'neon'}`, peak: d.peak, grain: d.grain, paper: d.paper };
   writeFileSync(a.history!, JSON.stringify([...history.filter((r) => r.song !== song.title), rec], null, 1));
 }
 status.stage('director', { state: 'done', costUSD: report.costUSD, message: undefined });

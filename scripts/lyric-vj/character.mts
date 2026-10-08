@@ -1,4 +1,4 @@
-// Character directions on one frame (after huashu-art-motion's "three directions on the same frame"): the image model
+// Character directions on one frame: the image model
 // draws each candidate character into a reference frame of the song's own scene, keeping its style, so the user picks
 // one before any sprite sheet is made. People are drawn by the image model; code only composites them (see notes).
 // npx tsx scripts/lyric-vj/character.mts --ref frame.jpg --directions dirs.json --out <dir>

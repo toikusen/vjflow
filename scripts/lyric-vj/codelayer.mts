@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
 
 const { values: a } = parseArgs({ options: { song: { type: 'string' }, dir: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
   // an approved earlier drawing (its codelayer.json and still_*.jpg) to build on, and the user's notes on what to keep or fix
@@ -68,6 +69,7 @@ const RULES = `
 - f.lyric：此刻歌詞在畫面上的矩形 {x0,y0,x1,y1}（像素），沒有歌詞時是 null。歌詞會畫在你上面。f.lyric 換句時會在 0.4 秒內滑到新位置；f.lyricWeight 是 0→1 的讓位權重（歌詞出現時漸增、離開時漸減），讓位的位移和縮放一律乘上它。
 - f.cam：此刻的鏡頭 { index, start, end, progress 0→1, count }。鏡頭在 cuts 的時間點硬切（index 0 是第一個切點之前），切點和歌詞版型換版同步。
 - f.hash(a, b)：決定性雜訊 [0,1)。
+- f.cache：跨格保留的物件，用來存只算一次的離屏畫布或雜訊圖（例如 f.cache.paper ??= 建立紙紋()）。
 規則：
 1. 完全決定性：只依 f 的值畫，不能用 Math.random、Date、requestAnimationFrame、全域狀態累積（每一格可能單獨被畫、也可能跳著畫）。
 2. 效能：每格 10 毫秒內（不要每格建上萬個路徑、不要 getImageData、不要 filter: blur 大面積）。
@@ -127,22 +129,20 @@ ${sprites.some((x) => x.id.startsWith('girl.')) ? `25. 角色是故事的主角�
 const baseline = a.baseline ? JSON.parse(readFileSync(join(a.baseline, 'codelayer.json'), 'utf8')) as { idea: string; src: string } : undefined;
 const baseStills = a.baseline ? readdirSync(a.baseline).filter((f) => /^still_.*\.jpg$/.test(f)).sort((x, y) => parseFloat(x.slice(6)) - parseFloat(y.slice(6))) : [];
 const notes = a.feedback ? readFileSync(a.feedback, 'utf8').trim() : '';
-// style recipes (huashu-art-motion, MIT): how to draw an art style in Canvas code — renderers, parameters, pitfalls.
-// The director reads the index, the renderer notes, the transitions, and the full cards mapped to this song's language.
-const recipeDir = join('scripts', 'lyric-vj', 'recipes');
-const recipeMap: Record<string, string[]> = JSON.parse(readFileSync(join(recipeDir, 'recipes.json'), 'utf8'));
-const recipeRead = (f: string) => readFileSync(join(recipeDir, 'huashu', f), 'utf8');
-const cardIds = recipeMap[base.design?.language ?? ''] ?? [];
+// how to draw this song's language in code (languages.ts craft), plus the general method every language shares
+const lang = base.design?.language ? LANGUAGES[base.design.language as LanguageId] : undefined;
 const RECIPES = `
 
-畫風配方（取自開源專案 huashu-art-motion，MIT 授權，簡體中文筆記：用 Canvas 程式畫各種藝術風格的渲染器、參數與踩過的坑）。用它們把這首歌的畫風畫得像真的那種材料和技法，而不是扁平的向量圖；配方裡的人物、貓等角色畫法不要照搬（本片不放人物），借的是渲染器、材質、母題動作和轉場的做法。
-${cardIds.length ? `【和這首歌的設計語言最相關的配方卡（完整）】\n${cardIds.map((c) => recipeRead(join('cards', `${c}.md`))).join('\n\n')}` : ''}
-【渲染器速查與五層畫法】
-${recipeRead('renderers.md')}
-【全部 35 種風格索引（需要時借用其中的手法）】
-${recipeRead('INDEX.md')}
-【轉場集】
-${recipeRead('transitions.md')}`;
+這首歌的畫風「${lang?.name ?? '—'}」要畫得像真的那種材料和製作過程，而不是扁平的向量圖：
+${lang ? `【畫法】${lang.craft}` : ''}
+【通用畫法】
+1. 由下往上分層：先用平塗把構圖和明暗擺對（大面積），再用這個畫風的「材料處理」重畫一次（筆觸、網點、刻痕、透明疊色），小物件和素材另外一層畫（不要讓大面積的處理把小東西打碎），最後補線和高光。
+2. 材料的物理過程就是畫法：先想這種畫在現實裡怎麼做出來（刷版、刻木、疊透明顏料、放映膠片），把那個過程寫成程式。
+3. 顏色按區域給一小組色（天、地、主體各 3–5 色），筆觸或色點從該區的色組取色，比整張隨機抖動顏色好看得多。
+4. 小東西要比直覺大：在影片裡 40px 以下的細節幾乎看不見。
+5. 每個鏡頭至少一個主要動作加兩三個這個畫風特有的小循環（浪頭、燈光呼吸、雲漂），讓畫是活的，而不是靜止的圖在移動。
+6. 確定性：所有亂數用 f.hash 種子；重的東西（紙紋、雜訊圖、靜態背景）只算一次：存在 f.cache（每個程式一個、跨格保留的物件；內容必須只由種子決定），每格只做合成。
+7. 合成的坑：在畫面上用 destination-out 會挖出透明洞（影片裡變黑），挖洞要在離屏完成再貼回；source-in／source-atop 會清掉同一畫布上不相干的東西，先在離屏畫完再合成；每格開始前重設 lineWidth、globalAlpha、composite 等狀態。`;
 
 // lessons: the user's notes on earlier songs (Studio appends them), so a new song starts from what was learned
 const lessonsFile = join('out', 'design-lessons.md');
@@ -162,7 +162,7 @@ const messages: Anthropic.Messages.MessageParam[] = [{
     ]
     : [{ type: 'text', text: intro }, ...spriteSheet],
 }];
-/** The first draft is planned at high effort; revisions are edits at medium (after skillry's plan/build/judge split). */
+/** The first draft is planned at high effort; revisions are edits at medium (planning and judging cost more than editing). */
 async function ask(effort: 'high' | 'medium' = 'medium'): Promise<Reply> {
   const msg = await client.messages
     .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, output_config: { effort, format: { type: 'json_schema', schema: SCHEMA } } } as Anthropic.Messages.MessageStreamParams)
@@ -290,7 +290,7 @@ async function review(images: string[], weak: string[], strips: string[], tcuts:
 }
 
 /**
- * A second reader tries to refute each review issue against the same frames (after cinetic's verifier): an issue that is
+ * A second reader tries to refute each review issue against the same frames: an issue that is
  * wrong, invisible at normal speed, or whose fix would make things worse is dropped before the director acts on it.
  */
 async function verify(rv: Review, images: string[], strips: string[]): Promise<Review> {

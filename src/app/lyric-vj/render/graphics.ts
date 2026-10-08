@@ -121,7 +121,7 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
 /** The camera shot a code layer is in: shots are cut at `cuts` (song seconds), synced with the lyric layouts. */
 export interface CodeCam { index: number; start: number; end: number; progress: number; count: number }
 /** f.img(id): a sprite from the song's library (designed by the image model, keyed), null when it is missing. */
-type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null }) => void;
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null; cache: Record<string, unknown> }) => void;
 
 /** The shot at t among cut times (sorted); before the first cut is shot 0. */
 export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
@@ -133,6 +133,8 @@ export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
   return { index, start, end: stop, progress: Math.min(1, Math.max(0, (t - start) / Math.max(0.001, span))), count: cuts.length + 1 };
 }
 const compiled = new Map<string, CodeDraw>();
+/** Per drawing, kept across frames: textures and noise it builds once (deterministic content, so frame order is free). */
+const caches = new Map<string, Record<string, unknown>>();
 const reported = new Set<string>();
 /** Reports a code layer's failure or slowness once per message (the render's console, read by codelayer.mts). */
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
@@ -152,7 +154,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   const t0 = performance.now();
   ctx.save();
   try {
-    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam: camAt(l.cuts ?? [], t), hash, img: (id) => image(`spr:${id}`) ?? null });
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam: camAt(l.cuts ?? [], t), hash, img: (id) => image(`spr:${id}`) ?? null, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
   } catch (e) {
     report(`runtime: ${(e as Error).message}`);
   }

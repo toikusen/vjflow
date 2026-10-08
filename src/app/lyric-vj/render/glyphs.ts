@@ -38,7 +38,7 @@ export const setKanaScale = (k: number) => (defaultKana = k);
 /** Japanese typesetting rules (typeset.ts) on or off for the glyphs made next. */
 let typesetOn = true;
 export const setTypeset = (on: boolean) => (typesetOn = on);
-/** Glyphs split into their strokes (connected components) for assemble / scatter motion (after JIZURA, MIT). */
+/** Glyphs split into their strokes (connected components) for assemble / scatter motion. */
 let piecesOn = false;
 export const setPieces = (on: boolean) => (piecesOn = on);
 /** Hiragana (and its small forms); katakana and kanji keep full size. */

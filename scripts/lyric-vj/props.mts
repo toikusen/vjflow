@@ -1,4 +1,4 @@
-// A song's prop library (after huashu-art-motion: "people and objects by the image model, code composites"): the
+// A song's prop library: the
 // director lists the concrete things its scenes need, the image model draws them as green-screen sheets in the song's
 // palette (the first sheet anchors the style of the rest), they are keyed and split, and the director names what came
 // out and drops the misdrawn ones. Writes <out>/library (sprite_library.py: library.json, assets.json, contact.jpg).

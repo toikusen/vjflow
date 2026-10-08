@@ -124,7 +124,7 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
 }
 
 /**
- * Editor pass after the director (rules after JIZURA's unify mode, MIT): directional pairs alternate, strong
+ * Editor pass after the director (an editor's consistency rules): directional pairs alternate, strong
  * entrances are rationed, and a repeated lyric replays its first occurrence's entrance, exit and reveal. `same` maps a
  * repeated cue id to its first occurrence (structure.ts sameLines). Returns the repairs made.
  */

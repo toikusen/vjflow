@@ -1,4 +1,4 @@
-// Template contact sheet (QA, after JIZURA's dev/pack_sheet): every lyric template rendered on a short, a medium and
+// Template contact sheet (QA): every lyric template rendered on a short, a medium and
 // a long line of one song, one row per template, so a layout or typesetting change can be judged at a glance.
 // npx tsx scripts/lyric-vj/sheet.mts --dir out/db/<id> --treatment <treatment.json> --assets <assets.json> --out <png>
 import { execFileSync } from 'node:child_process';

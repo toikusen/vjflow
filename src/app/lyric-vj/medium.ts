@@ -1,7 +1,7 @@
 // Medium: the physical material a song's video pretends to be made of, applied as a post layer over everything
-// (AI plates included) so the frame stops reading as a clean digital render. Techniques after ReelMimic's engines
-// (MIT, github.com/edenfunf/reelmimic): held frames (on twos / 8–12 fps), line boil, paper tooth, exposure flicker,
-// per-step grain, ordered dither. Reimplemented here as one shader (engine.ts FINAL_SHADER).
+// (AI plates included) so the frame stops reading as a clean digital render: held frames (on twos / 8–12 fps), line
+// boil, paper tooth, exposure flicker, per-step grain, ordered dither — the traces each real medium leaves, done as one
+// shader (engine.ts FINAL_SHADER).
 
 export type MediumId = 'clean' | 'film' | 'paper' | 'crayon' | 'cutout' | 'pixel';
 

@@ -1,4 +1,4 @@
-// Japanese typesetting rules for display lyrics (after JIZURA's 03_text.js, MIT): particles set smaller, kana
+// Japanese typesetting rules for display lyrics: particles set smaller, kana
 // tracked tighter, a leading kanji enlarged, Latin a touch larger with a gap at the script change. Pure: the glyph
 // layer applies the numbers.
 

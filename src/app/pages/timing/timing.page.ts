@@ -19,7 +19,7 @@ const VIEW_SEC = 16; // seconds visible on the waveform at first; the wheel zoom
 const VIEW_MIN = 2;
 const VIEW_MAX = 60;
 const NUDGE = 0.05;
-const EDGE_LISTEN = 0.5; // Q/W/E/D play this long before/after a line's start or end (after Aegisub)
+const EDGE_LISTEN = 0.5; // Q/W/E/D play this long before/after a line's start or end
 const SNAP = 0.15; // Shift while dragging: an edge within this of a beat, a voice onset or a line edge lands on it
 const SPEEDS = [0.5, 0.75, 1];
 

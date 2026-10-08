@@ -569,7 +569,7 @@ export class LyricVjEngine {
       cues: this.cueLayers.map(({ rt, layer }) => {
         const [from, to] = layer.readable();
         const readableSec = Math.max(0, to - from);
-        // reading time: chars / 12 + 1 s (lemo-opuscar's readcheck), but never more than 90 % of the time the line is sung
+        // reading time: chars / 12 + 1 s , but never more than 90 % of the time the line is sung
         const chars = [...rt.cue.text.replace(/\s/g, '')].length;
         const requiredSec = Math.min(chars / 12 + 1, 0.9 * (rt.cue.end - rt.cue.start + 0.4));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
@@ -872,7 +872,7 @@ export class LyricVjEngine {
     // every light object (a cream sprite got a white halo), so it stays low there too
     if (this.job.treatment.graphics) this.bloom.strength = sectionAt(this.job.treatment.graphics, t).text ? 0.05 : Math.min(this.bloom.strength, 0.15);
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
-    // chroma ghosts (after JIZURA's ghost passes): the lyrics as they were 1/30 and 1/15 s ago, offset and tinted
+    // chroma ghosts: the lyrics as they were 1/30 and 1/15 s ago, offset and tinted
     const chroma = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].chroma;
     if (chroma && this.ghostPass) {
       const offset = this.textRoot.position.x;

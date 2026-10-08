@@ -118,7 +118,7 @@ export const beatCut: TemplateRenderer = {
       tagSource(gs, text, piece.from);
       return { holder, gs, from: startOf(k), to: k + 1 < pieces.length ? startOf(k + 1) : rt.exitAt, recap, size, tilt: (lay.tilt * Math.PI) / 180 };
     });
-    // morph into the recap (after JIZURA's morph, MIT): the last word's glyphs glide from where they were into their
+    // morph into the recap: the last word's glyphs glide from where they were into their
     // place in the whole line; the rest of the line fades in around them
     const MORPH = 0.35;
     const last = big[big.length - 1];

@@ -30,6 +30,8 @@ export interface CueRuntime {
   planned?: Pick<CueStyle, 'enter' | 'reveal'>;
   /** What pacing and readFix changed, in order. */
   adjust?: PaceAdjust[];
+  /** The entrance plays on every character at once (a quick entrance with no per-character stagger). */
+  together?: boolean;
   /** When the later lines of the same shot show (stack and couplet move earlier lines aside as they arrive). */
   later?: number[];
   /** This line's place among the lines of its shot (0 = first). */
@@ -140,6 +142,7 @@ const fracOf = (rt: CueRuntime, g: Glyph) => (g.src ?? g.index) / Math.max(1, [.
 /** When glyph g starts entering: its place in the steady word reveal, else the line's stagger. */
 export function enterAt(rt: CueRuntime, g: Glyph, stagger: number): number {
   if (rt.style.reveal === 'word') return revealAt(rt, fracOf(rt, g));
+  if (rt.together) return rt.showFrom;
   return rt.showFrom + g.index * stagger;
 }
 
@@ -232,7 +235,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 /** When the last character has finished entering (all opaque and within 5 % of final scale). */
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
   // a cut and a whole-line fade bring every character in at once (glyphMotion ignores the stagger for them)
-  const together = rt.style.enter === 'cut' || rt.style.enter === 'fade';
+  const together = rt.together || rt.style.enter === 'cut' || rt.style.enter === 'fade';
   const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : together ? rt.showFrom : rt.showFrom + (n - 1) * stagger * rt.pace;
   return last + enterSec(rt.style.enter, rt.pace);
 }
@@ -276,20 +279,24 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
 }
 
 /**
- * fast-cut: a line sung faster than it reads lost a slow entrance to a cut; fast-line / tight-line: its word reveal
- * became a whole-line entrance; read-hold: readFix only kept it up longer; read-cut: readFix landed it at once and cut
- * it out.
+ * fast-cut / fast-short: a line sung faster than it reads lost a slow entrance (to a cut, or to a short one);
+ * fast-line / tight-line: its word reveal became a whole-line entrance; read-hold: readFix only kept it up longer;
+ * read-short: instead of that cut, a quick entrance that still leaves the reading time; read-cut: readFix landed it at
+ * once and cut it out.
  */
-export type PaceAdjust = 'fast-cut' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-cut';
+export type PaceAdjust = 'fast-cut' | 'fast-short' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-short' | 'read-cut';
 
 /** Entrances too slow for a line sung faster than it reads (pop and fade are quick enough to keep). */
 const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise']);
+/** The quick entrance closest in feel: impacts pop, the rest fade. */
+const SHORT_ENTER = (e: EnterKind): EnterKind => (e === 'slam' || e === 'flap' || e === 'slot' ? 'pop' : 'fade');
 
 /**
- * Pacing before a line is built: a line sung faster than it reads (rushed) comes up whole and a slow entrance becomes
- * a cut; a line with little time to spare (tight) is not spelled out word by word.
+ * Pacing before a line is built: a line sung faster than it reads (rushed) comes up whole, and a slow entrance becomes
+ * a cut, or with `shortEnter` a quick entrance (readFix still cuts it when even that leaves too little reading time);
+ * a line with little time to spare (tight) is not spelled out word by word.
  */
-export function paceStyle(style: CueStyle, cue: { start: number; end: number; text: string }): { style: CueStyle; rushed: boolean; adjust: PaceAdjust[] } {
+export function paceStyle(style: CueStyle, cue: { start: number; end: number; text: string }, shortEnter = false): { style: CueStyle; rushed: boolean; adjust: PaceAdjust[] } {
   const chars = [...cue.text.replace(/\s/g, '')].length;
   const len = cue.end - cue.start;
   const rushed = len < chars / 12 + 1;
@@ -303,11 +310,39 @@ export function paceStyle(style: CueStyle, cue: { start: number; end: number; te
   if (rushed) {
     out = { ...out, reveal: 'line' };
     if (SLOW_ENTERS.has(style.enter)) {
-      out = { ...out, enter: 'cut' };
-      adjust.push('fast-cut');
+      out = { ...out, enter: shortEnter ? SHORT_ENTER(style.enter) : 'cut' };
+      adjust.push(shortEnter ? 'fast-short' : 'fast-cut');
     }
   }
   return { style: out, rushed, adjust };
+}
+
+/**
+ * The line again with a quick entrance, whole and with its pieces all up at once: what readFix tries before a cut when
+ * quick entrances are on. Undefined when there is nothing quicker than a cut to try.
+ */
+export function quickEntrance(rt: CueRuntime, together = false): CueRuntime | undefined {
+  if (rt.style.enter === 'cut') return undefined;
+  const enter = rt.style.enter === 'pop' || rt.style.enter === 'fade' ? rt.style.enter : SHORT_ENTER(rt.style.enter);
+  return { ...rt, style: { ...rt.style, reveal: 'line', enter }, rushed: true, together: together || rt.together, adjust: [...(rt.adjust ?? []), 'read-short'] };
+}
+
+export type ReadingFix = Pick<CueRuntime, 'style' | 'exitAt' | 'exitDur' | 'rushed' | 'adjust' | 'together'>;
+
+/**
+ * Gives a built line its reading time. `measure` builds the line with a timing and returns its readable window.
+ * readFix holds it longer or lands it on a cut; with `shortEnter`, before that cut a quick entrance is tried (held
+ * longer if need be) and kept only if the line built with it, as it will be drawn, still reads. Undefined = as it is.
+ */
+export function fitReading(rt: CueRuntime, measure: (r: CueRuntime) => [number, number], need: number, limit: number, shortEnter = false, together = false): ReadingFix | undefined {
+  const fix = readFix(rt, measure(rt), need, limit);
+  const quick = fix?.adjust?.at(-1) === 'read-cut' && shortEnter ? quickEntrance(rt, together) : undefined;
+  if (!quick) return fix;
+  const again = readFix(quick, measure(quick), need, limit);
+  if (again && again.adjust?.at(-1) !== 'read-hold') return fix;
+  const kept: ReadingFix = { style: quick.style, exitAt: quick.exitAt, exitDur: quick.exitDur, rushed: true, together: quick.together, adjust: quick.adjust, ...again };
+  const [from, to] = measure({ ...rt, ...kept });
+  return to - from >= need - 0.05 ? kept : fix;
 }
 
 /**

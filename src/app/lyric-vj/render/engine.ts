@@ -36,7 +36,7 @@ import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, r
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
-import { contrast, CueLayer, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readFix, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { contrast, CueLayer, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -128,6 +128,12 @@ export interface RenderJob {
   track?: boolean;
   /** One layer only, for compositing in VJ software: 'text' = lyrics on transparency, 'back' = everything else. */
   layer?: 'text' | 'back';
+  /**
+   * A line too fast for its entrance: 'whole' (default) keeps a quick entrance on the whole line at once when readFix
+   * still finds the reading time, else cuts; 'stagger' the same character by character (comparison only); 'cut' always
+   * cuts: the earlier entrance strategy, kept as the fallback (measuring, room-making and fit work the same either way).
+   */
+  entrance?: Entrance;
 }
 
 /** motionQa per line: the deepest overlap with a story prop by cause, and how far past the safe area / frame edge. */
@@ -143,6 +149,8 @@ export interface MotionCheck {
   offSafe: { t: number; px: number };
   offFrame: { t: number; px: number };
 }
+
+export type Entrance = 'whole' | 'stagger' | 'cut';
 
 export interface CueMetric {
   id: string;
@@ -165,6 +173,8 @@ export interface CueMetric {
   reveal: string;
   /** How much the line was scaled down to stay in the safe area at rest and in the frame as it moves (1 = not). */
   fitScale: number;
+  /** A whole-line quick entrance was drawn (entrance 'whole'); a line cut afterwards keeps its state but did not get one. */
+  together: boolean;
   adjust: PaceAdjust[];
   entranceLost: boolean;
 }
@@ -650,7 +660,10 @@ export class LyricVjEngine {
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
-      const { style: paced, rushed, adjust } = paceStyle(style, cue);
+      const entrance = this.job.entrance ?? 'whole';
+      const { style: paced, rushed, adjust } = paceStyle(style, cue, entrance !== 'cut');
+      // a quick entrance comes in on the whole line at once
+      const together = entrance === 'whole' && adjust.includes('fast-short');
       const rt: CueRuntime = {
         cue, style: paced, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
         // an English line is set in the paired Latin face
@@ -662,6 +675,7 @@ export class LyricVjEngine {
         pace,
         rushed,
         planned: { enter: style.enter, reveal: style.reveal },
+        together,
         adjust,
         later,
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
@@ -708,13 +722,13 @@ export class LyricVjEngine {
       setGhost(darkType ? [0, 0] : langGhost);
       setInkGhost(darkType && (langGhost[0] || langGhost[1]) ? { dx: langGhost[0] * 1.4, dy: langGhost[1] * 1.4, color: new THREE.Color(rt.palette.accent).lerp(new THREE.Color(1, 1, 1), 0.25) } : null);
       // templates draw the plain entrance/exit; ink, glitch, slash and drawn emphasis go on top (text-fx.ts)
-      const build = () => withTextFx(RENDERERS[shot.template].cue({ ...rt, style: templateStyle(rt.style) }), rt);
+      const build = (r = rt) => withTextFx(RENDERERS[shot.template].cue({ ...r, style: templateStyle(r.style) }), r);
       let layer = build();
       // a line not up long enough to read holds into the free time after it, or lands and leaves at once (the
       // templates read their timing when built, so the line is built again with the new timing)
       const need = readingSec(rt.cue.text, rt.cue.start, rt.cue.end);
       const limit = (persist ? leaveBy : nextShow) - 0.02;
-      const fixRead = readFix(rt, layer.readable(), need, limit);
+      const fixRead = fitReading(rt, (r) => (r === rt ? layer : build(r)).readable(), need, limit, entrance !== 'cut', entrance === 'whole');
       if (fixRead) {
         Object.assign(rt, fixRead);
         layer = build();
@@ -781,7 +795,7 @@ export class LyricVjEngine {
         const requiredSec = Math.min(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), 0.95 * (rt.exitAt + rt.exitDur - rt.showFrom));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style) }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style) }; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };

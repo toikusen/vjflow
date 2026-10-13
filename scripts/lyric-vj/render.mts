@@ -17,7 +17,7 @@ import { chromium, Page } from 'playwright';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { alignOffset, SongTimeline, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
-import type { AssetSource, RenderJob } from '../../src/app/lyric-vj/render/engine';
+import type { AssetSource, Entrance, RenderJob } from '../../src/app/lyric-vj/render/engine';
 import { decode } from './media.mts';
 import { MEDIA, MediumId } from '../../src/app/lyric-vj/medium';
 import { DEFAULT_DESIGN } from '../../src/app/lyric-vj/design';
@@ -36,9 +36,11 @@ const { values: a } = parseArgs({
     medium: { type: 'string' }, // override the treatment's medium (medium.ts)
     clip: { type: 'string' }, // 'a,b': render only this part of the window (previews)
     layer: { type: 'string' }, // text | back: one compositing layer (text = ProRes 4444 with alpha)
+    entrance: { type: 'string', default: 'whole' }, // fast lines: whole (quick entrance, default) | stagger (comparison) | cut (fallback)
     'motion-frames': { type: 'string' }, // QA: line ids whose motion check runs on every frame (60 fps), comma-separated
   },
 });
+if (!['whole', 'stagger', 'cut'].includes(a.entrance!)) throw new Error(`--entrance 只能是 whole、stagger 或 cut（收到 ${a.entrance}）`);
 const ROOT = process.cwd();
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
 // nothing is generated on unchecked lyric timing (the timing editor confirms it); --unconfirmed for internal tests
@@ -83,6 +85,7 @@ const job: RenderJob = {
   meta: { ...splitSongTitle(song.title), logo: a.logo ? url(a.logo) : undefined },
   layer: a.layer === 'text' || a.layer === 'back' ? a.layer : undefined,
   track: !!a.track,
+  entrance: a.entrance as Entrance,
 };
 // which code and options made this render, so reports from different versions are never mixed up
 const git = (...args: string[]) => {
@@ -96,7 +99,7 @@ const diff = git('diff', 'HEAD');
 const version = {
   commit: git('rev-parse', '--short', 'HEAD'),
   uncommitted: diff ? createHash('sha1').update(diff).digest('hex').slice(0, 10) : null,
-  options: {},
+  options: { entrance: job.entrance },
   renderedAt: new Date().toISOString(),
 };
 const alpha = job.layer === 'text';

@@ -1,0 +1,2451 @@
+{
+ "language": "risograph",
+ "concept": "一位偶像的一天被印成一疊雙色孔版小誌：開演前的空舞台、化妝鏡、握手會的長桌，到副歌的愛心舞台與白馬旋轉木馬；橋段走進大風的屋頂、夏日冰淇淋街與雨夜斑馬線，最後回到散滿彩帶的散場舞台。螢光粉疊上藍墨，錯位殘影像她一下子心動、一下子嘴硬的樣子。",
+ "styleAnchor": {
+  "prompt": "Palette of fluorescent pink, medium cobalt blue and sunny yellow over warm off-white, saturated colors, deep blue shadows, bright highlights, playful cheerful idol-pop mood, crisp light, generous empty space, clear foreground, midground and background layers. No text, no letters, no logos.",
+  "palette": {
+   "background": "#f4ede0",
+   "text": "#2b2a8c",
+   "accent": "#ff4fa3",
+   "line": "#1aa39a",
+   "glow": "#ffd23f"
+  }
+ },
+ "assets": [
+  {
+   "id": "img_stage",
+   "kind": "image",
+   "prompt": "An empty small live house stage before the show, a single microphone stand at center, pink spotlight cones cutting through haze, amplifiers and cables in the foreground, a curtain of tiny bulbs in the background, wide composition with open space above"
+  },
+  {
+   "id": "img_five_lights",
+   "kind": "image",
+   "prompt": "Concert stage seen from the empty floor, five spotlight beams in pink, blue, yellow, mint and lavender fanning upward from the stage edge, a metal crowd barrier in the foreground, haze and floating dust in the midground, dark rafters above"
+  },
+  {
+   "id": "img_mirror",
+   "kind": "image",
+   "prompt": "Backstage dressing room vanity mirror ringed with round light bulbs, a small sparkling tiara, lipstick, hair ribbons and a hand fan on the table in the foreground, a rack of frilly stage costumes blurred in the background, empty chair, warm bright light"
+  },
+  {
+   "id": "img_handshake",
+   "kind": "image",
+   "prompt": "Empty idol handshake event hall, a long table with a white cloth and a low partition, a stack of paper tickets, a small kitchen timer and a ribbon stanchion in the foreground, rows of empty booths receding into the distance, overhead fluorescent light"
+  },
+  {
+   "id": "img_chorus_a",
+   "kind": "image",
+   "prompt": "Big concert stage at full blast, a giant heart-shaped light frame glowing at the back, crossing spotlight beams, confetti and paper streamers suspended in the air at different depths, glittering floor reflections, bright light band along the stage edge"
+  },
+  {
+   "id": "img_chorus_b",
+   "kind": "image",
+   "prompt": "A white carousel horse with a pink saddle and golden pole under bright spotlights, carousel canopy with bulbs above, other horses blurred in the background, scattered star-shaped confetti in the foreground, dreamy bright night fairground light"
+  },
+  {
+   "id": "img_chorus_c",
+   "kind": "image",
+   "prompt": "Night city rooftop with strings of round fairy lights criss-crossing overhead, a huge full moon rising behind distant buildings, layered clouds drifting in front of the moon, a water tank and railing in the foreground, deep blue sky with a bright glow at the horizon"
+  },
+  {
+   "id": "img_cape",
+   "kind": "image",
+   "prompt": "Windy rooftop at bright late afternoon, a red cape billowing on a clothesline in the foreground, fast moving layered cumulus clouds, distant city skyline below, a strong sunlight band along the horizon"
+  },
+  {
+   "id": "img_icecream",
+   "kind": "image",
+   "prompt": "Sunny summer shopping street, a towering three-scoop ice cream cone on a little shop counter in the foreground, striped awnings and hanging paper lanterns in the midground, tall white clouds in a vivid blue sky above"
+  },
+  {
+   "id": "img_rain",
+   "kind": "image",
+   "prompt": "Rainy night crosswalk in a small town, a clear plastic umbrella left open on the wet pavement in the foreground, glowing traffic lights and shop windows reflected in puddles, slanted rain streaks, misty buildings in the background"
+  },
+  {
+   "id": "img_phone",
+   "kind": "image",
+   "prompt": "Quiet bedroom at night set up for live streaming, a smartphone on a tripod with a glowing ring light in the foreground, plush toys and a heart cushion on the bed in the midground, window with city lights and a crescent moon in the background"
+  },
+  {
+   "id": "img_dusk",
+   "kind": "image",
+   "prompt": "Wide pink and violet twilight sky over a quiet railway crossing and rooftops, long layered clouds stretching across the sky, a bright golden band at the horizon, first stars appearing, tiny distant power lines"
+  },
+  {
+   "id": "img_ending",
+   "kind": "image",
+   "prompt": "Stage right after the show, house lights half on, confetti and streamers scattered across the floor in the foreground, a lone microphone stand under a single spotlight, glowing heart light frame dimming in the background"
+  }
+ ],
+ "shots": [
+  {
+   "id": "S01",
+   "start": 0,
+   "end": 5.29,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.2
+   },
+   "asset": "img_stage",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S02",
+   "start": 5.29,
+   "end": 10.36,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_stage",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S03",
+   "start": 10.36,
+   "end": 15.08,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_five_lights",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S04",
+   "start": 15.08,
+   "end": 19.84,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_five_lights",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S05",
+   "start": 19.84,
+   "end": 24.82,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.2
+   },
+   "asset": "img_mirror",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S06",
+   "start": 24.82,
+   "end": 29.44,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.3
+   },
+   "asset": "img_mirror",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S07",
+   "start": 29.44,
+   "end": 34.38,
+   "template": "scatter",
+   "params": {
+    "direction": "up",
+    "spread": 0.8,
+    "tilt": 0,
+    "flash": false,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_mirror",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S08",
+   "start": 34.38,
+   "end": 39.66,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "img_stage",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S09",
+   "start": 39.66,
+   "end": 46.92,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_handshake",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S10",
+   "start": 46.92,
+   "end": 53.98,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_handshake",
+   "camera": "push",
+   "transitionIn": "flash"
+  },
+  {
+   "id": "S11",
+   "start": 53.98,
+   "end": 58.88,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_a",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S12",
+   "start": 58.88,
+   "end": 63.98,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_a",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S13",
+   "start": 63.98,
+   "end": 68.96,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "img_chorus_b",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S14",
+   "start": 68.96,
+   "end": 74.46,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_b",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S15",
+   "start": 74.46,
+   "end": 78.94,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_a",
+   "camera": "parallax",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S16",
+   "start": 78.94,
+   "end": 83.66,
+   "template": "scatter",
+   "params": {
+    "direction": "down",
+    "spread": 0.95,
+    "tilt": -4,
+    "flash": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_chorus_a",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S17",
+   "start": 83.66,
+   "end": 91.28,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.7,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_chorus_c",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S18",
+   "start": 91.28,
+   "end": 95.8055328798186,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_c",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S19",
+   "start": 95.8055328798186,
+   "end": 101.64,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_cape",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S20",
+   "start": 101.64,
+   "end": 106.24,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "img_cape",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S21",
+   "start": 106.24,
+   "end": 111.26,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_icecream",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S22",
+   "start": 111.26,
+   "end": 116.94,
+   "template": "quiet",
+   "params": {
+    "position": "auto",
+    "dim": 0.5
+   },
+   "asset": "img_rain",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S23",
+   "start": 116.94,
+   "end": 123.34,
+   "template": "stack",
+   "params": {
+    "dim": 0.35,
+    "pair": true
+   },
+   "asset": "img_rain",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S24",
+   "start": 123.34,
+   "end": 129.29,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_a",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S25",
+   "start": 129.29,
+   "end": 133.7,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_a",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S26",
+   "start": 133.7,
+   "end": 138.16,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "img_phone",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S27",
+   "start": 138.16,
+   "end": 146.36,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.3
+   },
+   "asset": "img_chorus_b",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S28",
+   "start": 146.36,
+   "end": 153.58,
+   "template": "vertical",
+   "params": {
+    "position": "auto",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_dusk",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S29",
+   "start": 153.58,
+   "end": 160.823,
+   "template": "quiet",
+   "params": {
+    "position": "center",
+    "dim": 0.6
+   },
+   "asset": "img_dusk",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S30",
+   "start": 160.823,
+   "end": 165.8,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_handshake",
+   "camera": "parallax",
+   "transitionIn": "flash"
+  },
+  {
+   "id": "S31",
+   "start": 165.8,
+   "end": 171.6,
+   "template": "stack",
+   "params": {
+    "dim": 0.35,
+    "pair": true
+   },
+   "asset": "img_handshake",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S32",
+   "start": 171.6,
+   "end": 177.12,
+   "template": "vertical",
+   "params": {
+    "position": "right",
+    "step": 1,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_chorus_c",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S33",
+   "start": 177.12,
+   "end": 184.06,
+   "template": "scatter",
+   "params": {
+    "direction": "up",
+    "spread": 0.9,
+    "tilt": 0,
+    "flash": false,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_stage",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S34",
+   "start": 184.06,
+   "end": 189.68,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.3
+   },
+   "asset": "img_chorus_a",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S35",
+   "start": 189.68,
+   "end": 194.1,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_chorus_b",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S36",
+   "start": 194.1,
+   "end": 199.7,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.3
+   },
+   "asset": "img_chorus_a",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S37",
+   "start": 199.7,
+   "end": 207.12,
+   "template": "scatter",
+   "params": {
+    "direction": "up",
+    "spread": 1,
+    "tilt": -4,
+    "flash": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_chorus_b",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S38",
+   "start": 207.12,
+   "end": 211.78,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "img_five_lights",
+   "camera": "parallax",
+   "transitionIn": "flash"
+  },
+  {
+   "id": "S39",
+   "start": 211.78,
+   "end": 216.7350566893424,
+   "template": "scatter",
+   "params": {
+    "direction": "down",
+    "spread": 1,
+    "tilt": 0,
+    "flash": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "img_ending",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S40",
+   "start": 216.7350566893424,
+   "end": 221.03,
+   "template": "vertical",
+   "params": {
+    "position": "auto",
+    "step": 0.6,
+    "dim": 0.35,
+    "lift": 0
+   },
+   "asset": "img_ending",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  }
+ ],
+ "arc": [
+  {
+   "start": 0,
+   "level": 1
+  },
+  {
+   "start": 46.92,
+   "level": 2
+  },
+  {
+   "start": 53.98,
+   "level": 3
+  },
+  {
+   "start": 95.79,
+   "level": 1
+  },
+  {
+   "start": 116.94,
+   "level": 2
+  },
+  {
+   "start": 123.34,
+   "level": 3
+  },
+  {
+   "start": 153.58,
+   "level": 0
+  },
+  {
+   "start": 160.82,
+   "level": 2
+  },
+  {
+   "start": 184.06,
+   "level": 3
+  },
+  {
+   "start": 207.12,
+   "level": 2
+  }
+ ],
+ "moments": [
+  {
+   "kind": "build",
+   "at": 53.98,
+   "dur": 3.5,
+   "strength": 1
+  },
+  {
+   "kind": "drop",
+   "at": 53.98,
+   "strength": 1
+  },
+  {
+   "kind": "build",
+   "at": 123.34,
+   "dur": 3.5,
+   "strength": 1.1
+  },
+  {
+   "kind": "drop",
+   "at": 123.34,
+   "strength": 1.15
+  },
+  {
+   "kind": "break",
+   "at": 153.58,
+   "dur": 7.2,
+   "strength": 0.9
+  },
+  {
+   "kind": "build",
+   "at": 184.06,
+   "dur": 2.1,
+   "strength": 1.2
+  },
+  {
+   "kind": "hold",
+   "at": 184.06,
+   "dur": 0.5,
+   "strength": 1
+  },
+  {
+   "kind": "finale",
+   "at": 184.06,
+   "strength": 1.3
+  }
+ ],
+ "cues": [
+  {
+   "cueId": "c001",
+   "shot": "S01",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c002",
+   "shot": "S01",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c003",
+   "shot": "S02",
+   "enter": "fade",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c004",
+   "shot": "S02",
+   "enter": "slot",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c005",
+   "shot": "S02",
+   "enter": "pop",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c006",
+   "shot": "S03",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c007",
+   "shot": "S03",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c008",
+   "shot": "S04",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c009",
+   "shot": "S04",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c010",
+   "shot": "S05",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c011",
+   "shot": "S05",
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c012",
+   "shot": "S06",
+   "enter": "cut",
+   "exit": "glitch",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c013",
+   "shot": "S07",
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c014",
+   "shot": "S08",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c015",
+   "shot": "S09",
+   "enter": "fade",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c016",
+   "shot": "S09",
+   "enter": "fade",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c017",
+   "shot": "S09",
+   "enter": "pop",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c018",
+   "shot": "S10",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c019",
+   "shot": "S10",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c020",
+   "shot": "S10",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c021",
+   "shot": "S11",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c022",
+   "shot": "S11",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c023",
+   "shot": "S11",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c024",
+   "shot": "S11",
+   "enter": "cut",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c025",
+   "shot": "S12",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c026",
+   "shot": "S12",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c027",
+   "shot": "S12",
+   "enter": "slam",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c028",
+   "shot": "S13",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c029",
+   "shot": "S13",
+   "enter": "pop",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c030",
+   "shot": "S14",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c031",
+   "shot": "S14",
+   "enter": "cut",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c032",
+   "shot": "S15",
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c033",
+   "shot": "S15",
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c034",
+   "shot": "S16",
+   "enter": "slam",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c035",
+   "shot": "S17",
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c036",
+   "shot": "S17",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c038",
+   "shot": "S18",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c037",
+   "shot": "S18",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c039",
+   "shot": "S19",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c040",
+   "shot": "S19",
+   "enter": "pop",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c041",
+   "shot": "S20",
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c042",
+   "shot": "S21",
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c043",
+   "shot": "S22",
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c044",
+   "shot": "S22",
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c045",
+   "shot": "S23",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c046",
+   "shot": "S23",
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c047",
+   "shot": "S24",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c048",
+   "shot": "S24",
+   "enter": "slot",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c049",
+   "shot": "S24",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c050",
+   "shot": "S24",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c051",
+   "shot": "S24",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c052",
+   "shot": "S25",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c053",
+   "shot": "S25",
+   "enter": "slam",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c054",
+   "shot": "S26",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c055",
+   "shot": "S26",
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c056",
+   "shot": "S27",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c057",
+   "shot": "S27",
+   "enter": "slam",
+   "exit": "slash",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c058",
+   "shot": "S27",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c059",
+   "shot": "S28",
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c060",
+   "shot": "S29",
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c061",
+   "shot": "S30",
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c062",
+   "shot": "S30",
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c063",
+   "shot": "S31",
+   "enter": "wipe",
+   "exit": "glitch",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c064",
+   "shot": "S31",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c065",
+   "shot": "S32",
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c066",
+   "shot": "S33",
+   "enter": "slot",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c067",
+   "shot": "S33",
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c068",
+   "shot": "S34",
+   "enter": "slam",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c069",
+   "shot": "S34",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c070",
+   "shot": "S35",
+   "enter": "pop",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c071",
+   "shot": "S35",
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c072",
+   "shot": "S36",
+   "enter": "cut",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c073",
+   "shot": "S36",
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c074",
+   "shot": "S37",
+   "enter": "wipe",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c075",
+   "shot": "S37",
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c076",
+   "shot": "S38",
+   "enter": "wipe",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c077",
+   "shot": "S38",
+   "enter": "cut",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c078",
+   "shot": "S39",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c079",
+   "shot": "S40",
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  }
+ ],
+ "design": {
+  "font": "Zen Maru Gothic",
+  "accentFont": "Pacifico",
+  "kanaScale": 0.88,
+  "grain": 0.25,
+  "paper": 0.6,
+  "colorScript": [
+   {
+    "start": 0,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.45
+   },
+   {
+    "start": 10.4,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.35
+   },
+   {
+    "start": 19.8,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.45
+   },
+   {
+    "start": 46.9,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.3
+   },
+   {
+    "start": 54,
+    "shadow": "#5A2A86",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.55
+   },
+   {
+    "start": 69,
+    "shadow": "#5A2A86",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.55
+   },
+   {
+    "start": 83.7,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.5
+   },
+   {
+    "start": 95.8,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.5
+   },
+   {
+    "start": 106.2,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.4
+   },
+   {
+    "start": 111.3,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#1E64B4",
+    "duotone": 0.95,
+    "image": 0.4
+   },
+   {
+    "start": 123.3,
+    "shadow": "#5A2A86",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.6
+   },
+   {
+    "start": 129.3,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.45
+   },
+   {
+    "start": 146.4,
+    "shadow": "#5A2A86",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.45
+   },
+   {
+    "start": 160.8,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.85,
+    "image": 0.35
+   },
+   {
+    "start": 184.1,
+    "shadow": "#5A2A86",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.6
+   },
+   {
+    "start": 199.7,
+    "shadow": "#1E64B4",
+    "highlight": "#F5EFE4",
+    "accent": "#FF4FAE",
+    "duotone": 0.9,
+    "image": 0.4
+   }
+  ],
+  "peak": "vacuum",
+  "medium": "cutout",
+  "techniques": [
+   "title-hook",
+   "skeleton",
+   "flash"
+  ],
+  "language": "risograph"
+ },
+ "graphics": {
+  "sections": [
+   {
+    "start": 0,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#FF4FAE",
+      "scale": 14,
+      "angle": 15,
+      "blend": "multiply",
+      "opacity": 0.3
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_stage",
+      "tint": "#1E64B4",
+      "blend": "multiply",
+      "x": -0.62,
+      "y": 0.42,
+      "r": 0.28,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ]
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 6,
+      "size": 40,
+      "color": "#FF4FAE",
+      "drift": 0.3,
+      "blend": "multiply",
+      "pulse": 0.4,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 2,
+        "color": "#1E64B4"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 10.4,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#FF4FAE",
+       "#1E64B4"
+      ],
+      "from": 0.82,
+      "to": 1,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ],
+      "color": "#FF4FAE"
+     },
+     {
+      "kind": "particles",
+      "shape": "star",
+      "color": "#808080",
+      "count": 28,
+      "size": 30,
+      "speed": 0.6,
+      "dir": "up",
+      "opacity": 0.7
+     },
+     {
+      "kind": "frame",
+      "type": "ticket",
+      "label": "NONFIC LIVE",
+      "color": "#1E64B4",
+      "pulse": 0.3
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 19.8,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 4,
+      "size": 260,
+      "color": "#1E64B4",
+      "opacity": 0.35,
+      "drift": 0.15,
+      "outline": false,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 2,
+        "color": "#FF4FAE"
+       }
+      ]
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#FF4FAE",
+      "scale": 12,
+      "angle": 60,
+      "blend": "multiply",
+      "opacity": 0.28
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_mirror",
+      "tint": "#FF4FAE",
+      "blend": "multiply",
+      "x": 0.62,
+      "y": -0.4,
+      "r": 0.3,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 46.9,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "pattern",
+      "type": "stripes",
+      "color": "#1E64B4",
+      "scale": 40,
+      "angle": 30,
+      "scroll": 60,
+      "blend": "multiply",
+      "opacity": 0.2
+     },
+     {
+      "kind": "band",
+      "color": "#FF4FAE",
+      "y": -0.75,
+      "angle": -6,
+      "height": 140,
+      "scroll": 120,
+      "blend": "multiply",
+      "pulse": 0.5,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 54,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#FF4FAE"
+      ],
+      "from": 0,
+      "to": 0.38,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 0,
+        "dy": 4,
+        "color": "#1E64B4"
+       }
+      ],
+      "color": "#FF4FAE"
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#1E64B4",
+      "scale": 16,
+      "angle": 75,
+      "blend": "multiply",
+      "opacity": 0.35
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_chorus_a",
+      "tint": "#1E64B4",
+      "blend": "multiply",
+      "x": 0.6,
+      "y": 0.45,
+      "r": 0.32,
+      "pulse": 0.3,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ]
+     },
+     {
+      "kind": "stamp",
+      "text": "推",
+      "size": 160,
+      "tilt": -12,
+      "color": "#FF4FAE",
+      "x": -0.75,
+      "y": 0.55
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 69,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#1E64B4"
+      ],
+      "from": 0.72,
+      "to": 1,
+      "blend": "multiply",
+      "opacity": 0.85,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ],
+      "color": "#1E64B4"
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 8,
+      "size": 90,
+      "color": "#FF4FAE",
+      "opacity": 0.6,
+      "drift": 0.3,
+      "blend": "multiply",
+      "pulse": 0.5,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 2,
+        "color": "#1E64B4"
+       }
+      ]
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_chorus_b",
+      "tint": "#FF4FAE",
+      "blend": "multiply",
+      "x": -0.62,
+      "y": -0.42,
+      "r": 0.3,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ]
+     },
+     {
+      "kind": "stamp",
+      "text": "チョロイン",
+      "size": 110,
+      "tilt": 8,
+      "color": "#FF4FAE",
+      "x": 0.68,
+      "y": -0.62
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 83.7,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#1E64B4"
+      ],
+      "from": 0,
+      "to": 0.22,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ],
+      "color": "#1E64B4"
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#FF4FAE",
+      "scale": 18,
+      "angle": 30,
+      "blend": "multiply",
+      "opacity": 0.3
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_chorus_c",
+      "tint": "#1E64B4",
+      "blend": "multiply",
+      "x": 0.65,
+      "y": 0.4,
+      "r": 0.3,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ]
+     },
+     {
+      "kind": "particles",
+      "shape": "star",
+      "color": "#FF4FAE",
+      "count": 24,
+      "size": 28,
+      "speed": 0.4,
+      "dir": "down",
+      "opacity": 0.7
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 95.8,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "band",
+      "color": "#FF4FAE",
+      "y": 0.6,
+      "angle": -10,
+      "height": 220,
+      "scroll": 220,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ]
+     },
+     {
+      "kind": "speedlines",
+      "count": 28,
+      "inner": 0.65,
+      "color": "#1E64B4",
+      "opacity": 0.22
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_cape",
+      "tint": "#FF4FAE",
+      "blend": "multiply",
+      "x": -0.65,
+      "y": -0.4,
+      "r": 0.3,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 106.2,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "pattern",
+      "type": "gingham",
+      "color": "#FF4FAE",
+      "scale": 60,
+      "angle": 0,
+      "blend": "multiply",
+      "opacity": 0.2
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 5,
+      "size": 120,
+      "color": "#1E64B4",
+      "opacity": 0.45,
+      "drift": 0.4,
+      "blend": "multiply",
+      "pulse": 0.4,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 2,
+        "color": "#FF4FAE"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 111.3,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.45
+     },
+     {
+      "kind": "pattern",
+      "type": "stripes",
+      "color": "#1E64B4",
+      "scale": 24,
+      "angle": 75,
+      "blend": "multiply",
+      "opacity": 0.12
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_rain",
+      "tint": "#1E64B4",
+      "blend": "multiply",
+      "x": 0.62,
+      "y": 0.42,
+      "r": 0.26,
+      "opacity": 0.85
+     },
+     {
+      "kind": "particles",
+      "shape": "dot",
+      "color": "#1E64B4",
+      "count": 50,
+      "size": 24,
+      "speed": 1.4,
+      "dir": "down",
+      "opacity": 0.45
+     }
+    ],
+    "transition": {
+     "kind": "liquid",
+     "dur": 1,
+     "color": "#1E64B4"
+    },
+    "text": "#1E64B4"
+   },
+   {
+    "start": 123.3,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#FFE30A",
+       "#FF4FAE"
+      ],
+      "from": 0,
+      "to": 0.45,
+      "blend": "multiply",
+      "pulse": 0.5,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ],
+      "color": "#FFE30A"
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 10,
+      "size": 110,
+      "color": "#FF4FAE",
+      "opacity": 0.6,
+      "drift": 0.5,
+      "blend": "multiply",
+      "pulse": 0.7,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 2,
+        "color": "#FFE30A"
+       }
+      ]
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#1E64B4",
+      "scale": 16,
+      "angle": 45,
+      "blend": "multiply",
+      "opacity": 0.3
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_five_lights",
+      "tint": "#FF4FAE",
+      "blend": "multiply",
+      "x": -0.62,
+      "y": 0.45,
+      "r": 0.3,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FFE30A"
+       }
+      ]
+     },
+     {
+      "kind": "stamp",
+      "text": "NONONONO",
+      "size": 110,
+      "tilt": -8,
+      "color": "#1E64B4",
+      "x": 0.65,
+      "y": -0.65
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 129.3,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#FFE30A"
+      ],
+      "from": 0.8,
+      "to": 1,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ],
+      "color": "#FFE30A"
+     },
+     {
+      "kind": "pattern",
+      "type": "dots",
+      "color": "#1E64B4",
+      "scale": 28,
+      "angle": 20,
+      "blend": "multiply",
+      "opacity": 0.18
+     },
+     {
+      "kind": "photo",
+      "mode": "circle",
+      "asset": "img_phone",
+      "tint": "#1E64B4",
+      "blend": "multiply",
+      "x": -0.65,
+      "y": -0.45,
+      "r": 0.28,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#FF4FAE"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 146.4,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.45
+     },
+     {
+      "kind": "photo",
+      "mode": "full",
+      "asset": "img_dusk",
+      "tint": "#FF4FAE",
+      "blend": "multiply",
+      "opacity": 0.4
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#1E64B4",
+      "scale": 20,
+      "angle": 60,
+      "blend": "multiply",
+      "opacity": 0.2
+     }
+    ],
+    "text": "#1E64B4"
+   },
+   {
+    "start": 160.8,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#FF4FAE",
+      "scale": 14,
+      "angle": 15,
+      "blend": "multiply",
+      "opacity": 0.22
+     },
+     {
+      "kind": "shapes",
+      "type": "triangle",
+      "count": 7,
+      "size": 140,
+      "color": "#1E64B4",
+      "opacity": 0.45,
+      "drift": 0.5,
+      "blend": "multiply",
+      "pulse": 0.5,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 2,
+        "color": "#FF4FAE"
+       }
+      ]
+     },
+     {
+      "kind": "band",
+      "color": "#FF4FAE",
+      "y": -0.8,
+      "angle": 4,
+      "height": 120,
+      "scroll": 300,
+      "blend": "multiply",
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ]
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 184.1,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.4
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#FFE30A",
+       "#FF4FAE"
+      ],
+      "from": 0,
+      "to": 0.55,
+      "blend": "multiply",
+      "pulse": 0.6,
+      "ghosts": [
+       {
+        "dx": 3,
+        "dy": 3,
+        "color": "#1E64B4"
+       }
+      ],
+      "color": "#FFE30A"
+     },
+     {
+      "kind": "pattern",
+      "type": "halftone",
+      "color": "#1E64B4",
+      "scale": 16,
+      "angle": 45,
+      "blend": "multiply",
+      "opacity": 0.3
+     },
+     {
+      "kind": "particles",
+      "shape": "star",
+      "color": "#808080",
+      "count": 40,
+      "size": 34,
+      "speed": 0.9,
+      "dir": "up",
+      "opacity": 0.85
+     },
+     {
+      "kind": "stamp",
+      "text": "単推し",
+      "size": 130,
+      "tilt": -10,
+      "color": "#FF4FAE",
+      "x": -0.7,
+      "y": 0.6
+     }
+    ],
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   },
+   {
+    "start": 199.7,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F5EFE4",
+      "grain": 0.45
+     },
+     {
+      "kind": "photo",
+      "mode": "full",
+      "asset": "img_ending",
+      "tint": "#1E64B4",
+      "blend": "multiply",
+      "opacity": 0.32
+     },
+     {
+      "kind": "particles",
+      "shape": "dot",
+      "color": "#808080",
+      "count": 45,
+      "size": 26,
+      "speed": 0.5,
+      "dir": "down",
+      "sway": 0.6,
+      "opacity": 0.8
+     },
+     {
+      "kind": "frame",
+      "type": "ticket",
+      "label": "PLATONIC CHOROINE",
+      "color": "#FF4FAE"
+     }
+    ],
+    "transition": {
+     "kind": "diagonal",
+     "dur": 0.6,
+     "color": "#FF4FAE"
+    },
+    "accent": "#FF4FAE",
+    "text": "#1E64B4"
+   }
+  ],
+  "story": [
+   {
+    "kind": "hero",
+    "x": 0.75,
+    "y": -0.55,
+    "size": 0.36,
+    "prop": "horse.carousel",
+    "motion": "drift",
+    "states": [
+     {
+      "at": 0,
+      "state": "show"
+     },
+     {
+      "at": 19.8,
+      "state": "hide"
+     },
+     {
+      "at": 64,
+      "state": "show"
+     },
+     {
+      "at": 66.7,
+      "state": "glow"
+     },
+     {
+      "at": 83.7,
+      "state": "hide"
+     },
+     {
+      "at": 160.8,
+      "state": "show"
+     },
+     {
+      "at": 163.4,
+      "state": "crack"
+     },
+     {
+      "at": 165.8,
+      "state": "shatter"
+     },
+     {
+      "at": 184.1,
+      "state": "gather"
+     },
+     {
+      "at": 189.7,
+      "state": "glow"
+     },
+     {
+      "at": 216.7,
+      "state": "glow"
+     }
+    ],
+    "glow": "#FF4FAE"
+   },
+   {
+    "kind": "cards",
+    "x": 0.6,
+    "y": 0.45,
+    "size": 0.25,
+    "from": 39.7,
+    "to": 46.9,
+    "every": 1.6,
+    "style": "bubble",
+    "texts": [
+     "あ～ありがとう～！",
+     "二度目まして？",
+     "えーとえーと…",
+     "来てくれて本当ありがとう"
+    ],
+    "color": "#F5EFE4",
+    "ink": "#1E64B4",
+    "props": []
+   },
+   {
+    "kind": "fly",
+    "x": -0.7,
+    "y": 0.5,
+    "size": 0.3,
+    "prop": "cape.red",
+    "motion": "drift",
+    "at": 96.1,
+    "dur": 3,
+    "until": 101.6,
+    "side": "left",
+    "through": true,
+    "trail": "#FF4FAE",
+    "from": "left"
+   },
+   {
+    "kind": "pop",
+    "x": 0.7,
+    "y": -0.5,
+    "size": 0.32,
+    "prop": "icecream.triple",
+    "motion": "sit",
+    "at": 108.4,
+    "dur": 3
+   },
+   {
+    "kind": "pop",
+    "x": -0.7,
+    "y": -0.5,
+    "size": 0.3,
+    "prop": "umbrella.clear",
+    "motion": "sit",
+    "at": 112.5,
+    "dur": 4
+   },
+   {
+    "kind": "pop",
+    "x": 0.72,
+    "y": 0.45,
+    "size": 0.28,
+    "prop": "phone.pink",
+    "motion": "sit",
+    "at": 133.7,
+    "dur": 2.8
+   },
+   {
+    "kind": "cards",
+    "x": -0.62,
+    "y": 0.45,
+    "size": 0.25,
+    "from": 160.8,
+    "to": 171.6,
+    "every": 2.2,
+    "style": "note",
+    "texts": [
+     "スキスキ",
+     "推し変？",
+     "嘘つき！",
+     "病んじゃうぞ",
+     "責任とれ～"
+    ],
+    "color": "#FF4FAE",
+    "ink": "#1E64B4",
+    "props": []
+   }
+  ],
+  "storyProps": [
+   {
+    "id": "horse.carousel",
+    "what": "A white carousel horse with a pink saddle and pink bridle, mounted on a shiny golden twisted pole, side view facing left, mane flowing, glossy painted wood",
+    "hero": true
+   },
+   {
+    "id": "cape.red",
+    "what": "A bright pink-red silk cape billowing sideways in strong wind, golden clasp at the collar, flowing fabric folds",
+    "hero": false
+   },
+   {
+    "id": "icecream.triple",
+    "what": "A tall three-scoop ice cream cone, strawberry pink, vanilla cream and soda blue scoops stacked on a waffle cone, slightly melting",
+    "hero": false
+   },
+   {
+    "id": "umbrella.clear",
+    "what": "An open transparent plastic umbrella tinted light blue with a navy blue curved handle and navy rim, raindrops on the canopy, seen from a slight angle",
+    "hero": false
+   },
+   {
+    "id": "phone.pink",
+    "what": "A smartphone in a glossy pink case standing upright, screen glowing light blue, small star stickers on the case",
+    "hero": false
+   }
+  ]
+ }
+}

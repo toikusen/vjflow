@@ -115,3 +115,66 @@
 4. **安全的套用規則**：不修改輸入；重複套用不累加；「維持」真的不改；缺資料就安全回退。
 
 下一步：兩段短片（海／太空、圓窗／河堤，各涵蓋主歌到副歌與一次轉場），Utsusemi 藍字疊照片看全尺寸與轉場；再看具體 prompt／schema 差異；通過後才接正式編排；API 重跑另行確認。
+
+## 8. 原型 v2 與短片（2026-10-13）
+
+### 8.1 依審查修正的套用規則
+
+`prototype/apply_signature2.py`（測試 `prototype/test_apply_signature2.py`，8 項通過；`python3 test_apply_signature2.py` 從任何資料夾都能執行）：
+
+- **場景與構圖分開**：`scene`（海、太空、河堤；也可不填，地面照舊）決定地面；`horizon`／`chorusHorizon`、`picture`／`chorusPicture`（維持、橫幅、圓窗、滿版）、`layout`（圓形、線性）各自獨立。天文対話只填構圖、不填場景。
+- **只換骨架**：只替換天空色帶（從 0 開始的 bands）與地景剪影（skyline）；導演的日月、軌道環、膠帶、星點、照片素材全部保留。太空場景是「加上」行星弧，畫面已有導演自己的行星（大圓、在底部）就不加。
+- **安全套用**：不修改輸入；新增的圖層、改過的圖層（附原值）、被替換的圖層都有標記，可完整還原；重複套用等於套一次；「維持」完全不動；沒有天空色帶的段落地面不動。六首跑分的 treatment（各首最新一輪，固定在 `prototype/fixtures/`，缺任何一首測試就失敗）都驗證過「套用後還原 = 原本」。
+
+### 8.2 短片（現況／原型，各涵蓋主歌到副歌與一次轉場）
+
+| 組 | 歌 | 片段 |
+|---|---|---|
+| 海／太空 | 世界のつづき | 40–62 s（27.5 s 段 → 53.6 s 副歌） |
+| 海／太空 | 行星 | 88–110 s（86 s 段 → 99.5 s 段 → 102.2 s 副歌） |
+| 圓窗／河堤 | 天文対話 | 36–56 s（40.8 s 段 → 45.6 s 副歌） |
+| 圓窗／河堤 | Utsusemi | 34–56 s（37.3 s 段 → 45.6 s 副歌） |
+
+檔案（未入庫）：`out/research/identity-1013/clips/pair-sea-space.mp4`、`pair-round-riverbank.mp4`（上排現況、下排原型，左右為兩首，無聲），以及 `sbs-<歌>.mp4`（左現況、右原型，帶該首聲音）。
+
+**短片才看得出、靜態圖看不出的問題（都已修）：**
+
+1. **副歌太陽提早一整段出現**：drop 在 53.59 s、下一段 53.6 s 開始，原型把 drop 算進上一段。改成段落開頭 0.5 s 內的事件屬於該段。
+2. **行星弧到處跑**：避讓會把平面圓移到空位，地面變成飄動的圓。渲染器新增通用旗標 `fixed`（地面的一部分，不為歌詞移動或縮小），行星弧標上它。
+3. **文字保護沒看到橫幅與滿版照片**：這兩種照片不參與避讓、沒有避讓框，Utsusemi「交差する道」的藍字壓在橫幅照片上卻沒有被檢查。新增 `photoBox()`，文字保護改用照片的繪製範圍。`photoBox()` 是每種照片模式的**基本矩形**：沒有計入照片的緩慢旋轉、踩拍縮放與圓形裁切（圓窗以外接正方形計），不是精確的像素範圍。
+4. **改成淺字反而更糟**：上一項修好後，チョロイン 6 句疊在淺色舞台照片上的藍字被改成淺字，看起來發白。規則改成：只有在淺字的不合格比例也比較低時才重建（`runtime.ts` 的 `guardLine`，測試涵蓋淺字較差、淺字較好、結果相同、低於門檻四種情況）。結果チョロイン c037、c056、iw c025 也不再重建，看圖確認維持原色較清楚；c003 仍會重建。
+5. **河堤場景的照片橫幅壓到第二行歌詞**：橫幅改貼在畫面底部（y −0.62）。
+
+3、4 兩項改的是已提交的文字保護（`05c8753`），影響所有歌。六首在既有 treatment 上和 `05c8753` 比對：文字保護句數チョロイン 7 → 5（c037、c056 改回原色）、iw 4 → 3（c025），其餘不變；讀不完句數、可讀秒數、字級縮放、出框都沒有變差；動態碰撞チョロイン、iw 各 1 → 0，雙截棍超出安全區 9 → 8。チョロイン c057 的裝飾照片重疊量從 242 px 變 307 px（beat-cut 片語飛行時的量測點），兩版靜態畫面看起來相同。
+
+可讀性檢查（整首）：天文対話 現況與原型都因 c035 不通過（既有問題，基準就有），其餘 6 支通過。
+
+觀感（Claude 看畫面序列，未帶聲音完整播放）：海／太空這組分辨度明確，行星的行星弧固定在底部後讀起來是地面；Utsusemi 的滿版上墨夏空差異最大；天文対話 的改善仍小（只有照片改圓窗，墨色與其他構圖照舊）。
+
+### 8.3 具體 schema／prompt 差異（草稿，未套用）
+
+**schema**（`direct.mts` 的 `DESIGN_SCHEMA` 新增一個選填欄位，舊 treatment 不受影響）：
+
+```ts
+signature: {
+  type: 'object', additionalProperties: false, required: ['image', 'scene', 'horizon', 'chorusHorizon', 'picture', 'chorusPicture', 'layout'],
+  properties: {
+    image: { type: 'string', description: '這首歌發生的地方與時間，一句話，從概念與歌詞來（例：小島海岸的一天一夜）' },
+    scene: { type: 'string', enum: ['sea', 'space', 'riverbank', 'land', 'none'], description: '地面：海平線、太空（底部行星弧）、河堤（低而長的地平線）、陸地（照導演的地景）、none（不改地面）' },
+    horizon: { type: 'number', minimum: 0.25, maximum: 0.75, description: '主歌地平線高度（畫面頂端起算）' },
+    chorusHorizon: { type: 'number', minimum: 0.25, maximum: 0.75, description: '副歌地平線高度：和主歌不同才有起伏' },
+    picture: { type: 'string', enum: ['keep', 'band', 'circle', 'full'] },
+    chorusPicture: { type: 'string', enum: ['keep', 'band', 'circle', 'full'] },
+    layout: { type: 'string', enum: ['round', 'linear', 'free'], description: '主要幾何：圓（圓窗、軌道）、線（橫線、斜線）或不限' },
+  },
+}
+```
+
+**prompt**：
+
+- `DESIGN_RULES` 加一段：「先寫 signature：從概念與歌詞決定這首歌發生在哪裡（image），再選地面、地平線、照片角色與主要幾何；副歌的地平線或照片角色要和主歌不同。這些要能用這首歌的歌詞或概念說明理由。」
+- `languages.ts` 的範例配色前加「以下只示範墨與墨怎麼搭，不是色票，不要照抄；這首歌的墨從 image 的時間與地點推出」。
+- 各語言 `kit.craft` 改寫成語言層級的做法，移除特定歌的配方（例如 silkscreen 的「色帶做天空與地景、天體是平塗圓點」改成「色帶與剪影的層次由這首歌的地面決定」）。
+- `samenessIssues` 的「同風格要換掉主要裝飾」改成提示：列出同語言最近幾首的 signature 當參考，「骨架相同時，要能說出這首歌的理由」；**不再要求至少幾項不同**。
+
+本機側：`validateTreatment` 之後、渲染之前套用簽名（`apply_signature2.py` 的規則改寫成 TypeScript 並附同樣的測試）；沒有 signature 的 treatment 行為完全不變。正式接入時要補執行期驗證：schema 的上下限之外，`validateTreatment` 也要檢查 signature 的數值與列舉（導演輸出不一定守 schema），套用簽名之後再對產出的 treatment 跑一次 `validateTreatment`。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, heroAt, storyLayers } from './story';
+import { along, heroAt, StoryItem, storyLayers } from './story';
 
 describe('story components', () => {
   it('plays a hero through show, crack, shatter, gather and a bookend return', () => {
@@ -109,5 +109,23 @@ describe('story components, second batch', () => {
     expect(storyLayers(items, 11).filter((l) => l.kind === 'card')).toHaveLength(1);
     expect(storyLayers(items, 14).filter((l) => l.kind === 'card')).toHaveLength(0);
     for (const t of [5, 33, 77]) for (const l of storyLayers(items, t)) if (l.kind === 'sprite') expect(Math.abs(l.x) <= 0.72 && Math.abs(l.y) <= 0.55).toBe(true);
+  });
+});
+
+describe('story layer refs (QA only)', () => {
+  it('names each layer after its story item', () => {
+    const items: StoryItem[] = [
+      { kind: 'hero', prop: 'horse', x: 0, y: 0, size: 0.3, states: [{ at: 0, state: 'show' }] },
+      { kind: 'cards', style: 'note', texts: ['a', 'b'], from: 1, to: 9, every: 1, x: 0, y: 0, color: '#ffffff', ink: '#000000' },
+    ];
+    expect(storyLayers(items, 3).map((l) => l.ref)).toEqual(['hero#0:horse', 'cards#1[0]:a', 'cards#1[1]:b']);
+  });
+
+  it('gives the same prop in two items different ids', () => {
+    const items: StoryItem[] = [
+      { kind: 'pop', prop: 'horse', at: 1, dur: 5, x: -0.5, y: 0, size: 0.2 },
+      { kind: 'pop', prop: 'horse', at: 2, dur: 5, x: 0.5, y: 0, size: 0.2 },
+    ];
+    expect(storyLayers(items, 4).map((l) => l.ref)).toEqual(['pop#0:horse', 'pop#1:horse']);
   });
 });

@@ -44,10 +44,12 @@ export type StoryItem =
   | { kind: 'float'; props: string[]; aspects?: Record<string, number>; from: number; to: number; size: number };
 
 /** The per-frame layers story items become (drawn by drawStory). Sizes are fractions of the frame height. */
-export type StoryLayer =
+/** `ref` names the story item a layer comes from, unique per item (`pop#7:horse`; QA reports only, drawing ignores it). */
+export type StoryLayer = { ref?: string } & (
   | { kind: 'sprite'; asset: string; aspect?: number; lift?: Rgb; pass?: boolean; x: number; y: number; size: number; rot?: number; sx?: number; pivot?: 'top'; opacity?: number; crack?: number; shatter?: number; seed?: number; glow?: Rgb; trail?: { color: Rgb; pts: Pt[] } }
   | { kind: 'thread'; pts: Pt[]; color: Rgb; width: number; opacity?: number }
-  | { kind: 'card'; style: 'bubble' | 'note' | 'polaroid' | 'chapter'; text: string; asset?: string; x: number; y: number; w: number; h: number; rot: number; scale: number; color: Rgb; ink: Rgb; opacity?: number };
+  | { kind: 'card'; style: 'bubble' | 'note' | 'polaroid' | 'chapter'; text: string; asset?: string; x: number; y: number; w: number; h: number; rot: number; scale: number; color: Rgb; ink: Rgb; opacity?: number }
+);
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOut = (k: number) => 1 - (1 - clamp01(k)) ** 3;
@@ -160,7 +162,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const h = heroAt(it.states, t);
         if (!h) return;
         const m = idle(it.motion ?? 'drift', t, n);
-        out.push({ kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: it.x + m.dx, y: it.y + m.dy + 0.05 * (1 - h.visible), size: it.size, opacity: h.visible, crack: h.crack, shatter: h.shatter, seed: n * 17 + 3, glow: h.glow ? it.glow ?? '#FFF4C8' : undefined, rot: m.rot, sx: m.sx, pivot: it.motion === 'hang' ? 'top' : undefined });
+        out.push({ ref: `hero#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: it.x + m.dx, y: it.y + m.dy + 0.05 * (1 - h.visible), size: it.size, opacity: h.visible, crack: h.crack, shatter: h.shatter, seed: n * 17 + 3, glow: h.glow ? it.glow ?? '#FFF4C8' : undefined, rot: m.rot, sx: m.sx, pivot: it.motion === 'hang' ? 'top' : undefined });
         return;
       }
       case 'fly': {
@@ -183,7 +185,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const motion = it.motion ?? 'flutter';
         // in flight: banked along the path, wings beating fast; landed: the prop's own rest movement
         const m = flying ? { dx: 0, dy: 0, rot: Math.atan2(-(ahead[1] - here[1]), ahead[0] - here[0]) * 0.25, sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
-        out.push({ kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
+        out.push({ ref: `fly#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
         return;
       }
       case 'pop': {
@@ -193,7 +195,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const m = idle(motion, t, n);
         // leaving: it sinks a little as it fades, never blinks out
         const outK = clamp01((t - it.at - it.dur) / 0.4);
-        out.push({ kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: it.x + a.dx + m.dx, y: it.y + a.dy + m.dy - outK * 0.04, size: it.size, opacity: a.opacity * (1 - outK), rot: a.rot + m.rot, sx: m.sx, pivot: motion === 'hang' ? 'top' : undefined });
+        out.push({ ref: `pop#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: it.x + a.dx + m.dx, y: it.y + a.dy + m.dy - outK * 0.04, size: it.size, opacity: a.opacity * (1 - outK), rot: a.rot + m.rot, sx: m.sx, pivot: motion === 'hang' ? 'top' : undefined });
         return;
       }
       case 'orbit': {
@@ -202,7 +204,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const near = Math.sin(a); // 1 at the bottom of the ellipse: nearest the viewer
         const fade = Math.min(1, (t - it.from) / 0.6) * (1 - clamp01((t - it.to) / 0.6));
         // it passes behind the lyrics (dimmed while it crosses them) instead of jumping out of their way every lap
-        out.push({ kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: true, x: it.x + it.r * Math.cos(a), y: it.y - it.r * (it.tilt ?? 0.35) * near, size: it.size * (0.85 + 0.15 * near), rot: 0.08 * Math.cos(a), opacity: fade });
+        out.push({ ref: `orbit#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: true, x: it.x + it.r * Math.cos(a), y: it.y - it.r * (it.tilt ?? 0.35) * near, size: it.size * (0.85 + 0.15 * near), rot: 0.08 * Math.cos(a), opacity: fade });
         return;
       }
       case 'journey': {
@@ -215,7 +217,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: Math.atan2(ahead[1] - here[1], Math.abs(ahead[0] - here[0]) + 1e-6) * 0.2, sx: 1 } : idle(it.motion ?? 'sit', t, n);
         const trail = it.trail && t < it.to + 1.5 ? { color: it.trail, pts: Array.from({ length: 28 }, (_, i) => along(it.pts, Math.max(0, u - 0.35 + (0.35 * i) / 27))) } : undefined;
         const opacity = Math.min(1, (t - it.from) / 0.4) * (1 - clamp01((t - end) / 0.5));
-        out.push({ kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: moving, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity, trail });
+        out.push({ ref: `journey#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: moving, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity, trail });
         return;
       }
       case 'morph': {
@@ -229,18 +231,18 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         // the old shape folds edge-on as the new one opens out of it with a small overshoot
         if (i > 0 && k < 1) {
           const prev = steps[i - 1].prop;
-          out.push({ ...base, asset: `spr:${prev}`, aspect: it.aspects?.[prev], size: it.size, sx: Math.max(0.02, 1 - easeOut(k * 2)), opacity: leave * (1 - clamp01(k * 2 - 0.5)) });
+          out.push({ ...base, ref: `morph#${n}:${prev}`, asset: `spr:${prev}`, aspect: it.aspects?.[prev], size: it.size, sx: Math.max(0.02, 1 - easeOut(k * 2)), opacity: leave * (1 - clamp01(k * 2 - 0.5)) });
         }
         const cur = steps[i].prop;
         const grow = i === 0 ? easeOut(k) : easeOutBack(clamp01(k * 1.4 - 0.3));
-        out.push({ ...base, asset: `spr:${cur}`, aspect: it.aspects?.[cur], size: it.size * Math.max(0.02, grow), opacity: leave * Math.min(1, k * 3) });
+        out.push({ ...base, ref: `morph#${n}:${cur}`, asset: `spr:${cur}`, aspect: it.aspects?.[cur], size: it.size * Math.max(0.02, grow), opacity: leave * Math.min(1, k * 3) });
         return;
       }
       case 'chapter': {
         if (t < it.at || t > it.at + it.dur + 0.5) return;
         const inK = easeOut((t - it.at) / 0.6);
         const outK = clamp01((t - it.at - it.dur) / 0.5);
-        out.push({ kind: 'card', style: 'chapter', text: it.text, x: it.x - (1 - inK) * 0.25, y: it.y + outK * 0.06, w: 0.3, h: 0.1, rot: 0, scale: 1, color: it.color, ink: it.ink, opacity: Math.min(1, inK * 1.5) * (1 - outK) });
+        out.push({ ref: `chapter#${n}:${it.text}`, kind: 'card', style: 'chapter', text: it.text, x: it.x - (1 - inK) * 0.25, y: it.y + outK * 0.06, w: 0.3, h: 0.1, rot: 0, scale: 1, color: it.color, ink: it.ink, opacity: Math.min(1, inK * 1.5) * (1 - outK) });
         return;
       }
       case 'float': {
@@ -251,7 +253,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
           const s = t - it.from;
           const x = 0.72 * Math.sin(s * 0.11 * (1 + j * 0.27) + j * 2.1);
           const y = 0.55 * Math.cos(s * 0.08 * (1 + j * 0.19) + j * 1.3);
-          out.push({ kind: 'sprite', asset: `spr:${p}`, aspect: it.aspects?.[p], pass: true, x, y, size: it.size * (0.8 + 0.4 * ((j * 0.618) % 1)), rot: (j % 2 ? 1 : -1) * 0.12 * s + j, opacity: fade });
+          out.push({ ref: `float#${n}[${j}]:${p}`, kind: 'sprite', asset: `spr:${p}`, aspect: it.aspects?.[p], pass: true, x, y, size: it.size * (0.8 + 0.4 * ((j * 0.618) % 1)), rot: (j % 2 ? 1 : -1) * 0.12 * s + j, opacity: fade });
         });
         return;
       }
@@ -273,7 +275,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
           // the pile steps down-right but every card stays wholly inside the frame
           const cx = Math.min(1 - w * 1.05, Math.max(-1 + w * 1.05, it.x + k * 0.07));
           const cy = Math.min(1 - h * 1.1, Math.max(-1 + h * 1.1, it.y - k * 0.09));
-          out.push({ kind: 'card', style: it.style, text: it.texts[k] ?? '', asset: it.props?.[k] ? `spr:${it.props[k]}` : undefined, x: cx + fallX, y: cy + fallY, w, h, rot, scale: land * (0.9 + 0.1 * clear), color: it.color, ink: it.ink, opacity: clear * Math.min(1, u * 3) });
+          out.push({ ref: `cards#${n}[${k}]:${it.texts[k] ?? it.props?.[k] ?? ''}`, kind: 'card', style: it.style, text: it.texts[k] ?? '', asset: it.props?.[k] ? `spr:${it.props[k]}` : undefined, x: cx + fallX, y: cy + fallY, w, h, rot, scale: land * (0.9 + 0.1 * clear), color: it.color, ink: it.ink, opacity: clear * Math.min(1, u * 3) });
         }
         return;
       }

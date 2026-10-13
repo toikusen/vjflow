@@ -30,7 +30,7 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Rect, sectionAt } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Measured, measurable, Rect, sectionAt } from './graphics';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -136,18 +136,34 @@ export interface RenderJob {
   entrance?: Entrance;
 }
 
-/** motionQa per line: the deepest overlap with a story prop by cause, and how far past the safe area / frame edge. */
+/** motionQa per line: the deepest overlap with a visible story prop (by cause), decoration and card pile, and how far past the safe area / frame edge. */
 export interface MotionCheck {
   id: string;
   text: string;
   template: string;
-  motion: { t: number; px: number };
-  atRest: { t: number; px: number };
-  /** Over a prop that found no room and faded behind the line (avoid's fallback, by design). */
-  steppedBack: { t: number; px: number };
-  gliding: { t: number; px: number };
+  /** Lyrics over a visible story prop or card, by cause (each the deepest, with which prop, its opacity and layer). */
+  motion: Hit;
+  atRest: Hit;
+  /** Over a prop that found no room and faded behind the line (avoid's fallback, by design; still counted). */
+  steppedBack: Hit;
+  gliding: Hit;
+  /** Lyrics over a visible decoration (inset photo, blob, stamp, seal, numeral, window); `cause` as above. */
+  decor: Hit & { cause?: OverlapCause };
+  /** Two visible cards over each other while the line is up (their texts show through each other). */
+  cards: { t: number; px: number; a?: string; b?: string; opacity?: [number, number] };
   offSafe: { t: number; px: number };
   offFrame: { t: number; px: number };
+}
+
+export type OverlapCause = 'motion' | 'atRest' | 'steppedBack' | 'gliding';
+
+/** The deepest overlap (px) at t, with the object it is over: id, drawn opacity and draw layer. */
+export interface Hit {
+  t: number;
+  px: number;
+  prop?: string;
+  opacity?: number;
+  layer?: string;
 }
 
 export type Entrance = 'whole' | 'stagger' | 'cut';
@@ -335,8 +351,8 @@ export class LyricVjEngine {
   private probe?: CanvasRenderingContext2D;
   /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
   private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string }[] = [];
-  /** The story props as placed in the last rendered frame (motionQa checks the lyrics against them). */
-  private placedProps: { r: Rect; faded: boolean }[] = [];
+  /** The visible props, cards and decorations as placed in the last rendered frame (motionQa checks the lyrics against them). */
+  private placedProps: Measured[] = [];
   /** The props were still gliding out of the way of a line that just came up (or back after one left). */
   private propsGliding = false;
   private ghostA?: THREE.WebGLRenderTarget;
@@ -1307,11 +1323,14 @@ export class LyricVjEngine {
     const e = edges.length ? Math.max(...edges) : 0;
     const before = edges.length ? placed(e - 0.001) : now;
     const out = edges.length ? now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE))) : now;
-    // with whether the prop stepped back (faded behind the line: no room anywhere, or passing behind it)
-    this.placedProps = out.flatMap((l, i) => {
-      const r = l.kind === 'sprite' || l.kind === 'card' ? layerRect(l) : undefined;
-      return r ? [{ r, faded: (l.opacity ?? 1) < (ls[i].opacity ?? 1) - 1e-3 }] : [];
-    });
+    // what is visible, with whether it stepped back (faded behind the line: no room anywhere, or passing behind it).
+    // A transition calls this twice a frame (the section, then the one it reveals over): both are on screen, so both
+    // are kept (the second call used to replace the first, dropping the story props for the whole transition)
+    const look = this.job.treatment.graphics;
+    const sec = look ? sectionAt(look, this.koma(t)) : undefined;
+    const current = !!sec && sec.layers.length <= all.length && sec.layers.every((l, i) => all[i] === l);
+    const n = look && sec ? look.sections.indexOf(sec) : -1;
+    this.placedProps.push(...(sec && current ? measurable(out, ls, this.koma(t) - sec.start, 'section', n, sec.layers.length) : measurable(out, ls, Infinity, 'prev', n - 1)));
     // (a line shows 0.05 s before its room is made: those frames are the start of the glide)
     this.propsGliding = this.lyricRects.some((r) => [r.from, r.to].some((x) => x <= t + 0.05 && x > t - GLIDE));
     return out;
@@ -1334,10 +1353,12 @@ export class LyricVjEngine {
       const times = everyFrame.includes(rt.cue.id)
         ? Array.from({ length: Math.floor((to - from) * 60) + 1 }, (_, k) => from + k / 60)
         : [...new Set([...rt.accentTimes.filter((a) => a >= from && a <= to), ...[0.1, 0.3, 0.5, 0.7, 0.9].map((k) => from + (to - from) * k)])];
-      const worst: MotionCheck = { id: rt.cue.id, text: rt.cue.text, template: rt.shot.template, motion: { t: 0, px: 0 }, atRest: { t: 0, px: 0 }, steppedBack: { t: 0, px: 0 }, gliding: { t: 0, px: 0 }, offSafe: { t: 0, px: 0 }, offFrame: { t: 0, px: 0 } };
-      const keep = (k: 'motion' | 'atRest' | 'steppedBack' | 'gliding' | 'offSafe' | 'offFrame', t: number, px: number) => {
-        if (px > worst[k].px) worst[k] = { t, px };
+      const none = { t: 0, px: 0 };
+      const worst: MotionCheck = { id: rt.cue.id, text: rt.cue.text, template: rt.shot.template, motion: none, atRest: none, steppedBack: none, gliding: none, decor: none, cards: none, offSafe: none, offFrame: none };
+      const keep = <K extends 'motion' | 'atRest' | 'steppedBack' | 'gliding' | 'decor' | 'cards' | 'offSafe' | 'offFrame'>(k: K, px: number, hit: MotionCheck[K]) => {
+        if (px > worst[k].px) worst[k] = hit;
       };
+      const hit = (t: number, px: number, p: Measured): Hit => ({ t, px, prop: p.ref, opacity: p.opacity, layer: p.layer });
       for (const t of times) {
         await this.renderAt(t);
         if (!layer.group.visible) continue;
@@ -1349,12 +1370,24 @@ export class LyricVjEngine {
           const px = depth(r, p.r);
           if (!px) continue;
           // gliding: the prop is still on its way out (0.4 s, by design); stepped back: it found no room and faded
-          // behind the line (by design); at rest: the measured box already meets it at full strength; else the playing
-          // line's motion carried it onto a prop that had cleared its box
-          keep(this.propsGliding ? 'gliding' : p.faded ? 'steppedBack' : rest && depth(rest, p.r) > 0 ? 'atRest' : 'motion', t, px);
+          // behind the line (by design, but a half-transparent prop behind the words is still counted); at rest: the
+          // measured box already meets it; else the playing line's motion carried it onto a prop that had cleared its box
+          const cause: OverlapCause = this.propsGliding ? 'gliding' : p.faded ? 'steppedBack' : rest && depth(rest, p.r) > 0 ? 'atRest' : 'motion';
+          if (p.group === 'decor') keep('decor', px, { ...hit(t, px, p), cause });
+          else keep(cause, px, hit(t, px, p));
         }
-        keep('offFrame', t, Math.max(0, -r.x0, r.x1 - W, -r.y0, r.y1 - H));
-        keep('offSafe', t, Math.max(0, 48 - r.x0, r.x1 - (W - 48), 40 - r.y0, r.y1 - (H - 40)));
+        // cards over each other: measured apart from the lyrics (c061: two half-transparent cards, texts through each other)
+        const cards = this.placedProps.filter((p) => p.group === 'card');
+        cards.forEach((a, i) =>
+          cards.slice(i + 1).forEach((b) => {
+            const px = depth(a.r, b.r);
+            keep('cards', px, { t, px, a: a.ref, b: b.ref, opacity: [a.opacity, b.opacity] });
+          }),
+        );
+        const off = Math.max(0, -r.x0, r.x1 - W, -r.y0, r.y1 - H);
+        keep('offFrame', off, { t, px: off });
+        const safe = Math.max(0, 48 - r.x0, r.x1 - (W - 48), 40 - r.y0, r.y1 - (H - 40));
+        keep('offSafe', safe, { t, px: safe });
       }
       out.push(worst);
     }

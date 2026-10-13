@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawLook, GraphicsLook, sectionAt } from './graphics';
+import { drawLook, GraphicsLook, Layer, measurable, sectionAt } from './graphics';
 
 const look: GraphicsLook = {
   sections: [
@@ -127,5 +127,45 @@ describe('window cascade', () => {
     const five = layerRect({ kind: 'ui', type: 'error', color: '#3DFF6E', x: 0, y: 0, cascade: 5 })!;
     expect(five.x1 - five.x0 - (one.x1 - one.x0)).toBeCloseTo(4 * 44);
     expect(five.y1 - five.y0 - (one.y1 - one.y0)).toBeCloseTo(4 * 44);
+  });
+});
+
+describe('measurable (motion QA visibility)', () => {
+  const hero = (opacity: number, shatter = 0): Layer => ({ kind: 'sprite', ref: 'hero#0:horse', asset: 'spr:horse', x: 0.75, y: -0.55, size: 0.36, opacity, shatter });
+  const card = (ref: string, opacity: number, x = 0): Layer => ({ kind: 'card', ref, style: 'note', text: '嘘つき', x, y: 0, w: 0.24, h: 0.16, rot: 0, scale: 1, color: '#ffc0d0', ink: '#333333', opacity });
+  const stamp: Layer = { kind: 'stamp', text: 'LOVE', color: '#ff0000', x: -0.5, y: 0.5 };
+  const one = (ls: Layer[], age = 10, storyFrom = 1) => measurable(ls, ls, age, 'section', 3, storyFrom);
+
+  it('skips a hidden, not yet shown, faded out or shattered hero', () => {
+    expect(one([stamp, hero(0)]).map((m) => m.ref)).toEqual(['stamp:LOVE@s3#0']);
+    expect(one([stamp, hero(0.01)])).toHaveLength(1);
+    expect(one([stamp, hero(1, 1)])).toHaveLength(1);
+    expect(one([stamp, hero(0.5, 0.4)]).map((m) => [m.ref, m.group, m.opacity, m.layer])).toEqual([
+      ['stamp:LOVE@s3#0', 'decor', 1, 'section:0'],
+      ['hero#0:horse', 'prop', 0.5, 'story:0'],
+    ]);
+  });
+
+  it('counts visible decorations, a window only once it has popped in', () => {
+    const win: Layer = { kind: 'ui', type: 'error', color: '#3DFF6E', x: 0, y: 0, delay: 2 };
+    expect(one([win], 1, 1)).toEqual([]);
+    expect(one([win], 2.075, 1)[0].opacity).toBeCloseTo(0.5);
+    expect(one([win], 5, 1)[0]).toMatchObject({ ref: 'ui:error@s3#0', group: 'decor', opacity: 1 });
+    // a full-frame photo has no box to collide with; a director's faint stamp is kept at its own opacity
+    expect(one([{ kind: 'photo', mode: 'full' }, { ...stamp, opacity: 0.3 }], 10, 2).map((m) => m.opacity)).toEqual([0.3]);
+  });
+
+  it('keeps a half-transparent stepped-back prop, marked faded', () => {
+    const planned = [card('cards#0[0]', 1)];
+    const placed = [card('cards#0[0]', 0.55)];
+    expect(measurable(placed, planned, 10, 'section', 3, 0)[0]).toMatchObject({ group: 'card', opacity: 0.55, faded: true });
+  });
+
+  it('tells the same decoration in two sections apart', () => {
+    expect(measurable([stamp], [stamp], 10, 'section', 1)[0].ref).not.toBe(measurable([stamp], [stamp], 10, 'section', 4)[0].ref);
+  });
+
+  it('names the previous section in a transition', () => {
+    expect(measurable([stamp], [stamp], Infinity, 'prev', 2)[0]).toMatchObject({ layer: 'prev:0', ref: 'stamp:LOVE@s2#0' });
   });
 });

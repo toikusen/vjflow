@@ -169,14 +169,22 @@ try {
     // after the metrics: the motion check renders frames of its own
     const motion = await page.evaluate((ids) => window.vjMotionQa(ids), (a['motion-frames'] ?? '').split(',').filter(Boolean));
     writeFileSync(join(out, 'motion.json'), JSON.stringify({ version, lines: motion }, null, 1));
+    const on = (h: { prop?: string; opacity?: number; layer?: string }) => (h.prop ? ` ${h.prop}（透明度 ${h.opacity}，${h.layer}）` : '');
     const check = {
       version,
+      // what the overlap fields below are, and are not
+      overlapNote: '道具、裝飾、卡片的重疊是可見性篩選後的幾何重疊（透明度門檻 0.02），不等於已證實的閱讀干擾',
       // a playing line (kick, sway, drift, beat pulse) carried onto a story prop that had cleared it, or past the frame
       // edge; overlaps already in the measured box or while a prop glides away are counted apart
-      motion: motion.filter((x) => x.motion.px > 0 || x.offFrame.px > 0).map((x) => `${x.id} ${x.template} 動態疊到道具 ${x.motion.px.toFixed(0)}px@${x.motion.t.toFixed(2)}s 出框 ${x.offFrame.px.toFixed(0)}px@${x.offFrame.t.toFixed(2)}s ${x.text}`),
-      propAtRest: motion.filter((x) => x.atRest.px > 0).map((x) => `${x.id} ${x.template} ${x.atRest.px.toFixed(0)}px@${x.atRest.t.toFixed(2)}s`),
-      propSteppedBack: motion.filter((x) => x.steppedBack.px > 0).map((x) => `${x.id} ${x.template} ${x.steppedBack.px.toFixed(0)}px@${x.steppedBack.t.toFixed(2)}s`),
+      motion: motion.filter((x) => x.motion.px > 0 || x.offFrame.px > 0).map((x) => `${x.id} ${x.template} 動態疊到道具 ${x.motion.px.toFixed(0)}px@${x.motion.t.toFixed(2)}s${on(x.motion)} 出框 ${x.offFrame.px.toFixed(0)}px@${x.offFrame.t.toFixed(2)}s ${x.text}`),
+      // only objects past the visibility filter count (a hidden hero does not); a half-transparent prop behind the words still counts
+      propAtRest: motion.filter((x) => x.atRest.px > 0).map((x) => `${x.id} ${x.template} ${x.atRest.px.toFixed(0)}px@${x.atRest.t.toFixed(2)}s${on(x.atRest)}`),
+      propSteppedBack: motion.filter((x) => x.steppedBack.px > 0).map((x) => `${x.id} ${x.template} ${x.steppedBack.px.toFixed(0)}px@${x.steppedBack.t.toFixed(2)}s${on(x.steppedBack)}`),
       propGliding: motion.filter((x) => x.gliding.px > 0).length,
+      // decorations (inset photos, blobs, stamps, seals, numerals, windows) under the words, counted apart
+      decorOverlap: motion.filter((x) => x.decor.px > 0).map((x) => `${x.id} ${x.template} ${x.decor.cause} ${x.decor.px.toFixed(0)}px@${x.decor.t.toFixed(2)}s${on(x.decor)}`),
+      // cards over each other while a line is up (not the lyrics: their texts show through each other)
+      cardOverlap: motion.filter((x) => x.cards.px > 0).map((x) => `${x.id} ${x.cards.px.toFixed(0)}px@${x.cards.t.toFixed(2)}s ${x.cards.a}(${x.cards.opacity?.[0]}) × ${x.cards.b}(${x.cards.opacity?.[1]})`),
       offSafe: motion.filter((x) => x.offSafe.px > 0 && !x.offFrame.px).length,
       unreadable: m.cues.filter((c) => !c.ok).map((c) => `${c.id} ${c.text}（${c.readableSec.toFixed(1)}/${c.requiredSec.toFixed(1)}s）`),
       // planned entrances that never play (a cut the director chose is not a loss), and every pacing change

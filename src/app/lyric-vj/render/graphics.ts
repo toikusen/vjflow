@@ -2593,6 +2593,58 @@ export function spreadWindows(layers: Layer[]): Layer[] {
   });
 }
 
+/** A layer the motion check measures the lyrics against, as it is drawn in one frame. */
+export interface Measured {
+  r: Rect;
+  /**
+   * Which object, unique per item: a story item by its index (`hero#0:horse`, `pop#7:horse`, `cards#2[1]:嘘つき`) or a
+   * decoration by section and layer index (`stamp:LOVE@s3#4`: section 3's layer 4).
+   */
+  ref: string;
+  group: 'prop' | 'card' | 'decor';
+  /** The opacity it is drawn at in this frame (a window's pop-in counted). */
+  opacity: number;
+  /** Draw order, all under the lyrics: `story:i`, `section:i`, or `prev:i` for the section a transition reveals over. */
+  layer: string;
+  /** Faded below its own opacity to make room (avoid's fallback, or passing behind the line). */
+  faded: boolean;
+}
+
+/** The measuring threshold for a hidden hero, a card not yet down, one faded out (not a guarantee no eye sees it). */
+export const VISIBLE_OPACITY = 0.02;
+
+/**
+ * The layers of one frame the lyrics can actually collide with: story props, cards and the movable decorations (inset
+ * photos, blobs, stamps, seals, numerals, windows) that are visible. `placed` is after making room, `planned` before
+ * (same order); layers from `storyFrom` on are the story's; `age` is seconds into the section (a window shows `delay` s
+ * in); `zone` names the draw pass and `section` the look section the layers belong to. Pure: what the motion QA
+ * records, it changes nothing drawn. A geometric overlap of what passes the visibility filter, not proof the words are
+ * harder to read (an opaque card can hide another; a background disc behind the words may be the design).
+ */
+export function measurable(placed: Layer[], planned: Layer[], age: number, zone: 'section' | 'prev', section: number, storyFrom = placed.length): Measured[] {
+  return placed.flatMap((l, i): Measured[] => {
+    const r = l.kind === 'code' ? undefined : layerRect(l);
+    if (!r) return [];
+    const story = i >= storyFrom;
+    const pop = l.kind === 'ui' ? Math.min(1, Math.max(0, (age - (l.delay ?? 0)) / (l.type === 'cursor' ? 0.3 : 0.15))) : 1;
+    // a shattered hero's pieces are gone at 1
+    const gone = l.kind === 'sprite' && (l.shatter ?? 0) >= 0.999;
+    const opacity = gone ? 0 : (l.opacity ?? 1) * pop;
+    if (opacity < VISIBLE_OPACITY) return [];
+    const label = l.kind === 'card' ? '' : 'text' in l ? `:${l.text}` : 'type' in l ? `:${l.type}` : 'mode' in l ? `:${l.mode}` : '';
+    return [
+      {
+        r,
+        ref: story ? ((l as StoryLayer).ref ?? l.kind) : `${l.kind}${label}@s${section}#${i}`,
+        group: l.kind === 'card' ? 'card' : story ? 'prop' : 'decor',
+        opacity: +opacity.toFixed(3),
+        layer: story ? `story:${i - storyFrom}` : `${zone}:${i}`,
+        faded: (l.opacity ?? 1) < (planned[i]?.opacity ?? 1) - 1e-3,
+      },
+    ];
+  });
+}
+
 /** Makes room for the lyrics across a section's layers: each movable object avoids the lyrics and the ones placed before it. */
 export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
   // objects already clear of the lyrics stay where they are and are obstacles for the ones that must move

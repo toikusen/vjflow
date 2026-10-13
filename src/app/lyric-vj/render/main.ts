@@ -21,6 +21,7 @@ declare global {
     /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
     grabAt: (t: number, quality: number) => Promise<string>;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
+    vjMotionQa: (everyFrame?: string[]) => ReturnType<LyricVjEngine['motionQa']>;
   }
 }
 
@@ -43,6 +44,7 @@ window.grabAt = async (t, quality) => {
   return stage.toDataURL('image/jpeg', quality);
 };
 window.vjMetrics = () => engine.metrics();
+window.vjMotionQa = (everyFrame) => engine.motionQa(everyFrame);
 await window.vjReady;
 const t = new URLSearchParams(location.search).get('t');
 if (t) await engine.renderAt(Number(t));

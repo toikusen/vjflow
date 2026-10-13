@@ -20,8 +20,9 @@ export const quietFace = (display: string) =>
 export const quiet: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const p = rt.params;
-    // the slow fade is the template's calm; a line with no time to spare comes up almost at once
-    const fadeIn = rt.rushed ? 0.15 : FADE_IN;
+    // the slow fade is the template's calm; a line with no time to spare comes up almost at once, and one readFix
+    // landed on a cut comes up at once, as readFix counted on (チョロイン c044 kept its 0.15 s and fell 0.08 s short)
+    const fadeIn = rt.adjust?.includes('read-cut') ? 1 / 60 : rt.rushed ? 0.15 : FADE_IN;
     const text = rt.cue.text.replace(/[\s　]+/g, ' ');
     const rows = [...text].length > 16 ? chunks(text, 2) : [text];
     // quiet by tracking and space, not by hairlines: weight 500 at 66 px vanished over a bright scene

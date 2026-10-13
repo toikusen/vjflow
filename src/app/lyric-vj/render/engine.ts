@@ -30,13 +30,13 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { avoidAll, blendLayer, drawLook, drawNative, Layer, Rect, sectionAt } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Rect, sectionAt } from './graphics';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
-import { contrast, CueLayer, CueRuntime, EXIT_SEC, FrameFx, LEAD, readable as readableOn, readFix, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { contrast, CueLayer, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readFix, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -45,37 +45,58 @@ const H = 1080;
  * safe area (48 px side / 40 px top-bottom margin), scaled down about the centre inside a wrapper group.
  */
 /** The layer's settled bounds in frame px (origin at the centre), with the layer laid out at its readable moment. */
-function settledBox(layer: CueLayer, parent?: THREE.Object3D): THREE.Box3 {
+function settledBox(layer: CueLayer, parent?: THREE.Object3D, span = false): THREE.Box3 {
   const [from, to] = layer.readable();
+  const end = Number.isFinite(to) ? to : from + 1;
   const vis = layer.group.visible;
   layer.group.visible = true;
-  layer.update(Number.isFinite(to) ? (from + to) / 2 : from + 0.5, { flash: 0, hit: 0, shake: 0 });
+  // span: every place the line rests while it is read (a stack line is pushed up when the next one lands; measured
+  // once it protected only one of its places — a card covered チョロイン c061, c003 ran off the frame), else the middle
+  const box = new THREE.Box3();
+  for (const k of span ? [0.05, 0.25, 0.5, 0.75, 0.95] : [0.5]) {
+    measureAtRest(() => layer.update(from + (end - from) * k, { flash: 0, hit: 0, shake: 0 }));
+    (parent ?? layer.group).updateMatrixWorld(true);
+    box.union(shownBox(layer));
+  }
   layer.group.visible = vis;
-  (parent ?? layer.group).updateMatrixWorld(true);
+  return box;
+}
+
+/** The box of what the layer shows now, in world (frame) px with every transform above it applied. */
+function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
   // only what is showing at that moment (beat-cut keeps its other pieces hidden)
   const box = new THREE.Box3();
   // decor (array's tiled words) is not the lyric: it may fill the frame on purpose
   const shown = (o: THREE.Object3D): boolean => o === layer.group || (o.visible && !o.userData['decor'] && (!o.parent || shown(o.parent)));
   layer.group.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible) box.expandByObject(o);
+    // inkOnly (the motion check): what can be seen, not pieces waiting at zero opacity
+    const faint = inkOnly && ((o as THREE.Mesh).material as THREE.Material | undefined)?.opacity !== undefined && ((o as THREE.Mesh).material as THREE.Material).opacity <= 0.01;
+    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible && !faint) box.expandByObject(o);
   });
   return box;
 }
 
-function fitToFrame(layer: CueLayer): THREE.Group {
+function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   const fit = new THREE.Group();
   fit.add(layer.group);
-  const box = settledBox(layer, fit);
+  const box = settledBox(layer, fit, true);
   if (box.isEmpty()) return fit;
-  const sx = (W / 2 - 48) / Math.max(Math.abs(box.min.x), Math.abs(box.max.x));
-  const sy = (H / 2 - 40) / Math.max(Math.abs(box.min.y), Math.abs(box.max.y));
-  fit.scale.setScalar(Math.min(1, sx, sy));
+  const ex = Math.max(Math.abs(box.min.x), Math.abs(box.max.x));
+  const ey = Math.max(Math.abs(box.min.y), Math.abs(box.max.y));
+  // inside the safe area at rest, and inside the frame as it moves (motionPad: the kick and drift grow the box about
+  // the centre, the sway and drift shift it); 行星 c010 and 天文対話 c036 sat in the safe area and swayed off the frame
+  const pad = motionPad({ x0: W / 2 - ex, y0: H / 2 - ey, x1: W / 2 + ex, y1: H / 2 + ey }, kick);
+  const mx = (pad.x1 - W / 2) / ex;
+  const my = (pad.y1 - H / 2) / ey;
+  fit.scale.setScalar(Math.min(1, (W / 2 - 48) / ex, (H / 2 - 40) / ey, W / 2 / (ex * mx), H / 2 / (ey * my)));
   return fit;
 }
 
 /** How long a drop's keyword flash holds before the line takes over (a few frames). */
 const FLASH_SEC = 0.16;
 const HOLD_SEC = 1.2;
+/** Loudness from which heavy beats kick the type layer (kickAt); the lyrics' avoidance room counts the kick from here. */
+const KICK_LEVEL = 2.4;
 const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card']);
 const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel };
 
@@ -109,6 +130,20 @@ export interface RenderJob {
   layer?: 'text' | 'back';
 }
 
+/** motionQa per line: the deepest overlap with a story prop by cause, and how far past the safe area / frame edge. */
+export interface MotionCheck {
+  id: string;
+  text: string;
+  template: string;
+  motion: { t: number; px: number };
+  atRest: { t: number; px: number };
+  /** Over a prop that found no room and faded behind the line (avoid's fallback, by design). */
+  steppedBack: { t: number; px: number };
+  gliding: { t: number; px: number };
+  offSafe: { t: number; px: number };
+  offFrame: { t: number; px: number };
+}
+
 export interface CueMetric {
   id: string;
   text: string;
@@ -122,6 +157,16 @@ export interface CueMetric {
   /** When its last character is sung and when it is gone (equal for a line a template keeps up on purpose). */
   lastSung: number;
   goneAt: number;
+  template: string;
+  /** The director's entrance/reveal, what was drawn, why it changed, and whether a planned entrance never played. */
+  plannedEnter: string;
+  plannedReveal: string;
+  enter: string;
+  reveal: string;
+  /** How much the line was scaled down to stay in the safe area at rest and in the frame as it moves (1 = not). */
+  fitScale: number;
+  adjust: PaceAdjust[];
+  entranceLost: boolean;
 }
 
 const FINAL_SHADER = {
@@ -279,7 +324,11 @@ export class LyricVjEngine {
   private textScene = new THREE.Scene();
   private probe?: CanvasRenderingContext2D;
   /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
-  private lyricRects: { from: number; to: number; rect: Rect }[] = [];
+  private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string }[] = [];
+  /** The story props as placed in the last rendered frame (motionQa checks the lyrics against them). */
+  private placedProps: { r: Rect; faded: boolean }[] = [];
+  /** The props were still gliding out of the way of a line that just came up (or back after one left). */
+  private propsGliding = false;
   private ghostA?: THREE.WebGLRenderTarget;
   private ghostB?: THREE.WebGLRenderTarget;
   private ghostPass?: ShaderPass;
@@ -502,7 +551,8 @@ export class LyricVjEngine {
             this.textRoot.remove(layer.group);
             setHalo(both ? MIXED_HALO : luma(ground) > 0.5 ? hexToRgba(ground, 0.95) : 'rgba(0,0,0,0.85)');
             layer = make({ ...treatment.styleAnchor.palette, text, background: ground });
-            this.lyricRects.push({ from, to: shot.end, rect: { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y } });
+            const r = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y };
+            this.lyricRects.push({ from, to: shot.end, rect: r, rest: r });
           }
         }
         this.shotLayers.set(shot.id, layer);
@@ -600,10 +650,7 @@ export class LyricVjEngine {
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
-      const rushed = cue.end - cue.start < [...cue.text.replace(/\s/g, '')].length / 12 + 1;
-      // a line sung faster than it reads lands whole and at once; one with little room to spare is not spelled out
-      const tight = cue.end - cue.start < [...cue.text.replace(/\s/g, '')].length / 12 + 1.6;
-      const paced = rushed ? { ...style, reveal: 'line' as const, enter: ['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise'].includes(style.enter) ? ('cut' as const) : style.enter } : tight && style.reveal === 'word' ? { ...style, reveal: 'line' as const } : style;
+      const { style: paced, rushed, adjust } = paceStyle(style, cue);
       const rt: CueRuntime = {
         cue, style: paced, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
         // an English line is set in the paired Latin face
@@ -614,6 +661,8 @@ export class LyricVjEngine {
         accentTimes: [...(style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined), ...(repeats.get(cue.id) ?? [])].sort((a, b) => a - b),
         pace,
         rushed,
+        planned: { enter: style.enter, reveal: style.reveal },
+        adjust,
         later,
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
       };
@@ -663,14 +712,19 @@ export class LyricVjEngine {
       let layer = build();
       // a line not up long enough to read holds into the free time after it, or lands and leaves at once (the
       // templates read their timing when built, so the line is built again with the new timing)
-      const fixRead = readFix(rt, layer.readable(), readingSec(rt.cue.text, rt.cue.start, rt.cue.end), (persist ? leaveBy : nextShow) - 0.02);
+      const need = readingSec(rt.cue.text, rt.cue.start, rt.cue.end);
+      const limit = (persist ? leaveBy : nextShow) - 0.02;
+      const fixRead = readFix(rt, layer.readable(), need, limit);
       if (fixRead) {
         Object.assign(rt, fixRead);
         layer = build();
       }
       setInkGhost(null);
       layer.group.visible = false;
-      const fit = fitToFrame(layer);
+      // the kick (kickAt) moves the line only where the section is loud enough: its fit and its room count it there
+      const span = rt.exitAt + rt.exitDur - rt.showFrom;
+      const kick = Array.from({ length: Math.ceil(span / 0.25) + 1 }, (_, k) => rt.showFrom + k * 0.25).some((x) => fxAt(x, treatment.moments ?? [], treatment.arc ?? []).level >= KICK_LEVEL);
+      const fit = fitToFrame(layer, kick);
       this.textRoot.add(fit);
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
@@ -678,9 +732,13 @@ export class LyricVjEngine {
       if (this.job.treatment.graphics) {
         // where the line sits on screen, so background objects can make room for it
         // beat-cut throws its phrases all over the frame before the line settles: the whole frame is the line's
-        const b = settledBox(layer, fit);
-        if (shot.template === 'beat-cut') this.lyricRects.push({ from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H } });
-        else if (!b.isEmpty()) this.lyricRects.push({ from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y } });
+        const b = settledBox(layer, fit, true);
+        if (shot.template === 'beat-cut') this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H }, rest: { x0: 0, y0: 0, x1: W, y1: H } });
+        else if (!b.isEmpty()) {
+          // room for the line as it moves, not only where it rests
+          const rest = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y };
+          this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: motionPad(rest, kick), rest });
+        }
       }
       if (split.calls.length) this.callLayers.push(this.makeCalls(rt, cue1, split.calls, settledBox(layer, fit)));
       if (shot.params['echo'] && !this.ownDrawing(cue.start)) {
@@ -713,7 +771,7 @@ export class LyricVjEngine {
 
   metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[] } {
     return {
-      cues: this.cueLayers.map(({ rt, layer }) => {
+      cues: this.cueLayers.map(({ rt, layer, fitScale }) => {
         const [from, to] = layer.readable();
         const readableSec = Math.max(0, to - from);
         // reading time: chars / 12 + 1 s , but never more than 90 % of the time the line is sung
@@ -723,7 +781,7 @@ export class LyricVjEngine {
         const requiredSec = Math.min(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), 0.95 * (rt.exitAt + rt.exitDur - rt.showFrom));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, lingerSec, lastSung: last, goneAt: last + lingerSec }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style) }; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };
@@ -932,6 +990,7 @@ export class LyricVjEngine {
   }
 
   async renderAt(t: number) {
+    this.placedProps = [];
     const { shot, prev } = this.shotAt(t);
     const medium = MEDIA[(this.job.treatment.design ?? DEFAULT_DESIGN).medium ?? 'clean'];
     // background motion is held to the medium's frame rate (on twos); cuts and lyrics stay on every frame
@@ -1168,7 +1227,7 @@ export class LyricVjEngine {
   /** Kick pulse 0..1 at t: only in loud sections (arc level ≥ 2.4), only on beats that really hit (≥ 0.3). */
   private kickAt(t: number, level: number): number {
     const strength = this.job.beatStrength;
-    if (!strength || level < 2.4) return 0;
+    if (!strength || level < KICK_LEVEL) return 0;
     const beats = this.job.beats;
     let lo = 0;
     let hi = beats.length;
@@ -1212,19 +1271,80 @@ export class LyricVjEngine {
     // an intro or an interlude never frames empty space (a section running on past its first line kept it there)
     const words = Math.max(0, ...this.lyricRects.map((r) => Math.min(clamp01((t - r.from + 0.15) / 0.3), clamp01((r.to - t) / 0.3))));
     const ls = all.map((l) => (l.kind === 'frame' && (l.type === 'brackets' || l.type === 'viewfinder') ? ({ ...l, opacity: (l.opacity ?? 1) * words } as Layer) : l));
-    const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to).map((r) => r.rect);
+    const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to);
     const union = (rs: Rect[]) => (rs.length ? rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })) : undefined);
+    // room for the lines as they move where the frame has it; an object with nowhere to go clear of that makes room
+    // for the lines at rest instead (as it did before the motion room; the bigger box left it over the words)
     const placed = (x: number) => {
-      const u = union(at(x));
-      return u ? avoidAll(ls, u) : ls;
+      const lines = at(x);
+      const moving = union(lines.map((r) => r.rect));
+      const rest = union(lines.map((r) => r.rest));
+      if (!moving || !rest) return ls;
+      const wide = avoidAll(ls, moving);
+      const tight = avoidAll(ls, rest);
+      return wide.map((l, i) => {
+        const r = l.kind === 'code' ? undefined : layerRect(l);
+        return r && r.x0 < moving.x1 && moving.x0 < r.x1 && r.y0 < moving.y1 && moving.y0 < r.y1 ? tight[i] : l;
+      });
     };
     // the latest change of the visible set before t: glide from the placement just before it
     const edges = this.lyricRects.flatMap((r) => [r.from, r.to]).filter((x) => x <= t && x > t - GLIDE);
     const now = placed(t);
-    if (!edges.length) return now;
-    const e = Math.max(...edges);
-    const before = placed(e - 0.001);
-    return now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE)));
+    const e = edges.length ? Math.max(...edges) : 0;
+    const before = edges.length ? placed(e - 0.001) : now;
+    const out = edges.length ? now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE))) : now;
+    // with whether the prop stepped back (faded behind the line: no room anywhere, or passing behind it)
+    this.placedProps = out.flatMap((l, i) => {
+      const r = l.kind === 'sprite' || l.kind === 'card' ? layerRect(l) : undefined;
+      return r ? [{ r, faded: (l.opacity ?? 1) < (ls[i].opacity ?? 1) - 1e-3 }] : [];
+    });
+    // (a line shows 0.05 s before its room is made: those frames are the start of the glide)
+    this.propsGliding = this.lyricRects.some((r) => [r.from, r.to].some((x) => x <= t + 0.05 && x > t - GLIDE));
+    return out;
+  }
+
+  /**
+   * QA after a render: where each line actually is while it plays (the type layer's kick and sway, its own drift,
+   * wave and beat pulses), at its beats and across its readable time, against the story props placed in that frame,
+   * the safe area and the frame edge. The avoidance boxes are measured at rest; this is what checks the motion.
+   */
+  async motionQa(everyFrame: string[] = []): Promise<MotionCheck[]> {
+    const depth = (a: Rect, p: Rect) => Math.max(0, Math.min(Math.min(a.x1, p.x1) - Math.max(a.x0, p.x0), Math.min(a.y1, p.y1) - Math.max(a.y0, p.y0)));
+    const out: MotionCheck[] = [];
+    for (const { rt, layer } of this.cueLayers) {
+      const [from, to0] = layer.readable();
+      const to = Number.isFinite(to0) ? to0 : from + 1;
+      if (!(to > from)) continue;
+      const rest = this.lyricRects.find((r) => r.id === rt.cue.id)?.rest;
+      // sampled (beats + five points) to find problems; lines named in everyFrame are checked on every 60 fps frame
+      const times = everyFrame.includes(rt.cue.id)
+        ? Array.from({ length: Math.floor((to - from) * 60) + 1 }, (_, k) => from + k / 60)
+        : [...new Set([...rt.accentTimes.filter((a) => a >= from && a <= to), ...[0.1, 0.3, 0.5, 0.7, 0.9].map((k) => from + (to - from) * k)])];
+      const worst: MotionCheck = { id: rt.cue.id, text: rt.cue.text, template: rt.shot.template, motion: { t: 0, px: 0 }, atRest: { t: 0, px: 0 }, steppedBack: { t: 0, px: 0 }, gliding: { t: 0, px: 0 }, offSafe: { t: 0, px: 0 }, offFrame: { t: 0, px: 0 } };
+      const keep = (k: 'motion' | 'atRest' | 'steppedBack' | 'gliding' | 'offSafe' | 'offFrame', t: number, px: number) => {
+        if (px > worst[k].px) worst[k] = { t, px };
+      };
+      for (const t of times) {
+        await this.renderAt(t);
+        if (!layer.group.visible) continue;
+        this.textRoot.updateMatrixWorld(true);
+        const b = shownBox(layer, true);
+        if (b.isEmpty()) continue;
+        const r = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y };
+        for (const p of this.placedProps) {
+          const px = depth(r, p.r);
+          if (!px) continue;
+          // gliding: the prop is still on its way out (0.4 s, by design); stepped back: it found no room and faded
+          // behind the line (by design); at rest: the measured box already meets it at full strength; else the playing
+          // line's motion carried it onto a prop that had cleared its box
+          keep(this.propsGliding ? 'gliding' : p.faded ? 'steppedBack' : rest && depth(rest, p.r) > 0 ? 'atRest' : 'motion', t, px);
+        }
+        keep('offFrame', t, Math.max(0, -r.x0, r.x1 - W, -r.y0, r.y1 - H));
+        keep('offSafe', t, Math.max(0, 48 - r.x0, r.x1 - (W - 48), 40 - r.y0, r.y1 - (H - 40)));
+      }
+      out.push(worst);
+    }
+    return out;
   }
 
   /** The value of a placement param (align / position) that puts the lyrics over the calmest third of the frame. */

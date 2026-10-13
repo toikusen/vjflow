@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { contrastFace } from '../fonts';
 import { CueStyle, SymbolName } from '../treatment';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, GlyphStyle, glyphTexture, hash } from './glyphs';
-import { CueLayer, CueRuntime, FrameFx, revealAt } from './runtime';
+import { CueLayer, CueRuntime, DRAWN, enterSec, FrameFx, revealAt } from './runtime';
 
 type GlyphMesh = THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
 interface Item {
@@ -356,7 +356,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
     const pics = new Map<string, { map: THREE.Texture; geo: THREE.PlaneGeometry }>();
     for (const it of items) {
       home.set(it.mesh, { map: it.mesh.material.map, geo: it.mesh.geometry });
-      const picks = Array.from({ length: 6 }, (_, j) => pool[Math.floor(hash(it.glyph.index, j + 11) * pool.length)]).filter((c) => c !== it.glyph.char);
+      const picks = Array.from({ length: DRAWN.flap.faces }, (_, j) => pool[Math.floor(hash(it.glyph.index, j + 11) * pool.length)]).filter((c) => c !== it.glyph.char);
       faces.set(
         it.mesh,
         picks.map((c) => {
@@ -416,9 +416,11 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   };
   return {
     group: layer.group,
+    // a drawn entrance is readable once the last character to start it has finished it (same timing as drawn)
     readable: () => {
       const [a, b] = layer.readable();
-      return [ink ? a + 0.6 * rt.pace : cycling ? a + 0.5 * rt.pace : enter === 'focus' || enter === 'rise' ? a + 0.3 * rt.pace : a, b];
+      if (!DRAWN_ENTER.has(enter) || !items.length) return [a, b];
+      return [Math.max(a, Math.max(...items.map((it) => startOf(rt, it.glyph, n))) + enterSec(enter, rt.pace)), b];
     },
     update(t: number, fx: FrameFx) {
       layer.update(t, fx);
@@ -430,8 +432,8 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       if (ink)
         for (const it of items) {
           const k = (t - startOf(rt, it.glyph, n)) / rt.pace;
-          const line = easeOutCubic(k / 0.28);
-          const fill = easeOutCubic((k - 0.22) / 0.34);
+          const line = easeOutCubic(k / DRAWN.ink.line);
+          const fill = easeOutCubic((k - DRAWN.ink.fillFrom) / DRAWN.ink.fill);
           const base = it.mesh.material.opacity;
           const o = outlines.get(it.mesh)!;
           o.material.opacity = base * line * (1 - 0.6 * fill);
@@ -455,7 +457,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           const fs = faces.get(m)!;
           const steps = fs.length;
           // flap: one fold every 0.07 s; slot: the reel slows down toward its own character
-          const u = enter === 'flap' ? k / 0.07 : steps * (1 - (1 - clamp01(k / 0.55)) ** 2);
+          const u = enter === 'flap' ? k / DRAWN.flap.fold : steps * (1 - (1 - clamp01(k / DRAWN.slot.reel)) ** 2);
           const step = Math.floor(Math.max(0, u));
           const own = step >= steps || k < 0;
           const pic = own ? home.get(m)! : fs[step];
@@ -473,7 +475,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           if (enter === 'slot') {
             const b = box(m);
             // each character rolls down through the window; the last one lands with a small overshoot
-            const off = own ? 1 - easeOutBack(clamp01((k - 0.55) / 0.25)) : 1 - f;
+            const off = own ? 1 - easeOutBack(clamp01((k - DRAWN.slot.reel) / DRAWN.slot.land)) : 1 - f;
             m.position.y += (off * b.half * 2) / Math.max(1e-6, m.getWorldScale(tmpS).y / (m.scale.y || 1));
             // the window stays where the glyph rests
             clips.get(m)![0].set(new THREE.Vector3(0, -1, 0), b.y + b.half);
@@ -486,7 +488,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           const m = it.mesh;
           const k = (t - startOf(rt, it.glyph, n)) / rt.pace;
           const b = box(m);
-          const drop = 1 - easeOutCubic(k / 0.45);
+          const drop = 1 - easeOutCubic(k / DRAWN.rise.sec);
           // the glyph comes up from behind the line it sits on: nothing shows below its own baseline
           m.position.y -= drop * 1.1 * b.half * 2 / Math.max(1e-6, m.getWorldScale(tmpS).y / (m.scale.y || 1));
           clips.get(m)![0].set(new THREE.Vector3(0, 1, 0), -(b.y - b.half));
@@ -496,7 +498,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       if (enter === 'focus')
         for (const it of items) {
           const m = it.mesh;
-          const k = clamp01((t - startOf(rt, it.glyph, n)) / (0.6 * rt.pace));
+          const k = clamp01((t - startOf(rt, it.glyph, n)) / (DRAWN.focus.sec * rt.pace));
           const base = m.material.opacity;
           const c = blurs.get(m)!;
           // the soft one is there first (a little larger, coming closer), the sharp one fades in over it

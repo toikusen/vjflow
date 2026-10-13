@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { Fonts } from '../fonts';
 import { TimelineCue } from '../timeline';
-import { CueStyle, Palette, ParamValue, Shot } from '../treatment';
+import { CueStyle, EnterKind, Palette, ParamValue, Shot } from '../treatment';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, hash } from './glyphs';
 
 /** Text shows this long before the voice so it is readable on the first sung syllable. */
@@ -26,6 +26,10 @@ export interface CueRuntime {
   pace: number;
   /** The line is sung faster than it can be read (chars / 12 + 1 s): show it whole at once, no staggering. */
   rushed?: boolean;
+  /** The director's entrance and reveal, before pacing and readFix changed them (for the render check). */
+  planned?: Pick<CueStyle, 'enter' | 'reveal'>;
+  /** What pacing and readFix changed, in order. */
+  adjust?: PaceAdjust[];
   /** When the later lines of the same shot show (stack and couplet move earlier lines aside as they arrive). */
   later?: number[];
   /** This line's place among the lines of its shot (0 = first). */
@@ -74,7 +78,23 @@ export interface TemplateRenderer {
 }
 
 /** Strength of the most recent accent at time t (exponential decay after each hit). */
+/**
+ * Rest pose: while a line's box is measured (where it sits, what must make room for it), the decorative motion — the
+ * held wave and the beat pulses — is left out, so measuring a hundredth of a second earlier or later does not move the
+ * box (a 4 px wave swing moved 雙截棍's prop to the other side of the frame).
+ */
+let restPose = false;
+export function measureAtRest<T>(f: () => T): T {
+  restPose = true;
+  try {
+    return f();
+  } finally {
+    restPose = false;
+  }
+}
+
 export function accentPulse(t: number, accents: number[], decay = 9): number {
+  if (restPose) return 0;
   let p = 0;
   for (const a of accents) if (t >= a) p = Math.max(p, Math.exp(-(t - a) * decay));
   return p;
@@ -127,10 +147,37 @@ export function enterAt(rt: CueRuntime, g: Glyph, stagger: number): number {
  * Applies enter/exit motion to one glyph. Returns the scale and opacity multipliers and offsets so templates can
  * combine them with their own layout. `stagger` is the delay between characters.
  */
+/** slam, pop and wipe run over this many seconds × pace; a fade always takes FADE_SEC (it is not sped up). */
+const PACED_SEC = 0.32;
+const FADE_SEC = 0.3;
+
+/**
+ * Seconds from a glyph's start until it has landed (opaque, in place, within 5 % of its size), as it is drawn:
+ * glyphMotion's entrances and text-fx's drawn ones (DRAWN; wipe is within 5 % of its slide at 0.21). The readable
+ * estimates use this same table, so what is measured is what is shown.
+ */
+/** The drawn entrances' timing (text-fx.ts draws with these; enterSec reads them), in seconds × pace. */
+export const DRAWN = {
+  ink: { line: 0.28, fillFrom: 0.22, fill: 0.34 },
+  /** One fold per this many seconds, through at most `faces` other characters. */
+  flap: { fold: 0.07, faces: 6 },
+  slot: { reel: 0.55, land: 0.25 },
+  rise: { sec: 0.45 },
+  focus: { sec: 0.6 },
+} as const;
+
+export function enterSec(enter: EnterKind, pace: number): number {
+  const paced: Record<EnterKind, number> = {
+    cut: 0, fade: 0, slam: PACED_SEC, pop: PACED_SEC, wipe: 0.21,
+    ink: DRAWN.ink.fillFrom + DRAWN.ink.fill, flap: DRAWN.flap.fold * DRAWN.flap.faces, slot: DRAWN.slot.reel + DRAWN.slot.land, rise: DRAWN.rise.sec, focus: DRAWN.focus.sec,
+  };
+  return enter === 'fade' ? FADE_SEC : paced[enter] * pace;
+}
+
 export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stagger: number) {
   stagger *= rt.pace;
   const start = enterAt(rt, g, stagger);
-  const enterSec = 0.32 * rt.pace;
+  const enterSec = PACED_SEC * rt.pace;
   let scale = 1;
   let opacity = 1;
   let dx = 0;
@@ -152,7 +199,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       dx = (1 - easeOutCubic(p)) * -24;
       break;
     case 'fade':
-      opacity = easeOutCubic((t - (rt.style.reveal === 'word' ? start : rt.showFrom)) / 0.3);
+      opacity = easeOutCubic((t - (rt.style.reveal === 'word' ? start : rt.showFrom)) / FADE_SEC);
       break;
     case 'cut':
       opacity = t >= rt.showFrom ? 1 : 0;
@@ -160,7 +207,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
   }
   // once landed, each glyph keeps a slight wave so a held line still breathes (designer VJs never freeze type)
   const held = clamp01((t - start - enterSec) / 0.6);
-  if (held > 0) dy += held * 2.5 * Math.sin((t - start) * 1.7 + g.index * 0.55);
+  if (held > 0 && !restPose) dy += held * 2.5 * Math.sin((t - start) * 1.7 + g.index * 0.55);
   if (t > rt.exitAt && rt.style.exit !== 'cut') {
     const q = (t - rt.exitAt - g.index * Math.min(0.02, rt.exitDur / Math.max(1, n) / 2)) / rt.exitDur;
     const e = easeInCubic(q);
@@ -184,11 +231,10 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 
 /** When the last character has finished entering (all opaque and within 5 % of final scale). */
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
-  // a cut lands every character at once (glyphMotion ignores the stagger for it)
-  const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : rt.style.enter === 'cut' ? rt.showFrom : rt.showFrom + (n - 1) * stagger * rt.pace;
-  // seconds per glyph until opaque and back at final scale (back-easing overshoots until the end of its entrance)
-  const settle = { slam: 0.34, pop: 0.34, wipe: 0.2, fade: 0.3, cut: 0, ink: 0.6, flap: 0.45, slot: 0.8, focus: 0.6, rise: 0.45 }[rt.style.enter];
-  return last + settle * rt.pace;
+  // a cut and a whole-line fade bring every character in at once (glyphMotion ignores the stagger for them)
+  const together = rt.style.enter === 'cut' || rt.style.enter === 'fade';
+  const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : together ? rt.showFrom : rt.showFrom + (n - 1) * stagger * rt.pace;
+  return last + enterSec(rt.style.enter, rt.pace);
 }
 
 export const color = (hex: string, boost = 1) => new THREE.Color(hex).multiplyScalar(boost);
@@ -218,13 +264,64 @@ export const readingSec = (text: string, start: number, end: number) => Math.min
  * at once (no word-by-word reveal, no drawn entrance) and leaves on a cut at `limit`. Undefined when it reads already.
  * Applies to every template and effect alike: it works from the readable window the built layer reports.
  */
-export function readFix(rt: CueRuntime, readable: [number, number], required: number, limit: number): Pick<CueRuntime, 'style' | 'exitAt' | 'exitDur' | 'rushed'> | undefined {
+export function readFix(rt: CueRuntime, readable: [number, number], required: number, limit: number): Pick<CueRuntime, 'style' | 'exitAt' | 'exitDur' | 'rushed' | 'adjust'> | undefined {
   let short = required - (readable[1] - readable[0]);
   if (short <= 0.05) return undefined;
   const room = Math.max(0, limit - (rt.exitAt + rt.exitDur));
   const hold = Math.min(short, room);
   short -= hold;
-  if (short <= 0.05) return { style: rt.style, exitAt: rt.exitAt + hold, exitDur: rt.exitDur, rushed: rt.rushed };
+  if (short <= 0.05) return { style: rt.style, exitAt: rt.exitAt + hold, exitDur: rt.exitDur, rushed: rt.rushed, adjust: [...(rt.adjust ?? []), 'read-hold'] };
   // rushed: templates that set a line in pieces (scatter, stair rows, typing) put them all up at once
-  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: Math.max(rt.exitAt, limit - 0.08), exitDur: 0.08, rushed: true };
+  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: Math.max(rt.exitAt, limit - 0.08), exitDur: 0.08, rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
 }
+
+/**
+ * fast-cut: a line sung faster than it reads lost a slow entrance to a cut; fast-line / tight-line: its word reveal
+ * became a whole-line entrance; read-hold: readFix only kept it up longer; read-cut: readFix landed it at once and cut
+ * it out.
+ */
+export type PaceAdjust = 'fast-cut' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-cut';
+
+/** Entrances too slow for a line sung faster than it reads (pop and fade are quick enough to keep). */
+const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise']);
+
+/**
+ * Pacing before a line is built: a line sung faster than it reads (rushed) comes up whole and a slow entrance becomes
+ * a cut; a line with little time to spare (tight) is not spelled out word by word.
+ */
+export function paceStyle(style: CueStyle, cue: { start: number; end: number; text: string }): { style: CueStyle; rushed: boolean; adjust: PaceAdjust[] } {
+  const chars = [...cue.text.replace(/\s/g, '')].length;
+  const len = cue.end - cue.start;
+  const rushed = len < chars / 12 + 1;
+  const tight = len < chars / 12 + 1.6;
+  const adjust: PaceAdjust[] = [];
+  let out = style;
+  if (style.reveal === 'word' && (rushed || tight)) {
+    out = { ...out, reveal: 'line' };
+    adjust.push(rushed ? 'fast-line' : 'tight-line');
+  }
+  if (rushed) {
+    out = { ...out, reveal: 'line' };
+    if (SLOW_ENTERS.has(style.enter)) {
+      out = { ...out, enter: 'cut' };
+      adjust.push('fast-cut');
+    }
+  }
+  return { style: out, rushed, adjust };
+}
+
+/**
+ * A line's measured (rest) rectangle grown by how far the type layer's own motion can carry it while it plays, so the
+ * objects that make room for it clear it in every frame: the kick's 5 % scale (loud sections only) and the drift's
+ * 1.2 % growth, both about the frame centre, the sway (13 / 6 px), the drift (14 / 8 px), the kick's 10 px jump and
+ * the 2.5 px wave. Worst case and fixed, so it never moves with when the box was measured. Frame px, y down.
+ */
+export function motionPad(r: { x0: number; y0: number; x1: number; y1: number }, kick: boolean, w = 1920, h = 1080) {
+  const grow = (kick ? 1.05 : 1) * 1.012 - 1;
+  const dx = (x: number) => Math.abs(x - w / 2) * grow + 13 + 14 + 2.5;
+  const dy = (y: number) => Math.abs(y - h / 2) * grow + 6 + 8 + 2.5 + (kick ? 10 : 0);
+  return { x0: r.x0 - dx(r.x0), y0: r.y0 - dy(r.y0), x1: r.x1 + dx(r.x1), y1: r.y1 + dy(r.y1) };
+}
+
+/** A planned entrance that never plays: the line was meant to enter with motion and lands on a cut instead. */
+export const entranceLost = (planned: Pick<CueStyle, 'enter'>, final: Pick<CueStyle, 'enter'>) => planned.enter !== 'cut' && final.enter === 'cut';

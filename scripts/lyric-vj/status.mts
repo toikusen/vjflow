@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import type { JobItem, JobStage, JobStatus, StageId } from '../../src/app/lyric-vj/job-status';
+import { lockFile } from './lock.mts';
 
 export const JOBS_DIR = resolve('out/jobs');
 const OUT_ROOT = resolve('out');
@@ -52,3 +53,6 @@ export function jobStatus(id: string, init: Partial<JobStatus> = {}) {
     },
   };
 }
+
+/** One render per job at a time: two renders of one job raced on its status file (lock.mts). Returns release. */
+export const lockJob = (id: string) => lockFile(join(JOBS_DIR, `${id}.render.lock`), (pid) => `這個工作（${id}）已經有一個渲染在進行（pid ${pid}），請等它結束`);

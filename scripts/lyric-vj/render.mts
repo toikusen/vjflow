@@ -1,11 +1,13 @@
 // Offline render: bundle the render page, drive headless Chrome frame by frame, encode with ffmpeg, mux both audio versions.
 // npx tsx --tsconfig tsconfig.json scripts/lyric-vj/render.mts --song out/indigo/song.json --treatment out/indigo/treatment.json \
 //   [--assets out/indigo/assets/assets.json] --start 69 --end 90 [--stills 70,75] [--fps 30 --workers 2]
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
-import { jobIdFor, jobStatus } from './status.mts';
+import { jobIdFor, jobStatus, lockJob } from './status.mts';
+import { lockFile } from './lock.mts';
 import { parseArgs } from 'node:util';
 import { endAtVoice, silentTail, timingGate } from '../../src/app/lyric-vj/timing-qa';
 import { frameStats, visualIssues, type FrameStats } from '../../src/app/lyric-vj/visual-qa';
@@ -34,6 +36,7 @@ const { values: a } = parseArgs({
     medium: { type: 'string' }, // override the treatment's medium (medium.ts)
     clip: { type: 'string' }, // 'a,b': render only this part of the window (previews)
     layer: { type: 'string' }, // text | back: one compositing layer (text = ProRes 4444 with alpha)
+    'motion-frames': { type: 'string' }, // QA: line ids whose motion check runs on every frame (60 fps), comma-separated
   },
 });
 const ROOT = process.cwd();
@@ -47,6 +50,10 @@ const [clipStart, clipEnd] = a.clip ? a.clip.split(',').map(Number) : [win.start
 const range = { start: Math.max(win.start, clipStart), end: Math.min(win.end, clipEnd) };
 const out = a.out ?? dirname(a.treatment!);
 const fps = Number(a.fps);
+// before anything is written: one render per output directory, and a video render also owns its job's status
+const jobId = a.job ?? jobIdFor(dirname(a.treatment!));
+lockFile(join(resolve(out), '.render.lock'), (pid) => `${out} 已經有一個渲染在寫入（pid ${pid}），請等它結束`);
+if (!a.stills) lockJob(jobId);
 mkdirSync(join(out, 'render'), { recursive: true });
 
 const checked = validateTreatment(JSON.parse(readFileSync(a.treatment!, 'utf8')) as TreatmentV3, song, win, TEMPLATES);
@@ -76,6 +83,21 @@ const job: RenderJob = {
   meta: { ...splitSongTitle(song.title), logo: a.logo ? url(a.logo) : undefined },
   layer: a.layer === 'text' || a.layer === 'back' ? a.layer : undefined,
   track: !!a.track,
+};
+// which code and options made this render, so reports from different versions are never mixed up
+const git = (...args: string[]) => {
+  try {
+    return execFileSync('git', args, { encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+};
+const diff = git('diff', 'HEAD');
+const version = {
+  commit: git('rev-parse', '--short', 'HEAD'),
+  uncommitted: diff ? createHash('sha1').update(diff).digest('hex').slice(0, 10) : null,
+  options: {},
+  renderedAt: new Date().toISOString(),
 };
 const alpha = job.layer === 'text';
 const ext = alpha ? 'mov' : 'mp4';
@@ -141,8 +163,22 @@ try {
     }
     // a pre-render check (no full render needed): lines too short to read, lines left over an instrumental
     const m = await page.evaluate(() => window.vjMetrics());
+    // after the metrics: the motion check renders frames of its own
+    const motion = await page.evaluate((ids) => window.vjMotionQa(ids), (a['motion-frames'] ?? '').split(',').filter(Boolean));
+    writeFileSync(join(out, 'motion.json'), JSON.stringify({ version, lines: motion }, null, 1));
     const check = {
+      version,
+      // a playing line (kick, sway, drift, beat pulse) carried onto a story prop that had cleared it, or past the frame
+      // edge; overlaps already in the measured box or while a prop glides away are counted apart
+      motion: motion.filter((x) => x.motion.px > 0 || x.offFrame.px > 0).map((x) => `${x.id} ${x.template} 動態疊到道具 ${x.motion.px.toFixed(0)}px@${x.motion.t.toFixed(2)}s 出框 ${x.offFrame.px.toFixed(0)}px@${x.offFrame.t.toFixed(2)}s ${x.text}`),
+      propAtRest: motion.filter((x) => x.atRest.px > 0).map((x) => `${x.id} ${x.template} ${x.atRest.px.toFixed(0)}px@${x.atRest.t.toFixed(2)}s`),
+      propSteppedBack: motion.filter((x) => x.steppedBack.px > 0).map((x) => `${x.id} ${x.template} ${x.steppedBack.px.toFixed(0)}px@${x.steppedBack.t.toFixed(2)}s`),
+      propGliding: motion.filter((x) => x.gliding.px > 0).length,
+      offSafe: motion.filter((x) => x.offSafe.px > 0 && !x.offFrame.px).length,
       unreadable: m.cues.filter((c) => !c.ok).map((c) => `${c.id} ${c.text}（${c.readableSec.toFixed(1)}/${c.requiredSec.toFixed(1)}s）`),
+      // planned entrances that never play (a cut the director chose is not a loss), and every pacing change
+      entranceLost: m.cues.filter((c) => c.entranceLost).map((c) => `${c.id} ${c.template} ${c.plannedEnter}→cut（${c.adjust.join('+')}）${c.text}`),
+      adjusted: m.cues.filter((c) => c.adjust.length).map((c) => `${c.id} ${c.template} ${c.plannedEnter}/${c.plannedReveal}→${c.enter}/${c.reveal}（${c.adjust.join('+')}）`),
       // lingering = up over silence: measured on the vocal stem (a held note or a backing vocal is still singing; from
       // the last character's start alone, every held ending was flagged); without a stem, the old 4 s rule
       lingering: (() => {
@@ -153,10 +189,12 @@ try {
       visual: visualIssues(frames),
     };
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
+    // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     const total = Math.round((range.end - range.start) * fps);
-    const status = jobStatus(a.job ?? jobIdFor(dirname(a.treatment!)));
+    const status = jobStatus(jobId);
     status.stage('render', { state: 'running', done: 0, total, message: a['no-video'] ? '純圖片版本' : undefined });
     process.on('uncaughtExceptionMonitor', (e) => status.stage('render', { state: 'failed', message: String(e).slice(0, 300) }));
     let rendered = 0;
@@ -227,7 +265,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ ...report, cues: m.cues }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

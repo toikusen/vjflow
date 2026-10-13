@@ -47,6 +47,8 @@ interface Base {
   ghosts?: { dx: number; dy: number; color: Rgb }[];
   /** Beat pulse amount (scale or brightness kick), default 0. */
   pulse?: number;
+  /** Part of the ground (a planet's curve rising from the bottom): never moved or shrunk to make room for the lyrics. */
+  fixed?: boolean;
 }
 
 export type Layer = Base &
@@ -1133,6 +1135,19 @@ function panels(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'panels
     ctx.lineTo(poly[3][0], poly[3][1]);
     ctx.stroke();
   });
+}
+
+/**
+ * Where a photo is drawn (frame px), in every mode: a full or band photo makes no room for the lyrics (layerRect has
+ * no box for it), but the type over it is read against it all the same (engine.ts backdropAt).
+ */
+export function photoBox(l: Extract<Layer, { kind: 'photo' }>): Rect {
+  if (l.mode === 'full') return { x0: 0, y0: 0, x1: W, y1: H };
+  const bw = (l.w ?? 0.42) * W;
+  const bh = l.mode === 'band' ? (l.h ?? 0.34) * H : l.mode === 'circle' ? bw : (l.h ?? 0.5) * H;
+  const cx = W / 2 + ((l.x ?? 0) * W) / 2;
+  const cy = H / 2 - ((l.y ?? 0) * H) / 2;
+  return { x0: cx - bw / 2, y0: cy - bh / 2, x1: cx + bw / 2, y1: cy + bh / 2 };
 }
 
 function photo(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'photo' }>, t: number, age: number, kick: number, img: CanvasImageSource | undefined) {
@@ -2460,7 +2475,7 @@ export function layerRect(l: Layer): Rect | undefined {
  */
 export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []): Layer {
   const r = layerRect(l);
-  if (!r) return l;
+  if (!r || l.fixed) return l;
   const guard = { x0: lyrics.x0 - margin, y0: lyrics.y0 - margin, x1: lyrics.x1 + margin, y1: lyrics.y1 + margin };
   if (!overlaps(r, guard)) return l;
   if (l.kind === 'sprite' && l.pass) {

@@ -248,3 +248,17 @@ describe('poorShare', () => {
     expect(poorShare(dotted, 100, 400, '#1E64B4', [photo])).toBe(0);
   });
 });
+
+describe('guardLine', () => {
+  it('rebuilds a line light only when light type reads better than its own colour', async () => {
+    const { guardLine } = await import('./runtime');
+    // light type worse (a pale photo): keep the line's colour
+    expect(guardLine(0.36, 0.52, 0.15)).toBe(false);
+    // light type better (a mid-blue stage photo under blue type): rebuild
+    expect(guardLine(0.35, 0.18, 0.15)).toBe(true);
+    // a tie keeps the colour the line was given
+    expect(guardLine(0.3, 0.3, 0.15)).toBe(false);
+    // under the threshold nothing changes, however light type would do
+    expect(guardLine(0.12, 0, 0.15)).toBe(false);
+  });
+});

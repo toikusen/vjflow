@@ -76,6 +76,9 @@ describe('density: making room when the frame is full', () => {
     expect(avoid(stamp, full).opacity).toBe(0);
     const disc = { kind: 'blob' as const, x: 0, y: 0, r: 0.4, color: '#f80' };
     expect(avoid(disc, full)).toBe(disc);
+    // a fixed shape is ground: it stays where it is even when a free spot is near
+    const ground = { kind: 'blob' as const, x: -0.6, y: 0, r: 0.08, color: '#f80', fixed: true };
+    expect(avoid(ground, full)).toBe(ground);
   });
 
   it('keeps only the card that landed last when a pile does not fit; the others leave where they are', async () => {
@@ -281,5 +284,19 @@ describe('measurable (motion QA visibility)', () => {
 
   it('names the previous section in a transition', () => {
     expect(measurable([stamp], [stamp], Infinity, 'prev', 2)[0]).toMatchObject({ layer: 'prev:0', ref: 'stamp:LOVE@s2#0' });
+  });
+});
+
+describe('photoBox', () => {
+  it('is where the photo is drawn in every mode, a band and a full photo included', async () => {
+    const { photoBox } = await import('./graphics');
+    expect(photoBox({ kind: 'photo', mode: 'full' })).toEqual({ x0: 0, y0: 0, x1: 1920, y1: 1080 });
+    // a band: 42 % of the width, 34 % of the height, centred where it is put
+    const b = photoBox({ kind: 'photo', mode: 'band', y: -0.42 });
+    expect(b.x1 - b.x0).toBeCloseTo(0.42 * 1920);
+    expect(b.y1 - b.y0).toBeCloseTo(0.34 * 1080);
+    expect((b.y0 + b.y1) / 2).toBeCloseTo(540 + 0.42 * 540);
+    const c = photoBox({ kind: 'photo', mode: 'circle', w: 0.24, x: 0.5 });
+    expect(c.y1 - c.y0).toBeCloseTo(0.24 * 1920);
   });
 });

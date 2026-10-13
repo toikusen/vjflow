@@ -367,6 +367,13 @@ export const entranceLost = (planned: Pick<CueStyle, 'enter'>, final: Pick<CueSt
  * under part of the line does not). Cells off the photos do not count against the line: bands and shapes are part of
  * the design its colour was chosen on, and a photo is what stays behind the words when there is no room.
  */
+/**
+ * Whether a line is rebuilt light in a dark halo: its own type falls short over more than `threshold` of its box, and
+ * light type falls short over less of it (over a pale photo the line's own dark ink reads better than light type on a
+ * thin keyline; a tie keeps the colour the line was given).
+ */
+export const guardLine = (share: number, light: number, threshold: number) => share > threshold && light < share;
+
 export function poorShare(img: { data: ArrayLike<number>; width: number; height: number }, x0: number, y0: number, text: string, photos: { x0: number; y0: number; x1: number; y1: number }[]): number {
   const { data: d, width: w, height: h } = img;
   if (!photos.length || !w || !h) return 0;

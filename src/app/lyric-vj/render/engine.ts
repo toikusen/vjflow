@@ -30,14 +30,14 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Measured, measurable, Rect, sectionAt, smoothPlacement } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
 import { storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
-import { contrast, CueLayer, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -113,6 +113,8 @@ const SETTLE_SEC = 0.9;
 /** A line whose type reads below 3:1 over more than this share of its box, as played, is rebuilt light in a dark halo
  * (experimental: set by eye on チョロイン, iw and Utsusemi stills, 2026-10-13). */
 const POOR_SHARE = 0.15;
+/** The light type of a line over light and dark at once (in a dark halo). */
+const LIGHT_TYPE = '#f4f2ee';
 
 function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   const fit = new THREE.Group();
@@ -417,7 +419,7 @@ export class LyricVjEngine {
   private flashes: { at: number; glyphs: Glyph[]; group: THREE.Group; cueId: string }[] = [];
   private textRoot = new THREE.Group();
   private shotLayers = new Map<string, ShotLayer>();
-  private cueLayers: { rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; guard?: { from: number; to: number; rect: Rect; share: number } }[] = [];
+  private cueLayers: { rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; guard?: { from: number; to: number; rect: Rect; share: number; light: number } }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
   private callLayers: { rt: CueRuntime; group: THREE.Group; units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[] }[] = [];
   private images = new Map<string, THREE.Texture>();
@@ -760,7 +762,7 @@ export class LyricVjEngine {
       // the emphasis colour is read against the same dark keyline as the type: measured against the light half of the
       // backdrop it was darkened, and a dark keyword sat unreadable on the dark half (世界のつづき 「波に」)
       const colour = (mix: boolean) => {
-        if (mix) rt.palette = { ...rt.palette, text: '#f4f2ee', background: '#141218' };
+        if (mix) rt.palette = { ...rt.palette, text: LIGHT_TYPE, background: '#141218' };
         // a member's line in the member's colour, lightened or darkened until it reads on what is behind it
         const singer = cue.singer ? this.job.singers?.find((x) => x.name === cue.singer) : undefined;
         if (singer) rt.palette = { ...rt.palette, text: readableOn(singer.color, backdrop ?? rt.palette.background, 4.5) };
@@ -867,12 +869,17 @@ export class LyricVjEngine {
             const box = new THREE.Box3(new THREE.Vector3(r.rest.x0 - W / 2, H / 2 - r.rest.y1, 0), new THREE.Vector3(r.rest.x1 - W / 2, H / 2 - r.rest.y0, 0));
             // read after the 0.4 s objects take to glide clear of a line coming up, and the median over the place's
             // stretch: an object mid-glide as the line comes up or leaves is not where the line is read
-            const at = [r.from + 0.5, (r.from + r.to) / 2, r.to - 0.2].filter((x) => x >= r.from && x <= r.to).map((x) => this.backdropAt(x, box, true, c.rt.palette.text)?.poor ?? 0).sort((p, q) => p - q);
-            return at.length ? [{ from: r.from, to: r.to, rect: r.rest, share: at[Math.floor((at.length - 1) / 2)] }] : [];
+            const at = [r.from + 0.5, (r.from + r.to) / 2, r.to - 0.2].filter((x) => x >= r.from && x <= r.to).map((x) => ({ x, poor: this.backdropAt(x, box, true, c.rt.palette.text)?.poor ?? 0 })).sort((p, q) => p.poor - q.poor);
+            const mid = at[Math.floor((at.length - 1) / 2)];
+            return mid ? [{ from: r.from, to: r.to, rect: r.rest, share: mid.poor, x: mid.x, box }] : [];
           });
         const worst = places.reduce<(typeof places)[number] | undefined>((a, b) => (!a || b.share > a.share ? b : a), undefined);
         if (!worst || worst.share <= POOR_SHARE) continue;
-        c.guard = worst;
+        // only when light type reads better there (guardLine): over a pale photo (チョロイン's bright stage) the line's
+        // own dark ink read better than light type on a thin keyline
+        const light = this.backdropAt(worst.x, worst.box, true, LIGHT_TYPE)?.poor ?? 1;
+        if (!guardLine(worst.share, light, POOR_SHARE)) continue;
+        c.guard = { from: worst.from, to: worst.to, rect: worst.rect, share: worst.share, light };
         c.remake();
       }
     setKanaScale(design.kanaScale);
@@ -898,11 +905,11 @@ export class LyricVjEngine {
     }
   }
 
-  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number }[] } {
+  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number; light: number }[] } {
     return {
       // lines rebuilt light in a dark halo over a photo as played: the place that set it off and its share below 3:1
       // (POOR_SHARE and the median are experimental rules, recorded here to be checked against the picture)
-      textGuard: this.cueLayers.flatMap(({ rt, guard: g }) => (g ? [{ id: rt.cue.id, text: rt.cue.text, from: +g.from.toFixed(2), to: +g.to.toFixed(2), rect: [g.rect.x0, g.rect.y0, g.rect.x1, g.rect.y1].map(Math.round), share: +g.share.toFixed(2) }] : [])),
+      textGuard: this.cueLayers.flatMap(({ rt, guard: g }) => (g ? [{ id: rt.cue.id, text: rt.cue.text, from: +g.from.toFixed(2), to: +g.to.toFixed(2), rect: [g.rect.x0, g.rect.y0, g.rect.x1, g.rect.y1].map(Math.round), share: +g.share.toFixed(2), light: +g.light.toFixed(2) }] : [])),
       cues: this.cueLayers.map(({ rt, layer, fitScale }) => {
         const [from, to] = layer.readable();
         const readableSec = Math.max(0, to - from);
@@ -1653,8 +1660,11 @@ export class LyricVjEngine {
       else if (l > 0.65) light++;
     }
     const hx = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
-    // only pictures left behind the words for want of room count (as placed): photos and a key hero (see poorShare)
-    const photos = placed.flatMap((l) => ((l.kind === 'photo' || (l.kind === 'sprite' && l.key)) && (l.opacity ?? 1) > 0.05 && layerRect(l) ? [layerRect(l)!] : []));
+    // only pictures behind the words count (as placed): photos in every mode (a band or full photo makes no room, so
+    // it is under the words by design: Utsusemi's band photo under 「交差する道」) and a key hero (see poorShare)
+    const photos = placed.flatMap((l) =>
+      (l.opacity ?? 1) <= 0.05 ? [] : l.kind === 'photo' ? [photoBox(l)] : l.kind === 'sprite' && l.key && layerRect(l) ? [layerRect(l)!] : [],
+    );
     const poor = text ? poorShare(img, Math.floor(x0), Math.floor(y0), text, photos) : 0;
     // mixed: a sizeable share of both dark and light under the line — no single type colour reads everywhere
     return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, mixed: dark / n > 0.06 && light / n > 0.06, poor };

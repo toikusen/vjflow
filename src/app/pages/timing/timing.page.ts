@@ -1,7 +1,8 @@
-import { moveEdge, snapTo } from './timing-edit';
+import { EditResult, graphemeIndexAt, mergeLines, moveEdge, shiftAll, snapTo, splitLine } from './timing-edit';
+import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
+import { exportIssues, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
 
 interface SongItem {
@@ -387,6 +388,48 @@ export class TimingPage {
     this.cues.update((l) => l.filter((_, j) => j !== i));
     this.selected.set(Math.min(i, this.cues().length - 1));
     this.dirty.set(true);
+  }
+
+  private apply(r: EditResult<TimelineCue>, touch: string[]) {
+    if (!r.ok) return this.message.set(r.message);
+    this.remember();
+    this.cues.set(r.lines);
+    this.touched.update((s) => new Set([...s, ...touch]));
+    this.dirty.set(true);
+    this.message.set(null);
+  }
+
+  /** Splits line i where the caret is in its text, at the playhead (the right half becomes a new line). */
+  protected split(i: number, input: HTMLInputElement) {
+    const c = this.cues()[i];
+    const newId = `n${Date.now().toString(36)}`;
+    this.apply(splitLine(this.cues(), c.id, graphemeIndexAt(c.text, input.selectionStart ?? 0), +this.audio.currentTime.toFixed(3), newId), [c.id, newId]);
+  }
+
+  protected mergeNext(i: number) {
+    this.apply(mergeLines(this.cues(), this.cues()[i].id), [this.cues()[i].id]);
+  }
+
+  protected shiftEverything(value: string) {
+    const ids = this.cues().map((c) => c.id);
+    this.apply(shiftAll(this.cues(), Number(value), this.song()!.duration), ids);
+  }
+
+  /** Downloads the lines as they are in the editor (saved or not); rounding problems are reported, not fixed. */
+  protected download(kind: 'lrc' | 'srt') {
+    const song = this.song()!;
+    const cues = this.cues();
+    const text = kind === 'lrc'
+      ? toLrc({ title: song.title, cues }, (t) => [...phraseBoundaries(t)].sort((a, b) => a - b).filter((b) => b < [...t].length))
+      : toSrt(cues);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    a.download = `${song.title.replace(/[\\/:*?"<>|]/g, '_')}.${kind}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    const issues = exportIssues(cues);
+    const unsaved = this.dirty() ? '（含尚未儲存的修改）' : '';
+    this.message.set(issues.length ? `已下載 ${kind.toUpperCase()}${unsaved}，但請檢查：${issues.join('；')}` : `已下載 ${kind.toUpperCase()}${unsaved}`);
   }
 
   protected edit(i: number, edge: 'start' | 'end', value: string) {

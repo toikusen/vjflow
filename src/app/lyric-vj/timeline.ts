@@ -191,10 +191,51 @@ export function beatStrengths(samples: Float32Array, sampleRate: number, beats: 
   return raw.map((v) => +Math.min(1, v / p95).toFixed(3));
 }
 
+const pad = (n: number, w = 2) => String(n).padStart(w, '0');
+
+// round to the format's unit first, then split into fields, so 59.9996 s carries to 01:00.00 instead of 00:60.00
 const lrcTime = (t: number) => {
-  const m = Math.floor(Math.max(0, t) / 60);
-  return `${String(m).padStart(2, '0')}:${(Math.max(0, t) - m * 60).toFixed(2).padStart(5, '0')}`;
+  const cs = Math.round(Math.max(0, t) * 100);
+  return `${pad(Math.floor(cs / 6000))}:${pad(Math.floor(cs / 100) % 60)}.${pad(cs % 100)}`;
 };
+
+const srtTime = (t: number) => {
+  const ms = Math.round(Math.max(0, t) * 1000);
+  return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(Math.floor(ms / 1000) % 60)},${pad(ms % 1000, 3)}`;
+};
+
+/** The cues as SRT (UTF-8, no BOM): numbered blocks in time order, millisecond stamps. */
+export function toSrt(cues: readonly Pick<TimelineCue, 'start' | 'end' | 'text'>[]): string {
+  return [...cues].sort((a, b) => a.start - b.start).map((c, i) => `${i + 1}\n${srtTime(c.start)} --> ${srtTime(c.end)}\n${c.text}\n`).join('\n');
+}
+
+/**
+ * What the LRC/SRT rounding would break, reported rather than fixed (moving a line would invent a time nobody heard):
+ * adjacent lines sharing an LRC stamp, and lines that become zero-length or overlap at SRT's millisecond resolution.
+ */
+export function exportIssues(cues: readonly Pick<TimelineCue, 'start' | 'end'>[]): string[] {
+  const s = [...cues].sort((a, b) => a.start - b.start);
+  const ms = (t: number) => Math.round(t * 1000);
+  const cs = (t: number) => Math.round(t * 100);
+  return s.flatMap((c, i) => {
+    const next = s[i + 1];
+    return [
+      ...(ms(c.end) <= ms(c.start) ? [`第 ${i + 1} 行在 SRT 會變成零長度`] : []),
+      ...(next && cs(next.start) === cs(c.start) ? [`第 ${i + 1}、${i + 2} 行在 LRC 的開始時間相同`] : []),
+      ...(next && ms(c.end) > ms(next.start) ? [`第 ${i + 1}、${i + 2} 行在 SRT 重疊`] : []),
+    ];
+  });
+}
+
+/**
+ * Re-preparing a song must not undo the timing editor: when the previous song.json was confirmed or has hand-edited
+ * lines (and is the same recording, by duration), its lines, singers and confirmation replace the fresh automatic ones.
+ */
+export function keepUserTiming<S extends Pick<SongTimeline, 'duration' | 'cues' | 'singers' | 'timingConfirmedAt'>>(prev: S | undefined, next: S): S {
+  if (!prev || Math.abs(prev.duration - next.duration) > 0.5) return next;
+  if (!prev.timingConfirmedAt && !prev.cues.some((c) => c.confidence === 'verified')) return next;
+  return { ...next, cues: prev.cues, singers: prev.singers, timingConfirmedAt: prev.timingConfirmedAt };
+}
 
 /**
  * The song's lyric timing as LRC: one `[mm:ss.xx]` line per cue, with enhanced-LRC `<mm:ss.xx>` word stamps at each

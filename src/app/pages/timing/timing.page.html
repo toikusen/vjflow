@@ -39,6 +39,8 @@
     </div>
     <div class="actions">
       <a class="btn" href="/timing">其他歌曲</a>
+      <button class="btn" (click)="download('lrc')" title="目前編輯器裡的時間（LRC：0.01 秒）">下載 LRC</button>
+      <button class="btn" (click)="download('srt')" title="目前編輯器裡的時間（SRT：0.001 秒）">下載 SRT</button>
       <button class="btn" [disabled]="!dirty()" (click)="save(false)">儲存</button>
       <button class="btn primary" [disabled]="counts().red > 0" (click)="save(true)" [title]="counts().red ? '還有必須修正的行' : ''">確認時間軸</button>
     </div>
@@ -72,10 +74,16 @@
           <button class="btn" (click)="undo()" [disabled]="!canUndo()" title="Ctrl/⌘+Z">復原</button>
           <button class="btn" (click)="redo()" [disabled]="!canRedo()" title="Ctrl/⌘+Shift+Z">重做</button>
           <button class="btn" (click)="nextProblem()" title="N">下一個待確認</button>
+          <span class="muted follow" title="整首歌每一句一起移動（負數往前）；有句子會超出歌曲就整批不套用">
+            整首平移
+            <input #shiftBy class="shift" type="number" step="0.05" value="0" />
+            秒
+            <button class="btn" (click)="shiftEverything(shiftBy.value)">套用</button>
+          </span>
         </div>
         <p class="muted keys">
           空白鍵 播放／暫停 · Enter 把選取行的開始設為現在並跳下一行 · ←／→ 微調開始 0.05 秒（Shift：微調結束）· ↑／↓ 選行 · N 下一個待確認<br />
-          點歌詞可以直接改字，＋ 在下面新增一句、✕ 刪除這句 · Q／W 聽開始前／後半秒 · E／D 聽結束前／後半秒 · L 循環這一句 · [ ] 調整速度 · ⌘/Ctrl+Z 復原<br />
+          點歌詞可以直接改字，＋ 在下面新增一句、✕ 刪除這句 · ✂ 在文字游標處、從播放位置切成兩句 · ⤵ 和下一句合併 · Q／W 聽開始前／後半秒 · E／D 聽結束前／後半秒 · L 循環這一句 · [ ] 調整速度 · ⌘/Ctrl+Z 復原<br />
           拖曳波形上的線調整（按住 Shift 吸附到拍點、人聲起音或其他句子的邊界；按住 Alt 臨時切換「後面一起移」）
         </p>
       </section>
@@ -103,8 +111,10 @@
     @for (c of cues(); track c.id; let i = $index) {
       <li [attr.data-index]="i" [attr.data-status]="statuses()[i]" [class.selected]="i === selected()" [class.playing]="i === playingIndex() && playing()" (click)="selected.set(i)">
         <button class="play" (click)="playLine(i); $event.stopPropagation()" title="從這行前 1 秒播放">▶</button>
-        <input class="text" [value]="c.text" (click)="$event.stopPropagation(); selected.set(i)" (keydown)="$event.stopPropagation()" (keydown.enter)="$any($event.target).blur()" (change)="retype(i, $any($event.target).value)" title="點一下修改歌詞" />
+        <input #txt class="text" [value]="c.text" (click)="$event.stopPropagation(); selected.set(i)" (keydown)="$event.stopPropagation()" (keydown.enter)="$any($event.target).blur()" (change)="retype(i, $any($event.target).value)" title="點一下修改歌詞" />
         <span class="line-ops">
+          <button (click)="split(i, txt); $event.stopPropagation()" title="在文字游標處切開，切點時間是目前播放位置">✂</button>
+          <button (click)="mergeNext(i); $event.stopPropagation()" title="和下一句合併">⤵</button>
           <button (click)="addAfter(i); $event.stopPropagation()" title="在下面新增一句">＋</button>
           <button (click)="remove(i); $event.stopPropagation()" title="刪除這一句">✕</button>
         </span>

@@ -66,6 +66,50 @@ describe('toLrc', () => {
     ] }, () => [0, 3]);
     expect(lrc).toBe('[ti:t]\n[00:01.50]<00:01.50>ab <00:02.20>cd\n[00:03.00]\n[01:10.00]ef\n[01:12.00]\n');
   });
+
+  it('carries rounding across a minute', async () => {
+    const { toLrc } = await import('./timeline');
+    expect(toLrc({ title: 't', cues: [{ id: 'a', start: 59.9996, end: 61, text: '光', timingSource: 'lrc', confidence: 'verified' }] }, () => [0])).toContain('[01:00.00]光');
+  });
+});
+
+describe('toSrt', () => {
+  const cue = (start: number, end: number, text: string) => ({ id: text, start, end, text, timingSource: 'lrc' as const, confidence: 'verified' as const });
+
+  it('numbers blocks in time order with millisecond stamps that carry', async () => {
+    const { toSrt } = await import('./timeline');
+    expect(toSrt([cue(3661.0005, 3662, 'b'), cue(59.9996, 61, '光')])).toBe('1\n00:01:00,000 --> 00:01:01,000\n光\n\n2\n01:01:01,001 --> 01:01:02,000\nb\n');
+  });
+});
+
+describe('exportIssues', () => {
+  const cue = (start: number, end: number, text: string) => ({ id: text, start, end, text, timingSource: 'lrc' as const, confidence: 'verified' as const });
+
+  it('reports lines that share an LRC stamp or lose their length or overlap in SRT', async () => {
+    const { exportIssues } = await import('./timeline');
+    expect(exportIssues([cue(1, 2, 'a'), cue(3, 4, 'b')])).toEqual([]);
+    expect(exportIssues([cue(1, 1.0004, 'a'), cue(1.004, 2, 'b')])).toEqual([
+      '第 1 行在 SRT 會變成零長度',
+      '第 1、2 行在 LRC 的開始時間相同',
+    ]);
+    expect(exportIssues([cue(1, 2.5, 'a'), cue(2, 3, 'b')])).toEqual(['第 1、2 行在 SRT 重疊']);
+  });
+});
+
+describe('keepUserTiming', () => {
+  const cue = (id: string, start: number, confidence: 'verified' | 'aligned') => ({ id, start, end: start + 1, text: id, timingSource: 'lrc' as const, confidence });
+  const song = (cues: ReturnType<typeof cue>[], extra = {}) => ({ title: 't', duration: 10, tempo: 120, cues, ...extra }) as never;
+
+  it('keeps a confirmed or hand-edited timeline over a fresh automatic one', async () => {
+    const { keepUserTiming } = await import('./timeline');
+    const fresh = song([cue('x', 5, 'aligned')]);
+    const confirmed = song([cue('a', 1, 'aligned')], { timingConfirmedAt: 'now', singers: [{ name: 'A', color: '#ffffff' }] });
+    const edited = song([cue('a', 1, 'verified')]);
+    expect(keepUserTiming(confirmed, fresh)).toMatchObject({ cues: [{ id: 'a' }], timingConfirmedAt: 'now', singers: [{ name: 'A' }] });
+    expect(keepUserTiming(edited, fresh)).toMatchObject({ cues: [{ id: 'a' }] });
+    expect(keepUserTiming(song([cue('a', 1, 'aligned')]), fresh)).toBe(fresh);
+    expect(keepUserTiming(undefined, fresh)).toBe(fresh);
+  });
 });
 
 describe('snapToVoice', () => {

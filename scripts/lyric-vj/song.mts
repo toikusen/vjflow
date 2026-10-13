@@ -10,7 +10,7 @@ import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
 import { alignLyrics, alignMainLines, AsrWord, cleanLyricLine, combineTimings, ForcedLine, isShout, voteStarts, withoutAsides } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
-import { alignOffset, beatStrengths, checkTiming, downbeats, holdToVoice, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, beatStrengths, checkTiming, downbeats, holdToVoice, keepUserTiming, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
@@ -156,7 +156,10 @@ const song: SongTimeline = {
   audio: { mix: a.audio, instrumental: a.instrumental, instrumentalOffsetSec, vocals: a.vocals },
   timingCheck: check,
 };
-writeFileSync(join(a.out, 'song.json'), JSON.stringify(song, null, 1));
+const songFile = join(a.out, 'song.json');
+const kept = keepUserTiming(existsSync(songFile) ? (JSON.parse(readFileSync(songFile, 'utf8')) as SongTimeline) : undefined, song);
+if (kept !== song) console.log('保留時間編輯器確認／修改過的歌詞時間（要重新自動對時，先刪掉 song.json）');
+writeFileSync(songFile, JSON.stringify(kept, null, 1));
 console.log(JSON.stringify({
   duration: +song.duration.toFixed(2), tempo: +song.tempo.toFixed(1), beats: song.beats.length, sections: song.sections.length,
   cues: cues.length, timingSource: cues[0]?.timingSource, timingCheck: check, instrumentalOffsetSec,

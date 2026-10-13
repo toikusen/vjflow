@@ -8,6 +8,7 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { jobIdFor, jobStatus, lockJob } from './status.mts';
 import { lockFile } from './lock.mts';
+import { fontCache } from './font-cache.mts';
 import { parseArgs } from 'node:util';
 import { endAtVoice, silentTail, timingGate } from '../../src/app/lyric-vj/timing-qa';
 import { frameStats, visualIssues, type FrameStats } from '../../src/app/lyric-vj/visual-qa';
@@ -125,8 +126,18 @@ const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 const pageUrl = `${base}${url(join(out, 'render', 'render.html'))}?job=${url(join(out, 'job.json'))}`;
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
+const getFont = fontCache(resolve('out/font-cache'));
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+  // Google Fonts from the disk cache shared by every worktree (out/ is shared; font-cache.mts). A miss with no network
+  // fails the song rather than rendering it in fallback fonts.
+  const fontMiss: string[] = [];
+  await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => {
+    const u = route.request().url();
+    const font = await getFont(u, route.request().headers()['user-agent'] ?? '');
+    if (!font) return void (fontMiss.push(u), await route.abort());
+    await route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } });
+  });
   page.on('pageerror', (e) => console.error('page error:', e.message));
   // a texture that fails to load surfaces only as 'page error: Event': name the file
   page.on('requestfailed', (r) => console.error('request failed:', r.url(), r.failure()?.errorText));
@@ -138,6 +149,9 @@ async function openPage(): Promise<Page> {
     try {
       await page.goto(pageUrl);
       await page.waitForSelector('body[data-ready="1"]', { timeout: attempt ? 300_000 : 120_000 });
+      const bad = await page.evaluate(() => [...document.fonts].filter((f) => f.status === 'error').map((f) => f.family));
+      if (fontMiss.length) throw new Error(`fonts not cached and not reachable: ${fontMiss.join(' ')}`);
+      if (bad.length) throw new Error(`fonts failed to load: ${bad.join(', ')}`);
       return page;
     } catch (e) {
       if (attempt >= 1 || (e as Error).name !== 'TimeoutError') throw e;

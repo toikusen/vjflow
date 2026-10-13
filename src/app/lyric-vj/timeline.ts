@@ -21,10 +21,20 @@ export interface TimelineCue {
   charStarts?: number[];
   /** charStarts come from the audio (forced alignment matched most characters), not interpolation. */
   charTimed?: boolean;
+  /** Who sings the line (a name from the song's singers); absent = everyone / not set. */
+  singer?: string;
+}
+
+/** A member and the colour their lines are set in (idol videos colour-code who sings). */
+export interface Singer {
+  name: string;
+  color: string;
 }
 
 export interface SongTimeline {
   title: string;
+  /** The members, set in the timing editor; lines name theirs in `singer`. */
+  singers?: Singer[];
   duration: number;
   tempo: number;
   beats: number[];

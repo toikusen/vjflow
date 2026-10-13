@@ -1,6 +1,6 @@
 <div class="head">
   <h1>Studio</h1>
-  <p class="muted">選一首歌 → 確認時間 → 產生設計 → 看預覽 → 渲染</p>
+  <p class="muted">選一首歌，照著下面的步驟一步步往下做</p>
 </div>
 @if (error()) {
   <p class="alert">{{ error() }}</p>
@@ -17,110 +17,152 @@
   @if (song(); as s) {
     <section class="panel">
       <h2>{{ s.title }}</h2>
-      @if (!s.confirmedAt) {
-        <p class="alert">還沒確認歌詞時間。<a [href]="'/timing?song=' + s.id">到時間編輯器確認</a></p>
-        <label class="row">
-          <input type="checkbox" [checked]="unconfirmed()" (change)="unconfirmed.set($any($event.target).checked)" />
-          時間還沒確認也先試做（字幕時間可能有誤差，之後確認時間再重新渲染即可）
-        </label>
-      }
-      <div class="row">
-        <label>
-          設計語言
-          <select [value]="language()" (change)="language.set($any($event.target).value)">
-            <option value="">交給導演依歌曲決定</option>
-            @for (l of languages(); track l.id) {
-              <option [value]="l.id">{{ l.name }}（適合：{{ l.suits }}）</option>
-            }
-          </select>
-        </label>
-      </div>
-      <div class="row buttons">
-        <button (click)="run('make')" [disabled]="running() || (!s.confirmedAt && !unconfirmed())">產生設計與預覽</button>
-        <button (click)="run('clip')" [disabled]="running() || !state()?.design">重做動態預覽</button>
-        <button (click)="run('design')" [disabled]="running() || !state()?.design">只重做設計</button>
-        <button (click)="run('draw')" [disabled]="running() || !state()?.design">{{ state()?.design?.drawing ? '重做專屬圖層' : '方向 OK，繪製專屬圖層' }}</button>
-        <button (click)="run('render')" [disabled]="running() || !state()?.design">渲染完整影片</button>
-        <button (click)="run('layer')" [disabled]="running() || !state()?.design">輸出歌詞透明層</button>
-        <button (click)="run('lrc')" [disabled]="running()">輸出 LRC</button>
-      </div>
-      @if (state(); as st) {
-        @if (st.run; as r) {
-          <div class="progress" [class.done]="r.endedAt && r.ok" [class.failed]="r.endedAt && !r.ok">
-            <div class="row-between">
-              <strong>{{ stepLabel[r.step] }}</strong>
-              <span class="muted">
-                {{ r.endedAt ? (r.ok ? '完成' : '失敗') : (r.phase ?? '準備中') }} · {{ elapsed(r.startedAt, r.endedAt) }}
-              </span>
-            </div>
-            <div class="bar"><div class="fill" [style.width.%]="(r.progress ?? 0) * 100"></div></div>
-            @if (!r.endedAt) {
-              <p class="muted">{{ ((r.progress ?? 0) * 100).toFixed(0) }}% · 可以離開這個頁面，回來時會繼續顯示進度</p>
-            }
+      @if (state()?.run; as r) {
+        <div class="progress" [class.done]="r.endedAt && r.ok" [class.failed]="r.endedAt && !r.ok">
+          <div class="row-between">
+            <strong>{{ stepLabel[r.step] }}</strong>
+            <span class="muted">
+              {{ r.endedAt ? (r.ok ? '完成' : '失敗') : (r.phase ?? '準備中') }} · {{ elapsed(r.startedAt, r.endedAt) }}
+            </span>
           </div>
+          <div class="bar"><div class="fill" [style.width.%]="(r.progress ?? 0) * 100"></div></div>
+          @if (!r.endedAt) {
+            @if (r.detail) {
+              <p class="detail">{{ r.detail }}</p>
+            }
+            <p class="muted">{{ ((r.progress ?? 0) * 100).toFixed(0) }}% · 可以離開這個頁面，回來時會繼續顯示進度</p>
+          }
           @if (!r.ok || !r.endedAt) {
-            <pre class="log">{{ r.log.slice(-12).join('\n') }}</pre>
+            <pre class="log" #logBox>{{ r.log.join('\n') }}</pre>
           }
+        </div>
+      }
+
+      <!-- 1 timing -->
+      <div class="step" [class.current]="stage() === 1" [class.done]="stage() > 1">
+        <h3><span class="num">1</span>確認歌詞時間</h3>
+        @if (s.confirmedAt) {
+          <p class="muted">時間已確認。<a [href]="'/timing?song=' + s.id">再調整</a></p>
+        } @else {
+          <p>先到時間編輯器把每句歌詞的時間對好，字幕才會跟歌聲同步。<a [href]="'/timing?song=' + s.id">到時間編輯器</a></p>
+          <label class="row">
+            <input type="checkbox" [checked]="unconfirmed()" (change)="unconfirmed.set($any($event.target).checked)" />
+            先略過，時間還沒確認也先試做（之後確認時間再重新渲染即可）
+          </label>
         }
-        @if (st.design && !st.design.drawing && !running()) {
-          <p class="alert">先看下面的 30 秒預覽確認方向（元件庫版，還沒有專屬圖層）。方向對了按「方向 OK，繪製專屬圖層」（約 35 分鐘、US$5–6）；不對就按「只重做設計」。</p>
-        }
-        @if (st.design; as d) {
-          <div class="design">
-            <p><strong>{{ langName() }}</strong> · {{ d.font }}{{ d.motif ? ' · 主題物件 ' + d.motif : '' }}</p>
-            <p class="muted">{{ d.concept }}</p>
-            @if (d.drawing) {
-              <p class="muted">專屬圖層：{{ d.drawing }}</p>
-            }
-            <p class="muted">目前費用約 US${{ st.costUSD }}</p>
-          </div>
-        }
-        @if (st.props; as pr) {
-          <div class="props">
-            <div class="row-between">
-              <strong>素材庫{{ pr.sprites ? '（' + pr.sprites + ' 個）' : '' }}</strong>
-              <button (click)="run('props')" [disabled]="running()">重畫素材庫</button>
-            </div>
-            <img [src]="file(pr.contact)" alt="素材庫總覽" />
-            <p class="muted">重畫素材庫之後，按「依意見修改專屬圖層」讓導演用新的素材重新演出。</p>
-          </div>
-        }
-        @if (st.design?.drawing) {
-          <div class="revise">
+      </div>
+
+      <!-- 2 design and the library preview -->
+      @if (state(); as st) {
+        <div class="step" [class.current]="stage() === 2" [class.done]="stage() > 2" [class.later]="stage() < 2">
+          <h3><span class="num">2</span>設計方向與 30 秒預覽</h3>
+          <p class="muted">導演依歌曲決定設計語言、配色、字型與素材庫，先做一支 30 秒預覽讓你確認方向（約 15 分鐘、US$3）。</p>
+          <div class="row">
             <label>
-              對專屬圖層的意見（會讓導演以目前版本為基準修改，也會記成之後每首歌的參考）
-              <textarea rows="4" [value]="feedback()" (input)="feedback.set($any($event.target).value)" placeholder="例如：中間紫色那段看不出是什麼；貓太小；鏡頭再大膽一點"></textarea>
+              設計語言
+              <select [value]="language()" (change)="language.set($any($event.target).value)">
+                <option value="">交給導演依歌曲決定</option>
+                @for (l of languages(); track l.id) {
+                  <option [value]="l.id">{{ l.name }}（適合：{{ l.suits }}）</option>
+                }
+              </select>
             </label>
-            <button (click)="run('revise')" [disabled]="running() || !feedback().trim()">依意見修改專屬圖層</button>
           </div>
-        }
-        @if (st.previews.length) {
-          <div class="previews">
-            @for (p of st.previews; track p) {
-              <img [src]="file(p)" alt="預覽畫面" />
+          <div class="row buttons">
+            @if (!st.design) {
+              <button class="primary" (click)="run('make')" [disabled]="running() || stage() < 2">產生設計與預覽</button>
+            } @else {
+              <button (click)="run('design')" [disabled]="running()">方向不對，重做設計</button>
+              <button (click)="run('clip')" [disabled]="running()">重做 30 秒預覽</button>
             }
           </div>
-        }
-        @if (st.check; as c) {
-          <p class="muted">
-            自動檢查：{{ c.unreadable.length }} 句停留時間偏短、{{ c.lingering.length }} 句唱完後停留太久
-          </p>
-        }
-        @for (o of st.outputs; track o) {
-          @if (name(o).startsWith('preview_')) {
-            <video class="clip" [src]="file(o)" controls></video>
+          @if (st.design; as d) {
+            <div class="design">
+              <p><strong>{{ langName() }}</strong> · {{ d.font }}{{ d.motif ? ' · 主題物件 ' + d.motif : '' }}</p>
+              <p class="muted">{{ d.concept }}</p>
+              <p class="muted">目前費用約 US${{ st.costUSD }}</p>
+            </div>
           }
+          @if (st.props; as pr) {
+            <div class="props">
+              <div class="row-between">
+                <strong>素材庫{{ pr.sprites ? '（' + pr.sprites + ' 個）' : '' }}</strong>
+                <button (click)="run('props')" [disabled]="running()">重畫素材庫</button>
+              </div>
+              <img [src]="file(pr.contact)" alt="素材庫總覽" />
+            </div>
+          }
+          @if (st.design && !st.design.drawing) {
+            <ng-container *ngTemplateOutlet="preview; context: { $implicit: st }" />
+          }
+        </div>
+
+        @if (st.visualQa?.length) {
+          <p class="muted">自動畫面檢查還有沒修好的地方（導演已重新設計一次）：{{ st.visualQa!.join('；') }}。可以直接繼續，或換一個風格重新設計。</p>
         }
-        @if (st.outputs.length) {
-          <ul class="outputs">
-            @for (o of st.outputs; track o) {
-              <li><a [href]="file(o)" target="_blank">{{ name(o) }}</a></li>
-            }
-          </ul>
-        }
+        <!-- 3 the song's own drawing -->
+        <div class="step" [class.current]="stage() === 3" [class.done]="stage() > 3" [class.later]="stage() < 3">
+          <h3><span class="num">3</span>專屬圖層</h3>
+          @if (st.fallback && !st.design?.drawing) {
+            <p class="muted">這次畫出的專屬圖層審片 {{ st.fallback.score }} 分，沒達到交付標準，已改用保底設計，可以直接輸出。想再試一次可以重畫（{{ st.fallback.verdict }}）</p>
+            <button (click)="run('draw')" [disabled]="running()">重畫專屬圖層</button>
+          } @else if (!st.design?.drawing) {
+            <p class="muted">方向確認後，導演會為這首歌寫專屬的畫面程式：故事、運鏡、素材演出（約 35–60 分鐘、US$5–8）。</p>
+            <button class="primary" (click)="run('draw')" [disabled]="running() || !st.design">方向 OK，繪製專屬圖層</button>
+          } @else {
+            <p class="muted">{{ st.design.drawing }}</p>
+            <ng-container *ngTemplateOutlet="preview; context: { $implicit: st }" />
+            <div class="revise">
+              <label>
+                看完預覽，有哪裡要改？（導演會以目前版本為基準修改，也會記成之後每首歌的參考）
+                <textarea rows="4" [value]="feedback()" (input)="feedback.set($any($event.target).value)" placeholder="例如：松樹蓋到歌詞；太陽像幾何圖形；船那段太空"></textarea>
+              </label>
+              <div class="row buttons">
+                <button (click)="run('revise')" [disabled]="running() || !feedback().trim()">依意見修改專屬圖層</button>
+                <button (click)="run('draw')" [disabled]="running()">整個重畫一版</button>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- 4 output -->
+        <div class="step" [class.current]="stage() === 4" [class.later]="stage() < 4">
+          <h3><span class="num">4</span>輸出</h3>
+          <p class="muted">滿意預覽之後再渲染完整影片（60fps，約 10 分鐘）。</p>
+          <div class="row buttons">
+            <button class="primary" (click)="run('render')" [disabled]="running() || !st.design">渲染完整影片</button>
+            <button (click)="run('layer')" [disabled]="running() || !st.design">輸出歌詞透明層</button>
+            <button (click)="run('lrc')" [disabled]="running()">輸出 LRC</button>
+          </div>
+          @if (st.outputs.length) {
+            <ul class="outputs">
+              @for (o of st.outputs; track o) {
+                <li><a [href]="file(o)" target="_blank">{{ name(o) }}</a></li>
+              }
+            </ul>
+          }
+        </div>
       }
     </section>
   } @else {
     <p class="muted">從左邊選一首歌。</p>
   }
 </div>
+
+<ng-template #preview let-st>
+  @for (o of st.outputs; track o) {
+    @if (name(o).startsWith('preview_')) {
+      <video class="clip" [src]="file(o)" controls></video>
+    }
+  }
+  @if (st.previews.length) {
+    <div class="previews">
+      @for (p of st.previews; track p) {
+        <img [src]="file(p)" alt="預覽畫面" />
+      }
+    </div>
+  }
+  @if (st.check; as c) {
+    <p class="muted">自動檢查：{{ c.unreadable.length }} 句停留時間偏短、{{ c.lingering.length }} 句唱完後停留太久</p>
+  }
+</ng-template>

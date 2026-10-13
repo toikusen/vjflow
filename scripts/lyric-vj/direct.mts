@@ -9,19 +9,20 @@ import { parseArgs } from 'node:util';
 import { timingGate } from '../../src/app/lyric-vj/timing-qa';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
-import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
+import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, SYMBOLS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
-import { editorPass, varyComposition } from '../../src/app/lyric-vj/compose';
-import { FONTS } from '../../src/app/lyric-vj/fonts';
+import { editorPass, planSides, stackRushed, varyComposition } from '../../src/app/lyric-vj/compose';
+import { facesFor, FONTS, hanOf, scriptOf } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS, MOTIF_RENDERS, MOTIF_VARIANTS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES, TECHNIQUES } from '../../src/app/lyric-vj/design';
 import { MEDIA } from '../../src/app/lyric-vj/medium';
-import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
-import { validateLook } from '../../src/app/lyric-vj/look';
+import { LANGUAGES, LanguageId, PROVEN_LANGUAGES, keepOwnMotifs, SHARED_MOTIFS, type SharedMotif } from '../../src/app/lyric-vj/languages';
+import { dropEmptyFrames, mainDecor, samenessIssues, validateLook } from '../../src/app/lyric-vj/look';
+import { StoryPlan, validateStory } from '../../src/app/lyric-vj/render/story';
 import { LAYER_KINDS } from '../../src/app/lyric-vj/render/graphics';
 
 /** What a song was made with, so the next songs can be told apart from it (older records have a system). */
-interface DesignRecord { song: string; language?: LanguageId; system?: string; font: string; medium?: string; motif?: string; peak?: string; grain?: number; paper?: number }
+interface DesignRecord { song: string; language?: LanguageId; system?: string; decor?: string[]; font: string; medium?: string; motif?: string; peak?: string; grain?: number; paper?: number }
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
 import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
@@ -42,6 +43,7 @@ const { values: a } = parseArgs({
     language: { type: 'string' }, // the user's pick: build the song in this design language
     'design-language': { type: 'string' }, // with --design-only: redo the design in another language // designs of the songs made before: the next one must differ
     'keep-assets': { type: 'string' }, // existing treatment: rewrite shots/cues/design but keep its generated assets
+    'qa-notes': { type: 'string' }, // with --design-only: frame-check findings (qa.mts) the new design must fix
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -53,6 +55,9 @@ if (!process.env['ANTHROPIC_API_KEY'] && existsSync(env)) {
 }
 const PRICES: Record<string, [number, number]> = { 'claude-opus-5-5': [4, 20], 'claude-fable-5-1': [10, 50] };
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
+// Chinese lyrics need Traditional Chinese faces (Japanese ones draw other glyph forms or miss characters)
+const script = scriptOf(song.cues.map((c) => c.text).join(''));
+const readable = (family: string) => hanOf(family) === undefined || (script === 'zh' ? hanOf(family) === 'tc' : hanOf(family) === 'ja');
 // nothing is generated on unchecked lyric timing (the timing editor confirms it); --unconfirmed for internal tests
 const gate = timingGate(song);
 // VJ_UNCONFIRMED=1: Studio's "try before the timing is confirmed" (passed down to every render it starts)
@@ -86,20 +91,78 @@ const LAYER_SCHEMA = {
 const GRAPHICS_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['sections'],
   properties: {
-    sections: { type: 'array', description: '依段落的圖層組合，start 在段落交界（副歌、安靜段要和主歌不同）', items: { type: 'object', additionalProperties: false, required: ['start', 'text', 'accent', 'layers'],
-      properties: { start: { type: 'number' }, text: { type: 'string', description: '#rrggbb 這段歌詞的字色（淺色底必填深色；深色底填空字串）' }, accent: { type: 'string', description: '#rrggbb 強調字色，或空字串' },
+    sections: { type: 'array', description: '依段落的圖層組合，start 在段落交界（副歌、安靜段要和主歌不同）', items: { type: 'object', additionalProperties: false, required: ['start', 'text', 'accent', 'transition', 'layers'],
+      properties: { start: { type: 'number' }, transition: { type: 'string', description: '這段怎麼蓋過上一段：空字串是直接切；或 "kind"、"kind:秒數"、"kind:秒數:#色"（色是走在邊緣的色帶）' }, text: { type: 'string', description: '#rrggbb 這段歌詞的字色（淺色底必填深色；深色底填空字串）' }, accent: { type: 'string', description: '#rrggbb 強調字色，或空字串' },
         layers: { type: 'array', description: '由下往上畫', items: LAYER_SCHEMA } } } },
   },
 };
+// story components (render/story.ts): the props the story needs and the behaviours placed in time
+const STORY_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['props', 'items'],
+  properties: {
+    props: { type: 'array', description: '故事要用的具體物件（生圖模型會畫成素材）', items: { type: 'object', additionalProperties: false, required: ['id', 'what', 'hero'],
+      properties: { id: { type: 'string', description: '英文小寫加點，例 furin.glass' }, what: { type: 'string', description: '英文的具體外觀描述（形狀、顏色、方向），給生圖模型' }, hero: { type: 'boolean', description: '貫穿全曲的主角物件' } } } },
+    items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['kind', 'why', 'prop', 'motion', 'x', 'y', 'size', 'params'],
+      properties: {
+        kind: { type: 'string', enum: ['hero', 'fly', 'pop', 'cards', 'thread', 'orbit', 'journey', 'morph', 'chapter', 'float'] },
+        why: { type: 'string', description: '對應哪句歌詞或哪個段落、為什麼這樣演' },
+        prop: { type: 'string', description: '物件 id（cards、thread、morph、chapter、float 填空字串）' },
+        motion: { type: 'string', enum: ['hang', 'flutter', 'roll', 'sit', 'drift', 'still', ''] },
+        x: { type: 'number' }, y: { type: 'number' }, size: { type: 'number', description: '物件高度佔畫面高的比例 0.1–0.5（cards、thread 填 0）' },
+        params: { type: 'array', description: '其他參數 key/value：states（hero，"秒:狀態;秒:狀態"）、glow、at、dur、until、side、trail、through、from、to、every、style、texts（用 | 分隔）、props（用 , 分隔）、color、ink、a（"x,y"）、b、bend、loop、cut、width、r、period、tilt、pts（"x,y;x,y"）、steps（"秒:物件id;秒:物件id"）、text', items: { type: 'object', additionalProperties: false, required: ['key', 'value'], properties: { key: { type: 'string' }, value: { type: 'string' } } } },
+      } } },
+  },
+};
+const STORY_RULES = `故事（story）：程式已經做好幾種演出，你只決定用哪個、什麼時候、放哪裡、用什麼物件。歌詞裡有反覆出現或有象徵意義的具體物件（行星、風鈴、信、傘、花……）時，一定要用 hero 讓它貫穿全曲、首尾呼應；其他元件適合才用，不要為了用而用。歌詞完全沒有具體物件時才給空的 props 與 items。
+- hero 主角物件：歌詞裡反覆出現或有象徵意義的一個具體物件（例：〈Utsusemi〉的風鈴）。states 依時間排列：show 出現、hide 收起、crack 裂開、shatter 碎掉、gather 碎片聚回、glow 發光。建議首尾呼應：前奏 show、中段 hide、歌詞講到它壞掉／失去時 crack→shatter、最後副歌 gather、結尾 glow。一首最多 1 個。
+- fly：物件沿弧線從 side 那一側飛進來，停在 (x,y)，until 秒離開；through=true 是飛過去不停。trail 是拖曳的光點色。只在歌詞講到飛、離開、尋找、飄落時用，一首最多 3 個。
+- pop：歌詞唱到某個具體東西時它出現 dur 秒（at 對準那個詞）。一首最多 4 個，只給歌詞裡真的有的東西。
+- cards：卡片隨時間一張張落下疊起，to 秒一起清掉；style polaroid（props 放物件 id）、bubble 對話框、note 便條（texts 放短句）。用在回憶、訊息、清單類的段落，一首最多 2 組。
+- thread：一條線從 a 長到 b（bend 彎曲度，loop 中間打結），cut 秒被剪斷落下。只在歌詞講到線、緣、羈絆、連結時用，一首最多 1 條。
+- orbit：一個物件繞著 (x,y) 在傾斜的橢圓上轉（r 半徑 0.2–0.6，period 一圈幾秒，預設 6），from 到 to 秒。給行星、月亮、衛星、繞著某人轉的心情、循環。一首最多 1 個。
+- journey：一個物件從 from 到 to 秒沿著 pts 的幾個點走一趟，留下虛線軌跡（trail 色），到終點後停在那裡。給旅程、回家、追尋、出發（紙飛機、船、車、小鳥）。一首最多 1 個，路線沿畫面上下緣或兩側走，不要穿過畫面中央。
+- morph：一個形狀依序變成下一個（steps 例 "60:cube.box;75:star.gold;90:heart.red"，每個時間對準歌詞唱到那個東西），until 秒消失。給歌詞裡一連串有關聯的物件或象徵的轉變。一首最多 1 組，2–4 個形狀，props 每個都要列。
+- chapter：章節字卡，at 秒從左邊滑進、dur 秒後離開，text 是 16 字以內的短標（例「第一章 夏」「01 出発」），color 卡色、ink 字色。只給歌曲有明確段落敘事（時間、季節、地點轉換）的時候，放在段落開頭，一首最多 5 張、不要每段都放。
+- float：幾個物件（props 用逗號列 2–5 個）在畫面裡失重般慢慢漂、慢慢轉，from 到 to 秒。給宇宙、夢、無重力、記憶碎片飄散的段落（間奏或安靜段最好）。一首最多 1 組。
+- motion 物件的動法要合它的本性：hang 吊著的（風鈴、燈籠）像鐘擺晃；flutter 只給有翅膀的昆蟲和鳥（偶爾拍翅）；葉子、花瓣、紙片這類飄落的東西用 drift；roll 會滾的（球、殼）滾進來；sit 放在地上的落下後停住；drift 漂浮的慢慢飄；still 招牌、建築這類本來就不動的完全不動。不要亂跳亂閃。
+- 位置：歌詞大多在畫面中央，物件放在上緣、下緣或左右兩側（|y| ≥ 0.4 或 |x| ≥ 0.6），size 0.15–0.45；顏色要和背景有對比（淺色玻璃不要放淺色底上）。
+- props 列出上面用到的每一個物件；what 用英文具體描述外觀，不要人物、不要文字。
+- 寫法：prop、motion、x、y、size 是共用欄位；其他寫在 params 的 key/value，例 hero：{key:'states',value:'0:show;12:hide;95:crack;97:shatter;170:gather;205:glow'}；fly：at、dur、until、side、trail；pop：at、dur；cards：from、to、every、style、texts（a|b|c）或 props（id,id）、color、ink；thread：from、to、a（"-1,-0.6"）、b、bend、loop、cut、color。`;
+
+/** The director's story in story.ts shapes: params are key/value strings (states "t:state;…", points "x,y"). */
+function toStory(st: { props: StoryPlan['props']; items: { kind: string; why: string; prop: string; motion: string; x: number; y: number; size: number; params: { key: string; value: string }[] }[] } | undefined): StoryPlan | undefined {
+  if (!st) return undefined;
+  const pt = (v: string) => v.split(',').map(Number).slice(0, 2) as [number, number];
+  return {
+    props: st.props,
+    items: st.items.map(({ params, prop, motion, ...rest }) => {
+      const p: Record<string, unknown> = Object.fromEntries(params.map(({ key, value }) => {
+        if (key === 'states') return [key, value.split(';').map((x) => x.split(':')).filter((x) => x.length === 2).map(([at, state]) => ({ at: Number(at), state: state.trim() }))];
+        if (key === 'texts') return [key, value.split('|').map((x) => x.trim())];
+        if (key === 'props') return [key, value.split(',').map((x) => x.trim()).filter(Boolean)];
+        if (key === 'a' || key === 'b') return [key, pt(value)];
+        if (key === 'pts') return [key, value.split(';').map((x) => pt(x)).filter((p) => p.length === 2 && p.every(Number.isFinite))];
+        if (key === 'steps') return [key, value.split(';').map((x) => x.split(':')).filter((x) => x.length === 2).map(([at, prop]) => ({ at: Number(at), prop: prop.trim() }))];
+        if (key === 'text') return [key, value];
+        return [key, coerce(value)];
+      }));
+      // a fly's side is its `from`; cards and threads keep from/to as seconds
+      if (rest.kind === 'fly') p['from'] = p['side'] ?? 'left';
+      return { ...rest, ...(prop ? { prop } : {}), ...(motion ? { motion } : {}), ...p } as unknown as StoryPlan['items'][number];
+    }),
+  };
+}
+
 /** Turns the director's key/value layers into graphics.ts layers. */
 function toLook(g: { sections: { start: number; text: string; accent: string; layers: { kind: string; params: { key: string; value: string }[] }[] }[] }) {
   return {
     sections: g.sections.map((s) => ({
-      start: s.start, text: s.text || undefined, accent: s.accent || undefined,
+      start: s.start, text: s.text || undefined, accent: s.accent || undefined, transition: s.transition || undefined,
       layers: s.layers.map((l) => ({
         kind: l.kind,
         ...Object.fromEntries(l.params.map(({ key, value }) => {
           if (key === 'colors') return [key, value.split(',').map((x) => x.trim())];
+          if (key === 'lines') return [key, value.split('|').map((x) => x.trim()).filter(Boolean)];
           if (key === 'ghosts') return [key, value.split(';').map((g) => g.split(',').map((x) => x.trim())).filter((p) => p.length === 3).map(([dx, dy, color]) => ({ dx: Number(dx), dy: Number(dy), color }))];
           return [key, coerce(value)];
         })),
@@ -109,14 +172,16 @@ function toLook(g: { sections: { start: number; text: string; accent: string; la
 }
 const GRAPHICS_RULES = `graphics（圖形層，最重要）：用下列圖層由下往上組出每個段落的畫面，嚴格照設計語言的圖層配方與色彩邏輯。
 - 座標：x、y 為 -1..1（0 是中心，y 往上為正）；w、h、r、radius 是畫面比例；size、height、inset、gap 是像素（1920×1080）。
-- 圖層：fill（純色，to 漸層）、paper（紙，grain）、pattern（type、scale 像素、angle、scroll 每秒像素）、photo（mode、asset 素材 id，不填用當下鏡頭的圖、tint、frame、tilt）、frame（type、label）、rings、sparkles、sunburst（rays、spin）、band（type、y、angle、height、scroll、color2）、shapes（type、count、size、drift、outline）、blob（x、y、r）、bands（colors 階梯色帶，from 與 to 為 0..1）、stamp（text、size、tilt）、seal（text 2–4 字）、numeral（text、size 為畫面高比例）、scanlines（gap、vignette）、chargrid（cols、field、chars）、mist（count、y）、speedlines（count、inner）、swissgrid（color 格線、bars、signal、seed）。
+- 圖層：fill（純色，to 漸層）、paper（紙，grain）、pattern（type 是 grid／dots／stripes／gingham／checker／halftone／waves／genkou／shibori／itajime、scale 像素、angle、scroll 每秒像素）、photo（mode、asset 素材 id，不填用當下鏡頭的圖、tint、frame、tilt）、frame（type 是 border／filmstrip／viewfinder／brackets／window／ticket／deco、label）、rings、sparkles、sunburst（rays、spin）、band（type、y、angle、height、scroll、color2）、shapes（type、count、size、drift、outline）、blob（x、y、r）、bands（colors 階梯色帶，from 與 to 為 0..1）、stamp（text、size、tilt）、seal（text 2–4 字）、numeral（text、size 為畫面高比例）、scanlines（gap、vignette）、chargrid（cols、field、chars）、mist（count、y、soft true 是柔和的霧）、speedlines（count、inner）、swissgrid（color 格線、bars、signal、seed）、skyline（層疊剪影地景：type 是 city／hills／trees／peaks，colors 由遠到近，height 為畫面高比例 0–0.9，drift、windows 窗燈色、wash true 是由山頂淡入霧裡的墨色）、mosaic（彩繪玻璃：type 是 random／rose 玫瑰窗／lancet 尖拱窗，colors 寶石色、color 鉛條色、cells，rose 可設 x、y、r）、ink（墨暈：color 或 colors、count、size 像素）、botanical（藍曬植物剪影：type 是 fern／leaf／flower／feather／mixed，color、count、size 像素）、particles（飄落粒子：shape 是 dot／petal／leaf／snow／star／spark／heart／bubble／char，char 指定字元，color 可多色，count、size 像素（建議 24–44）、speed、dir 是 down／up／left／right、sway、opacity；有遠近景深）、panels（分格分屏：count 2–4、layout 是 vertical／horizontal／diagonal／grid、assets 每格的素材 id、tints 每格色調、line 分隔線色、gap 線寬；段落開始時各格依序滑入）、ui（一個電腦視窗：type 是 terminal 打指令／log 捲動的系統紀錄／code 程式碼／files 檔案列表（選取列隨拍往下）／error 錯誤警告（跳出時震一下，標題隨拍閃）／progress 進度條／loading 讀取中／cursor 安靜段用：沒有視窗，畫面上只有一行指令打完後游標獨自閃爍（lines 第一行是那行指令），cascade 2–8：同一個視窗每 0.45 秒再跳出一個、往右下疊成一串（失控、爆量的段落，例如副歌高潮或錯誤狂跳；一段最多一個），skin 視窗外觀（term 發光的終端機玻璃，預設／mac 真實的 Mac 視窗／win 真實的 Windows 視窗；mac 和 win 一首歌只能選一種，同一段的視窗外觀要一致，依歌詞情境決定哪幾段用系統視窗，例如聊天、檔案、日常電腦畫面），color 視窗色、alert 錯誤色、x、y、w、h（畫面比例）、title 標題列文字、lines 視窗內容（用「|」分隔的幾行短句，寫跟這首歌的故事有關的內容，英文或日文都可以）、delay 段落開始後幾秒跳出；疊 2–4 個不同的視窗就是一個桌面，會自動讓開歌詞）
 - 共通：opacity、pulse（拍點跳動 0–1）、blend（multiply 疊印）、ghosts（套印偏移或硬投影的副本，最多 2 個）。
 - 每個圖層的參數寫在 params 的 key/value 裡，例：{kind:'blob', params:[{key:'color',value:'#FBE6B4'},{key:'x',value:'0.5'},{key:'r',value:'0.2'},{key:'ghosts',value:'3,2,#EE9A73'}]}。
+- 段落轉場（transition）：大多數段落直接切（空字串）；只在音樂真的換段時用（進副歌、爆點、橋段、間奏開始），一首最多一半的段落交界有轉場。選的形狀要合歌和設計語言：circle 圓形從某點展開、clock 時鐘掃一圈（時間、等待）、diagonal 斜切（俐落）、stripes 橫條交錯、quad 四格依序、brush 筆刷抹過（手作、墨）、liquid 液面上漲（水、海、淚）、impact 白閃加震波（爆點專用）、diamond 菱形展開、iris 光圈打開（電影感）、checker 棋盤翻牌、bars 等化器長條（電子、節奏）、drip 油漆滴落、zigzag 鋸齒撕開（激烈）、star 星形展開（夢幻、偶像、閃亮）、pinwheel 六片扇葉旋開（童趣、風車、旋轉）、corners 四角三角形向中間合攏（俐落、幾何）、grid 九宮格逐格翻開（節奏、拼貼）、ripple 從一點泛開的水波邊緣（水、雨、溫柔）、wave 柔和的波浪邊推過去（海、流動）。impact、checker、zigzag、bars、quad、drip、grid、pinwheel 是強烈的，不可以連續兩段用；同一種不要在一首裡重複超過兩次。
 - 每段第一層必須是滿版的 fill 或 paper（或 photo full）。淺色底要設定 text 為深色。
+- 底（fill、paper、bands、pattern、skyline）可以貫穿整首；裝飾（太陽月亮等圓、同心圓、外框、照片小圖、印章、幾何等）不要每段都放，同一個裝飾最多六成的段落。整首要像一系列不同的海報，不是同一張換顏色。
 - 歌詞要清楚：歌詞會出現在畫面中央附近，那一帶不要放高對比的細碎圖案；照片與圖形是配角。
 - 沒有歌詞的長段（20 秒以上的間奏或哼唱）每 10 秒左右換一次圖層組合，讓畫面持續有變化。
 - 段落：至少 3 種組合（主歌、副歌、安靜段），整首最多 16 個 graphics 段落（同類段落重複時直接沿用，不要逐句細分），副歌最強烈；把設計語言的招牌動作放在最後一次副歌。
-- stamp、seal、numeral 的文字用這首歌的歌名、關鍵詞或編號，不要放無關的字。`;
+- stamp、seal、numeral 的文字用這首歌的歌名、關鍵詞或編號，不要放無關的字。numeral 只在那段歌詞裡真的唱到這個數字時才用；不要用數字當象徵（例如用「12」「0:00」暗示午夜），觀眾看不懂只會覺得突兀。seal 是方形印章，只用在印章本來就合理的設計（公文、和風），不要當裝飾到處蓋。`;
 const DESIGN_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['font', 'accentFont', 'kanaScale', 'grain', 'paper', 'colorScript', 'peak', 'medium', 'techniques'],
   properties: {
@@ -155,7 +220,7 @@ const MOTIF_RULES = `主題物件（motif，必須做）：
 - 用 transitionIn wipe 的鏡頭，下一個畫面會從物件的形狀中打開（物件形狀的轉場）。
 - 有物件的段落，背景圖是配角：物件與文字才是主角。`;
 // font lists live in the prompt, not the schema: long enums made the structured-output grammar too large
-const FONT_LIST = `主字型可選：${FONTS.filter((f) => f.roles.includes('display')).map((f) => `${f.family}（${f.feel}）`).join('、')}\n搭配英文字型可選：${FONTS.filter((f) => f.roles.includes('accent')).map((f) => `${f.family}（${f.feel}）`).join('、')}`;
+const FONT_LIST = `主字型可選：${FONTS.filter((f) => f.roles.includes('display') && readable(f.family)).map((f) => `${f.family}（${f.feel}）`).join('、')}\n搭配英文字型可選：${FONTS.filter((f) => f.roles.includes('accent')).map((f) => `${f.family}（${f.feel}）`).join('、')}`;
 const DESIGN_RULES = `設計系統（design，必須做；這是每首歌獨特性的關鍵）：
 ${FONT_LIST}
 - 搭配字型：選一款英文字型與主字型搭配，只用在英文歌詞、歌手名與角落標籤（例：明朝＋優雅草寫、圓體＋圓潤手寫、點陣＋等寬）。
@@ -199,7 +264,7 @@ const SCHEMA = {
     cues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cueId', 'shot', 'enter', 'exit', 'reveal'],
       properties: { cueId: str, shot: str, rows: { type: 'array', items: { type: 'integer' } },
         emphasis: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'to', 'method'],
-          properties: { from: { type: 'integer' }, to: { type: 'integer' }, method: { type: 'string', enum: EMPHASIS_METHODS } } } },
+          properties: { from: { type: 'integer' }, to: { type: 'integer' }, method: { type: 'string', enum: EMPHASIS_METHODS }, symbol: { type: 'string', enum: SYMBOLS, description: 'method 是 symbol 時必填' } } } },
         accents: { type: 'array', items: { type: 'integer' } },
         enter: { type: 'string', enum: ENTER_KINDS }, exit: { type: 'string', enum: EXIT_KINDS },
         reveal: { type: 'string', enum: ['line', 'word'], description: 'word：字以固定速度依序出現（在句子前段載完，之後整句停留）；line：整句一起進場' } } } },
@@ -242,13 +307,13 @@ const history: DesignRecord[] = existsSync(a.history!) ? JSON.parse(readFileSync
 const recent = history.filter((r) => r.song !== song.title).slice(-3);
 // languages rotate through the whole catalogue before one repeats (a 3-song window let 第六感's neon stage come back
 // four songs later and read as the same design); fonts and motifs only avoid the last three
-// every language is on offer (the director picks what suits the song best); the ones used lately are flagged, and a
-// repeat must look different in its settings (keepApart below)
-const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : (Object.keys(LANGUAGES) as LanguageId[]);
+// only proven languages are on offer (a song a paying user gets must come out usable); the director picks what suits
+// the song best among them, the ones used lately are flagged, and a repeat must look different (keepApart below)
+const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : PROVEN_LANGUAGES;
 const recentLanguages = new Set(recent.map((r) => r.language).filter(Boolean));
 const recentText = recent.length ? recent.map((r) => `- ${r.song}：${r.language ? `${LANGUAGES[r.language].name}（${r.language}）` : r.system}、字型 ${r.font}、媒材 ${r.medium ?? '—'}${r.motif ? `、主題物件 ${r.motif}` : ''}`).join('\n') : '（無）';
 const SYSTEMS_TEXT = `設計語言（language，最重要的決定）：每首歌要像不同設計師做的。先依這首歌的個性選一種設計語言，鏡頭只能用它的模板。
-${(Object.keys(LANGUAGES) as LanguageId[]).map((k) => `- ${k}（${LANGUAGES[k].name}）${recentLanguages.has(k) ? '【最近用過：最適合這首才選，選了就要讓配色、字型、媒材與質感明顯不同】' : ''}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}`).join('\n')}
+${allowedLanguages.map((k) => `- ${k}（${LANGUAGES[k].name}）${recentLanguages.has(k) ? '【最近用過：最適合這首才選，選了就要讓配色、字型、媒材與質感明顯不同】' : ''}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}${LANGUAGES[k].kit ? `。質感要點（驗收通過的${LANGUAGES[k].kit!.song}）：${LANGUAGES[k].kit!.craft}` : ''}`).join('\n')}
 最近做過的歌（這首要和它們明顯不同）：
 ${recentText}`;
 const style = STYLES[a['style-id']!];
@@ -256,7 +321,7 @@ if (!style) throw new Error(`未知風格 ${a['style-id']}`);
 const tier = a.tier as Tier;
 if (!TIERS[tier]) throw new Error(`未知版本 ${a.tier}（still | standard | rich）`);
 const scenes = sceneCount(tier, win, repeatSec);
-const SYSTEM = `你是日本地下偶像 Live House 的歌詞 VJ 導演兼動態設計師。你為一段歌曲寫「企劃 v3」JSON，引擎會照著逐格渲染。
+const SYSTEM = `你是 Live House 大螢幕的歌詞 VJ 導演兼動態設計師。你為一段歌曲寫「企劃 v3」JSON，引擎會照著逐格渲染。
 這次的風格是「${style.name}」：${style.description}
 
 風格規則（必須遵守）：
@@ -275,10 +340,35 @@ ${SYSTEMS_TEXT}
 - 時間可信度為 interpolated 的句子不要踩拍、用 fade。
 
 文字動態（必須做）：
-- 構圖：不要每個畫面都置中。用 align、position 讓畫面左右輪替，副歌一次比一次大（第一次收斂、最後一次最大；不要用 bleed 出血，裁切的巨字會被看成排版錯誤）；程式也會自動錯開連續置中的鏡頭。
+- 構圖：不要每個畫面都置中。用 align、position 讓畫面左右輪替；背景是圖片或專屬圖層、你不確定哪邊比較空時，填 auto 讓程式看背景把字放在最空的一側，副歌一次比一次大（第一次收斂、最後一次最大；不要用 bleed 出血，裁切的巨字會被看成排版錯誤）；程式也會自動錯開連續置中的鏡頭。
 - reveal：主歌、敘事句、慢歌多用 word（字以固定速度依序載出，像在說話）；副歌的衝擊句可用 line 讓整句砸下。
 - 系統有 beat-cut 時，副歌節奏強烈的句子可用它（每唱到一個詞就換一個構圖切入）。
-- 重複的歌詞（第 2、3 次副歌）沿用畫面但換版型，讓副歌逐次升級。
+- 重複的歌詞（第 2、3 次副歌）沿用畫面，讓副歌逐次升級：沒選 skeleton 時換版型；選了 skeleton 就沿用第一次副歌的版型順序，靠色彩和爆點升級（程式會照第一次副歌的版型排）。
+
+文字手法（工具箱，不是清單：先想這首歌的個性和歌詞需要什麼，只挑真正適合的；很多歌只用其中一兩招、甚至一招都不用才是對的。抒情慢歌不會需要斬切或陣列，功夫或電子歌才可能用到。同一招整首最多用 2–4 次，用在最對的地方才有力）：
+- 進場 ink：先描出字的輪廓、再填滿，像毛筆或墨水。適合書法感、和風、中國風、冷靜敘事的句子。
+- 進場 flap：每個字像車站／機場的翻牌看板，翻過幾個字後停在正確的字。適合時刻、日期、地名、出發、等待、倒數，或復古、都會、旅行感的設計；一首最多 3 句。
+- 進場 slot：每個字像拉霸機的轉輪，滾過幾個字後彈停。適合運氣、命運、選擇、賭注、遊戲感、普普的句子；一首最多 3 句，不要和 flap 同一首都用。
+- 進場 focus：字從模糊的殘影收攏成清楚的字。適合回憶、夢、醒來、看清、淚眼、朦朧，抒情慢歌的主歌。
+- 進場 rise：每個字從自己的底線後面升上來（線以下看不到）。安靜、確定、像雜誌排版的進場，適合敘事句、極簡或編輯感的設計；它是點綴不是預設，一首最多約四分之一的句子，其他句子用版型本身的進場。
+- 退場 glitch：句尾像訊號斷掉一樣跳格、錯位、閃爍消失。適合電子、科技、情緒崩潰、「斷線」意象的句子。
+- 退場 slash：一道光刃斜斜劃過，字被切成兩半錯開掉落。只給一首歌裡最有殺氣的 1–2 句（功夫、決鬥、斬斷、告別）。
+- 強調 hollow：關鍵詞變成空心描邊字，和實心的其他字對比。適合「空」「透明」「消失」或想要冷調的關鍵詞。
+- 強調 face：關鍵詞換成對比字體（黑體句子裡的關鍵詞變毛筆或明朝，明朝句子裡的變粗黑體）。一首最多 2–3 個詞，通常是歌名詞或副歌核心詞。
+- 強調 mark：關鍵詞下面畫出一道手繪麥克筆底線（是底線，不是底板）。適合手帳、校園、可愛、日常系。
+- 強調 liquid：關鍵詞先是空心字，再從底部像倒水一樣灌滿強調色，水面會微微晃。只給跟液體或「滿」有關的詞（海、淚、雨、酒、溢れる、滿），或情緒一路漲滿的那個詞；一首最多 2 個詞。
+- 強調 symbol：在詞旁邊彈出一個小符號，symbol 填 heart、star、sparkle、note、flame、drop、bolt、exclaim、question、swirl、flower 之一；預設不用：字義對應不是理由（講到愛不代表要放愛心，講到燃不代表要放火），只有這個詞是整句的情緒重點、而且設計語言本身適合貼紙感（可愛、普普）時才用，一首最多 2 次。
+- 括號裡的應援、和聲、呼喊（例如「(幹什麼?)」「（Hey!）」）程式會自動抽出成第二條小字軌，在主歌詞旁邊彈出，你不用處理，也不要把它們當強調範圍。
+- 版型 stack：導歌／蓄力段（build）每句堆上來、舊句被往上推，鏡頭結束在 drop 上一起清掉。
+- 版型 array：重複的口號或副歌標語鋪滿成陣列（例如「快使用雙截棍」），一首 2–3 次，通常在副歌。
+- 版型 couplet：對仗、問答、你／我相對的兩句左右對望。
+- 版型 quote：歌詞裡的對白、引用、某人說的話。
+- 版型 orbit：夢幻、循環、時間、宇宙、旋轉意象的短句。
+- 版型 ribbon：字沿著流動的波浪線，給風、河、海浪、流れ、飄這類「流動」的句子，一首 1–3 次。
+- 版型 tunnel：關鍵詞排成往鏡頭衝的文字隧道，給衝刺、穿越、加速、墜落、無限的句子或副歌爆點，一首最多 2 次。
+- 版型 frame-split（框住的字）：只給旁白、引述、內心話、系統訊息這類「被框起來才有意義」的句子，一首最多約 2 成的鏡頭；框是這個風格本身的東西（終端機視窗、默片字卡、圖面標題欄、抬頭顯示）才用。
+- 版型怎麼挑：每一句挑最適合它的歌詞內容和這個風格的版型，適合比多樣重要；風格只適合一兩種版型就只用那一兩種，不要為了變化硬塞，但也不要整首只靠同一種撐。
+- 冷卻句：副歌或高能段落中間，挑 1 句用 quiet 或 fade／line 讓它突然安靜、變小，下一句再回到衝擊；這種對比讓副歌更有力。只在歌詞或編曲真的有這個呼吸點時用（例如一句獨白、一個停頓），不要硬加。
 
 情緒起伏（必須做）：
 - arc：每個段落標強度 0–3（前奏、尾奏 0，主歌 1，導歌 2，副歌 3；安靜的落ちサビ或橋段降到 0–1）。引擎依強度調整背景亮度、飽和度、光暈、光粒子。
@@ -289,12 +379,41 @@ ${MOMENT_KINDS.map((k) => `  - ${k}：${MOMENT_RULES[k].desc}（dur ${MOMENT_RUL
 - 有 drop 或 finale 的那個鏡頭不需要再用 transitionIn flash（引擎會略過）。
 - 素材描述用英文，畫面不可有任何文字。這個範圍${TIERS[tier].video ? `要 ${tier === 'rich' ? Math.ceil(scenes * 0.6) : 1}–${scenes} 組素材（每組 1 image + 1 video）` : `要 1–${scenes} 張 image，不要 video`}。`;
 
+// what designers do, from the database of designer lyric videos (knowledge.mts): a toolbox to pick from per song
+const toolboxFile = join('out', 'knowledge', 'toolbox.md');
+const TOOLBOX = existsSync(toolboxFile) ? `\n\n設計師常用手法（從大量設計師做的歌詞 MV 整理出來；是工具箱不是清單，依這首歌挑適合的，引擎做得到的才用）：\n${readFileSync(toolboxFile, 'utf8')}` : '';
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
-const USER = `【輸出要求】shots 大約 ${expectShots} 個（每個 ${style.shotSec[0]}–${style.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${cues.length} 句。\n\n【這首歌的說明】\n${a.style ? `${a.style}\n` : ''}${describeStructure(structure)}\n\n【程式建議的爆點】（依結構產生，可以調整強度與長度，位置除非有明確理由不要改）\n${suggestedText}\n\n【關鍵詞（可以換色的詞）】\n${keyWords(song).join('、') || '（無）'}\n\n【重複段落】\n${repeatText}\n\n【標題卡】\n${gapText}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
+const USER = `${TOOLBOX ? `${TOOLBOX}\n\n` : ''}【輸出要求】shots 大約 ${expectShots} 個（每個 ${style.shotSec[0]}–${style.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${cues.length} 句。\n\n【這首歌的說明】\n${a.style ? `${a.style}\n` : ''}${describeStructure(structure)}\n\n【程式建議的爆點】（依結構產生，可以調整強度與長度，位置除非有明確理由不要改）\n${suggestedText}\n\n【關鍵詞（可以換色的詞）】\n${keyWords(song).join('、') || '（無）'}\n\n【重複段落】\n${repeatText}\n\n【標題卡】\n${gapText}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 // overloaded (529) and rate limits: the SDK retries with backoff; a long design run should ride them out
 const client = new Anthropic({ maxRetries: 8 });
+/**
+ * One streamed reply, retried when the connection drops mid-stream ("terminated"): the SDK's own retries only cover
+ * a request that fails before the reply starts, and a paid song must not fail on a dropped connection.
+ */
+async function streamed(params: Anthropic.Beta.Messages.MessageStreamParams) {
+  for (let k = 0; ; k++) {
+    // a stream that goes silent never ends on its own (one waited 3 hours): no event for 5 minutes counts as dropped
+    const stream = client.beta.messages.stream(params);
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const arm = () => {
+      clearTimeout(idle);
+      idle = setTimeout(() => stream.abort(), 5 * 60_000);
+    };
+    arm();
+    stream.on('streamEvent', arm);
+    try {
+      return await stream.finalMessage();
+    } catch (e) {
+      const dropped = stream.aborted || e instanceof Anthropic.APIConnectionError || /terminated|ECONNRESET|socket hang up|other side closed/i.test(String((e as Error)?.message) + String((e as { cause?: unknown })?.cause));
+      if (!dropped || k >= 2) throw e;
+      console.error(`連線中斷，重試第 ${k + 1} 次：${(e as Error).message}`);
+    } finally {
+      clearTimeout(idle);
+    }
+  }
+}
 const keep: TreatmentV3 | undefined = a['keep-assets'] ? JSON.parse(readFileSync(a['keep-assets'], 'utf8')) : undefined;
 const keepText = keep
   ? `\n\n【已生成的素材：只能用這些，不可新增或修改素材（assets 欄位照抄即可，程式會沿用原本的）】\n${keep.assets.map((x) => `- ${x.id}（${x.kind}${x.from ? `，from ${x.from}` : ''}）：${x.prompt}`).join('\n')}\n背景風格：${keep.styleAnchor.prompt}`
@@ -323,7 +442,7 @@ function keepApart(t: TreatmentV3, fixes: string[]) {
 }
 
 async function designPass(base: TreatmentV3, language: LanguageId): Promise<{ checked: ReturnType<typeof validateTreatment>; usage: { input: number; output: number } }> {
-  const sys = LANGUAGES[language];
+  const sys = { ...LANGUAGES[language], fonts: facesFor(LANGUAGES[language].fonts, script) };
   const sysText = `【設計語言】${sys.name}（${language}）
 - 本質：${sys.essence}
 - 不是：${sys.not}
@@ -332,20 +451,22 @@ async function designPass(base: TreatmentV3, language: LanguageId): Promise<{ ch
 - 圖層：${sys.layers}
 - 動態：${sys.motion}
 - 招牌動作（放在歌曲最高潮）：${sys.native}
-${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌】這首的字型要和它們不同：\n${recentText}`;
-  const userD = `為這首歌設計 design、graphics${sys.motif ? ' 與 motif' : ''}。企劃的鏡頭與歌詞版型已定，你決定字型、色彩、質感、爆點樣式，以及畫面的圖形：graphics 是用程式畫的圖層組合（取代滿版背景圖），依段落切換。\n\n${sysText}\n\n${GRAPHICS_RULES}\n\n${DESIGN_RULES}\n\n${sys.motif ? MOTIF_RULES : ''}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【鏡頭】\n${base.shots.map((x) => `${x.id} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s ${x.template}`).join('\n')}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
-  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: userD }];
+${sys.motif ? '' : '- 這個語言沒有主題物件（motif）；故事（story）的物件不受影響，照故事規則做。\n'}- 共用裝飾：這個語言只能用 ${sys.own.length ? sys.own.map((m) => SHARED_MOTIFS[m]).join('、') : '（沒有）'}；${(Object.keys(SHARED_MOTIFS) as SharedMotif[]).filter((m) => !sys.own.includes(m)).map((m) => SHARED_MOTIFS[m]).join('、')} 都不准用（每個風格都用會變成同一個模板），改用這個語言自己的圖形。能用的也只在歌詞或故事需要時才用。\n【最近做過的歌】這首的字型要和它們不同：\n${recentText}${(() => {
+    const same = history.filter((r) => r.song !== song.title && r.language === language && r.decor?.length);
+    return same.length ? `\n【同風格做過的歌用過的主要裝飾】這首要換成不同的組合：\n${same.map((r) => `- ${r.song}：${r.decor!.join('、')}`).join('\n')}` : '';
+  })()}`;
+  const qaNotes = a['qa-notes'] && existsSync(a['qa-notes']) ? `\n\n【上一版設計的畫面檢查發現這些問題，這一版必須避免】\n${readFileSync(a['qa-notes'], 'utf8')}` : '';
+  const userD = `為這首歌設計 design、graphics、story${sys.motif ? ' 與 motif' : ''}。企劃的鏡頭與歌詞版型已定，你決定字型、色彩、質感、爆點樣式，以及畫面的圖形：graphics 是用程式畫的圖層組合（取代滿版背景圖），依段落切換。\n\n${sysText}\n\n${GRAPHICS_RULES}\n\n${DESIGN_RULES}\n\n${STORY_RULES}\n\n${sys.motif ? MOTIF_RULES : ''}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【鏡頭】\n${base.shots.map((x) => `${x.id} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s ${x.template}`).join('\n')}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
+  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: userD + qaNotes }];
   let checked!: ReturnType<typeof validateTreatment>;
   const usage = { input: 0, output: 0 };
   for (let attempt = 0; attempt < 3; attempt++) {
-    const msg = await client.beta.messages
-      .stream({
+    const msg = await streamed({
         model: a.model!, max_tokens: 48000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
-        output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: sys.motif ? ['design', 'graphics', 'motif'] : ['design', 'graphics'], properties: sys.motif ? { design: DESIGN_SCHEMA, graphics: GRAPHICS_SCHEMA, motif: MOTIF_SCHEMA } : { design: DESIGN_SCHEMA, graphics: GRAPHICS_SCHEMA } } } },
-        system: '你是日本偶像歌詞 VJ 的資深動態設計總監，為每首歌建立獨特的字體與色彩系統。',
+        output_config: { effort: 'high', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: sys.motif ? ['design', 'graphics', 'story', 'motif'] : ['design', 'graphics', 'story'], properties: sys.motif ? { design: DESIGN_SCHEMA, graphics: GRAPHICS_SCHEMA, story: STORY_SCHEMA, motif: MOTIF_SCHEMA } : { design: DESIGN_SCHEMA, graphics: GRAPHICS_SCHEMA, story: STORY_SCHEMA } } } },
+        system: '你是歌詞 VJ 的資深動態設計總監，為每首歌建立獨特的字體與色彩系統。',
         messages: dMessages,
-      } as Anthropic.Beta.Messages.MessageStreamParams)
-      .finalMessage();
+      } as Anthropic.Beta.Messages.MessageStreamParams);
     usage.input += msg.usage.input_tokens;
     usage.output += msg.usage.output_tokens;
     const text = msg.content.find((b) => b.type === 'text')?.text;
@@ -354,7 +475,13 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     const out2 = JSON.parse(text);
     base.design = { ...out2.design, language };
     base.motif = sys.motif ? out2.motif : undefined;
-    base.graphics = validateLook(toLook(out2.graphics) as never, base.assets.map((x) => x.id), win.start).look;
+    // transitions only where the music changes section (analysed structure)
+    base.graphics = validateLook(toLook(out2.graphics) as never, base.assets.map((x) => x.id), win.start, song.sections?.map((x) => x.start)).look;
+    // the story rides on the look: its items drawn over every section, its props drawn by props.mts
+    writeFileSync(join(out, 'story.raw.json'), JSON.stringify(out2.story ?? null, null, 1));
+    const story = validateStory(toStory(out2.story), song.duration);
+    if (story.fixes.length) console.log(`story: ${story.fixes.join(' | ')}`);
+    if (base.graphics) base.graphics = { ...base.graphics, story: story.items.length ? story.items : undefined, storyProps: out2.story?.props?.length ? out2.story.props : undefined } as never;
     checked = validateTreatment(base, song, win, TEMPLATES);
     const usedFonts = recent.map((r) => r.font);
     const errs = [
@@ -363,6 +490,8 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
       // a motif shape (kind + variant) is never reused across songs: sweet timer's clock came back in another song
       ...(base.motif && history.filter((r) => r.song !== song.title).some((r) => (r.motif ?? '').startsWith(`${base.motif!.kind}/${base.motif!.variant ?? ''}/`) || (r.motif === base.motif!.kind && !base.motif!.variant)) ? [`主題物件 ${base.motif!.kind}/${base.motif!.variant ?? ''} 以前的歌用過：換一種物件或造型（已用過：${history.filter((r) => r.motif).map((r) => r.motif).join('、')}）`] : []),
       ...lyriclessGaps().filter((g) => (base.graphics?.sections ?? []).filter((x) => x.start > g.start + 0.5 && x.start < g.end - 2).length < Math.min(3, Math.floor((g.end - g.start) / 10))).map((g) => `${g.start.toFixed(1)}–${g.end.toFixed(1)} 秒沒有歌詞（間奏或哼唱），graphics 要在裡面換 ${Math.min(3, Math.floor((g.end - g.start) / 10))} 次以上的圖層組合，用設計語言的大型圖形或招牌動作讓畫面有變化`),
+      // same language, different materials: every earlier song in this language, not only the recent three
+      ...samenessIssues(base.graphics, history.filter((r) => r.song !== song.title && r.language === language)),
       ...(!base.graphics || base.graphics.sections.length < 3 ? ['graphics 至少要有 3 個段落（主歌、副歌、安靜段各有不同的圖層組合）'] : []),
       ...checked.errors, ...checkStyle(checked.treatment, style, song, win, tier, titleCards).filter((e) => e.includes('主題物件'))];
     console.log(`design attempt ${attempt}: ${errs.length} errors`);
@@ -374,7 +503,16 @@ ${sys.motif ? '' : '- 這個語言沒有主題物件。\n'}【最近做過的歌
     checked.fixes.push(`顆粒 ${checked.treatment.design.grain} 太重，調為 0.25`);
     checked.treatment.design.grain = 0.25;
   }
+  // the chorus skeleton and echo follow the techniques this pass just chose (run before it, an unset list meant "all"
+  // and a skeleton the director then dropped stayed applied)
+  checked.fixes.push(...varyComposition(checked.treatment, chorusSpans(structure)));
+  checked.fixes.push(...keepOwnMotifs(checked.treatment as never, language));
   keepApart(checked.treatment, checked.fixes);
+  checked.fixes.push(...dropEmptyFrames(checked.treatment.graphics, song.cues, song.duration));
+  // lines sung faster than they read stay up while the next lands (fast idol songs and rap lost half their lines)
+  checked.fixes.push(...stackRushed(checked.treatment, song.cues));
+  // last: the lines take the side the design leaves free (readability outranks the off-centre variety pass)
+  checked.fixes.push(...planSides(checked.treatment));
   return { checked, usage };
 }
 
@@ -398,13 +536,11 @@ process.on('uncaughtExceptionMonitor', (e) => status.stage('director', { state: 
 let result: ReturnType<typeof validateTreatment> | undefined;
 let chosen: LanguageId = 'neon-stage';
 for (let attempt = 0; attempt < 3; attempt++) {
-  const message = await client.beta.messages
-    .stream({
+  const message = await streamed({
       model: a.model!, max_tokens: 64000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
       output_config: { effort: 'high', format: { type: 'json_schema', schema: SCHEMA } },
       system: SYSTEM, messages,
-    } as Anthropic.Beta.Messages.MessageStreamParams)
-    .finalMessage();
+    } as Anthropic.Beta.Messages.MessageStreamParams);
   usage = { input: usage.input + message.usage.input_tokens, output: usage.output + message.usage.output_tokens };
   if (message.stop_reason === 'refusal') throw new Error(`Refused: ${JSON.stringify(message.stop_details)}`);
   if (message.stop_reason === 'max_tokens') throw new Error('Output was cut off at max_tokens');
@@ -430,7 +566,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   const lang = LANGUAGES[chosen];
   if (!lang) result.errors.push(`language ${chosen} 不存在`);
   else {
-    if (!allowedLanguages.includes(chosen)) result.errors.push(`language ${chosen} 最近的歌已用過，請改選：${allowedLanguages.join('、')}`);
+    if (!allowedLanguages.includes(chosen)) result.errors.push(`language ${chosen} 不在可選的設計語言裡，請改選：${allowedLanguages.join('、')}`);
     const bad = draft.shots.filter((x) => !lang.templates.includes(x.template));
     if (bad.length) result.errors.push(`「${lang.name}」不能用這些模板：${bad.map((x) => `${x.id}=${x.template}`).join('、')}（可用：${lang.templates.join('、')}）`);
   }
@@ -440,8 +576,14 @@ for (let attempt = 0; attempt < 3; attempt++) {
   messages.push({ role: 'assistant', content: message.content as Anthropic.Beta.Messages.BetaContentBlockParam[] });
   messages.push({ role: 'user', content: `程式驗證未通過，請修正後輸出完整的企劃 JSON：\n${result.errors.map((e) => `- ${e}`).join('\n')}` });
 }
+// a shot a little off the style's pacing still renders fine: after the last attempt it is a note, not a failed song
+// (neon-stage on 第六感 died on one 8.6 s shot where the style asks 3.5–8)
+const pacing = (e: string) => /^鏡頭 \S+ 長 [\d.]+ 秒，這個風格要/.test(e);
+if (result && result.errors.length && result.errors.every(pacing)) {
+  result.fixes.push(...result.errors.map((e) => `接受：${e}`));
+  result.errors = [];
+}
 if (!result || result.errors.length) throw new Error('導演 3 次仍未通過驗證：\n' + result?.errors.join('\n'));
-result.fixes.push(...varyComposition(result.treatment, chorusSpans(structure)));
 result.fixes.push(...editorPass(result.treatment, sameLines(song)));
 // second call: the design system and motif for these shots
 // saved so a failed design pass can be retried alone: --design-only <out>/shots.json
@@ -455,7 +597,7 @@ const report = { model: a.model, seconds: Math.round((Date.now() - began) / 1000
 writeFileSync(join(out, 'director.json'), JSON.stringify(report, null, 1));
 {
   const d = result.treatment.design!;
-  const rec: DesignRecord = { song: song.title, language: chosen, font: d.font, medium: d.medium, motif: result.treatment.motif && `${result.treatment.motif.kind}/${result.treatment.motif.variant ?? ''}/${result.treatment.motif.render ?? 'neon'}`, peak: d.peak, grain: d.grain, paper: d.paper };
+  const rec: DesignRecord = { song: song.title, language: chosen, decor: mainDecor(result.treatment.graphics), font: d.font, medium: d.medium, motif: result.treatment.motif && `${result.treatment.motif.kind}/${result.treatment.motif.variant ?? ''}/${result.treatment.motif.render ?? 'neon'}`, peak: d.peak, grain: d.grain, paper: d.paper };
   writeFileSync(a.history!, JSON.stringify([...history.filter((r) => r.song !== song.title), rec], null, 1));
 }
 status.stage('director', { state: 'done', costUSD: report.costUSD, message: undefined });

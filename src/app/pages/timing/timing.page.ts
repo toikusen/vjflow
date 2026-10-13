@@ -39,6 +39,8 @@ export class TimingPage {
   protected readonly songId = signal<string | null>(new URLSearchParams(location.search).get('song'));
   protected readonly song = signal<SongTimeline | null>(null);
   protected readonly cues = signal<TimelineCue[]>([]);
+  /** Members and their colours (lines tagged with a member are set in that colour). */
+  protected readonly singers = signal<{ name: string; color: string }[]>([]);
   protected readonly touched = signal<Set<string>>(new Set());
   protected readonly selected = signal(0);
   protected readonly time = signal(0);
@@ -157,6 +159,7 @@ export class TimingPage {
     const song: SongTimeline = await (await fetch(base, { cache: 'no-store' })).json();
     this.song.set(song);
     this.cues.set(song.cues.map((c) => ({ ...c })));
+    this.singers.set((song.singers ?? []).map((x) => ({ ...x })));
     this.touched.set(new Set());
     this.undoStack = [];
     this.redoStack = [];
@@ -309,6 +312,83 @@ export class TimingPage {
     this.dirty.set(true);
   }
 
+  // ---- singers
+  private static readonly SWATCHES = ['#ff5c8a', '#4fb3ff', '#ffd23f', '#5ce1a1', '#b38bff', '#ff8a3d', '#f4f2ee', '#ff4d4d'];
+
+  protected addSinger() {
+    const n = this.singers().length;
+    this.singers.update((l) => [...l, { name: `成員${n + 1}`, color: TimingPage.SWATCHES[n % TimingPage.SWATCHES.length] }]);
+    this.dirty.set(true);
+  }
+
+  protected editSinger(k: number, patch: Partial<{ name: string; color: string }>) {
+    const old = this.singers()[k];
+    const name = patch.name?.trim();
+    if (patch.name !== undefined && (!name || this.singers().some((x, j) => j !== k && x.name === name))) return;
+    this.singers.update((l) => l.map((x, j) => (j === k ? { ...x, ...patch, ...(name ? { name } : {}) } : x)));
+    // a renamed member keeps their lines
+    if (name && name !== old.name) this.cues.update((l) => l.map((c) => (c.singer === old.name ? { ...c, singer: name } : c)));
+    this.dirty.set(true);
+  }
+
+  protected removeSinger(k: number) {
+    const gone = this.singers()[k].name;
+    this.singers.update((l) => l.filter((_, j) => j !== k));
+    this.cues.update((l) => l.map((c) => (c.singer === gone ? { ...c, singer: undefined } : c)));
+    this.dirty.set(true);
+  }
+
+  protected setSinger(i: number, name: string) {
+    this.remember();
+    this.cues.update((l) => l.map((c, j) => (j === i ? { ...c, singer: name || undefined } : c)));
+    this.dirty.set(true);
+  }
+
+  protected singerColor(name?: string) {
+    return this.singers().find((x) => x.name === name)?.color ?? 'transparent';
+  }
+
+  /** Retypes a line (a misheard or missing word); its per-character times are rebuilt on save. */
+  protected retype(i: number, value: string) {
+    const text = value.trim();
+    if (!text || text === this.cues()[i].text) return;
+    this.remember();
+    this.cues.update((l) => l.map((c, j) => (j === i ? { ...c, text } : c)));
+    this.touched.update((s) => new Set(s).add(this.cues()[i].id));
+    this.dirty.set(true);
+  }
+
+  /** A new line after line i: in the gap before the next line, or the second half of line i when there is none. */
+  protected addAfter(i: number) {
+    this.remember();
+    const list = this.cues().map((c) => ({ ...c }));
+    const c = list[i];
+    const next = list[i + 1];
+    const gapEnd = next ? next.start - 0.05 : this.song()!.duration;
+    let start = c.end + 0.05;
+    let end = Math.min(gapEnd, start + 3);
+    if (end - start < 0.6) {
+      start = +((c.start + c.end) / 2).toFixed(3);
+      end = c.end;
+      c.end = start;
+    }
+    const added: TimelineCue = { id: `n${Date.now().toString(36)}`, start, end, text: '新的一句', timingSource: 'lrc', confidence: 'verified' };
+    list.splice(i + 1, 0, added);
+    this.cues.set(list);
+    this.touched.update((s) => new Set(s).add(added.id));
+    this.selected.set(i + 1);
+    this.dirty.set(true);
+    setTimeout(() => this.list()?.nativeElement.querySelector<HTMLInputElement>(`[data-index="${i + 1}"] .text`)?.select());
+  }
+
+  protected remove(i: number) {
+    if (this.cues().length <= 1) return;
+    this.remember();
+    this.cues.update((l) => l.filter((_, j) => j !== i));
+    this.selected.set(Math.min(i, this.cues().length - 1));
+    this.dirty.set(true);
+  }
+
   protected edit(i: number, edge: 'start' | 'end', value: string) {
     const v = Number(value);
     if (Number.isFinite(v)) this.setLine(i, { [edge]: v });
@@ -381,12 +461,16 @@ export class TimingPage {
     const r = await fetch(`/lyric-vj/songs/${encodeURIComponent(id)}/cues`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ cues: this.cues().map(({ id, start, end }) => ({ id, start, end })), confirm, accepted: [...this.touched()] }),
+      body: JSON.stringify({ cues: this.cues().map(({ id, start, end, text, singer }) => ({ id, start, end, text, singer: singer ?? '' })), confirm, accepted: [...this.touched()], singers: this.singers() }),
     });
     const body = await r.json();
     if (!r.ok) return this.message.set(`儲存失敗：${body.error}`);
     this.dirty.set(false);
-    this.message.set(confirm ? '時間軸已確認，可以開始生成 VJ。' : '已儲存。');
+    // a design styles each line by id: added, removed or retyped lines need the design redone
+    const before = this.song()!.cues;
+    const reshaped = before.length !== this.cues().length || this.cues().some((c, i) => c.id !== before[i]?.id || c.text !== before[i]?.text);
+    const note = reshaped ? '歌詞的句子有增減或改字：已經做好的設計要到 Studio 按「方向不對，重做設計」才會套用新歌詞。' : '';
+    this.message.set(`${confirm ? '時間軸已確認，可以開始生成 VJ。' : '已儲存。'}${note}`);
     await this.open(id);
     await this.loadList();
   }

@@ -10,6 +10,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
 import type { AssetSource } from '../../src/app/lyric-vj/render/engine';
 import { STYLES } from '../../src/app/lyric-vj/styles';
 import { Tier, TIERS } from '../../src/app/lyric-vj/tiers';
@@ -22,6 +23,8 @@ const { values: a } = parseArgs({
     'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'style-id': { type: 'string', default: 'emotional' }, 'video-model': { type: 'string' },
     // vertex: Google Cloud project quota (no 10-clips/day cap); gemini: Gemini API key
     'video-backend': { type: 'string' },
+    // scenes for the song's own drawing: every picture, full-bleed (the drawing uses them as its worlds)
+    scenes: { type: 'boolean', default: false },
   },
 });
 // official list prices (2026-10): Flash Image 2K $0.101/image; Veo 3.1 Fast 1080p $0.12/s
@@ -70,12 +73,20 @@ async function image(id: string, prompt: string, ref?: Buffer): Promise<string> 
   // the model sometimes completes with no picture: ask again (up to three times) before giving up
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let r: any;
-  for (let tries = 0; tries < 3 && !r?.output_image?.data; tries++)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    r = await (ai as any).interactions.create({
-      model: a['image-model'], input,
-      response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '16:9', image_size: '2K' },
-    });
+  for (let tries = 0; tries < 3 && !r?.output_image?.data; tries++) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      r = await (ai as any).interactions.create({
+        model: a['image-model'], input,
+        response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '16:9', image_size: '2K' },
+      });
+    } catch (e) {
+      // rate limits and server hiccups pass; billing (402) and bad requests do not, so they fail at once
+      const status = Number((e as { status?: number }).status);
+      if (tries >= 2 || !(status === 429 || status >= 500 || !status)) throw e;
+      await new Promise((ok) => setTimeout(ok, 8000 * 3 ** tries));
+    }
+  }
   if (!r.output_image?.data) throw new Error(`圖片 ${id} 沒有產出：${JSON.stringify(r).slice(0, 400)}`);
   writeFileSync(file, Buffer.from(r.output_image.data, 'base64'));
   charge(`image ${id}`, PRICE.image);
@@ -128,7 +139,13 @@ async function video(id: string, prompt: string, first: string): Promise<string>
 const manifest: Record<string, AssetSource> = {};
 // with a graphic look the pictures show only through its photo layers (the engine hides the full-frame plates), so
 // only those are generated; a photo layer without an asset shows the shot's picture
-const needed = neededAssets(t);
+// scenes only for a handmade medium (languages.ts): elsewhere the drawing paints its own world
+const sceneLang = t.design?.language ? LANGUAGES[t.design.language as LanguageId] : undefined;
+if (a.scenes && !sceneLang?.scenes) {
+  console.log(`no scene pictures for ${t.design?.language ?? 'this design'}: its medium does not carry pictures`);
+  process.exit(0);
+}
+const needed = a.scenes ? new Set(t.assets.map((x) => x.id)) : neededAssets(t);
 const unused = t.assets.filter((x) => !needed.has(x.id)).map((x) => x.id);
 if (unused.length) console.log(`skip ${unused.length} pictures the graphic look never shows: ${unused.join(', ')}`);
 t.assets = t.assets.filter((x) => needed.has(x.id));
@@ -142,11 +159,27 @@ process.on('uncaughtExceptionMonitor', (e) => status.stage('assets', { state: 'f
 // the song's medium decides how every picture is rendered (medium.ts)
 const look = MEDIA[t.design?.medium ?? 'clean'].look;
 let anchor: Buffer | undefined;
+const failedImages: string[] = [];
 for (const img of images) {
   // the first image is the style anchor; every later image is generated with it as a reference (spec 3.3)
-  const prompt = `${look}. ${t.styleAnchor.prompt}. ${img.prompt}. 16:9 background plate for a lyric video, leave calm space for typography. ${NO_TEXT}`;
+  // as a drawing's world the picture fills the frame and is drawn in the same medium as the song's props
+  const lang = t.design?.language ? LANGUAGES[t.design.language as LanguageId] : undefined;
+  const sceneRules = a.scenes ? ` Full-bleed scene filling the whole frame edge to edge: not a model on a table, no visible tabletop, base, frame or border. No signboards with writing.${lang?.props ? ` Drawn as ${lang.props.style}.` : ''}` : '';
+  const prompt = `${look}. ${t.styleAnchor.prompt}. ${img.prompt}. 16:9 background plate for a lyric video, leave calm space for typography.${sceneRules} ${NO_TEXT}`;
   status.item('assets', { id: img.id, kind: 'image', state: 'running' });
-  const file = await image(img.id, prompt, anchor);
+  let file: string;
+  try {
+    file = await image(img.id, prompt, anchor);
+  } catch (e) {
+    // the song goes on without this picture (a photo layer with no picture draws nothing; the graphic look carries
+    // the frame): a paying user gets a video, not an error (cel80s died here when the image credits ran out)
+    const msg = (e as Error).message;
+    console.error(`圖片 ${img.id} 生成失敗，這張圖先不用：${msg.slice(0, 200)}`);
+    if (/402|prepayment|credits|billing/i.test(msg)) console.error('##ALERT 生圖額度用完，請到 AI Studio 儲值');
+    failedImages.push(img.id);
+    status.item('assets', { id: img.id, kind: 'image', state: 'failed', note: msg.slice(0, 200) });
+    continue;
+  }
   anchor ??= readFileSync(file);
   status.item('assets', { id: img.id, kind: 'image', state: 'done', file: outPath(file), usd: usdOf(img.id) });
   status.stage('assets', { costUSD: +spent().toFixed(3) });
@@ -156,6 +189,7 @@ for (const img of images) {
 const missing: string[] = [];
 for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   const from = manifest[vid.from!];
+  if (!from && failedImages.includes(vid.from!)) continue; // its picture failed: the clip goes too
   if (!from) throw new Error(`影片 ${vid.id} 的 from ${vid.from} 不是已生成的圖片`);
   let file: string;
   status.item('assets', { id: vid.id, kind: 'video', state: 'running', file: outPath(from.url) });
@@ -181,6 +215,6 @@ for (const vid of t.assets.filter((x) => x.kind === 'video')) {
   status.stage('assets', { costUSD: +spent().toFixed(3) });
 }
 writeFileSync(join(out, 'assets.json'), JSON.stringify(manifest, null, 1));
-console.log(JSON.stringify({ spentUSD: +spent().toFixed(3), budgetUSD: Number(a.budget), assets: Object.keys(manifest), stillInsteadOfVideo: missing }, null, 1));
-status.stage('assets', { state: 'done', costUSD: +spent().toFixed(3), message: missing.length ? `${missing.length} 段影片改用靜態圖：${missing.join(', ')}` : undefined });
+console.log(JSON.stringify({ spentUSD: +spent().toFixed(3), budgetUSD: Number(a.budget), assets: Object.keys(manifest), stillInsteadOfVideo: missing, failedImages }, null, 1));
+status.stage('assets', { state: 'done', costUSD: +spent().toFixed(3), message: [missing.length ? `${missing.length} 段影片改用靜態圖：${missing.join(', ')}` : '', failedImages.length ? `${failedImages.length} 張圖沒有生成：${failedImages.join(', ')}` : ''].filter(Boolean).join('；') || undefined });
 if (missing.length) process.exitCode = 3;

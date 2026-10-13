@@ -36,6 +36,18 @@ describe('avoid', () => {
     const free = { kind: 'blob' as const, x: 0.8, y: 0.8, r: 0.1, color: '#fff' };
     expect(avoid(free, lyrics)).toBe(free);
   });
+
+  it('sends a story prop with no room beside the line to the far side instead of fading it', async () => {
+    const { avoid, layerRect } = await import('./graphics');
+    // a tall vertical line on the right, the spot beside it taken by another object
+    const lyrics = { x0: 1500, y0: 40, x1: 1700, y1: 1040 };
+    const taken = { x0: 1000, y0: 0, x1: 1476, y1: 1080 };
+    const chime = { kind: 'sprite' as const, asset: 'spr:chime', x: 0.65, y: 0, size: 0.4 };
+    const moved = avoid(chime, lyrics, 24, [taken]);
+    const r = layerRect(moved)!;
+    expect(moved.opacity ?? 1).toBe(1);
+    expect(r.x1 <= taken.x0).toBe(true);
+  });
 });
 
 describe('code layer', () => {
@@ -77,5 +89,43 @@ describe('code layer lyric glide', () => {
     expect((blendLayer(code(), code(box(0)), 0.25) as { lyricWeight: number }).lyricWeight).toBe(0.25);
     const leaving = blendLayer(code(box(0)), code(), 0.25) as { lyric: { x0: number }; lyricWeight: number };
     expect([leaving.lyric.x0, leaving.lyricWeight]).toEqual([0, 0.75]);
+  });
+});
+
+describe('ui windows', () => {
+  it('a computer window moves off the lyrics like any boxed layer', async () => {
+    const { avoidAll, layerRect } = await import('./graphics');
+    const win = { kind: 'ui', type: 'log', color: '#3DFF6E', x: 0, y: 0 } as const;
+    const lyrics = { x0: 560, y0: 440, x1: 1360, y1: 640 };
+    const r0 = layerRect(win)!;
+    expect(r0.x1 - r0.x0).toBeCloseTo(0.36 * 1920);
+    const [moved] = avoidAll([win], lyrics);
+    const r = layerRect(moved)!;
+    // clear of the lyrics by the 24 px margin (to a rounding error)
+    expect(r.x1 <= lyrics.x0 - 23 || r.x0 >= lyrics.x1 + 23 || r.y1 <= lyrics.y0 - 23 || r.y0 >= lyrics.y1 + 23).toBe(true);
+  });
+});
+
+describe('spreadWindows', () => {
+  it('moves a window off one it covers and leaves separate windows alone', async () => {
+    const { spreadWindows, layerRect } = await import('./graphics');
+    const win = (x: number, y: number) => ({ kind: 'ui', type: 'files', color: '#3DFF6E', x, y }) as const;
+    const [a, b, c] = spreadWindows([win(0.5, 0.5), win(0.55, 0.45), win(-0.6, -0.6)]);
+    const ra = layerRect(a)!;
+    const rb = layerRect(b)!;
+    expect(a).toEqual(win(0.5, 0.5));
+    expect(c).toEqual(win(-0.6, -0.6));
+    const cut = Math.max(0, Math.min(ra.x1, rb.x1) - Math.max(ra.x0, rb.x0)) * Math.max(0, Math.min(ra.y1, rb.y1) - Math.max(ra.y0, rb.y0));
+    expect(cut).toBeLessThanOrEqual(0.2 * (rb.x1 - rb.x0) * (rb.y1 - rb.y0));
+  });
+});
+
+describe('window cascade', () => {
+  it('places a cascade as one block that grows with its copies', async () => {
+    const { layerRect } = await import('./graphics');
+    const one = layerRect({ kind: 'ui', type: 'error', color: '#3DFF6E', x: 0, y: 0 })!;
+    const five = layerRect({ kind: 'ui', type: 'error', color: '#3DFF6E', x: 0, y: 0, cascade: 5 })!;
+    expect(five.x1 - five.x0 - (one.x1 - one.x0)).toBeCloseTo(4 * 44);
+    expect(five.y1 - five.y0 - (one.y1 - one.y0)).toBeCloseTo(4 * 44);
   });
 });

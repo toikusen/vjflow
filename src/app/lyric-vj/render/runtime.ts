@@ -26,6 +26,10 @@ export interface CueRuntime {
   pace: number;
   /** The line is sung faster than it can be read (chars / 12 + 1 s): show it whole at once, no staggering. */
   rushed?: boolean;
+  /** When the later lines of the same shot show (stack and couplet move earlier lines aside as they arrive). */
+  later?: number[];
+  /** This line's place among the lines of its shot (0 = first). */
+  order?: number;
 }
 
 /** Per-frame effects templates can request from the post stack. */
@@ -65,6 +69,8 @@ export interface TemplateRenderer {
   shot?(shot: Shot, params: Record<string, ParamValue>, palette: Palette, ctx: ShotContext): ShotLayer;
   /** The shot layer shows for the whole shot, not only around its lines (title cards have none). */
   standalone?: boolean;
+  /** Lines stay up past their own time: until the shot ends ('shot'), or until the line after next shows ('next'). */
+  persist?: 'shot' | 'next';
 }
 
 /** Strength of the most recent accent at time t (exponential decay after each hit). */
@@ -103,7 +109,9 @@ export function tagSource(glyphs: Glyph[], text: string, from = 0): number {
  * word flash before a cut.
  */
 export function revealAt(rt: CueRuntime, frac: number): number {
-  const span = Math.min(1.5, Math.max(0.3, 0.45 * (rt.exitAt - rt.showFrom)));
+  // the whole line is up within a quarter of its time (at most 0.8 s): a reveal over half the line left fast songs'
+  // lines whole on screen for too little time to be read
+  const span = Math.min(0.8, Math.max(0.2, 0.25 * (rt.exitAt - rt.showFrom)));
   return rt.showFrom + clamp01(frac) * span;
 }
 
@@ -176,9 +184,10 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 
 /** When the last character has finished entering (all opaque and within 5 % of final scale). */
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
-  const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : rt.showFrom + (n - 1) * stagger * rt.pace;
+  // a cut lands every character at once (glyphMotion ignores the stagger for it)
+  const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : rt.style.enter === 'cut' ? rt.showFrom : rt.showFrom + (n - 1) * stagger * rt.pace;
   // seconds per glyph until opaque and back at final scale (back-easing overshoots until the end of its entrance)
-  const settle = { slam: 0.34, pop: 0.34, wipe: 0.2, fade: 0.3, cut: 0 }[rt.style.enter];
+  const settle = { slam: 0.34, pop: 0.34, wipe: 0.2, fade: 0.3, cut: 0, ink: 0.6, flap: 0.45, slot: 0.8, focus: 0.6, rise: 0.45 }[rt.style.enter];
   return last + settle * rt.pace;
 }
 
@@ -198,4 +207,24 @@ export function readable(hex: string, background: string, min = 4.5): string {
     if (contrast(c, background) >= min) return c;
   }
   return light ? '#000000' : '#ffffff';
+}
+
+/** Seconds a line needs on screen, fully in, to be read: chars / 12 + 1 s, at most 90 % of the time it is sung. */
+export const readingSec = (text: string, start: number, end: number) => Math.min([...text.replace(/\s/g, '')].length / 12 + 1, 0.9 * (end - start + 0.4));
+
+/**
+ * What to change so a line that is not up long enough to be read gets its reading time: first it holds into the free
+ * time after it (up to `limit`, when the next line or the shot's end needs the screen); if that is not enough it lands
+ * at once (no word-by-word reveal, no drawn entrance) and leaves on a cut at `limit`. Undefined when it reads already.
+ * Applies to every template and effect alike: it works from the readable window the built layer reports.
+ */
+export function readFix(rt: CueRuntime, readable: [number, number], required: number, limit: number): Pick<CueRuntime, 'style' | 'exitAt' | 'exitDur' | 'rushed'> | undefined {
+  let short = required - (readable[1] - readable[0]);
+  if (short <= 0.05) return undefined;
+  const room = Math.max(0, limit - (rt.exitAt + rt.exitDur));
+  const hold = Math.min(short, room);
+  short -= hold;
+  if (short <= 0.05) return { style: rt.style, exitAt: rt.exitAt + hold, exitDur: rt.exitDur, rushed: rt.rushed };
+  // rushed: templates that set a line in pieces (scatter, stair rows, typing) put them all up at once
+  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: Math.max(rt.exitAt, limit - 0.08), exitDur: 0.08, rushed: true };
 }

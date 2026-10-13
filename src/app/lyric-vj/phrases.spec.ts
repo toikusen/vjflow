@@ -30,3 +30,13 @@ describe('kinsoku', () => {
     expect(p.join('|')).not.toMatch(/六\|感/);
   });
 });
+
+describe('Chinese phrases', () => {
+  it('cuts a Han line into words, not one block', async () => {
+    const { phraseBoundaries } = await import('./phrases');
+    const b = phraseBoundaries('氣沉丹田手心開');
+    expect(b.has(4)).toBe(true);
+    expect(b.has(2)).toBe(true);
+    expect(phraseBoundaries('世界の続き').has(1)).toBe(false);
+  });
+});

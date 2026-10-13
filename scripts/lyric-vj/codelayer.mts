@@ -4,11 +4,12 @@
 // <out>/codelayer.json; the test renders go to <out>/codelayer/.
 // npx tsx scripts/lyric-vj/codelayer.mts --song out/db/<id>/song.json --dir out/db/<id>/studio --out <dir>
 import Anthropic from '@anthropic-ai/sdk';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { continuity, parseTrack } from '../../src/app/lyric-vj/continuity';
 import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
 
 const { values: a } = parseArgs({ options: { song: { type: 'string' }, dir: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
@@ -58,9 +59,15 @@ const brief = {
   titleCards: base.shots.filter((x: { template: string }) => x.template === 'title-card').map((x: { start: number; end: number }) => ({ from: x.start, to: x.end })),
   sections: sections.map((s, i) => ({ index: i, start: s.start, end: sections[i + 1]?.start ?? +song.duration.toFixed(1), lyricColor: s.text ?? 'auto', layers: s.layers.map((l, j) => ({ index: j, ...l })) })),
   lyrics: song.cues.map((c: { start: number; text: string }) => `${c.start.toFixed(1)} ${c.text}`),
+  // instrumental stretches (over 4 s without a line): where the picture breathes on its own
+  interludes: (() => {
+    const cs = song.cues as { start: number; end: number }[];
+    const gaps = [{ from: 0, to: cs[0]?.start ?? song.duration }, ...cs.slice(0, -1).map((c, i) => ({ from: c.end, to: cs[i + 1].start })), { from: cs[cs.length - 1]?.end ?? 0, to: song.duration }];
+    return gaps.filter((g) => g.to - g.from > 4).map((g) => ({ from: +g.from.toFixed(1), to: +g.to.toFixed(1) }));
+  })(),
 };
 
-const SYSTEM = `你是頂尖的動態設計師，正在為一首日本偶像歌曲的歌詞 VJ 寫「這首歌專屬的背景動畫」。其他圖層來自共用元件庫，看起來像模板；你寫的這一層要讓這首歌一看就知道是設計師為它量身做的。`;
+const SYSTEM = `你是頂尖的動態設計師，正在為一首歌的歌詞 VJ 寫「這首歌專屬的背景動畫」。其他圖層來自共用元件庫，看起來像模板；你寫的這一層要讓這首歌一看就知道是設計師為它量身做的。`;
 const RULES = `
 寫一個 JavaScript 函式本體（不含 function 宣告），會被 new Function('ctx', 'f', src) 編譯，每一格呼叫一次：
 - ctx：1920×1080 的 CanvasRenderingContext2D，已經畫好你下面保留的圖層；畫完會自動 restore。
@@ -70,6 +77,8 @@ const RULES = `
 - f.cam：此刻的鏡頭 { index, start, end, progress 0→1, count }。鏡頭在 cuts 的時間點硬切（index 0 是第一個切點之前），切點和歌詞版型換版同步。
 - f.hash(a, b)：決定性雜訊 [0,1)。
 - f.cache：跨格保留的物件，用來存只算一次的離屏畫布或雜訊圖（例如 f.cache.paper ??= 建立紙紋()）。
+- f.particles({ shape, char?, color, count, size, speed, dir, sway, opacity, seed })：畫一層有遠近景深、會飄動的粒子（shape：dot／petal／leaf／snow／star／spark／heart／bubble／char；dir：down／up／left／right）。用在場景的氛圍（花瓣、雪、星塵、泡泡、飄落的字），不要整首都鋪；間奏、副歌高潮、情緒句最適合。
+- f.warp(img, x, y, w, h, zones, seed?)：像 ctx.drawImage(img, x, y, w, h) 一樣畫素材，但素材「本身」的軟部分會動（網格變形，同一陣風驅動全畫面）。zones 是 [{ kind, rect?, pin?, amp? }]：kind 有 'sway'（樹、草、花、枝：pin 固定端預設 bottom）、'flutter'（旗、布條、緞帶、頭髮：pin 預設 left）、'billow'（帆、窗簾、布幕鼓起）、'swing'（懸吊的燈籠、風鈴、招牌：繞頂端擺）、'pulse'（水母、心臟、燈光呼吸）、'ripple'（水面、浪面）；rect 是 [x0,y0,x1,y1]（素材的 0–1 比例），只有這塊會動、其餘保持硬（例如帆船只讓帆 [0.27,0.08,0.76,0.68] billow、船底的水 ripple，船身不動）；amp 是幅度（素材尺寸的比例，預設 0.02–0.08，不要超過 0.1）。每格最多 3 個 f.warp（每個約 5–10 毫秒）。
 規則：
 1. 完全決定性：只依 f 的值畫，不能用 Math.random、Date、requestAnimationFrame、全域狀態累積（每一格可能單獨被畫、也可能跳著畫）。
 2. 效能：每格 10 毫秒內（不要每格建上萬個路徑、不要 getImageData、不要 filter: blur 大面積）。
@@ -93,7 +102,15 @@ const RULES = `
 17-3. 動態系統（不像 AI 做的關鍵）：全片只用 3 種緩動曲線，各有用途——進場用減速（ease-out，例如 1-(1-p)^3）、退場用加速（ease-in）、鏡頭用兩端都緩（ease-in-out）；線性只能用在慢慢漂移。回彈（overshoot 1–7%）只給「真的落地或卡上」的那一下，全片最多 2 次，其他動作不准彈。移動距離越長時間越長（約 0.35 秒＋每 1000 像素 1.35 秒，鏡頭 0.6–2.4 秒）；同一時間只有 1 個主要動作＋最多 2 個輔助動作；任何東西每格移動不超過 60–80 像素，更快就改成拍點上的硬切。次要動作在主要動作進行到 55–75% 時才開始，兩者一起停下。鏡頭切點兩側要嘛都靜止，要嘛新鏡頭用舊鏡頭的速度延續。同一個物件不能用兩份交叉淡化，要讓同一個物件變形過去。
 17-4. 一個強調色只代表一件事（例如「命運」「現在」「你」）：平常只佔畫面約 8%，全片最多鋪滿畫面一次（在最大的高潮）。不要到處用。
 17-5. 一個故事物件（一條線、一個信物、一個形狀）貫穿每個鏡頭、在切點也不消失，最後在結尾收成一個畫面——要是這首歌獨有的東西，不要用單純的點、線、方塊敷衍。
-17-6. 轉場：全片用 6–8 種，每種最多 2 次，另外選 1 種從故事物件長出來的「招牌轉場」，在開頭、中段、結尾各用一次；交叉淡化不能當預設，也不要閃白、光斑、故障、漩渦這類現成特效。`;
+17-6. 轉場：全片用 6–8 種，每種最多 2 次，另外選 1 種從故事物件長出來的「招牌轉場」，在開頭、中段、結尾各用一次；交叉淡化不能當預設，也不要閃白、光斑、故障、漩渦這類現成特效。
+17-7. 故事性：先在 idea 裡寫出一條有起承轉合的故事線，每個段落是故事裡的一個「事件」（例如小舟從夏天的海岸出發→秋天沿岸航行→夜裡遇上巨浪→黎明抵達），物件要參與事件（被浪捲起、被風吹走、靠岸、被拾起），不是擺著當背景。禁止把幾個道具在地面排成一列再橫移鏡頭帶過；每個鏡頭要有主從關係：一個主角物件佔畫面大部分或被大膽裁切，其他是配角。
+17-9. 軟的東西要真的動：樹、草、帆、旗、布、燈籠、風鈴、水母、水面用 f.warp 讓它自己擺動，取代整張圖上下漂浮或左右平移；硬的東西（船身、建築、鳥居、石頭、器物）不要 warp，它們用整體的位移、旋轉或擠壓來演。同一個鏡頭裡的風向一致。
+17-12. 物件要屬於畫面，不是貼紙：同一時間畫面上最多 3 個素材；每個素材要有物理上的位置（放在地面、桌面、水面、掛在東西上，大小符合場景的透視和遠近），不要漂在空中、不要沒有理由地上下晃；兩個素材不能疊在一起。素材出現和離開都要有動畫（從畫外進來、落下、長出、淡入），不能一格之內冒出、消失、瞬移或突然變大變小——系統會逐格量測，違反就是必須修的錯誤。
+17-13. 少而有關聯：全片的素材圍繞一個故事物件（它貫穿全片），配角只在歌詞真的提到時出現；不要每個場景都塞新的道具。
+17-14. 間奏留白呼吸：資料裡的 interludes（超過 4 秒沒有歌詞）背景降成低能量——極慢的推鏡或漂移、明暗緩慢呼吸、少量環境微動（光、雲、水、粒子），不要在間奏塞新的事件或新道具；歌詞回來前一兩拍再把能量帶回來。片尾最後一句唱完後讓畫面慢慢減速，程式會自動淡出到黑。
+17-10. 歌詞不能被素材蓋住：歌詞完整出現時，素材的不透明部分不能壓進 f.lyric 的矩形（系統會量測，蓋住超過 8% 就是必須修的錯誤）。用構圖、取景和 f.lyricWeight 讓位，不要把素材塞到歌詞後面。
+17-11. 構圖是分區，不是閃躲：每個鏡頭先決定歌詞區和畫面區（例如直排歌詞在右三分之一，主角大浪佔左邊三分之二並被畫框大膽裁切；橫排歌詞在上方留白，主角物件佔下半部）。主角物件要大（畫面面積 25–60%），可以出框；配角少而小、有主從。不要為了避開歌詞把所有物件縮小推到角落，留下一片空的底色——那比壓到歌詞更糟。歌詞換位置時，主角跟著換邊或換景別。
+17-8. 具體的東西（浪、山、樹、建築、動物、器物）只能用素材庫的圖（f.img）畫，程式只畫背景、色面、紋樣、光和運鏡；素材庫沒有的具體物件就不要出現，不要用幾何圖形拼湊。`;
 
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['idea', 'src', 'sections'],
@@ -104,6 +121,43 @@ const SCHEMA = {
   },
 };
 type Reply = { idea: string; src: string; sections: { index: number; order: number[] }[] };
+
+// the storyboard comes before any code: where each section is, what happens, who acts; checked by the program, then
+// the code follows it (a plan is cheap to fix, a drawing is not)
+const STORY_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['rule', 'story', 'signature', 'beats'],
+  properties: {
+    rule: { type: 'string', description: '貫穿全片的視覺規則（從歌名或概念推出）' },
+    story: { type: 'string', description: '起承轉合的故事線，3–5 句' },
+    signature: { type: 'string', description: '招牌轉場：從故事物件長出的轉場，開頭、中段、結尾各一次' },
+    beats: {
+      type: 'array', description: '每個段落（sections 的 index）一筆',
+      items: {
+        type: 'object', additionalProperties: false, required: ['section', 'scene', 'framing', 'heroes', 'event', 'lyricZone'],
+        properties: {
+          section: { type: 'integer' },
+          scene: { type: 'string', description: '場景圖 id；沒有場景圖時填空字串' },
+          framing: { type: 'string', description: '取景與運鏡（景別、角度、怎麼動），每段要不同' },
+          heroes: { type: 'array', items: { type: 'string' }, description: '這段演出的素材 id，最多 2 個：故事物件在前，配角只在歌詞提到時才出現' },
+          event: { type: 'string', description: '這段發生的事件：物件做了什麼（甩、踢、飛、碎、落下…），不是擺著' },
+          lyricZone: { type: 'string', enum: ['left', 'right', 'top', 'bottom', 'center'], description: '這段畫面留給歌詞的區域' },
+        },
+      },
+    },
+  },
+};
+type Story = { rule: string; story: string; signature: string; beats: { section: number; scene: string; framing: string; heroes: string[]; event: string; lyricZone: string }[] };
+
+// a revision is an edit of the code, not a rewrite: each find is a unique stretch of the current code
+const EDIT_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['idea', 'edits', 'sections'],
+  properties: {
+    idea: { type: 'string', description: '修改後的設計想法，2–4 句' },
+    edits: { type: 'array', description: '要改的地方；沒有要改就給空陣列', items: { type: 'object', additionalProperties: false, required: ['find', 'replace'], properties: { find: { type: 'string', description: '目前程式裡只出現一次的一段原文（至少一整行）' }, replace: { type: 'string' } } } },
+    sections: { type: 'array', description: '圖層順序有改才填，否則空陣列', items: { type: 'object', additionalProperties: false, required: ['index', 'order'], properties: { index: { type: 'integer' }, order: { type: 'array', items: { type: 'integer' } } } } },
+  },
+};
+type Edit = { idea: string; edits: { find: string; replace: string }[]; sections: Reply['sections'] };
 
 // overloaded (529) and rate limits: the SDK retries with backoff; a long design run should ride them out
 const client = new Anthropic({ maxRetries: 8 });
@@ -147,9 +201,44 @@ ${lang ? `【畫法】${lang.craft}` : ''}
 // lessons: the user's notes on earlier songs (Studio appends them), so a new song starts from what was learned
 const lessonsFile = join('out', 'design-lessons.md');
 const lessons = existsSync(lessonsFile) ? readFileSync(lessonsFile, 'utf8').trim().split('\n').slice(-40).join('\n') : '';
-const intro = `${RULES}${RECIPES}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
+// the song's scene pictures: full-bleed worlds the drawing stages its props in (made by assets.mts --scenes)
+const scenePics: Record<string, { kind: string; url: string }> = existsSync(join(a.dir!, 'assets', 'assets.json')) ? JSON.parse(readFileSync(join(a.dir!, 'assets', 'assets.json'), 'utf8')) : {};
+// only a handmade medium carries scene pictures (languages.ts scenes); elsewhere the drawing paints its own world
+const scenes = !LANGUAGES[base.design?.language as LanguageId]?.scenes ? [] : ((base.assets ?? []) as { id: string; kind: string; prompt: string }[]).filter((x) => x.kind === 'image' && scenePics[x.id] && existsSync(scenePics[x.id].url));
+const SCENE_RULES = `
+
+場景圖（生圖模型畫好的滿版場景，這首歌的「世界」）：用 f.scene('<id>') 取得（CanvasImageSource，載入失敗時是 null，要先判斷），用 ctx.drawImage 畫。清單（下面也附了縮圖）：
+${scenes.map((x) => `${x.id}：${x.prompt.slice(0, 120)}`).join('\n')}
+28. 每個段落用一張場景圖當背景世界：等比放大蓋滿畫面，在上面運鏡（推、移、搖、局部特寫；放大不超過 1.6 倍以免糊），素材庫的道具在場景的前景演出、參與事件。有場景圖可用時，不要再用程式的幾何圖形畫山、街道、建築、屋頂、雲和煙。場景跟著歌詞走：歌詞講到哪裡，畫面就到哪個場景；同一張場景可以在不同段落用不同取景再出現。
+29. 為了歌詞清楚、全片色調一致，可以在場景上疊一層半透明的暗色或語言主色（globalCompositeOperation 'multiply' 或低透明度填色）；不要在歌詞後面畫底板。歌詞放在場景本身較暗、較空的區域。`;
+// graphic languages: the component-library design underneath is the look (sweet timer v3: every code layer that
+// repainted the background scored below the plain base), so the drawing only adds the story on top of it
+const OVERLAY_RULES = `
+
+這個設計語言沒有場景圖：畫面的背景、版面、色塊、紙紋、網點、印章都由底層設計負責，而且已經是驗收過的水準。
+28. 專屬圖層只疊在底層上面，負責讓道具演出故事（物件進場、移動到底層的圓窗或色塊裡、互動、被翻開帶出下一段），不要重畫背景：不要畫天空、地面、地平線、山、街道、建築，也不要畫任何超過畫面三分之一的不透明色塊或漸層。
+29. 畫面大部分時間要看得到底層設計；專屬圖層的東西加起來最多佔畫面四分之一。`;
+const sceneSheet = scenes.flatMap((x) => {
+  const jpg = join(work, `scene_${x.id}.jpg`);
+  execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', scenePics[x.id].url, '-vf', 'scale=480:-1', '-q:v', '5', jpg]);
+  return [{ type: 'text' as const, text: `場景 ${x.id}：` }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(jpg).toString('base64') } }];
+});
+// what designers do in backgrounds, transitions, interludes and camera (knowledge.mts), to pick from per song
+const toolboxFile = join('out', 'knowledge', 'toolbox.md');
+const TOOLBOX = existsSync(toolboxFile) ? `\n\n設計師常用手法（從大量設計師做的歌詞 MV 整理出來；依這首歌挑適合的，背景、轉場、過門、鏡頭的部分由你這一層做）：\n${readFileSync(toolboxFile, 'utf8')}` : '';
+const intro = `${RULES}${RECIPES}${TOOLBOX}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${scenes.length ? SCENE_RULES : OVERLAY_RULES}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
 const spriteSheet = a.sprites
   ? [{ type: 'text' as const, text: '素材庫總覽（每張下面是 id）：' }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(join(a.sprites, 'contact.jpg')).toString('base64') } }]
+  : [];
+// the language's style kit: the user-approved song in this language is the bar for texture and craft (sweet timer v2
+// shipped a purple gradient with clip-art props because nothing showed the director what this look must feel like)
+const kitFile = join('scripts/lyric-vj/references/kits', `${base.design?.language}.jpg`);
+const kit = lang?.kit && existsSync(kitFile) ? { ...lang.kit, image: readFileSync(kitFile).toString('base64') } : undefined;
+const kitSheet = kit
+  ? [
+    { type: 'text' as const, text: `質感基準（同一個設計語言、使用者驗收通過的作品：${kit.song}）。這首歌的故事、配色、場景都要不同，但材質、手感、完成度要達到這個水準：${kit.craft}\n專屬圖層畫在這首歌的紙紋／網點等底層之上：不要用不透明的滿版背景把底層蓋掉。` },
+    { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: kit.image } },
+  ]
   : [];
 const messages: Anthropic.Messages.MessageParam[] = [{
   role: 'user',
@@ -158,17 +247,38 @@ const messages: Anthropic.Messages.MessageParam[] = [{
       { type: 'text', text: intro },
       { type: 'text', text: `基準設計的想法：${baseline.idea}\n\n基準設計的程式碼：\n${baseline.src}\n\n基準設計的成品截圖，時間依序為 ${baseStills.map((f) => parseFloat(f.slice(6))).join('、')} 秒：` },
       ...baseStills.map((f) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(join(a.baseline!, f)).toString('base64') } })),
+      ...kitSheet,
       ...spriteSheet,
+      ...sceneSheet,
     ]
-    : [{ type: 'text', text: intro }, ...spriteSheet],
+    : [{ type: 'text', text: intro }, ...kitSheet, ...spriteSheet, ...sceneSheet],
 }];
 /** The first draft is planned at high effort; revisions are edits at medium (planning and judging cost more than editing). */
-async function ask(effort: 'high' | 'medium' = 'medium'): Promise<Reply> {
+async function ask(effort: 'high' | 'medium' = 'medium', tries = 4): Promise<Reply> {
+  return call<Reply>(SCHEMA, effort, tries);
+}
+
+/** One director turn in the running conversation, answered in the given schema (retries cut streams and overloads). */
+async function call<T>(schema: object, effort: 'high' | 'medium' = 'medium', tries = 4): Promise<T> {
   const msg = await client.messages
-    .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, output_config: { effort, format: { type: 'json_schema', schema: SCHEMA } } } as Anthropic.Messages.MessageStreamParams)
-    .finalMessage();
+    .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, output_config: { effort, format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageStreamParams)
+    .finalMessage()
+    // the SDK retries failed requests but not a stream cut mid-way (a long plan streams for many minutes)
+    .catch((e: Error) => {
+      // a stream cut mid-way, or an overload / rate limit reported inside the stream: wait, then ask again
+      if (tries <= 1 || !/terminated|socket|ECONNRESET|overloaded|529|rate_limit|429/i.test(`${e.message} ${(e.cause as Error)?.message}`)) throw e;
+      console.log(`stream failed (${e.message.slice(0, 80)}), retrying`);
+      step(`連線中斷或伺服器忙碌，${(5 - tries) * 20} 秒後自動重試（不用處理）`);
+      return undefined;
+    });
+  if (!msg) {
+    await new Promise((r) => setTimeout(r, (5 - tries) * 20_000));
+    return call<T>(schema, effort, tries - 1);
+  }
   usage.input += msg.usage.input_tokens;
   usage.output += msg.usage.output_tokens;
+  // a high-effort plan can think past the output limit; plan again at medium before giving up
+  if (msg.stop_reason === 'max_tokens' && effort === 'high') return console.log('ran out of tokens at high effort, retrying at medium'), step('想得太長，改用精簡模式重寫'), call<T>(schema, 'medium');
   if (msg.stop_reason === 'max_tokens') throw new Error('director ran out of tokens');
   messages.push({ role: 'assistant', content: msg.content as Anthropic.Messages.ContentBlockParam[] });
   const text = msg.content.find((b) => b.type === 'text')?.text ?? '';
@@ -207,56 +317,129 @@ writeFileSync(pics, JSON.stringify({
 }));
 
 // every shot's middle and 0.3 s later, background only: how much moves and how much is more than the ground colour
+/** The lowest final review score a drawing may ship with: below it the run fails instead of handing over a video. */
+const PASS = 75;
 const shotMids = (() => { const c = [0, ...cuts, song.duration]; return c.slice(0, -1).map((x, i) => +((x + c[i + 1]) / 2).toFixed(2)); })();
 const REVIEW_SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['verdict', 'issues'],
+  type: 'object', additionalProperties: false, required: ['verdict', 'score', 'issues'],
   properties: {
     verdict: { type: 'string', description: '整體評語，2–3 句' },
+    score: { type: 'integer', description: `0–100。80＝設計師等級、付費的人會滿意；${PASS}＝最低可交付；60＝看得出是模板或 AI、質感不足（大片空底色、通用貼圖、沒有材質）；照實打，不要客氣` },
     issues: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['shot', 'problem', 'fix'], properties: { shot: { type: 'integer' }, problem: { type: 'string' }, fix: { type: 'string' } } } },
   },
 };
-type Review = { verdict: string; issues: { shot: number; problem: string; fix: string }[] };
+type Review = { verdict: string; score: number; issues: { shot: number; problem: string; fix: string }[] };
 
-function test(r: Reply, round: number) {
+/**
+ * Renders the drawing and measures it. The renders (review stills, lyric-cover stills, per-shot background pairs,
+ * transition strips, jump pairs) run at once. Problems are what the director must fix: render errors, sprites over
+ * the lyrics, and the checks that used to come back as review notes — a flat slab over the frame, a washed-out grey
+ * frame, a story that sits in one scene or never visits some.
+ */
+/** Deletes the rounds' continuity, jump, transition and ghost renders; the drawing and review stills stay. */
+function sweepChecks() {
+  for (const d of existsSync(work) ? readdirSync(work) : []) if (/^(track|jump|trans|ghost)_r\d+$/.test(d)) rmSync(join(work, d), { recursive: true, force: true });
+}
+
+async function test(r: Reply, round: number) {
+  // earlier rounds' check renders (~1 GB each) are never read again: three rounds of them filled the disk mid-run
+  sweepChecks();
   const file = join(work, `treatment_r${round}.json`);
   writeFileSync(file, JSON.stringify(apply(r)));
   const dir = join(work, `stills_r${round}`);
-  const render = (stills: number[], out: string, extra: string[] = []) => {
-    try {
-      return execFileSync('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', '0', '--end', String(song.duration), '--stills', stills.map((x) => x.toFixed(2)).join(','), '--out', out, ...extra], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-    } catch (e) {
-      return String((e as { stderr?: string }).stderr ?? e);
-    }
+  const once = (stills: number[], out: string, extra: string[] = []) =>
+    new Promise<string>((resolve) => {
+      // both streams: the renderer reports code-layer problems on stderr, also when the render succeeds
+      const p = spawn('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', '0', '--end', String(song.duration), '--stills', stills.map((x) => x.toFixed(2)).join(','), '--out', out, ...extra]);
+      let log = '';
+      p.stdout.on('data', (d) => (log += d));
+      p.stderr.on('data', (d) => (log += d));
+      p.on('close', () => resolve(log));
+      p.on('error', (e) => resolve(`${log}\n${e.message}`));
+    });
+  // six renders run at once and one sometimes dies loading (fonts on a slow network): the stills it left out get one
+  // more try, and whatever is still missing is skipped by the checks below
+  const render = async (stills: number[], out: string, extra: string[] = []) => {
+    const log = await once(stills, out, extra);
+    // missing, or cut short (a render that died while writing leaves a broken file behind)
+    const missing = stills.filter((x) => { const f = join(out, `still_${x.toFixed(2)}.png`); return !existsSync(f) || statSync(f).size < 2000; });
+    return missing.length ? `${log}\n${await once(missing, out, extra)}` : log;
   };
-  const log = render(times, dir);
-  const problems = [...new Set(log.split('\n').filter((l) => /code layer:|page error:/.test(l)))];
-  const images = times.map((x) => {
-    const jpg = join(dir, `s_${x.toFixed(2)}.jpg`);
-    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', join(dir, `still_${x.toFixed(2)}.png`), '-vf', 'scale=960:-1', '-q:v', '4', jpg]);
-    return readFileSync(jpg).toString('base64');
-  });
-  // shot QA on the background alone (lyrics would count as motion)
+  // the middle of every lyric line, rendered only to let the renderer measure sprites hiding the lyric
+  const mids = song.cues.map((c: { start: number; end: number }) => +((c.start + c.end) / 2).toFixed(2));
   const qaDir = join(work, `qa_r${round}`);
-  render(shotMids.flatMap((x) => [x, x + 0.3]), qaDir, ['--layer', 'back']);
-  const qaFile = join(qaDir, 'qa.json');
-  execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', 'python', 'scripts/lyric-vj/shot_qa.py', qaDir, shotMids.map((x) => x.toFixed(2)).join(','), qaFile], { stdio: ['ignore', 'ignore', 'inherit'] });
-  const qa: { shot: number; motion: number; detail: number }[] = JSON.parse(readFileSync(qaFile, 'utf8'));
-  const weak = qa.filter((x) => x.motion < 0.02 || x.detail < 0.08).map((x) => `鏡頭 ${x.shot}：${x.motion < 0.02 ? `幾乎不動（${(x.motion * 100).toFixed(1)}% 的畫面在 0.3 秒內有變化）` : ''}${x.detail < 0.08 ? `偏空（只有 ${(x.detail * 100).toFixed(1)}% 的畫面不是底色）` : ''}`);
   // transitions: three cuts across the song, a strip of frames through each (0.1 s before to 0.45 s after)
   const tcuts = [cuts[Math.floor(cuts.length * 0.2)], cuts[Math.floor(cuts.length * 0.5)], cuts[Math.floor(cuts.length * 0.8)]].filter((x) => x !== undefined);
   const offs = [-0.1, 0.1, 0.25, 0.45];
   const tDir = join(work, `trans_r${round}`);
-  render(tcuts.flatMap((c) => offs.map((o) => c + o)), tDir);
-  const strips = tcuts.map((c) => {
-    const jpg = join(tDir, `strip_${c.toFixed(2)}.jpg`);
-    const ins = offs.flatMap((o) => ['-i', join(tDir, `still_${(c + o).toFixed(2)}.png`)]);
-    execFileSync('ffmpeg', ['-v', 'error', '-y', ...ins, '-filter_complex', `${offs.map((_, i) => `[${i}]scale=480:-1[s${i}]`).join(';')};${offs.map((_, i) => `[s${i}]`).join('')}hstack=${offs.length}`, '-q:v', '4', jpg]);
-    return readFileSync(jpg).toString('base64');
-  });
   // jumps: 1/30 s pairs where each lyric line appears (a drawing that makes room by snapping jumps right there)
   const jDir = join(work, `jump_r${round}`);
   const jTimes = song.cues.map((c: { start: number }) => +(c.start - 0.2).toFixed(2)).filter((x: number) => x > 0.5 && !cuts.some((c) => Math.abs(c - x) < 0.15));
-  render(jTimes.flatMap((x: number) => [x, x + 0.03]), jDir, ['--layer', 'back']);
+  // continuity: around every shot's middle, six samples (two of them one frame apart) with each sprite's box logged
+  const cSec = 1 / 30;
+  const trackTimes = shotMids.flatMap((m, i) => {
+    const [a0, b0] = [i ? cuts[i - 1] : 0, i < cuts.length ? cuts[i] : song.duration];
+    return [m - 0.5, m - 0.25, m, m + cSec, m + 0.25, m + 0.5].filter((x) => x > a0 + 0.05 && x < b0 - 0.05);
+  });
+  const [log, coverLog, qaLog, , , trackLog] = await Promise.all([
+    render(times, dir),
+    render(mids, join(work, `cover_r${round}`)),
+    render(shotMids.flatMap((x) => [x, x + 0.3]), qaDir, ['--layer', 'back']),
+    render(tcuts.flatMap((c) => offs.map((o) => c + o)), tDir),
+    render(jTimes.flatMap((x: number) => [x, x + 0.03]), jDir, ['--layer', 'back']),
+    render(trackTimes, join(work, `track_r${round}`), ['--layer', 'back', '--track']),
+  ]);
+  const cont = continuity(parseTrack(trackLog), cSec);
+  const lines = [...log.split('\n'), ...coverLog.split('\n'), ...qaLog.split('\n')];
+  const problems = [...new Set(lines.filter((l) => /code layer:|page error:/.test(l) && !l.includes('scene-use') && !l.includes('code layer: track')))];
+  // props that jump, pop, swell or sit on each other inside a shot (the user's complaints on sweet timer)
+  problems.push(...cont.hard.slice(0, 20).map((x) => `物件不連續：${x}`));
+  // a render that failed (a slow network while the page loaded its fonts) is tried once more; a still that is still
+  // missing is left out rather than ending the run
+  const stillOf = (x: number) => join(dir, `still_${x.toFixed(2)}.png`);
+  const images = times.filter((x) => existsSync(stillOf(x))).map((x) => {
+    const jpg = join(dir, `s_${x.toFixed(2)}.jpg`);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', stillOf(x), '-vf', 'scale=960:-1', '-q:v', '4', jpg]);
+    return readFileSync(jpg).toString('base64');
+  });
+  if (!images.length) throw new Error('檢查畫面全部渲染失敗');
+  // shot QA on the background alone (lyrics would count as motion)
+  const qaFile = join(qaDir, 'qa.json');
+  execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', 'python', 'scripts/lyric-vj/shot_qa.py', qaDir, shotMids.map((x) => x.toFixed(2)).join(','), qaFile], { stdio: ['ignore', 'ignore', 'inherit'] });
+  const qa: { shot: number; t: number; motion: number; detail: number; flat: number; spread: number; sat: number }[] = JSON.parse(readFileSync(qaFile, 'utf8'));
+  const weak = qa.filter((x) => x.motion < 0.02 || x.detail < 0.08).map((x) => `鏡頭 ${x.shot}：${x.motion < 0.02 ? `幾乎不動（${(x.motion * 100).toFixed(1)}% 的畫面在 0.3 秒內有變化）` : ''}${x.detail < 0.08 ? `偏空（只有 ${(x.detail * 100).toFixed(1)}% 的畫面不是底色）` : ''}`);
+  // with scene pictures, a frame mostly one flat colour is a slab over the scene, and a low-spread low-saturation
+  // frame is a grey wash over it (both came back from review as "covers the scene" on 雙截棍)
+  if (scenes.length)
+    for (const x of qa) {
+      if (x.flat > 0.45) problems.push(`鏡頭 ${x.shot}（${x.t} 秒）：一塊單色蓋住畫面 ${Math.round(x.flat * 100)}%（色塊／底板），拿掉或縮小，讓場景露出來`);
+      else if (x.spread < 0.09 && x.sat < 0.12) problems.push(`鏡頭 ${x.shot}（${x.t} 秒）：畫面灰濛濛（明暗與飽和度都太低），拿掉灰色覆蓋層，保持場景原本的濃度`);
+    }
+  // scene rotation: which scene each shot shows (reported by the renderer)
+  if (scenes.length >= 3) {
+    const byShot = new Map<number, string>();
+    for (const l of qaLog.split('\n')) {
+      const m = /scene-use (\d+) (\S+)/.exec(l);
+      if (m) byShot.set(Number(m[1]), m[2].split(',')[0]);
+    }
+    const order = [...byShot.entries()].sort((x, y) => x[0] - y[0]).map(([, id]) => id);
+    const unused = scenes.map((x) => x.id).filter((id) => !order.includes(id));
+    if (unused.length > Math.floor(scenes.length / 3)) problems.push(`這些場景完全沒用到：${unused.join('、')}（故事要走過它們）`);
+    let run = 1;
+    for (let i = 1; i < order.length; i++) {
+      run = order[i] === order[i - 1] ? run + 1 : 1;
+      if (run === 5) problems.push(`場景 ${order[i]} 連續用了 5 個以上的鏡頭（到第 ${i} 個），故事沒有往前走：換場景或明顯換取景`);
+    }
+    const blank = [...Array(shotMids.length).keys()].filter((k) => !byShot.has(k));
+    if (blank.length > shotMids.length / 3) problems.push(`有 ${blank.length} 個鏡頭沒有用任何場景圖（只有程式畫的底）：${blank.slice(0, 8).join('、')}`);
+  }
+  const strips = tcuts.flatMap((c) => {
+    const frames = offs.map((o) => join(tDir, `still_${(c + o).toFixed(2)}.png`)).filter((f) => existsSync(f));
+    if (frames.length < 2) return [];
+    const jpg = join(tDir, `strip_${c.toFixed(2)}.jpg`);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', ...frames.flatMap((f) => ['-i', f]), '-filter_complex', `${frames.map((_, i) => `[${i}]scale=480:-1[s${i}]`).join(';')};${frames.map((_, i) => `[s${i}]`).join('')}hstack=${frames.length}`, '-q:v', '4', jpg]);
+    return [readFileSync(jpg).toString('base64')];
+  });
   const jFile = join(jDir, 'jumps.json');
   try {
     execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', 'python', 'scripts/lyric-vj/jump_qa.py', jDir, jTimes.map((x: number) => x.toFixed(2)).join(','), jFile], { stdio: ['ignore', 'ignore', 'inherit'] });
@@ -264,7 +447,7 @@ function test(r: Reply, round: number) {
     /* a missing still: no jump report this round */
   }
   const jumps: string[] = existsSync(jFile) ? (JSON.parse(readFileSync(jFile, 'utf8')) as { t: number; diff: number }[]).filter((x) => x.diff > 4).map((x) => `${x.t.toFixed(2)} 秒（一格之內畫面變了 ${x.diff.toFixed(1)}）`) : [];
-  return { file, problems, images, weak: [...weak, ...jumps.map((j) => `歌詞出現時物件瞬間跳動：${j}`)], strips, tcuts };
+  return { file, problems, images, weak: [...weak, ...jumps.map((j) => `歌詞出現時物件瞬間跳動：${j}`), ...cont.bob.slice(0, 10)], strips, tcuts };
 }
 
 /** A reviewer who did not make it: sees only the stills, the brief and the user's standards. */
@@ -275,8 +458,9 @@ async function review(images: string[], weak: string[], strips: string[], tcuts:
       system: '你是嚴格的 MV 審片總監，沒有參與這支片的製作。你只看成品截圖，指出會讓觀眾覺得粗糙、普通、像模板或 AI 做的地方，以及看不清楚歌詞的地方。',
       messages: [{
         role: 'user', content: [
-          { type: 'text', text: `這是一首日本偶像歌曲的歌詞 VJ 背景動畫（歌詞疊在上面）。概念：${base.concept}\n使用者的標準：設計師等級（目標 80/100）；歌詞永遠清楚；不要大色塊閃爍、不要歌詞底板；物件和人物要有設計感、不能隨便畫；鏡頭要多且大膽；每首歌獨一無二。${notes ? `\n使用者對上一版的意見：\n${notes}` : ''}\n量測（只看背景）可能有問題的鏡頭：${weak.length ? weak.join('；') : '無'}\n以下截圖時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。列出最重要的問題（最多 10 條，最嚴重的先），每條寫哪個鏡頭、問題、具體怎麼改。` },
+          { type: 'text', text: `這是一首歌的歌詞 VJ 背景動畫（歌詞疊在上面）。概念：${base.concept}\n使用者的標準：設計師等級（目標 80/100）；歌詞永遠清楚；不要大色塊閃爍、不要歌詞底板；物件和人物要有設計感、不能隨便畫；鏡頭要多且大膽；每首歌獨一無二；要有故事性（每段是故事裡的一個事件，物件參與事件），道具在地面排成一列橫移、或用幾何圖形拼湊的具體物件（浪、山、動物）都是嚴重問題；要看得出是這個設計語言（不是通用的扁平插畫）。${notes ? `\n使用者對上一版的意見：\n${notes}` : ''}\n量測（只看背景）可能有問題的鏡頭：${weak.length ? weak.join('；') : '無'}\n以下截圖時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。列出最重要的問題（最多 10 條，最嚴重的先），每條寫哪個鏡頭、問題、具體怎麼改。` },
           ...images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
+          ...(kit ? [{ type: 'text' as const, text: `對照：這是同一個設計語言、使用者驗收通過的作品（${kit.song}）。故事不同沒關係，但材質、手感、完成度明顯不如它（例如沒有紙紋網點、大片空底色、通用貼圖）就是不及格，分數要反映出來。這個語言該有的樣子：${kit.craft}` }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: kit.image } }] : []),
           { type: 'text', text: `以下 ${strips.length} 條是轉場（${tcuts.map((x) => x.toFixed(1)).join('、')} 秒的切點，每條由左到右是切點前 0.1 秒、後 0.1、0.25、0.45 秒）：好的轉場用下一個場景的招牌元素帶出下一場（從畫面裡的物件長出、擴張、甩過去），或是乾淨的硬切；滿版色塊掃過、普通的推入／滑入／淡入淡出都算問題。` },
           ...strips.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
         ],
@@ -317,29 +501,172 @@ async function verify(rv: Review, images: string[], strips: string[]): Promise<R
 }
 
 const began = Date.now();
-let reply = await ask('high');
+/** What the run is doing, in words for the person waiting (Studio shows it under the progress bar). */
+const step = (what: string) => console.log(`##STEP ${what}`);
+
+/** Program checks on a storyboard: every section planned, real scenes and props, the story moving through scenes. */
+function checkStory(st: Story): string[] {
+  const errs: string[] = [];
+  const ids = new Set(sprites.map((x) => x.id));
+  const sceneIds = new Set(scenes.map((x) => x.id));
+  const missing = sections.map((_, i) => i).filter((i) => !st.beats.some((b) => b.section === i));
+  if (missing.length) errs.push(`這些段落沒有分鏡：${missing.join('、')}`);
+  for (const b of st.beats) {
+    if (scenes.length && !sceneIds.has(b.scene)) errs.push(`段落 ${b.section} 的場景 ${b.scene || '（空）'} 不存在，請從場景清單選`);
+    if (b.heroes.length > 2) errs.push(`段落 ${b.section} 用了 ${b.heroes.length} 個素材：每段最多 2 個（故事物件加一個配角），太多會像貼紙拼貼`);
+    const bad = b.heroes.filter((h) => !ids.has(h));
+    if (bad.length) errs.push(`段落 ${b.section} 的素材 ${bad.join('、')} 不在素材庫`);
+    if (!b.event.trim() || /^(無|沒有|none)$/i.test(b.event.trim())) errs.push(`段落 ${b.section} 沒有事件：每段要有物件做的事`);
+  }
+  if (scenes.length >= 3) {
+    const order = [...st.beats].sort((x, y) => x.section - y.section).map((b) => b.scene);
+    const used = new Set(order);
+    if (used.size < Math.min(scenes.length, Math.ceil(sections.length / 2))) errs.push(`只用了 ${used.size} 個場景，至少要走過 ${Math.min(scenes.length, Math.ceil(sections.length / 2))} 個（場景清單：${scenes.map((x) => x.id).join('、')}）`);
+    for (let i = 2; i < order.length; i++) if (order[i] === order[i - 1] && order[i] === order[i - 2]) errs.push(`段落 ${i - 2}–${i} 連續三段都在場景 ${order[i]}，故事要往前走`);
+    const frames = st.beats.map((b) => b.framing.trim());
+    if (new Set(frames).size < frames.length * 0.7) errs.push('很多段落的取景寫得一樣：每段的景別、角度或運鏡要不同');
+  }
+  return errs;
+}
+
+/** Applies an edit to the code; the finds that do not match exactly once come back as errors. */
+function applyEdits(cur: Reply, e: Edit): { next: Reply; errs: string[] } {
+  let src = cur.src;
+  const errs: string[] = [];
+  for (const [k, x] of e.edits.entries()) {
+    const n = x.find ? src.split(x.find).length - 1 : 0;
+    if (n !== 1) {
+      errs.push(`第 ${k + 1} 個修改的 find ${n === 0 ? '在目前程式裡找不到' : `出現了 ${n} 次`}：${x.find.slice(0, 80)}`);
+      continue;
+    }
+    src = src.replace(x.find, () => x.replace);
+  }
+  return { next: { idea: e.idea || cur.idea, src, sections: e.sections.length ? e.sections : cur.sections }, errs };
+}
+
+/** A revision as edits; finds that miss are sent back once, then the director rewrites in full. */
+async function revise(cur: Reply): Promise<Reply> {
+  let e = await call<Edit>(EDIT_SCHEMA);
+  let { next, errs } = applyEdits(cur, e);
+  if (errs.length) {
+    messages.push({ role: 'user', content: `這些修改套不上（find 必須是目前程式裡原樣只出現一次的一段）：\n${errs.join('\n')}\n請重新給這幾個修改（其他已經套上了，不要重複）。` });
+    e = await call<Edit>(EDIT_SCHEMA);
+    ({ next, errs } = applyEdits(next, e));
+  }
+  if (errs.length) {
+    messages.push({ role: 'user', content: '修改還是套不上：請直接回傳修改後的完整程式。' });
+    return ask();
+  }
+  return next;
+}
+
+// a run that failed part-way resumes from its last finished round (same design, props, scenes and notes)
+const runKey = JSON.stringify([base.concept, base.design, sprites.map((x) => x.id), scenes.map((x) => x.id), notes ?? '', baseline?.idea ?? '']);
+const savedFile = join(work, 'progress.json');
+const saved = existsSync(savedFile) ? (JSON.parse(readFileSync(savedFile, 'utf8')) as { key: string; reply: Reply; round: number; story?: Story }) : undefined;
+const resume = saved?.key === runKey ? saved : undefined;
+const save = (reply: Reply, round: number, story?: Story) => writeFileSync(savedFile, JSON.stringify({ key: runKey, reply, round, story }));
+
+let reply: Reply;
+let story: Story | undefined;
+let firstRound = 1;
+if (resume) {
+  step(`接續上次中斷的進度（第 ${resume.round} 輪）`);
+  reply = resume.reply;
+  story = resume.story;
+  firstRound = resume.round;
+  messages.push({ role: 'assistant', content: JSON.stringify(reply) });
+} else if (baseline) {
+  step('導演依你的意見和目前版本，構思修改並寫新版畫面');
+  reply = await ask('high');
+} else {
+  step('導演構思故事和分鏡（每段的場景、事件、主角）');
+  (messages[0].content as Anthropic.Messages.ContentBlockParam[]).push({ type: 'text', text: '第一步只做分鏡，不要寫程式：照 beats 的格式，每個段落（sections 的 index）一筆，決定場景、取景、主角素材、事件、歌詞區。分鏡要讓故事走過場景、每段有事件、取景每段不同。' });
+  story = await call<Story>(STORY_SCHEMA, 'high');
+  for (let k = 0; k < 2; k++) {
+    const errs = checkStory(story);
+    if (!errs.length) break;
+    console.log(`story check: ${errs.join(' | ')}`);
+    step('分鏡有問題，導演修正分鏡');
+    messages.push({ role: 'user', content: `分鏡檢查沒通過，請修正後輸出完整分鏡：\n${errs.map((x) => `- ${x}`).join('\n')}` });
+    story = await call<Story>(STORY_SCHEMA, 'high');
+  }
+  console.log('story:', story.story);
+  writeFileSync(join(work, 'story.json'), JSON.stringify(story, null, 1));
+  step('照分鏡寫畫面程式');
+  messages.push({ role: 'user', content: '分鏡通過。第二步：照這份分鏡寫程式（每段的場景、取景、主角、事件、歌詞區都要做到），輸出 idea、src、sections。' });
+  reply = await ask('medium');
+}
 console.log('idea:', reply.idea);
-for (let round = 1; round <= 3; round++) {
-  const r = test(reply, round);
+save(reply, firstRound, story);
+
+let last: Awaited<ReturnType<typeof test>> | undefined;
+for (let round = firstRound; round <= 3; round++) {
+  step(`第 ${round} 輪：渲染檢查畫面（物理、跳動、歌詞遮擋、色塊、灰霧、場景輪替）`);
+  const r = await test(reply, round);
+  last = r;
   console.log(`round ${round}: ${r.problems.length ? r.problems.join(' | ') : 'no errors'}; weak shots: ${r.weak.length}`);
   if (round === 3) break;
-  const rv0 = await review(r.images, r.weak, r.strips, r.tcuts);
-  const rv = await verify(rv0, r.images, r.strips);
-  writeFileSync(join(work, `review_r${round}.json`), JSON.stringify({ ...rv, weak: r.weak }, null, 1));
-  console.log(`review ${round}: ${rv.verdict} (${rv.issues.length} issues)`);
+  // one independent review, in the first round only: later rounds fix what the program measures, not taste
+  let reviewText = '';
+  if (round === firstRound) {
+    step(`第 ${round} 輪：獨立審片（只看一次）`);
+    const rv = await verify(await review(r.images, r.weak, r.strips, r.tcuts), r.images, r.strips);
+    writeFileSync(join(work, `review_r${round}.json`), JSON.stringify({ ...rv, weak: r.weak }, null, 1));
+    console.log(`review ${round}: ${rv.score} — ${rv.verdict} (${rv.issues.length} issues)`);
+    reviewText = `\n\n獨立審片的意見（沒有參與製作的人）：${rv.verdict}\n${rv.issues.map((x) => `- 鏡頭 ${x.shot}：${x.problem} → ${x.fix}`).join('\n')}\n逐條判斷審片意見（同意就改，不同意可以不改）。`;
+  } else if (!r.problems.length) break;
   messages.push({
     role: 'user',
     content: [
-      { type: 'text', text: `${r.problems.length ? `渲染時的問題（必須修）：\n${r.problems.join('\n')}\n\n` : '渲染沒有錯誤。\n\n'}量測（只看背景）可能偏空或偏靜的鏡頭：${r.weak.length ? r.weak.join('；') : '無'}\n\n獨立審片的意見（沒有參與製作的人）：${rv.verdict}\n${rv.issues.map((x) => `- 鏡頭 ${x.shot}：${x.problem} → ${x.fix}`).join('\n')}\n\n以下是成品截圖（歌詞已疊上），時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。逐條判斷審片意見（同意就改，不同意可以不改），${baseline ? '物件的細緻度和設計感不能比基準差，' : ''}${round === 2 ? '這是最後一次修改機會。' : ''}如果已經達到你滿意的水準且沒有錯誤，原樣回傳同一份；否則回傳修改後的完整版本。` },
+      { type: 'text', text: `${r.problems.length ? `程式量測到的問題（必須全部修好）：\n${r.problems.join('\n')}\n\n` : '程式量測沒有問題。\n\n'}量測（只看背景）可能偏空或偏靜的鏡頭：${r.weak.length ? r.weak.join('；') : '無'}${reviewText}\n\n以下是成品截圖（歌詞已疊上），時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。${baseline ? '物件的細緻度和設計感不能比基準差。' : ''}用 edits 修改程式：每個 find 是目前程式裡原樣只出現一次的一段，replace 是改好的內容；沒有要改就給空的 edits。` },
       ...r.images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
     ],
   });
-  const next = await ask();
+  step(`第 ${round} 輪：導演修改（只改有問題的地方）`);
+  const next = await revise(reply);
   if (next.src === reply.src && JSON.stringify(next.sections) === JSON.stringify(reply.sections) && !r.problems.length) break;
   reply = next;
   console.log('revised:', reply.idea);
+  save(reply, round + 1, story);
+}
+// the quality gate: a fresh review of the finished drawing; below PASS the director gets one more round on its notes,
+// and if it is still below, the run fails rather than hand a paying user something unusable
+step('最終品質審查');
+let final = await review(last!.images, last!.weak, last!.strips, last!.tcuts);
+console.log(`final review: ${final.score} — ${final.verdict}`);
+if (final.score < PASS) {
+  messages.push({ role: 'user', content: `最終審片只有 ${final.score} 分（最低可交付 ${PASS}）：${final.verdict}\n${final.issues.map((x) => `- 鏡頭 ${x.shot}：${x.problem} → ${x.fix}`).join('\n')}\n這一輪要把質感拉上來（材質、構圖、畫面不要空），不要只修小地方。用 edits 修改程式。` });
+  step(`品質不足（${final.score} 分），導演加修一輪`);
+  // the extra round may fail outright (a rewrite too long for one reply): then the fallback below still applies
+  try {
+    const next = await revise(reply);
+    const r4 = await test(next, 4);
+    if (r4.problems.length) console.log(`round 4: ${r4.problems.join(' | ')}`);
+    step('最終品質審查（加修後）');
+    const again = await review(r4.images, r4.weak, r4.strips, r4.tcuts);
+    console.log(`final review: ${again.score} — ${again.verdict}`);
+    if (again.score > final.score) [reply, last, final] = [next, r4, again];
+  } catch (e) {
+    console.log(`extra round failed: ${(e as Error).message}`);
+  }
+}
+// the rounds' check renders (continuity tracks, jump and transition stills: about 1 GB a round) are spent once the
+// run ends either way; only the drawing and the review stills stay
+sweepChecks();
+const usd = (usage.input * 4 + usage.output * 20) / 1e6;
+const record = { ...reply, story, score: final.score, verdict: final.verdict, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +usd.toFixed(3) };
+if (final.score < PASS) {
+  // never leave the user empty-handed: the drawing is kept aside and the song ships with the design it already has
+  // (the proven component-library look, or the last drawing that passed)
+  writeFileSync(join(out, 'codelayer_failed.json'), JSON.stringify(record, null, 1));
+  writeFileSync(savedFile, '{}');
+  console.log(`##STEP 專屬圖層 ${final.score} 分未達 ${PASS}，改用保底設計`);
+  console.log(`fallback: drawing scored ${final.score} < ${PASS}, kept the current design (${final.verdict})`);
+  process.exit(0);
 }
 writeFileSync(join(out, 'treatment.json'), JSON.stringify(apply(reply)));
-const usd = (usage.input * 4 + usage.output * 20) / 1e6;
-writeFileSync(join(out, 'codelayer.json'), JSON.stringify({ ...reply, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +usd.toFixed(3) }, null, 1));
+writeFileSync(join(out, 'codelayer.json'), JSON.stringify(record, null, 1));
+// a finished run starts the next one fresh
+writeFileSync(savedFile, '{}');
 console.log(`done: ${Math.round((Date.now() - began) / 1000)}s, $${usd.toFixed(3)}`);

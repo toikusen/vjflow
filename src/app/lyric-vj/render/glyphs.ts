@@ -61,12 +61,28 @@ export function advanceOf(char: string, s: GlyphStyle): number {
   return measureCtx.measureText(char).width;
 }
 
+/** Width of a glyph's ink (its painted strokes), which can fill the whole em in pixel and monospace faces. */
+export function inkOf(char: string, s: GlyphStyle): number {
+  measureCtx.font = fontOf(s);
+  const m = measureCtx.measureText(char);
+  return Math.max(0, m.actualBoundingBoxLeft + m.actualBoundingBoxRight);
+}
+
+/** The halo of a line over light and dark at once (engine.ts): it also gets a dark keyline. */
+export const MIXED_HALO = 'rgba(14,12,18,0.92)';
+const darkHalo = () => {
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(halo);
+  return !!m && 0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3] < 80;
+};
 /** Halo behind shadowed glyphs: dark over pictures, none over a light field (a grey smudge on paper). */
 let halo = 'rgba(0,0,0,0.85)';
 export const setHalo = (rgba: string) => (halo = rgba);
 /** A hard dark copy offset under every glyph, as a fraction of its size (print misregistration, sticker shadows). */
 let ghost: [number, number] = [0, 0];
 export const setGhost = (g: [number, number]) => (ghost = g);
+/** Multiplier on the templates' largest lyric size (a language read from far away, e.g. a terminal's big type). */
+export let sizeCap = 1;
+export const setSizeCap = (k: number) => (sizeCap = k);
 /**
  * A misregistered plate in a second ink under dark type (risograph-like): a separate coloured copy, offset, so dark
  * strokes never merge with a dark shadow. Offsets are fractions of the glyph size.
@@ -74,8 +90,11 @@ export const setGhost = (g: [number, number]) => (ghost = g);
 let inkGhost: { dx: number; dy: number; color: THREE.ColorRepresentation } | null = null;
 export const setInkGhost = (g: typeof inkGhost) => (inkGhost = g);
 
+/** A glyph's texture for a style (cached): the text effects swap in outline or contrast-face versions of a glyph. */
+export const glyphTexture = (char: string, s: GlyphStyle) => texture(char, s);
+
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow || s.outline ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -91,8 +110,14 @@ function texture(char: string, s: GlyphStyle) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   if (s.outline) {
-    ctx.lineWidth = s.outline;
     ctx.lineJoin = 'round';
+    if (halo === MIXED_HALO) {
+      // a hollow word over light and dark keeps a dark edge on both sides of its stroke, or it vanishes on the light part
+      ctx.lineWidth = s.outline + s.size * 0.08;
+      ctx.strokeStyle = 'rgba(12,10,16,0.9)';
+      ctx.strokeText(char, w / 2, h / 2);
+    }
+    ctx.lineWidth = s.outline;
     ctx.strokeStyle = '#fff';
     ctx.strokeText(char, w / 2, h / 2);
   } else {
@@ -110,11 +135,21 @@ function texture(char: string, s: GlyphStyle) {
       ctx.fillStyle = 'rgba(10,10,14,0.92)';
       ctx.fillText(char, w / 2 + ghost[0] * s.size, h / 2 + ghost[1] * s.size);
     }
+    if (s.shadow && halo === MIXED_HALO) {
+      // over light and dark at once a soft glow fades to nothing on the light part (white type on a cream band): a
+      // tight dark keyline under the glyph reads on anything
+      ctx.lineWidth = s.size * 0.1;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(12,10,16,0.9)';
+      ctx.strokeText(char, w / 2, h / 2);
+    }
     if (s.shadow) {
       // the halo is drawn dark, then the white glyph on top; the material colour tints only bright pixels
       ctx.shadowColor = halo;
-      // a light halo (dark type on a light field) stays tight: a wide one fogged dark areas it crossed
-      ctx.shadowBlur = s.size * (halo.startsWith('rgba(0,0,0') ? 0.28 : 0.1);
+      // a light halo (dark type on a light field) stays tight: a wide one fogged dark areas it crossed. Read by the
+      // halo's darkness, not its spelling: the near-black halo of a line over light and dark (rgba(14,12,18,…)) came
+      // out tight, and white type over a white band had nothing under it
+      ctx.shadowBlur = s.size * (darkHalo() ? 0.28 : 0.1);
       draw('rgba(0,0,0,0.6)');
       draw('rgba(0,0,0,0.6)');
       ctx.shadowColor = 'transparent';
@@ -167,11 +202,17 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
       mesh.add(gm);
       mesh.userData['inkGhost'] = gm;
     }
-    const advance = t.advance * ts[index].advance;
+    // kana tracking (typeset.ts) never closes the gap below the ink: a face whose kana fill the em (DotGothic16)
+    // otherwise touched its neighbours
+    const advance = Math.max(t.advance * ts[index].advance, Math.min(t.advance, inkOf(char, cs) + cs.size * 0.06));
     const gap = ts[index].gapBefore * s.size;
     x += gap;
     // glyphs of another size are centred so all sit on one baseline
-    out.push({ char, mesh, advance, x: x + advance / 2, y: 0, index, dy: -(s.size - cs.size) * 0.42, gap: gap || undefined });
+    const g: Glyph = { char, mesh, advance, x: x + advance / 2, y: 0, index, dy: -(s.size - cs.size) * 0.42, gap: gap || undefined };
+    // the text effects (text-fx.ts) find every glyph of a line, its style and its place in the cue text through this
+    mesh.userData['glyph'] = g;
+    mesh.userData['style'] = cs;
+    out.push(g);
     x += advance + tracking;
   });
   return out;

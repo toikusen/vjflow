@@ -1,4 +1,5 @@
-import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
+import { Component, computed, DestroyRef, ElementRef, inject, signal, viewChild } from '@angular/core';
 
 interface SongItem {
   id: string;
@@ -16,8 +17,11 @@ interface Language {
 }
 
 interface StudioState {
-  run: { step: string; startedAt: string; endedAt?: string; ok?: boolean; log: string[]; phase?: string; progress?: number } | null;
+  run: { step: string; startedAt: string; endedAt?: string; ok?: boolean; log: string[]; phase?: string; progress?: number; detail?: string } | null;
   design: { language: string | null; font: string | null; concept: string; motif: string | null; drawing: string | null } | null;
+  /** The last drawing missed the quality bar: the song keeps its current design (score out of 100, reviewer's words). */
+  fallback: { score: number; verdict: string } | null;
+  visualQa?: string[];
   costUSD: number;
   previews: string[];
   check: { unreadable: string[]; lingering: string[] } | null;
@@ -36,6 +40,7 @@ const STEP_LABEL: Record<string, string> = { make: '產生設計與預覽', clip
  */
 @Component({
   selector: 'app-studio-page',
+  imports: [NgTemplateOutlet],
   templateUrl: './studio.page.html',
   styleUrl: './studio.page.scss',
 })
@@ -56,7 +61,15 @@ export class StudioPage {
     const id = this.state()?.design?.language;
     return this.languages().find((l) => l.id === id)?.name ?? id ?? '';
   });
+  /** The step the user is on: 1 timing, 2 design and preview, 3 the song's own drawing, 4 output. */
+  protected readonly stage = computed(() => {
+    const st = this.state();
+    if (!this.song()?.confirmedAt && !this.unconfirmed() && !st?.design) return 1;
+    if (!st?.design) return 2;
+    return st.design.drawing || st.fallback ? 4 : 3;
+  });
   protected readonly stepLabel = STEP_LABEL;
+  private readonly logBox = viewChild<ElementRef<HTMLPreElement>>('logBox');
   protected readonly now = signal(Date.now());
 
   /** Minutes:seconds since the run started. */
@@ -115,6 +128,11 @@ export class StudioPage {
     const id = this.selected();
     if (!id) return;
     const res = await fetch(`/lyric-vj/studio/${encodeURIComponent(id)}`);
-    if (res.ok) this.state.set(await res.json());
+    if (!res.ok) return;
+    // the log follows new lines only while it is scrolled to the bottom (reading back is left alone)
+    const box = this.logBox()?.nativeElement;
+    const atBottom = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    this.state.set(await res.json());
+    if (atBottom) setTimeout(() => this.logBox()?.nativeElement.scrollTo({ top: 1e9 }));
   }
 }

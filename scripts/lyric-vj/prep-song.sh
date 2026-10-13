@@ -2,7 +2,7 @@
 # Any song from YouTube (internal testing; audio stays under out/db/, gitignored): audio → Demucs and Mel-RoFormer
 # vocal stems → plain lyrics from LRCLIB as the fallback text → song.json (LRCLIB synced lines when they pass the
 # vocal check, else the seven-timing vote).
-# usage: scripts/lyric-vj/prep-song.sh <youtube id> "<artist - title>" [language: ja (default) | en | ko]
+# usage: scripts/lyric-vj/prep-song.sh <youtube id> "<artist - title>" [language: ja (default) | en | ko | zh]
 set -euo pipefail
 yid=$1; meta=$2; lang=${3:-ja}
 VJA=~/vjanalytics

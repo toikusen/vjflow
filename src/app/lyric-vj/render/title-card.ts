@@ -2,7 +2,7 @@
 // no lyrics. Letters rise in one by one between two thin lines that draw out from the centre.
 import * as THREE from 'three';
 import { advanceOf, clamp01, easeOutCubic, GlyphStyle, makeGlyphs, placeRow } from './glyphs';
-import { color, CueLayer, CueRuntime, ShotContext, ShotLayer, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, readable, ShotContext, ShotLayer, TemplateRenderer } from './runtime';
 import { typewriter } from './typewriter';
 import { readingLatin } from '../fonts';
 import { Palette, ParamValue, Shot } from '../treatment';
@@ -31,7 +31,7 @@ export const titleCard: TemplateRenderer = {
     const cx = lower ? -W / 2 + 140 : 0;
     const cy = lower ? -300 : 0;
     const tGlyphs = makeGlyphs(title, tStyle, color(palette.text, 1.1), size * 0.04);
-    const aGlyphs = params['showArtist'] !== false && artist ? makeGlyphs(artist, aStyle, color(palette.accent, 1.2), aStyle.size * 0.35) : [];
+    const aGlyphs = params['showArtist'] !== false && artist ? makeGlyphs(artist, aStyle, color(readable(palette.accent, palette.background, 4.5), 1.2), aStyle.size * 0.35) : [];
     const rowW = (gs: typeof tGlyphs, track: number) => gs.reduce((s, g) => s + g.advance, 0) + track * Math.max(0, gs.length - 1);
     const tW = rowW(tGlyphs, size * 0.04);
     placeRow(tGlyphs, lower ? cx + tW / 2 : cx, cy, size * 0.04);
@@ -58,12 +58,15 @@ export const titleCard: TemplateRenderer = {
     }
 
     const dur = shot.end - shot.start;
-    const outAt = shot.end - Math.min(0.8, dur * 0.2);
+    // designers clear an interlude: the card shows at the start of a long gap, then the picture breathes alone
+    const hold = Number(params['hold'] ?? 6);
+    const outAt = Math.min(shot.end - Math.min(0.8, dur * 0.2), hold > 0 ? shot.start + hold : Infinity);
+    const outEnd = Math.min(shot.end, outAt + 0.8);
     return {
       group,
       update(t: number) {
         const since = t - shot.start;
-        const out = 1 - clamp01((t - outAt) / Math.max(0.1, shot.end - outAt));
+        const out = 1 - clamp01((t - outAt) / Math.max(0.1, outEnd - outAt));
         const drift = 1 + 0.025 * clamp01(since / Math.max(1, dur)); // slow push while it holds
         group.scale.setScalar(drift);
         lines.forEach((m, k) => {

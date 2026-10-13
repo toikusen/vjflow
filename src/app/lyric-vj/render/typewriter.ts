@@ -1,14 +1,15 @@
 // typewriter: the line types in character by character behind a cursor (database: 45/50 videos type lyrics in).
 import * as THREE from 'three';
 import { chunks } from '../phrases';
-import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
+import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth, sizeCap } from './glyphs';
 import { accentPulse, color, enterAt, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const TRACK = 6;
 
 /** Seconds between characters: the line finishes typing in the first ~45 % of its duration. */
-export const typeInterval = (dur: number, n: number) => Math.min(0.09, Math.max(0.03, (0.45 * dur) / Math.max(1, n)));
+// typing takes a quarter of the line, at most 0.8 s in all, so the finished line has most of its time to be read
+export const typeInterval = (dur: number, n: number) => Math.min(0.06, 0.8 / Math.max(1, n), Math.max(0.02, (0.25 * dur) / Math.max(1, n)));
 
 export const typewriter: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
@@ -17,7 +18,7 @@ export const typewriter: TemplateRenderer = {
     const rows = [...text].length > 14 ? chunks(text, 2) : [text];
     const probe: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 100 };
     const widest = Math.max(...rows.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
-    const size = Math.round(Math.max(88, Math.min(150, (100 * 0.78 * W) / widest)));
+    const size = Math.round(Math.max(88, Math.min(150 * sizeCap, (100 * 0.78 * W) / widest)));
     const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
 
@@ -52,7 +53,8 @@ export const typewriter: TemplateRenderer = {
     group.add(cursor);
 
     const n = glyphs.length;
-    const per = typeInterval(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);
+    // a line with no time to spare is up at once (typing it would leave nothing to read)
+    const per = rt.rushed ? 0 : typeInterval(rt.cue.end - rt.cue.start, n) * Math.max(0.6, rt.pace);
     tagSource(glyphs, rt.cue.text, 0);
     // word reveal: steady typing over the first part of the line
     const typedAt = (i: number) => (rt.style.reveal === 'word' ? enterAt(rt, glyphs[i], 0) : rt.showFrom + i * per);

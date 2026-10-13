@@ -13,7 +13,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       flash: { type: 'boolean', default: true, description: '踩拍時白閃' },
       tilt: { type: 'number', min: -12, max: 12, default: 0, description: '整組文字傾斜角度（度）' },
       outline: { type: 'boolean', default: false, description: '關鍵字加描邊殘影（容易有模板感，預設關閉）' },
-      align: { type: 'enum', values: ['center', 'left', 'right'], default: 'center', description: '整組文字靠左／置中／靠右（出血時固定置中）' },
+      align: { type: 'enum', values: ['center', 'left', 'right', 'auto'], default: 'center', description: '整組文字靠左／置中／靠右（出血時固定置中）（auto：程式看這個鏡頭的背景，把字放在最空的那一側）' },
       bleed: { type: 'boolean', default: false, description: '關鍵字放大到超出畫面、被邊緣裁切（當成構圖元素，副歌高潮用；讀不全也沒關係）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度（確保可讀）' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '整組文字上移的像素（避開素材主體，例如人物在下方就往上）' },
@@ -35,7 +35,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {
-      position: { type: 'enum', values: ['center', 'left'], default: 'center', description: '文字位置' },
+      position: { type: 'enum', values: ['center', 'left', 'auto'], default: 'center', description: '文字位置（auto：程式看這個鏡頭的背景，把字放在最空的那一側）' },
       dim: { type: 'number', min: 0, max: 0.9, default: 0.7, description: '背景壓暗程度（安靜段要暗）' },
     },
   },
@@ -50,7 +50,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lineWidth: { type: 'number', min: 1, max: 6, default: 2, description: '線寬（px，1080p）' },
       brackets: { type: 'boolean', default: true, description: '四角加角括號' },
       drawSec: { type: 'number', min: 0.2, max: 1.2, default: 0.45, description: '框線畫出所需秒數' },
-      align: { type: 'enum', values: ['center', 'left', 'right'], default: 'center', description: '框在畫面的位置' },
+      align: { type: 'enum', values: ['center', 'left', 'right', 'auto'], default: 'center', description: '框在畫面的位置（auto：程式看這個鏡頭的背景，把字放在最空的那一側）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.25, description: '背景壓暗程度' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '框與文字整組上移的像素（避開素材主體）' },
     },
@@ -61,7 +61,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {
-      position: { type: 'enum', values: ['center', 'bottom', 'left'], default: 'center', description: '文字位置' },
+      position: { type: 'enum', values: ['center', 'bottom', 'left', 'auto'], default: 'center', description: '文字位置（auto：程式看這個鏡頭的背景，把字放在最空的那一側）' },
       cursor: { type: 'boolean', default: true, description: '顯示游標（打完後閃爍）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
@@ -73,7 +73,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {
-      position: { type: 'enum', values: ['right', 'center', 'left'], default: 'right', description: '直排欄在畫面的位置' },
+      position: { type: 'enum', values: ['right', 'center', 'left', 'auto'], default: 'right', description: '直排欄在畫面的位置（auto：程式看這個鏡頭的背景，把字放在最空的那一側）' },
       step: { type: 'number', min: 0, max: 1.5, default: 0.6, description: '每欄起點下移量（字高的倍數）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
@@ -85,7 +85,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     defaultEnter: 'fade',
     defaultExit: 'fade',
     params: {
-      position: { type: 'enum', values: ['center', 'lower', 'left'], default: 'center', description: '文字位置' },
+      position: { type: 'enum', values: ['center', 'lower', 'left', 'auto'], default: 'center', description: '文字位置（auto：程式看這個鏡頭的背景，把字放在最空的那一側）' },
       weight: { type: 'number', min: 0, max: 0.06, default: 0.035, description: '筆畫加粗（字高的倍數；細字型在大螢幕上要加粗）' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
@@ -108,6 +108,7 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     params: {
       layout: { type: 'enum', values: ['center', 'lower-left'], default: 'center', description: 'center：置中大標；lower-left：左下角小標（間奏用，不搶畫面）' },
       showArtist: { type: 'boolean', default: true, description: '顯示歌手名' },
+      hold: { type: 'number', min: 0, max: 30, default: 6, description: '標題停留秒數，之後淡出、只留背景（設計師的間奏多半清掉字讓畫面呼吸）；0 = 整段都顯示' },
       logo: { type: 'boolean', default: true, description: '有上傳 LOGO 時顯示' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度' },
     },
@@ -124,6 +125,76 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       flash: { type: 'boolean', default: false, description: '踩拍時亮閃' },
       dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
+    },
+  },
+  stack: {
+    id: 'stack',
+    description: '蓄力堆疊：同一個鏡頭裡的每一句落在畫面中下方，之前的句子被往上推、縮小、變暗，一句一句堆到快滿版，鏡頭結束時一起清掉。用在進副歌前的蓄力段（build-up），鏡頭結束點放在 drop 上；一個鏡頭 3–6 句。',
+    defaultEnter: 'slam',
+    defaultExit: 'cut',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度' },
+      pair: { type: 'boolean', default: false, description: '兩句模式：只留上一句（縮小在上方），下一句落下時淡出（快歌由程式設定）' },
+    },
+  },
+  array: {
+    id: 'array',
+    description: '重複詞陣列：這句的關鍵詞（強調範圍，否則最長的詞組）鋪滿畫面成一排排小字、相鄰行反向滑動，唱的那句大字疊在上面；踩拍時陣列亮一下。用在重複的口號、應援、副歌標語（例如「哼哼哈兮」「いつまでも」），一首最多 2–3 次。',
+    defaultEnter: 'pop',
+    defaultExit: 'cut',
+    params: {
+      rows: { type: 'number', min: 4, max: 10, default: 7, description: '陣列行數' },
+      speed: { type: 'number', min: 30, max: 220, default: 90, description: '滑動速度（像素／秒）' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.45, description: '背景壓暗程度' },
+    },
+  },
+  couplet: {
+    id: 'couplet',
+    description: '對句：兩句相對的歌詞（對仗、問答、你／我）左右對望：第一句靠中線排在左上，第二句從右邊應答排在右下，中間一條直線；第二句出現時第一句留著變暗。一個鏡頭放成對的 2 句（或 4 句）。',
+    defaultEnter: 'wipe',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+    },
+  },
+  quote: {
+    id: 'quote',
+    description: '台詞：把這句當成角色說的話：大大的「」（英文用 “ ”）先落下，字在中間逐字打出，靠左排。用在歌詞裡的對白、引用、自言自語、「她說」的句子；不要連續用。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+    },
+  },
+  orbit: {
+    id: 'orbit',
+    description: '環繞：字沿著一段圓弧排在畫面上方，整圈慢慢轉，字從弧線後方滑進來，配一圈淡淡的圓環。用在夢幻、循環、時間、宇宙、輪迴、旋轉意象的句子；短句最好（12 字內）。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      direction: { type: 'enum', values: ['cw', 'ccw'], default: 'cw', description: '轉動方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+    },
+  },
+  ribbon: {
+    id: 'ribbon',
+    description: '緞帶：整句字沿著一條慢慢流動的波浪線排列，每個字隨曲線傾斜，字下有一條強調色細帶跟著畫出來。用在風、河、海浪、流れ、飄、思緒流動、旋律拉長的句子；一首 1–3 次，不要連續用。',
+    defaultEnter: 'fade',
+    defaultExit: 'fade',
+    params: {
+      flow: { type: 'enum', values: ['right', 'left'], default: 'right', description: '波往哪邊流' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.3, description: '背景壓暗程度' },
+    },
+  },
+  tunnel: {
+    id: 'tunnel',
+    description: '隧道：關鍵詞重複排在隧道四面牆上，一圈圈從畫面中心往鏡頭衝過來，唱的那句大而清楚地放在正前方。用在衝刺、穿越、加速、墜落、無限、時間倒流的句子或副歌爆點；一首最多 2 次，抒情慢歌通常不用。',
+    defaultEnter: 'slam',
+    defaultExit: 'fade',
+    params: {
+      direction: { type: 'enum', values: ['out', 'in'], default: 'out', description: 'out 衝向鏡頭，in 往深處退' },
+      speed: { type: 'number', min: 0.1, max: 0.5, default: 0.22, description: '每秒前進幾分之一圈' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度' },
     },
   },
 };

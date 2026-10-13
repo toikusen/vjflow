@@ -34,3 +34,23 @@ describe('readingLatin', () => {
     expect(readingLatin('Cormorant Garamond')).toBe('Cormorant Garamond');
   });
 });
+
+import { facesFor, FONTS as ALL, hanOf, scriptOf, TC_FOR } from './fonts';
+
+describe('Chinese lyrics', () => {
+  it('tells Japanese, Chinese and Latin lyrics apart', () => {
+    expect(scriptOf('世界のつづき')).toBe('ja');
+    expect(scriptOf('快使用雙截棍 哼哼哈兮')).toBe('zh');
+    expect(scriptOf('Love you kill you')).toBe('latin');
+  });
+
+  it('gives Chinese lyrics a Traditional Chinese counterpart for every Japanese face', () => {
+    for (const f of ALL.filter((x) => hanOf(x.family) === 'ja')) {
+      const [tc] = facesFor([f.family], 'zh');
+      expect(hanOf(tc), f.family).toBe('tc');
+      expect(TC_FOR[f.family], f.family).toBeDefined();
+    }
+    expect(facesFor(['Zen Old Mincho', 'Montserrat'], 'zh')).toEqual(['Chiron Sung HK', 'Montserrat']);
+    expect(facesFor(['Zen Old Mincho'], 'ja')).toEqual(['Zen Old Mincho']);
+  });
+});

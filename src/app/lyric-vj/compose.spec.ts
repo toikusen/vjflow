@@ -97,6 +97,16 @@ describe('editorPass', () => {
     expect(t.cues[1].enter).toBe('wipe');
     expect(t.cues[2]).toMatchObject({ enter: 'slam', exit: 'cut', reveal: 'line' });
   });
+
+  it('caps the showy text effects per song', async () => {
+    const { editorPass } = await import('./compose');
+    const t = tr([shot('a', 10, 'stair')]);
+    t.cues = Array.from({ length: 5 }, (_, i) => ({ cueId: `c${i}`, shot: 'a', enter: 'flap', exit: 'fade', reveal: 'line', emphasis: [{ from: 0, to: 1, method: 'liquid' }] })) as TreatmentV3['cues'];
+    editorPass(t, new Map());
+    // five lines: rise takes at most 2 (a quarter, at least 2), so both overflows still fit
+    expect(t.cues.map((c) => c.enter)).toEqual(['flap', 'flap', 'flap', 'rise', 'rise']);
+    expect(t.cues.map((c) => c.emphasis![0].method)).toEqual(['liquid', 'liquid', 'hollow', 'hollow', 'hollow']);
+  });
 });
 
 describe('short title cards', () => {
@@ -107,5 +117,47 @@ describe('short title cards', () => {
     t.cues = [];
     editorPass(t, new Map());
     expect(t.shots[0].template).toBe('quiet');
+  });
+
+  it('keeps a language without quiet in its own templates', async () => {
+    const { editorPass } = await import('./compose');
+    const t = tr([shot('a', 10, 'title-card'), shot('b', 14, 'typewriter')]);
+    t.shots[0].end = 14;
+    t.cues = [];
+    Object.assign(t, { language: 'terminal' }); // before the design pass: the shot pass's language
+    editorPass(t, new Map());
+    expect(t.shots[0].template).toBe('typewriter');
+  });
+});
+
+describe('planSides', () => {
+  it('moves a line off the side its section fills and keeps lines already clear', async () => {
+    const { planSides } = await import('./compose');
+    const win = { kind: 'ui', type: 'code', color: '#3DFF6E', x: -0.6, y: 0 } as const;
+    const t = { ...tr([shot('a', 0, 'frame-split', { align: 'left' }), shot('b', 5, 'frame-split', { align: 'right' }), shot('c', 10, 'typewriter', { position: 'auto' })]), graphics: { sections: [{ start: 0, layers: [win] }] } } as unknown as TreatmentV3;
+    const fixes = planSides(t);
+    expect(t.shots.map((s) => Object.values(s.params)[0])).toEqual(['right', 'right', 'auto']);
+    expect(fixes).toHaveLength(1);
+  });
+});
+
+describe('stackRushed', () => {
+  it('stacks the shots whose lines are sung faster than they read, at most half of them', async () => {
+    const { stackRushed } = await import('./compose');
+    const cue = (id: string, start: number, len: number, text: string) => ({ id, start, end: start + len, text });
+    const cues = [cue('a', 0, 0.8, 'とても長い歌詞の一行です'), cue('b', 1, 0.8, 'もう一つの長い歌詞です'), cue('c', 10, 4, '短い'), cue('d', 15, 4, '短い')];
+    const t = { ...tr([shot('s1', 0, 'typewriter'), shot('s2', 10, 'typewriter')]), cues: [{ cueId: 'a', shot: 's1' }, { cueId: 'b', shot: 's1' }, { cueId: 'c', shot: 's2' }, { cueId: 'd', shot: 's2' }] } as unknown as TreatmentV3;
+    expect(stackRushed(t, cues)).toHaveLength(1);
+    expect(t.shots.map((s) => s.template)).toEqual(['stack', 'typewriter']);
+  });
+});
+
+describe('editorPass symbols', () => {
+  it('keeps at most two drawn signs per song', async () => {
+    const { editorPass } = await import('./compose');
+    const sym = [{ from: 0, to: 1, method: 'symbol', symbol: 'heart' }];
+    const t = { ...tr([shot('s1', 0, 'typewriter')]), cues: ['a', 'b', 'c'].map((id) => ({ cueId: id, shot: 's1', enter: 'wipe', exit: 'cut', emphasis: structuredClone(sym) })) } as unknown as TreatmentV3;
+    editorPass(t, new Map());
+    expect(t.cues.map((c) => c.emphasis?.length)).toEqual([1, 1, 0]);
   });
 });

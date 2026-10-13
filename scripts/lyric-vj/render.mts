@@ -7,12 +7,13 @@ import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
 import { jobIdFor, jobStatus } from './status.mts';
 import { parseArgs } from 'node:util';
-import { timingGate } from '../../src/app/lyric-vj/timing-qa';
+import { endAtVoice, silentTail, timingGate } from '../../src/app/lyric-vj/timing-qa';
+import { frameStats, visualIssues, type FrameStats } from '../../src/app/lyric-vj/visual-qa';
 import { keyPhrases, splitSongTitle } from '../../src/app/lyric-vj/structure';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
-import { alignOffset, SongTimeline } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, SongTimeline, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import type { AssetSource, RenderJob } from '../../src/app/lyric-vj/render/engine';
 import { decode } from './media.mts';
@@ -25,6 +26,7 @@ const { values: a } = parseArgs({
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
     stills: { type: 'string' }, font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
+    track: { type: 'boolean', default: false }, // QA: log sprite boxes per frame
     'no-video': { type: 'boolean', default: false }, // still version: every clip replaced by the image it starts from
     'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
     job: { type: 'string' },
@@ -62,13 +64,18 @@ for (const s of Object.values(assets)) {
   s.url = url(s.url);
   if (s.frames) s.frames.pattern = url(s.frames.pattern);
 }
+// where the voice is, from the vocal stem: a line leaves after its real end, not after a stretch of silence the timing
+// ran on into, and the check reports lines left up over silence
+const vocals = song.audio.vocals && existsSync(song.audio.vocals) ? vocalActivity(decode(song.audio.vocals, 22050), 22050) : undefined;
 const job: RenderJob = {
   fps, window: win, beats: song.beats, beatStrength: song.beatStrength, tempo: song.tempo,
-  cues: cuesIn(song, win),
+  cues: cuesIn(song, win).map((c) => (vocals ? { ...c, end: endAtVoice(c, vocals) } : c)),
+  singers: song.singers,
   treatment: checked.treatment, assets,
   fonts: { family: a.font, display: a['font-display'], body: a['font-body'], script: a['font-script'] },
   meta: { ...splitSongTitle(song.title), logo: a.logo ? url(a.logo) : undefined },
   layer: a.layer === 'text' || a.layer === 'back' ? a.layer : undefined,
+  track: !!a.track,
 };
 const alpha = job.layer === 'text';
 const ext = alpha ? 'mov' : 'mp4';
@@ -96,25 +103,54 @@ const browser = await chromium.launch({ channel: 'chrome', args: ['--force-devic
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   page.on('pageerror', (e) => console.error('page error:', e.message));
+  // a texture that fails to load surfaces only as 'page error: Event': name the file
+  page.on('requestfailed', (r) => console.error('request failed:', r.url(), r.failure()?.errorText));
+  page.on('response', (r) => r.status() >= 400 && console.error('http', r.status(), r.url()));
   page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && console.error(m.text()));
-  await page.goto(pageUrl);
-  await page.waitForSelector('body[data-ready="1"]', { timeout: 120_000 });
-  return page;
+  // a busy machine (several songs at once) can miss the ready timeout: one more try with longer patience before the
+  // song fails (three style tests started together all timed out, then rendered fine one by one)
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.goto(pageUrl);
+      await page.waitForSelector('body[data-ready="1"]', { timeout: attempt ? 300_000 : 120_000 });
+      return page;
+    } catch (e) {
+      if (attempt >= 1 || (e as Error).name !== 'TimeoutError') throw e;
+      console.error('render page not ready in 120 s, retrying');
+    }
+  }
 }
 const shoot = (page: Page, type: 'jpeg' | 'png') => page.locator('#stage').screenshot({ type, ...(type === 'jpeg' ? { quality: 92 } : { omitBackground: true }) });
 
 try {
   if (a.stills) {
     const page = await openPage();
+    const frames: FrameStats[] = [];
     for (const t of a.stills.split(',').map(Number)) {
       await page.evaluate((x) => window.renderAt(x), t);
-      writeFileSync(join(out, `still_${t.toFixed(2)}.png`), await shoot(page, 'png'));
+      const png = await shoot(page, 'png');
+      writeFileSync(join(out, `still_${t.toFixed(2)}.png`), png);
+      // a thumbnail's pixels, decoded by the page (no image library here), for the frame checks
+      const px = await page.evaluate(async (b64) => {
+        const bmp = await createImageBitmap(await (await fetch(`data:image/png;base64,${b64}`)).blob());
+        const c = new OffscreenCanvas(192, 108).getContext('2d')!;
+        c.drawImage(bmp, 0, 0, 192, 108);
+        return Array.from(c.getImageData(0, 0, 192, 108).data);
+      }, png.toString('base64'));
+      frames.push(frameStats(t, px));
     }
     // a pre-render check (no full render needed): lines too short to read, lines left over an instrumental
     const m = await page.evaluate(() => window.vjMetrics());
     const check = {
       unreadable: m.cues.filter((c) => !c.ok).map((c) => `${c.id} ${c.text}（${c.readableSec.toFixed(1)}/${c.requiredSec.toFixed(1)}s）`),
-      lingering: m.cues.filter((c) => c.lingerSec > 4).map((c) => `${c.id} ${c.text}（唱完後還留 ${c.lingerSec.toFixed(1)}s）`),
+      // lingering = up over silence: measured on the vocal stem (a held note or a backing vocal is still singing; from
+      // the last character's start alone, every held ending was flagged); without a stem, the old 4 s rule
+      lingering: (() => {
+        const tail = (c: (typeof m.cues)[number]) => (vocals ? silentTail(vocals, c.lastSung, c.goneAt) : c.lingerSec - 4);
+        // the breathing a line is given on purpose: 1.2 s hold + up to 1 s fade after its end → over 2.5 s is a fault
+        return m.cues.filter((c) => tail(c) > (vocals ? 2.5 : 0)).map((c) => `${c.id} ${c.text}（人聲停了還留 ${tail(c).toFixed(1)}s）`);
+      })(),
+      visual: visualIssues(frames),
     };
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     console.log('stills written to', out, JSON.stringify(check));

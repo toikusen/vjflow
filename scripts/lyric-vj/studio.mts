@@ -3,7 +3,7 @@
 // user's notes (which also become lessons for later songs), full render, the transparent lyric layer, LRC.
 // Each song works in <song dir>/studio/; one run per song at a time; output streams into an in-memory log.
 import { spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statfsSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { phraseBoundaries } from '../../src/app/lyric-vj/phrases';
 import { toLrc, type SongTimeline } from '../../src/app/lyric-vj/timeline';
@@ -19,14 +19,16 @@ export interface StudioRun {
   /** What is running now (for the page) and the step's overall progress 0..1. */
   phase?: string;
   progress?: number;
+  /** The step inside the phase, in words for the person waiting (e.g. the review round, an automatic retry). */
+  detail?: string;
 }
 
-type Phase = 'director' | 'build' | 'props' | 'baseline' | 'code' | 'stills' | 'clip' | 'render';
-const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', build: '生成背景圖與素材庫', props: '生成素材庫', baseline: '整理目前版本當基準', code: '導演繪製專屬圖層', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
+type Phase = 'director' | 'build' | 'qa' | 'props' | 'baseline' | 'code' | 'stills' | 'clip' | 'render';
+const PHASE_LABEL: Record<Phase, string> = { director: '導演設計中', build: '生成背景圖與素材庫', qa: '檢查畫面', props: '生成素材庫', baseline: '整理目前版本當基準', code: '導演繪製專屬圖層', stills: '算預覽畫面', clip: '渲染 30 秒動態預覽', render: '渲染完整影片' };
 /** Each step's phases and their share of its progress bar (rough time shares). */
 const PLAN: Record<string, [Phase, number][]> = {
-  make: [['director', 0.45], ['build', 0.3], ['stills', 0.05], ['clip', 0.2]],
-  design: [['director', 0.45], ['props', 0.3], ['stills', 0.05], ['clip', 0.2]],
+  make: [['director', 0.42], ['build', 0.28], ['qa', 0.06], ['stills', 0.05], ['clip', 0.19]],
+  design: [['director', 0.42], ['props', 0.28], ['qa', 0.06], ['stills', 0.05], ['clip', 0.19]],
   props: [['props', 1]],
   revise: [['baseline', 0.05], ['code', 0.75], ['stills', 0.05], ['clip', 0.15]],
   draw: [['code', 0.8], ['stills', 0.05], ['clip', 0.15]],
@@ -35,9 +37,10 @@ const PLAN: Record<string, [Phase, number][]> = {
   clip: [['clip', 1]],
 };
 /** Seconds a phase usually takes when it prints nothing countable (its bar fills by time, never past 95 %). */
-const TYPICAL: Partial<Record<Phase, number>> = { director: 240, build: 240, props: 240, baseline: 60, code: 1300, stills: 25 };
+const TYPICAL: Partial<Record<Phase, number>> = { director: 240, build: 240, props: 240, baseline: 60, code: 1300, stills: 25, qa: 60 };
 
 const runs = new Map<string, StudioRun>();
+export const MIN_FREE = 3e9;
 const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
 
 /** The studio folder of a song (song.json's folder + /studio). */
@@ -52,6 +55,10 @@ export function studioState(songFile: string, outRoot: string) {
   const director = read(join(dir, 'director.json'));
   const costs = read(join(dir, 'assets', 'costs.json')) as { usd: number }[] | undefined;
   const drawing = read(join(dir, 'codelayer.json')) as { idea: string; costUSD: number } | undefined;
+  // a drawing that missed the quality bar (codelayer.mts kept the current design instead), newer than any that passed
+  const failedFile = join(dir, 'codelayer_failed.json');
+  const passedFile = join(dir, 'codelayer.json');
+  const failed = existsSync(failedFile) && (!existsSync(passedFile) || statSync(failedFile).mtimeMs > statSync(passedFile).mtimeMs) ? (read(failedFile) as { score: number; verdict: string }) : undefined;
   const props = read(join(dir, 'props', 'props.json')) as { costUSD: number; sprites: number } | undefined;
   const library = join(dir, 'props', 'library', 'contact.jpg');
   const drawn = !!t?.graphics?.sections?.some((s: { layers: { kind: string }[] }) => s.layers.some((l) => l.kind === 'code'));
@@ -63,7 +70,10 @@ export function studioState(songFile: string, outRoot: string) {
       motif: t.motif ? `${t.motif.kind}${t.motif.variant ? `/${t.motif.variant}` : ''}` : null,
       drawing: drawn ? (drawing?.idea ?? null) : null,
     },
-    costUSD: +(((director?.costUSD as number) ?? 0) + (costs ?? []).reduce((s, x) => s + x.usd, 0) + (drawn ? (drawing?.costUSD ?? 0) : 0) + (props?.costUSD ?? 0)).toFixed(2),
+    costUSD: +(((director?.costUSD as number) ?? 0) + (costs ?? []).reduce((s, x) => s + x.usd, 0) + (drawn ? (drawing?.costUSD ?? 0) : 0) + ((failed as { costUSD?: number } | undefined)?.costUSD ?? 0) + (props?.costUSD ?? 0)).toFixed(2),
+    fallback: failed ? { score: failed.score, verdict: failed.verdict } : null,
+    // frame-check problems the director's one retry did not fix (qa.mts)
+    visualQa: ((read(join(dir, 'visual-qa.json')) as { remaining?: string[] } | undefined)?.remaining ?? []),
     props: existsSync(library) ? { contact: rel(library), sprites: props?.sprites ?? null } : null,
     feedback: existsSync(join(dir, 'feedback.txt')) ? readFileSync(join(dir, 'feedback.txt'), 'utf8') : '',
     previews: list(join(dir, 'preview'), /^still_.*\.png$/),
@@ -79,6 +89,10 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
   if (!song.timingConfirmedAt && step !== 'lrc' && !opts.unconfirmed) return '請先在時間編輯器確認歌詞時間（或勾選「時間還沒確認也先試做」）';
   const dir = studioDir(songFile);
   mkdirSync(dir, { recursive: true });
+  // refuse before spending anything: a render that runs the disk dry fails half way, after the money is gone
+  // (four style tests died at 400 MB free); a full render needs about 2 GB while it works
+  const free = statfsSync(dir).bavail * statfsSync(dir).bsize;
+  if (step !== 'lrc' && free < MIN_FREE) return `伺服器空間不足（剩 ${(free / 1e9).toFixed(1)} GB），請稍後再試`;
   const notes = (opts.feedback ?? '').trim();
   if (step === 'revise' && !notes) return '請先寫下要修改的意見';
   if (step === 'revise' && !existsSync(join(dir, 'codelayer.json'))) return '這首歌還沒有專屬圖層，請先產生設計';
@@ -101,9 +115,14 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
   const preview = `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${assets} --start 0 --end ${end} --stills ${(song.duration * 0.18).toFixed(2)},${(song.duration * 0.45).toFixed(2)},${(song.duration * 0.8).toFixed(2)} --out ${q(join(dir, 'preview'))}`;
   const render = (layer?: string) => `npx tsx scripts/lyric-vj/render.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --assets ${assets} --start 0 --end ${end} --out ${q(dir)} --fps 60${layer ? ` --layer ${layer}` : ''} && rm -rf ${q(join(dir, 'render'))} ${q(join(dir, 'segments'))}`;
   const mark = (p: Phase) => `echo '##PHASE ${p}'`;
+  // the frame check (qa.mts): blank or black-holed frames send the design back to the director once; never fails the
+  // job, but a check that never ran is shown as an open problem, not as a clean design
+  const qa = `(npx tsx scripts/lyric-vj/qa.mts --song ${q(songFile)} --dir ${q(dir)} || echo '{"remaining":["畫面檢查沒有完成，設計尚未驗收"]}' > ${q(join(dir, 'visual-qa.json'))})`;
   // the song's own drawing layer; when it fails the song keeps its library look
   const library = join(dir, 'props', 'library');
-  const code = (extra = '') => `(npx tsx scripts/lyric-vj/codelayer.mts --song ${q(songFile)} --dir ${q(dir)} --out ${q(dir)} $( [ -f ${q(join(library, 'library.json'))} ] && echo --sprites ${q(library)} )${extra} || echo '專屬圖層失敗，沿用元件庫設計')`;
+  // the drawing's worlds: every picture of the design, full-bleed (cached ones are reused); a failure leaves it without
+  const scenes = `(npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still --scenes || echo '場景圖失敗，專屬圖層不用場景')`;
+  const code = (extra = '') => `(npx tsx scripts/lyric-vj/codelayer.mts --song ${q(songFile)} --dir ${q(dir)} --out ${q(dir)} $( [ -f ${q(join(library, 'library.json'))} ] && echo --sprites ${q(library)} )${extra} || { echo '專屬圖層失敗（重按一次會從中斷的地方接著做）'; exit 1; })`;
   // the prop library: a failed one leaves the drawing without sprites (it draws its own shapes)
   const props = `(npx tsx scripts/lyric-vj/props.mts --song ${q(songFile)} --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'props'))} || echo '素材庫失敗，專屬圖層不用素材')`;
   // the current drawing as the baseline of a revision: its code and stills across the song
@@ -119,7 +138,10 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
       // go without pictures, which a graphic look rarely shows); a failed drawing never fails the step
       // pictures and props don't depend on each other: both at once; the drawing then acts with the props
       mark('build'),
-      `{ ${props} & pp=$!; npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still; ar=$?; wait $pp; [ $ar -eq 0 ]; }`,
+      // exit 3: some clips fell back to stills, which still makes a song
+      `{ ${props} & pp=$!; npx tsx scripts/lyric-vj/assets.mts --treatment ${q(join(dir, 'treatment.json'))} --out ${q(join(dir, 'assets'))} --style-id emotional --tier still; ar=$?; wait $pp; [ $ar -eq 0 ] || [ $ar -eq 3 ]; }`,
+      mark('qa'),
+      qa,
       // the user judges the direction on this preview before the drawing (the expensive part) is made: 'draw'
       mark('stills'),
       preview,
@@ -132,6 +154,8 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
       `npx tsx scripts/lyric-vj/direct.mts --song ${q(songFile)} --start 0 --end ${end} --out ${q(dir)} --design-only ${q(join(dir, 'shots.json'))} --history out/design-history.json${lang ? ` --design-language ${lang}` : ''}`,
       mark('props'),
       props,
+      mark('qa'),
+      qa,
       mark('stills'),
       preview,
       mark('clip'),
@@ -142,8 +166,8 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
     clip: [mark('clip'), clipCmd()],
     props: [mark('props'), props],
     // a fresh drawing on the same design and props (after a failed one, or to see another take)
-    draw: [mark('code'), code(), mark('stills'), preview, mark('clip'), clipCmd()],
-    revise: [mark('baseline'), baseline, mark('code'), code(` --baseline ${q(baseDir)} --feedback ${q(join(dir, 'feedback.txt'))}`), mark('stills'), preview, mark('clip'), clipCmd()],
+    draw: [mark('code'), scenes, code(), mark('stills'), preview, mark('clip'), clipCmd()],
+    revise: [mark('baseline'), baseline, mark('code'), scenes, code(` --baseline ${q(baseDir)} --feedback ${q(join(dir, 'feedback.txt'))}`), mark('stills'), preview, mark('clip'), clipCmd()],
   }[step];
   function clipCmd() {
     // a 30 s moving preview from 10 s before the first chorus drop (the moment that sells the design); the treatment
@@ -167,7 +191,13 @@ export function startStep(songFile: string, step: StudioStep, opts: { language?:
         phase = m[1] as Phase;
         phaseAt = Date.now();
         run.phase = PHASE_LABEL[phase];
+        run.detail = undefined;
         setInner(0);
+        continue;
+      }
+      const d = /^##STEP (.+)/.exec(line);
+      if (d) {
+        run.detail = d[1];
         continue;
       }
       run.log.push(line);

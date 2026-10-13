@@ -60,8 +60,10 @@ describe('validateTreatment', () => {
     t.shots[0].template = 'nope';
     t.shots[1].params = { frameWidth: 'wide' as unknown as number, bogus: 1 };
     const r = validateTreatment(t, song, win, TEMPLATES);
-    expect(r.errors.join('\n')).toMatch(/c999/);
-    expect(r.errors.join('\n')).toMatch(/強調範圍/);
+    expect(r.fixes.join("\n")).toMatch(/c999/); // a style for a line not in the song (deleted in the editor) is dropped
+    expect(r.errors.join('\n')).not.toMatch(/強調範圍/); // trimmed, not a failed render
+    expect(r.fixes.join('\n')).toMatch(/截到句尾/);
+    expect(r.treatment.cues[0].emphasis![0].to).toBeLessThan(99);
     expect(r.errors.join('\n')).toMatch(/未知模板 nope/);
     expect(r.errors.join('\n')).toMatch(/沒有參數 bogus/);
     expect(r.errors.join('\n')).toMatch(/frameWidth 必須是數字/);
@@ -79,5 +81,17 @@ describe('validateTreatment', () => {
     const c3 = r.treatment.cues.find((c) => c.cueId === 'c003')!;
     expect([c3.enter, c3.accents]).toEqual(['fade', []]);
     expect(r.fixes.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('lyrics edited after the design', () => {
+  it('drops the style of a deleted line and styles a line added later', async () => {
+    const { validateTreatment } = await import('./treatment');
+    const { TEMPLATES } = await import('./templates');
+    const song = { title: 't', duration: 20, tempo: 120, beats: [], downbeats: [], sections: [], cues: [{ id: 'new1', start: 2, end: 4, text: '新しい', timingSource: 'lrc', confidence: 'verified' }] } as never;
+    const t = { concept: '', styleAnchor: { prompt: '', palette: { background: '#000000', text: '#ffffff', accent: '#ff0000', glow: '#ffffff' } }, assets: [], shots: [{ id: 's1', start: 0, end: 20, template: 'quiet', params: {}, camera: 'static', transitionIn: 'cut' }], cues: [{ cueId: 'gone', shot: 's1', enter: 'fade', exit: 'fade' }] } as never;
+    const r = validateTreatment(t, song, { start: 0, end: 20 }, TEMPLATES);
+    expect(r.errors).toEqual([]);
+    expect(r.treatment.cues.map((c) => c.cueId)).toEqual(['new1']);
   });
 });

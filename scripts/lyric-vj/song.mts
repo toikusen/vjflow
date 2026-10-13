@@ -114,7 +114,7 @@ if (a.lrc) {
       const altVocals = a['vocals-alt'];
       const alt = timeOn(altVocals, '_alt', lines, txt, vocalActivity(decode(altVocals, SR), SR));
       const mmsFile = join(a.out, 'mms_alt.json');
-      if (!existsSync(mmsFile)) py(['torch', 'torchaudio', 'pykakasi', 'soundfile'], 'mms_align.py', [altVocals, txt, mmsFile]);
+      if (!existsSync(mmsFile)) py(['torch', 'torchaudio', 'pykakasi', 'pypinyin', 'soundfile'], 'mms_align.py', [altVocals, txt, mmsFile, '--language', a.language!]);
       const timings = [primary.raw, startsById(primary.combined), startsById(primary.main), alt.raw, startsById(alt.combined), startsById(alt.main), linesById(mmsFile, lines.length)];
       cues = voteStarts(primary.main, timings.filter((x): x is Map<string, number> => !!x));
       voted = true;

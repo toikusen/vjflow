@@ -1,6 +1,18 @@
 // Render page entry (bundled by scripts/lyric-vj/render.mts): exposes ready / renderAt / metrics to the driver.
-import { googleFontsUrl } from '../fonts';
+import { contrastFace, DEFAULT_FAMILY, FONTS, googleFontsUrl, readingLatin } from '../fonts';
+import { quietFace } from './quiet';
 import { LyricVjEngine, RenderJob } from './engine';
+
+/** Every family a job can draw with: its faces, their quiet and contrast partners, and any font named in its look. */
+function jobFamilies(job: RenderJob): string[] {
+  const d = job.treatment.design;
+  const main = job.fonts?.family ?? d?.font ?? DEFAULT_FAMILY;
+  const named = new Set<string>();
+  // graphic layers (stamps, seals, labels) may name their own font
+  JSON.stringify(job.treatment.graphics ?? {}, (k, v) => (k === 'font' && typeof v === 'string' && named.add(v), v));
+  const accent = d?.accentFont ?? 'Montserrat';
+  return [...new Set([main, job.fonts?.display, job.fonts?.body, job.fonts?.script, accent, readingLatin(accent), 'Montserrat', quietFace(main), contrastFace(main), DEFAULT_FAMILY, 'Zen Old Mincho', ...named])].filter((f): f is string => !!f && FONTS.some((x) => x.family === f));
+}
 
 declare global {
   interface Window {
@@ -12,13 +24,14 @@ declare global {
   }
 }
 
-// the stylesheet must be in place before document.fonts.load can find the faces
+const job: RenderJob = await (await fetch(new URLSearchParams(location.search).get('job')!)).json();
+// QA renders log sprite boxes per frame (graphics.ts)
+(globalThis as { __vjTrack?: boolean }).__vjTrack = !!job.track;
+// the stylesheet must be in place before document.fonts.load can find the faces; only this song's faces are asked for
 await new Promise<void>((resolve, reject) => {
-  const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: googleFontsUrl(), onload: () => resolve(), onerror: reject });
+  const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: googleFontsUrl(jobFamilies(job)), onload: () => resolve(), onerror: reject });
   document.head.append(link);
 });
-
-const job: RenderJob = await (await fetch(new URLSearchParams(location.search).get('job')!)).json();
 // a transparent page for the lyric layer
 if (job.layer === 'text') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);

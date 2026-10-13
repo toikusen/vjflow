@@ -51,3 +51,12 @@ describe('planCut', () => {
     expect(p.recapAt).toBe(9.9);
   });
 });
+
+describe('beat-cut in Chinese', () => {
+  it('cuts a Chinese line into words', async () => {
+    const { cutPieces } = await import('./beat-cut');
+    const p = cutPieces('快使用雙截棍 哼哼哈兮').map((x) => x.text);
+    expect(p.length).toBeGreaterThan(1);
+    expect(p.join('')).toBe('快使用雙截棍哼哼哈兮');
+  });
+});

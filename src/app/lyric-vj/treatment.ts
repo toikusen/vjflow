@@ -11,17 +11,20 @@ import { phraseBoundaries } from './phrases';
 import { COLOR_SHARE, COLOR_WORDS, colourWords, sameLines } from './structure';
 import { SongTimeline } from './timeline';
 
-export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut';
-export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut';
+export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise';
+export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash';
 export type Camera = 'static' | 'push' | 'pan' | 'parallax';
-export type TransitionIn = 'cut' | 'flash' | 'wipe' | 'dissolve';
-export type EmphasisMethod = 'scale' | 'color' | 'glow' | 'shake';
+export type TransitionIn = 'cut' | 'flash' | 'wipe' | 'dissolve' | 'glitch';
+export type EmphasisMethod = 'scale' | 'color' | 'glow' | 'shake' | 'hollow' | 'face' | 'mark' | 'symbol' | 'liquid';
+/** Small drawn signs a word can carry (emphasis 'symbol'): its meaning made visible, never a sticker on every line. */
+export type SymbolName = 'heart' | 'star' | 'sparkle' | 'note' | 'flame' | 'drop' | 'bolt' | 'exclaim' | 'question' | 'swirl' | 'flower';
+export const SYMBOLS: SymbolName[] = ['heart', 'star', 'sparkle', 'note', 'flame', 'drop', 'bolt', 'exclaim', 'question', 'swirl', 'flower'];
 
-export const ENTER_KINDS: EnterKind[] = ['pop', 'slam', 'wipe', 'fade', 'cut'];
-export const EXIT_KINDS: ExitKind[] = ['burst', 'fade', 'rise', 'cut'];
+export const ENTER_KINDS: EnterKind[] = ['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'flap', 'slot', 'focus', 'rise'];
+export const EXIT_KINDS: ExitKind[] = ['burst', 'fade', 'rise', 'cut', 'glitch', 'slash'];
 export const CAMERAS: Camera[] = ['static', 'push', 'pan', 'parallax'];
-export const TRANSITIONS: TransitionIn[] = ['cut', 'flash', 'wipe', 'dissolve'];
-export const EMPHASIS_METHODS: EmphasisMethod[] = ['scale', 'color', 'glow', 'shake'];
+export const TRANSITIONS: TransitionIn[] = ['cut', 'flash', 'wipe', 'dissolve', 'glitch'];
+export const EMPHASIS_METHODS: EmphasisMethod[] = ['scale', 'color', 'glow', 'shake', 'hollow', 'face', 'mark', 'symbol', 'liquid'];
 
 export interface Palette {
   background: string;
@@ -61,6 +64,8 @@ export interface Emphasis {
   from: number;
   to: number;
   method: EmphasisMethod;
+  /** For method 'symbol': which sign. */
+  symbol?: SymbolName;
 }
 
 export interface CueStyle {
@@ -184,7 +189,9 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   t.cues = t.cues.filter((cs) => {
     const cue = cueById.get(cs.cueId);
     if (!cue) {
-      errors.push(`未知或不在範圍內的歌詞 ${cs.cueId}`);
+      // a line deleted in the timing editor after the design was made: its style is dropped, not an error
+      if (!song.cues.some((c) => c.id === cs.cueId)) fixes.push(`歌詞 ${cs.cueId} 已在時間編輯器刪除，略過它的樣式`);
+      else errors.push(`未知或不在範圍內的歌詞 ${cs.cueId}`);
       return false;
     }
     seen.add(cs.cueId);
@@ -196,11 +203,19 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
         cs.shot = right;
       }
     }
-    for (const e of cs.emphasis ?? []) {
-      if (!(Number.isInteger(e.from) && Number.isInteger(e.to) && 0 <= e.from && e.from < e.to && e.to <= len)) {
-        errors.push(`歌詞 ${cs.cueId} 的強調範圍 [${e.from}, ${e.to}) 超出文字長度 ${len}`);
+    // a range past the end is trimmed to the line, one outside it dropped: a stray index never fails a paid render
+    // (gameshow on ぷろふぃ〜る stopped at render on [9, 16) of a 15-character line)
+    if (cs.emphasis) cs.emphasis = cs.emphasis.flatMap((e) => {
+      if (!(Number.isInteger(e.from) && Number.isInteger(e.to) && 0 <= e.from && e.from < Math.min(e.to, len))) {
+        fixes.push(`歌詞 ${cs.cueId} 的強調範圍 [${e.from}, ${e.to}) 不在文字裡，已移除`);
+        return [];
       }
+      if (e.to > len) fixes.push(`歌詞 ${cs.cueId} 的強調範圍 [${e.from}, ${e.to}) 超出文字長度 ${len}，已截到句尾`);
+      return [{ ...e, to: Math.min(e.to, len) }];
+    });
+    for (const e of cs.emphasis ?? []) {
       if (!EMPHASIS_METHODS.includes(e.method)) errors.push(`歌詞 ${cs.cueId} 的強調方式 ${e.method} 不存在`);
+      if (e.method === 'symbol' && !SYMBOLS.includes(e.symbol as SymbolName)) errors.push(`歌詞 ${cs.cueId} 的符號強調要指定 symbol（${SYMBOLS.join('、')}）`);
       // widen a range that cuts a word to the whole phrase(s) it touches
       const b = [...phraseBoundaries(cue.text)].sort((x, y) => x - y);
       const from = b.filter((x) => x <= e.from).pop() ?? 0;

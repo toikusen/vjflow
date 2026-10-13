@@ -2,8 +2,30 @@
 // framed photos, frames, rings, sparkles, sunbursts, tape bands, shapes. The database's designer VJs are mostly
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
+import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
+import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
+import { drawWarped, WarpZone } from './warp';
 
 export type Rgb = string;
+
+/** Drifting particles: petals, leaves, snow, stars, hearts, bubbles or a character, in depth layers. */
+export interface ParticleLayer {
+  kind: 'particles';
+  shape?: 'dot' | 'petal' | 'leaf' | 'snow' | 'star' | 'spark' | 'heart' | 'bubble' | 'char';
+  /** For shape 'char': the character(s) to drift (one picked per particle). */
+  char?: string;
+  color?: Rgb | Rgb[];
+  count?: number;
+  /** Base size in px (near particles are drawn larger). */
+  size?: number;
+  /** Fall speed in px/s (near particles move faster). */
+  speed?: number;
+  dir?: 'down' | 'up' | 'left' | 'right';
+  /** Side-to-side sway 0..1. */
+  sway?: number;
+  opacity?: number;
+  seed?: number;
+}
 
 export interface Beat {
   /** Seconds since the last beat and decaying hit (1 → 0). */
@@ -31,14 +53,16 @@ export type Layer = Base &
   (
     | { kind: 'fill'; color: Rgb; to?: Rgb; angle?: number }
     | { kind: 'paper'; color: Rgb; grain?: number }
-    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves' | 'genkou'; color: Rgb; scale?: number; angle?: number; scroll?: number }
+    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves' | 'genkou' | 'shibori' | 'itajime'; color: Rgb; scale?: number; angle?: number; scroll?: number }
     | { kind: 'photo'; mode: 'full' | 'inset' | 'polaroid' | 'band' | 'circle'; asset?: string; x?: number; y?: number; w?: number; h?: number; tilt?: number; tint?: Rgb; frame?: Rgb; drift?: number }
-    | { kind: 'frame'; type: 'border' | 'filmstrip' | 'viewfinder' | 'brackets' | 'window' | 'ticket'; color: Rgb; inset?: number; label?: string }
+    | { kind: 'frame'; type: 'border' | 'filmstrip' | 'viewfinder' | 'brackets' | 'window' | 'ticket' | 'deco'; color: Rgb; inset?: number; label?: string }
     | { kind: 'rings'; x?: number; y?: number; count?: number; color: Rgb; radius?: number; spin?: number; dashed?: boolean }
     | { kind: 'sparkles'; count?: number; color: Rgb; size?: number; seed?: number }
+    | ParticleLayer
+    | { kind: 'panels'; count?: number; layout?: 'vertical' | 'horizontal' | 'diagonal' | 'grid'; assets?: string[]; tints?: Rgb[]; line?: Rgb; gap?: number }
     | { kind: 'sunburst'; x?: number; y?: number; color: Rgb; rays?: number; spin?: number }
     | { kind: 'band'; type: 'tape' | 'solid' | 'marquee'; color: Rgb; color2?: Rgb; y?: number; angle?: number; height?: number; scroll?: number }
-    | { kind: 'shapes'; type: 'circle' | 'diamond' | 'triangle' | 'star' | 'heart' | 'cross'; count?: number; color: Rgb; size?: number; drift?: number; seed?: number; outline?: boolean }
+    | { kind: 'shapes'; type: 'circle' | 'diamond' | 'triangle' | 'star' | 'heart' | 'cross'; count?: number; color: Rgb; colors?: Rgb[]; size?: number; drift?: number; seed?: number; outline?: boolean }
     | { kind: 'blob'; x?: number; y?: number; r?: number; color: Rgb; breathe?: number }
     | { kind: 'bands'; colors: Rgb[]; from?: number; to?: number }
     | { kind: 'stamp'; text: string; color: Rgb; x?: number; y?: number; size?: number; tilt?: number; font?: string }
@@ -46,15 +70,26 @@ export type Layer = Base &
     | { kind: 'numeral'; text: string; color: Rgb; x?: number; y?: number; size?: number; font?: string; weight?: number }
     | { kind: 'scanlines'; color?: Rgb; gap?: number; vignette?: number }
     | { kind: 'chargrid'; color: Rgb; cols?: number; chars?: string; field?: 'noise' | 'radial' | 'rain'; speed?: number }
-    | { kind: 'mist'; color: Rgb; count?: number; y?: number; drift?: number }
+    | { kind: 'mist'; color: Rgb; count?: number; y?: number; drift?: number; soft?: boolean }
     | { kind: 'speedlines'; color: Rgb; count?: number; inner?: number }
     | { kind: 'swissgrid'; color: Rgb; cols?: number; bars?: Rgb; signal?: Rgb; seed?: number }
-    | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb }
-    | { kind: 'mosaic'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number }
+    | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb; wash?: boolean }
+    | { kind: 'mosaic'; type?: 'random' | 'rose' | 'lancet'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number; x?: number; y?: number; r?: number }
+    | { kind: 'botanical'; type?: 'fern' | 'leaf' | 'flower' | 'feather' | 'mixed'; color: Rgb; count?: number; size?: number; seed?: number }
     | { kind: 'ink'; color: Rgb; colors?: Rgb[]; count?: number; size?: number; seed?: number }
+    | UiLayer
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
     | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[] }
+    // story components' per-frame layers (story.ts), never written by the director directly
+    | StoryLayer
   );
+
+/**
+ * One computer window (terminal, log, code, file list, error dialog, progress, loading): stack a few for a desktop.
+ * x/y centre in −1..1, w/h fractions of the frame; `lines` are the song's own words for its content; it pops in
+ * `delay` s after the section starts.
+ */
+export type UiLayer = { kind: 'ui'; type: 'terminal' | 'log' | 'code' | 'files' | 'error' | 'progress' | 'loading' | 'cursor'; color: Rgb; alert?: Rgb; skin?: 'term' | 'mac' | 'win'; cascade?: number; x?: number; y?: number; w?: number; h?: number; title?: string; lines?: string[]; delay?: number };
 
 export interface LookSection {
   start: number;
@@ -62,14 +97,20 @@ export interface LookSection {
   /** Lyric colour and accent over this section's graphics (a light field needs dark type). */
   text?: Rgb;
   accent?: Rgb;
+  /** How this section comes in over the one before (transition.ts); none is a cut. */
+  transition?: SectionTransition;
 }
 
 /** A song's graphic look: layer stacks per section (cut on the section start). */
 export interface GraphicsLook {
   sections: LookSection[];
+  /** Story components across the whole song (story.ts), drawn over each section's layers. */
+  story?: StoryItem[];
+  /** The props the story uses, for props.mts to draw (id, English description, hero). */
+  storyProps?: { id: string; what: string; hero: boolean }[];
 }
 
-export const LAYER_KINDS = ['fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid', 'skyline', 'mosaic', 'ink'] as const;
+export const LAYER_KINDS = ['ui', 'fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid', 'skyline', 'mosaic', 'ink', 'botanical', 'particles', 'panels'] as const;
 
 const W = 1920;
 const H = 1080;
@@ -96,7 +137,46 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   ctx.save();
   ctx.clearRect(0, 0, W, H);
   const sec = sectionAt(look, t);
-  for (const l of adjust(sec.layers)) {
+  // the story's layers make room for the lyrics together with the section's, but are drawn over any transition
+  const story = storyLayers(look.story ?? [], t) as Layer[];
+  const all = adjust([...sec.layers, ...story]);
+  const own = all.slice(0, sec.layers.length);
+  const tr = sec.transition;
+  const i = look.sections.indexOf(sec);
+  const prev = i > 0 ? look.sections[i - 1] : undefined;
+  const dur = tr ? (tr.dur ?? TRANSITION_SEC[tr.kind]) : 0;
+  const k = tr && prev && !(globalThis as { __vjProbe?: boolean }).__vjProbe ? (t - sec.start) / dur : 1;
+  if (k < 1 && tr && prev) {
+    // the section before stays underneath; the new one is drawn apart and shows only inside the growing shape
+    drawLayers(ctx, adjust(prev.layers), prev, t, beat, image, codeTime);
+    const off = transitionCanvas();
+    const oc = off.getContext('2d')! as unknown as CanvasRenderingContext2D;
+    oc.save();
+    oc.clearRect(0, 0, W, H);
+    drawLayers(oc, own, sec, t, beat, image, codeTime);
+    oc.globalCompositeOperation = 'destination-in';
+    oc.fillStyle = '#000';
+    revealMask(oc, tr.kind, k, W, H, Math.round(sec.start * 10));
+    oc.restore();
+    if (tr.color) {
+      // a band of colour leads the edge: the same shape a little further on, under the new section
+      ctx.save();
+      ctx.fillStyle = tr.color;
+      revealMask(ctx, tr.kind, Math.min(1, k * 1.15 + 0.05), W, H, Math.round(sec.start * 10));
+      ctx.restore();
+    }
+    ctx.drawImage(off, 0, 0);
+    transitionAccent(ctx, tr.kind, k, W, H);
+  } else drawLayers(ctx, own, sec, t, beat, image, codeTime);
+  drawLayers(ctx, all.slice(sec.layers.length), sec, t, beat, image, codeTime);
+  ctx.restore();
+}
+
+let transitionOff: OffscreenCanvas | undefined;
+const transitionCanvas = () => (transitionOff ??= new OffscreenCanvas(W, H));
+
+function drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], sec: LookSection, t: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, codeTime: number) {
+  for (const l of layers) {
     ctx.save();
     ctx.globalAlpha = l.opacity ?? 1;
     if (l.blend) ctx.globalCompositeOperation = l.blend;
@@ -115,13 +195,12 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
     }
     ctx.restore();
   }
-  ctx.restore();
 }
 
 /** The camera shot a code layer is in: shots are cut at `cuts` (song seconds), synced with the lyric layouts. */
 export interface CodeCam { index: number; start: number; end: number; progress: number; count: number }
 /** f.img(id): a sprite from the song's library (designed by the image model, keyed), null when it is missing. */
-type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null; cache: Record<string, unknown> }) => void;
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null; scene: (id: string) => CanvasImageSource | null; particles: (opts: Omit<ParticleLayer, 'kind'>) => void; warp: (img: CanvasImageSource | null, x: number, y: number, w: number, h: number, zones: WarpZone[], seed?: number) => void; cache: Record<string, unknown> }) => void;
 
 /** The shot at t among cut times (sorted); before the first cut is shot 0. */
 export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
@@ -139,6 +218,47 @@ const reported = new Set<string>();
 /** Reports a code layer's failure or slowness once per message (the render's console, read by codelayer.mts). */
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
 
+// lyric cover: a sprite's opaque cells (24 × 24, measured once per picture) drawn inside the lyric box
+const COVER_GRID = 24;
+const masks = new Map<CanvasImageSource, Uint8Array>();
+function maskOf(img: CanvasImageSource & { width: number; height: number }) {
+  let m = masks.get(img);
+  if (m) return m;
+  m = new Uint8Array(COVER_GRID * COVER_GRID);
+  try {
+    const c = new OffscreenCanvas(COVER_GRID, COVER_GRID);
+    const x = c.getContext('2d')!;
+    x.drawImage(img, 0, 0, COVER_GRID, COVER_GRID);
+    const d = x.getImageData(0, 0, COVER_GRID, COVER_GRID).data;
+    for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 128 ? 1 : 0;
+  } catch {
+    m.fill(1);
+  }
+  masks.set(img, m);
+  return m;
+}
+/** Shares of the lyric box hidden by one sprite draw, and of the sprite inside the box (dest box in its transform). */
+export function coverOf(img: CanvasImageSource & { width: number; height: number }, m: DOMMatrix, dx: number, dy: number, dw: number, dh: number, r: Rect) {
+  const mask = maskOf(img);
+  const cell = (Math.abs(m.a * m.d - m.b * m.c) * dw * dh) / (COVER_GRID * COVER_GRID);
+  let hidden = 0;
+  let solid = 0;
+  for (let j = 0; j < COVER_GRID; j++)
+    for (let i = 0; i < COVER_GRID; i++) {
+      if (!mask[j * COVER_GRID + i]) continue;
+      solid += cell;
+      const lx = dx + ((i + 0.5) / COVER_GRID) * dw;
+      const ly = dy + ((j + 0.5) / COVER_GRID) * dh;
+      const x = m.a * lx + m.c * ly + m.e;
+      const y = m.b * lx + m.d * ly + m.f;
+      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) hidden += cell;
+    }
+  return [hidden / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0)), hidden / Math.max(1, solid)] as const;
+}
+const covered = new Set<string>();
+// which sprite a picture is: kept across frames (a drawing caches what f.img returned)
+const ids = new Map<CanvasImageSource, string>();
+
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
 function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   let fn = compiled.get(l.src);
@@ -152,19 +272,103 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     compiled.set(l.src, fn);
   }
   const t0 = performance.now();
+  const cam = camAt(l.cuts ?? [], t);
+  // while the lyric is fully up, watch the sprite draws for ones that hide it (a check the director must pass)
+  const base = l.lyric && (l.lyricWeight ?? 1) > 0.85 ? ctx.getTransform?.()?.inverse?.() : undefined;
+  const lyric = base ? l.lyric : undefined;
+  // soft motion inside a sprite (sails, branches, cloth, water); its mesh pieces skip the cover watch, its box counts
+  let warping = false;
+  const warp = (pic: CanvasImageSource | null, x: number, y: number, w: number, h: number, zones: WarpZone[], seed = 0) => {
+    if (!pic) return;
+    recordCover(pic, x, y, w, h);
+    recordBox(pic, x, y, w, h);
+    warping = true;
+    try {
+      drawWarped(ctx, pic as CanvasImageSource & { width: number; height: number }, x, y, w, h, Array.isArray(zones) ? zones : [], t, seed, 10);
+    } finally {
+      warping = false;
+    }
+  };
+  const proto = typeof CanvasRenderingContext2D === 'undefined' ? undefined : CanvasRenderingContext2D.prototype;
+  const plain = proto?.drawImage;
+  // QA renders (render.mts --track) log every sprite's box on screen per frame: codelayer.mts finds jumps, pops,
+  // overlaps and aimless bobbing from them
+  const track = !!(globalThis as { __vjTrack?: boolean }).__vjTrack && !(globalThis as { __vjProbe?: boolean }).__vjProbe && !!proto;
+  const frame = track ? ctx.getTransform?.()?.inverse?.() : undefined;
+  const boxes: string[] = [];
+  const recordBox = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number) => {
+    const id = ids.get(pic);
+    if (!frame || !id) return;
+    const m = frame.multiply(ctx.getTransform());
+    const pts = [[dx, dy], [dx + dw, dy], [dx, dy + dh], [dx + dw, dy + dh]].map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
+    const xs = pts.map((p) => p[0]);
+    const ys = pts.map((p) => p[1]);
+    const [x0, y0] = [Math.min(...xs), Math.min(...ys)];
+    boxes.push(`${id}:${Math.round(x0)},${Math.round(y0)},${Math.round(Math.max(...xs) - x0)},${Math.round(Math.max(...ys) - y0)},${ctx.globalAlpha.toFixed(2)}`);
+  };
+  const recordCover = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number) => {
+    const id = ids.get(pic);
+    if (!lyric || !base || !id) return;
+    const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, lyric);
+    const key = `${id}@${cam.index}`;
+    // a big sprite across the lyric, or a small one sitting on its words
+    if ((share > 0.08 || (inside > 0.5 && share > 0.015)) && !covered.has(key)) {
+      covered.add(key);
+      console.error(`code layer: lyric covered: ${id} hides ${Math.round(share * 100)}% of the lyric box (${Math.round(inside * 100)}% of it inside) at ${t.toFixed(1)} s (shot ${cam.index})`);
+    }
+  };
+  // every drawImage while the drawing runs: a sprite copied onto the drawing's own canvas (tinted, made solid) passes
+  // its name to that canvas when the canvas is about the sprite's size; a sprite drawn on the frame is measured
+  if ((lyric || track) && proto)
+    proto.drawImage = function (this: CanvasRenderingContext2D, pic: CanvasImageSource, ...a: number[]) {
+      const id = ids.get(pic);
+      if (id && !warping && this === ctx && (a.length === 2 || a.length === 4 || a.length === 8)) {
+        const sized = pic as CanvasImageSource & { width: number; height: number };
+        const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
+        recordCover(pic, dx, dy, dw, dh);
+        recordBox(pic, dx, dy, dw, dh);
+      } else if (id && this !== ctx && this.canvas) {
+        const src = pic as CanvasImageSource & { width: number; height: number };
+        const c = this.canvas;
+        if (c.width * c.height <= src.width * src.height * 2.5) ids.set(c, id);
+      }
+      return (plain as (...x: unknown[]) => void).call(this, pic, ...a);
+    } as typeof proto.drawImage;
+  // which scene pictures each camera shot shows (codelayer.mts checks that the story moves through them)
+  const sceneIds = new Set<string>();
+  const scene = (id: string) => {
+    const x = image(id) ?? null;
+    if (x) sceneIds.add(id);
+    return x;
+  };
+  const img = (id: string) => {
+    const x = image(`spr:${id}`) ?? null;
+    if (x) ids.set(x, id);
+    return x;
+  };
   ctx.save();
   try {
-    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam: camAt(l.cuts ?? [], t), hash, img: (id) => image(`spr:${id}`) ?? null, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam, hash, img, scene, particles: (opts: Omit<ParticleLayer, 'kind'>) => particles(ctx, { kind: 'particles', ...opts }, t), warp, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
   } catch (e) {
     report(`runtime: ${(e as Error).message}`);
   }
   ctx.restore();
+  if ((lyric || track) && proto && plain) proto.drawImage = plain;
+  if (track) console.error(`code layer: track ${t.toFixed(3)} ${cam.index} ${boxes.join(';')}`);
+  if (sceneIds.size) {
+    const key = `scene-use ${cam.index} ${[...sceneIds].sort().join(',')}`;
+    if (!covered.has(key)) {
+      covered.add(key);
+      console.error(`code layer: ${key}`);
+    }
+  }
   const ms = performance.now() - t0;
   if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
 }
 
 function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   if (l.kind === 'code') return drawCode(ctx, l, t, age, beat, image);
+  if (l.kind === 'sprite' || l.kind === 'thread' || l.kind === 'card') return drawStory(ctx, l, image);
   const kick = 1 + (l.pulse ?? 0) * beat.pulse;
   switch (l.kind) {
     case 'fill': {
@@ -240,6 +444,12 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       }
       return;
     }
+    case 'particles':
+      return particles(ctx, l, t, kick);
+    case 'panels':
+      return panels(ctx, l, t, age, image);
+    case 'ui':
+      return ui(ctx, l, age, beat);
     case 'sunburst': {
       const cx = W / 2 + (l.x ?? 0) * W / 2;
       const cy = H / 2 - (l.y ?? 0) * H / 2;
@@ -274,7 +484,7 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(hash(seed, 4) * 6.28 + t * 0.4 * (hash(seed, 5) - 0.5));
-        shape(ctx, l.type, size, l.color, !!l.outline);
+        shape(ctx, l.type, size, l.colors?.length ? l.colors[i % l.colors.length] : l.color, !!l.outline);
         ctx.restore();
       }
       return;
@@ -405,6 +615,21 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         g.addColorStop(0.85, l.color);
         g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g;
+        // soft: a drifting haze (ink-wash, indigo), an elliptical glow with no edge, not ukiyo-e's crisp flat band
+        if (l.soft) {
+          ctx.save();
+          ctx.translate(x + w / 2, y + h / 2);
+          ctx.scale(w * 0.6, h * 1.8);
+          const r = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+          r.addColorStop(0, l.color);
+          r.addColorStop(1, `${l.color.slice(0, 7)}00`);
+          ctx.fillStyle = r;
+          ctx.beginPath();
+          ctx.arc(0, 0, 1, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+          continue;
+        }
         roundRect(ctx, x, y, w, h, h / 2);
         ctx.fill();
       }
@@ -456,16 +681,24 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
     case 'skyline': {
       // layered silhouettes (paper-lantern / cut-paper depth): back layers first, each a flat colour, parallax drift
       const n = l.colors.length;
-      const top = H * (1 - (l.height ?? 0.45));
+      // height is a fraction of the frame; a director that wrote pixels (cyanotype: 160) got a skyline over everything
+      const top = H * (1 - Math.min(0.9, (l.height ?? 0.45) > 1 ? (l.height as number) / 1080 : (l.height ?? 0.45)));
       l.colors.forEach((c, k) => {
         const depth = (k + 1) / n; // 0 back … 1 front
         const base = top + (H - top) * (0.15 + 0.5 * depth);
         const off = (t * (l.drift ?? 6) * (0.3 + depth)) % W;
-        ctx.fillStyle = c;
+        // wash: ink graded from the ridge down into the mist at the foot (ink-wash), instead of a flat cut-out
+        if (l.wash) {
+          const g = ctx.createLinearGradient(0, top + (base - top) * 0.2, 0, base + (H - base) * 0.4);
+          g.addColorStop(0, c);
+          g.addColorStop(1, `${c.slice(0, 7)}00`);
+          ctx.fillStyle = g;
+        } else ctx.fillStyle = c;
         ctx.beginPath();
         ctx.moveTo(-off - 10, H);
         const seed = (l.seed ?? 0) * 31 + k * 7;
         const type = l.type ?? 'city';
+        let lastSaddle = H;
         for (let x = -off - 10; x < W + W; ) {
           const r = hash(Math.floor(x / 40), seed);
           if (type === 'city') {
@@ -475,13 +708,69 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
             ctx.lineTo(x + w, base - h);
             x += w;
           } else if (type === 'trees') {
-            const w = 30 + r * 40;
-            ctx.lineTo(x + w / 2, base - 60 - r * 120);
-            ctx.lineTo(x + w, base);
-            x += w;
+            // a mixed treeline: tiered pines, round broadleaf crowns and slim cypresses of uneven height, a little
+            // ground between some of them (a row of equal triangles read as a placeholder)
+            const kind = hash(Math.floor(x / 40), seed + 9);
+            const h = (70 + r * 170) * (1 - depth * 0.25);
+            // the tops sway in a slow breeze, each tree on its own phase, more the higher the point
+            const sway = Math.sin(t * 0.9 + x * 0.013 + k) * h * 0.03;
+            if (kind < 0.45) {
+              const w = 50 + r * 50;
+              const tiers = [[0, 0.32], [0.12, 0.6], [0.22, 0.86]];
+              ctx.lineTo(x, base);
+              for (const [inset, up] of tiers) {
+                ctx.lineTo(x + w * inset + sway * (up - 0.3), base - h * (up - 0.3));
+                ctx.lineTo(x + w * (inset + 0.12) + sway * up, base - h * up);
+              }
+              ctx.lineTo(x + w / 2 + sway, base - h);
+              for (const [inset, up] of [...tiers].reverse()) {
+                ctx.lineTo(x + w * (1 - inset - 0.12) + sway * up, base - h * up);
+                ctx.lineTo(x + w * (1 - inset) + sway * (up - 0.3), base - h * (up - 0.3));
+              }
+              ctx.lineTo(x + w, base);
+              x += w * 0.85;
+            } else if (kind < 0.8) {
+              const w = 60 + r * 60;
+              const cr = w * 0.62;
+              ctx.lineTo(x + w * 0.44, base);
+              ctx.lineTo(x + w * 0.44, base - h * 0.2);
+              // a lumpy crown: three overlapping arcs over the trunk
+              ctx.arc(x + w * 0.28 + sway * 0.6, base - h * 0.2 - cr * 0.55, cr * 0.55, Math.PI * 0.75, Math.PI * 1.5);
+              ctx.arc(x + w * 0.5 + sway, base - h * 0.2 - cr * 0.95, cr * 0.62, Math.PI * 1.15, Math.PI * 1.85);
+              ctx.arc(x + w * 0.72 + sway * 0.6, base - h * 0.2 - cr * 0.55, cr * 0.55, Math.PI * 1.5, Math.PI * 0.25);
+              ctx.lineTo(x + w * 0.56, base - h * 0.2);
+              ctx.lineTo(x + w * 0.56, base);
+              x += w * 0.9;
+            } else {
+              const w = 26 + r * 18;
+              ctx.lineTo(x, base);
+              ctx.quadraticCurveTo(x - w * 0.1 + sway * 0.6, base - h * 0.75, x + w / 2 + sway * 1.2, base - h * 1.15);
+              ctx.quadraticCurveTo(x + w * 1.1 + sway * 0.6, base - h * 0.75, x + w, base);
+              x += w;
+            }
+            if (hash(Math.floor(x / 40), seed + 11) < 0.25) x += 20 + r * 40;
+          } else if (type === 'peaks' && l.wash) {
+            // brushed mountains: a ridge from layered value noise, tall and uneven, not a row of equal bumps
+            const vn = (v: number, o: number) => {
+              const i = Math.floor(v);
+              const f = v - i;
+              return hash(i, seed + o) + (hash(i + 1, seed + o) - hash(i, seed + o)) * f * f * (3 - 2 * f);
+            };
+            const xx = x + off;
+            const ridge = 0.6 * vn(xx / 420, 1) + 0.3 * vn(xx / 140, 2) + 0.1 * vn(xx / 45, 3);
+            ctx.lineTo(x, base - (H - top) * (0.1 + 0.9 * ridge) * (1 - depth * 0.35));
+            x += 18;
           } else {
+            // rolling ridge: alternate crests and saddles joined through their midpoints, so the line stays smooth (one
+            // arch per hill met the next in a sharp V)
             const w = (type === 'peaks' ? 120 : 260) + r * 200;
-            ctx.quadraticCurveTo(x + w / 2, base - (type === 'peaks' ? 160 : 60) - r * (type === 'peaks' ? 260 : 90), x + w, base - r * 20);
+            // crests of clearly different heights, saddles part-way down: overlapping hills, not an even wave
+            const crest = base - (type === 'peaks' ? 160 : 70) - r * (type === 'peaks' ? 260 : 150);
+            const saddle = crest + (base - crest) * (type === 'peaks' ? 0.7 : 0.35 + 0.3 * hash(Math.floor(x / 40), seed + 13));
+            // flat tangents at every crest and saddle: the ridge never folds into a point
+            ctx.bezierCurveTo(x + w * 0.2, lastSaddle, x + w * 0.3, crest, x + w * 0.5, crest);
+            ctx.bezierCurveTo(x + w * 0.7, crest, x + w * 0.8, saddle, x + w, saddle);
+            lastSaddle = saddle;
             x += w;
           }
         }
@@ -501,6 +790,8 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       return;
     }
     case 'mosaic': {
+      if (l.type === 'rose') return roseWindow(ctx, l, t);
+      if (l.type === 'lancet') return lancets(ctx, l, t);
       // stained glass: triangulated cells in a few jewel colours, dark leading between them, light breathing through
       const n = l.cells ?? 9;
       const cw = W / n;
@@ -528,6 +819,8 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         }
       return;
     }
+    case 'botanical':
+      return botanicals(ctx, l, t);
     case 'ink': {
       // ink-wash blots: soft overlapping washes with a darker core, growing slowly
       const n = l.count ?? 5;
@@ -604,6 +897,43 @@ function pattern(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'patte
     case 'checker':
       for (let i = 0; i < span[0]; i++) for (let j = 0; j < span[1]; j++) if ((i + j) % 2) ctx.fillRect(i * s, j * s, s, s);
       return;
+    case 'shibori':
+      // kanoko shibori: rows of tiny resist rings where thread bound the cloth, the dye bleeding into every edge
+      ctx.drawImage(blurredOnce(`shibori${s}${l.color}`, span[0] * s, span[1] * s, Math.max(1, s * 0.05), (c) => {
+        c.strokeStyle = l.color;
+        c.lineWidth = Math.max(2, s * 0.1);
+        for (let i = 0; i < span[0]; i++)
+          for (let j = 0; j < span[1] / 0.86; j++) {
+            c.beginPath();
+            c.arc(i * s + (j % 2 ? s / 2 : 0), j * s * 0.86, s * (0.16 + 0.07 * hash(i, j + 3)), 0, Math.PI * 2);
+            c.stroke();
+          }
+      }), 0, 0);
+      return;
+    case 'itajime':
+      // itajime: cloth folded and clamped between boards; each fold leaves a soft white diamond and a faint crease
+      ctx.drawImage(blurredOnce(`itajime${s}${l.color}`, span[0] * s, span[1] * s, Math.max(1.5, s * 0.025), (c) => {
+        c.fillStyle = l.color;
+        c.strokeStyle = l.color;
+        for (let i = 0; i < span[0]; i++)
+          for (let j = 0; j < span[1]; j++) {
+            const [cx, cy, d] = [i * s + s / 2, j * s + s / 2, s * (0.3 + 0.06 * hash(i, j + 7))];
+            c.beginPath();
+            c.moveTo(cx, cy - d);
+            c.lineTo(cx + d, cy);
+            c.lineTo(cx, cy + d);
+            c.lineTo(cx - d, cy);
+            c.closePath();
+            c.fill();
+          }
+        c.globalAlpha = 0.35;
+        c.lineWidth = 2;
+        c.beginPath();
+        for (let i = 0; i < span[0]; i++) c.rect(i * s, 0, 0.001, span[1] * s);
+        for (let j = 0; j < span[1]; j++) c.rect(0, j * s, span[0] * s, 0.001);
+        c.stroke();
+      }), 0, 0);
+      return;
     case 'genkou':
       // genkō yōshi (manuscript paper): square cells in vertical columns, a gutter between columns
       ctx.lineWidth = 2;
@@ -633,6 +963,176 @@ function pattern(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'patte
       for (let j = 0; j < span[1]; j += 2) ctx.fillRect(0, j * s, W * 2 + s * 2, s);
       return;
   }
+}
+
+/** One particle shape, centred at the origin, size s. */
+function particleShape(ctx: CanvasRenderingContext2D, shape: NonNullable<ParticleLayer['shape']>, s: number, char: string) {
+  ctx.beginPath();
+  switch (shape) {
+    case 'petal': {
+      // a cherry petal: narrow base, wide rounded tip with a notch, darker toward the base
+      ctx.moveTo(-s * 0.5, 0);
+      ctx.bezierCurveTo(-s * 0.25, -s * 0.3, s * 0.25, -s * 0.42, s * 0.5, -s * 0.17);
+      ctx.quadraticCurveTo(s * 0.4, -s * 0.03, s * 0.32, 0);
+      ctx.quadraticCurveTo(s * 0.4, s * 0.03, s * 0.5, s * 0.17);
+      ctx.bezierCurveTo(s * 0.25, s * 0.42, -s * 0.25, s * 0.3, -s * 0.5, 0);
+      ctx.fill();
+      const g = ctx.createLinearGradient(-s * 0.5, 0, s * 0.1, 0);
+      g.addColorStop(0, 'rgba(0,0,0,0.22)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fill();
+      return;
+    }
+    case 'leaf':
+      ctx.moveTo(-s * 0.5, 0);
+      ctx.quadraticCurveTo(0, -s * 0.4, s * 0.5, 0);
+      ctx.quadraticCurveTo(0, s * 0.4, -s * 0.5, 0);
+      ctx.fill();
+      return;
+    case 'snow':
+      ctx.arc(0, 0, s * 0.3, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    case 'star':
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + (i * Math.PI) / 5;
+        const r = i % 2 ? s * 0.2 : s * 0.5;
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.fill();
+      return;
+    case 'spark':
+      star4(ctx, 0, 0, s);
+      return;
+    case 'heart':
+      ctx.moveTo(0, s * 0.35);
+      ctx.bezierCurveTo(-s * 0.6, -s * 0.05, -s * 0.3, -s * 0.55, 0, -s * 0.2);
+      ctx.bezierCurveTo(s * 0.3, -s * 0.55, s * 0.6, -s * 0.05, 0, s * 0.35);
+      ctx.fill();
+      return;
+    case 'bubble':
+      ctx.lineWidth = Math.max(1, s * 0.06);
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.arc(0, 0, s * 0.45, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    case 'char':
+      ctx.font = `700 ${s}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(char, 0, 0);
+      return;
+    default:
+      ctx.arc(0, 0, s * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+  }
+}
+
+/**
+ * Drifting particles in three depth bands: far ones small, slow and faint, near ones large and quick, each swaying on
+ * its own phase and turning slowly; positions are a function of t only (any frame renders the same).
+ */
+export function particles(ctx: CanvasRenderingContext2D, l: ParticleLayer, t: number, kick = 1) {
+  const n = Math.min(400, l.count ?? 60);
+  const size = l.size ?? 30;
+  const speed = l.speed ?? 60;
+  const sway = l.sway ?? 0.5;
+  const colors = Array.isArray(l.color) ? l.color : [l.color ?? '#ffffff'];
+  const chars = [...(l.char ?? '✦')];
+  const [vx, vy] = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] }[l.dir ?? 'down'];
+  const margin = size * 3;
+  const spanX = W + margin * 2;
+  const spanY = H + margin * 2;
+  for (let i = 0; i < n; i++) {
+    const seed = (l.seed ?? 0) * 131 + i;
+    const depth = 0.35 + 0.65 * hash(seed, 3); // 0.35 far … 1 near
+    const v = speed * depth * (0.7 + 0.6 * hash(seed, 4));
+    const ph = hash(seed, 5) * Math.PI * 2;
+    const wob = Math.sin(t * (0.6 + hash(seed, 6)) + ph) * sway * 40 * depth;
+    const x = ((((hash(seed, 1) * spanX + vx * v * t + (vy ? wob : 0)) % spanX) + spanX) % spanX) - margin;
+    const y = ((((hash(seed, 2) * spanY + vy * v * t + (vx ? wob : 0)) % spanY) + spanY) % spanY) - margin;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ph + t * (hash(seed, 7) - 0.5) * 1.6);
+    // petals and leaves tumble: turning around their long axis, face-on then edge-on
+    if (l.shape === 'petal' || l.shape === 'leaf') ctx.scale(1, Math.cos(t * (1.2 + 2 * hash(seed, 9)) + ph));
+    ctx.globalAlpha = (l.opacity ?? 0.85) * (0.35 + 0.65 * depth) * (l.shape === 'spark' || l.shape === 'star' ? 0.6 + 0.4 * Math.sin(t * 3 + ph) : 1);
+    ctx.fillStyle = colors[i % colors.length];
+    particleShape(ctx, l.shape ?? 'dot', size * depth * (0.7 + 0.6 * hash(seed, 8)) * kick, chars[i % chars.length]);
+    ctx.restore();
+  }
+}
+
+/**
+ * Split panels: the frame cut into 2–4 panels (vertical, horizontal, diagonal or a grid), each with its own picture (or
+ * tint) framed and drifting on its own, sliding in one after another as the section starts, thin rules between them.
+ */
+function panels(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'panels' }>, t: number, age: number, image: (asset?: string) => CanvasImageSource | undefined) {
+  const n = Math.max(2, Math.min(4, l.count ?? 3));
+  const layout = l.layout ?? 'vertical';
+  const gap = l.gap ?? 10;
+  const polys: [number, number][][] = [];
+  if (layout === 'grid') {
+    const cols = 2;
+    const rows = Math.ceil(n / 2);
+    for (let k = 0; k < n; k++) {
+      const c = k % cols;
+      const r = Math.floor(k / cols);
+      const [x0, y0, x1, y1] = [(c * W) / cols, (r * H) / rows, ((c + 1) * W) / cols, ((r + 1) * H) / rows];
+      polys.push([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]);
+    }
+  } else
+    for (let k = 0; k < n; k++) {
+      const a = k / n;
+      const b = (k + 1) / n;
+      if (layout === 'horizontal') polys.push([[0, a * H], [W, a * H], [W, b * H], [0, b * H]]);
+      else {
+        // diagonal panels lean by a fifth of the frame width
+        const lean = layout === 'diagonal' ? W * 0.1 : 0;
+        polys.push([[a * W + lean, 0], [b * W + lean, 0], [b * W - lean, H], [a * W - lean, H]]);
+      }
+    }
+  polys.forEach((poly, k) => {
+    const enter = 1 - Math.pow(1 - Math.min(1, Math.max(0, (age - k * 0.12) / 0.45)), 3);
+    if (enter <= 0) return;
+    const off = (1 - enter) * (layout === 'horizontal' ? W : H) * (k % 2 ? 1 : -1);
+    ctx.save();
+    ctx.translate(layout === 'horizontal' ? off : 0, layout === 'horizontal' ? 0 : off);
+    ctx.beginPath();
+    poly.forEach(([x, y], j) => (j ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.clip();
+    const pic = image(l.assets?.[k % Math.max(1, l.assets.length)]) as (CanvasImageSource & { width: number; height: number }) | undefined;
+    const xs = poly.map((p) => p[0]);
+    const ys = poly.map((p) => p[1]);
+    const [bx, by, bw, bh] = [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+    if (pic?.width) {
+      // each panel frames its picture differently and drifts on its own
+      const sc = Math.max(bw / pic.width, bh / pic.height) * (1.15 + 0.05 * Math.sin(t * 0.2 + k));
+      const dx = Math.sin(t * 0.15 + k * 1.7) * bw * 0.04;
+      ctx.drawImage(pic, bx + (bw - pic.width * sc) / 2 + dx, by + (bh - pic.height * sc) / 2, pic.width * sc, pic.height * sc);
+    } else {
+      ctx.fillStyle = l.tints?.[k % l.tints.length] ?? '#222222';
+      ctx.fillRect(bx, by, bw, bh);
+    }
+    if (l.tints?.length && pic?.width) {
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.fillStyle = l.tints[k % l.tints.length];
+      ctx.fillRect(bx, by, bw, bh);
+      ctx.globalCompositeOperation = 'source-over';
+    }
+    ctx.restore();
+  });
+  // rules between panels
+  ctx.strokeStyle = l.line ?? '#ffffff';
+  ctx.lineWidth = gap;
+  polys.slice(1).forEach((poly) => {
+    ctx.beginPath();
+    ctx.moveTo(poly[0][0], poly[0][1]);
+    ctx.lineTo(poly[3][0], poly[3][1]);
+    ctx.stroke();
+  });
 }
 
 function photo(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'photo' }>, t: number, age: number, kick: number, img: CanvasImageSource | undefined) {
@@ -688,6 +1188,74 @@ function frame(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'frame' 
       ctx.lineWidth = 4;
       ctx.strokeRect(m, m, W - 2 * m, H - 2 * m);
       return;
+    case 'deco': {
+      // art deco: a double rule with stepped (ziggurat) corners, a fan rising from the top and bottom centre, and
+      // nested chevrons on the sides
+      ctx.lineWidth = 3;
+      ctx.strokeRect(m, m, W - 2 * m, H - 2 * m);
+      const n = m + 16;
+      const st = 22;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      const corner = (x: number, y: number, dx: number, dy: number) => {
+        ctx.lineTo(x, y + dy * 3 * st);
+        for (let k = 3; k > 0; k--) {
+          ctx.lineTo(x + dx * (4 - k) * st, y + dy * k * st);
+          ctx.lineTo(x + dx * (4 - k) * st, y + dy * (k - 1) * st);
+        }
+        ctx.lineTo(x + dx * 3 * st, y);
+      };
+      ctx.moveTo(n, H / 2);
+      corner(n, n, 1, 1);
+      ctx.lineTo(W - n - 3 * st, n);
+      for (let k = 0; k < 3; k++) {
+        ctx.lineTo(W - n - (3 - k) * st, n + k * st);
+        ctx.lineTo(W - n - (2 - k) * st, n + k * st);
+      }
+      ctx.lineTo(W - n, n + 3 * st);
+      ctx.lineTo(W - n, H - n - 3 * st);
+      for (let k = 0; k < 3; k++) {
+        ctx.lineTo(W - n - k * st, H - n - (3 - k) * st);
+        ctx.lineTo(W - n - k * st, H - n - (2 - k) * st);
+      }
+      ctx.lineTo(W - n - 3 * st, H - n);
+      ctx.lineTo(n + 3 * st, H - n);
+      for (let k = 0; k < 3; k++) {
+        ctx.lineTo(n + (3 - k) * st, H - n - k * st);
+        ctx.lineTo(n + (2 - k) * st, H - n - k * st);
+      }
+      ctx.lineTo(n, H - n - 3 * st);
+      ctx.closePath();
+      ctx.stroke();
+      // fans: half-discs of rays and arcs, opening a little on the beat
+      for (const [fy, dir] of [[n, 1], [H - n, -1]] as const) {
+        const R = 190 * (1 + 0.05 * beat.pulse);
+        ctx.lineWidth = 2;
+        for (let k = 1; k <= 3; k++) {
+          ctx.beginPath();
+          ctx.arc(W / 2, fy, (R * k) / 3, dir > 0 ? 0 : Math.PI, dir > 0 ? Math.PI : Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        for (let k = 0; k <= 10; k++) {
+          const a = (k / 10) * Math.PI * dir;
+          ctx.moveTo(W / 2 + Math.cos(a) * R * 0.33, fy + Math.sin(a) * R * 0.33);
+          ctx.lineTo(W / 2 + Math.cos(a) * R, fy + Math.sin(a) * R);
+        }
+        ctx.stroke();
+      }
+      // chevrons pointing inward at the middle of each side
+      ctx.lineWidth = 2.5;
+      for (const [x, d] of [[n + 30, 1], [W - n - 30, -1]] as const)
+        for (let k = 0; k < 3; k++) {
+          ctx.beginPath();
+          ctx.moveTo(x + d * k * 16, H / 2 - 40);
+          ctx.lineTo(x + d * (k * 16 + 22), H / 2);
+          ctx.lineTo(x + d * k * 16, H / 2 + 40);
+          ctx.stroke();
+        }
+      return;
+    }
     case 'filmstrip': {
       // black edges with sprocket holes running sideways
       ctx.fillRect(0, 0, W, 90);
@@ -792,6 +1360,335 @@ function frame(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'frame' 
   }
 }
 
+const UI_W: Record<UiLayer['type'], number> = { terminal: 0.42, log: 0.36, code: 0.38, files: 0.32, error: 0.32, progress: 0.38, loading: 0.28, cursor: 0.34 };
+const UI_H: Record<UiLayer['type'], number> = { terminal: 0.4, log: 0.4, code: 0.42, files: 0.36, error: 0.24, progress: 0.18, loading: 0.16, cursor: 0.1 };
+// a cascade's copies step down-right by this much (px) and pop this often (s), like a flood of popups
+const CASCADE_STEP = 44;
+const CASCADE_EVERY = 0.45;
+// generic machine text when the director gives no lines of the song's own
+const UI_TEXT: Record<UiLayer['type'], string[]> = {
+  terminal: ['ping -c 4 target', 'reply: 64 bytes  time=12ms', 'ssh observer@remote', 'connected.', 'cat signal.log', 'tail -f /var/log/sys'],
+  log: ['link up', 'handshake ok', 'packet lost', 'retry 1/3', 'sync 98%', 'checksum ok', 'buffer full', 'reconnect'],
+  code: ['while (true) {', '  if (signal) send(msg);', '  wait(beat);', '}', 'function call(target) {', '  return reply ?? retry();', '}'],
+  files: ['memory.dat', 'signal.log', 'photo_0412.jpg', 'draft.txt', 'core.sys', 'backup.tar'],
+  error: ['CONNECTION LOST'],
+  progress: ['UPLOADING'],
+  loading: ['CONNECTING'],
+  cursor: [''],
+};
+
+// desktop window chrome: the look's own phosphor glass, or a generic Mac / Windows window in system colours
+// (no vendor logos or icons, only the window shapes everyone recognises)
+type Skin = { body: string; bar: string; barText: string; ink: string; accent: string; alert: string; line: string; radius: number; font: string; mono: string };
+const OS_SANS = '"Helvetica Neue", "Hiragino Sans", "Noto Sans JP", "Segoe UI", sans-serif';
+// ponytail: system faces from the render machine, not webfonts — load a webfont pair if renders move to a bare server
+const SKINS: Record<'mac' | 'win', Skin> = {
+  mac: { body: '#F5F5F7', bar: '#E3E3E6', barText: '#3A3A3C', ink: '#1D1D1F', accent: '#0A84FF', alert: '#FF3B30', line: '#C6C6C8', radius: 14, font: OS_SANS, mono: '"SF Mono", Menlo, "Space Mono", monospace' },
+  win: { body: '#FFFFFF', bar: '#F3F3F3', barText: '#1B1B1B', ink: '#1B1B1B', accent: '#0067C0', alert: '#C42B1C', line: '#D1D1D1', radius: 8, font: OS_SANS, mono: 'Consolas, "Space Mono", monospace' },
+};
+const skinOf = (l: UiLayer, col: string): Skin =>
+  l.skin === 'mac' || l.skin === 'win'
+    ? // a terminal window stays dark on either system, as it does on a real desktop
+      l.type === 'terminal' || l.type === 'log' ? { ...SKINS[l.skin], body: '#1E1E1E', ink: '#E6E6E6', bar: l.skin === 'mac' ? '#3A3A3C' : '#2B2B2B', barText: '#E6E6E6', line: '#4A4A4C' } : SKINS[l.skin]
+    : { body: 'rgba(2,8,4,0.86)', bar: col, barText: '#020804', ink: col, accent: col, alert: col, line: col, radius: 0, font: '"Space Mono", "DotGothic16", monospace', mono: '"Space Mono", "DotGothic16", monospace' };
+
+// the whole window stays on screen, with room for a camera push-in (a director's y of 0.9 cut the title bar off)
+const UI_MX = W * 0.07;
+const UI_MY = H * 0.1;
+/** Where a window is drawn: its centre clamped inside the margins, and its size. Placement checks use the same box. */
+function uiBox(l: UiLayer) {
+  // a cascade is placed as one block: the first copy's window plus the steps of the rest
+  const extra = CASCADE_STEP * (cascadeOf(l) - 1);
+  const w = (l.w ?? UI_W[l.type]) * W + extra;
+  const h = (l.h ?? UI_H[l.type]) * H + extra;
+  const px = Math.min(W - w / 2 - UI_MX, Math.max(w / 2 + UI_MX, W / 2 + (l.x ?? 0) * W / 2));
+  const py = Math.min(H - h / 2 - UI_MY, Math.max(h / 2 + UI_MY, H / 2 - (l.y ?? 0) * H / 2));
+  return { px, py, w, h };
+}
+
+const cascadeOf = (l: UiLayer) => Math.max(1, Math.min(8, Math.round(l.cascade ?? 1)));
+
+/** A computer window: the look's phosphor glass, or a Mac / Windows window (one system per song); its content moves with time. */
+function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) {
+  const n = cascadeOf(l);
+  if (n > 1) {
+    // the same window popping again and again, each copy a step down-right of the last (the desktop losing control)
+    const { px, py, w, h } = uiBox(l);
+    const w1 = w - CASCADE_STEP * (n - 1);
+    const h1 = h - CASCADE_STEP * (n - 1);
+    for (let k = 0; k < n; k++) {
+      const cx = px - w / 2 + w1 / 2 + k * CASCADE_STEP;
+      const cy = py - h / 2 + h1 / 2 + k * CASCADE_STEP;
+      ctx.save();
+      ui(ctx, { ...l, cascade: 1, delay: (l.delay ?? 0) + k * CASCADE_EVERY, x: (cx - W / 2) / (W / 2), y: (H / 2 - cy) / (H / 2) }, age, beat);
+      ctx.restore();
+    }
+    return;
+  }
+  const local = age - (l.delay ?? 0);
+  if (local < 0) return;
+  if (l.type === 'cursor') {
+    // a quiet section's whole desktop: one prompt, its line typed out, then the cursor blinking alone
+    const { px, py } = uiBox(l);
+    const line = `> ${(l.lines?.[0] ?? '').slice(0, Math.floor(local * 12))}`;
+    ctx.font = `400 46px ${l.skin === 'mac' || l.skin === 'win' ? SKINS[l.skin].mono : '"Space Mono", "DotGothic16", monospace'}`;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = l.skin === 'mac' || l.skin === 'win' ? '#E6E6E6' : l.color;
+    const x0 = px - ctx.measureText(`> ${l.lines?.[0] ?? ''}`).width / 2;
+    ctx.globalAlpha *= Math.min(1, local / 0.3);
+    ctx.fillText(line, x0, py);
+    if (Math.floor(local / 0.53) % 2 === 0) ctx.fillRect(x0 + ctx.measureText(line).width + 8, py - 24, 26, 48);
+    return;
+  }
+  const err = l.type === 'error';
+  const col = err ? (l.alert ?? '#FF4040') : l.color;
+  const { px, py, w, h } = uiBox(l);
+  const pop = Math.min(1, local / 0.15);
+  // an error dialog lands with a short shake, then blinks its title on the beat
+  const shake = err && local < 0.35 ? Math.sin(local * 90) * 10 * (1 - local / 0.35) : 0;
+  ctx.translate(px + shake, py);
+  ctx.scale(0.9 + 0.1 * pop, 0.9 + 0.1 * pop);
+  ctx.globalAlpha *= pop;
+  ctx.translate(-w / 2, -h / 2);
+  const sk = skinOf(l, col);
+  const os = l.skin === 'mac' || l.skin === 'win';
+  const bar = os ? 44 : 40;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, w, h, sk.radius);
+  if (os) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 40;
+    ctx.shadowOffsetY = 14;
+    ctx.fillStyle = sk.body;
+    ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.fillStyle = sk.body;
+    ctx.fill();
+  }
+  ctx.save();
+  ctx.clip();
+  ctx.globalAlpha *= !os && err && beat.since < 0.12 ? 0.35 : 1;
+  ctx.fillStyle = sk.bar;
+  ctx.fillRect(0, 0, w, bar);
+  ctx.restore();
+  ctx.strokeStyle = sk.line;
+  ctx.lineWidth = os ? 1.5 : 2;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, w, h, sk.radius);
+  ctx.stroke();
+  const title = l.title ?? (err ? (os ? 'Error' : 'ERROR') : l.type === 'terminal' ? (os ? 'Terminal' : '~ $ terminal') : l.type);
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = sk.barText;
+  if (l.skin === 'mac') {
+    // traffic lights left, title centred
+    ['#FF5F57', '#FEBC2E', '#28C840'].forEach((c, i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(24 + i * 26, bar / 2, 8, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.fillStyle = sk.barText;
+    ctx.font = `600 22px ${sk.font}`;
+    ctx.textAlign = 'center';
+    ctx.fillText(title, w / 2, bar / 2 + 1, w - 200);
+    ctx.textAlign = 'left';
+  } else if (l.skin === 'win') {
+    // title left, minimise / maximise / close right
+    ctx.font = `400 21px ${sk.font}`;
+    ctx.fillText(title, 16, bar / 2 + 1, w - 190);
+    ctx.strokeStyle = sk.barText;
+    ctx.lineWidth = 1.5;
+    const cx0 = w - 30;
+    ctx.beginPath();
+    ctx.moveTo(cx0 - 7, bar / 2 - 7); ctx.lineTo(cx0 + 7, bar / 2 + 7);
+    ctx.moveTo(cx0 + 7, bar / 2 - 7); ctx.lineTo(cx0 - 7, bar / 2 + 7);
+    ctx.moveTo(w - 140, bar / 2); ctx.lineTo(w - 126, bar / 2);
+    ctx.stroke();
+    ctx.strokeRect(w - 92, bar / 2 - 7, 14, 14);
+  } else {
+    ctx.font = '700 24px "Space Mono", "DotGothic16", monospace';
+    ctx.fillText(title, 12, bar / 2 + 1);
+    for (let i = 0; i < 3; i++) ctx.strokeRect(w - 34 - i * 30, 11, 18, 18);
+  }
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, bar, w, h - bar);
+  ctx.clip();
+  const text = l.lines?.length ? l.lines : UI_TEXT[l.type];
+  const fs = 26;
+  const lh = fs * 1.4;
+  const mono = l.type === 'terminal' || l.type === 'log' || l.type === 'code';
+  ctx.font = `400 ${fs}px ${mono ? sk.mono : sk.font}`;
+  ctx.fillStyle = sk.ink;
+  const rows = Math.max(1, Math.floor((h - bar - 16) / lh));
+  const blink = Math.floor(local / 0.53) % 2 === 0;
+  switch (l.type) {
+    case 'terminal': {
+      // commands type in at 16 characters a second; the screen scrolls when it fills
+      const typed = Math.floor(local * 16);
+      const out: string[] = [];
+      let n = 0;
+      for (const line of text.flatMap((x, i) => [i % 2 === 0 ? `> ${x}` : x])) {
+        if (n >= typed) break;
+        out.push([...line].slice(0, typed - n).join(''));
+        n += [...line].length;
+      }
+      const shown = out.slice(-rows);
+      shown.forEach((x, i) => ctx.fillText(x, 14, bar + 12 + lh * (i + 0.5)));
+      if (blink) {
+        const last = shown[shown.length - 1] ?? '';
+        ctx.fillRect(14 + ctx.measureText(last).width + 4, bar + 12 + lh * (shown.length - 0.5) - fs / 2, fs * 0.6, fs);
+      }
+      break;
+    }
+    case 'log':
+    case 'code': {
+      // a steady upward scroll, a line every 0.5 s (code scrolls slower, with line numbers)
+      const speed = l.type === 'log' ? 2 : 0.8;
+      const off = local * speed;
+      for (let i = -1; i <= rows; i++) {
+        const k = Math.floor(off) + i;
+        const y = bar + 12 + lh * (i + 0.5 - (off % 1));
+        const line = text[((k % text.length) + text.length) % text.length];
+        const pre = l.type === 'log' ? `[${(k * 0.731 + 10).toFixed(3).padStart(8, ' ')}] ` : `${String((k % 99) + 1).padStart(2, ' ')}  `;
+        ctx.globalAlpha *= l.type === 'code' ? 1 : 0.55 + 0.45 * hash(k, 3);
+        ctx.fillText(pre + line, 14, y);
+        ctx.globalAlpha /= l.type === 'code' ? 1 : 0.55 + 0.45 * hash(k, 3);
+      }
+      break;
+    }
+    case 'files': {
+      // the selection walks down the list on the beat (highlighted row)
+      const sel = Math.max(0, beat.index) % Math.min(rows, text.length);
+      text.slice(0, rows).forEach((x, i) => {
+        const y = bar + 12 + lh * (i + 0.5);
+        if (i === sel) {
+          ctx.fillStyle = sk.accent;
+          ctx.beginPath();
+          ctx.roundRect(8, y - lh / 2, w - 16, lh, os ? 6 : 0);
+          ctx.fill();
+        }
+        ctx.fillStyle = i !== sel ? sk.ink : os ? '#FFFFFF' : '#020804';
+        if (os) {
+          // a plain document glyph, then name and size in columns
+          ctx.strokeStyle = ctx.fillStyle;
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(18, y - 11, 16, 22);
+          ctx.fillText(x, 46, y, w - 190);
+          ctx.textAlign = 'right';
+          ctx.fillText(`${(hash(i, 5) * 900 + 12).toFixed(0)} KB`, w - 20, y);
+          ctx.textAlign = 'left';
+        } else ctx.fillText(`${x.padEnd(18, ' ')} ${(hash(i, 5) * 900 + 12).toFixed(0).padStart(4, ' ')}KB`, 14, y);
+      });
+      break;
+    }
+    case 'error': {
+      const cy = bar + (h - bar) * 0.42;
+      ctx.lineWidth = 3;
+      if (os) {
+        // Mac: a warning triangle; Windows: a red circle with a cross
+        ctx.fillStyle = l.skin === 'mac' ? '#FFCC00' : sk.alert;
+        ctx.beginPath();
+        if (l.skin === 'mac') {
+          ctx.moveTo(62, cy - 24); ctx.lineTo(88, cy + 22); ctx.lineTo(36, cy + 22); ctx.closePath();
+        } else ctx.arc(62, cy, 24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = l.skin === 'mac' ? '#1D1D1F' : '#FFFFFF';
+        ctx.font = `700 26px ${sk.font}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(l.skin === 'mac' ? '!' : '✕', 62, cy + (l.skin === 'mac' ? 6 : 1));
+        ctx.textAlign = 'left';
+        ctx.fillStyle = sk.ink;
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(40, cy + 22);
+        ctx.lineTo(62, cy - 20);
+        ctx.lineTo(84, cy + 22);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.fillText('!', 56, cy + 6);
+      }
+      // the message shrinks to fit a window the lyrics squeezed
+      const face = os ? sk.font : sk.mono;
+      let mf = fs + 4;
+      ctx.font = `700 ${mf}px ${face}`;
+      while (mf > 14 && ctx.measureText(text[0]).width > w - 124) ctx.font = `700 ${--mf}px ${face}`;
+      ctx.fillText(text[0], 104, cy);
+      const bw = 110;
+      if (os) {
+        // the default button in the system accent
+        ctx.fillStyle = sk.accent;
+        ctx.beginPath();
+        ctx.roundRect(w - bw - 20, h - 54, bw, 38, l.skin === 'mac' ? 8 : 4);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = `600 22px ${sk.font}`;
+        ctx.textAlign = 'center';
+        ctx.fillText('OK', w - bw / 2 - 20, h - 35);
+        ctx.textAlign = 'left';
+      } else {
+        ctx.lineWidth = 2;
+        ctx.strokeRect(w / 2 - bw / 2, h - 52, bw, 36);
+        ctx.font = `700 ${fs}px "Space Mono", monospace`;
+        ctx.fillText('OK', w / 2 - 14, h - 34);
+      }
+      break;
+    }
+    case 'progress': {
+      // fills over about eight seconds, then holds at 100 %
+      const p = Math.min(1, local / 8);
+      ctx.fillText(`${text[0]}...  ${Math.floor(p * 100)}%`, 14, bar + 28, w - 28);
+      if (os) {
+        // a continuous rounded bar in the system accent
+        ctx.fillStyle = sk.line;
+        ctx.beginPath();
+        ctx.roundRect(14, bar + 58, w - 28, 12, 6);
+        ctx.fill();
+        ctx.fillStyle = sk.accent;
+        ctx.beginPath();
+        ctx.roundRect(14, bar + 58, Math.max(12, (w - 28) * p), 12, 6);
+        ctx.fill();
+        break;
+      }
+      const cells = 24;
+      const cw = (w - 28) / cells;
+      for (let i = 0; i < cells; i++) {
+        if (i < Math.floor(p * cells)) ctx.fillRect(14 + i * cw, bar + 52, cw - 4, 26);
+        else ctx.strokeRect(14 + i * cw, bar + 52, cw - 4, 26);
+      }
+      break;
+    }
+    case 'loading': {
+      if (os) {
+        // a spinner of fading spokes
+        const cy = bar + (h - bar) / 2;
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          ctx.globalAlpha *= ((i - Math.floor(local * 12) + 120) % 12) / 12 * 0.8 + 0.2;
+          ctx.strokeStyle = sk.ink;
+          ctx.lineWidth = 4;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(44 + Math.cos(a) * 9, cy + Math.sin(a) * 9);
+          ctx.lineTo(44 + Math.cos(a) * 18, cy + Math.sin(a) * 18);
+          ctx.stroke();
+          ctx.globalAlpha /= ((i - Math.floor(local * 12) + 120) % 12) / 12 * 0.8 + 0.2;
+        }
+        ctx.font = `500 ${fs}px ${sk.font}`;
+        ctx.fillText(`${text[0]}${'.'.repeat(Math.floor(local * 2) % 4)}`, 80, cy, w - 100);
+        break;
+      }
+      const spin = '|/-\\'[Math.floor(local * 8) % 4];
+      ctx.font = `700 ${fs + 6}px "Space Mono", monospace`;
+      ctx.fillText(`${spin}  ${text[0]}${'.'.repeat(Math.floor(local * 2) % 4)}`, 18, bar + (h - bar) / 2);
+      break;
+    }
+  }
+  ctx.restore();
+}
+
 function band(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'band' }>, t: number) {
   const h = l.height ?? 110;
   ctx.translate(W / 2, H / 2 - (l.y ?? 0) * H / 2);
@@ -881,6 +1778,220 @@ function shape(ctx: CanvasRenderingContext2D, type: Extract<Layer, { kind: 'shap
   else ctx.fill();
 }
 
+// soft-edged pictures (dye bleeding, light under a leaf) drawn and blurred once: a canvas blur per stroke per frame
+// took a 7-object photogram past the renderer's two-minute ready timeout
+const blurCache = new Map<string, OffscreenCanvas>();
+function blurredOnce(key: string, w: number, h: number, blur: number, draw: (c: OffscreenCanvasRenderingContext2D) => void): OffscreenCanvas {
+  const hit = blurCache.get(key);
+  if (hit) return hit;
+  const raw = new OffscreenCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)));
+  draw(raw.getContext('2d')!);
+  let out = raw;
+  if (blur > 0) {
+    out = new OffscreenCanvas(raw.width, raw.height);
+    const c = out.getContext('2d')!;
+    c.filter = `blur(${blur}px)`;
+    c.drawImage(raw, 0, 0);
+  }
+  if (blurCache.size > 48) blurCache.clear();
+  blurCache.set(key, out);
+  return out;
+}
+
+type Mosaic = Extract<Layer, { kind: 'mosaic' }>;
+
+/** One pane of leaded glass: its colour lit by where the sun is (`light` 0..1), then the lead line around it. */
+function pane(ctx: CanvasRenderingContext2D, l: Mosaic, path: () => void, k: number, light: number) {
+  const a = l.opacity ?? 1;
+  ctx.globalAlpha = a * (0.45 + 0.55 * light);
+  ctx.fillStyle = l.colors[Math.floor(hash(k, (l.seed ?? 0) + 5) * l.colors.length)];
+  ctx.beginPath();
+  path();
+  ctx.fill();
+  ctx.globalAlpha = a;
+  ctx.stroke();
+}
+
+/** A rose window: a centre disc, a ring of petals, a ring of roundels, leaded and set in a stone ring; the sun moves
+ * round it so the lit side keeps changing. */
+function roseWindow(ctx: CanvasRenderingContext2D, l: Mosaic, t: number) {
+  const cx = W / 2 + ((l.x ?? 0) * W) / 2;
+  const cy = H / 2 - ((l.y ?? 0) * H) / 2;
+  const R = (l.r ?? 0.46) * H;
+  const n = Math.max(6, Math.min(16, l.cells ?? 12));
+  const sun = t * 0.18;
+  const lit = (ang: number) => 0.5 + 0.5 * Math.cos(ang - sun);
+  ctx.strokeStyle = l.color ?? '#141018';
+  ctx.lineWidth = 6;
+  pane(ctx, l, () => ctx.arc(cx, cy, R * 0.17, 0, Math.PI * 2), 0, 1);
+  for (let i = 0; i < n; i++) {
+    const [a0, a1] = [(i / n) * Math.PI * 2, ((i + 1) / n) * Math.PI * 2];
+    const am = (a0 + a1) / 2;
+    // inner ring: wedges between the centre and the petals
+    pane(ctx, l, () => { ctx.arc(cx, cy, R * 0.5, a0, a1); ctx.arc(cx, cy, R * 0.17, a1, a0, true); ctx.closePath(); }, i + 1, lit(am));
+    // petals: a pointed lobe on each wedge
+    pane(ctx, l, () => ctx.arc(cx + Math.cos(am) * R * 0.64, cy + Math.sin(am) * R * 0.64, R * 0.15, 0, Math.PI * 2), i + 40, lit(am));
+    // outer roundels, two per wedge
+    for (const f of [0.25, 0.75]) {
+      const ao = a0 + (a1 - a0) * f;
+      pane(ctx, l, () => ctx.arc(cx + Math.cos(ao) * R * 0.88, cy + Math.sin(ao) * R * 0.88, R * 0.09, 0, Math.PI * 2), i * 2 + 80 + f * 4, lit(ao));
+    }
+  }
+  ctx.lineWidth = 20;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R * 0.78, 0, Math.PI * 2);
+  ctx.stroke();
+  // light breathing through the glass
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.25);
+  g.addColorStop(0, 'rgba(255,240,210,0.16)');
+  g.addColorStop(1, 'rgba(255,240,210,0)');
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = g;
+  ctx.fillRect(cx - R * 1.3, cy - R * 1.3, R * 2.6, R * 2.6);
+  ctx.globalCompositeOperation = 'source-over';
+}
+
+/** Three pointed-arch lancet windows of diamond quarries with a roundel in each; a band of sunlight crosses them. */
+function lancets(ctx: CanvasRenderingContext2D, l: Mosaic, t: number) {
+  const lead = l.color ?? '#141018';
+  const yb = H * 0.94;
+  const sweep = ((t * 0.08) % 1.6) - 0.3;
+  const wins = [[W * 0.2, W * 0.15, H * 0.42], [W * 0.5, W * 0.18, H * 0.3], [W * 0.8, W * 0.15, H * 0.42]] as const;
+  wins.forEach(([cx, w, ys], wi) => {
+    const [xl, xr] = [cx - w / 2, cx + w / 2];
+    const outline = () => {
+      ctx.moveTo(xl, yb);
+      ctx.lineTo(xl, ys);
+      ctx.arc(xr, ys, w, Math.PI, (Math.PI * 4) / 3);
+      ctx.arc(xl, ys, w, -Math.PI / 3, 0);
+      ctx.lineTo(xr, yb);
+      ctx.closePath();
+    };
+    ctx.save();
+    ctx.beginPath();
+    outline();
+    ctx.clip();
+    ctx.strokeStyle = lead;
+    ctx.lineWidth = 4;
+    const q = w / 3.2;
+    const top = ys - w * 0.9;
+    for (let j = 0; top + (j - 1) * q * 0.7 < yb; j++)
+      for (let i = -1; i < 5; i++) {
+        const [x, y] = [xl + i * q + (j % 2 ? q / 2 : 0), top + j * q * 0.7];
+        const light = Math.max(0, 1 - Math.abs(x / W - sweep - (y / H) * 0.3) * 3);
+        pane(ctx, l, () => { ctx.moveTo(x, y - q * 0.7); ctx.lineTo(x + q / 2, y); ctx.lineTo(x, y + q * 0.7); ctx.lineTo(x - q / 2, y); ctx.closePath(); }, wi * 97 + j * 7 + i, 0.35 + 0.65 * light);
+      }
+    // a roundel in the head of each window
+    ctx.lineWidth = 6;
+    pane(ctx, l, () => ctx.arc(cx, ys - w * 0.1, w * 0.3, 0, Math.PI * 2), wi + 300, 1);
+    ctx.restore();
+    ctx.strokeStyle = lead;
+    ctx.lineWidth = 16;
+    ctx.beginPath();
+    outline();
+    ctx.stroke();
+  });
+}
+
+/** Cyanotype photogram objects: white silhouettes of plants and feathers laid round the edges of the sheet, each with
+ * the soft halo light leaves where it crept under the object. */
+function botanicals(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'botanical' }>, t: number) {
+  const n = l.count ?? 6;
+  const types = ['fern', 'leaf', 'flower', 'feather'] as const;
+  ctx.fillStyle = l.color;
+  ctx.strokeStyle = l.color;
+  for (let i = 0; i < n; i++) {
+    const seed = (l.seed ?? 0) * 53 + i;
+    const type = !l.type || l.type === 'mixed' ? types[Math.floor(hash(seed, 1) * 4)] : l.type;
+    // round the edges, the centre left for the lyrics
+    const side = i % 4;
+    const u = hash(seed, 2);
+    const [x, y] = side === 0 ? [u * W, H * 0.06] : side === 1 ? [W * 0.94, u * H] : side === 2 ? [u * W, H * 0.94] : [W * 0.06, u * H];
+    const size = (l.size ?? 380) * (0.7 + 0.6 * hash(seed, 3));
+    const rot = Math.atan2(H / 2 - y, W / 2 - x) + (hash(seed, 4) - 0.5) * 1.2 + 0.06 * Math.sin(t * 0.6 + i);
+    // the halo and the crisp silhouette are blurred once, then placed every frame
+    // the stem runs from the centre to +size and a flower's petals reach past its end: the canvas must hold 1.3 × size
+    // each side plus the halo blur, or the head was cut off flat
+    const box = Math.ceil(size * 2.8 + 40);
+    const img = blurredOnce(`bot${type}${Math.round(size)}${seed}${l.color}`, box, box, 0, (c) => {
+      for (const [blur, alpha] of [[10, 0.3], [1.2, 0.92]] as const) {
+        const tmp = new OffscreenCanvas(box, box);
+        const tc = tmp.getContext('2d')!;
+        tc.fillStyle = tc.strokeStyle = l.color;
+        tc.translate(box / 2, box / 2);
+        drawBotanical(tc as unknown as CanvasRenderingContext2D, type, size, seed);
+        c.filter = `blur(${blur}px)`;
+        c.globalAlpha = alpha;
+        c.drawImage(tmp, 0, 0);
+      }
+    });
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.drawImage(img, -box / 2, -box / 2);
+    ctx.restore();
+  }
+}
+
+function drawBotanical(ctx: CanvasRenderingContext2D, type: 'fern' | 'leaf' | 'flower' | 'feather', s: number, seed: number) {
+  const bend = (hash(seed, 6) - 0.5) * 0.5;
+  // the stem / shaft runs from the origin along +x, curving
+  const at = (u: number) => [u * s, Math.sin(u * Math.PI) * bend * s * 0.3] as const;
+  ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(3, s * 0.012);
+  ctx.beginPath();
+  for (let k = 0; k <= 20; k++) ctx.lineTo(...at(k / 20));
+  ctx.stroke();
+  if (type === 'fern' || type === 'feather') {
+    const pairs = type === 'fern' ? 16 : 60;
+    for (let k = 1; k < pairs; k++) {
+      const u = k / pairs;
+      const [px, py] = at(u);
+      const len = s * (type === 'fern' ? 0.28 * Math.sin(Math.PI * Math.min(1, u * 1.15)) : 0.16 * Math.sqrt(Math.sin(Math.PI * u)));
+      for (const d of [-1, 1]) {
+        const a = d * (type === 'fern' ? 1.05 : 0.6);
+        if (type === 'fern') {
+          ctx.beginPath();
+          ctx.ellipse(px + Math.cos(a) * len * 0.5, py + Math.sin(a) * len * 0.5, len * 0.5, len * 0.13, a, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + Math.cos(a) * len, py + Math.sin(a) * len);
+          ctx.stroke();
+        }
+      }
+    }
+    return;
+  }
+  if (type === 'leaf') {
+    // two halves with a thin gap down the midrib
+    for (const d of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(s * 0.15, d * 3);
+      ctx.bezierCurveTo(s * 0.4, d * s * 0.3, s * 0.85, d * s * 0.22, s, d * 2);
+      ctx.lineTo(s * 0.15, d * 3);
+      ctx.fill();
+    }
+    return;
+  }
+  // flower: petals round a centre at the stem's end
+  const [fx, fy] = at(1);
+  const petals = 5 + Math.floor(hash(seed, 7) * 4);
+  for (let k = 0; k < petals; k++) {
+    const a = (k / petals) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.ellipse(fx + Math.cos(a) * s * 0.13, fy + Math.sin(a) * s * 0.13, s * 0.13, s * 0.055, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -950,7 +2061,8 @@ export function drawNative(ctx: CanvasRenderingContext2D, language: string, sinc
       const cw = W / cols;
       const ch = cw * 2;
       ctx.font = `${ch * 0.9}px "Space Mono", monospace`;
-      ctx.fillStyle = '#FFB000';
+      // the language's one phosphor (languages.ts terminal), dim enough that the error windows and lyrics read over it
+      ctx.fillStyle = '#0B5A22';
       ctx.textBaseline = 'top';
       const ramp = '.:-=+*#%@';
       for (let j = 0; j < Math.ceil(H / ch); j++)
@@ -958,6 +2070,13 @@ export function drawNative(ctx: CanvasRenderingContext2D, language: string, sinc
           const d = Math.min(1, k * 1.2 - Math.hypot(i / cols - 0.5, j / (H / ch) - 0.5) * (1 - k) * 2);
           if (d > 0.05) ctx.fillText(ramp[Math.min(ramp.length - 1, Math.floor(d * ramp.length))], i * cw, j * ch);
         }
+      // the system is breached: error dialogs pop one after another round the edges, clear of the centred lyrics —
+      // only when the director put an error window in this section (the lyrics are about a failure, a break, a loss)
+      if (sec.layers.some((l) => l.kind === 'ui' && l.type === 'error')) ['SYSTEM BREACH', 'ACCESS DENIED', 'SIGNAL LOST', 'FATAL ERROR'].forEach((msg, i) => {
+        ctx.save();
+        ui(ctx, { kind: 'ui', type: 'error', color: '#3DFF6E', alert: '#FF4040', x: [-0.62, 0.6, -0.55, 0.64][i], y: [0.62, 0.55, -0.6, -0.64][i], w: 0.3, h: 0.2, lines: [msg], delay: i * 0.12 }, since, beat);
+        ctx.restore();
+      });
       break;
     }
     case 'cel80s': {
@@ -1321,6 +2440,14 @@ export function layerRect(l: Layer): Rect | undefined {
       const s = (l.size ?? 0.8) * H;
       return box(cx(l.x), cy(l.y), s * 0.62 * [...String(l.text ?? '')].length, s);
     }
+    case 'ui': {
+      const b = uiBox(l);
+      return box(b.px, b.py, b.w, b.h);
+    }
+    case 'sprite':
+    case 'card':
+    case 'thread':
+      return storyRect(l);
     default:
       return undefined;
   }
@@ -1336,11 +2463,21 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
   if (!r) return l;
   const guard = { x0: lyrics.x0 - margin, y0: lyrics.y0 - margin, x1: lyrics.x1 + margin, y1: lyrics.y1 + margin };
   if (!overlaps(r, guard)) return l;
+  if (l.kind === 'sprite' && l.pass) {
+    // a prop on its way (an orbit, a journey, a float) passes behind the line, fading by how much it covers it:
+    // pushed aside every frame it would jump about
+    const cover = (Math.max(0, Math.min(r.x1, guard.x1) - Math.max(r.x0, guard.x0)) * Math.max(0, Math.min(r.y1, guard.y1) - Math.max(r.y0, guard.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0));
+    return { ...l, opacity: (l.opacity ?? 1) * (1 - 0.65 * Math.min(1, cover)) };
+  }
   const clash = (q: Rect) => overlaps(q, guard) || others.some((o) => overlaps(q, o));
   const w = r.x1 - r.x0;
   const h = r.y1 - r.y0;
-  const inFrame = (q: Rect) => q.x0 >= 0 && q.y0 >= 0 && q.x1 <= W && q.y1 <= H;
-  for (const k of [1, 0.75, 0.55]) {
+  // a window must land inside its own margins, or the draw clamps it back over the line
+  const [mx, my] = l.kind === 'ui' ? [UI_MX, UI_MY] : [0, 0];
+  const inFrame = (q: Rect) => q.x0 >= mx - 1 && q.y0 >= my - 1 && q.x1 <= W - mx + 1 && q.y1 <= H - my + 1;
+  // a story prop is the subject, not decoration: it may give way a little but never shrinks into a corner
+  const story = l.kind === 'sprite' || l.kind === 'card';
+  for (const k of story ? [1, 0.85] : [1, 0.75, 0.55]) {
     const ww = w * k;
     const hh = h * k;
     const cy0 = (r.y0 + r.y1) / 2;
@@ -1355,14 +2492,33 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
     ];
     for (const [x, y] of spots) {
       // keep it inside the frame along the free axis
-      const fx = Math.min(W - ww / 2, Math.max(ww / 2, x));
-      const fy = Math.min(H - hh / 2, Math.max(hh / 2, y));
+      const fx = Math.min(W - ww / 2 - mx, Math.max(ww / 2 + mx, x));
+      const fy = Math.min(H - hh / 2 - my, Math.max(hh / 2 + my, y));
       const q = { x0: fx - ww / 2, y0: fy - hh / 2, x1: fx + ww / 2, y1: fy + hh / 2 };
       if (!inFrame(q) || clash(q)) continue;
       return resize({ ...l, x: (fx - W / 2) / (W / 2), y: (H / 2 - fy) / (H / 2) } as Layer, k);
     }
   }
-  return l;
+  if (story) {
+    // no room next to the line: the prop crosses to the far side or another free spot (nearest first) rather than
+    // fading behind the line (落ちた風鈴 dimmed to a ghost beside the vertical lyrics)
+    const cx0 = (r.x0 + r.x1) / 2;
+    const cy0 = (r.y0 + r.y1) / 2;
+    const spots = [[W - cx0, cy0], [cx0, H - cy0], [W - cx0, H - cy0], ...[0.2, 0.5, 0.8].flatMap((fx) => [0.25, 0.5, 0.75].map((fy) => [W * fx, H * fy]))].sort(
+      (a, b) => Math.hypot(a[0] - cx0, a[1] - cy0) - Math.hypot(b[0] - cx0, b[1] - cy0),
+    );
+    for (const k of [1, 0.85])
+      for (const [x, y] of spots) {
+        const fx = Math.min(W - (w * k) / 2, Math.max((w * k) / 2, x));
+        const fy = Math.min(H - (h * k) / 2, Math.max((h * k) / 2, y));
+        const q = { x0: fx - (w * k) / 2, y0: fy - (h * k) / 2, x1: fx + (w * k) / 2, y1: fy + (h * k) / 2 };
+        if (!clash(q)) return resize({ ...l, x: (fx - W / 2) / (W / 2), y: (H / 2 - fy) / (H / 2) } as Layer, k);
+      }
+    // a frame full of type (beat-cut): the prop steps back behind the line
+    return { ...l, opacity: (l.opacity ?? 1) * 0.55 } as Layer;
+  }
+  // a window with nowhere to go (huge beat-cut type over the whole frame) steps back behind the line instead
+  return l.kind === 'ui' ? { ...l, opacity: 0.45 } : l;
 }
 
 function resize(l: Layer, k: number): Layer {
@@ -1378,6 +2534,12 @@ function resize(l: Layer, k: number): Layer {
       return { ...l, size: (l.size ?? 90) * k };
     case 'numeral':
       return { ...l, size: (l.size ?? 0.8) * k };
+    case 'ui':
+      return { ...l, w: (l.w ?? UI_W[l.type]) * k, h: (l.h ?? UI_H[l.type]) * k };
+    case 'sprite':
+      return { ...l, size: l.size * k };
+    case 'card':
+      return { ...l, scale: l.scale * k };
     default:
       return l;
   }
@@ -1398,12 +2560,37 @@ export function blendLayer(a: Layer, b: Layer, k: number): Layer {
     return b;
   }
   const out = { ...b } as Record<string, unknown>;
+  if (a.kind === 'ui' && b.kind === 'ui' && (a.opacity ?? 1) !== (b.opacity ?? 1)) out['opacity'] = (a.opacity ?? 1) + ((b.opacity ?? 1) - (a.opacity ?? 1)) * k;
   for (const key of ['x', 'y', 'w', 'h', 'r', 'size']) {
     const va = (a as unknown as Record<string, unknown>)[key];
     const vb = (b as unknown as Record<string, unknown>)[key];
     if (typeof va === 'number' && typeof vb === 'number') out[key] = va + (vb - va) * k;
   }
   return out as unknown as Layer;
+}
+
+/**
+ * Pulls apart a section's computer windows that the director stacked on each other: each window that covers more than
+ * a fifth of an earlier one moves to the free spot (of nine around the frame) nearest its own. Positions only.
+ */
+export function spreadWindows(layers: Layer[]): Layer[] {
+  const placed: Rect[] = [];
+  const area = (r: Rect) => Math.max(0, r.x1 - r.x0) * Math.max(0, r.y1 - r.y0);
+  const cut = (a: Rect, b: Rect) => area({ x0: Math.max(a.x0, b.x0), y0: Math.max(a.y0, b.y0), x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1) });
+  const crowded = (r: Rect) => placed.some((p) => cut(r, p) > 0.2 * Math.min(area(r), area(p)));
+  return layers.map((l) => {
+    if (l.kind !== 'ui') return l;
+    const r = layerRect(l)!;
+    if (!crowded(r)) return placed.push(r), l;
+    const spots = [-0.62, 0, 0.62].flatMap((x) => [0.58, 0, -0.58].map((y) => ({ ...l, x, y })));
+    const free = spots.filter((q) => !crowded(layerRect(q)!));
+    const d = (q: UiLayer) => ((q.x ?? 0) - (l.x ?? 0)) ** 2 + ((q.y ?? 0) - (l.y ?? 0)) ** 2;
+    const best = free.sort((a, b) => d(a) - d(b))[0];
+    // ponytail: no free spot keeps the overlap, a busy desktop overlaps anyway
+    const out = best ?? l;
+    placed.push(layerRect(out)!);
+    return out;
+  });
 }
 
 /** Makes room for the lyrics across a section's layers: each movable object avoids the lyrics and the ones placed before it. */
@@ -1413,13 +2600,16 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
     const r = layerRect(l);
     return !r || !overlaps(r, { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 });
   };
-  const placed: Rect[] = layers.filter(clear).map(layerRect).filter((r): r is Rect => !!r);
+  const isStory = (l: Layer) => l.kind === 'sprite' || l.kind === 'card' || l.kind === 'thread';
+  const placed = layers.filter(clear).flatMap((l) => (layerRect(l) ? [{ r: layerRect(l)!, story: isStory(l) }] : []));
   return layers.map((l) => {
     if (l.kind === 'code') return { ...l, lyric: lyrics };
     if (clear(l)) return l;
-    const out = avoid(l, lyrics, 24, placed);
+    // a story prop is drawn over the backdrop, so only the lyrics and the other story objects are in its way (a
+    // background disc next to the line pushed 落ちた風鈴 under the lyrics)
+    const out = avoid(l, lyrics, 24, placed.filter((p) => !isStory(l) || p.story).map((p) => p.r));
     const r = layerRect(out);
-    if (r) placed.push(r);
+    if (r) placed.push({ r, story: isStory(l) });
     return out;
   });
 }

@@ -5,6 +5,19 @@ const KANA_ONLY = /^[぀-ゟー]+$/;
 
 /** Character indexes (code points) where a phrase may start or end, including 0 and the text length. */
 export function phraseBoundaries(text: string): Set<number> {
+  // Chinese: the word segmenter's words as they are (a Han run is many words, not one: 氣沉|丹田|手心|開)
+  if (!/[\u3040-\u30ff]/.test(text) && /\p{Script=Han}/u.test(text)) {
+    const out = new Set<number>([0]);
+    let pos = 0;
+    for (const { segment } of new Intl.Segmenter('zh-Hant', { granularity: 'word' }).segment(text)) {
+      out.add(pos);
+      pos += [...segment].length;
+    }
+    out.add(pos);
+    const cs = [...text];
+    for (const b of [...out]) if (b > 0 && b < cs.length && /[、。，．,.!?！？）」』】]/.test(cs[b])) out.delete(b);
+    return out;
+  }
   const seg = new Intl.Segmenter('ja', { granularity: 'word' });
   const out = new Set<number>([0]);
   let pos = 0;

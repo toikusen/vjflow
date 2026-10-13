@@ -38,7 +38,7 @@ export const stair: TemplateRenderer = {
       group.add(g.mesh);
     });
     // the second row enters a beat-ish later
-    const delay = 0.35 * rt.pace;
+    const delay = rt.rushed ? 0 : 0.35 * rt.pace;
     const firstRow = rowGlyphs[0].length;
     const rowRt = (i: number): CueRuntime => (i < firstRow ? rt : { ...rt, showFrom: rt.showFrom + delay });
 

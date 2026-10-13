@@ -112,8 +112,8 @@ createServer(async (req, res) => {
         return sendFile(req, res, resolve(dirname(OUT_ROOT), p));
       }
       if (m[2] === '/cues' && req.method === 'PUT') {
-        const body = JSON.parse(await readBody(req)) as { cues: TimingEdit[]; confirm?: boolean; accepted?: string[] };
-        const next = applyTimingEdit(song, body.cues, !!body.confirm, undefined, Array.isArray(body.accepted) ? body.accepted.map(String) : []);
+        const body = JSON.parse(await readBody(req)) as { cues: TimingEdit[]; confirm?: boolean; accepted?: string[]; singers?: { name: string; color: string }[] };
+        const next = applyTimingEdit(song, body.cues, !!body.confirm, undefined, Array.isArray(body.accepted) ? body.accepted.map(String) : [], body.singers);
         const backup = file.replace(/\.json$/, '.orig.json');
         if (!existsSync(backup)) copyFileSync(file, backup); // the automatic timing, kept once
         writeFileSync(file, JSON.stringify(next, null, 1));

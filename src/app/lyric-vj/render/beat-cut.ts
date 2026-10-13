@@ -16,11 +16,14 @@ export const MAX_PIECE = 6;
 export function cutPieces(text: string): { text: string; from: number }[] {
   const out: { text: string; from: number }[] = [];
   let at = 0;
+  // Chinese is all Han: its words come from the segmenter, the Japanese "never cut a kanji run" rule would keep a
+  // Chinese line in one piece
+  const zh = !/[\u3040-\u30ff]/.test(text) && /\p{Script=Han}/u.test(text);
   const split = (p: string): string[] => {
     const cs = [...p.trim()];
     if (cs.length <= MAX_PIECE) return [p];
     // cut nearest the middle, at a phrase boundary when there is one, never inside a kanji run (六|感 or 年甲|斐)
-    const kanji = (c?: string) => !!c && /\p{Script=Han}/u.test(c);
+    const kanji = (c?: string) => !zh && !!c && /\p{Script=Han}/u.test(c);
     const ok = cs.map((_, i) => i).filter((i) => i >= 2 && cs.length - i >= 2 && !(kanji(cs[i - 1]) && kanji(cs[i])) && !/^[、。，,ーっゃゅょぁぃぅぇぉ]/.test(cs[i]));
     const bounds = phraseBoundaries(p.trim());
     const byMiddle = (x: number, y: number) => Math.abs(x - cs.length / 2) - Math.abs(y - cs.length / 2);
@@ -31,7 +34,7 @@ export function cutPieces(text: string): { text: string; from: number }[] {
   // phrases can split a kanji compound (六|感): rejoin pieces that meet kanji to kanji
   const kanjiEnd = /\p{Script=Han}$/u;
   const kanjiStart = /^\p{Script=Han}/u;
-  const joined = phrases(text).reduce<string[]>((acc, p) => (acc.length && kanjiEnd.test(acc[acc.length - 1]) && kanjiStart.test(p) ? [...acc.slice(0, -1), acc[acc.length - 1] + p] : [...acc, p]), []);
+  const joined = phrases(text).reduce<string[]>((acc, p) => (!zh && acc.length && kanjiEnd.test(acc[acc.length - 1]) && kanjiStart.test(p) ? [...acc.slice(0, -1), acc[acc.length - 1] + p] : [...acc, p]), []);
   for (const p of joined.flatMap(split)) {
     const from = [...text].indexOf([...p.trim()][0] ?? '', at);
     at = from + [...p].length;
@@ -68,7 +71,9 @@ export function timedPieces(pieces: { text: string; from: number }[], charStarts
  */
 export function planCut(text: string, timed: { text: string; from: number; at: number }[], showFrom: number, lastSung: number, exitAt: number) {
   const recapAt = lastSung + 0.3;
-  const fits = timed.length > 1 && exitAt - recapAt >= 0.9 && recapAt > timed[timed.length - 1].at + MIN_HOLD;
+  // the recap must stay long enough to read the whole line (a 23-character recap held 0.9 s could not be read)
+  const read = Math.max(0.9, [...text.replace(/\s/g, '')].length / 12 + 0.4);
+  const fits = timed.length > 1 && exitAt - recapAt >= read && recapAt > timed[timed.length - 1].at + MIN_HOLD;
   if (!fits) return { pieces: [{ text: text.trim(), from: 0, at: showFrom }], cutCount: 1, recapAt: showFrom };
   return { pieces: [...timed, { text: text.replace(/\s+/g, ' ').trim(), from: 0, at: recapAt }], cutCount: timed.length, recapAt };
 }

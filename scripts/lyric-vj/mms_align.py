@@ -1,7 +1,8 @@
 """Forced alignment with Meta's MMS aligner (torchaudio MMS_FA, CTC) on romanised lyrics: a second aligner family,
-independent of Whisper. Lines are read as kana (pykakasi) and romanised; output matches force_align.py.
+independent of Whisper. Japanese lines are read as kana (pykakasi) and romanised, Chinese lines as pinyin (pypinyin);
+output matches force_align.py.
 
-uv run --with torch --with torchaudio --with pykakasi --with soundfile python scripts/lyric-vj/mms_align.py vocals.wav lyrics.txt out.json
+uv run --with torch --with torchaudio --with pykakasi --with pypinyin --with soundfile python scripts/lyric-vj/mms_align.py vocals.wav lyrics.txt out.json [--language ja|zh]
 """
 
 import json
@@ -25,8 +26,17 @@ def romaji(line):
     return words
 
 
+def pinyin(line):
+    from pypinyin import lazy_pinyin
+
+    # one word per syllable (a sung Chinese character is one note); latin words as they are
+    return [w for w in (re.sub(r"[^a-z]", "", x.lower()) for x in lazy_pinyin(line)) if w]
+
+
 def main():
     vocals, lyrics, out = sys.argv[1:4]
+    language = sys.argv[sys.argv.index("--language") + 1] if "--language" in sys.argv else "ja"
+    read = pinyin if language.startswith("zh") else romaji
     lines = [l.strip() for l in open(lyrics, encoding="utf-8") if l.strip()]
     wav, sr = sf.read(vocals, dtype="float32", always_2d=True)
     wav = torch.from_numpy(wav.mean(axis=1))[None]
@@ -40,7 +50,7 @@ def main():
         emission = torch.cat(ems, dim=1)
     words, owner = [], []
     for k, l in enumerate(lines):
-        w = romaji(l) or ["a"]
+        w = read(l) or ["a"]
         words += w
         owner += [k] * len(w)
     tokenizer = bundle.get_tokenizer()

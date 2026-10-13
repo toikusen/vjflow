@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { FONTS } from './fonts';
-import { LANGUAGES } from './languages';
+import { keepOwnMotifs, LANGUAGES, PROVEN_LANGUAGES } from './languages';
 import { TEMPLATES } from './templates';
 
 describe('design languages', () => {
+  it('offers the director only the user-approved ones (cel80s on sweet timer came out unusable)', () => {
+    expect([...PROVEN_LANGUAGES].sort()).toEqual(['dossier', 'pictogram', 'risograph', 'silkscreen', 'spy-titles']);
+  });
   it('use only catalog fonts and real templates, and each says how to draw it', () => {
     const fonts = new Set(FONTS.map((f) => f.family));
     for (const [id, l] of Object.entries(LANGUAGES)) {
@@ -11,5 +14,39 @@ describe('design languages', () => {
       expect(l.templates.filter((t) => !(t in TEMPLATES)), id).toEqual([]);
       expect(l.craft.length, id).toBeGreaterThan(200);
     }
+  });
+
+  it('each draws its props in its own medium (one shared flat style made every song look alike)', () => {
+    const styles = Object.entries(LANGUAGES).map(([id, l]) => [id, l.props?.style ?? ''] as const);
+    for (const [id, style] of styles) expect(style.length, id).toBeGreaterThan(120);
+    expect(new Set(styles.map(([, s]) => s)).size).toBe(styles.length);
+  });
+
+  it('strips shared decorations a language does not own, and echo next to a motif', () => {
+    const t = {
+      design: {} as { techniques?: string[] },
+      motif: undefined as unknown,
+      graphics: { sections: [{ layers: [{ kind: 'paper' }, { kind: 'rings' }, { kind: 'pattern', type: 'waves' }, { kind: 'particles', shape: 'heart' }, { kind: 'stamp' }] }] },
+      cues: [{ emphasis: [{ method: 'face' }, { method: 'symbol', symbol: 'heart' }, { method: 'scale' }] }],
+    };
+    const fixes = keepOwnMotifs(t, 'aizome');
+    expect(t.graphics.sections[0].layers.map((l) => l.kind)).toEqual(['paper']);
+    expect(t.cues[0].emphasis.map((e) => e.method)).toEqual(['scale']);
+    expect(t.design.techniques).not.toContain('echo');
+    expect(fixes.length).toBeGreaterThan(3);
+    const r = { ...t, design: {}, graphics: { sections: [{ layers: [{ kind: 'stamp' }, { kind: 'rings' }] }] }, cues: [] };
+    keepOwnMotifs(r, 'risograph');
+    expect(r.graphics.sections[0].layers.map((l) => l.kind)).toEqual(['stamp']);
+    const s = { design: { techniques: ['echo', 'quiet'] }, motif: { kind: 'orbit' }, shots: [{ params: { echo: true, dim: 0.3 } }], cues: [] };
+    keepOwnMotifs(s, 'swiss');
+    expect(s.design.techniques).toEqual(['quiet']);
+    expect(s.shots[0].params).toEqual({ dim: 0.3 });
+  });
+
+  it('takes the photos out of a drawn-only look', () => {
+    const t = { shots: [{ params: {}, asset: 'img_a' }] as { params: Record<string, unknown>; asset?: string }[], assets: [{ id: 'img_a' }], cues: [] };
+    keepOwnMotifs(t, 'terminal');
+    expect(t.shots[0].asset).toBeUndefined();
+    expect(t.assets).toEqual([]);
   });
 });

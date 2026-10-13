@@ -176,7 +176,7 @@ p {
 
   li {
     display: grid;
-    grid-template-columns: 32px 1fr;
+    grid-template-columns: 32px 1fr auto;
     align-items: center;
     gap: 6px 10px;
     padding: 8px 10px;
@@ -205,15 +205,54 @@ p {
 
   // second row: times and fixes under the lyric
   .controls {
-    grid-column: 2;
+    grid-column: 2 / -1;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 12px;
   }
 
-  .text {
+  // the lyric reads as text and edits in place
+  input.text {
+    width: 100%;
+    min-width: 0;
+    padding: 2px 4px;
     font-size: 15px;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+
+    &:hover {
+      border-color: var(--border);
+    }
+
+    &:focus {
+      background: var(--surface-2);
+      border-color: var(--accent, #6fa8ff);
+      outline: none;
+    }
+  }
+
+  .line-ops {
+    display: flex;
+    gap: 4px;
+
+    button {
+      padding: 2px 8px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+
+      &:hover {
+        color: var(--text);
+        background: var(--surface-2);
+      }
+    }
   }
 
   .play,
@@ -281,3 +320,69 @@ p {
   }
 }
 
+
+.singers {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+
+  .row-between {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .singer {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+
+    input[type='color'] {
+      width: 34px;
+      height: 28px;
+      padding: 0;
+      border: none;
+      background: none;
+    }
+
+    .name {
+      flex: 1;
+      padding: 4px 8px;
+      font: inherit;
+      color: var(--text);
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+
+    button {
+      padding: 2px 8px;
+      color: var(--muted);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+  }
+}
+
+.who {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+  }
+
+  select {
+    font: inherit;
+    font-size: 12px;
+  }
+}

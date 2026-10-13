@@ -1,7 +1,7 @@
 // frame-split: a thin frame (and corner brackets) draws itself at the start of the shot; the main row sits inside,
 // remaining rows in small type outside the frame's lower right.
 import * as THREE from 'three';
-import { advanceOf, clamp01, easeOutBack, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
+import { advanceOf, clamp01, easeOutBack, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth, sizeCap } from './glyphs';
 import { accentPulse, color, readable, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, settledAt, ShotLayer, tagSource, TemplateRenderer } from './runtime';
 import { Palette, ParamValue, Shot } from '../treatment';
 
@@ -117,11 +117,11 @@ export const frameSplit: TemplateRenderer = {
       const w100 = [...text].reduce((s, c) => s + advanceOf(c, probe), 0) || 1;
       return (100 * w * 0.86) / w100;
     };
-    let size = Math.min(168, fit(rows[0]));
+    let size = Math.min(168 * sizeCap, fit(rows[0]));
     if (size < 88) {
       const c = [...rows[0]];
       mainRows = [c.slice(0, Math.ceil(c.length / 2)).join(''), c.slice(Math.ceil(c.length / 2)).join('')];
-      size = Math.max(88, Math.min(168, ...mainRows.map(fit)));
+      size = Math.max(88, Math.min(168 * sizeCap, ...mainRows.map(fit)));
     }
     const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
     const mainGlyphs: Glyph[] = [];

@@ -360,3 +360,30 @@ export function motionPad(r: { x0: number; y0: number; x1: number; y1: number },
 
 /** A planned entrance that never plays: the line was meant to enter with motion and lands on a cut instead. */
 export const entranceLost = (planned: Pick<CueStyle, 'enter'>, final: Pick<CueStyle, 'enter'>) => planned.enter !== 'cut' && final.enter === 'cut';
+
+/**
+ * The share of a line's box where `text` reads below 3:1 over a photo inset: the box (pixels `img`, its top left at
+ * x0, y0 in frame px) is cut in ~48 px cells, each read on its mean (halftone dots or a star average out; a picture
+ * under part of the line does not). Cells off the photos do not count against the line: bands and shapes are part of
+ * the design its colour was chosen on, and a photo is what stays behind the words when there is no room.
+ */
+export function poorShare(img: { data: ArrayLike<number>; width: number; height: number }, x0: number, y0: number, text: string, photos: { x0: number; y0: number; x1: number; y1: number }[]): number {
+  const { data: d, width: w, height: h } = img;
+  if (!photos.length || !w || !h) return 0;
+  const cols = Math.max(1, Math.round(w / 48));
+  const rows = Math.max(1, Math.round(h / 48));
+  const cells = Array.from({ length: cols * rows }, () => [0, 0, 0, 0]);
+  for (let i = 0; i < d.length; i += 4 * 97) {
+    const p = i / 4;
+    const c = cells[Math.min(rows - 1, Math.floor((Math.floor(p / w) / h) * rows)) * cols + Math.min(cols - 1, Math.floor(((p % w) / w) * cols))];
+    c[0] += d[i]; c[1] += d[i + 1]; c[2] += d[i + 2]; c[3]++;
+  }
+  const hx = (v: number, k: number) => Math.round(v / k).toString(16).padStart(2, '0');
+  const onPhoto = (k: number) => {
+    const [x, y] = [x0 + ((k % cols) + 0.5) * (w / cols), y0 + (Math.floor(k / cols) + 0.5) * (h / rows)];
+    return photos.some((q) => x > q.x0 && x < q.x1 && y > q.y0 && y < q.y1);
+  };
+  const filled = cells.flatMap((c, k) => (c[3] ? [{ c, k }] : []));
+  if (!filled.length) return 0;
+  return filled.filter(({ c, k }) => onPhoto(k) && contrast(text, `#${hx(c[0], c[3])}${hx(c[1], c[3])}${hx(c[2], c[3])}`) < 3).length / filled.length;
+}

@@ -30,13 +30,14 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Measured, measurable, Rect, sectionAt } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Measured, measurable, Rect, sectionAt, smoothPlacement } from './graphics';
+import { storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
-import { contrast, CueLayer, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { contrast, CueLayer, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -62,6 +63,33 @@ function settledBox(layer: CueLayer, parent?: THREE.Object3D, span = false): THR
   return box;
 }
 
+/**
+ * Each place a line rests while it is read, with when it is there: a stack (or couplet) line moves when a later line
+ * lands (`cuts`, its arrivals); one box per stretch between them, measured once the 0.4 s push has settled. The
+ * union of all of them held the whole frame middle for the whole line (チョロイン c003: a one-row line kept props and
+ * photos off 580 px of the frame) though the line is only ever in one of those places.
+ */
+function placesWhileRead(layer: CueLayer, parent: THREE.Object3D, cuts: number[]): { from: number; to: number; box: THREE.Box3 }[] {
+  const [from, to] = layer.readable();
+  const end = Number.isFinite(to) ? to : from + 1;
+  const vis = layer.group.visible;
+  layer.group.visible = true;
+  const bounds = [from, ...cuts.filter((c) => c > from + 0.05 && c < end - 0.05), end];
+  const out = bounds.slice(0, -1).map((a, i) => {
+    const b = bounds[i + 1];
+    const s0 = Math.min(i ? a + 0.4 : a + (end - from) * 0.05, b - 0.01);
+    const box = new THREE.Box3();
+    for (const x of [s0, (s0 + b) / 2, b - 0.01]) {
+      measureAtRest(() => layer.update(x, { flash: 0, hit: 0, shake: 0 }));
+      parent.updateMatrixWorld(true);
+      box.union(shownBox(layer));
+    }
+    return { from: a, to: b, box };
+  });
+  layer.group.visible = vis;
+  return out;
+}
+
 /** The box of what the layer shows now, in world (frame) px with every transform above it applied. */
 function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
   // only what is showing at that moment (beat-cut keeps its other pieces hidden)
@@ -75,6 +103,16 @@ function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
   });
   return box;
 }
+
+/** Text without spaces, punctuation or symbols, to match a card's words in a line (「嘘つき！」 in 「…結局嘘つき！つき！」). */
+const bare = (s: string) => s.replace(/[\s\p{P}\p{S}]/gu, '');
+
+/** A stretch between changes is placed as it is this long in: a card that just landed has stopped falling (story.ts). */
+const SETTLE_SEC = 0.9;
+
+/** A line whose type reads below 3:1 over more than this share of its box, as played, is rebuilt light in a dark halo
+ * (experimental: set by eye on チョロイン, iw and Utsusemi stills, 2026-10-13). */
+const POOR_SHARE = 0.15;
 
 function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   const fit = new THREE.Group();
@@ -379,7 +417,7 @@ export class LyricVjEngine {
   private flashes: { at: number; glyphs: Glyph[]; group: THREE.Group; cueId: string }[] = [];
   private textRoot = new THREE.Group();
   private shotLayers = new Map<string, ShotLayer>();
-  private cueLayers: { rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number] }[] = [];
+  private cueLayers: { rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; guard?: { from: number; to: number; rect: Rect; share: number } }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
   private callLayers: { rt: CueRuntime; group: THREE.Group; units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[] }[] = [];
   private images = new Map<string, THREE.Texture>();
@@ -721,22 +759,25 @@ export class LyricVjEngine {
       // on both; flipping each glyph to the other ink made words change colour for no reason
       // the emphasis colour is read against the same dark keyline as the type: measured against the light half of the
       // backdrop it was darkened, and a dark keyword sat unreadable on the dark half (世界のつづき 「波に」)
-      if (mixed) rt.palette = { ...rt.palette, text: '#f4f2ee', background: '#141218' };
-      // a member's line in the member's colour, lightened or darkened until it reads on what is behind it
-      const singer = cue.singer ? this.job.singers?.find((x) => x.name === cue.singer) : undefined;
-      if (singer) rt.palette = { ...rt.palette, text: readableOn(singer.color, backdrop ?? rt.palette.background, 4.5) };
-      // a one-ink look (phosphor) keeps its ink on everything: the dark halo carries it over a busy backdrop
-      // a section on a real Mac / Windows desktop takes white type instead, so the two kinds of section read apart
-      // (read mid-line: the director's section starts are rounded and land a few hundredths after the cut)
-      const desk = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, (cue.start + cue.end) / 2).layers.some((l) => l.kind === 'ui' && (l.skin === 'mac' || l.skin === 'win'));
-      const ink = design.language && LANGUAGES[design.language].text?.ink;
-      if (ink) rt.palette = { ...rt.palette, text: desk ? '#F5F5F7' : ink };
-      setHalo(mixed ? MIXED_HALO : backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
-      // the dark offset copy goes under light type; dark type gets the offset as a coloured second ink instead (a dark
-      // shadow under dark heavy type merged the strokes into one blob)
-      const darkType = luma(rt.palette.text) <= 0.5;
-      setGhost(darkType ? [0, 0] : langGhost);
-      setInkGhost(darkType && (langGhost[0] || langGhost[1]) ? { dx: langGhost[0] * 1.4, dy: langGhost[1] * 1.4, color: new THREE.Color(rt.palette.accent).lerp(new THREE.Color(1, 1, 1), 0.25) } : null);
+      const colour = (mix: boolean) => {
+        if (mix) rt.palette = { ...rt.palette, text: '#f4f2ee', background: '#141218' };
+        // a member's line in the member's colour, lightened or darkened until it reads on what is behind it
+        const singer = cue.singer ? this.job.singers?.find((x) => x.name === cue.singer) : undefined;
+        if (singer) rt.palette = { ...rt.palette, text: readableOn(singer.color, backdrop ?? rt.palette.background, 4.5) };
+        // a one-ink look (phosphor) keeps its ink on everything: the dark halo carries it over a busy backdrop
+        // a section on a real Mac / Windows desktop takes white type instead, so the two kinds of section read apart
+        // (read mid-line: the director's section starts are rounded and land a few hundredths after the cut)
+        const desk = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, (cue.start + cue.end) / 2).layers.some((l) => l.kind === 'ui' && (l.skin === 'mac' || l.skin === 'win'));
+        const ink = design.language && LANGUAGES[design.language].text?.ink;
+        if (ink) rt.palette = { ...rt.palette, text: desk ? '#F5F5F7' : ink };
+        setHalo(mix ? MIXED_HALO : backdrop && luma(backdrop) > 0.5 ? hexToRgba(backdrop, 0.95) : 'rgba(0,0,0,0.85)');
+        // the dark offset copy goes under light type; dark type gets the offset as a coloured second ink instead (a dark
+        // shadow under dark heavy type merged the strokes into one blob)
+        const darkType = luma(rt.palette.text) <= 0.5;
+        setGhost(darkType ? [0, 0] : langGhost);
+        setInkGhost(darkType && (langGhost[0] || langGhost[1]) ? { dx: langGhost[0] * 1.4, dy: langGhost[1] * 1.4, color: new THREE.Color(rt.palette.accent).lerp(new THREE.Color(1, 1, 1), 0.25) } : null);
+      };
+      colour(mixed);
       // templates draw the plain entrance/exit; ink, glitch, slash and drawn emphasis go on top (text-fx.ts)
       const build = (r = rt) => withTextFx(RENDERERS[shot.template].cue({ ...r, style: templateStyle(r.style) }), r);
       let layer = build();
@@ -758,16 +799,46 @@ export class LyricVjEngine {
       this.textRoot.add(fit);
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
-      this.cueLayers.push({ rt, layer, fit, fitScale: fit.scale.x, drift: [Math.cos(ang) * 14, Math.sin(ang) * 8] });
+      const entry: (typeof this.cueLayers)[number] = { rt, layer, fit, fitScale: fit.scale.x, drift: [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
+      // rebuilt light type in a dark halo (same timing and layout): a line found over a picture once the song is laid out
+      entry.remake = () => {
+        setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
+        colour(true);
+        const l = build();
+        setInkGhost(null);
+        l.group.visible = false;
+        const f = fitToFrame(l, kick);
+        const kids = this.textRoot.children;
+        const k = kids.indexOf(entry.fit!);
+        entry.fit!.removeFromParent();
+        this.textRoot.add(f);
+        kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
+        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, mixed: true });
+      };
+      this.cueLayers.push(entry);
       if (this.job.treatment.graphics) {
         // where the line sits on screen, so background objects can make room for it
         // beat-cut throws its phrases all over the frame before the line settles: the whole frame is the line's
         const b = settledBox(layer, fit, true);
         if (shot.template === 'beat-cut') this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H }, rest: { x0: 0, y0: 0, x1: W, y1: H } });
         else if (!b.isEmpty()) {
-          // room for the line as it moves, not only where it rests
-          const rest = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y };
-          this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: motionPad(rest, kick), rest });
+          const px = (x: THREE.Box3): Rect => ({ x0: x.min.x + W / 2, y0: H / 2 - x.max.y, x1: x.max.x + W / 2, y1: H / 2 - x.min.y });
+          const places = placesWhileRead(layer, fit, rt.later ?? []);
+          // room for the line as it moves, not only where it rests; a line pushed along by later lines gets each place
+          // for its own stretch (the change lands with a line coming up, where the props glide anyway), and once its
+          // reading time is over (pushed out by the second one) no room at all
+          if (places.length < 2) {
+            const rest = px(b);
+            this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: motionPad(rest, kick), rest });
+          } else {
+            const readTo = layer.readable()[1];
+            places.forEach((p, k) => {
+              if (p.box.isEmpty()) return;
+              const last = k === places.length - 1;
+              const rest = px(p.box);
+              this.lyricRects.push({ id: rt.cue.id, from: k ? p.from : rt.showFrom, to: last && readTo >= rt.exitAt - 0.01 ? rt.exitAt + rt.exitDur : p.to, rect: motionPad(rest, kick), rest });
+            });
+          }
         }
       }
       if (split.calls.length) this.callLayers.push(this.makeCalls(rt, cue1, split.calls, settledBox(layer, fit)));
@@ -776,6 +847,34 @@ export class LyricVjEngine {
         if (echo) this.echoes.push(echo);
       }
     });
+    // each line's colour was read where it first sits, with room made for it alone; as played it may be pushed up by
+    // the next lines, and an object with no room for all of them stays behind (チョロイン c003: blue type pushed up over
+    // the blue stage photo). Every place a line takes is read again as played; a line whose type falls short over a
+    // share of it is rebuilt light in a dark halo (a mean let a mid-tone photo under half the line pass)
+    if (treatment.graphics)
+      for (const c of this.cueLayers) {
+        if (c.mixed || !c.remake) continue;
+        // beat-cut takes the whole frame for room (its phrases fly all over before the line settles): its type is read
+        // where it settles, so that box is measured, not the frame (a photo anywhere filled a frame-wide share)
+        const settled = c.rt.shot.template === 'beat-cut' ? settledBox(c.layer, c.fit, true) : undefined;
+        const own = settled
+          ? settled.isEmpty()
+            ? []
+            : [{ from: c.rt.showFrom, to: c.rt.exitAt, rest: { x0: settled.min.x + W / 2, y0: H / 2 - settled.max.y, x1: settled.max.x + W / 2, y1: H / 2 - settled.min.y } }]
+          : this.lyricRects.filter((r) => r.id === c.rt.cue.id);
+        const places = own
+          .flatMap((r) => {
+            const box = new THREE.Box3(new THREE.Vector3(r.rest.x0 - W / 2, H / 2 - r.rest.y1, 0), new THREE.Vector3(r.rest.x1 - W / 2, H / 2 - r.rest.y0, 0));
+            // read after the 0.4 s objects take to glide clear of a line coming up, and the median over the place's
+            // stretch: an object mid-glide as the line comes up or leaves is not where the line is read
+            const at = [r.from + 0.5, (r.from + r.to) / 2, r.to - 0.2].filter((x) => x >= r.from && x <= r.to).map((x) => this.backdropAt(x, box, true, c.rt.palette.text)?.poor ?? 0).sort((p, q) => p - q);
+            return at.length ? [{ from: r.from, to: r.to, rect: r.rest, share: at[Math.floor((at.length - 1) / 2)] }] : [];
+          });
+        const worst = places.reduce<(typeof places)[number] | undefined>((a, b) => (!a || b.share > a.share ? b : a), undefined);
+        if (!worst || worst.share <= POOR_SHARE) continue;
+        c.guard = worst;
+        c.remake();
+      }
     setKanaScale(design.kanaScale);
     this.quiet = uses(design, 'quiet') ? quietSpans(treatment.moments ?? []) : [];
     // the drop keyword flash: one per drop/finale (2–4 a song), the line's keyword set full width in the display face
@@ -799,8 +898,11 @@ export class LyricVjEngine {
     }
   }
 
-  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[] } {
+  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number }[] } {
     return {
+      // lines rebuilt light in a dark halo over a photo as played: the place that set it off and its share below 3:1
+      // (POOR_SHARE and the median are experimental rules, recorded here to be checked against the picture)
+      textGuard: this.cueLayers.flatMap(({ rt, guard: g }) => (g ? [{ id: rt.cue.id, text: rt.cue.text, from: +g.from.toFixed(2), to: +g.to.toFixed(2), rect: [g.rect.x0, g.rect.y0, g.rect.x1, g.rect.y1].map(Math.round), share: +g.share.toFixed(2) }] : [])),
       cues: this.cueLayers.map(({ rt, layer, fitScale }) => {
         const [from, to] = layer.readable();
         const readableSec = Math.max(0, to - from);
@@ -1192,8 +1294,16 @@ export class LyricVjEngine {
     const chroma = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].chroma;
     if (chroma && this.ghostPass) {
       const offset = this.textRoot.position.x;
+      // a line jumping (pushed up by the next one landing) leaves no ghost: a copy a whole line away is a second line
+      // over the new one (チョロイン c061 at 163.4 s), not a misregistered plate; small motion keeps its trail
+      const pose = () => this.cueLayers.map(({ layer }) => [layer.group.position.x, layer.group.position.y, layer.group.scale.x]);
+      const at = pose();
       ([[2 / 30, -3.4, this.ghostB!], [1 / 30, 3.2, this.ghostA!]] as const).forEach(([lag, dx, target]) => {
         this.updateCues(t - lag, { flash: 0, hit: 0, shake: 0 }, flash?.cueId);
+        pose().forEach(([x, y, s], i) => {
+          const [x1, y1, s1] = at[i];
+          if (Math.hypot(x - x1, y - y1) > 24 || Math.abs(s - s1) > 0.03 * Math.max(s, s1)) this.cueLayers[i].layer.group.visible = false;
+        });
         this.textRoot.position.x = offset + dx;
         this.renderer.setRenderTarget(target);
         this.renderer.setClearColor(0x000000, 0);
@@ -1295,41 +1405,107 @@ export class LyricVjEngine {
    * Background objects make room for the lyrics: moved (or shrunk) off the rectangle of the line on screen, gliding
    * there over 0.4 s when a new line comes up and back when lines leave.
    */
+  private roomEvents?: { n: number; ev: number[] };
+  /** Every time the frame's set of objects or lines changes, sorted (see makeRoom). */
+  private roomEventsFor(): number[] {
+    if (this.roomEvents?.n === this.lyricRects.length) return this.roomEvents.ev;
+    const look = this.job.treatment.graphics;
+    const all = [...this.lyricRects.flatMap((r) => [r.from, r.to]), ...(look?.sections.map((s) => s.start) ?? []), ...storyEvents(look?.story ?? [])];
+    const ev = [...new Set(all.filter((x) => Number.isFinite(x)))].sort((a, b) => a - b);
+    this.roomEvents = { n: this.lyricRects.length, ev };
+    return ev;
+  }
+
   private makeRoom(all: Layer[], t: number): Layer[] {
     const GLIDE = 0.4;
     // a bracket or viewfinder frame marks where the words are: it fades in with the words and out when none are up, so
     // an intro or an interlude never frames empty space (a section running on past its first line kept it there)
-    const words = Math.max(0, ...this.lyricRects.map((r) => Math.min(clamp01((t - r.from + 0.15) / 0.3), clamp01((r.to - t) / 0.3))));
+    // (per line, from its first box to its last: a line pushed along has one box per place and must not dip between them)
+    const spans = new Map<string, { from: number; to: number }>();
+    this.lyricRects.forEach((r, i) => {
+      const k = r.id ?? `#${i}`;
+      const s = spans.get(k);
+      spans.set(k, s ? { from: Math.min(s.from, r.from), to: Math.max(s.to, r.to) } : { from: r.from, to: r.to });
+    });
+    const words = Math.max(0, ...[...spans.values()].map((r) => Math.min(clamp01((t - r.from + 0.15) / 0.3), clamp01((r.to - t) / 0.3))));
     const ls = all.map((l) => (l.kind === 'frame' && (l.type === 'brackets' || l.type === 'viewfinder') ? ({ ...l, opacity: (l.opacity ?? 1) * words } as Layer) : l));
     const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to);
     const union = (rs: Rect[]) => (rs.length ? rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })) : undefined);
     // room for the lines as they move where the frame has it; an object with nowhere to go clear of that makes room
     // for the lines at rest instead (as it did before the motion room; the bigger box left it over the words)
-    const placed = (x: number) => {
+    const placeAt = (layers0: Layer[], x: number) => {
       const lines = at(x);
       const moving = union(lines.map((r) => r.rect));
       const rest = union(lines.map((r) => r.rest));
-      if (!moving || !rest) return ls;
-      const wide = avoidAll(ls, moving);
-      const tight = avoidAll(ls, rest);
+      if (!moving || !rest) return layers0;
+      // a card about a line up (its text in the line: 「嘘つき！」 on c062) is key content: it stays before the others
+      const sung = lines.map((r) => bare(this.cueLayers.find((c) => c.rt.cue.id === r.id)?.rt.cue.text ?? '')).join('|');
+      const layers = layers0.map((l) => (l.kind === 'card' && !l.key && bare(l.text) && sung.includes(bare(l.text)) ? ({ ...l, key: true } as Layer) : l));
+      const wide = avoidAll(layers, moving);
+      const tight = avoidAll(layers, rest);
       return wide.map((l, i) => {
         const r = l.kind === 'code' ? undefined : layerRect(l);
         return r && r.x0 < moving.x1 && moving.x0 < r.x1 && r.y0 < moving.y1 && moving.y0 < r.y1 ? tight[i] : l;
       });
     };
+    const placed = (x: number) => placeAt(ls, x);
     // the latest change of the visible set before t: glide from the placement just before it
     const edges = this.lyricRects.flatMap((r) => [r.from, r.to]).filter((x) => x <= t && x > t - GLIDE);
     const now = placed(t);
     const e = edges.length ? Math.max(...edges) : 0;
     const before = edges.length ? placed(e - 0.001) : now;
-    const out = edges.length ? now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE))) : now;
-    // what is visible, with whether it stepped back (faded behind the line: no room anywhere, or passing behind it).
-    // A transition calls this twice a frame (the section, then the one it reveals over): both are on screen, so both
-    // are kept (the second call used to replace the first, dropping the story props for the whole transition)
+    const blended = edges.length ? now.map((l, i) => blendLayer(before[i], l, easeOutCubic((t - e) / GLIDE))) : now;
     const look = this.job.treatment.graphics;
     const sec = look ? sectionAt(look, this.koma(t)) : undefined;
     const current = !!sec && sec.layers.length <= all.length && sec.layers.every((l, i) => all[i] === l);
     const n = look && sec ? look.sections.indexOf(sec) : -1;
+    // every move making room makes, and every object it sends away (avoid sets one with no room anywhere to 0), glides
+    // and fades over GLIDE: the placement is the mean over the frames of the last GLIDE s, each placed with the layers
+    // and lines of its own time — whatever made the change (a line, a card landing, a hero state), nothing jumps
+    const storyFrom = sec && current ? sec.layers.length : all.length;
+    const idsOf = (layers: Layer[], s: number, from: number) => layers.map((l, i) => (i >= from ? ((l as { ref?: string }).ref ?? `story#${i - from}`) : `${s}#${i}`));
+    const keys = (layers: Layer[], s: number, from: number) => new Map(idsOf(layers, s, from).map((k, i) => [k, i]));
+    const own = sec && current ? n : n - 1;
+    // decided once per stretch between changes (a line, a section, a card landing, a hero turn, a prop coming or going):
+    // placed per frame, a falling, swaying card found another spot every few frames and the pile hopped about
+    // (チョロイン 167–169 s). The stretch is placed as it is 0.9 s in (a card that just landed has settled), or just
+    // before the next change if that comes first
+    const ev = this.roomEventsFor();
+    const decide = (x: number) => {
+      const k = ev.findIndex((e) => e > x);
+      const e = k < 0 ? ev[ev.length - 1] : k === 0 ? undefined : ev[k - 1];
+      const next = k < 0 ? Infinity : ev[k];
+      return e === undefined ? x : Math.min(e + SETTLE_SEC, next - 0.001);
+    };
+    const memo = new Map<number, { plan: Layer[]; placed: Layer[]; keys: Map<string, number> }>();
+    // the window looks back twice GLIDE: a long move fades out and in over GLIDE each (see smoothPlacement); the rest
+    // glides over the latest GLIDE
+    const STEPS = 25;
+    const LOOK = 2 * STEPS - 1;
+    // a prop flying along its path is placed frame by frame: room made where it was at one time of the stretch is not
+    // where it is later (a feather of 春泥棒 grazed c008)
+    const flying = (l: Layer) => ((l as { ref?: string }).ref ?? '').startsWith('fly#');
+    const sample = (j: number, each: boolean) => {
+      const x = t - (GLIDE * j) / (STEPS - 1);
+      const d = each ? x : decide(x);
+      const hit = memo.get(d);
+      if (hit) return hit;
+      const sx = look && sec && current ? sectionAt(look, this.koma(d)) : undefined;
+      const plan = sx && look ? [...sx.layers, ...(storyLayers(look.story ?? [], this.koma(d)) as Layer[])] : ls;
+      const f = { plan, placed: placeAt(plan, d), keys: sx && look ? keys(plan, look.sections.indexOf(sx), sx.layers.length) : keys(ls, own, storyFrom) };
+      memo.set(d, f);
+      return f;
+    };
+    const frames = Array.from({ length: LOOK }, (_, j) => sample(j, false));
+    const each = ls.some(flying) ? Array.from({ length: STEPS }, (_, j) => sample(j, true)) : frames;
+    const ids = idsOf(ls, own, storyFrom);
+    const out = ls.map((l, i) => {
+      if (l.kind === 'code') return blended[i];
+      return smoothPlacement(l, (flying(l) ? each : frames).map((f) => {
+        const j = f.keys.get(ids[i]);
+        return j === undefined ? undefined : { plan: f.plan[j], placed: f.placed[j] };
+      }), STEPS);
+    });
     this.placedProps.push(...(sec && current ? measurable(out, ls, this.koma(t) - sec.start, 'section', n, sec.layers.length) : measurable(out, ls, Infinity, 'prev', n - 1)));
     // (a line shows 0.05 s before its room is made: those frames are the start of the glide)
     this.propsGliding = this.lyricRects.some((r) => [r.from, r.to].some((x) => x <= t + 0.05 && x > t - GLIDE));
@@ -1348,7 +1524,7 @@ export class LyricVjEngine {
       const [from, to0] = layer.readable();
       const to = Number.isFinite(to0) ? to0 : from + 1;
       if (!(to > from)) continue;
-      const rest = this.lyricRects.find((r) => r.id === rt.cue.id)?.rest;
+      const boxes = this.lyricRects.filter((r) => r.id === rt.cue.id);
       // sampled (beats + five points) to find problems; lines named in everyFrame are checked on every 60 fps frame
       const times = everyFrame.includes(rt.cue.id)
         ? Array.from({ length: Math.floor((to - from) * 60) + 1 }, (_, k) => from + k / 60)
@@ -1372,6 +1548,7 @@ export class LyricVjEngine {
           // gliding: the prop is still on its way out (0.4 s, by design); stepped back: it found no room and faded
           // behind the line (by design, but a half-transparent prop behind the words is still counted); at rest: the
           // measured box already meets it; else the playing line's motion carried it onto a prop that had cleared its box
+          const rest = (boxes.find((x) => t >= x.from && t <= x.to) ?? boxes[0])?.rest;
           const cause: OverlapCause = this.propsGliding ? 'gliding' : p.faded ? 'steppedBack' : rest && depth(rest, p.r) > 0 ? 'atRest' : 'motion';
           if (p.group === 'decor') keep('decor', px, { ...hit(t, px, p), cause });
           else keep(cause, px, hit(t, px, p));
@@ -1439,8 +1616,12 @@ export class LyricVjEngine {
     return (['left', 'center', 'right'] as const)[k];
   }
 
-  /** Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. */
-  private backdropAt(t: number, box?: THREE.Box3): { mean: string; mixed: boolean } | undefined {
+  /**
+   * Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. `asPlayed`
+   * places the objects as the frame does (room for every line up, eased), not with room for this box alone; `text`
+   * also gives `poor`, the share of the box where that colour reads below 3:1.
+   */
+  private backdropAt(t: number, box?: THREE.Box3, asPlayed = false, text?: string): { mean: string; mixed: boolean; poor: number } | undefined {
     if (!this.job.treatment.graphics) return undefined;
     this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
     const shot = this.shotAt(t).shot;
@@ -1449,15 +1630,21 @@ export class LyricVjEngine {
     // as props teleporting between two samples a frame apart)
     const pf = globalThis as { __vjProbe?: boolean };
     pf.__vjProbe = true;
+    const [kept, gliding] = [this.placedProps.length, this.propsGliding];
+    let placed: Layer[] = [];
     try {
-      drawLook(this.probe, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => (lyric ? avoidAll(ls, lyric) : ls));
+      drawLook(this.probe, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => (asPlayed ? (placed = this.makeRoom(ls, t)) : lyric ? avoidAll(ls, lyric) : ls));
     } finally {
       pf.__vjProbe = false;
+      // makeRoom logs what it placed for the motion QA: a probe is not a frame
+      this.placedProps.length = kept;
+      this.propsGliding = gliding;
     }
     const [x0, y0, x1, y1] = box
       ? [box.min.x + W / 2, H / 2 - box.max.y, box.max.x + W / 2, H / 2 - box.min.y].map((v, i) => Math.max(0, Math.min(i % 2 ? H : W, v)))
       : [W * 0.15, H * 0.28, W * 0.85, H * 0.72];
-    const d = this.probe.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0)).data;
+    const img = this.probe.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
+    const d = img.data;
     let r = 0, g = 0, b = 0, n = 0, dark = 0, light = 0;
     for (let i = 0; i < d.length; i += 4 * 97) {
       r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
@@ -1466,8 +1653,11 @@ export class LyricVjEngine {
       else if (l > 0.65) light++;
     }
     const hx = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
+    // only pictures left behind the words for want of room count (as placed): photos and a key hero (see poorShare)
+    const photos = placed.flatMap((l) => ((l.kind === 'photo' || (l.kind === 'sprite' && l.key)) && (l.opacity ?? 1) > 0.05 && layerRect(l) ? [layerRect(l)!] : []));
+    const poor = text ? poorShare(img, Math.floor(x0), Math.floor(y0), text, photos) : 0;
     // mixed: a sizeable share of both dark and light under the line — no single type colour reads everywhere
-    return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, mixed: dark / n > 0.06 && light / n > 0.06 };
+    return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, mixed: dark / n > 0.06 && light / n > 0.06, poor };
   }
 
   /** A sprite's mean colour over its opaque pixels, as #rrggbb. */

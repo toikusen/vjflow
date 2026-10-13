@@ -45,7 +45,9 @@ export type StoryItem =
 
 /** The per-frame layers story items become (drawn by drawStory). Sizes are fractions of the frame height. */
 /** `ref` names the story item a layer comes from, unique per item (`pop#7:horse`; QA reports only, drawing ignores it). */
-export type StoryLayer = { ref?: string } & (
+/** `key`: content that matters now (a hero at a turn of its story, a card about the line being sung): it is placed
+ * before the rest when the frame is crowded and does not leave for want of room (graphics.ts avoidAll). */
+export type StoryLayer = { ref?: string; key?: boolean } & (
   | { kind: 'sprite'; asset: string; aspect?: number; lift?: Rgb; pass?: boolean; x: number; y: number; size: number; rot?: number; sx?: number; pivot?: 'top'; opacity?: number; crack?: number; shatter?: number; seed?: number; glow?: Rgb; trail?: { color: Rgb; pts: Pt[] } }
   | { kind: 'thread'; pts: Pt[]; color: Rgb; width: number; opacity?: number }
   | { kind: 'card'; style: 'bubble' | 'note' | 'polaroid' | 'chapter'; text: string; asset?: string; x: number; y: number; w: number; h: number; rot: number; scale: number; color: Rgb; ink: Rgb; opacity?: number }
@@ -109,6 +111,12 @@ function arrive(motion: Motion, k: number, fromRight: boolean): { dx: number; dy
 /** Seconds a state change takes to play. */
 const TURN: Record<HeroState, number> = { show: 0.5, hide: 0.5, crack: 0.8, shatter: 1.2, gather: 1.2, glow: 0.6 };
 
+/**
+ * The hero's key moments (density proposal §3.2): from 1 s before each turn of its story (its entrance, a crack, a
+ * shatter, a gather, a glow; not a hide) to 1.5 s after the turn has played.
+ */
+export const heroKey = (states: { at: number; state: HeroState }[], t: number) => states.some((s) => s.state !== 'hide' && t >= s.at - 1 && t <= s.at + TURN[s.state] + 1.5);
+
 /** The hero at t: whether it is up, how cracked, how far into a shatter (1 = pieces gone), glowing. */
 export function heroAt(states: { at: number; state: HeroState }[], t: number): { visible: number; crack: number; shatter: number; glow: number } | undefined {
   const s = [...states].sort((a, b) => a.at - b.at);
@@ -154,6 +162,31 @@ const entry = (from: 'left' | 'right' | 'top' | 'bottom', x: number, y: number):
   from === 'left' ? [-1.35, y + 0.3] : from === 'right' ? [1.35, y + 0.3] : from === 'top' ? [x - 0.4, 1.4] : [x - 0.4, -1.4];
 
 /** The layers of every story item at t. Pure: the same t gives the same frame. */
+/**
+ * The times the story's set of objects changes: a card lands or the pile clears, the hero turns, a prop comes or goes.
+ * Making room decides once per stretch between such times (and line changes), so nothing hops about in between.
+ */
+export function storyEvents(items: StoryItem[]): number[] {
+  return items.flatMap((it) => {
+    switch (it.kind) {
+      case 'hero':
+        return it.states.map((s) => s.at);
+      case 'cards': {
+        const count = it.style === 'polaroid' ? (it.props?.length ?? 0) : it.texts.length;
+        return [...Array.from({ length: count }, (_, k) => it.from + k * it.every).filter((x) => x <= it.to), it.to];
+      }
+      case 'fly':
+      case 'pop':
+      case 'chapter':
+        return [it.at, it.at + it.dur];
+      case 'morph':
+        return [...it.steps.map((s) => s.at), it.until];
+      default:
+        return [it.from, it.to];
+    }
+  });
+}
+
 export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
   const out: StoryLayer[] = [];
   items.forEach((it, n) => {
@@ -162,7 +195,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const h = heroAt(it.states, t);
         if (!h) return;
         const m = idle(it.motion ?? 'drift', t, n);
-        out.push({ ref: `hero#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: it.x + m.dx, y: it.y + m.dy + 0.05 * (1 - h.visible), size: it.size, opacity: h.visible, crack: h.crack, shatter: h.shatter, seed: n * 17 + 3, glow: h.glow ? it.glow ?? '#FFF4C8' : undefined, rot: m.rot, sx: m.sx, pivot: it.motion === 'hang' ? 'top' : undefined });
+        out.push({ ref: `hero#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: it.x + m.dx, y: it.y + m.dy + 0.05 * (1 - h.visible), size: it.size, opacity: h.visible, crack: h.crack, shatter: h.shatter, seed: n * 17 + 3, glow: h.glow ? it.glow ?? '#FFF4C8' : undefined, rot: m.rot, sx: m.sx, pivot: it.motion === 'hang' ? 'top' : undefined, key: heroKey(it.states, t) || undefined });
         return;
       }
       case 'fly': {
@@ -185,7 +218,7 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const motion = it.motion ?? 'flutter';
         // in flight: banked along the path, wings beating fast; landed: the prop's own rest movement
         const m = flying ? { dx: 0, dy: 0, rot: Math.atan2(-(ahead[1] - here[1]), ahead[0] - here[0]) * 0.25, sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
-        out.push({ ref: `fly#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
+        out.push({ ref: `fly#${n}:${it.prop}`, kind: 'sprite', pass: flying, asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
         return;
       }
       case 'pop': {

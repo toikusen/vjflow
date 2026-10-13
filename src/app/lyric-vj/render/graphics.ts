@@ -2499,27 +2499,95 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
       return resize({ ...l, x: (fx - W / 2) / (W / 2), y: (H / 2 - fy) / (H / 2) } as Layer, k);
     }
   }
-  if (story) {
-    // no room next to the line: the prop crosses to the far side or another free spot (nearest first) rather than
+  // a picture or letters (a photo inset, a stamp, a seal, a numeral) behind the words is what makes them hard to read
+  // (チョロイン c003: blue type over a blue stage photo); a flat shape (a blob, a disc) may stay behind them by design
+  const busy = l.kind === 'photo' || l.kind === 'stamp' || l.kind === 'seal' || l.kind === 'numeral';
+  if (story || busy) {
+    // no room next to the line: the object crosses to the far side or another free spot (nearest first) rather than
     // fading behind the line (落ちた風鈴 dimmed to a ghost beside the vertical lyrics)
     const cx0 = (r.x0 + r.x1) / 2;
     const cy0 = (r.y0 + r.y1) / 2;
-    const spots = [[W - cx0, cy0], [cx0, H - cy0], [W - cx0, H - cy0], ...[0.2, 0.5, 0.8].flatMap((fx) => [0.25, 0.5, 0.75].map((fy) => [W * fx, H * fy]))].sort(
-      (a, b) => Math.hypot(a[0] - cx0, a[1] - cy0) - Math.hypot(b[0] - cx0, b[1] - cy0),
-    );
-    for (const k of [1, 0.85])
-      for (const [x, y] of spots) {
-        const fx = Math.min(W - (w * k) / 2, Math.max((w * k) / 2, x));
-        const fy = Math.min(H - (h * k) / 2, Math.max((h * k) / 2, y));
-        const q = { x0: fx - (w * k) / 2, y0: fy - (h * k) / 2, x1: fx + (w * k) / 2, y1: fy + (h * k) / 2 };
-        if (!clash(q)) return resize({ ...l, x: (fx - W / 2) / (W / 2), y: (H / 2 - fy) / (H / 2) } as Layer, k);
-      }
-    // a frame full of type (beat-cut): the prop steps back behind the line
-    return { ...l, opacity: (l.opacity ?? 1) * 0.55 } as Layer;
+    const near = (ss: number[][]) => ss.sort((a, b) => Math.hypot(a[0] - cx0, a[1] - cy0) - Math.hypot(b[0] - cx0, b[1] - cy0));
+    const spots = near([[W - cx0, cy0], [cx0, H - cy0], [W - cx0, H - cy0], ...[0.2, 0.5, 0.8].flatMap((fx) => [0.25, 0.5, 0.75].map((fy) => [W * fx, H * fy]))]);
+    // then against the frame's edges (a strip beside lines that fill the middle), a card down to 70 %
+    const edges = near([...[0.15, 0.5, 0.85].flatMap((fy) => [[0, H * fy], [W, H * fy]]), ...[0.25, 0.5, 0.75].flatMap((fx) => [[W * fx, 0], [W * fx, H]])]);
+    const tries: [number[][], number[]][] = [
+      [spots, story ? [1, 0.85] : [1, 0.75, 0.55]],
+      [[...spots, ...edges], l.kind === 'card' ? [1, 0.85, 0.7] : story ? [1, 0.85] : [1, 0.75, 0.55, 0.4]],
+    ];
+    for (const [where, scales] of tries)
+      for (const k of scales)
+        for (const [x, y] of where) {
+          const fx = Math.min(W - (w * k) / 2, Math.max((w * k) / 2, x));
+          const fy = Math.min(H - (h * k) / 2, Math.max((h * k) / 2, y));
+          const q = { x0: fx - (w * k) / 2, y0: fy - (h * k) / 2, x1: fx + (w * k) / 2, y1: fy + (h * k) / 2 };
+          if (!clash(q)) return resize({ ...l, x: (fx - W / 2) / (W / 2), y: (H / 2 - fy) / (H / 2) } as Layer, k);
+        }
+    // a frame full of type: a photo stays where it is (the line's halo carries it; a frame emptied of its picture read
+    // as dead, チョロイン 0-20 s), and so does key story content (a hero at a turn of its story, a card about the line
+    // being sung: the line is read against it, engine.ts); the rest leaves (opacity 0; the caller fades it out and back
+    // in) instead of staying half-transparent behind the words, where its text showed through them (c061's cards)
+    return l.kind === 'photo' || (l as StoryLayer).key ? l : ({ ...l, opacity: 0 } as Layer);
   }
   // a window with nowhere to go (huge beat-cut type over the whole frame) steps back behind the line instead
   return l.kind === 'ui' ? { ...l, opacity: 0.45 } : l;
 }
+
+/**
+ * A layer's placement eased over the frames before it: `samples` are the same object as planned and as placed (after
+ * making room) at t and in the frames before (undefined where it was not up yet). Its shift, size and opacity are
+ * the mean of what making room did to it over those frames, so any change — a line coming up, a card landing, a pile
+ * thinning out, a prop leaving — glides and fades over the window instead of jumping. Untouched, it is `plan` itself.
+ */
+export function smoothPlacement(plan: Layer, samples: ({ plan: Layer; placed: Layer } | undefined)[], glide = samples.length): Layer {
+  const r0 = layerRect(plan);
+  if (!r0 || plan.kind === 'code') return samples[0]?.placed ?? plan;
+  // a photo's box carries a fixed 22 px margin each side; the rest scale with the layer
+  const pad = plan.kind === 'photo' ? 44 : 0;
+  const have = samples.flatMap((s, i) => {
+    const a = s && layerRect(s.plan);
+    const b = s && layerRect(s.placed);
+    if (!s || !a || !b) return [];
+    const pa = s.plan.opacity ?? 1;
+    return [{ i, dx: (b.x0 + b.x1 - a.x0 - a.x1) / 2, dy: (b.y0 + b.y1 - a.y0 - a.y1) / 2, k: (b.x1 - b.x0 - pad) / Math.max(1, a.x1 - a.x0 - pad), o: pa > 1e-3 ? (s.placed.opacity ?? 1) / pa : 1 }];
+  });
+  // the plain glide and fade read the latest `glide` samples; a long move fades over the whole look-back
+  const recent = have.filter((h) => h.i < glide);
+  if (!recent.length) return plan;
+  // a long move (a prop crossing to the far side of the frame) does not slide: on the way it would sweep across the
+  // words it makes room for (チョロイン 163.5 s, the carousel horse through c062). It fades out where it was, changes
+  // place unseen and fades in at the new one, each over half the look-back (density proposal §3.4: 0.3–0.4 s fades;
+  // the koma of a stepped medium turned a 0.2 s fade into 0.4 jumps between frames)
+  const dist = (a: (typeof have)[number], b: (typeof have)[number]) => Math.hypot(a.dx - b.dx, a.dy - b.dy);
+  // (pictures and letters only: a flat shape behind the words is there by design, and a sun fading out and in at every
+  // line change of 行星 read as a flicker)
+  const pictured = plan.kind === 'sprite' || plan.kind === 'card' || plan.kind === 'photo' || plan.kind === 'stamp' || plan.kind === 'seal' || plan.kind === 'numeral';
+  // the latest long move in the window (frames before it are where the object was): two changes close together (a
+  // line, then a card landing 0.24 s later) count from the latest, so the object never flashes up between them
+  const m0 = pictured ? have.findIndex((h, i) => i > 0 && dist(h, have[i - 1]) > JUMP_PX / 2 && dist(h, have[0]) > JUMP_PX) : -1;
+  // a move to or from nowhere (leaving for want of room, coming back) is a plain fade where it shows, over the whole
+  // window: cross-faded, it was gone in half the time (the carousel horse at チョロイン 14.4 s, 1 → 0 in five frames)
+  const seen = (hs: typeof have) => hs.reduce((sum, h) => sum + h.o, 0) / Math.max(1, hs.length) > 0.02;
+  const m = m0 > 0 && seen(have.slice(0, m0)) && seen(have.slice(m0)) ? m0 : -1;
+  const jump = m > 0;
+  const showing = m0 > 0 && !jump ? (seen(have.slice(0, m0)) ? have.slice(0, m0) : have.slice(m0)).filter((h) => h.i < glide) : undefined;
+  // (the share of the window already at the new place: under half, the old place still shows, fading)
+  const arrived = jump ? m / have.length : 1;
+  const side0 = jump ? (arrived >= 0.5 ? have.slice(0, m) : have.slice(m).filter((h) => dist(h, have[m]) <= JUMP_PX / 2)) : showing?.length ? showing : recent;
+  const side = side0.length ? side0 : recent;
+  const mean = (f: (h: (typeof have)[number]) => number, hs = side) => hs.reduce((sum, h) => sum + f(h), 0) / hs.length;
+  const [dx, dy, k] = [mean((h) => h.dx), mean((h) => h.dy), mean((h) => h.k)];
+  const o = jump ? mean((h) => h.o) * Math.abs(2 * arrived - 1) : mean((h) => h.o, recent);
+  const moved = Math.abs(dx) > 1e-6 || Math.abs(dy) > 1e-6;
+  const cx = (r0.x0 + r0.x1) / 2 + dx;
+  const cy = (r0.y0 + r0.y1) / 2 + dy;
+  const at = moved ? ({ ...plan, x: (cx - W / 2) / (W / 2), y: (H / 2 - cy) / (H / 2) } as Layer) : plan;
+  const sized = Math.abs(k - 1) > 1e-6 ? resize(at, k) : at;
+  return Math.abs(o - 1) > 1e-6 ? ({ ...sized, opacity: (plan.opacity ?? 1) * o } as Layer) : sized;
+}
+
+/** A move longer than this (frame px) within the glide fades out and in rather than sliding (smoothPlacement). */
+const JUMP_PX = 160;
 
 function resize(l: Layer, k: number): Layer {
   if (k === 1) return l;
@@ -2653,15 +2721,40 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
     return !r || !overlaps(r, { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 });
   };
   const isStory = (l: Layer) => l.kind === 'sprite' || l.kind === 'card' || l.kind === 'thread';
-  const placed = layers.filter(clear).flatMap((l) => (layerRect(l) ? [{ r: layerRect(l)!, story: isStory(l) }] : []));
-  return layers.map((l) => {
-    if (l.kind === 'code') return { ...l, lyric: lyrics };
-    if (clear(l)) return l;
-    // a story prop is drawn over the backdrop, so only the lyrics and the other story objects are in its way (a
-    // background disc next to the line pushed 落ちた風鈴 under the lyrics)
-    const out = avoid(l, lyrics, 24, placed.filter((p) => !isStory(l) || p.story).map((p) => p.r));
-    const r = layerRect(out);
-    if (r) placed.push({ r, story: isStory(l) });
+  const placed = layers.flatMap((l, i) => (clear(l) && layerRect(l) ? [{ i, r: layerRect(l)!, story: isStory(l) }] : []));
+  // key story content finds its place first: the rest gives way to it (density proposal §3.2)
+  const key = (l: Layer) => !!(l as StoryLayer).key;
+  const order = layers.map((_, i) => i).sort((a, b) => Number(key(layers[b])) - Number(key(layers[a])));
+  const place = (only: (i: number) => boolean) => {
+    const out: Layer[] = [...layers];
+    const taken = placed.filter((p) => only(p.i));
+    order.forEach((i) => {
+      const l = layers[i];
+      if (l.kind === 'code') {
+        out[i] = { ...l, lyric: lyrics };
+        return;
+      }
+      if (!only(i) || clear(l)) return;
+      // a story prop is drawn over the backdrop, so only the lyrics and the other story objects are in its way (a
+      // background disc next to the line pushed 落ちた風鈴 under the lyrics)
+      out[i] = avoid(l, lyrics, 24, taken.filter((p) => !isStory(l) || p.story).map((p) => p.r));
+      const r = layerRect(out[i]);
+      if (r) taken.push({ i, r, story: isStory(l) });
+    });
     return out;
-  });
+  };
+  const out = place(() => true);
+  // a card pile that does not fit beside the lines keeps the cards about the lines up (key), or, with none, the card
+  // that landed last: the others leave where they are (the caller fades them) and the kept ones find their place
+  // without them; everything else keeps the place it found above, so nothing jumps when a card lands
+  const pile = (l: Layer) => (l.kind === 'card' ? (l.ref ?? '').replace(/\[.*$/, '') : '');
+  for (const id of new Set(layers.map(pile).filter(Boolean))) {
+    const cards = layers.flatMap((l, i) => (pile(l) === id && (l.opacity ?? 1) > 1e-3 ? [i] : []));
+    if (!cards.some((i) => (out[i].opacity ?? 1) <= 1e-3)) continue;
+    const keys = cards.filter((i) => key(layers[i]));
+    const kept = keys.length ? keys : [cards[cards.length - 1]];
+    const alone = place((i) => !cards.includes(i) || kept.includes(i));
+    cards.forEach((i) => (out[i] = kept.includes(i) ? alone[i] : ({ ...out[i], opacity: 0 } as Layer)));
+  }
+  return out;
 }

@@ -213,3 +213,38 @@ describe('motionPad', () => {
     expect(140 - loud.y0).toBeCloseTo(400 * (1.05 * 1.012 - 1) + 26.5);
   });
 });
+
+describe('poorShare', () => {
+  // a 480 x 96 box: 10 x 2 cells of 48 px; cream paper with a mid-blue photo under its left half
+  const box = (paint: (x: number, y: number) => [number, number, number]) => {
+    const [w, h] = [480, 96];
+    const data = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const [r, g, b] = paint(x, y);
+        data.set([r, g, b, 255], (y * w + x) * 4);
+      }
+    return { data, width: w, height: h };
+  };
+  const cream: [number, number, number] = [245, 236, 227];
+  const stage: [number, number, number] = [110, 130, 190];
+  const photo = { x0: 100, y0: 400, x1: 340, y1: 600 }; // frame px; the box sits at 100, 400
+
+  it('counts the cells over a photo where the type falls short, not the paper beside it', async () => {
+    const { poorShare } = await import('./runtime');
+    const img = box((x) => (x < 240 ? stage : cream));
+    expect(poorShare(img, 100, 400, '#1E64B4', [photo])).toBeCloseTo(0.5, 1);
+    // light type reads on the stage photo
+    expect(poorShare(img, 100, 400, '#f4f2ee', [photo])).toBe(0);
+  });
+
+  it('ignores a dark band or halftone dots when no photo is under the line', async () => {
+    const { poorShare } = await import('./runtime');
+    const dotted = box((x, y) => (x % 6 === 0 && y % 6 === 0 ? [30, 30, 90] : cream));
+    expect(poorShare(dotted, 100, 400, '#1E64B4', [])).toBe(0);
+    const band = box(() => [40, 40, 90]);
+    expect(poorShare(band, 100, 400, '#1E64B4', [])).toBe(0);
+    // dots over a photo of paper average out: the cells read on their mean
+    expect(poorShare(dotted, 100, 400, '#1E64B4', [photo])).toBe(0);
+  });
+});

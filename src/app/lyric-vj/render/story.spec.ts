@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { along, heroAt, StoryItem, storyLayers } from './story';
+import { along, heroAt, heroKey, StoryItem, storyEvents, storyLayers } from './story';
 
 describe('story components', () => {
   it('plays a hero through show, crack, shatter, gather and a bookend return', () => {
@@ -127,5 +127,35 @@ describe('story layer refs (QA only)', () => {
       { kind: 'pop', prop: 'horse', at: 2, dur: 5, x: 0.5, y: 0, size: 0.2 },
     ];
     expect(storyLayers(items, 4).map((l) => l.ref)).toEqual(['pop#0:horse', 'pop#1:horse']);
+  });
+});
+
+describe('heroKey', () => {
+  const states = [{ at: 2, state: 'show' as const }, { at: 20, state: 'crack' as const }, { at: 40, state: 'hide' as const }];
+  it('marks the turns of the hero story (1 s before to 1.5 s after the turn plays), not the stretches between or a hide', () => {
+    expect(heroKey(states, 1.2)).toBe(true); // its entrance
+    expect(heroKey(states, 3.9)).toBe(true);
+    expect(heroKey(states, 10)).toBe(false);
+    expect(heroKey(states, 19.2)).toBe(true); // the crack
+    expect(heroKey(states, 22.2)).toBe(true);
+    expect(heroKey(states, 22.5)).toBe(false);
+    expect(heroKey(states, 40.2)).toBe(false); // the hide
+  });
+  it('is carried on the hero layer', () => {
+    const items: StoryItem[] = [{ kind: 'hero', prop: 'horse', x: 0, y: 0, size: 0.3, states }];
+    expect(storyLayers(items, 21)[0].key).toBe(true);
+    expect(storyLayers(items, 10)[0].key).toBeUndefined();
+  });
+});
+
+describe('storyEvents', () => {
+  it('lists when the set of objects changes: each card landing and the pile clearing, hero turns, a pop coming and going', () => {
+    const items: StoryItem[] = [
+      { kind: 'cards', from: 10, to: 16, every: 2, style: 'note', texts: ['a', 'b', 'c', 'd'], x: 0, y: 0, color: '#fff', ink: '#000' },
+      { kind: 'hero', prop: 'horse', x: 0, y: 0, size: 0.3, states: [{ at: 1, state: 'show' }, { at: 30, state: 'crack' }] },
+      { kind: 'pop', prop: 'star', at: 40, dur: 5, x: 0, y: 0, size: 0.2 },
+    ];
+    // the fourth card (at 16) lands as the pile clears
+    expect(storyEvents(items)).toEqual([10, 12, 14, 16, 16, 1, 30, 40, 45]);
   });
 });

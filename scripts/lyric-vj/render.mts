@@ -215,7 +215,7 @@ try {
     };
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     const total = Math.round((range.end - range.start) * fps);
@@ -290,7 +290,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

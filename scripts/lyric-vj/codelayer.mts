@@ -13,10 +13,24 @@ import { continuity, parseTrack } from '../../src/app/lyric-vj/continuity';
 import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
 
 const { values: a } = parseArgs({ options: { song: { type: 'string' }, dir: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
+  // the viewers and checkers that look at stills (blind viewer, states judge, cast check): half the director's price
+  'check-model': { type: 'string', default: 'claude-sonnet-5-5' },
   // an approved earlier drawing (its codelayer.json and still_*.jpg) to build on, and the user's notes on what to keep or fix
   baseline: { type: 'string' }, feedback: { type: 'string' },
   // a sprite library (sprite_library.py: library.json, assets.json, contact.jpg): designed characters and props to act with
-  sprites: { type: 'string' } } });
+  sprites: { type: 'string' },
+  // the drawing owns the whole frame (it may drop every library layer but the ground and lay the page out itself)
+  'full-scene': { type: 'boolean', default: false },
+  // one event, its states planned with times and checked on the real renderer before anything else (no score gate)
+  states: { type: 'boolean', default: false },
+  // with --states: the director casts the event (people and the state drawings it needs), drawn in the song's style
+  cast: { type: 'boolean', default: false },
+  // the picture whose drawing style the cast is drawn in (default: the first prop sheet next to --sprites)
+  'style-ref': { type: 'string' },
+  // the song's characters as already drawn (songplan.mts): extra state drawings keep these people identical
+  'cast-ref': { type: 'string' },
+  // a hard cap on this run's API spend (USD): the next request is not sent once it is reached
+  budget: { type: 'string' } } });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
 for (const line of existsSync(env) ? readFileSync(env, 'utf8').split('\n') : []) {
   const m = line.match(/^([A-Z_]+)=(.*)$/);
@@ -30,14 +44,18 @@ const base = JSON.parse(readFileSync(join(a.dir!, 'treatment.json'), 'utf8'));
 // a rerun replaces the previous drawing
 for (const s of base.graphics.sections) s.layers = s.layers.filter((l: { kind: string }) => l.kind !== 'code');
 const sections: { start: number; layers: { kind: string }[]; text?: string }[] = base.graphics.sections;
+// a treatment made for part of the song (direct.mts --start/--end) is drawn, rendered and reviewed over that part only
+const W0 = Math.min(...base.shots.map((x: { start: number }) => x.start));
+const W1 = Math.max(...base.shots.map((x: { end: number }) => x.end));
+const cues: { id: string; start: number; end: number; text: string }[] = song.cues.filter((c: { start: number }) => c.start >= W0 - 0.01 && c.start < W1);
 
 // camera cuts: with the lyric layouts (the shots), and every two bars through a long stretch without one, so the
 // background is edited like the type rather than one framing per section
 const cuts = (() => {
-  const shotCuts: number[] = base.shots.map((x: { start: number }) => x.start).filter((x: number) => x > 0.5);
+  const shotCuts: number[] = base.shots.map((x: { start: number }) => x.start).filter((x: number) => x > W0 + 0.5);
   const bars: number[] = song.downbeats ?? [];
   const out: number[] = [];
-  const marks = [0, ...shotCuts, song.duration];
+  const marks = [W0, ...shotCuts, W1];
   for (let i = 0; i + 1 < marks.length; i++) {
     if (i) out.push(marks[i]);
     if (marks[i + 1] - marks[i] > 6.5) {
@@ -52,17 +70,19 @@ const cuts = (() => {
 })();
 
 const brief = {
-  title: song.title, duration: +song.duration.toFixed(1), bpm: +song.tempo.toFixed(1),
+  title: song.title, duration: +W1.toFixed(1), ...(W0 > 0 || W1 < song.duration - 0.5 ? { window: { from: +W0.toFixed(1), to: +W1.toFixed(1), note: '只做這一段：畫面、故事、鏡頭都在這個範圍內完成' } } : {}), bpm: +song.tempo.toFixed(1),
   concept: base.concept, language: base.design.language, font: base.design.font,
   arc: base.arc, moments: base.moments,
   cuts: cuts.map((t, i) => ({ shot: i + 1, at: t })),
+  // the lyric shots by id: what layouts names (the camera cuts above are numbered, these are not)
+  lyricShots: base.shots.map((x: { id: string; start: number; end: number; template: string }) => ({ id: x.id, from: +x.start.toFixed(2), to: +x.end.toFixed(2), template: x.template })),
   titleCards: base.shots.filter((x: { template: string }) => x.template === 'title-card').map((x: { start: number; end: number }) => ({ from: x.start, to: x.end })),
-  sections: sections.map((s, i) => ({ index: i, start: s.start, end: sections[i + 1]?.start ?? +song.duration.toFixed(1), lyricColor: s.text ?? 'auto', layers: s.layers.map((l, j) => ({ index: j, ...l })) })),
-  lyrics: song.cues.map((c: { start: number; text: string }) => `${c.start.toFixed(1)} ${c.text}`),
+  sections: sections.map((s, i) => ({ index: i, start: s.start, end: sections[i + 1]?.start ?? +W1.toFixed(1), lyricColor: s.text ?? 'auto', layers: s.layers.map((l, j) => ({ index: j, ...l })) })),
+  lyrics: cues.map((c: { start: number; text: string }) => `${c.start.toFixed(1)} ${c.text}`),
   // instrumental stretches (over 4 s without a line): where the picture breathes on its own
   interludes: (() => {
-    const cs = song.cues as { start: number; end: number }[];
-    const gaps = [{ from: 0, to: cs[0]?.start ?? song.duration }, ...cs.slice(0, -1).map((c, i) => ({ from: c.end, to: cs[i + 1].start })), { from: cs[cs.length - 1]?.end ?? 0, to: song.duration }];
+    const cs = cues;
+    const gaps = [{ from: W0, to: cs[0]?.start ?? W1 }, ...cs.slice(0, -1).map((c, i) => ({ from: c.end, to: cs[i + 1].start })), { from: cs[cs.length - 1]?.end ?? W0, to: W1 }];
     return gaps.filter((g) => g.to - g.from > 4).map((g) => ({ from: +g.from.toFixed(1), to: +g.to.toFixed(1) }));
   })(),
 };
@@ -110,6 +130,10 @@ const RULES = `
 17-14. 間奏留白呼吸：資料裡的 interludes（超過 4 秒沒有歌詞）背景降成低能量——極慢的推鏡或漂移、明暗緩慢呼吸、少量環境微動（光、雲、水、粒子），不要在間奏塞新的事件或新道具；歌詞回來前一兩拍再把能量帶回來。片尾最後一句唱完後讓畫面慢慢減速，程式會自動淡出到黑。
 17-10. 歌詞不能被素材蓋住：歌詞完整出現時，素材的不透明部分不能壓進 f.lyric 的矩形（系統會量測，蓋住超過 8% 就是必須修的錯誤）。用構圖、取景和 f.lyricWeight 讓位，不要把素材塞到歌詞後面。
 17-11. 構圖是分區，不是閃躲：每個鏡頭先決定歌詞區和畫面區（例如直排歌詞在右三分之一，主角大浪佔左邊三分之二並被畫框大膽裁切；橫排歌詞在上方留白，主角物件佔下半部）。主角物件要大（畫面面積 25–60%），可以出框；配角少而小、有主從。不要為了避開歌詞把所有物件縮小推到角落，留下一片空的底色——那比壓到歌詞更糟。歌詞換位置時，主角跟著換邊或換景別。
+17-15. 場景有一個光源（燭火、夕陽、路燈、窗光、螢幕）：先決定它在哪裡，再讓整個畫面服從它——地面和牆上有它照出的光暈（'lighter' 疊淡色徑向漸層，可以隨時間呼吸或閃動）、每個物件的影子朝遠離光源的方向拉長（柔邊，用 ctx.filter blur 只畫在影子上）、靠近光源的物件被照亮一點（同一張圖用 'lighter' 低透明度再疊一次）。光源的變化就是事件（燭火熄滅、夕陽沉下、路燈亮起）。
+17-16. 物件放在一個有透視的承載面上（桌面、地面、斑馬線、水面）：畫出它的後緣和朝觀眾延伸的紋理線（木紋、地磚、斑馬線往消失點收），物件分前、中、後排，越前面越大、越低，前排的物件可以壓住後排的一部分（遮擋＝景深）；不要把物件排成同一條水平線。躺著的東西要真的躺平（花、筆、照片轉成接近水平），不要用尖端立在桌上。
+17-17. 先排字再排物件：這段歌詞放哪一區、橫排或直排（lyricZone），物件群就放在另一側，鏡頭推近時也不能壓進字的那一側；字和物件一起構成畫面，不是字疊在物件上。
+17-18. 段落之間的轉場最好是「前一個場景裡發生的事」：光源熄滅後只剩故事物件、物件被拉出畫面帶進下一場、門窗關上；選這個轉場的理由要寫在 idea 裡。
 17-8. 具體的東西（浪、山、樹、建築、動物、器物）只能用素材庫的圖（f.img）畫，程式只畫背景、色面、紋樣、光和運鏡；素材庫沒有的具體物件就不要出現，不要用幾何圖形拼湊。`;
 
 const SCHEMA = {
@@ -118,9 +142,12 @@ const SCHEMA = {
     idea: { type: 'string', description: '這一層的設計想法，2–4 句繁體中文' },
     src: { type: 'string', description: '函式本體' },
     sections: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['index', 'order'], properties: { index: { type: 'integer' }, order: { type: 'array', items: { type: 'integer' } } } } },
+    // the words are part of the picture: where each shot's lyrics sit (applied over the shot's template)
+    layouts: { type: 'array', description: '（完整場景模式）每個歌詞鏡頭的排法：shot 是 lyricShots 裡的 id（例如 s24，不是 cuts 的編號）；template 是 vertical（直排）、stair（階梯橫排）、quiet（安靜小字）其中之一；side 是 left、right、center', items: { type: 'object', additionalProperties: false, required: ['shot', 'template', 'side'], properties: { shot: { type: 'string' }, template: { type: 'string' }, side: { type: 'string' } } } },
   },
 };
-type Reply = { idea: string; src: string; sections: { index: number; order: number[] }[] };
+type Layout = { shot: string; template: string; side: string };
+type Reply = { idea: string; src: string; sections: { index: number; order: number[] }[]; layouts?: Layout[] };
 
 // the storyboard comes before any code: where each section is, what happens, who acts; checked by the program, then
 // the code follows it (a plan is cheap to fix, a drawing is not)
@@ -162,6 +189,38 @@ type Edit = { idea: string; edits: { find: string; replace: string }[]; sections
 // overloaded (529) and rate limits: the SDK retries with backoff; a long design run should ride them out
 const client = new Anthropic({ maxRetries: 8 });
 const usage = { input: 0, output: 0 };
+const RETRY = /terminated|socket|ECONNRESET|ECANCELED|timed out|overloaded|529|rate_limit|429/i;
+/** One streamed request, asked again after a cut stream or an overload (the SDK retries only before the stream starts). */
+async function streamed(params: Anthropic.Messages.MessageStreamParams, tries = 4): Promise<Anthropic.Messages.Message> {
+  try {
+    return await client.messages.stream(params).finalMessage();
+  } catch (e) {
+    if (tries <= 1 || !RETRY.test(`${(e as Error).message} ${((e as Error).cause as Error)?.message}`)) throw e;
+    console.log(`stream failed (${(e as Error).message.slice(0, 80)}), retrying`);
+    await new Promise((r) => setTimeout(r, (5 - tries) * 20_000));
+    return streamed(params, tries - 1);
+  }
+}
+
+// the cast's drawings (character.mts, per sheet)
+let imageUSD = 0;
+// the check model's calls, at its own price (Sonnet 5.5: $2 / $10 per MTok)
+let checkUSD = 0;
+const checked = (u: Anthropic.Messages.Usage) => void (checkUSD += (u.input_tokens * 2 + u.output_tokens * 10) / 1e6);
+/**
+ * The run's spend cap (--budget, USD, every call counted): before each request its likely cost is reserved, and a
+ * request that could pass the cap is not sent (the run stops with what it has).
+ */
+/** What a stop keeps (the states stage sets it to its best version so far). */
+let onStop: () => void = () => {};
+function guard(reserve: number) {
+  const spent = (usage.input * 4 + usage.output * 20) / 1e6 + imageUSD + checkUSD;
+  if (!a.budget || spent + reserve <= Number(a.budget)) return;
+  console.log(`##STEP 再問一次可能超過花費上限 $${a.budget}（已花 $${spent.toFixed(2)}），停止`);
+  console.log(`stopped: budget $${a.budget} (spent $${spent.toFixed(3)}, next call reserved $${reserve})`);
+  onStop();
+  process.exit(3);
+}
 // with a baseline the director refines an approved design instead of inventing a new one: the baseline sets the craft
 // level, and variety comes from the camera rather than from new props
 const BASELINE_RULES = `
@@ -177,7 +236,7 @@ const SPRITE_RULES = `
 ${sprites.map((x) => `${x.id} ${x.w}×${x.h} ${x.what}`).join('\n')}
 23. 具體的東西（人物、貓、冰棒、電車、站牌、螢光棒、勳章、星星、棉花糖、吉祥物）一律用素材庫的圖，不要再用程式畫它們。程式負責背景、天空、地面、雲、光線、圖樣、幾何造型、運鏡、轉場和讓素材「演」：位置、移動路徑、換格、擠壓拉伸（以腳底為軸）、彈跳、出場與退場。
 24. 素材放大不要超過原始像素的 1.3 倍（會糊）；特寫就用原尺寸附近。動作要用換格：走路用 girl.walk1→walk2→walk3 以每秒 8–10 格一頓一頓循環，配合位移；跳躍用 crouch→jump；揮手在 wave 與 stand 間切換。
-${sprites.some((x) => x.id.startsWith('girl.')) ? `25. 角色是故事的主角：少女（girl.*）貫穿全曲，帶出每段歌詞的情境（例如「進んだ一歩」就讓她一步步走），取代腳印這類看不懂的象徵；雲朵吉祥物（cloud.*）只在副歌出現當作那朵大雲的分身。貓、冰棒、電車等道具在對應的段落出場。` : '25. 不要有人物或吉祥物角色（少量動作格做出的角色動畫看起來單調、不流暢）：每個鏡頭的焦點由道具、場景和運鏡擔任，讓道具自己「演」——出場、聚集、整齊地隨拍子動作。'}
+${a.cast ? '25. 人物由選角步驟畫好後加入素材庫：照選角規則演（停著的姿勢、背影、特寫、狀態圖換張），不要做全身走路之類的逐格動作。' : sprites.some((x) => x.id.startsWith('girl.')) ? `25. 角色是故事的主角：少女（girl.*）貫穿全曲，帶出每段歌詞的情境（例如「進んだ一歩」就讓她一步步走），取代腳印這類看不懂的象徵；雲朵吉祥物（cloud.*）只在副歌出現當作那朵大雲的分身。貓、冰棒、電車等道具在對應的段落出場。` : '25. 不要有人物或吉祥物角色（少量動作格做出的角色動畫看起來單調、不流暢）：每個鏡頭的焦點由道具、場景和運鏡擔任，讓道具自己「演」——出場、聚集、整齊地隨拍子動作。'}
 27. 素材庫優先於基準：基準裡用程式畫的貓、冰棒、電車、站牌、螢光棒、腳印、人物，全部換成素材庫的圖；基準的構圖、場景安排、配色和鏡頭保留。
 26. 素材要和場景印在同一張紙上：腳下用場景的深色畫一個扁平的硬邊影子（不要模糊陰影），必要時整體 globalAlpha 0.95–1；不要加外框。素材上不要寫字；冰棒棒子上的「あたり」用程式在 pop.stick 上寫。`;
 const baseline = a.baseline ? JSON.parse(readFileSync(join(a.baseline, 'codelayer.json'), 'utf8')) as { idea: string; src: string } : undefined;
@@ -226,7 +285,14 @@ const sceneSheet = scenes.flatMap((x) => {
 // what designers do in backgrounds, transitions, interludes and camera (knowledge.mts), to pick from per song
 const toolboxFile = join('out', 'knowledge', 'toolbox.md');
 const TOOLBOX = existsSync(toolboxFile) ? `\n\n設計師常用手法（從大量設計師做的歌詞 MV 整理出來；依這首歌挑適合的，背景、轉場、過門、鏡頭的部分由你這一層做）：\n${readFileSync(toolboxFile, 'utf8')}` : '';
-const intro = `${RULES}${RECIPES}${TOOLBOX}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${scenes.length ? SCENE_RULES : OVERLAY_RULES}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
+// full scene: the drawing answers for the whole picture, so it may lay out the whole picture (a flat language stays flat)
+const FULL_SCENE_RULES = `
+
+完整場景模式：這一層負責整個畫面，畫面好不好看由你負責。
+28. 你可以拿掉元件庫的所有圖層，只留底色（sections 的 order 給 [0, -1]）：條紋、照片框、裝飾都可以不要；背景、版面、色面、遮擋、轉換都由你畫。
+29. 平面的設計語言可以維持平面（不必畫成立體場景），但構圖、主從、留白和事件要由你安排；照這個語言的材料畫法（紙紋、網點、疊印等）。
+30. 歌詞也是畫面的一部分：用 layouts 決定每個鏡頭的歌詞排法（vertical 直排／stair 階梯橫排／quiet 安靜小字，放 left、right 或 center），主角放在另一側，字不要切過人物的臉和身體。`;
+const intro = `${RULES}${RECIPES}${TOOLBOX}${lessons ? `\n\n使用者對之前其他歌的意見（通用的部分都適用這首）：\n${lessons}` : ''}${baseline ? BASELINE_RULES : ''}${sprites.length ? SPRITE_RULES : ''}${a['full-scene'] ? FULL_SCENE_RULES : scenes.length ? SCENE_RULES : OVERLAY_RULES}${notes ? `\n\n使用者對上一版的意見（必須照做）：\n${notes}` : ''}\n\n這首歌的資料：\n${JSON.stringify(brief)}`;
 const spriteSheet = a.sprites
   ? [{ type: 'text' as const, text: '素材庫總覽（每張下面是 id）：' }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(join(a.sprites, 'contact.jpg')).toString('base64') } }]
   : [];
@@ -254,19 +320,23 @@ const messages: Anthropic.Messages.MessageParam[] = [{
     : [{ type: 'text', text: intro }, ...kitSheet, ...spriteSheet, ...sceneSheet],
 }];
 /** The first draft is planned at high effort; revisions are edits at medium (planning and judging cost more than editing). */
-async function ask(effort: 'high' | 'medium' = 'medium', tries = 4): Promise<Reply> {
+async function ask(effort: Effort = 'medium', tries = 4): Promise<Reply> {
   return call<Reply>(SCHEMA, effort, tries);
 }
 
 /** One director turn in the running conversation, answered in the given schema (retries cut streams and overloads). */
-async function call<T>(schema: object, effort: 'high' | 'medium' = 'medium', tries = 4): Promise<T> {
+// output (mostly thinking) was most of a segment's cost: an edit at medium thought for ~29k tokens ($0.58)
+type Effort = 'high' | 'medium' | 'low';
+async function call<T>(schema: object, effort: Effort = 'medium', tries = 4): Promise<T> {
+  guard(0.9);
   const msg = await client.messages
-    .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, output_config: { effort, format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageStreamParams)
+    // the conversation is resent every round (rules, toolbox, stills): cached for an hour, since renders and checks run between turns
+    .stream({ model: a.model!, max_tokens: 128000, system: SYSTEM, messages, cache_control: { type: 'ephemeral', ttl: '1h' }, output_config: { effort, format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageStreamParams)
     .finalMessage()
     // the SDK retries failed requests but not a stream cut mid-way (a long plan streams for many minutes)
     .catch((e: Error) => {
       // a stream cut mid-way, or an overload / rate limit reported inside the stream: wait, then ask again
-      if (tries <= 1 || !/terminated|socket|ECONNRESET|overloaded|529|rate_limit|429/i.test(`${e.message} ${(e.cause as Error)?.message}`)) throw e;
+      if (tries <= 1 || !RETRY.test(`${e.message} ${(e.cause as Error)?.message}`)) throw e;
       console.log(`stream failed (${e.message.slice(0, 80)}), retrying`);
       step(`連線中斷或伺服器忙碌，${(5 - tries) * 20} 秒後自動重試（不用處理）`);
       return undefined;
@@ -275,8 +345,11 @@ async function call<T>(schema: object, effort: 'high' | 'medium' = 'medium', tri
     await new Promise((r) => setTimeout(r, (5 - tries) * 20_000));
     return call<T>(schema, effort, tries - 1);
   }
-  usage.input += msg.usage.input_tokens;
+  // counted as uncached input: an hour's cache write bills 2×, a read 0.05× (Opus 5.5)
+  usage.input += msg.usage.input_tokens + 2 * (msg.usage.cache_creation_input_tokens ?? 0) + 0.05 * (msg.usage.cache_read_input_tokens ?? 0);
   usage.output += msg.usage.output_tokens;
+  const u = msg.usage;
+  console.log(`call: in ${u.input_tokens} write ${u.cache_creation_input_tokens ?? 0} read ${u.cache_read_input_tokens ?? 0} out ${u.output_tokens} $${((u.input_tokens * 4 + 8 * (u.cache_creation_input_tokens ?? 0) + 0.2 * (u.cache_read_input_tokens ?? 0) + u.output_tokens * 20) / 1e6).toFixed(2)}`);
   // a high-effort plan can think past the output limit; plan again at medium before giving up
   if (msg.stop_reason === 'max_tokens' && effort === 'high') return console.log('ran out of tokens at high effort, retrying at medium'), step('想得太長，改用精簡模式重寫'), call<T>(schema, 'medium');
   if (msg.stop_reason === 'max_tokens') throw new Error('director ran out of tokens');
@@ -293,25 +366,45 @@ function apply(r: Reply) {
     const field = order[0] === 0 ? order : [0, ...order.filter((x) => x !== 0)];
     const code = { kind: 'code', src: r.src, cuts };
     const layers = field.map((j) => (j === -1 ? code : s.layers[j])).filter(Boolean);
-    return { ...s, layers: layers.some((l) => l.kind === 'code') ? layers : [...layers, code] };
+    // a section the drawing lays out alone (ground and code) drops the layers the signature had set aside too, or the
+    // signature puts them back under the drawing (an orange rail across 黄昏サイクル's eye)
+    const { sigRemoved, ...rest } = s as typeof s & { sigRemoved?: unknown };
+    const alone = field.every((j) => j === -1 || j === 0);
+    return { ...(alone ? rest : { ...rest, sigRemoved }), layers: layers.some((l) => l.kind === 'code') ? layers : [...layers, code] };
   });
+  // the lyric layouts the drawing composed around (full scene): vertical / stair / quiet, on a side
+  for (const l of r.layouts ?? []) {
+    // an id, or a number counting the lyric shots (the director wrote 0 and 1 for s24 and s25)
+    const shot = t.shots.find((x: { id: string }) => x.id === l.shot) ?? (/^\d+$/.test(l.shot) ? t.shots[Number(l.shot)] : undefined);
+    if (!shot || !['vertical', 'stair', 'quiet'].includes(l.template)) continue;
+    const side = ['left', 'right', 'center'].includes(l.side) ? l.side : 'left';
+    shot.template = l.template;
+    shot.params = l.template === 'vertical' ? { position: side, dim: 0, step: 0.6, lift: 60 } : l.template === 'stair' ? { side: side === 'center' ? 'right' : side, dim: 0 } : { position: side === 'right' ? 'auto' : side, dim: 0 };
+  }
   return t;
 }
 
 // stills across the song: a verse, the first drop, an interlude, the finale
-const drop = base.moments.find((m: { kind: string }) => m.kind === 'drop')?.at ?? song.duration * 0.3;
-const fin = base.moments.find((m: { kind: string }) => m.kind === 'finale')?.at ?? song.duration * 0.75;
+const drop = base.moments.find((m: { kind: string }) => m.kind === 'drop')?.at ?? W0 + (W1 - W0) * 0.3;
+const fin = base.moments.find((m: { kind: string }) => m.kind === 'finale')?.at ?? W0 + (W1 - W0) * 0.75;
 // review stills: one inside each of 12 shots spread over the song (the drop and finale among them), so the director
 // sees its camera work, not one framing per section
-const mid = (i: number) => { const c = [0, ...cuts, song.duration]; return (c[i] + c[i + 1]) / 2; };
+const mid = (i: number) => { const c = [W0, ...cuts, W1]; return (c[i] + c[i + 1]) / 2; };
 const picks = [...new Set([...Array.from({ length: 10 }, (_, k) => Math.round((k * cuts.length) / 9)), cuts.findIndex((c) => c > drop), cuts.findIndex((c) => c > fin)].filter((i) => i >= 0 && i <= cuts.length))].sort((x, y) => x - y);
-const times = picks.map((i) => +Math.min(song.duration - 1, mid(i)).toFixed(2));
+const times = picks.map((i) => +Math.min(W1 - 0.5, mid(i)).toFixed(2));
 
 // pictures may still be generating (Studio runs both at once): test renders go without them then; the sprite library
 // joins them in one manifest
 const songPics = join(a.dir!, 'assets', 'assets.json');
 const pics = join(out, 'assets.merged.json');
+// the cast a stopped run drew (codelayer/cast.json) stays in the manifest: a resumed run builds on those drawings
+const castFile = join(work, 'cast.json');
+const castKept = existsSync(castFile) && existsSync(pics) ? (() => {
+  const prev = JSON.parse(readFileSync(pics, 'utf8'));
+  return Object.fromEntries((JSON.parse(readFileSync(castFile, 'utf8')).added as { id: string }[]).filter((x) => prev[`spr:${x.id}`]).map((x) => [`spr:${x.id}`, prev[`spr:${x.id}`]]));
+})() : {};
 writeFileSync(pics, JSON.stringify({
+  ...castKept,
   ...(existsSync(songPics) ? JSON.parse(readFileSync(songPics, 'utf8')) : {}),
   ...(a.sprites ? JSON.parse(readFileSync(join(a.sprites, 'assets.json'), 'utf8')) : {}),
 }));
@@ -319,7 +412,7 @@ writeFileSync(pics, JSON.stringify({
 // every shot's middle and 0.3 s later, background only: how much moves and how much is more than the ground colour
 /** The lowest final review score a drawing may ship with: below it the run fails instead of handing over a video. */
 const PASS = 75;
-const shotMids = (() => { const c = [0, ...cuts, song.duration]; return c.slice(0, -1).map((x, i) => +((x + c[i + 1]) / 2).toFixed(2)); })();
+const shotMids = (() => { const c = [W0, ...cuts, W1]; return c.slice(0, -1).map((x, i) => +((x + c[i + 1]) / 2).toFixed(2)); })();
 const REVIEW_SCHEMA = {
   type: 'object', additionalProperties: false, required: ['verdict', 'score', 'issues'],
   properties: {
@@ -350,7 +443,7 @@ async function test(r: Reply, round: number) {
   const once = (stills: number[], out: string, extra: string[] = []) =>
     new Promise<string>((resolve) => {
       // both streams: the renderer reports code-layer problems on stderr, also when the render succeeds
-      const p = spawn('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', '0', '--end', String(song.duration), '--stills', stills.map((x) => x.toFixed(2)).join(','), '--out', out, ...extra]);
+      const p = spawn('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', String(W0), '--end', String(W1), '--stills', stills.map((x) => x.toFixed(2)).join(','), '--out', out, ...extra]);
       let log = '';
       p.stdout.on('data', (d) => (log += d));
       p.stderr.on('data', (d) => (log += d));
@@ -366,7 +459,7 @@ async function test(r: Reply, round: number) {
     return missing.length ? `${log}\n${await once(missing, out, extra)}` : log;
   };
   // the middle of every lyric line, rendered only to let the renderer measure sprites hiding the lyric
-  const mids = song.cues.map((c: { start: number; end: number }) => +((c.start + c.end) / 2).toFixed(2));
+  const mids = cues.map((c: { start: number; end: number }) => +((c.start + c.end) / 2).toFixed(2));
   const qaDir = join(work, `qa_r${round}`);
   // transitions: three cuts across the song, a strip of frames through each (0.1 s before to 0.45 s after)
   const tcuts = [cuts[Math.floor(cuts.length * 0.2)], cuts[Math.floor(cuts.length * 0.5)], cuts[Math.floor(cuts.length * 0.8)]].filter((x) => x !== undefined);
@@ -374,11 +467,11 @@ async function test(r: Reply, round: number) {
   const tDir = join(work, `trans_r${round}`);
   // jumps: 1/30 s pairs where each lyric line appears (a drawing that makes room by snapping jumps right there)
   const jDir = join(work, `jump_r${round}`);
-  const jTimes = song.cues.map((c: { start: number }) => +(c.start - 0.2).toFixed(2)).filter((x: number) => x > 0.5 && !cuts.some((c) => Math.abs(c - x) < 0.15));
+  const jTimes = cues.map((c: { start: number }) => +(c.start - 0.2).toFixed(2)).filter((x: number) => x > 0.5 && !cuts.some((c) => Math.abs(c - x) < 0.15));
   // continuity: around every shot's middle, six samples (two of them one frame apart) with each sprite's box logged
   const cSec = 1 / 30;
   const trackTimes = shotMids.flatMap((m, i) => {
-    const [a0, b0] = [i ? cuts[i - 1] : 0, i < cuts.length ? cuts[i] : song.duration];
+    const [a0, b0] = [i ? cuts[i - 1] : W0, i < cuts.length ? cuts[i] : W1];
     return [m - 0.5, m - 0.25, m, m + cSec, m + 0.25, m + 0.5].filter((x) => x > a0 + 0.05 && x < b0 - 0.05);
   });
   const [log, coverLog, qaLog, , , trackLog] = await Promise.all([
@@ -452,8 +545,8 @@ async function test(r: Reply, round: number) {
 
 /** A reviewer who did not make it: sees only the stills, the brief and the user's standards. */
 async function review(images: string[], weak: string[], strips: string[], tcuts: number[]): Promise<Review> {
-  const msg = await client.messages
-    .stream({
+  guard(0.4);
+  const msg = await streamed({
       model: a.model!, max_tokens: 16000,
       system: '你是嚴格的 MV 審片總監，沒有參與這支片的製作。你只看成品截圖，指出會讓觀眾覺得粗糙、普通、像模板或 AI 做的地方，以及看不清楚歌詞的地方。',
       messages: [{
@@ -466,8 +559,7 @@ async function review(images: string[], weak: string[], strips: string[], tcuts:
         ],
       }],
       output_config: { effort: 'high', format: { type: 'json_schema', schema: REVIEW_SCHEMA } },
-    } as Anthropic.Messages.MessageStreamParams)
-    .finalMessage();
+    } as Anthropic.Messages.MessageStreamParams);
   usage.input += msg.usage.input_tokens;
   usage.output += msg.usage.output_tokens;
   return JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"verdict":"","issues":[]}');
@@ -478,9 +570,9 @@ async function review(images: string[], weak: string[], strips: string[], tcuts:
  * wrong, invisible at normal speed, or whose fix would make things worse is dropped before the director acts on it.
  */
 async function verify(rv: Review, images: string[], strips: string[]): Promise<Review> {
+  guard(0.2);
   if (!rv.issues.length) return rv;
-  const msg = await client.messages
-    .stream({
+  const msg = await streamed({
       model: a.model!, max_tokens: 8000,
       system: '你是審片意見的查核者。你的工作是試著推翻每一條意見：對照截圖，判斷它是否真的存在、正常播放時看不看得出來、照它改會不會更好。只保留站得住的意見。',
       messages: [{
@@ -490,8 +582,7 @@ async function verify(rv: Review, images: string[], strips: string[]): Promise<R
         ],
       }],
       output_config: { effort: 'medium', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['keep'], properties: { keep: { type: 'array', items: { type: 'integer' } } } } } },
-    } as Anthropic.Messages.MessageStreamParams)
-    .finalMessage();
+    } as Anthropic.Messages.MessageStreamParams);
   usage.input += msg.usage.input_tokens;
   usage.output += msg.usage.output_tokens;
   const keep = new Set<number>(JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"keep":[]}').keep ?? []);
@@ -541,16 +632,16 @@ function applyEdits(cur: Reply, e: Edit): { next: Reply; errs: string[] } {
     }
     src = src.replace(x.find, () => x.replace);
   }
-  return { next: { idea: e.idea || cur.idea, src, sections: e.sections.length ? e.sections : cur.sections }, errs };
+  return { next: { idea: e.idea || cur.idea, src, sections: e.sections.length ? e.sections : cur.sections, layouts: cur.layouts }, errs };
 }
 
 /** A revision as edits; finds that miss are sent back once, then the director rewrites in full. */
 async function revise(cur: Reply): Promise<Reply> {
-  let e = await call<Edit>(EDIT_SCHEMA);
+  let e = await call<Edit>(EDIT_SCHEMA, 'low');
   let { next, errs } = applyEdits(cur, e);
   if (errs.length) {
     messages.push({ role: 'user', content: `這些修改套不上（find 必須是目前程式裡原樣只出現一次的一段）：\n${errs.join('\n')}\n請重新給這幾個修改（其他已經套上了，不要重複）。` });
-    e = await call<Edit>(EDIT_SCHEMA);
+    e = await call<Edit>(EDIT_SCHEMA, 'low');
     ({ next, errs } = applyEdits(next, e));
   }
   if (errs.length) {
@@ -558,6 +649,280 @@ async function revise(cur: Reply): Promise<Reply> {
     return ask();
   }
   return next;
+}
+
+// ---- key states (--states): the event's states, planned with times, rendered by the real renderer at those times and
+// judged by someone who did not make them — is each state there, can a viewer tell what it is, and does one become
+// the next — before any other check (a plan said "the eye closes" and no frame ever showed it)
+const STATES_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['event', 'states'],
+  properties: {
+    event: { type: 'string', description: '這段要演出的那一個事件，一句話（歌詞本身講的事）' },
+    states: { type: 'array', description: '事件的 3 個狀態：前、中、後，時間由小到大', items: { type: 'object', additionalProperties: false, required: ['at', 'what', 'look'], properties: { at: { type: 'number', description: '秒（歌曲時間）' }, what: { type: 'string', description: '這一刻的狀態' }, look: { type: 'string', description: '觀眾在畫面上靠什麼認出這個狀態：具體的形狀、位置、大小、明暗、顏色' } } } },
+  },
+};
+type States = { event: string; states: { at: number; what: string; look: string }[] };
+const JUDGE_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['states', 'moves'],
+  properties: {
+    states: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['index', 'present', 'readable', 'why'], properties: { index: { type: 'integer' }, present: { type: 'boolean', description: '畫面上真的有 look 描述的東西' }, readable: { type: 'boolean', description: '沒看過說明的觀眾，看這張畫面就認得出這個狀態' }, why: { type: 'string', description: '看到了什麼、缺什麼' } } } },
+    moves: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'gradual', 'why'], properties: { from: { type: 'integer', description: '從第幾個狀態到下一個' }, gradual: { type: 'boolean', description: '連續格裡看得出一個狀態逐漸變成下一個（不是突然換一張圖）' }, why: { type: 'string' } } } },
+    layout: { type: 'array', description: '構圖問題（沒有就給空陣列）：線條、色塊或物件切過人物的臉或身體、壓住歌詞；歌詞和底色對比不足看不清楚；畫面有大片空白、主角太小（主要人物不到畫面高度的一半就算太小）或被擠到邊緣、一半出框；兩個人物分不清誰是誰', items: { type: 'object', additionalProperties: false, required: ['at', 'problem', 'severe'], properties: { at: { type: 'number', description: '哪一張（秒）' }, problem: { type: 'string', description: '具體在畫面哪裡、什麼問題、怎麼改' }, severe: { type: 'boolean', description: '嚴重：觀眾會直接看壞——歌詞被擋住或看不清、人物的臉被切過或出框、分不清誰是誰。其他（留白偏多、人物偏小、位置不夠好）不算嚴重' } } } },
+  },
+};
+type Judge = { blind?: string; states: { index: number; present: boolean; readable: boolean; why: string }[]; moves: { from: number; gradual: boolean; why: string }[]; layout: { at: number; problem: string; severe: boolean }[] };
+
+/** The director plans the event's states after the storyboard (checked: three, in order, inside the window). */
+async function planStates(recast = false): Promise<States> {
+  step(recast ? '選角後，導演用畫好的人物重寫三個狀態' : '導演寫出事件的前、中、後三個狀態和時間點');
+  messages.push({ role: 'user', content: `${recast ? '人物和狀態圖已經畫好：照實際畫出來的人物和狀態圖重寫三個狀態（what 和 look 都用畫好的東西描述，例如誰出現、哪一張狀態圖），不要再用選角前的設定。' : ''}第 1.5 步：這段只演一個事件。寫出它的 3 個狀態（前、中、後）：每個狀態的時間點（${W0.toFixed(1)}–${W1.toFixed(1)} 秒之間，由小到大）、這一刻是什麼狀態、觀眾在畫面上靠什麼認出它。` });
+  let st = await call<States>(STATES_SCHEMA, 'medium');
+  for (let k = 0; k < 2; k++) {
+    const t = st.states.map((x) => x.at);
+    const errs = [
+      ...(st.states.length !== 3 ? [`要剛好 3 個狀態（現在 ${st.states.length} 個）`] : []),
+      ...(t.some((x) => x < W0 + 0.3 || x > W1 - 0.3) ? [`時間點要在 ${(W0 + 0.3).toFixed(1)}–${(W1 - 0.3).toFixed(1)} 秒之間`] : []),
+      ...(t.some((x, i) => i && x - t[i - 1] < 1) ? ['狀態之間至少隔 1 秒，時間由小到大'] : []),
+    ];
+    if (!errs.length) break;
+    messages.push({ role: 'user', content: `狀態要修正：\n${errs.map((x) => `- ${x}`).join('\n')}` });
+    st = await call<States>(STATES_SCHEMA, 'medium');
+  }
+  console.log(`event: ${st.event} | ${st.states.map((x) => `${x.at}s ${x.what}`).join(' → ')}`);
+  writeFileSync(join(work, 'states.json'), JSON.stringify(st, null, 1));
+  return st;
+}
+
+/** Stills of the drawing at the given times, by the same renderer the video uses; jpg base64 by time. */
+async function stillsAt(r: Reply, stills: number[], out: string): Promise<Record<string, string>> {
+  const file = join(work, 'treatment_states.json');
+  writeFileSync(file, JSON.stringify(apply(r)));
+  rmSync(out, { recursive: true, force: true });
+  await new Promise<void>((resolve) => {
+    const p = spawn('npx', ['tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', String(W0), '--end', String(W1), '--stills', stills.map((x) => x.toFixed(2)).join(','), '--out', out]);
+    p.on('close', () => resolve());
+    p.on('error', () => resolve());
+  });
+  const got: Record<string, string> = {};
+  for (const t of stills) {
+    const png = join(out, `still_${t.toFixed(2)}.png`);
+    if (!existsSync(png)) continue;
+    const jpg = png.replace(/\.png$/, '.jpg');
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', png, '-vf', 'scale=960:-1', '-q:v', '4', jpg]);
+    got[t.toFixed(2)] = readFileSync(jpg).toString('base64');
+  }
+  return got;
+}
+
+/** Each state's still and the frames between consecutive states, judged by a reviewer who did not make them. */
+async function judgeStates(r: Reply, st: States, k: number): Promise<{ judge: Judge; pass: number; total: number; images: string[] }> {
+  const t = st.states.map((x) => x.at);
+  const between = t.slice(0, -1).flatMap((x, i) => [0.2, 0.4, 0.6, 0.8].map((u) => +(x + (t[i + 1] - x) * u).toFixed(2)));
+  const all = [...t, ...between].sort((x, y) => x - y);
+  const got = await stillsAt(r, all, join(work, `states_r${k}`));
+  const at = (x: number) => got[x.toFixed(2)];
+  // 1. a viewer told nothing: what happens in these frames (the intent must not leak into what is "seen")
+  guard(0.2);
+  const seen = await streamed({ model: a['check-model']!, max_tokens: 6000, system: '你是第一次看這支 MV 的觀眾。你沒有任何說明，只看畫面。', messages: [{ role: 'user', content: [
+      { type: 'text', text: `這是一支歌詞 MV 裡連續 ${all.length} 個時間點的畫面（依時間順序，秒數標在每張前面）。請回答：每張畫面看到什麼；連起來發生了什麼事；最後出現的東西或人讓你想到什麼、和前面的畫面有什麼關係、靠哪些線索判斷；有沒有哪裡看不懂或可能被誤解。` },
+      ...all.flatMap((x) => (at(x) ? [{ type: 'text' as const, text: `${x} 秒：` }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: at(x) } }] : [])),
+    ] }] } as Anthropic.Messages.MessageStreamParams);
+  checked(seen.usage);
+  const blind = seen.content.find((b) => b.type === 'text')?.text ?? '';
+  // 2. the intent held against what the viewer saw: a state counts as readable only if the viewer named it unprompted
+  guard(0.25);
+  const content: Anthropic.Messages.ContentBlockParam[] = [{ type: 'text', text: `導演想演的事件：${st.event}\n一位沒有任何說明的觀眾看完這些畫面後這樣描述：\n${blind}\n\n下面是每個狀態的畫面與導演的意圖。逐一判斷：「有出現」＝畫面上真的有描述的東西；「看得懂」＝上面那位觀眾自己說出了這個狀態（沒說出來、或理解成別的意思，就是看不懂，即使畫面上有）；每段狀態之間的連續格，看得出一個狀態逐漸變成下一個嗎。最後逐張檢查構圖（layout）：線條或色塊切過人物的臉、壓住歌詞；歌詞和底色對比不足；大片空白或主角被擠到邊緣出框；兩個人物分不清。` }];
+  st.states.forEach((x, i) => {
+    content.push({ type: 'text', text: `狀態 ${i}（${x.at} 秒）應該是：${x.what}；觀眾應該靠這個認出來：${x.look}` });
+    if (at(x.at)) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: at(x.at) } });
+    else content.push({ type: 'text', text: '（這張沒有渲染出來）' });
+  });
+  t.slice(0, -1).forEach((_, i) => {
+    content.push({ type: 'text', text: `狀態 ${i} → ${i + 1} 之間的連續格（${between.slice(i * 4, i * 4 + 4).join('、')} 秒）：` });
+    for (const x of between.slice(i * 4, i * 4 + 4)) if (at(x)) content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: at(x) } });
+  });
+  const msg = await streamed({ model: a['check-model']!, max_tokens: 8000, system: '你是審片的查核者：拿導演的意圖去對照觀眾實際看到的，不替畫面補上觀眾沒看出來的意思。', messages: [{ role: 'user', content }], output_config: { effort: 'high', format: { type: 'json_schema', schema: JUDGE_SCHEMA } } } as Anthropic.Messages.MessageStreamParams);
+  checked(msg.usage);
+  const judge = JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{}') as Judge;
+  judge.layout ??= [];
+  // a composition without severe problems counts as one more item to pass: an event that reads over a line cutting her
+  // face is not done; minor ones never ran out (3–7 per segment in every round of a whole song), so they do not block
+  judge.layout = judge.layout.filter((x) => x.severe);
+  const pass = judge.states.filter((x) => x.present && x.readable).length + judge.moves.filter((x) => x.gradual).length + (judge.layout.length ? 0 : 1);
+  writeFileSync(join(work, `states_r${k}.json`), JSON.stringify({ blind, ...judge }, null, 1));
+  return { judge: { ...judge, blind } as Judge, pass, total: st.states.length * 2, images: st.states.map((x) => at(x.at)).filter(Boolean) };
+}
+
+// ---- the cast (--cast): the people and state drawings the event needs, designed by the director and drawn by the
+// image model in the song's style, one sheet per group that must match (one person, one eye in its three states)
+const CAST_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['why', 'sheets'],
+  properties: {
+    why: { type: 'string', description: '這個事件需要哪些人物和狀態圖、為什麼（觀眾要靠它們認出事件）' },
+    sheets: { type: 'array', description: '1–2 張：同一張上的圖會畫成一致的造型與比例（例如同一個人的不同姿勢，或同一隻眼睛的睜開／半閉／閉上）', items: { type: 'object', additionalProperties: false, required: ['id', 'items'], properties: { id: { type: 'string' }, items: { type: 'array', description: '2–4 個', items: { type: 'object', additionalProperties: false, required: ['id', 'what'], properties: { id: { type: 'string', description: '英文小寫加點，例 boy.bike_back、eye.half' }, what: { type: 'string', description: '英文，給生圖的具體描述：誰（一定寫性別與年紀，例如 a teenage boy／a teenage girl）、外型（髮型、髮色、服裝、和其他人物的區別）、姿勢、角度、取景；同一張的狀態圖要寫「the exact same … same framing」，也要再寫一次性別' } } } } } } },
+  },
+};
+type Cast = { why: string; sheets: { id: string; items: { id: string; what: string }[] }[] };
+const CAST_RULES = `
+人物與狀態圖（選角）：
+- 故事裡的「誰」用人物演，不要用物件代替（之前用粉紅蝴蝶結代表「君」，觀眾連不起來）。人物之間外型要明顯不同（性別、髮型、服裝、顏色），觀眾才不會認錯人；照歌詞決定主角的性別（例如「僕」）。每張圖的描述都要寫清楚性別（只寫髮型和制服，生圖會畫成別的性別）。
+- 動作用 2–4 張狀態圖在拍點上直接換張（例如眼睛睜開→半閉→閉上），不要交叉淡化（兩張重疊會像在融化），也不要用程式扭曲整張圖做動作。
+- 全身動作（走路、騎車）做不好就不要做：用停著的姿勢、背影、局部特寫、裁切來演。
+- 人物圖裡已經畫了的東西（例如他身邊的腳踏車、手上的照片）不要在同一個畫面再放一個單獨的貼圖：同一樣東西出現兩次會很突兀；道具只有在故事需要、而人物圖裡沒有時才放。
+- 現實和回憶可以用不同畫法（例如回憶只用一個特色墨），但要是刻意且一致的決定。`;
+
+/** Each cast drawing checked against its description by a viewer: wrong gender, hair or clothes, or two people alike. */
+async function checkCast(added: { id: string; what: string }[], manifest: Record<string, { url: string }>): Promise<{ id: string; problem: string }[]> {
+  guard(0.2);
+  const content: Anthropic.Messages.ContentBlockParam[] = [{ type: 'text', text: '下面每張圖都附了它應該畫成的樣子。逐張檢查：性別、年紀、髮型、髮色、服裝、姿勢和描述一致嗎？不同的人物之間看得出是不同的人嗎（同一個人的不同狀態要看起來是同一個人）？只列出不符的，全部正確就給空陣列。' }];
+  for (const x of added) {
+    const jpg = manifest[`spr:${x.id}`].url.replace(/\.png$/, '.check.jpg');
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', manifest[`spr:${x.id}`].url, '-vf', 'scale=-1:360', '-q:v', '4', jpg]);
+    content.push({ type: 'text', text: `${x.id} 應該是：${x.what}` }, { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: readFileSync(jpg).toString('base64') } });
+  }
+  const msg = await streamed({ model: a['check-model']!, max_tokens: 4000, messages: [{ role: 'user', content }], output_config: { effort: 'medium', format: { type: 'json_schema', schema: { type: 'object', additionalProperties: false, required: ['wrong'], properties: { wrong: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'problem'], properties: { id: { type: 'string' }, problem: { type: 'string', description: '英文：哪裡不符、應該怎樣' } } } } } } } } } as Anthropic.Messages.MessageStreamParams);
+  checked(msg.usage);
+  return (JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"wrong":[]}').wrong ?? []) as { id: string; problem: string }[];
+}
+
+/** The director casts the event; each sheet is drawn in the song's style, keyed, and joins the sprite library. */
+async function castStage(st: States) {
+  step('導演決定人物和事件需要的狀態圖');
+  messages.push({ role: 'user', content: `第 1.7 步（選角）：${CAST_RULES}\n這個事件（${st.event}）需要哪些人物和狀態圖？列出要畫的圖，分成 1–2 張（同一張上的會畫成一致）。素材庫已經有的東西不用再畫（整首共用的人物已經在素材庫：要新的狀態圖時，描述寫成同一個人）。如果素材庫已經夠用，sheets 給空陣列。` });
+  const cast = await call<Cast>(CAST_SCHEMA, 'medium');
+  console.log(`cast: ${cast.sheets.map((x) => `${x.id}[${x.items.map((i) => i.id).join(',')}]`).join(' ')} — ${cast.why}`);
+  const dir = join(work, 'cast');
+  mkdirSync(dir, { recursive: true });
+  const ref = a['cast-ref'] ?? a['style-ref'] ?? (a.sprites ? readdirSync(join(a.sprites, '..')).filter((f) => /^sheet.*\.jpg$/.test(f)).map((f) => join(a.sprites!, '..', f))[0] : undefined);
+  const lang2 = lang ? ` Art direction of this video: ${lang.name} — ${lang.essence} Colour: ${lang.colour}` : '';
+  const added: { id: string; w: number; h: number; what: string }[] = [];
+  const manifest = JSON.parse(readFileSync(pics, 'utf8'));
+  for (const sh of cast.sheets.slice(0, 2)) {
+    const items = sh.items.slice(0, 4);
+    const instr = join(dir, `instruction_${sh.id}.txt`);
+    writeFileSync(instr, `CHARACTER SHEET for a music video.${a['cast-ref'] ? ' The reference image shows the characters of this video: anyone listed below who appears there must be drawn identical to it (same face, hair colour, hairstyle, clothes, proportions), in exactly its drawing style, inks, halftone and grain.' : ref ? ' The reference image is a prop sheet of this video: draw the items listed below in exactly its drawing style, inks, halftone and grain, so they belong to the same print.' : lang2}
+Draw the items listed below, each one separate, in a ${items.length} columns x 1 row grid, all at the same scale, with generous empty space around every item, on a perfectly flat chroma-key green background #00B140 (no gradient, no floor, no cast shadows, no borders, no extra objects). Do not use any green close to #00B140 in the items.
+The characters are designed, not generic: clear silhouette, simple confident shapes, faces drawn with few strokes (no realistic rendering, no glossy anime shading), the same proportions in every item. Items described as the same thing must match exactly (same face, hair, clothes, framing).
+Absolutely no text, letters, numbers or labels anywhere.`);
+    const dirs = join(dir, `dirs_${sh.id}.json`);
+    writeFileSync(dirs, JSON.stringify([{ id: sh.id, prompt: items.map((x, i) => `${i + 1} ${x.what}`).join('; ') }]));
+    step(`畫人物與狀態圖：${sh.id}`);
+    execFileSync('npx', ['tsx', 'scripts/lyric-vj/character.mts', ...(ref ? ['--ref', ref] : []), '--directions', dirs, '--instruction', instr, '--out', dir], { stdio: ['ignore', 'ignore', 'inherit'] });
+    imageUSD += 0.101;
+    const sheet = join(dir, `${sh.id}.jpg`);
+    if (!existsSync(sheet)) throw new Error(`人物表 ${sh.id} 沒有畫出來`);
+    const keyed = join(dir, sh.id);
+    execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', '--with', 'scipy', 'python', 'scripts/lyric-vj/key_sprites.py', sheet, keyed, '--min', '0.003'], { stdio: ['ignore', 'ignore', 'inherit'] });
+    // the drawings in reading order; stray specks (a half-keyed ghost) are far smaller than the drawings
+    const frames = (JSON.parse(readFileSync(join(keyed, 'frames.json'), 'utf8')).frames as { file: string; w: number; h: number; x?: number; sheetIndex: number }[]);
+    const big = [...frames].sort((x, y) => y.w * y.h - x.w * x.h).slice(0, items.length).sort((x, y) => (x.x ?? x.sheetIndex) - (y.x ?? y.sheetIndex));
+    if (big.length < items.length) console.log(`cast ${sh.id}: ${big.length} of ${items.length} drawings came out`);
+    big.forEach((fr, i) => {
+      const it = items[i];
+      manifest[`spr:${it.id}`] = { kind: 'image', url: join(process.cwd(), keyed, fr.file) };
+      added.push({ id: it.id, w: fr.w, h: fr.h, what: it.what });
+    });
+  }
+  // what was drawn, held against what was asked: gender, hair, clothes, and the people telling apart (a "short black
+  // hair, navy uniform" narrator came back a girl, next to a girl)
+  const wrong = added.length ? await checkCast(added, manifest) : [];
+  if (wrong.length) console.log(`cast check: ${wrong.map((x) => `${x.id} ${x.problem}`).join(' | ')}`);
+  for (const sh of cast.sheets.slice(0, 2).filter((x) => x.items.some((i) => wrong.some((w) => w.id === i.id)))) {
+    const items = sh.items.slice(0, 4);
+    const fix = wrong.filter((w) => items.some((i) => i.id === w.id)).map((w) => `${w.id}: ${w.problem}`).join('; ');
+    const dirs = join(dir, `dirs_${sh.id}.json`);
+    // the redo starts from the sheet as drawn: the same people (face, hair colour, clothes), only the faults changed — a
+    // redo from the style reference alone came back as a different girl
+    writeFileSync(dirs, JSON.stringify([{ id: `${sh.id}.redo`, prompt: `Redraw the reference sheet with the same characters (same face, hair colour, clothes, drawing style and layout): ${items.map((x, i) => `${i + 1} ${x.what}`).join('; ')}. Fix exactly this and keep everything else: ${fix}` }]));
+    step(`人物畫得不對，重畫：${sh.id}`);
+    execFileSync('npx', ['tsx', 'scripts/lyric-vj/character.mts', '--ref', join(dir, `${sh.id}.jpg`), '--directions', dirs, '--instruction', join(dir, `instruction_${sh.id}.txt`), '--out', dir], { stdio: ['ignore', 'ignore', 'inherit'] });
+    imageUSD += 0.101;
+    const sheet = join(dir, `${sh.id}.redo.jpg`);
+    if (!existsSync(sheet)) continue;
+    const keyed = join(dir, `${sh.id}.redo`);
+    execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', '--with', 'scipy', 'python', 'scripts/lyric-vj/key_sprites.py', sheet, keyed, '--min', '0.003'], { stdio: ['ignore', 'ignore', 'inherit'] });
+    const frames = (JSON.parse(readFileSync(join(keyed, 'frames.json'), 'utf8')).frames as { file: string; w: number; h: number; x?: number; sheetIndex: number }[]);
+    const big = [...frames].sort((x, y) => y.w * y.h - x.w * x.h).slice(0, items.length).sort((x, y) => (x.x ?? x.sheetIndex) - (y.x ?? y.sheetIndex));
+    if (big.length < items.length) continue;
+    big.forEach((fr, i) => {
+      manifest[`spr:${items[i].id}`] = { kind: 'image', url: join(process.cwd(), keyed, fr.file) };
+      const x = added.find((y) => y.id === items[i].id);
+      if (x) Object.assign(x, { w: fr.w, h: fr.h });
+    });
+  }
+  writeFileSync(pics, JSON.stringify(manifest));
+  sprites.push(...added);
+  writeFileSync(join(work, 'cast.json'), JSON.stringify({ cast, added }, null, 1));
+  // the director sees what was drawn before it writes the code
+  const shots = added.map((x) => {
+    const jpg = join(dir, `${x.id}.preview.jpg`);
+    execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', (manifest[`spr:${x.id}`] as { url: string }).url, '-vf', 'scale=-1:360', '-q:v', '4', jpg]);
+    return [{ type: 'text' as const, text: `${x.id}（${x.w}×${x.h}）：` }, { type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data: readFileSync(jpg).toString('base64') } }];
+  }).flat();
+  messages.push({ role: 'user', content: [{ type: 'text', text: `人物與狀態圖畫好了，已加入素材庫（用 f.img('<id>') 取得）。照上面的選角規則用它們：${CAST_RULES}` }, ...shots] });
+}
+
+/**
+ * The states stage: judged, then fixed by the kind of failure — a state missing from the frame is a rewrite, one that
+ * is there but unclear (or a jump between states) is an edit — until all pass, two rounds bring no gain or three rounds are done (then the
+ * run stops at its preview: no video). After it passes, the program's technical check runs once; the review is advice.
+ */
+const MAX_ROUNDS = 3;
+async function stateStage(st: States): Promise<never> {
+  let best = -1, still = 0, k = 1, bestReply = reply, bestRound = 1;
+  let judged = await judgeStates(reply, st, k);
+  let bestJudged = judged;
+  for (;;) {
+    console.log(`states r${k}: ${judged.pass}/${judged.total} — ${judged.judge.states.map((x) => `${x.index}:${x.present ? (x.readable ? 'ok' : '不懂') : '沒有'}`).join(' ')} ${judged.judge.moves.map((x) => `${x.from}→:${x.gradual ? 'ok' : '跳'}`).join(' ')} 構圖:${judged.judge.layout.length ? judged.judge.layout.length + ' 個問題' : 'ok'}`);
+    if (judged.pass === judged.total) break;
+    if (judged.pass > best) [best, still, bestReply, bestRound, bestJudged] = [judged.pass, 0, reply, k, judged];
+    else still++;
+    onStop = () => writeFileSync(join(out, 'treatment.preview.json'), JSON.stringify(apply(bestReply)));
+    // the best version came by round 3 in 10 of 11 segments of a whole song: later rounds only spent money
+    if (still >= 2 || k >= MAX_ROUNDS) {
+      // stopped: the best version stays as the preview (its treatment and state stills), no video
+      writeFileSync(join(out, 'treatment.preview.json'), JSON.stringify(apply(bestReply)));
+      writeFileSync(join(out, 'codelayer_failed.json'), JSON.stringify({ ...bestReply, story, states: st, judge: bestJudged.judge, bestRound, ...usage, imageUSD, checkUSD }, null, 1));
+      console.log(`##STEP ${still >= 2 ? '連續兩輪沒有進步' : `修了 ${k} 輪`}，停止；保留第 ${bestRound} 輪（${best}/${judged.total}）當預覽（codelayer/states_r${bestRound}）`);
+      console.log(`stopped: best states ${best}/${judged.total} (round ${bestRound}) after ${k} rounds`);
+      process.exit(2);
+    }
+    // a round worse than the best goes back to the best and fixes that (building on a worse rewrite lost a good one)
+    const back = judged.pass < best;
+    if (back) [reply, judged] = [bestReply, bestJudged];
+    const missing = judged.judge.states.filter((x) => !x.present);
+    const notes2 = [...judged.judge.states.filter((x) => !(x.present && x.readable)).map((x) => `- 狀態 ${x.index}（${st.states[x.index]?.at} 秒）${x.present ? '有出現但看不懂' : '沒有出現'}：${x.why}`), ...judged.judge.moves.filter((x) => !x.gradual).map((x) => `- 狀態 ${x.from}→${x.from + 1} 不是逐漸變化：${x.why}`), ...judged.judge.layout.map((x) => `- 構圖（${x.at} 秒）：${x.problem}`)].join('\n');
+    messages.push({
+      role: 'user', content: [
+        { type: 'text', text: `${back ? `上一輪的修改比第 ${bestRound} 輪差，回到第 ${bestRound} 輪的版本繼續修。目前的程式（第 ${bestRound} 輪）：\n${reply.src}\n\n` : ''}沒參與製作的觀眾看了這些狀態畫面：\n${notes2}\n${missing.length ? '有狀態根本沒畫出來：這段的構圖要重新安排，回傳完整的新程式（idea、src、sections、layouts），已經成立的狀態保留原本的做法。' : '狀態都在，但不夠清楚、變化是跳的或構圖有問題：用 edits 修改。'}以下是目前各狀態的畫面：` },
+        ...judged.images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
+      ],
+    });
+    step(`第 ${k} 輪：${back ? `回到第 ${bestRound} 輪，` : ''}${missing.length ? '狀態沒畫出來，重寫這段' : '狀態不清楚，修改'}`);
+    reply = missing.length ? await ask('medium') : await revise(reply);
+    save(reply, k + 1, story);
+    judged = await judgeStates(reply, st, ++k);
+  }
+  step('事件狀態通過，做技術檢查');
+  const r = await test(reply, k);
+  console.log(`technical: ${r.problems.length ? r.problems.join(' | ') : 'no errors'}`);
+  if (r.problems.length) {
+    messages.push({ role: 'user', content: `程式量測到的問題（必須修好，不要動到事件的狀態）：\n${r.problems.join('\n')}\n用 edits 修改。` });
+    const next = await revise(reply);
+    const again = await judgeStates(next, st, k + 1);
+    if (again.pass === again.total) reply = next;
+    else console.log('technical fix broke the states: kept the version whose states pass');
+  }
+  // advice only: the review no longer decides whether this ships
+  const rv = await review(r.images, r.weak, r.strips, r.tcuts);
+  console.log(`review (advice): ${rv.score} — ${rv.verdict}`);
+  writeFileSync(join(work, 'review_states.json'), JSON.stringify(rv, null, 1));
+  const usd = (usage.input * 4 + usage.output * 20) / 1e6 + imageUSD + checkUSD;
+  writeFileSync(join(out, 'treatment.json'), JSON.stringify(apply(reply)));
+  writeFileSync(join(out, 'codelayer.json'), JSON.stringify({ ...reply, story, states: st, review: rv, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +usd.toFixed(3) }, null, 1));
+  writeFileSync(savedFile, '{}');
+  console.log(`done: ${Math.round((Date.now() - began) / 1000)}s, $${usd.toFixed(3)}`);
+  process.exit(0);
 }
 
 // a run that failed part-way resumes from its last finished round (same design, props, scenes and notes)
@@ -569,6 +934,7 @@ const save = (reply: Reply, round: number, story?: Story) => writeFileSync(saved
 
 let reply: Reply;
 let story: Story | undefined;
+let states: States | undefined;
 let firstRound = 1;
 if (resume) {
   step(`接續上次中斷的進度（第 ${resume.round} 輪）`);
@@ -576,6 +942,9 @@ if (resume) {
   story = resume.story;
   firstRound = resume.round;
   messages.push({ role: 'assistant', content: JSON.stringify(reply) });
+  // a states run that stopped part-way goes back to its states stage, with the cast it drew
+  if (a.states && existsSync(join(work, 'states.json'))) states = JSON.parse(readFileSync(join(work, 'states.json'), 'utf8'));
+  if (existsSync(castFile)) sprites.push(...(JSON.parse(readFileSync(castFile, 'utf8')).added as typeof sprites).filter((x) => castKept[`spr:${x.id}`] && !sprites.some((y) => y.id === x.id)));
 } else if (baseline) {
   step('導演依你的意見和目前版本，構思修改並寫新版畫面');
   reply = await ask('high');
@@ -593,12 +962,20 @@ if (resume) {
   }
   console.log('story:', story.story);
   writeFileSync(join(work, 'story.json'), JSON.stringify(story, null, 1));
+  if (a.states) states = await planStates();
+  // the states are written again on what was actually drawn: a judge held to the pre-cast plan (a ribbon) failed the
+  // version where she appeared, and the rewrite that followed lost it
+  if (a.states && a.cast && states) {
+    await castStage(states);
+    states = await planStates(true);
+  }
   step('照分鏡寫畫面程式');
-  messages.push({ role: 'user', content: '分鏡通過。第二步：照這份分鏡寫程式（每段的場景、取景、主角、事件、歌詞區都要做到），輸出 idea、src、sections。' });
+  messages.push({ role: 'user', content: `分鏡通過。第二步：照這份分鏡寫程式（每段的場景、取景、主角、事件、歌詞區都要做到），輸出 idea、src、sections。${states ? `\n事件的每個狀態在它的時間點（at）都必須在畫面上清楚呈現 look 寫的樣子，狀態之間要看得到連續的變化：\n${states.states.map((x) => `- ${x.at} 秒：${x.what}（觀眾靠：${x.look}）`).join('\n')}` : ''}` });
   reply = await ask('medium');
 }
 console.log('idea:', reply.idea);
 save(reply, firstRound, story);
+if (a.states && states) await stateStage(states);
 
 let last: Awaited<ReturnType<typeof test>> | undefined;
 for (let round = firstRound; round <= 3; round++) {
@@ -657,13 +1034,13 @@ sweepChecks();
 const usd = (usage.input * 4 + usage.output * 20) / 1e6;
 const record = { ...reply, story, score: final.score, verdict: final.verdict, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +usd.toFixed(3) };
 if (final.score < PASS) {
-  // never leave the user empty-handed: the drawing is kept aside and the song ships with the design it already has
-  // (the proven component-library look, or the last drawing that passed)
+  // a drawing below the bar stops the song here: the plain library look is not a finished video (黄昏サイクル shipped
+  // as bicycle stickers over stripes); the drawing and its stills stay for a look at what went wrong
   writeFileSync(join(out, 'codelayer_failed.json'), JSON.stringify(record, null, 1));
   writeFileSync(savedFile, '{}');
-  console.log(`##STEP 專屬圖層 ${final.score} 分未達 ${PASS}，改用保底設計`);
-  console.log(`fallback: drawing scored ${final.score} < ${PASS}, kept the current design (${final.verdict})`);
-  process.exit(0);
+  console.log(`##STEP 專屬圖層 ${final.score} 分未達 ${PASS}，停止：不輸出整首（問題畫面在 codelayer/stills_r*）`);
+  console.log(`stopped: drawing scored ${final.score} < ${PASS} (${final.verdict})`);
+  process.exit(2);
 }
 writeFileSync(join(out, 'treatment.json'), JSON.stringify(apply(reply)));
 writeFileSync(join(out, 'codelayer.json'), JSON.stringify(record, null, 1));

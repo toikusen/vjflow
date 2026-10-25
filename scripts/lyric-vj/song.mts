@@ -10,7 +10,7 @@ import { parseLyrics } from '../../src/app/lyrics/lyric-parser.service';
 import { LyricSearchService } from '../../src/app/lyrics/lyric-search.service';
 import { alignLyrics, alignMainLines, AsrWord, cleanLyricLine, combineTimings, ForcedLine, isShout, voteStarts, withoutAsides } from '../../src/app/lyric-vj/align';
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
-import { alignOffset, beatStrengths, checkTiming, downbeats, holdToVoice, keepUserTiming, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
+import { alignOffset, beatStrengths, checkTiming, downbeats, holdToVoice, keepGivenStarts, keepLyricOrder, placeInVoice, keepUserTiming, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
 
 const { values: a } = parseArgs({
@@ -124,7 +124,11 @@ if (a.lrc) {
     console.log(`歌詞時間：${cues.filter((c) => !c.review).length}/${cues.length} 句自動通過，${cues.filter((c) => c.review).length} 句需要在時間校正頁確認`);
   }
 }
-if (cues[0]?.timingSource !== 'whisper') cues = mainLines(cues, a.vocals, '', active);
+if (cues[0]?.timingSource !== 'whisper') {
+  const r = keepGivenStarts(cues, mainLines(cues, a.vocals, '', active));
+  cues = r.cues;
+  if (r.kept) console.log(`${r.kept} 句逐字對齊偏離原本時間太多，維持原本時間`);
+}
 // lines the aligner was unsure of snap to where the voice actually enters (a vote already outweighs one stem's voice)
 if (!voted) {
   const snapped = snapToVoice(cues, active);
@@ -132,11 +136,38 @@ if (!voted) {
   if (snapped.moved) console.log(`${snapped.moved} 句低信心歌詞對齊到人聲起點`);
 }
 
+// lines out of the lyric's order, or too short for their words, share their joint span
+{
+  const ordered = keepLyricOrder(cues);
+  cues = ordered.cues;
+  if (ordered.reflowed.length) console.log(`${ordered.reflowed.length} 句順序或長度不對，依字數重排（${ordered.reflowed.join('、')}）`);
+}
+
+// a line nobody sings under moves to where the voice enters, or goes
+{
+  // voice in both stems: one separation's bleed (htdemucs at 154.7 s in チョロイン's gap) read as an onset
+  const alt = a['vocals-alt'] ? vocalActivity(decode(a['vocals-alt'], SR), SR) : undefined;
+  const placed = placeInVoice(cues, alt ? active.map((v, i) => v && (alt[i] ?? false)) : active);
+  cues = placed.cues;
+  if (placed.moved.length) console.log(`${placed.moved.length} 句落在沒有人聲的地方，移到下一段人聲（${placed.moved.join('、')}）`);
+  if (placed.dropped.length) console.log(`${placed.dropped.length} 句落在沒有人聲的地方，沒有空間可移，先拿掉（${placed.dropped.join('、')}）`);
+}
+
 // a held last note before a gap keeps its caption until the voice stops
 {
   const held = holdToVoice(cues, active);
   cues = held.cues;
   if (held.held) console.log(`${held.held} 句延長到尾音結束`);
+}
+
+// the timing as delivered, checked line by line: every step after the source (word timing, snaps, holds) can move a
+// line, and the editor has to see the ones that ended up off (i REVOLUTION: LRCLIB passed its check, then the word
+// step dragged three lines onto the instrumental and nothing flagged them)
+{
+  const lines = checkLines(cues, active);
+  cues = cues.map((c, i) => (lines[i].ok ? c : { ...c, review: [...new Set([...(c.review ?? []), ...lines[i].issues.map((k) => ISSUE_LABEL[k])])] }));
+  const off = lines.filter((l) => !l.ok).length;
+  if (off) console.log(`最後檢查：${off} 句時間可能不對（${lines.filter((l) => !l.ok).map((l) => l.id).join('、')}），請在時間校正頁確認`);
 }
 
 let instrumentalOffsetSec: number | undefined;

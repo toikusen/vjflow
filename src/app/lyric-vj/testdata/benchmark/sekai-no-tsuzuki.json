@@ -1,0 +1,2398 @@
+{
+ "language": "silkscreen",
+ "concept": "一座小島海岸的一天一夜：從童年夏日的海邊、褪去的秋日沙灘，到星光下遼闊的夜海；風帶著翅膀迎向黎明。最後在小路盡頭的晨光裡，相約在夢的延續中重逢。",
+ "styleAnchor": {
+  "prompt": "Saturated limited palette of deep indigo night, ocean blue, coral and warm gold; sky built from a few distinct horizontal color bands, deep dark shadows, one bright luminous band of light along the horizon or light source, layered foreground and background clouds for depth, nostalgic and hopeful seaside mood, high contrast, never grey or washed out. No text, no letters, no logos.",
+  "palette": {
+   "background": "#141a3c",
+   "text": "#fff4e0",
+   "accent": "#ff6a3d",
+   "line": "#f2c14e",
+   "glow": "#ffb36b"
+  }
+ },
+ "assets": [
+  {
+   "id": "a_intro",
+   "kind": "image",
+   "prompt": "Pre-dawn small island harbor, a white lighthouse on a rocky point at right, calm deep indigo sea, a thin bright coral band of first light on the horizon, layered stratus clouds in front and high clouds behind, a few fading stars, wide open sky in the upper half."
+  },
+  {
+   "id": "a_beach",
+   "kind": "image",
+   "prompt": "Summer afternoon on a small cove beach, rocky tide pools and scattered seashells in the foreground, an old wooden pier reaching into turquoise water, tall cumulus clouds stacked in near and far layers, a brilliant sun glare band on the sea, lots of open sky."
+  },
+  {
+   "id": "a_autumn",
+   "kind": "image",
+   "prompt": "The same cove beach in late autumn at dusk, empty sand, a closed wooden beach hut with shutters down, dune grass bending in the wind in the foreground, orange-red horizon band, long streaks of clouds in two layers drifting across, deep blue upper sky."
+  },
+  {
+   "id": "a_starsea",
+   "kind": "image",
+   "prompt": "Night beach under a dense starry sky with the Milky Way arching overhead, calm sea reflecting starlight as a glittering path, low dark headland silhouettes on both sides, thin luminous blue band on the horizon, a few low clouds in the foreground and thin high clouds behind."
+  },
+  {
+   "id": "a_cliffnight",
+   "kind": "image",
+   "prompt": "View from a grassy sea cliff at night over a vast endless ocean, rising moon just above the horizon casting a wide bright band of light across the water, layered night clouds near and far, deep indigo sky full of stars, grass tufts in the near foreground."
+  },
+  {
+   "id": "a_dawnwind",
+   "kind": "image",
+   "prompt": "Dawn over the sea seen from a cliff edge, strong wind stretching clouds into long diagonal streaks in foreground and background layers, a few tiny seabirds far away in the sky, grass bending sideways, bright gold band of sunrise on the horizon, deep blue upper sky."
+  },
+  {
+   "id": "a_ship",
+   "kind": "image",
+   "prompt": "Open sea at bright midday, a tiny distant sailing ship on the horizon, towering cumulus clouds in several depth layers, vivid cobalt water with sparkling sunlight band, wide sky."
+  },
+  {
+   "id": "a_cloudsea",
+   "kind": "image",
+   "prompt": "After a storm over the ocean, dark clouds breaking apart in layers, golden sunbeams pouring through the gaps onto the sea, bright light patch on the water, deep shadowed cloud undersides in front, lighter clouds far behind."
+  },
+  {
+   "id": "a_tide",
+   "kind": "image",
+   "prompt": "Evening shoreline, gentle waves washing over a line of footprints in wet sand in the foreground, magenta and orange sunset band on the horizon, sun half sunk into the sea, layered pink clouds near and far, deep violet upper sky."
+  },
+  {
+   "id": "a_waves",
+   "kind": "image",
+   "prompt": "Large rolling waves breaking toward the shore at twilight, white spray in the foreground, deep blue water, a narrow bright coral band where the sky meets the sea, layered dark clouds above."
+  },
+  {
+   "id": "a_road",
+   "kind": "image",
+   "prompt": "A long narrow coastal road running along the cliffs toward a cape at dawn, at the very end of the road a tiny distant still silhouette with one hand raised, sunrise gold band behind the cape, layered morning clouds, sea on one side."
+  },
+  {
+   "id": "a_stage",
+   "kind": "image",
+   "prompt": "An empty small open-air stage by the sea at dusk, wooden boards and rows of empty benches, warm string lights hanging over it, the sea and a bright orange horizon band behind, layered dusk clouds."
+  },
+  {
+   "id": "a_dream",
+   "kind": "image",
+   "prompt": "Deep night sea with a lighthouse on a distant point sweeping a long beam of light across the water, dense stars, soft layered clouds catching the beam, calm reflective water, indigo and violet sky."
+  },
+  {
+   "id": "a_dawn",
+   "kind": "image",
+   "prompt": "Sunrise breaking over the open sea, the sun just clearing the horizon, an intense gold and coral band of light spreading across the water, layered clouds lit from below in front and pale high clouds behind, deep blue sky fading upward."
+  },
+  {
+   "id": "a_morning",
+   "kind": "image",
+   "prompt": "Bright clear morning over the island harbor, the lighthouse on the rocky point, calm blue sea with sparkling light band, small boats moored, fresh cumulus clouds in near and far layers, wide open sky."
+  }
+ ],
+ "shots": [
+  {
+   "id": "S01",
+   "start": 0,
+   "end": 27.46,
+   "template": "title-card",
+   "params": {
+    "layout": "center",
+    "showArtist": true,
+    "hold": 12,
+    "logo": true,
+    "dim": 0.3
+   },
+   "asset": "a_intro",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S02",
+   "start": 27.46,
+   "end": 35.15501133786848,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_beach",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S03",
+   "start": 35.15501133786848,
+   "end": 40.59,
+   "template": "quiet",
+   "params": {
+    "position": "auto",
+    "dim": 0.5
+   },
+   "asset": "a_beach",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S04",
+   "start": 40.59,
+   "end": 46.393469387755104,
+   "template": "typewriter",
+   "params": {
+    "position": "left",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_autumn",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S05",
+   "start": 46.393469387755104,
+   "end": 53.59,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_autumn",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S06",
+   "start": 53.59,
+   "end": 60.62,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "a_starsea",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S07",
+   "start": 60.62,
+   "end": 67.93,
+   "template": "vertical",
+   "params": {
+    "position": "right",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_starsea",
+   "camera": "parallax",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S08",
+   "start": 67.93,
+   "end": 74.24,
+   "template": "typewriter",
+   "params": {
+    "position": "auto",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_cliffnight",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S09",
+   "start": 74.24,
+   "end": 81.32,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "a_starsea",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S10",
+   "start": 81.32,
+   "end": 88.52,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_cliffnight",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S11",
+   "start": 88.52,
+   "end": 93.69,
+   "template": "typewriter",
+   "params": {
+    "position": "auto",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_dawnwind",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S12",
+   "start": 93.69,
+   "end": 98.54548752834468,
+   "template": "vertical",
+   "params": {
+    "position": "right",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_dawnwind",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S13",
+   "start": 98.54548752834468,
+   "end": 102.30712018140589,
+   "template": "quiet",
+   "params": {
+    "position": "center",
+    "dim": 0.5
+   },
+   "asset": "a_dawnwind",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S14",
+   "start": 102.30712018140589,
+   "end": 109.73750566893425,
+   "template": "title-card",
+   "params": {
+    "layout": "lower-left",
+    "showArtist": true,
+    "hold": 5,
+    "logo": true,
+    "dim": 0.35
+   },
+   "asset": "a_ship",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S15",
+   "start": 109.73750566893425,
+   "end": 115.3102947845805,
+   "template": "quiet",
+   "params": {
+    "position": "auto",
+    "dim": 0.4
+   },
+   "asset": "a_ship",
+   "camera": "parallax",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S16",
+   "start": 115.3102947845805,
+   "end": 119.02548752834467,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "a_cloudsea",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S17",
+   "start": 119.02548752834467,
+   "end": 123.88,
+   "template": "quiet",
+   "params": {
+    "position": "left",
+    "dim": 0.5
+   },
+   "asset": "a_cloudsea",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S18",
+   "start": 123.88,
+   "end": 130.1710657596372,
+   "template": "typewriter",
+   "params": {
+    "position": "left",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_tide",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S19",
+   "start": 130.1710657596372,
+   "end": 135.95,
+   "template": "quiet",
+   "params": {
+    "position": "auto",
+    "dim": 0.5
+   },
+   "asset": "a_tide",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S20",
+   "start": 135.95,
+   "end": 141.31664399092972,
+   "template": "vertical",
+   "params": {
+    "position": "auto",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_waves",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S21",
+   "start": 141.31664399092972,
+   "end": 148.46,
+   "template": "quiet",
+   "params": {
+    "position": "center",
+    "dim": 0.5
+   },
+   "asset": "a_waves",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S22",
+   "start": 148.46,
+   "end": 155,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "a_starsea",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S23",
+   "start": 155,
+   "end": 161.26,
+   "template": "vertical",
+   "params": {
+    "position": "right",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_starsea",
+   "camera": "parallax",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S24",
+   "start": 161.26,
+   "end": 167.26,
+   "template": "typewriter",
+   "params": {
+    "position": "auto",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_cliffnight",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S25",
+   "start": 167.26,
+   "end": 174.14,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "a_road",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S26",
+   "start": 174.14,
+   "end": 180.52,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_cliffnight",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S27",
+   "start": 180.52,
+   "end": 186.34,
+   "template": "quiet",
+   "params": {
+    "position": "center",
+    "dim": 0.7
+   },
+   "asset": "a_stage",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S28",
+   "start": 186.34,
+   "end": 190.22,
+   "template": "quiet",
+   "params": {
+    "position": "left",
+    "dim": 0.7
+   },
+   "asset": "a_stage",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S29",
+   "start": 190.22,
+   "end": 195.66,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "a_starsea",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S30",
+   "start": 195.66,
+   "end": 202.44,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_cliffnight",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S31",
+   "start": 202.44,
+   "end": 208.16,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "a_dream",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S32",
+   "start": 208.16,
+   "end": 214.36,
+   "template": "vertical",
+   "params": {
+    "position": "auto",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_dream",
+   "camera": "parallax",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S33",
+   "start": 214.36,
+   "end": 218.42,
+   "template": "typewriter",
+   "params": {
+    "position": "left",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_dawn",
+   "camera": "push",
+   "transitionIn": "flash"
+  },
+  {
+   "id": "S34",
+   "start": 218.42,
+   "end": 224.08,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "a_starsea",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S35",
+   "start": 224.08,
+   "end": 230.98,
+   "template": "vertical",
+   "params": {
+    "position": "left",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_cliffnight",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S36",
+   "start": 230.98,
+   "end": 236.6,
+   "template": "typewriter",
+   "params": {
+    "position": "left",
+    "cursor": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_dream",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "S37",
+   "start": 236.6,
+   "end": 243.18,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "a_dawn",
+   "camera": "pan",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S38",
+   "start": 243.18,
+   "end": 249.28943310657596,
+   "template": "vertical",
+   "params": {
+    "position": "center",
+    "step": 0.6,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_dawn",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "S39",
+   "start": 249.28943310657596,
+   "end": 254.86222222222221,
+   "template": "quiet",
+   "params": {
+    "position": "center",
+    "dim": 0.4
+   },
+   "asset": "a_dawn",
+   "camera": "parallax",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "S40",
+   "start": 254.86222222222221,
+   "end": 295.01,
+   "template": "title-card",
+   "params": {
+    "layout": "center",
+    "showArtist": true,
+    "hold": 14,
+    "logo": true,
+    "dim": 0.3
+   },
+   "asset": "a_morning",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  }
+ ],
+ "arc": [
+  {
+   "start": 0,
+   "level": 0
+  },
+  {
+   "start": 27.46,
+   "level": 1
+  },
+  {
+   "start": 53.59,
+   "level": 3
+  },
+  {
+   "start": 88.52,
+   "level": 2
+  },
+  {
+   "start": 102.46,
+   "level": 1
+  },
+  {
+   "start": 123.88,
+   "level": 1
+  },
+  {
+   "start": 141.32,
+   "level": 2
+  },
+  {
+   "start": 148.46,
+   "level": 3
+  },
+  {
+   "start": 180.52,
+   "level": 1
+  },
+  {
+   "start": 190.22,
+   "level": 3
+  },
+  {
+   "start": 208.16,
+   "level": 2
+  },
+  {
+   "start": 218.42,
+   "level": 3
+  },
+  {
+   "start": 243.18,
+   "level": 2
+  },
+  {
+   "start": 255.34,
+   "level": 0
+  }
+ ],
+ "moments": [
+  {
+   "kind": "build",
+   "at": 53.59,
+   "dur": 3.5,
+   "strength": 1
+  },
+  {
+   "kind": "drop",
+   "at": 53.59,
+   "strength": 1
+  },
+  {
+   "kind": "build",
+   "at": 148.46,
+   "dur": 3.5,
+   "strength": 1.1
+  },
+  {
+   "kind": "finale",
+   "at": 148.46,
+   "strength": 1.3
+  },
+  {
+   "kind": "break",
+   "at": 180.52,
+   "dur": 9.5,
+   "strength": 1
+  },
+  {
+   "kind": "build",
+   "at": 190.22,
+   "dur": 3.5,
+   "strength": 1.05
+  },
+  {
+   "kind": "drop",
+   "at": 190.22,
+   "strength": 1.15
+  }
+ ],
+ "cues": [
+  {
+   "cueId": "c001",
+   "shot": "S02",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 13,
+     "method": "liquid"
+    }
+   ],
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c002",
+   "shot": "S04",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 14,
+     "method": "hollow"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c003",
+   "shot": "S06",
+   "emphasis": [
+    {
+     "from": 6,
+     "to": 8,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c004",
+   "shot": "S07",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c005",
+   "shot": "S08",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 2,
+     "method": "glow"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c006",
+   "shot": "S09",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    8
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c007",
+   "shot": "S10",
+   "emphasis": [
+    {
+     "from": 7,
+     "to": 9,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    7
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c008",
+   "shot": "S11",
+   "emphasis": [
+    {
+     "from": 7,
+     "to": 9,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c009",
+   "shot": "S12",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 4,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c010",
+   "shot": "S18",
+   "emphasis": [
+    {
+     "from": 15,
+     "to": 18,
+     "method": "scale"
+    }
+   ],
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c011",
+   "shot": "S20",
+   "emphasis": [
+    {
+     "from": 10,
+     "to": 13,
+     "method": "hollow"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c012",
+   "shot": "S22",
+   "emphasis": [
+    {
+     "from": 6,
+     "to": 8,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c013",
+   "shot": "S23",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c014",
+   "shot": "S24",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 5,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c015",
+   "shot": "S25",
+   "emphasis": [
+    {
+     "from": 12,
+     "to": 14,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c016",
+   "shot": "S26",
+   "emphasis": [],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "burst",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c017",
+   "shot": "S27",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 4,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c018",
+   "shot": "S28",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 5,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c019",
+   "shot": "S29",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 2,
+     "method": "glow"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c020",
+   "shot": "S30",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word",
+   "accents": [
+    0,
+    8
+   ]
+  },
+  {
+   "cueId": "c021",
+   "shot": "S31",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 5,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c022",
+   "shot": "S32",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 6,
+     "method": "color"
+    }
+   ],
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c023",
+   "shot": "S33",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 4,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c024",
+   "shot": "S34",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 2,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c025",
+   "shot": "S35",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word",
+   "accents": [
+    0,
+    8
+   ]
+  },
+  {
+   "cueId": "c026",
+   "shot": "S36",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 2,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    6
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c027",
+   "shot": "S37",
+   "emphasis": [
+    {
+     "from": 9,
+     "to": 13,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c028",
+   "shot": "S38",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 4,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  }
+ ],
+ "design": {
+  "font": "Zen Kaku Gothic New",
+  "accentFont": "Montserrat",
+  "kanaScale": 0.8,
+  "grain": 0.4,
+  "paper": 0.6,
+  "colorScript": [
+   {
+    "start": 0,
+    "shadow": "#121A33",
+    "highlight": "#E88B6E",
+    "accent": "#FFD88A",
+    "duotone": 0.9,
+    "image": 0.3
+   },
+   {
+    "start": 27.5,
+    "shadow": "#0E2F3A",
+    "highlight": "#8FD3CF",
+    "accent": "#E8553A",
+    "duotone": 0.85,
+    "image": 0.4
+   },
+   {
+    "start": 53.6,
+    "shadow": "#0A1030",
+    "highlight": "#6F8FC4",
+    "accent": "#FFE36B",
+    "duotone": 0.9,
+    "image": 0.3
+   },
+   {
+    "start": 88.5,
+    "shadow": "#0F2235",
+    "highlight": "#E9B04A",
+    "accent": "#FF6B3D",
+    "duotone": 0.85,
+    "image": 0.4
+   },
+   {
+    "start": 102.5,
+    "shadow": "#0E2232",
+    "highlight": "#9BC4D9",
+    "accent": "#F2C14E",
+    "duotone": 0.85,
+    "image": 0.45
+   },
+   {
+    "start": 109.7,
+    "shadow": "#151B24",
+    "highlight": "#5A6B7A",
+    "accent": "#C9A55A",
+    "duotone": 0.95,
+    "image": 0.25
+   },
+   {
+    "start": 116.5,
+    "shadow": "#12283A",
+    "highlight": "#F2C14E",
+    "accent": "#FF6B3D",
+    "duotone": 0.9,
+    "image": 0.3
+   },
+   {
+    "start": 123.9,
+    "shadow": "#1A1530",
+    "highlight": "#D9668C",
+    "accent": "#FFD07A",
+    "duotone": 0.9,
+    "image": 0.35
+   },
+   {
+    "start": 141.3,
+    "shadow": "#0B0A18",
+    "highlight": "#3A2D5E",
+    "accent": "#F6C8B0",
+    "duotone": 1,
+    "image": 0.1
+   },
+   {
+    "start": 148.5,
+    "shadow": "#080720",
+    "highlight": "#7A6FB8",
+    "accent": "#FF5A3C",
+    "duotone": 0.95,
+    "image": 0.25
+   },
+   {
+    "start": 161.3,
+    "shadow": "#2A1430",
+    "highlight": "#F2A14A",
+    "accent": "#1FB5B0",
+    "duotone": 0.95,
+    "image": 0.25
+   },
+   {
+    "start": 180.5,
+    "shadow": "#1E1020",
+    "highlight": "#F08A4B",
+    "accent": "#FFE08A",
+    "duotone": 0.85,
+    "image": 0.4
+   },
+   {
+    "start": 208.2,
+    "shadow": "#13213F",
+    "highlight": "#F6B04A",
+    "accent": "#FFE45C",
+    "duotone": 0.9,
+    "image": 0.3
+   },
+   {
+    "start": 254.9,
+    "shadow": "#172647",
+    "highlight": "#F7C35A",
+    "accent": "#E8553A",
+    "duotone": 0.9,
+    "image": 0.35
+   },
+   {
+    "start": 275,
+    "shadow": "#0D2A3C",
+    "highlight": "#A9D6E5",
+    "accent": "#F25C3B",
+    "duotone": 0.85,
+    "image": 0.3
+   }
+  ],
+  "peak": "vacuum",
+  "medium": "paper",
+  "techniques": [
+   "skeleton",
+   "quiet"
+  ],
+  "language": "silkscreen"
+ },
+ "graphics": {
+  "sections": [
+   {
+    "start": 0,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#EBD9C4",
+      "grain": 0.3
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#121A33",
+       "#2A3560",
+       "#5B5E8C",
+       "#E88B6E"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A0F20"
+       }
+      ],
+      "color": "#121A33"
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 14,
+      "size": 10,
+      "color": "#FFD88A",
+      "drift": 0.05,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#E88B6E"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#2A3560",
+       "#121A33"
+      ],
+      "height": 0.22,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A0F20"
+       }
+      ],
+      "color": "#2A3560"
+     },
+     {
+      "kind": "frame",
+      "type": "border",
+      "color": "#121A33"
+     }
+    ],
+    "accent": "#FFD88A",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 13.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#EBD9C4",
+      "grain": 0.3
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#121A33",
+       "#2A3560",
+       "#5B5E8C",
+       "#E88B6E"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A0F20"
+       }
+      ],
+      "color": "#121A33"
+     },
+     {
+      "kind": "photo",
+      "mode": "band",
+      "asset": "a_intro",
+      "tint": "#2A3560",
+      "y": -0.4,
+      "height": 300,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#121A33"
+       }
+      ]
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 6,
+      "size": 8,
+      "color": "#FFD88A",
+      "drift": 0.03
+     }
+    ],
+    "accent": "#FFD88A",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 27.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F4E9C9",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#3A9AA6",
+       "#8FD3CF",
+       "#F4E9C9"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#1F6475"
+       }
+      ],
+      "color": "#3A9AA6"
+     },
+     {
+      "kind": "blob",
+      "color": "#E8553A",
+      "x": 0.62,
+      "y": 0.5,
+      "r": 0.12,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#B83A28"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#1F6475",
+       "#0E2F3A"
+      ],
+      "height": 0.25,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#071A20"
+       }
+      ],
+      "color": "#1F6475"
+     }
+    ],
+    "accent": "#E8553A",
+    "text": "#0E2F3A"
+   },
+   {
+    "start": 53.6,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#DCE6F0",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#0A1030",
+       "#18265A",
+       "#2D4A86",
+       "#6F8FC4"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#050818"
+       }
+      ],
+      "color": "#0A1030"
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 30,
+      "size": 8,
+      "color": "#FFE36B",
+      "drift": 0.05,
+      "pulse": 0.3,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#6F8FC4"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#18265A",
+       "#0A1030"
+      ],
+      "height": 0.2,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#050818"
+       }
+      ],
+      "color": "#18265A"
+     }
+    ],
+    "accent": "#FFE36B",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 88.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F6E7B8",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#234766",
+       "#4F7FA8",
+       "#E9B04A",
+       "#F6E7B8"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0F2235"
+       }
+      ],
+      "color": "#234766"
+     },
+     {
+      "kind": "botanical",
+      "type": "feather",
+      "color": "#0F2235",
+      "count": 5,
+      "size": 220,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#070F18"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#234766",
+       "#0F2235"
+      ],
+      "height": 0.18,
+      "drift": 0.2,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#070F18"
+       }
+      ],
+      "color": "#234766"
+     }
+    ],
+    "accent": "#FF6B3D",
+    "text": "#0F2235"
+   },
+   {
+    "start": 102.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F2EFE4",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#3F7FA6",
+       "#9BC4D9",
+       "#F2EFE4"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#1E4A6B"
+       }
+      ],
+      "color": "#3F7FA6"
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 6,
+      "size": 160,
+      "color": "#F2EFE4",
+      "drift": 0.1,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#9BC4D9"
+       }
+      ]
+     },
+     {
+      "kind": "photo",
+      "mode": "band",
+      "asset": "a_ship",
+      "tint": "#1E4A6B",
+      "y": -0.4,
+      "height": 280,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0E2232"
+       }
+      ]
+     }
+    ],
+    "accent": "#F2C14E",
+    "text": "#0E2232"
+   },
+   {
+    "start": 109.7,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#E9E2CC",
+      "grain": 0.3
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#151B24",
+       "#2E3A48",
+       "#5A6B7A",
+       "#C9A55A"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A0E14"
+       }
+      ],
+      "color": "#151B24"
+     },
+     {
+      "kind": "skyline",
+      "type": "peaks",
+      "colors": [
+       "#5A6B7A",
+       "#2E3A48",
+       "#151B24"
+      ],
+      "height": 0.45,
+      "drift": 0.15,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A0E14"
+       }
+      ],
+      "color": "#5A6B7A"
+     }
+    ],
+    "accent": "#C9A55A",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 116.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#FFF4D6",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#2F5A78",
+       "#6E9CB8",
+       "#F2C14E",
+       "#FFF4D6"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#12283A"
+       }
+      ],
+      "color": "#2F5A78"
+     },
+     {
+      "kind": "blob",
+      "color": "#FF6B3D",
+      "x": -0.1,
+      "y": -0.15,
+      "r": 0.28,
+      "pulse": 0.2,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#C94A28"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#2F5A78",
+       "#12283A"
+      ],
+      "height": 0.22,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#081520"
+       }
+      ],
+      "color": "#2F5A78"
+     }
+    ],
+    "accent": "#FF6B3D",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 123.9,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F6C8B0",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#1A1530",
+       "#3A2D5E",
+       "#7A4C8C",
+       "#D9668C",
+       "#F6C8B0"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0B0A18"
+       }
+      ],
+      "color": "#1A1530"
+     },
+     {
+      "kind": "blob",
+      "color": "#FFD07A",
+      "x": -0.55,
+      "y": -0.3,
+      "r": 0.13,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#D9668C"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#3A2D5E",
+       "#1A1530"
+      ],
+      "height": 0.2,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0B0A18"
+       }
+      ],
+      "color": "#3A2D5E"
+     }
+    ],
+    "accent": "#FFD07A",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 141.3,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#0B0A18"
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 6,
+      "size": 6,
+      "color": "#F6C8B0",
+      "drift": 0.02,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#3A2D5E"
+       }
+      ]
+     }
+    ],
+    "accent": "#F6C8B0"
+   },
+   {
+    "start": 148.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#E4E9F2",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#080720",
+       "#14123A",
+       "#2E2A6E",
+       "#7A6FB8"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#030210"
+       }
+      ],
+      "color": "#080720"
+     },
+     {
+      "kind": "rings",
+      "color": "#7A6FB8",
+      "x": 0.6,
+      "y": -0.3,
+      "pulse": 0.4,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#2E2A6E"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "peaks",
+      "colors": [
+       "#14123A",
+       "#080720"
+      ],
+      "height": 0.24,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#030210"
+       }
+      ],
+      "color": "#14123A"
+     }
+    ],
+    "accent": "#FF5A3C",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 161.3,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#FFF1C2",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#2A1430",
+       "#6B2F5A",
+       "#E0563A",
+       "#F2A14A"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#150A18"
+       }
+      ],
+      "color": "#2A1430"
+     },
+     {
+      "kind": "rings",
+      "color": "#F2A14A",
+      "x": 0.6,
+      "y": -0.3,
+      "pulse": 0.5,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#E0563A"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "peaks",
+      "colors": [
+       "#6B2F5A",
+       "#2A1430"
+      ],
+      "height": 0.24,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#150A18"
+       }
+      ],
+      "color": "#6B2F5A"
+     }
+    ],
+    "accent": "#1FB5B0",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 180.5,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F7E2C4",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#4A2440",
+       "#A2475A",
+       "#F08A4B",
+       "#F7E2C4"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#1E1020"
+       }
+      ],
+      "color": "#4A2440"
+     },
+     {
+      "kind": "shapes",
+      "type": "dot",
+      "count": 18,
+      "size": 10,
+      "color": "#FFE08A",
+      "drift": 0,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#F08A4B"
+       }
+      ]
+     },
+     {
+      "kind": "photo",
+      "mode": "band",
+      "asset": "a_stage",
+      "tint": "#1E1020",
+      "y": -0.42,
+      "height": 260,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#4A2440"
+       }
+      ]
+     }
+    ],
+    "accent": "#FFE08A",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 208.2,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#FFF3D6",
+      "grain": 0.25
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#13213F",
+       "#2F4E8A",
+       "#E46A4A",
+       "#F6B04A"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A1224"
+       }
+      ],
+      "color": "#13213F"
+     },
+     {
+      "kind": "blob",
+      "color": "#FFE45C",
+      "x": 0.55,
+      "y": -0.32,
+      "r": 0.16,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#F6B04A"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "hills",
+      "colors": [
+       "#2F4E8A",
+       "#13213F"
+      ],
+      "height": 0.18,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0A1224"
+       }
+      ],
+      "color": "#2F4E8A"
+     }
+    ],
+    "accent": "#FFE45C",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 254.9,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#FFF1C2",
+      "grain": 0.3
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#172647",
+       "#3B5B96",
+       "#E8774E",
+       "#F7C35A"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0B1428"
+       }
+      ],
+      "color": "#172647"
+     },
+     {
+      "kind": "shapes",
+      "type": "star",
+      "count": 8,
+      "size": 8,
+      "color": "#FFF1C2",
+      "drift": 0.03,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#3B5B96"
+       }
+      ]
+     },
+     {
+      "kind": "photo",
+      "mode": "band",
+      "asset": "a_road",
+      "tint": "#172647",
+      "y": -0.38,
+      "height": 300,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#0B1428"
+       }
+      ]
+     }
+    ],
+    "accent": "#E8553A",
+    "text": "#1a1a1a"
+   },
+   {
+    "start": 275,
+    "layers": [
+     {
+      "kind": "paper",
+      "color": "#F7F3E6",
+      "grain": 0.3
+     },
+     {
+      "kind": "bands",
+      "colors": [
+       "#4A9CC0",
+       "#A9D6E5",
+       "#F7F3E6"
+      ],
+      "from": 0,
+      "to": 0.6,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#1F5E80"
+       }
+      ],
+      "color": "#4A9CC0"
+     },
+     {
+      "kind": "blob",
+      "color": "#F25C3B",
+      "x": -0.55,
+      "y": 0.5,
+      "r": 0.11,
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#B8402A"
+       }
+      ]
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#1F5E80",
+       "#0D2A3C"
+      ],
+      "height": 0.24,
+      "windows": "#F25C3B",
+      "ghosts": [
+       {
+        "dx": 2,
+        "dy": 1,
+        "color": "#06161F"
+       }
+      ],
+      "color": "#1F5E80"
+     },
+     {
+      "kind": "frame",
+      "type": "border",
+      "color": "#0D2A3C"
+     }
+    ],
+    "accent": "#F25C3B",
+    "text": "#0D2A3C"
+   }
+  ],
+  "story": [
+   {
+    "kind": "hero",
+    "x": 0.72,
+    "y": 0.62,
+    "size": 0.18,
+    "prop": "star.light",
+    "motion": "drift",
+    "states": [
+     {
+      "at": 0,
+      "state": "show"
+     },
+     {
+      "at": 27.5,
+      "state": "hide"
+     },
+     {
+      "at": 74.2,
+      "state": "show"
+     },
+     {
+      "at": 88.5,
+      "state": "hide"
+     },
+     {
+      "at": 135.9,
+      "state": "show"
+     },
+     {
+      "at": 138.5,
+      "state": "crack"
+     },
+     {
+      "at": 141.3,
+      "state": "shatter"
+     },
+     {
+      "at": 161.3,
+      "state": "gather"
+     },
+     {
+      "at": 195.7,
+      "state": "glow"
+     },
+     {
+      "at": 254.9,
+      "state": "glow"
+     }
+    ],
+    "glow": "#FFE36B"
+   },
+   {
+    "kind": "pop",
+    "x": -0.7,
+    "y": -0.6,
+    "size": 0.18,
+    "prop": "shell.conch",
+    "motion": "sit",
+    "at": 30,
+    "dur": 6
+   },
+   {
+    "kind": "fly",
+    "x": 0.7,
+    "y": 0.5,
+    "size": 0.2,
+    "prop": "feather.white",
+    "motion": "drift",
+    "at": 88.5,
+    "dur": 3,
+    "until": 98,
+    "side": "left",
+    "trail": "#FFF7E0",
+    "from": "left"
+   },
+   {
+    "kind": "fly",
+    "x": -0.6,
+    "y": 0.6,
+    "size": 0.15,
+    "prop": "seabird.gull",
+    "motion": "flutter",
+    "at": 94,
+    "dur": 4,
+    "until": 99,
+    "side": "right",
+    "through": true,
+    "from": "right"
+   }
+  ],
+  "storyProps": [
+   {
+    "id": "star.light",
+    "what": "A flat five-pointed star with slightly rounded points, pale golden yellow, printed like a silkscreen paper cutout, facing front",
+    "hero": true
+   },
+   {
+    "id": "feather.white",
+    "what": "A single long white bird feather, slightly curved, lying diagonally, soft grey shaft line",
+    "hero": false
+   },
+   {
+    "id": "seabird.gull",
+    "what": "A white seagull in side view with grey-tipped wings spread wide, gliding to the left",
+    "hero": false
+   },
+   {
+    "id": "shell.conch",
+    "what": "A small spiral conch seashell, cream with coral-pink inner lip, resting on its side",
+    "hero": false
+   }
+  ]
+ }
+}

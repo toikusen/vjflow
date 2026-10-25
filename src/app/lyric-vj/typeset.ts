@@ -7,6 +7,7 @@ const SMALL = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵ�
 const PARTICLES = new Set([...'はがをにでとのへもや']);
 const KANJI = /\p{Script=Han}/u;
 const LATIN = /[A-Za-z0-9]/;
+const CJK = /[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff]/;
 
 export interface CharSet {
   /** Glyph size multiplier. */
@@ -38,7 +39,8 @@ export function typeset(text: string, display: boolean): CharSet[] {
     else if (c === 'ー') advance = 0.94;
     if (LATIN.test(c)) scale = 1.08;
     // a space-free switch between Latin and Japanese gets a fifth of an em
-    if (prev && prev.trim() && c.trim() && LATIN.test(prev) !== LATIN.test(c) && !/[\s、。,.!?！？]/.test(prev + c)) gapBefore = 0.2;
+    // (only between Latin and CJK: an apostrophe or hyphen inside English is no switch)
+    if (prev && ((LATIN.test(prev) && CJK.test(c)) || (CJK.test(prev) && LATIN.test(c)))) gapBefore = 0.2;
     if (display && i === 0 && visible >= 3 && KANJI.test(c)) scale = 1.18;
     return { scale, advance, gapBefore };
   });

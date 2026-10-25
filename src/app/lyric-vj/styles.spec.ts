@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast, readable } from './render/runtime';
-import { checkStyle, STYLES } from './styles';
+import { attachmentErrors, checkStyle, STYLES } from './styles';
 import { sceneCount } from './tiers';
 import { SongTimeline } from './timeline';
 import { TreatmentV3 } from './treatment';
@@ -76,5 +76,62 @@ describe('readable', () => {
     const c = readable('#3b5bff', '#0a1030');
     expect(contrast(c, '#0a1030')).toBeGreaterThanOrEqual(4.5);
     expect(readable('#ffffff', '#0a1030')).toBe('#ffffff');
+  });
+});
+
+describe('an interface language (phone)', () => {
+  it('wants its lyrics in its own templates, each line marked with who says it, and allows long runs of one template', () => {
+    const t = { ...base(), language: 'phone', assets: [] } as unknown as TreatmentV3;
+    t.shots = [
+      { id: 's1', start: 20, end: 26, template: 'typewriter', params: {}, camera: 'static', transitionIn: 'cut' },
+      { id: 's2', start: 26, end: 36, template: 'chat', params: {}, camera: 'static', transitionIn: 'cut' },
+    ] as never;
+    t.cues = [{ cueId: 'c001', shot: 's2', enter: 'cut', exit: 'cut' }];
+    const errs = checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n');
+    expect(errs).toMatch(/voice/);
+    expect(errs).not.toMatch(/相鄰鏡頭要換版型|至少要 4 種/);
+    t.cues = [{ cueId: 'c001', shot: 's1', enter: 'cut', exit: 'cut' }];
+    expect(checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).toMatch(/介面版型/);
+    t.cues = [{ cueId: 'c001', shot: 's2', enter: 'cut', exit: 'cut', voice: 'me' }];
+    expect(checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).not.toMatch(/介面版型|voice/);
+  });
+});
+
+describe('phone checks that held nothing before (review 2026-10-14)', () => {
+  it('counts a quiet shot that carries lyrics toward the interface share', () => {
+    const t = { ...base(), language: 'phone', assets: [] } as unknown as TreatmentV3;
+    t.shots = [{ id: 's1', start: 20, end: 36, template: 'quiet', params: {}, camera: 'static', transitionIn: 'cut' }] as never;
+    t.cues = [{ cueId: 'c001', shot: 's1', enter: 'cut', exit: 'cut' }];
+    expect(checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).toMatch(/介面版型/);
+  });
+  it('stops a sticker that no prop draws and a photo that is not a picture of the song', () => {
+    const shot = (attachKind: string, attach: string) => ({ id: 's1', start: 0, end: 9, template: 'chat', params: { attachKind, attach }, camera: 'static', transitionIn: 'cut' });
+    const t = { shots: [shot('sticker', 'earth.planet')], assets: [], graphics: { sections: [], storyProps: [] } } as never;
+    expect(attachmentErrors(t, true).join()).toMatch(/earth\.planet/);
+    expect(attachmentErrors(t, false)).toEqual([]);
+    const ok = { shots: [shot('sticker', 'spr:earth.planet')], assets: [], graphics: { sections: [], storyProps: [{ id: 'earth.planet', what: 'x', hero: false }] } } as never;
+    expect(attachmentErrors(ok, true)).toEqual([]);
+    expect(attachmentErrors({ shots: [shot('photo', 'roof')], assets: [], graphics: undefined } as never, false).join()).toMatch(/roof/);
+  });
+});
+
+describe('a chosen language over the style', () => {
+  it('takes the language\'s templates and picture rule, not the style\'s', () => {
+    const t = { ...base(), language: 'phone', assets: [] } as unknown as TreatmentV3;
+    t.shots = [{ id: 's1', start: 20, end: 36, template: 'chat', params: {}, camera: 'static', transitionIn: 'cut' }] as never;
+    t.cues = [{ cueId: 'c001', shot: 's1', enter: 'cut', exit: 'cut', voice: 'me' }];
+    const errs = checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n');
+    expect(errs).not.toMatch(/不屬於|沒有素材/);
+  });
+});
+
+describe('phone input fields', () => {
+  it('sends a line sung too fast to read out of the input field', () => {
+    const fast = { ...song, cues: [{ id: 'c001', start: 20.5, end: 21.2, text: 'とても長い一行の歌詞です', timingSource: 'lrclib', confidence: 'verified' }] } as unknown as SongTimeline;
+    const t = { ...base(), language: 'phone', assets: [] } as unknown as TreatmentV3;
+    t.shots = [{ id: 's1', start: 20, end: 36, template: 'input', params: {}, camera: 'static', transitionIn: 'cut' }] as never;
+    t.cues = [{ cueId: 'c001', shot: 's1', enter: 'cut', exit: 'cut', voice: 'me' }];
+    expect(checkStyle(t, STYLES['emotional'], fast, { start: 20, end: 36 }).join('\n')).toMatch(/唱得太快/);
+    expect(checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).not.toMatch(/唱得太快/);
   });
 });

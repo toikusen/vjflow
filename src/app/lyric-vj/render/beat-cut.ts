@@ -2,7 +2,7 @@
 // the whole line comes back big once it is sung. The designer move of re-composing the frame every 1–2 beats in a
 // chorus. No small copy of the line underneath: the pieces cycling over it read as the line repeating.
 import * as THREE from 'three';
-import { phraseBoundaries, phrases } from '../phrases';
+import { balancedRows, phraseBoundaries, phrases } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, readable, tagSource, TemplateRenderer } from './runtime';
 
@@ -78,6 +78,12 @@ export function planCut(text: string, timed: { text: string; from: number; at: n
   return { pieces: [...timed, { text: text.replace(/\s+/g, ' ').trim(), from: 0, at: recapAt }], cutCount: timed.length, recapAt };
 }
 
+/** Rows to wrap a whole line into: one up to 9 characters, two up to 20, three beyond. */
+export const wrapRows = (text: string) => {
+  const n = [...text.replace(/\s/g, '')].length;
+  return n <= 9 ? 1 : n <= 20 ? 2 : 3;
+};
+
 /** Layout variants a piece can take: centre, upper left tilted, lower right tilted, oversized and cropped. */
 const LAYOUTS = [
   { x: 0, y: 40, width: 0.8, tilt: 0, align: 'center' },
@@ -103,14 +109,20 @@ export const beatCut: TemplateRenderer = {
       const recap = k === pieces.length - 1 && pieces.length > cut.length;
       const lay = whole || recap ? LAYOUTS[0] : LAYOUTS[(k + seed) % LAYOUTS.length];
       const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 200 };
-      const w200 = [...piece.text].reduce((w, c) => w + advanceOf(c, probe), 0) || 1;
+      // the whole line (shown whole, or as the recap) is wrapped into balanced rows at phrase boundaries, so a long
+      // line is set big over two or three rows instead of small on one (我愛台妹 台妹愛我 對我來說… sat at 75 px)
+      const rows = whole || recap ? balancedRows(piece.text, wrapRows(piece.text)) : [piece.text];
+      const w200 = Math.max(...rows.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0))) || 1;
+      const fitH = rows.length > 1 ? (200 * H * 0.78) / (rows.length * 1.18 * 200) : Infinity;
       // fits the layout width, and never wider than the frame (minus margins) even at the floor size
-      const size = Math.round(Math.min((200 * 0.9 * W) / w200, Math.max(150, Math.min(lay.width > 1 ? 640 : 460, (200 * lay.width * W) / w200))));
+      const size = Math.round(Math.min((200 * 0.9 * W) / w200, fitH, Math.max(150, Math.min(lay.width > 1 ? 640 : 460, (200 * lay.width * W) / w200))));
       const em = emphasisOf(rt, piece.from);
-      const gs = makeGlyphs(piece.text, { family: rt.fonts.display, weight: 900, size }, color(em === 'color' || em === 'glow' ? accent : rt.palette.text, 1.0));
-      const width = gs.reduce((s, g) => s + g.advance, 0);
+      const style = { family: rt.fonts.display, weight: 900, size };
+      const rowGs = rows.map((r) => makeGlyphs(r, style, color(em === 'color' || em === 'glow' ? accent : rt.palette.text, 1.0)));
+      const gs = rowGs.flat();
+      const width = Math.max(...rowGs.map((r) => r.reduce((s, g) => s + g.advance, 0)));
       const cx = lay.align === 'left' ? lay.x + width / 2 : lay.align === 'right' ? lay.x - width / 2 : lay.x;
-      placeRow(gs, 0, 0);
+      rowGs.forEach((r, i) => placeRow(r, 0, ((rows.length - 1) / 2 - i) * size * 1.18));
       const holder = new THREE.Group();
       holder.position.set(cx, lay.y, 0);
       holder.rotation.z = (lay.tilt * Math.PI) / 180;

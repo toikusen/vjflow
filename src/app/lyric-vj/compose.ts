@@ -108,9 +108,13 @@ export function varyComposition(t: TreatmentV3, choruses: { start: number; end: 
     }
   });
   // quiet spans (breaks) drop the type down a register: thin mincho, small, still, left or centred
+  // an interface's own templates are not turned into captions: its quiet is the screen's (a notification, a field
+  // left unsent); 天文対話's 今日の星占い notifications and an input field became floating mincho lines
   let left = false;
+  const lang = languageOf(t);
+  const screen = new Set(lang ? (LANGUAGES[lang].layout?.lyrics ?? []) : []);
   for (const q of uses(t.design, 'quiet') && quietAllowed(t) ? quietSpans(t.moments ?? []) : []) {
-    for (const s of t.shots.filter((x) => x.template !== 'title-card' && Math.min(x.end, q.end) - Math.max(x.start, q.start) > 0.6 * (x.end - x.start))) {
+    for (const s of t.shots.filter((x) => x.template !== 'title-card' && !screen.has(x.template) && Math.min(x.end, q.end) - Math.max(x.start, q.start) > 0.6 * (x.end - x.start))) {
       s.template = 'quiet';
       s.params = { position: left ? 'left' : 'center', dim: 0.7 };
       left = !left;
@@ -234,7 +238,11 @@ export function planSides(t: TreatmentV3): string[] {
     const rects = sectionAt(g, (s.start + s.end) / 2).layers.map(layerRect).filter((r): r is Rect => !!r);
     // a full-frame object (a photo backdrop) is ground, not something in the way
     const objects = rects.filter((r) => (r.x1 - r.x0) * (r.y1 - r.y0) < W * H * 0.6);
-    const busy = (k: Anchor) => objects.reduce((n, r) => n + cover(r, thirds[k]), 0) / area;
+    // a centred line runs wider than its third: an object taller than the lyric band (a phone) cannot dodge it up or
+    // down, so for the centre it counts across the middle 60 % of the width
+    const tall = (r: Rect) => r.y1 - r.y0 > (band.y1 - band.y0) * 0.9;
+    const wide = { ...thirds.C, x0: W * 0.2, x1: W * 0.8 };
+    const busy = (k: Anchor) => objects.reduce((n, r) => n + cover(r, k === 'C' && tall(r) ? wide : thirds[k]), 0) / area;
     const now = anchorOf(s) ?? 'C';
     if (busy(now) <= 0.25) continue;
     const best = (Object.keys(place.values) as Anchor[]).sort((a, b) => busy(a) - busy(b))[0];

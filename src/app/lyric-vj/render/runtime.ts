@@ -34,8 +34,18 @@ export interface CueRuntime {
   together?: boolean;
   /** When the later lines of the same shot show (stack and couplet move earlier lines aside as they arrive). */
   later?: number[];
+  /** Those later lines' texts, in the same order (chat sizes their bubbles to push this one up by). */
+  laterText?: string[];
+  /** Every line of the shot, in order (chat sets its close-up from the first). */
+  shotText?: string[];
+  /** The voice of the shot's first line (chat takes its close-up from that side). */
+  firstVoice?: 'me' | 'them';
   /** This line's place among the lines of its shot (0 = first). */
   order?: number;
+  /** The song's seed: a drawn effect's look (how many shards, how hard they fly) is its own in each song. */
+  song?: number;
+  /** The song's tempo (a held line's heartbeat thumps with it). */
+  bpm?: number;
 }
 
 /** Per-frame effects templates can request from the post stack. */
@@ -52,6 +62,8 @@ export interface CueLayer {
   update(t: number, fx: FrameFx): void;
   /** [from, to]: when every character is fully opaque and settled. */
   readable(): [number, number];
+  /** Laid out in frame px from edge to edge (lyric lanes): neither fitted into the safe area nor drifted. */
+  framed?: boolean;
 }
 
 export interface ShotLayer {
@@ -67,6 +79,10 @@ export interface ShotContext {
   accentFont: string;
   /** The group logo, when one was uploaded. */
   logo?: THREE.Texture;
+  /** A loaded picture by asset id (a photo, or a prop sprite as spr:<id>), for layouts that show one. */
+  texture?: (id: string) => THREE.Texture | undefined;
+  /** The lines of a shot as they will show (text and time), once the cues are laid out. */
+  lines?: (shotId: string) => { text: string; at: number }[];
 }
 
 export interface TemplateRenderer {
@@ -167,15 +183,51 @@ export const DRAWN = {
   slot: { reel: 0.55, land: 0.25 },
   rise: { sec: 0.45 },
   focus: { sec: 0.6 },
+  /** Random signs flicker through each place, this long each, before the character settles. */
+  decode: { fold: 0.045, faces: 8 },
+  slice: { sec: 0.4 },
+  flip: { sec: 0.45 },
+  stretch: { sec: 0.55 },
+  /** The line's characters swap places and run home along small arcs (kittenjam 洗牌重排). */
+  shuffle: { sec: 0.7 },
+  /** Falls under gravity and bounces lower each time, squashing on each landing (Motion Prompt #123, MIT). */
+  squash: { sec: 1.1 },
+  /** Backs off and squashes to wind up, then shoots home and wobbles (Motion Prompt #121, MIT). */
+  windup: { sec: 0.85 },
+  /** The whole line waits faint while a ball hops from character to character as each is sung (kittenjam 卡拉OK小球). */
+  karaoke: { sec: 0.25 },
 } as const;
 
 export function enterSec(enter: EnterKind, pace: number): number {
   const paced: Record<EnterKind, number> = {
     cut: 0, fade: 0, slam: PACED_SEC, pop: PACED_SEC, wipe: 0.21,
     ink: DRAWN.ink.fillFrom + DRAWN.ink.fill, flap: DRAWN.flap.fold * DRAWN.flap.faces, slot: DRAWN.slot.reel + DRAWN.slot.land, rise: DRAWN.rise.sec, focus: DRAWN.focus.sec,
+    decode: DRAWN.decode.fold * DRAWN.decode.faces, slice: DRAWN.slice.sec, flip: DRAWN.flip.sec, stretch: DRAWN.stretch.sec,
+    shuffle: DRAWN.shuffle.sec, squash: DRAWN.squash.sec, windup: DRAWN.windup.sec, karaoke: DRAWN.karaoke.sec, settle: PACED_SEC * MOTION_SEC.settle, flicker: PACED_SEC * MOTION_SEC.flicker,
+    dash: PACED_SEC * MOTION_SEC.dash, drop: PACED_SEC * MOTION_SEC.drop, zoom: PACED_SEC * MOTION_SEC.zoom, gather: PACED_SEC * MOTION_SEC.gather, spin: PACED_SEC * MOTION_SEC.spin, prelight: PACED_SEC, spread: PACED_SEC * MOTION_SEC.spread, swing: PACED_SEC * MOTION_SEC.swing,
   };
   return enter === 'fade' ? FADE_SEC : paced[enter] * pace;
 }
+
+/** The motion entrances' length as a multiple of PACED_SEC (a drop needs room to bounce, a gather to travel). */
+const MOTION_SEC = { dash: 0.8, drop: 1.5, zoom: 0.9, gather: 1.3, spin: 1.1, spread: 1.4, swing: 2.4, settle: 2.2, flicker: 1.6 } as const;
+/** Bounces twice on the way in (a gravity drop landing on an unseen floor). */
+const bounce = (p: number) => {
+  const x = clamp01(p);
+  if (x < 0.6) return (x / 0.6) ** 2;
+  if (x < 0.85) return 1 - 0.12 * Math.sin(((x - 0.6) / 0.25) * Math.PI);
+  return 1 - 0.04 * Math.sin(((x - 0.85) / 0.15) * Math.PI);
+};
+
+/**
+ * A drawn line effect's look in this song (a shake's reach, a hop's height, a fall's bounce): a value in [lo, hi] fixed
+ * by the song and the key, the lyric's counterpart of the moves' knobs (knobs.ts), so the same effect differs by song.
+ */
+export const songVary = (rt: Pick<CueRuntime, 'song'>, key: string, lo: number, hi: number) => {
+  let h = rt.song ?? 0;
+  for (const c of key) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return lo + hash(h % 100003, 3.7) * (hi - lo);
+};
 
 export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stagger: number) {
   stagger *= rt.pace;
@@ -187,11 +239,75 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
   let dy = 0;
   let rot = 0;
   const p = (t - start) / enterSec;
+  const m = (k: keyof typeof MOTION_SEC) => clamp01((t - start) / (enterSec * MOTION_SEC[k]));
+  const side = g.index - (n - 1) / 2;
+  // the song's own reach for each motion (how far, how big, how much it turns); never its timing, which the reading
+  // checks (enterSec, settledAt) count on, and held motions only ever smaller than the motion room (motionPad) allows
+  const v = (key: string, lo: number, hi: number) => songVary(rt, key, lo, hi);
   switch (rt.style.enter) {
+    case 'dash': {
+      const q = m('dash');
+      dx = -900 * v('dash.far', 0.7, 1.2) * (1 - easeOutCubic(q)) ** 3;
+      opacity = clamp01(q * 6);
+      break;
+    }
+    case 'drop':
+      // y is up (the camera's): it starts above its place and falls onto it (with -520 it rose up from below)
+      dy = 520 * v('drop.far', 0.7, 1.2) * (1 - bounce(m('drop')));
+      opacity = clamp01(m('drop') * 5);
+      break;
+    case 'zoom':
+      scale = 1 + 3 * v('zoom.depth', 0.6, 1.3) * (1 - easeOutCubic(m('zoom')));
+      opacity = clamp01(m('zoom') * 3);
+      break;
+    case 'gather': {
+      const q = easeOutCubic(m('gather')), a = hash(g.index, rt.cue.start + 3) * Math.PI * 2;
+      const reach = v('gather.reach', 0.7, 1.3);
+      dx = Math.cos(a) * 520 * reach * (1 - q);
+      dy = Math.sin(a) * 320 * reach * (1 - q);
+      rot = (hash(g.index, 11) - 0.5) * 2.4 * v('gather.turn', 0.5, 1.3) * (1 - q);
+      opacity = clamp01(m('gather') * 2.5);
+      break;
+    }
+    case 'spin':
+      rot = -Math.PI * 2 * (v('spin.dir', 0, 1) < 0.5 ? 1 : -1) * (v('spin.turns', 0, 1) < 0.3 ? 0.5 : 1) * (1 - easeOutCubic(m('spin')));
+      scale = easeOutBack(m('spin'));
+      opacity = clamp01(m('spin') * 3);
+      break;
+    case 'prelight':
+      // the whole line shows faint ahead of the voice, each character lights as it comes
+      opacity = t >= rt.showFrom - 0.4 ? v('prelight.faint', 0.12, 0.3) + (1 - v('prelight.faint', 0.12, 0.3)) * clamp01(p * 3) : 0;
+      break;
+    case 'spread':
+      dx = -side * 46 * v('spread.gap', 0.6, 1.4) * (1 - easeOutCubic(m('spread')));
+      opacity = easeOutCubic(m('spread'));
+      break;
+    case 'swing': {
+      const q = m('swing');
+      rot = 0.5 * v('swing.arc', 0.6, 1.2) * Math.cos(q * 9) * (1 - q) * (q < 1 ? 1 : 0);
+      dy = -60 * (1 - easeOutCubic(clamp01(q * 3)));
+      opacity = clamp01(q * 6);
+      break;
+    }
+    case 'settle': {
+      // shivers hard as it lands and calms down to still (kittenjam 顫抖穩定): the shake decays with the entrance
+      const q = m('settle'), f = Math.floor((t - start) * songVary(rt, 'settle.fps', 18, 30)), amp = (1 - easeOutCubic(q)) * (q < 1 ? 1 : 0) * songVary(rt, 'settle.amp', 0.65, 1.2);
+      dx = (hash(g.index, f) - 0.5) * 34 * amp;
+      dy = (hash(g.index + 7, f) - 0.5) * 22 * amp;
+      rot = (hash(g.index + 3, f) - 0.5) * 0.3 * amp;
+      opacity = clamp01(q * 8);
+      break;
+    }
+    case 'flicker': {
+      // a neon tube striking: dark, two short blinks at their own moments, then on for good (kittenjam 霓虹閃爍)
+      const s = songVary(rt, 'flicker.seed', 0, 50), q = m('flicker'), a = 0.15 + 0.25 * hash(g.index, 41 + s), b = 0.5 + 0.2 * hash(g.index, 43 + s);
+      opacity = q >= 0.85 ? 1 : (q > a && q < a + 0.08) || (q > b && q < b + 0.12) ? 0.85 : q > 0.7 ? 0.35 : 0;
+      break;
+    }
     case 'slam':
-      scale = 1 + 1.4 * (1 - easeOutBack(p));
+      scale = 1 + 1.4 * v('slam.size', 0.6, 1.2) * (1 - easeOutBack(p));
       opacity = clamp01(p * 4);
-      dy = (1 - easeOutCubic(p)) * 40;
+      dy = (1 - easeOutCubic(p)) * 40 * v('slam.drop', 0.5, 1.5);
       break;
     case 'pop':
       scale = easeOutBack(p);
@@ -199,7 +315,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       break;
     case 'wipe':
       opacity = clamp01(p * 2.5);
-      dx = (1 - easeOutCubic(p)) * -24;
+      dx = (1 - easeOutCubic(p)) * -24 * v('wipe.far', 0.7, 1.4);
       break;
     case 'fade':
       opacity = easeOutCubic((t - (rt.style.reveal === 'word' ? start : rt.showFrom)) / FADE_SEC);
@@ -210,24 +326,113 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
   }
   // once landed, each glyph keeps a slight wave so a held line still breathes (designer VJs never freeze type)
   const held = clamp01((t - start - enterSec) / 0.6);
-  if (held > 0 && !restPose) dy += held * 2.5 * Math.sin((t - start) * 1.7 + g.index * 0.55);
+  const idle = rt.style.idle;
+  const since = Math.max(0, t - start - enterSec);
+  if (held > 0 && !restPose)
+    switch (idle) {
+      case 'still':
+        break;
+      case 'drift': // the line slides slowly up and right while it is held
+        dx += since * 6 * v('idle.drift', 0.6, 1);
+        dy -= since * 3 * v('idle.drift', 0.6, 1);
+        break;
+      case 'push': // a slow push in, as a camera would
+        scale *= 1 + Math.min(0.08, since * 0.03);
+        dx += side * Math.min(0.08, since * 0.03) * 30;
+        break;
+      case 'wave': // a water wave through the characters
+        dy += held * 9 * v('idle.wave', 0.6, 1) * Math.sin(t * v('idle.waveSpeed', 2.4, 3.6) - g.index * 0.7);
+        break;
+      case 'float': // each character bobs on its own
+        dy += held * 6 * v('idle.float', 0.6, 1) * Math.sin(t * v('idle.floatSpeed', 1.1, 1.8) + hash(g.index, 5) * 6.28);
+        rot += held * 0.04 * Math.sin(t * 1.1 + g.index);
+        break;
+      case 'shake': // a nervous tremble
+        dx += held * (hash(g.index, Math.floor(t * v('idle.shakeHz', 14, 22))) - 0.5) * 5 * v('idle.shake', 0.7, 1);
+        dy += held * (hash(g.index + 9, Math.floor(t * v('idle.shakeHz', 14, 22))) - 0.5) * 5 * v('idle.shake', 0.7, 1);
+        break;
+      case 'boil': {
+        // stop motion: every character redrawn a little off its place eight times a second (Motion Prompt #128/#136)
+        const f = Math.floor(t * songVary(rt, 'boil.fps', 6, 10)), amp = songVary(rt, 'boil.amp', 0.7, 1.3);
+        dx += held * (hash(g.index, f + 101) - 0.5) * 7 * amp;
+        dy += held * (hash(g.index + 5, f + 101) - 0.5) * 6 * amp;
+        rot += held * (hash(g.index + 9, f + 101) - 0.5) * 0.12;
+        scale *= 1 + held * (hash(g.index + 13, f + 101) - 0.5) * 0.06;
+        break;
+      }
+      case 'thump': {
+        // a heartbeat with the song: a double lub-dub on every beat, a quick swell that drops straight back (Motion Prompt #125)
+        const beat = 60 / (rt.bpm ?? 120), ph = (((t - rt.showFrom) % beat) + beat) % beat / beat;
+        const G = (c: number, w: number) => Math.exp(-(((ph - c) / w) ** 2));
+        scale *= 1 + held * v('idle.thump', 0.6, 1) * (0.05 * G(0.17, 0.055) + 0.03 * G(0.37, 0.06));
+        break;
+      }
+      case 'hop': // the characters hop one after another, never dipping under the line (kittenjam 逐字彈跳)
+        dy += held * songVary(rt, 'hop.h', 10, 22) * Math.max(0, Math.sin(t * songVary(rt, 'hop.speed', 3.2, 5) - g.index * 0.6)) ** 2;
+        break;
+      default:
+        dy += held * 2.5 * Math.sin((t - start) * 1.7 + g.index * 0.55);
+    }
   if (t > rt.exitAt && rt.style.exit !== 'cut') {
     const q = (t - rt.exitAt - g.index * Math.min(0.02, rt.exitDur / Math.max(1, n) / 2)) / rt.exitDur;
     const e = easeInCubic(q);
     switch (rt.style.exit) {
       case 'burst': {
         const ang = hash(g.index, rt.cue.start) * Math.PI * 2;
-        dx += Math.cos(ang) * 260 * e;
-        dy += Math.sin(ang) * 260 * e;
-        rot += (hash(g.index, 7) - 0.5) * 1.2 * e;
+        dx += Math.cos(ang) * 260 * v('burst.far', 0.7, 1.4) * e;
+        dy += Math.sin(ang) * 260 * v('burst.far', 0.7, 1.4) * e;
+        rot += (hash(g.index, 7) - 0.5) * 1.2 * v('burst.turn', 0.5, 1.5) * e;
         scale *= 1 + 0.4 * e;
         break;
       }
       case 'rise':
-        dy += 36 * e;
+        dy += 36 * v('rise.far', 0.7, 1.6) * e;
         break;
+      case 'drop': // falls out of the bottom of the frame, characters a little apart
+        dy -= 620 * e * e * (0.8 + 0.4 * hash(g.index, 13));
+        rot += (hash(g.index, 17) - 0.5) * 0.6 * v('dropout.turn', 0.4, 1.6) * e;
+        break;
+      case 'shrink':
+        scale *= 1 - v('shrink.to', 0.7, 0.9) * e;
+        break;
+      case 'dash':
+        dx += 1100 * e * e * (v('dashout.dir', 0, 1) < 0.5 ? 1 : -1);
+        break;
+      case 'dust': { // breaks into drifting specks
+        const a = hash(g.index, rt.cue.start + 1) * Math.PI * 2;
+        const wind = v('dust.wind', 0.4, 1.6);
+        dx += Math.cos(a) * 70 * e + 60 * wind * e;
+        dy -= 90 * e + Math.sin(a) * 40 * e;
+        scale *= 1 - 0.6 * e;
+        rot += (hash(g.index, 19) - 0.5) * 2 * e;
+        break;
+      }
+      case 'spin':
+        rot += Math.PI * 1.5 * (v('spinout.dir', 0, 1) < 0.5 ? 1 : -1) * e;
+        scale *= 1 - 0.7 * e;
+        break;
+      case 'zoom': // through the lens
+        scale *= 1 + 3.5 * v('zoomout.depth', 0.6, 1.3) * e;
+        break;
+      case 'melt': // runs down, each character at its own rate
+        dy -= 160 * v('melt.run', 0.6, 1.4) * e * (0.5 + hash(g.index, 23));
+        scale *= 1 - 0.2 * e;
+        break;
+      case 'domino': {
+        // each character tips over its lower right corner onto the next, in turn (kittenjam 骨牌倒下); y is up
+        // the song's row falls one way (right or left) at its own pace
+        const lag = songVary(rt, 'domino.lag', 0.3, 0.6), side = songVary(rt, 'domino.side', 0, 1) < 0.5 ? 1 : -1;
+        const d = (rt.exitDur * lag) / Math.max(1, n - 1), k = easeInCubic((t - rt.exitAt - (side > 0 ? g.index : n - 1 - g.index) * d) / (rt.exitDur * (1 - lag)));
+        const a = -side * (Math.PI / 2) * k, w = (side * g.advance) / 2, h = g.advance / 2;
+        dx += w - w * Math.cos(a) - h * Math.sin(a);
+        dy += -h - w * Math.sin(a) + h * Math.cos(a);
+        rot += a;
+        opacity *= 1 - clamp01((k - 0.7) / 0.3);
+        break;
+      }
     }
-    opacity *= 1 - clamp01(q);
+    // a domino keeps each character up until it has fallen
+    if (rt.style.exit !== 'domino') opacity *= 1 - clamp01(q);
   } else if (t > rt.exitAt + rt.exitDur || (rt.style.exit === 'cut' && t > rt.exitAt)) opacity = 0;
   return { scale, opacity, dx, dy, rot };
 }
@@ -287,7 +492,7 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
 export type PaceAdjust = 'fast-cut' | 'fast-short' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-short' | 'read-cut';
 
 /** Entrances too slow for a line sung faster than it reads (pop and fade are quick enough to keep). */
-const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise']);
+const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'settle', 'flicker']);
 /** The quick entrance closest in feel: impacts pop, the rest fade. */
 const SHORT_ENTER = (e: EnterKind): EnterKind => (e === 'slam' || e === 'flap' || e === 'slot' ? 'pop' : 'fade');
 

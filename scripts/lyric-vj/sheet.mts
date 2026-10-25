@@ -18,7 +18,7 @@ const lines = [...song.cues].filter((c) => c.end - c.start > 1.6).sort((x, y) =>
 const picks = [lines[0], lines[Math.floor(lines.length / 2)], lines[lines.length - 1]];
 const times = picks.map((c) => +(c.start + Math.min(1.4, (c.end - c.start) * 0.6)).toFixed(2));
 const rows: string[] = [];
-for (const id of Object.keys(TEMPLATES).filter((x) => x !== 'title-card')) {
+for (const id of Object.keys(TEMPLATES).filter((x) => x !== 'title-card' && x !== 'scene')) {
   const t = structuredClone(base);
   for (const s of t.shots) {
     if (s.template === 'title-card') continue;
@@ -37,4 +37,4 @@ for (const id of Object.keys(TEMPLATES).filter((x) => x !== 'title-card')) {
   console.log(id);
 }
 execFileSync('ffmpeg', ['-v', 'error', '-y', ...rows.flatMap((r) => ['-i', r]), '-filter_complex', `vstack=inputs=${rows.length}`, a.out!]);
-console.log('sheet →', a.out, '(rows top to bottom:', Object.keys(TEMPLATES).filter((x) => x !== 'title-card').join(', '), ')');
+console.log('sheet →', a.out, '(rows top to bottom:', Object.keys(TEMPLATES).filter((x) => x !== 'title-card' && x !== 'scene').join(', '), ')');

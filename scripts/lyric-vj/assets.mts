@@ -25,6 +25,8 @@ const { values: a } = parseArgs({
     'video-backend': { type: 'string' },
     // scenes for the song's own drawing: every picture, full-bleed (the drawing uses them as its worlds)
     scenes: { type: 'boolean', default: false },
+    // pictures asked for by name (a board's photos, boardplan.mts): made whatever the look shows
+    ids: { type: 'string' },
   },
 });
 // official list prices (2026-10): Flash Image 2K $0.101/image; Veo 3.1 Fast 1080p $0.12/s
@@ -141,11 +143,12 @@ const manifest: Record<string, AssetSource> = {};
 // only those are generated; a photo layer without an asset shows the shot's picture
 // scenes only for a handmade medium (languages.ts): elsewhere the drawing paints its own world
 const sceneLang = t.design?.language ? LANGUAGES[t.design.language as LanguageId] : undefined;
-if (a.scenes && !sceneLang?.scenes) {
+const asked = a.ids ? new Set(a.ids.split(',')) : undefined;
+if (a.scenes && !asked && !sceneLang?.scenes) {
   console.log(`no scene pictures for ${t.design?.language ?? 'this design'}: its medium does not carry pictures`);
   process.exit(0);
 }
-const needed = a.scenes ? new Set(t.assets.map((x) => x.id)) : neededAssets(t);
+const needed = asked ?? (a.scenes ? new Set(t.assets.map((x) => x.id)) : neededAssets(t));
 const unused = t.assets.filter((x) => !needed.has(x.id)).map((x) => x.id);
 if (unused.length) console.log(`skip ${unused.length} pictures the graphic look never shows: ${unused.join(', ')}`);
 t.assets = t.assets.filter((x) => needed.has(x.id));

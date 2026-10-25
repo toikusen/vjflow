@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FONTS } from './fonts';
-import { keepOwnMotifs, LANGUAGES, PROVEN_LANGUAGES } from './languages';
+import { interfaceLook, keepOwnMotifs, LANGUAGES, lookChanges, PROVEN_LANGUAGES } from './languages';
 import { TEMPLATES } from './templates';
 
 describe('design languages', () => {
@@ -13,6 +13,20 @@ describe('design languages', () => {
       expect(l.fonts.filter((f) => !fonts.has(f)), id).toEqual([]);
       expect(l.templates.filter((t) => !(t in TEMPLATES)), id).toEqual([]);
       expect(l.craft.length, id).toBeGreaterThan(200);
+    }
+  });
+
+  it('build their recipes from layers and patterns the renderer has (the 2026-10-14 styles brought new ones)', async () => {
+    const { LAYER_KINDS } = await import('./render/graphics');
+    const { KIT_PATTERNS } = await import('./render/kit');
+    const kinds = new Set<string>(LAYER_KINDS);
+    const patterns = new Set<string>(['grid', 'dots', 'stripes', 'gingham', 'checker', 'halftone', 'waves', 'genkou', 'shibori', 'itajime', ...KIT_PATTERNS]);
+    for (const [id, l] of Object.entries(LANGUAGES)) {
+      // each step of a recipe opens with a layer kind (or a bare pattern type): 'fill（…）→ pattern lined（…）→ phone（…）'
+      const named = [...l.layers.matchAll(/(?:^|→\s*)([a-z]+)/g)].map((m) => m[1]);
+      expect(named.filter((k) => !kinds.has(k) && !patterns.has(k)), id).toEqual([]);
+      const used = [...l.layers.matchAll(/pattern ([a-z]+)/g)].map((m) => m[1]);
+      expect(used.filter((p) => !patterns.has(p)), id).toEqual([]);
     }
   });
 
@@ -48,5 +62,33 @@ describe('design languages', () => {
     keepOwnMotifs(t, 'terminal');
     expect(t.shots[0].asset).toBeUndefined();
     expect(t.assets).toEqual([]);
+  });
+});
+
+describe('phone photos', () => {
+  it('keeps only the photos a chat sends, and no other picture', () => {
+    const t = {
+      design: {},
+      assets: [{ id: 'roof' }, { id: 'selfie' }],
+      shots: [{ asset: 'roof', params: {} }, { params: { attachKind: 'photo', attach: 'selfie' } }],
+      graphics: { sections: [{ layers: [{ kind: 'photo', mode: 'full' }, { kind: 'app' }] }] },
+      cues: [],
+    };
+    keepOwnMotifs(t as never, 'phone');
+    expect(t.assets).toEqual([{ id: 'selfie' }]);
+    expect(t.shots[0].asset).toBeUndefined();
+    expect(t.graphics.sections[0].layers.map((l) => l.kind)).toEqual(['app']);
+  });
+});
+
+describe('phone looks', () => {
+  it('reads a design\'s look and counts what changed from another song\'s', () => {
+    const app = (skin: string, color: string, accent: string) => ({ sections: [{ layers: [{ kind: 'app', skin, color, accent }] }] });
+    const a = interfaceLook({ shots: [{ template: 'chat', params: { corner: 1 } }, { template: 'input', params: {} }], graphics: app('dark', '#1b2233', '#06c755'), design: { font: 'M PLUS Rounded 1c' } });
+    expect(a).toEqual({ direction: 'C', skin: 'dark', wallpaper: '#1B2233', bubble: '#06C755', corner: '1', font: 'M PLUS Rounded 1c' });
+    const b = interfaceLook({ shots: [{ template: 'chat', params: { corner: 0.4 } }], graphics: { sections: [{ layers: [{ kind: 'fill' }] }] }, design: { font: 'Zen Maru Gothic', colorScript: [{ accent: '#5ac8fa' }] } });
+    expect(b.direction).toBe('B');
+    expect(lookChanges(a, b)).toBe(6);
+    expect(lookChanges(a, { ...a, corner: '0.5' })).toBe(1);
   });
 });

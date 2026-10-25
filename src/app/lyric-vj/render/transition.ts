@@ -3,11 +3,15 @@
 // shape: the same k always gives the same frame, so scrubbing anywhere in the timeline is exact.
 // Shapes picked from the @ai_yunon_ai transition catalogue (out_effects/summary.md).
 import type { Rgb } from './graphics';
+import { MOTION, MOTION_KINDS, MotionKind } from './motion-transition';
 
-export type TransitionKind = 'circle' | 'clock' | 'diagonal' | 'stripes' | 'quad' | 'brush' | 'liquid' | 'impact' | 'diamond' | 'iris' | 'checker' | 'bars' | 'drip' | 'zigzag' | 'star' | 'pinwheel' | 'corners' | 'grid' | 'ripple' | 'wave';
-export const TRANSITION_KINDS: TransitionKind[] = ['circle', 'clock', 'diagonal', 'stripes', 'quad', 'brush', 'liquid', 'impact', 'diamond', 'iris', 'checker', 'bars', 'drip', 'zigzag', 'star', 'pinwheel', 'corners', 'grid', 'ripple', 'wave'];
+/** Shape reveals (this file) and motion transitions where both pictures move (motion-transition.ts). */
+export type TransitionKind = MaskKind | MotionKind;
+export type MaskKind = 'circle' | 'clock' | 'diagonal' | 'stripes' | 'quad' | 'brush' | 'liquid' | 'impact' | 'diamond' | 'iris' | 'checker' | 'bars' | 'drip' | 'zigzag' | 'star' | 'pinwheel' | 'corners' | 'grid' | 'ripple' | 'wave' | 'shatter' | 'heart';
+export const MASK_KINDS: MaskKind[] = ['circle', 'clock', 'diagonal', 'stripes', 'quad', 'brush', 'liquid', 'impact', 'diamond', 'iris', 'checker', 'bars', 'drip', 'zigzag', 'star', 'pinwheel', 'corners', 'grid', 'ripple', 'wave', 'shatter', 'heart'];
+export const TRANSITION_KINDS: TransitionKind[] = [...MASK_KINDS, ...MOTION_KINDS];
 /** The strong ones: never two in a row (they read as a showreel). */
-export const LOUD_TRANSITIONS = new Set<TransitionKind>(['impact', 'checker', 'zigzag', 'bars', 'quad', 'drip', 'grid', 'pinwheel']);
+export const LOUD_TRANSITIONS = new Set<TransitionKind>(['shatter', 'impact', 'checker', 'zigzag', 'bars', 'quad', 'drip', 'grid', 'pinwheel']);
 
 export interface SectionTransition {
   kind: TransitionKind;
@@ -18,7 +22,43 @@ export interface SectionTransition {
 }
 
 /** Default length by kind: shape reveals are quick, liquids slower. */
-export const TRANSITION_SEC: Record<TransitionKind, number> = { circle: 0.6, clock: 0.7, diagonal: 0.5, stripes: 0.55, quad: 0.6, brush: 0.6, liquid: 0.9, impact: 0.45, diamond: 0.6, iris: 0.55, checker: 0.7, bars: 0.6, drip: 0.9, zigzag: 0.45, star: 0.6, pinwheel: 0.7, corners: 0.6, grid: 0.7, ripple: 0.8, wave: 0.7 };
+/**
+ * What each transition says (for the directors): pick the one whose meaning fits the moment of the song's story, never
+ * one because it is "the chorus transition". Shatter is breaking — heartbreak, collapse, breaking free — not a stock
+ * burst: a happy song does not shatter.
+ */
+const MASK_MOOD: Record<MaskKind, string> = {
+  circle: '圓形從某點展開：柔和、揭曉、溫暖',
+  clock: '時鐘掃一圈：時間、等待、回憶',
+  diagonal: '斜切：俐落、有速度的換場',
+  stripes: '橫條交錯：節奏、活潑、流行',
+  quad: '四格依序：熱鬧、多重視角',
+  brush: '筆刷抹過：手作、墨、溫度',
+  liquid: '液面上漲：水、海、淚、夢',
+  impact: '白閃加震波：力量、宣言、衝擊',
+  diamond: '菱形展開：華麗、閃耀、正式',
+  iris: '光圈打開：聚焦、登場、電影感',
+  checker: '棋盤翻牌：遊戲、俏皮、數位',
+  bars: '等化器長條：電子、節拍、硬派',
+  drip: '油漆滴落：黏稠、詭異、哭泣、病嬌',
+  zigzag: '鋸齒撕開：激烈、躁動、搖滾',
+  star: '星形展開：閃亮、夢想、偶像',
+  pinwheel: '六片扇葉旋開：童趣、旋轉、轉變',
+  corners: '四角向中間合攏：收束、俐落、幾何',
+  grid: '九宮格逐格翻開：拼貼、群像、節奏',
+  ripple: '水波泛開：溫柔、回聲、雨',
+  wave: '波浪推過：海、流動、舒展',
+  shatter: '畫面碎成玻璃掉落：崩壞、心碎、決裂、打破限制（不是一般的爆發，開心的歌不要用）',
+  heart: '愛心打開：喜歡、心動、可愛、應援',
+};
+
+export const TRANSITION_MOOD = { ...MASK_MOOD, ...Object.fromEntries(MOTION_KINDS.map((k) => [k, MOTION[k].mood])) } as Record<TransitionKind, string>;
+
+/** The transitions and what each says, as one line for a director's prompt. */
+export const transitionGuide = () => TRANSITION_KINDS.map((k) => `${k}（${TRANSITION_MOOD[k]}）`).join('、');
+
+const MASK_SEC: Record<MaskKind, number> = { circle: 0.6, clock: 0.7, diagonal: 0.5, stripes: 0.55, quad: 0.6, brush: 0.6, liquid: 0.9, impact: 0.45, diamond: 0.6, iris: 0.55, checker: 0.7, bars: 0.6, drip: 0.9, zigzag: 0.45, star: 0.6, pinwheel: 0.7, corners: 0.6, grid: 0.7, ripple: 0.8, wave: 0.7, shatter: 1.1, heart: 0.65 };
+export const TRANSITION_SEC = { ...MASK_SEC, ...Object.fromEntries(MOTION_KINDS.map((k) => [k, MOTION[k].sec])) } as Record<TransitionKind, number>;
 
 const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -189,6 +229,18 @@ export function revealMask(ctx: CanvasRenderingContext2D | OffscreenCanvasRender
       }
       break;
     }
+    case 'heart': {
+      // a heart opening from the centre (the classic curve, sampled), until its notch has passed the frame's top
+      const sc = (e * R) / 6;
+      for (let i = 0; i <= 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        const x = 16 * Math.sin(a) ** 3;
+        const y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a);
+        if (i) ctx.lineTo(w / 2 + x * sc, h / 2 - y * sc);
+        else ctx.moveTo(w / 2 + x * sc, h / 2 - y * sc);
+      }
+      break;
+    }
     case 'pinwheel': {
       // six blades sweep round the centre together, each a widening wedge, until they meet
       const n = 6;
@@ -245,6 +297,11 @@ export function revealMask(ctx: CanvasRenderingContext2D | OffscreenCanvasRender
       ctx.lineTo(-10, h + 10);
       break;
     }
+    case 'shatter':
+      // drawn by graphics.ts drawLook (the old frame's shards fall away over the new one); as a plain mask the new
+      // frame is there once the pieces are mostly gone
+      if (k > 0.5) ctx.rect(0, 0, w, h);
+      break;
     case 'impact': {
       // the cut lands at once under a white flash (drawn by transitionAccent); the mask is the whole frame
       if (k > 0.12) ctx.rect(0, 0, w, h);

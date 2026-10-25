@@ -6,6 +6,7 @@ import { LANGUAGES, LanguageId } from './languages';
 import { FONTS } from './fonts';
 import type { Window } from './treatment';
 import { MEDIA, MediumId } from './medium';
+import type { Signature } from './signature';
 
 export interface ColorStop {
   /** Section start (seconds); the stop holds until the next one. */
@@ -43,7 +44,16 @@ export type TechniqueId = keyof typeof TECHNIQUES;
 /** Whether a design uses a technique: designs from before the choice existed use them all. */
 export const uses = (d: Pick<Design, 'techniques'> | undefined, id: TechniqueId) => !d?.techniques || d.techniques.includes(id);
 
+/** A print finish on every lyric glyph (glyphs.ts): LED dots, a 45° extrusion, chalk grain, a worn print, diagonal
+ * hatching or a top-lit gradient. */
+export type GlyphFinish = 'dots' | 'extrude' | 'chalk' | 'distress' | 'stripes' | 'gradient';
+export const GLYPH_FINISHES: GlyphFinish[] = ['dots', 'extrude', 'chalk', 'distress', 'stripes', 'gradient'];
+
 export interface Design {
+  /** The lyric type's print finish (unset: plain). */
+  finish?: GlyphFinish;
+  /** Quiet type (a song felt, not shouted): no offset print ghost behind the lines, only their keyline. */
+  quiet?: boolean;
   /** The visual language (systems.ts); older treatments have none = stage. */
   system?: SystemId;
   /** The design language (languages.ts) the song's graphics are built in. */
@@ -63,6 +73,8 @@ export interface Design {
   peak: PeakStyle;
   /** The material the video pretends to be made of (medium.ts); older treatments have none = clean. */
   medium?: MediumId;
+  /** Where the song happens and how its frame is built (signature.ts); older treatments have none = as drawn. */
+  signature?: Signature;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -94,7 +106,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined, language: d.language && d.language in LANGUAGES ? d.language : undefined }, fixes),
+    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined, language: d.language && d.language in LANGUAGES ? d.language : undefined, ...(d.signature !== undefined ? { signature: structuredClone(d.signature) } : {}) }, fixes),
     fixes,
   };
 }

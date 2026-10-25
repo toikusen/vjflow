@@ -139,6 +139,14 @@ describe('planSides', () => {
     expect(t.shots.map((s) => Object.values(s.params)[0])).toEqual(['right', 'right', 'auto']);
     expect(fixes).toHaveLength(1);
   });
+
+  it('moves a centred line off a phone at the side: too tall to dodge, it is in the way of a long line', async () => {
+    const { planSides } = await import('./compose');
+    const phone = { kind: 'phone', type: 'chat', color: '#1C1C1E', x: 0.62, size: 0.78 } as const;
+    const t = { ...tr([shot('a', 0, 'typewriter', { position: 'center' })]), graphics: { sections: [{ start: 0, layers: [phone] }] } } as unknown as TreatmentV3;
+    expect(planSides(t)).toHaveLength(1);
+    expect(t.shots[0].params['position']).toBe('left');
+  });
 });
 
 describe('stackRushed', () => {

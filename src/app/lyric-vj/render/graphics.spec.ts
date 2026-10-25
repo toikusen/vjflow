@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { drawLook, GraphicsLook, Layer, measurable, sectionAt } from './graphics';
+import { drawLook, drawTransition, GraphicsLook, Layer, measurable, sectionAt } from './graphics';
+import { lineVeil, setLineVeil } from './kinetic';
 
 const look: GraphicsLook = {
   sections: [
@@ -184,6 +185,14 @@ describe('code layer', () => {
     const broken = { sections: [{ start: 0, layers: [{ kind: 'code' as const, src: 'nope(' }, { kind: 'code' as const, src: 'missing()' }] }] };
     expect(() => drawLook(stub([]), broken, 1, { since: 0, pulse: 0, index: 0 }, () => undefined)).not.toThrow();
   });
+
+  it('a reused drawing sees the time it was written for', () => {
+    const seen: unknown[] = [];
+    (globalThis as Record<string, unknown>)['__seen'] = seen;
+    const reused = { kind: 'code' as const, src: 'globalThis.__seen.push(f.t);', shift: 120 };
+    drawLook(stub([]), { sections: [{ start: 0, layers: [reused] }] }, 130, { since: 0, pulse: 0, index: 0 }, () => undefined);
+    expect(seen).toEqual([10]);
+  });
 });
 
 describe('camAt', () => {
@@ -298,5 +307,57 @@ describe('photoBox', () => {
     expect((b.y0 + b.y1) / 2).toBeCloseTo(540 + 0.42 * 540);
     const c = photoBox({ kind: 'photo', mode: 'circle', w: 0.24, x: 0.5 });
     expect(c.y1 - c.y0).toBeCloseTo(0.24 * 1920);
+  });
+});
+
+describe('kit layers', () => {
+  it('a phone moved off the lyrics stays off them where it is actually drawn (the draw keeps 40/20 px margins)', async () => {
+    const { avoid, layerRect } = await import('./graphics');
+    const phone = { kind: 'phone', type: 'chat', color: '#1C1C1E', x: 0.3, y: 0, size: 0.5 } as const;
+    const w = 0.5 * 1080 * 0.47;
+    const lyrics = { x0: 300, y0: 300, x1: 1920 - 24 - w - 1, y1: 700 };
+    const r = layerRect(avoid(phone as never, lyrics))!;
+    const guard = { x0: lyrics.x0 - 24, x1: lyrics.x1 + 24, y0: lyrics.y0 - 24, y1: lyrics.y1 + 24 };
+    const overlap = Math.max(0, Math.min(r.x1, guard.x1) - Math.max(r.x0, guard.x0)) * Math.max(0, Math.min(r.y1, guard.y1) - Math.max(r.y0, guard.y0));
+    expect(overlap).toBe(0);
+  });
+
+  it('stage beams keep the layer opacity (opacity 0 is lights off)', async () => {
+    const { drawKit } = await import('./kit');
+    const alphas: number[] = [];
+    const state: Record<string, unknown> = { globalAlpha: 1 };
+    const ctx = new Proxy(state, {
+      get: (o, k) => (k in o ? o[k as string] : k === 'createLinearGradient' ? () => ({ addColorStop: () => undefined }) : k === 'fill' ? () => alphas.push(o['globalAlpha'] as number) : () => undefined),
+      set: (o, k, v) => ((o[k as string] = v), true),
+    }) as unknown as CanvasRenderingContext2D;
+    for (const opacity of [0, 0.4]) {
+      alphas.length = 0;
+      state['globalAlpha'] = opacity;
+      drawKit(ctx, { kind: 'beams', color: '#FF5FA2', count: 3, pulse: 1 }, 1, 1, { since: 0, pulse: 1, index: 0 });
+      expect(Math.max(...alphas)).toBeLessThanOrEqual(opacity + 1e-9);
+    }
+  });
+
+  it('lays the keyline once, on the frame, after a motion transition (never into the moving pictures)', () => {
+    const stub = () => new Proxy({} as CanvasRenderingContext2D, { get: (_, k) => (k === 'canvas' ? {} : k.toString().startsWith('create') ? () => ({ addColorStop() {} }) : () => undefined), set: () => true });
+    const g = globalThis as unknown as { OffscreenCanvas?: unknown };
+    const had = g.OffscreenCanvas;
+    g.OffscreenCanvas ??= class { getContext = () => stub(); };
+    const frame = stub();
+    const onto: unknown[] = [];
+    setLineVeil((c) => void onto.push(c));
+    const kinetic = (c: CanvasRenderingContext2D) => lineVeil()?.(c, 1);
+    drawTransition(frame, { kind: 'push' }, 0.5, 3, kinetic, kinetic);
+    expect(onto.length).toBe(1);
+    expect(onto[0] === frame).toBe(true);
+    setLineVeil(undefined);
+    if (!had) delete g.OffscreenCanvas;
+  });
+
+  it('fades a backdrop disc the lines would squeeze into a corner instead of leaving a dot there', async () => {
+    const { avoidAll } = await import('./graphics');
+    const sun = { kind: 'blob', color: '#f2504b', x: 0, y: 0, r: 0.3 } as Layer;
+    const [out] = avoidAll([sun], { x0: 100, y0: 300, x1: 1500, y1: 780 });
+    expect(out.opacity).toBe(0);
   });
 });

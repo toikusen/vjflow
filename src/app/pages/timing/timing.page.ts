@@ -2,7 +2,7 @@ import { EditResult, graphemeIndexAt, mergeLines, moveEdge, shiftAll, snapTo, sp
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
 import { DecimalPipe } from '@angular/common';
-import { exportIssues, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
+import { applyProof, exportIssues, LyricProof, proofNote, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
 
 interface SongItem {
@@ -356,6 +356,19 @@ export class TimingPage {
     this.remember();
     this.cues.update((l) => l.map((c, j) => (j === i ? { ...c, text } : c)));
     this.touched.update((s) => new Set(s).add(this.cues()[i].id));
+    this.dirty.set(true);
+  }
+
+  /**
+   * A suspected typo the proofreading pass found (proofread.mts): taken (the line retyped with the correction) or
+   * dismissed; either way it leaves the line's review.
+   */
+  protected fixProof(i: number, p: LyricProof, take: boolean) {
+    this.remember();
+    const c = this.cues()[i];
+    const rest = { proof: c.proof?.filter((x) => x !== p), review: c.review?.filter((r) => r !== proofNote(p)) };
+    this.cues.update((l) => l.map((x, j) => (j === i ? { ...x, ...rest, text: take ? applyProof(x.text, p) : x.text } : x)));
+    if (take) this.touched.update((s) => new Set(s).add(c.id));
     this.dirty.set(true);
   }
 

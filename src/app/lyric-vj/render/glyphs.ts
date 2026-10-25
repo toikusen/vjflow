@@ -80,6 +80,9 @@ export const setHalo = (rgba: string) => (halo = rgba);
 /** A hard dark copy offset under every glyph, as a fraction of its size (print misregistration, sticker shadows). */
 let ghost: [number, number] = [0, 0];
 export const setGhost = (g: [number, number]) => (ghost = g);
+/** The song's print finish on the type (design.finish). */
+let finish = '';
+export const setFinish = (f: string | undefined) => (finish = f ?? '');
 /** Multiplier on the templates' largest lyric size (a language read from far away, e.g. a terminal's big type). */
 export let sizeCap = 1;
 export const setSizeCap = (k: number) => (sizeCap = k);
@@ -91,10 +94,12 @@ let inkGhost: { dx: number; dy: number; color: THREE.ColorRepresentation } | nul
 export const setInkGhost = (g: typeof inkGhost) => (inkGhost = g);
 
 /** A glyph's texture for a style (cached): the text effects swap in outline or contrast-face versions of a glyph. */
+/** The thickest stroke a glyph may be emboldened by, as a share of its size (more closes its counters). */
+export const EMBOLDEN_MAX = 0.04;
 export const glyphTexture = (char: string, s: GlyphStyle) => texture(char, s);
 
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow || s.outline ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow || s.outline ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}|${finish}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -125,7 +130,9 @@ function texture(char: string, s: GlyphStyle) {
       ctx.fillStyle = style;
       ctx.fillText(char, w / 2, h / 2);
       if (!s.embolden) return;
-      ctx.lineWidth = s.embolden;
+      // an added stroke stays under 4 % of the size: thicker, it filled the gaps inside 愛 and 甩 and the letters ran
+      // into one blot (我愛台妹, 2026-10-21); every caller is held to it
+      ctx.lineWidth = Math.min(s.embolden, s.size * EMBOLDEN_MAX);
       ctx.lineJoin = 'round';
       ctx.strokeStyle = style;
       ctx.strokeText(char, w / 2, h / 2);
@@ -154,7 +161,13 @@ function texture(char: string, s: GlyphStyle) {
       draw('rgba(0,0,0,0.6)');
       ctx.shadowColor = 'transparent';
     }
+    // the extrusion: grey copies down-right of the face (grey times the type colour reads as its shade)
+    if (finish === 'extrude') for (let i = Math.round(s.size * 0.1); i > 0; i -= 1) {
+      ctx.fillStyle = 'rgb(70,70,78)';
+      ctx.fillText(char, w / 2 + i, h / 2 + i);
+    }
     draw('#fff');
+    if (finish && finish !== 'extrude') applyFinish(ctx, finish, w, h, s.size, char);
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -163,6 +176,58 @@ function texture(char: string, s: GlyphStyle) {
   if (piecesOn) entry.pieces = piecesOf(canvas, w, h);
   cache.set(key, entry);
   return entry;
+}
+
+/** Cuts the drawn glyph into its finish: a dot matrix, hatching, grain or wear (seeded by the character). */
+function applyFinish(ctx: CanvasRenderingContext2D, f: string, w: number, h: number, size: number, char: string) {
+  const seed = [...char].reduce((a, c) => a + c.charCodeAt(0), 0);
+  ctx.save();
+  if (f === 'gradient') {
+    // lit from the top: the lower half darkens toward the type colour's shade
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0.35, 'rgba(255,255,255,1)');
+    g.addColorStop(1, 'rgba(150,150,165,1)');
+    ctx.globalCompositeOperation = 'source-atop';
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+  } else if (f === 'dots') {
+    // LED matrix: only round cells of the glyph stay
+    const c = Math.max(4, size / 14);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.beginPath();
+    for (let y = c / 2; y < h; y += c) for (let x = c / 2; x < w; x += c) ctx.rect(x - c * 0.36, y - c * 0.36, c * 0.72, c * 0.72);
+    ctx.fill();
+  } else {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.strokeStyle = ctx.fillStyle = '#000';
+    if (f === 'stripes') {
+      ctx.lineWidth = Math.max(1.5, size / 30);
+      for (let x = -h; x < w; x += size / 9) {
+        ctx.beginPath();
+        ctx.moveTo(x, h);
+        ctx.lineTo(x + h, 0);
+        ctx.stroke();
+      }
+    } else {
+      // chalk: fine grain all over; distress: fewer, larger blotches and a scratch
+      const n = f === 'chalk' ? Math.round(w * h * 0.02) : Math.round(w * h * 0.002);
+      for (let i = 0; i < n; i++) {
+        const r = f === 'chalk' ? 0.6 + hash(i, seed) * 1.1 : 1 + hash(i, seed) * size * 0.05;
+        ctx.globalAlpha = f === 'chalk' ? 0.8 : 1;
+        ctx.beginPath();
+        ctx.arc(hash(i, seed + 1) * w, hash(i, seed + 2) * h, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (f === 'distress') {
+        ctx.lineWidth = Math.max(1, size / 60);
+        ctx.beginPath();
+        ctx.moveTo(0, h * hash(seed, 3));
+        ctx.lineTo(w, h * hash(seed, 4));
+        ctx.stroke();
+      }
+    }
+  }
+  ctx.restore();
 }
 
 /** One mesh per character, laid out left to right from x=0 (callers position the row). */

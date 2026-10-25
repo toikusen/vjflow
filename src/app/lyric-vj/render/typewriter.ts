@@ -15,10 +15,17 @@ export const typewriter: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const p = rt.params;
     const text = rt.cue.text.replace(/[\s　]+/g, ' ');
-    const rows = [...text].length > 14 ? chunks(text, 2) : [text];
+    // span: the block keeps to a side column this wide (a fraction of the frame), in as many rows as that takes; a
+    // mixed-language line from the vertical template stays in its lyric third instead of crossing the picture
+    const span = p['span'] as number | undefined;
     const probe: GlyphStyle = { family: rt.fonts.body, weight: 900, size: 100 };
-    const widest = Math.max(...rows.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
-    const size = Math.round(Math.max(88, Math.min(150 * sizeCap, (100 * 0.78 * W) / widest)));
+    const widthOf = (rs: string[]) => Math.max(...rs.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
+    // in a side column: as many rows as keep the block inside it at the smallest type size (a long English line at the
+    // floor size ran wider than its column and over the picture)
+    let rows = [...text].length > 14 ? chunks(text, 2) : [text];
+    if (span) for (let n = 2; n <= 12; n++) { rows = chunks(text, n); if ((widthOf(rows) * 64) / 100 <= span * W) break; }
+    const widest = widthOf(rows);
+    const size = Math.round(Math.max(span ? 64 : 88, Math.min(150 * sizeCap, (100 * (span ?? 0.78) * W) / widest)));
     const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
 
@@ -30,7 +37,7 @@ export const typewriter: TemplateRenderer = {
     const rowGlyphs = rows.map((r) => makeGlyphs(r, style, color(rt.palette.text, 1.0), TRACK));
     const blockW = Math.max(...rowGlyphs.map((g) => rowWidth(g, TRACK)));
     // rows share one left edge, like text typed on a page
-    const left = pos === 'left' ? -W / 2 + 160 : -blockW / 2;
+    const left = pos === 'left' ? -W / 2 + 160 : pos === 'right' && span ? W / 2 - 160 - blockW : -blockW / 2;
     const glyphs: Glyph[] = [];
     let srcIndex = 0;
     rowGlyphs.forEach((gs, r) => {

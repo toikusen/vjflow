@@ -178,3 +178,23 @@ signature: {
 - `samenessIssues` 的「同風格要換掉主要裝飾」改成提示：列出同語言最近幾首的 signature 當參考，「骨架相同時，要能說出這首歌的理由」；**不再要求至少幾項不同**。
 
 本機側：`validateTreatment` 之後、渲染之前套用簽名（`apply_signature2.py` 的規則改寫成 TypeScript 並附同樣的測試）；沒有 signature 的 treatment 行為完全不變。正式接入時要補執行期驗證：schema 的上下限之外，`validateTreatment` 也要檢查 signature 的數值與列舉（導演輸出不一定守 schema），套用簽名之後再對產出的 treatment 跑一次 `validateTreatment`。
+
+## 9. 實作（2026-10-13，未提交）
+
+**更正 §8.3**：結構化輸出（`output_config.format`）的 JSON schema 不支援 `minimum`／`maximum`（官方 JSON Schema Limitations）；`direct.mts` 直接送 schema、不經 SDK 的 `parse()`，所以地平線範圍只寫在說明文字，由執行期的 `signatureErrors` 強制。導演輸出的 signature 每個欄位都列為必填，用不到的填 `null`，進 treatment 前去掉（`signatureFromDirector`）；treatment 的 `design.signature` 仍是選填。
+
+**本機編排**（`src/app/lyric-vj/signature.ts`，測試 `signature.spec.ts`）：
+
+- `signatureErrors`：型別、範圍（0.25–0.75）、允許值、未知欄位、需要地平線的場景。
+- `chorusSections`：drop／hold／finale 或能量最高點所在的段落；落在下一段開頭前 0.25 s 內的事件屬於下一段。
+- `applySignature`／`stripSignature`：同 v2 規則（場景與構圖分開、只換天空色帶與地景剪影、行星是 `fixed` 地面），不修改輸入、可完整還原、重複套用等於一次；`chorusHorizon`／`chorusPicture` 可不填（副歌沿用主歌）。
+- 接入點：`validateTreatment` 最後。簽名錯誤列入 errors 且不套用；套用後再跑一次圖層檢查，新出現的修正列為錯誤。`validateDesign` 原本會丟掉不認得的欄位，已改為保留 signature。
+- 固定素材：`src/app/lyric-vj/testdata/benchmark/`（六首）。
+
+**導演**（`scripts/lyric-vj/direct.mts`、`languages.ts`）：`DESIGN_SCHEMA` 新增 signature；`DESIGN_RULES` 新增「簽名」一段；語言說明的範例配色前加註不要照抄；silkscreen 的骨架規則與品質範例不再寫死 0–0.6 色帶與山丘；同語言較早的歌改為參考提示（列出簽名與裝飾），不再當成錯誤要求換掉；歷史紀錄存簽名。其他語言（dossier、pictogram、spy-titles）的品質範例未改寫。
+
+**驗收（固定素材，未呼叫 API）**：
+
+- 六首不加簽名：檢查結果、逐句量測、動態量測與靜態圖都和改動前逐位元組相同。
+- 四首加簽名：讀不完句數、可讀秒數、字級縮放都不變；主歌到副歌短片 `out/research/identity-1013/clips/v3-pair-*.mp4`、`v3-sbs-*.mp4`。
+- 單元測試 512 項通過；`direct.mts` 的型別檢查錯誤數和改動前相同（5 個既有錯誤）。

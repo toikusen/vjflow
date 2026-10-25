@@ -1,5 +1,6 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import { applyStoryboard, checkScenes, resolveTime, type Keyframe, type Scene } from './scene';
 import type { GraphicsLook } from './render/graphics';
 import type { CustomSceneSpec } from './render/custom-scene';
 import { Fonts } from './fonts';
@@ -7,24 +8,36 @@ import type { ArcPoint, Moment } from './moments';
 import { Design, validateDesign } from './design';
 import { MotifPlan, validateMotif } from './motif';
 import { validateMoments } from './moments';
+import { applySignature, signatureErrors, stripSignature } from './signature';
+import { validateLook } from './look';
 import { phraseBoundaries } from './phrases';
 import { COLOR_SHARE, COLOR_WORDS, colourWords, sameLines } from './structure';
 import { SongTimeline } from './timeline';
 
-export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise';
-export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash';
+// dash … swing: motions from the 534-video knowledge base (high-speed slide, gravity drop, z-zoom through the lens,
+// scattered strokes gathering, spin, a faint pre-shown line lit as sung, tracking in, a hanging swing)
+export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise' | 'dash' | 'drop' | 'zoom' | 'gather' | 'spin' | 'prelight' | 'spread' | 'swing' | 'decode' | 'slice' | 'flip' | 'stretch' | 'shuffle' | 'settle' | 'flicker' | 'squash' | 'windup' | 'karaoke';
+export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash' | 'drop' | 'shrink' | 'dash' | 'dust' | 'spin' | 'zoom' | 'melt' | 'scramble' | 'split' | 'domino' | 'pixel' | 'shatter';
+/** How a landed line moves while it is held (unset: a slight per-character wave). */
+export type IdleKind = 'still' | 'drift' | 'push' | 'wave' | 'float' | 'shake' | 'boil' | 'hop' | 'thump';
+export const IDLE_KINDS: IdleKind[] = ['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump'];
 export type Camera = 'static' | 'push' | 'pan' | 'parallax';
 export type TransitionIn = 'cut' | 'flash' | 'wipe' | 'dissolve' | 'glitch';
-export type EmphasisMethod = 'scale' | 'color' | 'glow' | 'shake' | 'hollow' | 'face' | 'mark' | 'symbol' | 'liquid';
+// strike: a brush line struck through the word half a beat after it lands; box: a solid block behind it; hold: a
+// long sung vowel drawn as a wavering line trailing from the word (あーー); revise: the proofreader's correction —
+// the word struck through and a caret under it where the right word goes (不是X ^ 而是Y); echo: outlined copies fan
+// out behind the word and back; weight: the word swells from its own weight to a heavy one as it is sung; shine: a band
+// of light sweeps across the word; faces: the word flicks through other typefaces before it lands in its own
+export type EmphasisMethod = 'scale' | 'color' | 'glow' | 'shake' | 'hollow' | 'face' | 'mark' | 'symbol' | 'liquid' | 'strike' | 'box' | 'hold' | 'revise' | 'echo' | 'weight' | 'shine' | 'faces';
 /** Small drawn signs a word can carry (emphasis 'symbol'): its meaning made visible, never a sticker on every line. */
 export type SymbolName = 'heart' | 'star' | 'sparkle' | 'note' | 'flame' | 'drop' | 'bolt' | 'exclaim' | 'question' | 'swirl' | 'flower';
 export const SYMBOLS: SymbolName[] = ['heart', 'star', 'sparkle', 'note', 'flame', 'drop', 'bolt', 'exclaim', 'question', 'swirl', 'flower'];
 
-export const ENTER_KINDS: EnterKind[] = ['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'flap', 'slot', 'focus', 'rise'];
-export const EXIT_KINDS: ExitKind[] = ['burst', 'fade', 'rise', 'cut', 'glitch', 'slash'];
+export const ENTER_KINDS: EnterKind[] = ['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'flap', 'slot', 'focus', 'rise', 'dash', 'drop', 'zoom', 'gather', 'spin', 'prelight', 'spread', 'swing', 'decode', 'slice', 'flip', 'stretch', 'shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke'];
+export const EXIT_KINDS: ExitKind[] = ['burst', 'fade', 'rise', 'cut', 'glitch', 'slash', 'drop', 'shrink', 'dash', 'dust', 'spin', 'zoom', 'melt', 'scramble', 'split', 'domino', 'pixel', 'shatter'];
 export const CAMERAS: Camera[] = ['static', 'push', 'pan', 'parallax'];
 export const TRANSITIONS: TransitionIn[] = ['cut', 'flash', 'wipe', 'dissolve', 'glitch'];
-export const EMPHASIS_METHODS: EmphasisMethod[] = ['scale', 'color', 'glow', 'shake', 'hollow', 'face', 'mark', 'symbol', 'liquid'];
+export const EMPHASIS_METHODS: EmphasisMethod[] = ['scale', 'color', 'glow', 'shake', 'hollow', 'face', 'mark', 'symbol', 'liquid', 'strike', 'box', 'hold', 'revise', 'echo', 'weight', 'shine', 'faces'];
 
 export interface Palette {
   background: string;
@@ -66,7 +79,15 @@ export interface Emphasis {
   method: EmphasisMethod;
   /** For method 'symbol': which sign. */
   symbol?: SymbolName;
+  /** For method 'revise': how the wrong word is struck out (the song keeps one; see REVISE_LOOKS). */
+  look?: ReviseLook;
 }
+/**
+ * The ways a word is struck out to be replaced: a strike with a proofreader's caret, correction tape over it, a pen
+ * scribbling it out, a VOID stamp on it.
+ */
+export type ReviseLook = 'caret' | 'tape' | 'scribble' | 'stamp';
+export const REVISE_LOOKS: ReviseLook[] = ['caret', 'tape', 'scribble', 'stamp'];
 
 export interface CueStyle {
   cueId: string;
@@ -78,10 +99,22 @@ export interface CueStyle {
   accents?: number[];
   enter: EnterKind;
   exit: ExitKind;
+  idle?: IdleKind;
+  /** Faint copies follow each character where it was a moment ago (an echo trail behind a fast entrance or exit). */
+  trail?: boolean;
   variant?: string;
   /** 'word': characters appear as they are sung (needs charStarts); 'line' (default): the line enters at once. */
   reveal?: 'line' | 'word';
+  /** Who says the line on an interface (a chat): the singer ('me', a sent message) or the other person ('them', a
+   * message received). Unset: the shot's side decides. */
+  voice?: 'me' | 'them';
+  /** A short shout everyone joins (ドドドド！, はい！, a member roll call): set as a big call word beside the lead line
+   * that is up, not as a lyric line of its own (idol Live). */
+  shout?: boolean;
 }
+
+/** The longest line (characters, no spaces) that may be set as a shout. */
+export const SHOUT_MAX = 12;
 
 export interface TreatmentV3 {
   concept: string;
@@ -101,12 +134,18 @@ export interface TreatmentV3 {
   scenes?: CustomSceneSpec[];
   /** Program-drawn graphic look (render/graphics.ts); when set it is the background instead of full-bleed plates. */
   graphics?: GraphicsLook;
+  /** The storyboard (scene.ts): locked scenes of parts carrying the lines, written before any layout. */
+  storyboard?: Scene[];
+  /** The stills the design is judged by first, as times in the storyboard (rendered from this same treatment). */
+  keyframes?: Keyframe[];
 }
 
 export type ParamSpec =
   | { type: 'number'; min: number; max: number; default: number; description: string }
   | { type: 'enum'; values: string[]; default: string; description: string }
-  | { type: 'boolean'; default: boolean; description: string };
+  | { type: 'boolean'; default: boolean; description: string }
+  // a short label the layout shows (a notification's sender): cut to maxLength
+  | { type: 'text'; maxLength: number; default: string; description: string };
 
 export interface TemplateSpec {
   id: string;
@@ -138,6 +177,9 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   const errors: string[] = [];
   const fixes: string[] = [];
   const cues = cuesIn(song, win);
+  // a storyboard makes its own locked shots first: what follows validates them like any other
+  const taken = applyStoryboard(t as never, cues);
+  if (taken) fixes.push(`分鏡鎖定 ${taken} 句歌詞（不經過一般字幕版型與通用調整）`);
   const cueById = new Map(cues.map((c) => [c.id, c]));
   const assetIds = new Set(t.assets.map((a) => a.id));
 
@@ -220,7 +262,10 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       const b = [...phraseBoundaries(cue.text)].sort((x, y) => x - y);
       const from = b.filter((x) => x <= e.from).pop() ?? 0;
       const to = b.find((x) => x >= e.to) ?? len;
-      if (from !== e.from || to !== e.to) {
+      // a line the splitter finds no word edges in widened a five-character word to all sixteen (誰かの栄光 in 誰かの栄光の
+      // ようにはいかなくても): past twice the word, or four more characters, the director's own range stands
+      const n = e.to - e.from;
+      if ((from !== e.from || to !== e.to) && to - from <= Math.max(2 * n, n + 4)) {
         fixes.push(`歌詞 ${cs.cueId} 的強調範圍 [${e.from}, ${e.to}) 切開了一個詞，擴展為 [${from}, ${to})`);
         e.from = from;
         e.to = to;
@@ -239,6 +284,15 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       const ok = cs.accents.filter((k) => Number.isInteger(k) && k >= 0 && k < beatsIn.length);
       if (ok.length !== cs.accents.length) fixes.push(`歌詞 ${cs.cueId} 移除顯示期間外的踩拍 ${cs.accents.filter((k) => !ok.includes(k)).join(', ')}`);
       cs.accents = ok;
+    }
+    if (cs.voice !== undefined && cs.voice !== 'me' && cs.voice !== 'them') {
+      fixes.push(`歌詞 ${cs.cueId} 的 voice ${String(cs.voice)} 不是 me/them，已移除`);
+      delete cs.voice;
+    }
+    // a shout is a call word: a sung line as long as a lyric set as one would be unreadable
+    if (cs.shout !== undefined && (cs.shout !== true || [...cue.text.replace(/\s/g, '')].length > SHOUT_MAX)) {
+      fixes.push(`歌詞 ${cs.cueId} 不是短喊聲（shout 只給 ${SHOUT_MAX} 字以內的掛け声），已改回一般歌詞`);
+      delete cs.shout;
     }
     if (!ENTER_KINDS.includes(cs.enter)) errors.push(`歌詞 ${cs.cueId} 的 enter 必須是 ${ENTER_KINDS.join('/')}`);
     if (!EXIT_KINDS.includes(cs.exit)) errors.push(`歌詞 ${cs.cueId} 的 exit 必須是 ${EXIT_KINDS.join('/')}`);
@@ -309,7 +363,37 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   t.arc = mv.arc;
   errors.push(...mv.errors);
   fixes.push(...mv.fixes);
+  errors.push(...signLook(t, win.start));
+  if (t.storyboard?.length) {
+    const r = checkScenes(t.storyboard, song, new Set(cues.map((c) => c.id)));
+    errors.push(...r.errors);
+    fixes.push(...r.warnings.map((w) => `注意：${w}`));
+    for (const k of t.keyframes ?? [])
+      if (!t.storyboard.some((b) => { const r = resolveTime(k.at, b, song); return r && r.t >= b.start - 0.05 && r.t <= b.end + 0.05; }))
+        errors.push(`關鍵畫面「${k.label}」的時間不在任何分鏡裡`);
+  }
   return { treatment: t, errors, fixes };
+}
+
+/**
+ * The song signature on a treatment's look (signature.ts), in place: a wrong one is reported and taken off, a right
+ * one replaces the look's skeleton, and the signed look is checked again (anything the layer check would now repair
+ * that it did not before is an error). The look may already be signed: it is signed again from the director's own.
+ */
+export function signLook(t: TreatmentV3, start: number): string[] {
+  const sig = t.design?.signature;
+  if (sig === undefined) return [];
+  const bad = signatureErrors(sig);
+  if (bad.length) {
+    delete t.design!.signature;
+    if (t.graphics) t.graphics = stripSignature(t.graphics);
+    return bad;
+  }
+  if (!t.graphics) return [];
+  const ids = t.assets.map((a) => a.id);
+  const before = new Set(validateLook(stripSignature(t.graphics), ids, start).fixes);
+  t.graphics = applySignature(t.graphics, sig, t.moments, t.arc);
+  return validateLook(t.graphics, ids, start).fixes.filter((f) => !before.has(f)).map((f) => `套用簽名後的圖層未通過驗證：${f}`);
 }
 
 function repairParams(shotId: string, params: Record<string, ParamValue>, spec: TemplateSpec, errors: string[], fixes: string[]) {
@@ -334,6 +418,9 @@ function repairParams(shotId: string, params: Record<string, ParamValue>, spec: 
         errors.push(`鏡頭 ${shotId}：參數 ${k} 必須是 ${p.values.join('/')}`);
         out[k] = p.default;
       } else out[k] = v;
+    } else if (p.type === 'text') {
+      if (typeof v !== 'string') errors.push(`鏡頭 ${shotId}：參數 ${k} 必須是文字`);
+      out[k] = typeof v === 'string' ? [...v.trim()].slice(0, p.maxLength).join('') : p.default;
     } else {
       if (typeof v !== 'boolean') errors.push(`鏡頭 ${shotId}：參數 ${k} 必須是布林值`);
       out[k] = typeof v === 'boolean' ? v : p.default;

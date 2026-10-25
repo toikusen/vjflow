@@ -100,7 +100,7 @@ export function validateLook(look: GraphicsLook | undefined, assets: string[], s
       l.skin = first;
     }
   }
-  return { look: { sections, ...(look.story?.length ? { story: look.story } : {}), ...(look.storyProps?.length ? { storyProps: look.storyProps } : {}) }, fixes };
+  return { look: { sections, ...(look.story?.length ? { story: look.story } : {}), ...(look.storyProps?.length ? { storyProps: look.storyProps } : {}), ...(look.subtitles?.length ? { subtitles: look.subtitles } : {}) }, fixes };
 }
 
 const SCATTER = new Set(['shapes', 'particles', 'sparkles']);
@@ -112,7 +112,13 @@ function cleanLayer(l: Layer, assets: string[], fixes: string[]): Layer {
   if (palette.length && !(typeof out['color'] === 'string' && HEX.test(out['color']))) out['color'] = palette[0];
   for (const [k, v] of Object.entries(out)) {
     // colours that don't parse fall back to a neutral grey rather than breaking the canvas
-    if (/^(color|color2|to|tint|frame|bars|signal|alert)$/.test(k) && typeof v === 'string' && !HEX.test(v) && !v.startsWith('rgba')) out[k] = '#808080';
+    if (/^(color|color2|to|tint|frame|bars|signal|alert|ink|off|tape|accent)$/.test(k) && typeof v === 'string' && !HEX.test(v) && !v.startsWith('rgba')) out[k] = '#808080';
+    // a colour written as a switch (swissgrid bars: true on i REVOLUTION drew grey blocks in whatever colour the canvas
+    // last had): on takes the layer's own colour, off leaves the drawing's default
+    if (/^(color2|to|tint|frame|bars|signal|alert)$/.test(k) && typeof v === 'boolean') {
+      if (v && typeof out['color'] === 'string' && HEX.test(out['color'] as string)) out[k] = out['color'];
+      else delete out[k];
+    }
     if (v === null) delete out[k];
   }
   // a numeral the director wrote as a number (1, not "1") broke every layer that spreads its text
@@ -140,6 +146,8 @@ export function neededAssets(t: { assets: { id: string; kind: string; from?: str
   const photos = t.graphics.sections.flatMap((s) => s.layers).filter((l): l is Extract<Layer, { kind: 'photo' }> => l.kind === 'photo');
   const ids = new Set(photos.map((l) => l.asset).filter((x): x is string => !!x));
   if (photos.some((l) => !l.asset)) for (const s of t.shots) if (s.asset) ids.add(s.asset);
+  // a photo sent in a chat is shown too
+  for (const s of t.shots as { params?: Record<string, unknown> }[]) if (s.params?.['attachKind'] === 'photo' && typeof s.params['attach'] === 'string') ids.add(s.params['attach']);
   for (const x of t.assets) if (x.kind === 'video' && ids.has(x.id) && x.from) ids.add(x.from);
   return ids;
 }
@@ -197,6 +205,86 @@ export function dropEmptyFrames(look: GraphicsLook | undefined, lines: { start: 
     const before = s.layers.length;
     s.layers = s.layers.filter((l) => !(l.kind === 'frame' && (l.type === 'brackets' || l.type === 'viewfinder')));
     if (s.layers.length < before) fixes.push(`段落 ${s.start.toFixed(1)}s 沒有歌詞，移除框住空白的框`);
+  });
+  return fixes;
+}
+
+/**
+ * Where the band comes in inside one look section (an intro that builds, the energy of the next music section at least
+ * 1.8 times and 0.3 above the last), the frame was the same before and after (i REVOLUTION 0–22 s: one look over a
+ * quiet opening and the drums at 11 s). Splits the section there: the quiet part keeps its ground only, the rest of the
+ * look comes in with the music. Only where nothing is sung before the rise (an intro, an interlude): a verse keeps its
+ * picture. `music` are the song's sections; a boundary within 3 s of either end is left alone.
+ */
+export function buildOnRise(look: GraphicsLook | undefined, music: { start: number; energy: number }[], lines: { start: number; end: number }[], end: number): string[] {
+  if (!look) return [];
+  const fixes: string[] = [];
+  look.sections = look.sections.flatMap((s, i, secs) => {
+    const to = secs[i + 1]?.start ?? end;
+    const k = music.findIndex((m, j) => j > 0 && m.start >= s.start + 3 && m.start <= to - 3 && m.energy >= 1.8 * music[j - 1].energy && m.energy - music[j - 1].energy >= 0.3);
+    const ground = s.layers.filter((l) => GROUND.has(l.kind));
+    if (k >= 0 && lines.some((l) => l.start < music[k].start && l.end > s.start)) return [s];
+    if (k < 0 || !ground.length || ground.length === s.layers.length) return [s];
+    fixes.push(`段落 ${s.start.toFixed(1)}s 在 ${music[k].start.toFixed(1)}s 音樂進來，前面只留底，其餘跟著音樂出現`);
+    return [{ ...s, layers: ground }, { ...s, start: music[k].start, transition: undefined, layers: s.layers }];
+  });
+  return fixes;
+}
+
+/**
+ * The title card is the words of an intro, interlude or outro: a stamp in the same section reads as a second caption
+ * beside the artist and title (Utsusemi 116 s: 「何度も」 next to 「Ringwanderung / Utsusemi」). Removes stamps from
+ * sections a title-card shot overlaps.
+ */
+export function dropTitleStamps(look: GraphicsLook | undefined, shots: { start: number; end: number; template: string }[], end: number): string[] {
+  const cards = shots.filter((s) => s.template === 'title-card');
+  const fixes: string[] = [];
+  const secs = look?.sections ?? [];
+  secs.forEach((s, i) => {
+    const to = secs[i + 1]?.start ?? end;
+    if (!cards.some((c) => c.start < to && c.end > s.start)) return;
+    const before = s.layers.length;
+    s.layers = s.layers.filter((l) => l.kind !== 'stamp');
+    if (s.layers.length < before) fixes.push(`段落 ${s.start.toFixed(1)}s 有標題卡，移除旁邊的印章`);
+  });
+  return fixes;
+}
+
+/**
+ * A disc drawn wholly inside a bigger one reads as two circles stacked by mistake, and under multiply its core prints
+ * near black (Utsusemi 168 s: an orange sun inside a yellow one over a blue photo). Keeps the bigger disc.
+ */
+export function dropNestedBlobs(look: GraphicsLook | undefined): string[] {
+  const fixes: string[] = [];
+  // in frame heights: x spans the width (16:9), y and r the height
+  const disc = (l: Extract<Layer, { kind: 'blob' }>) => ({ x: ((l.x ?? 0) * 16) / 18, y: (l.y ?? 0) / 2, r: l.r ?? 0.35 });
+  for (const s of look?.sections ?? []) {
+    const blobs = s.layers.filter((l): l is Extract<Layer, { kind: 'blob' }> => l.kind === 'blob').map((l) => ({ l, ...disc(l) }));
+    const inside = blobs.filter((a) => blobs.some((b) => b.r > a.r && Math.hypot(b.x - a.x, b.y - a.y) + a.r <= b.r)).map((a) => a.l as Layer);
+    if (!inside.length) continue;
+    s.layers = s.layers.filter((l) => !inside.includes(l));
+    fixes.push(`段落 ${s.start.toFixed(1)}s 圓疊在另一個圓裡，移除小的`);
+  }
+  return fixes;
+}
+
+/**
+ * Beat pulse only where the song hits: a section holding a drop or finale keeps one pulsing layer (its first), every
+ * other section none. A circle bouncing on every beat of every song was filler, not a reason in the music.
+ */
+export function limitPulse(look: GraphicsLook | undefined, hits: number[], end: number): string[] {
+  if (!look?.sections?.length) return [];
+  const fixes: string[] = [];
+  look.sections.forEach((s, i) => {
+    const to = look.sections[i + 1]?.start ?? end;
+    const hit = hits.some((t) => t >= s.start - 0.05 && t < to);
+    let kept = 0;
+    for (const l of s.layers as { kind: string; pulse?: number }[]) {
+      if (!l.pulse) continue;
+      if (hit && !kept++) continue;
+      delete l.pulse;
+      fixes.push(`段落 ${s.start.toFixed(1)}s 的 ${l.kind} 不隨拍跳動（${hit ? '一段只留一個' : '不是爆點段落'}）`);
+    }
   });
   return fixes;
 }

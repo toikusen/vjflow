@@ -621,3 +621,4 @@ export function validateStory(plan: StoryPlan | undefined, duration: number): { 
 
 const first = (it: StoryItem) =>
   it.kind === 'hero' ? Math.min(...(it.states ?? []).map((s) => s.at), Infinity) : it.kind === 'morph' ? Math.min(...(it.steps ?? []).map((s) => s.at), Infinity) : it.kind === 'fly' || it.kind === 'pop' || it.kind === 'chapter' ? it.at : it.from;
+

@@ -6,7 +6,8 @@
 export type LanguageId =
   | 'silkscreen' | 'risograph' | 'dossier' | 'swiss' | 'terminal' | 'cel80s' | 'gameshow' | 'ukiyoe' | 'papercut' | 'crayon' | 'neon-stage'
   | 'art-deco' | 'blueprint' | 'ink-wash' | 'stained-glass' | 'spy-titles' | 'pictogram' | 'watercolor' | 'hologram' | 'silent-film' | 'woodcut' | 'midcentury' | 'paper-lantern'
-  | 'screentone' | 'chiyogami' | 'aizome' | 'citypop' | 'y2k' | 'gothic-lolita' | 'embroidery' | 'chalkboard' | 'cyanotype' | 'claymation';
+  | 'screentone' | 'chiyogami' | 'aizome' | 'citypop' | 'y2k' | 'gothic-lolita' | 'embroidery' | 'chalkboard' | 'cyanotype' | 'claymation'
+  | 'scrapbook' | 'phone' | 'popart' | 'notebook' | 'brutalist' | 'document' | 'graffiti' | 'psychedelic' | 'led-board' | 'xerox' | 'isometric' | 'idol-live' | 'dark-glitch';
 
 export interface DesignLanguage {
   name: string;
@@ -56,7 +57,8 @@ export interface DesignLanguage {
    */
   kit?: { song: string; craft: string };
   /** false: the look is drawn only (no picture under it), so shots carry no photo. */
-  photos?: false;
+  /** false: no photos; 'attached': only photos sent as a message (a chat attachment), nothing full-frame. */
+  photos?: false | 'attached';
   /** Lyric glyph treatment: a hard dark offset copy (fraction of the glyph size); lyrics set flush left; `cap`
    * multiplies the templates' largest lyric size; `ink` is the one lyric colour whatever is behind it. */
   text?: { ghost?: [number, number]; left?: boolean; cap?: number; ink?: string };
@@ -69,6 +71,41 @@ export interface DesignLanguage {
    * of them in every language read as one template across the 28-style test.
    */
   own: SharedMotif[];
+  /**
+   * The language's own layout rules, replacing the generic ones (a different template every shot, at least four of
+   * them, 3.5–8 s shots, repeated lines in a new template): a chat thread is one template for many shots running a
+   * dozen seconds, and its variety comes from what happens on the screen. `rule` replaces the style's layout line in
+   * the director's prompt.
+   */
+  layout?: {
+    rule: string;
+    minTemplates: number;
+    shotSec: [number, number];
+    repeatOk: true;
+    /** The templates the lyrics live in: at least `share` of the lyric shots must use them. */
+    lyrics: string[];
+    share: number;
+    /** How the director plans the lyrics in this language (replaces the generic layout advice in its prompt). */
+    guide: string[];
+  };
+  /** The song's calls (bracketed in the lyrics) are shouted on an LED calls board kept in every section, apart from
+   * the lead's lines (idol Live: the database's iLiFE! videos run the crowd's calls along a marquee at the bottom). */
+  callBoard?: boolean;
+  /** Bright grounds by default (an idol song is light and upbeat): dark stages only where the story needs them. */
+  bright?: boolean;
+  /** How the director sorts the lyrics into layers in this language (added to the generic layout advice). */
+  lyricLayers?: string[];
+  /** What must change from the last songs in this language, and how much (an interface: its look). Sent to the
+   * designer and checked against the recorded looks (interfaceLook / lookChanges). */
+  variety?: { rule: string; min: number };
+  /** No story props for this language (a phone's world is its screen: a planet sticker hung beside the chat read as
+   * AI clip art on 天文対話). */
+  story?: false;
+  /** The lyrics are part of an on-screen interface (messages in a chat): they stay locked to the screen — no kick on
+   * heavy beats, no hand-held drift, no letterbox bars over the interface. */
+  screen?: boolean;
+  /** The one medium this language is printed in, whatever the director picks (a phone screen has no paper grain). */
+  medium?: 'clean' | 'film' | 'paper' | 'crayon' | 'cutout' | 'pixel';
   /** Whether the song's program-drawn motif (motif.ts) belongs in this language. */
   motif: boolean;
   /** What kind of song it suits. */
@@ -95,7 +132,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
   silkscreen: {
     own: ['seal', 'rings'],
     proven: true,
-    kit: { song: '理想混蛋〈行星〉', craft: '米白紙底（paper，grain 0.3）上用 2–4 階平塗色帶（bands）做天空與地景，色數少、每層帶 1–2px 錯位（ghosts）；天體、光點是平塗圓點；照片只以單色上墨（tint、multiply）放進色帶或內框；海報式邊框與小字標籤（frame border label）。畫面像一張張絲網印刷海報：平、色少、有錯位，不要漸層、不要寫實光影、不要描邊卡通貼圖。' },
+    kit: { song: '理想混蛋〈行星〉', craft: '米白紙底（paper，grain 0.3）上，天空是 2–4 階平塗色帶（bands），地面是這首歌自己的場景（海、山、城市、太空都可以，不是固定的山丘），色數少、每層帶 1–2px 錯位（ghosts）；天體、光點是平塗圓點；照片只以單色上墨（tint、multiply）放進色帶或內框；海報式邊框與小字標籤（frame border label）。畫面像一張張絲網印刷海報：平、色少、有錯位，不要漸層、不要寫實光影、不要描邊卡通貼圖。' },
     koma: 12,
     text: { ghost: [0.025, 0.018] },
     name: '絲網海報',
@@ -104,7 +141,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     colour: '每段只配一組最多 6 色的墨：亮天、暗天、遠景、中景、最暗的近景（同時是放字的地方），外加一個只用在太陽或關鍵字的稀有色。例：初夏清晨 #F7D3A1 #E99572 #8F7AA6 #3B6B76 #1B3439，稀有色 #FFF1C2；冬夜港口 #E6EEF1 #86B4C9 #2D6A8A #142F44，稀有色 #EC5A3F。進下一段時構圖不動，只把整組墨換掉。',
     type: '窄而粗的標題字直接印在天空色帶上，字距拉開；字色從底下那道墨挑對比最大的，不加任何陰影或光暈。',
     fonts: ['Zen Kaku Gothic New', 'Zen Old Mincho', 'Shippori Mincho'],
-    layers: 'paper（米白紙）→ bands（3–5 階天空，from 0 to 0.6）是固定的底；上面每段挑 1–2 個主角，段落之間要換，不要每段都同一組：skyline（城市、山丘、樹林、山峰的平塗剪影）、blob（太陽或月亮，稀有色）、shapes（平塗幾何、星點）、botanical（植物剪影）、photo（band 橫幅，tint 成近景墨色；inset 小圖整首最多 2 段）、rings（只在歌詞講到軌道、迴圈、擴散時）。frame border 外框只放在開頭或結尾 1–2 段。每個色塊都加 ghosts [{dx:2,dy:1,color:深一階的墨}] 做出套印不準。',
+    layers: 'paper（米白紙）→ bands（3–5 階天空）是底，天空多高由這首歌的地平線決定（signature.horizon），不要每首都是 from 0 to 0.6；上面每段挑 1–2 個主角，段落之間要換，不要每段都同一組：skyline（城市、山丘、樹林、山峰的平塗剪影）、blob（太陽或月亮，稀有色）、shapes（平塗幾何、星點）、botanical（植物剪影）、photo（band 橫幅，tint 成近景墨色；inset 小圖整首最多 2 段）、rings（只在歌詞講到軌道、迴圈、擴散時）。frame border 外框只放在開頭或結尾 1–2 段。每個色塊都加 ghosts [{dx:2,dy:1,color:深一階的墨}] 做出套印不準。',
     motion: '每行歌詞是一道墨，在拍點上被「刷」出來（wipe 進、cut 出），不准 fade；副歌整張換一組墨。',
     templates: ['stair', 'vertical', 'typewriter', 'quiet', 'title-card', 'stack', 'array'],
     native: '副歌爆點：整張海報在一拍之內換一組墨色——構圖一動不動，只有顏色翻面。',
@@ -724,6 +761,269 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     motif: false,
     suits: '可愛、童趣、搞笑、元氣、溫馨的歌',
   },
+  // 2026-10-14: the styles the 534-video survey found we did not have (style-gap report); none proven yet
+  scrapbook: {
+    own: ['heart'],
+    name: '剪貼簿',
+    essence: '一本做給某人的剪貼簿：米白紙頁上貼著拍立得照片、手撕的色紙、紙膠帶和小貼紙，每一段翻到新的一頁；照片是回憶，色紙是當天的心情。',
+    not: '不是整齊的雜誌排版，也不是數位拼貼：每張紙都是手撕、手貼、有一點歪、有陰影。',
+    colour: '紙頁 米白 #F4EEDF 或牛皮 #D9C29A；色紙 2–3 種柔和色（例 珊瑚 #F08A73、薄荷 #9BD3B8、檸檬 #F5D76E、天藍 #8EC5E8）；紙膠帶半透明（同色系）；墨 #2B2620。',
+    type: '手寫感字體（Klee One、Yomogi、Yusei Magic）或圓體，墨色字；重點字像用麥克筆寫在色紙上。',
+    fonts: ['Klee One', 'Yomogi', 'Yusei Magic', 'Zen Maru Gothic'],
+    layers: 'paper（米白或牛皮，grain 0.5）→ scraps（colors 該段 2–3 種色紙，tape 紙膠帶色，count 5–8，seed 每段不同：手撕紙沿畫面邊緣一張張貼上）→ photo polaroid（1–2 張，tilt ±4–8，放在左右兩側，asset 用這段的回憶照片）→ 少量 shapes star 或 heart（當貼紙，size 40–60）。副歌換一頁：色紙換色、照片換張、多一條 band tape 斜貼。安靜段只留 paper 加一張照片。',
+    motion: '紙片和照片一張張貼上（略大落下、停住）；字像手寫一筆一筆出現；換段落像翻頁。',
+    templates: ['handwrite', 'scatter', 'stair', 'quiet', 'title-card', 'quote', 'stack'],
+    native: '爆點：十幾張拍立得從四周一張張啪地貼滿整頁。',
+    craft: '手撕邊：矩形每 12–18px 一個轉折、±4px 的鋸齒，撕口一側加 1px 較淺的纖維邊；紙片投影 blur 10、偏移 4px、透明度 0.2。紙膠帶：半透明（0.7），兩端鋸齒，寬為紙片的 40–60%，斜 5–15°；膠帶下面的紙要透出來。拍立得：白框下緣比其他三邊厚 3 倍，可在下緣手寫日期或一個詞。貼紙：白邊 6px 加小陰影。活起來：最上面一張紙片角落被風吹得微微掀動（±2°）。轉場：整頁像紙一樣從右下角翻起。坑：貼得太滿蓋住歌詞（中央留白）；每張都一樣角度會像電腦排版。',
+    props: { style: 'scrapbook cut-out: the item as a printed photo or sticker cut out with a white border, slightly rough scissor edge, soft natural colours, a little paper texture, no outline, flat lighting' },
+    motif: false,
+    suits: '回憶、青春、日常、旅行、告白、溫暖的歌',
+  },
+  phone: {
+    own: [],
+    name: '手機介面',
+    essence: '歌詞活在一支手機裡：訊息、通知、輸入框就是歌詞本身，唱到才送出、才跳出、才打字。歌的故事變成螢幕上發生的事——誰在傳、對方有沒有讀、有沒有回、螢幕亮著還是鎖著、正在打的字有沒有送出。資料庫的作品不是同一種做法：〈貴方解剖純愛歌〉整首是聊天室但不斷有事發生（洗版、碎裂、漏液），〈Couldn\'t stop fallin\'〉是人物躺在床上看手機、泡泡疊在房間的畫面上、光從夜晚走到早上，〈ブルースクリーン〉〈まっしぐら恋心〉是聊天、通知、輸入、視窗、當機輪流出現。',
+    not: '不是「旁邊擺一支小手機的歌詞畫面」（歌詞在介面外就失敗了），不是科幻全息介面，也不是終端機；不要品牌標誌和真實 App 名稱。也不是整首同一個位置一直冒泡泡：每個段落要有發生的事。',
+    colour: '聊天 App 的配色：桌布一個顏色（深夜的 #1B2233、白天的 #7494C0、暖色的 #F3E9DC），標題列深一階，自己的泡泡是 accent（綠 #06C755、藍 #0A84FF、粉 #FF5FA2 等，一首歌一個；情緒轉折時才換色），對方的泡泡淺灰 #ECECEF；人物場景用 colorScript 讓時間（夜→黎明）走過去。',
+    type: '清楚的圓體或黑體（M PLUS Rounded 1c、Zen Kaku Gothic New、Zen Maru Gothic），字在泡泡、通知卡或輸入框裡。',
+    fonts: ['M PLUS Rounded 1c', 'Zen Kaku Gothic New', 'Zen Maru Gothic'],
+    layers: '先選這首歌的主要方向（一首一個，寫進 concept）：A 純聊天室——每段第一層 app（type chat，title 是聊天對象：君、あなた、先輩……；skin 介面造型 line／light／dark、color 桌布、bar 標題列、accent 自己的泡泡色、time 狀態列時間隨段落往後走），歌詞用 chat；靠訊息密度、等待、已讀、回覆、碎裂撐起整首，安靜段切 app type lock。B 人物場景＋訊息——不用 app 外框，用程式畫的平面場景表現主角在哪裡、什麼時間：fill（夜空或天色，to 漸層）→ bands（地平線的天色階）→ skyline（city 有窗燈／hills／trees，深色剪影）→ particles（star 星點，或 snow、dot）→ blob（月亮或街燈的光，小）→ mist（霧，選用）；歌詞用 chat（glow true，發光泡泡疊在場景上），段落之間讓時間和光線改變（colorScript 由深夜到黎明）。C 介面混合——段落依歌詞換介面：鎖定畫面＋notify（訊息湧進來、等人打開）、chat（對話）、input（心裡想說、打了又刪：after delete）、app type lock 加 quiet（沉默、時間過去）。三種方向的主角都是介面與文字：不用滿版或和歌關係薄弱的生圖（一看就是 AI），程式畫的場景也要有這首歌的理由（主角在哪裡、幾點），不是換一張壁紙。照片只能是聊天裡傳出或收到的一則訊息（chat 的 attachKind photo：要說得通誰拍的、傳給誰、為什麼是這一刻；assets 寫成手機隨手拍的照片），貼圖也只能是一則訊息（attachKind sticker，道具列在 storyProps，是一次有意義的回覆或情緒，一首最多兩三則，不要每段都放同一張）；歌詞講到的具體東西另外用 story 物件放在聊天室旁邊的空位（主角物件首尾呼應），讓故事看得見。',
+    motion: '訊息在唱到的那一拍送出（泡泡從自己那側彈出）、通知往下掉、輸入框跟著歌聲打字；舊的往上推或往下推再淡出；換段落時清空、或換到另一個介面狀態。',
+    templates: ['chat', 'notify', 'input', 'quiet', 'title-card', 'typewriter', 'punch'],
+    native: '爆點：沒有固定的招牌動作——依這首歌的螢幕故事，在最關鍵的一句讓介面到達它的極限：鏡頭貼近那則訊息（chat 的 zoom）、同一句連傳洗版、等了整首的對方終於回了一句、打好的一句被刪掉、或（只有崩壞的歌）螢幕碎裂（glass 圖層）。一首只選一種。',
+    craft: '先寫這首歌的「螢幕故事」：主角是誰、在跟誰說話、整首有哪三四個關鍵事件（例：前奏鎖屏上跳出一則通知→主歌一直傳沒人讀→副歌前打了一句又刪掉→最後副歌對方終於已讀），再決定哪些段落要換畫面，其他段落維持同一個介面，讓變化有意義。誰傳的（chat 的 side：right 自己、left 對方、alternate 對話）、已讀（read：read／none）只能來自歌詞：對方的句子必須是歌詞裡真的是對方說的話，不要亂編。訊息一則一句，唱到才送出；長句會自動在詞組之間折行；快歌的句子會一則接一則堆上去。高潮要有意義的變化，不是只換泡泡色：在真正重要的一兩句改變觀看距離（zoom 1.5–2，讓那句自己當一個鏡頭的開頭）或訊息密度。螢幕碎裂（在 graphics 段落加 glass 圖層：crack 0–1、seed；裂痕和碎片的折射蓋在整個畫面上，連訊息一起）只給真的有崩壞、傷害、失控的歌，從那一句所在的段落開始，之後的段落維持或加重（同一個 seed：同一支手機）。不必用齊所有手法，也不必用貼圖把空間填滿：單邊留白本身就是「等不到回覆」。坑：歌詞放在介面外面；整首同一個畫面只換顏色；每首都碎裂。',
+    props: { style: 'chat sticker art: the item as a cute bold messaging-app sticker with a thick white outline, flat bright colours, a simple expressive shape, no text' },
+    motif: false,
+    photos: 'attached',
+    variety: {
+      rule: '每首歌的手機要看起來不一樣：和同風格做過的歌比，這六項至少換三項——方向（A 純聊天室／B 人物場景／C 介面混合）、app 的 skin（line 深色標題列的通訊軟體／light 淺色系統 App／dark 深色模式；B 沒有 app 時算 none）、桌布色、自己的泡泡色、泡泡圓角（chat 的 corner：1 膠囊、0.3 方）、字型；每一項都要有這首歌的理由（深夜的病嬌用 dark、白天的戀愛用 light……），不是為了不同而不同。',
+      min: 3,
+    },
+    medium: 'clean',
+    screen: true,
+    layout: {
+      rule: '版型：歌詞依段落的介面用 chat（訊息）、notify（鎖屏通知）、input（輸入框）；quiet、title-card 給前奏、間奏、結尾；typewriter、punch 只在介面以外的特別時刻少用。同一個介面可以連續好幾個鏡頭、一個鏡頭可以涵蓋一整段（8–20 秒），變化來自螢幕上發生的事（誰傳、已讀、刪掉、碎裂、切到鎖屏），不是版型數量；重複的歌詞可以沿用同一個介面（連傳本身就是演出）。',
+      minTemplates: 2,
+      shotSec: [2, 24],
+      repeatOk: true,
+      lyrics: ['chat', 'notify', 'input'],
+      share: 0.8,
+      guide: [
+        '先寫螢幕故事再排鏡頭：主角是誰、在跟誰說話、整首有哪三四個關鍵事件（例：前奏打字送出 → 主歌一直傳沒人讀 → 副歌前打了一句又刪掉 → 最後對方終於回了一句），這些事件決定哪些段落換介面。',
+        '逐句決定這句在螢幕上是什麼動作：傳出的訊息（chat，voice me）、收到的訊息（chat，voice them）、正在打的字（input：送出 send 或刪掉 delete）、鎖屏上跳出的通知（notify，from 寫寄件者）。每一句的 cue 都要填 voice；只有歌詞裡真的是對方說的話才是 them，收發對象要前後一致。',
+        'input 一次只顯示一句、下一句就換掉：只給唱得慢、能讀完的句子（快的句子放 chat，訊息會留在對話串）。至少八成有歌詞的鏡頭用 chat、notify 或 input；typewriter、punch 只留給介面以外的特別時刻（一首最多兩三個鏡頭），quiet、title-card 給前奏、間奏、結尾。',
+        '一個介面鏡頭可以涵蓋一整段（8–20 秒）、連續好幾個鏡頭同一個介面；換鏡頭就是換畫面（聊天室清空、切到鎖屏、換到輸入框），只在故事的事件發生時換；換鏡頭會清掉上一個聊天室，所以唱得很快的短句不要當鏡頭的最後一句（它會來不及讀就被清掉），把它和下一句放在同一個鏡頭。',
+        '故事要用畫面上的東西說，不能只有對話框：歌詞講到的具體東西（菸、咖啡、玫瑰、地球、鑰匙…）用 story 放進畫面——hero 主角物件首尾呼應（例：前奏出現、崩壞時裂開、最後留下），pop 在唱到那個詞時出現；物件放在聊天室旁邊的空位，不蓋訊息，出現後只輕輕呼吸，不亂飄。物件要是這首歌的東西，不要裝飾性的貼圖。',
+        '強弱都用介面自己的語言：最強的一句用訊息特寫（chat 的 zoom，讓那句當鏡頭的第一則）、連傳，或鎖屏上跳出的一則通知；安靜的一句用輸入框打完停住不送（input 的 after hold）或刪掉、或鎖屏只剩時間。真的要跳出介面（punch、quiet 這類一般版型）時要有銜接：從上一則訊息的特寫推進，或在介面清空、鎖屏之後才出現，一首最多一兩次。',
+        '不要用 align、position、bleed 這類一般版型的構圖參數（介面有自己的位置）；聊天的 side 只在整個鏡頭都是同一個人說時用，否則逐句填 voice。介面裡的句子是訊息，不用字幕特效：enter／exit 用版型預設、reveal line、不要 scale／hollow／face 等強調和踩拍（程式會移除），要強調只用 color。',
+      ],
+    },
+    suits: '戀愛、網路、等待回覆、單戀、病嬌、社群、現代生活的歌',
+  },
+  popart: {
+    own: ['numeral'],
+    text: { ghost: [0.07, 0.07] },
+    name: '美式普普漫畫',
+    essence: '六〇年代美式漫畫頁：粗黑線、班戴點（半色調大圓點）、三原色加黑白的撞色，對話框和「POW!」爆炸框；每一句都像一格漫畫的台詞。',
+    not: '不是日漫網點（那是灰階細網），也不是現代向量插畫：顏色只有印刷的原色，點要大得看得見。',
+    colour: '印刷原色：紅 #E8262C、黃 #FFD200、青 #00A3E0、黑 #111111、紙白 #FFF8E7；一格最多三色。',
+    type: '粗 POP 字或粗黑體，黑字白底或白字黑邊；強調字放進爆炸框。',
+    fonts: ['Mochiy Pop One', 'Zen Kaku Gothic New', 'M PLUS Rounded 1c'],
+    layers: 'fill（一個原色）→ pattern halftone 或 dots（另一個原色或白，scale 40–70，像印刷網點）→ panels（count 2–3，line 黑，gap 10，像漫畫分格，tints 用原色）→ burst（type boom，color 黃或白，ink 黑，text 用這段歌詞裡的擬聲詞或一個關鍵詞，放在一角）或 burst speech（對話框）→ speedlines（黑，副歌）。每段換主色。',
+    motion: '字和爆炸框在拍上「砰」地彈出；分格依序滑入；副歌集中線。',
+    templates: ['punch', 'beat-cut', 'scatter', 'stair', 'title-card', 'quiet', 'stack', 'frame-split'],
+    native: '爆點：一個巨大的爆炸框在畫面中央炸開，網點從中心擴散。',
+    craft: '班戴點：規則格子上的實心圓，點徑 = 格距的 0.3–0.5，45° 斜排；漸層用點徑變化而不是透明度。粗線：lineWidth 8–12、round join，黑色。爆炸框：16 個尖角，內外半徑比 0.62，尖角長度有點亂；裡面的字傾斜 −6°。對話框：橢圓加一個尖尾巴指向說話的方向。套印錯版：黑線往右下偏 2px 疊一層原色。活起來：網點緩慢平移；爆炸框每拍輕跳。轉場：一格一格的分格像翻頁一樣切換。坑：用超過四色就不是漫畫；網點太細看起來像灰色。',
+    props: { style: '1960s American pop-art comic: thick black ink outline, flat primary colours (red, yellow, cyan) with large visible Ben-Day halftone dots for shading, bold graphic shapes, no gradients' },
+    motif: false,
+    suits: '元氣、搞笑、強節奏、英雄、戀愛喜劇的歌',
+  },
+  notebook: {
+    own: [],
+    name: '筆記本',
+    essence: '一本私人的筆記本：橫線紙上，歌詞是一句一句用鋼筆寫下的字，旁邊有塗改、圈起來的字、小小的塗鴉；翻頁就是換段落。安靜、私密、真誠。',
+    not: '不是剪貼簿（不貼照片和色紙），也不是黑板：只有紙和筆。',
+    colour: '紙 #FBF8F0（或淡黃 #F7F0D8）、橫線淡藍 #A9C4E0、邊線紅 #E2574C、墨 藍黑 #1F2A44 或黑 #222；強調用一支紅筆或螢光筆黃 #FFE45C（像劃重點）。',
+    type: '手寫字（Klee One 鋼筆楷書、Yomogi 隨性筆記），墨色；重點字用紅筆或劃螢光線。',
+    fonts: ['Klee One', 'Yomogi', 'Zen Kurenaido'],
+    layers: 'paper（紙色，grain 0.3）→ pattern lined（淡藍，scale 64–80：橫線加紅色邊線）→ 少量 shapes（star 或 heart，outline true，墨色，size 40，像隨手畫的塗鴉）→ 副歌加 band solid（螢光黃，height 60，opacity 0.5，像劃重點）。安靜段只留紙和線。不用照片。',
+    motion: '字一筆一筆寫出來（handwrite）；寫完停一下再翻頁；偶爾一個字被劃掉重寫。',
+    templates: ['handwrite', 'stair', 'quiet', 'title-card', 'quote', 'couplet'],
+    native: '爆點：整頁被一支紅筆大大圈起來，旁邊寫上一個驚嘆號。',
+    craft: '橫線：1.5–2px 淡藍、間距 64–80px，左邊 1/3 處一條紅色邊線；紙的上方留空白。手寫：筆畫沿路徑逐段顯現（每字 0.1–0.2 秒），墨水在筆畫起點略濃。塗改：一條略歪的線劃過錯字，再在上方寫正確的字。螢光筆：半透明黃色、兩端略圓、壓在字的下半部。塗鴉：星星、愛心、箭頭，用不閉合的手繪線（終點略超出起點）。活起來：筆尖跟著最後一個字輕微移動。轉場：紙頁從右往左翻過去。坑：字太小、線太深會像作業本；字一定要壓在橫線上。',
+    props: { style: 'ballpoint pen doodle on notebook paper: the item drawn with a single blue-black pen line, a little sketchy, light cross-hatching, no colour fill, no shading tone' },
+    motif: false,
+    photos: false,
+    suits: '抒情、告白、日記、民謠、回憶、安靜的歌',
+  },
+  brutalist: {
+    own: ['numeral'],
+    text: { cap: 1.5 },
+    name: '龐克海報',
+    essence: '一張貼在地下 live house 牆上的龐克／粗獷主義海報：滿版的超粗大字、黃黑警戒斜紋、紅與黑的高反差，一拍一切，每個字都像在吼；影印的粗糙和雜訊。',
+    not: '不是瑞士網格的冷靜秩序，也不是賽博霓虹：沒有漸層和發光，只有平塗的高對比色塊和粗字。',
+    colour: '黑 #0D0D0D、白 #F2F2F2、警戒黃 #FFD400、血紅 #E01E2B；一段只用兩三色：黃黑、紅黑、黑白；強調色一個。',
+    type: '最粗的黑體（Zen Kaku Gothic New 900），全大寫英文用 Montserrat 700；字要大到撞到畫面邊緣；白字黑底或黑字黃底。',
+    fonts: ['Zen Kaku Gothic New', 'Noto Serif JP'],
+    layers: 'fill（黑或黃或紅）→ pattern stripes（angle 45，scale 60–90，黑或黃：警戒斜紋，只在上下或一側用 band 帶狀露出，或整面 opacity 0.25）→ band solid（紅或黃，angle −8 到 −15，height 120–220，像貼歪的膠帶標語）→ numeral 或 stamp（只用歌名、關鍵詞）→ scanlines（gap 3，影印雜訊）。副歌：底色每段在黃黑／紅黑／黑白之間硬切，加 glitch（amount 0.3–0.5）。安靜段：純黑底只留一條細紅線。',
+    motion: '一拍一個字（beat-cut、punch）；硬切、不淡入；畫面在重拍上震一下。',
+    templates: ['punch', 'beat-cut', 'stack', 'stair', 'scatter', 'title-card', 'quiet', 'tunnel'],
+    native: '爆點：整個畫面一拍變成黃黑警戒斜紋，一個巨大的字砸在正中央。',
+    craft: '警戒斜紋：45° 等寬黃黑條，條寬 60–90px，以每秒 40px 平移。粗字：字距 −2% 到 −5%，行距 0.9，字可以超出畫面被裁切。膠帶標語：斜 −8 到 −15° 的實心長條，上面反白一行字。影印：整張圖加 1–2% 的黑白顆粒、偶爾一條橫向的影印拉痕（2–4px 高、整幅寬、0.1 秒）。活起來：每拍底色和字色反轉一次（只在副歌）。轉場：硬切，或一條粗黑條從畫面一側掃過。坑：顏色超過三種就變吵；字小了就沒有力量；不要漸層、陰影、發光。',
+    props: { style: 'punk xerox poster cut-out: the item as a high-contrast black and white photocopy silhouette with rough toner grain, one flat spot colour (yellow or red) block behind it, ragged scissor edges, no gradients' },
+    motif: false,
+    photos: false,
+    suits: '搖滾、龐克、反抗、憤怒、口號、突破極限的歌',
+  },
+  document: {
+    own: ['stamp', 'seal', 'numeral'],
+    name: '物件版面',
+    essence: '整首歌寫在一件真實的物件上：一張樂譜、一張鈔票、一份菜單、一張車票或電影票、一份劇本；歌詞變成物件上的品項、音節、條款、台詞，換段落就換一個角落或翻到下一頁。',
+    not: '不是一般的海報設計：版面規則必須來自那件物件本身（樂譜的五線、鈔票的花紋、菜單的價格欄）。',
+    colour: '依物件：樂譜 紙 #F3ECDD／墨 #2A2622；鈔票 #E7EFE3／#2F5D50／#8A6D2F；菜單 #FBF3E4／#B3261E／#1F1F1F；車票 #F6F1E7／#1E4C8A。一首歌一件物件、一組色。',
+    type: '依物件：樂譜用明朝；鈔票、證書用古典明朝或襯線英文；菜單、票券用黑體加襯線英文。',
+    fonts: ['Shippori Mincho', 'Zen Old Mincho', 'Zen Kaku Gothic New'],
+    layers: '先決定這首歌的物件（從歌詞找：聽歌的人、錢、吃飯、旅行、演戲……），整首都在它上面：paper（物件的紙色）→ 物件的紋理 pattern（樂譜 staff、鈔票 guilloche、票券 grid 或 dots、劇本 lined）→ frame（ticket 或 border 或 deco：物件的外框，label 寫物件上的標題，例 歌名、MENU、No. 0412）→ stamp 或 seal（蓋章、價格、編號，只用歌名或歌詞裡的詞）。換段落就換物件的不同部位（frame 位置、label 換）；副歌加深一階紙色或多一個章。',
+    motion: '字像印上去或寫上去（typewriter、stair）；鏡頭沿著物件慢慢平移；章在拍上蓋下。',
+    templates: ['typewriter', 'stair', 'quote', 'frame-split', 'quiet', 'title-card', 'couplet', 'array'],
+    native: '爆點：一個大印章在物件中央「蓋」下去，紙震一下。',
+    craft: '樂譜：五線一組、線距 10–14px、組距 140–180px，歌詞像唱詞排在譜下，偶爾一個音符頭（實心橢圓斜 −20°）。鈔票：多條極細的正弦曲線疊出波紋（guilloche），中央一個圓形花紋，四角放編號。菜單：左品項右價格，中間用點線連起來。票券：一側打孔虛線、可撕的存根。印章：雙圈或方框、字有缺墨（destination-out 小點）。活起來：紙微微的光線變化、印章蓋下的一瞬間。轉場：鏡頭平移到物件的另一個部位，或翻到背面。坑：物件與歌無關就是硬套；版面太細碎蓋過歌詞。',
+    props: { style: 'engraved printed ephemera: the item drawn as a fine line engraving like on a banknote or an old menu, one ink colour, crisp hatching, no fill colours' },
+    motif: false,
+    suits: '有具體物件或場景隱喻的歌：音樂、金錢、餐廳、旅行、戲劇、契約',
+  },
+  graffiti: {
+    own: [],
+    name: '街頭噴漆',
+    essence: '夜裡的一面水泥牆：噴漆的色塊邊緣是霧狀的、往下流的漆滴、鏤空模板噴出來的字；每一段像有人又在牆上噴了一層。',
+    not: '不是乾淨的向量插畫，也不是手繪蠟筆：是噴罐的霧邊和漆滴。',
+    colour: '牆 水泥灰 #6E6A66 或磚紅 #8C4A3A 或黑 #1A1A1A；噴漆 2–3 個飽和色（例 螢光粉 #FF3E9A、亮綠 #3DDC84、天藍 #2EC4F1、亮黃 #FFE23D）＋白 #F4F4F4。',
+    type: '粗黑體白字或噴漆色字，重點字像模板字（有斷橋）。',
+    fonts: ['Zen Kaku Gothic New', 'Yusei Magic'],
+    layers: 'fill（牆色）→ paper（同色系，grain 0.9，像水泥顆粒）→ spray（colors 該段 2–3 個噴漆色，count 4–6，drips true；副歌加 text 用歌名或一個關鍵詞，放在上方 y 0.6）→ 少量 shapes star 或 cross（白，size 50，像噴的符號）。每段多噴一層新顏色；安靜段只有一團噴漆和漆滴。',
+    motion: '噴漆色塊依序噴上、漆滴慢慢往下流；字像噴上去一樣由霧變實。',
+    templates: ['punch', 'scatter', 'beat-cut', 'stair', 'title-card', 'quiet', 'stack'],
+    native: '爆點：一個巨大的模板字被一口氣噴在牆中央，漆滴往下流。',
+    craft: '噴霧：放射漸層從實心（內 55%）到透明，邊緣外再撒 100–200 個 2–3px 的飛沫點。漆滴：從色塊下緣垂直往下，長度隨時間增加（2–4 秒流完），末端一顆比線粗的漆珠。模板字：最粗的字，每一筆中間挖一道斷橋（destination-out 的細條），邊緣再加一點飛沫。牆：灰色底加粗顆粒和幾道裂縫細線。活起來：漆滴持續緩慢變長；偶爾一道新的噴痕劃過。轉場：一層新的噴漆從畫面一側噴過蓋住舊的。坑：色塊放在歌詞後面太亮會讀不清（歌詞後面留深色牆）。',
+    props: { style: 'street stencil graffiti: the item as a single-colour spray-paint stencil on a wall, soft overspray at the edges, a few paint drips, high contrast silhouette, no outlines' },
+    motif: false,
+    photos: false,
+    suits: '街頭、嘻哈、叛逆、青春、城市、夜晚的歌',
+  },
+  psychedelic: {
+    own: ['sunburst'],
+    name: '70 年代迷幻',
+    essence: '七〇年代的迷幻海報：橘、芥末黃、棕、桃紅的粗波浪條紋在流動，圓滾滾的泡泡字，太陽般的放射；暖、慵懶、會讓人跟著搖。',
+    not: '不是現代霓虹，也不是 Y2K：顏色是暖的、有點褪色的大地色加一點桃紅；沒有發光和金屬。',
+    colour: '奶油 #F6E7C8、芥末黃 #E8B23A、橘 #E4702B、焦棕 #7A3B1E、桃紅 #E0567A、橄欖 #8A8B3A；一段三到四色的暖色組。',
+    type: '圓滾的粗字（Mochiy Pop One、M PLUS Rounded 1c 900），焦棕或奶油色，可加一層橘色的厚投影。',
+    fonts: ['Mochiy Pop One', 'M PLUS Rounded 1c', 'Kaisei Decol'],
+    layers: 'fill（奶油或芥末）→ pattern wavy（橘或焦棕，scale 120–180：粗波浪條紋流動）→ bands（3–4 階暖色，from 0.6 to 1：像夕陽色帶）→ sunburst（芥末或橘，rays 24，spin 慢，只在副歌）→ blob（桃紅或橘，大，pulse，一顆太陽）。每段換一組暖色、波浪的方向（angle）不同。',
+    motion: '波浪條紋持續緩慢流動；字有彈性地跳出來、微微搖擺；整體慵懶有律動。',
+    templates: ['scatter', 'stair', 'punch', 'orbit', 'quiet', 'title-card', 'ribbon', 'tunnel'],
+    native: '爆點：整個畫面的波浪條紋捲成一個漩渦往中心收。',
+    craft: '波浪條紋：每條是 lineWidth = 間距一半的正弦曲線（波長 = 間距 1.6 倍、振幅 0.35 倍），以每秒 0.8 rad 的相位流動；三到四色輪流。泡泡字：字加一層同色粗描邊（lineWidth 字高 0.15、round join）讓角變圓，再一層深色往右下偏的厚投影。放射：24 道兩色交替的扇形，慢轉。紋理：整張加一點褪色的紙紋和 1% 的顆粒。活起來：波浪流動、太陽隨拍呼吸。轉場：漩渦旋轉著把舊畫面捲進中心，新畫面從中心旋出。坑：顏色太飽和會像現代螢光；冷色太多就失去七〇年代感。',
+    props: { style: '1970s psychedelic poster art: the item in bold rounded shapes with warm faded colours (orange, mustard, brown, pink), thick wavy outlines in a darker warm tone, flat fills, no gradients' },
+    motif: false,
+    suits: '復古、輕快、幽默、慵懶、迷幻、陽光的歌',
+  },
+  'led-board': {
+    own: [],
+    name: 'LED 看板',
+    essence: '車站、球場、live house 門口的 LED 點陣看板：黑底上一顆顆亮起的燈點組成跑馬燈字，紅橘或綠色的光；歌詞像看板上的公告和倒數。',
+    not: '不是霓虹燈管（那是連續的光管），也不是終端機：是一顆一顆的燈點，暗的燈點也看得到。',
+    colour: '黑 #050505、燈點 琥珀 #FFB22E 或紅 #FF3B2F 或綠 #3DFF7A（一首歌選一個，副歌可加第二色）；暗燈點 rgba(255,255,255,0.07)。',
+    type: '點陣字（DotGothic16），燈點色；大字。',
+    fonts: ['DotGothic16'],
+    layers: 'fill（黑）→ chargrid（燈點色，cols 120，chars " ·•●"，field noise，opacity 0.25：背景的燈點閃爍）→ led（上方 y 0.8 與下方 y −0.8 各一條，text 用歌名、段落名或歌詞關鍵詞，speed 160–260，一條往左一條往右感）→ 副歌加 band marquee 或第二色的 led；scanlines（gap 4）。不用照片。',
+    motion: '跑馬燈持續捲動；字逐字亮起（typewriter）或一拍一切；副歌全板閃爍。',
+    templates: ['typewriter', 'beat-cut', 'stack', 'array', 'title-card', 'quiet', 'punch'],
+    native: '爆點：整面看板所有燈點同時全亮一拍，再從中心向外熄滅。',
+    craft: '點陣：圓點直徑 = 間距 0.72，暗點一直存在（透明度 0.07），亮點是燈點色；字用 16 點高的格子取樣。捲動：整格整格地移（不平滑），每秒 160–260px。閃爍：亮點每拍亮度 +30% 一瞬。光暈：亮點下面 lighter 疊一個模糊 4px 的同色點（透明度 0.3）。活起來：背景的燈點隨機閃、偶爾一行倒數數字。轉場：燈點由上往下一列列熄滅再亮起新的畫面。坑：燈點太小變成普通文字；顏色超過兩種就不像看板。',
+    props: { style: 'LED dot-matrix sign graphic: the item drawn only with round lit dots on a black grid in one amber colour, unlit dots faintly visible, no outlines, no gradients' },
+    motif: false,
+    photos: false,
+    text: { ink: '#FFB22E' },
+    suits: '偶像 Live、倒數、車站、運動、資訊感、電子的歌',
+  },
+  xerox: {
+    own: [],
+    name: '影印拼貼',
+    essence: '用影印機做的獨立雜誌：照片被印成全黑全白的高反差，碳粉的顆粒和掃描時拉長的殘影；剪下來亂貼，再用一個螢光色套印。',
+    not: '不是乾淨的黑白攝影，也不是漫畫網點：是影印機的粗糙——黑壓壓的陰影、白爆的亮部、拉痕。',
+    colour: '紙白 #F1EFEA、碳粉黑 #121212；一個套印色（螢光粉 #FF4FA3 或螢光橘 #FF6A1A 或螢光黃 #E8FF3A 或紫 #8C5CFF），一段一個。',
+    type: '粗黑體或打字機感的等寬英文（Space Mono），黑或套印色。',
+    fonts: ['Zen Kaku Gothic New', 'Noto Serif JP'],
+    layers: 'paper（紙白，grain 0.8）→ photo（xerox true，mode inset 或 band 或 full，tint 套印色：影印成黑白再套一色）→ 第二張 photo xerox（不同位置、tilt，像剪下來亂貼）→ scanlines（gap 5，opacity 0.3：掃描拉痕）→ band solid（套印色，像一塊螢光色紙）。副歌：photo full 加 glitch（amount 0.3）。',
+    motion: '畫面像影印一張張出來（硬切）；照片微微抖動；字硬切或打字。',
+    templates: ['punch', 'stack', 'scatter', 'typewriter', 'title-card', 'quiet', 'frame-split'],
+    native: '爆點：整個畫面被「影印」一次：一道亮光從上掃到下，經過的地方都變成高反差黑白。',
+    craft: '影印：灰階後對比拉到 5 倍、亮度 1.15，讓中間調消失；碳粉：黑色區域上撒 1–2px 的白色小點、白色區域偶爾一點黑。掃描拉伸：隨機一條 20–60px 高的橫帶往右拉長 1.5–3 倍。套印：用 multiply 把套印色疊在影印上（白變色、黑還是黑），套印版偏移 3–6px。剪貼：照片邊緣是剪刀剪的直線、略歪。活起來：每 2 拍照片抖動 1px；偶爾一條拉痕。轉場：一道白光從上往下掃過（影印機的燈）。坑：照片太多太碎會蓋過歌詞；灰階太多就不像影印。',
+    props: { style: 'photocopied zine cut-out: the item as a harsh black and white xerox print with heavy toner grain and lost midtones, cut out with scissors, no colour except an optional single fluorescent overprint' },
+    motif: false,
+    suits: '實驗、龐克、獨立、叛逆、冷調、都市的歌',
+  },
+  isometric: {
+    own: [],
+    name: '等角空間',
+    essence: '一座用等角投影畫出來的小世界：沒有消失點的方塊、階梯、房間像積木一樣排列，鏡頭沿著對角線平移；歌詞貼在牆面和地板上。',
+    not: '不是寫實 3D，也不是平面插畫：所有線只有三個方向（垂直和兩條 30°）。',
+    colour: '每個面三階明度：頂面最亮、左面中間、右面最暗。例 桃紅組 #F7A6C1／#E0708F／#B64A6C，天藍組 #A8D8F0／#6BB3DB／#3E86B3；底 奶油 #FBF4E9 或深藍 #1D2340；一段一組。',
+    type: '幾何黑體或圓體，深色字；英文 Montserrat。',
+    fonts: ['Zen Kaku Gothic New', 'M PLUS Rounded 1c', 'Montserrat'],
+    layers: 'fill（底色）→ pattern iso（同色系淺一階，scale 50–80：等角格線）→ shapes cube（等角立方體，color 頂面色，自動畫出三階明度，size 120–220，count 3–6，drift 小）→ 副歌 cube 變多變大、加 pulse；安靜段只留格線和一個方塊。每段換一組色，像走進另一個房間。',
+    motion: '鏡頭沿 30° 對角線慢慢平移；物件在拍上升起或落下一格；字沿著等角方向滑入。',
+    templates: ['stair', 'scatter', 'array', 'stack', 'quiet', 'title-card', 'tunnel'],
+    native: '爆點：整片等角格子的方塊一格格依序升起，像城市長出來。',
+    craft: '等角：x 軸 30°、y 軸 150°、z 軸垂直；一個方塊 = 頂面菱形 + 左右兩個平行四邊形，三個面三階明度、不加漸層和陰影。格子：三組平行線（垂直、+30°、−30°），線距相同。升起：方塊沿 z 軸往上長（0.2 秒，ease-out），下面露出側面。矛盾空間（可選）：讓一段階梯首尾相接。活起來：一個小方塊或球沿著格線移動、每拍換格。轉場：整個場景沿對角線平移出畫面，新的房間跟著滑進來。坑：任何一條線不在三個方向上就破功；細節太多會擋到歌詞。',
+    props: { style: 'isometric icon: the item drawn in strict isometric projection (30 degree axes), three flat tones for top, left and right faces, no outlines, no gradients, clean geometric shapes' },
+    motif: false,
+    photos: false,
+    suits: '知性、建築、遊戲感、構築、未來、節奏精準的歌',
+  },
+  'idol-live': {
+    own: ['heart', 'sunburst'],
+    text: { ghost: [0.06, 0.06] },
+    name: '偶像 Live',
+    essence: '地下偶像 live 的現場：舞台燈光打下來、成員代表色一段一段輪流當主色、台下的螢光棒在晃；成員唱的歌詞在台上，台下喊的 Call 跑在 LED 看板上，兩條軌道一起把場子炒熱。',
+    not: '不是電視綜藝攝影棚（那是糖果色平面），也不是夜店霓虹：是 live house 的黑底、彩色舞台光和應援色。',
+    colour: '舞台黑 #0B0814；成員代表色依段落輪替（粉 #FF5FA2、水藍 #3EC6FF、黃 #FFD93D、紫 #A66BFF、綠 #4CE38A、紅 #FF4B4B、橘 #FF9A3C），一段一個主色；白 #FFFFFF。',
+    type: '主唱歌詞：極粗圓體白字（M PLUS Rounded 1c 900）；Call 在 LED 看板上是點陣字（程式處理）；掛け声是主色實心粗字加深色粗外框、傾斜（程式處理）。',
+    fonts: ['M PLUS Rounded 1c', 'Mochiy Pop One', 'Zen Maru Gothic'],
+    layers: '每段都有 led（calls true，下方 y −0.84，color 這段的成員色，text 寫團名和歌名：沒有 Call 時暗暗地跑）。主歌／導歌：fill 舞台黑 → beams 只有一盞白色追光（count 1，opacity 0.5–0.6，spin 0.2）→ particles 少量暗的光點（count 15–20）。副歌：fill 舞台黑 to 成員色深一階 → beams 成員色和白（count 5–6，spin 1–1.4，pulse 0.6）→ particles（star 或 heart，成員色和白，count 50–70，dir up）；最高潮加 sunburst（成員色，opacity 0.2–0.25）和 sparkles（白）。間奏：燈光暗下但不全黑，螢光棒光點（各成員色，count 50，sway 0.6）慢慢晃、兩盞暗燈。進副歌前一拍：一段只有黑 fill 的熄燈（start 在副歌前一拍），副歌換下一個成員色亮起。',
+    motion: '主唱歌詞在拍上進場（punch、beat-cut）；Call 在喊的那一拍打上 LED、掛け声在喊的那一拍彈出；燈光隨拍掃動；副歌所有光一起亮。',
+    templates: ['punch', 'beat-cut', 'scatter', 'stack', 'stair', 'title-card', 'quiet', 'tunnel'],
+    native: '爆點：兩格純白閃光，彩帶從上方炸下來。',
+    craft: '舞台燈：從上緣的燈架打下的光錐，主色到透明，lighter 疊加，以不同相位擺動；重拍時變亮。對比：主歌只有一盞白追光、副歌滿場成員色，反差要一眼看得出來。轉場：進副歌前熄燈一拍、白閃兩格，換下一個成員色。Call 看板：黑底點陣，每個 Call 在喊的那一拍從右邊打進來、舊的往左推，剛喊的發光，密集時排成一列；沒有 Call 時團名歌名暗暗地跑。掛け声：主唱上方或旁邊，傾斜，彈出後很快消失。坑：所有顏色同時出現會變彩虹（一段一個主色，間奏的螢光棒例外）；光太亮蓋過歌詞（歌詞區保持暗）；閃光淡出會變灰（只用兩格純白）。',
+    props: { style: 'idol live concert sticker: the item as a glossy pop sticker with a thick white border, bright member colour fill, a small star sparkle highlight, flat with one soft shade, no outlines' },
+    motif: false,
+    photos: false,
+    callBoard: true,
+    bright: true,
+    lyricLayers: [
+      '偶像 Live 的歌詞分三層，先逐句分好再排鏡頭：主唱（成員唱的句子，用一般版型）、Call（台下喊的，歌詞裡括號內的部分：程式自動放到 LED 看板上，你不用處理）、掛け声（全員一起喊的短句：ドドドド！、はい！、成員點名、NONONO！這類 12 字以內、沒有內容只有喊聲的句子，cue 填 shout true，程式把它做成主唱旁邊的大顆喊聲字；它不佔鏡頭、前一句主唱會留著）。',
+      '主歌和副歌要有明顯的舞台反差：主歌用小一點的版型（stack、stair）和一盞追光，副歌用 punch、beat-cut 和滿場燈光；進副歌前一拍熄燈。',
+    ],
+    suits: '偶像、應援、MIX、Call 多、live 感強的歌',
+  },
+  'dark-glitch': {
+    own: [],
+    chroma: ['#FF1E3C', '#1EE6FF'],
+    name: '黑紅故障',
+    essence: '訊號壞掉的黑紅白畫面：純黑底上的白字被撕裂、錯位，紅色的色塊和雜訊條在重拍上爆開；冷、狂、有攻擊性，像腦中的雜音。',
+    not: '不是哥德蘿莉的華麗裝飾，也不是綠色終端機：沒有花邊和視窗，只有黑白紅和壞掉的訊號。',
+    colour: '黑 #070707、白 #F0F0F0、血紅 #E0102F；少量的青 #1EE6FF 只當色差邊。',
+    type: '粗黑體或尖銳的明朝（Zen Old Mincho 900），白字；重點字紅色。',
+    fonts: ['Zen Kaku Gothic New', 'Zen Old Mincho'],
+    layers: 'fill（黑）→ scanlines（gap 3，vignette 0.6）→ chargrid（暗紅，field noise，opacity 0.15，cols 140）→ band solid（紅，angle 0，height 8–30，像訊號條）→ glitch（color 紅，color2 白，amount 0.4–0.8：重拍時畫面切片錯位）。安靜段只留黑底和一條細紅線；副歌 amount 加大。照片少用，要用就 xerox true、tint 紅。',
+    motion: '字硬切、在重拍上錯位撕裂；畫面切片左右跳；偶爾全畫面反白一格。',
+    templates: ['punch', 'beat-cut', 'stack', 'vertical', 'title-card', 'quiet', 'tunnel'],
+    native: '爆點：整個畫面碎成十幾條橫向切片往兩邊甩開，再一拍歸位。',
+    craft: '切片：每次重拍後 0.12 秒內，把畫面分成 6–12 條 8–80px 高的橫帶，各自往左右偏 ±80px（直接把已畫好的畫面切下來貼回）。色差：字的紅、青兩版各偏 2–4px。雜訊條：隨機的紅白細長方塊閃一下。反白：副歌每 4 拍反轉一格。活起來：背景的暗紅字元緩慢流動；偶爾一條雜訊條滾過。轉場：一格全白閃再切到新畫面。坑：一直故障會讓人讀不到歌詞（只在拍上 0.12 秒）；顏色加多就失去冷感。',
+    props: { style: 'glitch art cut-out: the item as a stark white silhouette on black with red and cyan channel offsets, horizontal slice displacement, digital noise blocks, no gradients' },
+    motif: false,
+    suits: '暗黑、病嬌、電子搖滾、憤怒、瘋狂、反抗的歌',
+  },
 };
 
 /** The languages the director may choose from (see DesignLanguage.proven). */
@@ -760,6 +1060,15 @@ export function keepOwnMotifs(t: Prunable, id: LanguageId): string[] {
   }
   for (const c of t.cues) if (c.emphasis) c.emphasis = c.emphasis.filter((e) => !((e.method === 'face' && drop('face')) || (e.method === 'symbol' && e.symbol === 'heart' && drop('heart'))));
   // a photo under a no-photo look still shows through the engine's exposure floor (a blue streak on terminal's glass)
+  // a phone shows a photo only as a message someone sent: every other picture goes (generated backdrops read as AI)
+  if (LANGUAGES[id]?.photos === 'attached') {
+    const sent = new Set((t.shots ?? []).flatMap((s) => (s.params?.['attachKind'] === 'photo' && typeof s.params['attach'] === 'string' ? [s.params['attach'] as string] : [])));
+    const before = t.assets?.length ?? 0;
+    for (const sh of t.shots ?? []) delete sh.asset;
+    t.assets = (t.assets ?? []).filter((x) => sent.has((x as { id: string }).id));
+    for (const sec of t.graphics?.sections ?? []) sec.layers = sec.layers.filter((l) => l.kind !== 'photo');
+    if (before > t.assets.length) fixes.add(`「${LANGUAGES[id].name}」的照片只保留聊天裡傳送的那幾張`);
+  }
   if (LANGUAGES[id]?.photos === false && (t.assets?.length || t.shots?.some((s) => s.asset))) {
     for (const sh of t.shots ?? []) delete sh.asset;
     t.assets = [];
@@ -767,3 +1076,31 @@ export function keepOwnMotifs(t: Prunable, id: LanguageId): string[] {
   }
   return [...fixes];
 }
+
+/** The parts of an interface design that make one song's phone look like another's (lookChanges counts them). */
+export interface InterfaceLook {
+  direction: string;
+  skin: string;
+  wallpaper: string;
+  bubble: string;
+  corner: string;
+  font: string;
+}
+
+/** The look of a phone design: its direction (A chat, B scene, C mixed interfaces), app skin, colours, bubble shape, font. */
+export function interfaceLook(t: { shots: { template: string; params: Record<string, unknown> }[]; graphics?: { sections: { layers: { kind: string }[] }[] }; design?: { font?: string; colorScript?: { accent: string }[] } }): InterfaceLook {
+  const app = t.graphics?.sections.flatMap((s) => s.layers).find((l) => l.kind === 'app') as { skin?: string; color?: string; accent?: string } | undefined;
+  const chat = t.shots.find((s) => s.template === 'chat');
+  const mixed = t.shots.some((s) => s.template === 'notify' || s.template === 'input');
+  return {
+    direction: !app ? 'B' : mixed ? 'C' : 'A',
+    skin: app ? (app.skin ?? 'line') : 'none',
+    wallpaper: (app?.color ?? '').toUpperCase(),
+    bubble: (app?.accent ?? t.design?.colorScript?.[0]?.accent ?? '').toUpperCase(),
+    corner: String(chat?.params['corner'] ?? 1),
+    font: t.design?.font ?? '',
+  };
+}
+
+/** How many of the look's parts differ between two designs. */
+export const lookChanges = (a: InterfaceLook, b: InterfaceLook) => (Object.keys(a) as (keyof InterfaceLook)[]).filter((k) => a[k] !== b[k]).length;

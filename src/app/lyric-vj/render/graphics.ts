@@ -4,7 +4,10 @@
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
 import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
+import { drawMotionTransition, isMotion } from './motion-transition';
+import { burstBox, drawGlassCrack, drawKit, glassOf, glassPieces, KIT_KINDS, kitPattern, KitLayer, KitPattern, PHONE_MX, PHONE_MY, phoneBox } from './kit';
 import { drawWarped, WarpZone } from './warp';
+import { drawKinetic, KineticLayer, lineVeil, setLineVeil } from './kinetic';
 
 export type Rgb = string;
 
@@ -49,14 +52,16 @@ interface Base {
   pulse?: number;
   /** Part of the ground (a planet's curve rising from the bottom): never moved or shrunk to make room for the lyrics. */
   fixed?: boolean;
+  /** When the layer's own motion started, if before its section: a backdrop held under several cuts keeps moving on. */
+  t0?: number;
 }
 
 export type Layer = Base &
   (
     | { kind: 'fill'; color: Rgb; to?: Rgb; angle?: number }
     | { kind: 'paper'; color: Rgb; grain?: number }
-    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves' | 'genkou' | 'shibori' | 'itajime'; color: Rgb; scale?: number; angle?: number; scroll?: number }
-    | { kind: 'photo'; mode: 'full' | 'inset' | 'polaroid' | 'band' | 'circle'; asset?: string; x?: number; y?: number; w?: number; h?: number; tilt?: number; tint?: Rgb; frame?: Rgb; drift?: number }
+    | { kind: 'pattern'; type: 'grid' | 'dots' | 'stripes' | 'gingham' | 'checker' | 'halftone' | 'waves' | 'genkou' | 'shibori' | 'itajime' | KitPattern; color: Rgb; scale?: number; angle?: number; scroll?: number }
+    | { kind: 'photo'; mode: 'full' | 'inset' | 'polaroid' | 'band' | 'circle'; /** A story frame (keyframes.mts): the song's picture role leaves it whole. */ own?: boolean; asset?: string; x?: number; y?: number; w?: number; h?: number; tilt?: number; tint?: Rgb; frame?: Rgb; drift?: number; xerox?: boolean }
     | { kind: 'frame'; type: 'border' | 'filmstrip' | 'viewfinder' | 'brackets' | 'window' | 'ticket' | 'deco'; color: Rgb; inset?: number; label?: string }
     | { kind: 'rings'; x?: number; y?: number; count?: number; color: Rgb; radius?: number; spin?: number; dashed?: boolean }
     | { kind: 'sparkles'; count?: number; color: Rgb; size?: number; seed?: number }
@@ -64,7 +69,7 @@ export type Layer = Base &
     | { kind: 'panels'; count?: number; layout?: 'vertical' | 'horizontal' | 'diagonal' | 'grid'; assets?: string[]; tints?: Rgb[]; line?: Rgb; gap?: number }
     | { kind: 'sunburst'; x?: number; y?: number; color: Rgb; rays?: number; spin?: number }
     | { kind: 'band'; type: 'tape' | 'solid' | 'marquee'; color: Rgb; color2?: Rgb; y?: number; angle?: number; height?: number; scroll?: number }
-    | { kind: 'shapes'; type: 'circle' | 'diamond' | 'triangle' | 'star' | 'heart' | 'cross'; count?: number; color: Rgb; colors?: Rgb[]; size?: number; drift?: number; seed?: number; outline?: boolean }
+    | { kind: 'shapes'; type: 'circle' | 'diamond' | 'triangle' | 'star' | 'heart' | 'cross' | 'cube'; count?: number; color: Rgb; colors?: Rgb[]; size?: number; drift?: number; seed?: number; outline?: boolean }
     | { kind: 'blob'; x?: number; y?: number; r?: number; color: Rgb; breathe?: number }
     | { kind: 'bands'; colors: Rgb[]; from?: number; to?: number }
     | { kind: 'stamp'; text: string; color: Rgb; x?: number; y?: number; size?: number; tilt?: number; font?: string }
@@ -80,8 +85,12 @@ export type Layer = Base &
     | { kind: 'botanical'; type?: 'fern' | 'leaf' | 'flower' | 'feather' | 'mixed'; color: Rgb; count?: number; size?: number; seed?: number }
     | { kind: 'ink'; color: Rgb; colors?: Rgb[]; count?: number; size?: number; seed?: number }
     | UiLayer
+    | KitLayer
+    // a kinetic-type cut (kinetic.ts): the planner changes it on the beat
+    | KineticLayer
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
-    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[] }
+    // shift: a drawing reused later in the song (a repeated chorus) sees the time it was written for
+    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number }
     // story components' per-frame layers (story.ts), never written by the director directly
     | StoryLayer
   );
@@ -110,9 +119,11 @@ export interface GraphicsLook {
   story?: StoryItem[];
   /** The props the story uses, for props.mts to draw (id, English description, hero). */
   storyProps?: { id: string; what: string; hero: boolean }[];
+  /** A small translation line at the foot of the frame while each lyric line is sung (over every transition). */
+  subtitles?: { start: number; end: number; text: string }[];
 }
 
-export const LAYER_KINDS = ['ui', 'fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid', 'skyline', 'mosaic', 'ink', 'botanical', 'particles', 'panels'] as const;
+export const LAYER_KINDS = ['ui', 'fill', 'paper', 'pattern', 'photo', 'frame', 'rings', 'sparkles', 'sunburst', 'band', 'shapes', 'blob', 'bands', 'stamp', 'seal', 'numeral', 'scanlines', 'chargrid', 'mist', 'speedlines', 'swissgrid', 'skyline', 'mosaic', 'ink', 'botanical', 'particles', 'panels', 'kinetic', ...KIT_KINDS] as const;
 
 const W = 1920;
 const H = 1080;
@@ -148,30 +159,132 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   const prev = i > 0 ? look.sections[i - 1] : undefined;
   const dur = tr ? (tr.dur ?? TRANSITION_SEC[tr.kind]) : 0;
   const k = tr && prev && !(globalThis as { __vjProbe?: boolean }).__vjProbe ? (t - sec.start) / dur : 1;
-  if (k < 1 && tr && prev) {
-    // the section before stays underneath; the new one is drawn apart and shows only inside the growing shape
-    drawLayers(ctx, adjust(prev.layers), prev, t, beat, image, codeTime);
+  if (k < 1 && tr && prev) drawTransition(ctx, tr, k, Math.round(sec.start * 10), (c) => drawLayers(c, adjust(prev.layers), prev, t, beat, image, codeTime), (c) => drawLayers(c, own, sec, t, beat, image, codeTime));
+  else drawLayers(ctx, own, sec, t, beat, image, codeTime);
+  drawLayers(ctx, all.slice(sec.layers.length), sec, t, beat, image, codeTime);
+  const sub = look.subtitles?.find((s) => t >= s.start && t < s.end);
+  if (sub) drawSubtitle(ctx, sub, t, sec);
+  ctx.restore();
+}
+
+/** The translation line: small, centred at the foot, in the cut's ink with a paper edge so it reads on any move. */
+function drawSubtitle(ctx: CanvasRenderingContext2D, sub: { start: number; end: number; text: string }, t: number, sec: LookSection) {
+  const kin = sec.layers.find((l) => l.kind === 'kinetic') as { ink: Rgb; paper: Rgb; dark?: boolean } | undefined;
+  const [ink, paper] = kin ? (kin.dark ? [kin.paper, kin.ink] : [kin.ink, kin.paper]) : ['#ffffff', '#000000'];
+  ctx.save();
+  ctx.globalAlpha = Math.min(1, (t - sub.start) / 0.15, (sub.end - t) / 0.15);
+  ctx.font = '700 34px "Noto Sans TC", "PingFang TC", "Hiragino Sans", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = paper;
+  ctx.strokeText(sub.text, W / 2, H - 46);
+  ctx.fillStyle = ink;
+  ctx.fillText(sub.text, W / 2, H - 46);
+  ctx.restore();
+}
+
+/**
+ * One frame of a transition at progress k (0..1) from what `drawPrev` draws to what `drawNew` draws: the new one
+ * opening inside the transition's shape over the old, or (shatter) the old one breaking into glass that falls away
+ * from over the new. Shared by graphics sections and storyboard scenes.
+ */
+export function drawTransition(ctx: CanvasRenderingContext2D, tr: SectionTransition, k: number, seed: number, drawPrev: (c: CanvasRenderingContext2D) => void, drawNew: (c: CanvasRenderingContext2D) => void) {
+  // the pictures move here (pushed, zoomed, falling as glass): a keyline drawn into them moved off the letters it rings
+  // and stood beside the lyric as a blank dark block; it is laid once, after, where the letters are
+  const veil = isMotion(tr.kind) || tr.kind === 'shatter' ? lineVeil() : undefined;
+  if (!veil) return paintTransition(ctx, tr, k, seed, drawPrev, drawNew);
+  setLineVeil(undefined);
+  try {
+    paintTransition(ctx, tr, k, seed, drawPrev, drawNew);
+  } finally {
+    setLineVeil(veil);
+  }
+  veil(ctx, 1);
+}
+
+function paintTransition(ctx: CanvasRenderingContext2D, tr: SectionTransition, k: number, seed: number, drawPrev: (c: CanvasRenderingContext2D) => void, drawNew: (c: CanvasRenderingContext2D) => void) {
+  if (isMotion(tr.kind)) drawMotionTransition(ctx, tr.kind, k, W, H, seed, drawPrev, drawNew);
+  else if (tr.kind === 'shatter') {
+    // the screen breaks: the new section underneath, the old one on top cut into glass shards that crack, hang for a
+    // moment, then fall and turn away, the ones round the impact first
+    drawNew(ctx);
     const off = transitionCanvas();
     const oc = off.getContext('2d')! as unknown as CanvasRenderingContext2D;
     oc.save();
     oc.clearRect(0, 0, W, H);
-    drawLayers(oc, own, sec, t, beat, image, codeTime);
+    drawPrev(oc);
+    oc.restore();
+    const gseed = (seed % 97) + 1;
+    const glass = glassOf(W, H, 1, gseed)!;
+    const hold = 0.16;
+    for (const p of glassPieces(glass)) {
+      const delay = hold + (1 - p.near) * 0.25 + hash(p.id, 5) * 0.08;
+      const f = Math.max(0, k - delay) / (1 - delay);
+      if (f >= 1) continue;
+      const [cx, cy] = p.pts.reduce(([x, y], [px, py]) => [x + px / p.pts.length, y + py / p.pts.length], [0, 0]);
+      ctx.save();
+      ctx.translate(cx + (hash(p.id, 6) - 0.5) * 260 * f, cy + 1500 * f * f + 30 * f);
+      ctx.rotate((hash(p.id, 7) - 0.5) * 2.4 * f);
+      ctx.scale(1 - 0.25 * f, 1 - 0.25 * f);
+      ctx.translate(-cx, -cy);
+      ctx.beginPath();
+      p.pts.forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.closePath();
+      ctx.save();
+      ctx.clip();
+      ctx.drawImage(off, 0, 0);
+      // a lighter edge on each falling piece: glass catching the light as it turns
+      ctx.restore();
+      // only once it moves: still in place it is covered by the cracks, and outlined it read as a drawn web
+      if (f > 0) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.35 * (1 - f)})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    if (k < hold + 0.1) {
+      // the hit: the cracks over the whole frame and a short white flash
+      const crack = cracksOnce(gseed);
+      ctx.drawImage(crack, 0, 0);
+      ctx.fillStyle = `rgba(255,255,255,${0.5 * Math.max(0, 1 - k / 0.1)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+  } else {
+    // the section before stays underneath; the new one is drawn apart and shows only inside the growing shape
+    drawPrev(ctx);
+    const off = transitionCanvas();
+    const oc = off.getContext('2d')! as unknown as CanvasRenderingContext2D;
+    oc.save();
+    oc.clearRect(0, 0, W, H);
+    drawNew(oc);
     oc.globalCompositeOperation = 'destination-in';
     oc.fillStyle = '#000';
-    revealMask(oc, tr.kind, k, W, H, Math.round(sec.start * 10));
+    revealMask(oc, tr.kind, k, W, H, seed);
     oc.restore();
     if (tr.color) {
       // a band of colour leads the edge: the same shape a little further on, under the new section
       ctx.save();
       ctx.fillStyle = tr.color;
-      revealMask(ctx, tr.kind, Math.min(1, k * 1.15 + 0.05), W, H, Math.round(sec.start * 10));
+      revealMask(ctx, tr.kind, Math.min(1, k * 1.15 + 0.05), W, H, seed);
       ctx.restore();
     }
     ctx.drawImage(off, 0, 0);
     transitionAccent(ctx, tr.kind, k, W, H);
-  } else drawLayers(ctx, own, sec, t, beat, image, codeTime);
-  drawLayers(ctx, all.slice(sec.layers.length), sec, t, beat, image, codeTime);
-  ctx.restore();
+  }
+}
+
+/** The crack lines a shatter transition shows on its first frames, drawn once per seed. */
+const crackCache = new Map<number, OffscreenCanvas>();
+function cracksOnce(seed: number) {
+  const hit = crackCache.get(seed);
+  if (hit) return hit;
+  const c = new OffscreenCanvas(W, H);
+  drawGlassCrack(c.getContext('2d')!, W, H, 0.6, seed);
+  crackCache.set(seed, c);
+  return c;
 }
 
 let transitionOff: OffscreenCanvas | undefined;
@@ -182,16 +295,17 @@ function drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], sec: LookSec
     ctx.save();
     ctx.globalAlpha = l.opacity ?? 1;
     if (l.blend) ctx.globalCompositeOperation = l.blend;
+    const age = t - (l.t0 ?? sec.start);
     for (const g of 'color' in l ? (l.ghosts ?? []) : []) {
       ctx.save();
       ctx.translate(g.dx, g.dy);
-      draw(ctx, { ...l, color: g.color } as Layer, t, t - sec.start, beat, image);
+      draw(ctx, { ...l, color: g.color } as Layer, t, age, beat, image);
       ctx.restore();
     }
     // one layer the director got wrong (a missing colour) draws nothing instead of stopping the whole render
     try {
       if (l.kind === 'code') drawCode(ctx, l, codeTime, codeTime - sec.start, beat, image);
-      else draw(ctx, l, t, t - sec.start, beat, image);
+      else draw(ctx, l, t, age, beat, image);
     } catch (e) {
       report(`${l.kind}: ${(e as Error).message}`);
     }
@@ -262,7 +376,8 @@ const covered = new Set<string>();
 const ids = new Map<CanvasImageSource, string>();
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+  t -= l.shift ?? 0;
   let fn = compiled.get(l.src);
   if (!fn) {
     try {
@@ -371,6 +486,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
 function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   if (l.kind === 'code') return drawCode(ctx, l, t, age, beat, image);
   if (l.kind === 'sprite' || l.kind === 'thread' || l.kind === 'card') return drawStory(ctx, l, image);
+  if (l.kind === 'kinetic') return drawKinetic(ctx, l, age, beat, image, t);
   const kick = 1 + (l.pulse ?? 0) * beat.pulse;
   switch (l.kind) {
     case 'fill': {
@@ -485,7 +601,8 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         const size = s * (0.5 + hash(seed, 3)) * kick;
         ctx.save();
         ctx.translate(x, y);
-        ctx.rotate(hash(seed, 4) * 6.28 + t * 0.4 * (hash(seed, 5) - 0.5));
+        // a cube keeps the isometric axes; everything else tumbles
+        if (l.type !== 'cube') ctx.rotate(hash(seed, 4) * 6.28 + t * 0.4 * (hash(seed, 5) - 0.5));
         shape(ctx, l.type, size, l.colors?.length ? l.colors[i % l.colors.length] : l.color, !!l.outline);
         ctx.restore();
       }
@@ -701,6 +818,8 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         const seed = (l.seed ?? 0) * 31 + k * 7;
         const type = l.type ?? 'city';
         let lastSaddle = H;
+        // the front city layer's buildings, kept for its windows (lights belong inside a building, not in the sky)
+        const towers: { x: number; w: number; top: number; id: number }[] = [];
         for (let x = -off - 10; x < W + W; ) {
           const r = hash(Math.floor(x / 40), seed);
           if (type === 'city') {
@@ -708,6 +827,7 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
             const h = (H - base) * 0.3 + r * (H - top) * 0.55 * (1 - depth * 0.4);
             ctx.lineTo(x, base - h);
             ctx.lineTo(x + w, base - h);
+            towers.push({ x, w, top: base - h, id: Math.floor((x + off) / 40) });
             x += w;
           } else if (type === 'trees') {
             // a mixed treeline: tiered pines, round broadleaf crowns and slim cypresses of uneven height, a little
@@ -781,11 +901,21 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
         ctx.fill();
         // lit windows on the front-most city layer
         if (type === 'city' && l.windows && k === n - 1) {
+          // a grid of windows on each building's face, inside its outline; about half lit, and each window switches on
+          // or off on its own slow clock (every few seconds), never the whole city at once
           ctx.fillStyle = l.windows;
-          for (let i = 0; i < 120; i++) {
-            const x = (hash(i, seed + 3) * W * 1.2 - off) % W;
-            const y = base - hash(i, seed + 4) * (H - top) * 0.4;
-            if (hash(i, seed + 5 + Math.floor(t)) > 0.35) ctx.fillRect(x, y, 6, 9);
+          for (const b of towers) {
+            if (b.x + b.w < 0 || b.x > W) continue;
+            const cols = Math.max(1, Math.floor((b.w - 12) / 16));
+            const rows = Math.max(0, Math.floor((base - b.top - 18) / 22));
+            const x0 = b.x + (b.w - cols * 16) / 2 + 5;
+            for (let j = 0; j < rows; j++)
+              for (let i = 0; i < cols; i++) {
+                const cell = b.id * 977 + j * 31 + i;
+                const period = 4 + hash(cell, seed + 6) * 6;
+                const phase = Math.floor((t + hash(cell, seed + 7) * period) / period);
+                if (hash(cell, seed + 5 + phase) > 0.5) ctx.fillRect(x0 + i * 16, b.top + 10 + j * 22, 6, 9);
+              }
           }
         }
       });
@@ -851,6 +981,9 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       }
       return;
     }
+    default:
+      drawKit(ctx, l as never, t, age, beat);
+      return;
     case 'blob': {
       const cx = W / 2 + (l.x ?? 0) * W / 2;
       const cy = H / 2 - (l.y ?? 0) * H / 2;
@@ -874,6 +1007,7 @@ function pattern(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'patte
   const span = [Math.ceil((W * 2) / s) + 2, Math.ceil((H * 2) / s) + 2];
   ctx.fillStyle = l.color;
   ctx.strokeStyle = l.color;
+  if (kitPattern(ctx, l.type, s, l.color, span as [number, number], t)) return;
   switch (l.type) {
     case 'grid':
       ctx.lineWidth = 2;
@@ -1182,8 +1316,16 @@ function photo(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'photo' 
   // cover the box, with a slow push-in
   const zoom = 1.06 + 0.04 * Math.min(1, age / 8) * (l.drift ?? 1);
   const sc = Math.max(bw / iw, bh / ih) * zoom;
+  // xerox: the photocopy of the picture, black and white at full contrast (a tint then prints it in that ink)
+  if (l.xerox) ctx.filter = 'grayscale(1) contrast(5) brightness(1.15)';
   ctx.drawImage(img, -iw * sc / 2 + Math.sin(t * 0.07) * 20 * (l.drift ?? 1), -ih * sc / 2, iw * sc, ih * sc);
-  if (l.tint) {
+  ctx.filter = 'none';
+  if (l.tint && l.xerox) {
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = l.tint;
+    ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+    ctx.globalCompositeOperation = 'source-over';
+  } else if (l.tint) {
     // tint keeps the photo's light and takes the section's hue ('color' blend): a multiply by a dark colour
     // blacked the picture out
     ctx.globalCompositeOperation = 'color';
@@ -1750,6 +1892,7 @@ function star4(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
 }
 
 function shape(ctx: CanvasRenderingContext2D, type: Extract<Layer, { kind: 'shapes' }>['type'], s: number, color: string, outline: boolean) {
+  if (type === 'cube') return cube(ctx, s, color, outline);
   ctx.fillStyle = color;
   ctx.strokeStyle = color;
   ctx.lineWidth = Math.max(2, s * 0.08);
@@ -1791,6 +1934,28 @@ function shape(ctx: CanvasRenderingContext2D, type: Extract<Layer, { kind: 'shap
   }
   if (outline) ctx.stroke();
   else ctx.fill();
+}
+
+/** An isometric cube, `color` its top face; the left and right faces one and two steps darker (no gradient). */
+function cube(ctx: CanvasRenderingContext2D, s: number, color: string, outline: boolean) {
+  const h = s / 2;
+  const c = h * Math.cos(Math.PI / 6);
+  const faces: [number, [number, number][]][] = [
+    [1, [[0, -h], [c, -h / 2], [0, 0], [-c, -h / 2]]],
+    [0.78, [[-c, -h / 2], [0, 0], [0, h], [-c, h / 2]]],
+    [0.58, [[c, -h / 2], [0, 0], [0, h], [c, h / 2]]],
+  ];
+  const dim = (k: number) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(color.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+  ctx.lineWidth = Math.max(2, s * 0.03);
+  for (const [k, pts] of faces) {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.fillStyle = /^#[0-9a-f]{6}$/i.test(color) ? dim(k) : color;
+    ctx.strokeStyle = color;
+    if (outline) ctx.stroke();
+    else ctx.fill();
+  }
 }
 
 // soft-edged pictures (dye bleeding, light under a leaf) drawn and blurred once: a canvas blur per stroke per frame
@@ -2412,6 +2577,145 @@ export function drawNative(ctx: CanvasRenderingContext2D, language: string, sinc
       ctx.fill();
       break;
     }
+    case 'scrapbook':
+    case 'xerox': {
+      // polaroids slap down around the page one after another (xerox: photocopied scraps)
+      for (let i = 0; i < 12; i++) {
+        const land = Math.min(1, Math.max(0, (since - i * 0.06) / 0.12));
+        if (!land) continue;
+        const a = (i / 12) * Math.PI * 2;
+        ctx.save();
+        ctx.translate(W / 2 + Math.cos(a) * W * 0.36, H / 2 + Math.sin(a) * H * 0.36);
+        ctx.rotate((hash(i, 91) - 0.5) * 0.5);
+        ctx.scale(1.3 - 0.3 * land, 1.3 - 0.3 * land);
+        ctx.fillStyle = language === 'xerox' ? '#121212' : '#F7F3EA';
+        ctx.fillRect(-110, -120, 220, 250);
+        ctx.fillStyle = i % 2 ? accent : ink;
+        ctx.fillRect(-92, -102, 184, 170);
+        ctx.restore();
+      }
+      break;
+    }
+    case 'led-board': {
+      // the board floods: rows of lit dots drop in from the top
+      for (let i = 0; i < 9; i++) {
+        const y = (i + 0.5) * (H / 9) * Math.min(1, since / 0.4);
+        ctx.fillStyle = i % 2 ? accent : 'rgba(255,255,255,0.85)';
+        for (let x = 0; x < W; x += 36) ctx.fillRect(x, y - 10, 20, 20);
+      }
+      break;
+    }
+    case 'popart': {
+      // a giant comic burst in the middle, its dots spreading out
+      ctx.translate(W / 2, H / 2);
+      ctx.scale(k * 1.4, k * 1.4);
+      ctx.fillStyle = accent;
+      ctx.strokeStyle = '#111111';
+      ctx.lineWidth = 14;
+      ctx.beginPath();
+      for (let i = 0; i < 32; i++) {
+        const a = (i / 32) * Math.PI * 2;
+        const r = i % 2 ? 260 : 420 - 60 * hash(i, 93);
+        ctx.lineTo(Math.cos(a) * r * 1.4, Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case 'notebook':
+    case 'document': {
+      // a red pen circle drawn round the page (document: a big stamp ring pressed down)
+      ctx.strokeStyle = language === 'document' ? accent : '#E2574C';
+      ctx.lineWidth = language === 'document' ? 22 : 10;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.ellipse(W / 2, H / 2, W * 0.36, H * 0.34, -0.05, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2.1 * Math.min(1, since / 0.5));
+      ctx.stroke();
+      break;
+    }
+    case 'brutalist': {
+      // the frame turns into hazard stripes for a beat
+      if (since > 0.6) break;
+      ctx.fillStyle = '#FFD400';
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#0D0D0D';
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(Math.PI / 4);
+      for (let x = -W * 1.5; x < W * 1.5; x += 160) ctx.fillRect(x + since * 200, -W, 80, W * 2);
+      break;
+    }
+    case 'graffiti': {
+      // a burst of spray from the middle, with drips
+      const r = H * 0.45 * k;
+      const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, r);
+      g.addColorStop(0, accent);
+      g.addColorStop(0.6, accent);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = accent;
+      for (let i = 0; i < 9; i++) ctx.fillRect(W / 2 + (i - 4) * 70, H / 2 + r * 0.4, 10, Math.min(1, since / 1.2) * 300 * (0.4 + hash(i, 95)));
+      break;
+    }
+    case 'psychedelic': {
+      // the wavy stripes curl into a spiral toward the centre
+      ctx.translate(W / 2, H / 2);
+      ctx.rotate(since * 2);
+      ctx.lineWidth = 60;
+      for (let j = 0; j < 4; j++) {
+        ctx.strokeStyle = j % 2 ? accent : '#E8B23A';
+        ctx.beginPath();
+        for (let a = 0; a < Math.PI * 8; a += 0.1) {
+          const r = (a / (Math.PI * 8)) * W * 0.6 * k + j * 30;
+          ctx.lineTo(Math.cos(a + j) * r, Math.sin(a + j) * r);
+        }
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'isometric': {
+      // the grid's cubes rise one by one
+      for (let i = 0; i < 18; i++) {
+        const up = Math.min(1, Math.max(0, (since - i * 0.04) / 0.2));
+        const x = W * 0.1 + (i % 6) * W * 0.16;
+        const y = H * 0.25 + Math.floor(i / 6) * H * 0.25;
+        const s = 70;
+        ctx.save();
+        ctx.translate(x, y - up * 40);
+        ctx.fillStyle = accent;
+        ctx.beginPath();
+        ctx.moveTo(0, -s / 2); ctx.lineTo(s * 0.87, 0); ctx.lineTo(0, s / 2); ctx.lineTo(-s * 0.87, 0);
+        ctx.fill();
+        ctx.restore();
+      }
+      break;
+    }
+    case 'idol-live': {
+      // a white flash, streamers raining down: the flash is two frames of pure white (a fading wash reads as grey)
+      if (since < 0.07) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+      }
+      for (let i = 0; i < 40; i++) {
+        ctx.fillStyle = i % 2 ? accent : '#FFFFFF';
+        ctx.save();
+        ctx.translate(hash(i, 97) * W, -40 + since * (500 + 400 * hash(i, 98)));
+        ctx.rotate(since * 6 + i);
+        ctx.fillRect(-6, -24, 12, 48);
+        ctx.restore();
+      }
+      break;
+    }
+    case 'dark-glitch': {
+      // red slices thrown sideways, then back
+      const off = Math.sin(Math.min(1, since / 0.5) * Math.PI) * 160;
+      for (let i = 0; i < 14; i++) {
+        ctx.fillStyle = i % 3 ? '#E0102F' : '#F0F0F0';
+        ctx.fillRect((i % 2 ? off : -off) + hash(i, 99) * W * 0.5, (i / 14) * H, W * 0.5, 10 + 30 * hash(i, 100));
+      }
+      break;
+    }
   }
   ctx.restore();
   void ink;
@@ -2459,6 +2763,14 @@ export function layerRect(l: Layer): Rect | undefined {
       const b = uiBox(l);
       return box(b.px, b.py, b.w, b.h);
     }
+    case 'phone': {
+      const b = phoneBox(l);
+      return box(b.cx, b.cy, b.w, b.h);
+    }
+    case 'burst': {
+      const b = burstBox(l);
+      return box(b.cx, b.cy, b.w, b.h);
+    }
     case 'sprite':
     case 'card':
     case 'thread':
@@ -2487,8 +2799,8 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
   const clash = (q: Rect) => overlaps(q, guard) || others.some((o) => overlaps(q, o));
   const w = r.x1 - r.x0;
   const h = r.y1 - r.y0;
-  // a window must land inside its own margins, or the draw clamps it back over the line
-  const [mx, my] = l.kind === 'ui' ? [UI_MX, UI_MY] : [0, 0];
+  // a window or a phone must land inside its own margins, or the draw clamps it back over the line
+  const [mx, my] = l.kind === 'ui' ? [UI_MX, UI_MY] : l.kind === 'phone' ? [PHONE_MX, PHONE_MY] : [0, 0];
   const inFrame = (q: Rect) => q.x0 >= mx - 1 && q.y0 >= my - 1 && q.x1 <= W - mx + 1 && q.y1 <= H - my + 1;
   // a story prop is the subject, not decoration: it may give way a little but never shrinks into a corner
   const story = l.kind === 'sprite' || l.kind === 'card';
@@ -2619,6 +2931,10 @@ function resize(l: Layer, k: number): Layer {
       return { ...l, size: (l.size ?? 0.8) * k };
     case 'ui':
       return { ...l, w: (l.w ?? UI_W[l.type]) * k, h: (l.h ?? UI_H[l.type]) * k };
+    case 'phone':
+      return { ...l, size: (l.size ?? 0.78) * k };
+    case 'burst':
+      return { ...l, size: (l.size ?? 300) * k };
     case 'sprite':
       return { ...l, size: l.size * k };
     case 'card':
@@ -2729,6 +3045,9 @@ export function measurable(placed: Layer[], planned: Layer[], age: number, zone:
 }
 
 /** Makes room for the lyrics across a section's layers: each movable object avoids the lyrics and the ones placed before it. */
+/** Backdrop shapes that are only decoration (a sun disc, scattered shapes, rays, leaves): squeezed, they fade. */
+const DECOR = new Set(['blob', 'shapes', 'sunburst', 'botanical']);
+
 export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
   // objects already clear of the lyrics stay where they are and are obstacles for the ones that must move
   const clear = (l: Layer) => {
@@ -2753,8 +3072,13 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
       // a story prop is drawn over the backdrop, so only the lyrics and the other story objects are in its way (a
       // background disc next to the line pushed 落ちた風鈴 under the lyrics)
       out[i] = avoid(l, lyrics, 24, taken.filter((p) => !isStory(l) || p.story).map((p) => p.r));
+      // a backdrop shape squeezed to a corner at a fraction of its size reads as a stray dot (三年後的大雪's sun went
+      // to a dark disc by the lyric's end): it fades instead; story props keep their place-finding
+      const was = layerRect(l), now = layerRect(out[i]);
+      const area = (q: Rect) => Math.max(0, q.x1 - q.x0) * Math.max(0, q.y1 - q.y0);
+      if (DECOR.has(l.kind) && was && now && area(now) < 0.4 * area(was)) out[i] = { ...l, opacity: 0 } as Layer;
       const r = layerRect(out[i]);
-      if (r) taken.push({ i, r, story: isStory(l) });
+      if (r && (out[i].opacity ?? 1) > 1e-3) taken.push({ i, r, story: isStory(l) });
     });
     return out;
   };

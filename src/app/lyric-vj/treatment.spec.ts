@@ -44,6 +44,17 @@ describe('validateTreatment', () => {
     expect(r.treatment.cues.map((c) => c.cueId)).toEqual(['c001', 'c002', 'c003']); // c003 got a default style
   });
 
+  it('keeps a shout only on a short line', () => {
+    const t = base();
+    t.cues[0].shout = true; // 光る星　夜空: short, kept
+    t.cues[1].shout = true;
+    const long = { ...song, cues: song.cues.map((c) => (c.id === 'c002' ? { ...c, text: 'とにかく僕のこと見て見て見てよ' } : c)) };
+    const r = validateTreatment(t, long, win, TEMPLATES);
+    expect(r.treatment.cues[0].shout).toBe(true);
+    expect(r.treatment.cues[1].shout).toBeUndefined();
+    expect(r.fixes.join('\n')).toMatch(/不是短喊聲/);
+  });
+
   it('widens emphasis that cuts a word to the whole phrase', () => {
     const t = base();
     t.cues[0].emphasis = [{ from: 1, to: 2, method: 'scale' }]; // 光[る]星 → 光る
@@ -51,6 +62,14 @@ describe('validateTreatment', () => {
     expect(r.errors).toEqual([]);
     expect(r.treatment.cues[0].emphasis![0]).toMatchObject({ from: 0, to: 2 });
     expect(r.fixes.join('\n')).toMatch(/切開了一個詞/);
+  });
+
+  it('keeps the director\'s word when the line has no word edges to widen to', () => {
+    const t = base();
+    t.cues[0].emphasis = [{ from: 0, to: 5, method: 'revise' }];
+    const long = { ...song, cues: song.cues.map((c) => (c.id === t.cues[0].cueId ? { ...c, text: '誰かの栄光のようにはいかなくても' } : c)) };
+    const r = validateTreatment(t, long, win, TEMPLATES);
+    expect(r.treatment.cues[0].emphasis![0]).toMatchObject({ from: 0, to: 5 });
   });
 
   it('reports what the director must fix', () => {

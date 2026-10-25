@@ -15,6 +15,11 @@ export interface TimelineCue {
   confidence: TimingConfidence;
   /** Why this line needs a human check in the timing editor (empty/absent = passed the automatic checks). */
   review?: string[];
+  /**
+   * Suspected typos in the line's text (a lyric site's homophone slip: 大雪下得 for 下的), found by the proofreading
+   * pass (scripts/lyric-vj/proofread.mts). Never applied on their own: the timing editor offers each one to the user.
+   */
+  proof?: LyricProof[];
   /** The other aligner's start when the two disagree: a one-click alternative in the editor. */
   altStart?: number;
   /** When each character (code point of `text`) is sung, for word-by-word reveals. */
@@ -23,6 +28,24 @@ export interface TimelineCue {
   charTimed?: boolean;
   /** Who sings the line (a name from the song's singers); absent = everyone / not set. */
   singer?: string;
+}
+
+/** One suspected typo: `wrong` at character `at` of the line, what it most likely should be, and why. */
+export interface LyricProof {
+  at: number;
+  wrong: string;
+  right: string;
+  why: string;
+}
+
+/** The review note a line with a suspected typo carries in the timing editor. */
+export const proofNote = (p: Pick<LyricProof, 'wrong' | 'right'>) => `疑似錯字：${p.wrong}→${p.right}`;
+
+/** The line with a suggested correction applied (the text unchanged when the wrong part is no longer where it was). */
+export function applyProof(text: string, p: LyricProof): string {
+  const cs = [...text];
+  if (cs.slice(p.at, p.at + [...p.wrong].length).join('') !== p.wrong) return text;
+  return [...cs.slice(0, p.at), ...p.right, ...cs.slice(p.at + [...p.wrong].length)].join('');
 }
 
 /** A member and the colour their lines are set in (idol videos colour-code who sings). */
@@ -339,6 +362,119 @@ export function refineWithVoice(cues: TimelineCue[], active: boolean[], fps = 10
     out.push({ ...c, start: +start.toFixed(3), end: +Math.max(start + 0.3, end).toFixed(3), charStarts: chars });
   });
   return out;
+}
+
+/**
+ * Lines whose start the word-by-word alignment moved more than `far` seconds from a given timing (LRCLIB, an LRC) go
+ * back to that timing, without character times: the aligner slips on repeats and shouts and dragged whole lines
+ * across an instrumental (i REVOLUTION: three lines 17 s early, 「iで革命を」 5 s late), where the given timing and the
+ * vote of the aligners agreed. Returns the cues, in order, and how many went back.
+ */
+export function keepGivenStarts(given: TimelineCue[], aligned: TimelineCue[], far = 1.2): { cues: TimelineCue[]; kept: number } {
+  const byId = new Map(given.map((c) => [c.id, c]));
+  let kept = 0;
+  const out = aligned
+    .map((c) => {
+      const g = byId.get(c.id);
+      if (!g || Math.abs(c.start - g.start) <= far) return c;
+      kept++;
+      return { ...c, start: g.start, end: g.end, charStarts: undefined, charTimed: false };
+    })
+    .sort((x, y) => x.start - y.start);
+  const cues = out.map((c, i) => {
+    const next = out[i + 1];
+    // the line before a restored one had its end cut to that line's wrong, early start: it gets its given end back,
+    // up to where the next line now starts
+    const g = byId.get(c.id);
+    const end = +Math.max(c.start + 0.3, Math.min(Math.max(c.end, g?.end ?? c.end), next ? next.start : Infinity)).toFixed(3);
+    // character times past the line's end would reveal characters after it is gone
+    const inside = !c.charStarts?.some((x) => x >= end);
+    return { ...c, end, ...(inside ? {} : { charStarts: undefined, charTimed: false }) };
+  });
+  return { cues, kept };
+}
+
+/**
+ * The tempo the song is felt in: a detected tempo of a slow song often comes out doubled (Keep Your Fire Burning read
+ * 154.6 for a ballad sung at well under one character a beat). Under 0.75 sung characters a beat above 110 BPM, the
+ * tempo halves and every other beat stays: the parity holding most downbeats.
+ */
+export function feltTempo(song: Pick<SongTimeline, 'tempo' | 'beats' | 'downbeats' | 'cues'>): { tempo: number; beats: number[]; halved: boolean } {
+  const rates = song.cues
+    .filter((c) => c.end - c.start >= 0.8)
+    .map((c) => [...c.text.replace(/[\s、。！？!?,.・～〜ー…「」()（）︕︖]/g, '')].length / (((c.end - c.start) * song.tempo) / 60))
+    .sort((a, b) => a - b);
+  const median = rates[Math.floor(rates.length / 2)] ?? 1;
+  if (!(song.tempo > 110 && median < 0.75)) return { tempo: song.tempo, beats: song.beats, halved: false };
+  const down = new Set(song.downbeats ?? []);
+  const keep = (k: number) => song.beats.filter((_, i) => i % 2 === k);
+  const [even, odd] = [keep(0), keep(1)];
+  const on = (bs: number[]) => bs.filter((b) => down.has(b)).length;
+  return { tempo: song.tempo / 2, beats: on(odd) > on(even) ? odd : even, halved: true };
+}
+
+/**
+ * Lines kept in the lyric's order and long enough to sing: a line that starts before the one sung ahead of it, or that
+ * is far too short for its words (チョロイン c038, 25 characters in 0.3 s, placed ahead of the chant before it), is
+ * re-timed with the lines it collides with, their joint span shared by character count, and flagged for the editor.
+ * `cues` come in lyric order.
+ */
+export function keepLyricOrder(cues: TimelineCue[]): { cues: TimelineCue[]; reflowed: string[] } {
+  const len = (c: TimelineCue) => Math.max(1, [...c.text.replace(/\s/g, '')].length);
+  const out = cues.map((c) => ({ ...c }));
+  const reflowed: string[] = [];
+  for (let i = 1; i < out.length; i++) {
+    const a = out[i - 1];
+    const b = out[i];
+    const short = (c: TimelineCue) => c.end - c.start < 0.04 * len(c);
+    if (b.start >= a.start + 0.05 && !(short(b) && b.start < a.end)) continue;
+    let lo = i - 1;
+    let hi = i;
+    let span = [Math.min(a.start, b.start), Math.max(a.end, b.end)];
+    // the shared span runs into the line before: it joins
+    while (lo > 0 && out[lo - 1].end > span[0] + 0.3) span = [Math.min(span[0], out[--lo].start), Math.max(span[1], out[lo].end)];
+    while (hi + 1 < out.length && out[hi + 1].start < span[1] - 0.3) span = [span[0], Math.max(span[1], out[++hi].end)];
+    const group = out.slice(lo, hi + 1);
+    const total = group.reduce((n, c) => n + len(c), 0);
+    let t = span[0];
+    for (const c of group) {
+      const d = ((span[1] - span[0]) * len(c)) / total;
+      Object.assign(c, { start: +t.toFixed(3), end: +(t + d).toFixed(3), charStarts: undefined, charTimed: undefined, review: [...new Set([...(c.review ?? []), '順序或長度不對，已依字數重排'])] });
+      t += d;
+      if (!reflowed.includes(c.id)) reflowed.push(c.id);
+    }
+    i = hi;
+  }
+  return { cues: out, reflowed };
+}
+
+/**
+ * A line placed where nobody sings (under a fifth of it voiced: チョロイン's あ～～～ in an 8 s instrumental gap, a
+ * repeated chant after the last vocal) moves to the next voice onset when it fits before the next line, else it is
+ * dropped: shown over silence it is always wrong, and the editor can still add it back.
+ */
+export function placeInVoice(cues: TimelineCue[], active: boolean[], fps = 100): { cues: TimelineCue[]; moved: string[]; dropped: string[] } {
+  const share = (a: number, b: number) => {
+    const f0 = Math.max(0, Math.floor(a * fps));
+    const f1 = Math.max(f0 + 1, Math.min(active.length, Math.ceil(b * fps)));
+    let n = 0;
+    for (let f = f0; f < f1; f++) n += active[f] ? 1 : 0;
+    return n / (f1 - f0);
+  };
+  const phrases = phraseStarts(active, fps);
+  const sorted = [...cues].sort((a, b) => a.start - b.start);
+  const moved: string[] = [];
+  const dropped: string[] = [];
+  const out: TimelineCue[] = [];
+  sorted.forEach((c, i) => {
+    if (share(c.start, c.end) >= 0.2) return void out.push(c);
+    const next = sorted[i + 1]?.start ?? active.length / fps;
+    const at = phrases.find((p) => p > c.start && p <= next - 0.4);
+    if (at === undefined) return void dropped.push(c.id);
+    moved.push(c.id);
+    out.push({ ...c, start: +at.toFixed(3), end: +Math.min(next - 0.05, at + Math.max(0.8, c.end - c.start)).toFixed(3), charStarts: undefined, charTimed: undefined });
+  });
+  return { cues: out, moved, dropped };
 }
 
 /**

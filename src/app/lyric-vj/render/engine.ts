@@ -15,36 +15,77 @@ import { beatCut } from './beat-cut';
 import { handwrite } from './handwrite';
 import { titleCard } from './title-card';
 import { punch } from './punch';
+import { chat } from './chat';
+import { drawGlassCrack, drawGlassShards, glassOf } from './kit';
+import { input, notify } from './phone';
 import { array, couplet, orbit, quote, ribbon, stack, tunnel } from './layouts';
 import { templateStyle, withTextFx } from './text-fx';
-import { Call, mapRange, splitCalls } from '../calls';
+import { Call, callPhrases, callTimes, lineUp, mapRange, splitCalls } from '../calls';
+import { enterSec, momentCamera, Scene, SceneSong, ShownText, shownTexts } from '../scene';
+import type { TransitionKind } from './transition';
+import { checkScene, drawScene, echoCarry, SCENE_FONTS, SceneTextQa, setScenePictures } from './scene-parts';
 import { fxAt, MomentFx, quietSpans } from '../moments';
 import { quiet, quietFace } from './quiet';
 import { hookRanges, titleHook } from '../compose';
 import { stair } from './stair';
 import { keywordRange } from './punch';
-import { makeGlyphs, placeRow, advanceOf, Glyph, setGhost, setHalo, setSizeCap, setInkGhost, setPieces, syncPieces } from './glyphs';
+import { makeGlyphs, placeRow, rowWidth, advanceOf, Glyph, setFinish, setGhost, setHalo, setSizeCap, setInkGhost, setPieces, syncPieces } from './glyphs';
 import { colorAt, DEFAULT_DESIGN, uses } from '../design';
 import { SYSTEMS } from '../systems';
 import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
-import { avoidAll, blendLayer, drawLook, drawNative, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
+import { freeBand, oppositeSide, setLineVeil } from './kinetic';
+import { freeZone } from './board';
+import { DIAGRAM_FX } from './kinetic-more';
 import { storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
+import { lanes } from './lanes';
 import { contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
+/** Exits drawn over time (a glitch, a blade, falling dominoes, pixels, a shattering pane): given the gap to the next line. */
+const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter']);
 /**
  * Lyrics always inside the frame: the layer is laid out at its settled moment and, if any glyph would cross the
  * safe area (48 px side / 40 px top-bottom margin), scaled down about the centre inside a wrapper group.
  */
+/**
+ * Frame-px boxes of the glyphs on screen in a line's group (visible and not faded out), their opacity, and for a whole
+ * glyph texture the affine that lays the texture where the letter is drawn, tilt and all (a letter on an arc).
+ */
+function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number] })[] {
+  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number] })[] = [];
+  const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
+  if (!shown(group)) return out;
+  const b = new THREE.Box3();
+  group.traverseVisible((o) => {
+    const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    if (!m.isMesh || (m.material.opacity ?? 1) < 0.05) return;
+    b.setFromObject(m);
+    const map = m.material.map;
+    const whole = map && map.repeat.x === 1 && map.repeat.y === 1 && !map.offset.x && !map.offset.y;
+    if (b.isEmpty()) return;
+    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1 };
+    const pos = m.geometry.getAttribute('position');
+    const img = whole ? (map.image as CanvasImageSource & { width: number; height: number }) : undefined;
+    if (!img || !pos || pos.count !== 4 || !img.width) return void out.push(box);
+    // a plane's corners, top left, top right, bottom left, into frame px: the texture's own affine
+    [0, 1, 2].forEach((k) => v[k].fromBufferAttribute(pos, k).applyMatrix4(m.matrixWorld));
+    const [tl, tr, bl] = v.map((p) => [p.x + W / 2, H / 2 - p.y]);
+    out.push({ ...box, img, at: [(tr[0] - tl[0]) / img.width, (tr[1] - tl[1]) / img.width, (bl[0] - tl[0]) / img.height, (bl[1] - tl[1]) / img.height, tl[0], tl[1]] });
+  });
+  return out;
+}
+
 /** The layer's settled bounds in frame px (origin at the centre), with the layer laid out at its readable moment. */
 function settledBox(layer: CueLayer, parent?: THREE.Object3D, span = false): THREE.Box3 {
   const [from, to] = layer.readable();
@@ -119,6 +160,7 @@ const LIGHT_TYPE = '#f4f2ee';
 function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   const fit = new THREE.Group();
   fit.add(layer.group);
+  if (layer.framed) return fit;
   const box = settledBox(layer, fit, true);
   if (box.isEmpty()) return fit;
   const ex = Math.max(Math.abs(box.min.x), Math.abs(box.max.x));
@@ -138,7 +180,13 @@ const HOLD_SEC = 1.2;
 /** Loudness from which heavy beats kick the type layer (kickAt); the lyrics' avoidance room counts the kick from here. */
 const KICK_LEVEL = 2.4;
 const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card']);
-const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel };
+/** Vertical presentation forms (︕︖︙) in lyrics typed for vertical text set as wide blanks across: their horizontal
+ * marks, one for one so character timings keep their indexes. */
+function horizontalPunct<T extends { text: string }>(c: T): T {
+  return c && /[︕︖︐]/.test(c.text) ? { ...c, text: c.text.replace(/︕/g, '！').replace(/︖/g, '？').replace(/︐/g, '、') } : c;
+}
+
+const RENDERERS: Record<string, TemplateRenderer> = { punch, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel, chat, notify, input, lanes };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -164,6 +212,8 @@ export interface RenderJob {
   meta?: { title: string; artist: string; logo?: string };
   /** Members and their colours: a line tagged with a singer is set in that singer's colour. */
   singers?: { name: string; color: string }[];
+  /** Downbeats (song.downbeats): storyboard events may count them. */
+  downbeats?: number[];
   /** QA: log every sprite's box per frame (codelayer.mts continuity checks). */
   track?: boolean;
   /** One layer only, for compositing in VJ software: 'text' = lyrics on transparency, 'back' = everything else. */
@@ -239,19 +289,22 @@ const FINAL_SHADER = {
   uniforms: {
     tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uBeams: { value: 0 },
     // section moments (moments.ts)
-    uVignette: { value: 0 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
+    uVignette: { value: 0 }, uVigBase: { value: 0.55 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
     uRayColor: { value: new THREE.Color(1, 1, 1) },
     // medium (medium.ts)
     uBoil: { value: 0 }, uBoilSeed: { value: 0 }, uWeave: { value: new THREE.Vector2() }, uFlicker: { value: 1 }, uTooth: { value: 0 },
     uPixel: { value: 0 }, uLift: { value: 0 }, tText: { value: null }, uHasText: { value: 0 },
     // full-frame glitch transition, and the ending's fade to black
     uGlitch: { value: 0 }, uFade: { value: 0 },
+    // a broken screen (kit.ts glass): the shard map shifts and shades the picture piece by piece, the cracks go on top
+    tGlass: { value: null }, tCracks: { value: null }, uGlass: { value: 0 },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
     uniform sampler2D tDiffuse; uniform float uTime, uFlash, uHit, uSweep, uAberration, uGrain, uPaper, uBeams;
-    uniform float uVignette, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
+    uniform float uVignette, uVigBase, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     uniform float uBoil, uBoilSeed, uFlicker, uTooth, uPixel, uLift, uHasText, uGlitch, uFade; uniform sampler2D tText; uniform vec2 uWeave;
+    uniform sampler2D tGlass, tCracks; uniform float uGlass;
     const vec2 RES = vec2(1920.0, 1080.0);
     const vec3 LUMA = vec3(0.299, 0.587, 0.114);
     const vec2 PIX = vec2(320.0, 180.0);         // the pixel medium's grid (6 px cells)
@@ -289,6 +342,16 @@ const FINAL_SHADER = {
       vec2 d = uv - 0.5;
       float a = uAberration * (3.0 * uFlash + uShock) + 0.012 * uGlitch; // only on hits, faint on the shockwave: a strong split doubled the drop's type into ghosts
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
+      vec4 cracks = vec4(0.0);
+      if (uGlass > 0.0) {                           // broken glass: each shard refracts what is under it a little
+        vec3 sh = texture2D(tGlass, vUv).rgb;
+        vec2 off = (sh.rg - 0.5) * 0.02 * uGlass;
+        cracks = texture2D(tCracks, vUv);
+        float split = 0.0016 * cracks.a;            // a rainbow fringe along the cracks
+        c = vec3(texture2D(tDiffuse, uv + off + split).r, texture2D(tDiffuse, uv + off).g, texture2D(tDiffuse, uv + off - split).b);
+        c *= 1.0 + (sh.b - 0.5) * 0.3 * uGlass;
+        c += vec3(0.03) * (sh.b - 0.5) * uGlass;   // a lighter shard is a little milky even over black
+      }
       c *= 1.0 + 0.45 * uHit;         // accent hit: exposure up (highlights bloom), shadows stay dark
       if (uRays > 0.0) {                            // light rays bursting from the horizon, added light only
         float ang = atan(q.y, q.x);
@@ -302,7 +365,7 @@ const FINAL_SHADER = {
         float band = pow(0.5 + 0.5 * sin(x * 9.0), 18.0) + 0.6 * pow(0.5 + 0.5 * sin(x * 23.0 + 1.3), 30.0);
         c += uRayColor * band * uBeams * 0.85;
       }
-      c *= 1.0 - (0.55 + uVignette) * dot(d, d) * 1.6; // vignette
+      c *= 1.0 - (uVigBase + uVignette) * dot(d, d) * 1.6; // vignette
       c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
       if (uPaper > 0.0) {                           // static print/paper texture: fibres and soft blotches
         vec2 p = vUv * vec2(1920.0, 1080.0);
@@ -333,7 +396,11 @@ const FINAL_SHADER = {
         float gb = floor(vUv.y * 14.0) + floor(uTime * 30.0) * 7.0;
         c += (rnd(floor(vUv * vec2(48.0, 27.0)) + uTime) - 0.5) * 0.14 * uGlitch * step(0.45, h1(gb * 1.7));
       }
-      c = mix(c, vec3(1.0), clamp(uFlash, 0.0, 1.0));
+      c = mix(c, cracks.rgb, cracks.a * uGlass);   // the cracks themselves over everything, the type included
+      // white only at the peak, then an exposure lift that falls away: a plain white mix while it decays is grey fog
+      // over a dark frame; brightening keeps the darks dark and makes the lit parts glow
+      float fl = clamp(uFlash, 0.0, 1.0);
+      c = mix(c, vec3(1.0), pow(fl, 4.0)) * (1.0 + 1.2 * fl);
       c *= 1.0 - clamp(uFade, 0.0, 1.0);
       gl_FragColor = vec4(c, 1.0);
     }`,
@@ -419,10 +486,14 @@ export class LyricVjEngine {
   private flashes: { at: number; glyphs: Glyph[]; group: THREE.Group; cueId: string }[] = [];
   private textRoot = new THREE.Group();
   private shotLayers = new Map<string, ShotLayer>();
-  private cueLayers: { rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; guard?: { from: number; to: number; rect: Rect; share: number; light: number } }[] = [];
+  private cueLayers: { rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number } }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
   private callLayers: { rt: CueRuntime; group: THREE.Group; units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[] }[] = [];
   private images = new Map<string, THREE.Texture>();
+  /** Each shot's lines as they show (chat attachments are pushed up by the messages after them). */
+  private shotLines = new Map<string, { text: string; at: number }[]>();
+  /** The storyboard's scenes (scene.ts): drawn by their parts, their lines never built as caption layers. */
+  private storyboard: Scene[] = [];
   private frameCache = new Map<string, THREE.Texture>();
   private gradient: THREE.Texture;
 
@@ -474,6 +545,8 @@ export class LyricVjEngine {
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
     this.motes = new THREE.Points(geo, new THREE.PointsMaterial({ size: 4, color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthTest: false, sizeAttenuation: false }));
     this.motes.renderOrder = 2.5;
+    // a storyboard draws on the graphics canvas: give it one
+    if (this.job.treatment.storyboard?.length) this.job.treatment.graphics ??= { sections: [{ start: 0, layers: [] }] };
     if (this.job.treatment.graphics) {
       const c = document.createElement('canvas');
       c.width = W;
@@ -525,6 +598,11 @@ export class LyricVjEngine {
     );
     // story props take their pictures' aspect (their boxes make room for the lyrics); a prop with no picture (the
     // image model dropped it) is taken out instead of drawing nothing where the story expects it
+    // a calls board (idol Live's LED marquee) shows the song's calls as they are shouted, apart from the lead's lines
+    if (treatment.graphics) {
+      const script = callTimes(cues).map(({ text, at }) => ({ text, at }));
+      for (const sec of treatment.graphics.sections) for (const l of sec.layers) if (l.kind === 'led' && l.calls) l.script = script;
+    }
     if (treatment.graphics?.story) {
       const pic = (prop: string) => this.images.get(`spr:${prop}`)?.image as { width: number; height: number } | undefined;
       const aspect = (prop: string) => pic(prop)!.width / pic(prop)!.height;
@@ -570,7 +648,7 @@ export class LyricVjEngine {
     }
     const logo = this.job.meta?.logo ? await loader.loadAsync(this.job.meta.logo) : undefined;
     if (logo) logo.colorSpace = THREE.SRGBColorSpace;
-    const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo };
+    const ctx = { fonts: this.fonts, accentFont: this.accentFont, meta: { title: this.job.meta?.title ?? '', artist: this.job.meta?.artist ?? '' }, logo, texture: (id: string) => this.images.get(id), lines: (shotId: string) => this.shotLines.get(shotId) ?? [] };
     if (treatment.motif && (!design.system || SYSTEMS[design.system].motif) && (!design.language || LANGUAGES[design.language].motif)) {
       this.motif = new MotifLayer(treatment.motif, this.job.beats, { display: this.fonts.display, accent: this.accentFont });
       this.motif.group.renderOrder = 2.7; // above the background and motes, under the lyrics
@@ -624,10 +702,24 @@ export class LyricVjEngine {
         this.shotLayers.set(shot.id, layer);
       }
     }
-    const sorted = treatment.cues
-      .map((style) => ({ style, cue: cues.find((c) => c.id === style.cueId)! }))
+    const all = treatment.cues
+      .map((style) => ({ style, cue: horizontalPunct(cues.find((c) => c.id === style.cueId)!) }))
       .filter((x) => x.cue)
       .sort((a, b) => a.cue.start - b.cue.start);
+    // shouts are call words beside the lead line that is up (the line before keeps showing through them)
+    const shouts = all.filter((x) => x.style.shout);
+    // a scene's lines are drawn by its parts: nothing below (merging, pacing, room-making, recolouring) touches them
+    this.storyboard = treatment.storyboard ?? [];
+    // the story's drawn props and the song's title, for the scene parts that show them
+    setScenePictures((prop) => this.images.get(`spr:${prop}`)?.image as (CanvasImageSource & { width: number; height: number }) | undefined, this.job.meta ? { title: this.job.meta.title, artist: this.job.meta.artist } : undefined);
+    const sceneShots = new Set(treatment.shots.filter((s) => s.template === 'scene').map((s) => s.id));
+    const sorted = all.filter((x) => !x.style.shout && !sceneShots.has(x.style.shot));
+    if (this.storyboard.length) {
+      const text = this.storyboard.flatMap((sc) => shownTexts(sc, this.sceneSong()).map((x) => x.text)).join('') + 'iLiFE!';
+      const faces = new Set([...SCENE_FONTS, ...this.storyboard.flatMap((sc) => sc.parts.flatMap((p) => (typeof p.params?.['font'] === 'string' ? [p.params['font'] as string] : [])))]);
+      const extra = '特典券No.0046CHEKI×1¥2,000TIME UP0123456789:';
+      await Promise.all([...faces].flatMap((f) => [400, 700, 900].map((wt) => document.fonts.load(`${wt} 100px "${f}"`, text + extra))));
+    }
     // a line sung again straight away (いつまでも ×3) stays up as one line that pulses on each repeat: three cuts in
     // three seconds could not be read
     const norm = (x: string) => x.replace(/[\s、。,.!?！？「」]/g, '');
@@ -635,7 +727,9 @@ export class LyricVjEngine {
     const styled: typeof sorted = [];
     for (const x of sorted) {
       const prev = styled[styled.length - 1];
-      if (prev && norm(prev.cue.text) === norm(x.cue.text) && x.cue.start - prev.cue.end < 0.6) {
+      // a chat keeps every message: the earlier ones stay up in the thread, and sending it three times is the point
+      const chat = treatment.shots.find((s) => s.id === x.style.shot)?.template === 'chat';
+      if (prev && !chat && norm(prev.cue.text) === norm(x.cue.text) && x.cue.start - prev.cue.end < 0.6) {
         prev.cue = { ...prev.cue, end: x.cue.end };
         repeats.set(prev.cue.id, [...(repeats.get(prev.cue.id) ?? []), x.cue.start]);
       } else styled.push({ ...x });
@@ -647,7 +741,9 @@ export class LyricVjEngine {
       const a = styled[i].cue;
       const b = styled[i + 1].cue;
       const chars = [...a.text.replace(/\s/g, '')].length + [...b.text.replace(/\s/g, '')].length;
-      if (!quick(a) || !quick(b) || b.start - a.end > 0.35 || chars > 26 || repeats.has(a.id) || repeats.has(b.id)) continue;
+      // a chat sends each line as its own message: the thread keeps both up anyway
+      const inChat = treatment.shots.find((s) => s.id === styled[i].style.shot)?.template === 'chat';
+      if (inChat || !quick(a) || !quick(b) || b.start - a.end > 0.35 || chars > 26 || repeats.has(a.id) || repeats.has(b.id)) continue;
       const aLen = [...a.text].length;
       styled[i] = {
         style: { ...styled[i].style, rows: [aLen + 1], reveal: 'word' },
@@ -663,19 +759,27 @@ export class LyricVjEngine {
     // before is no longer being sung)
     const ENTER_LEAD: Record<string, number> = { slam: 0.3, pop: 0.3, wipe: 0.2, fade: 0.25, ink: 0.45, cut: 0 };
     const showAt = styled.map(({ cue, style }, i) => {
+      // a message is sent on the line's first sung syllable, not ahead of it (the database's chat videos: the bubble
+      // lands on the beat the voice comes in)
+      if (treatment.shots.find((s) => s.id === style.shot)?.template === 'chat') return cue.start;
       const pace = Math.min(1, Math.max(0.35, (cue.end - cue.start) / 2));
       return Math.max(cue.start - Math.max(lead, (ENTER_LEAD[style.enter] ?? 0.25) * pace), Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3));
     });
+    for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
     setPieces(!!design.techniques?.includes('pieces'));
-    const langGhost: [number, number] = design.language ? (LANGUAGES[design.language].text?.ghost ?? [0, 0]) : [0, 0];
+    // a quiet song's lines carry no offset ghost (三年後的大雪's thick shadows pushed its longing into a poster's shout)
+    const langGhost: [number, number] = design.language && !design.quiet ? (LANGUAGES[design.language].text?.ghost ?? [0, 0]) : [0, 0];
     setGhost(langGhost);
+    setFinish(design.finish);
     setSizeCap(design.language ? (LANGUAGES[design.language].text?.cap ?? 1) : 1);
     const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
     styled.forEach(({ style: style1, cue: cue1 }, i) => {
-      // bracketed calls leave the line for a track of their own; emphasis and breaks follow the remaining text
-      const split = splitCalls(cue1.text);
+      // bracketed calls leave the line for a track of their own; emphasis and breaks follow the remaining text (a chat
+      // message keeps its aside: 「もう殺しちゃいたいんだ (キルユー)」 is one message)
+      const inChat = treatment.shots.find((s) => s.id === style1.shot)?.template === 'chat';
+      const split = inChat ? { main: cue1.text, calls: [] as Call[], map: [...cue1.text].map((_, k) => k) } : splitCalls(cue1.text);
       const cue = split.calls.length ? { ...cue1, text: split.main, charStarts: cue1.charStarts && cue1.charStarts.length === split.map.length ? cue1.charStarts.filter((_, k) => split.map[k] >= 0) : undefined } : cue1;
       const style0 = split.calls.length
         ? {
@@ -696,14 +800,22 @@ export class LyricVjEngine {
       const pace = Math.min(1, Math.max(0.35, len / 2)); // short lines enter and leave faster so they stay readable
       // a rushed line leaves in a blink: its exit animation would eat the little time it has
       const rushedLine = len < [...cue.text.replace(/\s/g, '')].length / 12 + 1;
-      // a glitch or a blade needs time to be seen; it takes up to half a second when the next line leaves room
+      // a glitch or a blade needs time to be seen; it takes up to half a second when the next line leaves room (a row of
+      // dominoes or a shattering pane up to 0.8 s: in 0.28 s neither reads as more than a flicker)
       // a cut needs no time: the line holds until the next one shows (leaving early left a frame with no words in it)
       // a fade takes the time the music leaves it: half the gap to the next line, 0.28–1 s
       const fadeSec = Math.min(1, Math.max(EXIT_SEC * pace, (nextShow - cue.end) * 0.5));
-      const exitSec = style.exit === 'cut' ? 0 : rushedLine ? 0.08 : style.exit === 'fade' ? fadeSec : style.exit === 'glitch' || style.exit === 'slash' ? Math.max(EXIT_SEC * pace, Math.min(0.5, nextShow - cue.end - 0.05)) : EXIT_SEC * pace;
+      // a falling, breaking or pixelating exit may take 0.6 s of the line's own end when the line has that much more than
+      // it needs to be read (lines sung back to back left it 0.28 s: a blink, never seen as dominoes or glass)
+      const spare = len - readingSec(cue.text, cue.start, cue.end);
+      const drawnFloor = ['domino', 'shatter', 'pixel'].includes(style.exit) && spare > 0.8 ? 0.6 : 0;
+      const exitSec = style.exit === 'cut' ? 0 : rushedLine ? 0.08 : style.exit === 'fade' ? fadeSec : LONG_EXITS.has(style.exit) ? Math.max(EXIT_SEC * pace, drawnFloor, Math.min(style.exit === 'domino' || style.exit === 'shatter' ? 0.8 : 0.5, nextShow - cue.end - 0.05)) : EXIT_SEC * pace;
       // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
       // lines after this one in the same shot (stack and couplet keep earlier lines up while they arrive)
       const later = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [showAt[j]] : []));
+      const laterText = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [x.cue.text] : []));
+      const shotText = styled.flatMap((x) => (x.style.shot === style.shot ? [x.cue.text] : []));
+      const firstVoice = styled.find((x) => x.style.shot === style.shot)?.style.voice;
       const persist = RENDERERS[shot.template]?.persist;
       const leaveBy = (() => {
         const other = styled.findIndex((x, j) => j > i && x.style.shot !== style.shot);
@@ -731,9 +843,14 @@ export class LyricVjEngine {
         pace,
         rushed,
         planned: { enter: style.enter, reveal: style.reveal },
+        song: [...(this.job.meta?.title ?? '')].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7),
+        bpm: this.job.tempo,
         together,
         adjust,
         later,
+        laterText,
+        shotText,
+        firstVoice,
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
       };
       // small kana only on the impact templates: on every line it read as an algorithm
@@ -776,6 +893,9 @@ export class LyricVjEngine {
         // the dark offset copy goes under light type; dark type gets the offset as a coloured second ink instead (a dark
         // shadow under dark heavy type merged the strokes into one blob)
         const darkType = luma(rt.palette.text) <= 0.5;
+        // dark type never sits on a dark halo or keyline: its strokes and counters fill in and the word reads as one
+        // blob (てぇてぇ's chorus: dark type on a dark keyline). A light halo keeps it legible on any ground
+        if (darkType && (mix || !(backdrop && luma(backdrop) > 0.5))) setHalo('rgba(255,255,255,0.92)');
         setGhost(darkType ? [0, 0] : langGhost);
         setInkGhost(darkType && (langGhost[0] || langGhost[1]) ? { dx: langGhost[0] * 1.4, dy: langGhost[1] * 1.4, color: new THREE.Color(rt.palette.accent).lerp(new THREE.Color(1, 1, 1), 0.25) } : null);
       };
@@ -792,6 +912,26 @@ export class LyricVjEngine {
         Object.assign(rt, fixRead);
         layer = build();
       }
+      // a kinetic print swaps paper and ink from cut to cut under one line: no one type colour reads on both (light
+      // type with a dark keyline sat unreadable on the cream cuts), so the line is built in both inks and each frame
+      // shows the one that reads on the cut behind it (updateCues)
+      const inks = this.kineticInks(cue.start, cue.end);
+      let twin: CueLayer | undefined;
+      const keyOn: [string, string] = ['', '']; // each build's type colour after the language's own ink
+      if (inks) {
+        const inked = (text: string, ground: string) => {
+          backdrop = ground;
+          rt.palette = { ...this.cuePalette(cue.start + 0.3, ground), text };
+          colour(false);
+          return build();
+        };
+        layer = inked(inks.ink, inks.paper);
+        keyOn[0] = rt.palette.text;
+        twin = inked(inks.paper, inks.ink);
+        keyOn[1] = rt.palette.text;
+        twin.group.visible = false;
+        mixed = true; // never rebuilt as light type in a dark halo (the guard below)
+      }
       setInkGhost(null);
       layer.group.visible = false;
       // the kick (kickAt) moves the line only where the section is loud enough: its fit and its room count it there
@@ -801,7 +941,12 @@ export class LyricVjEngine {
       this.textRoot.add(fit);
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
-      const entry: (typeof this.cueLayers)[number] = { rt, layer, fit, fitScale: fit.scale.x, drift: [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
+      const entry: (typeof this.cueLayers)[number] = { rt, layer, fit, fitScale: fit.scale.x, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
+      if (twin) {
+        const f = fitToFrame(twin, kick);
+        this.textRoot.add(f);
+        entry.twin = { layer: twin, fit: f, text: keyOn };
+      }
       // rebuilt light type in a dark halo (same timing and layout): a line found over a picture once the song is laid out
       entry.remake = () => {
         setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
@@ -843,12 +988,21 @@ export class LyricVjEngine {
           }
         }
       }
-      if (split.calls.length) this.callLayers.push(this.makeCalls(rt, cue1, split.calls, settledBox(layer, fit)));
+      const onBoard = !!treatment.graphics && sectionAt(treatment.graphics, cue1.start).layers.some((l) => l.kind === 'led' && l.calls);
+      if (split.calls.length && !onBoard) this.callLayers.push(this.makeCalls(rt, cue1, split.calls, settledBox(layer, fit)));
       if (shot.params['echo'] && !this.ownDrawing(cue.start)) {
         const echo = this.makeEcho(rt);
         if (echo) this.echoes.push(echo);
       }
     });
+    for (const { cue } of shouts) {
+      const host = this.cueLayers.find((c) => c.rt.showFrom <= cue.start && cue.start < c.rt.exitAt) ?? this.cueLayers.find((c) => c.rt.showFrom > cue.start);
+      if (!host) continue;
+      const until = Math.max(cue.end, cue.start + 0.8);
+      const rt = { ...host.rt, cue, showFrom: cue.start - 0.05, exitAt: until, exitDur: 0.15 };
+      const box = host.rt.showFrom <= cue.start ? settledBox(host.layer, host.fit) : new THREE.Box3();
+      this.callLayers.push(this.makeCalls(rt, cue, [{ text: cue.text, from: 0, to: 1 }], box, 1.9));
+    }
     // each line's colour was read where it first sits, with room made for it alone; as played it may be pushed up by
     // the next lines, and an object with no room for all of them stays behind (チョロイン c003: blue type pushed up over
     // the blue stage photo). Every place a line takes is read again as played; a line whose type falls short over a
@@ -882,6 +1036,37 @@ export class LyricVjEngine {
         c.guard = { from: worst.from, to: worst.to, rect: worst.rect, share: worst.share, light };
         c.remake();
       }
+    // a kinetic cut's character stands on the other side from where its lyric actually landed (a layout with no side
+    // setting, couplet, sat its lines on the left over the figure the plan had put there)
+    if (treatment.graphics) {
+      const secs = treatment.graphics.sections;
+      const rects = this.lyricRects.map((r) => ({ from: r.from, to: r.to, x0: r.rest.x0, x1: r.rest.x1 }));
+      secs.forEach((sec, i) => {
+        for (const l of sec.layers as Layer[]) {
+          if (l.kind !== 'kinetic') continue;
+          const until = secs[i + 1]?.start ?? Infinity;
+          // a board lays its pieces where this cut's lines leave the most room (board.ts)
+          if (l.board) {
+            const lines = this.lyricRects.map((r) => ({ from: r.from, to: r.to, ...r.rest }));
+            l.zone = freeZone(lines, sec.start, until, W, H) ?? null;
+            const on = lines.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0);
+            if (on.length) l.busy = on.map((r) => [r.x0, r.y0, r.x1, r.y1] as [number, number, number, number]);
+          }
+          if (!(l.sprite || DIAGRAM_FX.has(l.fx))) {
+            // a move with big words of its own (split panels) keeps them out of the lines' way: the room the lines leave
+            // ([0, 0] when they leave none; unset when nobody sings over the cut)
+            const way = oppositeSide(rects, sec.start, until);
+            if (rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) l.room = (way && freeBand(rects, sec.start, until, way)) || [0, 0];
+            continue;
+          }
+          const side = oppositeSide(rects, sec.start, until);
+          if (side) Object.assign(l, { side, flip: side === 'left' });
+          // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
+          const room = side && l.sprite ? freeBand(rects, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
+          if (room) l.room = room;
+        }
+      });
+    }
     setKanaScale(design.kanaScale);
     this.quiet = uses(design, 'quiet') ? quietSpans(treatment.moments ?? []) : [];
     // the drop keyword flash: one per drop/finale (2–4 a song), the line's keyword set full width in the display face
@@ -903,6 +1088,59 @@ export class LyricVjEngine {
       this.textRoot.add(group);
       this.flashes.push({ at: m.at, glyphs, group, cueId: hit.cue.id });
     }
+  }
+
+  /** A storyboard frame: the scene under the moments' camera, coming in through the scene before's exit (a flash, a
+   * transition from the library), lights out on its last beat when it ends that way, a drop's two white frames. */
+  private drawStoryboard(ctx: CanvasRenderingContext2D, scene: Scene, t: number, since: number, beat: number) {
+    const song = this.sceneSong();
+    const k = this.storyboard.indexOf(scene);
+    const prev = this.storyboard[k - 1];
+    const joined = !!prev && Math.abs(prev.end - scene.start) < 0.1;
+    const lastBeat = [...this.job.beats].reverse().find((b) => b < scene.end - 0.05) ?? scene.end;
+    const cam = momentCamera(this.job.treatment.moments ?? [], t);
+    const bursts = (s: Scene) => (this.job.treatment.moments ?? []).filter((m) => (m.kind === 'drop' || m.kind === 'finale') && m.at >= s.start - 0.05 && m.at < s.end).map((m) => m.at);
+    const frame = (s: Scene) => ({ t, since, beat, hide: this.sceneHide, zoom: cam.zoom, carry: echoCarry(this.storyboard, s, song), bursts: bursts(s), enterFlash: s === scene && joined && prev.exit === 'flash', exitDark: s.exit === 'blackout' && t >= ([...this.job.beats].reverse().find((b) => b < s.end - 0.05) ?? s.end) && t < s.end });
+    const into = enterSec(this.storyboard, scene);
+    if (into && t < scene.start + into)
+      drawTransition(ctx, { kind: prev.exit as TransitionKind }, (t - scene.start) / into, Math.round(scene.start * 10), (c) => void drawScene(c, prev, song, { ...frame(prev), t: Math.min(t, prev.end - 0.001) }), (c) => void drawScene(c, scene, song, frame(scene)));
+    else drawScene(ctx, scene, song, { ...frame(scene), exitDark: scene.exit === 'blackout' && t >= lastBeat });
+    if (cam.flash) {
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  /** The scene playing at t. */
+  private sceneAt(t: number): Scene | undefined {
+    return this.storyboard.find((s) => t >= s.start && t < s.end);
+  }
+
+  private sceneSong(): SceneSong {
+    return { beats: this.job.beats, downbeats: this.job.downbeats ?? [], cues: this.job.cues };
+  }
+
+  /** A text the next frames leave out (the scene check renders a frame without it). */
+  sceneHide?: ShownText;
+
+  /** Every storyboard text measured on finished frames (scene-parts.ts checkScene); `grab` renders and reads one. */
+  async sceneQa(grab: (t: number) => Promise<ImageData>): Promise<SceneTextQa[]> {
+    const beats = this.job.beats;
+    const sinceAt = (t: number) => {
+      const b = beats.filter((x) => x <= t).pop();
+      return b === undefined ? 10 : t - b;
+    };
+    const out: SceneTextQa[] = [];
+    for (const sc of this.storyboard)
+      out.push(...(await checkScene(sc, this.sceneSong(), sinceAt, async (t, hide) => {
+        this.sceneHide = hide;
+        try {
+          return await grab(t);
+        } finally {
+          this.sceneHide = undefined;
+        }
+      }, (t) => momentCamera(this.job.treatment.moments ?? [], t).zoom, sc.start + enterSec(this.storyboard, sc))));
+    return out;
   }
 
   metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number; light: number }[] } {
@@ -983,10 +1221,114 @@ export class LyricVjEngine {
     return tex;
   }
 
+  /** The kinetic print's two inks when the look under t0..t1 is kinetic type (the line is then built in both). */
+  private kineticInks(t0: number, t1: number): { ink: string; paper: string } | undefined {
+    const g = this.job.treatment.graphics;
+    if (!g) return undefined;
+    const ks = g.sections.filter((s, i) => s.start < t1 && (g.sections[i + 1]?.start ?? Infinity) > t0).flatMap((s) => s.layers.filter((l) => l.kind === 'kinetic')) as { ink: string; paper: string }[];
+    return ks.length ? { ink: ks[0].ink, paper: ks[0].paper } : undefined;
+  }
+
+  /**
+   * A kinetic cut draws its words, diagrams and tape wherever its move puts them: behind each line up, the cut's own
+   * ground is laid round each letter as a tight keyline, so the move still shows round the line but never
+   * through it (第六感: a clock and stacked 未完成 under the sung words). Drawn under the character (kinetic.ts):
+   * laid over it, the figure greyed into a box behind the line.
+   */
+  private veilLines(ctx: CanvasRenderingContext2D, t: number, alpha: number) {
+    this.veilShape ??= new OffscreenCanvas(W, H).getContext('2d')!;
+    const shape = this.veilShape;
+    for (const { rt, layer, twin } of this.cueLayers) {
+      const end = rt.exitAt + rt.exitDur;
+      if (t < rt.showFrom || t > end) continue;
+      const inks = this.kineticInks(rt.cue.start, rt.cue.end);
+      if (!inks || !twin) continue;
+      // which build reads here is decided now, on this frame's ground and move (before any keyline or the character):
+      // read off the last frame, a cold still or a cut's first frame took the other ink, and its keyline then held
+      // the choice (light type in a dark keyline on cream)
+      if (this.lit.t !== t) this.lit = { t, by: new Map() };
+      if (!this.lit.by.has(rt.cue.id)) this.lit.by.set(rt.cue.id, this.groundLight(rt.cue.id, t, twin.text));
+      const light = this.lit.by.get(rt.cue.id)!;
+      // both builds share one layout: the keyline follows whichever was laid out
+      const boxes = glyphBoxes(twin.layer.group.visible ? twin.layer.group : layer.group);
+      if (!boxes.length) continue;
+      // a tight keyline in the type's own ground round each letter's shape, grown by R px: the move is cut cleanly
+      // where it crosses a letter (a frosted blur under each letter read as a smudge)
+      // twice as wide where neither ink stands off the ground (thin mincho in navy on a mid violet sky, indigo)
+      const R = (this.weak.get(rt.cue.id) ?? 21) < 4.5 ? 14 : 7;
+      const x0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.x0)) - R));
+      const y0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.y0)) - R));
+      const [w, h] = [Math.min(W, Math.ceil(Math.max(...boxes.map((b) => b.x1)) + R)) - x0, Math.min(H, Math.ceil(Math.max(...boxes.map((b) => b.y1)) + R)) - y0];
+      if (w < 2 || h < 2) continue;
+      shape.save();
+      shape.clearRect(x0, y0, w, h);
+      for (const b of boxes) {
+        // only what has a letter's own shape gets a keyline: a cut-up glyph, a repeating wave (a held vowel's ～), a
+        // mark took a rounded box, a smudge of ground behind it
+        if (!b.img || !b.at) continue;
+        shape.globalAlpha = b.a;
+        // the texture where the letter is, tilted with it (an arc's letters had upright keylines, a blur round them)
+        for (let k = 0; k < 12; k++) {
+          const a = (k / 12) * Math.PI * 2;
+          shape.setTransform(b.at[0], b.at[1], b.at[2], b.at[3], b.at[4] + Math.cos(a) * R, b.at[5] + Math.sin(a) * R);
+          shape.drawImage(b.img, 0, 0);
+        }
+        shape.setTransform(1, 0, 0, 1, 0, 0);
+      }
+      shape.globalAlpha = 1;
+      shape.globalCompositeOperation = 'source-in';
+      // the ink the letters are not in (a language's own type ink can put both builds in the same colour)
+      const text = twin.text[light ? 0 : 1];
+      shape.fillStyle = contrast(text, inks.ink) > contrast(text, inks.paper) ? inks.ink : inks.paper;
+      shape.fillRect(x0, y0, w, h);
+      shape.restore();
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // frame px, under the cut's camera move
+      ctx.globalAlpha = alpha * clamp01((t - rt.showFrom) / 0.25) * clamp01((end - t) / 0.25);
+      ctx.drawImage(shape.canvas, x0, y0, w, h, x0, y0, w, h);
+      ctx.restore();
+    }
+  }
+  private veilShape?: OffscreenCanvasRenderingContext2D;
+  /** The build each kinetic line shows this frame, picked by the veil (veilLines). */
+  private lit: { t: number; by: Map<string, boolean> } = { t: NaN, by: new Map() };
+
+  /**
+   * Whether the line's first build (`texts[0]`) reads better than its twin on the look drawn behind it this frame (read
+   * from the frame's own background canvas). By contrast, not by a light/dark split: a mid red paper counted as dark
+   * and took the red twin, red type on red (雙截棍).
+   */
+  private groundLight(id: string, t: number, texts: [string, string]): boolean {
+    if (this.lit.t === t && this.lit.by.has(id)) return this.lit.by.get(id)!;
+    const rs = this.lyricRects.filter((r) => r.id === id);
+    const r = rs.find((x) => t >= x.from && t <= x.to)?.rest ?? rs[0]?.rest;
+    if (!this.gfx || !r) return true;
+    const [x0, y0] = [Math.max(0, Math.floor(r.x0)), Math.max(0, Math.floor(r.y0))];
+    const [w, h] = [Math.min(W, Math.ceil(r.x1)) - x0, Math.min(H, Math.ceil(r.y1)) - y0];
+    if (w < 1 || h < 1) return true;
+    const d = this.gfx.ctx.getImageData(x0, y0, w, h).data;
+    const rgb = [0, 0, 0];
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4 * 53, n++) for (let c = 0; c < 3; c++) rgb[c] += d[i + c];
+    const mean = `#${rgb.map((v) => Math.round(v / Math.max(1, n)).toString(16).padStart(2, '0')).join('')}`;
+    const [c0, c1] = [contrast(texts[0], mean), contrast(texts[1], mean)];
+    this.weak.set(id, Math.max(c0, c1));
+    return c0 >= c1;
+  }
+  /** The contrast the chosen build has on its ground, per line, as last read (groundLight). */
+  private weak = new Map<string, number>();
+
+  /** Whether the section at t is a kinetic-type cut: a flat print, shown without lens effects. */
+  private flatPrint(t: number) {
+    const g = this.job.treatment.graphics;
+    return !!g && sectionAt(g, t).layers.some((l) => l.kind === 'kinetic');
+  }
+
   /** Whether the section at t has the director's own drawing (a 'code' layer), which owns the background. */
   private ownDrawing(t: number) {
     const g = this.job.treatment.graphics;
-    return !!g && sectionAt(g, t).layers.some((l) => l.kind === 'code');
+    // a kinetic cut lays out its own frame too: the language's drop move drew an orange rail across it
+    return !!g && sectionAt(g, t).layers.some((l) => l.kind === 'code' || l.kind === 'kinetic');
   }
 
   /** The cue's keyword as large outlined type behind the line, within the frame. */
@@ -1016,38 +1358,91 @@ export class LyricVjEngine {
    * away from the main line and pops in when it is sung (its share of the line's time), tilted alternately like a
    * crowd shouting back; all of it leaves with the line.
    */
-  private makeCalls(rt: CueRuntime, full: TimelineCue, calls: Call[], box: THREE.Box3) {
+  /** The phone's broken glass (a glass layer in the current look section), its two maps made once per crack. */
+  private glassKey = '';
+  private glassFlash = 0;
+  private updateGlass(t: number) {
+    const u = this.finalPass.uniforms;
+    const look = this.job.treatment.graphics;
+    const l = look ? (sectionAt(look, t).layers.find((x) => x.kind === 'glass') as { crack: number; seed?: number } | undefined) : undefined;
+    this.glassFlash = 0;
+    if (!l || !(l.crack > 0)) {
+      u['uGlass'].value = 0;
+      return;
+    }
+    const key = `${l.crack}|${l.seed ?? 7}`;
+    if (key !== this.glassKey) {
+      this.glassKey = key;
+      const glass = glassOf(W, H, l.crack, l.seed ?? 7)!;
+      const shards = new OffscreenCanvas(W, H);
+      drawGlassShards(shards.getContext('2d')!, W, H, glass);
+      const lines = new OffscreenCanvas(W, H);
+      drawGlassCrack(lines.getContext('2d')!, W, H, l.crack, l.seed ?? 7);
+      for (const [name, c] of [['tGlass', shards], ['tCracks', lines]] as const) {
+        (u[name].value as THREE.Texture | null)?.dispose();
+        const tex = new THREE.CanvasTexture(c as unknown as HTMLCanvasElement);
+        tex.flipY = true;
+        u[name].value = tex;
+      }
+    }
+    // a fresh break (more cracked than the section before): the glass snaps in with a short white hit
+    const secs = look!.sections;
+    const k = secs.indexOf(sectionAt(look!, t));
+    const before = (secs[k - 1]?.layers.find((x) => x.kind === 'glass') as { crack: number } | undefined)?.crack ?? 0;
+    const since = t - secs[k].start;
+    const fresh = l.crack > before + 0.05 && since < 0.3;
+    u['uGlass'].value = fresh ? clamp01(since / 0.08) : 1;
+    this.glassFlash = fresh && since < 0.12 ? 0.35 * (1 - since / 0.12) : 0;
+  }
+
+  private makeCalls(rt: CueRuntime, full: TimelineCue, calls: Call[], box: THREE.Box3, scale = 1) {
     const group = new THREE.Group();
     group.renderOrder = 3;
     const dur = full.end - full.start;
     const cx = box.isEmpty() ? 0 : (box.min.x + box.max.x) / 2;
-    // layouts that keep earlier lines up fill the space above: their calls go to the side
-    const wide = !RENDERERS[rt.shot.template]?.persist && (box.isEmpty() || box.max.x - box.min.x > W * 0.62);
-    // beside the line when it leaves room, else above it
-    const side = cx > 0 ? -1 : 1;
-    const baseX = wide ? 0 : side * W * (RENDERERS[rt.shot.template]?.persist ? 0.36 : 0.3);
+    // the calls sit right over their own line (under it when the frame has no room above): set beside it they ran off
+    // the frame's edge and lay over the next line of a couplet (Tokyo Drift's asides over あなたも東京好き)
     const top = box.isEmpty() ? H * 0.2 : box.max.y;
-    const baseY = wide ? Math.min(H / 2 - 110, top + 90) : Math.min(H / 2 - 120, (box.isEmpty() ? 0 : (box.min.y + box.max.y) / 2) + 80);
+    const bottom = box.isEmpty() ? -H * 0.2 : box.min.y;
     const units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[] = [];
+    const widths: number[] = [];
     for (const c of calls) {
-      const parts = [...c.text].length > 6 ? c.text.split(/[\s　]+/).filter(Boolean) : [c.text];
+      // a long aside in phrases of a few words, not a word per row (you / see / me / go … ran off the frame's foot)
+      const parts = [...c.text].length > 6 ? callPhrases(c.text) : [c.text];
       const from = full.start + c.from * dur;
       const span = Math.max(0.2, (c.to - c.from) * dur);
       parts.forEach((part, k) => {
-        const glyphs = makeGlyphs(part, { family: rt.fonts.display, weight: 900, size: 78, shadow: true }, new THREE.Color(readableOn(rt.palette.accent, rt.palette.background)));
+        // a shout is a sticker: the heaviest face, filled, on a thick dark keyline (the database's idol call words)
+        const face = scale > 1 ? { family: rt.fonts.body, weight: 900, size: Math.round(78 * scale) } : { family: rt.fonts.display, weight: 900, size: 78, shadow: true };
+        const fill = makeGlyphs(part, face, new THREE.Color(readableOn(rt.palette.accent, rt.palette.background)));
+        const keyline = scale > 1 ? makeGlyphs(part, { ...face, outline: Math.round(face.size * 0.16) }, new THREE.Color('#14081A')) : [];
+        const glyphs = [...keyline, ...fill];
         const n = units.length;
-        const x = wide ? baseX + (n % 2 ? 1 : -1) * W * 0.16 * (1 + Math.floor(n / 2) * 0.4) : baseX + (n % 2 ? 40 : -40) * side;
-        const y = wide ? baseY : baseY - n * 104;
-        placeRow(glyphs, 0, 0);
+        placeRow(fill, 0, 0);
+        if (keyline.length) placeRow(keyline, 0, 0);
         const g = new THREE.Group();
-        glyphs.forEach((gl) => {
-          gl.mesh.position.set(gl.x, gl.y, 0);
+        glyphs.forEach((gl, j) => {
+          // the keyline is drawn first, under the fill (same render order: added first, and further back)
+          gl.mesh.position.set(gl.x, gl.y, j < keyline.length ? -1 : 0);
+          if (j < keyline.length) gl.mesh.renderOrder = -1;
           g.add(gl.mesh);
         });
         group.add(g);
-        units.push({ glyphs, at: from + (k * span) / parts.length - 0.04, x, y, tilt: (n % 2 ? -1 : 1) * 0.07 });
+        units.push({ glyphs, at: from + (k * span) / parts.length - 0.04, x: 0, y: 0, tilt: (n % 2 ? -1 : 1) * 0.07 });
+        widths.push(rowWidth(fill) * (scale > 1 ? 1.1 : 1));
       });
     }
+    // in rows as wide as the line (at least half the frame), each call beside the last (lineUp), inside the frame
+    const room = Math.min(W * 0.9, Math.max(W * 0.5, box.isEmpty() ? 0 : box.max.x - box.min.x));
+    const at = lineUp(widths, room, 56);
+    const rows = Math.max(1, ...at.map((a) => a.row + 1));
+    const above = top + 70 + (rows - 1) * 96 <= H / 2 - 50;
+    at.forEach(({ x, row }, j) => {
+      const half = widths[j] / 2 + 30;
+      units[j].x = Math.min(W / 2 - half, Math.max(-W / 2 + half, cx + x));
+      // the first row read first: on top above the line, nearest the line below it
+      units[j].y = above ? top + 70 + (rows - 1 - row) * 96 : Math.max(-H / 2 + 60, bottom - 70 - row * 96);
+    });
     group.visible = false;
     this.textRoot.add(group);
     return { rt, group, units };
@@ -1055,15 +1450,22 @@ export class LyricVjEngine {
 
   /** Shows the lines up at t and moves them; strokes follow their glyphs. */
   private updateCues(t: number, fx: FrameFx, hidden?: string) {
-    for (const { rt, layer, fit, fitScale, drift } of this.cueLayers) {
+    for (const { rt, layer: main, fit, fitScale, drift, twin } of this.cueLayers) {
       if (fit && drift && fitScale !== undefined) {
         const k = clamp01((t - rt.showFrom) / Math.max(0.5, rt.exitAt + rt.exitDur - rt.showFrom));
         const e = 0.5 - 0.5 * Math.cos(Math.PI * k);
-        fit.position.set(drift[0] * e, drift[1] * e, 0);
-        fit.scale.setScalar(fitScale * (1 + 0.012 * e));
+        for (const f of twin ? [fit, twin.fit] : [fit]) {
+          f.position.set(drift[0] * e, drift[1] * e, 0);
+          f.scale.setScalar(fitScale * (1 + 0.012 * e));
+        }
       }
-      layer.group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
-      if (layer.group.visible) layer.update(this.koma(t), fx);
+      const on = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
+      // the dark-ink build on a light cut, the light-ink twin on a dark one
+      const light = !twin || !on || this.groundLight(rt.cue.id, t, twin.text);
+      const layer = light ? main : twin!.layer;
+      main.group.visible = on && light;
+      if (twin) twin.layer.group.visible = on && !light;
+      if (on) layer.update(this.koma(t), fx);
     }
     for (const { rt, group, units } of this.callLayers) {
       const k = this.koma(t);
@@ -1178,12 +1580,22 @@ export class LyricVjEngine {
       let i = beats.findIndex((b) => b > bt) - 1;
       if (i < -1) i = beats.length - 1;
       const since = i >= 0 ? bt - beats[i] : 10;
+      if (this.flatPrint(bt)) {
+        // the type laid out for this frame first: the veil under it follows where its letters are now
+        this.updateCues(t, fx, this.flashes.find((f) => t >= f.at && t < f.at + FLASH_SEC)?.cueId);
+        this.textRoot.updateMatrixWorld(true);
+        setLineVeil((c, alpha) => this.veilLines(c, t, alpha));
+      }
       drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
         const tex = this.images.get(asset ?? shot.asset ?? '');
         return tex?.image as CanvasImageSource | undefined;
-      }, (ls) => this.makeRoom(ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
+      }, (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
+      setLineVeil(undefined); // probes draw the look without it
+      // (a title card takes the frame alone: a lock screen's big clock under it read as one word with the title)
+      const scene = this.sceneAt(t);
+      if (scene) this.drawStoryboard(this.gfx.ctx, scene, t, since, i);
       const lang = this.job.treatment.design?.language;
-      const drop = [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
+      const drop = scene ? undefined : [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
       // a song's own code layer brings its own peaks; the language's stock move on top of it read as clutter
       if (lang && drop && !this.ownDrawing(bt)) drawNative(this.gfx.ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
       this.gfx.tex.needsUpdate = true;
@@ -1223,19 +1635,25 @@ export class LyricVjEngine {
     // letterbox: bars slide in over 0.5 s at a quiet span and snap open on the beat that ends it
     const q = this.quiet.find((s) => t >= s.start && t < s.end);
     const sys = this.job.treatment.design?.system;
-    const close = sys && SYSTEMS[sys].letterbox ? 1 : q ? easeOutCubic(clamp01((t - q.start) / 0.5)) : 0;
+    // a phone's messages are the screen itself: nothing moves them off it or draws bars over it
+    const screen = !!(this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language]?.screen);
+    // a flat print fills the frame: the letterbox bars read as a mistake over it
+    const close = screen || this.sceneAt(t) || this.flatPrint(t) ? 0 : sys && SYSTEMS[sys].letterbox ? 1 : q ? easeOutCubic(clamp01((t - q.start) / 0.5)) : 0;
     for (const bar of this.bars) bar.position.y = bar.userData['side'] * (H / 2 + H * 0.1 - close * H * 0.12);
     this.updateCues(t, fx, flash?.cueId);
     // heavy beats in loud sections: the lyrics jump with the kick (strength from the song's kick analysis)
-    const kick = this.kickAt(t, mfx.level);
+    const kick = screen ? 0 : this.kickAt(t, mfx.level);
     this.textRoot.scale.setScalar(1 + 0.05 * kick);
     this.textRoot.position.y = 10 * kick;
     // held lyrics never freeze: the whole type layer drifts a few pixels, like a hand-held camera on a slow move
-    this.textRoot.position.x = 9 * Math.sin(t * 0.31) + 4 * Math.sin(t * 0.83 + 1.7);
-    this.textRoot.position.y += 6 * Math.sin(t * 0.27 + 0.9);
-    const shake = Math.max(fx.shake, mfx.shake) * 10;
+    const drift = screen ? 0 : 1;
+    this.textRoot.position.x = drift * (9 * Math.sin(t * 0.31) + 4 * Math.sin(t * 0.83 + 1.7));
+    this.textRoot.position.y += drift * 6 * Math.sin(t * 0.27 + 0.9);
+    // a scene plays its moments itself (scene.ts momentCamera): the shared push, shake and hit would come on top of it
+    const inScene = !!this.sceneAt(t);
+    const shake = inScene ? 0 : Math.max(fx.shake, mfx.shake) * 10;
     this.camera.position.set((hash(t * 30) - 0.5) * shake, (hash(t * 30, 1) - 0.5) * shake, 5);
-    this.camera.zoom = mfx.zoom;
+    this.camera.zoom = inScene ? 1 : mfx.zoom;
     this.camera.updateProjectionMatrix();
     const u = this.finalPass.uniforms;
     const d = this.job.treatment.design ?? DEFAULT_DESIGN;
@@ -1249,11 +1667,18 @@ export class LyricVjEngine {
       p.mesh.material.uniforms['exposure'].value = mfx.exposure * (isScene ? 1 : 0.12 + 0.88 * stop.image);
       p.mesh.material.uniforms['sat'].value = mfx.saturation * (1 - 0.65 * beams);
     }
-    if (peak === 'vacuum') {
+    // a phone's screen does not go black for a drop: its climax is what happens on it (a close-up, the glass breaking)
+    const onScreen = !!(d.language && LANGUAGES[d.language]?.screen);
+    if (onScreen || this.sceneAt(t)) this.dim.material.opacity = 0;
+    if (peak === 'vacuum' && !onScreen && !this.sceneAt(t)) {
       const drop = (this.job.treatment.moments ?? []).find((m) => (m.kind === 'drop' || m.kind === 'finale') && t >= m.at - 0.35 && t < m.at);
       if (drop) this.dim.material.opacity = Math.max(this.dim.material.opacity, 0.96);
     }
-    u['uVignette'].value = mfx.vignette;
+    // a scene's stage draws its own dark edges: the shared vignette greyed its white flash
+    u['uVignette'].value = this.sceneAt(t) ? 0 : mfx.vignette;
+    // a flat print (kinetic type) has no lens: the vignette greyed its paper and inks
+    u['uVigBase'].value = this.sceneAt(t) || this.flatPrint(t) ? 0 : 0.55;
+    this.updateGlass(t);
     // a design language brings its own peak move (graphics.ts drawNative): no shared rays, beams or shockwave
     const own = !!this.job.treatment.design?.language && !!this.gfx;
     u['uRays'].value = own ? 0 : peak === 'rays' || peak === 'vacuum' ? mfx.rays * (peak === 'vacuum' ? 0.5 : 1) : 0;
@@ -1289,13 +1714,17 @@ export class LyricVjEngine {
     const needsMask = medium.pixel + medium.tooth > 0;
     u['uHasText'].value = needsMask ? 1 : 0;
     if (needsMask) u['tText'].value = this.renderTextMask();
-    this.finalPass.uniforms['uFlash'].value = fx.flash;
-    this.finalPass.uniforms['uHit'].value = fx.hit;
+    this.finalPass.uniforms['uFlash'].value = inScene ? 0 : Math.max(fx.flash, this.glassFlash);
+    this.finalPass.uniforms['uHit'].value = inScene ? 0 : fx.hit;
     // capped: past this, white lyrics bloom into an unreadable glare
     this.bloom.strength = Math.min(1.2, 0.55 + 0.9 * fx.hit + mfx.bloom);
     // a light field blooms to white: keep only a trace there; on a dark field a flat graphic look still glows around
     // every light object (a cream sprite got a white halo), so it stays low there too
     if (this.job.treatment.graphics) this.bloom.strength = sectionAt(this.job.treatment.graphics, t).text ? 0.05 : Math.min(this.bloom.strength, 0.15);
+    // the cream paper bloomed to white and spilled over the printed figure, turning navy pale blue
+    if (this.flatPrint(t)) this.bloom.strength = 0;
+    // a scene's parts glow on their own (the LED's halo): a bloom over them washed the band's type grey
+    if (this.sceneAt(t)) this.bloom.strength = 0;
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
     // chroma ghosts: the lyrics as they were 1/30 and 1/15 s ago, offset and tinted
     const chroma = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].chroma;

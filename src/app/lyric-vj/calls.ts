@@ -53,3 +53,59 @@ export function mapRange(map: number[], from: number, to: number): [number, numb
   const kept = map.slice(from, to).filter((m) => m >= 0);
   return kept.length ? [kept[0], kept[kept.length - 1] + 1] : undefined;
 }
+
+/** A call as shouted: its text and when (s). */
+export interface TimedCall {
+  text: string;
+  at: number;
+  cueId: string;
+}
+
+/**
+ * Every bracketed call in the cues with the time it is shouted: the sung time of its opening bracket when the line
+ * has character timings, else its share of the line.
+ */
+export function callTimes(cues: { id: string; start: number; end: number; text: string; charStarts?: number[] }[]): TimedCall[] {
+  return cues.flatMap((c) => {
+    const n = [...c.text].length;
+    return splitCalls(c.text).calls.map((k) => {
+      const i = Math.round(k.from * n);
+      const at = c.charStarts?.[i] ?? c.start + k.from * (c.end - c.start);
+      return { text: k.text, at: Math.max(c.start, Math.min(c.end, at)), cueId: c.id };
+    });
+  });
+}
+
+/**
+ * Call words set side by side in rows centred on 0: each beside the last by its own width plus `gap`, a row that
+ * would pass `room` starting another (row 1 above row 0). Alternating sides at a fixed step put キタ and the second
+ * drift of Tokyo Drift's chorus on the same spot.
+ */
+export function lineUp(widths: number[], room: number, gap: number): { x: number; row: number }[] {
+  const rows: number[][] = [[]];
+  widths.forEach((w, i) => {
+    const r = rows[rows.length - 1];
+    if (r.length && r.reduce((a, j) => a + widths[j] + gap, 0) + w > room) rows.push([i]);
+    else r.push(i);
+  });
+  const out: { x: number; row: number }[] = [];
+  rows.forEach((r, row) => {
+    let x = -(r.reduce((a, j) => a + widths[j], 0) + gap * (r.length - 1)) / 2;
+    for (const j of r) {
+      out[j] = { x: x + widths[j] / 2, row };
+      x += widths[j] + gap;
+    }
+  });
+  return out;
+}
+
+/** A call split at its spaces into phrases of up to `max` characters each. */
+export function callPhrases(text: string, max = 14): string[] {
+  const out: string[] = [];
+  for (const w of text.split(/[\s　]+/).filter(Boolean)) {
+    const last = out[out.length - 1];
+    if (last !== undefined && [...last].length + 1 + [...w].length <= max) out[out.length - 1] = `${last} ${w}`;
+    else out.push(w);
+  }
+  return out;
+}

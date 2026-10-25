@@ -72,7 +72,7 @@ const RUBRIC = `1. 段落與鏡頭邊界落在歌詞句首或明顯的能量變�
 10. 持續動態：畫面不能長時間靜止；靜態插畫只靠慢推鏡、人物不動，視為明顯缺點。不要為了克制而減少閃光、踩拍或動態。`;
 const paramProps: Record<string, object> = {};
 for (const tp of Object.values(TEMPLATES))
-  for (const [k, p] of Object.entries(tp.params)) paramProps[k] = p.type === 'number' ? { type: 'number' } : p.type === 'boolean' ? { type: 'boolean' } : { type: 'string', enum: p.values };
+  for (const [k, p] of Object.entries(tp.params)) paramProps[k] = p.type === 'number' ? { type: 'number' } : p.type === 'boolean' ? { type: 'boolean' } : p.type === 'text' ? { type: 'string' } : { type: 'string', enum: p.values };
 const SCHEMA = {
   type: 'object', additionalProperties: false, required: ['scores', 'issues', 'edits', 'assetUnusable'],
   properties: {
@@ -96,7 +96,7 @@ content.push({ type: 'text', text: `以上是歌詞 VJ 的關鍵畫面與動態�
 修改只能改模板參數與歌詞樣式（不可改時間、鏡頭結構或素材）；只有素材根本不能用時才列在 assetUnusable 並寫理由。
 注意：幀序列只能看出大致動態，踩拍與可讀時間以自動量測為準。
 
-【評分標準】\n${RUBRIC}\n\n【企劃】\n${JSON.stringify(t)}\n\n【歌詞時間軸】\n${cuesIn(song, win).map((c) => `${c.id} ${c.start.toFixed(2)}–${c.end.toFixed(2)}s「${c.text}」`).join('\n')}\n\n【自動量測】\n${metrics}\n\n【模板參數範圍】\n${Object.values(TEMPLATES).map((x) => `${x.id}: ${Object.entries(x.params).map(([k, p]) => `${k} ${p.type === 'number' ? `${p.min}–${p.max}` : p.type === 'enum' ? p.values.join('/') : 'bool'}`).join(', ')}`).join('\n')}`});
+【評分標準】\n${RUBRIC}\n\n【企劃】\n${JSON.stringify(t)}\n\n【歌詞時間軸】\n${cuesIn(song, win).map((c) => `${c.id} ${c.start.toFixed(2)}–${c.end.toFixed(2)}s「${c.text}」`).join('\n')}\n\n【自動量測】\n${metrics}\n\n【模板參數範圍】\n${Object.values(TEMPLATES).map((x) => `${x.id}: ${Object.entries(x.params).map(([k, p]) => `${k} ${p.type === 'number' ? `${p.min}–${p.max}` : p.type === 'enum' ? p.values.join('/') : p.type === 'text' ? 'text' : 'bool'}`).join(', ')}`).join('\n')}`});
 
 const began = Date.now();
 let review: ReviewResult;

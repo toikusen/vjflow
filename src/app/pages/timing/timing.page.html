@@ -164,6 +164,15 @@
           }
         </span>
         </div>
+        @if (c.proof?.length) {
+          <div class="proof">
+            @for (p of c.proof; track p.at) {
+              <span>疑似錯字「{{ p.wrong }}」→「{{ p.right }}」<small class="muted">{{ p.why }}</small></span>
+              <button class="chip" (click)="fixProof(i, p, true); $event.stopPropagation()">改成「{{ p.right }}」</button>
+              <button class="chip" (click)="fixProof(i, p, false); $event.stopPropagation()" title="歌詞本來就是這樣寫">不用改</button>
+            }
+          </div>
+        }
       </li>
     }
     </ol>

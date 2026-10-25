@@ -1,4 +1,5 @@
 // Render page entry (bundled by scripts/lyric-vj/render.mts): exposes ready / renderAt / metrics to the driver.
+import { SCENE_FONTS } from './scene-parts';
 import { contrastFace, DEFAULT_FAMILY, FONTS, googleFontsUrl, readingLatin } from '../fonts';
 import { quietFace } from './quiet';
 import { LyricVjEngine, RenderJob } from './engine';
@@ -10,6 +11,8 @@ function jobFamilies(job: RenderJob): string[] {
   const named = new Set<string>();
   // graphic layers (stamps, seals, labels) may name their own font
   JSON.stringify(job.treatment.graphics ?? {}, (k, v) => (k === 'font' && typeof v === 'string' && named.add(v), v));
+  JSON.stringify(job.treatment.storyboard ?? [], (k, v) => (k === 'font' && typeof v === 'string' && named.add(v), v));
+  if (job.treatment.storyboard?.length) SCENE_FONTS.forEach((f) => named.add(f));
   const accent = d?.accentFont ?? 'Montserrat';
   return [...new Set([main, job.fonts?.display, job.fonts?.body, job.fonts?.script, accent, readingLatin(accent), 'Montserrat', quietFace(main), contrastFace(main), DEFAULT_FAMILY, 'Zen Old Mincho', ...named])].filter((f): f is string => !!f && FONTS.some((x) => x.family === f));
 }
@@ -21,6 +24,7 @@ declare global {
     /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
     grabAt: (t: number, quality: number) => Promise<string>;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
+    vjSceneQa: () => ReturnType<LyricVjEngine['sceneQa']>;
     vjMotionQa: (everyFrame?: string[]) => ReturnType<LyricVjEngine['motionQa']>;
   }
 }
@@ -44,6 +48,13 @@ window.grabAt = async (t, quality) => {
   return stage.toDataURL('image/jpeg', quality);
 };
 window.vjMetrics = () => engine.metrics();
+window.vjSceneQa = () =>
+  engine.sceneQa(async (t) => {
+    await engine.renderAt(t);
+    const c = new OffscreenCanvas(1920, 1080).getContext('2d')!;
+    c.drawImage(stage, 0, 0, 1920, 1080);
+    return c.getImageData(0, 0, 1920, 1080);
+  });
 window.vjMotionQa = (everyFrame) => engine.motionQa(everyFrame);
 await window.vjReady;
 const t = new URLSearchParams(location.search).get('t');

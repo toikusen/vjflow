@@ -159,3 +159,4 @@ describe('storyEvents', () => {
     expect(storyEvents(items)).toEqual([10, 12, 14, 16, 16, 1, 30, 40, 45]);
   });
 });
+

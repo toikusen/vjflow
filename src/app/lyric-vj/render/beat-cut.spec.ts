@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cutPieces, planCut, timedPieces } from './beat-cut';
+import { balancedRows } from '../phrases';
+import { cutPieces, planCut, timedPieces, wrapRows } from './beat-cut';
 
 describe('cutPieces', () => {
   it('cuts a line into sung pieces of two or more characters, with their positions', () => {
@@ -58,5 +59,14 @@ describe('beat-cut in Chinese', () => {
     const p = cutPieces('快使用雙截棍 哼哼哈兮').map((x) => x.text);
     expect(p.length).toBeGreaterThan(1);
     expect(p.join('')).toBe('快使用雙截棍哼哼哈兮');
+  });
+
+  it('wraps a long whole line into balanced rows instead of one small row', () => {
+    const line = '我愛台妹 台妹愛我 對我來說 林志玲算什麼?!';
+    expect([wrapRows('我愛台妹'), wrapRows(line), wrapRows('我的阿妹妹 快來跟我跳阿哥哥 Go 我知道你看到是我')]).toEqual([1, 2, 3]);
+    const rows = balancedRows(line, wrapRows(line));
+    expect(rows.join('').replace(/ /g, '')).toBe(line.replace(/ /g, ''));
+    expect(rows.length).toBe(2);
+    expect(Math.max(...rows.map((r) => [...r.replace(/ /g, '')].length))).toBeLessThanOrEqual(12);
   });
 });

@@ -1,0 +1,2434 @@
+{
+ "language": "spy-titles",
+ "concept": "一部不存在的功夫片片頭：從岩燒店煙霧瀰漫的夜街、國術館的兵器架，一路走到屋頂月夜、竹林狂風與嵩山日出。紅黑雙色加金光的剪影布景裡，雙截棍在聚光燈下靜靜等待出手，副歌一次比一次狠。",
+ "styleAnchor": {
+  "prompt": "Bold limited palette of deep crimson and ink black with metallic gold highlights, strong diagonal light, deep rich shadows, a bright glowing gold band at the horizon or light source, saturated high contrast, tense cinematic mood, clear foreground midground background depth layers. No text, no letters, no logos.",
+  "palette": {
+   "background": "#120808",
+   "text": "#f7eedb",
+   "accent": "#e8b13a",
+   "line": "#d42a1f",
+   "glow": "#ffcf6a"
+  }
+ },
+ "assets": [
+  {
+   "id": "a_alley",
+   "kind": "image",
+   "prompt": "Narrow night street in an old Taipei neighborhood: a rock-grill restaurant with steam and smoke billowing from its doorway, next door a martial arts hall with a heavy wooden gate and red lanterns, wet pavement reflecting gold light, layered drifting smoke in foreground, midground and background, strong diagonal composition, open dark sky band above."
+  },
+  {
+   "id": "a_hall",
+   "kind": "image",
+   "prompt": "Inside a traditional martial arts hall at dusk: wooden weapon rack with spears and staffs, a wooden training dummy, leather sandbags hanging from beams, low sun shafts slanting through lattice windows with floating dust, crimson walls, deep shadows, layered depth from rack to far window."
+  },
+  {
+   "id": "a_songshan",
+   "kind": "image",
+   "prompt": "Mount Song at dawn: layered mountain ridges receding into mist, a temple roof and a stone pagoda forest on a slope in the foreground, clouds in several depth layers, a bright gold sunrise band along the horizon, deep crimson sky above."
+  },
+  {
+   "id": "a_courtyard",
+   "kind": "image",
+   "prompt": "Empty stone courtyard of a mountain temple in early morning, worn stone floor, a bronze incense burner releasing curling smoke, an open temple gate framing distant misty peaks, layered clouds near and far, a warm gold light band low in the sky."
+  },
+  {
+   "id": "a_rooftops",
+   "kind": "image",
+   "prompt": "Curved tiled rooftops and upturned flying eaves of an old town at night seen from above, a huge full moon, layered clouds sweeping across in foreground and background, a tiny distant still silhouette standing on a far roof ridge, strong diagonal lines of the roofs."
+  },
+  {
+   "id": "a_bamboo",
+   "kind": "image",
+   "prompt": "Dense bamboo forest in strong wind at sunset, stalks leaning diagonally, leaves streaming sideways, a round clearing with a still pond reflecting a gold sun, layered mist between near and far bamboo, crimson and black tones."
+  },
+  {
+   "id": "a_nunchaku",
+   "kind": "image",
+   "prompt": "A pair of black nunchaku with gold-bound ends lying crossed on a crimson lacquered floor of an empty training stage, a single hard spotlight from above, dramatic diagonal shadows, red silk banners hanging in the deep background, dark vignette."
+  },
+  {
+   "id": "a_cigarette",
+   "kind": "image",
+   "prompt": "An old wooden table by a window at night, a single unlit cigarette resting on the edge of a tin ashtray, a small tea cup beside it, neon street glow and rain streaks on the window glass, warm lamp light, deep shadows, layered depth from table to window to the street beyond."
+  },
+  {
+   "id": "a_moon",
+   "kind": "image",
+   "prompt": "Night mountain ridge under a vast full moon, layered clouds drifting in front of and behind the peaks, a lone pine on a cliff edge in the foreground, a thin gold glow along the horizon, deep indigo and crimson sky."
+  }
+ ],
+ "shots": [
+  {
+   "id": "s01",
+   "start": 0,
+   "end": 29.76,
+   "template": "title-card",
+   "params": {
+    "layout": "center",
+    "showArtist": true,
+    "hold": 10,
+    "logo": true,
+    "dim": 0.4
+   },
+   "asset": "a_alley",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s02",
+   "start": 29.76,
+   "end": 34.7,
+   "template": "stair",
+   "params": {
+    "side": "left",
+    "dim": 0.3
+   },
+   "asset": "a_alley",
+   "camera": "pan",
+   "transitionIn": "flash"
+  },
+  {
+   "id": "s03",
+   "start": 34.7,
+   "end": 39.41,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "a_hall",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s04",
+   "start": 39.41,
+   "end": 44.2,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "a_hall",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s05",
+   "start": 44.2,
+   "end": 48.8,
+   "template": "frame-split",
+   "params": {
+    "frameWidth": 0.7,
+    "frameHeight": 0.32,
+    "lineWidth": 2,
+    "brackets": true,
+    "drawSec": 0.45,
+    "align": "left",
+    "dim": 0.25,
+    "lift": 0
+   },
+   "asset": "a_songshan",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s06",
+   "start": 48.8,
+   "end": 53.72,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "a_courtyard",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "s07",
+   "start": 53.72,
+   "end": 58.18,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "a_rooftops",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s08",
+   "start": 58.18,
+   "end": 63.34,
+   "template": "stack",
+   "params": {
+    "dim": 0.45,
+    "pair": true
+   },
+   "asset": "a_hall",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s09",
+   "start": 63.34,
+   "end": 70.54,
+   "template": "frame-split",
+   "params": {
+    "frameWidth": 0.6,
+    "frameHeight": 0.32,
+    "lineWidth": 2,
+    "brackets": true,
+    "drawSec": 0.45,
+    "align": "right",
+    "dim": 0.25,
+    "lift": 0
+   },
+   "asset": "a_cigarette",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  },
+  {
+   "id": "s10",
+   "start": 70.54,
+   "end": 76.316,
+   "template": "scatter",
+   "params": {
+    "direction": "down",
+    "spread": 0.85,
+    "tilt": 0,
+    "flash": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_alley",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s11",
+   "start": 76.316,
+   "end": 81.16,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.4
+   },
+   "asset": "a_nunchaku",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s12",
+   "start": 81.16,
+   "end": 85.78,
+   "template": "frame-split",
+   "params": {
+    "echo": true,
+    "frameWidth": 0.75,
+    "frameHeight": 0.32,
+    "lineWidth": 2,
+    "brackets": true,
+    "drawSec": 0.45,
+    "align": "right",
+    "dim": 0.25,
+    "lift": 0
+   },
+   "asset": "a_bamboo",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s13",
+   "start": 85.78,
+   "end": 90.56,
+   "template": "scatter",
+   "params": {
+    "echo": true,
+    "direction": "up",
+    "spread": 0.9,
+    "tilt": 0,
+    "flash": false,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_nunchaku",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s14",
+   "start": 90.56,
+   "end": 96.16,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.3
+   },
+   "asset": "a_rooftops",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s15",
+   "start": 96.16,
+   "end": 100.84,
+   "template": "stack",
+   "params": {
+    "dim": 0.4,
+    "pair": true
+   },
+   "asset": "a_hall",
+   "camera": "pan",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s16",
+   "start": 100.84,
+   "end": 105.8829931972789,
+   "template": "stack",
+   "params": {
+    "dim": 0.35,
+    "pair": true
+   },
+   "asset": "a_songshan",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s17",
+   "start": 105.8829931972789,
+   "end": 114.5,
+   "template": "title-card",
+   "params": {
+    "layout": "lower-left",
+    "showArtist": true,
+    "hold": 4,
+    "logo": true,
+    "dim": 0.35
+   },
+   "asset": "a_courtyard",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s18",
+   "start": 114.5,
+   "end": 119.04,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.3
+   },
+   "asset": "a_nunchaku",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s19",
+   "start": 119.04,
+   "end": 123.8,
+   "template": "frame-split",
+   "params": {
+    "echo": true,
+    "frameWidth": 0.75,
+    "frameHeight": 0.32,
+    "lineWidth": 2,
+    "brackets": true,
+    "drawSec": 0.45,
+    "align": "right",
+    "dim": 0.45,
+    "lift": 0
+   },
+   "asset": "a_bamboo",
+   "camera": "parallax",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s20",
+   "start": 123.8,
+   "end": 128.595,
+   "template": "scatter",
+   "params": {
+    "echo": true,
+    "direction": "up",
+    "spread": 0.85,
+    "tilt": -5,
+    "flash": true,
+    "dim": 0.3,
+    "lift": 0
+   },
+   "asset": "a_nunchaku",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s21",
+   "start": 128.595,
+   "end": 134.079,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.4
+   },
+   "asset": "a_rooftops",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s22",
+   "start": 134.079,
+   "end": 138.86,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "a_hall",
+   "camera": "pan",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s23",
+   "start": 138.86,
+   "end": 143.91727891156464,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "a_songshan",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s24",
+   "start": 143.91727891156464,
+   "end": 152.25,
+   "template": "title-card",
+   "params": {
+    "layout": "lower-left",
+    "showArtist": true,
+    "hold": 3,
+    "logo": true,
+    "dim": 0.5
+   },
+   "asset": "a_moon",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s25",
+   "start": 152.25,
+   "end": 156.88,
+   "template": "beat-cut",
+   "params": {
+    "dim": 0.3
+   },
+   "asset": "a_nunchaku",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s26",
+   "start": 156.88,
+   "end": 163.98,
+   "template": "frame-split",
+   "params": {
+    "echo": true,
+    "frameWidth": 0.75,
+    "frameHeight": 0.32,
+    "lineWidth": 2,
+    "brackets": true,
+    "drawSec": 0.45,
+    "align": "right",
+    "dim": 0.4,
+    "lift": 0
+   },
+   "asset": "a_bamboo",
+   "camera": "parallax",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s27",
+   "start": 163.98,
+   "end": 169,
+   "template": "stack",
+   "params": {
+    "dim": 0.3,
+    "pair": true
+   },
+   "asset": "a_rooftops",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s28",
+   "start": 169,
+   "end": 173.131,
+   "template": "stair",
+   "params": {
+    "side": "right",
+    "dim": 0.35
+   },
+   "asset": "a_nunchaku",
+   "camera": "push",
+   "transitionIn": "cut"
+  },
+  {
+   "id": "s29",
+   "start": 173.131,
+   "end": 179.53668934240363,
+   "template": "quiet",
+   "params": {
+    "position": "auto",
+    "dim": 0.75
+   },
+   "asset": "a_songshan",
+   "camera": "push",
+   "transitionIn": "wipe"
+  },
+  {
+   "id": "s30",
+   "start": 179.53668934240363,
+   "end": 195.9,
+   "template": "title-card",
+   "params": {
+    "layout": "center",
+    "showArtist": true,
+    "hold": 0,
+    "logo": true,
+    "dim": 0.4
+   },
+   "asset": "a_rooftops",
+   "camera": "push",
+   "transitionIn": "dissolve"
+  }
+ ],
+ "arc": [
+  {
+   "start": 0,
+   "level": 0
+  },
+  {
+   "start": 29.76,
+   "level": 1
+  },
+  {
+   "start": 67.8,
+   "level": 2
+  },
+  {
+   "start": 76.32,
+   "level": 3
+  },
+  {
+   "start": 106.5,
+   "level": 1
+  },
+  {
+   "start": 114.5,
+   "level": 3
+  },
+  {
+   "start": 143.72,
+   "level": 0
+  },
+  {
+   "start": 152.25,
+   "level": 3
+  },
+  {
+   "start": 173.13,
+   "level": 1
+  },
+  {
+   "start": 179.87,
+   "level": 0
+  }
+ ],
+ "moments": [
+  {
+   "kind": "build",
+   "at": 76.316,
+   "dur": 3.5,
+   "strength": 1
+  },
+  {
+   "kind": "drop",
+   "at": 76.316,
+   "strength": 1
+  },
+  {
+   "kind": "build",
+   "at": 114.5,
+   "dur": 3.5,
+   "strength": 1.1
+  },
+  {
+   "kind": "drop",
+   "at": 114.5,
+   "strength": 1.15
+  },
+  {
+   "kind": "build",
+   "at": 152.25,
+   "dur": 3.5,
+   "strength": 1.2
+  },
+  {
+   "kind": "hold",
+   "at": 152.25,
+   "dur": 0.6,
+   "strength": 1
+  },
+  {
+   "kind": "finale",
+   "at": 152.25,
+   "strength": 1.3
+  },
+  {
+   "kind": "break",
+   "at": 173.131,
+   "dur": 6.7,
+   "strength": 1
+  }
+ ],
+ "cues": [
+  {
+   "cueId": "c001",
+   "shot": "s02",
+   "emphasis": [
+    {
+     "from": 12,
+     "to": 15,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c002",
+   "shot": "s02",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 10,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c003",
+   "shot": "s03",
+   "emphasis": [
+    {
+     "from": 9,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c004",
+   "shot": "s03",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 14,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c005",
+   "shot": "s04",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 15,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c006",
+   "shot": "s04",
+   "emphasis": [
+    {
+     "from": 5,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c007",
+   "shot": "s05",
+   "emphasis": [
+    {
+     "from": 9,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slot",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c008",
+   "shot": "s05",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 10,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c009",
+   "shot": "s06",
+   "emphasis": [
+    {
+     "from": 16,
+     "to": 19,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c010",
+   "shot": "s06",
+   "emphasis": [
+    {
+     "from": 14,
+     "to": 16,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c011",
+   "shot": "s07",
+   "emphasis": [
+    {
+     "from": 14,
+     "to": 16,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c012",
+   "shot": "s07",
+   "emphasis": [
+    {
+     "from": 0,
+     "to": 4,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c013",
+   "shot": "s08",
+   "emphasis": [
+    {
+     "from": 13,
+     "to": 16,
+     "method": "shake"
+    }
+   ],
+   "accents": [
+    0,
+    4
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c014",
+   "shot": "s08",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 10,
+     "method": "shake"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c015",
+   "shot": "s09",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c016",
+   "shot": "s09",
+   "emphasis": [
+    {
+     "from": 10,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "enter": "focus",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c017",
+   "shot": "s09",
+   "emphasis": [
+    {
+     "from": 15,
+     "to": 19,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c018",
+   "shot": "s10",
+   "emphasis": [
+    {
+     "from": 12,
+     "to": 16,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "cut",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c019",
+   "shot": "s10",
+   "emphasis": [
+    {
+     "from": 15,
+     "to": 19,
+     "method": "scale"
+    },
+    {
+     "from": 20,
+     "to": 22,
+     "method": "shake"
+    }
+   ],
+   "accents": [
+    3
+   ],
+   "enter": "slam",
+   "exit": "slash",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c020",
+   "shot": "s11",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c021",
+   "shot": "s11",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c022",
+   "shot": "s12",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 12,
+     "method": "face"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c023",
+   "shot": "s12",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 7,
+     "method": "face"
+    },
+    {
+     "from": 8,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "ink",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c024",
+   "shot": "s13",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c025",
+   "shot": "s13",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c026",
+   "shot": "s14",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c027",
+   "shot": "s14",
+   "emphasis": [
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    3
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c028",
+   "shot": "s15",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 15,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c029",
+   "shot": "s15",
+   "emphasis": [
+    {
+     "from": 5,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c030",
+   "shot": "s16",
+   "emphasis": [
+    {
+     "from": 9,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slot",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c031",
+   "shot": "s16",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 10,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c032",
+   "shot": "s18",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c033",
+   "shot": "s18",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c034",
+   "shot": "s19",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 12,
+     "method": "face"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c035",
+   "shot": "s19",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 7,
+     "method": "face"
+    },
+    {
+     "from": 8,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "ink",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c036",
+   "shot": "s20",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c037",
+   "shot": "s20",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c038",
+   "shot": "s21",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "pop",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c039",
+   "shot": "s21",
+   "emphasis": [
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    3
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c040",
+   "shot": "s22",
+   "emphasis": [
+    {
+     "from": 11,
+     "to": 15,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c041",
+   "shot": "s22",
+   "emphasis": [
+    {
+     "from": 5,
+     "to": 7,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c042",
+   "shot": "s23",
+   "emphasis": [
+    {
+     "from": 9,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slot",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c043",
+   "shot": "s23",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 10,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0
+   ],
+   "enter": "rise",
+   "exit": "cut",
+   "reveal": "word"
+  },
+  {
+   "cueId": "c044",
+   "shot": "s25",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c045",
+   "shot": "s25",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    },
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c046",
+   "shot": "s26",
+   "emphasis": [
+    {
+     "from": 8,
+     "to": 12,
+     "method": "face"
+    }
+   ],
+   "accents": [
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c047",
+   "shot": "s26",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 7,
+     "method": "face"
+    },
+    {
+     "from": 8,
+     "to": 12,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    2,
+    4
+   ],
+   "enter": "ink",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c048",
+   "shot": "s27",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c049",
+   "shot": "s27",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    }
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line",
+   "accents": []
+  },
+  {
+   "cueId": "c050",
+   "shot": "s27",
+   "emphasis": [
+    {
+     "from": 4,
+     "to": 6,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    2
+   ],
+   "enter": "slam",
+   "exit": "cut",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c051",
+   "shot": "s28",
+   "emphasis": [
+    {
+     "from": 7,
+     "to": 11,
+     "method": "scale"
+    }
+   ],
+   "accents": [
+    0,
+    4
+   ],
+   "enter": "slam",
+   "exit": "slash",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c052",
+   "shot": "s29",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "line"
+  },
+  {
+   "cueId": "c053",
+   "shot": "s29",
+   "emphasis": [
+    {
+     "from": 2,
+     "to": 4,
+     "method": "scale"
+    }
+   ],
+   "enter": "fade",
+   "exit": "fade",
+   "reveal": "word"
+  },
+  {
+   "cueId": "nmuzicb0l",
+   "shot": "s29",
+   "emphasis": [
+    {
+     "from": 3,
+     "to": 6,
+     "method": "scale"
+    }
+   ],
+   "enter": "rise",
+   "exit": "fade",
+   "reveal": "word"
+  }
+ ],
+ "design": {
+  "font": "Chiron Sung HK",
+  "accentFont": "Montserrat",
+  "kanaScale": 0.7,
+  "grain": 0.25,
+  "paper": 0.4,
+  "colorScript": [
+   {
+    "start": 0,
+    "shadow": "#1C1815",
+    "highlight": "#D13C24",
+    "accent": "#E0A42B",
+    "duotone": 0.9,
+    "image": 0.25
+   },
+   {
+    "start": 29.8,
+    "shadow": "#1C1815",
+    "highlight": "#EEE3C8",
+    "accent": "#D13C24",
+    "duotone": 0.85,
+    "image": 0.2
+   },
+   {
+    "start": 67.8,
+    "shadow": "#1C1815",
+    "highlight": "#D13C24",
+    "accent": "#E0A42B",
+    "duotone": 0.9,
+    "image": 0.25
+   },
+   {
+    "start": 76,
+    "shadow": "#1C1815",
+    "highlight": "#D13C24",
+    "accent": "#E0A42B",
+    "duotone": 0.95,
+    "image": 0.3
+   },
+   {
+    "start": 106.5,
+    "shadow": "#1C1815",
+    "highlight": "#E0A42B",
+    "accent": "#D13C24",
+    "duotone": 0.9,
+    "image": 0.3
+   },
+   {
+    "start": 114.5,
+    "shadow": "#1C1815",
+    "highlight": "#D13C24",
+    "accent": "#E0A42B",
+    "duotone": 0.95,
+    "image": 0.3
+   },
+   {
+    "start": 143.7,
+    "shadow": "#1C1815",
+    "highlight": "#EEE3C8",
+    "accent": "#D13C24",
+    "duotone": 1,
+    "image": 0.2
+   },
+   {
+    "start": 152.3,
+    "shadow": "#1C1815",
+    "highlight": "#D13C24",
+    "accent": "#E0A42B",
+    "duotone": 0.95,
+    "image": 0.35
+   },
+   {
+    "start": 173.1,
+    "shadow": "#1C1815",
+    "highlight": "#E0A42B",
+    "accent": "#D13C24",
+    "duotone": 1,
+    "image": 0.4
+   },
+   {
+    "start": 175.3,
+    "shadow": "#1C1815",
+    "highlight": "#EEE3C8",
+    "accent": "#E0A42B",
+    "duotone": 1,
+    "image": 0.15
+   }
+  ],
+  "peak": "vacuum",
+  "medium": "cutout",
+  "techniques": [
+   "echo",
+   "skeleton",
+   "title-hook",
+   "flash"
+  ],
+  "language": "spy-titles"
+ },
+ "graphics": {
+  "sections": [
+   {
+    "start": 0,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#1C1815"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#2A2420",
+       "#3B302A"
+      ],
+      "height": 0.35,
+      "drift": 6,
+      "windows": "#E0A42B",
+      "color": "#2A2420"
+     },
+     {
+      "kind": "mist",
+      "count": 4,
+      "y": -0.35,
+      "soft": true,
+      "color": "#EEE3C8",
+      "opacity": 0.2
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 1,
+      "size": 560,
+      "color": "#D13C24",
+      "drift": 0.2,
+      "outline": false
+     }
+    ],
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 10,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#D13C24"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#B5311D",
+       "#8F2616"
+      ],
+      "height": 0.4,
+      "drift": 8,
+      "color": "#B5311D"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": 0.35,
+      "angle": 18,
+      "height": 140,
+      "color": "#1C1815",
+      "scroll": 50
+     }
+    ],
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 20,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#E0A42B"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#C78F22",
+       "#A5761A"
+      ],
+      "height": 0.3,
+      "drift": 10,
+      "color": "#C78F22"
+     },
+     {
+      "kind": "particles",
+      "shape": "leaf",
+      "color": "#D13C24",
+      "count": 18,
+      "size": 32,
+      "speed": 1.4,
+      "dir": "right",
+      "sway": 0.5,
+      "opacity": 0.75
+     }
+    ],
+    "accent": "#D13C24",
+    "text": "#1C1815"
+   },
+   {
+    "start": 29.8,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#EEE3C8"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#DCCFAE",
+       "#C9B88F"
+      ],
+      "height": 0.28,
+      "drift": 5,
+      "color": "#DCCFAE"
+     },
+     {
+      "kind": "mist",
+      "count": 3,
+      "y": -0.55,
+      "soft": true,
+      "color": "#D9CBA8",
+      "opacity": 0.5
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#1C1815",
+      "inset": 140
+     }
+    ],
+    "transition": {
+     "kind": "diagonal",
+     "dur": 0.4,
+     "color": "#D13C24"
+    },
+    "accent": "#D13C24",
+    "text": "#1C1815"
+   },
+   {
+    "start": 48.8,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#E0A42B"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#CC9325",
+       "#B07D1C"
+      ],
+      "height": 0.32,
+      "drift": 8,
+      "color": "#CC9325"
+     },
+     {
+      "kind": "speedlines",
+      "count": 40,
+      "inner": 0.6,
+      "color": "#C48E22",
+      "opacity": 0.5
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#1C1815",
+      "inset": 140
+     }
+    ],
+    "accent": "#D13C24",
+    "text": "#1C1815"
+   },
+   {
+    "start": 58.2,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#D13C24"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#B3301C",
+       "#7E2213"
+      ],
+      "height": 0.38,
+      "drift": 10,
+      "color": "#B3301C"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": -0.72,
+      "angle": -16,
+      "height": 120,
+      "color": "#1C1815",
+      "scroll": 60
+     }
+    ],
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 67.8,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#1C1815"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#2B2521",
+       "#3D322B"
+      ],
+      "height": 0.3,
+      "drift": 6,
+      "windows": "#D13C24",
+      "color": "#2B2521"
+     },
+     {
+      "kind": "speedlines",
+      "count": 36,
+      "inner": 0.62,
+      "color": "#D13C24",
+      "opacity": 0.5,
+      "pulse": 0.3
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#EEE3C8",
+      "inset": 140
+     }
+    ],
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 76,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#1C1815"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#2E2723",
+       "#433730"
+      ],
+      "height": 0.42,
+      "drift": 10,
+      "windows": "#E0A42B",
+      "color": "#2E2723"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": -0.45,
+      "angle": -18,
+      "height": 150,
+      "color": "#D13C24",
+      "scroll": 80,
+      "pulse": 0.3
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 1,
+      "size": 640,
+      "color": "#D13C24",
+      "drift": 0.15,
+      "outline": false,
+      "pulse": 0.4
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#E0A42B",
+      "inset": 120
+     }
+    ],
+    "transition": {
+     "kind": "stripes",
+     "dur": 0.5,
+     "color": "#D13C24"
+    },
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 96.2,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#EEE3C8"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#E0D3B3",
+       "#CDBD97"
+      ],
+      "height": 0.3,
+      "drift": 6,
+      "color": "#E0D3B3"
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 1,
+      "size": 380,
+      "color": "#D13C24",
+      "drift": 0.2,
+      "outline": false
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#D13C24",
+      "inset": 140
+     }
+    ],
+    "accent": "#D13C24",
+    "text": "#1C1815"
+   },
+   {
+    "start": 106.5,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#E0A42B"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#C99124",
+       "#A8781A"
+      ],
+      "height": 0.45,
+      "drift": 14,
+      "color": "#C99124"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": -0.2,
+      "angle": -24,
+      "height": 200,
+      "color": "#D13C24",
+      "scroll": 60
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 1,
+      "size": 360,
+      "color": "#D13C24",
+      "drift": 0.25,
+      "outline": false
+     }
+    ],
+    "accent": "#D13C24",
+    "text": "#1C1815"
+   },
+   {
+    "start": 114.5,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#D13C24"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#AE2E1B",
+       "#7A2012"
+      ],
+      "height": 0.42,
+      "drift": 12,
+      "color": "#AE2E1B"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": -0.45,
+      "angle": -18,
+      "height": 160,
+      "color": "#1C1815",
+      "scroll": 90,
+      "pulse": 0.4
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#EEE3C8",
+      "inset": 120
+     }
+    ],
+    "transition": {
+     "kind": "zigzag",
+     "dur": 0.4,
+     "color": "#1C1815"
+    },
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 134.1,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#EEE3C8"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#DDD0AF",
+       "#C8B68E"
+      ],
+      "height": 0.3,
+      "drift": 6,
+      "color": "#DDD0AF"
+     },
+     {
+      "kind": "mist",
+      "count": 3,
+      "y": -0.5,
+      "soft": true,
+      "color": "#DCCFAE",
+      "opacity": 0.5
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#1C1815",
+      "inset": 140
+     }
+    ],
+    "accent": "#D13C24",
+    "text": "#1C1815"
+   },
+   {
+    "start": 143.7,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#1C1815"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#262019",
+       "#352B24"
+      ],
+      "height": 0.25,
+      "drift": 4,
+      "color": "#262019"
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 1,
+      "size": 700,
+      "color": "#D13C24",
+      "drift": 0.05,
+      "outline": false,
+      "opacity": 0.9
+     }
+    ],
+    "transition": {
+     "kind": "iris",
+     "dur": 0.8
+    },
+    "accent": "#D13C24"
+   },
+   {
+    "start": 152.3,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#1C1815"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#30282A",
+       "#47392F"
+      ],
+      "height": 0.45,
+      "drift": 16,
+      "windows": "#D13C24",
+      "color": "#30282A"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": -0.4,
+      "angle": -20,
+      "height": 180,
+      "color": "#D13C24",
+      "scroll": 110,
+      "pulse": 0.5
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": 0.62,
+      "angle": -20,
+      "height": 50,
+      "color": "#E0A42B",
+      "scroll": 110,
+      "pulse": 0.4
+     },
+     {
+      "kind": "shapes",
+      "type": "circle",
+      "count": 1,
+      "size": 720,
+      "color": "#D13C24",
+      "drift": 0.2,
+      "outline": false,
+      "pulse": 0.5
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#E0A42B",
+      "inset": 110
+     }
+    ],
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 173.1,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#D13C24"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#A92C19",
+       "#6E1C10"
+      ],
+      "height": 0.5,
+      "drift": 24,
+      "color": "#A92C19"
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": -0.5,
+      "angle": -22,
+      "height": 220,
+      "color": "#1C1815",
+      "scroll": 140,
+      "pulse": 0.6
+     },
+     {
+      "kind": "band",
+      "type": "solid",
+      "y": 0.7,
+      "angle": -22,
+      "height": 40,
+      "color": "#E0A42B",
+      "scroll": 140
+     },
+     {
+      "kind": "frame",
+      "type": "brackets",
+      "color": "#EEE3C8",
+      "inset": 110
+     }
+    ],
+    "accent": "#E0A42B"
+   },
+   {
+    "start": 175.3,
+    "layers": [
+     {
+      "kind": "fill",
+      "color": "#1C1815"
+     },
+     {
+      "kind": "skyline",
+      "type": "city",
+      "colors": [
+       "#2A2420",
+       "#3A302A"
+      ],
+      "height": 0.3,
+      "drift": 3,
+      "windows": "#E0A42B",
+      "color": "#2A2420"
+     },
+     {
+      "kind": "mist",
+      "count": 4,
+      "y": -0.3,
+      "soft": true,
+      "color": "#EEE3C8",
+      "opacity": 0.22
+     }
+    ],
+    "accent": "#E0A42B"
+   }
+  ],
+  "story": [
+   {
+    "kind": "hero",
+    "x": 0.72,
+    "y": 0.42,
+    "size": 0.4,
+    "prop": "nunchaku.pair",
+    "motion": "hang",
+    "states": [
+     {
+      "at": 0,
+      "state": "show"
+     },
+     {
+      "at": 29.8,
+      "state": "hide"
+     },
+     {
+      "at": 44.2,
+      "state": "show"
+     },
+     {
+      "at": 48.8,
+      "state": "hide"
+     },
+     {
+      "at": 76.3,
+      "state": "glow"
+     },
+     {
+      "at": 106.5,
+      "state": "hide"
+     },
+     {
+      "at": 114.5,
+      "state": "glow"
+     },
+     {
+      "at": 143.7,
+      "state": "hide"
+     },
+     {
+      "at": 152.3,
+      "state": "glow"
+     },
+     {
+      "at": 173.1,
+      "state": "glow"
+     },
+     {
+      "at": 192,
+      "state": "glow"
+     }
+    ],
+    "glow": "#E0A42B"
+   },
+   {
+    "kind": "pop",
+    "x": -0.7,
+    "y": -0.55,
+    "size": 0.18,
+    "prop": "tea.cup",
+    "motion": "sit",
+    "at": 32.6,
+    "dur": 2.2
+   },
+   {
+    "kind": "pop",
+    "x": -0.72,
+    "y": 0.45,
+    "size": 0.3,
+    "prop": "sand.bag",
+    "motion": "hang",
+    "at": 54.6,
+    "dur": 3
+   },
+   {
+    "kind": "pop",
+    "x": -0.68,
+    "y": -0.6,
+    "size": 0.15,
+    "prop": "cigarette.single",
+    "motion": "still",
+    "at": 63.6,
+    "dur": 4.2
+   }
+  ],
+  "storyProps": [
+   {
+    "id": "nunchaku.pair",
+    "what": "A pair of nunchaku: two short black lacquered wooden sticks joined by a short steel chain, each end bound with bright gold metal bands, flat cut-paper silhouette style, hanging vertically from one stick",
+    "hero": true
+   },
+   {
+    "id": "tea.cup",
+    "what": "A small dark brown glazed ceramic tea cup without handle, steam curl above, flat cut-paper style, side view",
+    "hero": false
+   },
+   {
+    "id": "sand.bag",
+    "what": "A worn brown leather training sandbag tied with rope, cylindrical, hanging from a short rope, flat cut-paper style",
+    "hero": false
+   },
+   {
+    "id": "cigarette.single",
+    "what": "A single unlit white cigarette with an orange filter, lying horizontally, flat cut-paper style",
+    "hero": false
+   }
+  ]
+ }
+}

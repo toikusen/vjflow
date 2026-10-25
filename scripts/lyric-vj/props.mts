@@ -41,18 +41,36 @@ async function ask<T>(content: Anthropic.Messages.MessageParam['content'], schem
 // the director's story props (graphics.storyProps) are drawn whatever the plan says
 const story: { id: string; what: string; hero: boolean }[] = t.graphics?.storyProps ?? [];
 
+// a language without story props (a phone: its pictures are the stickers sent in the chat) draws only those, and
+// nothing at all when no sticker is sent (天文対話 paid for four sheets of props it could never show)
+// a storyboard design draws exactly the props its story names (its object parts show them), nothing more
+const onlyStory = LANGUAGES[t.design?.language as LanguageId]?.story === false || !!t.storyboard?.length;
+if (onlyStory && !story.length) {
+  console.log(`「${LANGUAGES[t.design.language as LanguageId]?.name ?? t.design?.language}」沒有要畫的物件，略過道具`);
+  writeFileSync(join(out, 'props.json'), JSON.stringify({ skipped: true, costUSD: 0 }, null, 1));
+  process.exit(0);
+}
 // 1. what the scenes need
-type Plan = { sheets: { id: string; items: { id: string; what: string; hero: boolean }[] }[] };
-const plan = await ask<Plan>(`你是這支歌詞 MV 的美術指導。背景、天空、地面、雲、光、幾何造型由程式畫；「具體的東西」（動物、食物、交通工具、招牌、道具、小物）由生圖模型設計成素材，程式再讓它們在鏡頭裡演出。列出這首歌的場景需要的具體物件，分成 3–4 張素材表，每張 8 個。
-規則：只列歌詞或概念裡真的會出現、能讓觀眾一眼認出的東西；不要人物或擬人角色（少量動作格的角色動畫看起來單調）；動物可以給同一種的不同姿勢或花色；不要程式就能畫好的東西（太陽、彩虹、星星、雲、房子剪影、圖樣）；這個設計語言最有代表性、程式畫不好的「主角大物件」（例如浮世繪的巨浪與富士山、哥德的玫瑰拱門）一定要列 1–2 個，hero=true（其他 hero=false）；每個物件是單獨一個、完整入框；id 用英文小寫加點（例如 cat.white_sit），what 用英文寫給生圖模型的具體描述（形狀、顏色、姿勢），不要寫文字或字母在物件上。
-這首歌：${song.title}
+type Plan = { sheets: { id: string; items: { id: string; what: string; hero: boolean; role?: string; line?: string; why?: string }[] }[] };
+const plan: Plan = onlyStory ? { sheets: Array.from({ length: Math.ceil(story.length / 8) }, (_, k) => ({ id: k ? `stickers${k + 1}` : 'stickers', items: story.slice(k * 8, k * 8 + 8).map((x) => ({ ...x, hero: false })) })) } : await ask<Plan>(`你是這支歌詞 MV 的美術指導。背景、天空、地面、雲、光、幾何造型由程式畫；「具體的東西」（動物、食物、交通工具、招牌、道具、小物）由生圖模型設計成素材，程式再讓它們在鏡頭裡演出。列出這首歌的場景需要的具體物件，分成 3–4 張素材表，每張 8 個。
+規則：列這首歌的世界需要的、能讓觀眾一眼認出的東西：它們讓這首歌的情緒、故事或文化脈絡成立，不必每個都是歌詞講到的（逐句把歌詞講到的東西畫出來只是配圖；歌詞講到的東西只在那句是重點時才列）；不要人物或擬人角色（少量動作格的角色動畫看起來單調）；動物可以給同一種的不同姿勢或花色；不要程式就能畫好的東西（太陽、彩虹、星星、雲、房子剪影、圖樣）；這個設計語言最有代表性、程式畫不好的「主角大物件」（例如浮世繪的巨浪與富士山、哥德的玫瑰拱門）一定要列 1–2 個，hero=true（其他 hero=false）；每個物件是單獨一個、完整入框；id 用英文小寫加點（例如 cat.white_sit），what 用英文寫給生圖模型的具體描述（形狀、顏色、姿勢），不要寫文字或字母在物件上。
+每個物件都要說出它的作用：role 填 mood（撐住情緒）、story（故事或段落變化裡的東西）、culture（這首歌的文化脈絡、場景、年代）、lyric（重點歌詞講到的東西）之一；why 用一句話說它對這首歌的情緒、故事或文化脈絡有什麼作用；role 是 lyric 時 line 抄下那句歌詞，其他 line 可以空字串。人名、藝名、綽號、團名、自稱不能只因為字面意思就變成道具（歌手 MC HotDog 自稱「熱狗」，就不因為這個名字畫香腸、熱狗堡）；歌詞真的在講的東西照常列。比喻要畫它比喻的那件事，不是字面上的東西。物件的造型要符合這首歌的情緒：失落、思念、悲傷的歌不要可愛、童趣、Q 版的造型（例如蜷睡的大白貓、笑臉雪人會把思念變成可愛）。說不出作用的物件不要列。
+這首歌：${song.title}（歌手和歌名裡的字都是名字）
 概念：${t.concept}
 設計語言：${t.design?.language}
 歌詞：
 ${song.cues.map((c: { text: string }) => c.text).join('\n')}${story.length ? `\n導演的故事一定要用到下面這些物件，id 照抄、一定要列入：\n${story.map((x) => `${x.id}: ${x.what}${x.hero ? '（hero）' : ''}`).join('\n')}` : ''}`, {
   type: 'object', additionalProperties: false, required: ['sheets'],
-  properties: { sheets: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'items'], properties: { id: { type: 'string' }, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'what', 'hero'], properties: { id: { type: 'string' }, what: { type: 'string' }, hero: { type: 'boolean' } } } } } } } },
+  properties: { sheets: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'items'], properties: { id: { type: 'string' }, items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'what', 'hero', 'role', 'line', 'why'], properties: { id: { type: 'string' }, what: { type: 'string' }, hero: { type: 'boolean' }, role: { type: 'string', enum: ['mood', 'story', 'culture', 'lyric'] }, line: { type: 'string' }, why: { type: 'string' } } } } } } } },
 });
+// a thing with no part in the song's mood, story or culture is not drawn, nor a lyric prop with no line (a grilled
+// sausage for the singer's nickname 熱狗). Lines were required once; every prop became a lyric illustrated (2026-10-21)
+if (!onlyStory)
+  for (const s of plan.sheets) {
+    const kept = s.items.filter((x) => story.some((p) => p.id === x.id) || (!!x.why?.trim() && (x.role !== 'lyric' || !!x.line?.trim())));
+    if (kept.length < s.items.length) console.log(`props: dropped ${s.items.filter((x) => !kept.includes(x)).map((x) => x.id).join(', ')} (no part in the song)`);
+    s.items = kept;
+  }
 // a story prop the plan left out still gets drawn (on the first sheet with room, or a sheet of its own)
 for (const p of story) {
   if (plan.sheets.some((s) => s.items.some((x) => x.id === p.id))) continue;
@@ -132,7 +150,10 @@ for (const sheet of plan.sheets) {
     type: 'object', additionalProperties: false, required: ['frames'],
     properties: { frames: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['n', 'keep', 'id', 'what'], properties: { n: { type: 'integer' }, keep: { type: 'boolean' }, id: { type: 'string' }, what: { type: 'string' } } } } },
   });
-  names[dir] = Object.fromEntries(named.frames.filter((f) => f.keep && f.n >= 0 && f.n < frames.length && !used.has(f.id) && /^[a-z0-9._-]+$/.test(f.id)).map((f) => (used.add(f.id), [String(f.n), [f.id, f.what]])));
+  // only what was asked for (or another pose of it): the image model's extras are not props of the song (a garlic
+  // clove it drew beside the sausage)
+  const asked = (id: string) => sheet.items.some((x) => id === x.id || id.startsWith(`${x.id}_`) || id.startsWith(`${x.id}.`));
+  names[dir] = Object.fromEntries(named.frames.filter((f) => f.keep && f.n >= 0 && f.n < frames.length && !used.has(f.id) && /^[a-z0-9._-]+$/.test(f.id) && asked(f.id)).map((f) => (used.add(f.id), [String(f.n), [f.id, f.what]])));
 }
 writeFileSync(join(out, 'names.json'), JSON.stringify(names, null, 1));
 if (!Object.values(names).some((x) => Object.keys(x).length)) throw new Error('素材表裡沒有可用的物件');

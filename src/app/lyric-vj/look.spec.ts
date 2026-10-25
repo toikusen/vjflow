@@ -109,6 +109,35 @@ describe('dropEmptyFrames', () => {
   });
 });
 
+describe('buildOnRise', () => {
+  it('splits a look where the music rises: the quiet part keeps only its ground', async () => {
+    const { buildOnRise } = await import('./look');
+    const fill = { kind: 'fill', color: '#ffe01a' };
+    const photo = { kind: 'photo', mode: 'circle', asset: 'a' };
+    const look = { sections: [{ start: 0, layers: [fill, photo] }, { start: 22, layers: [fill, photo] }] } as never as import('./render/graphics').GraphicsLook;
+    const music = [{ start: 0, energy: 0.22 }, { start: 11.1, energy: 0.77 }, { start: 30, energy: 0.6 }, { start: 40, energy: 0.9 }];
+    expect(buildOnRise(look, music, [{ start: 22, end: 25 }], 60)).toHaveLength(1);
+    expect(look.sections.map((s) => [s.start, s.layers.length])).toEqual([[0, 1], [11.1, 2], [22, 2]]);
+    // a rise too small (0.6 → 0.9), with nothing to hold back, or after a sung line leaves the look alone
+    expect(buildOnRise({ sections: [{ start: 0, layers: [fill] }] } as never, music, [], 60)).toEqual([]);
+    expect(buildOnRise({ sections: [{ start: 0, layers: [fill, photo] }] } as never, music, [{ start: 5, end: 8 }], 60)).toEqual([]);
+  });
+});
+
+describe('dropTitleStamps and dropNestedBlobs', () => {
+  it('removes a stamp beside a title card and a disc inside a bigger disc, and keeps the rest', async () => {
+    const { dropNestedBlobs, dropTitleStamps } = await import('./look');
+    const stamp = { kind: 'stamp', text: '何度も', color: '#ff6b2c' };
+    const sun = { kind: 'blob', color: '#ffe01a', x: 0.6, y: 0.5, r: 0.36 };
+    const core = { kind: 'blob', color: '#ff6b2c', x: 0.5, y: 0.42, r: 0.22 };
+    const apart = { kind: 'blob', color: '#2d4fc4', x: -0.35, y: 0.12, r: 0.42 };
+    const look = { sections: [{ start: 0, layers: [stamp, sun, core] }, { start: 20, layers: [stamp, sun, apart] }] } as never as import('./render/graphics').GraphicsLook;
+    expect(dropTitleStamps(look, [{ start: 21, end: 30, template: 'title-card' }, { start: 2, end: 9, template: 'quiet' }], 40)).toHaveLength(1);
+    expect(dropNestedBlobs(look)).toHaveLength(1);
+    expect(look.sections.map((s) => s.layers)).toEqual([[stamp, sun], [sun, apart]]);
+  });
+});
+
 describe('validateLook photo over skyline', () => {
   it('drops multiply from a framed photo in a section with a skyline', async () => {
     const { validateLook } = await import('./look');
@@ -139,5 +168,32 @@ describe('validateLook transition limits', () => {
     const { validateLook } = await import('./look');
     const r = validateLook({ sections: [sec(0, ''), sec(10, 'circle'), sec(20, ''), sec(31, 'clock'), sec(40, ''), sec(50, '')] } as never, [], 0, [0, 9.2, 45]);
     expect(r.look!.sections.map((s) => s.transition?.kind)).toEqual([undefined, 'circle', undefined, undefined, undefined, undefined]);
+  });
+});
+
+describe('cleanLayer colours written as switches', () => {
+  it('gives a colour set to true the layer’s own colour and drops one set to false', async () => {
+    const { validateLook } = await import('./look');
+    const look = { sections: [{ start: 0, layers: [
+      { kind: 'swissgrid', color: '#7A5A10', bars: true, opacity: 0.35 },
+      { kind: 'swissgrid', color: '#1A7FAE', bars: false },
+    ] }] } as never;
+    const [a, b] = validateLook(look, [], 0).look!.sections[0].layers as { bars?: string }[];
+    expect(a.bars).toBe('#7A5A10');
+    expect('bars' in b).toBe(false);
+  });
+});
+
+describe('limitPulse', () => {
+  it('keeps one beat bounce in a section with a drop and none elsewhere', async () => {
+    const { limitPulse } = await import('./look');
+    const look = { sections: [
+      { start: 0, layers: [{ kind: 'blob', pulse: 0.5 }, { kind: 'shapes', pulse: 0.3 }] },
+      { start: 20, layers: [{ kind: 'blob', pulse: 0.5 }, { kind: 'shapes', pulse: 0.3 }] },
+    ] } as never;
+    const fixes = limitPulse(look, [25], 40);
+    const pulses = (look as { sections: { layers: { pulse?: number }[] }[] }).sections.map((s) => s.layers.map((l) => l.pulse ?? 0));
+    expect(pulses).toEqual([[0, 0], [0.5, 0]]);
+    expect(fixes.length).toBe(3);
   });
 });

@@ -37,20 +37,25 @@ def main():
     rgb[..., 1] = np.where(rim & (green > 0), np.maximum(r, b), g)
     # a figure plus the prop it holds is one blob: close small gaps first
     labels, n = ndimage.label(ndimage.binary_closing(mask, iterations=6))
-    boxes = [s for s in ndimage.find_objects(labels) if s and (s[0].stop - s[0].start) * (s[1].stop - s[1].start) > a.min * mask.size]
+    boxes = [(s, j) for j, s in enumerate(ndimage.find_objects(labels), 1) if s and (s[0].stop - s[0].start) * (s[1].stop - s[1].start) > a.min * mask.size]
     # reading order: rows by the figure's foot line, then left to right
     h = mask.shape[0]
-    boxes.sort(key=lambda s: (round(s[0].stop / (h / 4)), s[1].start))
+    boxes.sort(key=lambda b: (round(b[0][0].stop / (h / 4)), b[0][1].start))
     drop = {int(x) for x in a.drop.split(",") if x}
     frames = []
     k = 0
-    for i, (ys, xs) in enumerate(boxes, 1):
+    for i, ((ys, xs), j) in enumerate(boxes, 1):
         if i in drop:
             continue
-        rgba = np.dstack([rgb[ys, xs], (alpha[ys, xs] * 255)]).astype(np.uint8)
+        # only this figure: specks of other blobs and half-keyed green inside its box are cleared (a green dot rode
+        # along on 黄昏サイクル's portrait window)
+        own = ndimage.binary_dilation(labels[ys, xs] == j, iterations=2)
+        a_crop = alpha[ys, xs] * own
+        a_crop = np.where((green[ys, xs] > 30) & (a_crop < 1), 0, a_crop)
+        rgba = np.dstack([rgb[ys, xs], (a_crop * 255)]).astype(np.uint8)
         name = f"f{k:02d}.png"
         Image.fromarray(rgba, "RGBA").save(os.path.join(a.out, name))
-        frames.append({"file": name, "w": int(xs.stop - xs.start), "h": int(ys.stop - ys.start), "sheetIndex": i})
+        frames.append({"file": name, "w": int(xs.stop - xs.start), "h": int(ys.stop - ys.start), "x": int(xs.start), "y": int(ys.start), "sheetIndex": i})
         k += 1
     json.dump({"frames": frames}, open(os.path.join(a.out, "frames.json"), "w"), indent=1)
     print(f"{len(boxes)} figures found, {len(frames)} frames written")

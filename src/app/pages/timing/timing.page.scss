@@ -212,6 +212,20 @@ p {
     gap: 8px 12px;
   }
 
+  // a suspected typo under the line, with its fix
+  .proof {
+    grid-column: 2 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    font-size: 13px;
+
+    small {
+      margin-left: 6px;
+    }
+  }
+
   // the lyric reads as text and edits in place
   input.text {
     width: 100%;

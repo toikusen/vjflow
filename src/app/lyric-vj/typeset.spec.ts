@@ -18,3 +18,10 @@ describe('typeset', () => {
     expect(t[5].gapBefore).toBe(0.2);
   });
 });
+
+describe('typeset script gaps', () => {
+  it('adds no gap inside English words with an apostrophe', () => {
+    expect(typeset("You're", false).every((t) => t.gapBefore === 0)).toBe(true);
+    expect(typeset('我愛Coca', false).some((t) => t.gapBefore > 0)).toBe(true);
+  });
+});

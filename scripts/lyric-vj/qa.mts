@@ -43,7 +43,9 @@ if (before?.length) {
   const firstCost = costOf();
   const firstDirector = existsSync(join(dir, 'director.json')) ? readFileSync(join(dir, 'director.json'), 'utf8') : undefined;
   try {
-    execFileSync('npx', ['tsx', 'scripts/lyric-vj/direct.mts', '--song', a.song!, '--start', '0', '--end', song.duration.toFixed(2), '--out', dir, '--design-only', `${treatment}.qa-first`, '--qa-notes', notes, '--history', a.history!], { stdio: ['ignore', 'inherit', 'inherit'] });
+    execFileSync('npx', ['tsx', 'scripts/lyric-vj/direct.mts', '--song', a.song!, '--start', '0', '--end', song.duration.toFixed(2), '--out', dir, '--design-only', `${treatment}.qa-first`, '--qa-notes', notes, '--history', a.history!,
+      // the props and pictures were made before this check: the redo keeps the story and uses only pictures there are
+      '--keep-story', ...(existsSync(join(dir, 'assets.merged.json')) ? ['--available-assets', join(dir, 'assets.merged.json')] : existsSync(join(dir, 'assets', 'assets.json')) ? ['--available-assets', join(dir, 'assets', 'assets.json')] : [])], { stdio: ['ignore', 'inherit', 'inherit'] });
     after = check();
     // a redo whose check failed is unknown, not clean: keep the measured first version
     if (after && after.length < before.length) kept = 'redo';

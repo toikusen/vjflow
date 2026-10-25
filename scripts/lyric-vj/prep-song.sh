@@ -33,3 +33,5 @@ open(out, "w").write(x["plainLyrics"])
 print(f"lyrics: {x['artistName']} - {x['trackName']} ({x['duration']} s)")
 PY
 npx tsx scripts/lyric-vj/song.mts --audio "$d/mix.mp3" --vocals "$d/vocals.wav" --vocals-alt "$d/vocals_kim.wav" --title "$meta" --lyrics "$d/lyrics-source.txt" --out "$d" --language "$lang"
+# the lyric site's homophone slips (下得 for 下的), flagged for the timing editor; never applied on their own
+npx tsx scripts/lyric-vj/proofread.mts --song "$d/song.json" || echo "proofread skipped (the lines still read as typed)"

@@ -125,6 +125,33 @@ describe('snapToVoice', () => {
   });
 });
 
+describe('keepGivenStarts', () => {
+  it('puts back a line the word alignment moved far from the given timing and keeps the small moves', async () => {
+    const { keepGivenStarts } = await import('./timeline');
+    const cue = (id: string, start: number, end: number) => ({ id, start, end, text: 'x', timingSource: 'lrclib' as const, confidence: 'verified' as const, charStarts: [start] });
+    const given = [cue('a', 70, 72), cue('b', 89.2, 90.4), cue('c', 90.4, 92)];
+    const aligned = [cue('a', 70.3, 71.7), cue('b', 71.7, 72.1), cue('c', 72.1, 75)];
+    const r = keepGivenStarts(given, aligned);
+    expect(r.kept).toBe(2);
+    expect(r.cues.map((c) => [c.id, c.start])).toEqual([['a', 70.3], ['b', 89.2], ['c', 90.4]]);
+    expect(r.cues[1].charStarts).toBeUndefined();
+  });
+
+  it('gives the line before a restored one back the end the early start had cut, and its character times stay inside', async () => {
+    const { keepGivenStarts } = await import('./timeline');
+    const cue = (id: string, start: number, end: number, charStarts?: number[]) => ({ id, start, end, text: 'xx', timingSource: 'lrclib' as const, confidence: 'verified' as const, charStarts });
+    const given = [cue('a', 8, 12), cue('b', 12, 14)];
+    const aligned = [cue('a', 8, 10.3, [8, 11.543]), cue('b', 10.3, 14)];
+    const r = keepGivenStarts(given, aligned);
+    expect(r.cues.map((c) => [c.id, c.start, c.end])).toEqual([['a', 8, 12], ['b', 12, 14]]);
+    expect(r.cues[0].charStarts).toEqual([8, 11.543]);
+    // character times past the line's own end are dropped rather than kept beyond it
+    const cut = keepGivenStarts([cue('a', 8, 10), cue('b', 10, 14)], [cue('a', 8, 8.5, [8, 11.5]), cue('b', 8.5, 14)]);
+    expect(cut.cues[0].end).toBe(10);
+    expect(cut.cues[0].charStarts).toBeUndefined();
+  });
+});
+
 describe('holdToVoice', () => {
   it('keeps a held last note on screen until the voice stops, never past the next line', async () => {
     const { holdToVoice } = await import('./timeline');
@@ -140,3 +167,63 @@ describe('holdToVoice', () => {
     expect(tight.cues[0].end).toBeCloseTo(15.9, 1);
   });
 });
+
+describe('placeInVoice', () => {
+  it('moves a line off silence to the next voice onset, drops one with no room', async () => {
+    const { placeInVoice } = await import('./timeline');
+    // voice 0–5 s and 9–12 s
+    const active = Array.from({ length: 1500 }, (_, f) => f < 500 || (f >= 900 && f < 1200));
+    const cues = [
+      { id: 'a', start: 1, end: 4, text: 'x' },
+      { id: 'b', start: 6, end: 6.5, text: 'y' }, // in the gap
+      { id: 'c', start: 9.5, end: 11.5, text: 'z' },
+      { id: 'd', start: 12.5, end: 14, text: 'w' }, // after the last voice
+    ] as Parameters<typeof placeInVoice>[0];
+    const r = placeInVoice(cues, active);
+    expect(r.moved).toEqual(['b']);
+    expect(r.dropped).toEqual(['d']);
+    expect(r.cues.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+    expect(r.cues[1].start).toBeCloseTo(9, 1);
+    expect(r.cues[1].end).toBeCloseTo(9.45, 2);
+  });
+});
+
+describe('keepLyricOrder', () => {
+  it('re-times a line placed ahead of the one before it, and the lines it overlaps, by character count', async () => {
+    const { keepLyricOrder } = await import('./timeline');
+    const cues = [
+      { id: 'a', start: 0, end: 2, text: 'xx' },
+      { id: 'b', start: 3, end: 9, text: 'aaaa' },
+      { id: 'c', start: 9, end: 9.5, text: 'bbbb' }, // 0.5 s chant after b
+      { id: 'd', start: 7, end: 11, text: 'cccccccc' }, // starts before c, inside b
+      { id: 'e', start: 12, end: 13, text: 'yy' },
+    ] as Parameters<typeof keepLyricOrder>[0];
+    const r = keepLyricOrder(cues);
+    expect(r.reflowed).toEqual(['b', 'c', 'd']);
+    expect(r.cues.map((c) => [c.start, c.end])).toEqual([[0, 2], [3, 5], [5, 7], [7, 11], [12, 13]]);
+  });
+
+  it('leaves lines in order alone', async () => {
+    const { keepLyricOrder } = await import('./timeline');
+    const cues = [{ id: 'a', start: 0, end: 1, text: 'ドドドド' }, { id: 'b', start: 1, end: 3, text: 'xx' }] as Parameters<typeof keepLyricOrder>[0];
+    expect(keepLyricOrder(cues).reflowed).toEqual([]);
+  });
+});
+
+describe('feltTempo', () => {
+  const beats = Array.from({ length: 40 }, (_, i) => i * 0.4); // 150 BPM
+  it('halves a doubled tempo of a slow song, keeping the beats on the downbeats', async () => {
+    const { feltTempo } = await import('./timeline');
+    const cues = [{ id: 'a', start: 0, end: 6, text: '重ねたすべては' }] as Parameters<typeof feltTempo>[0]['cues'];
+    const r = feltTempo({ tempo: 150, beats, downbeats: [0.4, 2, 3.6], cues });
+    expect(r.halved).toBe(true);
+    expect(r.tempo).toBe(75);
+    expect(r.beats[0]).toBeCloseTo(0.4);
+  });
+  it('leaves a busy line alone', async () => {
+    const { feltTempo } = await import('./timeline');
+    const cues = [{ id: 'a', start: 0, end: 2, text: 'のんののんのんのんののんふぃく' }] as Parameters<typeof feltTempo>[0]['cues'];
+    expect(feltTempo({ tempo: 150, beats, downbeats: [], cues }).halved).toBe(false);
+  });
+});
+

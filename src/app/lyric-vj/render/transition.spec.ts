@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { revealMask, TRANSITION_KINDS } from './transition';
+import { revealMask, MASK_KINDS } from './transition';
 
 /** A stand-in 2D context that keeps each subpath as a polygon (arcs sampled), so coverage can be measured. */
 function recorder() {
@@ -48,7 +48,7 @@ function recorder() {
 const W = 1920;
 const H = 1080;
 /** Share of a 48 × 27 grid of points the mask covers at progress k. */
-function coverage(kind: (typeof TRANSITION_KINDS)[number], k: number) {
+function coverage(kind: (typeof MASK_KINDS)[number], k: number) {
   const r = recorder();
   revealMask(r.ctx, kind, k, W, H, 7);
   let n = 0;
@@ -63,7 +63,7 @@ function coverage(kind: (typeof TRANSITION_KINDS)[number], k: number) {
 
 describe('section transitions', () => {
   it('start showing nothing and end showing the whole frame, every kind', () => {
-    for (const kind of TRANSITION_KINDS) {
+    for (const kind of MASK_KINDS) {
       expect(coverage(kind, 0), `${kind} at 0`).toBe(0);
       // the last moment before the transition ends: no corner left to pop in afterwards
       expect(coverage(kind, 0.999), `${kind} at the end`).toBe(1);
@@ -71,7 +71,7 @@ describe('section transitions', () => {
   });
 
   it('grow steadily (never shrink) while they play', () => {
-    for (const kind of TRANSITION_KINDS) {
+    for (const kind of MASK_KINDS) {
       const steps = [0.2, 0.4, 0.6, 0.8].map((k) => coverage(kind, k));
       expect(steps.every((v, i) => i === 0 || v >= steps[i - 1] - 0.01), kind).toBe(true);
     }

@@ -40,3 +40,15 @@ describe('Chinese phrases', () => {
     expect(phraseBoundaries('世界の続き').has(1)).toBe(false);
   });
 });
+
+describe('balancedRows', () => {
+  it('breaks at phrase boundaries so the longest row is as short as it can be', async () => {
+    const { balancedRows } = await import('./phrases');
+    const rows = balancedRows('不要說我壞話 因為我有順風耳 如果是你肚子大我帶你去看順風婦產科', 3);
+    expect(rows.join('').replace(/ /g, '')).toBe('不要說我壞話因為我有順風耳如果是你肚子大我帶你去看順風婦產科');
+    expect(rows.length).toBe(3);
+    expect(Math.max(...rows.map((r) => [...r.replace(/ /g, '')].length))).toBeLessThanOrEqual(13);
+    expect(balancedRows('我愛台妹', 2).join('')).toBe('我愛台妹');
+    expect(balancedRows('只怕你掛的太快 明天要去廟裡收驚拜拜 How High?! We can kiss the sky!', 2)[1]).toMatch(/^How High/);
+  });
+});

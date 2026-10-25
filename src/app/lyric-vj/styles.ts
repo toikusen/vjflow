@@ -1,5 +1,6 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
+import { LANGUAGES, type LanguageId } from './languages';
 import { MOVING_FORMS, motifStateAt } from './motif';
 import { analyzeStructure, chorusSpans, sameLines, TitleCards, titleGaps, wantedTitleGaps } from './structure';
 import { sceneCount, Tier, TIERS } from './tiers';
@@ -45,7 +46,13 @@ export const STYLES: Record<string, StylePreset> = {
 };
 
 /** Style-level checks the director must satisfy (counts and pacing); returned as feedback errors. */
+/** Time an input field takes to type a line out before the whole line can be read (s). */
+const INPUT_TYPING = 0.4;
+
 export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimeline, win: Window, tier: Tier = 'standard', titleCards: TitleCards = 'ends'): string[] {
+  // a storyboard design is drawn by its parts and checked by its own rules (scene.ts) and on its frames: the caption
+  // rules here (pictures per tier, templates per shot, shot lengths) do not apply to it
+  if (t.storyboard?.length) return [];
   const errors: string[] = [];
   const images = t.assets.filter((a) => a.kind === 'image').length;
   const videos = t.assets.filter((a) => a.kind === 'video').length;
@@ -58,9 +65,14 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
   if (images < min || images > g) errors.push(`「${name}」版本在這個長度要 ${min}–${g} 張 image，目前 ${images}`);
   if (TIERS[tier].video && (videos < min || videos > images)) errors.push(`「${name}」版本每張 image 都要有 video（${min}–${images} 段），目前 ${videos}`);
   if (!TIERS[tier].video && videos > 0) errors.push(`「${name}」版本不可有 video 素材`);
+  // a chosen design language brings its own templates and its own picture rules: the style's list left out the phone's
+  // chat, notify and input, and the two checks sent 天文対話 back and forth until it failed
+  const lang = LANGUAGES[((t as { language?: string }).language ?? t.design?.language) as LanguageId];
+  // (only an interface language, one with its own layout; the others stay held to both lists, as before)
+  const templates = lang?.layout ? lang.templates : style.templates;
   for (const s of t.shots) {
-    if (!style.templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於風格「${style.name}」`);
-    if (!s.asset) errors.push(`鏡頭 ${s.id} 沒有素材；這個風格每個鏡頭都要有素材`);
+    if (!templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於${lang?.layout ? `設計語言「${lang.name}」` : `風格「${style.name}」`}`);
+    if (!s.asset && !(lang?.photos === false || lang?.photos === 'attached')) errors.push(`鏡頭 ${s.id} 沒有素材；這個風格每個鏡頭都要有素材`);
   }
   // title cards over the gaps the user asked for (a design option, not a rule of the style)
   if (style.templates.includes('title-card')) {
@@ -90,8 +102,10 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
       if (s.form === 'mask' && s.intensity > 0 && sung(s.start, end)) errors.push(`主題物件 ${s.start.toFixed(1)}–${end.toFixed(1)} 秒用了 mask，但這段有歌詞；mask 只能用在沒有歌詞的段落`);
     });
   }
+  // a language with its own layout rules (an interface: a chat runs many shots) replaces the generic ones below
+  const own = lang?.layout;
   // a repeated line reuses its scene but not its layout: the same words in the same template read as a copy
-  {
+  if (!own?.repeatOk) {
     const same = sameLines(song);
     const tmpl = (cueId: string) => t.shots.find((s) => s.id === t.cues.find((c) => c.cueId === cueId)?.shot)?.template;
     const pairs = [...same].filter(([id, src]) => tmpl(id) && tmpl(src));
@@ -111,11 +125,28 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
     });
   }
   // variety: no template twice in a row, and use most of the style's templates over a longer window
-  t.shots.forEach((s, i) => {
+  if (!own?.repeatOk) t.shots.forEach((s, i) => {
     if (i > 0 && s.template === t.shots[i - 1].template && s.template !== 'title-card') errors.push(`鏡頭 ${t.shots[i - 1].id}、${s.id} 連續使用 ${s.template}，相鄰鏡頭要換版型`);
   });
+  // an interface's lyrics live in its own templates, each line marked with who says it on the screen
+  if (own) {
+    // every shot that carries lyrics counts, whatever its template (a quiet shot full of lines dodged the share)
+    const lyricShots = t.shots.filter((s) => t.cues.some((c) => c.shot === s.id));
+    const inUi = lyricShots.filter((s) => own.lyrics.includes(s.template));
+    if (lyricShots.length && inUi.length < own.share * lyricShots.length)
+      errors.push(`有歌詞的鏡頭只有 ${inUi.length}/${lyricShots.length} 個用介面版型（${own.lyrics.join('、')}），至少要 ${Math.round(own.share * 100)}%：先決定每句在螢幕上是傳出、收到、輸入還是通知，再選版型`);
+    errors.push(...attachmentErrors(t, false));
+    // an input field shows one line at a time and the next replaces it, and is read only once typed out: a line sung
+    // faster than it reads plus its typing (いっせーので: 1.69 s sung, 1.5 s to read, readable 1.39 s) is gone
+    // before it is read there (天文対話's いっせーので／言ってみたい), while a chat keeps it up in the thread
+    const byId = new Map(song.cues.map((c) => [c.id, c]));
+    const rushed = t.cues.filter((c) => t.shots.find((s) => s.id === c.shot)?.template === 'input').map((c) => byId.get(c.cueId)).filter((c): c is NonNullable<typeof c> => !!c && c.end - c.start < [...c.text.replace(/\s/g, '')].length / 12 + 1 + INPUT_TYPING);
+    if (rushed.length) errors.push(`這些句子唱得太快，放在 input（一次一句、下一句就換掉）來不及讀，改用 chat（訊息會留在對話串）：${rushed.map((c) => `${c.id}「${c.text}」`).join('、')}`);
+    const unmarked = t.cues.filter((c) => inUi.some((s) => s.id === c.shot) && !c.voice).map((c) => c.cueId);
+    if (unmarked.length) errors.push(`介面鏡頭裡的歌詞要填 voice（me 自己／them 對方）：${unmarked.slice(0, 8).join('、')}${unmarked.length > 8 ? ` 等 ${unmarked.length} 句` : ''}`);
+  }
   const used = new Set(t.shots.map((s) => s.template)).size;
-  const want = Math.min(4, style.templates.length, t.shots.length - 1);
+  const want = Math.min(own?.minTemplates ?? 4, templates.length, t.shots.length - 1);
   if (used < want) errors.push(`只用了 ${used} 種版型，這個長度至少要 ${want} 種`);
   // pacing: interior shots must fall in the range (the first/last may be clipped by the window)
   t.shots.forEach((s, i) => {
@@ -124,8 +155,9 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
     const edge = i === 0 || i === t.shots.length - 1;
     // a title card spans its whole gap without lyrics, however long
     if (s.template === 'title-card') return;
-    if ((!edge && len < style.shotSec[0] - 0.3) || len > style.shotSec[1] + 0.3) {
-      errors.push(`鏡頭 ${s.id} 長 ${len.toFixed(1)} 秒，這個風格要 ${style.shotSec[0]}–${style.shotSec[1]} 秒（約 2 句一個鏡頭）`);
+    const [lo, hi] = own?.shotSec ?? style.shotSec;
+    if ((!edge && len < lo - 0.3) || len > hi + 0.3) {
+      errors.push(`鏡頭 ${s.id} 長 ${len.toFixed(1)} 秒，這個風格要 ${lo}–${hi} 秒${own ? '' : '（約 2 句一個鏡頭）'}`);
     }
   });
   // flashes are rationed, not pinned to detected section starts (the analyser's boundaries can be off by bars)
@@ -138,4 +170,21 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
   const cues = cuesIn(song, win);
   if (!cues.length) errors.push('範圍內沒有歌詞');
   return errors;
+}
+
+/**
+ * What is wrong with a design's chat attachments: a photo must be one of the song's pictures, and (once the design
+ * has written its story props, `withProps`) a sticker must be one of its props — a missing one was simply not drawn.
+ */
+export function attachmentErrors(t: Pick<TreatmentV3, 'shots' | 'assets' | 'graphics'>, withProps: boolean): string[] {
+  const out: string[] = [];
+  for (const s of t.shots) {
+    const kind = s.params['attachKind'];
+    const id = String(s.params['attach'] ?? '').trim().replace(/^spr:/, '');
+    if (kind !== 'photo' && kind !== 'sticker') continue;
+    if (!id) out.push(`鏡頭 ${s.id} 的附件（${kind}）沒有填 attach`);
+    else if (kind === 'photo' && !t.assets.some((a) => a.id === id)) out.push(`鏡頭 ${s.id} 傳的照片 ${id} 不在 assets 裡：先在 assets 加上這張照片（手機隨手拍的樣子），或改用已有的`);
+    else if (kind === 'sticker' && withProps && !(t.graphics?.storyProps ?? []).some((p) => p.id === id)) out.push(`鏡頭 ${s.id} 傳的貼圖 ${id} 沒有列在 story 的 props：要列出它（what 寫貼圖的樣子），不然畫不出來`);
+  }
+  return out;
 }

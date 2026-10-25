@@ -3,9 +3,9 @@
 //   [--assets out/indigo/assets/assets.json] --start 69 --end 90 [--stills 70,75] [--fps 30 --workers 2]
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { dirname, extname, join, relative, resolve } from 'node:path';
+import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { jobIdFor, jobStatus, lockJob } from './status.mts';
 import { lockFile } from './lock.mts';
 import { fontCache } from './font-cache.mts';
@@ -15,6 +15,7 @@ import { frameStats, visualIssues, type FrameStats } from '../../src/app/lyric-v
 import { keyPhrases, splitSongTitle } from '../../src/app/lyric-vj/structure';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
+import { resolveTime } from '../../src/app/lyric-vj/scene';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { alignOffset, SongTimeline, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
@@ -28,7 +29,8 @@ const { values: a } = parseArgs({
     unconfirmed: { type: 'boolean', default: false },
     song: { type: 'string' }, treatment: { type: 'string' }, assets: { type: 'string' }, out: { type: 'string' },
     start: { type: 'string' }, end: { type: 'string' }, fps: { type: 'string', default: '30' }, workers: { type: 'string', default: '2' },
-    stills: { type: 'string' }, font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
+    stills: { type: 'string' }, keyframes: { type: 'boolean', default: false }, 'preview-invalid': { type: 'boolean', default: false }, // keyframes: the treatment's own key stills
+    font: { type: 'string' }, 'font-display': { type: 'string' }, 'font-body': { type: 'string' }, 'font-script': { type: 'string' }, // the user's font choice
     track: { type: 'boolean', default: false }, // QA: log sprite boxes per frame
     'no-video': { type: 'boolean', default: false }, // still version: every clip replaced by the image it starts from
     'with-instrumental': { type: 'boolean', default: false }, // vocal version only unless asked
@@ -56,11 +58,25 @@ const fps = Number(a.fps);
 // before anything is written: one render per output directory, and a video render also owns its job's status
 const jobId = a.job ?? jobIdFor(dirname(a.treatment!));
 lockFile(join(resolve(out), '.render.lock'), (pid) => `${out} 已經有一個渲染在寫入（pid ${pid}），請等它結束`);
-if (!a.stills) lockJob(jobId);
+if (!a.stills && !a.keyframes) lockJob(jobId);
 mkdirSync(join(out, 'render'), { recursive: true });
 
 const checked = validateTreatment(JSON.parse(readFileSync(a.treatment!, 'utf8')) as TreatmentV3, song, win, TEMPLATES);
-if (checked.errors.length) throw new Error('企劃未通過驗證：\n' + checked.errors.join('\n'));
+// --preview-invalid: stills of a design that failed its checks, to look at what was tried (never a video)
+if (checked.errors.length && !(a['preview-invalid'] && (a.stills || a.keyframes))) throw new Error('企劃未通過驗證：\n' + checked.errors.join('\n'));
+if (checked.errors.length) console.log('預覽未通過驗證的企劃（只出靜態畫面）：\n' + checked.errors.join('\n'));
+// the key stills are frames of this same design at its storyboard's times (never a separate picture of it)
+if (a.keyframes) {
+  const sb = checked.treatment.storyboard ?? [];
+  const keys = (checked.treatment.keyframes ?? []).map((k) => {
+    const t = sb.map((b) => resolveTime(k.at, b, song)?.t).find((x, i) => x !== undefined && x >= sb[i].start - 0.05 && x <= sb[i].end + 0.05);
+    return { label: k.label, t: t === undefined ? undefined : +t.toFixed(2) };
+  });
+  if (!keys.length || keys.some((k) => k.t === undefined)) throw new Error('企劃沒有可用的關鍵畫面（keyframes）');
+  a.stills = keys.map((k) => k.t).join(',');
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, 'keyframes.json'), JSON.stringify(keys.map((k) => ({ ...k, file: `still_${k.t!.toFixed(2)}.png` })), null, 1));
+}
 if (a.medium) {
   if (!(a.medium in MEDIA)) throw new Error(`沒有 ${a.medium} 這種媒材（可用 ${Object.keys(MEDIA).join('/')}）`);
   checked.treatment.design = { ...(checked.treatment.design ?? DEFAULT_DESIGN), medium: a.medium as MediumId };
@@ -69,7 +85,13 @@ const assets: Record<string, AssetSource> = a.assets ? JSON.parse(readFileSync(a
 if (a['no-video']) {
   for (const v of checked.treatment.assets.filter((x) => x.kind === 'video')) if (v.from && assets[v.from]) assets[v.id] = assets[v.from];
 }
-const url = (p: string) => '/' + relative(ROOT, resolve(p)).split('\\').join('/');
+// out/ is often a link shared by worktrees, and manifests keep the absolute path of the worktree that wrote them: a
+// file under the linked out/ is served through this one's
+const OUT_REAL = existsSync(join(ROOT, 'out')) ? realpathSync(join(ROOT, 'out')) : '';
+const url = (p: string) => {
+  const r = existsSync(p) ? realpathSync(p) : resolve(p);
+  return '/' + (OUT_REAL && r.startsWith(OUT_REAL + sep) ? join('out', relative(OUT_REAL, r)) : relative(ROOT, r)).split('\\').join('/');
+};
 for (const s of Object.values(assets)) {
   s.url = url(s.url);
   if (s.frames) s.frames.pattern = url(s.frames.pattern);
@@ -78,7 +100,7 @@ for (const s of Object.values(assets)) {
 // ran on into, and the check reports lines left up over silence
 const vocals = song.audio.vocals && existsSync(song.audio.vocals) ? vocalActivity(decode(song.audio.vocals, 22050), 22050) : undefined;
 const job: RenderJob = {
-  fps, window: win, beats: song.beats, beatStrength: song.beatStrength, tempo: song.tempo,
+  fps, window: win, beats: song.beats, downbeats: song.downbeats, beatStrength: song.beatStrength, tempo: song.tempo,
   cues: cuesIn(song, win).map((c) => (vocals ? { ...c, end: endAtVoice(c, vocals) } : c)),
   singers: song.singers,
   treatment: checked.treatment, assets,
@@ -180,6 +202,8 @@ try {
     }
     // a pre-render check (no full render needed): lines too short to read, lines left over an instrumental
     const m = await page.evaluate(() => window.vjMetrics());
+    // the storyboard's texts measured on frames drawn as played: size, what shows of them, contrast, time up
+    const sceneQa = await page.evaluate(() => window.vjSceneQa());
     // after the metrics: the motion check renders frames of its own
     const motion = await page.evaluate((ids) => window.vjMotionQa(ids), (a['motion-frames'] ?? '').split(',').filter(Boolean));
     writeFileSync(join(out, 'motion.json'), JSON.stringify({ version, lines: motion }, null, 1));
@@ -212,12 +236,23 @@ try {
         return m.cues.filter((c) => tail(c) > (vocals ? 2.5 : 0)).map((c) => `${c.id} ${c.text}（人聲停了還留 ${tail(c).toFixed(1)}s）`);
       })(),
       visual: visualIssues(frames),
+      scene: sceneQa.filter((x) => x.problems.length).map((x) => `${x.cueId} ${x.partId}「${x.text}」${x.problems.join('、')}`),
+      // the frames passing says nothing of the sync: these rest on timings not matched to the voice
+      sceneUncertain: sceneQa.filter((x) => x.uncertain).map((x) => `${x.cueId}「${x.text}」時間是估的（畫面檢查通過不代表聲音同步通過）`),
     };
+    writeFileSync(join(out, 'scene-qa.json'), JSON.stringify(sceneQa, null, 1));
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
     writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
+    // a storyboard that fails its check on the finished frames is not rendered: no half-made output
+    if (checked.treatment.storyboard?.length) {
+      const page = await openPage();
+      const bad = (await page.evaluate(() => window.vjSceneQa())).filter((x) => x.problems.length);
+      await page.close();
+      if (bad.length) throw new Error('分鏡未通過畫面檢查，不輸出：\n' + bad.map((x) => `${x.cueId} ${x.partId}「${x.text}」${x.problems.join('、')}`).join('\n'));
+    }
     const total = Math.round((range.end - range.start) * fps);
     const status = jobStatus(jobId);
     status.stage('render', { state: 'running', done: 0, total, message: a['no-video'] ? '純圖片版本' : undefined });

@@ -81,3 +81,37 @@ export function chunks(text: string, max: number, minLen = 4): string[] {
   }
   return parts;
 }
+
+/**
+ * The line in `rows` rows as even as its phrase boundaries allow: the breaks that make the longest row shortest, a
+ * break at a space costing nothing and one inside a run of words three characters (a Chinese line's segmenter breaks
+ * between almost any two characters: 台|妹 is a boundary too). chunks splits at spaces first, so a line whose spaces
+ * fall unevenly kept a 16-character row beside a 6-character one and was set small to fit it (我愛台妹's rap verses).
+ */
+export function balancedRows(text: string, rows: number): string[] {
+  const cs = [...text.trim()];
+  const cuts = [...phraseBoundaries(text.trim())].filter((b) => b > 0 && b < cs.length).sort((a, b) => a - b);
+  // widths in ems: a Latin letter or digit is about half a CJK character
+  const size = (a: number, b: number) => cs.slice(a, b).reduce((w, c) => w + (/\s/.test(c) ? 0 : /[\x21-\x7e]/.test(c) ? 0.55 : 1), 0);
+  // a space between two Latin words is a phrase's inside (How | High?!), between scripts or Chinese phrases it is free
+  const latinAround = (b: number) => {
+    let i = b - 1, j = b;
+    while (i >= 0 && /\s/.test(cs[i])) i--;
+    while (j < cs.length && /\s/.test(cs[j])) j++;
+    return /[A-Za-z0-9?!,.'"]/.test(cs[i] ?? '') && /[A-Za-z0-9]/.test(cs[j] ?? '');
+  };
+  const cost = (b: number) => (/\s/.test(cs[b]) || /\s/.test(cs[b - 1]) ? (latinAround(b) ? 2 : 0) : 3);
+  let best = { score: size(0, cs.length), at: [] as number[] };
+  const walk = (at: number[], left: number) => {
+    if (at.length) {
+      const edges = [0, ...at, cs.length];
+      const score = Math.max(...edges.slice(1).map((e, i) => size(edges[i], e))) + at.reduce((a, b) => a + cost(b), 0);
+      if (at.length === rows - 1 && score < best.score) best = { score, at };
+    }
+    if (!left) return;
+    for (const c of cuts) if (c > (at.at(-1) ?? 0)) walk([...at, c], left - 1);
+  };
+  walk([], rows - 1);
+  const edges = [0, ...best.at, cs.length];
+  return edges.slice(1).map((e, i) => cs.slice(edges[i], e).join('').trim()).filter(Boolean);
+}

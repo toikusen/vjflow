@@ -15,11 +15,17 @@ const VERTICAL_FORM: Record<string, string> = { '（': '︵', '(': '︵', '）':
 const LATIN = /[A-Za-z0-9!?'"&.,:;]/;
 /** Small marks sit in the upper right of their cell in vertical text. */
 const CORNER = /[、。，．]/;
+/** Small kana sit a little toward the upper right of their cell (Mografy cjk.ts, MIT). */
+const SMALL = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ]/;
+const DIGIT = /[0-9０-９]/;
 
 export const vertical: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     // English words do not stack in a column (spaces split them across columns): set such a line horizontally
-    if ((rt.cue.text.match(/[A-Za-z]/g) ?? []).length >= 3) return typewriter.cue({ ...rt, params: { ...rt.params, position: 'center', cursor: false } });
+    if ((rt.cue.text.match(/[A-Za-z]/g) ?? []).length >= 3) {
+      const side = rt.params['position'] === 'left' || rt.params['position'] === 'right';
+      return typewriter.cue({ ...rt, params: { ...rt.params, position: side ? rt.params['position'] : 'center', ...(side ? { span: 0.34 } : {}), cursor: false } });
+    }
     const p = rt.params;
     const src = [...rt.cue.text];
     const cols = chunks(rt.cue.text, 3);
@@ -52,14 +58,26 @@ export const vertical: TemplateRenderer = {
     let srcCursor = 0;
     cells.forEach((col, k) => {
       let y = top - k * step;
-      for (const { ch, m } of col) {
+      col.forEach(({ ch, m }, i) => {
         const em = m !== undefined;
+        // tate-chu-yoko: a number of one or two digits stands upright, a pair side by side in one cell (10月17日)
+        const isDigit = (j: number) => DIGIT.test(col[j]?.ch ?? '');
+        const run = (() => {
+          let a = i, b = i;
+          while (isDigit(a - 1)) a--;
+          while (isDigit(b + 1)) b++;
+          return isDigit(i) ? b - a + 1 : 0;
+        })();
+        const pair = run === 2 ? (isDigit(i - 1) ? 1 : 0) : -1;
         const [g] = makeGlyphs(VERTICAL_FORM[ch] ?? ch, em ? emStyle : style, color(em ? accent : rt.palette.text, em && m === 'glow' ? 1.1 : 1.0));
         // a sideways Latin letter takes only its own width down the column; spaces in a Latin run keep a gap
-        const h = LATIN.test(ch) || ch === ' ' ? Math.max(g.advance, size * 0.3) : em ? cell * EMPH : cell;
-        g.x = firstX - k * colGap + (CORNER.test(ch) ? size * 0.32 : 0);
-        g.y = y - h / 2 + (CORNER.test(ch) ? size * 0.32 : 0);
-        g.mesh.rotation.z = ROTATE.test(ch) ? -Math.PI / 2 : 0;
+        const upright = run === 1 || run === 2;
+        const h = upright ? (pair === 0 ? 0 : cell) : LATIN.test(ch) || ch === ' ' ? Math.max(g.advance, size * 0.3) : em ? cell * EMPH : cell;
+        const nudge = CORNER.test(ch) ? size * 0.32 : SMALL.test(ch) ? size * 0.12 : 0;
+        g.x = firstX - k * colGap + nudge + (pair === 0 ? -g.advance / 2 : pair === 1 ? g.advance / 2 : 0);
+        g.y = y - (upright ? cell : h) / 2 + nudge;
+        g.mesh.rotation.z = ROTATE.test(ch) && !upright ? -Math.PI / 2 : 0;
+        g.mesh.userData['turn'] = g.mesh.rotation.z;
         g.mesh.userData['emph'] = em ? 1 : 0;
         g.src = src.indexOf(ch, srcCursor);
         if (g.src >= 0) srcCursor = g.src + 1;
@@ -68,7 +86,7 @@ export const vertical: TemplateRenderer = {
         glyphs.push(g);
         group.add(g.mesh);
         y -= h;
-      }
+      });
     });
     const n = glyphs.length;
 
@@ -79,9 +97,12 @@ export const vertical: TemplateRenderer = {
         const drift = -14 * clamp01((t - rt.showFrom) / 4); // columns sink slowly while held
         for (const g of glyphs) {
           const m = glyphMotion(rt, g, n, t, STAGGER);
-          // entrances move along the column, not across it
-          g.mesh.position.set(g.x + m.dy * 0.3, g.y + drift - m.dx - m.dy * 0.2, 0);
+          // entrances move along the column, not across it: a sideways slide (dx) runs down the column, a fall (dy,
+          // y up) stays a fall (-0.2 · dy turned a drop into a rise once glyphMotion's drop came from above)
+          g.mesh.position.set(g.x, g.y + drift - m.dx + m.dy, 0);
           g.mesh.scale.setScalar(m.scale * (g.mesh.userData['emph'] ? 1 + 0.08 * pulse : 1));
+          // the glyph's own turn (a sideways long mark) plus the motion's (a spin, a domino falling)
+          g.mesh.rotation.z = (g.mesh.userData['turn'] as number) + m.rot;
           g.mesh.material.opacity = m.opacity;
         }
       },

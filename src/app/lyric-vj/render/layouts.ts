@@ -8,7 +8,7 @@
 // quote   — a line as spoken dialogue: big corner brackets drawn first, the words typed in between
 // orbit   — the line set along an arc that slowly turns, characters following the curve
 import * as THREE from 'three';
-import { chunks } from '../phrases';
+import { chunks, balancedRows } from '../phrases';
 import { keywordRange } from './punch';
 import { advanceOf, clamp01, easeOutBack, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth, sizeCap } from './glyphs';
 import { accentPulse, color, CueLayer, CueRuntime, emphasisOf, FrameFx, glyphMotion, readable, revealAt, settledAt, tagSource, TemplateRenderer } from './runtime';
@@ -160,19 +160,23 @@ export const couplet: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     const text = rt.cue.text.replace(/[\s　]+/g, ' ').trim();
     // two lines sung back to back reach a template as one line with a break: they are the couplet's two halves
-    const cut = rt.style.rows?.[0];
+    // a long line on its own (a rap verse) is its own couplet: it is split evenly into the two halves (set on one side
+    // of the gutter, 50 characters were shrunk to fit half the frame)
+    const cut = rt.style.rows?.[0] ?? ([...text.replace(/ /g, '')].length > 20 ? [...rt.cue.text.trimEnd()].length - [...(balancedRows(rt.cue.text, 2)[1] ?? '')].length : undefined);
     const merged = cut !== undefined && cut > 0 && cut < [...rt.cue.text].length;
     const halves = merged ? [[...rt.cue.text].slice(0, cut).join('').trim(), [...rt.cue.text].slice(cut).join('').trim()] : [text];
     const firstHalf = (rt.order ?? 0) % 2 === 0;
     const group = new THREE.Group();
     const gutter = 70;
-    const size = fit(halves.flatMap((h) => ([...h].length > 9 ? chunks(h, 2) : [h])), rt.fonts.display, 0.4, 96, 170);
+    // each half in as many even rows as it needs (a 25-character rap half in two rows was set too small to read)
+    const rowsOf = (h: string) => ([...h].length > 18 ? balancedRows(h, 3) : [...h].length > 9 ? balancedRows(h, 2) : [h]);
+    const size = fit(halves.flatMap(rowsOf), rt.fonts.display, 0.4, 96, 170);
     const style: GlyphStyle = { family: rt.fonts.display, weight: 900, size, shadow: true };
     const lineH = size * 1.2;
     // a half: the first hugs the centre from the left and sits higher, the second answers from the right, lower
     const parts = halves.map((h, k) => {
       const second = merged ? k === 1 : !firstHalf;
-      const rows = [...h].length > 9 ? chunks(h, 2) : [h];
+      const rows = rowsOf(h);
       const rowGlyphs = rows.map((r) => makeGlyphs(r, style, color(rt.palette.text)));
       rowGlyphs.forEach((gs, i) => {
         const w = rowWidth(gs);

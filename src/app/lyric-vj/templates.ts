@@ -67,6 +67,15 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       lift: { type: 'number', min: -200, max: 260, default: 0, description: '文字整組上移的像素' },
     },
   },
+  lanes: {
+    id: 'lanes',
+    description: '黑邊歌詞軌道：畫面上下加黑邊，上面那條是唱的這句（每個詞唱到才亮起、輪流換顏色），下面那條是翻譯；畫面中間完全不放字。只在客人有提供翻譯時才會出現在選項裡，適合電影感的段落、畫面本身很重要的地方，不要整首都用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      bar: { type: 'number', min: 100, max: 220, default: 150, description: '黑邊高度（像素）' },
+    },
+  },
   vertical: {
     id: 'vertical',
     description: '直排：日文縱書，句子依詞切成 1–3 欄、由右往左讀，每欄起點逐欄下移；強調範圍的字較大、用強調色。適合抒情句、副歌前的鋪陳、需要留白的畫面。英文多的句子不要用直排。',
@@ -135,6 +144,53 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     params: {
       dim: { type: 'number', min: 0, max: 0.8, default: 0.35, description: '背景壓暗程度' },
       pair: { type: 'boolean', default: false, description: '兩句模式：只留上一句（縮小在上方），下一句落下時淡出（快歌由程式設定）' },
+    },
+  },
+  scene: {
+    id: 'scene',
+    description: '分鏡鏡頭（程式依 storyboard 自動產生，導演不直接選）：歌詞由分鏡裡的元件承載。',
+    defaultEnter: 'cut',
+    defaultExit: 'cut',
+    params: { scene: { type: 'text', maxLength: 40, default: '', description: '分鏡 id' } },
+  },
+  chat: {
+    id: 'chat',
+    description: '聊天室：每句歌詞是一則訊息，唱到那一刻送出（氣泡從輸入列上方彈出），之後的訊息把前面的往上推，舊訊息在上方淡出；整個鏡頭像一段對話。side right 是自己傳的（一直傳、對方不回）、left 是對方傳來的、alternate 兩人輪流（第一句是對方）。自己的泡泡用段落的強調色（accent），對方的是淺灰。只在手機介面的設計語言用；一個鏡頭 3–8 句。',
+    defaultEnter: 'cut',
+    defaultExit: 'cut',
+    params: {
+      side: { type: 'enum', values: ['right', 'left', 'alternate'], default: 'right', description: '誰傳的' },
+      read: { type: 'enum', values: ['read', 'none'], default: 'read', description: 'read：自己的訊息旁顯示「既読」；none：不顯示（等不到回覆、對方根本沒看的歌）' },
+      size: { type: 'number', min: 44, max: 84, default: 64, description: '訊息字級（像素）' },
+      zoom: { type: 'number', min: 1, max: 2, default: 1, description: '鏡頭貼近這個鏡頭的第一則訊息（1 是整個聊天室，2 最近）；下一則訊息進來時鏡頭拉回整個聊天室。給歌裡真正關鍵的一句：讓那句自己成為一個鏡頭的開頭，一首最多兩三次' },
+      glow: { type: 'boolean', default: false, description: '泡泡發光：疊在暗的程式畫場景上時用（人物場景方向），不用 app 聊天室外框' },
+      theme: { type: 'enum', values: ['light', 'dark'], default: 'light', description: '對方泡泡的配色：light 淺灰、dark 深灰（app 的 skin 是 dark 時用 dark）' },
+      corner: { type: 'number', min: 0.2, max: 1, default: 1, description: '泡泡圓角：1 膠囊形、0.3 方一點（每首歌的介面外觀可以不同）' },
+      attachKind: { type: 'enum', values: ['none', 'photo', 'sticker'], default: 'none', description: '這個鏡頭裡傳的一則附件：photo 一張照片（故事裡有人拍了、傳了它）、sticker 一張貼圖（一次有意義的回覆或情緒，不是裝飾）；一首最多兩三則' },
+      attach: { type: 'text', maxLength: 40, default: '', description: '附件是哪一個：photo 填素材 id，sticker 填道具 id（要列在 storyProps）' },
+      attachAt: { type: 'number', min: 0, max: 30, default: 0, description: '附件在鏡頭開始後第幾秒送出（放在兩句歌詞之間）' },
+      attachVoice: { type: 'enum', values: ['me', 'them'], default: 'me', description: '附件是誰傳的' },
+    },
+  },
+  notify: {
+    id: 'notify',
+    description: '通知：每句歌詞是一張從畫面上方掉下來的通知卡（鎖定畫面上），新的在最上面、舊的往下推、在下方淡出。用在螢幕還鎖著的時候：前奏、訊息湧進來、等不到人打開的段落。只在手機介面的設計語言用；搭配 app 的 type lock。',
+    defaultEnter: 'cut',
+    defaultExit: 'cut',
+    params: {
+      size: { type: 'number', min: 44, max: 76, default: 60, description: '通知字級（像素）' },
+      from: { type: 'text', maxLength: 12, default: '', description: '通知的寄件者名字（誰傳來的；例如視角換到對方的手機時，寫主角的名字或暱稱），空字串顯示「メッセージ」' },
+    },
+  },
+  input: {
+    id: 'input',
+    description: '輸入框：歌詞隨歌聲一字一字打進畫面下方放大的輸入框（游標閃爍）；這句結束時 after send 是送出（整個框往上飛走），after delete 是一個字一個字刪掉（打了又不敢傳），after hold 是打完停住不送（說不出口）。用在心裡想說、正在打的句子，一句一個鏡頭或一個鏡頭幾句輪流。只在手機介面的設計語言用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      after: { type: 'enum', values: ['send', 'delete', 'hold'], default: 'send', description: '打完之後：send 送出、delete 刪掉、hold 打完停在那裡沒有送出（游標一直閃，說不出口、沉默的句子）' },
+
+      size: { type: 'number', min: 50, max: 96, default: 76, description: '字級（像素）' },
     },
   },
   array: {

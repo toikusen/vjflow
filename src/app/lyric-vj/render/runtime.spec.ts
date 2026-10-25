@@ -119,6 +119,55 @@ describe('enterSec matches what glyphMotion draws', () => {
     }
   });
 
+  it.each(['settle', 'flicker'])('%s has landed at its enterSec and is still moving or dark before it', async (enter) => {
+    const { enterSec, glyphMotion } = await import('./runtime');
+    const sec = enterSec(enter as never, 1);
+    const at = glyphMotion(line(enter, 1), glyph, 2, 10 + sec, 0);
+    expect(at.opacity).toBe(1);
+    expect(Math.abs(at.dx) + Math.abs(at.rot)).toBeLessThan(1e-9);
+    const mid = glyphMotion(line(enter, 1), glyph, 2, 10 + sec * 0.3, 0);
+    expect(mid.opacity < 0.99 || Math.abs(mid.dx) > 1).toBe(true);
+  });
+
+  it('drop falls from above onto its place and out through the bottom; melt runs down (y is up)', async () => {
+    const { glyphMotion } = await import('./runtime');
+    const l = { ...line('drop', 1), exitAt: 12, exitDur: 0.4, style: { enter: 'drop', reveal: 'line', exit: 'drop', idle: 'still' } } as unknown as CueRuntime;
+    expect(glyphMotion(l, glyph, 2, 10.05, 0).dy).toBeGreaterThan(100);
+    expect(glyphMotion(l, glyph, 2, 12.3, 0).dy).toBeLessThan(-100);
+    const melt = { ...l, style: { ...l.style, exit: 'melt' } } as unknown as CueRuntime;
+    expect(glyphMotion(melt, glyph, 2, 12.3, 0).dy).toBeLessThan(0);
+  });
+
+  it('domino tips the row over one corner after another, the way and pace the song\'s own', async () => {
+    const { glyphMotion } = await import('./runtime');
+    const g = (index: number) => ({ index, advance: 100 }) as never;
+    const sides = new Set<number>();
+    for (const song of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      const out = { ...line('cut', 1), exitAt: 12, exitDur: 0.8, song, style: { enter: 'cut', reveal: 'line', exit: 'domino', idle: 'still' } } as unknown as CueRuntime;
+      const [a, b] = [glyphMotion(out, g(0), 4, 12.35, 0).rot, glyphMotion(out, g(3), 4, 12.35, 0).rot];
+      // one end of the row is further over than the other: it falls in turn
+      expect(Math.abs(Math.abs(a) - Math.abs(b))).toBeGreaterThan(0.1);
+      // lying on its side at the end: a quarter turn, its centre one width over and level with where it stood
+      const down = glyphMotion(out, g(0), 4, 12.8, 0);
+      expect(Math.abs(down.rot)).toBeCloseTo(Math.PI / 2);
+      expect(Math.abs(down.dx)).toBeCloseTo(100);
+      expect(down.dy).toBeCloseTo(0);
+      sides.add(Math.sign(down.rot));
+    }
+    expect(sides.size).toBe(2);
+  });
+
+  it('boil holds each pose for an eighth of a second; hop only ever lifts the characters', async () => {
+    const { glyphMotion } = await import('./runtime');
+    const held = (idle: string) => ({ ...line('cut', 1), style: { enter: 'cut', reveal: 'line', exit: 'fade', idle } }) as unknown as CueRuntime;
+    const at = (t: number) => glyphMotion(held('boil'), glyph, 2, t, 0);
+    expect(at(13.01).dx).toBe(at(13.1).dx);
+    expect(at(13.01).dx).not.toBe(at(13.2).dx);
+    const ys = Array.from({ length: 40 }, (_, i) => glyphMotion(held('hop'), glyph, 2, 13 + i * 0.05, 0).dy);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...ys)).toBeGreaterThan(10);
+  });
+
   it('times a fade by its fixed 0.3 s and without a stagger (the whole line fades in together)', () => {
     const fast = { ...line('fade', 0.35) } as CueRuntime;
     expect(settledAt(fast, 20, 0.03)).toBeCloseTo(10.3);
@@ -260,5 +309,30 @@ describe('guardLine', () => {
     expect(guardLine(0.3, 0.3, 0.15)).toBe(false);
     // under the threshold nothing changes, however light type would do
     expect(guardLine(0.12, 0, 0.15)).toBe(false);
+  });
+
+  it.each([
+    ['dash', 'fade', 10.1], ['drop', 'fade', 10.1], ['zoom', 'fade', 10.1], ['gather', 'fade', 10.1], ['spin', 'fade', 10.1], ['spread', 'fade', 10.1], ['slam', 'fade', 10.05], ['wipe', 'fade', 10.03],
+    ['cut', 'burst', 12.2], ['cut', 'rise', 12.2], ['cut', 'dash', 12.2], ['cut', 'dust', 12.2], ['cut', 'spin', 12.2], ['cut', 'zoom', 12.2], ['cut', 'melt', 12.2],
+  ])('%s / %s: each song moves its own way, the same all song long', async (enter, exit, t) => {
+    const { glyphMotion } = await import('./runtime');
+    const at = (song: number) => {
+      const r = { showFrom: 10, exitAt: 12, exitDur: 0.4, pace: 1, cue: { text: 'abc', start: 10 }, song, style: { enter, exit, reveal: 'line', idle: 'still' } } as unknown as CueRuntime;
+      const m = glyphMotion(r, { index: 0, advance: 100 } as never, 3, t, 0);
+      return [m.dx, m.dy, m.rot, m.scale].map((x) => +x.toFixed(4)).join();
+    };
+    expect(new Set([11, 222, 3333, 44444, 555555].map(at)).size).toBeGreaterThan(1);
+    expect(at(222)).toBe(at(222));
+  });
+
+  it('thump beats twice on every beat of the song while the line is held', async () => {
+    const { glyphMotion } = await import('./runtime');
+    const r = { showFrom: 10, exitAt: 20, exitDur: 0.3, pace: 1, cue: { text: 'ab', start: 10 }, bpm: 120, style: { enter: 'cut', exit: 'fade', reveal: 'line', idle: 'thump' } } as unknown as CueRuntime;
+    const at = (t: number) => glyphMotion(r, { index: 0 } as never, 2, t, 0).scale;
+    // beat 0.5 s: the lub at 17 % of it, the dub at 37 %, still in between
+    expect(at(12 + 0.085)).toBeGreaterThan(1.02);
+    expect(at(12 + 0.185)).toBeGreaterThan(1.01);
+    expect(at(12 + 0.4)).toBeCloseTo(1, 2);
+    expect(at(12.5 + 0.085)).toBeCloseTo(at(12 + 0.085));
   });
 });

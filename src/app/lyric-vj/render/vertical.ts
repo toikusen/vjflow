@@ -19,12 +19,14 @@ const CORNER = /[、。，．]/;
 const SMALL = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ]/;
 const DIGIT = /[0-9０-９]/;
 
+/** A mixed-language line's side column, inside the third a picture leaves the lyric (cutout.mts keeps 0.36). */
+export const SIDE_SPAN = 0.28;
 export const vertical: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
     // English words do not stack in a column (spaces split them across columns): set such a line horizontally
     if ((rt.cue.text.match(/[A-Za-z]/g) ?? []).length >= 3) {
       const side = rt.params['position'] === 'left' || rt.params['position'] === 'right';
-      return typewriter.cue({ ...rt, params: { ...rt.params, position: side ? rt.params['position'] : 'center', ...(side ? { span: 0.34 } : {}), cursor: false } });
+      return typewriter.cue({ ...rt, params: { ...rt.params, position: side ? rt.params['position'] : 'center', ...(side ? { span: SIDE_SPAN } : {}), cursor: false } });
     }
     const p = rt.params;
     const src = [...rt.cue.text];

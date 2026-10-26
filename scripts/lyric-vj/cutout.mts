@@ -23,7 +23,17 @@ export const SHAPES = ['full', 'circle', 'ellipse', 'rect', 'rounded', 'arch', '
 /** Where the picture sits on the page: whole frame, or inside a window shape on paper (x -1..1, y 0..1 centre, size its height as a share of the frame, tilt in degrees). */
 export type Layout = { shape: (typeof SHAPES)[number]; x: number; y: number; size: number; paper: string; tilt: number };
 /** A song's page language: its paper, ink, texture and trim, and the few window shapes it keeps coming back to. */
-export type Look = { paper: string; ink: string; accent: string; texture: 'dots' | 'grain' | 'lines' | 'grid' | 'none'; border: number; shadow: boolean; tape: string; shapes: string[]; why: string };
+/**
+ * What moves on the paper round the windows, picked per song (every song had the same floating motes, 2026-10-26):
+ * none is still paper.
+ */
+export const AMBIENCE = ['none', 'motes', 'sines', 'contours', 'halftone', 'ripple'] as const;
+export type Ambience = (typeof AMBIENCE)[number];
+/** The quiet layer under a song's pages takes the song's ambience; an older spec without one keeps still paper. */
+export function withAmbience<T extends { kind: string; fx?: string; hush?: boolean }>(layers: T[], ambience: Ambience | undefined): T[] {
+  return layers.map((l) => (l.kind === 'kinetic' && l.hush ? { ...l, fx: ambience ?? 'none' } : l));
+}
+export type Look = { paper: string; ink: string; accent: string; texture: 'dots' | 'grain' | 'lines' | 'grid' | 'none'; ambience?: Ambience; border: number; shadow: boolean; tape: string; shapes: string[]; why: string };
 /** subject: who or what the shot is about (an object or place insert carries the story between people shots); who/contact/support/fallback: a painted frame's exact cast, touch, footing and its safer substitute. */
 export type Shot = { look?: Look; pulse: boolean; frame: number; subject: 'people' | 'object' | 'place'; shows: string; who: string[]; contact: string; support: string; fallback: string; key?: boolean; simple?: string; floor?: string; mode: 'cutout' | 'painted'; set: string; layout: Layout; zoom: [number, number]; focus: [number, number]; wash: string; weather: 'snow' | 'leaves' | 'none'; actors: Actor[]; props: Prop[]; transition: 'cut' | 'warp' | 'dissolve' | 'ripple' | 'liquid' };
 export type Spec = { look: Look; sets: { id: string; place: string; shows: string }[]; sprites: { id: string; who: string[]; shows: string }[]; shots: Shot[] };
@@ -183,6 +193,8 @@ export function limiter(n: number) {
   };
 }
 const geminiSlot = limiter(6);
+/** A network drop or an overloaded service, worth another try (not a refused prompt). */
+export const isTransient = (e: unknown) => /terminated|timeout|ECONNRESET|socket|fetch failed|overloaded|429|500|502|503|504|UND_ERR/i.test(`${(e as Error)?.message} ${String((e as { cause?: unknown })?.cause)} ${(e as { code?: string })?.code ?? ''}`);
 
 export async function geminiHands(file: string): Promise<{ status: Verdict; problems: string }> {
   const m = await sharp(file).metadata(), grid = m.height! > m.width! ? tiles(2, 3) : tiles(3, 2);
@@ -207,12 +219,12 @@ export async function geminiHands(file: string): Promise<{ status: Verdict; prob
  * The hand check of the pipeline: a flag for a person, never a redraw. Measured against 154 pictures people labelled
  * (bench-hands.mts, 2026-10-25): the close Gemini reading caught 4 of 5 bad hands but failed 71 of 149 good ones and
  * changed its mind on 35; the Opus tile reading caught 1 of 5 at $0.05 a picture; asked only for mistakes a viewer
- * would notice, Gemini caught none. Redrawing on every hand flag sent half the good pictures back, so a flagged hand
- * is shown first on the review page and a person decides.
+ * would notice, Gemini caught none. Redrawing on every hand flag sent half the good pictures back, so a flagged
+ * picture is drawn again in the same pose (redrawFlagged) and nobody has to look.
  */
 export async function handGate(file: string) {
   const g = await geminiHands(file);
-  return { status: (g.status === 'pass' ? 'pass' : 'uncertain') as Verdict, problems: g.status === 'pass' ? '' : `hands (please look): ${g.problems}`, usd: 0 };
+  return { status: (g.status === 'pass' ? 'pass' : 'uncertain') as Verdict, problems: g.status === 'pass' ? '' : `hand flag: ${g.problems}`, usd: 0 };
 }
 
 /** Overlapping tiles covering a picture (fractions x0, y0, x1, y1): `cols` × `rows`, each reaching a quarter into its neighbours. */
@@ -261,12 +273,34 @@ hands: every hand you can see in the tiles (when one appears in several tiles, r
 /** One checked picture, kept for the review page and the error set (out/qa-set). */
 export type QaEntry = { kind: 'pose' | 'paint'; id: string; file: string; status: Verdict | 'substitute' | 'dropped'; problems: string[]; tries: number };
 
-export async function verify(file: string, castSheet: string, people: { id: string; look: string }[], contact: string, support: string, scene = ''): Promise<{ pass: boolean; status: Verdict; problems: string; usd: number }> {
-  if (!people.length) return verifyBody(file, castSheet, people, contact, support, scene);
+export async function verify(file: string, castSheet: string, people: { id: string; look: string }[], contact: string, support: string, scene = ''): Promise<{ pass: boolean; status: Verdict; problems: string; usd: number; body: Verdict; hands: Verdict }> {
+  if (!people.length) { const b = await verifyBody(file, castSheet, people, contact, support, scene); return { ...b, body: b.status, hands: 'pass' }; }
   // the body and the hands are read separately (hands too small to read in the whole picture)
   const [body, hands] = await Promise.all([verifyBody(file, castSheet, people, contact, support, scene), handGate(file)]);
   const status: Verdict = body.status === 'fail' || hands.status === 'fail' ? 'fail' : body.status === 'uncertain' || hands.status === 'uncertain' ? 'uncertain' : 'pass';
-  return { pass: status !== 'fail', status, problems: [body.problems, hands.status !== 'pass' ? hands.problems : ''].filter(Boolean).join('; '), usd: body.usd + hands.usd };
+  return { pass: status !== 'fail', status, problems: [body.problems, hands.status !== 'pass' ? hands.problems : ''].filter(Boolean).join('; '), usd: body.usd + hands.usd, body: body.status, hands: hands.status };
+}
+
+/**
+ * A hand flag is mostly a false alarm (bench-hands, 2026-10-25: 71 of 149 good pictures flagged; the 7 flags of
+ * Tokyo Drift were all good hands), so a flagged picture is drawn again in the same pose, gesture included, up to
+ * twice, and the first redraw with a clean body and no hand flag is kept. When none is, the first picture stays:
+ * hiding the hands instead threw away a correct peace sign and pointing finger.
+ */
+export async function redrawFlagged(file: string, redraw: () => Promise<unknown>, check: () => Promise<{ body: Verdict; hands: Verdict; usd: number }>, tries = 2) {
+  const first = file.replace('.jpg', '.handflag.jpg');
+  renameSync(file, first);
+  let usd = 0;
+  for (let k = 0; k < tries; k++) {
+    await redraw();
+    if (!existsSync(file)) continue;
+    const v = await check();
+    usd += v.usd;
+    if (v.body !== 'fail' && v.hands === 'pass') return { redrawn: true, usd };
+    rmSync(file);
+  }
+  renameSync(first, file);
+  return { redrawn: false, usd };
 }
 
 async function verifyBody(file: string, castSheet: string, people: { id: string; look: string }[], contact: string, support: string, scene = '') {
@@ -326,7 +360,7 @@ export function diversify(shots: Shot[], sprites: { id: string; who: string[] }[
 const str = { type: 'string' }, num = { type: 'number' };
 const obj = (props: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, required: Object.keys(props), properties: props });
 const SCHEMA = obj({
-  look: obj({ paper: str, ink: str, accent: str, texture: { type: 'string', enum: ['dots', 'grain', 'lines', 'grid', 'none'] }, border: num, shadow: { type: 'boolean' }, tape: str, shapes: { type: 'array', items: str }, why: str }),
+  look: obj({ paper: str, ink: str, accent: str, texture: { type: 'string', enum: ['dots', 'grain', 'lines', 'grid', 'none'] }, ambience: { type: 'string', enum: [...AMBIENCE] }, border: num, shadow: { type: 'boolean' }, tape: str, shapes: { type: 'array', items: str }, why: str }),
   sets: { type: 'array', items: obj({ id: str, place: str, shows: str }) },
   sprites: { type: 'array', items: obj({ id: str, who: { type: 'array', items: str }, shows: str }) },
   shots: { type: 'array', items: obj({
@@ -365,7 +399,7 @@ async function main() {
 
   // the page languages of the last songs, so a new one does not repeat them
   const historyFile = 'out/page-history.json';
-  const history: { song: string; shapes: string[]; texture: string }[] = (existsSync(historyFile) ? JSON.parse(readFileSync(historyFile, 'utf8')) : []).filter((h: { song: string }) => h.song !== song.title);
+  const history: { song: string; shapes: string[]; texture: string; ambience?: string }[] = (existsSync(historyFile) ? JSON.parse(readFileSync(historyFile, 'utf8')) : []).filter((h: { song: string }) => h.song !== song.title);
   const keptLook = a['keep-look'] ? (JSON.parse(readFileSync(a['keep-look'], 'utf8')) as Spec).look : undefined;
   const specFile = join(out, 'spec.json');
   if (!existsSync(specFile)) {
@@ -379,7 +413,7 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
 - 每格：x 是人物或道具中心（-1 左到 1 右），ground 是人物腳底高度、道具的 y 是道具中心高度（都是 0 頂到 1 底；人物通常 0.85–0.95），h 是高度占畫面比例（遠景 0.4、中景 0.6、近景可 0.9 以上讓腳在畫面外）。人物和道具都放在歌詞那一側以外的三分之二（歌詞在 side 那側）。
 - 去背人物不會走路也不會滑動：用姿勢表達動作。每個人物一格內可以換一次姿勢（then 填第二個立繪 id、at 是換的時間點占這格的比例 0.3–0.7；不換就 then 填空字串），用來表現表情或動作的變化（笑→驚慌、抬頭→低頭）。同一個立繪只能在情緒相同的格重複用，情緒變了就畫新的姿勢和表情。走路的格改成站定的姿勢或 painted。換姿勢依樂句和動作需要（唱到指、擺手、喝、比讚就換成那個動作），不需要每格都換。enter 用 fade 淡入（第一次出現時），人物從不滑入。兩個人同框時，兩人的姿勢都要回應對方：視線看向對方、一個人動作時另一個人也有反應（笑著回看、伸手回應），不能一人直視觀眾；兩人各自的 then 姿勢要一起設計。換姿勢的兩張立繪要同樣的身體朝向、站位和比例（頭和腳的位置一樣），只改手、頭的角度和表情。wind（風吹衣襬、圍巾時 true）；道具要跟它所在的東西一起出現：綁在欄杆上、掛在樹上、放在桌上的道具不能單獨浮在畫面裡，那格用 painted（整張畫）。道具不是主角：高度不超過畫面 0.3，同一個道具不要在連續好幾格都當畫面中心。道具 motion：fall 只在落下的東西（落葉）、flutter 用在被風吹的布、hang 掛著擺動、其他 still；front=true 畫在人物前面（擋住人的人群、前景的樹枝或欄杆），walk 是整格水平移動量（人群穿過畫面用 ±0.2）。人群要把兩人隔開時，用 front 的人群從兩人之間穿過。
 - floor：大約四格裡挑一格（有地面、有人物站著的 cutout 格），把這句唱到的一個關鍵詞（1–4 個字，例如「一發」「台妹」「大雪」）寫進場景：字會一個個掉下來平貼在地面上，人物站的地方字會被推開。其他格填空字串；不要連續兩格都用。
-- look 是這首歌自己的版面語言（每首都要不一樣，從這首的歌詞意思和畫風來）：paper 紙色、ink 墨色（線條、網點、地平線）、accent 強調色、texture 紙的紋理（dots 網點、grain 顆粒、lines 筆記本橫線、grid 方格、none 無）、border 窗框線粗細 px（0 無框、4–12）、shadow 是否有錯位印刷的色塊影子、tape 膠帶色（空字串＝不用）、shapes 是這首反覆使用的 3–4 種窗形（母題），why 寫為什麼這些形狀和質感適合這首（對應到歌詞裡的什麼）。可用的窗形：circle 圓、ellipse 橢圓、rect 方框、rounded 圓角框、arch 拱門、diamond 菱形、hexagon 六角、flower 五瓣花、keyhole 鑰匙孔、cloud 雲邊、wavy 波浪邊、torn 撕紙邊、brush 毛筆邊、ticket 票根、polaroid 拍立得、filmstrip 膠捲、window 窗格、phone 手機、band 橫色帶、doubleband 雙色帶、split 斜切分割、panels 三格漫畫分格、full 整頁。不要選和下面「最近用過」一樣的組合。
+- look 是這首歌自己的版面語言（每首都要不一樣，從這首的歌詞意思和畫風來）：paper 紙色、ink 墨色（線條、網點、地平線）、accent 強調色、texture 紙的紋理（dots 網點、grain 顆粒、lines 筆記本橫線、grid 方格、none 無）、ambience 窗框外紙面上的動態（none 靜止的紙、motes 微粒上浮、sines 細線起伏、contours 等高線漂移、halftone 網點波浪、ripple 點陣漣漪；預設 none，只有這首的世界需要時才選，例如雪、夜裡的灰塵、水面；不要和最近用過的一樣）、border 窗框線粗細 px（0 無框、4–12）、shadow 是否有錯位印刷的色塊影子、tape 膠帶色（空字串＝不用）、shapes 是這首反覆使用的 3–4 種窗形（母題），why 寫為什麼這些形狀和質感適合這首（對應到歌詞裡的什麼）。可用的窗形：circle 圓、ellipse 橢圓、rect 方框、rounded 圓角框、arch 拱門、diamond 菱形、hexagon 六角、flower 五瓣花、keyhole 鑰匙孔、cloud 雲邊、wavy 波浪邊、torn 撕紙邊、brush 毛筆邊、ticket 票根、polaroid 拍立得、filmstrip 膠捲、window 窗格、phone 手機、band 橫色帶、doubleband 雙色帶、split 斜切分割、panels 三格漫畫分格、full 整頁。不要選和下面「最近用過」一樣的組合。
 - layout 是這格的版面（大面積紙色留白、場景放在一個窗形裡、人物站在窗形前面壓過邊緣、一條地平線）：shape 從這首的 shapes 裡選（必要時偶爾用別的），同一意義用同一形狀當母題（例如回憶都用同一種窗），相鄰格換形狀、位置或大小；full 只留給情緒最高點的 1–2 格。形狀放在歌詞那側以外（x 中心 -1..1、y 中心 0 頂到 1 底、size 是形狀高度占畫面比例 0.45–0.85；band/doubleband/filmstrip 橫跨全寬、split 用 x 決定切線位置）；tilt 是傾斜角度（拍立得、票根、照片可 -6..6，其他 0）。cutout 格的人物站在窗形前面，腳在地平線上（ground 0.8–0.92），可以超出形狀；paper 可每格換（例如現在冷、回憶暖），空字串就用 look.paper。painted 格的整張畫也放進窗形裡，除非它就是高點的 full。
 - zoom [開始, 結束] 介於 1–1.25 慢推，focus [x, y] 推向的位置（-1..1，y 上正）。wash：記憶場景暖色 hex、現在場景冷色或空字串。weather：雪夜 snow、楓葉街 leaves。
 - transition：時空切換（現在↔回憶、現實↔想像）用 warp（水波扭曲），其他一律 cut。pulse：快歌或高能量段落（饒舌、副歌、舞曲）true，整個版面跟著大鼓輕跳；慢歌、抒情段落 false。
@@ -406,12 +440,13 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     if (!made) throw new Error('spec: no usable answer after three tries');
     if (keptLook) made.look = keptLook;
     writeFileSync(specFile, JSON.stringify(made));
-    writeFileSync(historyFile, JSON.stringify([...history, { song: song.title, shapes: made.look.shapes, texture: made.look.texture }], null, 1));
+    writeFileSync(historyFile, JSON.stringify([...history, { song: song.title, shapes: made.look.shapes, texture: made.look.texture, ambience: made.look.ambience }], null, 1));
   }
   const spec = JSON.parse(readFileSync(specFile, 'utf8')) as Spec;
   // shape names are checked here, not in the schema (the enum twice made the response grammar too large)
   const known = (x: string) => (SHAPES as readonly string[]).includes(x);
   spec.look.shapes = spec.look.shapes.filter(known);
+  if (spec.look.ambience && !AMBIENCE.includes(spec.look.ambience)) spec.look.ambience = 'none';
   for (const s of spec.shots) if (!known(s.layout.shape)) s.layout.shape = (spec.look.shapes[0] ?? 'rect') as Layout['shape'];
   if (calm) spec.shots = spec.shots.map(calmShot);
   console.log(`spec: ${spec.sets.length} sets, ${spec.sprites.length} sprites, ${spec.shots.filter((s) => s.mode === 'painted').length}/${spec.shots.length} painted`);
@@ -422,9 +457,15 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     if (existsSync(file)) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let r: any;
-    for (let k = 0; k < 3 && !r?.output_image?.data; k++)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      r = await (ai as any).interactions.create({ model: a['image-model'], input: [{ type: 'text', text }, ...refs.map(img)], response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: ratio, image_size: '2K' } });
+    for (let k = 0; k < 5 && !r?.output_image?.data; k++)
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        r = await (ai as any).interactions.create({ model: a['image-model'], input: [{ type: 'text', text }, ...refs.map(img)], response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: ratio, image_size: '2K' } });
+      } catch (e) {
+        // a dropped connection (a body timeout killed the 第六感 / Tokyo Drift run) waits and tries again; anything else stops
+        if (!isTransient(e) || k === 4) throw e;
+        await new Promise((go) => setTimeout(go, 5000 * (k + 1)));
+      }
     if (!r?.output_image?.data) throw new Error(`no image for ${file}`);
     writeFileSync(file, Buffer.from(r.output_image.data, 'base64'));
     usd += 0.101;
@@ -475,6 +516,12 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
       const v = await verify(file, cast, board.people.filter((p) => s.who.includes(p.id)), '', 'standing on its own', s.shows);
       usd += v.usd;
       log({ kind: 'pose', id: s.id, file, status: v.status, problems: v.problems ? [v.problems] : [], tries: k + 1 });
+      if (v.pass && v.hands !== 'pass') {
+        const h = await redrawFlagged(file, () => draw(file, spriteText(s), [cast], '3:4'), () => verify(file, cast, board.people.filter((p) => s.who.includes(p.id)), '', 'standing on its own', s.shows));
+        usd += h.usd;
+        console.log(`pose ${s.id}: hand flag, ${h.redrawn ? 'drawn again, no flag' : 'first picture kept'}`);
+        log({ kind: 'pose', id: s.id, file, status: h.redrawn ? 'pass' : v.status, problems: h.redrawn ? ['redrawn after a hand flag'] : [v.problems], tries: k + 2 });
+      }
       if (v.pass) return;
       wrong = v.problems;
       console.log(`pose ${s.id} try ${k + 1}: ${wrong}`);
@@ -584,6 +631,12 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
       const v = await verify(paintFile(s), cast, who.map((id) => board.people.find((p) => p.id === id)!).filter(Boolean), s.contact, s.support, s.shows || f?.shows || '');
       usd += v.usd;
       log({ kind: 'paint', id: String(s.frame), file: paintFile(s), status: v.status, problems: v.problems ? [v.problems] : [], tries: k + 1 });
+      if (v.pass && v.hands !== 'pass') {
+        const h = await redrawFlagged(paintFile(s), () => paint(s, '', false, k >= 3), () => verify(paintFile(s), cast, who.map((id) => board.people.find((p) => p.id === id)!).filter(Boolean), s.contact, s.support, s.shows || f?.shows || ''));
+        usd += h.usd;
+        console.log(`paint ${s.frame}: hand flag, ${h.redrawn ? 'drawn again, no flag' : 'first picture kept'}`);
+        log({ kind: 'paint', id: String(s.frame), file: paintFile(s), status: h.redrawn ? 'pass' : v.status, problems: h.redrawn ? ['redrawn after a hand flag'] : [v.problems], tries: k + 2 });
+      }
       if (v.pass) return;
       wrong = v.problems;
       console.log(`paint ${s.frame} try ${k + 1}: ${wrong}`);
@@ -635,6 +688,7 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
   // keyframes never drawn (--sheets-only) are not assets: a missing file stalls the renderer's preload
   for (const id of Object.keys(assets)) if (id.startsWith('kf_') && !existsSync(assets[id].url)) delete assets[id];
   for (const sec of secs) sec.layers = sec.layers.filter((l) => !(l.kind === 'photo' && l.asset && !assets[l.asset]));
+  for (const sec of secs) sec.layers = withAmbience(sec.layers as { kind: string; fx?: string; hush?: boolean }[], spec.look.ambience);
   writeFileSync(join(out, 'treatment.json'), JSON.stringify(tr));
   writeFileSync(join(out, 'assets.json'), JSON.stringify(assets));
   console.log(`cutout: ${readdirSync(join(out, 'spr')).filter((x) => x.endsWith('.png')).length} cut-outs, $${usd.toFixed(2)} → ${join(out, 'treatment.json')}`);

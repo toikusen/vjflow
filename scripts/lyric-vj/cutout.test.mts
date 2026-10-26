@@ -1,7 +1,10 @@
 // npx tsx --test scripts/lyric-vj/cutout.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { arrange, calmShot, calmSong, diversify, headIn, limiter, tiles, oddCutout, offLyric, onBeat, overlapping, paintedWindow, Shot, shotCode, windowOff } from './cutout.mts';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { arrange, redrawFlagged, calmShot, calmSong, diversify, headIn, limiter, tiles, oddCutout, offLyric, onBeat, overlapping, paintedWindow, Shot, shotCode, windowOff } from './cutout.mts';
 
 test('cut-outs keep out of the lyric third', () => {
   assert.equal(offLyric(-0.8, 'left'), -0.2);
@@ -119,4 +122,32 @@ test('a scene word falls onto the floor and the figure standing on it pushes its
   const letters = xs.filter((x) => Math.abs(x - 960) > 100 && Math.abs(x - 960) < 1000);
   assert.ok(letters.length >= 2, 'both letters are drawn');
   assert.ok(letters.some((x) => x < 960 - 200) && letters.some((x) => x > 960 + 200), 'pushed out to both sides of the figure');
+});
+
+test('isTransient retries network drops but not refused prompts', async () => {
+  const { isTransient } = await import('./cutout.mts');
+  const drop = Object.assign(new TypeError('terminated'), { cause: { code: 'UND_ERR_BODY_TIMEOUT' } });
+  assert.equal(isTransient(drop), true);
+  assert.equal(isTransient(new Error('503 Service Unavailable')), true);
+  assert.equal(isTransient(new Error('Request blocked: SAFETY')), false);
+});
+
+test('withAmbience sets only the quiet page layer, still paper by default', async () => {
+  const { withAmbience } = await import('./cutout.mts');
+  const layers = [{ kind: 'kinetic', fx: 'motes', hush: true }, { kind: 'kinetic', fx: 'wall' }, { kind: 'code' }];
+  assert.deepEqual(withAmbience(layers, undefined).map((l) => l.fx), ['none', 'wall', undefined]);
+  assert.equal(withAmbience(layers, 'sines')[0].fx, 'sines');
+});
+
+test('a hand flag redraws the same pose, keeps the first clean redraw, else the first picture', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hands-')), file = join(dir, 'p.jpg');
+  let n = 0;
+  const redraw = async () => writeFileSync(file, `redraw${++n}`);
+  writeFileSync(file, 'first');
+  const verdicts = [{ body: 'pass', hands: 'uncertain', usd: 0 }, { body: 'pass', hands: 'pass', usd: 0 }] as const;
+  const ok = await redrawFlagged(file, redraw, async () => verdicts[n - 1]);
+  assert.deepEqual([ok.redrawn, readFileSync(file, 'utf8')], [true, 'redraw2']);
+  n = 0; writeFileSync(file, 'first');
+  const kept = await redrawFlagged(file, redraw, async () => ({ body: 'fail', hands: 'pass', usd: 0 }));
+  assert.deepEqual([kept.redrawn, readFileSync(file, 'utf8'), existsSync(file.replace('.jpg', '.handflag.jpg'))], [false, 'first', false]);
 });

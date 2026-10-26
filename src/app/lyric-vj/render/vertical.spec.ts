@@ -31,6 +31,8 @@ describe('vertical text', () => {
     l.update(2.9, { flash: 0, hit: 0, shake: 0 });
     const xs = (l.group.children as unknown as { position: { x: number } }[]).map((g) => g.position.x).filter((x) => x !== 0);
     expect(Math.min(...xs)).toBeGreaterThan(0);
+    // inside the third the picture leaves it (cutout.mts: 0.36 of the frame), not over the figure beside it
+    expect(Math.min(...xs)).toBeGreaterThan(1920 / 2 - 1920 * 0.36);
   });
 
   it('sets a two-digit number upright side by side in one cell (tate-chu-yoko)', async () => {

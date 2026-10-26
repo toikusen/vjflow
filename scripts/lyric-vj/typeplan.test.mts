@@ -38,11 +38,11 @@ const plan = {
 };
 
 /** The plan rebuilt for a song (no director call): its output treatment and log. */
-function rebuild(sng: object, pl: object) {
+function rebuild(sng: object, pl: object, extra: string[] = []) {
   const dir = mkdtempSync(join(tmpdir(), 'typeplan-'));
   try {
     for (const [f, v] of [['song.json', sng], ['treatment.json', treatment], ['plan.json', pl]] as const) writeFileSync(join(dir, f), JSON.stringify(v));
-    const r = spawnSync('npx', ['tsx', 'scripts/lyric-vj/typeplan.mts', '--song', join(dir, 'song.json'), '--treatment', join(dir, 'treatment.json'), '--backdrops', join(dir, 'treatment.json'), '--plan', join(dir, 'plan.json'), '--out', join(dir, 'out')], { encoding: 'utf8' });
+    const r = spawnSync('npx', ['tsx', 'scripts/lyric-vj/typeplan.mts', '--song', join(dir, 'song.json'), '--treatment', join(dir, 'treatment.json'), '--backdrops', join(dir, 'treatment.json'), '--plan', join(dir, 'plan.json'), '--out', join(dir, 'out'), ...extra], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
     return JSON.parse(readFileSync(join(dir, 'out', 'treatment.json'), 'utf8')) as { cues: { cueId: string; emphasis?: { method: string }[] }[]; graphics: { sections: { start: number; layers: { kind: string; fx?: string; colors?: string[] }[] }[] } };
   } finally {
@@ -80,7 +80,8 @@ test('a calm song holds through the director\'s parts, warms a warm part and kee
     { from: 's1', shift: 'change', what: '', warmth: 0.2, order: 1, keep: keep('', []), backdrops: ['B1'] },
     { from: 's3', shift: 'change', what: '', warmth: 0.9, order: 0, keep: keep('evidence', ['君の中', '夜空']), backdrops: ['B2'] },
   ] };
-  const t = rebuild(one, pl);
+  const t = rebuild(one, pl, ['--board']);
+  assert.ok(!JSON.stringify(rebuild(one, pl)).includes('"board"'), 'boards are off unless asked for');
   const at = (x: number) => t.graphics.sections.find((s) => Math.abs(s.start - x) < 0.01)!;
   const sky = (x: number) => JSON.stringify(at(x).layers.find((l) => l.kind === 'bands')?.colors);
   assert.notEqual(sky(9.9), sky(0), 'the second part kept the first part\'s sky inside one song section');

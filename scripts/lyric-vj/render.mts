@@ -1,7 +1,7 @@
 // Offline render: bundle the render page, drive headless Chrome frame by frame, encode with ffmpeg, mux both audio versions.
 // npx tsx --tsconfig tsconfig.json scripts/lyric-vj/render.mts --song out/indigo/song.json --treatment out/indigo/treatment.json \
 //   [--assets out/indigo/assets/assets.json] --start 69 --end 90 [--stills 70,75] [--fps 30 --workers 2]
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -20,7 +20,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { alignOffset, SongTimeline, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import type { AssetSource, Entrance, RenderJob } from '../../src/app/lyric-vj/render/engine';
-import { decode } from './media.mts';
+import { blackSpans, decode } from './media.mts';
 import { MEDIA, MediumId } from '../../src/app/lyric-vj/medium';
 import { DEFAULT_DESIGN } from '../../src/app/lyric-vj/design';
 
@@ -264,7 +264,20 @@ try {
     mkdirSync(segDir, { recursive: true });
     const began = Date.now();
     const parts = await Promise.all(
-      bounds.slice(0, -1).map(async (f0, k) => {
+      bounds.slice(0, -1).map((f0, k) => segment(f0, k)),
+    );
+    // a page that stops drawing hands over black frames (Tokyo Drift lost a third of its song twice, 2026-10-26, when
+    // three pages shared the GPU): its stretch is drawn again alone, once the other pages are closed (redrawn while
+    // they still ran, it came back with pictures but no lyrics)
+    const darkIn = (file: string) => (alpha ? [] : blackSpans(spawnSync('ffmpeg', ['-hide_banner', '-i', file, '-vf', 'blackdetect=d=3:pix_th=0.04', '-an', '-f', 'null', '-'], { encoding: 'utf8' }).stderr ?? ''));
+    for (const [k, file] of parts.entries()) {
+      for (let attempt = 0; attempt < 2 && darkIn(file).length; attempt++) {
+        console.log(`\n  segment ${k} came out black: drawing it again alone`);
+        await segment(bounds[k], k);
+      }
+    }
+    async function segment(f0: number, k: number) {
+      {
         const f1 = bounds[k + 1];
         const file = join(segDir, `seg_${k}.${ext}`);
         const page = await openPage();
@@ -292,13 +305,16 @@ try {
         await new Promise((r, j) => ff.on('close', (c) => (c ? j(new Error(`ffmpeg ${c}`)) : r(null))));
         await page.close();
         return file;
-      }),
-    );
+      }
+    }
     console.log();
     const list = join(segDir, 'list.txt');
     writeFileSync(list, parts.map((p) => `file '${resolve(p)}'`).join('\n'));
     const silent = join(out, `video_silent.${ext}`);
     await run('ffmpeg', ['-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', list, '-c', 'copy', silent]);
+    // a worker whose page stops drawing still hands over frames, all black (Tokyo Drift's last third, 2026-10-26)
+    const dark = alpha ? [] : blackSpans(spawnSync('ffmpeg', ['-hide_banner', '-i', silent, '-vf', 'blackdetect=d=3:pix_th=0.04', '-an', '-f', 'null', '-'], { encoding: 'utf8' }).stderr ?? '');
+    if (dark.length) throw new Error(`畫面全黑 ${dark.map(([a, b]) => `${a.toFixed(1)}–${b.toFixed(1)}s`).join('、')}：有工作程序沒有畫出來，請重新渲染`);
     rmSync(segDir, { recursive: true });
 
     const len = range.end - range.start;

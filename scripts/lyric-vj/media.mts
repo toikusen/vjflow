@@ -8,3 +8,8 @@ export function decode(path: string, sampleRate: number): Float32Array {
   });
   return new Float32Array(raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength)); // copy: byteOffset may be unaligned
 }
+
+/** The black spans ffmpeg's blackdetect printed, as [start, end] seconds. */
+export function blackSpans(log: string): [number, number][] {
+  return [...log.matchAll(/black_start:([\d.]+) black_end:([\d.]+)/g)].map((m) => [+m[1], +m[2]]);
+}

@@ -147,6 +147,9 @@ let veil: ((ctx: CanvasRenderingContext2D, alpha: number) => void) | undefined;
 export const setLineVeil = (fn?: (ctx: CanvasRenderingContext2D, alpha: number) => void) => (veil = fn);
 export const lineVeil = () => veil;
 
+/** Moves that frame or repeat the cut's figure: without one they draw an empty window. */
+export const NEEDS_ART = new Set(['window', 'aura', 'grid', 'glide']);
+
 export const THREAD_MARKS = ['flame', 'star', 'heart', 'moon', 'sun', 'note', 'drop', 'flower'] as const;
 export type ThreadMark = (typeof THREAD_MARKS)[number];
 

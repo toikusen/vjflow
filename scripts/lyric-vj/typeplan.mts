@@ -9,8 +9,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_FX, KINETIC_PRINTS, KineticLayer, THREAD_MARKS, ThreadMark } from '../../src/app/lyric-vj/render/kinetic';
+import { NEEDS_ART, DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_FX, KINETIC_PRINTS, KineticLayer, THREAD_MARKS, ThreadMark } from '../../src/app/lyric-vj/render/kinetic';
 import { TRANSITION_KINDS, transitionGuide } from '../../src/app/lyric-vj/render/transition';
+import { LOOPS, QUIET_LOOPS } from '../../src/app/lyric-vj/render/kinetic-loops';
 import { GLYPH_FINISHES } from '../../src/app/lyric-vj/design';
 import { EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, IDLE_KINDS, REVISE_LOOKS } from '../../src/app/lyric-vj/treatment';
 import { overCreator, useCap } from '../../src/app/lyric-vj/origin-rules';
@@ -30,6 +31,9 @@ const { values: a } = parseArgs({ options: {
   model: { type: 'string', default: 'claude-opus-5-5' },
   // a demo of the whole kit: every move and kind used somewhere (off: a vocabulary picked for this song)
   showcase: { type: 'boolean', default: false },
+  // what a part keeps on screen through its cuts (board.ts: a stage's lasting objects, an evidence board). Off: the
+  // event sample passed 4 of 12 blind checks and sweet timer's run (2026-10-26) stacked boards over titles and sprites
+  board: { type: 'boolean', default: false },
   // the user's choice: a small Traditional Chinese translation line under each sung line. The plan always carries the
   // translation, so turning it on later is a rebuild with --plan, not a new director call
   translate: { type: 'boolean', default: false },
@@ -131,7 +135,6 @@ const worn = Object.entries(recent.reduce((m, h) => (Object.keys(h.fx).forEach((
   .filter(([, n]) => n >= 3)
   .sort((a, b) => b[1] - a[1]);
 // moves that frame a picture show nothing without one: an empty arch window held an 8 s intro (Keep Your Fire Burning)
-const NEEDS_ART = new Set(['window', 'aura', 'grid', 'glide']);
 const DRAW_THREAD = false;
 /** What a line must say for a sign beside it to belong there. */
 const SIGN_WORDS: Record<string, RegExp> = {
@@ -168,6 +171,10 @@ const LOUD = new Set(['splash', 'countdown', 'rays', 'totem', 'warp', 'meteor', 
 // the hidden-line ridges read as unnatural twice (我愛台妹 28 s, 世界のつづき's opening, 2026-10-21): kept in the
 // renderer, no longer offered
 const RETIRED = new Set(['ridges']);
+// the 2026-10-25 openers and story devices print their own word in the middle of the frame: shown in the gallery, not
+// yet given a rule for where they may land in a song (sweet timer laid four card stacks under its lines), so a real
+// song only gets the quiet loops of that set
+const UNTRIED = new Set(Object.keys(LOOPS).filter((k) => !QUIET_LOOPS.includes(k)));
 console.log(`lyric density: ${perSec.toFixed(1)} chars/s${wordy ? '' : ' (no page-of-words moves)'}${calm ? ' (calm: no loud moves, one backdrop a part)' : ''}`);
 // moves whose parts are the cut's words (a hanging tag, a burst, keycaps, a loop's nodes, chat bubbles): with fewer
 // words than parts they hang empty boxes (an orange tag on a thread in 三年後的大雪's intro) or say a word twice
@@ -175,7 +182,7 @@ const WORDED: Record<string, number> = { hang: 1, bubble: 1, tiles: 1, flap: 1, 
 // learned 2026-10-21 (kittenjam, Motion Prompt #121–144): named to the director so they are weighed, not missed
 const NEW_FX = ['cube', 'drum', 'tape', 'corridor', 'confetti', 'warp', 'flow', 'synth', 'bokeh', 'ridges', 'shapes', 'lens', 'layers', 'panels', 'path', 'goo', 'morph', 'glide'];
 const [NEW_ENTERS, NEW_EXITS, NEW_IDLES, NEW_EMPH] = [['shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke'], ['domino', 'pixel', 'shatter'], ['boil', 'hop', 'thump'], ['echo', 'weight', 'shine', 'faces']];
-const MOVES = KINETIC_FX.filter((x) => (sprites.length || !NEEDS_ART.has(x)) && (wordy || !DENSE.has(x)) && !(calm && LOUD.has(x)) && !RETIRED.has(x));
+const MOVES = KINETIC_FX.filter((x) => (sprites.length || !NEEDS_ART.has(x)) && (wordy || !DENSE.has(x)) && !(calm && LOUD.has(x)) && !RETIRED.has(x) && (a.showcase || !UNTRIED.has(x)));
 // the visual direction is decided first, in a call of its own (the plan's schema with it compiled past the API's
 // grammar limit, and the direction is what the cuts are then laid against)
 const VISION_SCHEMA = {
@@ -469,6 +476,7 @@ export function buildCuts(p: Plan) {
   let threadLevel = 0;
   const missing: string[] = [];
   let last = '';
+  let shown = { sprite: '', side: '' };
   // round moves past their share of the song are swapped for the director's other moves (capRound)
   const order = shots.flatMap((s) => [...(p.shots.find((x) => x.shot === s.id)?.cuts ?? [])].sort((x, y) => x.beat - y.beat).map((c) => ({ c, shot: s.id })));
   const shotIds = order.map((o) => o.shot);
@@ -509,7 +517,7 @@ export function buildCuts(p: Plan) {
     const part = partOf(p, s.id);
     const partKey: unknown = part ?? s.part;
     const back = calm && hold?.part === partKey ? hold.back : backdrops.find((x) => x.id === bid);
-    const board = part ? boardOf(p, part) : undefined;
+    const board = a.board && part ? boardOf(p, part) : undefined;
     if ((back?.id ?? '') !== held.id) held = { id: back?.id ?? '', t0: s.start };
     const away = ps.lyric.side === 'left' ? 'right' : ps.lyric.side === 'right' ? 'left' : 'center';
     for (const [i, c] of [...ps.cuts].sort((x, y) => x.beat - y.beat).entries()) {
@@ -557,6 +565,10 @@ export function buildCuts(p: Plan) {
       const layer: KineticLayer = { kind: 'kinetic', fx: fx as KineticLayer['fx'], words, ink, paper, accent: c.heart ? heart : accent, seed: sections.length + 1, side, size, flip: side === 'left' };
       // a diagram stands where the character would
       if (c.sprite && !DIAGRAM_FX.has(fx)) layer.sprite = c.sprite;
+      // the same thing on the next cut but across the frame reads as it jumping there (sweet timer's moon and carriage
+      // swapped sides with the lyric): it sits that cut out
+      if (layer.sprite && !sameSpot(shown, layer.sprite, side)) delete layer.sprite;
+      shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;
       // the song's one variant of the move, and its direction when the move has one (MORE flows)
       const style = p.styles?.find((x) => x.fx === fx)?.style;
@@ -656,6 +668,10 @@ function settle(p: Plan) {
 }
 
 /** The side a lyric layout can take nearest the director's: stair has no centre; quiet, typewriter, handwrite no right. */
+/** Whether a sprite may show at this side after the last cut's: anything new may, the same one only where it stood. */
+export function sameSpot(last: { sprite: string; side: string }, sprite: string, side: string) {
+  return last.sprite !== sprite || last.side === side;
+}
 export function lyricSide(template: string, side: string): string {
   if (template === 'stair' && side === 'center') return 'right';
   if (['quiet', 'typewriter', 'handwrite'].includes(template) && side === 'right') return 'left';

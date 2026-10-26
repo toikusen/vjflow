@@ -25,8 +25,17 @@ export const typewriter: TemplateRenderer = {
     let rows = [...text].length > 14 ? chunks(text, 2) : [text];
     if (span) for (let n = 2; n <= 12; n++) { rows = chunks(text, n); if ((widthOf(rows) * 64) / 100 <= span * W) break; }
     const widest = widthOf(rows);
-    const size = Math.round(Math.max(span ? 64 : 88, Math.min(150 * sizeCap, (100 * (span ?? 0.78) * W) / widest)));
-    const style: GlyphStyle = { family: rt.fonts.body, weight: 900, size, shadow: true };
+    const guess = Math.round(Math.max(span ? 64 : 88, Math.min(150 * sizeCap, (100 * (span ?? 0.78) * W) / widest)));
+    const ink = color(rt.palette.text, 1.0);
+    const rowsAt = (sz: number) => rows.map((r) => makeGlyphs(r, { family: rt.fonts.body, weight: 900, size: sz, shadow: true }, ink, TRACK));
+    const widthAt = (gs: Glyph[][]) => Math.max(...gs.map((g) => rowWidth(g, TRACK)));
+    let rowGlyphs = rowsAt(guess);
+    // the guess counts characters; set Latin runs wider ("Supersonic like J. J. Fad" reached Tokyo Drift's driver), so a
+    // side column is measured as set and shrunk to its span
+    const over = span ? widthAt(rowGlyphs) / (span * W) : 1;
+    const size = over > 1 ? Math.floor(guess / over) : guess;
+    if (size !== guess) rowGlyphs = rowsAt(size);
+    const blockW = widthAt(rowGlyphs);
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
 
     const group = new THREE.Group();
@@ -34,10 +43,11 @@ export const typewriter: TemplateRenderer = {
     const lineH = size * 1.4;
     const pos = p['position'] as string;
     const cy = pos === 'bottom' ? -330 + ((rows.length - 1) * lineH) / 2 : 0;
-    const rowGlyphs = rows.map((r) => makeGlyphs(r, style, color(rt.palette.text, 1.0), TRACK));
-    const blockW = Math.max(...rowGlyphs.map((g) => rowWidth(g, TRACK)));
     // rows share one left edge, like text typed on a page
-    const left = pos === 'left' ? -W / 2 + 160 : pos === 'right' && span ? W / 2 - 160 - blockW : -blockW / 2;
+    // a side column hugs the frame edge (64 px): with the page margin of 160 it reached past the third the picture
+    // leaves the lyric and lay over Tokyo Drift's panels and its driver
+    const edge = span ? 64 : 160;
+    const left = pos === 'left' ? -W / 2 + edge : pos === 'right' && span ? W / 2 - edge - blockW : -blockW / 2;
     const glyphs: Glyph[] = [];
     let srcIndex = 0;
     rowGlyphs.forEach((gs, r) => {

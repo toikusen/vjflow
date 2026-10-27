@@ -76,6 +76,11 @@ export interface KineticLayer {
    * character is shrunk and slid to stand inside it, so it never reaches under the lyric.
    */
   room?: [number, number];
+  /**
+   * The lines leave the character no room (centred, or too little beside them): it stands behind them, faded
+   * (UNDER_ALPHA), instead of leaving the cut (dropping it emptied a minute of プラトニックチョロイン).
+   */
+  under?: boolean;
   /** What stays through the cut's part of the song (board.ts): evidence filling a board, a place's standing things. */
   board?: BoardLayer;
   /** Where the board may lay its pieces this cut (freeZone); null when the lines fill the frame. */
@@ -148,6 +153,8 @@ export const setLineVeil = (fn?: (ctx: CanvasRenderingContext2D, alpha: number) 
 export const lineVeil = () => veil;
 
 /** Moves that frame or repeat the cut's figure: without one they draw an empty window. */
+/** How strongly a character behind the lines shows: enough to read as the picture, faint next to the letters. */
+export const UNDER_ALPHA = 0.65;
 export const NEEDS_ART = new Set(['window', 'aura', 'grid', 'glide']);
 
 export const THREAD_MARKS = ['flame', 'star', 'heart', 'moon', 'sun', 'note', 'drop', 'flower'] as const;
@@ -537,6 +544,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(0.05 * Math.exp(-5 * clock) * Math.sin(13 * clock) * (seed % 2 ? 1 : -1));
       ctx.scale(pop * fit.s * (l.flip ? -1 : 1), pop * fit.s);
+      if (l.under) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;
       ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
       ctx.restore();

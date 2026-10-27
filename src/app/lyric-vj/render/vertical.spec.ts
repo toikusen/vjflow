@@ -45,6 +45,15 @@ describe('vertical text', () => {
     expect(month.position.y).toBeLessThan(one.position.y - 50);
   });
 
+  it('sets a short English word upright side by side too (はNG, 身邊 uh): lying on its side it read as a mistake', async () => {
+    const { l, gs } = await glyphsOf('はNG');
+    l.update(2, { flash: 0, hit: 0, shake: 0 });
+    const [, n, g] = gs;
+    expect(n.position.y).toBeCloseTo(g.position.y);
+    expect(g.position.x).toBeGreaterThan(n.position.x);
+    expect([n.rotation.z, g.rotation.z]).toEqual([0, 0]);
+  });
+
   it('turns three digits and long marks sideways, and nudges small kana up and right', async () => {
     const { l, gs } = await glyphsOf('123ーきっと');
     l.update(2, { flash: 0, hit: 0, shake: 0 });

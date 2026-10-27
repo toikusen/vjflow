@@ -17,7 +17,8 @@ const LATIN = /[A-Za-z0-9!?'"&.,:;]/;
 const CORNER = /[、。，．]/;
 /** Small kana sit a little toward the upper right of their cell (Mografy cjk.ts, MIT). */
 const SMALL = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶ]/;
-const DIGIT = /[0-9０-９]/;
+/** Set upright in a column when one or two in a row (tate-chu-yoko): digits and Latin letters (uh, NG, 10). */
+const UPRIGHT = /[0-9０-９A-Za-z]/;
 
 /** A mixed-language line's side column, inside the third a picture leaves the lyric (cutout.mts keeps 0.36). */
 export const SIDE_SPAN = 0.28;
@@ -62,8 +63,9 @@ export const vertical: TemplateRenderer = {
       let y = top - k * step;
       col.forEach(({ ch, m }, i) => {
         const em = m !== undefined;
-        // tate-chu-yoko: a number of one or two digits stands upright, a pair side by side in one cell (10月17日)
-        const isDigit = (j: number) => DIGIT.test(col[j]?.ch ?? '');
+        // tate-chu-yoko: one or two digits or Latin letters stand upright, a pair side by side in one cell (10月17日,
+        // 身邊 uh, はNG): a short English word lying on its side read as a mistake
+        const isDigit = (j: number) => UPRIGHT.test(col[j]?.ch ?? '');
         const run = (() => {
           let a = i, b = i;
           while (isDigit(a - 1)) a--;

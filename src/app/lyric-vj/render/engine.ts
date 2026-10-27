@@ -37,7 +37,7 @@ import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { freeBand, NEEDS_ART, oppositeSide, setLineVeil } from './kinetic';
+import { freeBand, oppositeSide, setLineVeil } from './kinetic';
 import { freeZone } from './board';
 import { DIAGRAM_FX } from './kinetic-more';
 import { storyEvents, storyLayers } from './story';
@@ -1064,13 +1064,10 @@ export class LyricVjEngine {
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
           const room = side && l.sprite ? freeBand(rects, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
           if (room) l.room = room;
-          // a thing never lies over a sung line: with lines centred, or too little room beside them, the cut has none
-          // (sweet timer's carriage, wand and moon sat on its lines)
-          else if (l.sprite && rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
-            delete l.sprite;
-            // a window or halo round nothing reads as a missing picture: that cut is plain paper
-            if (NEEDS_ART.has(l.fx)) (l as { fx: string }).fx = 'none';
-          }
+          // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
+          // stands behind them faded (sweet timer's carriage, wand and moon sat on its lines; dropping it instead left
+          // プラトニックチョロイン a minute without pictures)
+          else if (l.sprite && rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) l.under = true;
         }
       });
     }

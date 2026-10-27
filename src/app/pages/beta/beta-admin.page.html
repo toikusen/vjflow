@@ -1,0 +1,60 @@
+<header class="head">
+  <h1>封測管理</h1>
+  <p class="muted">全站已用 ${{ total().spentUsd.toFixed(2) }} ／ 總額度 ${{ total().globalLimitUsd.toFixed(2) }}・<a href="/my">我的歌曲</a></p>
+</header>
+
+@if (message()) {
+  <p class="note" role="status">{{ message() }}</p>
+}
+@if (loginUrl()) {
+  <p class="note"><code>{{ loginUrl() }}</code></p>
+}
+
+<section class="card">
+  <h2>邀請測試者</h2>
+  <form (ngSubmit)="addUser()" class="grid">
+    <label>名字<input name="name" [(ngModel)]="invite.name" required maxlength="60" /></label>
+    <label>額度（USD）<input name="limit" type="number" min="0" step="1" [(ngModel)]="invite.limitUsd" /></label>
+    <button type="submit">建立帳號並產生登入連結</button>
+  </form>
+  <form (ngSubmit)="saveGlobal()" class="grid">
+    <label>全站總額度（USD）<input name="global" type="number" min="0" step="1" [(ngModel)]="globalLimit" /></label>
+    <button type="submit">更新總額度</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>帳號</h2>
+  <table>
+    <tr><th>名字</th><th>已用</th><th>額度</th><th></th></tr>
+    @for (u of users(); track u.id) {
+      <tr [class.off]="u.disabled">
+        <td>{{ u.name }}@if (u.admin) {（管理者）}</td>
+        <td>${{ u.spentUsd.toFixed(2) }}</td>
+        <td><input #lim type="number" min="0" [value]="u.limitUsd" (change)="setLimit(u, lim.value)" aria-label="額度" /></td>
+        <td><button type="button" (click)="newLink(u)">新登入連結</button> @if (!u.admin) {<button type="button" (click)="toggle(u)">{{ u.disabled ? '恢復' : '停用' }}</button>}</td>
+      </tr>
+    }
+  </table>
+</section>
+
+<section class="card">
+  <h2>工作</h2>
+  <table>
+    <tr><th>時間</th><th>誰</th><th>歌曲</th><th>內容</th><th>狀態</th><th>花費</th><th></th></tr>
+    @for (j of sorted(); track j.id) {
+      <tr>
+        <td>{{ j.createdAt.slice(5, 16).replace('T', ' ') }}</td>
+        <td>{{ userName(j.userId) }}</td>
+        <td>{{ songTitle(j.songId) }}</td>
+        <td>{{ what(j) }}</td>
+        <td>{{ status[j.status] }}@if (j.phase && j.status !== 'done') {：{{ j.phase }}}@if (j.error) {<br /><span class="muted">{{ j.error }}</span>}</td>
+        <td>@if (j.costUsd !== undefined) {${{ j.costUsd.toFixed(2) }}} @else {預留 ${{ j.reservedUsd }}}</td>
+        <td>
+          @if (j.status === 'failed') {<button type="button" (click)="retry(j)">重跑</button>}
+          @if (j.status === 'admin') {<a [href]="video(j)" target="_blank">看影片</a> <button type="button" (click)="approve(j)">放行</button>}
+        </td>
+      </tr>
+    }
+  </table>
+</section>

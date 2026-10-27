@@ -37,7 +37,9 @@ const SPEEDS = [0.5, 0.75, 1];
 })
 export class TimingPage {
   protected readonly songs = signal<SongItem[]>([]);
-  protected readonly songId = signal<string | null>(new URLSearchParams(location.search).get('song'));
+  /** A beta tester's song (/timing?beta=<id>): read and saved through scripts/lyric-vj/beta/server.mts, no song list. */
+  protected readonly beta = new URLSearchParams(location.search).get('beta');
+  protected readonly songId = signal<string | null>(this.beta ?? new URLSearchParams(location.search).get('song'));
   protected readonly song = signal<SongTimeline | null>(null);
   protected readonly cues = signal<TimelineCue[]>([]);
   /** Members and their colours (lines tagged with a member are set in that colour). */
@@ -131,7 +133,7 @@ export class TimingPage {
     });
     this.audio.onplay = () => this.playing.set(true);
     this.audio.onpause = () => this.playing.set(false);
-    void this.loadList();
+    if (!this.beta) void this.loadList();
     const id = this.songId();
     if (id) void this.open(id);
   }
@@ -146,6 +148,11 @@ export class TimingPage {
     return this.checks()[i]?.suggestedStart;
   }
 
+  /** Where a song's timing, audio and cues are served. */
+  private api(id: string) {
+    return this.beta ? `/beta/songs/${encodeURIComponent(id)}` : `/lyric-vj/songs/${encodeURIComponent(id)}`;
+  }
+
   private async loadList() {
     const r = await fetch('/lyric-vj/songs', { cache: 'no-store' }).catch(() => null);
     if (!r?.ok) return this.message.set('讀不到歌曲清單，請先執行 npx tsx scripts/lyric-vj/dashboard.mts');
@@ -154,10 +161,10 @@ export class TimingPage {
 
   protected async open(id: string) {
     this.songId.set(id);
-    history.replaceState(null, '', `/timing?song=${encodeURIComponent(id)}`);
-    const base = `/lyric-vj/songs/${encodeURIComponent(id)}`;
+    if (!this.beta) history.replaceState(null, '', `/timing?song=${encodeURIComponent(id)}`);
+    const base = this.api(id);
     this.loading.set('讀取歌曲…');
-    const song: SongTimeline = await (await fetch(base, { cache: 'no-store' })).json();
+    const song: SongTimeline = await (await fetch(this.beta ? `${base}/timing` : base, { cache: 'no-store' })).json();
     this.song.set(song);
     this.cues.set(song.cues.map((c) => ({ ...c })));
     this.singers.set((song.singers ?? []).map((x) => ({ ...x })));
@@ -514,7 +521,7 @@ export class TimingPage {
   protected async save(confirm: boolean) {
     const id = this.songId();
     if (!id) return;
-    const r = await fetch(`/lyric-vj/songs/${encodeURIComponent(id)}/cues`, {
+    const r = await fetch(`${this.api(id)}/cues`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ cues: this.cues().map(({ id, start, end, text, singer }) => ({ id, start, end, text, singer: singer ?? '' })), confirm, accepted: [...this.touched()], singers: this.singers() }),
@@ -525,10 +532,11 @@ export class TimingPage {
     // a design styles each line by id: added, removed or retyped lines need the design redone
     const before = this.song()!.cues;
     const reshaped = before.length !== this.cues().length || this.cues().some((c, i) => c.id !== before[i]?.id || c.text !== before[i]?.text);
-    const note = reshaped ? '歌詞的句子有增減或改字：已經做好的設計要到 Studio 按「方向不對，重做設計」才會套用新歌詞。' : '';
+    const note = reshaped && !this.beta ? '歌詞的句子有增減或改字：已經做好的設計要到 Studio 按「方向不對，重做設計」才會套用新歌詞。' : '';
+    if (this.beta && confirm) return void location.assign('/my');
     this.message.set(`${confirm ? '時間軸已確認，可以開始生成 VJ。' : '已儲存。'}${note}`);
     await this.open(id);
-    await this.loadList();
+    if (!this.beta) await this.loadList();
   }
 
   // ---- waveform

@@ -5,21 +5,10 @@
 # usage: scripts/lyric-vj/prep-song.sh <youtube id> "<artist - title>" [language: ja (default) | en | ko | zh]
 set -euo pipefail
 yid=$1; meta=$2; lang=${3:-ja}
-VJA=~/vjanalytics
 d=out/db/yt_$yid
 mkdir -p "$d"
 [ -f "$d/mix.mp3" ] || yt-dlp -q -x --audio-format mp3 --audio-quality 0 -o "$d/mix.%(ext)s" "https://www.youtube.com/watch?v=$yid"
-if [ ! -f "$d/vocals.wav" ]; then
-  "$VJA/.venv/bin/python" -m demucs --two-stems=vocals -n htdemucs -o "$d/demucs" "$d/mix.mp3" > "$d/demucs.log" 2>&1
-  mv "$(find "$d/demucs" -name vocals.wav | head -1)" "$d/vocals.wav"
-  rm -rf "$d/demucs"
-fi
-if [ ! -f "$d/vocals_kim.wav" ]; then
-  uv run -q --python 3.11 --with "audio-separator[cpu]" audio-separator "$d/mix.mp3" -m vocals_mel_band_roformer.ckpt \
-    --output_dir "$d/kim" --output_format WAV --model_file_dir ~/.cache/audio-separator > "$d/kim.log" 2>&1
-  mv "$(find "$d/kim" -iname '*(vocals)*.wav' | head -1)" "$d/vocals_kim.wav"
-  rm -rf "$d/kim"
-fi
+bash scripts/lyric-vj/stems.sh "$d"
 # plain text for the aligners when LRCLIB's synced lines don't pass (closest duration wins)
 dur=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$d/mix.mp3")
 python3 - "$meta" "$dur" "$d/lyrics-source.txt" <<'PY'

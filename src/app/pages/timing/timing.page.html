@@ -38,7 +38,7 @@
       </p>
     </div>
     <div class="actions">
-      <a class="btn" href="/timing">其他歌曲</a>
+      <a class="btn" [href]="beta ? '/my' : '/timing'">{{ beta ? '回我的歌曲' : '其他歌曲' }}</a>
       <button class="btn" (click)="download('lrc')" title="目前編輯器裡的時間（LRC：0.01 秒）">下載 LRC</button>
       <button class="btn" (click)="download('srt')" title="目前編輯器裡的時間（SRT：0.001 秒）">下載 SRT</button>
       <button class="btn" [disabled]="!dirty()" (click)="save(false)">儲存</button>

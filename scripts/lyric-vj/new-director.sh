@@ -17,6 +17,8 @@ wait
 for n in noimg img; do
   [ -f "$d/$n/treatment.json" ] || { log "plan $n failed"; continue; }
   log "render $n"
+  # the song's own horizons in place of the four code skylines (a plan without skylines spends nothing)
+  npx tsx scripts/lyric-vj/horizon.mts --song "$S" --treatment "$d/base/treatment.json" --out "$d/horizon" --apply "$d/$n" > "$d/horizon-$n.log" 2>&1 || log "horizon $n skipped"
   ls "$d/$n/video/"lyric-vj_vocal_0-*.mp4 >/dev/null 2>&1 || npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$d/$n/treatment.json" --assets "$d/$n/assets.json" --start 0 --end "$end" --fps 30 --workers 2 --out "$d/$n/video" > "$d/$n/full.log" 2>&1
   rm -rf "${d:?}/$n/video/render" "${d:?}/$n/video/segments"
 done

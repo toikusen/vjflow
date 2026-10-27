@@ -45,6 +45,9 @@ case $tier in
   *) echo "unknown tier $tier" >&2; exit 2 ;;
 esac
 
+# the song's own horizons in place of the four code skylines (horizon.mts; a plan without skylines spends nothing)
+echo '##PHASE 畫背景剪影'
+npx tsx scripts/lyric-vj/horizon.mts --song "$S" --treatment "$w/base/treatment.json" --out "$w/horizon" --apply "$tr" > "$w/horizon-$tier.log" 2>&1 && cost_log "$w/horizon-$tier.log" || echo "horizon skipped"
 echo '##PHASE 輸出影片'
 # render.mts refuses to finish with a black stretch left (blackSpans), so a made file has picture throughout
 ls "$tr/video/"lyric-vj_vocal_0-*.mp4 > /dev/null 2>&1 || npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$tr/treatment.json" --assets "$tr/assets.json" --start 0 --end "$end" --fps 30 --workers 2 --out "$tr/video" > "$w/render-$tier.log" 2>&1

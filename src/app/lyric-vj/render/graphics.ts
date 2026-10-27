@@ -80,7 +80,7 @@ export type Layer = Base &
     | { kind: 'mist'; color: Rgb; count?: number; y?: number; drift?: number; soft?: boolean }
     | { kind: 'speedlines'; color: Rgb; count?: number; inner?: number }
     | { kind: 'swissgrid'; color: Rgb; cols?: number; bars?: Rgb; signal?: Rgb; seed?: number }
-    | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb; wash?: boolean }
+    | { kind: 'skyline'; type?: 'city' | 'hills' | 'trees' | 'peaks'; colors: Rgb[]; height?: number; seed?: number; drift?: number; windows?: Rgb; wash?: boolean; art?: string[] }
     | { kind: 'mosaic'; type?: 'random' | 'rose' | 'lancet'; colors: Rgb[]; color?: Rgb; cells?: number; seed?: number; x?: number; y?: number; r?: number }
     | { kind: 'botanical'; type?: 'fern' | 'leaf' | 'flower' | 'feather' | 'mixed'; color: Rgb; count?: number; size?: number; seed?: number }
     | { kind: 'ink'; color: Rgb; colors?: Rgb[]; count?: number; size?: number; seed?: number }
@@ -483,6 +483,23 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
 }
 
+/** A mask picture filled with one colour, made once per picture and colour. */
+const tints = new Map<string, HTMLCanvasElement>();
+function tinted(pic: CanvasImageSource & { width: number; height: number }, key: string, color: string) {
+  let c = tints.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = pic.width;
+  c.height = pic.height;
+  const x = c.getContext('2d')!;
+  x.drawImage(pic, 0, 0);
+  x.globalCompositeOperation = 'source-in';
+  x.fillStyle = color;
+  x.fillRect(0, 0, c.width, c.height);
+  tints.set(key, c);
+  return c;
+}
+
 function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   if (l.kind === 'code') return drawCode(ctx, l, t, age, beat, image);
   if (l.kind === 'sprite' || l.kind === 'thread' || l.kind === 'card') return drawStory(ctx, l, image);
@@ -802,6 +819,21 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       const n = l.colors.length;
       // height is a fraction of the frame; a director that wrote pixels (cyanotype: 160) got a skyline over everything
       const top = H * (1 - Math.min(0.9, (l.height ?? 0.45) > 1 ? (l.height as number) / 1080 : (l.height ?? 0.45)));
+      // the song's own horizons (horizon.mts): each layer a drawn band filled with the layer's colour, nearer ones lower
+      // and larger; a missing picture falls back to the code shapes
+      const arts = (l.art ?? []).map((id) => image(id) as (CanvasImageSource & { width: number; height: number }) | undefined);
+      if (arts.length && arts.every((p) => p && p.width)) {
+        l.colors.forEach((c, k) => {
+          const depth = (k + 1) / n;
+          const pic = arts[k % arts.length]!;
+          const h = (H - top) * (0.75 + 0.25 * depth);
+          const w = (pic.width / pic.height) * h;
+          const off = (t * (l.drift ?? 6) * (0.3 + depth)) % w;
+          const band = tinted(pic, `${l.art![k % arts.length]}|${c}`, c);
+          for (let x = -off; x < W; x += w) ctx.drawImage(band, x, H - h, w, h);
+        });
+        break;
+      }
       l.colors.forEach((c, k) => {
         const depth = (k + 1) / n; // 0 back … 1 front
         const base = top + (H - top) * (0.15 + 0.5 * depth);

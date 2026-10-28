@@ -199,7 +199,7 @@ async function runStub(script: string) {
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, headers: { cookie: `vjb=${token}`, 'content-type': 'application/json' } });
-  return { beta, admin: as(admin.token), tester: as(tester.token) };
+  return { beta, root, admin: as(admin.token), tester: as(tester.token) };
 }
 
 test('a job whose cost passes twice its price is stopped and not charged', async () => {
@@ -223,4 +223,33 @@ test('a failed job records the step it was in as unsettled', async () => {
   assert.equal(jobs[0].priceUsd, 6);
   assert.equal((await (await t.admin('/beta/admin/users')).json()).platformSpentUsd, 1.5);
   t.beta.server.close();
+});
+
+test('a pipeline orphaned by a crash is stopped when the server starts again, and the job reruns', async () => {
+  const t = await runStub("echo '##PHASE 製作中'; sleep 30");
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 40 && !t.beta.db.jobs[0].pid; k++) await new Promise((ok) => setTimeout(ok, 50));
+  const pid = t.beta.db.jobs[0].pid!;
+  assert.ok(pid > 0);
+  process.kill(-pid, 0); // alive
+  // a crash: the first server's record stays on disk with the job running; a second server starts on it
+  const root = t.root;
+  t.beta.server.close();
+  const second = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+  let gone = false;
+  for (let k = 0; k < 40 && !gone; k++) {
+    await new Promise((ok) => setTimeout(ok, 50));
+    try { process.kill(-pid, 0); } catch { gone = true; }
+  }
+  const newPid = second.db.jobs[0].pid;
+  try {
+    assert.ok(gone, 'old process group still alive');
+    assert.equal(second.db.jobs[0].status, 'running');
+    assert.notEqual(newPid, pid);
+  } finally {
+    // stop the rerun's group and the first server's group; only pids this test started
+    for (const p of [pid, newPid]) if (p) try { process.kill(-p, 'SIGKILL'); } catch { /* gone */ }
+    second.server.close();
+    await new Promise((ok) => setTimeout(ok, 200));
+  }
 });

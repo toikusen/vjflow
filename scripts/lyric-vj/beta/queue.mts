@@ -56,6 +56,15 @@ export function readLine(job: Job, line: string, now: () => string = () => new D
   return true;
 }
 
+/** Stops a job's whole process group; a group that ignores SIGTERM gets SIGKILL after `graceMs`. */
+export function killGroup(pid: number, graceMs = 10_000) {
+  try { process.kill(-pid, 'SIGTERM'); } catch { return; }
+  setTimeout(() => { try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ } }, graceMs).unref();
+}
+
+/** Stops every running job's process group (server shutdown, or a crash left pipelines behind). */
+export const killRunning = (db: Db, graceMs?: number) => { for (const j of db.jobs) if (j.status === 'running' && j.pid) killGroup(j.pid, graceMs); };
+
 /** Starts the next queued job when nothing runs; call after any change to the queue. */
 export function pump(q: Queue) {
   const job = nextJob(q.db);
@@ -73,6 +82,8 @@ export function pump(q: Queue) {
   const log = join(q.logDir, `${job.id}.log`);
   // the keys only reach the job's process, never the pages or the records
   const child = spawn('bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  job.pid = child.pid;
+  q.persist();
   let fused = false;
   let rest = '';
   const take = (b: Buffer) => {
@@ -84,7 +95,7 @@ export function pump(q: Queue) {
     if (!fused && job.costUsd !== undefined && job.costUsd > 2 * (job.priceUsd ?? Infinity)) {
       fused = true;
       job.error = '成本超過上限，已通知管理者';
-      try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* already gone */ }
+      killGroup(child.pid!);
     }
   };
   child.stdout.on('data', take);
@@ -98,6 +109,7 @@ export function pump(q: Queue) {
       endedAt: now(),
       error: failed ? (fused ? job.error : `exit ${code}`) : undefined,
       unsettled: failed ? job.phase : undefined,
+      pid: undefined,
     });
     q.persist();
     pump(q);

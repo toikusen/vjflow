@@ -16,6 +16,8 @@ export interface Job {
   reservedUsd: number;
   /** What the person pays for this job, fixed when it is queued; unset on legacy jobs. */
   priceUsd?: number;
+  /** The process id of the running job's shell (its own process group), cleared when it ends. */
+  pid?: number;
   /** The phase in progress when the job failed. */
   unsettled?: string;
   /** The measured cost, when the steps report one. */
@@ -61,8 +63,8 @@ export function save(file: string, db: Db) {
 /** What a person pays for a job: nothing when it failed, else its fixed price (legacy jobs: measured cost, else the reserve). */
 export const charged = (j: Job) => (j.status === 'failed' ? 0 : j.priceUsd ?? j.costUsd ?? j.reservedUsd);
 export const spent = (db: Db, userId?: string) => db.jobs.filter((j) => !userId || j.userId === userId).reduce((s, j) => s + charged(j), 0);
-/** What the platform pays: measured cost where known, else the price of a job still running. */
-export const platformSpent = (db: Db) => db.jobs.reduce((s, j) => s + (j.costUsd ?? (j.status === 'queued' || j.status === 'running' ? j.priceUsd ?? j.reservedUsd : 0)), 0);
+/** What the platform pays: a finished job its measured cost; a job still waiting or running the larger of its price and its cost so far. */
+export const platformSpent = (db: Db) => db.jobs.reduce((s, j) => s + (j.status === 'queued' || j.status === 'running' ? Math.max(j.costUsd ?? 0, j.priceUsd ?? j.reservedUsd) : j.costUsd ?? 0), 0);
 
 /** Why a job may not be queued (in words for the person), or undefined when it may. */
 export function refuse(db: Db, userId: string, kind: Job['kind'], tier?: Tier): string | undefined {
@@ -86,7 +88,7 @@ export const userByToken = (db: Db, token: string | undefined) => (token ? db.us
 
 /** Jobs a restart interrupted go back to the queue (every pipeline step skips what it already wrote). */
 export function requeueRunning(db: Db) {
-  for (const j of db.jobs) if (j.status === 'running') Object.assign(j, { status: 'queued', phase: undefined, startedAt: undefined });
+  for (const j of db.jobs) if (j.status === 'running') Object.assign(j, { status: 'queued', phase: undefined, startedAt: undefined, pid: undefined });
 }
 
 /** The next job to run: none while one runs (one machine, one song at a time), else the oldest queued. */

@@ -82,3 +82,14 @@ test('a legacy job without priceUsd is charged as before, and a failed one is fr
   db.jobs.push(job({ reservedUsd: 6, costUsd: 2, status: 'failed' }));
   assert.equal(spent(db), 3.62);
 });
+
+test('a queued or running job counts the larger of its price and its cost so far for the platform', () => {
+  const db = emptyDb();
+  db.jobs.push(job({ priceUsd: 4, costUsd: 0.5, status: 'running' }));
+  assert.equal(platformSpent(db), 4);
+  db.jobs[0].costUsd = 5;
+  assert.equal(platformSpent(db), 5);
+  db.jobs[0].status = 'done';
+  db.jobs[0].costUsd = 0.5;
+  assert.equal(platformSpent(db), 0.5);
+});

@@ -6,7 +6,7 @@ import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, resolve } from 'node:path';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
-import { pump, Queue } from './queue.mts';
+import { killRunning, pump, Queue } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
 
@@ -76,6 +76,7 @@ export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env };
+  killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
   requeueRunning(db);
   // make jobs queued before run folders existed get one now, so their output lands where videoFile looks
   for (const j of db.jobs) if (j.kind === 'make' && j.status === 'queued' && !j.runDir) j.runDir = `runs/${j.id}`;
@@ -222,7 +223,7 @@ export function createBetaServer(o: BetaOptions) {
         q.persist();
         return json(res, 200, { globalLimitUsd: v });
       }
-      // a failed job runs again as a new job (its cost so far stays charged; the steps resume from what they wrote)
+      // a failed job runs again as a new job at the fixed price (the failed one charged nothing; the steps resume from what they wrote)
       const rj = /^\/beta\/admin\/jobs\/([\w-]+)\/retry$/.exec(path);
       if (rj && req.method === 'POST') {
         const j = db.jobs.find((x) => x.id === rj[1] && x.status === 'failed');
@@ -258,6 +259,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (job.kind === 'prep') return `bash scripts/lyric-vj/beta/prep.sh ${q(dir)} ${q(song.language)} ${q([song.artist, song.title].filter(Boolean).join(' - '))}`;
     return `bash scripts/lyric-vj/beta/make.sh ${q(dir)} ${q(job.tier ?? '')} ${q(runPath(root, job))}`;
   };
-  const { server } = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });
+  const { server, db, queue } = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });
+  // the pipeline runs in its own process group: stop it with the server, or it would keep spending and a restart would run it twice
+  for (const sig of ['SIGINT', 'SIGTERM'] as const)
+    process.on(sig, () => { killRunning(db, 2000); queue.persist(); setTimeout(() => process.exit(0), 2500); });
   server.listen(4320, '127.0.0.1', () => console.log('beta backend on http://127.0.0.1:4320'));
 }

@@ -4,10 +4,12 @@ import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone' }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string }
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
 export const PREP_PRICE = 0.5;
+/** The concept fee every version starts with; mirrors PRICE.concept in scripts/lyric-vj/beta/store.mts. */
+export const CONCEPT_PRICE = 2.5;
 
 /** The three versions; `price` mirrors PRICE in scripts/lyric-vj/beta/store.mts. */
 export const TIER_INFO: Record<BetaTier, { name: string; about: string; price: number; minutes: string }> = {
@@ -121,11 +123,13 @@ export interface SongView {
   /** True when the last failed job was the system's own automatic retry (so "the system retried" is true). */
   failedAuto?: boolean;
   results: BetaJob[];
+  /** The make job behind `failedFor`, for the failure card. */
+  failed?: BetaJob;
   /** The newest finished concept the person has not accepted, adjusted or redone yet. */
   concept?: BetaJob;
 }
 
-/** One song as the detail page shows it: its stage, the running make, concept or fix job, and the finished (or held) results, newest first. */
+/** One song as the detail page shows it: its stage, the running make, concept or fix job, and the finished (or held) make and fix results, newest first. */
 export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   const mine = jobs.filter((j) => j.songId === song.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const prep = mine.filter((j) => j.kind === 'prep').at(-1);
@@ -134,6 +138,7 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   if (prep.status === 'failed') return { ...base, stage: 'prepFailed' };
   if (!song.confirmedAt) return { ...base, stage: 'timing' };
   const makes = mine.filter((j) => j.kind === 'make');
+  // a fix re-renders a result into a new video, so it is a result of its own
   // a concept or fix run is work in progress too: the song is busy until it ends
   const active = mine.find((j) => j.kind !== 'prep' && (j.status === 'queued' || j.status === 'running'));
   const last = makes.at(-1);
@@ -144,7 +149,8 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
     retrying: active?.auto === true,
     failedFor: !active && last?.status === 'failed' ? last.tier : undefined,
     failedAuto: !active && last?.status === 'failed' ? last.auto === true : undefined,
-    results: makes.filter((j) => j.status === 'done' || j.status === 'admin').reverse(),
+    failed: !active && last?.status === 'failed' ? last : undefined,
+    results: mine.filter((j) => (j.kind === 'make' || j.kind === 'fix') && (j.status === 'done' || j.status === 'admin')).reverse(),
     concept: mine.filter((j) => j.kind === 'concept' && j.status === 'done' && !j.decision).at(-1),
   };
 }

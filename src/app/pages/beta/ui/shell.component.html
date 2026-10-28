@@ -12,7 +12,7 @@
   }
 </aside>
 
-<header class="phone-top">
+<header class="phone-top" [class.own]="spec().ownTop">
   @if (spec().back; as b) {
     <a class="back" [href]="b.href">← {{ b.label }}</a>
   } @else {

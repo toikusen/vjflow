@@ -1,183 +1,249 @@
-
-
 @if (message()) {
   <p class="toast" role="status">{{ message() }}</p>
 }
 
-<main class="song-page">
-  <div class="song-top desk-only">
-    <a class="link back" href="/my">← 我的歌曲</a>
+@if (song(); as s) {
+  @let v = sv()!;
+  <header class="hero" [attr.data-tone]="tone(v)" [class.compact]="compact(v)" [style.--tint]="tint(s)">
+    <a class="back" href="/my">← 我的歌曲</a>
     @if (me(); as m) {
-      <app-balance [me]="m" look="compact" />
+      <app-balance class="bal desk" [me]="m" look="compact" />
+      <app-balance class="bal phone" [me]="m" look="phone" />
     }
-  </div>
-
-  @if (song(); as s) {
-    @let v = sv()!;
-    @let st = stage(s);
-    <section class="song">
-      <header class="song-head">
-        <div class="cover" aria-hidden="true">{{ s.title.slice(0, 1) }}</div>
-        <div class="song-title">
-          <h1>{{ s.title }}</h1>
-          <p class="muted">@if (s.artist) {<span>{{ s.artist }}・</span>}{{ langName(s.language) }}</p>
-        </div>
-        <app-status-chip [chip]="chip(v)" />
-      </header>
-
-      @switch (v.stage) {
-        @case ('preparing') {
-          @if ($any(st).job; as j) {
-            <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: j }" />
-          } @else {
-            <p class="muted">{{ $any(st).label }}</p>
-          }
+    <div class="cover" aria-hidden="true">{{ s.title.slice(0, 1) }}</div>
+    <div class="hero-text">
+      <app-status-chip class="hero-chip" [class.banner]="v.retrying" [chip]="heroChip(v)" />
+      <h1>{{ s.title }}</h1>
+      <p class="sub">
+        @if (s.artist) {<span>{{ s.artist }} · </span>}{{ langName(s.language) }}@if (duration(); as d) {<span> · {{ clock(d) }}</span>}
+        @if (v.stage === 'ready') {
+          <span class="timing-bit"> · 歌詞時間已確認 <a [href]="'/timing?beta=' + s.id">再看一次</a></span>
         }
-        @case ('prepFailed') {
-          <p class="warn">準備失敗，管理者會協助處理。</p>
+      </p>
+    </div>
+    @if (v.stage === 'ready' && !compact(v)) {
+      <div class="files">
+        <button class="button" type="button" (click)="download('lrc')">下載 LRC</button>
+        <button class="button" type="button" (click)="download('srt')">下載 SRT</button>
+      </div>
+    }
+  </header>
+
+  <main class="body">
+    @switch (v.stage) {
+      @case ('preparing') {
+        @if (v.prep; as j) {
+          <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: j, prep: true }" />
+        } @else {
+          <div class="empty"><p>等待上傳音檔</p></div>
         }
-        @case ('timing') {
-          <div class="callout">
-            <p>歌詞時間已自動對好，請檢查後確認，才能開始製作。</p>
-            <a class="cta small" [href]="'/timing?beta=' + s.id">確認時間</a>
+        <ng-container *ngTemplateOutlet="makeLater" />
+      }
+      @case ('prepFailed') {
+        <section class="failure">
+          <span class="bang" aria-hidden="true">!</span>
+          <div class="f-text">
+            <h2>歌曲準備失敗</h2>
+            <p>準備失敗，管理者會協助處理。</p>
           </div>
-        }
-        @case ('ready') {
-          <p class="muted timing-line">歌詞時間已確認・<a class="link" [href]="'/timing?beta=' + s.id">再看一次歌詞時間</a></p>
-        }
-      }
-    </section>
-
-    @if (v.stage === 'ready') {
-      @if (v.failedFor) {
-        <p class="warn notice">{{ failedNotice(v.failedAuto) }}</p>
-      }
-
-      @if (v.active; as a) {
-        <section class="song">
-          <h2>進行中・{{ tierName(a.tier) }}</h2>
-          @if (v.retrying) {
-            <p class="warn">第一次製作遇到系統問題，正在自動重試（不另外收費）</p>
-          }
-          <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: a }" />
         </section>
       }
-
-      @if (mine()) {
-      <section class="song">
-        <h2>製作新版本</h2>
-        <div class="tiers pick" role="radiogroup" aria-label="製作新版本" (keydown)="moveTier($event)">
-          @for (t of tierList; track t.id) {
-            <button
-              type="button"
-              class="tier"
-              role="radio"
-              [attr.data-tier]="t.id"
-              [attr.aria-checked]="chosen() === t.id"
-              [attr.tabindex]="chosen() === t.id ? 0 : -1"
-              [class.on]="chosen() === t.id"
-              [disabled]="!!v.active"
-              (click)="picked.set(t.id)"
-            >
-              <span class="tier-head">
-                <strong>{{ t.name }}</strong>
-                <app-price class="price" title="固定費用" [amount]="t.price" digits="short" />
-              </span>
-              <span class="muted">{{ t.about }}</span>
-              <span class="meta">{{ t.minutes }}</span>
-            </button>
-          }
-        </div>
-        <div class="make-foot">
-          <button class="cta" type="button" [disabled]="!!v.active" (click)="confirmMake(s, chosen())">製作{{ tierName(chosen()) }} · <app-price [amount]="tierPrice(chosen())" digits="short" [plain]="true" /></button>
-          @if (v.active) {
-            <p class="fine">目前有工作在進行，完成後才能再製作</p>
-          }
-        </div>
-      </section>
+      @case ('timing') {
+        <section class="callout">
+          <p>歌詞時間已自動對好，請檢查後確認，才能開始製作。</p>
+          <a class="button soft" [href]="'/timing?beta=' + s.id">確認時間</a>
+        </section>
+        <ng-container *ngTemplateOutlet="makeLater" />
       }
-
-      <section class="results">
-        <div class="works-head">
-          <h2>成品</h2>
-          <span class="muted">{{ v.results.length }}</span>
-        </div>
-        @if (!v.results.length) {
-          <div class="empty"><p>還沒有成品</p></div>
+      @case ('ready') {
+        @if (v.failed; as f) {
+          @let fc = failure(f);
+          <section class="failure" role="alert">
+            <span class="bang" aria-hidden="true">!</span>
+            <div class="f-text">
+              <h2>{{ fc.title }}</h2>
+              <p>
+                @if (fc.price !== undefined) {
+                  這次的 <app-price [amount]="fc.price" digits="short" [plain]="true" /> 已退回你的餘額。管理者已收到通知，會查原因後幫你重跑或聯絡你。
+                } @else {
+                  這次的費用已退回你的餘額。管理者已收到通知，會查原因後幫你重跑或聯絡你。
+                }
+              </p>
+            </div>
+            <div class="f-side">
+              <p class="f-stamps">{{ fc.stamps.join(' · ') }}</p>
+              <button class="button" type="button" (click)="contacted.set(true)">聯絡管理者</button>
+              @if (contacted()) {
+                <p class="f-note" role="status">管理者已收到通知，不用另外聯絡。</p>
+              }
+            </div>
+          </section>
         }
-        <div class="result-grid">
+
+        @if (v.active; as a) {
+          <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: a, prep: false }" />
+        }
+
+        <section class="results" aria-labelledby="results-h">
+          <div class="section-head">
+            <h2 id="results-h">成品</h2>
+            <span>{{ v.results.length ? v.results.length + ' 個版本' : '0 個' }}</span>
+          </div>
           @for (j of v.results; track j.id) {
-            <article class="result" [class.wide]="reporting() === j.id">
+            <article class="result" [class.reporting]="reporting() === j.id">
               @if (j.status === 'done') {
-                <video #vid [class.pinned]="reporting() === j.id" [src]="videoUrl(j)" controls playsinline preload="metadata"></video>
-                <ng-container *ngTemplateOutlet="resultBody; context: { $implicit: j, video: vid }" />
+                <div class="media">
+                  <video #vid [src]="videoUrl(j)" [controls]="played().has(j.id) || reporting() === j.id" playsinline preload="metadata" (play)="markPlayed(j.id)"></video>
+                  @if (!played().has(j.id) && reporting() !== j.id) {
+                    <button class="play" type="button" aria-label="播放" (click)="play(j.id, vid)"></button>
+                    <span class="res">1080p@if (duration(); as d) { · {{ clock(d) }}}</span>
+                  }
+                </div>
+                <div class="r-body">
+                  <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
+                  <div class="r-actions">
+                    <a class="button strong" [href]="videoUrl(j)" download>下載 1080p</a>
+                    @if (mine()) {
+                      <button class="button" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)"><span class="desk">回報這個作品</span><span class="phone">回報</span></button>
+                    }
+                  </div>
+                  <!-- stays mounted once opened so a draft survives closing the form or opening another card -->
+                  @if (opened().has(j.id)) {
+                    <app-report-form [job]="j" [video]="vid" [hidden]="reporting() !== j.id" (reported)="setReports(j.id, $event)" />
+                  }
+                </div>
               } @else {
-                <div class="held"><p class="muted">已完成，管理者確認後就能下載</p></div>
-                <ng-container *ngTemplateOutlet="resultBody; context: { $implicit: j, video: null }" />
+                <div class="media"><p class="held">已完成，管理者確認後就能下載</p></div>
+                <div class="r-body">
+                  <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
+                </div>
               }
             </article>
+          } @empty {
+            <div class="empty">
+              <span class="thumb" aria-hidden="true"></span>
+              <p>還沒有成品。第一個成品完成後會出現在這裡，可以播放、下載 1080p 與回報。</p>
+            </div>
           }
-        </div>
-      </section>
+        </section>
+
+        @if (mine()) {
+          <section class="make" aria-labelledby="make-h">
+            <div class="section-head">
+              <h2 id="make-h">製作新版本</h2>
+            </div>
+            <div class="tiers" role="radiogroup" aria-label="製作新版本" (keydown)="moveTier($event)">
+              @for (t of tierList; track t.id) {
+                <button
+                  type="button"
+                  class="tier"
+                  role="radio"
+                  [attr.data-tier]="t.id"
+                  [attr.aria-checked]="chosen() === t.id"
+                  [attr.tabindex]="chosen() === t.id ? 0 : -1"
+                  [class.on]="chosen() === t.id"
+                  [disabled]="!!v.active"
+                  (click)="picked.set(t.id)"
+                >
+                  <span class="tier-head">
+                    <strong>{{ t.name }}</strong>
+                    <app-price class="tier-price" [amount]="t.price" digits="short" [plain]="true" />
+                  </span>
+                  <span class="tier-about">{{ t.about }}</span>
+                  <span class="tier-meta">{{ t.minutes }}</span>
+                </button>
+              }
+            </div>
+            <div class="make-foot">
+              <button class="button primary" type="button" [disabled]="!!v.active" (click)="confirmMake(s, chosen())">製作{{ tierName(chosen()) }} · <app-price [amount]="tierPrice(chosen())" digits="short" [plain]="true" /></button>
+              @if (v.active) {
+                <p class="fine">目前有工作在進行，完成後才能再製作。</p>
+              }
+            </div>
+          </section>
+        }
+      }
     }
-  } @else if (loaded()) {
-    <div class="empty"><p>找不到這首歌</p></div>
-  }
-</main>
+  </main>
+} @else if (loaded()) {
+  <main class="body"><div class="empty"><p>找不到這首歌</p></div></main>
+}
 
 <app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />
 
-<ng-template #progressTpl let-job>
-  @let p = progress(job);
-  <div class="job-progress">
-    @if (job.status === 'queued') {
-      <div class="jp-head"><strong>排隊中</strong></div>
-      <div class="progress"><i></i></div>
-      <p class="muted">前面的工作完成後就會開始，預計需要約 {{ p.leftMin }} 分鐘。</p>
-    } @else {
-      <div class="jp-head"><strong>{{ p.label }}</strong><span class="pct">{{ p.pct }}%</span></div>
-      <div class="bar"><i [style.width.%]="p.pct"></i></div>
-      <p class="muted">步驟 {{ p.index + 1 }}／{{ p.steps.length }}・約剩 {{ p.leftMin }} 分鐘・可以離開頁面</p>
-    }
-    <ol class="steps">
-      @for (x of p.steps; track $index) {
-        <li [class.done]="job.status === 'running' && $index < p.index" [class.now]="job.status === 'running' && $index === p.index">{{ x.label }}</li>
-      }
-    </ol>
-  </div>
+<ng-template #makeLater>
+  <section class="later">
+    <span class="num" aria-hidden="true">2</span>
+    <p><strong>製作新版本</strong> · 等歌詞時間確認後開放。三種方案 <app-price [amount]="totals[0]" digits="short" [plain]="true" /> / <app-price [amount]="totals[1]" digits="short" [plain]="true" /> / <app-price [amount]="totals[2]" digits="short" [plain]="true" />，都先產生概念（<app-price [amount]="conceptPrice" digits="short" [plain]="true" />）再製作。</p>
+  </section>
 </ng-template>
 
-<ng-template #resultBody let-j let-video="video">
-  <div class="result-body">
-    <div class="tier-head">
-      <h4>{{ tierName(j.tier) }}</h4>
-      @if (j.style) {
-        <span class="chip">{{ j.style }}</span>
+<ng-template #progressTpl let-job let-prep="prep">
+  @let p = progress(job);
+  @let t = title(job);
+  @let queued = job.status === 'queued';
+  <section class="progress-card" [attr.data-tone]="prep ? 'info' : 'making'" aria-live="polite">
+    <div class="pc-main">
+      <p class="eyebrow">
+        <i class="dot" aria-hidden="true"></i>
+        @if (prep) {
+          準備歌曲 · 已付 <app-price [amount]="job.priceUsd ?? prepPrice" digits="fixed" [plain]="true" />
+        } @else {
+          {{ queued ? '排隊中' : '進行中' }} · {{ t.name }}@if (t.tag) { · {{ t.tag }}}@if (total(job); as x) { · <app-price [amount]="x" digits="short" [plain]="true" />}
+        }
+      </p>
+      <div class="pc-now">
+        <span class="pct">{{ p.pct }}<small>%</small></span>
+        <div class="pc-step">
+          <strong>{{ queued ? '排隊中' : p.label }}</strong>
+          @if (queued) {
+            <p class="pc-meta">前面的工作完成後就會開始，預計需要約 {{ p.leftMin }} 分鐘。</p>
+          } @else {
+            <p class="pc-meta">步驟 {{ p.index + 1 }} / {{ p.steps.length }} · 約剩 {{ p.leftMin }} 分鐘<span class="desk"> · 可以離開頁面</span></p>
+          }
+        </div>
+      </div>
+      <div class="bar" aria-hidden="true"><i [style.width.%]="p.pct"></i></div>
+      <button class="steps-toggle" type="button" [attr.aria-expanded]="stepsOpen()" (click)="stepsOpen.set(!stepsOpen())">看全部 {{ p.steps.length }} 個步驟 {{ stepsOpen() ? '▴' : '▾' }}</button>
+    </div>
+    <div class="pc-steps" [class.open]="stepsOpen()">
+      <ol class="steps" [class.one]="prep">
+        @for (c of clocks(job); track $index) {
+          <li [class]="c.state">
+            <span class="badge" aria-hidden="true">{{ c.state === 'done' ? '✓' : c.state === 'now' ? '' : $index + 1 }}</span>
+            <span class="name">{{ p.steps[$index].label }}</span>
+            <span class="time">{{ c.time }}</span>
+          </li>
+        }
+      </ol>
+      @if (prep) {
+        <p class="note">準備好後會請你確認每句歌詞的時間，確認後才能製作。</p>
       }
     </div>
-    <ul class="facts">
-      <li>完成於 {{ stamp(j.endedAt) }}</li>
-      @if (minutes(j) !== undefined) {
-        <li>花費時間 約 {{ minutes(j) }} 分鐘</li>
-      }
-      @if (j.priceUsd !== undefined) {
-        <li>費用 <app-price [amount]="j.priceUsd" digits="short" [plain]="true" /></li>
-      }
-    </ul>
-    @if (j.status === 'done') {
-      @if (summary(j)) {
-        <p class="fine report-summary">{{ summary(j) }}</p>
-      }
-      <div class="result-actions">
-        <a class="cta small" [href]="videoUrl(j)" download>下載 1080p</a>
-        @if (mine()) {
-          <button class="ghost-btn" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)">回報這個作品</button>
-        }
-      </div>
-      <!-- stays mounted once opened so a draft survives closing the form or opening another card -->
-      @if (opened().has(j.id)) {
-        <app-report-form [job]="j" [video]="video" [hidden]="reporting() !== j.id" (reported)="setReports(j.id, $event)" />
-      }
+  </section>
+</ng-template>
+
+<ng-template #resultInfo let-j>
+  @let t = title(j);
+  <div class="r-head">
+    <h3>{{ t.name }}</h3>
+    @if (t.tag) {
+      <span class="tag fix">{{ t.tag }}</span>
+    }
+    @if (j.style) {
+      <span class="tag">{{ j.style }}</span>
+    }
+    @if (total(j); as p) {
+      <app-price class="r-price" [amount]="p" digits="short" [plain]="true" />
     }
   </div>
+  <dl class="facts">
+    <div><dt>完成於</dt><dd>{{ stamp(j.endedAt) }}</dd></div>
+    @if (minutes(j) !== undefined) {
+      <div><dt>花費時間</dt><dd>約 {{ minutes(j) }} 分鐘</dd></div>
+    }
+    @if (j.status === 'done') {
+      <div><dt>回報</dt><dd [title]="summary(j)">已回報 {{ reportCount(j) }} 次</dd></div>
+    }
+  </dl>
 </ng-template>

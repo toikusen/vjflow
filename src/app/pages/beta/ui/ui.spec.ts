@@ -66,7 +66,7 @@ describe('STATUS_CHIP', () => {
 describe('shellFor', () => {
   it('marks the tab and the phone top bar for each beta page', () => {
     expect(shellFor('beta')).toEqual({ active: 'songs', title: '我的歌曲' });
-    expect(shellFor('beta-song')).toEqual({ active: 'songs', title: '', back: { href: '/my', label: '我的歌曲' } });
+    expect(shellFor('beta-song')).toEqual({ active: 'songs', title: '', back: { href: '/my', label: '我的歌曲' }, ownTop: true });
     expect(shellFor('beta-styles')).toEqual({ active: 'styles', title: '風格' });
     expect(shellFor('beta-admin')).toEqual({ active: 'admin', title: '管理' });
     expect(shellFor('beta-admin-song')).toEqual({ active: 'admin', title: '', back: { href: '/my/admin', label: '管理' } });

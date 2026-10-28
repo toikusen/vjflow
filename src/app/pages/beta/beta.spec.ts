@@ -137,6 +137,17 @@ describe('songView with concept and fix jobs', () => {
     expect(v.retrying).toBe(true);
     expect(v.failedFor).toBeUndefined();
   });
+  it('a finished fix is a result too, and counts for 有成品', () => {
+    const fix = at('3', { kind: 'fix', status: 'done' });
+    const v = songView(confirmed, [prep, at('2', { kind: 'make', status: 'done' }), fix, at('4', { kind: 'fix', status: 'failed' })]);
+    expect(v.results.map((j) => j.id)).toEqual(['3', '2']);
+    expect(inFilter('made', songView(confirmed, [prep, fix]))).toBe(true);
+  });
+  it('keeps the failed make job for the failure card', () => {
+    const failed = at('2', { kind: 'make', status: 'failed' });
+    expect(songView(confirmed, [prep, failed]).failed).toBe(failed);
+    expect(songView(confirmed, [prep, failed, at('3', { kind: 'make', status: 'running' })]).failed).toBeUndefined();
+  });
 });
 
 describe('songKind, nextStep and the list filters', () => {

@@ -154,6 +154,10 @@
     padding: 0 16px;
     background: var(--bg);
     border-bottom: 1px solid var(--divider);
+
+    &.own {
+      display: none;
+    }
   }
 
   .title {

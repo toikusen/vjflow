@@ -45,7 +45,7 @@
       }
     </div>
     <div class="top-actions">
-      <div class="more">
+      <div class="more" (keydown.escape)="more.set(false)">
         <button class="button" type="button" aria-haspopup="menu" [attr.aria-expanded]="more()" (click)="more.set(!more())"><span class="desk">更多 ▾</span><span class="phone">⋯</span></button>
         @if (more()) {
           <div class="menu" role="menu" aria-label="更多">

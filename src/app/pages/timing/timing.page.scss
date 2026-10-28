@@ -280,9 +280,10 @@ kbd {
   cursor: ew-resize;
 }
 
+// top-left, under the 16 px playhead tag: the lyric labels sit along the bottom of the canvas
 .wave-hint {
   position: absolute;
-  bottom: 8px;
+  top: 22px;
   left: 10px;
   font: 500 10px var(--font-mono);
   color: var(--faint);

@@ -1,10 +1,12 @@
 // npx tsx --test scripts/lyric-vj/brief.test.mts
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { briefFields, briefText, designBriefText, loadRefs, readStyle, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
+import { deflateSync } from 'node:zlib';
+import { briefFields, briefText, designBriefText, loadRefs, readStyle, sipsArgs, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
 
 const NAMES = '畫面裡絕對不能出現這些名字';
 const READING = 'briefReading 必填';
@@ -54,14 +56,50 @@ test('designBriefText is empty with no inputs and carries the reading, previous 
   assert.ok(t.includes('夏天') && t.includes('強光') && t.includes('Noto Sans TC') && t.includes('參考圖'));
 });
 
-test('loadRefs caps at 5, sorts by name and skips non-images', () => {
+/** A valid RGB PNG of the given size (one flat colour), written from bytes. */
+function png(w: number, h: number): Buffer {
+  const crcTable = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (b: Buffer) => { let c = 0xffffffff; for (const x of b) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type: string, data: Buffer) => { const t = Buffer.concat([Buffer.from(type), data]); const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const c = Buffer.alloc(4); c.writeUInt32BE(crc(t)); return Buffer.concat([len, t, c]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3, 0x80)]);
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(Array(h).fill(row)))), chunk('IEND', Buffer.alloc(0))]);
+}
+const hasSips = (() => { try { execFileSync('sips', ['--help'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+
+test('sipsArgs: long edge 1568, JPEG quality 85, into the given file', () => {
+  assert.deepEqual(sipsArgs('/in/a.png', '/tmp/x/0.jpg'), ['-Z', '1568', '-s', 'format', 'jpeg', '-s', 'formatOptions', '85', '/in/a.png', '--out', '/tmp/x/0.jpg']);
+});
+
+test('loadRefs caps at 5, sorts by name, skips non-images and files sips cannot read', { skip: !hasSips && 'sips not available' }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'refs-'));
-  for (const n of ['f.png', 'a.jpg', 'c.webp', 'b.jpeg', 'notes.txt', 'e.PNG', 'd.png']) writeFileSync(join(dir, n), n);
+  for (const n of ['f.png', 'a.jpg', 'c.webp', 'b.jpeg', 'e.PNG', 'd.png', 'g.png']) writeFileSync(join(dir, n), png(8, 8));
+  writeFileSync(join(dir, 'notes.txt'), 'x');
+  writeFileSync(join(dir, '0-broken.png'), 'not an image');
   const refs = loadRefs(dir);
-  assert.equal(refs.length, 5);
-  assert.deepEqual(refs.map((r) => Buffer.from(r.data, 'base64').toString()), ['a.jpg', 'b.jpeg', 'c.webp', 'd.png', 'e.PNG']);
-  assert.deepEqual(refs.map((r) => r.media_type), ['image/jpeg', 'image/jpeg', 'image/webp', 'image/png', 'image/png']);
+  assert.deepEqual(refs.map((r) => r.name), ['a.jpg', 'b.jpeg', 'c.webp', 'd.png', 'e.PNG']);
+  assert.ok(refs.every((r) => r.media_type === 'image/jpeg' && Buffer.from(r.data, 'base64').subarray(0, 2).equals(Buffer.from([0xff, 0xd8]))));
   assert.deepEqual(loadRefs(join(dir, 'missing')), []);
+});
+
+test('loadRefs turns a large PNG into a JPEG no larger than 1568 px', { skip: !hasSips && 'sips not available' }, () => {
+  const dir = mkdtempSync(join(tmpdir(), 'refs-big-'));
+  writeFileSync(join(dir, 'big.png'), png(3000, 2000));
+  const [r] = loadRefs(dir);
+  assert.equal(r.media_type, 'image/jpeg');
+  const f = join(dir, 'check.jpg');
+  writeFileSync(f, Buffer.from(r.data, 'base64'));
+  const info = execFileSync('sips', ['-g', 'pixelWidth', '-g', 'pixelHeight', '-g', 'format', f], { encoding: 'utf8' });
+  const num = (k: string) => Number(info.match(new RegExp(`${k}: (\\d+)`))![1]);
+  assert.ok(/format: jpeg/.test(info));
+  assert.ok(num('pixelWidth') <= 1568 && num('pixelHeight') <= 1568 && Math.max(num('pixelWidth'), num('pixelHeight')) === 1568);
+});
+
+test('briefText and designBriefText leave out empty parts of the previous version', () => {
+  const t = briefText({ previous: { concept: '', language: 'silkscreen', font: '' }, candidates: [], hasRefs: false });
+  assert.ok(t.includes('設計語言 silkscreen') && !t.includes('字型 。') && !t.includes('「」') && !t.includes('字型 ，'));
+  const d = designBriefText({ previous: { concept: 'c', language: 'silkscreen', font: '' }, hasRefs: false });
+  assert.ok(!d.includes('字型 ；'));
 });
 
 test('withRefs: plain text without refs, images before the text with them', () => {

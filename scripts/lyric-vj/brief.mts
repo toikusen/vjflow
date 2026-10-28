@@ -1,13 +1,24 @@
 // What the person asked for, as the director reads it (direct.mts): their text, reference images, a style they picked,
 // the candidate styles on offer and the concept being adjusted. Pure helpers, no API calls.
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
 
 export interface Previous { concept: string; language: string; font: string }
-export interface Ref { media_type: string; data: string }
+export interface Ref { media_type: string; data: string; name?: string }
 
 const MEDIA: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 export const MAX_REFS = 5;
+/** Long edge of a reference sent to the director (the model downsizes above 2,576 px anyway). */
+export const REF_EDGE = 1568;
+/** A converted reference larger than this is skipped (the API takes 10 MB per image base64, 32 MB per request). */
+export const REF_MAX_BYTES = 5 * 1024 * 1024;
+
+/** macOS sips arguments: fit the long edge into REF_EDGE and re-encode as JPEG quality 85. */
+export function sipsArgs(input: string, output: string): string[] {
+  return ['-Z', String(REF_EDGE), '-s', 'format', 'jpeg', '-s', 'formatOptions', '85', input, '--out', output];
+}
 
 /** `--style`: plain text as given, `@path` reads the file (trimmed). */
 export function readStyle(v: string | undefined): string {
@@ -15,14 +26,36 @@ export function readStyle(v: string | undefined): string {
   return v.startsWith('@') ? readFileSync(v.slice(1), 'utf8').trim() : v;
 }
 
-/** The reference images in a folder: jpg/png/webp only, sorted by name, at most five, base64. */
+/**
+ * The reference images in a folder: jpg/png/webp by extension, sorted by name, each re-encoded by sips as a JPEG of at
+ * most REF_EDGE px (a phone photo sent as is went over the API's size limits; a mislabelled file got the wrong media
+ * type), at most five. A file sips cannot read or that stays over REF_MAX_BYTES is skipped with a note, never fatal.
+ */
 export function loadRefs(dir: string): Ref[] {
   if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((n) => MEDIA[extname(n).toLowerCase()])
-    .sort()
-    .slice(0, MAX_REFS)
-    .map((n) => ({ media_type: MEDIA[extname(n).toLowerCase()], data: readFileSync(join(dir, n)).toString('base64') }));
+  const names = readdirSync(dir).filter((n) => MEDIA[extname(n).toLowerCase()]).sort();
+  const tmp = mkdtempSync(join(tmpdir(), 'vj-refs-'));
+  const refs: Ref[] = [];
+  try {
+    for (const [i, name] of names.entries()) {
+      if (refs.length >= MAX_REFS) break;
+      const out = join(tmp, `${i}.jpg`);
+      try {
+        execFileSync('sips', sipsArgs(join(dir, name), out), { stdio: 'ignore' });
+      } catch {
+        console.error(`ref skipped: ${name} (sips could not convert it)`);
+        continue;
+      }
+      if (!existsSync(out) || statSync(out).size > REF_MAX_BYTES) {
+        console.error(`ref skipped: ${name} (${existsSync(out) ? 'still over 5 MB after conversion' : 'no output'})`);
+        continue;
+      }
+      refs.push({ name, media_type: 'image/jpeg', data: readFileSync(out).toString('base64') });
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+  return refs;
 }
 
 /** A first user message: the text alone, or the images before it when there are references. */
@@ -34,6 +67,11 @@ export function withRefs(text: string, refs: Ref[]) {
   ];
 }
 
+/** 「上一版…。」 with only the parts the previous treatment has; '' when it has none. */
+const previousText = (p: Previous) => {
+  const parts = [p.concept.trim() && `概念是「${p.concept.trim()}」`, p.language.trim() && `設計語言 ${p.language.trim()}`, p.font.trim() && `字型 ${p.font.trim()}`].filter(Boolean);
+  return parts.length ? `上一版的${parts.join('，')}。` : '';
+};
 const block = (rules: string[]) => (rules.length ? `導演須知（依使用者的要求）：\n${rules.map((r) => `- ${r}`).join('\n')}` : '');
 
 /**
@@ -49,7 +87,7 @@ export function briefText(o: { style?: string; note?: string; previous?: Previou
   else if (o.hasRefs) rules.push('briefReading 必填：一兩句，用「你給的參考圖我理解成：…」的句型，說出你從圖裡取了哪些具體的視覺特徵。');
   if (o.chosen) rules.push(`使用者指定了設計語言「${o.chosen}」：照用，不要換。如果你判斷它不適合這首歌，在 concerns 用一兩句具體說明哪裡不合、畫面會受什麼影響；適合就填空字串。`);
   else if (o.candidates.length) rules.push(`設計語言清單裡標【候選】的（${o.candidates.join('、')}）還在試：只有它明顯比驗收過的更適合這首歌才選；選了就在 candidateReason 寫一兩句理由（這首歌的哪個特質需要它），選驗收過的就填空字串。`);
-  if (o.previous) rules.push(`這是調整：上一版的概念是「${o.previous.concept}」，設計語言 ${o.previous.language}，字型 ${o.previous.font}。${o.note?.trim() ? `使用者的意見：「${o.note.trim()}」。` : ''}使用者沒有要求改的（設計語言、字型、色調、故事）都保留，只改意見提到的地方。`);
+  if (o.previous) rules.push(`這是調整：${previousText(o.previous)}${o.note?.trim() ? `使用者的意見：「${o.note.trim()}」。` : ''}使用者沒有要求改的（設計語言、字型、色調、故事）都保留，只改意見提到的地方。`);
   return block(rules);
 }
 
@@ -58,7 +96,7 @@ export function designBriefText(o: { style?: string; briefReading?: string; prev
   const rules: string[] = [];
   if (o.style?.trim()) rules.push(`使用者寫的話：${o.style.trim()}${o.briefReading?.trim() ? `\n  導演的理解：${o.briefReading.trim()}` : ''}\n  色彩、字型、質感照這個理解做；名字只轉譯成視覺特徵，不能畫出名字、角色或標誌。`);
   if (o.hasRefs) rules.push('使用者附了參考圖（在這則訊息最前面）：色彩、光線與質感往它靠，不要照抄畫面，也不要畫出圖裡的人物、角色、文字或標誌。');
-  if (o.previous) rules.push(`這是調整：上一版用字型 ${o.previous.font}；使用者沒有要求改字型或色調時就保留。`);
+  if (o.previous) rules.push(`這是調整：${o.previous.font.trim() ? `上一版用字型 ${o.previous.font.trim()}；` : ''}使用者沒有要求改字型或色調時就保留上一版的。`);
   return rules.length ? `\n\n【使用者的要求】\n${rules.map((r) => `- ${r}`).join('\n')}` : '';
 }
 

@@ -1,11 +1,12 @@
 // The closed beta's backend: invited people log in with their link, see their own songs and jobs, and queue work
 // within their limit; the admin invites people, sets limits and retries failed jobs.
 // npx tsx scripts/lyric-vj/beta/server.mts   (listens on 127.0.0.1:4320; the tunnel points at it)
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
-import { extname, join, resolve } from 'node:path';
+import { extname, join, relative, resolve, sep } from 'node:path';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
+import { logEvent, readEvents } from './events.mts';
 import { killRunning, pump, Queue } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
@@ -86,7 +87,7 @@ export function stopBeta(b: { db: Db; queue: Queue }, exit: () => void = () => p
 export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
-  const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env };
+  const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }) };
   killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
   requeueRunning(db);
   // make jobs queued before run folders existed get one now, so their output lands where videoFile looks
@@ -95,7 +96,7 @@ export function createBetaServer(o: BetaOptions) {
   pump(q);
 
   /** Queues a job for a song the person owns, inside their limit. */
-  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string) => {
+  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retryOf?: string) => {
     const why = refuse(db, user.id, kind, tier);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
@@ -103,6 +104,8 @@ export function createBetaServer(o: BetaOptions) {
     const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: priceFor(kind, tier), priceUsd: priceFor(kind, tier), createdAt: new Date().toISOString() };
     db.jobs.push(job);
     q.persist();
+    logEvent(o.root, songId, { type: 'job.queued', jobId: id, by: user.id, kind, tier, priceUsd: job.priceUsd });
+    if (retryOf) logEvent(o.root, songId, { type: 'admin.retry', jobId: id, retryOf });
     pump(q);
     return { job };
   };
@@ -144,6 +147,7 @@ export function createBetaServer(o: BetaOptions) {
         if (translation) writeFileSync(join(dir, 'translation.txt'), translation + '\n');
         db.songs.push(song);
         q.persist();
+        logEvent(o.root, song.id, { type: 'song.created', by: user.id });
         return json(res, 201, song);
       }
       // one run's finished video; one held for the admin's look reaches the person once the admin approves it
@@ -162,6 +166,7 @@ export function createBetaServer(o: BetaOptions) {
           if (!ext) return json(res, 415, { error: '請上傳 mp3、wav、flac、m4a 或 aac' });
           if (db.jobs.some((j) => j.songId === song.id && j.kind === 'prep' && j.status !== 'failed')) return json(res, 409, { error: '這首歌已經上傳過音檔' });
           await saveBody(req, join(dir, `upload${ext}`), MAX_AUDIO);
+          logEvent(o.root, song.id, { type: 'audio.uploaded', by: user.id });
           const r = enqueue(user, song.id, 'prep');
           return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
         }
@@ -184,6 +189,7 @@ export function createBetaServer(o: BetaOptions) {
           writeFileSync(songFile, JSON.stringify(next, null, 1));
           song.confirmedAt = next.timingConfirmedAt;
           q.persist();
+          logEvent(o.root, song.id, { type: 'timing.saved', by: user.id, confirmed: !!b.confirm });
           return json(res, 200, { ok: true, confirmedAt: next.timingConfirmedAt ?? null });
         }
         return void res.writeHead(405).end();
@@ -240,7 +246,7 @@ export function createBetaServer(o: BetaOptions) {
         const j = db.jobs.find((x) => x.id === rj[1] && x.status === 'failed');
         if (!j) return json(res, 404, { error: '找不到失敗的工作' });
         const owner = db.users.find((u) => u.id === j.userId)!;
-        const r = enqueue(owner, j.songId, j.kind, j.tier, j.runDir);
+        const r = enqueue(owner, j.songId, j.kind, j.tier, j.runDir, j.id);
         return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
       }
       const ap = /^\/beta\/admin\/jobs\/([\w-]+)\/approve$/.exec(path);
@@ -249,7 +255,38 @@ export function createBetaServer(o: BetaOptions) {
         if (!j) return json(res, 404, { error: '找不到等待確認的工作' });
         j.status = 'done';
         q.persist();
+        logEvent(o.root, j.songId, { type: 'admin.approve', jobId: j.id, by: user.id });
         return json(res, 200, publicJob(j));
+      }
+      // a song's history and its logs (admin only; every file stays inside that song's folder)
+      const al = /^\/beta\/admin\/songs\/([\w-]+)\/(events|logs)(?:\/(.+))?$/.exec(path);
+      if (al && req.method === 'GET') {
+        const song = db.songs.find((s) => s.id === al[1]);
+        if (!song) return json(res, 404, { error: '找不到這首歌' });
+        if (al[2] === 'events') return json(res, 200, readEvents(o.root, song.id));
+        const dir = resolve(songDir(o.root, song.id));
+        const jobLog = (id: string) => join(o.root, 'logs', `${id}.log`);
+        if (!al[3]) {
+          const found: { path: string; bytes: number }[] = [];
+          const walk = (d: string) => {
+            if (!existsSync(d)) return;
+            for (const e of readdirSync(d, { withFileTypes: true })) {
+              const f = join(d, e.name);
+              if (e.isDirectory()) walk(f);
+              else if (e.isFile() && e.name.endsWith('.log')) found.push({ path: relative(dir, f).split(sep).join('/'), bytes: statSync(f).size });
+            }
+          };
+          walk(dir);
+          for (const j of db.jobs.filter((x) => x.songId === song.id))
+            if (existsSync(jobLog(j.id))) found.push({ path: `jobs/${j.id}.log`, bytes: statSync(jobLog(j.id)).size });
+          return json(res, 200, found);
+        }
+        const rel = decodeURIComponent(al[3]);
+        const jm = /^jobs\/([\w-]+)\.log$/.exec(rel);
+        const file = jm ? (db.jobs.some((x) => x.id === jm[1] && x.songId === song.id) ? jobLog(jm[1]) : '') : resolve(dir, rel);
+        if (!jm && (!file.startsWith(dir + sep) || !file.endsWith('.log'))) return json(res, 400, { error: '路徑不正確' });
+        if (!file || !existsSync(file) || !statSync(file).isFile()) return json(res, 404, { error: '找不到紀錄' });
+        return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
       if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });

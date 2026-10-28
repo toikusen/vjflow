@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir, uptime } from 'node:os';
 import { join } from 'node:path';
+import type { BetaEvent } from './events.mts';
 import { Db, Job, nextJob } from './store.mts';
 
 export interface Queue {
@@ -16,6 +17,8 @@ export interface Queue {
   env?: Record<string, string>;
   /** Set while the server shuts down: jobs killed then stay `running` (a restart re-queues them) and nothing new starts. */
   stopping?: boolean;
+  /** Told when a job starts, enters a phase, adds a measured cost or ends. */
+  onEvent?: (job: Job, e: Omit<BetaEvent, 'at' | 'jobId'>) => void;
 }
 
 /**
@@ -82,6 +85,7 @@ export function pump(q: Queue) {
   if (typeof cmd !== 'string') {
     Object.assign(job, { status: 'failed', error: cmd.error, endedAt: now() });
     q.persist();
+    q.onEvent?.(job, { type: 'job.ended', status: 'failed', error: cmd.error });
     return pump(q);
   }
   Object.assign(job, { status: 'running', startedAt: now(), error: undefined });
@@ -92,13 +96,23 @@ export function pump(q: Queue) {
   const child = spawn('bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   job.pid = child.pid;
   q.persist();
+  q.onEvent?.(job, { type: 'job.started' });
+  /** readLine, telling onEvent about the phase or cost it added. */
+  const read = (line: string) => {
+    const [steps, costs] = [job.steps?.length ?? 0, job.costs?.length ?? 0];
+    const changed = readLine(job, line);
+    if ((job.steps?.length ?? 0) > steps) q.onEvent?.(job, { type: 'job.phase', phase: job.phase });
+    const added = job.costs?.[costs];
+    if ((job.costs?.length ?? 0) > costs && added) q.onEvent?.(job, { type: 'job.cost', key: added.key, usd: added.usd });
+    return changed;
+  };
   let fused = false;
   let rest = '';
   const take = (b: Buffer) => {
     appendFileSync(log, b);
     const lines = (rest + b.toString()).split(/\r|\n/);
     rest = lines.pop() ?? '';
-    if (lines.map((l) => readLine(job, l)).some(Boolean)) q.persist();
+    if (lines.map((l) => read(l)).some(Boolean)) q.persist();
     // the fuse: a run that costs more than twice its price is stopped (the whole group, or bash's children keep the pipe open)
     if (!fused && job.costUsd !== undefined && job.costUsd > 2 * (job.priceUsd ?? Infinity)) {
       fused = true;
@@ -110,7 +124,7 @@ export function pump(q: Queue) {
   child.stderr.on('data', take);
   child.on('close', (code) => {
     if (q.stopping) return;
-    if (rest) readLine(job, rest);
+    if (rest) read(rest);
     // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10
     const failed = code !== 0 && code !== 10;
     Object.assign(job, {
@@ -121,6 +135,7 @@ export function pump(q: Queue) {
       pid: undefined,
     });
     q.persist();
+    q.onEvent?.(job, { type: 'job.ended', status: job.status, error: job.error, unsettled: job.unsettled, costUsd: job.costUsd });
     pump(q);
   });
 }

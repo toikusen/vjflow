@@ -300,3 +300,44 @@ test('a saved pid from before the machine booted is never signalled', async () =
     t.beta.server.close();
   }
 });
+
+test('a make job leaves queued, started, phase, cost and ended events', async () => {
+  const t = await runStub("echo '##PHASE 製作中'; echo '##COST 2.5 x'");
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 50 && t.beta.db.jobs[0].status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  const ev = await (await t.admin('/beta/admin/songs/s1/events')).json();
+  assert.deepEqual(ev.map((e: { type: string }) => e.type), ['job.queued', 'job.started', 'job.phase', 'job.cost', 'job.ended']);
+  assert.deepEqual([ev[0].kind, ev[0].tier, ev[0].priceUsd, ev[2].phase, ev[3].key, ev[3].usd, ev[4].status], ['make', 'img', 6, '製作中', 'x', 2.5, 'done']);
+  assert.ok(ev.every((e: { jobId: string }) => e.jobId === t.beta.db.jobs[0].id));
+  t.beta.server.close();
+});
+
+test('admin logs list and read; traversal and non-admins are refused', async () => {
+  const { mkdirSync, writeFileSync } = await import('node:fs');
+  const t = await runStub('true');
+  mkdirSync(join(t.root, 'songs/s1/runs/j'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1/runs/j/direct.log'), 'hello log');
+  writeFileSync(join(t.root, 'songs/s1/runs/j/video.mp4'), 'x');
+  mkdirSync(join(t.root, 'logs'), { recursive: true });
+  writeFileSync(join(t.root, 'logs/jb.log'), 'job out');
+  writeFileSync(join(t.root, 'logs/other.log'), 'not this song');
+  t.beta.db.jobs.push({ id: 'jb', userId: 'u', songId: 's1', kind: 'make', status: 'done', reservedUsd: 1, createdAt: 'x' });
+  const list = await (await t.admin('/beta/admin/songs/s1/logs')).json();
+  assert.deepEqual(list.map((l: { path: string }) => l.path).sort(), ['jobs/jb.log', 'runs/j/direct.log']);
+  assert.equal(list.find((l: { path: string }) => l.path === 'runs/j/direct.log').bytes, 9);
+  const r = await t.admin('/beta/admin/songs/s1/logs/runs/j/direct.log');
+  assert.match(r.headers.get('content-type') ?? '', /^text\/plain; charset=utf-8/);
+  assert.equal(await r.text(), 'hello log');
+  assert.equal(await (await t.admin('/beta/admin/songs/s1/logs/jobs/jb.log')).text(), 'job out');
+  assert.equal((await t.admin('/beta/admin/songs/s1/logs/jobs/other.log')).status, 404);
+  assert.equal((await t.admin('/beta/admin/songs/s1/logs/..%2F..%2Fdb.json')).status, 400);
+  // the URL parser folds %2e%2e itself, so this never reaches the song's log route; it must still not serve the other log
+  const dots = await t.admin('/beta/admin/songs/s1/logs/%2e%2e/%2e%2e/logs/other.log');
+  assert.ok(dots.status >= 400 && !(await dots.text()).includes('not this song'));
+  assert.equal((await t.admin('/beta/admin/songs/s1/logs/runs/j/video.mp4')).status, 400);
+  assert.equal((await t.admin('/beta/admin/songs/s1/logs/runs/j/nope.log')).status, 404);
+  assert.equal((await t.admin('/beta/admin/songs/nope/logs')).status, 404);
+  assert.equal((await t.tester('/beta/admin/songs/s1/events')).status, 403);
+  assert.equal((await t.tester('/beta/admin/songs/s1/logs/runs/j/direct.log')).status, 403);
+  t.beta.server.close();
+});

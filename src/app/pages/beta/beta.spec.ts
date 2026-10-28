@@ -1,4 +1,4 @@
-import { BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songStage, songView, TIER_INFO } from './beta';
+import { BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, TIER_INFO } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -110,5 +110,20 @@ describe('pageFor', () => {
     expect(pageFor('/timing')).toBe('timing');
     expect(pageFor('/studio')).toBe('studio');
     expect(pageFor('/')).toBe('home');
+  });
+});
+
+describe('songChip', () => {
+  const base: SongView = { stage: 'ready', retrying: false, results: [] };
+  const active = job({ kind: 'make', tier: 'img', status: 'running' });
+  it('names each stage with its tone', () => {
+    expect(songChip({ ...base, stage: 'preparing' })).toEqual({ label: '準備中', tone: 'live' });
+    expect(songChip({ ...base, stage: 'prepFailed' })).toEqual({ label: '準備失敗', tone: 'bad' });
+    expect(songChip({ ...base, stage: 'timing' })).toEqual({ label: '待確認時間', tone: 'warn' });
+    expect(songChip({ ...base, active })).toEqual({ label: '製作中', tone: 'live' });
+    expect(songChip({ ...base, active: { ...active, status: 'queued' } })).toEqual({ label: '製作中', tone: 'live' });
+    expect(songChip({ ...base, active, retrying: true })).toEqual({ label: '自動重試中', tone: 'warn' });
+    expect(songChip({ ...base, failedFor: 'img' })).toEqual({ label: '需要協助', tone: 'bad' });
+    expect(songChip(base)).toEqual({ label: '可製作', tone: 'ok' });
   });
 });

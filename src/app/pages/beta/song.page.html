@@ -33,12 +33,8 @@
           <h1>{{ s.title }}</h1>
           <p class="muted">@if (s.artist) {<span>{{ s.artist }}・</span>}{{ langName(s.language) }}</p>
         </div>
-        @switch (v.stage) {
-          @case ('preparing') {<span class="chip live">準備中</span>}
-          @case ('prepFailed') {<span class="chip bad">準備失敗</span>}
-          @case ('timing') {<span class="chip warn">待確認時間</span>}
-          @case ('ready') {<span class="chip ok">可製作</span>}
-        }
+        @let c = chip(v);
+        <span class="chip" [class]="c.tone">{{ c.label }}</span>
       </header>
 
       @switch (v.stage) {
@@ -67,6 +63,16 @@
     @if (v.stage === 'ready') {
       @if (v.failedFor) {
         <p class="warn notice">上一次製作失敗，系統已自動重試仍未成功，管理者會協助處理</p>
+      }
+
+      @if (v.active; as a) {
+        <section class="song">
+          <h2>進行中・{{ tierName(a.tier) }}</h2>
+          @if (v.retrying) {
+            <p class="warn">第一次製作遇到系統問題，正在自動重試（不另外收費）</p>
+          }
+          <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: a }" />
+        </section>
       }
 
       <section class="song">
@@ -100,16 +106,6 @@
           }
         </div>
       </section>
-
-      @if (v.active; as a) {
-        <section class="song">
-          <h2>進行中・{{ tierName(a.tier) }}</h2>
-          @if (v.retrying) {
-            <p class="warn">第一次製作遇到系統問題，正在自動重試（不另外收費）</p>
-          }
-          <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: a }" />
-        </section>
-      }
 
       <section class="results">
         <div class="works-head">

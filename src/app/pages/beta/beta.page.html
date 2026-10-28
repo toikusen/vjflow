@@ -92,18 +92,8 @@
             } @else if (v.stage === 'ready') {
               <span class="muted">{{ v.results.length }} 個成品</span>
             }
-            @switch (v.stage) {
-              @case ('preparing') {<span class="chip live">準備中</span>}
-              @case ('prepFailed') {<span class="chip bad">準備失敗</span>}
-              @case ('timing') {<span class="chip warn">待確認時間</span>}
-              @case ('ready') {
-                @if (v.active) {
-                  <span class="chip live">製作中</span>
-                } @else {
-                  <span class="chip ok">可製作</span>
-                }
-              }
-            }
+            @let c = chip(v);
+            <span class="chip" [class]="c.tone">{{ c.label }}</span>
           </span>
         </a>
       }

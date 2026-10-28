@@ -62,7 +62,9 @@ export class BetaSongPage extends BetaPage {
 
   private async make(song: BetaSong, tier: BetaTier) {
     const r = await fetch(`/beta/songs/${song.id}/make`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tier }) });
-    this.message.set(r.ok ? `「${song.title}」已開始排隊製作${TIER_INFO[tier].name}。` : `無法開始：${(await r.json()).error}`);
+    // a proxy error page (502) is not JSON
+    const why = async () => ((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `HTTP ${r.status}`;
+    this.message.set(r.ok ? `「${song.title}」已開始排隊製作${TIER_INFO[tier].name}。` : `無法開始：${await why()}`);
     if (r.ok) this.picked.set(null);
     await this.poll();
   }

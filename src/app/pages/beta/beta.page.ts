@@ -1,6 +1,6 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, jobProgress, PREP_PRICE, songStage, songView } from './beta';
+import { BetaJob, BetaMe, BetaSong, jobProgress, PREP_PRICE, songChip, songStage, songView, SongView } from './beta';
 
 const POLL_MS = 5000;
 
@@ -30,6 +30,7 @@ export class BetaPage {
   protected readonly loaded = signal(false);
   protected readonly stage = (s: BetaSong) => songStage(s, this.jobs());
   protected readonly view = (s: BetaSong) => songView(s, this.jobs());
+  protected readonly chip = (v: SongView) => songChip(v);
   protected readonly progress = (j: BetaJob) => jobProgress(j);
   protected readonly fileName = signal('');
   protected readonly ask = signal<Ask | null>(null);

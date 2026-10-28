@@ -137,3 +137,15 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
 
 /** Whole minutes from `a` to `b`, rounded up; undefined when either is missing. */
 export const minutesBetween = (a?: string, b?: string): number | undefined => (a && b ? Math.ceil((Date.parse(b) - Date.parse(a)) / 60000) : undefined);
+
+export interface SongChip { label: string; tone: 'ok' | 'warn' | 'bad' | 'live' }
+
+/** The status chip a song shows on its card and its page. */
+export function songChip(v: SongView): SongChip {
+  if (v.stage === 'preparing') return { label: '準備中', tone: 'live' };
+  if (v.stage === 'prepFailed') return { label: '準備失敗', tone: 'bad' };
+  if (v.stage === 'timing') return { label: '待確認時間', tone: 'warn' };
+  if (v.active) return v.retrying ? { label: '自動重試中', tone: 'warn' } : { label: '製作中', tone: 'live' };
+  if (v.failedFor) return { label: '需要協助', tone: 'bad' };
+  return { label: '可製作', tone: 'ok' };
+}

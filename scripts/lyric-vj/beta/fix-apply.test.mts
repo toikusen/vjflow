@@ -51,6 +51,27 @@ test('a skipped next cut makes the one before it run on (held gap)', () => {
   assert.deepEqual(sprites(r.plan).slice(0, 2), ['', '']);
 });
 
+test('a blanked picture does not come back later in its shot', () => {
+  // the X at 2 s had sat out after the X at 0 s (sameSpot); with the first blanked it would show
+  const p: FixPlan = { shots: [{ shot: 's1', cuts: [cut(0, 'x'), cut(2, 'x'), cut(4, 'x'), cut(6, 'y')] }, { shot: 's2', cuts: [cut(0, 'x'), cut(2, 'z')] }] };
+  const r = applyPictureFix(p, [{ at: 0.5, end: 1 }], timeline());
+  assert.deepEqual(sprites(r.plan), ['', '', '', 'y', 'x', 'z'], 'the y between ends the run: the next shot keeps its x');
+  assert.equal(r.removed, 3);
+});
+
+test('a blanked picture stays gone across the shot end while the next cuts that land keep showing it', () => {
+  const p: FixPlan = { shots: [{ shot: 's1', cuts: [cut(0, 'a'), cut(2, 'x'), cut(4, 'x')] }, { shot: 's2', cuts: [cut(0, 'x'), cut(2, 'x'), cut(3, 'y')] }] };
+  const r = applyPictureFix(p, [{ at: 2.5, end: 3 }], timeline());
+  assert.deepEqual(sprites(r.plan), ['a', '', '', '', '', 'y']);
+});
+
+test('a cut that does not land (held gap) does not end the run', () => {
+  // gap 2.5: the y at 7 s comes 1 s after the x at 6 s and is skipped, so the x at 8 s follows the x at 6 s
+  const p: FixPlan = { shots: [{ shot: 's1', cuts: [cut(0, 'x'), cut(6, 'x'), cut(7, 'y')] }, { shot: 's2', cuts: [cut(0, 'x')] }] };
+  const r = applyPictureFix(p, [{ at: 6.5, end: 6.8 }], timeline(2.5));
+  assert.deepEqual(sprites(r.plan), ['x', '', 'y', '']);
+});
+
 test('a range outside every cut removes nothing', () => {
   const r = applyPictureFix(plan(), [{ at: 20, end: 22 }], timeline());
   assert.equal(r.removed, 0);

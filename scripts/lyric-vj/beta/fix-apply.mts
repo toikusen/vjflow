@@ -2,6 +2,7 @@
 // out, so `typeplan.mts --plan` rebuilds the treatment without it and no model is called. The pictures are a cut's
 // sprite, a part's kept items (keep.items, shown through the part) and the thread's sprite (shown in the shots whose
 // level, or the level before, is above 0). Cut times use typeplan's own helpers (cutTimes, holdGap, landedEnd).
+// A blanked cut's sprite is also taken from the cuts after it that would now show it (blankFollowers).
 // A base treatment without interludes (a run made before them) gets every unsung window as pictures, so the rebuild
 // changes only the marked ranges (keptInterludes).
 // Exit 3 (stderr NOTHING_TO_REMOVE) when the ranges hold no picture: a render would only repeat the old video.
@@ -51,11 +52,13 @@ export function applyPictureFix(plan: FixPlan, ranges: { at: number; end?: numbe
   const spans = ranges.map((r) => ({ at: r.at, end: r.end ?? r.at + POINT_SPAN }));
   const hit = (start: number, end: number) => spans.some((r) => start < r.end && end > r.at);
   let removed = 0;
+  const blanked = new Set<FixPlan['shots'][number]['cuts'][number]>();
   for (const { cut, start, end } of cutSpans(next, tl)) {
     if (!cut.sprite || !hit(start, end)) continue;
-    cut.sprite = '';
+    blanked.add(cut);
     removed++;
   }
+  removed += blankFollowers(next, tl, blanked);
   for (const { part, start, end } of partSpans(next, tl)) {
     if (!hit(start, end)) continue;
     for (const item of part.keep?.items ?? []) {
@@ -74,6 +77,46 @@ export function applyPictureFix(plan: FixPlan, ranges: { at: number; end?: numbe
     }
   }
   return { plan: next, removed };
+}
+
+/**
+ * typeplan seats a sprite out when the cut before showed the same one at another side (sameSpot), so blanking a shown
+ * cut can bring that same sprite back on the cut after it. Blanking only turns the previous shown sprite from X into
+ * none, which matters only to a next landed cut that carries X; a landed cut with any other sprite, or none, decides
+ * the same either way and leaves the same state behind. So the change travels only along the unbroken run of landed
+ * cuts carrying X after the blanked one (cuts that do not land are passed over, as typeplan does). Every cut of that
+ * run loses X, and so does every later cut of the blanked cut's own shot. Blanks `blanked` too; returns how many
+ * more cuts lost their picture.
+ */
+function blankFollowers(plan: FixPlan, tl: FixTimeline, blanked: Set<FixPlan['shots'][number]['cuts'][number]>): number {
+  // typeplan's order: the treatment's shots, each shot's cuts by beat; a cut lands as in buildCuts
+  let lastLanded = -Infinity;
+  const order = tl.shots.flatMap((s) => {
+    const sorted = [...(plan.shots.find((x) => x.shot === s.id)?.cuts ?? [])].sort((x, y) => x.beat - y.beat);
+    const times = cutTimes(tl.beats, s, sorted);
+    return sorted.map((cut, i) => {
+      const landed = times[i] < s.end - 0.05 && (i === 0 || times[i] - lastLanded >= s.gap);
+      if (landed) lastLanded = times[i];
+      return { cut, shot: s.id, landed, sprite: cut.sprite };
+    });
+  });
+  const more = new Set<FixPlan['shots'][number]['cuts'][number]>();
+  order.forEach((o, k) => {
+    if (!blanked.has(o.cut)) return;
+    for (const later of order.slice(k + 1)) if (later.shot === o.shot && later.sprite === o.sprite) more.add(later.cut);
+    for (const later of order.slice(k + 1)) {
+      if (later.sprite === o.sprite) more.add(later.cut);
+      else if (later.landed) break;
+    }
+  });
+  for (const c of blanked) c.sprite = '';
+  let n = 0;
+  for (const c of more) {
+    if (blanked.has(c) || !c.sprite) continue;
+    c.sprite = '';
+    n++;
+  }
+  return n;
 }
 
 type Song = Parameters<typeof feltTempo>[0] & { duration?: number; sections?: { start: number; end: number; type: string }[] };

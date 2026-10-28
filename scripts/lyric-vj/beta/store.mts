@@ -54,7 +54,7 @@ export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd:
 /** A language's tier: the admin's choice, else `proven` for a proven language and `unlisted` for the rest. */
 export const styleTier = (db: Db, id: string): StyleTier => db.styles?.[id]?.tier ?? (LANGUAGES[id as LanguageId]?.proven ? 'proven' : 'unlisted');
 /** True when the person may pick the language: its tier is proven or candidate. */
-export const styleOffered = (db: Db, id: string) => id in LANGUAGES && styleTier(db, id) !== 'unlisted';
+export const styleOffered = (db: Db, id: string) => Object.hasOwn(LANGUAGES, id) && styleTier(db, id) !== 'unlisted';
 /** The candidate languages, in catalog order (the director must give a reason when it picks one). */
 export const candidateIds = (db: Db) => Object.keys(LANGUAGES).filter((id) => styleTier(db, id) === 'candidate');
 

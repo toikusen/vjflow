@@ -25,6 +25,8 @@ after(() => {
   }
 });
 
+const SONG = JSON.stringify({ duration: 10, cues: [{ id: 'c1', start: 1, end: 2, text: 'a' }] });
+
 async function setup() {
   const root = mkdtempSync(join(tmpdir(), 'beta-'));
   const db = emptyDb();
@@ -32,8 +34,10 @@ async function setup() {
   const tester = invite(db, 'Tester', 10);
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
-  // a concept job leaves a summary to accept; any job leaves a video (only make jobs serve one)
-  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${job.kind === 'concept' ? ` && echo '{"stills":[]}' > '${runPath(root, job)}/concept.json'` : ''}; echo '##PHASE 製作中'; echo '##COST 2.5'` });
+  mkdirSync(join(root, 'songs/s1'), { recursive: true });
+  writeFileSync(join(root, 'songs/s1/song.json'), SONG);
+  // a concept job snapshots the timing and leaves a summary to accept; any job leaves a video (only make jobs serve one)
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${job.kind === 'concept' ? ` && cp '${join(root, 'songs/s1/song.json')}' '${runPath(root, job)}/song.json' && echo '{"stills":[]}' > '${runPath(root, job)}/concept.json'` : ''}; echo '##PHASE 製作中'; echo '##COST 2.5'` });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token?: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, redirect: 'manual', headers: { ...(token ? { cookie: `vjb=${token}` } : {}), 'content-type': 'application/json' } });
@@ -677,7 +681,7 @@ const UNLISTED = Object.entries(LANGUAGES).filter(([, l]) => !l.proven).map(([id
  * given concerns), one still and the VJ_CANDIDATES it saw; a make job writes its video. `fail` picks jobs whose first
  * (non-retry) run exits 1.
  */
-async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'concept' | 'make'; limit?: number } = {}) {
+async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'concept' | 'make'; limit?: number; slow?: { on: boolean } } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'beta-'));
   const db = emptyDb();
   const admin = invite(db, 'Admin', 100, true);
@@ -685,11 +689,15 @@ async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'co
   const other = invite(db, 'Other', 10);
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
+  mkdirSync(join(root, 'songs/s1'), { recursive: true });
+  writeFileSync(join(root, 'songs/s1/song.json'), SONG);
   const command = (job: Job) => {
     const run = runPath(root, job);
     if (o.fail === job.kind && !job.retryOf) return 'exit 1';
     mkdirSync(join(run, 'stills'), { recursive: true });
     if (job.kind === 'make') return `echo mp4 > '${run}/video.mp4'`;
+    if (!existsSync(join(run, 'song.json'))) writeFileSync(join(run, 'song.json'), readFileSync(join(root, 'songs/s1/song.json')));
+    if (o.slow?.on) return `sleep 30`;
     writeFileSync(join(run, 'stills', 'still_1.00.png'), PNG);
     writeFileSync(join(run, 'concept.json'), JSON.stringify({ language: 'silkscreen', languageName: '絲網海報', font: 'f', palette: ['#000'], concept: 'c', concerns: o.concerns ?? '', candidateReason: o.candidateReason ?? '', stills: ['still_1.00.png'] }));
     return `printf '%s' "$VJ_CANDIDATES" > '${run}/candidates.txt'`;
@@ -699,9 +707,9 @@ async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'co
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token?: string) => (path: string, init: RequestInit & { json?: unknown } = {}) =>
     fetch(base + path, { method: init.method ?? (init.json !== undefined ? 'POST' : 'GET'), body: init.json !== undefined ? JSON.stringify(init.json) : init.body, headers: { ...(token ? { cookie: `vjb=${token}` } : {}), 'content-type': (init.headers as Record<string, string>)?.['content-type'] ?? 'application/json' } });
-  const put = (token: string, body: Buffer, type: string) => fetch(`${base}/beta/songs/s1/refs`, { method: 'PUT', body, headers: { cookie: `vjb=${token}`, 'content-type': type } });
+  const put = (token: string, body: Buffer, type: string) => fetch(`${base}/beta/songs/s1/refs`, { method: 'PUT', body: new Uint8Array(body), headers: { cookie: `vjb=${token}`, 'content-type': type } });
   const done = async (id: string) => { await waitFor(() => t.beta.db.jobs.find((j) => j.id === id)?.status === 'done'); return t.beta.db.jobs.find((j) => j.id === id)!; };
-  const t = { beta, root, base, admin: as(admin.token), tester: as(tester.token), other: as(other.token), anon: as(), put: (b: Buffer, type: string, token = tester.token) => put(token, b, type), otherToken: other.token, adminToken: admin.token, done };
+  const t = { beta, root, base, port: (beta.server.address() as AddressInfo).port, admin: as(admin.token), tester: as(tester.token), other: as(other.token), anon: as(), put: (b: Buffer, type: string, token = tester.token) => put(token, b, type), otherToken: other.token, adminToken: admin.token, testerToken: tester.token, done };
   return t;
 }
 
@@ -958,5 +966,101 @@ test('an admin retry of a legacy failed job checks the limit against what it set
   const r = await t.admin('/beta/admin/jobs/old/retry', { method: 'POST' });
   assert.equal(r.status, 409);
   assert.match((await r.json()).error, /額度不足/);
+  t.beta.server.close();
+});
+
+// ---- fix round 1 ----
+
+test('timing is locked while a concept runs; an edit after the concept blocks accept without a charge', async () => {
+  const slow = { on: true };
+  const t = await gate({ slow });
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  await waitFor(() => t.beta.db.jobs[0].status === 'running');
+  slow.on = false;
+  t.beta.db.jobs[0].fused = true; // the killed stub must not retry by itself
+  const cues = await t.tester('/beta/songs/s1/cues', { method: 'PUT', json: { cues: [] } });
+  assert.deepEqual([cues.status, (await cues.json()).error], [409, '概念製作中，時間不能再改']);
+  // finish the concept by hand (the stub only sleeps), then save a timing edit straight into the song
+  try { process.kill(-t.beta.db.jobs[0].pid!, 'SIGKILL'); } catch { /* gone */ }
+  await waitFor(() => t.beta.db.jobs[0].status !== 'running');
+  const job = t.beta.db.jobs[0];
+  assert.equal(t.beta.db.jobs.length, 1);
+  Object.assign(job, { status: 'done', error: undefined, fused: undefined });
+  writeFileSync(join(runPath(t.root, job), 'concept.json'), JSON.stringify({ stills: [], concerns: '' }));
+  writeFileSync(join(t.root, 'songs/s1/song.json'), JSON.stringify({ duration: 10, cues: [{ id: 'c1', start: 1.2, end: 2, text: 'a' }] }));
+  const r = await t.tester(`/beta/jobs/${id}/accept`, { json: {} });
+  assert.deepEqual([r.status, (await r.json()).error], [409, '歌詞時間已修改，請重做概念']);
+  assert.deepEqual([t.beta.db.jobs.length, job.decision, (await (await t.tester('/beta/me')).json()).spentUsd], [1, undefined, 2.5]);
+  // redo is still open and snapshots the new timing
+  assert.equal((await t.tester(`/beta/jobs/${id}/redo`, { json: {} })).status, 202);
+  t.beta.server.close();
+});
+
+test('accept without a timing edit still works after the timing is saved unchanged', async () => {
+  const t = await gate();
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'none' } })).json();
+  await t.done(id);
+  // rewriting the same cues (another formatting, an added field) is not an edit
+  writeFileSync(join(t.root, 'songs/s1/song.json'), JSON.stringify({ ...JSON.parse(SONG), timingConfirmedAt: '2026-10-28T00:00:00Z' }, null, 2));
+  assert.equal((await t.tester(`/beta/jobs/${id}/accept`, { json: {} })).status, 202);
+  t.beta.server.close();
+});
+
+test('a new concept waits while a finished one of the same version is undecided; adjust and redo are allowed', async () => {
+  const t = await gate();
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  await t.done(id);
+  const r = await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } });
+  assert.deepEqual([r.status, (await r.json()).error], [409, '這個版本有一個概念還沒決定']);
+  const other = await t.tester('/beta/songs/s1/make', { json: { tier: 'none' } });
+  assert.equal(other.status, 202, 'another version is its own');
+  await t.done((await other.json()).id);
+  assert.equal((await t.tester(`/beta/jobs/${id}/adjust`, { json: { note: '亮一點' } })).status, 202);
+  t.beta.server.close();
+});
+
+test('a decision taken while the body was read is not taken twice', async () => {
+  const t = await gate();
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  await t.done(id);
+  const [a, b] = await Promise.all([t.tester(`/beta/jobs/${id}/accept`, { json: {} }), t.tester(`/beta/jobs/${id}/redo`, { json: {} })]);
+  assert.deepEqual([a.status, b.status].sort(), [202, 409]);
+  assert.equal(t.beta.db.jobs.length, 2);
+  t.beta.server.close();
+});
+
+test('inherited object keys are not languages', async () => {
+  const t = await gate();
+  assert.equal((await t.tester('/beta/songs/s1/make', { json: { tier: 'img', style: 'constructor' } })).status, 400);
+  assert.equal((await t.admin('/beta/styles/constructor/image')).status, 404);
+  assert.equal((await t.admin('/beta/admin/styles/constructor', { method: 'PUT', json: { tier: 'candidate' } })).status, 404);
+  assert.equal((await t.admin('/beta/admin/styles/__proto__', { method: 'PUT', json: { tier: 'candidate' } })).status, 404);
+  t.beta.server.close();
+});
+
+test('an upload far past the limit gets its 413 and the server keeps answering; refs are not cached', async () => {
+  const t = await gate();
+  const { connect } = await import('node:net');
+  const got = await new Promise<string>((ok) => {
+    const sock = connect(t.port, '127.0.0.1');
+    let reply = '';
+    let stop = false;
+    sock.on('data', (d) => { reply += d; stop = true; });
+    sock.on('error', () => { stop = true; });
+    sock.on('close', () => ok(reply));
+    sock.write(`PUT /beta/songs/s1/refs HTTP/1.1\r\nhost: x\r\ncookie: vjb=${t.testerToken}\r\ncontent-type: image/png\r\ncontent-length: 60000000\r\n\r\n`);
+    // one 256 KB chunk at a time, waiting for each to drain, so the reply is read long before the 4x cut
+    const chunk = Buffer.concat([PNG, Buffer.alloc(256_000)]);
+    const pushMore = () => {
+      if (stop || sock.destroyed) return void sock.end();
+      if (sock.write(chunk)) setImmediate(pushMore);
+      else sock.once('drain', pushMore);
+    };
+    pushMore();
+  });
+  assert.match(got, /^HTTP\/1\.1 413/);
+  assert.equal((await t.tester('/beta/me')).status, 200);
+  await t.put(PNG, 'image/png');
+  assert.equal((await t.tester('/beta/songs/s1/refs/ref-1.png')).headers.get('cache-control'), 'no-store');
   t.beta.server.close();
 });

@@ -43,7 +43,7 @@ const styleImage = (id: string) => ['kits', 'samples'].map((d) => join(REFERENCE
 const chars = (s: string) => [...s].length;
 
 /** Streams a file with range support (the timing editor and the video player seek with range requests). */
-function sendFile(req: IncomingMessage, res: ServerResponse, file: string) {
+function sendFile(req: IncomingMessage, res: ServerResponse, file: string, headers: Record<string, string> = {}) {
   const type = SERVE[extname(file)];
   if (!type || !existsSync(file)) return void res.writeHead(404).end();
   const size = statSync(file).size;
@@ -51,16 +51,17 @@ function sendFile(req: IncomingMessage, res: ServerResponse, file: string) {
   if (range) {
     const start = Number(range[1]);
     const end = Math.min(size - 1, range[2] ? Number(range[2]) : size - 1);
-    res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1, 'x-content-type-options': 'nosniff' });
+    res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1, 'x-content-type-options': 'nosniff', ...headers });
     return void createReadStream(file, { start, end }).pipe(res);
   }
-  res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff' });
+  res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff', ...headers });
   createReadStream(file).pipe(res);
 }
 
 /**
- * A request body up to `max` bytes. Past it the rest is drained without being kept (so the 413 reaches the client) and
- * the connection is cut once four times the limit has passed.
+ * A request body up to `max` bytes. Once past it the promise settles with 'too-big' at once (the caller answers 413
+ * while the client is still sending), the rest is drained without being kept, and the connection is cut once four
+ * times the limit has passed. A client that goes away mid-body rejects it, so no handler is left waiting.
  */
 const readBody = (req: IncomingMessage, max: number) =>
   new Promise<Buffer | 'too-big'>((ok, fail) => {
@@ -68,12 +69,24 @@ const readBody = (req: IncomingMessage, max: number) =>
     let n = 0;
     req.on('data', (c: Buffer) => {
       n += c.length;
-      if (n <= max) parts.push(c);
-      else if (n > 4 * max) req.destroy();
+      if (n <= max) return void parts.push(c);
+      ok('too-big');
+      if (n > 4 * max) req.destroy();
     });
     req.on('end', () => ok(n > max ? 'too-big' : Buffer.concat(parts)));
     req.on('error', fail);
+    req.on('close', () => fail(new Error('上傳中斷')));
   });
+
+/** The lyric timing of a song.json (each cue's start, end, text and singer), or '' when it cannot be read. */
+const timingKey = (file: string) => {
+  try {
+    const t = JSON.parse(readFileSync(file, 'utf8')) as SongTimeline;
+    return JSON.stringify(t.cues.map((c) => [c.start, c.end, c.text, c.singer ?? null]));
+  } catch {
+    return '';
+  }
+};
 
 /** The reference images of a song folder, in upload order. */
 const songRefs = (dir: string) => {
@@ -176,7 +189,7 @@ export function createBetaServer(o: BetaOptions) {
   const db = load(dbFile);
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }),
     // the candidates as they are when the concept starts (the admin may change tiers while it waits)
-    jobEnv: (job) => (job.kind === 'concept' ? { VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
+    jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
   q.holding = true; // nothing starts, whatever gets enqueued, until the orphans are gone
   const orphanSongs = new Map(db.jobs.filter((j) => j.status === 'running' && j.pid).map((j) => [j.pid!, j.songId]));
   const orphans = killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
@@ -215,6 +228,9 @@ export function createBetaServer(o: BetaOptions) {
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
     if (kind === 'concept' && extra.inputs?.from !== undefined && !conceptRunId(songId, extra.inputs.from)) return { error: '找不到上一版概念' };
+    // a fresh concept waits until the last one is decided (adjust and redo decide it, so they pass `from`)
+    if (kind === 'concept' && !extra.inputs?.from && db.jobs.some((j) => j.kind === 'concept' && j.songId === songId && j.tier === tier && j.status === 'done' && !j.decision))
+      return { error: '這個版本有一個概念還沒決定' };
     const id = newId();
     const price = priceFor(kind, tier);
     const runDir = kind === 'prep' ? undefined : kind === 'concept' ? `runs/${id}` : (extra.runDir ?? `runs/${id}`);
@@ -264,7 +280,7 @@ export function createBetaServer(o: BetaOptions) {
         return json(res, 200, Object.entries(LANGUAGES).filter(([id]) => styleOffered(db, id)).map(([id, l]) => ({ id, name: l.name, suits: l.suits, image: styleImage(id) ? `/beta/styles/${id}/image` : null })));
       const si = /^\/beta\/styles\/([\w-]+)\/image$/.exec(path);
       if (si && req.method === 'GET') {
-        const file = si[1] in LANGUAGES && (user.admin || styleOffered(db, si[1])) ? styleImage(si[1]) : undefined;
+        const file = Object.hasOwn(LANGUAGES, si[1]) && (user.admin || styleOffered(db, si[1])) ? styleImage(si[1]) : undefined;
         return file ? sendFile(req, res, file) : json(res, 404, { error: '找不到' });
       }
       if (path === '/beta/songs' && req.method === 'GET') return json(res, 200, db.songs.filter((s) => user.admin || s.userId === user.id));
@@ -332,6 +348,7 @@ export function createBetaServer(o: BetaOptions) {
         if (sm[2].startsWith('audio/') && req.method === 'GET') return sendFile(req, res, join(dir, sm[2] === 'audio/mix' ? 'mix.mp3' : 'vocals.wav'));
         if (sm[2] === 'cues' && req.method === 'PUT') {
           if (db.jobs.some((j) => j.songId === song.id && j.kind === 'make' && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '影片製作中，時間不能再改' });
+          if (db.jobs.some((j) => j.songId === song.id && j.kind === 'concept' && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '概念製作中，時間不能再改' });
           const b = (await readJson(req)) as { cues?: TimingEdit[]; confirm?: boolean; accepted?: string[]; singers?: { name: string; color: string }[] };
           if (!Array.isArray(b.cues)) return json(res, 400, { error: '格式錯誤' });
           const next = applyTimingEdit(timeline, b.cues, !!b.confirm, undefined, Array.isArray(b.accepted) ? b.accepted.map(String) : [], b.singers);
@@ -357,7 +374,7 @@ export function createBetaServer(o: BetaOptions) {
           const type = IMAGE[(req.headers['content-type'] ?? '').split(';')[0].trim()];
           if (!type) return json(res, 415, { error: '請上傳 jpg、png 或 webp 圖片' });
           const body = await readBody(req, MAX_REF_BYTES);
-          if (body === 'too-big') return json(res, 413, { error: '圖片太大（上限 10 MB）' });
+          if (body === 'too-big') return void res.writeHead(413, { 'content-type': 'application/json', connection: 'close' }).end(JSON.stringify({ error: '圖片太大（上限 10 MB）' }));
           if (!body.length) return json(res, 400, { error: '沒有收到圖片' });
           if (!type.magic(body)) return json(res, 415, { error: '圖片格式不正確' });
           const refs = songRefs(dir);
@@ -371,7 +388,7 @@ export function createBetaServer(o: BetaOptions) {
         const name = rf[2] && REF_NAME.test(rf[2]) ? rf[2] : undefined;
         const file = name ? join(dir, 'refs', name) : '';
         if (!name || !existsSync(file)) return json(res, 404, { error: '找不到這張圖' });
-        if (reading) return sendFile(req, res, file);
+        if (reading) return sendFile(req, res, file, { 'cache-control': 'no-store' });
         if (req.method === 'DELETE') {
           rmSync(file);
           logEvent(o.root, song.id, { type: 'ref.deleted', by: user.id, name });
@@ -409,8 +426,13 @@ export function createBetaServer(o: BetaOptions) {
         const summary = jobConcept(o.root, j);
         if (!summary) return json(res, 409, { error: '概念還沒完成' });
         const b = await readJson(req);
+        // another request may have decided it while this body was read
+        if (j.decision) return json(res, 409, { error: '這個概念已經決定過了' });
         if (dc[2] === 'accept') {
           if (summary.concerns?.trim() && b.confirmConcerns !== true) return json(res, 409, { error: '導演認為這個風格不太適合這首歌，請確認後再接受', concerns: summary.concerns });
+          // the make reuses the concept's snapshot of the timing: a timing edit since then would be silently lost
+          if (timingKey(join(songDir(o.root, j.songId), 'song.json')) !== timingKey(join(runPath(o.root, j), 'song.json')) || !timingKey(join(runPath(o.root, j), 'song.json')))
+            return json(res, 409, { error: '歌詞時間已修改，請重做概念' });
           const r = enqueue(user, j.songId, 'make', j.tier, { runDir: j.runDir, conceptOf: j.id });
           if ('error' in r) return json(res, 409, r);
           j.decision = 'accepted';
@@ -421,6 +443,7 @@ export function createBetaServer(o: BetaOptions) {
         const note = dc[2] === 'adjust' ? (typeof b.note === 'string' ? b.note.trim() : '') : undefined;
         if (note !== undefined && (!note || chars(note) > MAX_CONCEPT)) return json(res, 400, { error: '請寫下想調整的地方（最多 500 字）' });
         const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
+        // the chain keeps its style even if the admin has since unlisted it: deliberate continuity for the person's pick
         const r = enqueue(user, j.songId, 'concept', j.tier, { inputs: { concept: j.inputs?.concept ?? '', style: j.inputs?.style, refs: j.inputs?.refs ?? [], note, from }, refsFrom: join(runPath(o.root, j), 'refs') });
         if ('error' in r) return json(res, 409, r);
         j.decision = note !== undefined ? 'adjusted' : 'redone';
@@ -535,7 +558,7 @@ export function createBetaServer(o: BetaOptions) {
         return json(res, 200, Object.entries(LANGUAGES).map(([id, l]) => ({ id, name: l.name, suits: l.suits, proven: !!l.proven, tier: styleTier(db, id), image: styleImage(id) ? `/beta/styles/${id}/image` : null })));
       const as = /^\/beta\/admin\/styles\/([\w-]+)$/.exec(path);
       if (as && req.method === 'PUT') {
-        if (!(as[1] in LANGUAGES)) return json(res, 404, { error: '找不到這個風格' });
+        if (!Object.hasOwn(LANGUAGES, as[1])) return json(res, 404, { error: '找不到這個風格' });
         const tier = (await readJson(req)).tier as StyleTier;
         if (!TIERS_OF_STYLE.includes(tier)) return json(res, 400, { error: '等級不正確' });
         db.styles = { ...db.styles, [as[1]]: { tier } };

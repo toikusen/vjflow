@@ -16,6 +16,10 @@ export interface Job {
   reservedUsd: number;
   /** The measured cost, when the steps report one. */
   costUsd?: number;
+  /** Each measured cost once, by key (a repeated line must not count twice); `costUsd` is their sum. */
+  costs?: { key: string; usd: number; phase?: string }[];
+  /** When each phase began, appended on a change of phase only. */
+  steps?: { phase: string; at: string }[];
   createdAt: string; startedAt?: string; endedAt?: string; phase?: string; error?: string;
   /** A make job's own folder, relative to the song folder (`runs/<jobId>`); unset for prep and for jobs made before run folders. */
   runDir?: string;

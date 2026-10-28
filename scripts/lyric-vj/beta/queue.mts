@@ -1,5 +1,5 @@
 // Runs the beta's jobs one at a time on this machine: each job is one shell command whose `##PHASE <label>` lines
-// become the progress the person sees and whose `##COST <usd>` lines add up to its measured cost.
+// become the progress the person sees and whose `##COST <usd> [key]` lines add up to its measured cost.
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -32,13 +32,28 @@ export function keyEnv(dir = join(homedir(), '.config/vjflow')) {
   return env;
 }
 
-/** Reads one output line of a job into it; true when the line changed something the page shows. */
-export function readLine(job: Job, line: string) {
+/**
+ * Reads one output line of a job into it; true when the line changed something the page shows.
+ * `##COST <usd> [key]`: a key already seen is ignored; no key becomes `phase:<phase>#<n>`.
+ */
+export function readLine(job: Job, line: string, now: () => string = () => new Date().toISOString()) {
   const p = /^##PHASE (.+)/.exec(line);
-  if (p) return void (job.phase = p[1].trim()), true;
-  const c = /^##COST ([\d.]+)/.exec(line);
-  if (c) return void (job.costUsd = +((job.costUsd ?? 0) + Number(c[1])).toFixed(3)), true;
-  return false;
+  if (p) {
+    const phase = p[1].trim();
+    if (phase === job.phase) return false;
+    job.phase = phase;
+    (job.steps ??= []).push({ phase, at: now() });
+    return true;
+  }
+  const c = /^##COST ([\d.]+)(?:\s+(\S+))?/.exec(line);
+  if (!c) return false;
+  const costs = (job.costs ??= []);
+  const prefix = `phase:${job.phase}#`;
+  const key = c[2] ?? `${prefix}${costs.filter((x) => x.key.startsWith(prefix)).length + 1}`;
+  if (costs.some((x) => x.key === key)) return false;
+  costs.push({ key, usd: Number(c[1]), phase: job.phase });
+  job.costUsd = +costs.reduce((s, x) => s + x.usd, 0).toFixed(3);
+  return true;
 }
 
 /** Starts the next queued job when nothing runs; call after any change to the queue. */

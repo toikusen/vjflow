@@ -100,7 +100,8 @@ export function createBetaServer(o: BetaOptions) {
         const file = resolve(o.site, '.' + decodeURIComponent(path));
         const page = file.startsWith(resolve(o.site) + '/') && existsSync(file) && statSync(file).isFile() ? file : join(o.site, 'index.html');
         res.writeHead(200, { 'content-type': PAGE[extname(page)] ?? 'application/octet-stream', 'cache-control': page.endsWith('index.html') ? 'no-store' : 'public, max-age=3600' });
-        return void createReadStream(page).pipe(res);
+        // a missing page (dist wiped mid-build) must not take the server and its running job down
+        return void createReadStream(page).on('error', () => res.destroy()).pipe(res);
       }
       // the invite link: the token becomes an HttpOnly cookie and leaves the address bar
       if (path === '/beta/login') {

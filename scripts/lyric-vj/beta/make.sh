@@ -14,8 +14,9 @@ end=$(python3 -c "import json,sys;print('%.2f'%json.load(open(sys.argv[1]))['dur
 cost_json() { [ -f "$1" ] && python3 -c "import json,sys;print('##COST %.3f' % (json.load(open(sys.argv[1])).get('costUSD') or 0))" "$1" || true; }
 cost_log() { local c; c=$(grep -oE '\$[0-9]+\.[0-9]+' "$1" | tail -1 | tr -d '$' || true); [ -n "$c" ] && echo "##COST $c" || true; }
 
-echo '##PHASE 導演設計'
-[ -f "$w/base/treatment.json" ] || { npx tsx scripts/lyric-vj/direct.mts --song "$S" --start 0 --end "$end" --out "$w/base" --style-id emotional --tier still --history out/design-history.json > "$w/direct.log" 2>&1; cost_json "$w/base/director.json"; }
+echo '##PHASE 導演規劃段落與故事'
+# direct.mts logs "attempt N: E errors" after each story draft, then designs the look: those lines become phases
+[ -f "$w/base/treatment.json" ] || { npx tsx scripts/lyric-vj/direct.mts --song "$S" --start 0 --end "$end" --out "$w/base" --style-id emotional --tier still --history out/design-history.json 2>&1 | tee "$w/direct.log" | awk '/^attempt [0-9]+: 0 errors/ { print "##PHASE 導演設計視覺風格"; fflush() } /^attempt [0-9]+: [1-9]/ { print "##PHASE 導演修正故事草稿"; fflush() }'; cost_json "$w/base/director.json"; }
 
 plan() { # <out> [--sprites dir]
   [ -f "$1/treatment.json" ] && return

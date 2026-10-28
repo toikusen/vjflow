@@ -15,6 +15,8 @@ export interface Queue {
   logDir: string;
   /** Extra environment for the jobs (default: the API keys in ~/.config/vjflow/*.env). */
   env?: Record<string, string>;
+  /** Environment for one job, read when it starts (e.g. the candidate languages a concept job may pick). */
+  jobEnv?: (job: Job) => Record<string, string>;
   /** The shell that runs a job's command (default `bash`; tests point it at a missing file to see a failed start). */
   shell?: string;
   /** Set while the server shuts down: jobs killed then stay `running` (a restart re-queues them) and nothing new starts. */
@@ -120,7 +122,7 @@ export function pump(q: Queue) {
   mkdirSync(q.logDir, { recursive: true });
   const log = join(q.logDir, `${job.id}.log`);
   // the keys only reach the job's process, never the pages or the records
-  const child = spawn(q.shell ?? 'bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  const child = spawn(q.shell ?? 'bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()), ...q.jobEnv?.(job) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   job.pid = child.pid;
   q.persist();
   q.onEvent?.(job, { type: 'job.started' });

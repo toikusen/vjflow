@@ -5,6 +5,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { Feedback } from './feedback.mts';
+import { LANGUAGES, type LanguageId } from '../../../src/app/lyric-vj/languages';
 
 export type Tier = 'none' | 'img' | 'hybrid';
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'admin';
@@ -43,9 +44,19 @@ export interface Job {
   /** On the make job an acceptance created: the concept job it came from. */
   conceptOf?: string;
 }
+export type StyleTier = 'proven' | 'candidate' | 'unlisted';
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number;
   /** Every problem report ever submitted, never overwritten. */
-  feedback: Feedback[] }
+  feedback: Feedback[];
+  /** The admin's tier per design language; a language not listed here takes its default (see styleTier). */
+  styles?: Record<string, { tier: StyleTier }> }
+
+/** A language's tier: the admin's choice, else `proven` for a proven language and `unlisted` for the rest. */
+export const styleTier = (db: Db, id: string): StyleTier => db.styles?.[id]?.tier ?? (LANGUAGES[id as LanguageId]?.proven ? 'proven' : 'unlisted');
+/** True when the person may pick the language: its tier is proven or candidate. */
+export const styleOffered = (db: Db, id: string) => id in LANGUAGES && styleTier(db, id) !== 'unlisted';
+/** The candidate languages, in catalog order (the director must give a reason when it picks one). */
+export const candidateIds = (db: Db) => Object.keys(LANGUAGES).filter((id) => styleTier(db, id) === 'candidate');
 
 /**
  * What a person pays, fixed per step (placeholders): each concept attempt, then the rest once the concept is accepted.
@@ -77,12 +88,13 @@ export const newId = () => randomBytes(9).toString('base64url');
 
 /**
  * Queues a new job that runs a failed one again: same person, song, kind, tier, run folder (the steps resume from what
- * they wrote) and fixed price. No limit check: the failed job charges nothing, so the person still pays the price once.
+ * they wrote), inputs, accepted concept and fixed price. No limit check: the failed job charges nothing, so the person still pays the price once.
  */
 export function retryJob(db: Db, failed: Job, opts: { auto: boolean }): Job {
   const job: Job = {
     id: newId(), userId: failed.userId, songId: failed.songId, kind: failed.kind, tier: failed.tier, status: 'queued',
     reservedUsd: failed.reservedUsd, priceUsd: failed.priceUsd, runDir: failed.runDir, retryOf: failed.id,
+    ...(failed.inputs ? { inputs: failed.inputs } : {}), ...(failed.conceptOf ? { conceptOf: failed.conceptOf } : {}),
     ...(opts.auto ? { auto: true } : {}), createdAt: new Date().toISOString(),
   };
   db.jobs.push(job);

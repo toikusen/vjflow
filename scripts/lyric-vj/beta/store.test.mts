@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, retryJob, runPath, save, spent, userByToken, videoFile } from './store.mts';
+import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, retryJob, runPath, styleTier, styleOffered, candidateIds, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -141,4 +141,21 @@ test('the 4th concept for a song and tier is refused', () => {
 test('a legacy make job keeps its stored price', () => {
   assert.equal(charged(job({ priceUsd: 6 })), 6);
   assert.equal(charged(job({ priceUsd: undefined, costUsd: 2.2 })), 2.2);
+});
+
+test('retryJob carries a concept job\'s inputs and a make job\'s accepted concept', () => {
+  const db = emptyDb();
+  const inputs = { concept: '雨', refs: ['ref-1.png'], from: 'a' };
+  assert.deepEqual(retryJob(db, job({ id: 'c', kind: 'concept', tier: 'img', status: 'failed', inputs }), { auto: true }).inputs, inputs);
+  assert.equal(retryJob(db, job({ id: 'm', kind: 'make', tier: 'img', status: 'failed', conceptOf: 'c' }), { auto: true }).conceptOf, 'c');
+});
+
+test('style tiers default to proven for proven languages and unlisted otherwise; the admin overrides them', () => {
+  const db = emptyDb();
+  assert.equal(styleTier(db, 'silkscreen'), 'proven');
+  assert.equal(styleTier(db, 'terminal'), 'unlisted');
+  assert.equal(styleOffered(db, 'nope'), false);
+  db.styles = { terminal: { tier: 'candidate' }, silkscreen: { tier: 'unlisted' } };
+  assert.deepEqual([styleTier(db, 'terminal'), styleOffered(db, 'terminal'), styleOffered(db, 'silkscreen')], ['candidate', true, false]);
+  assert.deepEqual(candidateIds(db), ['terminal']);
 });

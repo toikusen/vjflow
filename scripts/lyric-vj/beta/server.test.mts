@@ -8,9 +8,10 @@ import { after, test } from 'node:test';
 import { createBetaServer, stopBeta } from './server.mts';
 import { killRunning, waitGone } from './queue.mts';
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { LANGUAGES } from '../../../src/app/lyric-vj/languages';
 import { readEvents } from './events.mts';
-import { invite, save, emptyDb, runPath } from './store.mts';
+import { invite, save, emptyDb, runPath, type Job } from './store.mts';
 
 // every server and job a test starts is stopped when the file ends, so a failed assertion cannot leave the process hanging
 const started: ReturnType<typeof createBetaServer>[] = [];
@@ -31,7 +32,8 @@ async function setup() {
   const tester = invite(db, 'Tester', 10);
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
-  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##PHASE 製作中'; echo '##COST 2.5'` });
+  // a concept job leaves a summary to accept; any job leaves a video (only make jobs serve one)
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${job.kind === 'concept' ? ` && echo '{"stills":[]}' > '${runPath(root, job)}/concept.json'` : ''}; echo '##PHASE 製作中'; echo '##COST 2.5'` });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token?: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, redirect: 'manual', headers: { ...(token ? { cookie: `vjb=${token}` } : {}), 'content-type': 'application/json' } });
@@ -56,8 +58,9 @@ test('a queued job runs, reports its phase and measured cost, and the limit hold
   assert.equal(r.status, 202);
   for (let k = 0; k < 50 && t.beta.db.jobs[0].status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
   const [job] = t.beta.db.jobs;
-  assert.deepEqual([job.status, job.phase, job.costUsd], ['done', '製作中', 2.5]);
-  // $10 limit, $2.50 spent: the $16 hybrid reserve is refused
+  assert.deepEqual([job.kind, job.status, job.phase, job.costUsd, job.priceUsd], ['concept', 'done', '製作中', 2.5, 2.5]);
+  // $2.50 spent: with the limit lowered to $4 a second $2.50 concept is refused
+  t.beta.db.users[1].limitUsd = 4;
   const refused = await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'hybrid' }) });
   assert.equal(refused.status, 409);
   assert.match((await refused.json()).error, /額度不足/);
@@ -128,9 +131,14 @@ test('a fresh login link replaces the old one', async () => {
 test('each make job gets its own run folder, and its video is served by job', async () => {
   const t = await setup();
   const r = await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
-  const { id } = await r.json();
+  const cid = (await r.json()).id;
+  const concept = t.beta.db.jobs.find((j) => j.id === cid)!;
+  assert.equal(concept.runDir, `runs/${concept.id}`);
+  for (let k = 0; k < 50 && concept.status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  assert.equal((await t.tester(`/beta/jobs/${concept.id}/video`)).status, 404, 'a concept job has no video');
+  const { id } = await (await t.tester(`/beta/jobs/${concept.id}/accept`, { method: 'POST', body: '{}' })).json();
   const job = t.beta.db.jobs.find((j) => j.id === id)!;
-  assert.equal(job.runDir, `runs/${id}`);
+  assert.equal(job.runDir, concept.runDir);
   for (let k = 0; k < 50 && job.status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
   assert.equal(job.status, 'done');
   assert.equal((await t.tester(`/beta/jobs/${id}/video`)).status, 200);
@@ -224,7 +232,7 @@ test('a job whose cost passes twice its price is stopped and not charged', async
   await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
   for (let k = 0; k < 40 && t.beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 100));
   const [job] = t.beta.db.jobs;
-  assert.deepEqual([job.status, job.error, job.priceUsd], ['failed', '成本超過上限，已通知管理者', 6]);
+  assert.deepEqual([job.status, job.error, job.priceUsd], ['failed', '成本超過上限，已通知管理者', 2.5]);
   assert.ok(Date.now() - t0 < 4000);
   assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 0);
   t.beta.server.close();
@@ -237,7 +245,7 @@ test('a failed job records the step it was in as unsettled', async () => {
   const jobs = await (await t.admin('/beta/admin/jobs')).json();
   assert.equal(t.beta.db.jobs[0].costUsd, 1.5);
   assert.equal(jobs[0].unsettled, '畫道具');
-  assert.equal(jobs[0].priceUsd, 6);
+  assert.equal(jobs[0].priceUsd, 2.5);
   assert.equal((await (await t.admin('/beta/admin/users')).json()).platformSpentUsd, 3); // the failed run and its automatic retry
   t.beta.server.close();
 });
@@ -293,7 +301,7 @@ test('a job whose cost passes twice its price leaves a job.fused event beside jo
   for (let k = 0; k < 40 && t.beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 100));
   const ev = readEvents(t.root, 's1');
   const fused = ev.find((e) => e.type === 'job.fused');
-  assert.deepEqual([fused?.costUsd, fused?.priceUsd], [13, 6]);
+  assert.deepEqual([fused?.costUsd, fused?.priceUsd], [13, 2.5]);
   assert.ok(ev.some((e) => e.type === 'job.ended' && e.status === 'failed'));
   assert.ok(ev.findIndex((e) => e.type === 'job.fused') < ev.findIndex((e) => e.type === 'job.ended'));
   t.beta.server.close();
@@ -366,13 +374,14 @@ test('a saved pid from before the machine booted is never signalled', async () =
   }
 });
 
-test('a make job leaves queued, started, phase, cost and ended events', async () => {
+test('a concept job leaves queued, started, phase, cost and ended events', async () => {
   const t = await runStub("echo '##PHASE 製作中'; echo '##COST 2.5 x'");
   await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
   for (let k = 0; k < 50 && t.beta.db.jobs[0].status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
   const ev = await (await t.admin('/beta/admin/songs/s1/events')).json();
   assert.deepEqual(ev.map((e: { type: string }) => e.type), ['job.queued', 'job.started', 'job.phase', 'job.cost', 'job.ended']);
-  assert.deepEqual([ev[0].kind, ev[0].tier, ev[0].priceUsd, ev[2].phase, ev[3].key, ev[3].usd, ev[4].status], ['make', 'img', 6, '製作中', 'x', 2.5, 'done']);
+  assert.deepEqual([ev[0].kind, ev[0].tier, ev[0].priceUsd, ev[2].phase, ev[3].key, ev[3].usd, ev[4].status], ['concept', 'img', 2.5, '製作中', 'x', 2.5, 'done']);
+  assert.deepEqual(ev[0].inputs, { concept: '', refs: [] });
   assert.ok(ev.every((e: { jobId: string }) => e.jobId === t.beta.db.jobs[0].id));
   t.beta.server.close();
 });
@@ -407,12 +416,10 @@ test('admin logs list and read; traversal and non-admins are refused', async () 
   t.beta.server.close();
 });
 
-test('a song folder that cannot be written does not stop the job', async () => {
-  const { writeFileSync } = await import('node:fs');
+test('an event log that cannot be written does not stop the job', async () => {
   const t = await runStub("echo '##PHASE a'; echo '##COST 1 x'");
-  // a file where the song folder should be: every event write fails
-  mkdirSync(join(t.root, 'songs'), { recursive: true });
-  writeFileSync(join(t.root, 'songs/s1'), 'in the way');
+  // a folder where the event log should be: every event write fails (the concept's own run folder still can be)
+  mkdirSync(join(t.root, 'songs/s1/events.jsonl'), { recursive: true });
   await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
   for (let k = 0; k < 50 && t.beta.db.jobs[0].status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
   assert.deepEqual([t.beta.db.jobs[0].status, t.beta.db.jobs[0].costUsd], ['done', 1]);
@@ -543,7 +550,7 @@ test('an automatic retry that succeeds charges the price once', async () => {
   t.beta.queue.command = (j) => (j.auto ? 'true' : 'exit 1');
   await makeImg(t);
   await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs[1].status === 'done');
-  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 6);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 2.5);
   t.beta.server.close();
 });
 
@@ -586,7 +593,7 @@ test('an automatic retry resumes in the same run folder', async () => {
 
 test('no automatic retry when the global budget cannot cover it', async () => {
   const t = await runStub("echo '##COST 3 x'; exit 1");
-  t.beta.db.globalLimitUsd = 8; // the first run may start (6), but after its measured 3 a retry needing 6 more would pass 8
+  t.beta.db.globalLimitUsd = 5; // the first run may start (2.5), but after its measured 3 a retry needing 2.5 more would pass 5
   await makeImg(t);
   await waitFor(() => t.beta.db.jobs[0].status === 'failed');
   await new Promise((ok) => setTimeout(ok, 300));
@@ -655,4 +662,301 @@ test('new feedback records the job style', async () => {
   writeFileSync(join(t.root, 'songs/s1/runs/d/base/treatment.json'), JSON.stringify({ design: { language: 'silkscreen' } }));
   const r = await t.tester('/beta/jobs/d/feedback', { method: 'POST', body: JSON.stringify({ ok: true }) });
   assert.equal((await r.json()).style, '絲網海報');
+});
+
+// ---- the concept gate: reference images, concept jobs, decisions, stills and the style catalog ----
+
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(32)]);
+const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)]);
+const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(32)]);
+const PROVEN = Object.entries(LANGUAGES).filter(([, l]) => l.proven).map(([id]) => id);
+const UNLISTED = Object.entries(LANGUAGES).filter(([, l]) => !l.proven).map(([id]) => id);
+
+/**
+ * A root where the tester owns confirmed song s1 and every job is a stub: a concept job writes concept.json (with the
+ * given concerns), one still and the VJ_CANDIDATES it saw; a make job writes its video. `fail` picks jobs whose first
+ * (non-retry) run exits 1.
+ */
+async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'concept' | 'make'; limit?: number } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'beta-'));
+  const db = emptyDb();
+  const admin = invite(db, 'Admin', 100, true);
+  const tester = invite(db, 'Tester', o.limit ?? 50);
+  const other = invite(db, 'Other', 10);
+  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  save(join(root, 'db.json'), db);
+  const command = (job: Job) => {
+    const run = runPath(root, job);
+    if (o.fail === job.kind && !job.retryOf) return 'exit 1';
+    mkdirSync(join(run, 'stills'), { recursive: true });
+    if (job.kind === 'make') return `echo mp4 > '${run}/video.mp4'`;
+    writeFileSync(join(run, 'stills', 'still_1.00.png'), PNG);
+    writeFileSync(join(run, 'concept.json'), JSON.stringify({ language: 'silkscreen', languageName: '絲網海報', font: 'f', palette: ['#000'], concept: 'c', concerns: o.concerns ?? '', candidateReason: o.candidateReason ?? '', stills: ['still_1.00.png'] }));
+    return `printf '%s' "$VJ_CANDIDATES" > '${run}/candidates.txt'`;
+  };
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
+  await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
+  const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
+  const as = (token?: string) => (path: string, init: RequestInit & { json?: unknown } = {}) =>
+    fetch(base + path, { method: init.method ?? (init.json !== undefined ? 'POST' : 'GET'), body: init.json !== undefined ? JSON.stringify(init.json) : init.body, headers: { ...(token ? { cookie: `vjb=${token}` } : {}), 'content-type': (init.headers as Record<string, string>)?.['content-type'] ?? 'application/json' } });
+  const put = (token: string, body: Buffer, type: string) => fetch(`${base}/beta/songs/s1/refs`, { method: 'PUT', body, headers: { cookie: `vjb=${token}`, 'content-type': type } });
+  const done = async (id: string) => { await waitFor(() => t.beta.db.jobs.find((j) => j.id === id)?.status === 'done'); return t.beta.db.jobs.find((j) => j.id === id)!; };
+  const t = { beta, root, base, admin: as(admin.token), tester: as(tester.token), other: as(other.token), anon: as(), put: (b: Buffer, type: string, token = tester.token) => put(token, b, type), otherToken: other.token, adminToken: admin.token, done };
+  return t;
+}
+
+test('reference images: owner uploads jpg/png/webp, owner and admin read, nobody else; bad files are refused', async () => {
+  const t = await gate();
+  assert.deepEqual(await (await t.put(PNG, 'image/png')).json(), { name: 'ref-1.png' });
+  assert.equal((await t.put(JPG, 'image/jpeg')).status, 201);
+  assert.equal((await t.put(WEBP, 'image/webp')).status, 201);
+  assert.deepEqual(await (await t.tester('/beta/songs/s1/refs')).json(), ['ref-1.png', 'ref-2.jpg', 'ref-3.webp']);
+  assert.deepEqual(await (await t.admin('/beta/songs/s1/refs')).json(), ['ref-1.png', 'ref-2.jpg', 'ref-3.webp']);
+  const got = await t.tester('/beta/songs/s1/refs/ref-1.png');
+  assert.deepEqual([got.status, got.headers.get('content-type'), Buffer.from(await got.arrayBuffer()).equals(PNG)], [200, 'image/png', true]);
+  assert.equal((await t.admin('/beta/songs/s1/refs/ref-2.jpg')).status, 200);
+  assert.equal((await t.other('/beta/songs/s1/refs/ref-1.png')).status, 404);
+  assert.equal((await t.other('/beta/songs/s1/refs')).status, 404);
+  assert.equal((await t.anon('/beta/songs/s1/refs/ref-1.png')).status, 401);
+  // wrong type, a fake extension (declared png, jpg bytes), text posing as an image, empty, oversized, someone else's song
+  assert.equal((await t.put(PNG, 'image/gif')).status, 415);
+  assert.equal((await t.put(JPG, 'image/png')).status, 415);
+  assert.equal((await t.put(Buffer.from('<svg onload=alert(1)>'), 'image/jpeg')).status, 415);
+  assert.equal((await t.put(Buffer.alloc(0), 'image/png')).status, 400);
+  assert.equal((await t.put(Buffer.concat([PNG, Buffer.alloc(10_000_001)]), 'image/png')).status, 413);
+  assert.equal((await t.put(PNG, 'image/png', t.otherToken)).status, 404);
+  assert.equal((await t.put(PNG, 'image/png', t.adminToken)).status, 404, 'the admin reads but does not add');
+  // names are the server's: traversal, other extensions and unknown names are not served
+  for (const bad of ['..%2Fdb.json', '..%2F..%2F..%2Fdb.json', 'ref-1.png.html', 'ref-1.PNG', 'ref-9.png', 'x.png'])
+    assert.equal((await t.tester(`/beta/songs/s1/refs/${bad}`)).status, 404, bad);
+  assert.equal((await t.put(PNG, 'image/png')).status, 201);
+  assert.equal((await t.put(PNG, 'image/png')).status, 201);
+  const sixth = await t.put(PNG, 'image/png');
+  assert.deepEqual([sixth.status, (await sixth.json()).error], [409, '參考圖最多 5 張']);
+  // only the owner deletes; a deleted name is not reused
+  assert.equal((await t.other('/beta/songs/s1/refs/ref-1.png', { method: 'DELETE' })).status, 404);
+  assert.equal((await t.admin('/beta/songs/s1/refs/ref-1.png', { method: 'DELETE' })).status, 404);
+  assert.equal((await t.tester('/beta/songs/s1/refs/ref-1.png', { method: 'DELETE' })).status, 204);
+  assert.equal((await t.tester('/beta/songs/s1/refs/ref-1.png', { method: 'DELETE' })).status, 404);
+  assert.deepEqual(await (await t.put(PNG, 'image/png')).json(), { name: 'ref-6.png' });
+  t.beta.server.close();
+});
+
+test('make queues a concept job at the concept price with its inputs; the refs are copied into the run', async () => {
+  const t = await gate();
+  await t.put(PNG, 'image/png');
+  await t.put(JPG, 'image/jpeg');
+  const r = await t.tester('/beta/songs/s1/make', { json: { tier: 'img', concept: ' 溫暖的手繪感 ', style: PROVEN[0], refs: ['ref-2.jpg'] } });
+  assert.equal(r.status, 202);
+  const pub = await r.json();
+  const job = t.beta.db.jobs.find((j) => j.id === pub.id)!;
+  assert.deepEqual([job.kind, job.tier, job.priceUsd, job.runDir], ['concept', 'img', 2.5, `runs/${job.id}`]);
+  assert.deepEqual(job.inputs, { concept: '溫暖的手繪感', style: PROVEN[0], refs: ['ref-2.jpg'] });
+  assert.deepEqual(pub.inputs, job.inputs);
+  const run = runPath(t.root, job);
+  assert.deepEqual(JSON.parse(readFileSync(join(run, 'inputs.json'), 'utf8')), job.inputs);
+  assert.deepEqual(readdirSync(join(run, 'refs')), ['ref-2.jpg']);
+  assert.ok(readFileSync(join(run, 'refs/ref-2.jpg')).equals(JPG));
+  // deleting the song's ref afterwards leaves the queued concept's copy alone
+  await t.tester('/beta/songs/s1/refs/ref-2.jpg', { method: 'DELETE' });
+  assert.ok(existsSync(join(run, 'refs/ref-2.jpg')));
+  const queued = readEvents(t.root, 's1').find((e) => e.type === 'job.queued');
+  assert.deepEqual(queued?.inputs, job.inputs);
+  await t.done(job.id);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 2.5);
+  t.beta.server.close();
+});
+
+test('make refuses a bad tier, a long concept, a style that is not offered and refs that do not exist', async () => {
+  const t = await gate();
+  await t.put(PNG, 'image/png');
+  const make = (b: object) => t.tester('/beta/songs/s1/make', { json: b });
+  for (const b of [{}, { tier: 'gold' }, { tier: 'img', concept: 'x'.repeat(501) }, { tier: 'img', concept: 5 }, { tier: 'img', style: 'nope' }, { tier: 'img', style: UNLISTED[0] },
+    { tier: 'img', refs: ['ref-9.png'] }, { tier: 'img', refs: ['../db.json'] }, { tier: 'img', refs: 'ref-1.png' }, { tier: 'img', refs: ['ref-1.png', 'ref-1.png'] }])
+    assert.equal((await make(b)).status, 400, JSON.stringify(b).slice(0, 60));
+  assert.equal(t.beta.db.jobs.length, 0);
+  assert.equal((await make({ tier: 'img', concept: '字'.repeat(500), style: '' })).status, 202, '500 characters (not bytes) is allowed; an empty style means the director picks');
+  assert.equal(t.beta.db.jobs[0].inputs?.style, undefined);
+  t.beta.server.close();
+});
+
+test('accepting a concept queues the make in the same run at the tier price: concept + rest charged once', async () => {
+  const t = await gate();
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  assert.equal((await t.tester(`/beta/jobs/${id}/accept`, { json: {} })).status, 409, 'not finished yet');
+  const concept = await t.done(id);
+  assert.equal((await t.other(`/beta/jobs/${id}/accept`, { json: {} })).status, 404);
+  assert.equal((await t.admin(`/beta/jobs/${id}/accept`, { json: {} })).status, 404, 'only the owner decides');
+  const r = await t.tester(`/beta/jobs/${id}/accept`, { json: {} });
+  assert.equal(r.status, 202);
+  const make = t.beta.db.jobs.find((j) => j.kind === 'make')!;
+  assert.equal((await r.json()).id, make.id);
+  assert.deepEqual([make.kind, make.tier, make.priceUsd, make.runDir, make.conceptOf, concept.decision], ['make', 'img', 3.5, concept.runDir, id, 'accepted']);
+  assert.equal((await t.tester(`/beta/jobs/${id}/accept`, { json: {} })).status, 409, 'accepted once');
+  await t.done(make.id);
+  assert.equal(t.beta.db.jobs.length, 2, 'the director did not run again');
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 6);
+  assert.equal((await t.tester(`/beta/jobs/${make.id}/video`)).status, 200);
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'concept.accepted' && e.jobId === id));
+  t.beta.server.close();
+});
+
+test('a failed accepted make auto-retries at the tier price; an admin retry keeps it too', async () => {
+  const t = await gate({ fail: 'make' });
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  await t.done(id);
+  await t.tester(`/beta/jobs/${id}/accept`, { json: {} });
+  await waitFor(() => t.beta.db.jobs.length === 3 && t.beta.db.jobs[2].status === 'done');
+  const [, failed, retry] = t.beta.db.jobs;
+  assert.deepEqual([failed.status, retry.auto, retry.priceUsd, retry.runDir, retry.conceptOf], ['failed', true, 3.5, failed.runDir, id]);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 6);
+  // an admin retry of a failed accepted make (no automatic retry left) keeps the tier price
+  const uid = t.beta.db.songs[0].userId;
+  t.beta.db.jobs.push({ id: 'm2', userId: uid, songId: 's1', kind: 'make', tier: 'hybrid', status: 'failed', reservedUsd: 13.5, priceUsd: 13.5, runDir: `runs/${id}`, conceptOf: id, createdAt: '2026-10-27T00:00:00Z' });
+  const ar = await t.admin('/beta/admin/jobs/m2/retry', { method: 'POST' });
+  assert.equal(ar.status, 202);
+  const again = t.beta.db.jobs.find((j) => j.retryOf === 'm2')!;
+  assert.deepEqual([again.priceUsd, again.conceptOf, again.runDir], [13.5, id, `runs/${id}`]);
+  t.beta.server.close();
+});
+
+test('a concept with concerns needs the extra tick to accept', async () => {
+  const t = await gate({ concerns: '這個風格太熱鬧，和安靜的歌不合' });
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'none', style: PROVEN[0] } })).json();
+  await t.done(id);
+  for (const b of [{}, { confirmConcerns: 'yes' }]) {
+    const r = await t.tester(`/beta/jobs/${id}/accept`, { json: b });
+    assert.equal(r.status, 409);
+    assert.equal((await r.json()).concerns, '這個風格太熱鬧，和安靜的歌不合');
+  }
+  assert.deepEqual([t.beta.db.jobs.length, t.beta.db.jobs[0].decision], [1, undefined]);
+  assert.equal((await t.tester(`/beta/jobs/${id}/accept`, { json: { confirmConcerns: true } })).status, 202);
+  assert.equal(t.beta.db.jobs[1].priceUsd, 1.5);
+  t.beta.server.close();
+});
+
+test('adjust and redo queue a new concept in a new run from the previous one; the 4th attempt is refused', async () => {
+  const t = await gate();
+  await t.put(PNG, 'image/png');
+  const { id: a } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img', concept: '夜晚', style: PROVEN[0], refs: ['ref-1.png'] } })).json();
+  await t.done(a);
+  await t.tester('/beta/songs/s1/refs/ref-1.png', { method: 'DELETE' }); // the copy in the old run carries over
+  for (const note of ['', '  ', 'x'.repeat(501), 7]) assert.equal((await t.tester(`/beta/jobs/${a}/adjust`, { json: { note } })).status, 400, String(note).slice(0, 9));
+  assert.equal((await t.other(`/beta/jobs/${a}/adjust`, { json: { note: '更暗' } })).status, 404);
+  const r1 = await t.tester(`/beta/jobs/${a}/adjust`, { json: { note: ' 更暗一點 ' } });
+  assert.equal(r1.status, 202);
+  const b = (await r1.json()).id;
+  const jb = t.beta.db.jobs.find((j) => j.id === b)!;
+  assert.deepEqual([jb.kind, jb.priceUsd, jb.runDir, jb.inputs], ['concept', 2.5, `runs/${b}`, { concept: '夜晚', style: PROVEN[0], refs: ['ref-1.png'], note: '更暗一點', from: a }]);
+  assert.ok(readFileSync(join(runPath(t.root, jb), 'refs/ref-1.png')).equals(PNG));
+  assert.deepEqual(JSON.parse(readFileSync(join(runPath(t.root, jb), 'inputs.json'), 'utf8')).from, a);
+  assert.equal(t.beta.db.jobs.find((j) => j.id === a)!.decision, 'adjusted');
+  assert.equal((await t.tester(`/beta/jobs/${a}/redo`, { json: {} })).status, 409, 'already decided');
+  await t.done(b);
+  const r2 = await t.tester(`/beta/jobs/${b}/redo`, { json: {} });
+  assert.equal(r2.status, 202);
+  const c = (await r2.json()).id;
+  const jc = t.beta.db.jobs.find((j) => j.id === c)!;
+  assert.deepEqual([jc.inputs, t.beta.db.jobs.find((j) => j.id === b)!.decision], [{ concept: '夜晚', style: PROVEN[0], refs: ['ref-1.png'], from: b }, 'redone']);
+  await t.done(c);
+  for (const [path, body] of [[`/beta/jobs/${c}/redo`, {}], [`/beta/jobs/${c}/adjust`, { note: '再試' }]] as const) {
+    const r = await t.tester(path, { json: body });
+    assert.deepEqual([r.status, (await r.json()).error], [409, '這個版本已試過 3 次概念，請聯絡管理者']);
+  }
+  assert.equal(jc.decision, undefined, 'a refused attempt decides nothing');
+  // the direct make for the same tier is refused too; another tier has its own 3
+  assert.equal((await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).status, 409);
+  assert.equal((await t.tester('/beta/songs/s1/make', { json: { tier: 'none' } })).status, 202);
+  t.beta.server.close();
+});
+
+test('adjust refuses a concept whose run folder is not a run of the same song', async () => {
+  const t = await gate();
+  const uid = t.beta.db.songs[0].userId;
+  t.beta.db.songs.push({ ...t.beta.db.songs[0], id: 's2' });
+  const job = (id: string, songId: string, runDir: string) => ({ id, userId: uid, songId, kind: 'concept' as const, tier: 'img' as const, status: 'done' as const, reservedUsd: 2.5, priceUsd: 2.5, runDir, inputs: { concept: '', refs: [] }, createdAt: '2026-10-27T00:00:00Z' });
+  t.beta.db.jobs.push(job('evil', 's1', 'runs/../../../s2'), job('odd', 's1', 'elsewhere/x'));
+  for (const id of ['evil', 'odd']) assert.equal((await t.tester(`/beta/jobs/${id}/redo`, { json: {} })).status, 409, id);
+  assert.equal(t.beta.db.jobs.length, 2);
+  t.beta.server.close();
+});
+
+test('stills are served from the concept to its owner and the admin only, by the names in concept.json', async () => {
+  const t = await gate();
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  const job = await t.done(id);
+  writeFileSync(join(runPath(t.root, job), 'stills', 'secret.png'), PNG);
+  const s = await t.tester(`/beta/jobs/${id}/stills/still_1.00.png`);
+  assert.deepEqual([s.status, s.headers.get('content-type')], [200, 'image/png']);
+  assert.equal((await t.admin(`/beta/jobs/${id}/stills/still_1.00.png`)).status, 200);
+  assert.equal((await t.other(`/beta/jobs/${id}/stills/still_1.00.png`)).status, 404);
+  for (const bad of ['secret.png', '..%2Fconcept.json', '..%2Finputs.json', 'nope.png']) assert.equal((await t.tester(`/beta/jobs/${id}/stills/${bad}`)).status, 404, bad);
+  t.beta.server.close();
+});
+
+test('a finished concept shows its summary, decision and inputs; the candidate reason is the admin\'s only', async () => {
+  const t = await gate({ candidateReason: '候選語言比較合' });
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img', concept: '海' } })).json();
+  const queued = (await (await t.tester('/beta/jobs')).json())[0];
+  assert.equal(queued.concept, undefined);
+  await t.done(id);
+  const [mine] = await (await t.tester('/beta/jobs')).json();
+  assert.deepEqual([mine.concept.languageName, mine.concept.stills, mine.inputs.concept, mine.decision], ['絲網海報', ['still_1.00.png'], '海', undefined]);
+  assert.equal('candidateReason' in mine.concept, false);
+  const [adm] = await (await t.admin('/beta/admin/jobs')).json();
+  assert.equal(adm.concept.candidateReason, '候選語言比較合');
+  t.beta.server.close();
+});
+
+test('a failed concept job retries by itself with the same inputs and run folder, and is charged once', async () => {
+  const t = await gate({ fail: 'concept' });
+  await t.put(PNG, 'image/png');
+  await t.tester('/beta/songs/s1/make', { json: { tier: 'img', concept: '雨', refs: ['ref-1.png'] } });
+  await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs[1].status === 'done');
+  const [first, retry] = t.beta.db.jobs;
+  assert.deepEqual([first.status, retry.auto, retry.kind, retry.runDir, retry.inputs, retry.priceUsd], ['failed', true, 'concept', first.runDir, first.inputs, 2.5]);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 2.5);
+  // the retry is the concept the person decides on, still one attempt
+  assert.equal((await t.tester(`/beta/jobs/${retry.id}/accept`, { json: {} })).status, 202);
+  t.beta.server.close();
+});
+
+test('the style menu lists proven and candidate languages without tiers; the admin sets tiers; jobs see the candidates', async () => {
+  const t = await gate();
+  assert.equal((await t.anon('/beta/styles')).status, 401);
+  const list = (await (await t.tester('/beta/styles')).json()) as { id: string; name: string; suits: string; image: string | null }[];
+  assert.deepEqual(list.map((s) => s.id), PROVEN);
+  for (const s of list) assert.deepEqual(Object.keys(s).sort(), ['id', 'image', 'name', 'suits']);
+  const withImage = list.find((s) => s.image)!;
+  const img = await t.tester(withImage.image!);
+  assert.deepEqual([img.status, img.headers.get('content-type')], [200, 'image/jpeg']);
+  assert.equal((await t.tester(`/beta/styles/${UNLISTED[0]}/image`)).status, 404);
+  assert.equal((await t.tester('/beta/styles/..%2F..%2Fbeta%2Fdb/image')).status, 404);
+  // admin only: every language with its tier
+  assert.equal((await t.tester('/beta/admin/styles')).status, 403);
+  assert.equal((await t.tester(`/beta/admin/styles/${UNLISTED[0]}`, { method: 'PUT', json: { tier: 'candidate' } })).status, 403);
+  const all = (await (await t.admin('/beta/admin/styles')).json()) as { id: string; tier: string }[];
+  assert.equal(all.length, Object.keys(LANGUAGES).length);
+  assert.equal(all.find((s) => s.id === UNLISTED[0])!.tier, 'unlisted');
+  assert.equal((await t.admin(`/beta/admin/styles/${UNLISTED[0]}`, { method: 'PUT', json: { tier: 'gold' } })).status, 400);
+  assert.equal((await t.admin('/beta/admin/styles/nope', { method: 'PUT', json: { tier: 'candidate' } })).status, 404);
+  for (const id of [UNLISTED[0], UNLISTED[1]]) assert.equal((await t.admin(`/beta/admin/styles/${id}`, { method: 'PUT', json: { tier: 'candidate' } })).status, 200);
+  assert.equal((await t.admin(`/beta/admin/styles/${PROVEN[0]}`, { method: 'PUT', json: { tier: 'unlisted' } })).status, 200);
+  const now = ((await (await t.tester('/beta/styles')).json()) as { id: string }[]).map((s) => s.id);
+  assert.ok(now.includes(UNLISTED[0]) && now.includes(UNLISTED[1]) && !now.includes(PROVEN[0]));
+  assert.equal(JSON.parse(readFileSync(join(t.root, 'db.json'), 'utf8')).styles[UNLISTED[0]].tier, 'candidate');
+  assert.equal((await t.tester('/beta/songs/s1/make', { json: { tier: 'img', style: PROVEN[0] } })).status, 400, 'an unlisted style cannot be picked');
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img', style: UNLISTED[0] } })).json();
+  const job = await t.done(id);
+  assert.equal(readFileSync(join(runPath(t.root, job), 'candidates.txt'), 'utf8'), [UNLISTED[0], UNLISTED[1]].join(','));
+  t.beta.server.close();
+});
+
+test('an admin retry of a legacy failed job checks the limit against what it set aside', async () => {
+  const t = await gate({ limit: 5 });
+  t.beta.db.jobs.push({ id: 'old', userId: t.beta.db.songs[0].userId, songId: 's1', kind: 'make', tier: 'img', status: 'failed', reservedUsd: 6, createdAt: '2026-10-27T00:00:00Z' });
+  const r = await t.admin('/beta/admin/jobs/old/retry', { method: 'POST' });
+  assert.equal(r.status, 409);
+  assert.match((await r.json()).error, /額度不足/);
+  t.beta.server.close();
 });

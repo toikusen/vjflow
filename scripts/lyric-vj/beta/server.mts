@@ -1,9 +1,10 @@
 // The closed beta's backend: invited people log in with their link, see their own songs and jobs, and queue work
 // within their limit; the admin invites people, sets limits and retries failed jobs.
 // npx tsx scripts/lyric-vj/beta/server.mts   (listens on 127.0.0.1:4320; the tunnel points at it)
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { LANGUAGES, LanguageId } from '../../../src/app/lyric-vj/languages';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
@@ -11,7 +12,8 @@ import { logEvent, readEvents } from './events.mts';
 import { addFeedback, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { charged, Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, TIER_TOTAL, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import type { ConceptSummary } from './concept-summary.mts';
+import { candidateIds, charged, Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -21,7 +23,24 @@ const MAX_LYRICS = 20_000;
 const TIERS: Tier[] = ['none', 'img', 'hybrid'];
 const LANGS = ['ja', 'zh', 'en', 'ko'];
 const AUDIO: Record<string, string> = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/flac': '.flac', 'audio/x-flac': '.flac', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac' };
-const SERVE: Record<string, string> = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mp4': 'video/mp4' };
+const SERVE: Record<string, string> = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+const MAX_CONCEPT = 500;
+const MAX_REFS = 5;
+const MAX_REF_BYTES = 10_000_000;
+/** The reference image types a person may upload, each checked by its first bytes (the declared type alone proves nothing). */
+const IMAGE: Record<string, { ext: string; magic: (b: Buffer) => boolean }> = {
+  'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+  'image/png': { ext: 'png', magic: (b) => b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) },
+  'image/webp': { ext: 'webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
+};
+/** Reference names are the server's own; nothing else under a song's refs/ is ever served. */
+const REF_NAME = /^ref-(\d+)\.(jpg|png|webp)$/;
+const TIERS_OF_STYLE: StyleTier[] = ['proven', 'candidate', 'unlisted'];
+const REFERENCES = fileURLToPath(new URL('../references/', import.meta.url));
+/** A language's picture for the style menu: its kit image, else its sample strip. */
+const styleImage = (id: string) => ['kits', 'samples'].map((d) => join(REFERENCES, d, `${id}.jpg`)).find((f) => existsSync(f));
+/** A concept text's length in characters (not UTF-16 units). */
+const chars = (s: string) => [...s].length;
 
 /** Streams a file with range support (the timing editor and the video player seek with range requests). */
 function sendFile(req: IncomingMessage, res: ServerResponse, file: string) {
@@ -32,12 +51,35 @@ function sendFile(req: IncomingMessage, res: ServerResponse, file: string) {
   if (range) {
     const start = Number(range[1]);
     const end = Math.min(size - 1, range[2] ? Number(range[2]) : size - 1);
-    res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1 });
+    res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1, 'x-content-type-options': 'nosniff' });
     return void createReadStream(file, { start, end }).pipe(res);
   }
-  res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes' });
+  res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff' });
   createReadStream(file).pipe(res);
 }
+
+/**
+ * A request body up to `max` bytes. Past it the rest is drained without being kept (so the 413 reaches the client) and
+ * the connection is cut once four times the limit has passed.
+ */
+const readBody = (req: IncomingMessage, max: number) =>
+  new Promise<Buffer | 'too-big'>((ok, fail) => {
+    const parts: Buffer[] = [];
+    let n = 0;
+    req.on('data', (c: Buffer) => {
+      n += c.length;
+      if (n <= max) parts.push(c);
+      else if (n > 4 * max) req.destroy();
+    });
+    req.on('end', () => ok(n > max ? 'too-big' : Buffer.concat(parts)));
+    req.on('error', fail);
+  });
+
+/** The reference images of a song folder, in upload order. */
+const songRefs = (dir: string) => {
+  const refs = join(dir, 'refs');
+  return existsSync(refs) ? readdirSync(refs).filter((n) => REF_NAME.test(n)).sort((a, b) => Number(REF_NAME.exec(a)![1]) - Number(REF_NAME.exec(b)![1])) : [];
+};
 
 /** Saves a request body to a file, refusing past `max` bytes (the partial file is removed). */
 const saveBody = (req: IncomingMessage, file: string, max: number) =>
@@ -93,7 +135,28 @@ export function jobStyle(root: string, job: Job): string | undefined {
     return undefined;
   }
 }
-const publicJob = (j: Job, root?: string) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto, style: root && (j.status === 'done' || j.status === 'admin') ? jobStyle(root, j) : undefined });
+const conceptCache = new Map<string, ConceptSummary>();
+/** A finished concept job's summary from its concept.json; cached by job id once read. */
+export function jobConcept(root: string, job: Job): ConceptSummary | undefined {
+  if (job.kind !== 'concept' || job.status !== 'done') return undefined;
+  const hit = conceptCache.get(job.id);
+  if (hit) return hit;
+  try {
+    const c = JSON.parse(readFileSync(join(runPath(root, job), 'concept.json'), 'utf8')) as ConceptSummary;
+    if (!c || typeof c !== 'object' || !Array.isArray(c.stills)) return undefined;
+    conceptCache.set(job.id, c);
+    return c;
+  } catch {
+    return undefined;
+  }
+}
+/** What the owner (or, with `admin`, the admin) sees of a job; the candidate reason names a tier, so only the admin sees it. */
+const publicJob = (j: Job, root?: string, admin = false) => {
+  const c = root ? jobConcept(root, j) : undefined;
+  const concept = c && !admin ? (({ candidateReason: _, ...rest }) => rest)(c) : c;
+  return { id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto, style: root && (j.status === 'done' || j.status === 'admin') ? jobStyle(root, j) : undefined,
+    inputs: j.inputs, decision: j.decision, conceptOf: j.conceptOf, concept };
+};
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
 /**
@@ -111,7 +174,9 @@ export function stopBeta(b: { db: Db; queue: Queue; orphans?: number[] }, exit: 
 export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
-  const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }) };
+  const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }),
+    // the candidates as they are when the concept starts (the admin may change tiers while it waits)
+    jobEnv: (job) => (job.kind === 'concept' ? { VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
   q.holding = true; // nothing starts, whatever gets enqueued, until the orphans are gone
   const orphanSongs = new Map(db.jobs.filter((j) => j.status === 'running' && j.pid).map((j) => [j.pid!, j.songId]));
   const orphans = killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
@@ -134,18 +199,40 @@ export function createBetaServer(o: BetaOptions) {
   };
   const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).catch(() => orphans.slice()).then(release) : (release([]), Promise.resolve());
 
-  /** Queues a job for a song the person owns, inside their limit. */
-  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string) => {
-    // until makes go through concepts, a direct make charges concept + rest, the same total as before the split
-    const price = kind === 'make' && tier ? TIER_TOTAL(tier) : priceFor(kind, tier);
-    const why = refuse(db, user.id, kind, tier, songId, price);
+  /** The previous concept's run id when it is a run folder of a concept job of the same song, else undefined. */
+  const conceptRunId = (songId: string, from: string | undefined) =>
+    from && /^[\w-]+$/.test(from) && db.jobs.some((j) => j.kind === 'concept' && j.songId === songId && j.runDir === `runs/${from}`) ? from : undefined;
+
+  /**
+   * Queues a job for a song the person owns, inside their limit. A concept job gets a fresh run folder holding its
+   * inputs.json and a copy of the chosen refs from `refsFrom` (so a later change to the song's refs cannot touch it);
+   * a make job works in the given run folder (its accepted concept's) at the tier price.
+   */
+  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, extra: { runDir?: string; inputs?: Job['inputs']; conceptOf?: string; refsFrom?: string } = {}) => {
+    // refuse() skips the attempt limit without a tier, so a concept or make must name one
+    if (kind !== 'prep' && (!tier || !TIERS.includes(tier))) return { error: '方案不正確' };
+    const why = refuse(db, user.id, kind, tier, songId);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
+    if (kind === 'concept' && extra.inputs?.from !== undefined && !conceptRunId(songId, extra.inputs.from)) return { error: '找不到上一版概念' };
     const id = newId();
-    const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: price, priceUsd: price, createdAt: new Date().toISOString() };
+    const price = priceFor(kind, tier);
+    const runDir = kind === 'prep' ? undefined : kind === 'concept' ? `runs/${id}` : (extra.runDir ?? `runs/${id}`);
+    const job: Job = { id, runDir, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: price, priceUsd: price, createdAt: new Date().toISOString(),
+      ...(extra.conceptOf ? { conceptOf: extra.conceptOf } : {}) };
+    if (kind === 'concept') {
+      const run = runPath(o.root, job);
+      const given = extra.inputs ?? { concept: '', refs: [] };
+      const refs = extra.refsFrom ? given.refs.filter((n) => REF_NAME.test(n) && existsSync(join(extra.refsFrom!, n))) : [];
+      mkdirSync(run, { recursive: true });
+      if (refs.length) mkdirSync(join(run, 'refs'), { recursive: true });
+      for (const n of refs) copyFileSync(join(extra.refsFrom!, n), join(run, 'refs', n));
+      job.inputs = { concept: given.concept, ...(given.style ? { style: given.style } : {}), refs, ...(given.note ? { note: given.note } : {}), ...(given.from ? { from: given.from } : {}) };
+      writeFileSync(join(run, 'inputs.json'), JSON.stringify(job.inputs, null, 1));
+    }
     db.jobs.push(job);
     q.persist();
-    logEvent(o.root, songId, { type: 'job.queued', jobId: id, by: user.id, kind, tier, priceUsd: job.priceUsd });
+    logEvent(o.root, songId, { type: 'job.queued', jobId: id, by: user.id, kind, tier, priceUsd: job.priceUsd, ...(job.inputs ? { inputs: job.inputs } : {}), ...(job.conceptOf ? { conceptOf: job.conceptOf } : {}) });
     pump(q);
     return { job };
   };
@@ -171,7 +258,15 @@ export function createBetaServer(o: BetaOptions) {
       const user = userByToken(db, cookie(req, 'vjb'));
       if (!user) return json(res, 401, { error: '請用邀請連結登入' });
       if (path === '/beta/me') return json(res, 200, publicUser(db, user));
-      if (path === '/beta/jobs') return json(res, 200, db.jobs.filter((j) => user.admin || j.userId === user.id).map((j) => publicJob(j, o.root)));
+      if (path === '/beta/jobs') return json(res, 200, db.jobs.filter((j) => user.admin || j.userId === user.id).map((j) => publicJob(j, o.root, user.admin)));
+      // the style menu: what a person may pick, never the tiers
+      if (path === '/beta/styles' && req.method === 'GET')
+        return json(res, 200, Object.entries(LANGUAGES).filter(([id]) => styleOffered(db, id)).map(([id, l]) => ({ id, name: l.name, suits: l.suits, image: styleImage(id) ? `/beta/styles/${id}/image` : null })));
+      const si = /^\/beta\/styles\/([\w-]+)\/image$/.exec(path);
+      if (si && req.method === 'GET') {
+        const file = si[1] in LANGUAGES && (user.admin || styleOffered(db, si[1])) ? styleImage(si[1]) : undefined;
+        return file ? sendFile(req, res, file) : json(res, 404, { error: '找不到' });
+      }
       if (path === '/beta/songs' && req.method === 'GET') return json(res, 200, db.songs.filter((s) => user.admin || s.userId === user.id));
       // a new song: its words first (the person's own lyrics are the authority), the audio next
       if (path === '/beta/songs' && req.method === 'POST') {
@@ -249,15 +344,96 @@ export function createBetaServer(o: BetaOptions) {
         }
         return void res.writeHead(405).end();
       }
+      // a song's reference images: the owner adds and removes them; the owner and the admin see them
+      const rf = /^\/beta\/songs\/([\w-]+)\/refs(?:\/([^/]+))?$/.exec(path);
+      if (rf) {
+        const reading = req.method === 'GET';
+        const song = db.songs.find((s) => s.id === rf[1] && (s.userId === user.id || (user.admin && reading)));
+        if (!song) return json(res, 404, { error: '找不到這首歌' });
+        const dir = songDir(o.root, song.id);
+        if (!rf[2] && reading) return json(res, 200, songRefs(dir));
+        if (!rf[2] && req.method === 'PUT') {
+          if (songRefs(dir).length >= MAX_REFS) return json(res, 409, { error: '參考圖最多 5 張' });
+          const type = IMAGE[(req.headers['content-type'] ?? '').split(';')[0].trim()];
+          if (!type) return json(res, 415, { error: '請上傳 jpg、png 或 webp 圖片' });
+          const body = await readBody(req, MAX_REF_BYTES);
+          if (body === 'too-big') return json(res, 413, { error: '圖片太大（上限 10 MB）' });
+          if (!body.length) return json(res, 400, { error: '沒有收到圖片' });
+          if (!type.magic(body)) return json(res, 415, { error: '圖片格式不正確' });
+          const refs = songRefs(dir);
+          if (refs.length >= MAX_REFS) return json(res, 409, { error: '參考圖最多 5 張' });
+          const name = `ref-${Math.max(0, ...refs.map((n) => Number(REF_NAME.exec(n)![1]))) + 1}.${type.ext}`;
+          mkdirSync(join(dir, 'refs'), { recursive: true });
+          writeFileSync(join(dir, 'refs', name), body);
+          logEvent(o.root, song.id, { type: 'ref.uploaded', by: user.id, name, bytes: body.length });
+          return json(res, 201, { name });
+        }
+        const name = rf[2] && REF_NAME.test(rf[2]) ? rf[2] : undefined;
+        const file = name ? join(dir, 'refs', name) : '';
+        if (!name || !existsSync(file)) return json(res, 404, { error: '找不到這張圖' });
+        if (reading) return sendFile(req, res, file);
+        if (req.method === 'DELETE') {
+          rmSync(file);
+          logEvent(o.root, song.id, { type: 'ref.deleted', by: user.id, name });
+          return void res.writeHead(204).end();
+        }
+        return void res.writeHead(405).end();
+      }
+      // making a version starts with its concept: the person's wishes go to the director, the make waits for acceptance
       const mk = /^\/beta\/songs\/([\w-]+)\/make$/.exec(path);
       if (mk && req.method === 'POST') {
         const song = db.songs.find((s) => s.id === mk[1] && s.userId === user.id);
         if (!song) return json(res, 404, { error: '找不到這首歌' });
         if (!song.confirmedAt) return json(res, 409, { error: '請先確認歌詞時間' });
-        const tier = (await readJson(req)).tier as Tier;
+        const b = await readJson(req);
+        const tier = b.tier as Tier;
         if (!TIERS.includes(tier)) return json(res, 400, { error: '方案不正確' });
-        const r = enqueue(user, song.id, 'make', tier);
+        if (b.concept !== undefined && typeof b.concept !== 'string') return json(res, 400, { error: '格式錯誤' });
+        const concept = ((b.concept as string | undefined) ?? '').trim();
+        if (chars(concept) > MAX_CONCEPT) return json(res, 400, { error: '想要的感覺最多 500 字' });
+        const style = b.style === undefined || b.style === null || b.style === '' ? undefined : b.style;
+        if (style !== undefined && (typeof style !== 'string' || !styleOffered(db, style))) return json(res, 400, { error: '這個風格不能選' });
+        const refs = b.refs ?? [];
+        const have = songRefs(songDir(o.root, song.id));
+        if (!Array.isArray(refs) || refs.length > MAX_REFS || new Set(refs).size !== refs.length || refs.some((r) => typeof r !== 'string' || !have.includes(r)))
+          return json(res, 400, { error: '找不到參考圖' });
+        const r = enqueue(user, song.id, 'concept', tier, { inputs: { concept, style, refs: refs as string[] }, refsFrom: join(songDir(o.root, song.id), 'refs') });
         return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job, o.root));
+      }
+      // the person's decision on a finished concept: accept it (the make runs in its folder), adjust it with a note, or try again
+      const dc = /^\/beta\/jobs\/([\w-]+)\/(accept|adjust|redo)$/.exec(path);
+      if (dc && req.method === 'POST') {
+        const j = db.jobs.find((x) => x.id === dc[1] && x.kind === 'concept' && x.userId === user.id);
+        if (!j) return json(res, 404, { error: '找不到這個概念' });
+        if (j.decision) return json(res, 409, { error: '這個概念已經決定過了' });
+        const summary = jobConcept(o.root, j);
+        if (!summary) return json(res, 409, { error: '概念還沒完成' });
+        const b = await readJson(req);
+        if (dc[2] === 'accept') {
+          if (summary.concerns?.trim() && b.confirmConcerns !== true) return json(res, 409, { error: '導演認為這個風格不太適合這首歌，請確認後再接受', concerns: summary.concerns });
+          const r = enqueue(user, j.songId, 'make', j.tier, { runDir: j.runDir, conceptOf: j.id });
+          if ('error' in r) return json(res, 409, r);
+          j.decision = 'accepted';
+          q.persist();
+          logEvent(o.root, j.songId, { type: 'concept.accepted', jobId: j.id, by: user.id, makeJobId: r.job.id, confirmedConcerns: !!summary.concerns?.trim() });
+          return json(res, 202, publicJob(r.job, o.root));
+        }
+        const note = dc[2] === 'adjust' ? (typeof b.note === 'string' ? b.note.trim() : '') : undefined;
+        if (note !== undefined && (!note || chars(note) > MAX_CONCEPT)) return json(res, 400, { error: '請寫下想調整的地方（最多 500 字）' });
+        const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
+        const r = enqueue(user, j.songId, 'concept', j.tier, { inputs: { concept: j.inputs?.concept ?? '', style: j.inputs?.style, refs: j.inputs?.refs ?? [], note, from }, refsFrom: join(runPath(o.root, j), 'refs') });
+        if ('error' in r) return json(res, 409, r);
+        j.decision = note !== undefined ? 'adjusted' : 'redone';
+        q.persist();
+        logEvent(o.root, j.songId, { type: `concept.${j.decision}`, jobId: j.id, by: user.id, next: r.job.id });
+        return json(res, 202, publicJob(r.job, o.root));
+      }
+      // a concept's stills, by the names its summary lists
+      const st = /^\/beta\/jobs\/([\w-]+)\/stills\/([^/]+)$/.exec(path);
+      if (st && req.method === 'GET') {
+        const j = db.jobs.find((x) => x.id === st[1] && x.kind === 'concept' && (x.userId === user.id || user.admin));
+        const name = j && jobConcept(o.root, j)?.stills.includes(st[2]) && /^[\w.-]+\.(png|jpe?g)$/.test(st[2]) ? st[2] : undefined;
+        return j && name ? sendFile(req, res, join(runPath(o.root, j), 'stills', name)) : json(res, 404, { error: '找不到' });
       }
       if (!path.startsWith('/beta/admin/')) return json(res, 404, { error: '找不到' });
       if (!user.admin) return json(res, 403, { error: '只有管理者可以使用' });
@@ -303,7 +479,8 @@ export function createBetaServer(o: BetaOptions) {
         const again = db.jobs.find((x) => x.retryOf === j.id);
         if (again) return json(res, 409, { error: `已經重跑過（見 ${again.id}）` });
         const owner = db.users.find((u) => u.id === j.userId)!;
-        const why = refuse(db, owner.id, j.kind, j.tier, j.songId, j.priceUsd);
+        // a legacy job has no fixed price: what it set aside stands in for it
+        const why = refuse(db, owner.id, j.kind, j.tier, j.songId, j.priceUsd ?? j.reservedUsd);
         if (why) return json(res, 409, { error: why });
         if (db.jobs.some((x) => x.songId === j.songId && (x.status === 'queued' || x.status === 'running'))) return json(res, 409, { error: '這首歌已經在排隊或製作中' });
         const job = retryJob(db, j, { auto: false });
@@ -353,7 +530,19 @@ export function createBetaServer(o: BetaOptions) {
         return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
       if (path === '/beta/admin/feedback') return json(res, 200, [...db.feedback].reverse());
-      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j, o.root), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, costs: j.costs, fused: j.fused, chargedUsd: charged(j), unsettled: j.unsettled, error: j.error })));
+      // every design language and its tier: proven and candidate ones are on the menu, candidates make the director give a reason
+      if (path === '/beta/admin/styles' && req.method === 'GET')
+        return json(res, 200, Object.entries(LANGUAGES).map(([id, l]) => ({ id, name: l.name, suits: l.suits, proven: !!l.proven, tier: styleTier(db, id), image: styleImage(id) ? `/beta/styles/${id}/image` : null })));
+      const as = /^\/beta\/admin\/styles\/([\w-]+)$/.exec(path);
+      if (as && req.method === 'PUT') {
+        if (!(as[1] in LANGUAGES)) return json(res, 404, { error: '找不到這個風格' });
+        const tier = (await readJson(req)).tier as StyleTier;
+        if (!TIERS_OF_STYLE.includes(tier)) return json(res, 400, { error: '等級不正確' });
+        db.styles = { ...db.styles, [as[1]]: { tier } };
+        q.persist();
+        return json(res, 200, { id: as[1], tier });
+      }
+      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j, o.root, true), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, costs: j.costs, fused: j.fused, chargedUsd: charged(j), unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });
     } catch (e) {
       json(res, 400, { error: (e as Error).message });

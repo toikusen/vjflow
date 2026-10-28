@@ -281,7 +281,7 @@ test('unsungFrameRule: mixed windows state both; no windows gives the plain old 
 });
 
 test('quietFrames: people are cleared in backdrop windows only, sung time and pictures windows keep them', () => {
-  const cues = [{ id: 'c1', start: 5 }, { id: 'c2', start: 20 }];
+  const cues = [{ id: 'c1', start: 5 }, { id: 'c2', start: 40 }];
   const frames = [
     { cue: '@24.5', who: ['a'] }, { cue: 'c1', who: ['a'] }, { cue: '@18', who: ['b'] }, { cue: '@17', who: [] },
   ];

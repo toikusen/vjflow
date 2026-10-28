@@ -4,13 +4,19 @@
 # Each step is skipped when its output exists, so a retried job resumes. Prints ##PHASE / ##COST lines for the queue;
 # exit 10 = the video is made but a key story shot needs the admin's eye before it is handed over.
 # Everything of one job lives in its run dir: a snapshot of song.json taken at the start, the steps' files, video.mp4.
-# usage: scripts/lyric-vj/beta/make.sh <song dir> <none|img|hybrid> <run dir>
+# Without a run dir (a server still on the old layout) it works in the song dir as before: make/ and video-<tier>.mp4.
+# usage: scripts/lyric-vj/beta/make.sh <song dir> <none|img|hybrid> [<run dir>]
 set -euo pipefail
-d=$1; tier=$2; run=$3
+d=$1; tier=$2; run=${3:-}
 cd "$(dirname "$0")/../../.."
-mkdir -p "$run"
-[ -f "$run/song.json" ] || cp "$d/song.json" "$run/song.json"
-S=$run/song.json; w=$run
+if [ -n "$run" ]; then
+  mkdir -p "$run"
+  [ -f "$run/song.json" ] || cp "$d/song.json" "$run/song.json"
+  S=$run/song.json; w=$run; out=$run/video.mp4
+else
+  S=$d/song.json; w=$d/make; out=$d/video-$tier.mp4
+  mkdir -p "$w"
+fi
 end=$(python3 -c "import json,sys;print('%.2f'%json.load(open(sys.argv[1]))['duration'])" "$S")
 # the cost a step wrote into its json (costUSD), or the last $ amount on its log
 cost_json() { [ -f "$1" ] && python3 -c "import json,sys;print('##COST %.3f' % (json.load(open(sys.argv[1])).get('costUSD') or 0))" "$1" || true; }
@@ -55,7 +61,7 @@ echo '##PHASE 輸出影片'
 # render.mts refuses to finish with a black stretch left (blackSpans), so a made file has picture throughout
 ls "$tr/video/"lyric-vj_vocal_0-*.mp4 > /dev/null 2>&1 || npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$tr/treatment.json" --assets "$tr/assets.json" --start 0 --end "$end" --fps 30 --workers 2 --out "$tr/video" > "$w/render-$tier.log" 2>&1
 rm -rf "$tr/video/render" "$tr/video/segments"
-cp "$(ls "$tr/video/"lyric-vj_vocal_0-*.mp4 | head -1)" "$run/video.mp4.tmp" && mv "$run/video.mp4.tmp" "$run/video.mp4"
+cp "$(ls "$tr/video/"lyric-vj_vocal_0-*.mp4 | head -1)" "$out.tmp" && mv "$out.tmp" "$out"
 [ "$tier" = hybrid ] && grep -q 'key shot kept' "$w/cut.log" && { echo '##PHASE 等管理者確認一張畫面'; exit 10; }
 # a figure hiding much of a lyric holds the video for the admin. Tokyo Drift v2, which the user accepted, peaked at
 # 35 % (render.mts logs "lyric covered … hides N%"); the 40 % line is that plus a margin, not a measured taste line

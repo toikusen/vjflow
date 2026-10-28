@@ -77,6 +77,8 @@ export function createBetaServer(o: BetaOptions) {
   const db = load(dbFile);
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env };
   requeueRunning(db);
+  // make jobs queued before run folders existed get one now, so their output lands where videoFile looks
+  for (const j of db.jobs) if (j.kind === 'make' && j.status === 'queued' && !j.runDir) j.runDir = `runs/${j.id}`;
   q.persist();
   pump(q);
 

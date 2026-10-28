@@ -170,3 +170,20 @@ test('the old per-tier video link serves the latest done run', async () => {
   assert.equal(await (await t.tester('/beta/songs/s1/video/img')).text(), 'new-run');
   t.beta.server.close();
 });
+
+test('a legacy make job still queued at start gets a run folder and its video downloads by job', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'beta-'));
+  const db = emptyDb();
+  const tester = invite(db, 'Tester', 10);
+  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  db.jobs.push({ id: 'old', userId: tester.user.id, songId: 's1', kind: 'make', tier: 'img', status: 'running', reservedUsd: 6, createdAt: '2026-10-27T00:00:00Z' });
+  save(join(root, 'db.json'), db);
+  const beta = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##COST 1'` });
+  await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
+  const job = beta.db.jobs[0];
+  assert.equal(job.runDir, 'runs/old');
+  for (let k = 0; k < 50 && job.status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  const res = await fetch(`http://127.0.0.1:${(beta.server.address() as AddressInfo).port}/beta/jobs/old/video`, { headers: { cookie: `vjb=${tester.token}` } });
+  assert.equal(res.status, 200);
+  beta.server.close();
+});

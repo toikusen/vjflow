@@ -15,5 +15,5 @@ npx tsx scripts/lyric-vj/song.mts --audio "$d/mix.mp3" --vocals "$d/vocals.wav" 
 echo '##PHASE 檢查錯字'
 npx tsx scripts/lyric-vj/proofread.mts --song "$d/song.json" 2>&1 | tee "$d/proofread.log" || echo "proofread skipped"
 cost=$(grep -oE '\$[0-9.]+' "$d/proofread.log" | tail -1 | tr -d '$' || true)
-[ -n "$cost" ] && echo "##COST $cost proofread"
+[ -n "$cost" ] && awk -v c="$cost" 'BEGIN{exit !(c>0)}' && echo "##COST $cost proofread"
 true

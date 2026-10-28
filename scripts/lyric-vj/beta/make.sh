@@ -18,9 +18,10 @@ else
   mkdir -p "$w"
 fi
 end=$(python3 -c "import json,sys;print('%.2f'%json.load(open(sys.argv[1]))['duration'])" "$S")
-# the cost a step wrote into its json (costUSD), or the last $ amount on its log; the key (2nd argument) makes a step count once
-cost_json() { [ -f "$1" ] && python3 -c "import json,sys;print('##COST %.3f %s' % (json.load(open(sys.argv[1])).get('costUSD') or 0, sys.argv[2]))" "$1" "$2" || true; }
-cost_log() { local c; c=$(grep -oE '\$[0-9]+\.[0-9]+' "$1" | tail -1 | tr -d '$' || true); [ -n "$c" ] && echo "##COST $c $2" || true; }
+# the cost a step wrote into its json (costUSD), or the last $ amount on its log; the key (2nd argument) makes a step count once.
+# Nothing is printed when the cost is missing or zero: a ##COST line locks its key, so a 0 would drop the real cost on a rerun.
+cost_json() { [ -f "$1" ] && python3 -c "import json,sys;c=json.load(open(sys.argv[1])).get('costUSD') or 0;c>0 and print('##COST %.3f %s' % (c, sys.argv[2]))" "$1" "$2" || true; }
+cost_log() { local c; c=$(grep -oE '\$[0-9]+\.[0-9]+' "$1" | tail -1 | tr -d '$' || true); [ -n "$c" ] && awk -v c="$c" 'BEGIN{exit !(c>0)}' && echo "##COST $c $2" || true; }
 
 echo '##PHASE 導演規劃段落與故事'
 # direct.mts logs "attempt N: E errors" after each story draft, then designs the look: those lines become phases

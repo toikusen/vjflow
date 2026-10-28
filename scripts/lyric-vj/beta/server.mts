@@ -178,7 +178,9 @@ const publicJob = (j: Job, root?: string, admin = false) => {
   const c = root ? jobConcept(root, j) : undefined;
   const concept = c && !admin ? (({ candidateReason: _, ...rest }) => rest)(c) : c;
   return { id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto, style: root && (j.status === 'done' || j.status === 'admin') ? jobStyle(root, j) : undefined,
-    inputs: j.inputs, decision: j.decision, conceptOf: j.conceptOf, concept };
+    inputs: j.inputs, decision: j.decision, conceptOf: j.conceptOf, concept,
+    // why a fix failed without the raw error text: its only ##NORETRY reason is an empty range
+    nothingToRemove: j.kind === 'fix' && j.status === 'failed' && j.noRetry ? true : undefined };
 };
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 

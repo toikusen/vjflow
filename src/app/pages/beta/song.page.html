@@ -63,7 +63,9 @@
             <div class="f-text">
               <h2>{{ fc.title }}</h2>
               <p>
-                @if (fc.price !== undefined) {
+                @if (fc.reason) {
+                  {{ fc.reason }}
+                } @else if (fc.price !== undefined) {
                   這次的 <app-price [amount]="fc.price" digits="short" [plain]="true" /> 已退回你的餘額。管理者已收到通知，會查原因後幫你重跑或聯絡你。
                 } @else {
                   這次的費用已退回你的餘額。管理者已收到通知，會查原因後幫你重跑或聯絡你。
@@ -165,8 +167,14 @@
       }
     }
   </main>
-} @else if (loaded()) {
-  <main class="body"><div class="empty"><p>找不到這首歌</p></div></main>
+} @else {
+  <!-- the shell hides its phone top bar on this page, so the back link stays here when there is no hero -->
+  <main class="body">
+    <a class="back" href="/my">← 我的歌曲</a>
+    @if (loaded()) {
+      <div class="empty"><p>找不到這首歌</p></div>
+    }
+  </main>
 }
 
 <app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />
@@ -243,7 +251,10 @@
       <div><dt>花費時間</dt><dd>約 {{ minutes(j) }} 分鐘</dd></div>
     }
     @if (j.status === 'done') {
-      <div><dt>回報</dt><dd [title]="summary(j)">已回報 {{ reportCount(j) }} 次</dd></div>
+      <div><dt>回報</dt><dd>已回報 {{ reportCount(j) }} 次</dd></div>
     }
   </dl>
+  @if (j.status === 'done' && lastReport(j)) {
+    <p class="report-line">{{ lastReport(j) }}</p>
+  }
 </ng-template>

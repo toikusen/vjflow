@@ -73,4 +73,17 @@ describe('failureCard', () => {
     expect(failureCard(retry, [first, retry])).toEqual({ title: '文字動態版製作失敗，自動重試也沒成功', price: 4, stamps: ['10-28 07:44 失敗', '10-28 07:50 重試失敗'] });
     expect(failureCard(first, [first])).toEqual({ title: '文字動態版製作失敗', price: 4, stamps: ['10-28 07:44 失敗'] });
   });
+  it('names a failed concept by its tier and a failed fix as 修正', () => {
+    const concept = job({ id: 'c', kind: 'concept', tier: 'hybrid', status: 'failed', priceUsd: 2.5, auto: true, retryOf: 'x', endedAt: '2026-10-28T07:50:00' });
+    expect(failureCard(concept, [concept])).toMatchObject({ title: '故事版的概念產生失敗，自動重試也沒成功', price: 2.5 });
+    expect(failureCard({ ...concept, auto: undefined, retryOf: undefined }, []).title).toBe('故事版的概念產生失敗');
+    const fix = job({ id: 'f', kind: 'fix', tier: 'img', status: 'failed', priceUsd: 1, auto: true, retryOf: 'x', endedAt: '2026-10-28T07:50:00' });
+    expect(failureCard(fix, [fix])).toMatchObject({ title: '修正失敗，自動重試也沒成功', price: 1 });
+    expect(failureCard({ ...fix, auto: undefined, retryOf: undefined }, []).title).toBe('修正失敗');
+  });
+  it('a fix with nothing to remove says so, and that it cost nothing', () => {
+    const fix = job({ id: 'f', kind: 'fix', tier: 'img', status: 'failed', priceUsd: 1, nothingToRemove: true, endedAt: '2026-10-28T07:50:00' });
+    expect(failureCard(fix, [fix])).toMatchObject({ title: '修正失敗', reason: '標記的範圍裡沒有找到可以拿掉的圖，這次沒有收費。' });
+    expect(failureCard({ ...fix, nothingToRemove: undefined }, []).reason).toBeUndefined();
+  });
 });

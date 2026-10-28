@@ -1224,6 +1224,9 @@ test('fix: a fix with nothing to remove fails at no charge and does not retry by
   await waitFor(() => fix.status === 'failed');
   await new Promise((ok) => setTimeout(ok, 300));
   assert.deepEqual([fix.error, fix.noRetry], ['標記的範圍裡沒有可以拿掉的圖', true]);
+  // the person sees why without the raw error text
+  const seen = ((await (await t.tester('/beta/jobs')).json()) as { id: string; nothingToRemove?: boolean; error?: string }[]).find((j) => j.id === fix.id)!;
+  assert.deepEqual([seen.nothingToRemove, seen.error], [true, undefined]);
   assert.equal(t.beta.db.jobs.filter((j) => j.retryOf === fix.id).length, 0);
   assert.equal(readEvents(t.root, 's1').filter((e) => e.type === 'job.autoretry').length, 0);
   t.beta.server.close();
@@ -1237,5 +1240,7 @@ test('fix: a system failure of a fix still retries by itself at the fix price', 
   const again = t.beta.db.jobs.find((j) => j.retryOf === fix.id)!;
   assert.deepEqual([again.kind, again.priceUsd, again.runDir, again.auto], ['fix', 1, fix.runDir, true]);
   await waitFor(() => again.status === 'failed');
+  const seen = ((await (await t.tester('/beta/jobs')).json()) as { id: string; nothingToRemove?: boolean }[]).find((j) => j.id === again.id)!;
+  assert.equal(seen.nothingToRemove, undefined);
   t.beta.server.close();
 });

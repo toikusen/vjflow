@@ -178,6 +178,10 @@ a {
   padding: 28px 40px 48px;
 }
 
+.body > .back {
+  align-self: flex-start;
+}
+
 .section-head {
   display: flex;
   align-items: baseline;
@@ -618,6 +622,12 @@ a {
   }
 }
 
+.report-line {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .r-actions {
   display: flex;
   gap: 8px;
@@ -918,6 +928,10 @@ a {
 
   .r-head h3 {
     font-size: 17px;
+  }
+
+  .report-line {
+    margin-top: 6px;
   }
 
   .facts {

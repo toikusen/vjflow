@@ -53,10 +53,22 @@ export function stamp(iso?: string) {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** The 3b failure card: which version failed (and whether the automatic retry did too), the refunded price and when. */
-export function failureCard(failed: BetaJob, jobs: BetaJob[]) {
+/** The line a fix with nothing to remove shows in place of the refund line (the server sends only the flag, not its error). */
+export const NOTHING_TO_REMOVE_LINE = '標記的範圍裡沒有找到可以拿掉的圖，這次沒有收費。';
+
+/**
+ * The 3b failure card for the latest failed make, concept or fix: what failed (and whether the automatic retry did too),
+ * the refunded price, when, and for a fix with nothing to remove the reason in place of the refund line.
+ */
+export function failureCard(failed: BetaJob, jobs: BetaJob[]): { title: string; price?: number; stamps: string[]; reason?: string } {
   const name = TIER_INFO[failed.tier ?? 'none'].name;
+  const what = failed.kind === 'concept' ? `${name}的概念產生失敗` : failed.kind === 'fix' ? '修正失敗' : `${name}製作失敗`;
   const first = failed.auto && failed.retryOf ? jobs.find((x) => x.id === failed.retryOf) : undefined;
   const stamps = first ? [`${stamp(first.endedAt)} 失敗`, `${stamp(failed.endedAt)} 重試失敗`] : [`${stamp(failed.endedAt)} 失敗`];
-  return { title: failed.auto ? `${name}製作失敗，自動重試也沒成功` : `${name}製作失敗`, price: failed.priceUsd, stamps };
+  return {
+    title: failed.auto ? `${what}，自動重試也沒成功` : what,
+    price: failed.priceUsd,
+    stamps,
+    ...(failed.nothingToRemove ? { reason: NOTHING_TO_REMOVE_LINE } : {}),
+  };
 }

@@ -60,7 +60,8 @@ export class BetaSongPage extends BetaPage {
   protected readonly reports = signal<Readonly<Record<string, BetaFeedback[]>>>({});
   private readonly asked = new Set<string>();
   protected readonly reportCount = (j: BetaJob) => this.reports()[j.id]?.length ?? 0;
-  protected readonly summary = (j: BetaJob) => feedbackLine(this.reports()[j.id] ?? []);
+  /** The latest report's verdict and day (「最近：有問題・10-28」); the count is already in the facts beside it. */
+  protected readonly lastReport = (j: BetaJob) => feedbackLine(this.reports()[j.id] ?? []).split('・').slice(1).join('・');
   protected readonly tierList = TIERS.map((id) => ({ id, ...TIER_INFO[id] }));
   protected readonly tierName = (t?: BetaTier) => (t ? TIER_INFO[t].name : '');
   protected readonly tierPrice = (t: BetaTier) => TIER_INFO[t].price;

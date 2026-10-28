@@ -148,6 +148,16 @@ describe('songView with concept and fix jobs', () => {
     expect(songView(confirmed, [prep, failed]).failed).toBe(failed);
     expect(songView(confirmed, [prep, failed, at('3', { kind: 'make', status: 'running' })]).failed).toBeUndefined();
   });
+  it('a failed concept or fix is the failure too, when it is the latest non-prep job', () => {
+    for (const kind of ['concept', 'fix'] as const) {
+      const failed = at('3', { kind, status: 'failed', auto: true });
+      const v = songView(confirmed, [prep, at('2', { kind: 'make', status: 'done' }), failed]);
+      expect([v.failed, v.failedFor, v.failedAuto, songKind(v)]).toEqual([failed, 'img', true, 'help']);
+    }
+    // a later success clears an older failure
+    const v = songView(confirmed, [prep, at('2', { kind: 'concept', status: 'failed' }), at('3', { kind: 'concept', status: 'done', decision: 'accepted' })]);
+    expect(v.failed).toBeUndefined();
+  });
 });
 
 describe('songKind, nextStep and the list filters', () => {

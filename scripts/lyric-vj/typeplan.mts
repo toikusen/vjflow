@@ -23,7 +23,7 @@ import { EMPH_HELP, ENTER_HELP, EXIT_HELP, FX_HELP, IDLE_HELP, SIDED, TEMPLATES 
 import { TEMPLATES as TEMPLATE_SPECS } from '../../src/app/lyric-vj/templates';
 import { feltTempo } from '../../src/app/lyric-vj/timeline';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
-import { stripUnsungSprites, unsungRule } from './interludes.mts';
+import { landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
 
 export { stripUnsungSprites };
 
@@ -531,12 +531,15 @@ export function buildCuts(p: Plan) {
     const board = a.board && part ? boardOf(p, part) : undefined;
     if ((back?.id ?? '') !== held.id) held = { id: back?.id ?? '', t0: s.start };
     const away = ps.lyric.side === 'left' ? 'right' : ps.lyric.side === 'right' ? 'left' : 'center';
-    for (const [i, c] of [...ps.cuts].sort((x, y) => x.beat - y.beat).entries()) {
-      const at = i === 0 ? s.start : (bs[c.beat] ?? s.end);
+    const sorted = [...ps.cuts].sort((x, y) => x.beat - y.beat);
+    const times = sorted.map((x, k) => (k === 0 ? s.start : (bs[x.beat] ?? s.end)));
+    const gap = gapAt(s.part?.energy ?? 0.5, s.part?.type === 'chorus');
+    for (const [i, c] of sorted.entries()) {
+      const at = times[i];
       if (at >= s.end - 0.05) continue;
       // a shot's first cut always lands (it carries the shot's backdrop: a held ballad skipped one and kept the last
       // shot's sky for 6 s); the hold applies between the cuts inside a shot
-      if (i > 0 && sections.length && at - sections[sections.length - 1].start < gapAt(s.part?.energy ?? 0.5, s.part?.type === 'chorus')) continue;
+      if (i > 0 && sections.length && at - sections[sections.length - 1].start < gap) continue;
       const want = capped.get(c) ?? c.fx;
       let fx = KINETIC_FX.includes(want as never) ? want : 'wall';
       // no intro to hold a title card: the cut takes the song's quiet stars instead
@@ -551,9 +554,9 @@ export function buildCuts(p: Plan) {
       const nextBeat = [...ps.cuts].sort((x, y) => x.beat - y.beat).find((x) => x.beat > c.beat)?.beat;
       const cutEnd = nextBeat === undefined ? s.end : (bs[nextBeat] ?? s.end);
       // nobody sings over the whole cut and the director chose backdrop there: no figure, prop or illustration
-      const strip = stripUnsungSprites([{ at, end: cutEnd, sprite: c.sprite }], unsung, t.interludes);
-      removed += strip.removed;
-      const sprite = strip.cuts[0].sprite ?? '';
+      // (checked to the next cut that lands: a skipped next cut leaves this layer up into what follows)
+      const runsTo = landedEnd(times, i, gap, s.end);
+      const sprite = stripUnsungSprites([{ at, end: runsTo, sprite: c.sprite }], unsung, t.interludes).cuts[0].sprite ?? '';
       // a diagram under a centred lyric would sit on it: it takes a side, alternating
       // a diagram, or a character, under a centred lyric would sit on it: it takes a side, alternating, a figure smaller
       // (a mic stand stood behind きゅんとさせてほしい)
@@ -583,6 +586,9 @@ export function buildCuts(p: Plan) {
       // the same thing on the next cut but across the frame reads as it jumping there (sweet timer's moon and carriage
       // swapped sides with the lyric): it sits that cut out
       if (layer.sprite && !sameSpot(shown, layer.sprite, side)) delete layer.sprite;
+      // the picture the strip took would have been drawn (not a diagram, not across the frame, not on the board)
+      const tookPicture = !!c.sprite && !sprite && !DIAGRAM_FX.has(fx) && sameSpot(shown, c.sprite, side) && !board?.items.some((x) => x.sprite === c.sprite);
+      if (tookPicture) removed++;
       shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;
       // the song's one variant of the move, and its direction when the move has one (MORE flows)
@@ -613,7 +619,7 @@ export function buildCuts(p: Plan) {
       // the director's reading, once a song (a repeat takes the one made from the song)
       if ((fx === 'measure' || fx === 'counter') && c.label && !labels.has(c.label)) labels.add((layer.label = c.label.slice(0, 12)));
       // a cut no one sings over: its words are texture, so they are not taken for lyrics
-      const until = ps.cuts.find((x) => x.beat > c.beat) ? (bs[[...ps.cuts].sort((x, y) => x.beat - y.beat).find((x) => x.beat > c.beat)!.beat] ?? s.end) : s.end;
+      const until = runsTo;
       // (a title card and a chapter card are read on purpose: hushed, the opening title sank into the dark paper)
       if (!song.cues.some((x: { start: number; end: number }) => x.start < until && x.end > at) && fx !== 'credits' && fx !== 'chapter') {
         layer.hush = true;

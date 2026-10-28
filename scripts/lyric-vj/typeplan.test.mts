@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { stripUnsungSprites, unsungRule } from './interludes.mts';
+import { landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
@@ -211,6 +211,41 @@ test('a board keeps a picture over sung time and prints the word for one kept on
     const sections = JSON.parse(readFileSync(join(dir, 'out', 'treatment.json'), 'utf8')).graphics.sections as { start: number; layers: { kind: string; board?: { items: { sprite?: string; text?: string; at: number }[] } }[] }[];
     const board = sections.find((s) => Math.abs(s.start - 9.9) < 0.01)!.layers.find((l) => l.kind === 'kinetic')!.board!;
     assert.deepEqual(board.items.map((x) => x.sprite ?? `text:${x.text}`), ['lamp', 'text:月'], JSON.stringify(board.items));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('landedEnd: the next cut that lands ends this one; cuts inside the gap or at the shot end are skipped', () => {
+  assert.equal(landedEnd([48, 49, 51], 0, 1.2, 60), 51, 'the cut 1 s later is skipped by the gap');
+  assert.equal(landedEnd([48, 49.5], 0, 1.2, 60), 49.5);
+  assert.equal(landedEnd([48, 49, 59.98], 0, 1.2, 60), 60, 'a cut at the shot end does not land');
+  assert.equal(landedEnd([48], 0, 1.2, 60), 60);
+});
+
+test('unsungRule: board keep items follow the same rule', () => {
+  assert.ok(unsungRule(OUTRO).includes('keep'), unsungRule(OUTRO));
+});
+
+test('a cut whose next cut is skipped by the hold runs into sung time and keeps its picture', () => {
+  // s3 9.9–31 holds four beats (3.12 s): a cut at 21.06, the next planned at 22.62 is skipped, the one at 27.3 lands
+  const sng = { ...song, cues: [...song.cues, { id: 'c004', start: 26, end: 30, text: '灯りをともして' }] };
+  const tr = { ...treatment, cues: [...treatment.cues, { cueId: 'c004', shot: 's3' }] };
+  const pl = structuredClone(plan);
+  pl.shots[2].lines = [line('c003'), line('c004')];
+  pl.shots[2].cuts = [cut(0, 'stars'), { ...cut(14, 'motes'), sprite: 'lamp' }, cut(16, 'wall'), cut(22, 'stars')];
+  const dir = mkdtempSync(join(tmpdir(), 'typeplan-'));
+  try {
+    for (const [f, v] of [['song.json', sng], ['treatment.json', tr], ['plan.json', pl]] as const) writeFileSync(join(dir, f), JSON.stringify(v));
+    const r = spawnSync('npx', ['tsx', 'scripts/lyric-vj/typeplan.mts', '--song', join(dir, 'song.json'), '--treatment', join(dir, 'treatment.json'), '--backdrops', join(dir, 'treatment.json'), '--plan', join(dir, 'plan.json'), '--out', join(dir, 'out')], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    const sections = JSON.parse(readFileSync(join(dir, 'out', 'treatment.json'), 'utf8')).graphics.sections as { start: number; layers: { kind: string; sprite?: string }[] }[];
+    const starts = sections.map((s) => s.start);
+    assert.ok(!starts.some((x) => Math.abs(x - 22.62) < 0.05), `the cut inside the hold was skipped: ${starts}`);
+    const a = sections.find((s) => Math.abs(s.start - 21.06) < 0.05);
+    assert.ok(a, `the picture cut landed: ${starts}`);
+    assert.equal(a!.layers.find((l) => l.kind === 'kinetic')!.sprite, 'lamp', 'it runs on into c004');
+    assert.ok(!r.stdout.includes('interludes: removed'), r.stdout);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

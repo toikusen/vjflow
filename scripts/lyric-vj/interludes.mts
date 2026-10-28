@@ -48,7 +48,15 @@ export function unsungRule(windows: UnsungWindow[], interludes?: Interlude[]): s
   const modes = windowModes(windows, interludes);
   const quiet = modes.filter((w) => w.mode === 'backdrop');
   const pictures = modes.filter((w) => w.mode === 'pictures');
-  const list = quiet.length ? `這首歌沒人唱的段落：${quiet.map((w) => `${span(w)}（${KIND_NAME[w.kind]}）`).join('、')}，這些時間裡的刀 sprite 留空字串。` : '';
+  const list = quiet.length ? `這首歌沒人唱的段落：${quiet.map((w) => `${span(w)}（${KIND_NAME[w.kind]}）`).join('、')}，這些時間裡的刀 sprite 留空字串，keep 的道具也不要只落在這些時間裡。` : '';
   const allowed = pictures.length ? `只有美術指導寫了理由的段落可以放人物或道具，畫面要照著理由走：${pictures.map((w) => `${span(w)}（${KIND_NAME[w.kind]}），理由：「${w.reason}」`).join('；')}。` : '';
   return base + list + allowed;
+}
+
+/**
+ * When cut i of a shot really ends: at the first later cut that lands (at least `gap` after it and before the shot's
+ * last 0.05 s, as buildCuts decides), else at the shot's end. `times` are the shot's cut times in order.
+ */
+export function landedEnd(times: number[], i: number, gap: number, shotEnd: number): number {
+  return times.slice(i + 1).find((x) => x >= times[i] + gap && x < shotEnd - 0.05) ?? shotEnd;
 }

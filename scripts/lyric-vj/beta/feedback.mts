@@ -3,7 +3,7 @@
 import { Db, Job, newId, Tier } from './store.mts';
 
 export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'style' | 'rhythm' | 'other';
-/** `redo` is a stored type for a later plan; `fix` queues a fix job for the kinds a fix can do (fixKindFor). */
+/** `fix` queues a fix job for the kinds a fix can do (fixKindFor); `redo` is only stored: the person then makes a new version at the normal price. */
 export type FeedbackAction = 'fix' | 'redo' | 'none';
 /** What a fix job does: remove the pictures in the marked ranges (img tier only), or re-apply the song's new timing. */
 export type FixKind = 'picture' | 'timing';
@@ -51,7 +51,6 @@ export function parseFeedback(body: unknown, duration?: number, tier?: Tier): Pa
   const ok = b.ok === true;
   const action = (b.action ?? 'none') as FeedbackAction;
   if (!ACTIONS.includes(action)) return fail('動作不正確');
-  if (action === 'redo') return fail('修正與重做即將開放');
   const rawMarks = b.marks ?? [];
   if (!Array.isArray(rawMarks)) return fail('標記格式不正確');
   if (rawMarks.length > MAX_MARKS) return fail(`最多標 ${MAX_MARKS} 處`);

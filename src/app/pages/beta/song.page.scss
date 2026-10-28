@@ -508,12 +508,9 @@ a {
   }
 }
 
-// while reporting, the video stays in view beside the form
-.result.reporting .media {
-  position: sticky;
-  top: 16px;
-  z-index: 1;
-  background: #000;
+// the expanded card (2d) is the report form alone
+.result.reporting {
+  display: block;
 }
 
 .play {
@@ -633,15 +630,6 @@ a {
   gap: 8px;
   margin-top: auto;
   padding-top: 24px;
-
-  .button.on {
-    border-color: var(--border-strong);
-    background: var(--surface-2);
-  }
-}
-
-.result.reporting .r-actions {
-  margin-top: 0;
 }
 
 /* tablet: the hero buttons and the progress list wrap under */
@@ -842,10 +830,6 @@ a {
 
   .result {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .result.reporting .media {
-    top: 0;
   }
 
   .r-body {

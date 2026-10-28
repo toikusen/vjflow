@@ -1,49 +1,76 @@
-@if (past(); as list) {
-  <div class="thanks" role="status">
-    <p class="thanks-line">已收到回報，謝謝！</p>
-    <p class="muted small">這個作品的回報・{{ list.length }}</p>
-    <ul class="past">
-      @for (f of list; track f.id) {
-        <li>
-          <span [class]="f.ok ? 'tag ok' : 'tag bad'">{{ f.ok ? '沒問題' : '有問題' }}</span>
-          @if (f.marks.length) {
-            <span>標記 {{ f.marks.length }} 處</span>
-          }
-          <span class="muted when">{{ stamp(f.createdAt) }}</span>
-        </li>
-      }
-    </ul>
-    <button class="ghost" type="button" (click)="again()">再回報一次</button>
-  </div>
-} @else {
-  <div class="report">
-    <div class="choice" role="group" aria-label="這個作品">
-      <button type="button" class="big" [class.on]="choice() === 'ok'" [attr.aria-pressed]="choice() === 'ok'" (click)="pick('ok')">沒問題</button>
-      <button type="button" class="big" [class.on]="choice() === 'bad'" [attr.aria-pressed]="choice() === 'bad'" (click)="pick('bad')">有問題</button>
+<div class="head">
+  <h3>回報這個作品</h3>
+  <span class="meta">{{ meta() }}</span>
+  <button class="button fold" type="button" (click)="closed.emit()">收合</button>
+</div>
+
+<div class="panel">
+  <div class="left">
+    <div class="media">
+      <video #vid [src]="url()" controls playsinline preload="metadata" (timeupdate)="tick(vid)" (seeked)="tick(vid)" (loadedmetadata)="measured(vid)" (durationchange)="measured(vid)"></video>
     </div>
-
-    @if (choice() === 'ok') {
-      <input type="text" [attr.maxlength]="maxText" placeholder="想說的話（可不填）" aria-label="想說的話" [value]="okNote()" (input)="okNote.set($any($event.target).value)" />
-    }
-
-    @if (choice() === 'bad') {
-      <button type="button" class="mark-now" [disabled]="!video() || marks().length >= maxMarks" (click)="markNow()">
-        <span class="dot" aria-hidden="true"></span>標記目前時間
-      </button>
-      @if (marks().length >= maxMarks) {
-        <p class="muted small">最多標 {{ maxMarks }} 處</p>
+    <div class="tl">
+      <div class="track" aria-hidden="true"><i [style.width.%]="pct()"></i></div>
+      @for (m of marks(); track m.key) {
+        <button type="button" class="pin" [style.left.%]="pos(m)" [style.--c]="color($index)" [attr.aria-label]="'跳到標記 ' + ($index + 1) + '，' + time(m.at)" (click)="seek(m)">{{ $index + 1 }}</button>
       }
+    </div>
+    <div class="now-row">
+      <span class="now">{{ time(now()) }}<small> / {{ time(length()) }}</small></span>
+      <button class="button primary mark-now" type="button" [disabled]="marks().length >= maxMarks" (click)="markNow()"><i class="dot" aria-hidden="true"></i>標記目前時間 <span class="at">{{ time(now()) }}</span></button>
+    </div>
+    <p class="hint">{{ marks().length >= maxMarks ? '最多標 ' + maxMarks + ' 處' : '看到問題就按，影片會繼續播。點上方的數字可跳回那一秒。' }}</p>
+  </div>
 
-      @if (marks().length) {
-        <ol class="marks">
+  <div class="side">
+    @if (past(); as list) {
+      <div class="thanks" role="status">
+        <p class="thanks-line">已收到回報，謝謝！</p>
+        @switch (sent()) {
+          @case ('fix') {
+            <p class="thanks-next">修正已排隊，完成後會以新版本出現在成品，原本的版本保留。</p>
+          }
+          @case ('redo') {
+            <p class="thanks-next">已記下。往下到「製作新版本」，方案與想要的感覺已經幫你填好，照一般價格重新製作。</p>
+          }
+        }
+        <p class="past-count">這個作品的回報 · {{ list.length }}</p>
+        <ul class="past">
+          @for (f of list; track f.id) {
+            <li>
+              <span [class]="f.ok ? 'tag ok' : 'tag bad'">{{ f.ok ? '沒問題' : '有問題' }}</span>
+              @if (f.marks.length) {
+                <span>標記 {{ f.marks.length }} 處</span>
+              }
+              @if (f.action !== 'none') {
+                <span>{{ f.action === 'fix' ? '修正' : '重做' }}</span>
+              }
+              <span class="when">{{ stamp(f.createdAt) }}</span>
+            </li>
+          }
+        </ul>
+        <button class="button" type="button" (click)="again()">再回報一次</button>
+      </div>
+    } @else {
+      <section class="step">
+        <p class="step-h">① 這個版本</p>
+        <div class="seg" role="group" aria-label="這個版本">
+          <button type="button" [class.on]="verdict() === 'ok'" [attr.aria-pressed]="verdict() === 'ok'" (click)="pick('ok')">✓ 沒問題</button>
+          <button type="button" [class.on]="verdict() === 'issue'" [attr.aria-pressed]="verdict() === 'issue'" (click)="pick('issue')">! 有問題</button>
+        </div>
+      </section>
+
+      @if (verdict() === 'issue') {
+        <section class="step">
+          <p class="step-h"><span>② 標記 · {{ marks().length }} 個</span><span>點影片下方的按鈕新增</span></p>
           @for (m of marks(); track m.key) {
-            <li class="mark">
+            <div class="mark">
               <div class="mark-head">
-                <button type="button" class="time" title="跳到這裡" (click)="seek(m)">
-                  {{ time(m.at) }}@if (m.end !== undefined) {<span>–{{ time(m.end) }}</span>}
-                </button>
-                <button type="button" class="ghost small" (click)="setEnd(m)">設為結束</button>
-                <button type="button" class="remove" aria-label="移除這個標記" (click)="remove(m.key)">×</button>
+                <button type="button" class="num" [style.--c]="color($index)" [attr.aria-label]="'跳到標記 ' + ($index + 1)" (click)="seek(m)">{{ $index + 1 }}</button>
+                <span class="m-time">{{ time(m.at) }}</span>
+                <span class="m-range">{{ m.end !== undefined ? '→ ' + time(m.end) : '單點' }}</span>
+                <button type="button" class="link" (click)="setEnd(m)">設為結束</button>
+                <button type="button" class="x" aria-label="移除這個標記" (click)="remove(m.key)">×</button>
               </div>
               <div class="cats" role="group" aria-label="問題類別">
                 @for (c of categories; track c.id) {
@@ -51,33 +78,60 @@
                 }
               </div>
               <input type="text" [attr.maxlength]="maxText" placeholder="備註（可不填）" aria-label="備註" [value]="m.note" (input)="patch(m.key, { note: $any($event.target).value })" />
-            </li>
+            </div>
+          } @empty {
+            <p class="none">還沒有標記。播到有問題的地方，按「標記目前時間」。</p>
           }
-        </ol>
+        </section>
       }
 
-      <label class="field">
-        建議
-        <textarea rows="3" [attr.maxlength]="maxText" placeholder="整體想怎麼改（可不填）" [value]="suggestion()" (input)="suggestion.set($any($event.target).value)"></textarea>
-      </label>
+      @if (verdict(); as vd) {
+        <section class="step last">
+          <p class="step-h">{{ vd === 'ok' ? '② 想說的話' : '③ 整體建議與處理' }}</p>
+          <textarea rows="3" [attr.maxlength]="maxText" [placeholder]="vd === 'ok' ? '想說的話（可不填）' : '整體想怎麼改（可不填）'" aria-label="整體建議" [value]="suggestion()" (input)="suggestion.set($any($event.target).value)"></textarea>
 
-      <div class="field">
-        處理方式
-        <div class="actions" role="group" aria-label="處理方式">
-          @for (a of actions; track a.id) {
-            <button type="button" [class.on]="a.id === 'none'" [attr.aria-pressed]="a.id === 'none'" [disabled]="a.id !== 'none'">{{ a.label }}</button>
+          @if (vd === 'issue') {
+            <div class="acts" role="radiogroup" aria-label="處理方式">
+              <button type="button" class="act" role="radio" [class.on]="action() === 'fix'" [class.off]="!!fixWhy()" [attr.aria-checked]="action() === 'fix'" [attr.aria-disabled]="!!fixWhy()" (click)="choose('fix')">
+                <strong>修正</strong>
+                <small>只改標記處</small>
+                @if (fixWhy(); as why) {
+                  <span class="why">{{ why }}</span>
+                } @else {
+                  <span class="price"><app-price [amount]="fixPrice" digits="short" [plain]="true" /></span>
+                }
+              </button>
+              <button type="button" class="act" role="radio" [class.on]="action() === 'redo'" [attr.aria-checked]="action() === 'redo'" (click)="choose('redo')">
+                <strong>重做</strong>
+                <small>整首重新製作</small>
+                <span class="note">一般價格</span>
+              </button>
+              <button type="button" class="act" role="radio" [class.on]="action() === 'none'" [attr.aria-checked]="action() === 'none'" (click)="choose('none')">
+                <strong>只回報</strong>
+                <span class="free">免費</span>
+              </button>
+            </div>
+            @if (action() === 'fix' && fixKind() === 'timing') {
+              <p class="fix-note">修正會用新的歌詞時間重新輸出。<a [href]="timingUrl()">先到歌詞時間改好</a>，再送出。</p>
+            }
+            @if (action() === 'redo') {
+              <p class="fix-note">送出後會記下這份回報，並帶你到「製作新版本」：方案選好、想要的感覺填好，照一般價格重新製作。</p>
+            }
           }
-        </div>
-        <span class="fine">修正與重做即將開放</span>
-      </div>
-    }
 
-    @if (error()) {
-      <p class="err" role="alert">{{ error() }}</p>
-    }
+          @if (error()) {
+            <p class="err" role="alert">{{ error() }}</p>
+          }
 
-    @if (choice()) {
-      <button type="button" class="send" [disabled]="sending()" (click)="send()">送出</button>
+          <div class="send-bar">
+            <button class="button primary send" type="button" [disabled]="submitting()" (click)="send()">
+              {{ label() }}@if (vd === 'issue' && action() === 'fix') { · <app-price [amount]="fixPrice" digits="short" [plain]="true" />}
+            </button>
+          </div>
+        </section>
+      }
     }
   </div>
-}
+</div>
+
+<app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />

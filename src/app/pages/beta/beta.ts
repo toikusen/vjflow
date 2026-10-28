@@ -130,6 +130,36 @@ export const FEEDBACK_CATEGORIES: { id: FeedbackCategory; label: string }[] = [
   { id: 'other', label: '其他' },
 ];
 
+/** The fix fee; mirrors PRICE.fix in scripts/lyric-vj/beta/store.mts. */
+export const FIX_PRICE = 1;
+/** What a fix job does: take the pictures out of the marked stretches, or re-apply the song's new timing. */
+export type FixKind = 'picture' | 'timing';
+/** Mirrors fixKindFor in scripts/lyric-vj/beta/feedback.mts: `picture` or `timing` when every mark (at least one) is that category, else undefined. */
+export function fixKindFor(marks: readonly { category: FeedbackCategory | null }[]): FixKind | undefined {
+  const kind = marks[0]?.category;
+  return (kind === 'picture' || kind === 'timing') && marks.every((m) => m.category === kind) ? kind : undefined;
+}
+/** Whether the server's parseFeedback accepts a fix for these marks on this tier: pictures come out of 插圖版 only, timing on any tier. */
+export const fixAllowed = (marks: readonly { category: FeedbackCategory | null }[], tier?: BetaTier): boolean => {
+  const kind = fixKindFor(marks);
+  return !!kind && (kind !== 'picture' || tier === 'img');
+};
+/** The server's answer to a fix it cannot do (NOT_FIXABLE in feedback.mts). */
+export const NOT_FIXABLE = '這類問題目前只能重做或只回報';
+
+export interface FixState { marks: readonly { category: FeedbackCategory | null }[]; tier?: BetaTier; active?: boolean; left?: number | null }
+
+/** Why the 修正 card is off (one line), or null when the server would take the fix: the marks' kind and the tier first, then the song being busy, then the fee against the balance. */
+export function fixBlock(s: FixState): string | null {
+  if (!s.marks.length) return '先標出有問題的地方';
+  if (s.marks.some((m) => !m.category)) return '每個標記先選一個類別';
+  if (!fixAllowed(s.marks, s.tier)) return fixKindFor(s.marks) === 'picture' ? '只有插圖版能拿掉圖片' : NOT_FIXABLE;
+  if (s.active) return '這首歌已經在排隊或製作中';
+  // in cents, so float noise never makes a balance look short
+  if (s.left !== undefined && s.left !== null && Math.round(FIX_PRICE * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡管理者';
+  return null;
+}
+
 export interface SongView {
   stage: 'preparing' | 'prepFailed' | 'timing' | 'ready';
   prep?: BetaJob;

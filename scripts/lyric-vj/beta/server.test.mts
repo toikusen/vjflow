@@ -637,6 +637,23 @@ test('feedback: owner posts and reads; others and running jobs are refused; ever
   t.beta.server.close();
 });
 
+test('feedback: a redo is stored with its action and queues nothing', async () => {
+  const t = await setup();
+  const owner = t.beta.db.songs[0].userId;
+  t.beta.db.jobs.push({ id: 'd', userId: owner, songId: 's1', kind: 'make', tier: 'hybrid', status: 'done', reservedUsd: 16, priceUsd: 16, createdAt: '2026-10-27T00:00:00Z', runDir: 'runs/d' });
+  mkdirSync(join(t.root, 'songs/s1/runs/d'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1/runs/d/song.json'), JSON.stringify({ duration: 10 }));
+  const r = await t.tester('/beta/jobs/d/feedback', { method: 'POST', body: JSON.stringify({ ok: false, marks: [{ at: 2, category: 'style', note: '' }], suggestion: '整首換個方向', action: 'redo' }) });
+  assert.equal(r.status, 201);
+  const f = await r.json();
+  assert.deepEqual([f.action, f.tier, f.suggestion, f.fixJobId], ['redo', 'hybrid', '整首換個方向', undefined]);
+  assert.deepEqual(t.beta.db.feedback.map((x) => x.action), ['redo']);
+  assert.equal(t.beta.db.jobs.length, 1, 'nothing queued');
+  const ev = readEvents(t.root, 's1').filter((e) => e.type === 'feedback.submitted');
+  assert.deepEqual([ev.length, ev[0].action, ev[0].fixJobId], [1, 'redo', undefined]);
+  t.beta.server.close();
+});
+
 test('a finished job shows its style from the treatment; a missing file shows none', async () => {
   const t = await setup();
   const { writeFileSync, mkdirSync } = await import('node:fs');

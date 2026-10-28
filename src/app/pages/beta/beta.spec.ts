@@ -1,4 +1,4 @@
-import { BetaEvent, BetaFeedback, COVER_TINTS, coverTint, failedNotice, filterCounts, inFilter, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO } from './beta';
+import { BetaEvent, BetaFeedback, COVER_TINTS, coverTint, failedNotice, filterCounts, inFilter, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -334,5 +334,43 @@ describe('failure copy, retries and report summary', () => {
     expect(feedbackLine([])).toBe('');
     expect(feedbackLine([f(true, '2026-10-27T12:00:00'), f(false, '2026-10-28T12:00:00')])).toBe('已回報 2 次・最近：有問題・10-28');
     expect(feedbackLine([f(true, '2026-10-27T12:00:00')])).toBe('已回報 1 次・最近：沒問題・10-27');
+  });
+});
+
+describe('fix rules (mirror scripts/lyric-vj/beta/feedback.mts)', () => {
+  const m = (...cats: (FeedbackCategory | null)[]) => cats.map((category) => ({ category }));
+
+  it('fixKindFor: picture or timing only when every mark agrees', () => {
+    expect(fixKindFor([])).toBeUndefined();
+    expect(fixKindFor(m('picture', 'picture'))).toBe('picture');
+    expect(fixKindFor(m('timing'))).toBe('timing');
+    expect(fixKindFor(m('picture', 'timing'))).toBeUndefined();
+    expect(fixKindFor(m('lyrics'))).toBeUndefined();
+    expect(fixKindFor(m('picture', null))).toBeUndefined();
+  });
+
+  it('fixAllowed: pictures on img only, timing on every tier, nothing else', () => {
+    expect(fixAllowed(m('picture'), 'img')).toBe(true);
+    expect(fixAllowed(m('picture'), 'none')).toBe(false);
+    expect(fixAllowed(m('picture'), 'hybrid')).toBe(false);
+    expect(fixAllowed(m('picture'), undefined)).toBe(false);
+    for (const tier of ['none', 'img', 'hybrid'] as const) expect(fixAllowed(m('timing', 'timing'), tier)).toBe(true);
+    expect(fixAllowed(m('empty'), 'img')).toBe(false);
+    expect(fixAllowed([], 'img')).toBe(false);
+  });
+
+  it('fixBlock gives one reason in order: marks, kind and tier, busy song, balance', () => {
+    expect(FIX_PRICE).toBe(1);
+    expect(fixBlock({ marks: [], tier: 'img' })).toBe('先標出有問題的地方');
+    expect(fixBlock({ marks: m('picture', null), tier: 'img' })).toBe('每個標記先選一個類別');
+    expect(fixBlock({ marks: m('lyrics'), tier: 'img' })).toBe(NOT_FIXABLE);
+    expect(fixBlock({ marks: m('picture', 'timing'), tier: 'img' })).toBe(NOT_FIXABLE);
+    expect(fixBlock({ marks: m('picture'), tier: 'hybrid' })).toBe('只有插圖版能拿掉圖片');
+    expect(fixBlock({ marks: m('picture'), tier: 'img', active: true })).toBe('這首歌已經在排隊或製作中');
+    expect(fixBlock({ marks: m('timing'), tier: 'none', left: 0.99 })).toBe('餘額不足，請聯絡管理者');
+    expect(fixBlock({ marks: m('timing'), tier: 'none', left: 1 })).toBeNull();
+    expect(fixBlock({ marks: m('timing'), tier: 'none', left: 0.1 + 0.9 })).toBeNull();
+    expect(fixBlock({ marks: m('picture'), tier: 'img', left: null })).toBeNull();
+    expect(fixBlock({ marks: m('picture', 'picture'), tier: 'img', left: 14.5 })).toBeNull();
   });
 });

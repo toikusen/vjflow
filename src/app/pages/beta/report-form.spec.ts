@@ -1,4 +1,5 @@
-import { formatTime, ReportDraft, validateReport } from './report-form.component';
+import { NOT_FIXABLE } from './beta';
+import { fixBody, formatTime, ReportDraft, sendLabel, validateReport } from './report-form.component';
 
 const draft = (o: Partial<ReportDraft>): ReportDraft => ({ ok: false, marks: [], suggestion: '', action: 'none', ...o });
 const mark = (o: Partial<ReportDraft['marks'][number]> = {}) => ({ at: 1, category: 'lyrics' as const, note: '', ...o });
@@ -30,9 +31,21 @@ describe('validateReport', () => {
     expect(validateReport(draft({ marks: [mark()] }))).toBeNull();
   });
 
-  it('only 只回報 can be sent for now', () => {
-    expect(validateReport(draft({ ok: true, action: 'fix' }))).toBe('修正與重做即將開放');
-    expect(validateReport(draft({ ok: true, action: 'redo' }))).toBe('修正與重做即將開放');
+  it('a fix needs marks the server can fix: pictures on 插圖版, timing on any tier', () => {
+    expect(validateReport(draft({ marks: [mark({ category: 'picture' })], action: 'fix' }), 10, 'img')).toBeNull();
+    expect(validateReport(draft({ marks: [mark({ category: 'picture' })], action: 'fix' }), 10, 'hybrid')).toBe(NOT_FIXABLE);
+    expect(validateReport(draft({ marks: [mark({ category: 'timing' })], action: 'fix' }), 10, 'none')).toBeNull();
+    expect(validateReport(draft({ marks: [mark({ category: 'timing' }), mark({ category: 'picture' })], action: 'fix' }), 10, 'img')).toBe(NOT_FIXABLE);
+    expect(validateReport(draft({ marks: [mark()], action: 'fix' }), 10, 'img')).toBe(NOT_FIXABLE);
+    expect(validateReport(draft({ suggestion: 'x', action: 'fix' }), 10, 'img')).toBe(NOT_FIXABLE);
+    // a mark without a category is reported as such before the fix rule
+    expect(validateReport(draft({ marks: [mark({ category: null })], action: 'fix' }), 10, 'img')).toBe('每個標記請選一個類別');
+  });
+
+  it('a redo is sent like any report', () => {
+    expect(validateReport(draft({ marks: [mark()], action: 'redo' }), 10, 'none')).toBeNull();
+    expect(validateReport(draft({ suggestion: '整首換個方向', action: 'redo' }))).toBeNull();
+    expect(validateReport(draft({ action: 'redo' }))).toBe('請標出哪裡有問題，或寫下建議');
   });
 
   it('every mark needs one category', () => {
@@ -61,5 +74,21 @@ describe('validateReport', () => {
     expect(validateReport(draft({ suggestion: 'a'.repeat(1001) }))).toBe('建議最多 1000 字');
     expect(validateReport(draft({ suggestion: ` ${'a'.repeat(1000)} ` }))).toBeNull();
     expect(validateReport(draft({ marks: [mark({ note: 'a'.repeat(1001) })] }))).toBe('備註最多 1000 字');
+  });
+});
+
+describe('sendLabel and fixBody', () => {
+  it('names the action on the button; 沒問題 always sends plainly', () => {
+    expect(sendLabel('none', false)).toBe('送出回報');
+    expect(sendLabel('fix', false)).toBe('送出回報並修正');
+    expect(sendLabel('redo', false)).toBe('送出回報，去製作新版本');
+    expect(sendLabel('fix', true)).toBe('送出回報');
+  });
+
+  it('explains what the fix does and that the old version stays', () => {
+    expect(fixBody('picture')).toContain('圖片拿掉');
+    expect(fixBody('timing')).toContain('歌詞時間');
+    expect(fixBody('timing')).toContain('原本的版本保留');
+    expect(fixBody(undefined)).toBe(fixBody('picture'));
   });
 });

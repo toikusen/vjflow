@@ -34,8 +34,14 @@ test('marks may run up to half a second past the known length', () => {
   assert.equal(bad({ ok: false, marks: [mark({ at: 10.6 })] }, 10), '標記超出影片長度');
   assert.equal(bad({ ok: false, marks: [mark({ at: 9, end: 10.6 })] }, 10), '標記超出影片長度');
 });
-test('redo is still rejected; an unknown action is rejected', () => {
-  assert.equal(bad({ ok: true, action: 'redo' }), '修正與重做即將開放');
+test('redo is accepted on every tier and needs no fixable marks; an unknown action is rejected', () => {
+  for (const tier of ['none', 'img', 'hybrid'] as const) {
+    const r = parseFeedback({ ok: false, marks: [mark()], suggestion: '換個方向', action: 'redo' }, 10, tier);
+    assert.ok(r.ok);
+    if (r.ok) assert.equal(r.value.action, 'redo');
+  }
+  assert.ok(parseFeedback({ ok: false, suggestion: '整首重來', action: 'redo' }).ok);
+  assert.equal(bad({ ok: false, action: 'redo' }), '請標出哪裡有問題，或寫下建議');
   assert.ok(bad({ ok: false, marks: [mark()], action: 'zzz' }));
 });
 test('fixKindFor: picture or timing only when every mark agrees', () => {

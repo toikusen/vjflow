@@ -100,26 +100,40 @@
           @for (j of v.results; track j.id) {
             <article class="result" [class.reporting]="reporting() === j.id">
               @if (j.status === 'done') {
-                <div class="media">
-                  <video #vid [src]="videoUrl(j)" [controls]="played().has(j.id) || reporting() === j.id" playsinline preload="metadata" (play)="markPlayed(j.id)"></video>
-                  @if (!played().has(j.id) && reporting() !== j.id) {
-                    <button class="play" type="button" aria-label="播放" (click)="play(j.id, vid)"></button>
-                    <span class="res">1080p@if (duration(); as d) { · {{ clock(d) }}}</span>
-                  }
-                </div>
-                <div class="r-body">
-                  <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
-                  <div class="r-actions">
-                    <a class="button strong" [href]="videoUrl(j)" download>下載 1080p</a>
-                    @if (mine()) {
-                      <button class="button" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)"><span class="desk">回報這個作品</span><span class="phone">回報</span></button>
+                <!-- the expanded card (2d) is the report form itself: it carries its own video and the mark timeline -->
+                @if (reporting() !== j.id) {
+                  <div class="media">
+                    <video #vid [src]="videoUrl(j)" [controls]="played().has(j.id)" playsinline preload="metadata" (play)="markPlayed(j.id)"></video>
+                    @if (!played().has(j.id)) {
+                      <button class="play" type="button" aria-label="播放" (click)="play(j.id, vid)"></button>
+                      <span class="res">1080p@if (duration(); as d) { · {{ clock(d) }}}</span>
                     }
                   </div>
-                  <!-- stays mounted once opened so a draft survives closing the form or opening another card -->
-                  @if (opened().has(j.id)) {
-                    <app-report-form [job]="j" [video]="vid" [hidden]="reporting() !== j.id" (reported)="setReports(j.id, $event)" />
-                  }
-                </div>
+                  <div class="r-body">
+                    <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
+                    <div class="r-actions">
+                      <a class="button strong" [href]="videoUrl(j)" download>下載 1080p</a>
+                      @if (mine()) {
+                        <button class="button" type="button" [attr.aria-expanded]="false" (click)="toggleReport(j.id)"><span class="desk">回報這個作品</span><span class="phone">回報</span></button>
+                      }
+                    </div>
+                  </div>
+                }
+                <!-- stays mounted once opened so a draft survives folding the form or opening another card -->
+                @if (opened().has(j.id)) {
+                  <app-report-form
+                    [job]="j"
+                    [song]="s"
+                    [open]="reporting() === j.id"
+                    [active]="!!v.active"
+                    [left]="left()"
+                    [duration]="duration()"
+                    (reported)="setReports(j.id, $event)"
+                    (started)="started($event)"
+                    (redo)="redo($event.tier, $event.feeling)"
+                    (closed)="toggleReport(j.id)"
+                  />
+                }
               } @else {
                 <div class="media"><p class="held">已完成，管理者確認後就能下載</p></div>
                 <div class="r-body">

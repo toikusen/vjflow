@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # A fix of a finished video, made as a new version in its own run (the old run stays as it was):
 #   picture = the pictures shown in the marked ranges are removed (img tier: the saved type plan is edited and rebuilt
-#             with typeplan --plan, no model call); timing = the song's current timing replaces the run's snapshot.
+#             with typeplan --plan, no model call; a base treatment without interludes
+#             first gets every unsung window as pictures, so only the marked ranges change); timing = the song's current timing replaces the run's snapshot.
 # The source run is copied without its video, stills and logs, then make.sh renders it: every step before the
 # horizon finds its output and skips, so only the horizon and the render run. A retried job copies again only when
 # the fix was not applied yet (.fix-applied), else it resumes make.sh.

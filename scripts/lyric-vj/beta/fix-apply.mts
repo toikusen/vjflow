@@ -2,16 +2,21 @@
 // out, so `typeplan.mts --plan` rebuilds the treatment without it and no model is called. The pictures are a cut's
 // sprite, a part's kept items (keep.items, shown through the part) and the thread's sprite (shown in the shots whose
 // level, or the level before, is above 0). Cut times use typeplan's own helpers (cutTimes, holdGap, landedEnd).
+// A base treatment without interludes (a run made before them) gets every unsung window as pictures, so the rebuild
+// changes only the marked ranges (keptInterludes).
 // Exit 3 (stderr NOTHING_TO_REMOVE) when the ranges hold no picture: a render would only repeat the old video.
 // usage: npx tsx scripts/lyric-vj/beta/fix-apply.mts --run <run dir> --kind picture --ranges '[{"at":2,"end":4}]'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { unsungWindows } from '../../../src/app/lyric-vj/structure';
 import { feltTempo } from '../../../src/app/lyric-vj/timeline';
+import type { Interlude } from '../../../src/app/lyric-vj/treatment';
 import { cutTimes, holdGap, landedEnd } from '../interludes.mts';
 import { POINT_SPAN } from './feedback.mts';
 
 export const NOTHING_TO_REMOVE = '標記的範圍裡沒有可以拿掉的圖';
+export const KEEP_REASON = '保留原版（修正不改間奏）';
 
 export interface FixPlan {
   format?: { pace?: string };
@@ -84,6 +89,16 @@ export function fixTimeline(song: Song, treatment: { shots: { id: string; start:
   };
 }
 
+/**
+ * The interludes a fix writes into its copied base treatment: none when the treatment has its own (the director's
+ * decision, even an empty list), else every unsung window as pictures. A run made before interludes existed showed
+ * pictures in every window, and the rebuild would otherwise read the missing entries as backdrop and strip them all.
+ */
+export function keptInterludes(treatment: { interludes?: Interlude[] }, song: Parameters<typeof unsungWindows>[0]): Interlude[] | undefined {
+  if (treatment.interludes) return undefined;
+  return unsungWindows(song).map((w) => ({ start: w.start, end: w.end, mode: 'pictures' as const, reason: KEEP_REASON }));
+}
+
 const writeJson = (file: string, v: unknown) => {
   writeFileSync(`${file}.tmp`, JSON.stringify(v, null, 1));
   renameSync(`${file}.tmp`, file);
@@ -107,6 +122,9 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(3);
   }
   writeJson(file, r.plan);
+  // the run's own copy (written by rename, so a link to the source would be replaced, never followed)
+  const kept = keptInterludes(treatment, song);
+  if (kept) writeJson(join(a.run, 'base', 'treatment.json'), { ...treatment, interludes: kept });
   writeJson(join(a.run, 'fix.json'), { kind: 'picture', ranges, removed: r.removed, at: new Date().toISOString() });
   console.log(`fix-apply: ${r.removed} pictures removed in ${ranges.length} ranges`);
 }

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cutTimes, holdGap } from '../interludes.mts';
-import { applyPictureFix, cutSpans, NOTHING_TO_REMOVE, type FixPlan } from './fix-apply.mts';
+import { applyPictureFix, cutSpans, KEEP_REASON, keptInterludes, NOTHING_TO_REMOVE, type FixPlan } from './fix-apply.mts';
 
 const cut = (beat: number, sprite: string) => ({ beat, sprite, fx: 'wall' });
 const plan = (): FixPlan => ({
@@ -85,6 +85,18 @@ test('the thread loses its picture only when a range falls in a shot where it sh
   assert.equal(applyPictureFix(withThread([0, 0]), [{ at: 9, end: 9.2 }], timeline()).plan.thread!.sprite, 't');
 });
 
+test('keptInterludes: a base without interludes gets every unsung window as pictures; one with interludes is left alone', () => {
+  const song = { duration: 40, cues: [{ id: 'c1', start: 5, end: 10, text: 'a' }, { id: 'c2', start: 20, end: 25, text: 'b' }] };
+  assert.deepEqual(keptInterludes({ shots: [] }, song), [
+    { start: 0, end: 5, mode: 'pictures', reason: KEEP_REASON },
+    { start: 10, end: 20, mode: 'pictures', reason: KEEP_REASON },
+    { start: 25, end: 40, mode: 'pictures', reason: KEEP_REASON },
+  ]);
+  assert.equal(keptInterludes({ shots: [], interludes: [] }, song), undefined, "an empty list is the director's decision");
+  assert.equal(keptInterludes({ shots: [], interludes: [{ start: 0, end: 5, mode: 'backdrop', reason: '' }] }, song), undefined);
+  assert.equal(KEEP_REASON, '保留原版（修正不改間奏）');
+});
+
 // ---- fix.sh on a stub tree: a fake npx runs the real fix-apply and only echoes typeplan; make.sh is a stub ----
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -109,6 +121,21 @@ function fixTree() {
   const run = (from: string, to: string, ranges: string) => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/fix.sh'), song, 'img', join(song, 'runs', to), join(song, 'runs', from), 'picture', ranges], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}` } });
   return { song, src, run };
 }
+const treatmentOf = (dir: string) => JSON.parse(readFileSync(join(dir, 'base/treatment.json'), 'utf8'));
+
+test('fix.sh: a legacy base (no interludes) keeps its interlude pictures in the new run only; a base with interludes is untouched', () => {
+  const t = fixTree();
+  const before = readFileSync(join(t.src, 'base/treatment.json'), 'utf8');
+  assert.equal(t.run('m1', 'f1', '[{"at":2.5,"end":3}]').status, 0);
+  // the stub song: one line 1–2 s of 12 s, so the outro 2–12 s is the only unsung window
+  assert.deepEqual(treatmentOf(join(t.song, 'runs/f1')).interludes, [{ start: 2, end: 12, mode: 'pictures', reason: KEEP_REASON }]);
+  assert.equal(readFileSync(join(t.src, 'base/treatment.json'), 'utf8'), before, 'the source run is never written');
+  const own = { shots: [{ id: 's1', start: 0, end: 8 }, { id: 's2', start: 8, end: 12 }], interludes: [{ start: 2, end: 12, mode: 'backdrop', reason: '' }] };
+  writeFileSync(join(t.src, 'base/treatment.json'), JSON.stringify(own));
+  assert.equal(t.run('m1', 'f2', '[{"at":2.5,"end":3}]').status, 0);
+  assert.deepEqual(treatmentOf(join(t.song, 'runs/f2')), own);
+});
+
 const spritesIn = (file: string) => sprites(JSON.parse(readFileSync(file, 'utf8')));
 
 test('fix.sh: a fix of a fix applies its own edit (the source marker and record are not copied)', () => {

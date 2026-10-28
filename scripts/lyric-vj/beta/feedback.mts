@@ -3,8 +3,12 @@
 import { Db, Job, newId, Tier } from './store.mts';
 
 export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'style' | 'rhythm' | 'other';
-/** `fix` and `redo` are stored types for later plans; the form only sends `none`. */
+/** `redo` is a stored type for a later plan; `fix` queues a fix job for the kinds a fix can do (fixKindFor). */
 export type FeedbackAction = 'fix' | 'redo' | 'none';
+/** What a fix job does: remove the pictures in the marked ranges (img tier only), or re-apply the song's new timing. */
+export type FixKind = 'picture' | 'timing';
+/** A marked stretch a fix works on, in seconds. */
+export interface FixRange { at: number; end: number }
 export interface FeedbackMark { at: number; end?: number; category: FeedbackCategory; note: string }
 export interface Feedback {
   id: string; jobId: string; songId: string; userId: string; ok: boolean; marks: FeedbackMark[]; suggestion: string; action: FeedbackAction;
@@ -22,15 +26,30 @@ const ACTIONS: FeedbackAction[] = ['fix', 'redo', 'none'];
 
 type Parsed = { ok: true; value: Pick<Feedback, 'ok' | 'marks' | 'suggestion' | 'action'> } | { ok: false; error: string };
 const fail = (error: string): Parsed => ({ ok: false, error });
+/** A point mark covers this many seconds from its start when a fix works on it. */
+export const POINT_SPAN = 2;
+const NOT_FIXABLE = '這類問題目前只能重做或只回報';
+
+/** The fix a report's marks allow: `picture` or `timing` when every mark (at least one) is that category, else none. */
+export function fixKindFor(marks: Pick<FeedbackMark, 'category'>[]): FixKind | undefined {
+  const kind = marks[0]?.category;
+  return (kind === 'picture' || kind === 'timing') && marks.every((m) => m.category === kind) ? kind : undefined;
+}
+/** The marks as the ranges a fix job works on (a point mark covers POINT_SPAN seconds). */
+export const fixRanges = (marks: FeedbackMark[]): FixRange[] => marks.map((m) => ({ at: m.at, end: m.end ?? m.at + POINT_SPAN }));
+
 const isSec = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 
-/** Validates a posted report against the limits; `duration` (seconds) bounds the marks when known. */
-export function parseFeedback(body: unknown, duration?: number): Parsed {
+/**
+ * Validates a posted report against the limits; `duration` (seconds) bounds the marks when known. A fix is accepted
+ * only when the marks allow one (fixKindFor) and, for pictures, the video's `tier` is `img`.
+ */
+export function parseFeedback(body: unknown, duration?: number, tier?: Tier): Parsed {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   const ok = b.ok === true;
   const action = (b.action ?? 'none') as FeedbackAction;
   if (!ACTIONS.includes(action)) return fail('動作不正確');
-  if (action !== 'none') return fail('修正與重做即將開放');
+  if (action === 'redo') return fail('修正與重做即將開放');
   const rawMarks = b.marks ?? [];
   if (!Array.isArray(rawMarks)) return fail('標記格式不正確');
   if (rawMarks.length > MAX_MARKS) return fail(`最多標 ${MAX_MARKS} 處`);
@@ -52,6 +71,10 @@ export function parseFeedback(body: unknown, duration?: number): Parsed {
     marks.push({ at: m.at, ...(m.end !== undefined ? { end: m.end as number } : {}), category: m.category as FeedbackCategory, note });
   }
   if (!ok && !marks.length && !suggestion) return fail('請標出哪裡有問題，或寫下建議');
+  if (action === 'fix') {
+    const kind = fixKindFor(marks);
+    if (!kind || (kind === 'picture' && tier !== 'img')) return fail(NOT_FIXABLE);
+  }
   return { ok: true, value: { ok, marks, suggestion, action } };
 }
 

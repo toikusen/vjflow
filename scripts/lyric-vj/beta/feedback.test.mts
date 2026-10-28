@@ -1,10 +1,11 @@
 // npx tsx --test scripts/lyric-vj/beta/feedback.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { addFeedback, parseFeedback } from './feedback.mts';
+import { addFeedback, fixKindFor, parseFeedback } from './feedback.mts';
 import { emptyDb } from './store.mts';
 
 const mark = (o: object = {}) => ({ at: 1, category: 'lyrics', note: 'x', ...o });
+const bad2 = (body: unknown, tier: 'none' | 'img' | 'hybrid') => { const r = parseFeedback(body, 10, tier); assert.equal(r.ok, false); return r.ok ? '' : r.error; };
 const bad = (body: unknown, duration?: number) => { const r = parseFeedback(body, duration); assert.equal(r.ok, false); return r.ok ? '' : r.error; };
 
 test('a clean report parses and text is trimmed', () => {
@@ -33,10 +34,27 @@ test('marks may run up to half a second past the known length', () => {
   assert.equal(bad({ ok: false, marks: [mark({ at: 10.6 })] }, 10), '標記超出影片長度');
   assert.equal(bad({ ok: false, marks: [mark({ at: 9, end: 10.6 })] }, 10), '標記超出影片長度');
 });
-test('fix and redo are rejected in this plan', () => {
-  assert.equal(bad({ ok: false, marks: [mark()], action: 'fix' }), '修正與重做即將開放');
+test('redo is still rejected; an unknown action is rejected', () => {
   assert.equal(bad({ ok: true, action: 'redo' }), '修正與重做即將開放');
   assert.ok(bad({ ok: false, marks: [mark()], action: 'zzz' }));
+});
+test('fixKindFor: picture or timing only when every mark agrees', () => {
+  assert.equal(fixKindFor([]), undefined);
+  assert.equal(fixKindFor([mark({ category: 'picture' }), mark({ category: 'picture' })] as never), 'picture');
+  assert.equal(fixKindFor([mark({ category: 'timing' })] as never), 'timing');
+  assert.equal(fixKindFor([mark({ category: 'picture' }), mark({ category: 'timing' })] as never), undefined);
+  assert.equal(fixKindFor([mark({ category: 'lyrics' })] as never), undefined);
+});
+test('a fix is accepted for picture marks on img, timing marks on any tier; else refused', () => {
+  const pic = { ok: false, marks: [mark({ category: 'picture' })], action: 'fix' };
+  const tim = { ok: false, marks: [mark({ category: 'timing' })], action: 'fix' };
+  assert.ok(parseFeedback(pic, 10, 'img').ok);
+  assert.equal(bad2(pic, 'hybrid'), '這類問題目前只能重做或只回報');
+  assert.equal(bad2(pic, 'none'), '這類問題目前只能重做或只回報');
+  for (const tier of ['none', 'img', 'hybrid'] as const) assert.ok(parseFeedback(tim, 10, tier).ok);
+  assert.equal(bad2({ ok: false, marks: [mark()], action: 'fix' }, 'img'), '這類問題目前只能重做或只回報');
+  assert.equal(bad2({ ok: false, marks: [mark({ category: 'picture' }), mark({ category: 'timing' })], action: 'fix' }, 'img'), '這類問題目前只能重做或只回報');
+  assert.equal(bad2({ ok: false, suggestion: 'x', action: 'fix' }, 'img'), '這類問題目前只能重做或只回報');
 });
 test('not ok with nothing is rejected', () => {
   assert.equal(bad({ ok: false, marks: [], suggestion: '  ' }), '請標出哪裡有問題，或寫下建議');

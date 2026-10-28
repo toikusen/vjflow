@@ -9,11 +9,11 @@ import { LANGUAGES, LanguageId } from '../../../src/app/lyric-vj/languages';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
-import { addFeedback, parseFeedback } from './feedback.mts';
+import { addFeedback, fixKindFor, fixRanges, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import type { ConceptSummary } from './concept-summary.mts';
-import { candidateIds, charged, Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { candidateIds, charged, Db, hashToken, invite, Job, load, madeVideo, newId, platformSpent, PRICE, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -136,7 +136,7 @@ const videoDuration = (root: string, j: Job) => {
 const styleCache = new Map<string, string>();
 /** The Chinese name of a make job's design language, from its treatment.json; cached by job id once found. */
 export function jobStyle(root: string, job: Job): string | undefined {
-  if (job.kind !== 'make') return undefined;
+  if (!madeVideo(job)) return undefined;
   const hit = styleCache.get(job.id);
   if (hit) return hit;
   try {
@@ -224,7 +224,7 @@ export function createBetaServer(o: BetaOptions) {
   const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, extra: { runDir?: string; inputs?: Job['inputs']; conceptOf?: string; refsFrom?: string } = {}) => {
     // refuse() skips the attempt limit without a tier, so a concept or make must name one
     if (kind !== 'prep' && (!tier || !TIERS.includes(tier))) return { error: '方案不正確' };
-    const why = refuse(db, user.id, kind, tier, songId);
+    const why = refuse(db, user.id, kind, tier, songId, kind === 'fix' ? PRICE.fix : undefined);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
     if (kind === 'concept' && extra.inputs?.from !== undefined && !conceptRunId(songId, extra.inputs.from)) return { error: '找不到上一版概念' };
@@ -235,10 +235,10 @@ export function createBetaServer(o: BetaOptions) {
     const price = priceFor(kind, tier);
     const runDir = kind === 'prep' ? undefined : kind === 'concept' ? `runs/${id}` : (extra.runDir ?? `runs/${id}`);
     const job: Job = { id, runDir, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: price, priceUsd: price, createdAt: new Date().toISOString(),
-      ...(extra.conceptOf ? { conceptOf: extra.conceptOf } : {}) };
+      ...(extra.conceptOf ? { conceptOf: extra.conceptOf } : {}), ...(kind === 'fix' && extra.inputs ? { inputs: extra.inputs } : {}) };
     if (kind === 'concept') {
       const run = runPath(o.root, job);
-      const given = extra.inputs ?? { concept: '', refs: [] };
+      const given = { concept: extra.inputs?.concept ?? '', refs: extra.inputs?.refs ?? [], style: extra.inputs?.style, note: extra.inputs?.note, from: extra.inputs?.from };
       const refs = extra.refsFrom ? given.refs.filter((n) => REF_NAME.test(n) && existsSync(join(extra.refsFrom!, n))) : [];
       mkdirSync(run, { recursive: true });
       if (refs.length) mkdirSync(join(run, 'refs'), { recursive: true });
@@ -304,19 +304,29 @@ export function createBetaServer(o: BetaOptions) {
       // one run's finished video; one held for the admin's look reaches the person once the admin approves it
       const vj = /^\/beta\/jobs\/([\w-]+)\/video$/.exec(path);
       if (vj && req.method === 'GET') {
-        const j = db.jobs.find((x) => x.id === vj[1] && x.kind === 'make' && (x.userId === user.id || user.admin));
+        const j = db.jobs.find((x) => x.id === vj[1] && madeVideo(x) && (x.userId === user.id || user.admin));
         return j && isViewable(j, user) ? sendFile(req, res, videoFile(o.root, j)) : json(res, 404, { error: '影片還沒完成' });
       }
-      // problem reports on a finished video: only its owner posts; the owner or the admin reads; every report is kept
+      // problem reports on a finished video: only its owner posts; the owner or the admin reads; every report is kept.
+      // A report asking for a fix also queues the fix job (a new version in a fresh run); a refused fix stores nothing,
+      // so the person can send the same report as 只回報
       const fb = /^\/beta\/jobs\/([\w-]+)\/feedback$/.exec(path);
       if (fb) {
-        const j = db.jobs.find((x) => x.id === fb[1] && x.kind === 'make' && (x.userId === user.id || (user.admin && req.method === 'GET')));
+        const j = db.jobs.find((x) => x.id === fb[1] && madeVideo(x) && (x.userId === user.id || (user.admin && req.method === 'GET')));
         if (!j) return json(res, 404, { error: '找不到' });
         if (req.method === 'GET') return json(res, 200, db.feedback.filter((f) => f.jobId === j.id).reverse());
         if (req.method !== 'POST') return json(res, 404, { error: '找不到' });
         if (j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
-        const p = parseFeedback(await readJson(req), videoDuration(o.root, j));
+        const p = parseFeedback(await readJson(req), videoDuration(o.root, j), j.tier);
         if (!p.ok) return json(res, 400, { error: p.error });
+        // a report may have finished another request's job meanwhile: the source must still be done
+        if (j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
+        if (p.value.action === 'fix') {
+          const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
+          if (!from) return json(res, 409, { error: '這支舊影片無法修正，請重做' });
+          const r = enqueue(user, j.songId, 'fix', j.tier, { inputs: { from, kind: fixKindFor(p.value.marks)!, ranges: fixRanges(p.value.marks) } });
+          if ('error' in r) return json(res, 409, r);
+        }
         const f = addFeedback(db, j, p.value, user.id, jobStyle(o.root, j));
         q.persist();
         logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length });
@@ -339,7 +349,7 @@ export function createBetaServer(o: BetaOptions) {
         // old links: the latest finished video of a version
         if (sm[2].startsWith('video/') && req.method === 'GET') {
           const tier = sm[2].slice(6);
-          const latest = db.jobs.filter((j) => j.songId === song.id && j.kind === 'make' && j.tier === tier && isViewable(j, user)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+          const latest = db.jobs.filter((j) => j.songId === song.id && madeVideo(j) && j.tier === tier && isViewable(j, user)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
           return latest ? sendFile(req, res, videoFile(o.root, latest)) : json(res, 404, { error: '影片還沒完成' });
         }
         if (!existsSync(songFile)) return json(res, 409, { error: '歌曲還在準備中' });
@@ -347,7 +357,7 @@ export function createBetaServer(o: BetaOptions) {
         if (sm[2] === 'timing' && req.method === 'GET') return json(res, 200, timeline);
         if (sm[2].startsWith('audio/') && req.method === 'GET') return sendFile(req, res, join(dir, sm[2] === 'audio/mix' ? 'mix.mp3' : 'vocals.wav'));
         if (sm[2] === 'cues' && req.method === 'PUT') {
-          if (db.jobs.some((j) => j.songId === song.id && j.kind === 'make' && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '影片製作中，時間不能再改' });
+          if (db.jobs.some((j) => j.songId === song.id && madeVideo(j) && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '影片製作中，時間不能再改' });
           if (db.jobs.some((j) => j.songId === song.id && j.kind === 'concept' && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '概念製作中，時間不能再改' });
           const b = (await readJson(req)) as { cues?: TimingEdit[]; confirm?: boolean; accepted?: string[]; singers?: { name: string; color: string }[] };
           if (!Array.isArray(b.cues)) return json(res, 400, { error: '格式錯誤' });
@@ -574,18 +584,25 @@ export function createBetaServer(o: BetaOptions) {
   return { server, db, queue: q, orphans, /** Resolves when the first pump has run (after any orphaned pipeline has exited). */ ready };
 }
 
+const shq = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+/** The shell command of each job under `root`: the pipeline step its kind runs, with the song's and the run's folders. */
+export const betaCommand = (root: string) => (job: Job, db: Db): string | { error: string } => {
+  const song = db.songs.find((s) => s.id === job.songId);
+  if (!song) return { error: '找不到這首歌' };
+  const dir = songDir(root, song.id);
+  if (job.kind === 'prep') return `bash scripts/lyric-vj/beta/prep.sh ${shq(dir)} ${shq(song.language)} ${shq([song.artist, song.title].filter(Boolean).join(' - '))}`;
+  if (job.kind === 'concept') return `bash scripts/lyric-vj/beta/concept.sh ${shq(dir)} ${shq(runPath(root, job))}`;
+  if (job.kind === 'fix') {
+    const from = job.inputs?.from ?? '';
+    if (!/^[\w-]+$/.test(from) || !job.inputs?.kind) return { error: '找不到要修正的影片' };
+    return `bash scripts/lyric-vj/beta/fix.sh ${shq(dir)} ${shq(job.tier ?? '')} ${shq(runPath(root, job))} ${shq(join(dir, 'runs', from))} ${shq(job.inputs.kind)} ${shq(JSON.stringify(job.inputs.ranges ?? []))}`;
+  }
+  return `bash scripts/lyric-vj/beta/make.sh ${shq(dir)} ${shq(job.tier ?? '')} ${shq(runPath(root, job))}`;
+};
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = resolve(process.env.VJ_BETA_ROOT ?? 'out/beta');
-  const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
-  const command = (job: Job, db: Db) => {
-    const song = db.songs.find((s) => s.id === job.songId);
-    if (!song) return { error: '找不到這首歌' };
-    const dir = songDir(root, song.id);
-    if (job.kind === 'prep') return `bash scripts/lyric-vj/beta/prep.sh ${q(dir)} ${q(song.language)} ${q([song.artist, song.title].filter(Boolean).join(' - '))}`;
-    if (job.kind === 'concept') return `bash scripts/lyric-vj/beta/concept.sh ${q(dir)} ${q(runPath(root, job))}`;
-    return `bash scripts/lyric-vj/beta/make.sh ${q(dir)} ${q(job.tier ?? '')} ${q(runPath(root, job))}`;
-  };
-  const beta = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });
+  const beta = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command: betaCommand(root), site: resolve('dist/vjflow/browser') });
   // the pipeline runs in its own process group: stop it with the server, or it would keep spending and a restart would run it twice
   for (const sig of ['SIGINT', 'SIGTERM'] as const)
     process.on(sig, () => stopBeta(beta));

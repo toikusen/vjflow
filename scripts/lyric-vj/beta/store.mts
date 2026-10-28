@@ -4,7 +4,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Feedback } from './feedback.mts';
+import type { Feedback, FixKind, FixRange } from './feedback.mts';
 import { LANGUAGES, type LanguageId } from '../../../src/app/lyric-vj/languages';
 
 export type Tier = 'none' | 'img' | 'hybrid';
@@ -13,7 +13,7 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'admin';
 export interface User { id: string; name: string; tokenHash: string; admin: boolean; limitUsd: number; disabled?: boolean; createdAt: string }
 export interface Song { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
 export interface Job {
-  id: string; userId: string; songId: string; kind: 'prep' | 'concept' | 'make'; tier?: Tier; status: JobStatus;
+  id: string; userId: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: Tier; status: JobStatus;
   /** Legacy: what was set aside before the job started. New jobs keep it equal to `priceUsd`. */
   reservedUsd: number;
   /** What the person pays for this job, fixed when it is queued; unset on legacy jobs. */
@@ -37,13 +37,21 @@ export interface Job {
   auto?: boolean;
   /** Set when the cost fuse stopped the job; such a job never retries by itself. */
   fused?: boolean;
-  /** A concept job's input: the concept text, the chosen language id (unset = the director picks), reference file names copied into the run, the adjust note, and the concept job it adjusts or redoes. */
-  inputs?: { concept: string; style?: string; refs: string[]; note?: string; from?: string };
+  /**
+   * A concept job's input: the concept text, the chosen language id (unset = the director picks), reference file names
+   * copied into the run, the adjust note, and the concept job it adjusts or redoes. A fix job's: the run id of the video
+   * it fixes, what it does and the marked ranges.
+   */
+  inputs?: ConceptInputs | FixInputs;
   /** What the person decided about a finished concept. */
   decision?: 'accepted' | 'adjusted' | 'redone';
   /** On the make job an acceptance created: the concept job it came from. */
   conceptOf?: string;
 }
+export interface ConceptInputs { concept: string; style?: string; refs: string[]; note?: string; from?: string; kind?: undefined; ranges?: undefined }
+export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; concept?: undefined; style?: undefined; refs?: undefined; note?: undefined }
+/** True for the jobs that make a video a person watches: a make, or a fix of one (a new version beside the old). */
+export const madeVideo = (j: Pick<Job, 'kind'>) => j.kind === 'make' || j.kind === 'fix';
 export type StyleTier = 'proven' | 'candidate' | 'unlisted';
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number;
   /** Every problem report ever submitted, never overwritten. */
@@ -62,8 +70,8 @@ export const candidateIds = (db: Db) => Object.keys(LANGUAGES).filter((id) => st
  * What a person pays, fixed per step (placeholders): each concept attempt, then the rest once the concept is accepted.
  * Together they stay above the costs seen on the test songs; the platform absorbs a run that costs more.
  */
-export const PRICE: Record<'prep' | 'concept' | Tier, number> = { prep: 0.5, concept: 2.5, none: 1.5, img: 3.5, hybrid: 13.5 };
-export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'concept' ? PRICE.concept : kind === 'make' && tier ? PRICE[tier] : PRICE.prep);
+export const PRICE: Record<'prep' | 'concept' | 'fix' | Tier, number> = { prep: 0.5, concept: 2.5, fix: 1, none: 1.5, img: 3.5, hybrid: 13.5 };
+export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'concept' ? PRICE.concept : kind === 'fix' ? PRICE.fix : kind === 'make' && tier ? PRICE[tier] : PRICE.prep);
 /** One concept plus the rest: what a tier costs a person who accepts the first concept. */
 export const TIER_TOTAL = (tier: Tier) => PRICE.concept + PRICE[tier];
 export const MAX_CONCEPTS = 3;

@@ -108,7 +108,8 @@ test('retryJob copies the run and price, links retryOf, and the user pays once',
 });
 
 test('prices split into concept and the rest; a stop after the concept pays only the concept', () => {
-  assert.deepEqual(PRICE, { prep: 0.5, concept: 2.5, none: 1.5, img: 3.5, hybrid: 13.5 });
+  assert.deepEqual(PRICE, { prep: 0.5, concept: 2.5, fix: 1, none: 1.5, img: 3.5, hybrid: 13.5 });
+  assert.equal(priceFor('fix', 'hybrid'), 1);
   assert.equal(priceFor('concept', 'img'), 2.5);
   assert.equal(priceFor('make', 'img'), 3.5);
   assert.equal(priceFor('prep'), 0.5);

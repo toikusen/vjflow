@@ -5,7 +5,7 @@ import { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { createBetaServer, stopBeta } from './server.mts';
+import { betaCommand, createBetaServer, stopBeta } from './server.mts';
 import { killRunning, waitGone } from './queue.mts';
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -1063,4 +1063,123 @@ test('an upload far past the limit gets its 413 and the server keeps answering; 
   await t.put(PNG, 'image/png');
   assert.equal((await t.tester('/beta/songs/s1/refs/ref-1.png')).headers.get('cache-control'), 'no-store');
   t.beta.server.close();
+});
+
+// ---- fix jobs: a finished video fixed in a new run (pictures removed in a range, or the new timing re-applied) ----
+
+async function fixRoot(o: { slow?: boolean; limit?: number } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'beta-'));
+  const db = emptyDb();
+  const admin = invite(db, 'Admin', 100, true);
+  const tester = invite(db, 'Tester', o.limit ?? 50);
+  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  const src = (id: string, tier: Job['tier'], runDir?: string): Job => ({ id, userId: tester.user.id, songId: 's1', kind: 'make', tier, status: 'done', reservedUsd: 3.5, priceUsd: 3.5, createdAt: '2026-10-27T00:00:00Z', ...(runDir ? { runDir } : {}) });
+  db.jobs.push(src('i', 'img', 'runs/i'), src('h', 'hybrid', 'runs/h'), src('n', 'none', 'runs/n'), src('legacy', 'img'));
+  save(join(root, 'db.json'), db);
+  for (const r of ['i', 'h', 'n']) { mkdirSync(join(root, 'songs/s1/runs', r), { recursive: true }); writeFileSync(join(root, 'songs/s1/runs', r, 'song.json'), SONG); }
+  writeFileSync(join(root, 'songs/s1/song.json'), SONG);
+  const seen: Job[] = [];
+  const command = (job: Job) => { seen.push(job); return o.slow ? 'sleep 30' : `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'`; };
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
+  await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
+  const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
+  const as = (token: string) => (path: string, init: { method?: string; json?: unknown } = {}) =>
+    fetch(base + path, { method: init.method ?? (init.json !== undefined ? 'POST' : 'GET'), body: init.json !== undefined ? JSON.stringify(init.json) : undefined, headers: { cookie: `vjb=${token}`, 'content-type': 'application/json' } });
+  return { beta, root, seen, admin: as(admin.token), tester: as(tester.token) };
+}
+const fixBody = (category: string, o: object = {}) => ({ ok: false, marks: [{ at: 2, category, note: '' }], suggestion: '', action: 'fix', ...o });
+
+test('fix: a picture fix on img queues a fix job at the fix price in a fresh run, and its video is served', async () => {
+  const t = await fixRoot();
+  const r = await t.tester('/beta/jobs/i/feedback', { json: fixBody('picture', { marks: [{ at: 2, category: 'picture', note: '' }, { at: 5, end: 6, category: 'picture', note: 'x' }] }) });
+  assert.equal(r.status, 201);
+  const fb = await r.json();
+  assert.equal(fb.action, 'fix');
+  assert.equal(t.beta.db.feedback.length, 1);
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  assert.ok(fix);
+  assert.deepEqual([fix.tier, fix.priceUsd, fix.reservedUsd, fix.userId, fix.songId], ['img', 1, 1, t.beta.db.songs[0].userId, 's1']);
+  assert.equal(fix.runDir, `runs/${fix.id}`);
+  assert.notEqual(fix.runDir, 'runs/i');
+  assert.deepEqual(fix.inputs, { from: 'i', kind: 'picture', ranges: [{ at: 2, end: 4 }, { at: 5, end: 6 }] });
+  const q = readEvents(t.root, 's1').find((e) => e.type === 'job.queued');
+  assert.deepEqual([q?.kind, q?.jobId, (q?.inputs as { kind?: string })?.kind], ['fix', fix.id, 'picture']);
+  await waitFor(() => fix.status === 'done');
+  assert.equal(t.seen[0].id, fix.id);
+  assert.equal((await t.tester(`/beta/jobs/${fix.id}/video`)).status, 200);
+  assert.equal((await t.tester('/beta/songs/s1/video/img')).status, 200);
+  t.beta.server.close();
+});
+
+test('fix: timing is accepted on every tier', async () => {
+  for (const id of ['n', 'h', 'i']) {
+    const t = await fixRoot();
+    const r = await t.tester(`/beta/jobs/${id}/feedback`, { json: fixBody('timing') });
+    assert.equal(r.status, 201, id);
+    const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+    assert.deepEqual([fix.tier, fix.priceUsd, fix.inputs?.kind, fix.inputs?.from], [t.beta.db.jobs.find((j) => j.id === id)!.tier, 1, 'timing', id]);
+    t.beta.server.close();
+  }
+});
+
+test('fix: refused requests queue nothing and store no report', async () => {
+  const t = await fixRoot();
+  const status = async (id: string, body: object) => { const r = await t.tester(`/beta/jobs/${id}/feedback`, { json: body }); return [r.status, (await r.json()).error]; };
+  assert.deepEqual(await status('h', fixBody('picture')), [400, '這類問題目前只能重做或只回報']);
+  assert.deepEqual(await status('n', fixBody('picture')), [400, '這類問題目前只能重做或只回報']);
+  assert.deepEqual(await status('i', fixBody('lyrics')), [400, '這類問題目前只能重做或只回報']);
+  assert.deepEqual(await status('legacy', fixBody('timing')), [409, '這支舊影片無法修正，請重做']);
+  assert.equal(t.beta.db.feedback.length, 0);
+  assert.equal(t.beta.db.jobs.filter((j) => j.kind === 'fix').length, 0);
+  // the same report as 只回報 is kept
+  assert.equal((await t.tester('/beta/jobs/h/feedback', { json: fixBody('picture', { action: 'none' }) })).status, 201);
+  t.beta.server.close();
+});
+
+test('fix: refused while the song has a job queued or running, and over the limit', async () => {
+  const t = await fixRoot({ slow: true });
+  assert.equal((await t.tester('/beta/jobs/i/feedback', { json: fixBody('timing') })).status, 201);
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  await waitFor(() => fix.status === 'running');
+  fix.fused = true; // the killed stub must not retry by itself
+  const again = await t.tester('/beta/jobs/n/feedback', { json: fixBody('timing') });
+  assert.deepEqual([again.status, (await again.json()).error], [409, '這首歌已經在排隊或製作中']);
+  assert.equal(t.beta.db.feedback.length, 1);
+  // the timing stays locked while the fix runs
+  const cues = await t.tester('/beta/songs/s1/cues', { method: 'PUT', json: { cues: [] } });
+  assert.deepEqual([cues.status, (await cues.json()).error], [409, '影片製作中，時間不能再改']);
+  try { process.kill(-fix.pid!, 'SIGKILL'); } catch { /* gone */ }
+  await waitFor(() => fix.status !== 'running');
+  t.beta.server.close();
+  const poor = await fixRoot({ limit: 3.5 * 4 });
+  const r = await poor.tester('/beta/jobs/i/feedback', { json: fixBody('timing') });
+  assert.equal(r.status, 409);
+  assert.match((await r.json()).error, /額度不足/);
+  assert.equal(poor.beta.db.feedback.length, 0);
+  poor.beta.server.close();
+});
+
+test('fix: a failed fix retries at the fix price in the same run', async () => {
+  const t = await fixRoot();
+  assert.equal((await t.tester('/beta/jobs/i/feedback', { json: fixBody('timing') })).status, 201);
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  await waitFor(() => fix.status === 'done');
+  Object.assign(fix, { status: 'failed' });
+  const r = await t.admin(`/beta/admin/jobs/${fix.id}/retry`, { method: 'POST' });
+  assert.equal(r.status, 202);
+  const again = t.beta.db.jobs.find((j) => j.retryOf === fix.id)!;
+  assert.deepEqual([again.kind, again.priceUsd, again.runDir, again.inputs], ['fix', 1, fix.runDir, fix.inputs]);
+  t.beta.server.close();
+});
+
+test('the shell command of a fix job runs fix.sh with the source run, the kind and the ranges', () => {
+  const root = '/r';
+  const db = emptyDb();
+  db.songs.push({ id: 's1', userId: 'u', title: 'T', artist: 'A', language: 'ja', createdAt: 'x' });
+  const job = (kind: 'picture' | 'timing'): Job => ({ id: 'f1', userId: 'u', songId: 's1', kind: 'fix', tier: 'img', status: 'queued', reservedUsd: 1, priceUsd: 1, createdAt: 'x', runDir: 'runs/f1', inputs: { from: 'm1', kind, ranges: [{ at: 2, end: 4 }] } });
+  const cmd = betaCommand(root);
+  assert.equal(cmd(job('picture'), db), `bash scripts/lyric-vj/beta/fix.sh '/r/songs/s1' 'img' '/r/songs/s1/runs/f1' '/r/songs/s1/runs/m1' 'picture' '[{"at":2,"end":4}]'`);
+  assert.match(cmd(job('timing'), db) as string, /fix\.sh .* 'timing' /);
+  assert.deepEqual(cmd({ ...job('timing'), inputs: { from: '../x', kind: 'timing', ranges: [] } }, db), { error: '找不到要修正的影片' });
+  assert.match(cmd({ ...job('timing'), kind: 'make' }, db) as string, /^bash scripts\/lyric-vj\/beta\/make\.sh '\/r\/songs\/s1' 'img' '\/r\/songs\/s1\/runs\/f1'$/);
 });

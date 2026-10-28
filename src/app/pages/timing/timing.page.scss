@@ -134,6 +134,12 @@ p {
     flex-wrap: wrap;
   }
 
+  // fixed-width digits: a readout that changes width every frame shoves the controls after it sideways
+  .time {
+    min-width: 10ch;
+    font-variant-numeric: tabular-nums;
+  }
+
   .keys {
     font-size: 12px;
   }

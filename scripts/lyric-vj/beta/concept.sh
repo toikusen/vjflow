@@ -14,15 +14,16 @@ end=$(python3 -c "import json,sys;print('%.2f'%json.load(open(sys.argv[1]))['dur
 # same cost helpers as make.sh: nothing is printed for a missing or zero cost
 cost_json() { [ -f "$1" ] && python3 -c "import json,sys;c=json.load(open(sys.argv[1])).get('costUSD') or 0;c>0 and print('##COST %.3f %s' % (c, sys.argv[2]))" "$1" "$2" || true; }
 cost_log() { local c; c=$(grep -oE '\$[0-9]+\.[0-9]+' "$1" | tail -1 | tr -d '$' || true); [ -n "$c" ] && awk -v c="$c" 'BEGIN{exit !(c>0)}' && echo "##COST $c $2" || true; }
-# one inputs.json field, "" when absent
+[ -f "$w/inputs.json" ] || { echo "no inputs.json" >&2; exit 2; }
+# one inputs.json field, "" when absent; a corrupt file aborts
 field() { python3 -c "import json,sys;v=json.load(open(sys.argv[1])).get(sys.argv[2]);print(v if isinstance(v,str) else '')" "$w/inputs.json" "$1"; }
 
 # the person's words for the director: the concept text, then (adjusting) their note on the previous version
 brief=$w/brief.txt
-{ field concept; n=$(field note); [ -n "$n" ] && printf '\n使用者對上一版的意見：%s\n' "$n"; } > "$brief" || true
-lang=$(field style)
+concept=$(field concept); note=$(field note); lang=$(field style); from=$(field from)
+{ printf '%s\n' "$concept"; n=$note; [ -n "$n" ] && printf '\n使用者對上一版的意見：%s\n' "$n"; } > "$brief" || true
 prev=
-from=$(field from)
+[ -n "$from" ] && ! [[ $from =~ ^[A-Za-z0-9_-]+$ ]] && { echo "ignoring invalid from: $from" >&2; from=; }
 [ -n "$from" ] && [ -f "$d/runs/$from/base/treatment.json" ] && prev=$d/runs/$from/base/treatment.json
 
 echo '##PHASE 導演規劃段落與故事'
@@ -44,9 +45,11 @@ if [ ! -f "$w/noimg/treatment.json" ]; then
 fi
 
 echo '##PHASE 準備示意畫面'
-if ! ls "$w/stills/"still_*.png > /dev/null 2>&1; then
+if [ ! -d "$w/stills" ]; then
+  rm -rf "$w/stills.tmp"
   times=$(npx tsx scripts/lyric-vj/beta/concept-summary.mts --times "$w")
-  npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$w/noimg/treatment.json" --assets "$w/noimg/assets.json" --stills "$times" --out "$w/stills" > "$w/stills.log" 2>&1
+  npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$w/noimg/treatment.json" --assets "$w/noimg/assets.json" --stills "$times" --out "$w/stills.tmp" > "$w/stills.log" 2>&1
+  rm -rf "$w/stills"; mv "$w/stills.tmp" "$w/stills"
 fi
 
 echo '##PHASE 整理概念'

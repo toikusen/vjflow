@@ -44,3 +44,25 @@ test('writeSummary writes concept.json', () => {
   writeSummary(run);
   assert.equal(JSON.parse(readFileSync(join(run, 'concept.json'), 'utf8')).language, 'silkscreen');
 });
+
+const timesRun = (shots: unknown[], duration = 100) => {
+  const run = mkdtempSync(join(tmpdir(), 'concept-'));
+  w(join(run, 'song.json'), { duration, cues: [] });
+  w(join(run, 'noimg/treatment.json'), { shots });
+  return run;
+};
+
+test('two points in one shot still give three distinct times when shots allow', () => {
+  const run = timesRun([{ id: 'a', start: 0, end: 60 }, { id: 'b', start: 60, end: 85 }, { id: 'c', start: 85, end: 100 }]);
+  const t = stillTimes(run);
+  assert.equal(new Set(t).size, 3);
+  assert.deepEqual(t, [30, 72.5, 92.5]);
+});
+
+test('a one-shot song gives one time', () => {
+  assert.deepEqual(stillTimes(timesRun([{ id: 'a', start: 0, end: 100 }])), [50]);
+});
+
+test('no shots is a clear error', () => {
+  assert.throws(() => stillTimes(timesRun([])), /沒有鏡頭，無法選示意畫面/);
+});

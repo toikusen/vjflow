@@ -17,15 +17,27 @@ export interface ConceptSummary {
 
 const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
 
-/** The middle of the first sung line of the shots at 20 %, 50 % and 80 % of the song. */
+/**
+ * The middle of the first sung line of the shots at 20 %, 50 % and 80 % of the song. Points in the same shot would
+ * repeat a still, so each takes the next later shot that gives a time not yet used; fewer than 3 shots give fewer times.
+ */
 export function stillTimes(run: string): number[] {
   const song = read(join(run, 'song.json')) as { duration: number; cues: { start: number; end: number }[] };
   const shots = (read(join(run, 'noimg/treatment.json')) as { shots: { id: string; start: number; end: number }[] }).shots;
-  return [0.2, 0.5, 0.8].map((f) => {
+  if (!shots.length) throw new Error('沒有鏡頭，無法選示意畫面');
+  const used: number[] = [];
+  for (const f of [0.2, 0.5, 0.8]) {
     const at = song.duration * f;
-    const shot = shots.find((s) => s.start <= at && at < s.end) ?? shots.at(-1)!;
-    return stillAt(shot, song.cues as never);
-  });
+    let i = shots.findIndex((s) => s.start <= at && at < s.end);
+    if (i < 0) i = shots.length - 1;
+    for (; i < shots.length; i++) {
+      const t = stillAt(shots[i], song.cues as never);
+      if (used.includes(t)) continue;
+      used.push(t);
+      break;
+    }
+  }
+  return used;
 }
 
 /** The concept the gate shows, read from the run's base treatment and stills folder. */

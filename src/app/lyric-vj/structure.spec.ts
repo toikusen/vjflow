@@ -111,5 +111,11 @@ describe('unsungWindows', () => {
   it('has no outro when the last cue ends at the duration', () => expect(unsungWindows(mk([[0, 20]], 20))).toEqual([]));
   it('finds a 6 s outro', () => expect(unsungWindows(mk([[0, 14]], 20))).toEqual([{ start: 14, end: 20, kind: 'outro' }]));
   it('treats an instrumental as one intro window', () => expect(unsungWindows(mk([], 30))).toEqual([{ start: 0, end: 30, kind: 'intro' }]));
-  it('matches titleGaps', () => expect(unsungWindows(song)).toEqual(titleGaps(song)));
+  it('measures gaps from the latest end when cues overlap', () => {
+    const song2 = mk([[0, 20], [2, 5], [30, 40]], 40);
+    expect(unsungWindows(song2)).toEqual([{ start: 20, end: 30, kind: 'interlude' }]);
+    expect(titleGaps(song2 as SongTimeline)).toEqual([{ start: 20, end: 30, kind: 'interlude' }]);
+  });
+  it('sorts unsorted cues', () => expect(unsungWindows(mk([[30, 40], [0, 10]], 40))).toEqual([{ start: 10, end: 30, kind: 'interlude' }]));
+  it('has no outro and no negative window when a cue runs past the duration', () => expect(unsungWindows(mk([[0, 10], [20, 45]], 40))).toEqual([{ start: 10, end: 20, kind: 'interlude' }]));
 });

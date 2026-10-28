@@ -274,9 +274,12 @@ export function unsungWindows(song: Pick<SongTimeline, 'cues' | 'duration'>): Un
   if (!cues.length) return [{ start: 0, end: song.duration, kind: 'intro' }];
   const out: UnsungWindow[] = [];
   if (cues[0].start >= 4) out.push({ start: 0, end: cues[0].start, kind: 'intro' });
-  for (let i = 1; i < cues.length; i++) if (cues[i].start - cues[i - 1].end >= 6) out.push({ start: cues[i - 1].end, end: cues[i].start, kind: 'interlude' });
-  const last = cues[cues.length - 1].end;
-  if (song.duration - last >= 6) out.push({ start: last, end: song.duration, kind: 'outro' });
+  let maxEnd = cues[0].end;
+  for (let i = 1; i < cues.length; i++) {
+    if (cues[i].start - maxEnd >= 6) out.push({ start: maxEnd, end: cues[i].start, kind: 'interlude' });
+    maxEnd = Math.max(maxEnd, cues[i].end);
+  }
+  if (song.duration - maxEnd >= 6) out.push({ start: maxEnd, end: song.duration, kind: 'outro' });
   return out;
 }
 

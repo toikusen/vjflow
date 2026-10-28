@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeStructure, chorusSpans, keyWords, lineSimilarity, sameLines, splitSongTitle, suggestMoments, titleGaps, wantedTitleGaps } from './structure';
+import { analyzeStructure, chorusSpans, keyWords, lineSimilarity, sameLines, splitSongTitle, suggestMoments, titleGaps, unsungWindows, wantedTitleGaps } from './structure';
 import { SongTimeline, TimelineCue } from './timeline';
 
 // verse / chorus ×2 / quiet ochi / last chorus; the shout 「はぁ」 precedes every chorus, a pickup line only some
@@ -97,4 +97,19 @@ describe('colourWords', () => {
     expect(w).toContain('最強');
     expect(w).not.toContain('自分');
   });
+});
+
+describe('unsungWindows', () => {
+  const mk = (spans: [number, number][], duration: number) => ({
+    duration,
+    cues: spans.map(([start, end], i): TimelineCue => ({ id: `u${i}`, start, end, text: `l${i}`, timingSource: 'whisper', confidence: 'aligned' })),
+  });
+  it('has none when lines run back to back', () => expect(unsungWindows(mk([[0, 10], [11, 20]], 20))).toEqual([]));
+  it('finds a 5 s intro', () => expect(unsungWindows(mk([[5, 20]], 20))).toEqual([{ start: 0, end: 5, kind: 'intro' }]));
+  it('finds a 7 s interlude', () => expect(unsungWindows(mk([[0, 10], [17, 20]], 20))).toEqual([{ start: 10, end: 17, kind: 'interlude' }]));
+  it('ignores a 5 s interlude', () => expect(unsungWindows(mk([[0, 10], [15, 20]], 20))).toEqual([]));
+  it('has no outro when the last cue ends at the duration', () => expect(unsungWindows(mk([[0, 20]], 20))).toEqual([]));
+  it('finds a 6 s outro', () => expect(unsungWindows(mk([[0, 14]], 20))).toEqual([{ start: 14, end: 20, kind: 'outro' }]));
+  it('treats an instrumental as one intro window', () => expect(unsungWindows(mk([], 30))).toEqual([{ start: 0, end: 30, kind: 'intro' }]));
+  it('matches titleGaps', () => expect(unsungWindows(song)).toEqual(titleGaps(song)));
 });

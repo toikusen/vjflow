@@ -266,16 +266,23 @@ export function splitSongTitle(full: string): { artist: string; title: string } 
   return i < 0 ? { artist: '', title: full.trim() } : { artist: full.slice(0, i).trim(), title: full.slice(i + 3).trim() };
 }
 
-/** Gaps without lyrics long enough for a title card: intro ≥ 4 s, interludes and the outro ≥ 6 s. */
-export function titleGaps(song: SongTimeline): { start: number; end: number; kind: 'intro' | 'interlude' | 'outro' }[] {
+export interface UnsungWindow { start: number; end: number; kind: 'intro' | 'interlude' | 'outro' }
+
+/** Stretches with no sung cue: intro ≥ 4 s, interludes and the outro ≥ 6 s; a song with no cues is one intro window. */
+export function unsungWindows(song: Pick<SongTimeline, 'cues' | 'duration'>): UnsungWindow[] {
   const cues = [...song.cues].sort((a, b) => a.start - b.start);
   if (!cues.length) return [{ start: 0, end: song.duration, kind: 'intro' }];
-  const out: { start: number; end: number; kind: 'intro' | 'interlude' | 'outro' }[] = [];
+  const out: UnsungWindow[] = [];
   if (cues[0].start >= 4) out.push({ start: 0, end: cues[0].start, kind: 'intro' });
   for (let i = 1; i < cues.length; i++) if (cues[i].start - cues[i - 1].end >= 6) out.push({ start: cues[i - 1].end, end: cues[i].start, kind: 'interlude' });
   const last = cues[cues.length - 1].end;
   if (song.duration - last >= 6) out.push({ start: last, end: song.duration, kind: 'outro' });
   return out;
+}
+
+/** Gaps without lyrics long enough for a title card (the unsung windows). */
+export function titleGaps(song: SongTimeline): UnsungWindow[] {
+  return unsungWindows(song);
 }
 
 /** Each cue id → the first cue with the same words (only for repeats). */

@@ -55,6 +55,25 @@ describe('jobProgress', () => {
   it('a queued job has not started', () => {
     expect(jobProgress(job({ kind: 'make', tier: 'none', status: 'queued' }))).toMatchObject({ label: '排隊中', pct: 0 });
   });
+
+  it('a concept job runs its own steps, so its ETA covers the concept only, not a whole make', () => {
+    expect(JOB_STEPS.concept.map((x) => x.label)).toEqual(['導演正在讀歌詞、規劃段落與故事', '導演正在修正故事草稿', '導演正在選風格、設計畫面', '正在編排歌詞文字動態', '正在準備示意畫面', '正在整理概念']);
+    const c = job({ kind: 'concept', tier: 'hybrid', status: 'running', phase: '準備示意畫面', startedAt: '2026-10-27T00:00:00Z', steps: [{ phase: '準備示意畫面', at: '2026-10-27T00:13:00Z' }] });
+    // 13 min of earlier steps + 1 min into this one, of 15.5
+    expect(jobProgress(c, Date.parse('2026-10-27T00:14:00Z'))).toMatchObject({ index: 4, label: '正在準備示意畫面', pct: 90, leftMin: 2 });
+  });
+
+  it('a fix job applies its edit, then re-renders', () => {
+    expect(JOB_STEPS.fix.map((x) => x.label)).toEqual(['套用修正', '正在畫背景剪影', '正在繪製並輸出影片']);
+    const f = job({ kind: 'fix', tier: 'img', status: 'running', phase: '輸出影片', startedAt: '2026-10-27T00:00:00Z' });
+    expect(jobProgress(f, Date.parse('2026-10-27T00:05:00Z'))).toMatchObject({ index: 2, pct: 38, leftMin: 8 });
+  });
+
+  it('a job with no tier falls back to the text version and does not throw', () => {
+    const p = jobProgress(job({ kind: 'make', status: 'running', phase: '輸出影片', startedAt: '2026-10-27T00:00:00Z' }), start);
+    expect(p.steps).toBe(JOB_STEPS.none);
+    expect(() => jobProgress(job({ kind: 'other' as BetaJob['kind'], status: 'running' }))).not.toThrow();
+  });
 });
 
 describe('prices', () => {

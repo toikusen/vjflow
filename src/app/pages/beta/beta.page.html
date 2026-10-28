@@ -52,7 +52,8 @@
   </div>
 </form>
 
-@if (!composing()) {
+<!-- on phones the open form is its own page; wider screens show everything (CSS), so a resize never strands the list -->
+<div class="list">
   <div class="filters" role="group" aria-label="篩選">
     @for (f of filters; track f.id) {
       <button type="button" class="filter" [class.on]="filter() === f.id" [attr.aria-pressed]="filter() === f.id" (click)="filter.set(f.id)">
@@ -86,6 +87,6 @@
       </article>
     }
   </div>
-}
+</div>
 
 <app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />

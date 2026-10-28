@@ -20,6 +20,7 @@ const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文'
   imports: [FormsModule, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
   templateUrl: './beta.page.html',
   styleUrl: './list.page.scss',
+  host: { '[class.composing]': 'composing()' },
 })
 export class BetaPage {
   /** Shared with the shell, so its balance pill follows this page's poll. */

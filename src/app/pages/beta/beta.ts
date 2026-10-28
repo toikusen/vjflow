@@ -30,13 +30,19 @@ const DIRECT = [
 const TEXT = step('正在編排歌詞文字動態', 4, '編排文字動態');
 const TAIL = [step('正在畫背景剪影', 2, '畫背景剪影'), step('正在繪製並輸出影片', 10, '輸出影片')];
 
-/** The steps of each job, in the order its script (prep.sh, make.sh) runs them. */
-export const JOB_STEPS: Record<'prep' | BetaTier, JobStep[]> = {
+/** The steps of each job, in the order its script (prep.sh, concept, fix, make.sh) runs them. */
+export const JOB_STEPS: Record<'prep' | 'concept' | 'fix' | BetaTier, JobStep[]> = {
+  concept: [...DIRECT, TEXT, step('正在準備示意畫面', 2, '準備示意畫面'), step('正在整理概念', 0.5, '整理概念')],
+  fix: [step('套用修正', 1, '套用修正'), ...TAIL],
   prep: [step('讀取音檔', 0.5, '讀取音檔'), step('分離人聲與伴奏', 5, '分離人聲'), step('對齊歌詞時間', 8, '對齊歌詞時間'), step('檢查錯字', 3, '檢查錯字')],
   none: [...DIRECT, TEXT, ...TAIL],
   img: [...DIRECT, step('正在設計並畫出插圖道具', 5, '畫道具'), TEXT, ...TAIL],
   hybrid: [...DIRECT, TEXT, step('導演正在寫故事、設計角色', 8, '寫故事、畫角色'), step('正在畫故事畫面', 12, '畫故事畫面'), ...TAIL],
 };
+
+/** The step list for a job: by its kind, and for a make job by its tier; anything unknown reads as the text version. */
+const jobSteps = (job: BetaJob): JobStep[] =>
+  (job.kind === 'make' ? JOB_STEPS[job.tier ?? 'none'] : JOB_STEPS[job.kind]) ?? JOB_STEPS.none;
 
 export interface JobProgress { label: string; index: number; steps: JobStep[]; pct: number; leftMin: number }
 
@@ -45,7 +51,7 @@ export interface JobProgress { label: string; index: number; steps: JobStep[]; p
  * its recorded start (else since the job started, beyond them), held under 90 % of its estimate so the bar never claims a step is done early.
  */
 export function jobProgress(job: BetaJob, now = Date.now()): JobProgress {
-  const steps = JOB_STEPS[job.kind === 'prep' ? 'prep' : job.tier!];
+  const steps = jobSteps(job);
   const total = steps.reduce((s, x) => s + x.min, 0);
   const at = steps.findIndex((x) => x.phases.includes(job.phase ?? ''));
   const index = Math.max(0, at);

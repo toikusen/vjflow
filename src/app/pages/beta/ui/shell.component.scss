@@ -2,7 +2,8 @@
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
   min-height: 100dvh;
-  background: var(--bg);
+  // the sidebar column keeps its colour and line however tall the page gets (the sticky .side is one viewport high)
+  background: linear-gradient(to right, var(--sidebar) 0 87px, var(--divider) 87px 88px, var(--bg) 88px);
 }
 
 .side {
@@ -135,6 +136,7 @@
   :host {
     display: flex;
     flex-direction: column;
+    background: var(--bg);
   }
 
   .side {

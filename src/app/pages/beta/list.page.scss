@@ -111,6 +111,12 @@ h1, h3, p {
     background: var(--surface-2);
   }
 
+  // the native input is invisible, so the zone carries its focus ring
+  &:focus-within {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 2px;
+  }
+
   &.has {
     border-style: solid;
     border-color: var(--accent-text);
@@ -285,6 +291,22 @@ textarea {
   &:focus-within {
     border-color: var(--border-strong);
   }
+
+  // the title link covers the card, so the card shows its focus ring
+  &:has(.title-link:focus-visible) {
+    outline: 2px solid var(--accent-text);
+    outline-offset: 2px;
+  }
+}
+
+.title-link:focus-visible {
+  outline: none;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
 .cover {
@@ -444,6 +466,14 @@ h3 {
     background: none;
     border: 0;
     cursor: pointer;
+  }
+
+  .list {
+    gap: 12px;
+  }
+
+  :host(.composing) .list {
+    display: none;
   }
 
   .composer {

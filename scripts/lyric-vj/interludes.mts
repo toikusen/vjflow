@@ -70,6 +70,22 @@ export function unsungFrameRule(windows: UnsungWindow[], interludes?: Interlude[
 }
 
 /**
+ * Clears `who` on every story frame whose moment (an '@seconds' cue, or the start of the sung cue it names) lies inside
+ * a backdrop window; frames in pictures windows and in sung time keep their people. Returns new frame objects.
+ */
+export function quietFrames<F extends { cue: string; who: string[] }>(frames: F[], windows: UnsungWindow[], interludes: Interlude[] | undefined, cues: { id: string; start: number }[]): { frames: F[]; cleared: number; clearedFrames: F[] } {
+  const backdrop = windowModes(windows, interludes).filter((w) => w.mode === 'backdrop');
+  const clearedFrames: F[] = [];
+  const out = frames.map((f) => {
+    const t = f.cue.startsWith('@') ? Number(f.cue.slice(1)) : cues.find((c) => c.id === f.cue)?.start;
+    if (t === undefined || !f.who.length || !backdrop.some((w) => t >= w.start && t < w.end)) return f;
+    clearedFrames.push(f);
+    return { ...f, who: [] };
+  });
+  return { frames: out, cleared: clearedFrames.length, clearedFrames };
+}
+
+/**
  * When cut i of a shot really ends: at the first later cut that lands (at least `gap` after it and before the shot's
  * last 0.05 s, as buildCuts decides), else at the shot's end. `times` are the shot's cut times in order.
  */

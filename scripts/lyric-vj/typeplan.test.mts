@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { landedEnd, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
+import { landedEnd, quietFrames, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
@@ -278,4 +278,23 @@ test('unsungFrameRule: mixed windows state both; no windows gives the plain old 
   const mixed = unsungFrameRule([{ start: 0, end: 8, kind: 'intro' }, ...OUTRO], [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]);
   assert.ok(mixed.includes('0.0–8.0 秒（前奏）') && mixed.includes(`理由：「${REASON}」`), mixed);
   assert.equal(unsungFrameRule([]), '沒有歌詞的時段（前奏、間奏、尾奏）也要有畫面推進：一格最多停 9 秒；那裡的格 cue 寫「@秒數」（例如 @24.5），交代時間推移或停在結果。');
+});
+
+test('quietFrames: people are cleared in backdrop windows only, sung time and pictures windows keep them', () => {
+  const cues = [{ id: 'c1', start: 5 }, { id: 'c2', start: 20 }];
+  const frames = [
+    { cue: '@24.5', who: ['a'] }, { cue: 'c1', who: ['a'] }, { cue: '@18', who: ['b'] }, { cue: '@17', who: [] },
+  ];
+  const wins: UnsungWindow[] = [{ start: 16, end: 31, kind: 'outro' }];
+  // no interludes data: backdrop default; c1 is sung at 5 s and keeps its person
+  const d = quietFrames(frames, wins, undefined, cues);
+  assert.deepEqual(d.frames.map((f) => f.who), [[], ['a'], [], []]);
+  assert.equal(d.cleared, 2);
+  // pictures on the outro keeps its frames
+  const p = quietFrames(frames, wins, [{ start: 16, end: 31, mode: 'pictures', reason: REASON }], cues);
+  assert.deepEqual(p.frames.map((f) => f.who), [['a'], ['a'], ['b'], []]);
+  // sung time untouched
+  const s = quietFrames([{ cue: 'c2', who: ['a'] }], wins, undefined, cues);
+  assert.deepEqual(s.frames[0].who, ['a']);
+  assert.equal(s.cleared, 0);
 });

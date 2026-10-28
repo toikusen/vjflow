@@ -15,7 +15,7 @@ import { parseArgs } from 'node:util';
 import { lessonsText } from './lessons.mts';
 import sharp from 'sharp';
 import { Board, frameTimes, look } from './keyframes.mts';
-import { quietBoard } from './interludes.mts';
+import { interludesFor, quietBoard } from './interludes.mts';
 
 export type Actor = { sprite: string; then: string; at: number; x: number; ground: number; h: number; flip: boolean; enter: 'none' | 'fade'; wind: boolean };
 export type Prop = { sprite: string; x: number; y: number; h: number; motion: 'still' | 'fall' | 'flutter' | 'hang'; front: boolean; walk: number };
@@ -383,7 +383,7 @@ async function main() {
   const rawBoard = JSON.parse(readFileSync(join(kf, 'board.json'), 'utf8')) as Board;
   const tr = JSON.parse(readFileSync(join(kf, 'treatment.json'), 'utf8'));
   // safety net for boards written before keyframes cleared the people in backdrop windows
-  const interludes = a.treatment ? JSON.parse(readFileSync(a.treatment, 'utf8')).interludes : tr.interludes;
+  const interludes = interludesFor(a.treatment, tr);
   const board = quietBoard(rawBoard, song, interludes, song.cues.reduce((m: number, c: { end: number }) => Math.max(m, c.end), 0) + 8).board;
   const all = frameTimes(board, song.cues, 0, song.duration ?? Math.max(...song.cues.map((c: { end: number }) => c.end)) + 8);
   // each keyframe's own section (keyframes.mts names its picture kf_N) gives its real start and end: a passage's

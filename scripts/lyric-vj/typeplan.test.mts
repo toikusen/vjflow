@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { landedEnd, persistQuiet, quietBoard, quietFrames, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
+import { interludesFor, landedEnd, persistQuiet, quietBoard, quietFrames, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
@@ -327,4 +327,18 @@ test('quietBoard (cutout safety net): pictures windows keep people, backdrop one
   const keep = quietBoard(BOARD, SONG, [{ start: 12, end: 40, mode: 'pictures', reason: REASON }], 40);
   assert.deepEqual(keep.board.frames[0].who, ['a']);
   assert.deepEqual(quietBoard(BOARD, SONG, undefined, 40).board.frames[0].who, []);
+});
+
+test('interludesFor: cutout prefers the base treatment file over the keyframes treatment', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ilf-'));
+  const file = join(dir, 'treatment.json');
+  const base = [{ start: 16, end: 31, mode: 'pictures', reason: REASON }];
+  writeFileSync(file, JSON.stringify({ interludes: base }));
+  assert.deepEqual(interludesFor(file, { interludes: [] }), base);
+  assert.deepEqual(interludesFor(undefined, { interludes: [] as never[] }), []);
+});
+
+test('make.sh passes the base treatment to cutout and keyframes', () => {
+  const sh = readFileSync(new URL('./beta/make.sh', import.meta.url), 'utf8');
+  for (const tool of ['cutout.mts', 'keyframes.mts']) assert.ok(sh.split('\n').some((l) => l.includes(tool) && l.includes('--treatment "$w/base/treatment.json"')), tool);
 });

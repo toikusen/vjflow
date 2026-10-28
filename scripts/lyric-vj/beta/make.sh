@@ -50,7 +50,7 @@ case $tier in
     echo '##PHASE 寫故事、畫角色'
     [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$w/noimg" --sheets-only --from 0 --to "$end" --out "$w/kf" > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
     echo '##PHASE 畫故事畫面'
-    [ -f "$w/cut/treatment.json" ] || { npx tsx scripts/lyric-vj/cutout.mts --song "$S" --keyframes "$w/kf" --from 0 --to "$end" --out "$w/cut" > "$w/cut.log" 2>&1; cost_log "$w/cut.log" cutout; }
+    [ -f "$w/cut/treatment.json" ] || { npx tsx scripts/lyric-vj/cutout.mts --song "$S" --keyframes "$w/kf" --treatment "$w/base/treatment.json" --from 0 --to "$end" --out "$w/cut" > "$w/cut.log" 2>&1; cost_log "$w/cut.log" cutout; }
     tr=$w/cut ;;
   *) echo "unknown tier $tier" >&2; exit 2 ;;
 esac

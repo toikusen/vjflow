@@ -1,6 +1,6 @@
 // How the type planner treats the stretches nobody sings: backdrop (no figures, props or illustrations) unless the
 // director wrote a story reason for pictures there (direct.mts → treatment.interludes). Pure helpers for typeplan.mts.
-import { renameSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { unsungWindows, type UnsungWindow } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 import { MIN_REASON } from './brief.mts';
@@ -91,6 +91,11 @@ export function quietBoard<B extends { frames: { cue: string; who: string[]; sho
   const windows = unsungWindows({ cues: song.cues as never, duration: song.duration ?? end });
   const q = quietFrames(board.frames, windows, interludes, song.cues);
   return { board: { ...board, frames: q.frames }, cleared: q.cleared, clearedFrames: q.clearedFrames };
+}
+
+/** The director's interludes for cutout: the base treatment file when given, else whatever the keyframes treatment carries. */
+export function interludesFor(treatmentFile: string | undefined, kfTreatment: { interludes?: Interlude[] }): Interlude[] | undefined {
+  return treatmentFile ? JSON.parse(readFileSync(treatmentFile, 'utf8')).interludes : kfTreatment.interludes;
 }
 
 /** Clears the board's people in backdrop windows and, when anything changed, writes it back atomically (.tmp then rename). */

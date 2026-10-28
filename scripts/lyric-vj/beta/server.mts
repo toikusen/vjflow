@@ -102,11 +102,16 @@ export function createBetaServer(o: BetaOptions) {
   const release = (left: number[]) => {
     const bySong = new Map<string, number[]>();
     for (const pid of left) bySong.set(orphanSongs.get(pid)!, [...(bySong.get(orphanSongs.get(pid)!) ?? []), pid]);
-    for (const [songId, pids] of bySong) logEvent(o.root, songId, { type: 'queue.orphan.timeout', pids });
-    q.holding = false;
-    pump(q);
+    // only survivors stay listed: a pid that has exited may belong to a stranger's group by the time stopBeta runs
+    orphans.splice(0, orphans.length, ...left);
+    try {
+      for (const [songId, pids] of bySong) logEvent(o.root, songId, { type: 'queue.orphan.timeout', pids });
+    } finally {
+      q.holding = false;
+      pump(q);
+    }
   };
-  const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).then(release) : (release([]), Promise.resolve());
+  const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).catch(() => orphans.slice()).then(release) : (release([]), Promise.resolve());
 
   /** Queues a job for a song the person owns, inside their limit. */
   const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retry?: { of: string; by: string }) => {

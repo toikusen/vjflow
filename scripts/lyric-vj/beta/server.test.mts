@@ -479,3 +479,28 @@ test('waitGone reports survivors and the server logs queue.orphan.timeout', asyn
     assert.deepEqual(await waitGone([2 ** 22 + 12345], 50, 10), []);
   } finally { o.kill(); }
 });
+
+test('once the orphans have exited the server forgets their pids, so stopBeta never signals them again', async () => {
+  const o = await orphanRoot();
+  try {
+    const b = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+    assert.deepEqual(b.orphans, [o.orphan.pid]);
+    await b.ready;
+    await o.exitedAt;
+    assert.deepEqual(b.orphans, []);
+  } finally { o.kill(); }
+});
+
+test('a queued job still starts when the orphans outlive the wait and the event log cannot be written', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const o = await orphanRoot();
+  try {
+    mkdirSync(join(o.root, 'songs'), { recursive: true });
+    writeFileSync(join(o.root, 'songs/s1'), 'in the way');
+    const b = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30', orphanWaitMs: 100 });
+    await b.ready;
+    assert.equal(b.queue.holding, false);
+    assert.equal(b.db.jobs[0].status, 'running');
+    assert.deepEqual(b.orphans, [o.orphan.pid], 'a survivor stays listed for stopBeta');
+  } finally { o.kill(); }
+});

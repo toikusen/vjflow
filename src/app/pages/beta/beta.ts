@@ -152,7 +152,7 @@ export interface FixState { marks: readonly { category: FeedbackCategory | null 
 /** Why the 修正 card is off (one line), or null when the server would take the fix: the marks' kind and the tier first, then the song being busy, then the fee against the balance. */
 export function fixBlock(s: FixState): string | null {
   if (!s.marks.length) return '先標出有問題的地方';
-  if (s.marks.some((m) => !m.category)) return '每個標記先選一個類別';
+  if (s.marks.some((m) => !m.category)) return '每個標記請選一個類別';
   if (!fixAllowed(s.marks, s.tier)) return fixKindFor(s.marks) === 'picture' ? '只有插圖版能拿掉圖片' : NOT_FIXABLE;
   if (s.active) return '這首歌已經在排隊或製作中';
   // in cents, so float noise never makes a balance look short

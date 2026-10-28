@@ -143,7 +143,7 @@ export class BetaSongPage extends BetaPage {
   /** Opens 製作新版本 with a tier chosen and 想要的感覺 filled in (a redo from a report), and scrolls to it. */
   redo(tier: BetaTier, feeling: string) {
     this.makeTier.set(tier);
-    this.makeFeeling.set(feeling);
+    if (feeling) this.makeFeeling.set(feeling);
     this.makeForm()?.reveal();
   }
 

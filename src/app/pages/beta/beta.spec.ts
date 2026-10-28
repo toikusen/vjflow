@@ -362,7 +362,7 @@ describe('fix rules (mirror scripts/lyric-vj/beta/feedback.mts)', () => {
   it('fixBlock gives one reason in order: marks, kind and tier, busy song, balance', () => {
     expect(FIX_PRICE).toBe(1);
     expect(fixBlock({ marks: [], tier: 'img' })).toBe('先標出有問題的地方');
-    expect(fixBlock({ marks: m('picture', null), tier: 'img' })).toBe('每個標記先選一個類別');
+    expect(fixBlock({ marks: m('picture', null), tier: 'img' })).toBe('每個標記請選一個類別');
     expect(fixBlock({ marks: m('lyrics'), tier: 'img' })).toBe(NOT_FIXABLE);
     expect(fixBlock({ marks: m('picture', 'timing'), tier: 'img' })).toBe(NOT_FIXABLE);
     expect(fixBlock({ marks: m('picture'), tier: 'hybrid' })).toBe('只有插圖版能拿掉圖片');

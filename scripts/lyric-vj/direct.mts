@@ -33,6 +33,7 @@ import { PRICES, streamed } from './claude.mts';
 import { transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
+import { briefFields, briefText, designBriefText, loadRefs, type Previous, readStyle, userPrompt, withRefs } from './brief.mts';
 
 const { values: a } = parseArgs({
   options: {
@@ -51,6 +52,9 @@ const { values: a } = parseArgs({
     'design-attempts': { type: 'string', default: '3' }, // most design calls (each retry is a paid call)
     'keep-story': { type: 'boolean', default: false }, // with --design-only: keep the treatment's story and its props (no props to draw again)
     'available-assets': { type: 'string' }, // with --design-only: assets.json of the pictures already made; photo layers may use only these
+    refs: { type: 'string' }, // folder of the person's reference images (jpg/png/webp, at most 5): sent before the prompt text
+    candidates: { type: 'string' }, // comma ids: candidate languages the director may also pick (without --language)
+    previous: { type: 'string' }, // treatment.json of the concept being adjusted: quoted to the director as 上一版
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -74,6 +78,19 @@ if (gate && !a.unconfirmed && process.env['VJ_UNCONFIRMED'] !== '1') throw new E
 const win = { start: Number(a.start), end: Number(a.end) };
 const out = a.out!;
 mkdirSync(out, { recursive: true });
+// the person's wishes (brief.mts): their text (--style, @file reads it), reference images, a picked or candidate
+// language and the concept being adjusted; none given leaves the prompts as they were
+const styleText = readStyle(a.style);
+const refs = a.refs ? loadRefs(a.refs) : [];
+const picked = a.language && a.language in LANGUAGES ? (a.language as LanguageId) : undefined;
+const candidates = picked ? [] : [...new Set((a.candidates ?? '').split(',').map((x) => x.trim()))].filter((k): k is LanguageId => k in LANGUAGES && !PROVEN_LANGUAGES.includes(k as LanguageId));
+const previous: Previous | undefined = a.previous ? (() => {
+  const t = JSON.parse(readFileSync(a.previous, 'utf8')) as TreatmentV3 & { language?: string };
+  return { concept: t.concept ?? '', language: t.design?.language ?? t.language ?? '', font: t.design?.font ?? '' };
+})() : undefined;
+// only proven languages are on offer (a song a paying user gets must come out usable) plus the candidates the
+// operator opened; a language the user picked is the only one
+const allowedLanguages: LanguageId[] = picked ? [picked] : [...PROVEN_LANGUAGES, ...candidates];
 
 // ---- schema (structured output): only vocabulary the engine has
 // params are a list of {key, value} pairs: one optional field per template parameter would exceed the API's limit
@@ -261,7 +278,11 @@ const SCHEMA = {
   properties: {
     // a language the user picked is the only one the output may name (with all of them in the schema the director
     // answered watercolor to a phone request)
-    language: { type: 'string', enum: a.language && a.language in LANGUAGES ? [a.language] : PROVEN_LANGUAGES, description: '這首歌的設計語言（先決定，鏡頭只能用它的模板）' },
+    language: { type: 'string', enum: allowedLanguages, description: '這首歌的設計語言（先決定，鏡頭只能用它的模板）' },
+    // the director's reading of the person's wishes, shown on the concept card (beta/concept-summary.mts)
+    briefReading: { type: 'string', description: '使用者有寫字或附參考圖時必填：「你寫的『…』我理解成：…」' },
+    concerns: { type: 'string', description: '使用者指定的設計語言不適合這首歌時，一兩句說明哪裡不合；適合或沒有指定就填空字串' },
+    candidateReason: { type: 'string', description: '選了標【候選】的設計語言時必填：這首歌為什麼需要它；否則填空字串' },
     concept: { type: 'string', description: '繁體中文，一兩句：這段畫面的視覺故事' },
     styleAnchor: {
       type: 'object', additionalProperties: false, required: ['prompt', 'palette'],
@@ -326,20 +347,19 @@ const gapText = gaps.length
   ? `使用者選擇「${TITLE_CARDS[titleCards]}」。這些空白要放 title-card（前奏、尾奏用 center，間奏用 lower-left；一段空白用一個 title-card 鏡頭從頭蓋到尾，不受鏡頭長度上限限制）：${gaps.map((g) => `${g.start.toFixed(1)}–${g.end.toFixed(1)}s ${g.kind}`).join('；')}（歌名「${meta.title}」${meta.artist ? `、歌手「${meta.artist}」` : ''}）`
   : `使用者選擇「${TITLE_CARDS[titleCards]}」：不要用 title-card。`;
 const suggestedText = suggested.moments.filter((m) => inWin(m.at)).map((m) => `${m.kind}@${m.at.toFixed(2)}${m.dur ? ` dur ${m.dur.toFixed(1)}` : ''} strength ${m.strength}`).join('；') || '（無）';
-const db = a.db ? references(loadDb(a.db).filter((v) => v.video_id !== a['exclude-ref']), a.style + cues.map((c) => c.text).join('')) : { text: '（無）', ids: [] };
+const db = a.db ? references(loadDb(a.db).filter((v) => v.video_id !== a['exclude-ref']), styleText + cues.map((c) => c.text).join('')) : { text: '（無）', ids: [] };
 
 // the songs made before: this one must not look like them (another system, another font and medium)
 const history: DesignRecord[] = existsSync(a.history!) ? JSON.parse(readFileSync(a.history!, 'utf8')) : [];
 const recent = history.filter((r) => r.song !== song.title).slice(-3);
 // languages rotate through the whole catalogue before one repeats (a 3-song window let 第六感's neon stage come back
 // four songs later and read as the same design); fonts and motifs only avoid the last three
-// only proven languages are on offer (a song a paying user gets must come out usable); the director picks what suits
-// the song best among them, the ones used lately are flagged, and a repeat must look different (keepApart below)
-const allowedLanguages = a.language && a.language in LANGUAGES ? [a.language as LanguageId] : PROVEN_LANGUAGES;
+// the director picks what suits the song best among allowedLanguages, the ones used lately are flagged, and a repeat
+// must look different (keepApart below)
 const recentLanguages = new Set(recent.map((r) => r.language).filter(Boolean));
 const recentText = recent.length ? recent.map((r) => `- ${r.song}：${r.language ? `${LANGUAGES[r.language].name}（${r.language}）` : r.system}、字型 ${r.font}、媒材 ${r.medium ?? '—'}${r.motif ? `、主題物件 ${r.motif}` : ''}${r.look ? `、外觀 ${r.look}` : ''}`).join('\n') : '（無）';
 const SYSTEMS_TEXT = `設計語言（language，最重要的決定）：每首歌要像不同設計師做的。先依這首歌的個性選一種設計語言，鏡頭只能用它的模板。
-${allowedLanguages.map((k) => `- ${k}（${LANGUAGES[k].name}）${recentLanguages.has(k) ? '【最近用過：最適合這首才選，選了就要讓配色、字型、媒材與質感明顯不同】' : ''}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}${LANGUAGES[k].kit ? `。質感要點（驗收通過的${LANGUAGES[k].kit!.song}）：${LANGUAGES[k].kit!.craft}` : ''}`).join('\n')}
+${allowedLanguages.map((k) => `- ${k}（${LANGUAGES[k].name}）${candidates.includes(k) ? '【候選：選它要寫 candidateReason】' : ''}${recentLanguages.has(k) ? '【最近用過：最適合這首才選，選了就要讓配色、字型、媒材與質感明顯不同】' : ''}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}${LANGUAGES[k].kit ? `。質感要點（驗收通過的${LANGUAGES[k].kit!.song}）：${LANGUAGES[k].kit!.craft}` : ''}`).join('\n')}
 最近做過的歌（這首要和它們明顯不同）：
 ${recentText}`;
 const style = STYLES[a['style-id']!];
@@ -425,7 +445,12 @@ ${MOMENT_KINDS.map((k) => `  - ${k}：${MOMENT_RULES[k].desc}（dur ${MOMENT_RUL
 const toolboxFile = join('out', 'knowledge', 'toolbox.md');
 const TOOLBOX = existsSync(toolboxFile) ? `\n\n設計師常用手法（從大量設計師做的歌詞 MV 整理出來；是工具箱不是清單，依這首歌挑適合的，引擎做得到的才用）：\n${readFileSync(toolboxFile, 'utf8')}` : '';
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
-const USER = `${TOOLBOX ? `${TOOLBOX}\n\n` : ''}【輸出要求】shots 大約 ${expectShots} 個（每個 ${style.shotSec[0]}–${style.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${cues.length} 句。\n\n【這首歌的說明】\n${a.style ? `${a.style}\n` : ''}${describeStructure(structure)}\n\n【程式建議的爆點】（依結構產生，可以調整強度與長度，位置除非有明確理由不要改）\n${suggestedText}\n\n【關鍵詞（可以換色的詞）】\n${keyWords(song).join('、') || '（無）'}\n\n【重複段落】\n${repeatText}\n\n【標題卡】\n${gapText}\n\n【範圍】${win.start}–${win.end} 秒；BPM 約 ${song.tempo.toFixed(0)}\n【段落】\n${sections}\n【強拍】${song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' ')}\n\n【歌詞】\n${cueLines}\n\n【模板】\n${catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${db.text}`;
+const USER = userPrompt({
+  toolbox: TOOLBOX, expectShots, shotSec: style.shotSec, cueCount: cues.length, style: styleText,
+  brief: briefText({ style: styleText, previous, candidates, chosen: picked, hasRefs: refs.length > 0 }),
+  structure: describeStructure(structure), suggested: suggestedText, keyWords: keyWords(song), repeat: repeatText, titleCards: gapText, win,
+  tempo: song.tempo, sections, downbeats: song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' '), cueLines, catalog, dbText: db.text,
+});
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const keep: TreatmentV3 | undefined = a['keep-assets'] ? JSON.parse(readFileSync(a['keep-assets'], 'utf8')) : undefined;
@@ -474,8 +499,9 @@ ${sys.variety ? `- 每首的差異（必須做）：${sys.variety.rule}\n${(() =
   })()}`;
   const qaNotes = a['qa-notes'] && existsSync(a['qa-notes']) ? `\n\n【上一版設計的畫面檢查發現這些問題，這一版必須避免】\n${readFileSync(a['qa-notes'], 'utf8')}` : '';
   const userD = `為這首歌設計 design、graphics、story${sys.motif ? ' 與 motif' : ''}。企劃的鏡頭與歌詞版型已定，你決定字型、色彩、質感、爆點樣式，以及畫面的圖形：graphics 是用程式畫的圖層組合（取代滿版背景圖），依段落切換。\n\n${sysText}\n\n${GRAPHICS_RULES}\n\n${DESIGN_RULES}\n\n${STORY_RULES}\n\n${sys.motif ? MOTIF_RULES : ''}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【鏡頭】\n${base.shots.map((x) => `${x.id} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s ${x.template}${x.params['attachKind'] === 'photo' || x.params['attachKind'] === 'sticker' ? `（傳了一則${x.params['attachKind'] === 'photo' ? '照片' : '貼圖'} ${x.params['attach']}，${x.params['attachVoice'] === 'them' ? '對方' : '自己'}傳的${x.params['attachKind'] === 'sticker' ? '：story 的 props 要列出這個 id，what 寫貼圖的樣子' : ''}）` : ''}`).join('\n')}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
-  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: userD + qaNotes }];
-  writeFileSync(join(out, 'design_prompt.txt'), userD + qaNotes);
+  const wish = designBriefText({ style: styleText, briefReading: (base as { briefReading?: string }).briefReading, previous, hasRefs: refs.length > 0 });
+  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withRefs(userD + qaNotes + wish, refs) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
+  writeFileSync(join(out, 'design_prompt.txt'), userD + qaNotes + wish);
   let checked!: ReturnType<typeof validateTreatment>;
   const usage = { input: 0, output: 0 };
   for (let attempt = 0; attempt < Math.max(1, Math.min(3, Number(a['design-attempts']) || 3)); attempt++) {
@@ -557,7 +583,7 @@ if (a['design-only']) {
   console.log(JSON.stringify({ costUSD, design: checked.treatment.design, motif: checked.treatment.motif, errors: checked.errors }, null, 1));
   process.exit(0);
 }
-const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: USER + keepText }];
+const messages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withRefs(USER + keepText, refs) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
 let usage = { input: 0, output: 0 };
 const began = Date.now();
 const status = jobStatus(a.job ?? jobIdFor(out), { title: a.title ?? `${song.title} ${win.start}–${win.end}s`, tier, style: style.name });
@@ -576,7 +602,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   if (message.stop_reason === 'max_tokens') throw new Error('Output was cut off at max_tokens');
   const text = message.content.find((b) => b.type === 'text')?.text;
   if (!text) throw new Error(`No text in response (stop_reason ${message.stop_reason})`);
-  const draft = JSON.parse(text) as TreatmentV3;
+  const draft = briefFields(JSON.parse(text) as TreatmentV3 & { briefReading?: string; concerns?: string; candidateReason?: string });
   if (keep) {
     draft.assets = keep.assets;
     draft.styleAnchor = keep.styleAnchor;

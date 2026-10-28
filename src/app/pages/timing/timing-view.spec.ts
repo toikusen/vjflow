@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clock, clockShort, hint, lineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS } from './timing-view';
+import { clock, clockShort, hint, lineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
 
 describe('clock', () => {
   it('splits minutes:seconds from the hundredths and keeps the width', () => {
@@ -66,5 +66,26 @@ describe('SHORTCUTS', () => {
   it('lists every key the editor handles', () => {
     const keys = SHORTCUTS.map((s) => s.keys).join(' ');
     for (const k of ['Space', 'Enter', 'N', '← →', 'Shift ← →', 'Alt ← →', '↑ ↓', 'Q W', 'E D', 'L', '[ ]', '⌘ Z']) expect(keys).toContain(k);
+  });
+});
+
+describe('songPageHref', () => {
+  it('points at the tester song page and escapes the id', () => {
+    expect(songPageHref('abc-1')).toBe('/my/song?id=abc-1');
+    expect(songPageHref('a b&c')).toBe('/my/song?id=a%20b%26c');
+  });
+});
+
+describe('timingChanged', () => {
+  const a = { start: 1, end: 2, text: 'x' };
+  const b = { start: 3, end: 4, text: 'y', singer: 'A' };
+  it('sees a moved edge, a retyped line, a changed singer or a different line count; nothing else', () => {
+    expect(timingChanged([a, b], [{ ...a }, { ...b }])).toBe(false);
+    expect(timingChanged([a], [{ ...a, singer: undefined }])).toBe(false);
+    expect(timingChanged([a, b], [a, { ...b, start: 3.05 }])).toBe(true);
+    expect(timingChanged([a, b], [a, { ...b, end: 5 }])).toBe(true);
+    expect(timingChanged([a, b], [a, { ...b, text: 'z' }])).toBe(true);
+    expect(timingChanged([a, b], [a, { ...b, singer: 'B' }])).toBe(true);
+    expect(timingChanged([a, b], [a])).toBe(true);
   });
 });

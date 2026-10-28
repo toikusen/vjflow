@@ -7,6 +7,14 @@ export type TagTone = 'ok' | 'warn' | 'bad' | 'now';
 export interface LineTag { icon: string; label: string; tone: TagTone }
 
 /** The player's big readout: minutes:seconds and the hundredths apart (`0:27` + `.82`); always the same width. */
+type TimedLine = { start: number; end: number; text: string; singer?: string };
+/** Whether a save would change the timing as the beta server keys it (each line's start, end, text and singer; timingKey in server.mts). */
+export const timingChanged = (before: readonly TimedLine[], after: readonly TimedLine[]): boolean =>
+  before.length !== after.length || after.some((c, i) => c.start !== before[i].start || c.end !== before[i].end || c.text !== before[i].text || (c.singer ?? null) !== (before[i].singer ?? null));
+
+/** A beta tester's song page, where the editor goes back to and where a confirmed timing sends them. */
+export const songPageHref = (songId: string): string => `/my/song?id=${encodeURIComponent(songId)}`;
+
 export function clock(t: number): { main: string; frac: string } {
   const s = Math.max(0, t);
   const whole = Math.floor(s);

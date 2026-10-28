@@ -4,7 +4,7 @@ import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
 
 /** What a concept job was asked for (`job.inputs` on the server). */
 export interface BetaJobInputs { concept?: string; style?: string; refs?: string[]; note?: string; from?: string }
@@ -83,37 +83,13 @@ export function jobProgress(job: BetaJob, now = Date.now()): JobProgress {
   return { label: steps[index].label, index, steps, pct: Math.min(99, Math.round((doneMin / total) * 100)), leftMin: Math.max(1, Math.ceil(total - doneMin)) };
 }
 
-export type SongStage =
-  | { step: 'preparing'; label: string; job?: BetaJob }
-  | { step: 'prepFailed' }
-  | { step: 'timing' }
-  | { step: 'ready'; making: { tier: BetaTier; label: string; job: BetaJob }[]; done: BetaTier[]; held: BetaTier[]; failed: BetaTier[]; videos: { tier: BetaTier; jobId: string }[] };
-
-/** Where a song stands: being prepared, waiting for its timing, or ready with its versions' states. */
-export function songStage(song: BetaSong, jobs: BetaJob[]): SongStage {
-  const mine = jobs.filter((j) => j.songId === song.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const prep = mine.filter((j) => j.kind === 'prep').at(-1);
-  if (!prep) return { step: 'preparing', label: '等待上傳' };
-  if (prep.status === 'queued') return { step: 'preparing', label: '排隊中', job: prep };
-  if (prep.status === 'running') return { step: 'preparing', label: prep.phase ?? '準備中', job: prep };
-  if (prep.status === 'failed') return { step: 'prepFailed' };
-  if (!song.confirmedAt) return { step: 'timing' };
-  // the latest job of each version decides its state
-  const last = new Map<BetaTier, BetaJob>();
-  for (const j of mine) if (j.kind === 'make' && j.tier) last.set(j.tier, j);
-  const all = [...last.values()];
-  const tiers = (s: BetaJob['status'][]) => all.filter((j) => s.includes(j.status)).map((j) => j.tier!);
-  return {
-    step: 'ready',
-    making: all.filter((j) => j.status === 'queued' || j.status === 'running').map((j) => ({ tier: j.tier!, label: j.status === 'queued' ? '排隊中' : (j.phase ?? '製作中'), job: j })),
-    done: tiers(['done']),
-    held: tiers(['admin']),
-    failed: tiers(['failed']),
-    videos: (['none', 'img', 'hybrid'] as BetaTier[]).flatMap((tier) => {
-      const j = mine.filter((x) => x.kind === 'make' && x.tier === tier && x.status === 'done').at(-1);
-      return j ? [{ tier, jobId: j.id }] : [];
-    }),
-  };
+/**
+ * Orders overlapping polls: `begin()` numbers a request and `latest(n)` stays true until a newer one began, so a slow
+ * answer never overwrites a fresher one.
+ */
+export function pollOrder(): { begin: () => number; latest: (n: number) => boolean } {
+  let n = 0;
+  return { begin: () => ++n, latest: (k) => k === n };
 }
 
 export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'style' | 'rhythm' | 'other';
@@ -201,9 +177,6 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
     concept: mine.filter((j) => j.kind === 'concept' && j.status === 'done' && !j.decision).at(-1),
   };
 }
-
-/** The notice under a song whose last make job failed for good; claims an automatic retry only when one really failed. */
-export const failedNotice = (auto?: boolean) => (auto ? '上一次製作失敗，系統已自動重試仍未成功，管理者會協助處理' : '上一次製作失敗，管理者會協助處理');
 
 /** Job status as the admin pages read it. */
 export const STATUS: Record<BetaJob['status'], string> = { queued: '排隊中', running: '製作中', done: '完成', failed: '失敗', admin: '等你確認' };

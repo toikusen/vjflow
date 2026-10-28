@@ -1,6 +1,6 @@
 import { afterRenderEffect, Component, computed, ElementRef, input, output, viewChild } from '@angular/core';
 import { PriceComponent } from './price.component';
-import { Ask, bill } from './confirm';
+import { Ask, askRows } from './confirm';
 
 /**
  * The shared confirm dialog (2b) every paying action goes through. A native modal `<dialog>`: the page behind is inert
@@ -20,7 +20,7 @@ export class ConfirmDialogComponent {
   readonly closed = output<void>();
   protected readonly rows = computed(() => {
     const a = this.ask();
-    return a ? bill(a.cost, this.left()) : null;
+    return a ? askRows(a, this.left()) : null;
   });
   private readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('dialog');
 

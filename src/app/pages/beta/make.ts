@@ -1,5 +1,6 @@
 // Pure rules of the 製作新版本 form; the limits mirror scripts/lyric-vj/beta/server.mts and store.mts.
-import { BetaJob, BetaTier, CONCEPT_PRICE } from './beta';
+import { BetaJob, BetaTier, TIER_INFO } from './beta';
+import { formatPrice } from './ui/price';
 
 export const MAX_FEELING = 500;
 export const MAX_REFS = 5;
@@ -33,6 +34,23 @@ export function conceptAttempts(jobs: readonly BetaJob[], songId: string, tier: 
 export const pendingConcept = (jobs: readonly BetaJob[], songId: string): BetaJob | undefined =>
   jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.status === 'done' && !j.decision).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
 
+export interface TimingSaveWarning { title: string; body: string }
+
+/**
+ * The warning before a timing save when a finished concept of the song awaits a decision: the make reuses the concept's
+ * snapshot of the timing, so once the timing changes the server refuses the accept and the concept has to be produced
+ * again (another attempt at the concept fee). Saving itself charges nothing. Null when no concept is pending.
+ */
+export function timingSaveWarning(jobs: readonly BetaJob[], songId: string): TimingSaveWarning | null {
+  const pending = pendingConcept(jobs, songId);
+  if (!pending) return null;
+  const fee = formatPrice(TIER_INFO[pending.tier ?? 'none'].concept, 'short');
+  return {
+    title: '儲存後，待確認的概念要重新產生',
+    body: `這首歌有一個${TIER_INFO[pending.tier ?? 'none'].name}的概念還在等你決定。歌詞時間儲存後，那個概念就不能再接受，要重新產生概念（$${fee}）才能製作。現在儲存不會扣款。`,
+  };
+}
+
 /**
  * The form's default tier: the one whose concept awaits a decision (so the button shows that reason rather than a
  * second, live 產生概念), else the first tier the song has no result for.
@@ -50,8 +68,10 @@ export function makeBlock(s: MakeState): string | null {
   const undecided = s.jobs.some((j) => j.kind === 'concept' && j.songId === s.songId && j.tier === s.tier && j.status === 'done' && !j.decision);
   if (undecided) return '這個版本有一個概念還沒決定';
   if (conceptAttempts(s.jobs, s.songId, s.tier) >= MAX_CONCEPTS) return '這個版本已試過 3 次概念，請聯絡管理者';
-  // in cents, so float noise never makes a balance look short
-  if (s.left !== null && Math.round(CONCEPT_PRICE * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡管理者';
+  // the whole version (concept and make), in cents so float noise never makes a balance look short: a balance that
+  // covers the concept alone would leave the person with a concept they cannot accept
+  const price = TIER_INFO[s.tier].price;
+  if (s.left !== null && Math.round(price * 100) > Math.round(s.left * 100)) return `餘額不足以完成這個版本（需 $${formatPrice(price, 'short')}），請聯絡管理者`;
   if (s.submitting) return '送出中…';
   if (s.uploading) return '參考圖上傳中，請稍候。';
   if (feelingLength(s.feeling) > MAX_FEELING) return '想要的感覺最多 500 字';

@@ -117,8 +117,8 @@
       <span class="status" data-l="狀態">
         <app-status-chip [chip]="st.chip" look="text" />
         @if (st.detail) {<span class="detail">{{ st.detail }}</span>}
-        @if (j.status === 'failed' && !retried(j)) {<button class="mini" type="button" (click)="retry(j)">重跑</button>}
-        @if (j.status === 'admin') {<a class="mini" [href]="video(j)" target="_blank">看影片</a><button class="mini go" type="button" (click)="approve(j)">放行</button>}
+        @if (j.status === 'failed' && !retried(j)) {<button class="mini" type="button" [disabled]="acting() === j.id" title="會再向使用者收一次這個工作的費用" (click)="retry(j)">{{ retryLabel(j) }}</button>}
+        @if (j.status === 'admin') {<a class="mini" [href]="video(j)" target="_blank">看影片</a><button class="mini go" type="button" [disabled]="acting() === j.id" (click)="approve(j)">放行</button>}
       </span>
       <span class="mono r" data-l="使用者付"><app-price [amount]="j.chargedUsd ?? 0" [plain]="true" /></span>
       <span class="mono r cost" data-l="平台成本" [class.none]="j.costUsd === undefined">@if (j.costUsd !== undefined) {<app-price [amount]="j.costUsd" [plain]="true" />} @else {—}</span>

@@ -130,6 +130,30 @@ test('conceptAttempts: a system failure never uses up an attempt, and attempts c
   assert.equal(conceptAttempts(db, 's', 'none'), 1);
 });
 
+test('a concept is refused unless the whole version (concept and make) fits the limit; an explicit price still wins', () => {
+  const db = emptyDb();
+  const { user } = invite(db, 'A', 3);
+  // $3 pays the concept alone, not the 故事版 it starts
+  assert.equal(refuse(db, user.id, 'concept', 'hybrid', 's'), `額度不足：剩 $3.00，完成這個版本需要 $${TIER_TOTAL('hybrid').toFixed(2)}`);
+  assert.equal(refuse(db, user.id, 'concept', 'img', 's'), `額度不足：剩 $3.00，完成這個版本需要 $${TIER_TOTAL('img').toFixed(2)}`);
+  user.limitUsd = TIER_TOTAL('none');
+  assert.equal(refuse(db, user.id, 'concept', 'none', 's'), undefined);
+  // the admin's retry of a failed concept passes the job's own price: the concept fee alone
+  user.limitUsd = 3;
+  assert.equal(refuse(db, user.id, 'concept', 'hybrid', 's', PRICE.concept), undefined);
+  // the make after an accepted concept is charged its own part only
+  db.jobs.push(job({ userId: user.id, kind: 'concept', tier: 'none', priceUsd: PRICE.concept, reservedUsd: PRICE.concept, status: 'done' }));
+  user.limitUsd = TIER_TOTAL('none');
+  assert.equal(refuse(db, user.id, 'make', 'none', 's'), undefined);
+  // the beta's own budget counts the concept step alone (each step is checked as it is spent)
+  db.jobs.length = 0;
+  user.limitUsd = 100;
+  db.globalLimitUsd = PRICE.concept;
+  assert.equal(refuse(db, user.id, 'concept', 'hybrid', 's'), undefined);
+  db.globalLimitUsd = PRICE.concept - 0.01;
+  assert.match(refuse(db, user.id, 'concept', 'hybrid', 's') ?? '', /總額度/);
+});
+
 test('the 4th concept for a song and tier is refused', () => {
   const db = emptyDb();
   const { user } = invite(db, 'A', 100);

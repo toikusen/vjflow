@@ -1,4 +1,4 @@
-import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobState, kpis, margin, mmss, needHelp, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
+import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobState, kpis, margin, mmss, needHelp, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
 import { BetaMe, BetaSong } from './beta';
 
 const iso = (minAgo: number, now = Date.parse('2026-10-28T05:40:00Z')) => new Date(now - minAgo * 60e3).toISOString();
@@ -143,5 +143,14 @@ describe('style table', () => {
   it('counts the filter chips', () => {
     const s = (id: string, tier: 'proven' | 'candidate' | 'unlisted') => ({ id, name: id, suits: '', proven: tier === 'proven', tier, image: null });
     expect(styleFilterCounts([s('a', 'proven'), s('b', 'candidate'), s('c', 'unlisted'), s('d', 'unlisted')])).toEqual({ all: 4, proven: 1, candidate: 1, unlisted: 2 });
+  });
+});
+
+describe('retryLabel', () => {
+  it('names what a re-run charges the person again: the price, else the reserve, else nothing', () => {
+    expect(retryLabel(job({ id: 'a', priceUsd: 2.5 }))).toBe('重跑（再扣 $2.5）');
+    expect(retryLabel(job({ id: 'b', priceUsd: 13.5 }))).toBe('重跑（再扣 $13.5）');
+    expect(retryLabel(job({ id: 'c', priceUsd: undefined, reservedUsd: 4 }))).toBe('重跑（再扣 $4）');
+    expect(retryLabel(job({ id: 'd', priceUsd: 0, reservedUsd: 0 }))).toBe('重跑');
   });
 });

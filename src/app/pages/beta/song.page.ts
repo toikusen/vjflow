@@ -9,7 +9,6 @@ import { MakeFormComponent } from './make-form.component';
 import { ReportFormComponent } from './report-form.component';
 import { clock, failureCard, heroTone, jobTitle, jobTotal, stamp, stepClocks } from './song';
 import { BalanceComponent } from './ui/balance.component';
-import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
 import { StatusChip } from './ui/status';
 import { StatusChipComponent } from './ui/status-chip.component';
@@ -20,7 +19,7 @@ const RETRY_CHIP: StatusChip = { icon: '↻', label: '自動重試中 · 第一�
 /** One song (`/my/song?id=`): hero, the job in progress (or the failure), a concept awaiting a decision, every finished result, then 製作新版本. */
 @Component({
   selector: 'app-beta-song-page',
-  imports: [NgTemplateOutlet, ConceptCardComponent, MakeFormComponent, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
+  imports: [NgTemplateOutlet, ConceptCardComponent, MakeFormComponent, ReportFormComponent, BalanceComponent, PriceComponent, StatusChipComponent],
   templateUrl: './song.page.html',
   styleUrl: './song.page.scss',
 })

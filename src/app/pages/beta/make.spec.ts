@@ -1,8 +1,8 @@
 import { BetaJob, CONCEPT_PRICE, TIER_INFO } from './beta';
-import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, refProblem, stripGrid, stripTiles } from './make';
+import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, refProblem, stripGrid, stripTiles, timingSaveWarning } from './make';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T00:00:00Z', decision: 'accepted', ...o });
-const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 14.5, uploading: false, submitting: false, feeling: '', ...o });
+const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 20, uploading: false, submitting: false, feeling: '', ...o });
 
 describe('TIER_INFO prices', () => {
   it('carries the concept fee and the rest, adding up to the total', () => {
@@ -69,6 +69,22 @@ describe('defaultTier', () => {
   });
 });
 
+describe('timingSaveWarning', () => {
+  it('warns only while a finished concept of this song awaits a decision, naming the version and the concept fee', () => {
+    const pending = job({ id: 'c', tier: 'hybrid', decision: undefined });
+    expect(timingSaveWarning([pending], 's')).toEqual({
+      title: '儲存後，待確認的概念要重新產生',
+      body: '這首歌有一個故事版的概念還在等你決定。歌詞時間儲存後，那個概念就不能再接受，要重新產生概念（$2.5）才能製作。現在儲存不會扣款。',
+    });
+    expect(timingSaveWarning([job({ id: 'c', tier: 'img', decision: undefined })], 's')?.body).toContain('插圖版的概念');
+    // decided, unfinished or another song's concepts need no warning
+    expect(timingSaveWarning([], 's')).toBeNull();
+    expect(timingSaveWarning([job({ decision: 'accepted' })], 's')).toBeNull();
+    expect(timingSaveWarning([job({ decision: undefined, status: 'running' })], 's')).toBeNull();
+    expect(timingSaveWarning([{ ...pending, songId: 'x' }], 's')).toBeNull();
+  });
+});
+
 describe('makeBlock', () => {
   it('lets a ready song with money make', () => {
     expect(makeBlock(state())).toBeNull();
@@ -91,11 +107,16 @@ describe('makeBlock', () => {
     expect(makeBlock(state({ jobs, tier: 'none' }))).toBeNull();
   });
 
-  it('stops when the concept fee is more than what is left, in cents', () => {
-    expect(makeBlock(state({ left: 2.49 }))).toBe('餘額不足，請聯絡管理者');
-    expect(makeBlock(state({ left: 2.5 }))).toBeNull();
-    expect(makeBlock(state({ left: 0.1 + 2.4 }))).toBeNull();
+  it('stops when the whole version (concept and make) costs more than what is left, in cents, naming the total', () => {
+    expect(makeBlock(state({ left: 15.99 }))).toBe('餘額不足以完成這個版本（需 $16），請聯絡管理者');
+    expect(makeBlock(state({ left: 16 }))).toBeNull();
+    expect(makeBlock(state({ left: 0.1 + 15.9 }))).toBeNull();
     expect(makeBlock(state({ left: null }))).toBeNull();
+    // enough for the concept alone is not enough: the accept would be refused afterwards
+    expect(makeBlock(state({ left: 3 }))).toBe('餘額不足以完成這個版本（需 $16），請聯絡管理者');
+    expect(makeBlock(state({ left: 4, tier: 'none' }))).toBeNull();
+    expect(makeBlock(state({ left: 3.99, tier: 'none' }))).toBe('餘額不足以完成這個版本（需 $4），請聯絡管理者');
+    expect(makeBlock(state({ left: 5.99, tier: 'img' }))).toBe('餘額不足以完成這個版本（需 $6），請聯絡管理者');
   });
 
   it('stays off while the make request is on its way, so a second click sends nothing', () => {

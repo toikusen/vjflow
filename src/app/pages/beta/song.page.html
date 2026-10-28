@@ -17,7 +17,7 @@
       <p class="sub">
         @if (s.artist) {<span>{{ s.artist }} · </span>}{{ langName(s.language) }}@if (duration(); as d) {<span> · {{ clock(d) }}</span>}
         @if (v.stage === 'ready') {
-          <span class="timing-bit"> · 歌詞時間已確認 <a [href]="'/timing?beta=' + s.id">再看一次</a></span>
+          <span class="timing-bit"> · 歌詞時間已確認 <a [href]="'/timing?beta=' + s.id">再看一次</a>@if (v.concept) {<span class="timing-warn">（改了時間，待確認的概念要重新產生）</span>}</span>
         }
       </p>
     </div>
@@ -173,8 +173,6 @@
     }
   </main>
 }
-
-<app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />
 
 <ng-template #makeLater>
   <section class="later">

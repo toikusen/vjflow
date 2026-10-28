@@ -134,7 +134,12 @@ export function refuse(db: Db, userId: string, kind: Job['kind'], tier?: Tier, s
   if (!user || user.disabled) return '帳號無法使用';
   if (kind === 'concept' && songId && tier && conceptAttempts(db, songId, tier) >= MAX_CONCEPTS) return '這個版本已試過 3 次概念，請聯絡管理者';
   const cost = price ?? priceFor(kind, tier);
-  if (spent(db, userId) + cost > user.limitUsd) return `額度不足：剩 $${Math.max(0, user.limitUsd - spent(db, userId)).toFixed(2)}，這個步驟需要 $${cost.toFixed(2)}`;
+  // a concept is only worth starting when the whole version fits the person's limit: a balance that covers the concept
+  // alone would leave a concept nobody can accept (the accept's make would be refused); the beta's budget keeps counting
+  // each step as it is spent
+  const whole = kind === 'concept' && tier && price === undefined;
+  const need = whole ? TIER_TOTAL(tier) : cost;
+  if (spent(db, userId) + need > user.limitUsd) return `額度不足：剩 $${Math.max(0, user.limitUsd - spent(db, userId)).toFixed(2)}，${whole ? '完成這個版本' : '這個步驟'}需要 $${need.toFixed(2)}`;
   if (platformSpent(db) + cost > db.globalLimitUsd) return '本期封測的總額度已用完，請聯絡管理者';
   return undefined;
 }

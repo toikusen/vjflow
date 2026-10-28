@@ -110,6 +110,10 @@ a {
   font-size: 14px;
   color: var(--muted);
 
+  .timing-warn {
+    color: var(--warn);
+  }
+
   a {
     color: var(--text-2);
     text-underline-offset: 3px;

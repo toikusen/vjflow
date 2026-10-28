@@ -1,5 +1,5 @@
 import { balance } from './balance';
-import { bill } from './confirm';
+import { askRows, bill } from './confirm';
 import { formatPrice } from './price';
 import { shellFor } from './shell';
 import { STATUS_CHIP } from './status';
@@ -78,5 +78,13 @@ describe('shellFor', () => {
   it('leaves the other pages without a shell', () => {
     expect(shellFor('timing')).toBeUndefined();
     expect(shellFor('home')).toBeUndefined();
+  });
+});
+
+describe('askRows', () => {
+  it('bills a paying ask and shows no rows for a warning that charges nothing', () => {
+    expect(askRows({ cost: 2.5 }, 4)).toEqual({ cost: 2.5, left: 4, after: 1.5, short: false });
+    expect(askRows({ cost: 0 }, 4)).toBeNull();
+    expect(askRows({ cost: 0 }, null)).toBeNull();
   });
 });

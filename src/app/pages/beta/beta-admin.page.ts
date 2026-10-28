@@ -1,7 +1,7 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp } from './admin';
+import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp, retryLabel } from './admin';
 import { AdminStylesComponent } from './admin-styles.component';
 import { BetaMe, BetaSong, songChip, songView } from './beta';
 import { PriceComponent } from './ui/price.component';
@@ -50,6 +50,8 @@ export class BetaAdminPage {
       return { id: s.id, title: s.title, owner: this.userName(s.userId), last, jobs: mine.length, chip: songChip(songView(s, mine)) };
     }).sort((a, b) => b.last.localeCompare(a.last)),
   );
+  /** The job whose 重跑 or 放行 is on its way to the server; its buttons are off until the answer. */
+  protected readonly acting = signal<string | null>(null);
   protected invite = { name: '', limitUsd: 25 };
   protected globalLimit = 0;
 
@@ -60,6 +62,7 @@ export class BetaAdminPage {
   }
 
   protected readonly name = jobName;
+  protected readonly retryLabel = retryLabel;
   protected readonly state = (j: AdminJob) => jobState(this.jobs(), j);
   protected userName = (id: string) => this.users().find((u) => u.id === id)?.name ?? id;
   protected songTitle = (id: string) => this.songs().find((s) => s.id === id)?.title ?? id;
@@ -106,11 +109,22 @@ export class BetaAdminPage {
   }
 
   protected retry(j: AdminJob) {
-    return this.send('POST', `/beta/admin/jobs/${j.id}/retry`);
+    return this.act(j, 'retry');
   }
 
   protected approve(j: AdminJob) {
-    return this.send('POST', `/beta/admin/jobs/${j.id}/approve`);
+    return this.act(j, 'approve');
+  }
+
+  /** One admin action on a job at a time: a second click while the first is on its way would re-run or release it twice. */
+  private async act(j: AdminJob, what: 'retry' | 'approve') {
+    if (this.acting()) return null;
+    this.acting.set(j.id);
+    try {
+      return await this.send('POST', `/beta/admin/jobs/${j.id}/${what}`);
+    } finally {
+      this.acting.set(null);
+    }
   }
 
   protected async copyLink() {

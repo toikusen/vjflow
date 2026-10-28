@@ -1,5 +1,5 @@
 @if (ask(); as a) {
-  @let r = rows()!;
+  @let r = rows();
   <dialog #dialog class="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-body" (cancel)="$event.preventDefault(); cancel()" (click)="backdrop($event)">
     <div class="box">
       <div class="head">
@@ -9,19 +9,29 @@
         <h2 id="confirm-title">{{ a.title }}</h2>
         <p id="confirm-body" class="body">{{ a.body }}</p>
       </div>
-      <dl class="bill">
-        <div><dt>這次費用</dt><dd><app-price [amount]="r.cost" /></dd></div>
-        @if (r.left !== undefined) {
-          <div><dt>目前剩餘</dt><dd><app-price [amount]="r.left" /></dd></div>
-          <div class="after"><dt>扣除後剩餘</dt><dd><app-price [amount]="r.after!" /></dd></div>
+      @if (r) {
+        <dl class="bill">
+          <div><dt>這次費用</dt><dd><app-price [amount]="r.cost" /></dd></div>
+          @if (r.left !== undefined) {
+            <div><dt>目前剩餘</dt><dd><app-price [amount]="r.left" /></dd></div>
+            <div class="after"><dt>扣除後剩餘</dt><dd><app-price [amount]="r.after!" /></dd></div>
+          }
+        </dl>
+        @if (r.short) {
+          <p class="short" role="alert">餘額不足，請聯絡管理者</p>
         }
-      </dl>
-      @if (r.short) {
-        <p class="short" role="alert">餘額不足，請聯絡管理者</p>
       }
       <div class="actions">
         <button class="button" type="button" (click)="cancel()">取消</button>
-        <button class="button primary" type="button" [disabled]="r.short" (click)="confirm()">確認，扣 <app-price [amount]="r.cost" [plain]="true" /></button>
+        <button class="button primary" type="button" [disabled]="r?.short" (click)="confirm()">
+          @if (a.confirmLabel) {
+            {{ a.confirmLabel }}
+          } @else if (r) {
+            確認，扣 <app-price [amount]="r.cost" [plain]="true" />
+          } @else {
+            確認
+          }
+        </button>
       </div>
     </div>
   </dialog>

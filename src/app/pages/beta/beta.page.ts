@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, nextStep, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songStage, songView, SongView } from './beta';
+import { BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, nextStep, pollOrder, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
 import { Ask } from './ui/confirm';
@@ -30,8 +30,6 @@ export class BetaPage {
   protected readonly message = signal('');
   protected readonly busy = signal(false);
   protected readonly loaded = signal(false);
-  // read by the song page, which extends this one
-  protected readonly stage = (s: BetaSong) => songStage(s, this.jobs());
   protected readonly chip = (v: SongView) => songChip(v);
   protected readonly progress = (j: BetaJob) => jobProgress(j);
   protected readonly filters = SONG_FILTERS;
@@ -71,9 +69,12 @@ export class BetaPage {
   protected form = { title: '', artist: '', language: 'ja', lyrics: '' };
   private file: File | null = null;
   private fileInput: HTMLInputElement | null = null;
+  /** The poll in flight, if any, and the order of polls: a tick waits while one runs, a late answer is dropped. */
+  private polling: Promise<void> | null = null;
+  private readonly polls = pollOrder();
 
   constructor() {
-    const timer = setInterval(() => this.poll(), POLL_MS);
+    const timer = setInterval(() => void (this.polling ?? this.poll()), POLL_MS);
     // leaving mid-upload cuts the audio off; once it is on the server the work goes on without this page
     const stay = (e: BeforeUnloadEvent) => this.busy() && e.preventDefault();
     addEventListener('beforeunload', stay);
@@ -125,21 +126,30 @@ export class BetaPage {
     }
   }
 
-  protected async poll() {
-    const get = async <T,>(path: string): Promise<T> => {
-      const r = await fetch(path, { cache: 'no-store' });
-      if (r.status === 401) throw new Error('請用邀請連結登入');
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return r.json();
+  protected poll(): Promise<void> {
+    const run = async () => {
+      const n = this.polls.begin();
+      const get = async <T,>(path: string): Promise<T> => {
+        const r = await fetch(path, { cache: 'no-store' });
+        if (r.status === 401) throw new Error('請用邀請連結登入');
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      };
+      try {
+        const [me, songs, jobs] = await Promise.all([get<BetaMe>('/beta/me'), get<BetaSong[]>('/beta/songs'), get<BetaJob[]>('/beta/jobs')]);
+        // a newer poll (after an action) began meanwhile: its answer is the fresher one
+        if (!this.polls.latest(n)) return;
+        this.me.set(me);
+        this.songs.set([...songs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+        this.jobs.set(jobs);
+        this.loaded.set(true);
+      } catch (e) {
+        if (this.polls.latest(n)) this.message.set((e as Error).message);
+      }
     };
-    try {
-      const [me, songs, jobs] = await Promise.all([get<BetaMe>('/beta/me'), get<BetaSong[]>('/beta/songs'), get<BetaJob[]>('/beta/jobs')]);
-      this.me.set(me);
-      this.songs.set([...songs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-      this.jobs.set(jobs);
-      this.loaded.set(true);
-    } catch (e) {
-      this.message.set((e as Error).message);
-    }
+    const p = run().finally(() => {
+      if (this.polling === p) this.polling = null;
+    });
+    return (this.polling = p);
   }
 }

@@ -322,6 +322,11 @@ a.t-row:hover { background: var(--surface-2); }
     border-color: var(--border-strong);
   }
 
+  &:disabled {
+    cursor: progress;
+    opacity: 0.5;
+  }
+
   &.go {
     color: var(--on-accent);
     background: var(--accent);

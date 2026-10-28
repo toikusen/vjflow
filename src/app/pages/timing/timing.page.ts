@@ -1,10 +1,14 @@
 import { EditResult, graphemeIndexAt, mergeLines, moveEdge, shiftAll, snapTo, splitLine } from './timing-edit';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
+import { BetaJob } from '../beta/beta';
+import { timingSaveWarning } from '../beta/make';
+import { Ask } from '../beta/ui/confirm';
+import { ConfirmDialogComponent } from '../beta/ui/confirm-dialog.component';
 import { StatusChipComponent } from '../beta/ui/status-chip.component';
 import { applyProof, exportIssues, LyricProof, proofNote, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
-import { clock, hint, Hint, lineTag, LineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS } from './timing-view';
+import { clock, hint, Hint, lineTag, LineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
 
 interface SongItem {
   id: string;
@@ -32,7 +36,7 @@ const SPEEDS = [0.5, 1, 1.5];
  */
 @Component({
   selector: 'app-timing-page',
-  imports: [StatusChipComponent],
+  imports: [ConfirmDialogComponent, StatusChipComponent],
   templateUrl: './timing.page.html',
   styleUrl: './timing.page.scss',
 })
@@ -83,7 +87,9 @@ export class TimingPage {
   protected readonly sec = sec;
   protected readonly rowNumber = rowNumber;
   /** Back to the tester's song page, or to the dashboard's song list. */
-  protected readonly backHref = this.beta ? `/my/song?id=${encodeURIComponent(this.beta)}` : '/timing';
+  protected readonly backHref = this.beta ? songPageHref(this.beta) : '/timing';
+  /** The warning before a save that would void a tester's pending concept (beta mode only); saving charges nothing. */
+  protected readonly ask = signal<Ask | null>(null);
 
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
   protected readonly statuses = computed<Status[]>(() =>
@@ -545,9 +551,18 @@ export class TimingPage {
     e.preventDefault();
   }
 
-  protected async save(confirm: boolean) {
+  /**
+   * Saves the lines (and confirms the timing). A tester's song with a finished concept awaiting a decision asks first
+   * when the lines changed: the server refuses to accept that concept once the timing differs from the concept's copy,
+   * so the person must know before saving.
+   */
+  protected async save(confirm: boolean, warned = false) {
     const id = this.songId();
     if (!id) return;
+    if (this.beta && !warned && timingChanged(this.song()?.cues ?? [], this.cues())) {
+      const warning = timingSaveWarning(await this.betaJobs(), id);
+      if (warning) return this.ask.set({ ...warning, eyebrow: this.song()?.title, cost: 0, confirmLabel: confirm ? '仍要確認' : '仍要儲存', go: () => void this.save(confirm, true) });
+    }
     const r = await fetch(`${this.api(id)}/cues`, {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -560,10 +575,20 @@ export class TimingPage {
     const before = this.song()!.cues;
     const reshaped = before.length !== this.cues().length || this.cues().some((c, i) => c.id !== before[i]?.id || c.text !== before[i]?.text);
     const note = reshaped && !this.beta ? '歌詞的句子有增減或改字：已經做好的設計要到 Studio 按「方向不對，重做設計」才會套用新歌詞。' : '';
-    if (this.beta && confirm) return void location.assign('/my');
+    if (this.beta && confirm) return void location.assign(this.backHref);
     this.message.set(`${confirm ? '時間軸已確認，可以開始生成 VJ。' : '已儲存。'}${note}`);
     await this.open(id);
     if (!this.beta) await this.loadList();
+  }
+
+  /** The tester's jobs, for the pending-concept check; a failed read means no warning (the server still refuses the accept). */
+  private async betaJobs(): Promise<BetaJob[]> {
+    try {
+      const r = await fetch('/beta/jobs', { cache: 'no-store' });
+      return r.ok ? ((await r.json()) as BetaJob[]) : [];
+    } catch {
+      return [];
+    }
   }
 
   // ---- waveform

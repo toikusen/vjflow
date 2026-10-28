@@ -52,6 +52,12 @@ export function needHelp(songs: BetaSong[], jobs: AdminJob[]): { id: string; tit
 }
 
 /** What a job does, as the admin tables name it. */
+/** The 重跑 button's words: a re-run charges the person the job's price again, so the button says so. */
+export const retryLabel = (j: Pick<AdminJob, 'priceUsd' | 'reservedUsd'>): string => {
+  const price = j.priceUsd ?? j.reservedUsd;
+  return price > 0 ? `重跑（再扣 $${formatPrice(price, 'short')}）` : '重跑';
+};
+
 export const jobName = (j: BetaJob): string =>
   j.kind === 'prep' ? '準備歌曲' : j.kind === 'concept' ? '概念' : j.kind === 'fix' ? '修正' : (TIER_INFO[j.tier!]?.name ?? j.tier ?? '製作');
 

@@ -4,9 +4,15 @@ export interface Ask {
   eyebrow?: string;
   title: string;
   body: string;
+  /** What the action charges now; 0 for a warning that charges nothing (the bill rows stay out). */
   cost: number;
+  /** The 確認 button's words; the default is 「確認，扣 $X」, or 「確認」 when nothing is charged. */
+  confirmLabel?: string;
   go: () => void;
 }
+
+/** The dialog's amount rows for an ask, or null when it charges nothing (a warning): then no bill shows and nothing can be short. */
+export const askRows = (a: Pick<Ask, 'cost'>, left: number | null): Bill | null => (a.cost > 0 ? bill(a.cost, left) : null);
 
 export interface Bill { cost: number; left?: number; after?: number; short: boolean }
 

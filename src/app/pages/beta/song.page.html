@@ -117,9 +117,9 @@
         }
         <div class="result-grid">
           @for (j of v.results; track j.id) {
-            <article class="result">
+            <article class="result" [class.wide]="reporting() === j.id">
               @if (j.status === 'done') {
-                <video #vid [src]="videoUrl(j)" controls playsinline preload="metadata"></video>
+                <video #vid [class.pinned]="reporting() === j.id" [src]="videoUrl(j)" controls playsinline preload="metadata"></video>
                 <ng-container *ngTemplateOutlet="resultBody; context: { $implicit: j, video: vid }" />
               } @else {
                 <div class="held"><p class="muted">已完成，管理者確認後就能下載</p></div>
@@ -200,8 +200,9 @@
         <a class="cta small" [href]="videoUrl(j)" download>下載 1080p</a>
         <button class="ghost-btn" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)">回報這個作品</button>
       </div>
-      @if (reporting() === j.id) {
-        <app-report-form [job]="j" [video]="video" />
+      <!-- stays mounted once opened so a draft survives closing the form or opening another card -->
+      @if (opened().has(j.id)) {
+        <app-report-form [job]="j" [video]="video" [hidden]="reporting() !== j.id" />
       }
     }
   </div>

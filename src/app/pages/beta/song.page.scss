@@ -75,16 +75,40 @@
   gap: 12px;
 }
 
+// clip, not hidden: hidden would make the card a scroll container and break the sticky video
 .result {
   display: grid;
   align-content: start;
-  overflow: hidden;
+  overflow: clip;
   background: rgb(17 17 22 / 0.85);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 
   video {
     border-radius: 0;
+  }
+}
+
+// a card being reported on takes the whole row; its video stays in view below the top bar while marking
+.result.wide {
+  grid-column: 1 / -1;
+}
+
+.result video.pinned {
+  position: sticky;
+  top: 60px;
+  z-index: 1;
+  background: #000;
+}
+
+@media (min-width: 960px) {
+  .result.wide {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+
+    .result-body {
+      padding-top: 16px;
+    }
   }
 }
 

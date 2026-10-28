@@ -48,6 +48,12 @@ describe('validateReport', () => {
     expect(validateReport(draft({ marks: [mark({ at: 999 })] }))).toBeNull();
   });
 
+  it('allows half a second past the video length, like the server', () => {
+    expect(validateReport(draft({ marks: [mark({ at: 10.5 })] }), 10)).toBeNull();
+    expect(validateReport(draft({ marks: [mark({ at: 9, end: 10.4 })] }), 10)).toBeNull();
+    expect(validateReport(draft({ marks: [mark({ at: 10.6 })] }), 10)).toBe('標記超出影片長度');
+  });
+
   it('keeps to the text and mark limits', () => {
     const marks = Array.from({ length: 21 }, () => mark());
     expect(validateReport(draft({ marks }))).toBe('最多標 20 處');

@@ -3,6 +3,8 @@ import { BetaFeedback, BetaJob, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCat
 
 const MAX_TEXT = 1000;
 const MAX_MARKS = 20;
+/** Same slack as the server: the browser's and the pipeline's video lengths can differ slightly. */
+const END_SLACK = 0.5;
 const ACTIONS: { id: FeedbackAction; label: string }[] = [
   { id: 'fix', label: '修正' },
   { id: 'redo', label: '重做' },
@@ -37,7 +39,7 @@ export function validateReport(r: ReportDraft, duration?: number): string | null
   for (const m of r.marks) {
     if (!isSec(m.at)) return '標記的時間不正確';
     if (m.end !== undefined && (!isSec(m.end) || m.end < m.at)) return '標記的時間不正確';
-    if (duration !== undefined && (m.end ?? m.at) > duration) return '標記超出影片長度';
+    if (duration !== undefined && (m.end ?? m.at) > duration + END_SLACK) return '標記超出影片長度';
     if (!m.category) return '每個標記請選一個類別';
     if (m.note.trim().length > MAX_TEXT) return `備註最多 ${MAX_TEXT} 字`;
   }

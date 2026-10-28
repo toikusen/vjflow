@@ -15,6 +15,8 @@ export interface Feedback {
 
 export const MAX_TEXT = 1000;
 export const MAX_MARKS = 20;
+/** The browser's video length and the pipeline's song length can differ slightly; a mark at the very end must still fit. */
+export const END_SLACK = 0.5;
 const CATEGORIES: FeedbackCategory[] = ['lyrics', 'timing', 'picture', 'empty', 'style', 'rhythm', 'other'];
 const ACTIONS: FeedbackAction[] = ['fix', 'redo', 'none'];
 
@@ -42,7 +44,7 @@ export function parseFeedback(body: unknown, duration?: number): Parsed {
     if (!isSec(m.at)) return fail('標記的時間不正確');
     if (m.end !== undefined && (!isSec(m.end) || m.end < m.at)) return fail('標記的時間不正確');
     const last = m.end ?? m.at;
-    if (duration !== undefined && last > duration) return fail('標記超出影片長度');
+    if (duration !== undefined && last > duration + END_SLACK) return fail('標記超出影片長度');
     if (!CATEGORIES.includes(m.category as FeedbackCategory)) return fail('標記的類別不正確');
     const note = typeof (m.note ?? '') === 'string' ? String(m.note ?? '').trim() : null;
     if (note === null) return fail('備註格式不正確');

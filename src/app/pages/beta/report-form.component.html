@@ -63,9 +63,9 @@
 
       <div class="field">
         處理方式
-        <div class="actions" role="radiogroup" aria-label="處理方式">
+        <div class="actions" role="group" aria-label="處理方式">
           @for (a of actions; track a.id) {
-            <button type="button" role="radio" [class.on]="a.id === 'none'" [attr.aria-checked]="a.id === 'none'" [disabled]="a.id !== 'none'">{{ a.label }}</button>
+            <button type="button" [class.on]="a.id === 'none'" [attr.aria-pressed]="a.id === 'none'" [disabled]="a.id !== 'none'">{{ a.label }}</button>
           }
         </div>
         <span class="fine">修正與重做即將開放</span>

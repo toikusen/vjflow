@@ -27,6 +27,12 @@ test('limits are enforced', () => {
   assert.ok(bad({ ok: false, marks: [mark({ category: 'nope' })] }));
   assert.ok(parseFeedback({ ok: false, marks: [mark({ at: 500 })] }).ok);
 });
+test('marks may run up to half a second past the known length', () => {
+  assert.ok(parseFeedback({ ok: false, marks: [mark({ at: 10.5 })] }, 10).ok);
+  assert.ok(parseFeedback({ ok: false, marks: [mark({ at: 9, end: 10.4 })] }, 10).ok);
+  assert.equal(bad({ ok: false, marks: [mark({ at: 10.6 })] }, 10), '標記超出影片長度');
+  assert.equal(bad({ ok: false, marks: [mark({ at: 9, end: 10.6 })] }, 10), '標記超出影片長度');
+});
 test('fix and redo are rejected in this plan', () => {
   assert.equal(bad({ ok: false, marks: [mark()], action: 'fix' }), '修正與重做即將開放');
   assert.equal(bad({ ok: true, action: 'redo' }), '修正與重做即將開放');

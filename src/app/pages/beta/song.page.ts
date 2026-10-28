@@ -33,9 +33,12 @@ export class BetaSongPage extends BetaPage {
   });
   protected readonly minutes = (j: BetaJob) => minutesBetween(j.startedAt, j.endedAt);
   protected readonly videoUrl = (j: BetaJob) => `/beta/jobs/${j.id}/video`;
-  /** The result card whose report form is open (one at a time). */
+  /** The result card whose report form is showing (one at a time). */
   protected readonly reporting = signal<string | null>(null);
+  /** Cards whose form was ever opened on this page; their forms stay mounted and keep their drafts. */
+  protected readonly opened = signal<ReadonlySet<string>>(new Set());
   protected toggleReport(id: string) {
+    this.opened.update((s) => (s.has(id) ? s : new Set(s).add(id)));
     this.reporting.update((cur) => (cur === id ? null : id));
   }
 

@@ -12,5 +12,11 @@ const SHELL: Partial<Record<Page, ShellSpec>> = {
   'beta-admin-song': { active: 'admin', title: '', back: { href: '/my/admin', label: '管理' } },
 };
 
-/** The beta shell's active tab and phone top bar for a page; undefined for pages outside the shell. */
-export const shellFor = (page: Page): ShellSpec | undefined => SHELL[page];
+/**
+ * The beta shell's active tab and phone top bar for a page; undefined for pages outside the shell.
+ * The timing editor is in the shell only for a tester's song (`/timing?beta=<id>`); it draws its own top bar (2c, 2e).
+ */
+export const shellFor = (page: Page, search = ''): ShellSpec | undefined => {
+  if (page === 'timing') return new URLSearchParams(search).has('beta') ? { active: 'songs', title: '歌詞時間', back: { href: '/my', label: '我的歌曲' }, ownTop: true } : undefined;
+  return SHELL[page];
+};

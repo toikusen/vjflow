@@ -1,9 +1,10 @@
 import { EditResult, graphemeIndexAt, mergeLines, moveEdge, shiftAll, snapTo, splitLine } from './timing-edit';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
-import { DecimalPipe } from '@angular/common';
+import { StatusChipComponent } from '../beta/ui/status-chip.component';
 import { applyProof, exportIssues, LyricProof, proofNote, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
+import { clock, hint, Hint, lineTag, LineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS } from './timing-view';
 
 interface SongItem {
   id: string;
@@ -22,7 +23,7 @@ const VIEW_MAX = 60;
 const NUDGE = 0.05;
 const EDGE_LISTEN = 0.5; // Q/W/E/D play this long before/after a line's start or end
 const SNAP = 0.15; // Shift while dragging: an edge within this of a beat, a voice onset or a line edge lands on it
-const SPEEDS = [0.5, 0.75, 1];
+const SPEEDS = [0.5, 1, 1.5];
 
 /**
  * Lyric timing editor: the song plays over a lyrics-only preview while each line's start/end is checked live against
@@ -31,7 +32,7 @@ const SPEEDS = [0.5, 0.75, 1];
  */
 @Component({
   selector: 'app-timing-page',
-  imports: [DecimalPipe],
+  imports: [StatusChipComponent],
   templateUrl: './timing.page.html',
   styleUrl: './timing.page.scss',
 })
@@ -76,6 +77,13 @@ export class TimingPage {
   protected readonly loop = signal(false);
   /** Q/W/E/D play a short piece and stop here. */
   private stopAt: number | null = null;
+  /** The 更多 menu (downloads, undo, whole-song shift, every shortcut). */
+  protected readonly more = signal(false);
+  protected readonly shortcuts = SHORTCUTS;
+  protected readonly sec = sec;
+  protected readonly rowNumber = rowNumber;
+  /** Back to the tester's song page, or to the dashboard's song list. */
+  protected readonly backHref = this.beta ? `/my/song?id=${encodeURIComponent(this.beta)}` : '/timing';
 
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
   protected readonly statuses = computed<Status[]>(() =>
@@ -90,7 +98,12 @@ export class TimingPage {
   protected readonly counts = computed(() => ({
     red: this.statuses().filter((s) => s === 'red').length,
     yellow: this.statuses().filter((s) => s === 'yellow').length,
+    ok: this.statuses().filter((s) => s === 'ok').length,
   }));
+  /** The big readout split so the hundredths can be smaller; both parts keep their width. */
+  protected readonly clock = computed(() => clock(this.time()));
+  protected readonly todo = computed(() => remaining(this.counts().red, this.counts().yellow));
+  protected readonly nowLabel = computed(() => playingLabel(this.playingIndex(), this.playing(), this.song()?.duration ?? 0));
   /** The line on screen in the lyrics-only preview. */
   protected readonly current = computed(() => this.cues().find((c) => this.time() >= c.start && this.time() < c.end) ?? null);
   /** The line being sung: the last one that has started (stays on it through short gaps). */
@@ -144,8 +157,21 @@ export class TimingPage {
     return [...qa, ...aligner].join('、');
   }
 
-  protected suggested(i: number): number | undefined {
-    return this.checks()[i]?.suggestedStart;
+  /** The status column of row i. */
+  protected tag(i: number): LineTag {
+    const c = this.cues()[i];
+    return lineTag(this.statuses()[i], { listening: i === this.selected() && i === this.playingIndex() && this.playing(), verified: c.confidence === 'verified' || this.touched().has(c.id) });
+  }
+
+  /** The line under row i when it needs a look: a fix to take or the reason, and a way to keep it. */
+  protected hint(i: number): Hint | null {
+    return hint(this.cues()[i], this.checks()[i], this.statuses()[i], this.issueText(i));
+  }
+
+  /** The 更多 menu closes on a click anywhere outside it. */
+  @HostListener('document:click', ['$event'])
+  protected outside(e: MouseEvent) {
+    if (this.more() && !(e.target as HTMLElement).closest('.more')) this.more.set(false);
   }
 
   /** Where a song's timing, audio and cues are served. */
@@ -491,6 +517,7 @@ export class TimingPage {
     if (mod && e.code === 'KeyZ') e.shiftKey ? this.redo() : this.undo();
     else if (mod && e.code === 'KeyY') this.redo();
     else if (mod) return;
+    else if (e.code === 'Escape' && this.more()) this.more.set(false);
     else if (e.code === 'KeyQ') this.playRange(c.start - EDGE_LISTEN, c.start);
     else if (e.code === 'KeyW') this.playRange(c.start, c.start + EDGE_LISTEN);
     else if (e.code === 'KeyE') this.playRange(c.end - EDGE_LISTEN, c.end);
@@ -559,30 +586,49 @@ export class TimingPage {
     const bars = new Set((song.downbeats ?? []).map((b) => b.toFixed(2)));
     for (const b of song.beats ?? []) {
       if (b < t0 || b > t0 + view) continue;
-      g.fillStyle = bars.has(b.toFixed(2)) ? 'rgba(255,255,255,.28)' : 'rgba(255,255,255,.1)';
+      g.fillStyle = bars.has(b.toFixed(2)) ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)';
       g.fillRect(x(b), 0, devicePixelRatio, h);
     }
+    const dpr = devicePixelRatio;
+    g.fillStyle = '#3a414b';
+    g.fillRect(0, h / 2, w, dpr);
     const st = this.statuses();
+    const sel = this.selected();
     this.cues().forEach((c, i) => {
       if (c.end < t0 || c.start > t0 + view) return;
-      g.fillStyle = st[i] === 'red' ? 'rgba(255,92,108,.28)' : st[i] === 'yellow' ? 'rgba(255,200,87,.22)' : 'rgba(123,97,255,.22)';
+      // the selected line is the coral span; the others are tinted by their status
+      g.fillStyle = i === sel ? 'rgba(255,106,77,.2)' : st[i] === 'red' ? 'rgba(255,107,107,.18)' : st[i] === 'yellow' ? 'rgba(255,200,87,.16)' : 'rgba(199,204,211,.09)';
       g.fillRect(x(c.start), 0, x(c.end) - x(c.start), h);
-      g.fillStyle = i === this.selected() ? '#00e5ff' : '#ece9f7';
-      g.fillRect(x(c.start) - 1, 0, 3 * devicePixelRatio, h);
-      g.font = `${12 * devicePixelRatio}px system-ui`;
-      g.fillText(c.text, x(c.start) + 6, 16 * devicePixelRatio, Math.max(0, x(c.end) - x(c.start) - 10));
+      g.fillStyle = i === sel ? '#ff6a4d' : '#c7ccd3';
+      g.fillRect(x(c.start) - dpr, 0, 2 * dpr, h);
+      g.font = `500 ${11 * dpr}px 'Noto Sans TC', system-ui`;
+      g.fillStyle = i === sel ? '#f4f5f7' : '#8b929c';
+      g.fillText(c.text, x(c.start) + 6 * dpr, h - 10 * dpr, Math.max(0, x(c.end) - x(c.start) - 10 * dpr));
     });
     if (this.peaks) {
-      g.fillStyle = 'rgba(236,233,247,.75)';
+      g.fillStyle = 'rgba(244,245,247,.7)';
       const max = 0.0001 + this.peaks.reduce((m, v) => Math.max(m, v), 0) * 0.8;
       for (let px = 0; px < w; px += 2) {
         const f = Math.floor((t0 + (px / w) * view) * 100);
         const v = Math.min(1, (this.peaks[f] ?? 0) / max);
-        g.fillRect(px, h / 2 - (v * h) / 2.4, 1.5, (v * h) / 1.2);
+        g.fillRect(px, h / 2 - (v * h) / 2.8, 1.5, (v * h) / 1.4);
       }
     }
-    g.fillStyle = '#ff3d9a';
-    g.fillRect(x(this.time()), 0, 2 * devicePixelRatio, h);
+    // the coral playhead with its time tag hanging from the top edge
+    const px = x(this.time());
+    g.fillStyle = '#ff6a4d';
+    g.fillRect(px - dpr, 0, 2 * dpr, h);
+    g.font = `700 ${10 * dpr}px 'JetBrains Mono', monospace`;
+    const label = this.time().toFixed(2);
+    const tw = g.measureText(label).width + 12 * dpr;
+    const left = Math.max(0, Math.min(w - tw, px - tw / 2));
+    g.beginPath();
+    g.roundRect(left, 0, tw, 16 * dpr, [0, 0, 5 * dpr, 5 * dpr]);
+    g.fill();
+    g.fillStyle = '#1a0c08';
+    g.textBaseline = 'middle';
+    g.fillText(label, left + 6 * dpr, 8 * dpr);
+    g.textBaseline = 'alphabetic';
   }
 
   private timeAt(e: MouseEvent) {

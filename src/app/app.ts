@@ -57,7 +57,7 @@ import { BetaSession } from './pages/beta/ui/session';
 })
 export class App {
   protected readonly page = pageFor(location.pathname);
-  protected readonly shell = shellFor(this.page);
+  protected readonly shell = shellFor(this.page, location.search);
   protected readonly session = inject(BetaSession);
 
   constructor() {

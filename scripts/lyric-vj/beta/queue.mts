@@ -2,7 +2,7 @@
 // become the progress the person sees and whose `##COST <usd> [key]` lines add up to its measured cost.
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, uptime } from 'node:os';
 import { join } from 'node:path';
 import { Db, Job, nextJob } from './store.mts';
 
@@ -14,6 +14,8 @@ export interface Queue {
   logDir: string;
   /** Extra environment for the jobs (default: the API keys in ~/.config/vjflow/*.env). */
   env?: Record<string, string>;
+  /** Set while the server shuts down: jobs killed then stay `running` (a restart re-queues them) and nothing new starts. */
+  stopping?: boolean;
 }
 
 /**
@@ -62,11 +64,17 @@ export function killGroup(pid: number, graceMs = 10_000) {
   setTimeout(() => { try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ } }, graceMs).unref();
 }
 
-/** Stops every running job's process group (server shutdown, or a crash left pipelines behind). */
-export const killRunning = (db: Db, graceMs?: number) => { for (const j of db.jobs) if (j.status === 'running' && j.pid) killGroup(j.pid, graceMs); };
+/**
+ * Stops every running job's process group (server shutdown, or a crash left pipelines behind). A job that started before
+ * the machine booted is skipped: its saved pid may belong to an unrelated process now.
+ */
+export const killRunning = (db: Db, graceMs?: number, bootMs = Date.now() - uptime() * 1000) => {
+  for (const j of db.jobs) if (j.status === 'running' && j.pid && !(j.startedAt && Date.parse(j.startedAt) < bootMs)) killGroup(j.pid, graceMs);
+};
 
 /** Starts the next queued job when nothing runs; call after any change to the queue. */
 export function pump(q: Queue) {
+  if (q.stopping) return;
   const job = nextJob(q.db);
   if (!job) return;
   const cmd = q.command(job, q.db);
@@ -101,6 +109,7 @@ export function pump(q: Queue) {
   child.stdout.on('data', take);
   child.stderr.on('data', take);
   child.on('close', (code) => {
+    if (q.stopping) return;
     if (rest) readLine(job, rest);
     // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10
     const failed = code !== 0 && code !== 10;

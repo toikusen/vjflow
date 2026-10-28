@@ -5,7 +5,9 @@ import { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { createBetaServer } from './server.mts';
+import { createBetaServer, stopBeta } from './server.mts';
+import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { invite, save, emptyDb, runPath } from './store.mts';
 
 async function setup() {
@@ -251,5 +253,50 @@ test('a pipeline orphaned by a crash is stopped when the server starts again, an
     for (const p of [pid, newPid]) if (p) try { process.kill(-p, 'SIGKILL'); } catch { /* gone */ }
     second.server.close();
     await new Promise((ok) => setTimeout(ok, 200));
+  }
+});
+
+test('a normal stop leaves the running job running, kills its group and starts nothing else', async () => {
+  const t = await runStub("echo '##PHASE 製作中'; sleep 30");
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 40 && !t.beta.db.jobs[0].pid; k++) await new Promise((ok) => setTimeout(ok, 50));
+  const pid = t.beta.db.jobs[0].pid!;
+  t.beta.db.songs.push({ ...t.beta.db.songs[0], id: 's2' });
+  t.beta.db.jobs.push({ id: 'next', userId: t.beta.db.songs[0].userId, songId: 's2', kind: 'make', tier: 'none', status: 'queued', reservedUsd: 4, priceUsd: 4, createdAt: '2999-01-01T00:00:00Z' });
+  let exited = false;
+  stopBeta(t.beta, () => { exited = true; }, 300);
+  let gone = false;
+  for (let k = 0; k < 40 && !gone; k++) {
+    await new Promise((ok) => setTimeout(ok, 50));
+    try { process.kill(-pid, 0); } catch { gone = true; }
+  }
+  await new Promise((ok) => setTimeout(ok, 900));
+  try {
+    assert.ok(gone, 'group still alive');
+    assert.ok(exited);
+    const saved = JSON.parse(readFileSync(join(t.root, 'db.json'), 'utf8')).jobs;
+    assert.deepEqual([saved[0].status, saved[0].pid, saved[1].status], ['running', pid, 'queued']);
+    assert.equal(t.beta.db.jobs[1].pid, undefined);
+  } finally {
+    try { process.kill(-pid, 'SIGKILL'); } catch { /* gone */ }
+    t.beta.server.close();
+  }
+});
+
+test('a saved pid from before the machine booted is never signalled', async () => {
+  const bystander = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+  const t = await runStub('exit 0');
+  try {
+    const { killRunning } = await import('./queue.mts');
+    const old = { id: 'o', userId: 'u', songId: 's1', kind: 'make' as const, status: 'running' as const, reservedUsd: 4, pid: bystander.pid, startedAt: '2000-01-01T00:00:00Z', createdAt: '2000-01-01T00:00:00Z' };
+    killRunning({ ...t.beta.db, jobs: [old] }, 100);
+    await new Promise((ok) => setTimeout(ok, 300));
+    process.kill(-bystander.pid!, 0); // throws if it was killed
+    killRunning({ ...t.beta.db, jobs: [{ ...old, startedAt: new Date().toISOString() }] }, 100);
+    await new Promise((ok) => setTimeout(ok, 300));
+    assert.throws(() => process.kill(-bystander.pid!, 0));
+  } finally {
+    try { process.kill(-bystander.pid!, 'SIGKILL'); } catch { /* gone */ }
+    t.beta.server.close();
   }
 });

@@ -72,6 +72,17 @@ const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin &&
 const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, failed: j.status === 'failed' });
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
+/**
+ * Shuts the queue down for a server exit: stops the running pipelines but leaves their jobs `running` in the record
+ * (the next start re-queues them), starts nothing new, then calls `exit` once the kills have had their grace time.
+ */
+export function stopBeta(b: { db: Db; queue: Queue }, exit: () => void = () => process.exit(0), graceMs = 2000) {
+  b.queue.stopping = true;
+  killRunning(b.db, graceMs);
+  b.queue.persist();
+  setTimeout(exit, graceMs + 500);
+}
+
 export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
@@ -259,9 +270,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (job.kind === 'prep') return `bash scripts/lyric-vj/beta/prep.sh ${q(dir)} ${q(song.language)} ${q([song.artist, song.title].filter(Boolean).join(' - '))}`;
     return `bash scripts/lyric-vj/beta/make.sh ${q(dir)} ${q(job.tier ?? '')} ${q(runPath(root, job))}`;
   };
-  const { server, db, queue } = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });
+  const beta = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });
   // the pipeline runs in its own process group: stop it with the server, or it would keep spending and a restart would run it twice
   for (const sig of ['SIGINT', 'SIGTERM'] as const)
-    process.on(sig, () => { killRunning(db, 2000); queue.persist(); setTimeout(() => process.exit(0), 2500); });
+    process.on(sig, () => stopBeta(beta));
+  const { server } = beta;
   server.listen(4320, '127.0.0.1', () => console.log('beta backend on http://127.0.0.1:4320'));
 }

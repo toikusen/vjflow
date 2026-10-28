@@ -115,3 +115,18 @@ export function persistQuiet<B extends { frames: { cue: string; who: string[]; s
 export function landedEnd(times: number[], i: number, gap: number, shotEnd: number): number {
   return times.slice(i + 1).find((x) => x >= times[i] + gap && x < shotEnd - 0.05) ?? shotEnd;
 }
+
+/**
+ * When each of a shot's cuts (sorted by beat) starts, as buildCuts places them: the first at the shot's start, the rest
+ * on the shot's own beats (`beats` are the song's felt beats), a beat past the shot at its end.
+ */
+export function cutTimes(beats: number[], shot: { start: number; end: number }, sorted: { beat: number }[]): number[] {
+  const bs = beats.filter((b) => b >= shot.start && b < shot.end);
+  return sorted.map((x, k) => (k === 0 ? shot.start : (bs[x.beat] ?? shot.end)));
+}
+
+/** The least time between two cuts of a shot: held cuts (pace held, or mixed outside a chorus) hold four beats, at least 1.2 s. */
+export function holdGap(pace: string | undefined, chorus: boolean, beatSec: number): number {
+  const held = pace === 'held' || (pace === 'mixed' && !chorus);
+  return held ? Math.max(1.2, 4 * beatSec) : 0.45;
+}

@@ -1,7 +1,13 @@
 // npx tsx --test scripts/lyric-vj/beta/fix-apply.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { applyPictureFix, cutSpans, type FixPlan } from './fix-apply.mts';
+import { spawnSync } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { cutTimes, holdGap } from '../interludes.mts';
+import { applyPictureFix, cutSpans, NOTHING_TO_REMOVE, type FixPlan } from './fix-apply.mts';
 
 const cut = (beat: number, sprite: string) => ({ beat, sprite, fx: 'wall' });
 const plan = (): FixPlan => ({
@@ -11,7 +17,7 @@ const plan = (): FixPlan => ({
   ],
 });
 const beats = Array.from({ length: 16 }, (_, i) => i);
-const timeline = (gap = 0.45) => ({ shots: [{ id: 's1', start: 0, end: 8, gap }, { id: 's2', start: 8, end: 12, gap }], beats });
+const timeline = (gap = 0.45) => ({ shots: [{ id: 's1', start: 0, end: 8, gap }, { id: 's2', start: 8, end: 12, gap }], beats, duration: 12 });
 const sprites = (p: FixPlan) => p.shots.flatMap((s) => s.cuts.map((c) => c.sprite));
 
 test('cutSpans: a cut runs from its beat to the next cut that lands, or the shot end', () => {
@@ -49,4 +55,91 @@ test('a range outside every cut removes nothing', () => {
   const r = applyPictureFix(plan(), [{ at: 20, end: 22 }], timeline());
   assert.equal(r.removed, 0);
   assert.deepEqual(sprites(r.plan), ['a', 'b', '', 'c', 'd', 'e']);
+});
+
+test('the shared cut helpers: first cut at the shot start, later ones on the shot beats; held cuts hold four beats', () => {
+  assert.deepEqual(cutTimes([0, 1, 2, 3, 4, 5], { start: 1.5, end: 4.5 }, [{ beat: 0 }, { beat: 1 }, { beat: 9 }]), [1.5, 3, 4.5]);
+  assert.equal(holdGap('quick', false, 0.5), 0.45);
+  assert.equal(holdGap('held', true, 0.5), 2);
+  assert.equal(holdGap('held', true, 0.2), 1.2);
+  assert.equal(holdGap('mixed', true, 0.5), 0.45);
+  assert.equal(holdGap('mixed', false, 0.5), 2);
+});
+
+test('kept items of a part overlapping a range lose their picture; other parts keep theirs', () => {
+  const p: FixPlan = { ...plan(), parts: [
+    { from: 's1', keep: { style: 'stage', items: [{ sprite: 'k1', word: 'w' }, { sprite: '', word: 'x' }] } },
+    { from: 's2', keep: { style: 'stage', items: [{ sprite: 'k2', word: 'y' }] } },
+  ] };
+  const r = applyPictureFix(p, [{ at: 9, end: 9.5 }], timeline());
+  assert.deepEqual(r.plan.parts!.map((x) => x.keep!.items.map((i) => i.sprite)), [['k1', ''], ['']]);
+  assert.equal(r.removed, 2, 'the kept k2 and the cut d (8–10 s)');
+});
+
+test('the thread loses its picture only when a range falls in a shot where it shows', () => {
+  const withThread = (levels: number[]): FixPlan => ({ ...plan(), thread: { sprite: 't' }, shots: plan().shots.map((x, i) => ({ ...x, level: levels[i] })) });
+  assert.equal(applyPictureFix(withThread([0, 1]), [{ at: 20, end: 21 }], timeline()).plan.thread!.sprite, 't');
+  assert.equal(applyPictureFix(withThread([0, 1]), [{ at: 9, end: 9.2 }], timeline()).plan.thread!.sprite, '');
+  // up in s1, so s2 still eases out of it
+  assert.equal(applyPictureFix(withThread([1, 0]), [{ at: 9, end: 9.2 }], timeline()).plan.thread!.sprite, '');
+  assert.equal(applyPictureFix(withThread([0, 0]), [{ at: 9, end: 9.2 }], timeline()).plan.thread!.sprite, 't');
+});
+
+// ---- fix.sh on a stub tree: a fake npx runs the real fix-apply and only echoes typeplan; make.sh is a stub ----
+
+const here = dirname(fileURLToPath(import.meta.url));
+const repo = resolve(here, '../../..');
+function fixTree() {
+  const t = mkdtempSync(join(tmpdir(), 'fixsh-'));
+  mkdirSync(join(t, 'repo/scripts/lyric-vj/beta'), { recursive: true });
+  cpSync(join(here, 'fix.sh'), join(t, 'repo/scripts/lyric-vj/beta/fix.sh'));
+  writeFileSync(join(t, 'repo/scripts/lyric-vj/beta/make.sh'), 'echo "##PHASE make $3"; touch "$3/made"\n');
+  mkdirSync(join(t, 'bin'));
+  writeFileSync(join(t, 'bin/npx'), `#!/bin/bash\nif [[ "$2" == *fix-apply.mts ]]; then shift 2; exec ${JSON.stringify(join(repo, 'node_modules/.bin/tsx'))} ${JSON.stringify(join(here, 'fix-apply.mts'))} "$@"; fi\necho "npx $*"\n`, { mode: 0o755 });
+  const song = join(t, 'song'), src = join(song, 'runs/m1');
+  mkdirSync(join(src, 'img/video'), { recursive: true });
+  mkdirSync(join(src, 'base'), { recursive: true });
+  const songJson = { duration: 12, tempo: 60, beats, downbeats: [], cues: [{ id: 'c1', start: 1, end: 2, text: 'a' }] };
+  writeFileSync(join(src, 'song.json'), JSON.stringify(songJson));
+  writeFileSync(join(song, 'song.json'), JSON.stringify(songJson));
+  writeFileSync(join(src, 'base/treatment.json'), JSON.stringify({ shots: [{ id: 's1', start: 0, end: 8 }, { id: 's2', start: 8, end: 12 }] }));
+  writeFileSync(join(src, 'img/typeplan.json'), JSON.stringify(plan()));
+  writeFileSync(join(src, 'img/video/x.mp4'), 'v');
+  writeFileSync(join(src, 'video.mp4'), 'v');
+  const run = (from: string, to: string, ranges: string) => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/fix.sh'), song, 'img', join(song, 'runs', to), join(song, 'runs', from), 'picture', ranges], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}` } });
+  return { song, src, run };
+}
+const spritesIn = (file: string) => sprites(JSON.parse(readFileSync(file, 'utf8')));
+
+test('fix.sh: a fix of a fix applies its own edit (the source marker and record are not copied)', () => {
+  const t = fixTree();
+  writeFileSync(join(t.src, '.fix-applied'), '');
+  writeFileSync(join(t.src, 'fix.json'), '{"kind":"picture","old":true}');
+  const r = t.run('m1', 'f1', '[{"at":2.5,"end":3}]');
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const f1 = join(t.song, 'runs/f1');
+  assert.deepEqual(spritesIn(join(f1, 'img/typeplan.json')), ['a', '', '', 'c', 'd', 'e']);
+  assert.equal(JSON.parse(readFileSync(join(f1, 'fix.json'), 'utf8')).removed, 1);
+  assert.ok(existsSync(join(f1, '.fix-applied')) && existsSync(join(f1, 'made')));
+  assert.ok(!existsSync(join(f1, 'video.mp4')) && !existsSync(join(f1, 'img/video')));
+});
+
+test('fix.sh: nothing to remove stops before the render with a no-retry line', () => {
+  const t = fixTree();
+  const r = t.run('m1', 'f1', '[{"at":4.5,"end":5}]');
+  assert.equal(r.status, 3);
+  assert.match(r.stdout, new RegExp(`^##NORETRY ${NOTHING_TO_REMOVE}$`, 'm'));
+  assert.match(r.stderr, new RegExp(NOTHING_TO_REMOVE));
+  assert.ok(!existsSync(join(t.song, 'runs/f1/made')) && !existsSync(join(t.song, 'runs/f1/.fix-applied')));
+});
+
+test('fix.sh: a symlink out of the song folder is refused; one inside it is copied as a link', () => {
+  const t = fixTree();
+  symlinkSync(join(t.song, 'song.json'), join(t.src, 'inside'));
+  assert.equal(t.run('m1', 'f1', '[{"at":2.5,"end":3}]').status, 0);
+  symlinkSync('/etc/hosts', join(t.src, 'img/outside'));
+  const r = t.run('m1', 'f2', '[{"at":2.5,"end":3}]');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /symlink/);
+  assert.ok(!existsSync(join(t.song, 'runs/f2')));
 });

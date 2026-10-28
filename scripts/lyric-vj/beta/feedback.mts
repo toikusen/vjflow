@@ -15,6 +15,8 @@ export interface Feedback {
   createdAt: string;
   /** Copied from the job at submission so the record stays meaningful later. */
   tier?: Tier; style?: string;
+  /** The fix job this report queued (action `fix`). */
+  fixJobId?: string;
 }
 
 export const MAX_TEXT = 1000;
@@ -78,9 +80,9 @@ export function parseFeedback(body: unknown, duration?: number, tier?: Tier): Pa
   return { ok: true, value: { ok, marks, suggestion, action } };
 }
 
-/** Appends a new record for a finished make job; never replaces an earlier one. */
-export function addFeedback(db: Db, job: Job, value: Extract<Parsed, { ok: true }>['value'], userId: string, style?: string): Feedback {
-  const f: Feedback = { id: newId(), jobId: job.id, songId: job.songId, userId, ...value, createdAt: new Date().toISOString(), tier: job.tier, style };
+/** Appends a new record for a finished video; never replaces an earlier one. `link` gives a preassigned id and the fix job it queued. */
+export function addFeedback(db: Db, job: Job, value: Extract<Parsed, { ok: true }>['value'], userId: string, style?: string, link: { id?: string; fixJobId?: string } = {}): Feedback {
+  const f: Feedback = { id: link.id ?? newId(), jobId: job.id, songId: job.songId, userId, ...value, createdAt: new Date().toISOString(), tier: job.tier, style, ...(link.fixJobId ? { fixJobId: link.fixJobId } : {}) };
   db.feedback.push(f);
   return f;
 }

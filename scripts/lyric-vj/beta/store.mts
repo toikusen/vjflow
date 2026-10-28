@@ -37,6 +37,8 @@ export interface Job {
   auto?: boolean;
   /** Set when the cost fuse stopped the job; such a job never retries by itself. */
   fused?: boolean;
+  /** Set when the steps said a rerun would fail the same way (`##NORETRY`); such a job never retries by itself. */
+  noRetry?: boolean;
   /**
    * A concept job's input: the concept text, the chosen language id (unset = the director picks), reference file names
    * copied into the run, the adjust note, and the concept job it adjusts or redoes. A fix job's: the run id of the video
@@ -49,7 +51,7 @@ export interface Job {
   conceptOf?: string;
 }
 export interface ConceptInputs { concept: string; style?: string; refs: string[]; note?: string; from?: string; kind?: undefined; ranges?: undefined }
-export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; concept?: undefined; style?: undefined; refs?: undefined; note?: undefined }
+export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; feedbackId?: string; concept?: undefined; style?: undefined; refs?: undefined; note?: undefined }
 /** True for the jobs that make a video a person watches: a make, or a fix of one (a new version beside the old). */
 export const madeVideo = (j: Pick<Job, 'kind'>) => j.kind === 'make' || j.kind === 'fix';
 export type StyleTier = 'proven' | 'candidate' | 'unlisted';

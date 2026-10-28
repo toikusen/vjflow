@@ -319,17 +319,27 @@ export function createBetaServer(o: BetaOptions) {
         if (j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
         const p = parseFeedback(await readJson(req), videoDuration(o.root, j), j.tier);
         if (!p.ok) return json(res, 400, { error: p.error });
-        // a report may have finished another request's job meanwhile: the source must still be done
-        if (j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
+        // the report and its fix name each other: the fix job's inputs carry the report id, the report the fix job id
+        const feedbackId = newId();
+        let fixJobId: string | undefined;
         if (p.value.action === 'fix') {
           const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
           if (!from) return json(res, 409, { error: '這支舊影片無法修正，請重做' });
-          const r = enqueue(user, j.songId, 'fix', j.tier, { inputs: { from, kind: fixKindFor(p.value.marks)!, ranges: fixRanges(p.value.marks) } });
+          const kind = fixKindFor(p.value.marks)!;
+          if (kind === 'timing') {
+            const song = db.songs.find((s) => s.id === j.songId);
+            if (!song?.confirmedAt) return json(res, 409, { error: '請先確認歌詞時間' });
+            // the same comparison as a concept's acceptance: a render of the same timing would only repeat the video
+            const now = timingKey(join(songDir(o.root, j.songId), 'song.json'));
+            if (!now || now === timingKey(join(runPath(o.root, j), 'song.json'))) return json(res, 409, { error: '歌詞時間沒有變更' });
+          }
+          const r = enqueue(user, j.songId, 'fix', j.tier, { inputs: { from, kind, ranges: fixRanges(p.value.marks), feedbackId } });
           if ('error' in r) return json(res, 409, r);
+          fixJobId = r.job.id;
         }
-        const f = addFeedback(db, j, p.value, user.id, jobStyle(o.root, j));
+        const f = addFeedback(db, j, p.value, user.id, jobStyle(o.root, j), { id: feedbackId, ...(fixJobId ? { fixJobId } : {}) });
         q.persist();
-        logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length });
+        logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length, ...(fixJobId ? { fixJobId } : {}) });
         return json(res, 201, f);
       }
       const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|cues|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);

@@ -1,5 +1,6 @@
 // Runs the beta's jobs one at a time on this machine: each job is one shell command whose `##PHASE <label>` lines
-// become the progress the person sees and whose `##COST <usd> [key]` lines add up to its measured cost.
+// become the progress the person sees and whose `##COST <usd> [key]` lines add up to its measured cost. A
+// `##NORETRY <reason>` line marks a failure that a rerun would repeat: the reason becomes the error, no automatic retry.
 import { spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { homedir, uptime } from 'node:os';
@@ -48,6 +49,11 @@ export function keyEnv(dir = join(homedir(), '.config/vjflow')) {
  * `##COST <usd> [key]`: a key already seen is ignored; no key becomes `phase:<phase>#<n>`.
  */
 export function readLine(job: Job, line: string, now: () => string = () => new Date().toISOString()) {
+  const n = /^##NORETRY (.+)/.exec(line);
+  if (n) {
+    Object.assign(job, { noRetry: true, error: n[1].trim() });
+    return true;
+  }
   const p = /^##PHASE (.+)/.exec(line);
   if (p) {
     const phase = p[1].trim();
@@ -91,9 +97,9 @@ export async function waitGone(pids: number[], timeoutMs = 12_000, pollMs = 50):
   return pids.filter(alive);
 }
 
-/** A system failure runs once more by itself (inside the global budget); a fuse trip, a retry of a retry and an admin hold wait for the admin. */
+/** A system failure runs once more by itself (inside the global budget); a fuse trip, a `##NORETRY` failure, a retry of a retry and an admin hold wait for the admin. */
 function autoRetry(q: Queue, job: Job) {
-  if (q.stopping || job.status !== 'failed' || job.fused || job.auto || job.retryOf) return;
+  if (q.stopping || job.status !== 'failed' || job.fused || job.noRetry || job.auto || job.retryOf) return;
   if (platformSpent(q.db) + (job.priceUsd ?? job.reservedUsd) > q.db.globalLimitUsd) {
     q.onEvent?.(job, { type: 'job.autoretry.skipped', retryOf: job.id, reason: 'global-limit' });
     return;
@@ -173,7 +179,7 @@ export function pump(q: Queue) {
     Object.assign(job, {
       status: code === 0 ? 'done' : code === 10 ? 'admin' : 'failed',
       endedAt: now(),
-      error: failed ? (fused ? job.error : `exit ${code}`) : undefined,
+      error: failed ? (fused || job.noRetry ? job.error : `exit ${code}`) : undefined,
       unsettled: failed ? job.phase : undefined,
       pid: undefined,
     });

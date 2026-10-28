@@ -1,56 +1,87 @@
-// A picture fix on a copied run: every cut of the saved type plan that shows while a marked range plays loses its
-// picture (sprite ''), so `typeplan.mts --plan` rebuilds the treatment without them and no model is called.
-// Cut times follow typeplan's buildCuts: a shot's first cut at the shot start, later cuts on the shot's felt beats,
-// each running until the next cut that lands (landedEnd) or the shot end.
+// A picture fix on a copied run: every picture of the saved type plan that shows while a marked range plays is taken
+// out, so `typeplan.mts --plan` rebuilds the treatment without it and no model is called. The pictures are a cut's
+// sprite, a part's kept items (keep.items, shown through the part) and the thread's sprite (shown in the shots whose
+// level, or the level before, is above 0). Cut times use typeplan's own helpers (cutTimes, holdGap, landedEnd).
+// Exit 3 (stderr NOTHING_TO_REMOVE) when the ranges hold no picture: a render would only repeat the old video.
 // usage: npx tsx scripts/lyric-vj/beta/fix-apply.mts --run <run dir> --kind picture --ranges '[{"at":2,"end":4}]'
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { feltTempo } from '../../../src/app/lyric-vj/timeline';
-import { landedEnd } from '../interludes.mts';
+import { cutTimes, holdGap, landedEnd } from '../interludes.mts';
 import { POINT_SPAN } from './feedback.mts';
 
-export interface FixPlan { format?: { pace?: string }; shots: { shot: string; cuts: { beat: number; sprite: string }[] }[] }
-/** The song's shots (with the hold between cuts typeplan applies in each) and its felt beats. */
-export interface FixTimeline { shots: { id: string; start: number; end: number; gap: number }[]; beats: number[] }
+export const NOTHING_TO_REMOVE = '標記的範圍裡沒有可以拿掉的圖';
+
+export interface FixPlan {
+  format?: { pace?: string };
+  parts?: { from: string; keep?: { style: string; items: { sprite: string; word: string }[] } }[];
+  thread?: { sprite?: string };
+  shots: { shot: string; level?: number; cuts: { beat: number; sprite: string }[] }[];
+}
+/** The song's shots (with the hold between cuts typeplan applies in each), its felt beats and its length. */
+export interface FixTimeline { shots: { id: string; start: number; end: number; gap: number }[]; beats: number[]; duration: number }
 
 /** Each cut of the plan with the seconds it shows, in plan order (a cut of a shot the timeline lacks is left out). */
 export function cutSpans(plan: FixPlan, tl: FixTimeline) {
   return plan.shots.flatMap((ps) => {
     const s = tl.shots.find((x) => x.id === ps.shot);
     if (!s) return [];
-    const bs = tl.beats.filter((b) => b >= s.start && b < s.end);
     const sorted = [...ps.cuts].sort((x, y) => x.beat - y.beat);
-    const times = sorted.map((c, k) => (k === 0 ? s.start : (bs[c.beat] ?? s.end)));
+    const times = cutTimes(tl.beats, s, sorted);
     return sorted.map((cut, i) => ({ cut, start: times[i], end: landedEnd(times, i, s.gap, s.end) }));
   });
 }
 
-/** A copy of the plan whose cuts overlapping any range show no picture, and how many pictures went. */
+/** Each part with the seconds it holds the screen: from its first shot to the next part's (the last to the song end). */
+export function partSpans(plan: FixPlan, tl: FixTimeline) {
+  const parts = plan.parts ?? [];
+  const at = (id: string) => tl.shots.find((x) => x.id === id)?.start;
+  return parts.map((part, k) => ({ part, start: at(part.from) ?? 0, end: (k + 1 < parts.length ? at(parts[k + 1].from) : undefined) ?? tl.duration }));
+}
+
+/** A copy of the plan without the pictures that show while any range plays, and how many pictures went. */
 export function applyPictureFix(plan: FixPlan, ranges: { at: number; end?: number }[], tl: FixTimeline): { plan: FixPlan; removed: number } {
   const next = structuredClone(plan);
   const spans = ranges.map((r) => ({ at: r.at, end: r.end ?? r.at + POINT_SPAN }));
+  const hit = (start: number, end: number) => spans.some((r) => start < r.end && end > r.at);
   let removed = 0;
   for (const { cut, start, end } of cutSpans(next, tl)) {
-    if (!cut.sprite || !spans.some((r) => start < r.end && end > r.at)) continue;
+    if (!cut.sprite || !hit(start, end)) continue;
     cut.sprite = '';
     removed++;
+  }
+  for (const { part, start, end } of partSpans(next, tl)) {
+    if (!hit(start, end)) continue;
+    for (const item of part.keep?.items ?? []) {
+      if (!item.sprite) continue;
+      item.sprite = '';
+      removed++;
+    }
+  }
+  if (next.thread?.sprite) {
+    // the thread eases from the level of the shot before, so a shot after one with the thread up shows it too
+    const levels = new Map(next.shots.map((x) => [x.shot, x.level ?? 0]));
+    const shows = tl.shots.some((s, i) => ((levels.get(s.id) ?? 0) > 0 || (i > 0 && (levels.get(tl.shots[i - 1].id) ?? 0) > 0)) && hit(s.start, s.end));
+    if (shows) {
+      next.thread.sprite = '';
+      removed++;
+    }
   }
   return { plan: next, removed };
 }
 
-type Song = Parameters<typeof feltTempo>[0] & { sections?: { start: number; end: number; type: string }[] };
+type Song = Parameters<typeof feltTempo>[0] & { duration?: number; sections?: { start: number; end: number; type: string }[] };
 
-/** The timeline typeplan built the plan against: the run's shots, its felt beats and each shot's hold (gapAt). */
+/** The timeline typeplan built the plan against: the run's shots, its felt beats and each shot's hold (holdGap). */
 export function fixTimeline(song: Song, treatment: { shots: { id: string; start: number; end: number }[] }, plan: FixPlan): FixTimeline {
   const felt = feltTempo(song);
-  const pace = plan.format?.pace;
-  const gapOf = (start: number) => {
-    const chorus = song.sections?.find((x) => start >= x.start && start < x.end)?.type === 'chorus';
-    const held = pace === 'held' || (pace === 'mixed' && !chorus);
-    return held ? Math.max(1.2, (4 * 60) / felt.tempo) : 0.45;
+  const chorus = (start: number) => song.sections?.find((x) => start >= x.start && start < x.end)?.type === 'chorus';
+  return {
+    shots: treatment.shots.map((s) => ({ id: s.id, start: s.start, end: s.end, gap: holdGap(plan.format?.pace, chorus(s.start), 60 / felt.tempo) })),
+    beats: felt.beats,
+    duration: song.duration ?? song.cues.at(-1)?.end ?? 0,
   };
-  return { shots: treatment.shots.map((s) => ({ id: s.id, start: s.start, end: s.end, gap: gapOf(s.start) })), beats: felt.beats };
 }
 
 const writeJson = (file: string, v: unknown) => {
@@ -71,6 +102,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const song = JSON.parse(readFileSync(join(a.run, 'song.json'), 'utf8')) as Song;
   const treatment = JSON.parse(readFileSync(join(a.run, 'base', 'treatment.json'), 'utf8'));
   const r = applyPictureFix(plan, ranges, fixTimeline(song, treatment, plan));
+  if (!r.removed) {
+    console.error(NOTHING_TO_REMOVE);
+    process.exit(3);
+  }
   writeJson(file, r.plan);
   writeJson(join(a.run, 'fix.json'), { kind: 'picture', ranges, removed: r.removed, at: new Date().toISOString() });
   console.log(`fix-apply: ${r.removed} pictures removed in ${ranges.length} ranges`);

@@ -1067,19 +1067,21 @@ test('an upload far past the limit gets its 413 and the server keeps answering; 
 
 // ---- fix jobs: a finished video fixed in a new run (pictures removed in a range, or the new timing re-applied) ----
 
-async function fixRoot(o: { slow?: boolean; limit?: number } = {}) {
+const RETIMED = JSON.stringify({ duration: 10, cues: [{ id: 'c1', start: 1.3, end: 2, text: 'a' }] });
+async function fixRoot(o: { slow?: boolean; limit?: number; script?: string; sameTiming?: boolean; unconfirmed?: boolean } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'beta-'));
   const db = emptyDb();
   const admin = invite(db, 'Admin', 100, true);
   const tester = invite(db, 'Tester', o.limit ?? 50);
-  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', ...(o.unconfirmed ? {} : { confirmedAt: '2026-10-27T00:00:00Z' }) });
   const src = (id: string, tier: Job['tier'], runDir?: string): Job => ({ id, userId: tester.user.id, songId: 's1', kind: 'make', tier, status: 'done', reservedUsd: 3.5, priceUsd: 3.5, createdAt: '2026-10-27T00:00:00Z', ...(runDir ? { runDir } : {}) });
   db.jobs.push(src('i', 'img', 'runs/i'), src('h', 'hybrid', 'runs/h'), src('n', 'none', 'runs/n'), src('legacy', 'img'));
   save(join(root, 'db.json'), db);
   for (const r of ['i', 'h', 'n']) { mkdirSync(join(root, 'songs/s1/runs', r), { recursive: true }); writeFileSync(join(root, 'songs/s1/runs', r, 'song.json'), SONG); }
-  writeFileSync(join(root, 'songs/s1/song.json'), SONG);
+  // the person retimed the song after these videos (a timing fix needs a change)
+  writeFileSync(join(root, 'songs/s1/song.json'), o.sameTiming ? SONG : RETIMED);
   const seen: Job[] = [];
-  const command = (job: Job) => { seen.push(job); return o.slow ? 'sleep 30' : `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'`; };
+  const command = (job: Job) => { seen.push(job); return o.script ?? (o.slow ? 'sleep 30' : `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'`); };
   const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
@@ -1101,9 +1103,13 @@ test('fix: a picture fix on img queues a fix job at the fix price in a fresh run
   assert.deepEqual([fix.tier, fix.priceUsd, fix.reservedUsd, fix.userId, fix.songId], ['img', 1, 1, t.beta.db.songs[0].userId, 's1']);
   assert.equal(fix.runDir, `runs/${fix.id}`);
   assert.notEqual(fix.runDir, 'runs/i');
-  assert.deepEqual(fix.inputs, { from: 'i', kind: 'picture', ranges: [{ at: 2, end: 4 }, { at: 5, end: 6 }] });
+  assert.deepEqual(fix.inputs, { from: 'i', kind: 'picture', ranges: [{ at: 2, end: 4 }, { at: 5, end: 6 }], feedbackId: fb.id });
+  assert.equal(fb.fixJobId, fix.id);
+  assert.equal(t.beta.db.feedback[0].fixJobId, fix.id);
   const q = readEvents(t.root, 's1').find((e) => e.type === 'job.queued');
-  assert.deepEqual([q?.kind, q?.jobId, (q?.inputs as { kind?: string })?.kind], ['fix', fix.id, 'picture']);
+  assert.deepEqual([q?.kind, q?.jobId, (q?.inputs as { kind?: string })?.kind, (q?.inputs as { feedbackId?: string })?.feedbackId], ['fix', fix.id, 'picture', fb.id]);
+  const sub = readEvents(t.root, 's1').find((e) => e.type === 'feedback.submitted');
+  assert.deepEqual([sub?.feedbackId, sub?.fixJobId], [fb.id, fix.id]);
   await waitFor(() => fix.status === 'done');
   assert.equal(t.seen[0].id, fix.id);
   assert.equal((await t.tester(`/beta/jobs/${fix.id}/video`)).status, 200);
@@ -1130,10 +1136,23 @@ test('fix: refused requests queue nothing and store no report', async () => {
   assert.deepEqual(await status('i', fixBody('lyrics')), [400, '這類問題目前只能重做或只回報']);
   assert.deepEqual(await status('legacy', fixBody('timing')), [409, '這支舊影片無法修正，請重做']);
   assert.equal(t.beta.db.feedback.length, 0);
+  t.beta.server.close();
+  const same = await fixRoot({ sameTiming: true });
+  const r1 = await same.tester('/beta/jobs/i/feedback', { json: fixBody('timing') });
+  assert.deepEqual([r1.status, (await r1.json()).error], [409, '歌詞時間沒有變更']);
+  assert.equal((await same.tester('/beta/jobs/i/feedback', { json: fixBody('picture') })).status, 201, 'a picture fix needs no timing change');
+  same.beta.server.close();
+  const unconfirmed = await fixRoot({ unconfirmed: true });
+  const r2 = await unconfirmed.tester('/beta/jobs/i/feedback', { json: fixBody('timing') });
+  assert.deepEqual([r2.status, (await r2.json()).error], [409, '請先確認歌詞時間']);
+  for (const x of [same, unconfirmed]) assert.equal(x.beta.db.jobs.filter((j) => j.kind === 'fix').length, x === same ? 1 : 0);
+  assert.equal(unconfirmed.beta.db.feedback.length, 0);
+  unconfirmed.beta.server.close();
   assert.equal(t.beta.db.jobs.filter((j) => j.kind === 'fix').length, 0);
   // the same report as 只回報 is kept
-  assert.equal((await t.tester('/beta/jobs/h/feedback', { json: fixBody('picture', { action: 'none' }) })).status, 201);
-  t.beta.server.close();
+  const kept = await fixRoot();
+  assert.equal((await kept.tester('/beta/jobs/h/feedback', { json: fixBody('picture', { action: 'none' }) })).status, 201);
+  kept.beta.server.close();
 });
 
 test('fix: refused while the song has a job queued or running, and over the limit', async () => {
@@ -1182,4 +1201,27 @@ test('the shell command of a fix job runs fix.sh with the source run, the kind a
   assert.match(cmd(job('timing'), db) as string, /fix\.sh .* 'timing' /);
   assert.deepEqual(cmd({ ...job('timing'), inputs: { from: '../x', kind: 'timing', ranges: [] } }, db), { error: '找不到要修正的影片' });
   assert.match(cmd({ ...job('timing'), kind: 'make' }, db) as string, /^bash scripts\/lyric-vj\/beta\/make\.sh '\/r\/songs\/s1' 'img' '\/r\/songs\/s1\/runs\/f1'$/);
+});
+
+test('fix: a fix with nothing to remove fails at no charge and does not retry by itself', async () => {
+  const t = await fixRoot({ script: "echo '##PHASE 套用修正'; echo '##NORETRY 標記的範圍裡沒有可以拿掉的圖'; exit 3" });
+  assert.equal((await t.tester('/beta/jobs/i/feedback', { json: fixBody('picture') })).status, 201);
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  await waitFor(() => fix.status === 'failed');
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.deepEqual([fix.error, fix.noRetry], ['標記的範圍裡沒有可以拿掉的圖', true]);
+  assert.equal(t.beta.db.jobs.filter((j) => j.retryOf === fix.id).length, 0);
+  assert.equal(readEvents(t.root, 's1').filter((e) => e.type === 'job.autoretry').length, 0);
+  t.beta.server.close();
+});
+
+test('fix: a system failure of a fix still retries by itself at the fix price', async () => {
+  const t = await fixRoot({ script: 'exit 1' });
+  assert.equal((await t.tester('/beta/jobs/i/feedback', { json: fixBody('picture') })).status, 201);
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  await waitFor(() => t.beta.db.jobs.some((j) => j.retryOf === fix.id));
+  const again = t.beta.db.jobs.find((j) => j.retryOf === fix.id)!;
+  assert.deepEqual([again.kind, again.priceUsd, again.runDir, again.auto], ['fix', 1, fix.runDir, true]);
+  await waitFor(() => again.status === 'failed');
+  t.beta.server.close();
 });

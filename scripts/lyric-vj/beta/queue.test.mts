@@ -33,3 +33,9 @@ test('return value says whether anything changed; unkeyed costs number per phase
   assert.deepEqual(j.costs!.map((c) => c.phase), ['a', 'a', 'a', 'b']);
   assert.equal(j.costUsd, 4);
 });
+
+test('a ##NORETRY line marks the job and becomes its error', () => {
+  const j = { id: 'j', status: 'running' } as Job;
+  assert.equal(readLine(j, '##NORETRY 標記的範圍裡沒有可以拿掉的圖'), true);
+  assert.deepEqual([j.noRetry, j.error], [true, '標記的範圍裡沒有可以拿掉的圖']);
+});

@@ -23,7 +23,7 @@ import { EMPH_HELP, ENTER_HELP, EXIT_HELP, FX_HELP, IDLE_HELP, SIDED, TEMPLATES 
 import { TEMPLATES as TEMPLATE_SPECS } from '../../src/app/lyric-vj/templates';
 import { feltTempo } from '../../src/app/lyric-vj/timeline';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
-import { landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
+import { cutTimes, holdGap, landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
 
 export { stripUnsungSprites };
 
@@ -503,11 +503,7 @@ export function buildCuts(p: Plan) {
   // a calm song's part: its first cut's move, backdrop and clock run on under every later cut of the part (calm)
   let warmest = 0;
   let hold: { part: unknown; back?: Backdrop; fx: string; at: number; seed: number; words: string[] } | undefined;
-  const gapAt = (_energy: number, chorus: boolean) => {
-    const held = p.format?.pace === 'held' || (p.format?.pace === 'mixed' && !chorus);
-    if (!held) return 0.45;
-    return Math.max(1.2, 4 * beatSec);
-  };
+  const gapAt = (_energy: number, chorus: boolean) => holdGap(p.format?.pace, chorus, beatSec);
   const transitions = new Map<string, number>();
   const variants = new Map<string, number>();
   const labels = new Set<string>();
@@ -532,7 +528,7 @@ export function buildCuts(p: Plan) {
     if ((back?.id ?? '') !== held.id) held = { id: back?.id ?? '', t0: s.start };
     const away = ps.lyric.side === 'left' ? 'right' : ps.lyric.side === 'right' ? 'left' : 'center';
     const sorted = [...ps.cuts].sort((x, y) => x.beat - y.beat);
-    const times = sorted.map((x, k) => (k === 0 ? s.start : (bs[x.beat] ?? s.end)));
+    const times = cutTimes(beats, s, sorted);
     const gap = gapAt(s.part?.energy ?? 0.5, s.part?.type === 'chorus');
     for (const [i, c] of sorted.entries()) {
       const at = times[i];

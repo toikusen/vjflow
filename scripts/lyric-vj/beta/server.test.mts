@@ -242,6 +242,18 @@ test('a failed job records the step it was in as unsettled', async () => {
   t.beta.server.close();
 });
 
+test('the admin job list carries costs, fused and the charged amount; a tester\'s list does not', async () => {
+  const t = await runStub("echo '##COST 1.5 x'; exit 1");
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs.every((j) => j.status === 'failed'));
+  const [job] = await (await t.admin('/beta/admin/jobs')).json();
+  assert.deepEqual([job.costs[0].key, job.costs[0].usd, job.chargedUsd], ['x', 1.5, 0]);
+  assert.ok(!job.fused);
+  const own = await (await t.tester('/beta/jobs')).json();
+  for (const j of own) for (const k of ['costs', 'fused', 'chargedUsd']) assert.ok(!(k in j), k);
+  t.beta.server.close();
+});
+
 test('a pipeline orphaned by a crash is stopped when the server starts again, and the job reruns only after it has exited', async () => {
   const marks = mkdtempSync(join(tmpdir(), 'beta-marks-'));
   // the orphan takes a second to wind down after SIGTERM; the rerun records whether that had finished when it started

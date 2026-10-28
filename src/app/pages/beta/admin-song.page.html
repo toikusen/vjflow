@@ -35,7 +35,7 @@
             @if (j.retryOf) {<span class="chip">重跑自 {{ j.retryOf }}</span>}
             @if (j.fused) {<span class="chip bad">保險絲</span>}
             <span class="muted">{{ clock(j.createdAt) }}</span>
-            <span>費用 ${{ j.status === 'failed' ? '0' : (j.priceUsd ?? j.reservedUsd) }}</span>
+            <span>費用 ${{ j.chargedUsd.toFixed(2) }}</span>
             <span>成本 ${{ (j.costUsd ?? 0).toFixed(2) }}</span>
             @if (j.unsettled) {<span class="muted">中斷於 {{ j.unsettled }}</span>}
           </div>
@@ -57,8 +57,8 @@
               <table>
                 <thead><tr><th>費用項目</th><th>USD</th></tr></thead>
                 <tbody>
-                  @for (c of costRows(j); track c[0]) {
-                    <tr><td>{{ c[0] }}</td><td>${{ c[1].toFixed(4) }}</td></tr>
+                  @for (c of costRows(j); track $index) {
+                    <tr><td>{{ c.key }}</td><td>${{ c.usd.toFixed(4) }}</td></tr>
                   }
                 </tbody>
               </table>

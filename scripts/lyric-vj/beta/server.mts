@@ -11,7 +11,7 @@ import { logEvent, readEvents } from './events.mts';
 import { addFeedback, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { charged, Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -349,7 +349,7 @@ export function createBetaServer(o: BetaOptions) {
         return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
       if (path === '/beta/admin/feedback') return json(res, 200, [...db.feedback].reverse());
-      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j, o.root), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, unsettled: j.unsettled, error: j.error })));
+      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j, o.root), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, costs: j.costs, fused: j.fused, chargedUsd: charged(j), unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });
     } catch (e) {
       json(res, 400, { error: (e as Error).message });

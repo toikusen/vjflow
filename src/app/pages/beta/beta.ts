@@ -166,7 +166,7 @@ export function timeline(events: BetaEvent[]): TimelineRow[] {
       case 'job.queued': return row('排隊');
       case 'job.started': return row('開始');
       case 'job.phase': return row(`步驟：${e['phase']}`);
-      case 'job.cost': return row(`費用 $${e['usd']}（${e['key']}）`);
+      case 'job.cost': return row(`費用 $${Number(e['usd']).toFixed(3)}（${e['key']}）`);
       case 'job.ended': {
         const status = String(e['status']);
         const tone = status === 'done' ? 'ok' : status === 'failed' || status === 'timeout' || status === 'fused' ? 'bad' : 'info';

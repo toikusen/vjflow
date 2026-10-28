@@ -6,6 +6,7 @@ export const MAX_REFS = 5;
 export const MAX_REF_BYTES = 10_000_000;
 export const MAX_CONCEPTS = 3;
 export const REF_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const TIERS: BetaTier[] = ['none', 'img', 'hybrid'];
 
 /** What the person chose; `style: null` is 交給導演. */
 export interface MakeForm { tier: BetaTier; feeling: string; style: string | null; refs: readonly string[] }
@@ -26,6 +27,21 @@ export const feelingLength = (s: string) => [...s].length;
 export function conceptAttempts(jobs: readonly BetaJob[], songId: string, tier: BetaTier): number {
   const failedForGood = (j: BetaJob) => j.status === 'failed' && jobs.filter((r) => r.retryOf === j.id).every((r) => r.status === 'failed');
   return jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.tier === tier && !j.retryOf && !failedForGood(j)).length;
+}
+
+/** A finished concept of this song nobody has decided on yet (the newest), if any. */
+export const pendingConcept = (jobs: readonly BetaJob[], songId: string): BetaJob | undefined =>
+  jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.status === 'done' && !j.decision).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+
+/**
+ * The form's default tier: the one whose concept awaits a decision (so the button shows that reason rather than a
+ * second, live 產生概念), else the first tier the song has no result for.
+ */
+export function defaultTier(jobs: readonly BetaJob[], songId: string, made: readonly (BetaTier | undefined)[]): BetaTier {
+  const pending = pendingConcept(jobs, songId)?.tier;
+  if (pending) return pending;
+  const have = new Set(made);
+  return TIERS.find((t) => !have.has(t)) ?? TIERS[0];
 }
 
 /** Why 產生概念 is off right now (the line under the button), or null when the person may go ahead. */

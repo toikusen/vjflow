@@ -1,6 +1,6 @@
 import { Component, computed, effect, ElementRef, inject, input, model, output, signal } from '@angular/core';
 import { BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, JOB_STEPS, TIER_INFO } from './beta';
-import { feelingLength, makeBlock, makeBody, MAX_FEELING, MAX_REFS, refProblem, REF_TYPES, StripGrid, stripGrid, stripTiles } from './make';
+import { defaultTier, feelingLength, makeBlock, makeBody, MAX_FEELING, MAX_REFS, refProblem, REF_TYPES, StripGrid, stripGrid, stripTiles } from './make';
 import { Ask, bill } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { formatPrice } from './ui/price';
@@ -60,10 +60,9 @@ export class MakeFormComponent {
   /** Each style picture's frame grid, read once the image has loaded. */
   protected readonly grids = signal<Readonly<Record<string, StripGrid>>>({});
 
-  /** The tier the person picked, else the first one this song has no result for yet. */
+  /** The tier the person picked, else the pending concept's tier, else the first one this song has no result for yet. */
   protected readonly chosen = computed<BetaTier>(() => {
-    const made = new Set(this.made());
-    return this.tier() ?? TIERS.find((t) => !made.has(t)) ?? TIERS[0];
+    return this.tier() ?? defaultTier(this.jobs(), this.song().id, this.made());
   });
   protected readonly info = computed(() => TIER_INFO[this.chosen()]);
   protected readonly count = computed(() => feelingLength(this.feeling()));

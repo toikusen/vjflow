@@ -68,6 +68,17 @@ export class ConceptCardComponent {
     });
   }
 
+  /** The checkbox and the note clear the last refusal: the person is changing what they will send. */
+  protected tick(on: boolean) {
+    this.confirmed.set(on);
+    this.error.set('');
+  }
+
+  protected edit(text: string) {
+    this.note.set(text);
+    this.error.set('');
+  }
+
   protected closeZoom() {
     this.lightbox()?.nativeElement.close?.();
     this.zoomed.set(null);

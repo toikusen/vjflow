@@ -14,7 +14,7 @@
           <p class="cc-title">導演覺得「{{ s.languageName }}」不太適合這首歌</p>
           <p class="cc-text">{{ concerns() }}</p>
           <label class="check">
-            <input type="checkbox" [checked]="confirmed()" (change)="confirmed.set($any($event.target).checked)" />
+            <input type="checkbox" [checked]="confirmed()" (change)="tick($any($event.target).checked)" />
             <span>我了解，仍要用這個風格</span>
           </label>
         </div>
@@ -100,7 +100,7 @@
             </div>
             <p class="o-text">保留這個方向，告訴導演要改哪裡。</p>
             <label class="sr" for="concept-note">想調整的地方</label>
-            <textarea id="concept-note" rows="1" [maxLength]="maxNote" placeholder="例如：霓虹少一點，文字再大一些" [value]="note()" (input)="note.set($any($event.target).value)"></textarea>
+            <textarea id="concept-note" rows="1" [maxLength]="maxNote" placeholder="例如：霓虹少一點，文字再大一些" [value]="note()" (input)="edit($any($event.target).value)"></textarea>
             @if (noteCount() > 0) {
               <p class="count">{{ noteCount() }} / {{ maxNote }}</p>
             }

@@ -1,5 +1,5 @@
 import { BetaJob, CONCEPT_PRICE, TIER_INFO } from './beta';
-import { conceptAttempts, feelingLength, makeBlock, makeBody, MakeState, refProblem, stripGrid, stripTiles } from './make';
+import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, refProblem, stripGrid, stripTiles } from './make';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T00:00:00Z', decision: 'accepted', ...o });
 const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 14.5, uploading: false, submitting: false, feeling: '', ...o });
@@ -54,6 +54,18 @@ describe('conceptAttempts', () => {
     expect(conceptAttempts(jobs, 's', 'hybrid')).toBe(3);
     expect(conceptAttempts(jobs, 's', 'img')).toBe(1);
     expect(conceptAttempts(jobs, 's', 'none')).toBe(0);
+  });
+});
+
+describe('defaultTier', () => {
+  it('is the first tier without a result, unless a concept awaits a decision: then that tier', () => {
+    expect(defaultTier([], 's', [])).toBe('none');
+    expect(defaultTier([], 's', ['none'])).toBe('img');
+    expect(defaultTier([], 's', ['none', 'img', 'hybrid'])).toBe('none');
+    const pending = job({ id: 'c', tier: 'hybrid', decision: undefined });
+    expect(defaultTier([pending], 's', [])).toBe('hybrid');
+    // decided, running or another song's concepts do not pull the default
+    expect(defaultTier([job({ tier: 'hybrid' }), job({ tier: 'img', status: 'running', decision: undefined }), { ...pending, songId: 'x' }], 's', [])).toBe('none');
   });
 });
 

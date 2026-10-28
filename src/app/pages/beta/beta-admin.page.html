@@ -68,6 +68,25 @@
   </section>
 
   <section class="panel">
+    <h2>歌曲</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>歌名</th><th>擁有者</th><th>最後活動</th><th>工作數</th></tr></thead>
+        <tbody>
+          @for (s of songRows(); track s.id) {
+            <tr>
+              <td><a [href]="'/my/admin/song?id=' + s.id">{{ s.title }}</a></td>
+              <td>{{ s.owner }}</td>
+              <td class="nowrap muted">{{ s.last.slice(5, 16).replace('T', ' ') }}</td>
+              <td>{{ s.jobs }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
     <h2>工作</h2>
     <div class="table-wrap">
       <table>

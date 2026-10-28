@@ -149,3 +149,38 @@ export function songChip(v: SongView): SongChip {
   if (v.failedFor) return { label: '需要協助', tone: 'bad' };
   return { label: '可製作', tone: 'ok' };
 }
+
+/** One line of a song's event log, as written by scripts/lyric-vj/beta/events.mts. */
+export type BetaEvent = { at: string; type: string; jobId?: string; by?: string; [k: string]: unknown };
+export interface TimelineRow { jobId?: string; title: string; at: string; detail?: string; tone: 'ok' | 'warn' | 'bad' | 'info' }
+
+/** Turn raw song events into readable rows (one per event, Chinese titles, tone for the colour). */
+export function timeline(events: BetaEvent[]): TimelineRow[] {
+  return events.map((e): TimelineRow => {
+    const row = (title: string, tone: TimelineRow['tone'] = 'info', detail?: string): TimelineRow => ({ jobId: e.jobId, title, at: e.at, tone, ...(detail ? { detail } : {}) });
+    const retry = e['retryOf'] ? `重試 ${e['retryOf']}` : undefined;
+    switch (e.type) {
+      case 'song.created': return row('建立歌曲');
+      case 'audio.uploaded': return row('上傳音檔');
+      case 'timing.saved': return row(e['confirmed'] ? '確認時間' : '儲存時間');
+      case 'job.queued': return row('排隊');
+      case 'job.started': return row('開始');
+      case 'job.phase': return row(`步驟：${e['phase']}`);
+      case 'job.cost': return row(`費用 $${e['usd']}（${e['key']}）`);
+      case 'job.ended': {
+        const status = String(e['status']);
+        const tone = status === 'done' ? 'ok' : status === 'failed' || status === 'timeout' || status === 'fused' ? 'bad' : 'info';
+        return row(`結束：${status}`, tone, [e['error'], e['unsettled'] ? `中斷於 ${e['unsettled']}` : ''].filter(Boolean).join('；') || undefined);
+      }
+      case 'job.fused': return row('保險絲觸發', 'bad');
+      case 'job.requeued': return row('重開機後重新排隊', 'warn');
+      case 'job.autoretry': return row('自動重試', 'warn', retry);
+      case 'job.autoretry.skipped': return row('略過自動重試（全站額度不足）', 'warn', retry);
+      case 'admin.retry': return row('管理者重跑', 'info', retry);
+      case 'admin.approve': return row('管理者放行');
+      case 'feedback.submitted': return row('使用者回報', 'info', e['action'] ? `處理：${e['action']}` : undefined);
+      case 'queue.orphan.timeout': return row('殘留程序未結束', 'bad');
+      default: return row(e.type);
+    }
+  });
+}

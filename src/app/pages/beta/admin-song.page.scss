@@ -1,0 +1,14 @@
+.back { display: inline-block; margin-bottom: 12px; }
+.song-head { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; margin-bottom: 16px; }
+.job { border-top: 1px solid var(--line, rgb(255 255 255 / 0.1)); padding: 12px 0; }
+.job-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.sub { margin-top: 8px; }
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0; }
+.timeline .tone-ok { color: var(--ok, #4ade80); }
+.timeline .tone-warn { color: var(--warn); }
+.timeline .tone-bad { color: var(--bad, #f87171); }
+.logs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.log-view { max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; padding: 12px; border-radius: 8px; background: rgb(0 0 0 / 0.35); }
+.fb { border-top: 1px solid var(--line, rgb(255 255 255 / 0.1)); padding: 10px 0; }
+.fb ul { margin: 6px 0; padding-left: 18px; }

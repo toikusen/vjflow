@@ -1,0 +1,131 @@
+<header class="topbar">
+  <a class="brand" href="/my"><span class="mark"></span>VJFlow</a>
+  <nav>
+    <a href="/my">我的歌曲</a>
+    <a class="on" href="/my/admin">管理</a>
+  </nav>
+</header>
+
+@if (message()) {
+  <p class="toast" role="status">{{ message() }}</p>
+}
+
+<main class="admin">
+  <a class="back muted" href="/my/admin">← 回管理</a>
+
+  @if (song(); as s) {
+    <section class="panel">
+      <h2>{{ s.title }}</h2>
+      <div class="song-head">
+        <span class="muted">擁有者 {{ owner() }}</span>
+        <span class="muted">建立 {{ clock(s.createdAt) }}</span>
+        <span>使用者已扣 ${{ charged().toFixed(2) }}</span>
+        <span>平台成本 ${{ platform().toFixed(2) }}</span>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>工作</h2>
+      @for (j of newest(); track j.id) {
+        <div class="job">
+          <div class="job-head">
+            <strong>{{ what(j) }}</strong>
+            <span class="chip" [class.ok]="j.status === 'done'" [class.live]="j.status === 'running'" [class.bad]="j.status === 'failed'" [class.warn]="j.status === 'admin'">{{ status[j.status] }}</span>
+            @if (j.auto) {<span class="chip warn">自動重試</span>}
+            @if (j.retryOf) {<span class="chip">重跑自 {{ j.retryOf }}</span>}
+            @if (j.fused) {<span class="chip bad">保險絲</span>}
+            <span class="muted">{{ clock(j.createdAt) }}</span>
+            <span>費用 ${{ j.status === 'failed' ? '0' : (j.priceUsd ?? j.reservedUsd) }}</span>
+            <span>成本 ${{ (j.costUsd ?? 0).toFixed(2) }}</span>
+            @if (j.unsettled) {<span class="muted">中斷於 {{ j.unsettled }}</span>}
+          </div>
+          @if (j.error) {<p class="muted err sub">{{ j.error }}</p>}
+          @if (steps(j).length) {
+            <div class="table-wrap sub">
+              <table>
+                <thead><tr><th>步驟</th><th>開始</th><th>耗時</th></tr></thead>
+                <tbody>
+                  @for (st of steps(j); track $index) {
+                    <tr><td>{{ st.phase }}</td><td class="nowrap muted">{{ clock(st.at) }}</td><td>{{ st.secs === undefined ? '—' : st.secs + ' 秒' }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+          @if (costRows(j).length) {
+            <div class="table-wrap sub">
+              <table>
+                <thead><tr><th>費用項目</th><th>USD</th></tr></thead>
+                <tbody>
+                  @for (c of costRows(j); track c[0]) {
+                    <tr><td>{{ c[0] }}</td><td>${{ c[1].toFixed(4) }}</td></tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      } @empty {
+        <p class="muted">還沒有工作</p>
+      }
+    </section>
+
+    <section class="panel">
+      <h2>時間線</h2>
+      <ul class="timeline">
+        @for (r of rows(); track $index) {
+          <li>
+            <span class="muted nowrap">{{ clock(r.at) }}</span>
+            <span [class]="'tone-' + r.tone">{{ r.title }}</span>
+            @if (r.detail) {<span class="muted">{{ r.detail }}</span>}
+            @if (r.jobId) {<span class="muted">{{ r.jobId }}</span>}
+          </li>
+        } @empty {
+          <li class="muted">沒有事件</li>
+        }
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Log</h2>
+      <div class="logs">
+        @for (l of logs(); track l.path) {
+          <button class="ghost-btn" type="button" (click)="showLog(l.path)">{{ l.path }}（{{ kb(l.bytes) }}）</button>
+        } @empty {
+          <p class="muted">沒有 log</p>
+        }
+      </div>
+      @if (openLog(); as o) {
+        <p class="muted">
+          {{ o.path }}@if (o.cut) { · 只顯示最後 2000 行}
+          · <a [href]="logUrl(o.path)" [attr.download]="o.path.split('/').pop()">下載完整 log</a>
+        </p>
+        <pre class="log-view">{{ o.text }}</pre>
+      }
+    </section>
+
+    <section class="panel">
+      <h2>使用者回報</h2>
+      @for (f of feedback(); track f.id) {
+        <div class="fb">
+          <div class="job-head">
+            <span class="chip" [class.ok]="f.ok" [class.warn]="!f.ok">{{ f.ok ? '滿意' : '有問題' }}</span>
+            <span class="muted">{{ clock(f.createdAt) }}</span>
+            <span class="muted">工作 {{ f.jobId }}</span>
+            <span>處理：{{ f.action }}</span>
+          </div>
+          @if (f.marks.length) {
+            <ul>
+              @for (m of f.marks; track $index) {
+                <li>{{ m.at }}{{ m.end !== undefined ? '–' + m.end : '' }} 秒 · {{ category(m.category) }}@if (m.note) { · {{ m.note }}}</li>
+              }
+            </ul>
+          }
+          @if (f.suggestion) {<p>{{ f.suggestion }}</p>}
+        </div>
+      } @empty {
+        <p class="muted">沒有回報</p>
+      }
+    </section>
+  }
+</main>

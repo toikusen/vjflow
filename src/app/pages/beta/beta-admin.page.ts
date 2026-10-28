@@ -22,6 +22,13 @@ export class BetaAdminPage {
   protected readonly loginUrl = signal('');
   protected readonly sorted = computed(() => [...this.jobs()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   protected readonly active = computed(() => this.jobs().filter((j) => j.status === 'queued' || j.status === 'running').length);
+  protected readonly songRows = computed(() =>
+    this.songs().map((s) => {
+      const mine = this.jobs().filter((j) => j.songId === s.id);
+      const last = [s.createdAt, ...mine.map((j) => j.endedAt ?? j.startedAt ?? j.createdAt)].sort().at(-1)!;
+      return { id: s.id, title: s.title, owner: this.userName(s.userId), last, jobs: mine.length };
+    }).sort((a, b) => b.last.localeCompare(a.last)),
+  );
   protected readonly status = STATUS;
   protected invite = { name: '', limitUsd: 25 };
   protected globalLimit = 0;

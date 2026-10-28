@@ -5,13 +5,14 @@ import { TimingPage } from './pages/timing/timing.page';
 import { StudioPage } from './pages/studio/studio.page';
 import { BetaPage } from './pages/beta/beta.page';
 import { BetaAdminPage } from './pages/beta/beta-admin.page';
+import { BetaAdminSongPage } from './pages/beta/admin-song.page';
 import { BetaSongPage } from './pages/beta/song.page';
 import { pageFor } from './pages/beta/route';
 
 // ponytail: a path check instead of the router; switch to @angular/router when pages need parameters or guards
 @Component({
   selector: 'app-root',
-  imports: [GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaSongPage],
+  imports: [GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaAdminSongPage, BetaSongPage],
   template: `@switch (page) {
     @case ('admin') {
       <app-jobs-page />
@@ -26,7 +27,7 @@ import { pageFor } from './pages/beta/route';
       <app-beta-admin-page />
     }
     @case ('beta-admin-song') {
-      <app-beta-admin-page />
+      <app-beta-admin-song-page />
     }
     @case ('beta-song') {
       <app-beta-song-page />

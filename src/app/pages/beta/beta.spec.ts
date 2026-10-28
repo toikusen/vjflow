@@ -1,4 +1,4 @@
-import { BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, TIER_INFO } from './beta';
+import { BetaEvent, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -125,5 +125,43 @@ describe('songChip', () => {
     expect(songChip({ ...base, active, retrying: true })).toEqual({ label: '自動重試中', tone: 'warn' });
     expect(songChip({ ...base, failedFor: 'img' })).toEqual({ label: '需要協助', tone: 'bad' });
     expect(songChip(base)).toEqual({ label: '可製作', tone: 'ok' });
+  });
+});
+
+describe('timeline', () => {
+  const ev = (type: string, o: Partial<BetaEvent> = {}): BetaEvent => ({ at: '2026-10-27T00:00:00Z', type, ...o });
+
+  it('titles each event in Chinese with a tone and the job id', () => {
+    const rows = timeline([
+      ev('song.created'),
+      ev('timing.saved', { confirmed: true }),
+      ev('timing.saved'),
+      ev('job.phase', { jobId: 'j', phase: '分離人聲' }),
+      ev('job.cost', { jobId: 'j', key: 'gemini', usd: 0.1234 }),
+      ev('job.ended', { jobId: 'j', status: 'failed', error: 'boom' }),
+      ev('job.ended', { jobId: 'j', status: 'done' }),
+      ev('job.fused', { jobId: 'j' }),
+      ev('job.autoretry', { jobId: 'k', retryOf: 'j' }),
+      ev('job.autoretry.skipped', { retryOf: 'j', reason: 'budget' }),
+      ev('queue.orphan.timeout', { pids: [1, 2] }),
+      ev('weird.type'),
+    ]);
+    expect(rows.map((r) => [r.title, r.tone])).toEqual([
+      ['建立歌曲', 'info'],
+      ['確認時間', 'info'],
+      ['儲存時間', 'info'],
+      ['步驟：分離人聲', 'info'],
+      ['費用 $0.1234（gemini）', 'info'],
+      ['結束：failed', 'bad'],
+      ['結束：done', 'ok'],
+      ['保險絲觸發', 'bad'],
+      ['自動重試', 'warn'],
+      ['略過自動重試（全站額度不足）', 'warn'],
+      ['殘留程序未結束', 'bad'],
+      ['weird.type', 'info'],
+    ]);
+    expect(rows[3].jobId).toBe('j');
+    expect(rows[5].detail).toBe('boom');
+    expect(rows[8].detail).toBe('重試 j');
   });
 });

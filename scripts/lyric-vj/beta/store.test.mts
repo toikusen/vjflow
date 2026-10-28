@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { emptyDb, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, runPath, save, spent, userByToken, videoFile } from './store.mts';
+import { emptyDb, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, retryJob, runPath, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -92,4 +92,17 @@ test('a queued or running job counts the larger of its price and its cost so far
   db.jobs[0].status = 'done';
   db.jobs[0].costUsd = 0.5;
   assert.equal(platformSpent(db), 0.5);
+});
+
+test('retryJob copies the run and price, links retryOf, and the user pays once', () => {
+  const db = emptyDb(); const { user } = invite(db, 'A', 20);
+  const failed = job({ id: 'f', userId: user.id, tier: 'img', priceUsd: 6, reservedUsd: 6, runDir: 'runs/f', status: 'failed', costUsd: 2 });
+  db.jobs.push(failed);
+  const r = retryJob(db, failed, { auto: true });
+  assert.deepEqual([r.userId, r.songId, r.kind, r.tier, r.runDir, r.priceUsd, r.reservedUsd, r.retryOf, r.auto, r.status], [user.id, 's', 'make', 'img', 'runs/f', 6, 6, 'f', true, 'queued']);
+  assert.notEqual(r.id, 'f');
+  assert.ok(db.jobs.includes(r));
+  assert.equal(retryJob(db, failed, { auto: false }).auto, undefined);
+  db.jobs.pop(); r.status = 'done';
+  assert.equal(spent(db, user.id), 6);
 });

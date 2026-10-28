@@ -5,7 +5,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from
 import { homedir, uptime } from 'node:os';
 import { join } from 'node:path';
 import type { BetaEvent } from './events.mts';
-import { Db, Job, nextJob } from './store.mts';
+import { Db, Job, nextJob, retryJob } from './store.mts';
 
 export interface Queue {
   db: Db;
@@ -89,6 +89,15 @@ export async function waitGone(pids: number[], timeoutMs = 12_000, pollMs = 50):
   return pids.filter(alive);
 }
 
+/** A system failure runs once more by itself; a fuse trip, a retry of a retry and an admin hold wait for the admin. */
+function autoRetry(q: Queue, job: Job) {
+  if (q.stopping || job.status !== 'failed' || job.fused || job.auto || job.retryOf) return;
+  const next = retryJob(q.db, job, { auto: true });
+  q.persist();
+  q.onEvent?.(job, { type: 'job.autoretry', retryOf: job.id });
+  q.onEvent?.(next, { type: 'job.queued', kind: next.kind, tier: next.tier, priceUsd: next.priceUsd, auto: true });
+}
+
 /** Starts the next queued job when nothing runs; call after any change to the queue. */
 export function pump(q: Queue) {
   if (q.stopping || q.holding) return;
@@ -130,6 +139,7 @@ export function pump(q: Queue) {
     // the fuse: a run that costs more than twice its price is stopped (the whole group, or bash's children keep the pipe open)
     if (!fused && job.costUsd !== undefined && job.costUsd > 2 * (job.priceUsd ?? Infinity)) {
       fused = true;
+      job.fused = true;
       job.error = '成本超過上限，已通知管理者';
       q.onEvent?.(job, { type: 'job.fused', costUsd: job.costUsd, priceUsd: job.priceUsd });
       killGroup(child.pid!);
@@ -145,6 +155,7 @@ export function pump(q: Queue) {
     Object.assign(job, { status: 'failed', endedAt: now(), error: `無法啟動：${err.message}`, unsettled: job.phase ?? '啟動', pid: undefined });
     q.persist();
     q.onEvent?.(job, { type: 'job.ended', status: job.status, error: job.error, unsettled: job.unsettled, costUsd: job.costUsd });
+    autoRetry(q, job);
     pump(q);
   });
   child.on('close', (code) => {
@@ -162,6 +173,7 @@ export function pump(q: Queue) {
     });
     q.persist();
     q.onEvent?.(job, { type: 'job.ended', status: job.status, error: job.error, unsettled: job.unsettled, costUsd: job.costUsd });
+    autoRetry(q, job);
     pump(q);
   });
 }

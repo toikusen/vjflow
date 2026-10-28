@@ -237,7 +237,7 @@ test('a failed job records the step it was in as unsettled', async () => {
   const jobs = await (await t.admin('/beta/admin/jobs')).json();
   assert.equal(jobs[0].unsettled, '畫道具');
   assert.equal(jobs[0].priceUsd, 6);
-  assert.equal((await (await t.admin('/beta/admin/users')).json()).platformSpentUsd, 1.5);
+  assert.equal((await (await t.admin('/beta/admin/users')).json()).platformSpentUsd, 3); // the failed run and its automatic retry
   t.beta.server.close();
 });
 
@@ -303,7 +303,7 @@ test('a shell that cannot start fails the job once and the queue moves on', asyn
   assert.equal(job.status, 'failed');
   assert.match(job.error ?? '', /無法啟動/);
   assert.ok(job.endedAt && job.unsettled && !job.pid);
-  assert.equal(readEvents(root, 's1').filter((e) => e.type === 'job.ended').length, 1);
+  assert.equal(readEvents(root, 's1').filter((e) => e.type === 'job.ended').length, 2); // the failed start and its one automatic retry, each ended once
   beta.server.close();
 });
 
@@ -503,4 +503,56 @@ test('a queued job still starts when the orphans outlive the wait and the event 
     assert.equal(b.db.jobs[0].status, 'running');
     assert.deepEqual(b.orphans, [o.orphan.pid], 'a survivor stays listed for stopBeta');
   } finally { o.kill(); }
+});
+
+const waitFor = async (f: () => boolean) => { for (let k = 0; k < 80 && !f(); k++) await new Promise((ok) => setTimeout(ok, 100)); };
+const makeImg = (t: Awaited<ReturnType<typeof runStub>>) => t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+
+test('a failed job retries once by itself; a second failure waits for the admin', async () => {
+  const t = await runStub('exit 1');
+  await makeImg(t);
+  await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs.every((j) => j.status === 'failed'));
+  await new Promise((ok) => setTimeout(ok, 300));
+  const jobs = t.beta.db.jobs;
+  assert.equal(jobs.length, 2);
+  assert.deepEqual([jobs[1].auto, jobs[1].retryOf, jobs.map((j) => j.status)], [true, jobs[0].id, ['failed', 'failed']]);
+  const ev = await (await t.admin('/beta/admin/songs/s1/events')).json();
+  const types = ev.map((e: { type: string }) => e.type);
+  assert.equal(types.filter((x: string) => x === 'job.autoretry').length, 1);
+  assert.equal(ev.filter((e: { type: string; auto?: boolean }) => e.type === 'job.queued' && e.auto).length, 1);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 0);
+  t.beta.server.close();
+});
+
+test('an automatic retry that succeeds charges the price once', async () => {
+  const t = await runStub('exit 1');
+  t.beta.queue.command = (j) => (j.auto ? 'true' : 'exit 1');
+  await makeImg(t);
+  await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs[1].status === 'done');
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 6);
+  t.beta.server.close();
+});
+
+test('a fuse trip and an admin hold do not auto-retry', async () => {
+  const fused = await runStub("echo '##COST 13 x'; sleep 5");
+  await makeImg(fused);
+  await waitFor(() => fused.beta.db.jobs[0].status === 'failed');
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.deepEqual([fused.beta.db.jobs.length, fused.beta.db.jobs[0].fused], [1, true]);
+  fused.beta.server.close();
+  const held = await runStub('exit 10');
+  await makeImg(held);
+  await waitFor(() => held.beta.db.jobs[0].status === 'admin');
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.deepEqual([held.beta.db.jobs.length, held.beta.db.jobs[0].status], [1, 'admin']);
+  held.beta.server.close();
+});
+
+test('an automatic retry resumes in the same run folder', async () => {
+  const t = await runStub('exit 1');
+  await makeImg(t);
+  await waitFor(() => t.beta.db.jobs.length === 2);
+  assert.ok(t.beta.db.jobs[0].runDir);
+  assert.equal(t.beta.db.jobs[1].runDir, t.beta.db.jobs[0].runDir);
+  t.beta.server.close();
 });

@@ -29,6 +29,12 @@ export interface Job {
   createdAt: string; startedAt?: string; endedAt?: string; phase?: string; error?: string;
   /** A make job's own folder, relative to the song folder (`runs/<jobId>`); unset for prep and for jobs made before run folders. */
   runDir?: string;
+  /** The failed job this one runs again. */
+  retryOf?: string;
+  /** True for the automatic retry of a system failure (an admin's retry leaves it unset). */
+  auto?: boolean;
+  /** Set when the cost fuse stopped the job; such a job never retries by itself. */
+  fused?: boolean;
 }
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number }
 
@@ -48,6 +54,20 @@ export const videoFile = (root: string, job: Job) => (job.runDir ? join(runPath(
 
 export const emptyDb = (): Db => ({ users: [], songs: [], jobs: [], globalLimitUsd: 100 });
 export const newId = () => randomBytes(9).toString('base64url');
+
+/**
+ * Queues a new job that runs a failed one again: same person, song, kind, tier, run folder (the steps resume from what
+ * they wrote) and fixed price. No limit check: the failed job charges nothing, so the person still pays the price once.
+ */
+export function retryJob(db: Db, failed: Job, opts: { auto: boolean }): Job {
+  const job: Job = {
+    id: newId(), userId: failed.userId, songId: failed.songId, kind: failed.kind, tier: failed.tier, status: 'queued',
+    reservedUsd: failed.reservedUsd, priceUsd: failed.priceUsd, runDir: failed.runDir, retryOf: failed.id,
+    ...(opts.auto ? { auto: true } : {}), createdAt: new Date().toISOString(),
+  };
+  db.jobs.push(job);
+  return job;
+}
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
 export function load(file: string): Db {

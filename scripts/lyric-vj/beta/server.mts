@@ -9,7 +9,7 @@ import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa
 import { logEvent, readEvents } from './events.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
+import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
 
 export { songDir };
 
@@ -72,7 +72,7 @@ const cookie = (req: IncomingMessage, name: string) => (req.headers.cookie ?? ''
 
 /** What a person sees of a job (no logs: those can carry paths and keys' error text). */
 const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin && j.status === 'admin');
-const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed' });
+const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto });
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
 /**
@@ -114,7 +114,7 @@ export function createBetaServer(o: BetaOptions) {
   const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).catch(() => orphans.slice()).then(release) : (release([]), Promise.resolve());
 
   /** Queues a job for a song the person owns, inside their limit. */
-  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retry?: { of: string; by: string }) => {
+  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string) => {
     const why = refuse(db, user.id, kind, tier);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
@@ -123,7 +123,6 @@ export function createBetaServer(o: BetaOptions) {
     db.jobs.push(job);
     q.persist();
     logEvent(o.root, songId, { type: 'job.queued', jobId: id, by: user.id, kind, tier, priceUsd: job.priceUsd });
-    if (retry) logEvent(o.root, songId, { type: 'admin.retry', jobId: id, by: retry.by, retryOf: retry.of });
     pump(q);
     return { job };
   };
@@ -264,8 +263,15 @@ export function createBetaServer(o: BetaOptions) {
         const j = db.jobs.find((x) => x.id === rj[1] && x.status === 'failed');
         if (!j) return json(res, 404, { error: '找不到失敗的工作' });
         const owner = db.users.find((u) => u.id === j.userId)!;
-        const r = enqueue(owner, j.songId, j.kind, j.tier, j.runDir, { of: j.id, by: user.id });
-        return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
+        const why = refuse(db, owner.id, j.kind, j.tier);
+        if (why) return json(res, 409, { error: why });
+        if (db.jobs.some((x) => x.songId === j.songId && (x.status === 'queued' || x.status === 'running'))) return json(res, 409, { error: '這首歌已經在排隊或製作中' });
+        const job = retryJob(db, j, { auto: false });
+        q.persist();
+        logEvent(o.root, j.songId, { type: 'job.queued', jobId: job.id, by: owner.id, kind: job.kind, tier: job.tier, priceUsd: job.priceUsd });
+        logEvent(o.root, j.songId, { type: 'admin.retry', jobId: job.id, by: user.id, retryOf: j.id });
+        pump(q);
+        return json(res, 202, publicJob(job));
       }
       const ap = /^\/beta\/admin\/jobs\/([\w-]+)\/approve$/.exec(path);
       if (ap && req.method === 'POST') {

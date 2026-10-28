@@ -1,8 +1,8 @@
-<header class="page-head">
+<header class="page-head desk-only">
   <h1>我的歌曲</h1>
-  <span class="muted">{{ songs().length }} 首</span>
+  <span class="muted">{{ songs().length }} 首 · {{ counts().running }} 個在跑</span>
   @if (me(); as m) {
-    <app-balance class="desk-only" [me]="m" />
+    <app-balance [me]="m" />
   }
 </header>
 
@@ -10,84 +10,82 @@
   <p class="toast" role="status">{{ message() }}</p>
 }
 
-<main class="layout">
-  <section class="panel create">
-    <div class="panel-head">
-      <h2>新增歌曲</h2>
-      <p class="muted">上傳音檔與歌詞，系統會自動對好時間。</p>
-    </div>
-    <form (ngSubmit)="confirmAdd()" class="form">
-      <label class="drop" [class.has]="fileName()">
-        <input type="file" accept="audio/*" (change)="pick($event)" required />
-        <span class="drop-icon" aria-hidden="true">♪</span>
-        @if (fileName(); as f) {
-          <strong>{{ f }}</strong>
-          <span class="muted">點一下換檔案</span>
-        } @else {
-          <strong>選擇音檔</strong>
-          <span class="muted">mp3、wav、flac、m4a，80 MB 以內</span>
-        }
-      </label>
-      <div class="row">
-        <label class="field">歌名<input name="title" [(ngModel)]="form.title" required maxlength="120" placeholder="必填" /></label>
-        <label class="field">歌手<input name="artist" [(ngModel)]="form.artist" maxlength="120" placeholder="選填" /></label>
-      </div>
-      <div class="field">
-        語言
-        <div class="segmented" role="radiogroup" aria-label="語言">
-          @for (l of langs; track l[0]) {
-            <button type="button" role="radio" [attr.aria-checked]="form.language === l[0]" [class.on]="form.language === l[0]" (click)="form.language = l[0]">{{ l[1] }}</button>
+@if (composing()) {
+  <button class="back phone-only" type="button" (click)="composing.set(false)">← 我的歌曲</button>
+} @else {
+  <button class="entry phone-only" type="button" (click)="composing.set(true)">
+    <span class="note-icon" aria-hidden="true">♪</span>
+    <span class="entry-text"><strong>新增歌曲</strong><span class="muted">選音檔、填歌名與歌詞 · <app-price [amount]="prepPrice" [plain]="true" /></span></span>
+    <span class="muted" aria-hidden="true">›</span>
+  </button>
+}
+
+<form class="composer" [class.open]="composing()" (ngSubmit)="confirmAdd()" aria-label="新增歌曲">
+  <label class="drop" [class.has]="fileName()">
+    <input type="file" accept="audio/*" (change)="pick($event)" required aria-label="音檔" />
+    <span class="note-icon" aria-hidden="true">♪</span>
+    @if (fileName(); as f) {
+      <strong class="file">{{ f }}</strong>
+      <span class="muted">點一下或拖放換檔案</span>
+    } @else {
+      <strong>新增歌曲</strong>
+      <span class="muted">拖放音檔到這裡<br />mp3、wav、flac、m4a · 80 MB 以內</span>
+    }
+  </label>
+  <div class="names">
+    <input name="title" [(ngModel)]="form.title" required maxlength="120" placeholder="歌名 · 必填" aria-label="歌名" />
+    <input name="artist" [(ngModel)]="form.artist" maxlength="120" placeholder="歌手 · 選填" aria-label="歌手" />
+  </div>
+  <div class="segmented" role="radiogroup" aria-label="語言">
+    @for (l of langs; track l[0]) {
+      <button type="button" role="radio" [attr.aria-checked]="form.language === l[0]" [class.on]="form.language === l[0]" (click)="form.language = l[0]">{{ l[1] }}</button>
+    }
+  </div>
+  <textarea class="lyrics" name="lyrics" [(ngModel)]="form.lyrics" required placeholder="歌詞 · 一行一句，照唱的順序，重複的段落也要寫出來" aria-label="歌詞"></textarea>
+  <div class="go">
+    <button class="button primary" type="submit" [disabled]="busy() || !fileName()">@if (busy()) {上傳中…} @else {上傳並準備 · <app-price [amount]="prepPrice" [plain]="true" />}</button>
+    @if (busy()) {
+      <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
+    } @else {
+      <p class="fine">上傳後自動分離人聲、對歌詞時間。<br />只上傳你有權使用的音樂。</p>
+    }
+  </div>
+</form>
+
+@if (!composing()) {
+  <div class="filters" role="group" aria-label="篩選">
+    @for (f of filters; track f.id) {
+      <button type="button" class="filter" [class.on]="filter() === f.id" [attr.aria-pressed]="filter() === f.id" (click)="filter.set(f.id)">
+        {{ f.label }}@if (f.id !== 'all') {<span class="desk-only"> · {{ counts()[f.id] }}</span>}<span class="phone-only">&nbsp;{{ counts()[f.id] }}</span>
+      </button>
+    }
+  </div>
+
+  @if (loaded() && !shown().length) {
+    <p class="empty">{{ songs().length ? '這個分類目前沒有歌曲。' : '還沒有歌曲，從上面上傳第一首。' }}</p>
+  }
+
+  <div class="cards">
+    @for (c of shown(); track c.song.id) {
+      <article class="card">
+        <div class="cover" [style.--tint]="c.tint" aria-hidden="true">
+          <span class="initial">{{ c.song.title.slice(0, 1) }}</span>
+          @if (c.pct !== undefined) {
+            <span class="bar"><i [style.width.%]="c.pct"></i></span>
           }
         </div>
-      </div>
-      <label class="field">歌詞
-        <textarea name="lyrics" [(ngModel)]="form.lyrics" rows="9" required placeholder="一行一句，照唱的順序，重複的段落也要寫出來"></textarea>
-      </label>
-      <button class="cta" type="submit" [disabled]="busy() || !fileName()">@if (busy()) {上傳中…} @else {上傳並準備 · <app-price [amount]="prepPrice" [plain]="true" />}</button>
-      @if (busy()) {
-        <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
-      } @else {
-        <p class="fine">上傳後自動分離人聲、對歌詞時間。只上傳你有權使用的音樂。</p>
-      }
-    </form>
-  </section>
-
-  <section class="works">
-    <div class="works-head">
-      <h2>作品</h2>
-      <span class="muted">{{ songs().length }} 首</span>
-    </div>
-
-    @if (!songs().length) {
-      <div class="empty">
-        <span class="drop-icon" aria-hidden="true">♪</span>
-        <p>還沒有歌曲，從左邊上傳第一首。</p>
-      </div>
-    }
-
-    <div class="song-list">
-      @for (s of songs(); track s.id) {
-        @let v = view(s);
-        @let st = stage(s);
-        @let busyJob = v.active ?? $any(st).job;
-        <a class="song song-row" [href]="'/my/song?id=' + s.id">
-          <div class="cover" aria-hidden="true">{{ s.title.slice(0, 1) }}</div>
-          <div class="song-title">
-            <h3>{{ s.title }}</h3>
-            <p class="muted">@if (s.artist) {<span>{{ s.artist }}・</span>}{{ langName(s.language) }}</p>
+        <app-status-chip class="on-cover desk-only" [chip]="c.chip" look="overlay" />
+        <div class="body">
+          <div class="title-row">
+            <h3><a class="title-link" [href]="'/my/song?id=' + c.song.id">{{ c.song.title }}</a></h3>
+            <app-status-chip class="phone-only" [chip]="c.chip" look="text" />
           </div>
-          <span class="row-side">
-            @if (busyJob) {
-              <span class="pct">{{ busyJob.status === 'queued' ? '排隊中' : progress(busyJob).pct + '%' }}</span>
-            } @else if (v.stage === 'ready') {
-              <span class="muted">{{ v.results.length }} 個成品</span>
-            }
-            <app-status-chip [chip]="chip(v)" />
-          </span>
-        </a>
-      }
-    </div>
-  </section>
-</main>
+          <p class="meta">{{ c.meta }}</p>
+          <a class="next" [href]="c.next.to === 'timing' ? '/timing?beta=' + c.song.id : '/my/song?id=' + c.song.id">{{ c.next.label }} →</a>
+        </div>
+      </article>
+    }
+  </div>
+}
 
 <app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />

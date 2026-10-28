@@ -1,0 +1,538 @@
+// 我的歌曲 (artboards 1b-1 and 2e): header, add-song card, filter chips, song cards.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 28px 40px;
+  font-size: 14px;
+}
+
+h1, h3, p {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+@media (min-width: 721px) {
+  .phone-only {
+    display: none !important;
+  }
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+
+  h1 {
+    font: 700 26px var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  .muted {
+    font-size: 13px;
+  }
+
+  app-balance {
+    margin-left: auto;
+  }
+}
+
+.toast {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+}
+
+/* add-song card */
+
+.composer {
+  display: grid;
+  grid-template: 'drop names lyrics' auto 'drop lang lyrics' auto 'drop go lyrics' 1fr / 260px 1fr 1fr;
+  gap: 12px 20px;
+  padding: 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.note-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  color: var(--on-accent);
+  background: var(--accent);
+  border-radius: 50%;
+}
+
+.drop {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 18px;
+  text-align: center;
+  background: var(--inset);
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+
+  .note-icon {
+    margin-bottom: 6px;
+  }
+
+  strong {
+    max-width: 100%;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .muted {
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  &:hover,
+  &:focus-within {
+    background: var(--surface-2);
+  }
+
+  &.has {
+    border-style: solid;
+    border-color: var(--accent-text);
+  }
+
+  // ponytail: the transparent native input takes clicks and dropped files; no drag-and-drop handler needed
+  input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.drop {
+  grid-area: drop;
+}
+
+.names {
+  grid-area: names;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+input:not([type='file']),
+textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  transition: border-color 0.15s;
+
+  &::placeholder {
+    color: var(--faint);
+  }
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+}
+
+.lyrics {
+  grid-area: lyrics;
+  min-height: 154px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.segmented {
+  grid-area: lang;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  padding: 3px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+
+  button {
+    padding: 8px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+
+    &:hover:not(.on) {
+      background: var(--surface-2);
+    }
+
+    &.on {
+      font-weight: 700;
+      color: var(--text);
+      background: var(--border);
+    }
+  }
+}
+
+.go {
+  grid-area: go;
+  align-self: end;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  .button {
+    min-height: 44px;
+    padding: 12px 20px;
+  }
+}
+
+.fine {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+
+  &.warn {
+    color: var(--warn);
+  }
+}
+
+/* filter chips */
+
+.filters {
+  display: flex;
+  gap: 8px;
+}
+
+.filter {
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+
+  &:hover:not(.on) {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  &.on {
+    color: var(--bg);
+    background: var(--text);
+    border-color: var(--text);
+  }
+}
+
+.empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: 14px;
+}
+
+/* song cards */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: border-color 0.15s;
+
+  &:hover,
+  &:focus-within {
+    border-color: var(--border-strong);
+  }
+}
+
+.cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  background: repeating-linear-gradient(135deg, var(--tint) 0 12px, var(--surface) 12px 24px);
+}
+
+.initial {
+  font: 700 72px var(--font-display);
+  color: var(--text);
+  opacity: 0.9;
+}
+
+.bar {
+  position: absolute;
+  inset: auto 0 0;
+  height: 4px;
+  background: #0f111499;
+
+  i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease;
+  }
+}
+
+.on-cover {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  pointer-events: none;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 14px 16px 16px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+h3 {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// the title link covers the whole card; the next-step link sits above it
+.title-link {
+  color: inherit;
+  text-decoration: none;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+  }
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.next {
+  position: relative;
+  z-index: 1;
+  align-self: flex-start;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-text);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+}
+
+@media (max-width: 1100px) and (min-width: 721px) {
+  .composer {
+    grid-template: 'drop names' auto 'drop lang' auto 'drop go' 1fr 'lyrics lyrics' auto / 240px 1fr;
+  }
+}
+
+/* phone (2e): 64 px rows; the add-song card becomes an entry row that opens it as a full page */
+
+@media (max-width: 720px) {
+  :host {
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .entry {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px;
+    font: inherit;
+    color: var(--text);
+    text-align: left;
+    background: var(--surface);
+    border: 1px dashed var(--border-strong);
+    border-radius: 14px;
+    cursor: pointer;
+
+    .note-icon {
+      width: 40px;
+      height: 40px;
+      font-size: 18px;
+    }
+
+    > .muted {
+      margin-left: auto;
+    }
+  }
+
+  .entry-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+
+    strong {
+      font-size: 14px;
+    }
+
+    .muted {
+      font-size: 12px;
+    }
+  }
+
+  .back {
+    align-self: flex-start;
+    padding: 4px 0;
+    font: inherit;
+    font-size: 13px;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    cursor: pointer;
+  }
+
+  .composer {
+    display: none;
+
+    &.open {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+    }
+  }
+
+  .drop {
+    padding: 20px 16px;
+  }
+
+  .lyrics {
+    min-height: 220px;
+  }
+
+  .go {
+    align-self: stretch;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+
+    .button {
+      min-height: 48px;
+    }
+  }
+
+  .filters {
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .filter {
+    padding: 6px 12px;
+  }
+
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .card {
+    display: grid;
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 10px;
+    border-radius: 14px;
+  }
+
+  .cover {
+    width: 64px;
+    height: 64px;
+    overflow: hidden;
+    border-radius: 10px;
+    background: repeating-linear-gradient(135deg, var(--tint) 0 8px, var(--surface) 8px 16px);
+  }
+
+  .initial {
+    font-size: 26px;
+    opacity: 1;
+  }
+
+  .bar {
+    height: 3px;
+  }
+
+  .body {
+    gap: 2px;
+    padding: 0;
+  }
+
+  h3 {
+    font-size: 15px;
+  }
+
+  .title-row app-status-chip {
+    flex: none;
+    margin-left: auto;
+    font-size: 11px;
+  }
+
+  .next {
+    margin-top: 4px;
+  }
+}

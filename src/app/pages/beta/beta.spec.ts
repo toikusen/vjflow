@@ -1,4 +1,4 @@
-import { BetaEvent, BetaFeedback, failedNotice, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO } from './beta';
+import { BetaEvent, BetaFeedback, COVER_TINTS, coverTint, failedNotice, filterCounts, inFilter, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -98,6 +98,80 @@ describe('songView', () => {
   it('lists results newest first, held ones included', () => {
     const [a, b, c] = [make('1'), make('2', { status: 'admin' }), make('3', { status: 'failed' })];
     expect(songView(confirmed, [prep, a, b, c]).results).toEqual([b, a]);
+  });
+});
+
+describe('songView with concept and fix jobs', () => {
+  const prep = job({ id: 'p' });
+  const confirmed = { ...song, confirmedAt: '2026-10-27T01:00:00Z' };
+  const at = (id: string, o: Partial<BetaJob>) => job({ id, tier: 'img', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
+  it('a queued or running concept or fix job is the active one', () => {
+    for (const kind of ['concept', 'fix'] as const)
+      for (const status of ['queued', 'running'] as const) {
+        const j = at('2', { kind, status });
+        expect(songView(confirmed, [prep, j]).active).toBe(j);
+      }
+    expect(songView(confirmed, [prep, at('2', { kind: 'concept', status: 'done' })]).active).toBeUndefined();
+  });
+  it('an automatic retry of a concept counts as retrying, and hides an older failure', () => {
+    const v = songView(confirmed, [prep, at('2', { kind: 'make', status: 'failed' }), at('3', { kind: 'concept', status: 'queued', auto: true })]);
+    expect(v.retrying).toBe(true);
+    expect(v.failedFor).toBeUndefined();
+  });
+});
+
+describe('songKind, nextStep and the list filters', () => {
+  const base: SongView = { stage: 'ready', retrying: false, results: [] };
+  const active = job({ kind: 'make', tier: 'img', status: 'running' });
+  const concept = job({ id: 'c', kind: 'concept', tier: 'hybrid', status: 'done' });
+  const result = job({ id: 'r', kind: 'make', tier: 'none', status: 'done' });
+  const views: Record<string, SongView> = {
+    preparing: { ...base, stage: 'preparing' },
+    prepFailed: { ...base, stage: 'prepFailed' },
+    timing: { ...base, stage: 'timing' },
+    concept: { ...base, concept },
+    making: { ...base, active },
+    retrying: { ...base, active, retrying: true },
+    help: { ...base, failedFor: 'img', results: [result] },
+    ready: base,
+    readyMade: { ...base, results: [result] },
+  };
+  it('names the state as the chip does', () => {
+    expect(Object.fromEntries(Object.entries(views).map(([k, v]) => [k, songKind(v)]))).toEqual({
+      preparing: 'preparing', prepFailed: 'prepFailed', timing: 'timing', concept: 'concept', making: 'making', retrying: 'retrying', help: 'help', ready: 'ready', readyMade: 'ready',
+    });
+  });
+  it('says what to do next in each state', () => {
+    expect(nextStep(views['preparing'], { leftMin: 4 })).toEqual({ label: '約剩 4 分', to: 'song' });
+    expect(nextStep(views['preparing'])).toEqual({ label: '看進度', to: 'song' });
+    expect(nextStep(views['timing'])).toEqual({ label: '確認時間', to: 'timing' });
+    expect(nextStep(views['concept'])).toEqual({ label: '看概念', to: 'song' });
+    expect(nextStep(views['making'], { leftMin: 21 })).toEqual({ label: '約剩 21 分', to: 'song' });
+    expect(nextStep(views['retrying'], { leftMin: 9 })).toEqual({ label: '約剩 9 分', to: 'song' });
+    expect(nextStep(views['help'])).toEqual({ label: '聯絡管理者', to: 'song' });
+    expect(nextStep(views['prepFailed'])).toEqual({ label: '聯絡管理者', to: 'song' });
+    expect(nextStep(views['ready'])).toEqual({ label: '製作新版本', to: 'song' });
+    expect(nextStep(views['readyMade'])).toEqual({ label: '製作新版本', to: 'song' });
+  });
+  it('sorts songs into 要你處理, 進行中 and 有成品', () => {
+    const pick = (f: Parameters<typeof inFilter>[0]) => Object.keys(views).filter((k) => inFilter(f, views[k]));
+    expect(pick('all')).toEqual(Object.keys(views));
+    expect(pick('todo')).toEqual(['prepFailed', 'timing', 'concept', 'help']);
+    expect(pick('running')).toEqual(['preparing', 'making', 'retrying']);
+    expect(pick('made')).toEqual(['help', 'readyMade']);
+    expect(filterCounts(Object.values(views))).toEqual({ all: 9, todo: 4, running: 3, made: 2 });
+    expect(filterCounts([])).toEqual({ all: 0, todo: 0, running: 0, made: 0 });
+  });
+});
+
+describe('coverTint', () => {
+  it('gives each song a stable tint from the palette', () => {
+    expect(COVER_TINTS.length).toBeGreaterThanOrEqual(6);
+    expect(coverTint('abc')).toBe(coverTint('abc'));
+    expect(COVER_TINTS).toContain(coverTint('abc'));
+    expect(COVER_TINTS).toContain(coverTint(''));
+    const spread = new Set(Array.from({ length: 40 }, (_, i) => coverTint(`song-${i}`)));
+    expect(spread.size).toBeGreaterThanOrEqual(5);
   });
 });
 

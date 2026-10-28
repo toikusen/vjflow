@@ -1,6 +1,6 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, jobProgress, PREP_PRICE, songChip, songStage, songView, SongView } from './beta';
+import { BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, nextStep, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songStage, songView, SongView } from './beta';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
 import { Ask } from './ui/confirm';
@@ -19,7 +19,7 @@ const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文'
   selector: 'app-beta-page',
   imports: [FormsModule, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
   templateUrl: './beta.page.html',
-  styleUrl: './beta.page.scss',
+  styleUrl: './list.page.scss',
 })
 export class BetaPage {
   /** Shared with the shell, so its balance pill follows this page's poll. */
@@ -29,10 +29,34 @@ export class BetaPage {
   protected readonly message = signal('');
   protected readonly busy = signal(false);
   protected readonly loaded = signal(false);
+  // read by the song page, which extends this one
   protected readonly stage = (s: BetaSong) => songStage(s, this.jobs());
-  protected readonly view = (s: BetaSong) => songView(s, this.jobs());
   protected readonly chip = (v: SongView) => songChip(v);
   protected readonly progress = (j: BetaJob) => jobProgress(j);
+  protected readonly filters = SONG_FILTERS;
+  protected readonly filter = signal<SongFilter>('all');
+  /** Phones show the add-song form as its own full page, opened from an entry row. */
+  protected readonly composing = signal(false);
+  /** Each song as its card shows it: state, chip, cover tint, subtitle, progress (while something runs) and next step. */
+  protected readonly cards = computed(() =>
+    this.songs().map((song) => {
+      const view = songView(song, this.jobs());
+      const job = view.active ?? (view.stage === 'preparing' ? view.prep : undefined);
+      const progress = job ? jobProgress(job) : undefined;
+      const made = view.results.length;
+      return {
+        song,
+        view,
+        chip: songChip(view),
+        tint: coverTint(song.id),
+        meta: [song.artist, this.langName(song.language), made ? `${made} 個成品` : '尚無成品'].filter(Boolean).join(' · '),
+        pct: progress?.pct,
+        next: nextStep(view, progress),
+      };
+    }),
+  );
+  protected readonly counts = computed(() => filterCounts(this.cards().map((c) => c.view)));
+  protected readonly shown = computed(() => this.cards().filter((c) => inFilter(this.filter(), c.view)));
   protected readonly fileName = signal('');
   protected readonly ask = signal<Ask | null>(null);
   protected readonly prepPrice = PREP_PRICE;
@@ -90,6 +114,7 @@ export class BetaPage {
       this.file = null;
       this.fileName.set('');
       if (this.fileInput) this.fileInput.value = '';
+      this.composing.set(false);
       this.message.set('已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 5–10 分鐘），完成後請回來「確認時間」。');
       await this.poll();
     } catch (e) {

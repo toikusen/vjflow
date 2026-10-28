@@ -1,5 +1,5 @@
 // What the beta pages read from scripts/lyric-vj/beta/server.mts, and where a song stands.
-import { STATUS_CHIP, StatusChip } from './ui/status';
+import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
@@ -119,7 +119,7 @@ export interface SongView {
   concept?: BetaJob;
 }
 
-/** One song as the detail page shows it: its stage, the running make job, and the finished (or held) results, newest first. */
+/** One song as the detail page shows it: its stage, the running make, concept or fix job, and the finished (or held) results, newest first. */
 export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   const mine = jobs.filter((j) => j.songId === song.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const prep = mine.filter((j) => j.kind === 'prep').at(-1);
@@ -128,7 +128,8 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   if (prep.status === 'failed') return { ...base, stage: 'prepFailed' };
   if (!song.confirmedAt) return { ...base, stage: 'timing' };
   const makes = mine.filter((j) => j.kind === 'make');
-  const active = makes.find((j) => j.status === 'queued' || j.status === 'running');
+  // a concept or fix run is work in progress too: the song is busy until it ends
+  const active = mine.find((j) => j.kind !== 'prep' && (j.status === 'queued' || j.status === 'running'));
   const last = makes.at(-1);
   return {
     ...base,
@@ -167,13 +168,64 @@ export const minutesBetween = (a?: string, b?: string): number | undefined => (a
 
 export type SongChip = StatusChip;
 
-/** The status chip a song shows on its card and its page; a running job first, then a concept waiting for the person. */
-export function songChip(v: SongView): SongChip {
-  if (v.stage !== 'ready') return STATUS_CHIP[v.stage];
-  if (v.active) return STATUS_CHIP[v.retrying ? 'retrying' : 'making'];
-  if (v.concept) return STATUS_CHIP.concept;
-  if (v.failedFor) return STATUS_CHIP.help;
-  return STATUS_CHIP.ready;
+/** Which state a song is in, as its chip names it; a running job first, then a concept waiting for the person, then a failure. */
+export function songKind(v: SongView): StatusKind {
+  if (v.stage !== 'ready') return v.stage;
+  if (v.active) return v.retrying ? 'retrying' : 'making';
+  if (v.concept) return 'concept';
+  if (v.failedFor) return 'help';
+  return 'ready';
+}
+
+/** The status chip a song shows on its card and its page. */
+export const songChip = (v: SongView): SongChip => STATUS_CHIP[songKind(v)];
+
+/** The 「下一步 →」 link on a song card: its words, and whether it opens the timing editor or the song page. */
+export interface NextStep { label: string; to: 'song' | 'timing' }
+
+/** What the person does next with a song; `progress` is the running job's (prep or make), for the minutes left. */
+export function nextStep(v: SongView, progress?: Pick<JobProgress, 'leftMin'>): NextStep {
+  const song = (label: string): NextStep => ({ label, to: 'song' });
+  switch (songKind(v)) {
+    case 'preparing':
+    case 'making':
+    case 'retrying':
+      return song(progress ? `約剩 ${progress.leftMin} 分` : '看進度');
+    case 'timing': return { label: '確認時間', to: 'timing' };
+    case 'concept': return song('看概念');
+    case 'help':
+    case 'prepFailed': return song('聯絡管理者');
+    default: return song('製作新版本');
+  }
+}
+
+/** The list's filter chips: 要你處理 waits on the person (or the admin, after a failure), 進行中 is running, 有成品 has a video. */
+export type SongFilter = 'all' | 'todo' | 'running' | 'made';
+export const SONG_FILTERS: { id: SongFilter; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'todo', label: '要你處理' },
+  { id: 'running', label: '進行中' },
+  { id: 'made', label: '有成品' },
+];
+const FILTER_KINDS: Partial<Record<SongFilter, StatusKind[]>> = { todo: ['timing', 'concept', 'help', 'prepFailed'], running: ['preparing', 'making', 'retrying'] };
+
+export function inFilter(f: SongFilter, v: SongView): boolean {
+  if (f === 'all') return true;
+  if (f === 'made') return v.results.length > 0;
+  return FILTER_KINDS[f]!.includes(songKind(v));
+}
+
+export const filterCounts = (views: SongView[]): Record<SongFilter, number> =>
+  Object.fromEntries(SONG_FILTERS.map(({ id }) => [id, views.filter((v) => inFilter(id, v)).length])) as Record<SongFilter, number>;
+
+/** Stripe tints for song covers (the 1b artboard's five, plus three in the same muted range). */
+export const COVER_TINTS = ['#2a4a5a', '#5a3a8a', '#3a4a6a', '#6a3a4a', '#2a5a4a', '#5a4a2a', '#4a3a6a', '#2a5a5a'];
+
+/** A song's cover tint, fixed by its id (FNV-1a hash), so it stays the same on every visit. */
+export function coverTint(id: string): string {
+  let h = 0x811c9dc5;
+  for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
+  return COVER_TINTS[(h >>> 0) % COVER_TINTS.length];
 }
 
 /** One line of a song's event log, as written by scripts/lyric-vj/beta/events.mts. */

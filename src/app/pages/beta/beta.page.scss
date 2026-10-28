@@ -25,30 +25,6 @@ a {
   color: var(--warn);
 }
 
-/* page head (the balance pill moves to the shell's top bar on phones) */
-
-.page-head {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 28px 24px 0;
-
-  h1 {
-    font: 700 26px var(--font-display);
-    letter-spacing: -0.02em;
-  }
-
-  app-balance {
-    margin-left: auto;
-  }
-
-  @media (max-width: 720px) {
-    display: none;
-  }
-}
-
 .toast {
   max-width: 1280px;
   margin: 16px auto 0;
@@ -62,16 +38,6 @@ a {
 
 /* layout */
 
-.layout {
-  display: grid;
-  grid-template-columns: 400px minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
 .panel {
   display: grid;
   gap: 16px;
@@ -81,28 +47,7 @@ a {
   border-radius: var(--radius);
 }
 
-.create {
-  position: sticky;
-  top: 84px;
-}
-
-.panel-head {
-  display: grid;
-  gap: 4px;
-}
-
 /* form */
-
-.form {
-  display: grid;
-  gap: 14px;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
 
 .field {
   display: grid;
@@ -138,87 +83,6 @@ input:not([type='file']), textarea {
 textarea {
   resize: vertical;
   line-height: 1.6;
-}
-
-.drop {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 4px;
-  padding: 22px 16px;
-  text-align: center;
-  background: var(--surface-2);
-  border: 1px dashed var(--border-strong);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-
-  &:hover,
-  &:focus-within {
-    border-color: var(--accent-2);
-    background: rgb(139 92 255 / 0.06);
-  }
-
-  &.has {
-    border-style: solid;
-    border-color: var(--accent-2);
-  }
-
-  strong {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  span.muted {
-    font-size: 12px;
-  }
-
-  // ponytail: transparent overlay keeps native validation and the file picker; no drag-and-drop handler needed
-  input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-}
-
-.drop-icon {
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-bottom: 4px;
-  border-radius: 10px;
-  background: var(--surface-3);
-  font-size: 18px;
-}
-
-.segmented {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  padding: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-
-  button {
-    padding: 7px 0;
-    font: inherit;
-    color: var(--muted);
-    background: transparent;
-    border: none;
-    border-radius: 7px;
-    cursor: pointer;
-
-    &.on {
-      color: var(--text);
-      background: var(--surface-3);
-      box-shadow: inset 0 0 0 1px var(--border-strong);
-    }
-  }
 }
 
 .cta {
@@ -524,48 +388,6 @@ video {
   background: #000;
 }
 
-/* compact song list */
-
-.song-list {
-  display: grid;
-  gap: 10px;
-}
-
-.song-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  text-decoration: none;
-  transition: border-color 0.15s, background 0.15s;
-
-  &:hover,
-  &:focus-visible {
-    border-color: var(--border-strong);
-    background: var(--surface-2);
-  }
-}
-
-.row-side {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: none;
-  font-size: 13px;
-}
-
-@media (max-width: 560px) {
-  .song-row {
-    flex-wrap: wrap;
-    padding: 12px;
-  }
-
-  .row-side {
-    width: 100%;
-    justify-content: flex-end;
-  }
-}
-
 /* admin */
 
 .admin {
@@ -702,14 +524,6 @@ input.num {
 /* narrow screens */
 
 @media (max-width: 960px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .create {
-    position: static;
-  }
-
   .stats {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -720,7 +534,6 @@ input.num {
 }
 
 @media (max-width: 560px) {
-  .layout,
   .admin {
     padding: 16px;
   }

@@ -1,12 +1,11 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
-import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, BetaTier, jobProgress, PREP_PRICE, songStage, TIER_INFO } from './beta';
+import { BetaJob, BetaMe, BetaSong, jobProgress, PREP_PRICE, songStage, songView } from './beta';
 
 const POLL_MS = 5000;
 
 /** What a confirmation pop-up shows before money is set aside. */
-interface Ask {
+export interface Ask {
   title: string;
   body: string;
   cost: number;
@@ -14,10 +13,10 @@ interface Ask {
 }
 const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文', ko: '韓文' };
 
-/** A tester's songs (served by scripts/lyric-vj/beta/server.mts): add one, confirm its timing, pick a version, download. */
+/** A tester's songs (served by scripts/lyric-vj/beta/server.mts): add one; each card opens its song page. */
 @Component({
   selector: 'app-beta-page',
-  imports: [FormsModule, NgTemplateOutlet],
+  imports: [FormsModule],
   templateUrl: './beta.page.html',
   styleUrl: './beta.page.scss',
   host: { '(document:keydown.escape)': 'ask() && answer(false)' },
@@ -28,8 +27,9 @@ export class BetaPage {
   protected readonly jobs = signal<BetaJob[]>([]);
   protected readonly message = signal('');
   protected readonly busy = signal(false);
-  protected readonly tiers = Object.entries(TIER_INFO) as [BetaTier, (typeof TIER_INFO)[BetaTier]][];
+  protected readonly loaded = signal(false);
   protected readonly stage = (s: BetaSong) => songStage(s, this.jobs());
+  protected readonly view = (s: BetaSong) => songView(s, this.jobs());
   protected readonly progress = (j: BetaJob) => jobProgress(j);
   protected readonly fileName = signal('');
   protected readonly ask = signal<Ask | null>(null);
@@ -61,16 +61,6 @@ export class BetaPage {
       body: '上傳後會開始準備歌曲（分離人聲、自動對歌詞時間）。上傳過程中請勿關閉或離開這個頁面，上傳完成後就可以離開。',
       cost: PREP_PRICE,
       go: () => this.add(),
-    });
-  }
-
-  protected confirmMake(song: BetaSong, tier: BetaTier) {
-    const t = TIER_INFO[tier];
-    this.ask.set({
-      title: `製作「${song.title}」${t.name}`,
-      body: `${t.about}製作${t.minutes}，開始後無法取消；可以離開頁面，完成後回來下載。`,
-      cost: t.price,
-      go: () => this.make(song, tier),
     });
   }
 
@@ -109,17 +99,7 @@ export class BetaPage {
     }
   }
 
-  private async make(song: BetaSong, tier: BetaTier) {
-    const r = await fetch(`/beta/songs/${song.id}/make`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tier }) });
-    this.message.set(r.ok ? `「${song.title}」已開始排隊製作${TIER_INFO[tier].name}。` : `無法開始：${(await r.json()).error}`);
-    await this.poll();
-  }
-
-  protected video(r: { videos: { tier: BetaTier; jobId: string }[] }, tier: BetaTier) {
-    return `/beta/jobs/${r.videos.find((v) => v.tier === tier)?.jobId}/video`;
-  }
-
-  private async poll() {
+  protected async poll() {
     const get = async <T,>(path: string): Promise<T> => {
       const r = await fetch(path, { cache: 'no-store' });
       if (r.status === 401) throw new Error('請用邀請連結登入');
@@ -131,6 +111,7 @@ export class BetaPage {
       this.me.set(me);
       this.songs.set([...songs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       this.jobs.set(jobs);
+      this.loaded.set(true);
     } catch (e) {
       this.message.set((e as Error).message);
     }

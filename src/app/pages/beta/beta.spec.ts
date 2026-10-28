@@ -1,4 +1,5 @@
 import { BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songStage, songView, TIER_INFO } from './beta';
+import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'prep', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
@@ -96,5 +97,18 @@ describe('minutesBetween', () => {
   it('rounds up to whole minutes', () => {
     expect(minutesBetween('2026-10-27T00:00:00Z', '2026-10-27T00:20:10Z')).toBe(21);
     expect(minutesBetween(undefined, 'x')).toBeUndefined();
+  });
+});
+
+describe('pageFor', () => {
+  it('picks the page by path, the longer beta paths first', () => {
+    expect(pageFor('/my/song')).toBe('beta-song');
+    expect(pageFor('/my/admin/song')).toBe('beta-admin-song');
+    expect(pageFor('/my/admin')).toBe('beta-admin');
+    expect(pageFor('/my')).toBe('beta');
+    expect(pageFor('/admin')).toBe('admin');
+    expect(pageFor('/timing')).toBe('timing');
+    expect(pageFor('/studio')).toBe('studio');
+    expect(pageFor('/')).toBe('home');
   });
 });

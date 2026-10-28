@@ -606,6 +606,48 @@ video {
   background: #000;
 }
 
+/* compact song list */
+
+.song-list {
+  display: grid;
+  gap: 10px;
+}
+
+.song-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+}
+
+.row-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  font-size: 13px;
+}
+
+@media (max-width: 560px) {
+  .song-row {
+    flex-wrap: wrap;
+    padding: 12px;
+  }
+
+  .row-side {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 /* admin */
 
 .admin {

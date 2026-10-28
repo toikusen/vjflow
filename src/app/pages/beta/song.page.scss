@@ -1,0 +1,139 @@
+// Blocks only the song page uses; the shared look comes from beta.page.scss.
+
+/* song page */
+
+.song-page {
+  display: grid;
+  gap: 16px;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 24px;
+
+  .song-title h1 {
+    font-size: 20px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.back {
+  justify-self: start;
+  font-size: 13px;
+}
+
+.timing-line {
+  font-size: 13px;
+}
+
+.notice {
+  padding: 12px 16px;
+  background: rgb(255 200 87 / 0.06);
+  border: 1px solid rgb(255 200 87 / 0.25);
+  border-radius: 12px;
+}
+
+.tiers.pick .tier {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  strong {
+    font-size: 15px;
+    font-weight: 650;
+  }
+
+  &.on {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+    background: var(--surface-3);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+}
+
+.make-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.results {
+  display: grid;
+  gap: 12px;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px;
+}
+
+.result {
+  display: grid;
+  align-content: start;
+  overflow: hidden;
+  background: rgb(17 17 22 / 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+
+  video {
+    border-radius: 0;
+  }
+}
+
+.held {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  padding: 16px;
+  text-align: center;
+  background: var(--surface-2);
+}
+
+.result-body {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 16px;
+
+  .chip::before {
+    display: none;
+  }
+}
+
+.facts {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 560px) {
+  .song-page {
+    padding: 16px;
+  }
+
+  .song-page .song-head {
+    flex-wrap: wrap;
+  }
+
+  .make-foot .cta {
+    width: 100%;
+  }
+}

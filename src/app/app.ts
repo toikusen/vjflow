@@ -5,11 +5,13 @@ import { TimingPage } from './pages/timing/timing.page';
 import { StudioPage } from './pages/studio/studio.page';
 import { BetaPage } from './pages/beta/beta.page';
 import { BetaAdminPage } from './pages/beta/beta-admin.page';
+import { BetaSongPage } from './pages/beta/song.page';
+import { pageFor } from './pages/beta/route';
 
 // ponytail: a path check instead of the router; switch to @angular/router when pages need parameters or guards
 @Component({
   selector: 'app-root',
-  imports: [GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage],
+  imports: [GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaSongPage],
   template: `@switch (page) {
     @case ('admin') {
       <app-jobs-page />
@@ -23,6 +25,12 @@ import { BetaAdminPage } from './pages/beta/beta-admin.page';
     @case ('beta-admin') {
       <app-beta-admin-page />
     }
+    @case ('beta-admin-song') {
+      <app-beta-admin-page />
+    }
+    @case ('beta-song') {
+      <app-beta-song-page />
+    }
     @case ('beta') {
       <app-beta-page />
     }
@@ -32,5 +40,5 @@ import { BetaAdminPage } from './pages/beta/beta-admin.page';
   }`,
 })
 export class App {
-  protected readonly page = location.pathname.startsWith('/my/admin') ? 'beta-admin' : location.pathname.startsWith('/my') ? 'beta' : location.pathname.startsWith('/admin') ? 'admin' : location.pathname.startsWith('/timing') ? 'timing' : location.pathname.startsWith('/studio') ? 'studio' : 'home';
+  protected readonly page = pageFor(location.pathname);
 }

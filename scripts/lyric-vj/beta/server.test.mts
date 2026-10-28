@@ -547,6 +547,19 @@ test('an automatic retry that succeeds charges the price once', async () => {
   t.beta.server.close();
 });
 
+test('an admin cannot retry a failed job that was already retried', async () => {
+  const t = await runStub('exit 1');
+  t.beta.queue.command = (j) => (j.auto ? 'true' : 'exit 1');
+  await makeImg(t);
+  await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs[1].status === 'done');
+  const [a, b] = t.beta.db.jobs;
+  const r = await t.admin(`/beta/admin/jobs/${a.id}/retry`, { method: 'POST' });
+  assert.equal(r.status, 409);
+  assert.equal((await r.json()).error, `已經重跑過（見 ${b.id}）`);
+  assert.equal(t.beta.db.jobs.length, 2);
+  t.beta.server.close();
+});
+
 test('a fuse trip and an admin hold do not auto-retry', async () => {
   const fused = await runStub("echo '##COST 13 x'; sleep 5");
   await makeImg(fused);

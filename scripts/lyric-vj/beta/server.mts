@@ -298,6 +298,8 @@ export function createBetaServer(o: BetaOptions) {
       if (rj && req.method === 'POST') {
         const j = db.jobs.find((x) => x.id === rj[1] && x.status === 'failed');
         if (!j) return json(res, 404, { error: '找不到失敗的工作' });
+        const again = db.jobs.find((x) => x.retryOf === j.id);
+        if (again) return json(res, 409, { error: `已經重跑過（見 ${again.id}）` });
         const owner = db.users.find((u) => u.id === j.userId)!;
         const why = refuse(db, owner.id, j.kind, j.tier);
         if (why) return json(res, 409, { error: why });

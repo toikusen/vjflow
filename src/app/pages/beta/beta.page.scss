@@ -1,10 +1,5 @@
 :host {
   display: block;
-  min-height: 100vh;
-  background:
-    radial-gradient(900px 420px at 15% -10%, rgb(255 79 163 / 0.09), transparent 70%),
-    radial-gradient(800px 400px at 95% 0%, rgb(139 92 255 / 0.1), transparent 70%),
-    var(--bg);
   font-size: 14px;
 }
 
@@ -30,105 +25,28 @@ a {
   color: var(--warn);
 }
 
-/* top bar */
+/* page head (the balance pill moves to the shell's top bar on phones) */
 
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
+.page-head {
   display: flex;
   align-items: center;
-  gap: 24px;
-  height: 60px;
-  padding: 0 24px;
-  background: rgb(8 8 11 / 0.72);
-  backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
-}
+  gap: 20px;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 28px 24px 0;
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 17px;
-  font-weight: 750;
-  letter-spacing: -0.01em;
-  text-decoration: none;
-}
-
-.mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: var(--grad);
-  box-shadow: 0 0 18px rgb(255 79 163 / 0.45);
-}
-
-nav {
-  display: flex;
-  gap: 4px;
-  margin-right: auto;
-
-  a {
-    padding: 6px 12px;
-    border-radius: 8px;
-    white-space: nowrap;
-    color: var(--muted);
-    text-decoration: none;
-    transition: color 0.15s, background 0.15s;
-
-    &:hover {
-      color: var(--text);
-    }
-
-    &.on {
-      color: var(--text);
-      background: var(--surface-2);
-    }
+  h1 {
+    font: 700 26px var(--font-display);
+    letter-spacing: -0.02em;
   }
-}
 
-.credits {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  white-space: nowrap;
-}
-
-.coin {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--grad);
-}
-
-.meter {
-  width: 48px;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--surface-3);
-  overflow: hidden;
-
-  i {
-    display: block;
-    height: 100%;
-    background: var(--grad);
+  app-balance {
+    margin-left: auto;
   }
-}
 
-.avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--surface-3);
-  font-weight: 700;
+  @media (max-width: 720px) {
+    display: none;
+  }
 }
 
 .toast {
@@ -802,20 +720,6 @@ input.num {
 }
 
 @media (max-width: 560px) {
-  .topbar {
-    gap: 12px;
-    padding: 0 16px;
-  }
-
-  nav a {
-    padding: 6px 8px;
-  }
-
-  .meter,
-  .avatar {
-    display: none;
-  }
-
   .layout,
   .admin {
     padding: 16px;
@@ -846,94 +750,6 @@ input.num {
       flex: 1;
     }
   }
-}
-
-/* confirmation pop-up */
-
-.overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgb(0 0 0 / 0.6);
-  backdrop-filter: blur(6px);
-  animation: fade 0.15s ease-out;
-}
-
-.dialog {
-  display: grid;
-  gap: 14px;
-  width: min(440px, 100%);
-  padding: 24px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 16px;
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.6);
-  animation: rise 0.18s ease-out;
-
-  h2 {
-    font-size: 18px;
-  }
-
-  .muted {
-    line-height: 1.6;
-  }
-
-  .fine {
-    text-align: left;
-  }
-}
-
-.bill {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 14px 16px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-
-  div {
-    display: flex;
-    justify-content: space-between;
-  }
-
-  dt {
-    color: var(--muted);
-  }
-
-  dd {
-    margin: 0;
-    font-weight: 650;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .after {
-    padding-top: 8px;
-    border-top: 1px solid var(--border);
-  }
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-
-  .cta.small,
-  .ghost-btn {
-    height: 38px;
-    padding: 0 16px;
-  }
-}
-
-@keyframes fade {
-  from { opacity: 0; }
-}
-
-@keyframes rise {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
 }
 
 /* job progress */

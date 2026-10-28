@@ -1,0 +1,48 @@
+<aside class="side" aria-label="主選單">
+  <a class="logo" href="/my" aria-label="VJFlow 我的歌曲">VJ</a>
+  <nav class="side-nav">
+    <a class="tab" href="/my" [class.on]="spec().active === 'songs'" [attr.aria-current]="spec().active === 'songs' ? 'page' : null"><span class="ico square"></span>歌曲</a>
+    <a class="tab" href="/my/styles" [class.on]="spec().active === 'styles'" [attr.aria-current]="spec().active === 'styles' ? 'page' : null"><span class="ico round"></span>風格</a>
+    @if (me()?.admin) {
+      <a class="tab" href="/my/admin" [class.on]="spec().active === 'admin'" [attr.aria-current]="spec().active === 'admin' ? 'page' : null"><span class="ico box"></span>管理</a>
+    }
+  </nav>
+  @if (me(); as m) {
+    <span class="avatar" [title]="m.name">{{ m.name.slice(0, 1).toUpperCase() }}</span>
+  }
+</aside>
+
+<header class="phone-top">
+  @if (spec().back; as b) {
+    <a class="back" [href]="b.href">← {{ b.label }}</a>
+  } @else {
+    <a class="logo small" href="/my" aria-label="VJFlow 我的歌曲">VJ</a>
+    <h1 class="title">{{ spec().title }}</h1>
+  }
+  @if (me(); as m) {
+    <app-balance class="pill" [me]="m" look="phone" />
+  }
+</header>
+
+<main class="main">
+  <ng-content />
+</main>
+
+@if (sheet() && me(); as m) {
+  <div class="sheet" role="dialog" aria-label="我">
+    <div class="sheet-head">
+      <span class="avatar">{{ m.name.slice(0, 1).toUpperCase() }}</span>
+      <strong>{{ m.name }}</strong>
+    </div>
+    <p class="sheet-line">餘額 <app-price [amount]="balance(m).left" /> ／ 額度 <app-price [amount]="m.limitUsd" /></p>
+    @if (m.admin) {
+      <a class="button soft" href="/my/admin">管理</a>
+    }
+  </div>
+}
+
+<nav class="phone-tabs" aria-label="主選單">
+  <a class="tab" href="/my" [class.on]="!sheet() && spec().active === 'songs'" [attr.aria-current]="spec().active === 'songs' ? 'page' : null"><span class="ico square"></span>歌曲</a>
+  <a class="tab" href="/my/styles" [class.on]="!sheet() && spec().active === 'styles'" [attr.aria-current]="spec().active === 'styles' ? 'page' : null"><span class="ico round"></span>風格</a>
+  <button class="tab" type="button" [class.on]="sheet() || spec().active === 'admin'" [attr.aria-expanded]="sheet()" (click)="sheet.set(!sheet())"><span class="ico dot"></span>我</button>
+</nav>

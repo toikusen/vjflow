@@ -3,6 +3,10 @@ import { NgTemplateOutlet } from '@angular/common';
 import { BetaFeedback, BetaJob, BetaSong, BetaTier, failedNotice, feedbackLine, minutesBetween, songView, TIER_INFO } from './beta';
 import { BetaPage } from './beta.page';
 import { ReportFormComponent } from './report-form.component';
+import { BalanceComponent } from './ui/balance.component';
+import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
+import { PriceComponent } from './ui/price.component';
+import { StatusChipComponent } from './ui/status-chip.component';
 
 const TIERS = Object.keys(TIER_INFO) as BetaTier[];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -10,10 +14,9 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** One song (`/my/song?id=`): its info, the versions to make, the job in progress and every finished result. */
 @Component({
   selector: 'app-beta-song-page',
-  imports: [NgTemplateOutlet, ReportFormComponent],
+  imports: [NgTemplateOutlet, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
   templateUrl: './song.page.html',
   styleUrls: ['./beta.page.scss', './song.page.scss'],
-  host: { '(document:keydown.escape)': 'ask() && answer(false)' },
 })
 export class BetaSongPage extends BetaPage {
   protected readonly id = new URLSearchParams(location.search).get('id') ?? '';
@@ -94,7 +97,8 @@ export class BetaSongPage extends BetaPage {
   protected confirmMake(song: BetaSong, tier: BetaTier) {
     const t = TIER_INFO[tier];
     this.ask.set({
-      title: `製作「${song.title}」${t.name}`,
+      eyebrow: `${song.title} · ${t.name}`,
+      title: `製作${t.name}`,
       body: `${t.about}製作${t.minutes}，開始後無法取消；可以離開頁面，完成後回來下載。`,
       cost: t.price,
       go: () => this.make(song, tier),

@@ -1,27 +1,16 @@
-<header class="topbar">
-  <a class="brand" href="/my"><span class="mark"></span>VJFlow</a>
-  <nav>
-    <a class="on" href="/my">我的歌曲</a>
-    @if (me()?.admin) {
-      <a href="/my/admin">管理</a>
-    }
-  </nav>
-  @if (me(); as m) {
-    <div class="credits" [title]="'已用 $' + m.spentUsd.toFixed(2) + ' ／ 額度 $' + m.limitUsd.toFixed(2)">
-      <span class="coin"></span>
-      <strong>${{ left(m).toFixed(2) }}</strong>
-      <span class="meter"><i [style.width.%]="usedPct(m)"></i></span>
-    </div>
-    <span class="avatar" [title]="m.name">{{ m.name.slice(0, 1) }}</span>
-  }
-</header>
+
 
 @if (message()) {
   <p class="toast" role="status">{{ message() }}</p>
 }
 
 <main class="song-page">
-  <a class="link back" href="/my">← 我的歌曲</a>
+  <div class="song-top desk-only">
+    <a class="link back" href="/my">← 我的歌曲</a>
+    @if (me(); as m) {
+      <app-balance [me]="m" look="compact" />
+    }
+  </div>
 
   @if (song(); as s) {
     @let v = sv()!;
@@ -33,8 +22,7 @@
           <h1>{{ s.title }}</h1>
           <p class="muted">@if (s.artist) {<span>{{ s.artist }}・</span>}{{ langName(s.language) }}</p>
         </div>
-        @let c = chip(v);
-        <span class="chip" [class]="c.tone">{{ c.label }}</span>
+        <app-status-chip [chip]="chip(v)" />
       </header>
 
       @switch (v.stage) {
@@ -93,7 +81,7 @@
             >
               <span class="tier-head">
                 <strong>{{ t.name }}</strong>
-                <span class="price" title="固定費用">${{ t.price }}</span>
+                <app-price class="price" title="固定費用" [amount]="t.price" digits="short" />
               </span>
               <span class="muted">{{ t.about }}</span>
               <span class="meta">{{ t.minutes }}</span>
@@ -101,7 +89,7 @@
           }
         </div>
         <div class="make-foot">
-          <button class="cta" type="button" [disabled]="!!v.active" (click)="confirmMake(s, chosen())">製作{{ tierName(chosen()) }}・${{ tierPrice(chosen()) }}</button>
+          <button class="cta" type="button" [disabled]="!!v.active" (click)="confirmMake(s, chosen())">製作{{ tierName(chosen()) }} · <app-price [amount]="tierPrice(chosen())" digits="short" [plain]="true" /></button>
           @if (v.active) {
             <p class="fine">目前有工作在進行，完成後才能再製作</p>
           }
@@ -137,28 +125,7 @@
   }
 </main>
 
-@if (ask(); as a) {
-  <div class="overlay" (click)="answer(false)">
-    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="ask-title" (click)="$event.stopPropagation()">
-      <h2 id="ask-title">{{ a.title }}</h2>
-      <p class="muted">{{ a.body }}</p>
-      <dl class="bill">
-        <div><dt>這次費用</dt><dd>${{ a.cost.toFixed(2) }}</dd></div>
-        @if (me(); as m) {
-          <div><dt>目前剩餘</dt><dd>${{ left(m).toFixed(2) }}</dd></div>
-          <div class="after"><dt>扣除後剩餘</dt><dd>${{ (left(m) - a.cost).toFixed(2) }}</dd></div>
-        }
-      </dl>
-      <div class="dialog-actions">
-        <button class="ghost-btn" type="button" (click)="answer(false)">取消</button>
-        <button class="cta small" type="button" (click)="answer(true)" [disabled]="!!me() && left(me()!) < a.cost">確認並開始</button>
-      </div>
-      @if (me() && left(me()!) < a.cost) {
-        <p class="warn">額度不足，請聯絡管理者。</p>
-      }
-    </div>
-  </div>
-}
+<app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />
 
 <ng-template #progressTpl let-job>
   @let p = progress(job);
@@ -194,7 +161,7 @@
         <li>花費時間 約 {{ minutes(j) }} 分鐘</li>
       }
       @if (j.priceUsd !== undefined) {
-        <li>費用 ${{ j.priceUsd }}</li>
+        <li>費用 <app-price [amount]="j.priceUsd" digits="short" [plain]="true" /></li>
       }
     </ul>
     @if (j.status === 'done') {

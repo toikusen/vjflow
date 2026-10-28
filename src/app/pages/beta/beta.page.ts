@@ -1,28 +1,29 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BetaJob, BetaMe, BetaSong, jobProgress, PREP_PRICE, songChip, songStage, songView, SongView } from './beta';
+import { balance } from './ui/balance';
+import { BalanceComponent } from './ui/balance.component';
+import { Ask } from './ui/confirm';
+import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
+import { PriceComponent } from './ui/price.component';
+import { BetaSession } from './ui/session';
+import { StatusChipComponent } from './ui/status-chip.component';
 
 const POLL_MS = 5000;
 
-/** What a confirmation pop-up shows before money is set aside. */
-export interface Ask {
-  title: string;
-  body: string;
-  cost: number;
-  go: () => void;
-}
+export type { Ask } from './ui/confirm';
 const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文', ko: '韓文' };
 
 /** A tester's songs (served by scripts/lyric-vj/beta/server.mts): add one; each card opens its song page. */
 @Component({
   selector: 'app-beta-page',
-  imports: [FormsModule],
+  imports: [FormsModule, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
   templateUrl: './beta.page.html',
   styleUrl: './beta.page.scss',
-  host: { '(document:keydown.escape)': 'ask() && answer(false)' },
 })
 export class BetaPage {
-  protected readonly me = signal<BetaMe | null>(null);
+  /** Shared with the shell, so its balance pill follows this page's poll. */
+  protected readonly me = inject(BetaSession).me;
   protected readonly songs = signal<BetaSong[]>([]);
   protected readonly jobs = signal<BetaJob[]>([]);
   protected readonly message = signal('');
@@ -37,8 +38,11 @@ export class BetaPage {
   protected readonly prepPrice = PREP_PRICE;
   protected readonly langs = Object.entries(LANGS);
   protected readonly langName = (l: string) => LANGS[l] ?? l;
-  protected readonly left = (m: BetaMe) => Math.max(0, m.limitUsd - m.spentUsd);
-  protected readonly usedPct = (m: BetaMe) => (m.limitUsd ? Math.min(100, (m.spentUsd / m.limitUsd) * 100) : 100);
+  /** What the signed-in person has left, null until `/beta/me` answers. */
+  protected readonly left = () => {
+    const m = this.me();
+    return m ? balance(m).left : null;
+  };
   protected form = { title: '', artist: '', language: 'ja', lyrics: '' };
   private file: File | null = null;
   private fileInput: HTMLInputElement | null = null;
@@ -58,17 +62,12 @@ export class BetaPage {
   protected confirmAdd() {
     if (!this.file) return this.message.set('請選擇音檔');
     this.ask.set({
-      title: `上傳「${this.form.title}」`,
+      eyebrow: this.form.title,
+      title: '上傳並準備',
       body: '上傳後會開始準備歌曲（分離人聲、自動對歌詞時間）。上傳過程中請勿關閉或離開這個頁面，上傳完成後就可以離開。',
       cost: PREP_PRICE,
       go: () => this.add(),
     });
-  }
-
-  protected answer(yes: boolean) {
-    const a = this.ask();
-    this.ask.set(null);
-    if (yes) a?.go();
   }
 
   protected pick(e: Event) {

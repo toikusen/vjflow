@@ -1,9 +1,10 @@
 // What the beta pages read from scripts/lyric-vj/beta/server.mts, and where a song stands.
+import { STATUS_CHIP, StatusChip } from './ui/status';
 
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'make'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone' }
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
 export const PREP_PRICE = 0.5;
@@ -114,6 +115,8 @@ export interface SongView {
   /** True when the last failed job was the system's own automatic retry (so "the system retried" is true). */
   failedAuto?: boolean;
   results: BetaJob[];
+  /** The newest finished concept the person has not accepted, adjusted or redone yet. */
+  concept?: BetaJob;
 }
 
 /** One song as the detail page shows it: its stage, the running make job, and the finished (or held) results, newest first. */
@@ -135,6 +138,7 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
     failedFor: !active && last?.status === 'failed' ? last.tier : undefined,
     failedAuto: !active && last?.status === 'failed' ? last.auto === true : undefined,
     results: makes.filter((j) => j.status === 'done' || j.status === 'admin').reverse(),
+    concept: mine.filter((j) => j.kind === 'concept' && j.status === 'done' && !j.decision).at(-1),
   };
 }
 
@@ -161,16 +165,15 @@ export function feedbackLine(list: Pick<BetaFeedback, 'ok' | 'createdAt'>[]): st
 /** Whole minutes from `a` to `b`, rounded up; undefined when either is missing. */
 export const minutesBetween = (a?: string, b?: string): number | undefined => (a && b ? Math.ceil((Date.parse(b) - Date.parse(a)) / 60000) : undefined);
 
-export interface SongChip { label: string; tone: 'ok' | 'warn' | 'bad' | 'live' }
+export type SongChip = StatusChip;
 
-/** The status chip a song shows on its card and its page. */
+/** The status chip a song shows on its card and its page; a running job first, then a concept waiting for the person. */
 export function songChip(v: SongView): SongChip {
-  if (v.stage === 'preparing') return { label: '準備中', tone: 'live' };
-  if (v.stage === 'prepFailed') return { label: '準備失敗', tone: 'bad' };
-  if (v.stage === 'timing') return { label: '待確認時間', tone: 'warn' };
-  if (v.active) return v.retrying ? { label: '自動重試中', tone: 'warn' } : { label: '製作中', tone: 'live' };
-  if (v.failedFor) return { label: '需要協助', tone: 'bad' };
-  return { label: '可製作', tone: 'ok' };
+  if (v.stage !== 'ready') return STATUS_CHIP[v.stage];
+  if (v.active) return STATUS_CHIP[v.retrying ? 'retrying' : 'making'];
+  if (v.concept) return STATUS_CHIP.concept;
+  if (v.failedFor) return STATUS_CHIP.help;
+  return STATUS_CHIP.ready;
 }
 
 /** One line of a song's event log, as written by scripts/lyric-vj/beta/events.mts. */

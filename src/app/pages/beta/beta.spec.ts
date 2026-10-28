@@ -87,6 +87,14 @@ describe('songView', () => {
     expect(songView(confirmed, [prep, make('2', { status: 'failed', tier: 'img' })]).failedFor).toBe('img');
     expect(songView(confirmed, [prep, make('2', { status: 'failed' }), make('3', { status: 'running' })]).failedFor).toBeUndefined();
   });
+  it('holds the newest finished concept nobody has decided on yet', () => {
+    const c = (id: string, o: Partial<BetaJob> = {}) => job({ id, kind: 'concept', tier: 'hybrid', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
+    expect(songView(confirmed, [prep, c('2')]).concept?.id).toBe('2');
+    expect(songView(confirmed, [prep, c('2', { decision: 'accepted' })]).concept).toBeUndefined();
+    expect(songView(confirmed, [prep, c('2', { status: 'running' })]).concept).toBeUndefined();
+    expect(songView(confirmed, [prep, c('2', { decision: 'adjusted' }), c('3')]).concept?.id).toBe('3');
+    expect(songView(confirmed, [prep, c('2')]).results).toEqual([]);
+  });
   it('lists results newest first, held ones included', () => {
     const [a, b, c] = [make('1'), make('2', { status: 'admin' }), make('3', { status: 'failed' })];
     expect(songView(confirmed, [prep, a, b, c]).results).toEqual([b, a]);
@@ -105,6 +113,7 @@ describe('pageFor', () => {
     expect(pageFor('/my/song')).toBe('beta-song');
     expect(pageFor('/my/admin/song')).toBe('beta-admin-song');
     expect(pageFor('/my/admin')).toBe('beta-admin');
+    expect(pageFor('/my/styles')).toBe('beta-styles');
     expect(pageFor('/my')).toBe('beta');
     expect(pageFor('/admin')).toBe('admin');
     expect(pageFor('/timing')).toBe('timing');
@@ -116,15 +125,21 @@ describe('pageFor', () => {
 describe('songChip', () => {
   const base: SongView = { stage: 'ready', retrying: false, results: [] };
   const active = job({ kind: 'make', tier: 'img', status: 'running' });
-  it('names each stage with its tone', () => {
-    expect(songChip({ ...base, stage: 'preparing' })).toEqual({ label: '準備中', tone: 'live' });
-    expect(songChip({ ...base, stage: 'prepFailed' })).toEqual({ label: '準備失敗', tone: 'bad' });
-    expect(songChip({ ...base, stage: 'timing' })).toEqual({ label: '待確認時間', tone: 'warn' });
-    expect(songChip({ ...base, active })).toEqual({ label: '製作中', tone: 'live' });
-    expect(songChip({ ...base, active: { ...active, status: 'queued' } })).toEqual({ label: '製作中', tone: 'live' });
-    expect(songChip({ ...base, active, retrying: true })).toEqual({ label: '自動重試中', tone: 'warn' });
-    expect(songChip({ ...base, failedFor: 'img' })).toEqual({ label: '需要協助', tone: 'bad' });
-    expect(songChip(base)).toEqual({ label: '可製作', tone: 'ok' });
+  const concept = job({ id: 'c', kind: 'concept', tier: 'hybrid', status: 'done' });
+  it('names each stage with its icon and tone', () => {
+    expect(songChip({ ...base, stage: 'preparing' })).toEqual({ icon: '◐', label: '準備中', tone: 'info' });
+    expect(songChip({ ...base, stage: 'prepFailed' })).toEqual({ icon: '!', label: '準備失敗', tone: 'bad' });
+    expect(songChip({ ...base, stage: 'timing' })).toEqual({ icon: '◷', label: '待確認時間', tone: 'warn' });
+    expect(songChip({ ...base, active })).toEqual({ icon: '●', label: '製作中', tone: 'making' });
+    expect(songChip({ ...base, active: { ...active, status: 'queued' } })).toEqual({ icon: '●', label: '製作中', tone: 'making' });
+    expect(songChip({ ...base, active, retrying: true })).toEqual({ icon: '↻', label: '自動重試中', tone: 'warn' });
+    expect(songChip({ ...base, failedFor: 'img' })).toEqual({ icon: '!', label: '需要協助', tone: 'bad' });
+    expect(songChip(base)).toEqual({ icon: '✓', label: '可製作', tone: 'ok' });
+  });
+  it('a concept waiting for the person wins over an older failure, a running job over the concept', () => {
+    expect(songChip({ ...base, concept })).toEqual({ icon: '?', label: '概念待確認', tone: 'warn' });
+    expect(songChip({ ...base, concept, failedFor: 'img' }).label).toBe('概念待確認');
+    expect(songChip({ ...base, concept, active }).label).toBe('製作中');
   });
 });
 

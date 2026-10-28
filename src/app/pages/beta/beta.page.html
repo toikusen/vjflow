@@ -1,18 +1,8 @@
-<header class="topbar">
-  <a class="brand" href="/my"><span class="mark"></span>VJFlow</a>
-  <nav>
-    <a class="on" href="/my">我的歌曲</a>
-    @if (me()?.admin) {
-      <a href="/my/admin">管理</a>
-    }
-  </nav>
+<header class="page-head">
+  <h1>我的歌曲</h1>
+  <span class="muted">{{ songs().length }} 首</span>
   @if (me(); as m) {
-    <div class="credits" [title]="'已用 $' + m.spentUsd.toFixed(2) + ' ／ 額度 $' + m.limitUsd.toFixed(2)">
-      <span class="coin"></span>
-      <strong>${{ left(m).toFixed(2) }}</strong>
-      <span class="meter"><i [style.width.%]="usedPct(m)"></i></span>
-    </div>
-    <span class="avatar" [title]="m.name">{{ m.name.slice(0, 1) }}</span>
+    <app-balance class="desk-only" [me]="m" />
   }
 </header>
 
@@ -53,11 +43,11 @@
       <label class="field">歌詞
         <textarea name="lyrics" [(ngModel)]="form.lyrics" rows="9" required placeholder="一行一句，照唱的順序，重複的段落也要寫出來"></textarea>
       </label>
-      <button class="cta" type="submit" [disabled]="busy() || !fileName()">{{ busy() ? '上傳中…' : '上傳並準備' }}</button>
+      <button class="cta" type="submit" [disabled]="busy() || !fileName()">@if (busy()) {上傳中…} @else {上傳並準備 · <app-price [amount]="prepPrice" [plain]="true" />}</button>
       @if (busy()) {
         <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
       } @else {
-        <p class="fine">上傳費用 ${{ prepPrice.toFixed(2) }}・請只上傳你有權使用的音樂。</p>
+        <p class="fine">上傳後自動分離人聲、對歌詞時間。只上傳你有權使用的音樂。</p>
       }
     </form>
   </section>
@@ -92,8 +82,7 @@
             } @else if (v.stage === 'ready') {
               <span class="muted">{{ v.results.length }} 個成品</span>
             }
-            @let c = chip(v);
-            <span class="chip" [class]="c.tone">{{ c.label }}</span>
+            <app-status-chip [chip]="chip(v)" />
           </span>
         </a>
       }
@@ -101,25 +90,4 @@
   </section>
 </main>
 
-@if (ask(); as a) {
-  <div class="overlay" (click)="answer(false)">
-    <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="ask-title" (click)="$event.stopPropagation()">
-      <h2 id="ask-title">{{ a.title }}</h2>
-      <p class="muted">{{ a.body }}</p>
-      <dl class="bill">
-        <div><dt>這次費用</dt><dd>${{ a.cost.toFixed(2) }}</dd></div>
-        @if (me(); as m) {
-          <div><dt>目前剩餘</dt><dd>${{ left(m).toFixed(2) }}</dd></div>
-          <div class="after"><dt>扣除後剩餘</dt><dd>${{ (left(m) - a.cost).toFixed(2) }}</dd></div>
-        }
-      </dl>
-      <div class="dialog-actions">
-        <button class="ghost-btn" type="button" (click)="answer(false)">取消</button>
-        <button class="cta small" type="button" (click)="answer(true)" [disabled]="!!me() && left(me()!) < a.cost">確認並開始</button>
-      </div>
-      @if (me() && left(me()!) < a.cost) {
-        <p class="warn">額度不足，請聯絡管理者。</p>
-      }
-    </div>
-  </div>
-}
+<app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />

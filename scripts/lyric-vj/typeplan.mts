@@ -22,6 +22,10 @@ import { Backdrop, capMotifs, COVER_FX, harvestBackdrops, legiblePair, motifOf, 
 import { EMPH_HELP, ENTER_HELP, EXIT_HELP, FX_HELP, IDLE_HELP, SIDED, TEMPLATES } from './typehelp.mts';
 import { TEMPLATES as TEMPLATE_SPECS } from '../../src/app/lyric-vj/templates';
 import { feltTempo } from '../../src/app/lyric-vj/timeline';
+import { unsungWindows } from '../../src/app/lyric-vj/structure';
+import { stripUnsungSprites, unsungRule } from './interludes.mts';
+
+export { stripUnsungSprites };
 
 const { values: a } = parseArgs({ options: {
   song: { type: 'string' }, treatment: { type: 'string' }, sprites: { type: 'string' }, out: { type: 'string' }, story: { type: 'string' },
@@ -56,6 +60,8 @@ const out = a.out!;
 mkdirSync(out, { recursive: true });
 const song = JSON.parse(readFileSync(a.song!, 'utf8'));
 const t = JSON.parse(readFileSync(a.treatment!, 'utf8'));
+// the stretches nobody sings and the director's decision for each (no entry, or no interludes at all: backdrop)
+const unsung = unsungWindows(song);
 const script = (t.design?.colorScript ?? []) as { shadow?: string; highlight?: string; accent?: string }[];
 /** The value seen most often across the colour script (its first entry is often a one-off title card). */
 const most = (vals: (string | undefined)[]) => {
@@ -296,7 +302,7 @@ ${sprites.length ? '- 道具是這首歌的世界裡的東西：照段落的世�
   · 畫出意思的圖表（clock、gears、beforeafter、loop、measure、ecg、blueprint、tiles）：那句歌詞真的在講時間、分擔、改變、重複、差距、心跳、計畫、呼喊才用。
   · 呼應：副歌回到同一組招式、尾奏呼應前奏，大多數歌都適合。
 - 節制：一刀只說一件事。關鍵句讓字停住（2–4 拍才換刀），只有背景在動。
-- 背景上的字是質感，不是第二組歌詞：觀眾會把畫面上看得清楚的大字當成歌詞。所以背景的 words 少用（一半以上的刀不用詞，留空陣列，交給圖形和人物），要用就用能當圖案的方式（重複成牆、繞圈、很淡）；沒人唱的地方（前奏、間奏、尾奏）不要出現看得清楚的詞，用圖形、人物和節奏撐。
+- 背景上的字是質感，不是第二組歌詞：觀眾會把畫面上看得清楚的大字當成歌詞。所以背景的 words 少用（一半以上的刀不用詞，留空陣列，交給圖形和人物），要用就用能當圖案的方式（重複成牆、繞圈、很淡）；${unsungRule(unsung, t.interludes)}
 - 轉場也要有意思（說明裡寫了適合的情境），段落交界才用大轉場，其他地方多用硬切或 push、whip 這類俐落的：${transitionGuide()}
 
 規則：
@@ -367,7 +373,8 @@ quietType = calm && !!plan.vision?.kinds?.includes('mood');
 if (plan.flowRule) console.log(`flow: ${plan.flowRule}`);
 for (const x of plan.styles ?? []) console.log(`style: ${x.fx} ${x.style} ${x.why}`);
 settle(plan);
-const { layers, missing } = buildCuts(plan);
+const { layers, missing, removed: unsungRemoved } = buildCuts(plan);
+if (unsungRemoved) console.log(`interludes: removed ${unsungRemoved} pictures`);
 const tr = structuredClone(t);
 tr.graphics.sections = layers;
 tr.graphics.story = [];
@@ -440,7 +447,7 @@ export function boardOf(p: Pick<Plan, 'parts'>, part: NonNullable<Plan['parts']>
   const style = part.keep?.style;
   if (style !== 'evidence' && style !== 'stage') return undefined;
   const ids = new Set(sprites.map((x) => x.id));
-  const items = (part.keep?.items ?? []).slice(0, style === 'stage' ? 2 : 8).flatMap((x) => (ids.has(x.sprite) ? [{ sprite: x.sprite }] : x.word?.trim() ? [{ text: x.word.trim() }] : []));
+  const items = (part.keep?.items ?? []).slice(0, style === 'stage' ? 2 : 8).flatMap((x): { sprite?: string; text?: string; word?: string }[] => (ids.has(x.sprite) ? [{ sprite: x.sprite, word: x.word?.trim() }] : x.word?.trim() ? [{ text: x.word.trim() }] : []));
   if (!items.length) return undefined;
   const parts = p.parts ?? [];
   const k = parts.indexOf(part);
@@ -451,7 +458,10 @@ export function boardOf(p: Pick<Plan, 'parts'>, part: NonNullable<Plan['parts']>
   const lands = (i: number) => (sung.length >= items.length ? sung[Math.floor((i * sung.length) / items.length)] : from + ((to - from) * 0.8 * i) / items.length);
   const order = clamp01(part.order ?? 1);
   const before = k > 0 ? clamp01(parts[k - 1].order ?? order) : order;
-  return { style, from, to, order: [before, order], items: items.map((x, i) => ({ ...x, at: +lands(i).toFixed(2) })) };
+  // a picture kept from a moment nobody sings to the part's end, inside a backdrop window, is printed as its word
+  const landed = items.map((x, i) => ({ ...x, at: +lands(i).toFixed(2) }));
+  const kept = stripUnsungSprites(landed.map((x) => ({ ...x, end: to })), unsung, t.interludes).cuts.flatMap(({ end: _, word, ...x }, i) => (x.sprite || !landed[i].sprite ? [x] : word ? [{ text: word, at: x.at }] : []));
+  return { style, from, to, order: [before, order], items: kept };
 }
 function clamp01(x: number) {
   return Math.min(1, Math.max(0, x));
@@ -475,6 +485,7 @@ export function buildCuts(p: Plan) {
   // the thread's level of the cut before: each cut eases from it
   let threadLevel = 0;
   const missing: string[] = [];
+  let removed = 0;
   let last = '';
   let shown = { sprite: '', side: '' };
   // round moves past their share of the song are swapped for the director's other moves (capRound)
@@ -537,16 +548,20 @@ export function buildCuts(p: Plan) {
       for (let k = 1; k < KINETIC_FX.length && (fx === last || ((k > 1 || afterRound) && ROUND_FX.has(fx)) || !MOVES.includes(fx) || (k > 1 && (ran.get(fx) ?? 0) >= moveCap)); k++) fx = KINETIC_FX[(KINETIC_FX.indexOf(want as never) + k) % KINETIC_FX.length];
       last = fx;
       ran.set(fx, (ran.get(fx) ?? 0) + 1);
+      const nextBeat = [...ps.cuts].sort((x, y) => x.beat - y.beat).find((x) => x.beat > c.beat)?.beat;
+      const cutEnd = nextBeat === undefined ? s.end : (bs[nextBeat] ?? s.end);
+      // nobody sings over the whole cut and the director chose backdrop there: no figure, prop or illustration
+      const strip = stripUnsungSprites([{ at, end: cutEnd, sprite: c.sprite }], unsung, t.interludes);
+      removed += strip.removed;
+      const sprite = strip.cuts[0].sprite ?? '';
       // a diagram under a centred lyric would sit on it: it takes a side, alternating
       // a diagram, or a character, under a centred lyric would sit on it: it takes a side, alternating, a figure smaller
       // (a mic stand stood behind きゅんとさせてほしい)
-      const figure = !!c.sprite && !DIAGRAM_FX.has(fx);
+      const figure = !!sprite && !DIAGRAM_FX.has(fx);
       const side = (DIAGRAM_FX.has(fx) || figure) && away === 'center' ? (sections.length % 2 ? 'left' : 'right') : away;
       const size = Math.min(figure && away === 'center' ? 0.75 : 1.7, Math.max(0.4, c.size || 0.85));
       // the words behind are texture: none from the lines sung over the cut (恋に恋 walled behind 恋に恋 read as the
       // lyric twice), the title card's excepted
-      const nextBeat = [...ps.cuts].sort((x, y) => x.beat - y.beat).find((x) => x.beat > c.beat)?.beat;
-      const cutEnd = nextBeat === undefined ? s.end : (bs[nextBeat] ?? s.end);
       // (and the line just sung: 色褪せた空 walled right after it was sung read as an echo of the lyric)
       const sung = song.cues.filter((x: { start: number; end: number }) => x.start < cutEnd && x.end > at - 3).map((x: { text: string }) => x.text).join(' ');
       // a chapter card is read: over a sung line it reads as a lyric nobody sings (この路の果て across 世界のつづき's
@@ -564,7 +579,7 @@ export function buildCuts(p: Plan) {
       // 10 visible changes in a song of 91 cuts, and the user preferred the version that changed (2026-10-23)
       const layer: KineticLayer = { kind: 'kinetic', fx: fx as KineticLayer['fx'], words, ink, paper, accent: c.heart ? heart : accent, seed: sections.length + 1, side, size, flip: side === 'left' };
       // a diagram stands where the character would
-      if (c.sprite && !DIAGRAM_FX.has(fx)) layer.sprite = c.sprite;
+      if (sprite && !DIAGRAM_FX.has(fx)) layer.sprite = sprite;
       // the same thing on the next cut but across the frame reads as it jumping there (sweet timer's moon and carriage
       // swapped sides with the lyric): it sits that cut out
       if (layer.sprite && !sameSpot(shown, layer.sprite, side)) delete layer.sprite;
@@ -629,7 +644,7 @@ export function buildCuts(p: Plan) {
     }
   }
   if (sections.length) sections[0].start = 0;
-  return { layers: sections, missing };
+  return { layers: sections, missing, removed };
 }
 
 /**

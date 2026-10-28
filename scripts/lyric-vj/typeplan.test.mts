@@ -1,10 +1,12 @@
 // Rebuild tests for typeplan.mts from a fixed plan (no director call): npx tsx scripts/lyric-vj/typeplan.test.mts
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { stripUnsungSprites, unsungRule } from './interludes.mts';
+import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
 const song = {
@@ -111,6 +113,104 @@ test('a rebuilt held song keeps every shot\'s first cut and both skies', () => {
     assert.deepEqual(cues.find((c) => c.cueId === 'c001')!.emphasis!.map((e) => e.method), ['scale'], 'a heart by a line with no love in it');
     // a calm song's backgrounds carry no lyric words (one drawn while another line is sung reads as an extra line)
     assert.deepEqual((at(9.9)!.layers.find((l) => l.kind === 'kinetic') as unknown as { words: string[] }).words, []);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const OUTRO: UnsungWindow[] = [{ start: 16, end: 31, kind: 'outro' }];
+const REASON = '尾奏回到前奏那盞燈，讓故事收在同一個房間';
+
+test('stripUnsungSprites: a cut entirely inside a backdrop window loses its sprite', () => {
+  const r = stripUnsungSprites([{ at: 18, end: 24, sprite: 'moon' }], OUTRO, [{ start: 16, end: 31, mode: 'backdrop', reason: '' }]);
+  assert.equal(r.removed, 1);
+  assert.equal(r.cuts[0].sprite, undefined);
+  assert.equal(r.cuts[0].at, 18);
+});
+
+test('stripUnsungSprites: a cut straddling the window edge keeps its sprite', () => {
+  const r = stripUnsungSprites([{ at: 14, end: 20, sprite: 'moon' }, { at: 30, end: 32, sprite: 'sun' }], OUTRO);
+  assert.equal(r.removed, 0);
+  assert.deepEqual(r.cuts.map((c) => c.sprite), ['moon', 'sun']);
+});
+
+test('stripUnsungSprites: a cut inside a pictures window keeps its sprite', () => {
+  const r = stripUnsungSprites([{ at: 18, end: 24, sprite: 'moon' }], OUTRO, [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]);
+  assert.equal(r.removed, 0);
+  assert.equal(r.cuts[0].sprite, 'moon');
+});
+
+test('stripUnsungSprites: pictures with a too-short reason counts as backdrop', () => {
+  assert.equal(stripUnsungSprites([{ at: 18, end: 24, sprite: 'moon' }], OUTRO, [{ start: 16, end: 31, mode: 'pictures', reason: '好看' }]).removed, 1);
+});
+
+test('stripUnsungSprites: no interludes data counts as backdrop', () => {
+  assert.equal(stripUnsungSprites([{ at: 18, end: 24, sprite: 'moon' }], OUTRO).removed, 1);
+  assert.equal(stripUnsungSprites([{ at: 18, end: 24, sprite: 'moon' }], OUTRO, []).removed, 1);
+});
+
+test('stripUnsungSprites: no windows removes nothing', () => {
+  const r = stripUnsungSprites([{ at: 18, end: 24, sprite: 'moon' }, { at: 0, end: 3 }], []);
+  assert.equal(r.removed, 0);
+  assert.deepEqual(r.cuts.map((c) => c.sprite), ['moon', undefined]);
+});
+
+test('unsungRule: backdrop by default, no figures, props or illustrations', () => {
+  const r = unsungRule(OUTRO);
+  assert.ok(r.includes('用背景換段、圖形和節奏撐，不放人物、道具或插圖'), r);
+  assert.ok(!r.includes('用圖形、人物和節奏撐'), r);
+  assert.ok(r.includes('16.0–31.0 秒（尾奏）'), r);
+  assert.ok(!r.includes('理由'), r);
+});
+
+test('unsungRule: a pictures window quotes the director\'s reason', () => {
+  const r = unsungRule(OUTRO, [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]);
+  assert.ok(r.includes(`理由：「${REASON}」`), r);
+  assert.ok(!r.includes('這首歌沒人唱的段落'), 'no backdrop windows left to list');
+});
+
+test('unsungRule: no windows keeps only the general rule', () => {
+  assert.equal(unsungRule([]), '沒人唱的地方（前奏、間奏、尾奏）不要出現看得清楚的詞，用背景換段、圖形和節奏撐，不放人物、道具或插圖。');
+});
+
+test('a rebuild drops pictures from cuts inside a backdrop outro and logs it, keeps one over sung time', () => {
+  const pl = structuredClone(plan);
+  pl.shots[2].cuts = [{ ...cut(0, 'stars'), sprite: 'lamp' }, { ...cut(10, 'motes'), sprite: 'moon' }];
+  const dir = mkdtempSync(join(tmpdir(), 'typeplan-'));
+  try {
+    for (const [f, v] of [['song.json', song], ['treatment.json', treatment], ['plan.json', pl]] as const) writeFileSync(join(dir, f), JSON.stringify(v));
+    const r = spawnSync('npx', ['tsx', 'scripts/lyric-vj/typeplan.mts', '--song', join(dir, 'song.json'), '--treatment', join(dir, 'treatment.json'), '--backdrops', join(dir, 'treatment.json'), '--plan', join(dir, 'plan.json'), '--out', join(dir, 'out')], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(r.stdout.includes('interludes: removed 1 pictures'), r.stdout);
+    const sections = JSON.parse(readFileSync(join(dir, 'out', 'treatment.json'), 'utf8')).graphics.sections as { start: number; layers: { kind: string; sprite?: string }[] }[];
+    const kin = (s: { layers: { kind: string; sprite?: string }[] }) => s.layers.find((l) => l.kind === 'kinetic')!;
+    assert.equal(kin(sections.find((s) => Math.abs(s.start - 9.9) < 0.01)!).sprite, 'lamp', 'the cut over sung time keeps its picture');
+    const late = sections.filter((s) => s.start >= 16);
+    assert.ok(late.length, 'the outro cut landed');
+    assert.ok(late.every((s) => !kin(s).sprite), 'no picture in the outro');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a board keeps a picture over sung time and prints the word for one kept only inside a backdrop outro', () => {
+  const one = { ...song, sections: [{ start: 0, end: 31, type: 'verse', energy: 0.2 }] };
+  const pl = { ...structuredClone(plan), parts: [
+    { from: 's1', shift: 'change', what: '', warmth: 0.2, order: 1, keep: { style: '', items: [] }, backdrops: ['B1'] },
+    { from: 's3', shift: 'change', what: '', warmth: 0.5, order: 1, keep: { style: 'evidence', items: [{ sprite: 'lamp', word: '燈' }, { sprite: 'moon', word: '月' }] }, backdrops: ['B2'] },
+  ] };
+  const dir = mkdtempSync(join(tmpdir(), 'typeplan-'));
+  try {
+    for (const [f, v] of [['song.json', one], ['treatment.json', treatment], ['plan.json', pl]] as const) writeFileSync(join(dir, f), JSON.stringify(v));
+    const lib = join(dir, 'sprites');
+    mkdirSync(lib);
+    writeFileSync(join(lib, 'library.json'), JSON.stringify({ sprites: [{ id: 'lamp', what: 'a lamp' }, { id: 'moon', what: 'the moon' }] }));
+    writeFileSync(join(lib, 'assets.json'), '{}');
+    const r = spawnSync('npx', ['tsx', 'scripts/lyric-vj/typeplan.mts', '--song', join(dir, 'song.json'), '--treatment', join(dir, 'treatment.json'), '--backdrops', join(dir, 'treatment.json'), '--plan', join(dir, 'plan.json'), '--out', join(dir, 'out'), '--sprites', lib, '--board'], { encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+    const sections = JSON.parse(readFileSync(join(dir, 'out', 'treatment.json'), 'utf8')).graphics.sections as { start: number; layers: { kind: string; board?: { items: { sprite?: string; text?: string; at: number }[] } }[] }[];
+    const board = sections.find((s) => Math.abs(s.start - 9.9) < 0.01)!.layers.find((l) => l.kind === 'kinetic')!.board!;
+    assert.deepEqual(board.items.map((x) => x.sprite ?? `text:${x.text}`), ['lamp', 'text:月'], JSON.stringify(board.items));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

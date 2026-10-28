@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { quietFrames, unsungFrameRule } from './interludes.mts';
+import { persistQuiet, unsungFrameRule } from './interludes.mts';
 import { lessonsText } from './lessons.mts';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
@@ -192,8 +192,8 @@ ${keepPeople ? `- people：人物已經定好，照抄這些 id 和外觀，不�
     writeFileSync(boardFile, JSON.stringify(board, null, 1));
   }
   {
-    const q = quietFrames(board.frames, unsungWindows({ cues: song.cues, duration: (song as { duration?: number }).duration ?? to }), base.interludes, song.cues);
-    board.frames = q.frames;
+    const q = persistQuiet(boardFile, board, song, base.interludes, to);
+    board = q.board;
     console.log(`interludes: cleared people from ${q.cleared} frames`);
     for (const f of q.clearedFrames) if (f.shows.trim()) console.error(`warning: frame ${f.cue} is in a backdrop window but its shows text may still describe a person: ${f.shows.slice(0, 80)}`);
   }

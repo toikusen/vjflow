@@ -1,11 +1,11 @@
 // Rebuild tests for typeplan.mts from a fixed plan (no director call): npx tsx scripts/lyric-vj/typeplan.test.mts
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { landedEnd, quietFrames, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
+import { landedEnd, persistQuiet, quietBoard, quietFrames, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
@@ -297,4 +297,34 @@ test('quietFrames: people are cleared in backdrop windows only, sung time and pi
   const s = quietFrames([{ cue: 'c2', who: ['a'] }], wins, undefined, cues);
   assert.deepEqual(s.frames[0].who, ['a']);
   assert.equal(s.cleared, 0);
+});
+
+const BOARD = { frames: [{ cue: '@24.5', who: ['a'], shows: 'a girl at the window' }, { cue: 'c1', who: ['a'], shows: '' }] };
+const SONG = { cues: [{ id: 'c1', start: 5, end: 12 }], duration: 40 };
+
+test('quietFrames: applying it twice changes nothing', () => {
+  const wins: UnsungWindow[] = [{ start: 16, end: 31, kind: 'outro' }];
+  const once = quietFrames(BOARD.frames, wins, undefined, SONG.cues);
+  const twice = quietFrames(once.frames, wins, undefined, SONG.cues);
+  assert.deepEqual(twice.frames, once.frames);
+  assert.equal(twice.cleared, 0);
+});
+
+test('persistQuiet: the board on disk has the cleared who, atomically, and is left alone when nothing clears', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'quiet-'));
+  const file = join(dir, 'board.json');
+  writeFileSync(file, JSON.stringify(BOARD));
+  const q = persistQuiet(file, BOARD, SONG, undefined, 40);
+  assert.equal(q.cleared, 1);
+  const disk = JSON.parse(readFileSync(file, 'utf8'));
+  assert.deepEqual(disk.frames.map((f: { who: string[] }) => f.who), [[], ['a']]);
+  assert.ok(!existsSync(`${file}.tmp`));
+  const again = persistQuiet(file, disk, SONG, undefined, 40);
+  assert.equal(again.cleared, 0);
+});
+
+test('quietBoard (cutout safety net): pictures windows keep people, backdrop ones lose them', () => {
+  const keep = quietBoard(BOARD, SONG, [{ start: 12, end: 40, mode: 'pictures', reason: REASON }], 40);
+  assert.deepEqual(keep.board.frames[0].who, ['a']);
+  assert.deepEqual(quietBoard(BOARD, SONG, undefined, 40).board.frames[0].who, []);
 });

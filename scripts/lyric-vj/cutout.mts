@@ -15,6 +15,7 @@ import { parseArgs } from 'node:util';
 import { lessonsText } from './lessons.mts';
 import sharp from 'sharp';
 import { Board, frameTimes, look } from './keyframes.mts';
+import { quietBoard } from './interludes.mts';
 
 export type Actor = { sprite: string; then: string; at: number; x: number; ground: number; h: number; flip: boolean; enter: 'none' | 'fade'; wind: boolean };
 export type Prop = { sprite: string; x: number; y: number; h: number; motion: 'still' | 'fall' | 'flutter' | 'hang'; front: boolean; walk: number };
@@ -374,16 +375,19 @@ const SCHEMA = obj({
 });
 
 async function main() {
-  const { values: a } = parseArgs({ options: { song: { type: 'string' }, keyframes: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'keep-look': { type: 'string' }, recheck: { type: 'boolean' } } });
+  const { values: a } = parseArgs({ options: { song: { type: 'string' }, keyframes: { type: 'string' }, treatment: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'keep-look': { type: 'string' }, recheck: { type: 'boolean' } } });
   for (const line of readFileSync(join(homedir(), '.config/vjflow/anthropic.env'), 'utf8').split('\n')) { const m = line.match(/^([A-Z_]+)=(.*)$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim(); }
   const kf = a.keyframes!, out = a.out!, from = +a.from!, to = +a.to!;
   mkdirSync(join(out, 'spr'), { recursive: true });
   const song = JSON.parse(readFileSync(a.song!, 'utf8'));
-  const board = JSON.parse(readFileSync(join(kf, 'board.json'), 'utf8')) as Board;
+  const rawBoard = JSON.parse(readFileSync(join(kf, 'board.json'), 'utf8')) as Board;
+  const tr = JSON.parse(readFileSync(join(kf, 'treatment.json'), 'utf8'));
+  // safety net for boards written before keyframes cleared the people in backdrop windows
+  const interludes = a.treatment ? JSON.parse(readFileSync(a.treatment, 'utf8')).interludes : tr.interludes;
+  const board = quietBoard(rawBoard, song, interludes, song.cues.reduce((m: number, c: { end: number }) => Math.max(m, c.end), 0) + 8).board;
   const all = frameTimes(board, song.cues, 0, song.duration ?? Math.max(...song.cues.map((c: { end: number }) => c.end)) + 8);
   // each keyframe's own section (keyframes.mts names its picture kf_N) gives its real start and end: a passage's
   // first frame opens at the passage start, not at its line
-  const tr = JSON.parse(readFileSync(join(kf, 'treatment.json'), 'utf8'));
   const secs = tr.graphics.sections as { start: number; layers: { kind: string; asset?: string }[]; transition?: unknown }[];
   const kfAt = (n: number) => secs.findIndex((x) => x.layers.some((l) => l.kind === 'photo' && l.asset === `kf_${n}`));
   const shots = all.map((f, i) => ({ ...f, n: i + 1 })).flatMap((f) => {

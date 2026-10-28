@@ -1,6 +1,7 @@
 // How the type planner treats the stretches nobody sings: backdrop (no figures, props or illustrations) unless the
 // director wrote a story reason for pictures there (direct.mts → treatment.interludes). Pure helpers for typeplan.mts.
-import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
+import { renameSync, writeFileSync } from 'node:fs';
+import { unsungWindows, type UnsungWindow } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 import { MIN_REASON } from './brief.mts';
 
@@ -83,6 +84,23 @@ export function quietFrames<F extends { cue: string; who: string[] }>(frames: F[
     return { ...f, who: [] };
   });
   return { frames: out, cleared: clearedFrames.length, clearedFrames };
+}
+
+/** quietFrames over a whole board, the song's own unsung windows (duration, else `end`) and the director's interludes. */
+export function quietBoard<B extends { frames: { cue: string; who: string[]; shows: string }[] }>(board: B, song: { cues: { id: string; start: number; end?: number }[]; duration?: number }, interludes: Interlude[] | undefined, end: number) {
+  const windows = unsungWindows({ cues: song.cues as never, duration: song.duration ?? end });
+  const q = quietFrames(board.frames, windows, interludes, song.cues);
+  return { board: { ...board, frames: q.frames }, cleared: q.cleared, clearedFrames: q.clearedFrames };
+}
+
+/** Clears the board's people in backdrop windows and, when anything changed, writes it back atomically (.tmp then rename). */
+export function persistQuiet<B extends { frames: { cue: string; who: string[]; shows: string }[] }>(boardFile: string, board: B, song: { cues: { id: string; start: number; end?: number }[]; duration?: number }, interludes: Interlude[] | undefined, end: number) {
+  const q = quietBoard(board, song, interludes, end);
+  if (q.cleared) {
+    writeFileSync(`${boardFile}.tmp`, JSON.stringify(q.board, null, 1));
+    renameSync(`${boardFile}.tmp`, boardFile);
+  }
+  return q;
 }
 
 /**

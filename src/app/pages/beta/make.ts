@@ -11,7 +11,7 @@ export const REF_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 export interface MakeForm { tier: BetaTier; feeling: string; style: string | null; refs: readonly string[] }
 /** The JSON of `POST /beta/songs/:id/make`. */
 export interface MakeBody { tier: BetaTier; concept?: string; style?: string; refs: string[] }
-export interface MakeState { songId: string; tier: BetaTier; jobs: readonly BetaJob[]; active: boolean; left: number | null; uploading: boolean; feeling: string }
+export interface MakeState { songId: string; tier: BetaTier; jobs: readonly BetaJob[]; active: boolean; left: number | null; uploading: boolean; submitting: boolean; feeling: string }
 
 /** The make request: an empty feeling and 交給導演 are left out, the refs are copied. */
 export function makeBody(f: MakeForm): MakeBody {
@@ -36,6 +36,7 @@ export function makeBlock(s: MakeState): string | null {
   if (conceptAttempts(s.jobs, s.songId, s.tier) >= MAX_CONCEPTS) return '這個版本已試過 3 次概念，請聯絡管理者';
   // in cents, so float noise never makes a balance look short
   if (s.left !== null && Math.round(CONCEPT_PRICE * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡管理者';
+  if (s.submitting) return '送出中…';
   if (s.uploading) return '參考圖上傳中，請稍候。';
   if (feelingLength(s.feeling) > MAX_FEELING) return '想要的感覺最多 500 字';
   return null;

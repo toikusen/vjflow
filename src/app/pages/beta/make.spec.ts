@@ -2,7 +2,7 @@ import { BetaJob, CONCEPT_PRICE, TIER_INFO } from './beta';
 import { conceptAttempts, feelingLength, makeBlock, makeBody, MakeState, refProblem, stripGrid, stripTiles } from './make';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T00:00:00Z', decision: 'accepted', ...o });
-const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 14.5, uploading: false, feeling: '', ...o });
+const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 14.5, uploading: false, submitting: false, feeling: '', ...o });
 
 describe('TIER_INFO prices', () => {
   it('carries the concept fee and the rest, adding up to the total', () => {
@@ -84,6 +84,11 @@ describe('makeBlock', () => {
     expect(makeBlock(state({ left: 2.5 }))).toBeNull();
     expect(makeBlock(state({ left: 0.1 + 2.4 }))).toBeNull();
     expect(makeBlock(state({ left: null }))).toBeNull();
+  });
+
+  it('stays off while the make request is on its way, so a second click sends nothing', () => {
+    expect(makeBlock(state({ submitting: true }))).toBe('送出中…');
+    expect(makeBlock(state({ submitting: true, active: true }))).toBe('目前有工作在進行，完成後才能再製作。');
   });
 
   it('waits for an upload and refuses a feeling over 500 characters', () => {

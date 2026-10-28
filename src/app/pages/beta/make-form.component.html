@@ -116,6 +116,10 @@
     }
   </div>
 
+  @if (stylesFailed()) {
+    <p class="styles-note">風格清單載入失敗，仍可交給導演</p>
+  }
+
   @if (error()) {
     <p class="error" role="alert">{{ error() }}</p>
   }

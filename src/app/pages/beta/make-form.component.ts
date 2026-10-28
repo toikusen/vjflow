@@ -50,6 +50,9 @@ export class MakeFormComponent {
   protected readonly style = signal<string | null>(null);
   protected readonly refs = signal<string[]>([]);
   protected readonly uploading = signal(false);
+  /** The make request is on its way; the button stays off so a second click sends nothing. */
+  protected readonly submitting = signal(false);
+  protected readonly stylesFailed = signal(false);
   protected readonly refError = signal('');
   /** The server's answer when it refused the make (shown above the bar). */
   protected readonly error = signal('');
@@ -66,7 +69,7 @@ export class MakeFormComponent {
   protected readonly count = computed(() => feelingLength(this.feeling()));
   protected readonly many = computed(() => this.styles().length + 1 > GRID_CARDS);
   protected readonly block = computed(() =>
-    makeBlock({ songId: this.song().id, tier: this.chosen(), jobs: this.jobs(), active: this.active(), left: this.left(), uploading: this.uploading(), feeling: this.feeling() }),
+    makeBlock({ songId: this.song().id, tier: this.chosen(), jobs: this.jobs(), active: this.active(), left: this.left(), uploading: this.uploading(), submitting: this.submitting(), feeling: this.feeling() }),
   );
   protected readonly bill = computed(() => bill(CONCEPT_PRICE, this.left()));
   protected readonly refUrl = (name: string) => `/beta/songs/${this.song().id}/refs/${name}`;
@@ -95,9 +98,10 @@ export class MakeFormComponent {
   private async loadStyles() {
     try {
       const r = await fetch('/beta/styles');
-      if (r.ok) this.styles.set((await r.json()) as BetaStyle[]);
+      if (!r.ok) return this.stylesFailed.set(true);
+      this.styles.set((await r.json()) as BetaStyle[]);
     } catch {
-      // no menu: 交給導演 still works
+      this.stylesFailed.set(true);
     }
   }
 
@@ -179,6 +183,8 @@ export class MakeFormComponent {
   }
 
   private async make(tier: BetaTier) {
+    if (this.submitting()) return;
+    this.submitting.set(true);
     this.error.set('');
     const body = makeBody({ tier, feeling: this.feeling(), style: this.style(), refs: this.refs() });
     try {
@@ -190,6 +196,8 @@ export class MakeFormComponent {
       this.started.emit(`「${this.song().title}」已開始產生${TIER_INFO[tier].name}的概念，好了會請你確認。`);
     } catch {
       this.error.set('無法連線，請稍後再試');
+    } finally {
+      this.submitting.set(false);
     }
   }
 }

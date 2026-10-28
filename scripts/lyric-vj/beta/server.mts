@@ -7,7 +7,7 @@ import { extname, join, relative, resolve, sep } from 'node:path';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
-import { killRunning, pump, Queue } from './queue.mts';
+import { killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
 
@@ -88,12 +88,13 @@ export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }) };
-  killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
-  requeueRunning(db);
+  const orphans = killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
+  for (const j of requeueRunning(db)) logEvent(o.root, j.songId, { type: 'job.requeued', jobId: j.id });
   // make jobs queued before run folders existed get one now, so their output lands where videoFile looks
   for (const j of db.jobs) if (j.kind === 'make' && j.status === 'queued' && !j.runDir) j.runDir = `runs/${j.id}`;
   q.persist();
-  pump(q);
+  // the rerun starts only once the orphaned groups are gone; with none, at once
+  const ready = orphans.length ? waitGone(orphans).then(() => pump(q)) : (pump(q), Promise.resolve());
 
   /** Queues a job for a song the person owns, inside their limit. */
   const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retry?: { of: string; by: string }) => {
@@ -294,7 +295,7 @@ export function createBetaServer(o: BetaOptions) {
       json(res, 400, { error: (e as Error).message });
     }
   });
-  return { server, db, queue: q };
+  return { server, db, queue: q, /** Resolves when the first pump has run (after any orphaned pipeline has exited). */ ready };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

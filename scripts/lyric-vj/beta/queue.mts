@@ -15,6 +15,8 @@ export interface Queue {
   logDir: string;
   /** Extra environment for the jobs (default: the API keys in ~/.config/vjflow/*.env). */
   env?: Record<string, string>;
+  /** The shell that runs a job's command (default `bash`; tests point it at a missing file to see a failed start). */
+  shell?: string;
   /** Set while the server shuts down: jobs killed then stay `running` (a restart re-queues them) and nothing new starts. */
   stopping?: boolean;
   /** Told when a job starts, enters a phase, adds a measured cost or ends. */
@@ -72,8 +74,17 @@ export function killGroup(pid: number, graceMs = 10_000) {
  * the machine booted is skipped: its saved pid may belong to an unrelated process now.
  */
 export const killRunning = (db: Db, graceMs?: number, bootMs = Date.now() - uptime() * 1000) => {
-  for (const j of db.jobs) if (j.status === 'running' && j.pid && !(j.startedAt && Date.parse(j.startedAt) < bootMs)) killGroup(j.pid, graceMs);
+  const pids: number[] = [];
+  for (const j of db.jobs) if (j.status === 'running' && j.pid && !(j.startedAt && Date.parse(j.startedAt) < bootMs)) { killGroup(j.pid, graceMs); pids.push(j.pid); }
+  return pids;
 };
+
+/** Resolves once none of the process groups exists any more, or after `timeoutMs` (default: past the 10 s SIGKILL escalation). */
+export async function waitGone(pids: number[], timeoutMs = 12_000, pollMs = 50) {
+  const alive = (pid: number) => { try { process.kill(-pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code !== 'ESRCH'; } };
+  const until = Date.now() + timeoutMs;
+  while (pids.some(alive) && Date.now() < until) await new Promise((ok) => setTimeout(ok, pollMs));
+}
 
 /** Starts the next queued job when nothing runs; call after any change to the queue. */
 export function pump(q: Queue) {
@@ -93,7 +104,7 @@ export function pump(q: Queue) {
   mkdirSync(q.logDir, { recursive: true });
   const log = join(q.logDir, `${job.id}.log`);
   // the keys only reach the job's process, never the pages or the records
-  const child = spawn('bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  const child = spawn(q.shell ?? 'bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
   job.pid = child.pid;
   q.persist();
   q.onEvent?.(job, { type: 'job.started' });
@@ -117,13 +128,25 @@ export function pump(q: Queue) {
     if (!fused && job.costUsd !== undefined && job.costUsd > 2 * (job.priceUsd ?? Infinity)) {
       fused = true;
       job.error = '成本超過上限，已通知管理者';
+      q.onEvent?.(job, { type: 'job.fused', costUsd: job.costUsd, priceUsd: job.priceUsd });
       killGroup(child.pid!);
     }
   };
   child.stdout.on('data', take);
   child.stderr.on('data', take);
+  let ended = false;
+  // bash that cannot start (missing, no process slots) must fail the job, not crash the server; `close` may follow, the job ends once
+  child.on('error', (err) => {
+    if (q.stopping || ended) return;
+    ended = true;
+    Object.assign(job, { status: 'failed', endedAt: now(), error: `無法啟動：${err.message}`, unsettled: job.phase ?? '啟動', pid: undefined });
+    q.persist();
+    q.onEvent?.(job, { type: 'job.ended', status: job.status, error: job.error, unsettled: job.unsettled, costUsd: job.costUsd });
+    pump(q);
+  });
   child.on('close', (code) => {
-    if (q.stopping) return;
+    if (q.stopping || ended) return;
+    ended = true;
     if (rest) read(rest);
     // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10
     const failed = code !== 0 && code !== 10;

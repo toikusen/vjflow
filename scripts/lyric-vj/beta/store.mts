@@ -88,7 +88,9 @@ export const userByToken = (db: Db, token: string | undefined) => (token ? db.us
 
 /** Jobs a restart interrupted go back to the queue (every pipeline step skips what it already wrote). */
 export function requeueRunning(db: Db) {
-  for (const j of db.jobs) if (j.status === 'running') Object.assign(j, { status: 'queued', phase: undefined, startedAt: undefined, pid: undefined });
+  const requeued: Job[] = [];
+  for (const j of db.jobs) if (j.status === 'running') { Object.assign(j, { status: 'queued', phase: undefined, startedAt: undefined, pid: undefined }); requeued.push(j); }
+  return requeued;
 }
 
 /** The next job to run: none while one runs (one machine, one song at a time), else the oldest queued. */

@@ -8,7 +8,8 @@ import { after, test } from 'node:test';
 import { createBetaServer, stopBeta } from './server.mts';
 import { killRunning } from './queue.mts';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { readEvents } from './events.mts';
 import { invite, save, emptyDb, runPath } from './store.mts';
 
 // every server and job a test starts is stopped when the file ends, so a failed assertion cannot leave the process hanging
@@ -240,33 +241,70 @@ test('a failed job records the step it was in as unsettled', async () => {
   t.beta.server.close();
 });
 
-test('a pipeline orphaned by a crash is stopped when the server starts again, and the job reruns', async () => {
-  const t = await runStub("echo '##PHASE 製作中'; sleep 30");
+test('a pipeline orphaned by a crash is stopped when the server starts again, and the job reruns only after it has exited', async () => {
+  const marks = mkdtempSync(join(tmpdir(), 'beta-marks-'));
+  // the orphan takes a second to wind down after SIGTERM; the rerun records whether that had finished when it started
+  const t = await runStub(`echo '##PHASE 製作中'; trap 'sleep 1; touch ${marks}/orphan-exited; exit' TERM; touch ${marks}/orphan-up; sleep 30 & wait`);
   await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
   for (let k = 0; k < 40 && !t.beta.db.jobs[0].pid; k++) await new Promise((ok) => setTimeout(ok, 50));
+  for (let k = 0; k < 100 && !existsSync(join(marks, 'orphan-up')); k++) await new Promise((ok) => setTimeout(ok, 50));
   const pid = t.beta.db.jobs[0].pid!;
   assert.ok(pid > 0);
   process.kill(-pid, 0); // alive
   // a crash: the first server's record stays on disk with the job running; a second server starts on it
   const root = t.root;
   t.beta.server.close();
-  const second = create({ root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
-  let gone = false;
-  for (let k = 0; k < 40 && !gone; k++) {
-    await new Promise((ok) => setTimeout(ok, 50));
-    try { process.kill(-pid, 0); } catch { gone = true; }
-  }
+  const second = create({ root, publicUrl: 'https://beta.test', env: {}, command: () => `[ -f ${marks}/orphan-exited ] && touch ${marks}/rerun-saw-exit; sleep 30` });
+  assert.equal(second.db.jobs[0].status, 'queued', 'the rerun waits for the orphan');
+  await second.ready;
   const newPid = second.db.jobs[0].pid;
   try {
-    assert.ok(gone, 'old process group still alive');
+    assert.throws(() => process.kill(-pid, 0), 'old process group still alive');
     assert.equal(second.db.jobs[0].status, 'running');
     assert.notEqual(newPid, pid);
+    for (let k = 0; k < 40 && !existsSync(join(marks, 'rerun-saw-exit')); k++) await new Promise((ok) => setTimeout(ok, 50));
+    assert.ok(existsSync(join(marks, 'rerun-saw-exit')), 'rerun started before the orphan exited');
+    const ev = readEvents(root, 's1').map((e) => e.type);
+    assert.ok(ev.includes('job.requeued'));
   } finally {
     // stop the rerun's group and the first server's group; only pids this test started
     for (const p of [pid, newPid]) if (p) try { process.kill(-p, 'SIGKILL'); } catch { /* gone */ }
     second.server.close();
     await new Promise((ok) => setTimeout(ok, 200));
   }
+});
+
+test('a job whose cost passes twice its price leaves a job.fused event beside job.ended', async () => {
+  const t = await runStub("echo '##COST 13 x'; sleep 5");
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 40 && t.beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  const ev = readEvents(t.root, 's1');
+  const fused = ev.find((e) => e.type === 'job.fused');
+  assert.deepEqual([fused?.costUsd, fused?.priceUsd], [13, 6]);
+  assert.ok(ev.some((e) => e.type === 'job.ended' && e.status === 'failed'));
+  assert.ok(ev.findIndex((e) => e.type === 'job.fused') < ev.findIndex((e) => e.type === 'job.ended'));
+  t.beta.server.close();
+});
+
+test('a shell that cannot start fails the job once and the queue moves on', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'beta-'));
+  const db = emptyDb();
+  const tester = invite(db, 'Tester', 10);
+  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  save(join(root, 'db.json'), db);
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: () => 'true' });
+  beta.queue.shell = join(root, 'no-such-shell');
+  await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
+  const res = await fetch(`http://127.0.0.1:${(beta.server.address() as AddressInfo).port}/beta/songs/s1/make`, { method: 'POST', body: JSON.stringify({ tier: 'none' }), headers: { cookie: `vjb=${tester.token}`, 'content-type': 'application/json' } });
+  assert.equal(res.status, 202);
+  for (let k = 0; k < 40 && beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 50));
+  await new Promise((ok) => setTimeout(ok, 200));
+  const [job] = beta.db.jobs;
+  assert.equal(job.status, 'failed');
+  assert.match(job.error ?? '', /無法啟動/);
+  assert.ok(job.endedAt && job.unsettled && !job.pid);
+  assert.equal(readEvents(root, 's1').filter((e) => e.type === 'job.ended').length, 1);
+  beta.server.close();
 });
 
 test('a normal stop leaves the running job running, kills its group and starts nothing else', async () => {

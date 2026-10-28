@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
+import { landedEnd, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
@@ -249,4 +249,33 @@ test('a cut whose next cut is skipped by the hold runs into sung time and keeps 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('unsungFrameRule: a backdrop window allows only place, light, weather and time passing', () => {
+  const r = unsungFrameRule([{ start: 40, end: 52, kind: 'interlude' }]);
+  assert.ok(r.includes('40.0–52.0 秒（間奏）'), r);
+  assert.ok(r.includes('只畫地點、光線、天氣和時間的推移，不放人物、道具'), r);
+  assert.ok(r.includes('一格最多停 9 秒') && r.includes('「@秒數」'), r);
+  assert.ok(!r.includes('理由'), r);
+});
+
+test('unsungFrameRule: a pictures window keeps the old rule and quotes the reason', () => {
+  const r = unsungFrameRule(OUTRO, [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]);
+  assert.ok(r.includes('一格最多停 9 秒'), r);
+  assert.ok(r.includes(`理由：「${REASON}」`), r);
+  assert.ok(r.includes('16.0–31.0 秒（尾奏）'), r);
+  assert.ok(!r.includes('不放人物、道具'), r);
+});
+
+test('unsungFrameRule: a window without an entry or with a weak reason counts as backdrop', () => {
+  const weak = unsungFrameRule(OUTRO, [{ start: 16, end: 31, mode: 'pictures', reason: '好看' }]);
+  assert.ok(weak.includes('只畫地點、光線、天氣和時間的推移'), weak);
+  assert.ok(!weak.includes('好看'), weak);
+  assert.equal(unsungFrameRule(OUTRO), weak);
+});
+
+test('unsungFrameRule: mixed windows state both; no windows gives the plain old sentence', () => {
+  const mixed = unsungFrameRule([{ start: 0, end: 8, kind: 'intro' }, ...OUTRO], [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]);
+  assert.ok(mixed.includes('0.0–8.0 秒（前奏）') && mixed.includes(`理由：「${REASON}」`), mixed);
+  assert.equal(unsungFrameRule([]), '沒有歌詞的時段（前奏、間奏、尾奏）也要有畫面推進：一格最多停 9 秒；那裡的格 cue 寫「@秒數」（例如 @24.5），交代時間推移或停在結果。');
 });

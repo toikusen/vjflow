@@ -13,7 +13,10 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { unsungFrameRule } from './interludes.mts';
 import { lessonsText } from './lessons.mts';
+import { unsungWindows } from '../../src/app/lyric-vj/structure';
+import type { Interlude } from '../../src/app/lyric-vj/treatment';
 import sharp from 'sharp';
 
 type Cue = { id: string; start: number; end: number; text: string };
@@ -138,7 +141,7 @@ if (process.argv[1]?.endsWith('keyframes.mts')) {
   const out = a.out!;
   mkdirSync(out, { recursive: true });
   const song = JSON.parse(readFileSync(a.song!, 'utf8')) as { title: string; cues: Cue[] };
-  const base = JSON.parse(readFileSync(a.treatment!, 'utf8')) as { concept?: string; design?: { language?: string } };
+  const base = JSON.parse(readFileSync(a.treatment!, 'utf8')) as { concept?: string; design?: { language?: string }; interludes?: Interlude[] };
   const [from, to] = [Number(a.from), Number(a.to)];
   const lines = song.cues.filter((c) => c.start >= from - 0.5 && c.start < to);
   const keepPeople = a.people ? (JSON.parse(readFileSync(a.people, 'utf8')) as Board) : undefined;
@@ -158,7 +161,7 @@ ${lessonsText() ? `過去作品的使用者回饋整理出的經驗（一定要�
 - 歌詞若有粗話、性暗示或成人內容，畫面一律保持輕鬆、不露骨、全年齡：用表情、反應、道具或旁人的吐槽帶過，不畫出來；照樣把整段每一格都寫完。
 - 先想清楚這段的故事：誰、在哪、想要什麼、發生什麼轉折、結果是什麼。要有人物（表情與動作），可以有道具撐起劇情。
 - 分成約 ${n} 格畫面（frames），每格對應一句歌詞開始的時間（cue），一格只說一件事；重要事件要有「之前／之後」兩格。先建立關係，再讓它改變；結果要留在畫面上。
-- 沒有歌詞的時段（前奏、間奏、尾奏）也要有畫面推進：一格最多停 9 秒；那裡的格 cue 寫「@秒數」（例如 @24.5），交代時間推移或停在結果。
+- ${unsungFrameRule(unsungWindows({ cues: song.cues, duration: (song as { duration?: number }).duration ?? to }).filter((w) => w.end > from && w.start < to), base.interludes)}
 - 段落：${parts.map((x) => `${x.type} ${x.start.toFixed(0)}–${x.end.toFixed(0)}s`).join('、') || '（無）'}。前奏建立場景；間奏交代時間推移；尾奏停在結果。重複的副歌沿用同一個構圖或意象，但要讓表情、距離或道具狀態不同（看得出又往前一步）；只有回憶的呼應才可以原樣重用前面某一格（reuse 填那一格的序號，否則 0）。
 - places：故事發生的 2–4 個地方（英文寫給生圖模型：地點、建築、季節、時間與光線，不要人物），每格的 place 填其中一個 id。
 - 構圖：人物和重要的東西集中在 side 的另一側，side 那一側約三分之一寬要是場景的一部分但很安靜（天空、牆、雪地、水面），給直排歌詞放。

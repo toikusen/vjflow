@@ -54,6 +54,22 @@ export function unsungRule(windows: UnsungWindow[], interludes?: Interlude[]): s
 }
 
 /**
+ * The story writer's rule for frames over unsung stretches (keyframes.mts): a backdrop window shows only the place,
+ * light, weather and time passing; a pictures window keeps people and props, named with the director's reason.
+ */
+export function unsungFrameRule(windows: UnsungWindow[], interludes?: Interlude[]): string {
+  const old = '沒有歌詞的時段（前奏、間奏、尾奏）也要有畫面推進：一格最多停 9 秒；那裡的格 cue 寫「@秒數」（例如 @24.5），交代時間推移或停在結果。';
+  const modes = windowModes(windows, interludes);
+  const quiet = modes.filter((w) => w.mode === 'backdrop');
+  const pictures = modes.filter((w) => w.mode === 'pictures');
+  if (!modes.length || !quiet.length && !pictures.length) return old;
+  if (!quiet.length) return `${old}這些時段美術指導寫了理由，可以放人物或道具，畫面要照著理由走：${pictures.map((w) => `${span(w)}（${KIND_NAME[w.kind]}），理由：「${w.reason}」`).join('；')}。`;
+  const back = `沒有歌詞的時段也要有畫面推進：${quiet.map((w) => `${span(w)}（${KIND_NAME[w.kind]}）`).join('、')}只畫地點、光線、天氣和時間的推移，不放人物、道具；一格最多停 9 秒，那裡的格 cue 寫「@秒數」（例如 @24.5）。`;
+  if (!pictures.length) return back;
+  return `${back}另外${pictures.map((w) => `${span(w)}（${KIND_NAME[w.kind]}）`).join('、')}美術指導寫了理由，可以放人物或道具，一格最多停 9 秒，cue 一樣寫「@秒數」，畫面要照著理由走：${pictures.map((w) => `理由：「${w.reason}」`).join('；')}。`;
+}
+
+/**
  * When cut i of a shot really ends: at the first later cut that lands (at least `gap` after it and before the shot's
  * last 0.05 s, as buildCuts decides), else at the shot's end. `times` are the shot's cut times in order.
  */

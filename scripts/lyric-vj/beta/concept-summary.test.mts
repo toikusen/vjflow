@@ -66,3 +66,21 @@ test('a one-shot song gives one time', () => {
 test('no shots is a clear error', () => {
   assert.throws(() => stillTimes(timesRun([])), /沒有鏡頭，無法選示意畫面/);
 });
+
+test('summarize lists interludes and keeps a reason only for pictures entries', () => {
+  const run = fixture();
+  const t = JSON.parse(readFileSync(join(run, 'base/treatment.json'), 'utf8'));
+  t.interludes = [
+    { start: 8, end: 20, mode: 'pictures', reason: '間奏回到那盞燈，交代時間過了一夜' },
+    { start: 60, end: 70, mode: 'backdrop', reason: '弱理由不該出現' },
+  ];
+  w(join(run, 'base/treatment.json'), t);
+  assert.deepEqual(summarize(run).interludes, [
+    { start: 8, end: 20, mode: 'pictures', reason: '間奏回到那盞燈，交代時間過了一夜' },
+    { start: 60, end: 70, mode: 'backdrop' },
+  ]);
+});
+
+test('summarize has no interludes key when the treatment has none', () => {
+  assert.equal('interludes' in summarize(fixture()), false);
+});

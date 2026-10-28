@@ -3,6 +3,7 @@
 //   npx tsx scripts/lyric-vj/beta/concept-summary.mts --write <run>   writes <run>/concept.json
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Interlude } from '../../../src/app/lyric-vj/treatment';
 import { LANGUAGES, type LanguageId } from '../../../src/app/lyric-vj/languages';
 import { stillAt } from '../preview.mts';
 
@@ -13,6 +14,8 @@ export interface ConceptSummary {
   concept: string; briefReading?: string; concerns?: string; candidateReason?: string;
   /** File names under stills/. */
   stills: string[];
+  /** The director's choice per unsung window; `reason` only for pictures entries (a demoted entry's reason stays out). */
+  interludes?: { start: number; end: number; mode: 'backdrop' | 'pictures'; reason?: string }[];
 }
 
 const read = (p: string) => JSON.parse(readFileSync(p, 'utf8'));
@@ -51,6 +54,7 @@ export function summarize(run: string): ConceptSummary {
   return {
     language, languageName: LANGUAGES[language as LanguageId]?.name ?? language, font: t.design?.font ?? '', palette,
     concept: t.concept ?? '', briefReading: t.briefReading, concerns: t.concerns, candidateReason: t.candidateReason, stills,
+    ...(Array.isArray(t.interludes) ? { interludes: t.interludes.map((e: Interlude) => (e.mode === 'pictures' ? { start: e.start, end: e.end, mode: e.mode, reason: e.reason } : { start: e.start, end: e.end, mode: 'backdrop' as const })) } : {}),
   };
 }
 

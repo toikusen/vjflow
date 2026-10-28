@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { persistQuiet, unsungFrameRule } from './interludes.mts';
+import { persistQuiet, sectionArcRule, unsungFrameRule } from './interludes.mts';
 import { lessonsText } from './lessons.mts';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
@@ -152,6 +152,7 @@ if (process.argv[1]?.endsWith('keyframes.mts')) {
   let board = {} as Board;
   if (existsSync(boardFile)) board = JSON.parse(readFileSync(boardFile, 'utf8'));
   else {
+    const windows = unsungWindows({ cues: song.cues, duration: (song as { duration?: number }).duration ?? to }).filter((w) => w.end > from && w.start < to);
     const prompt = `你是〈${song.title}〉這支 MV 的編劇兼分鏡師。這次只做 ${from}–${to} 秒這一段，要讓沒看過劇本的人看得懂發生了什麼事。
 整支的概念：${base.concept ?? ''}
 這段的歌詞（id、秒數、內容）：
@@ -161,8 +162,8 @@ ${lessonsText() ? `過去作品的使用者回饋整理出的經驗（一定要�
 - 歌詞若有粗話、性暗示或成人內容，畫面一律保持輕鬆、不露骨、全年齡：用表情、反應、道具或旁人的吐槽帶過，不畫出來；照樣把整段每一格都寫完。
 - 先想清楚這段的故事：誰、在哪、想要什麼、發生什麼轉折、結果是什麼。要有人物（表情與動作），可以有道具撐起劇情。
 - 分成約 ${n} 格畫面（frames），每格對應一句歌詞開始的時間（cue），一格只說一件事；重要事件要有「之前／之後」兩格。先建立關係，再讓它改變；結果要留在畫面上。
-- ${unsungFrameRule(unsungWindows({ cues: song.cues, duration: (song as { duration?: number }).duration ?? to }).filter((w) => w.end > from && w.start < to), base.interludes)}
-- 段落：${parts.map((x) => `${x.type} ${x.start.toFixed(0)}–${x.end.toFixed(0)}s`).join('、') || '（無）'}。前奏建立場景；間奏交代時間推移；尾奏停在結果。重複的副歌沿用同一個構圖或意象，但要讓表情、距離或道具狀態不同（看得出又往前一步）；只有回憶的呼應才可以原樣重用前面某一格（reuse 填那一格的序號，否則 0）。
+- ${unsungFrameRule(windows, base.interludes)}
+- 段落：${parts.map((x) => `${x.type} ${x.start.toFixed(0)}–${x.end.toFixed(0)}s`).join('、') || '（無）'}。${sectionArcRule(windows, base.interludes)}重複的副歌沿用同一個構圖或意象，但要讓表情、距離或道具狀態不同（看得出又往前一步）；只有回憶的呼應才可以原樣重用前面某一格（reuse 填那一格的序號，否則 0）。
 - places：故事發生的 2–4 個地方（英文寫給生圖模型：地點、建築、季節、時間與光線，不要人物），每格的 place 填其中一個 id。
 - 構圖：人物和重要的東西集中在 side 的另一側，side 那一側約三分之一寬要是場景的一部分但很安靜（天空、牆、雪地、水面），給直排歌詞放。
 - shows 用英文寫給生圖模型：構圖（遠中近景）、誰在哪裡、表情、動作、道具、場景、時間與光線；畫面 ${'一側'}（side 指定的那一側，約三分之一寬）要留成乾淨的天空、牆或雪地，給直排歌詞放。不要寫任何字或招牌文字。

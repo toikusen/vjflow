@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { interludesFor, landedEnd, persistQuiet, quietBoard, quietFrames, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
+import { interludesFor, landedEnd, persistQuiet, quietBoard, quietFrames, sectionArcRule, stripUnsungSprites, unsungFrameRule, unsungRule } from './interludes.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 
 const beats = Array.from({ length: 40 }, (_, i) => +(i * 0.78).toFixed(2)); // a 77 BPM ballad
@@ -257,6 +257,16 @@ test('unsungFrameRule: a backdrop window allows only place, light, weather and t
   assert.ok(r.includes('只畫地點、光線、天氣和時間的推移，不放人物、道具'), r);
   assert.ok(r.includes('一格最多停 9 秒') && r.includes('「@秒數」'), r);
   assert.ok(!r.includes('理由'), r);
+});
+
+test('sectionArcRule: unchanged without a backdrop window; a backdrop intro or outro keeps people out', () => {
+  const generic = '前奏建立場景；間奏交代時間推移；尾奏停在結果。';
+  assert.equal(sectionArcRule([]), generic);
+  assert.equal(sectionArcRule(OUTRO, [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]), generic);
+  assert.equal(sectionArcRule(OUTRO), '前奏建立場景；間奏交代時間推移；尾奏停在地點或某樣東西的狀態上，不放人物。');
+  const both = sectionArcRule([{ start: 0, end: 8, kind: 'intro' }, ...OUTRO], [{ start: 16, end: 31, mode: 'pictures', reason: REASON }]);
+  assert.equal(both, '前奏只用地點或某樣東西的狀態建立場景，不放人物；間奏交代時間推移；尾奏停在結果。');
+  assert.equal(sectionArcRule([{ start: 40, end: 52, kind: 'interlude' }]), generic, 'a backdrop interlude is covered by unsungFrameRule');
 });
 
 test('unsungFrameRule: a pictures window keeps the old rule and quotes the reason', () => {

@@ -71,6 +71,17 @@ export function unsungFrameRule(windows: UnsungWindow[], interludes?: Interlude[
 }
 
 /**
+ * The story writer's line for what each part of the song does (keyframes.mts). A backdrop intro or outro stays on the
+ * place or a thing's state with no people (persistQuiet clears only `who`, a person in `shows` would still be drawn).
+ */
+export function sectionArcRule(windows: UnsungWindow[], interludes?: Interlude[]): string {
+  const quiet = new Set(windowModes(windows, interludes).filter((w) => w.mode === 'backdrop').map((w) => w.kind));
+  const intro = quiet.has('intro') ? '前奏只用地點或某樣東西的狀態建立場景，不放人物' : '前奏建立場景';
+  const outro = quiet.has('outro') ? '尾奏停在地點或某樣東西的狀態上，不放人物' : '尾奏停在結果';
+  return `${intro}；間奏交代時間推移；${outro}。`;
+}
+
+/**
  * Clears `who` on every story frame whose moment (an '@seconds' cue, or the start of the sung cue it names) lies inside
  * a backdrop window; frames in pictures windows and in sung time keep their people. Returns new frame objects.
  */

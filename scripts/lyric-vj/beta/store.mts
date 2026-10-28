@@ -12,8 +12,12 @@ export interface User { id: string; name: string; tokenHash: string; admin: bool
 export interface Song { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
 export interface Job {
   id: string; userId: string; songId: string; kind: 'prep' | 'make'; tier?: Tier; status: JobStatus;
-  /** What was set aside before the job started; it counts against the limits until the real cost is known. */
+  /** Legacy: what was set aside before the job started. New jobs keep it equal to `priceUsd`. */
   reservedUsd: number;
+  /** What the person pays for this job, fixed when it is queued; unset on legacy jobs. */
+  priceUsd?: number;
+  /** The phase in progress when the job failed. */
+  unsettled?: string;
   /** The measured cost, when the steps report one. */
   costUsd?: number;
   /** Each measured cost once, by key (a repeated line must not count twice); `costUsd` is their sum. */
@@ -27,11 +31,11 @@ export interface Job {
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number }
 
 /**
- * Set aside before a job runs: above the costs seen on the test songs (no image $2.2–2.6, with image $3.5–4.2,
- * hybrid $10–11 plus about $3 of hand redraws), so a run that retries a lot still stays inside a person's limit.
+ * What a person pays, fixed per step: above the costs seen on the test songs (no image $2.2–2.6, with image $3.5–4.2,
+ * hybrid $10–11 plus about $3 of hand redraws). The platform absorbs a run that costs more.
  */
-export const RESERVE: Record<Job['kind'] | Tier, number> = { prep: 0.5, make: 0, none: 4, img: 6, hybrid: 16 };
-export const reserveFor = (kind: Job['kind'], tier?: Tier) => (kind === 'make' && tier ? RESERVE[tier] : RESERVE[kind]);
+export const PRICE: Record<'prep' | Tier, number> = { prep: 0.5, none: 4, img: 6, hybrid: 16 };
+export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'make' && tier ? PRICE[tier] : PRICE.prep);
 
 /** Where a song's files live. */
 export const songDir = (root: string, id: string) => join(root, 'songs', id);
@@ -54,17 +58,19 @@ export function save(file: string, db: Db) {
   renameSync(`${file}.tmp`, file);
 }
 
-/** What a job counts against the limits: its measured cost once known, else what was set aside. */
-export const charged = (j: Job) => j.costUsd ?? j.reservedUsd;
+/** What a person pays for a job: nothing when it failed, else its fixed price (legacy jobs: measured cost, else the reserve). */
+export const charged = (j: Job) => (j.status === 'failed' ? 0 : j.priceUsd ?? j.costUsd ?? j.reservedUsd);
 export const spent = (db: Db, userId?: string) => db.jobs.filter((j) => !userId || j.userId === userId).reduce((s, j) => s + charged(j), 0);
+/** What the platform pays: measured cost where known, else the price of a job still running. */
+export const platformSpent = (db: Db) => db.jobs.reduce((s, j) => s + (j.costUsd ?? (j.status === 'queued' || j.status === 'running' ? j.priceUsd ?? j.reservedUsd : 0)), 0);
 
 /** Why a job may not be queued (in words for the person), or undefined when it may. */
 export function refuse(db: Db, userId: string, kind: Job['kind'], tier?: Tier): string | undefined {
   const user = db.users.find((u) => u.id === userId);
   if (!user || user.disabled) return '帳號無法使用';
-  const cost = reserveFor(kind, tier);
-  if (spent(db, userId) + cost > user.limitUsd) return `額度不足：剩 $${Math.max(0, user.limitUsd - spent(db, userId)).toFixed(2)}，這個步驟需要預留 $${cost.toFixed(2)}`;
-  if (spent(db) + cost > db.globalLimitUsd) return '本期封測的總額度已用完，請聯絡管理者';
+  const cost = priceFor(kind, tier);
+  if (spent(db, userId) + cost > user.limitUsd) return `額度不足：剩 $${Math.max(0, user.limitUsd - spent(db, userId)).toFixed(2)}，這個步驟需要 $${cost.toFixed(2)}`;
+  if (platformSpent(db) + cost > db.globalLimitUsd) return '本期封測的總額度已用完，請聯絡管理者';
   return undefined;
 }
 

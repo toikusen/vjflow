@@ -57,7 +57,7 @@
       @if (busy()) {
         <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
       } @else {
-        <p class="fine">上傳時預留 ${{ prepReserve.toFixed(2) }}・請只上傳你有權使用的音樂。</p>
+        <p class="fine">上傳費用 ${{ prepPrice.toFixed(2) }}・請只上傳你有權使用的音樂。</p>
       }
     </form>
   </section>
@@ -116,7 +116,7 @@
                 <div class="tier" [class.done]="r.done.includes(t[0])">
                   <div class="tier-head">
                     <h4>{{ t[1].name }}</h4>
-                    <span class="price" title="預留額度，完成後按實際花費扣">${{ t[1].reserve }}</span>
+                    <span class="price" title="固定費用">${{ t[1].price }}</span>
                   </div>
                   <p class="muted">{{ t[1].about }}</p>
                   <p class="meta">{{ t[1].minutes }}</p>
@@ -152,13 +152,12 @@
       <h2 id="ask-title">{{ a.title }}</h2>
       <p class="muted">{{ a.body }}</p>
       <dl class="bill">
-        <div><dt>這次預留</dt><dd>${{ a.cost.toFixed(2) }}</dd></div>
+        <div><dt>這次費用</dt><dd>${{ a.cost.toFixed(2) }}</dd></div>
         @if (me(); as m) {
           <div><dt>目前剩餘</dt><dd>${{ left(m).toFixed(2) }}</dd></div>
-          <div class="after"><dt>預留後剩餘</dt><dd>${{ (left(m) - a.cost).toFixed(2) }}</dd></div>
+          <div class="after"><dt>扣除後剩餘</dt><dd>${{ (left(m) - a.cost).toFixed(2) }}</dd></div>
         }
       </dl>
-      <p class="fine">先預留，完成後改按實際花費計算。</p>
       <div class="dialog-actions">
         <button class="ghost-btn" type="button" (click)="answer(false)">取消</button>
         <button class="cta small" type="button" (click)="answer(true)" [disabled]="!!me() && left(me()!) < a.cost">確認並開始</button>

@@ -8,7 +8,7 @@ import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { pump, Queue } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { Db, hashToken, invite, Job, load, newId, refuse, requeueRunning, reserveFor, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
+import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
 
 export { songDir };
 
@@ -88,7 +88,7 @@ export function createBetaServer(o: BetaOptions) {
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
     const id = newId();
-    const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: reserveFor(kind, tier), createdAt: new Date().toISOString() };
+    const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: priceFor(kind, tier), priceUsd: priceFor(kind, tier), createdAt: new Date().toISOString() };
     db.jobs.push(job);
     q.persist();
     pump(q);
@@ -188,7 +188,7 @@ export function createBetaServer(o: BetaOptions) {
       }
       if (!path.startsWith('/beta/admin/')) return json(res, 404, { error: '找不到' });
       if (!user.admin) return json(res, 403, { error: '只有管理者可以使用' });
-      if (path === '/beta/admin/users' && req.method === 'GET') return json(res, 200, { users: db.users.map((u) => publicUser(db, u)), globalLimitUsd: db.globalLimitUsd, spentUsd: +spent(db).toFixed(2) });
+      if (path === '/beta/admin/users' && req.method === 'GET') return json(res, 200, { users: db.users.map((u) => publicUser(db, u)), globalLimitUsd: db.globalLimitUsd, spentUsd: +spent(db).toFixed(2), platformSpentUsd: +platformSpent(db).toFixed(2) });
       if (path === '/beta/admin/users' && req.method === 'POST') {
         const b = await readJson(req);
         const name = String(b.name ?? '').trim().slice(0, 60);
@@ -239,7 +239,7 @@ export function createBetaServer(o: BetaOptions) {
         q.persist();
         return json(res, 200, publicJob(j));
       }
-      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j), userId: j.userId, reservedUsd: j.reservedUsd, costUsd: j.costUsd, error: j.error })));
+      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });
     } catch (e) {
       json(res, 400, { error: (e as Error).message });

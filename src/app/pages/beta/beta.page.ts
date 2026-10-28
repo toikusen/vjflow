@@ -1,7 +1,7 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, BetaTier, jobProgress, PREP_RESERVE, songStage, TIER_INFO } from './beta';
+import { BetaJob, BetaMe, BetaSong, BetaTier, jobProgress, PREP_PRICE, songStage, TIER_INFO } from './beta';
 
 const POLL_MS = 5000;
 
@@ -33,7 +33,7 @@ export class BetaPage {
   protected readonly progress = (j: BetaJob) => jobProgress(j);
   protected readonly fileName = signal('');
   protected readonly ask = signal<Ask | null>(null);
-  protected readonly prepReserve = PREP_RESERVE;
+  protected readonly prepPrice = PREP_PRICE;
   protected readonly langs = Object.entries(LANGS);
   protected readonly langName = (l: string) => LANGS[l] ?? l;
   protected readonly left = (m: BetaMe) => Math.max(0, m.limitUsd - m.spentUsd);
@@ -59,7 +59,7 @@ export class BetaPage {
     this.ask.set({
       title: `上傳「${this.form.title}」`,
       body: '上傳後會開始準備歌曲（分離人聲、自動對歌詞時間）。上傳過程中請勿關閉或離開這個頁面，上傳完成後就可以離開。',
-      cost: PREP_RESERVE,
+      cost: PREP_PRICE,
       go: () => this.add(),
     });
   }
@@ -69,7 +69,7 @@ export class BetaPage {
     this.ask.set({
       title: `製作「${song.title}」${t.name}`,
       body: `${t.about}製作${t.minutes}，開始後無法取消；可以離開頁面，完成後回來下載。`,
-      cost: t.reserve,
+      cost: t.price,
       go: () => this.make(song, tier),
     });
   }

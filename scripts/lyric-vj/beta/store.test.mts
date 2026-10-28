@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { emptyDb, invite, Job, load, nextJob, refuse, requeueRunning, runPath, save, spent, userByToken, videoFile } from './store.mts';
+import { emptyDb, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, runPath, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -65,4 +65,20 @@ test('videoFile and runPath fall back to the song folder for legacy jobs', () =>
   assert.equal(videoFile('/r', job({ songId: 's', tier: 'img' })), '/r/songs/s/video-img.mp4');
   assert.equal(runPath('/r', job({ songId: 's', runDir: 'runs/j' })), '/r/songs/s/runs/j');
   assert.equal(videoFile('/r', job({ songId: 's', runDir: 'runs/j' })), '/r/songs/s/runs/j/video.mp4');
+});
+
+test('users pay the fixed price; failed jobs are free; the platform pays the measured cost', () => {
+  const db = emptyDb(); const { user } = invite(db, 'A', 20);
+  db.jobs.push(job({ userId: user.id, tier: 'img', priceUsd: 6, costUsd: 3.62, status: 'done' }));
+  db.jobs.push(job({ userId: user.id, tier: 'img', priceUsd: 6, costUsd: 1.1, status: 'failed' }));
+  db.jobs.push(job({ userId: user.id, tier: 'none', priceUsd: 4, status: 'running' }));
+  assert.equal(spent(db, user.id), 10);
+  assert.equal(platformSpent(db), 3.62 + 1.1 + 4);
+});
+
+test('a legacy job without priceUsd is charged as before, and a failed one is free', () => {
+  const db = emptyDb(); db.jobs.push(job({ reservedUsd: 6, costUsd: 3.62 }));
+  assert.equal(spent(db), 3.62);
+  db.jobs.push(job({ reservedUsd: 6, costUsd: 2, status: 'failed' }));
+  assert.equal(spent(db), 3.62);
 });

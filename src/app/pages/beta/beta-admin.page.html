@@ -84,7 +84,9 @@
                 @if (j.phase && j.status !== 'done') {<span class="muted"> {{ j.phase }}</span>}
                 @if (j.error) {<div class="muted err">{{ j.error }}</div>}
               </td>
-              <td class="nowrap">@if (j.costUsd !== undefined) {${{ j.costUsd.toFixed(2) }}} @else {<span class="muted">預留 ${{ j.reservedUsd }}</span>}</td>
+              <td class="nowrap">@if (j.status === 'failed') {<span class="muted">費用 $0</span>} @else {<span class="muted">費用 ${{ j.priceUsd ?? j.reservedUsd }}</span>}
+                @if (j.costUsd !== undefined) {<div>成本 ${{ j.costUsd.toFixed(2) }}</div>}
+                @if (j.unsettled) {<div class="muted">中斷於 {{ j.unsettled }}</div>}</td>
               <td class="acts">
                 @if (j.status === 'failed') {<button class="ghost-btn" type="button" (click)="retry(j)">重跑</button>}
                 @if (j.status === 'admin') {<a class="ghost-btn" [href]="video(j)" target="_blank">看影片</a><button class="cta small" type="button" (click)="approve(j)">放行</button>}

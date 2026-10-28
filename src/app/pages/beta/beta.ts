@@ -5,14 +5,14 @@ export interface BetaMe { id: string; name: string; admin: boolean; disabled?: b
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
 export interface BetaJob { id: string; songId: string; kind: 'prep' | 'make'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string }
 
-/** Set aside when a song is uploaded (vocals split, lyric timing); mirrors RESERVE.prep in scripts/lyric-vj/beta/store.mts. */
-export const PREP_RESERVE = 0.5;
+/** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
+export const PREP_PRICE = 0.5;
 
-/** The three versions; `reserve` mirrors RESERVE in scripts/lyric-vj/beta/store.mts. */
-export const TIER_INFO: Record<BetaTier, { name: string; about: string; reserve: number; minutes: string }> = {
-  none: { name: '文字動態版', about: '只有歌詞文字與圖形動態，沒有插圖。', reserve: 4, minutes: '約 25 分鐘' },
-  img: { name: '插圖版', about: '文字動態加上配合歌詞的插圖道具。', reserve: 6, minutes: '約 30 分鐘' },
-  hybrid: { name: '故事版', about: '依歌詞編出故事，有角色與畫面。', reserve: 16, minutes: '約 45 分鐘' },
+/** The three versions; `price` mirrors PRICE in scripts/lyric-vj/beta/store.mts. */
+export const TIER_INFO: Record<BetaTier, { name: string; about: string; price: number; minutes: string }> = {
+  none: { name: '文字動態版', about: '只有歌詞文字與圖形動態，沒有插圖。', price: 4, minutes: '約 25 分鐘' },
+  img: { name: '插圖版', about: '文字動態加上配合歌詞的插圖道具。', price: 6, minutes: '約 30 分鐘' },
+  hybrid: { name: '故事版', about: '依歌詞編出故事，有角色與畫面。', price: 16, minutes: '約 45 分鐘' },
 };
 
 /** One step of a job as the person reads it; `phases` are the ##PHASE labels its script prints for it. */

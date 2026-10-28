@@ -4,7 +4,7 @@ import { BetaJob, BetaMe, BetaSong, TIER_INFO } from './beta';
 
 const POLL_MS = 5000;
 const STATUS: Record<BetaJob['status'], string> = { queued: '排隊中', running: '執行中', done: '完成', failed: '失敗', admin: '等你確認' };
-type AdminJob = BetaJob & { userId: string; reservedUsd: number; costUsd?: number; error?: string };
+type AdminJob = BetaJob & { userId: string; reservedUsd: number; priceUsd?: number; costUsd?: number; unsettled?: string; error?: string };
 
 /** The beta admin: invite people, set limits, watch the queue, retry failed jobs, release held videos. */
 @Component({
@@ -94,7 +94,7 @@ export class BetaAdminPage {
       };
       const [u, jobs, songs] = await Promise.all([get('/beta/admin/users'), get('/beta/admin/jobs'), get('/beta/songs')]);
       this.users.set(u.users);
-      this.total.set({ globalLimitUsd: u.globalLimitUsd, spentUsd: u.spentUsd });
+      this.total.set({ globalLimitUsd: u.globalLimitUsd, spentUsd: u.platformSpentUsd ?? u.spentUsd });
       this.jobs.set(jobs);
       this.songs.set(songs);
     } catch (e) {

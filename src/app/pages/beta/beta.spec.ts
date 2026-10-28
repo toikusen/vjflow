@@ -1,4 +1,4 @@
-import { BetaJob, BetaSong, jobProgress, JOB_STEPS, songStage } from './beta';
+import { BetaJob, BetaSong, jobProgress, JOB_STEPS, PREP_PRICE, songStage, TIER_INFO } from './beta';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'prep', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
@@ -45,5 +45,12 @@ describe('jobProgress', () => {
 
   it('a queued job has not started', () => {
     expect(jobProgress(job({ kind: 'make', tier: 'none', status: 'queued' }))).toMatchObject({ label: '排隊中', pct: 0 });
+  });
+});
+
+describe('prices', () => {
+  it('shows the fixed price of each version', () => {
+    expect(PREP_PRICE).toBe(0.5);
+    expect([TIER_INFO.none.price, TIER_INFO.img.price, TIER_INFO.hybrid.price]).toEqual([4, 6, 16]);
   });
 });

@@ -72,20 +72,33 @@ export function pump(q: Queue) {
   mkdirSync(q.logDir, { recursive: true });
   const log = join(q.logDir, `${job.id}.log`);
   // the keys only reach the job's process, never the pages or the records
-  const child = spawn('bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('bash', ['-c', cmd], { env: { ...process.env, ...(q.env ?? keyEnv()) }, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+  let fused = false;
   let rest = '';
   const take = (b: Buffer) => {
     appendFileSync(log, b);
     const lines = (rest + b.toString()).split(/\r|\n/);
     rest = lines.pop() ?? '';
     if (lines.map((l) => readLine(job, l)).some(Boolean)) q.persist();
+    // the fuse: a run that costs more than twice its price is stopped (the whole group, or bash's children keep the pipe open)
+    if (!fused && job.costUsd !== undefined && job.costUsd > 2 * (job.priceUsd ?? Infinity)) {
+      fused = true;
+      job.error = '成本超過上限，已通知管理者';
+      try { process.kill(-child.pid!, 'SIGTERM'); } catch { /* already gone */ }
+    }
   };
   child.stdout.on('data', take);
   child.stderr.on('data', take);
   child.on('close', (code) => {
     if (rest) readLine(job, rest);
     // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10
-    Object.assign(job, { status: code === 0 ? 'done' : code === 10 ? 'admin' : 'failed', endedAt: now(), error: code === 0 || code === 10 ? undefined : `exit ${code}` });
+    const failed = code !== 0 && code !== 10;
+    Object.assign(job, {
+      status: code === 0 ? 'done' : code === 10 ? 'admin' : 'failed',
+      endedAt: now(),
+      error: failed ? (fused ? job.error : `exit ${code}`) : undefined,
+      unsettled: failed ? job.phase : undefined,
+    });
     q.persist();
     pump(q);
   });

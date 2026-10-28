@@ -187,3 +187,40 @@ test('a legacy make job still queued at start gets a run folder and its video do
   assert.equal(res.status, 200);
   beta.server.close();
 });
+
+async function runStub(script: string) {
+  const root = mkdtempSync(join(tmpdir(), 'beta-'));
+  const db = emptyDb();
+  const admin = invite(db, 'Admin', 100, true);
+  const tester = invite(db, 'Tester', 10);
+  db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  save(join(root, 'db.json'), db);
+  const beta = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: () => script });
+  await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
+  const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
+  const as = (token: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, headers: { cookie: `vjb=${token}`, 'content-type': 'application/json' } });
+  return { beta, admin: as(admin.token), tester: as(tester.token) };
+}
+
+test('a job whose cost passes twice its price is stopped and not charged', async () => {
+  const t = await runStub("echo '##COST 13 x'; sleep 5");
+  const t0 = Date.now();
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 40 && t.beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  const [job] = t.beta.db.jobs;
+  assert.deepEqual([job.status, job.error, job.priceUsd], ['failed', '成本超過上限，已通知管理者', 6]);
+  assert.ok(Date.now() - t0 < 4000);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 0);
+  t.beta.server.close();
+});
+
+test('a failed job records the step it was in as unsettled', async () => {
+  const t = await runStub("echo '##PHASE 畫道具'; echo '##COST 1.5 x'; exit 1");
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 40 && t.beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  const jobs = await (await t.admin('/beta/admin/jobs')).json();
+  assert.equal(jobs[0].unsettled, '畫道具');
+  assert.equal(jobs[0].priceUsd, 6);
+  assert.equal((await (await t.admin('/beta/admin/users')).json()).platformSpentUsd, 1.5);
+  t.beta.server.close();
+});

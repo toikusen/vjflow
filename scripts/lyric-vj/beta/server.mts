@@ -370,6 +370,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!song) return { error: '找不到這首歌' };
     const dir = songDir(root, song.id);
     if (job.kind === 'prep') return `bash scripts/lyric-vj/beta/prep.sh ${q(dir)} ${q(song.language)} ${q([song.artist, song.title].filter(Boolean).join(' - '))}`;
+    if (job.kind === 'concept') return `bash scripts/lyric-vj/beta/concept.sh ${q(dir)} ${q(runPath(root, job))}`;
     return `bash scripts/lyric-vj/beta/make.sh ${q(dir)} ${q(job.tier ?? '')} ${q(runPath(root, job))}`;
   };
   const beta = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });

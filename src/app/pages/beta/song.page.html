@@ -130,39 +130,16 @@
         </section>
 
         @if (mine()) {
-          <section class="make" aria-labelledby="make-h">
-            <div class="section-head">
-              <h2 id="make-h">製作新版本</h2>
-            </div>
-            <div class="tiers" role="radiogroup" aria-label="製作新版本" (keydown)="moveTier($event)">
-              @for (t of tierList; track t.id) {
-                <button
-                  type="button"
-                  class="tier"
-                  role="radio"
-                  [attr.data-tier]="t.id"
-                  [attr.aria-checked]="chosen() === t.id"
-                  [attr.tabindex]="chosen() === t.id ? 0 : -1"
-                  [class.on]="chosen() === t.id"
-                  [disabled]="!!v.active"
-                  (click)="picked.set(t.id)"
-                >
-                  <span class="tier-head">
-                    <strong>{{ t.name }}</strong>
-                    <app-price class="tier-price" [amount]="t.price" digits="short" [plain]="true" />
-                  </span>
-                  <span class="tier-about">{{ t.about }}</span>
-                  <span class="tier-meta">{{ t.minutes }}</span>
-                </button>
-              }
-            </div>
-            <div class="make-foot">
-              <button class="button primary" type="button" [disabled]="!!v.active" (click)="confirmMake(s, chosen())">製作{{ tierName(chosen()) }} · <app-price [amount]="tierPrice(chosen())" digits="short" [plain]="true" /></button>
-              @if (v.active) {
-                <p class="fine">目前有工作在進行，完成後才能再製作。</p>
-              }
-            </div>
-          </section>
+          <app-make-form
+            [song]="s"
+            [jobs]="jobs()"
+            [active]="!!v.active"
+            [left]="left()"
+            [made]="madeTiers(v)"
+            [(tier)]="makeTier"
+            [(feeling)]="makeFeeling"
+            (started)="started($event)"
+          />
         }
       }
     }

@@ -1,9 +1,10 @@
-import { Component, computed, effect, signal } from '@angular/core';
+import { Component, computed, effect, signal, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { SongTimeline, toLrc, toSrt } from '../../lyric-vj/timeline';
 import { BetaFeedback, BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, coverTint, feedbackLine, minutesBetween, songKind, songView, SongView, TIER_INFO } from './beta';
 import { BetaPage } from './beta.page';
+import { MakeFormComponent } from './make-form.component';
 import { ReportFormComponent } from './report-form.component';
 import { clock, failureCard, heroTone, jobTitle, jobTotal, stamp, stepClocks } from './song';
 import { BalanceComponent } from './ui/balance.component';
@@ -18,7 +19,7 @@ const RETRY_CHIP: StatusChip = { icon: '↻', label: '自動重試中 · 第一�
 /** One song (`/my/song?id=`): hero, the job in progress (or the failure), every finished result, then 製作新版本. */
 @Component({
   selector: 'app-beta-song-page',
-  imports: [NgTemplateOutlet, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
+  imports: [NgTemplateOutlet, MakeFormComponent, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
   templateUrl: './song.page.html',
   styleUrl: './song.page.scss',
 })
@@ -62,15 +63,11 @@ export class BetaSongPage extends BetaPage {
   protected readonly reportCount = (j: BetaJob) => this.reports()[j.id]?.length ?? 0;
   /** The latest report's verdict and day (「最近：有問題・10-28」); the count is already in the facts beside it. */
   protected readonly lastReport = (j: BetaJob) => feedbackLine(this.reports()[j.id] ?? []).split('・').slice(1).join('・');
-  protected readonly tierList = TIERS.map((id) => ({ id, ...TIER_INFO[id] }));
-  protected readonly tierName = (t?: BetaTier) => (t ? TIER_INFO[t].name : '');
-  protected readonly tierPrice = (t: BetaTier) => TIER_INFO[t].price;
-  protected readonly picked = signal<BetaTier | null>(null);
-  /** The tier the person picked, else the first one this song has no result for yet. */
-  protected readonly chosen = computed<BetaTier>(() => {
-    const made = new Set(this.sv()?.results.map((j) => j.tier));
-    return this.picked() ?? TIERS.find((t) => !made.has(t)) ?? TIERS[0];
-  });
+  /** The make form's tier and feeling; a redo from a report sets them (see `redo`). */
+  protected readonly makeTier = signal<BetaTier | undefined>(undefined);
+  protected readonly makeFeeling = signal('');
+  private readonly makeForm = viewChild(MakeFormComponent);
+  protected readonly madeTiers = (v: SongView) => v.results.map((j) => j.tier);
   protected readonly minutes = (j: BetaJob) => minutesBetween(j.startedAt, j.endedAt);
   protected readonly videoUrl = (j: BetaJob) => `/beta/jobs/${j.id}/video`;
   /** The result card whose report form is showing (one at a time). */
@@ -142,33 +139,15 @@ export class BetaSongPage extends BetaPage {
     void video.play().catch(() => undefined);
   }
 
-  /** Arrow keys move the choice inside the tier radio group. */
-  protected moveTier(e: KeyboardEvent) {
-    const step = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? -1 : 0;
-    if (!step) return;
-    e.preventDefault();
-    const next = TIERS[(TIERS.indexOf(this.chosen()) + step + TIERS.length) % TIERS.length];
-    this.picked.set(next);
-    (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[data-tier="${next}"]`)?.focus();
+  /** Opens 製作新版本 with a tier chosen and 想要的感覺 filled in (a redo from a report), and scrolls to it. */
+  redo(tier: BetaTier, feeling: string) {
+    this.makeTier.set(tier);
+    this.makeFeeling.set(feeling);
+    this.makeForm()?.reveal();
   }
 
-  protected confirmMake(song: BetaSong, tier: BetaTier) {
-    const t = TIER_INFO[tier];
-    this.ask.set({
-      eyebrow: `${song.title} · ${t.name}`,
-      title: `製作${t.name}`,
-      body: `${t.about}製作${t.minutes}，開始後無法取消；可以離開頁面，完成後回來下載。`,
-      cost: t.price,
-      go: () => this.make(song, tier),
-    });
-  }
-
-  private async make(song: BetaSong, tier: BetaTier) {
-    const r = await fetch(`/beta/songs/${song.id}/make`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tier }) });
-    // a proxy error page (502) is not JSON
-    const why = async () => ((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `HTTP ${r.status}`;
-    this.message.set(r.ok ? `「${song.title}」已開始排隊製作${TIER_INFO[tier].name}。` : `無法開始：${await why()}`);
-    if (r.ok) this.picked.set(null);
+  protected async started(text: string) {
+    this.message.set(text);
     await this.poll();
   }
 }

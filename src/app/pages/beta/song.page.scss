@@ -644,80 +644,6 @@ a {
   margin-top: 0;
 }
 
-/* 製作新版本 (the old tier cards until the make form replaces them) */
-
-.tiers {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
-}
-
-.tier {
-  display: grid;
-  gap: 8px;
-  padding: 18px 20px;
-  font: inherit;
-  color: inherit;
-  text-align: left;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-
-  &:hover:not(:disabled) {
-    border-color: var(--border-strong);
-  }
-
-  &.on {
-    border-color: var(--accent);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-}
-
-.tier-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-
-  strong {
-    font-size: 16px;
-    font-weight: 700;
-  }
-}
-
-.tier-price {
-  font: 700 20px var(--font-display);
-}
-
-.tier-about {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.tier-meta {
-  font: 500 11px var(--font-mono);
-  color: var(--muted);
-}
-
-.make-foot {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 16px;
-  margin-top: 16px;
-}
-
-.fine {
-  font-size: 13px;
-  color: var(--muted);
-}
-
 /* tablet: the hero buttons and the progress list wrap under */
 
 @media (max-width: 1100px) {
@@ -969,13 +895,5 @@ a {
     .button.strong {
       flex: 1;
     }
-  }
-
-  .tiers {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .make-foot .button {
-    width: 100%;
   }
 }

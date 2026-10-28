@@ -11,11 +11,14 @@ export const PREP_PRICE = 0.5;
 /** The concept fee every version starts with; mirrors PRICE.concept in scripts/lyric-vj/beta/store.mts. */
 export const CONCEPT_PRICE = 2.5;
 
-/** The three versions; `price` mirrors PRICE in scripts/lyric-vj/beta/store.mts. */
-export const TIER_INFO: Record<BetaTier, { name: string; about: string; price: number; minutes: string }> = {
-  none: { name: '文字動態版', about: '只有歌詞文字與圖形動態，沒有插圖。', price: 4, minutes: '約 25 分鐘' },
-  img: { name: '插圖版', about: '文字動態加上配合歌詞的插圖道具。', price: 6, minutes: '約 30 分鐘' },
-  hybrid: { name: '故事版', about: '依歌詞編出故事，有角色與畫面。', price: 16, minutes: '約 45 分鐘' },
+/**
+ * The three versions. `concept` and `rest` mirror PRICE.concept and PRICE[tier] in scripts/lyric-vj/beta/store.mts;
+ * `price` is what the person pays in all (TIER_TOTAL there); `min` is the rough minutes from concept to video.
+ */
+export const TIER_INFO: Record<BetaTier, { name: string; about: string; concept: number; rest: number; price: number; min: number }> = {
+  none: { name: '文字動態版', about: '只有歌詞文字與圖形動態，沒有插圖。', concept: CONCEPT_PRICE, rest: 1.5, price: CONCEPT_PRICE + 1.5, min: 25 },
+  img: { name: '插圖版', about: '文字動態加上配合歌詞的插圖道具。', concept: CONCEPT_PRICE, rest: 3.5, price: CONCEPT_PRICE + 3.5, min: 30 },
+  hybrid: { name: '故事版', about: '依歌詞編出故事，有角色與畫面。', concept: CONCEPT_PRICE, rest: 13.5, price: CONCEPT_PRICE + 13.5, min: 45 },
 };
 
 /** One step of a job as the person reads it; `phases` are the ##PHASE labels its script prints for it. */

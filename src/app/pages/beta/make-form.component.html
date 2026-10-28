@@ -1,0 +1,140 @@
+<section class="make" aria-labelledby="make-h">
+  <div class="head">
+    <h2 id="make-h">製作新版本</h2>
+    <span class="desk">先花 <app-price [amount]="conceptPrice" digits="short" [plain]="true" /> 讓導演提概念，你確認後才開始製作完整影片。</span>
+  </div>
+
+  <div class="tiers" role="radiogroup" aria-label="方案" (keydown)="moveTier($event)">
+    @for (t of tiers; track t.id) {
+      <button
+        type="button"
+        class="tier"
+        role="radio"
+        [attr.data-id]="t.id"
+        [attr.aria-checked]="chosen() === t.id"
+        [attr.tabindex]="chosen() === t.id ? 0 : -1"
+        [class.on]="chosen() === t.id"
+        (click)="tier.set(t.id)"
+      >
+        <span class="radio" aria-hidden="true"></span>
+        <span class="t-name">{{ t.name }}</span>
+        <app-price class="t-price" [amount]="t.price" digits="short" [plain]="true" />
+        <span class="t-about">{{ t.about }}</span>
+        <span class="t-meta">
+          <span>概念 {{ t.concept }} + 製作 {{ t.rest }}</span>
+          <span>約 {{ t.min }} 分</span>
+        </span>
+      </button>
+    }
+  </div>
+
+  <div class="wish">
+    <label class="feel">
+      <span class="label">想要的感覺<span class="opt">（選填）</span></span>
+      <span class="counter" [class.over]="count() > maxFeeling">{{ count() }} / {{ maxFeeling }}</span>
+      <textarea
+        rows="3"
+        [attr.maxlength]="maxFeeling"
+        placeholder="例如：宮崎駿那種溫暖的手繪感、九〇年代日本動畫、深夜城市"
+        [value]="feeling()"
+        (input)="feeling.set($any($event.target).value)"
+      ></textarea>
+    </label>
+    <div class="refs" role="group" aria-labelledby="refs-h">
+      <span class="label" id="refs-h">參考圖<span class="opt">（選填 · {{ refs().length }} / {{ maxRefs }}）</span></span>
+      <div class="thumbs">
+        @for (r of refs(); track r) {
+          <span class="thumb">
+            <img [src]="refUrl(r)" alt="參考圖 {{ $index + 1 }}" />
+            <button class="x" type="button" [attr.aria-label]="'刪除參考圖 ' + ($index + 1)" (click)="remove(r)">×</button>
+          </span>
+        }
+        @if (refs().length < maxRefs) {
+          <label class="add" [class.busy]="uploading()">
+            <input type="file" [accept]="accept" [disabled]="uploading()" (change)="upload($any($event.target))" />
+            <span aria-hidden="true">{{ uploading() ? '…' : '+' }}</span>
+            <span class="sr">新增參考圖</span>
+          </label>
+        }
+      </div>
+      @if (refError()) {
+        <p class="ref-error" role="alert">{{ refError() }}</p>
+      }
+    </div>
+  </div>
+
+  <div class="styles-head">
+    <span class="label" id="styles-h">風格</span>
+    @if (many()) {
+      <span class="hint desk">← 左右捲動 · 1–6 / {{ styles().length }} →</span>
+      <span class="hint phone">全部 {{ styles().length }} 種 →</span>
+    }
+  </div>
+  <div class="styles" role="radiogroup" aria-labelledby="styles-h" [class.many]="many()" (keydown)="moveStyle($event)">
+    <button
+      type="button"
+      class="style director"
+      role="radio"
+      data-id=""
+      [attr.aria-checked]="style() === null"
+      [attr.tabindex]="style() === null ? 0 : -1"
+      [class.on]="style() === null"
+      (click)="style.set(null)"
+    >
+      <span class="radio" aria-hidden="true"></span>
+      <span class="s-text">
+        <strong>交給導演</strong>
+        <small>導演讀過歌詞後，挑最適合這首歌的風格。</small>
+      </span>
+    </button>
+    @for (st of styles(); track st.id) {
+      <button
+        type="button"
+        class="style"
+        role="radio"
+        [attr.data-id]="st.id"
+        [attr.aria-checked]="style() === st.id"
+        [attr.tabindex]="style() === st.id ? 0 : -1"
+        [class.on]="style() === st.id"
+        (click)="style.set(st.id)"
+      >
+        <span class="collage" aria-hidden="true">
+          @if (st.image; as src) {
+            <img class="probe" [src]="src" alt="" (load)="readGrid(st.id, $any($event.target))" />
+            @if (tiles(st.id); as ts) {
+              @for (t of ts; track $index) {
+                <span class="tile"><i [style.background-image]="'url(' + src + ')'" [style.--cols]="t.cols" [style.--rows]="t.rows" [style.--c]="t.col" [style.--r]="t.row"></i></span>
+              }
+            }
+          }
+        </span>
+        <span class="s-text">
+          <strong>{{ st.name }}</strong>
+          <small>{{ st.suits }}</small>
+        </span>
+      </button>
+    }
+  </div>
+
+  @if (error()) {
+    <p class="error" role="alert">{{ error() }}</p>
+  }
+
+  <div class="bar">
+    <button class="button primary go" type="button" [disabled]="!!block()" (click)="confirm()">產生概念 · <app-price [amount]="conceptPrice" digits="short" [plain]="true" /></button>
+    <p class="bar-note">
+      @if (block(); as why) {
+        <span class="why">{{ why }}</span>
+      }
+      <span class="rest">接受概念後再扣製作費 <strong><app-price [amount]="info().rest" digits="short" [plain]="true" /></strong>，中途不會另外收費。</span>
+    </p>
+    <dl class="sum">
+      <div><dt>這次費用</dt><dd><app-price [amount]="conceptPrice" [plain]="true" /></dd></div>
+      @if (bill().after !== undefined && !bill().short) {
+        <div><dt>扣除後剩餘</dt><dd><app-price [amount]="bill().after!" [plain]="true" /></dd></div>
+      }
+    </dl>
+  </div>
+</section>
+
+<app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />

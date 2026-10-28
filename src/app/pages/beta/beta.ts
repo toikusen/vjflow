@@ -4,7 +4,20 @@ import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
+
+/** What a concept job was asked for (`job.inputs` on the server). */
+export interface BetaJobInputs { concept?: string; style?: string; refs?: string[]; note?: string; from?: string }
+
+/**
+ * A finished concept as the gate shows it; mirrors ConceptSummary in scripts/lyric-vj/beta/concept-summary.mts
+ * (the server leaves `candidateReason` out for the person). `concept` is the story text, `stills` file names under stills/.
+ */
+export interface ConceptSummary {
+  language: string; languageName: string; font: string; palette: string[];
+  concept: string; briefReading?: string; concerns?: string; stills: string[];
+  interludes?: { start: number; end: number; mode: 'backdrop' | 'pictures'; reason?: string }[];
+}
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
 export const PREP_PRICE = 0.5;

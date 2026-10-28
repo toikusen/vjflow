@@ -114,6 +114,14 @@ describe('songView', () => {
     expect(songView(confirmed, [prep, c('2', { decision: 'adjusted' }), c('3')]).concept?.id).toBe('3');
     expect(songView(confirmed, [prep, c('2')]).results).toEqual([]);
   });
+  it('keeps a pending concept (with its summary and concerns) beside older results, on the 3rd attempt too', () => {
+    const c = (id: string, o: Partial<BetaJob> = {}) => job({ id, kind: 'concept', tier: 'hybrid', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
+    const summary = { language: 'neon', languageName: '霓虹城市', font: 'Noto Sans TC', palette: ['#112233'], concept: '港口', concerns: '節奏慢', stills: ['still_10.00.png'] };
+    const made = make('2');
+    const third = c('5', { concept: summary });
+    const v = songView(confirmed, [prep, made, c('3', { decision: 'adjusted' }), c('4', { decision: 'redone' }), third]);
+    expect([v.concept, v.concept?.concept?.concerns, v.results, songKind(v)]).toEqual([third, '節奏慢', [made], 'concept']);
+  });
   it('lists results newest first, held ones included', () => {
     const [a, b, c] = [make('1'), make('2', { status: 'admin' }), make('3', { status: 'failed' })];
     expect(songView(confirmed, [prep, a, b, c]).results).toEqual([b, a]);

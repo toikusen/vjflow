@@ -1,0 +1,142 @@
+@let h = head();
+<section class="concept" aria-labelledby="concept-h">
+  <header class="c-head">
+    <h2 id="concept-h">{{ h.title }}</h2>
+    <span class="attempt">第 {{ h.attempt }} 次 · 最多 3 次</span>
+    <p class="fee">概念費 <app-price [amount]="job().priceUsd ?? conceptPrice" digits="short" [plain]="true" /> 已扣 · 接受後再扣製作 <app-price [amount]="h.rest" digits="short" [plain]="true" /></p>
+  </header>
+
+  @if (summary(); as s) {
+    @if (concerns()) {
+      <div class="concerns" role="note">
+        <span class="bang" aria-hidden="true">!</span>
+        <div>
+          <p class="cc-title">導演覺得「{{ s.languageName }}」不太適合這首歌</p>
+          <p class="cc-text">{{ concerns() }}</p>
+          <label class="check">
+            <input type="checkbox" [checked]="confirmed()" (change)="confirmed.set($any($event.target).checked)" />
+            <span>我了解，仍要用這個風格</span>
+          </label>
+        </div>
+      </div>
+    }
+
+    <div class="c-grid">
+      <div class="c-main">
+        @if (s.stills.length) {
+          <ul class="stills">
+            @for (n of s.stills; track n; let i = $index) {
+              <li>
+                <button class="still" type="button" [attr.aria-label]="'放大' + label(n, i)" (click)="zoomed.set(n)">
+                  <img [src]="stillUrl(n)" [alt]="label(n, i)" />
+                  <span class="s-label">{{ label(n, i) }}</span>
+                  <span class="s-zoom" aria-hidden="true">⤢</span>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        <dl class="info">
+          <div><dt>風格</dt><dd>{{ s.languageName }}</dd></div>
+          @if (s.font) {
+            <div><dt>字型</dt><dd>{{ s.font }}</dd></div>
+          }
+          @if (s.palette.length) {
+            <div>
+              <dt>配色</dt>
+              <dd class="swatches">
+                @for (c of s.palette.slice(0, 5); track $index) {
+                  <span class="swatch" [style.background]="c" [attr.title]="c"></span>
+                }
+                <span class="sr">{{ s.palette.slice(0, 5).join('、') }}</span>
+              </dd>
+            </div>
+          }
+        </dl>
+
+        @if (s.concept) {
+          <div class="story">
+            <h3>故事概念</h3>
+            <p>{{ s.concept }}</p>
+          </div>
+        }
+
+        @if (s.briefReading) {
+          <div class="box">
+            <h3>你寫的感覺，導演這樣理解</h3>
+            <p>{{ s.briefReading }}</p>
+          </div>
+        }
+
+        @if (interludes().length) {
+          <div class="interludes">
+            <h3>間奏處理</h3>
+            <ul>
+              @for (l of interludes(); track $index) {
+                <li>{{ l }}</li>
+              }
+            </ul>
+          </div>
+        }
+      </div>
+
+      <aside class="c-side">
+        <div class="accept-bar">
+          <button class="button primary go" type="button" [disabled]="!!acceptWhy()" (click)="confirm('accept')">接受，開始製作 · <app-price [amount]="h.rest" digits="short" [plain]="true" /></button>
+          @if (acceptWhy(); as why) {
+            <p class="why">{{ why }}</p>
+          }
+          @if (error()) {
+            <p class="error" role="alert">{{ error() }}</p>
+          }
+        </div>
+        <div class="divider" aria-hidden="true"></div>
+        @if (h.more) {
+          <div class="option">
+            <div class="o-head">
+              <h3>依意見調整</h3>
+              <app-price class="o-price" [amount]="conceptPrice" digits="short" [plain]="true" />
+            </div>
+            <p class="o-text">保留這個方向，告訴導演要改哪裡。</p>
+            <label class="sr" for="concept-note">想調整的地方</label>
+            <textarea id="concept-note" rows="1" [maxLength]="maxNote" placeholder="例如：霓虹少一點，文字再大一些" [value]="note()" (input)="note.set($any($event.target).value)"></textarea>
+            @if (noteCount() > 0) {
+              <p class="count">{{ noteCount() }} / {{ maxNote }}</p>
+            }
+            <button class="button o-go" type="button" [disabled]="!!adjustWhy()" (click)="confirm('adjust')">
+              @if (adjustWhy(); as why) {
+                {{ why }}
+              } @else {
+                送出意見 · <app-price [amount]="conceptPrice" digits="short" [plain]="true" />
+              }
+            </button>
+          </div>
+          <div class="option row">
+            <div>
+              <h3>換一個方向</h3>
+              <p class="o-text">導演重新提一個完全不同的概念。</p>
+              @if (redoWhy(); as why) {
+                <p class="why left">{{ why }}</p>
+              }
+            </div>
+            <button class="button" type="button" [disabled]="!!redoWhy()" (click)="confirm('redo')"><app-price [amount]="conceptPrice" digits="short" [plain]="true" /></button>
+          </div>
+        } @else {
+          <p class="limit">已試過 3 次，請聯絡管理者</p>
+        }
+      </aside>
+    </div>
+  } @else {
+    <p class="missing">讀不到這個概念的內容，請聯絡管理者。</p>
+  }
+</section>
+
+@if (zoomed(); as z) {
+  <dialog #lightbox class="lightbox" aria-label="示意畫面" (cancel)="$event.preventDefault(); closeZoom()" (click)="zoomBackdrop($event)">
+    <img [src]="stillUrl(z)" [alt]="label(z, summary()?.stills?.indexOf(z) ?? 0)" />
+    <button class="button close" type="button" aria-label="關閉" (click)="closeZoom()">×</button>
+  </dialog>
+}
+
+<app-confirm [ask]="ask()" [left]="left()" (closed)="ask.set(null)" />

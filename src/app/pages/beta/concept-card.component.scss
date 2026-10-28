@@ -1,0 +1,542 @@
+// 概念卡 (2a); the phone layout is not drawn (4b), so it follows 2e: one column, the paying button sticky above the tabs.
+
+:host {
+  display: block;
+}
+
+h2, h3, p, dl, dd, ul {
+  margin: 0;
+}
+
+ul {
+  padding: 0;
+  list-style: none;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.concept {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  // clip, not hidden: hidden would make the card a scroll container and break the sticky column
+  overflow: clip;
+}
+
+.c-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--border);
+
+  h2 {
+    font: 700 20px var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}
+
+.attempt {
+  padding: 4px 10px;
+  font: 600 12px var(--font-mono);
+  color: var(--text-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.fee {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* the director's concerns */
+
+.concerns {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 20px 28px 0;
+  padding: 14px 18px;
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 12px;
+}
+
+.bang {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  font: 700 12px var(--font-mono);
+  color: var(--warn-bg);
+  background: var(--warn);
+  border-radius: 50%;
+}
+
+.cc-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.cc-text {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e6d9b3;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+
+  input {
+    appearance: none;
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    border: 2px solid var(--warn);
+    border-radius: 5px;
+    cursor: pointer;
+
+    &:checked {
+      background: var(--warn);
+
+      &::after {
+        content: '✓';
+        font: 800 12px/1 var(--font-body);
+        color: var(--warn-bg);
+      }
+    }
+  }
+}
+
+/* body */
+
+.c-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 28px;
+  padding: 22px 28px;
+}
+
+.c-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.stills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.still {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg, #2d2d6a 0 10px, #1d1d44 10px 20px);
+  border: 0;
+  border-radius: 10px;
+  cursor: zoom-in;
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.s-label {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  padding: 3px 7px;
+  font: 500 11px var(--font-mono);
+  color: var(--text-2);
+  background: #0f1114b3;
+  border-radius: 5px;
+}
+
+.s-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+  color: var(--text-2);
+  background: #0f1114b3;
+  border-radius: 7px;
+}
+
+.info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 28px;
+  padding: 14px 18px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+
+  dt {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  dd {
+    margin-top: 3px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+}
+
+.info dd.swatches {
+  display: flex;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #ffffff22;
+  border-radius: 6px;
+}
+
+h3 {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.story p {
+  margin-top: 6px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #e2e5e9;
+  text-wrap: pretty;
+}
+
+.box,
+.interludes {
+  padding: 14px 18px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+
+  p,
+  ul {
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-2);
+    text-wrap: pretty;
+  }
+}
+
+.missing {
+  padding: 22px 28px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* decisions */
+
+.c-side {
+  position: sticky;
+  top: 20px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accept-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.go {
+  width: 100%;
+  padding: 16px 18px;
+  font-size: 15px;
+  border-radius: 12px;
+}
+
+.why {
+  margin-top: -4px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+
+  &.left {
+    margin-top: 6px;
+    text-align: left;
+  }
+}
+
+.error {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--bad);
+  background: var(--bad-bg);
+  border: 1px solid var(--bad-border);
+  border-radius: 10px;
+}
+
+.divider {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--border);
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+
+  h3 {
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  &.row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+
+    .button {
+      flex: none;
+      min-height: 0;
+      padding: 9px 14px;
+      font-size: 13px;
+      border-color: var(--border-strong);
+      border-radius: 9px;
+    }
+  }
+
+  textarea {
+    width: 100%;
+    min-height: 40px;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    resize: vertical;
+
+    &::placeholder {
+      color: var(--faint);
+    }
+  }
+}
+
+.o-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.o-price {
+  font: 700 13px var(--font-display);
+}
+
+.o-text {
+  margin-top: 3px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+
+  .o-head + & {
+    margin-top: 0;
+  }
+}
+
+.count {
+  margin-top: -6px;
+  font: 500 11px var(--font-mono);
+  color: var(--muted);
+  text-align: right;
+}
+
+.o-go {
+  min-height: 0;
+  padding: 10px;
+  font-size: 13px;
+  white-space: normal;
+  border-color: var(--border-strong);
+  border-radius: 9px;
+}
+
+.limit {
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+}
+
+/* the still lightbox (not drawn, 4b): the picture alone over a dark backdrop */
+
+.lightbox {
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 40px;
+  background: transparent;
+  border: 0;
+
+  &[open] {
+    display: grid;
+    place-items: center;
+  }
+
+  &::backdrop {
+    background: #0f1114eb;
+  }
+
+  // stills are 16:9; as wide as fits the screen both ways, small mock images included
+  img {
+    width: min(100%, 1600px, calc((100dvh - 80px) * 16 / 9));
+    height: auto;
+    border-radius: 10px;
+    box-shadow: var(--shadow-float);
+  }
+}
+
+.close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 44px;
+  padding: 0;
+  font-size: 22px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+@media (max-width: 1100px) {
+  .c-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+  }
+}
+
+@media (max-width: 720px) {
+  .c-head {
+    gap: 8px 10px;
+    padding: 16px;
+
+    h2 {
+      font-size: 18px;
+    }
+  }
+
+  .fee {
+    flex-basis: 100%;
+    margin-left: 0;
+    font-size: 12px;
+  }
+
+  .concerns {
+    margin: 16px 16px 0;
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  // one column; the side melts into it so the accept bar can stick over the whole card
+  .c-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .c-side {
+    display: contents;
+  }
+
+  .stills {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 82%;
+    margin: 0 -16px;
+    padding: 0 16px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scroll-padding: 0 16px;
+    scrollbar-width: none;
+
+    li {
+      scroll-snap-align: start;
+    }
+  }
+
+  .accept-bar {
+    position: sticky;
+    // the shell's bottom tabs are sticky too; sit right above them
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    z-index: 5;
+    order: 2;
+    margin: 0 -16px;
+    padding: 20px 16px 10px;
+    background: linear-gradient(to bottom, transparent, var(--surface) 20px);
+  }
+
+  .go {
+    height: 48px;
+    padding-block: 0;
+  }
+
+  .divider {
+    display: none;
+  }
+
+  .option,
+  .limit {
+    order: 1;
+  }
+
+  .lightbox {
+    padding: 16px;
+  }
+}

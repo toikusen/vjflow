@@ -86,6 +86,12 @@
           <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: a, prep: false }" />
         }
 
+        @if (v.concept; as c) {
+          @if (mine()) {
+            <app-concept-card [song]="s" [job]="c" [jobs]="jobs()" [active]="!!v.active" [left]="left()" (decided)="started($event)" />
+          }
+        }
+
         <section class="results" aria-labelledby="results-h">
           <div class="section-head">
             <h2 id="results-h">成品</h2>

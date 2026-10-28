@@ -4,13 +4,14 @@
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
+import { LANGUAGES, LanguageId } from '../../../src/app/lyric-vj/languages';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
 import { addFeedback, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
+import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -77,7 +78,22 @@ const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin &&
 const videoDuration = (root: string, j: Job) => {
   try { const d = JSON.parse(readFileSync(join(runPath(root, j), 'song.json'), 'utf8')).duration; return typeof d === 'number' && d >= 0 ? d : undefined; } catch { return undefined; }
 };
-const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto });
+const styleCache = new Map<string, string>();
+/** The Chinese name of a make job's design language, from its treatment.json; cached by job id once found. */
+export function jobStyle(root: string, job: Job): string | undefined {
+  if (job.kind !== 'make') return undefined;
+  const hit = styleCache.get(job.id);
+  if (hit) return hit;
+  try {
+    const id = JSON.parse(readFileSync(join(workPath(root, job), 'base', 'treatment.json'), 'utf8'))?.design?.language as LanguageId;
+    const name = LANGUAGES[id]?.name;
+    if (name) styleCache.set(job.id, name);
+    return name;
+  } catch {
+    return undefined;
+  }
+}
+const publicJob = (j: Job, root?: string) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto, style: root && (j.status === 'done' || j.status === 'admin') ? jobStyle(root, j) : undefined });
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
 /**
@@ -153,7 +169,7 @@ export function createBetaServer(o: BetaOptions) {
       const user = userByToken(db, cookie(req, 'vjb'));
       if (!user) return json(res, 401, { error: '請用邀請連結登入' });
       if (path === '/beta/me') return json(res, 200, publicUser(db, user));
-      if (path === '/beta/jobs') return json(res, 200, db.jobs.filter((j) => user.admin || j.userId === user.id).map(publicJob));
+      if (path === '/beta/jobs') return json(res, 200, db.jobs.filter((j) => user.admin || j.userId === user.id).map((j) => publicJob(j, o.root)));
       if (path === '/beta/songs' && req.method === 'GET') return json(res, 200, db.songs.filter((s) => user.admin || s.userId === user.id));
       // a new song: its words first (the person's own lyrics are the authority), the audio next
       if (path === '/beta/songs' && req.method === 'POST') {
@@ -188,7 +204,7 @@ export function createBetaServer(o: BetaOptions) {
         if (j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
         const p = parseFeedback(await readJson(req), videoDuration(o.root, j));
         if (!p.ok) return json(res, 400, { error: p.error });
-        const f = addFeedback(db, j, p.value, user.id);
+        const f = addFeedback(db, j, p.value, user.id, jobStyle(o.root, j));
         q.persist();
         logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length });
         return json(res, 201, f);
@@ -205,7 +221,7 @@ export function createBetaServer(o: BetaOptions) {
           await saveBody(req, join(dir, `upload${ext}`), MAX_AUDIO);
           logEvent(o.root, song.id, { type: 'audio.uploaded', by: user.id });
           const r = enqueue(user, song.id, 'prep');
-          return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
+          return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job, o.root));
         }
         // old links: the latest finished video of a version
         if (sm[2].startsWith('video/') && req.method === 'GET') {
@@ -239,7 +255,7 @@ export function createBetaServer(o: BetaOptions) {
         const tier = (await readJson(req)).tier as Tier;
         if (!TIERS.includes(tier)) return json(res, 400, { error: '方案不正確' });
         const r = enqueue(user, song.id, 'make', tier);
-        return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
+        return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job, o.root));
       }
       if (!path.startsWith('/beta/admin/')) return json(res, 404, { error: '找不到' });
       if (!user.admin) return json(res, 403, { error: '只有管理者可以使用' });
@@ -291,7 +307,7 @@ export function createBetaServer(o: BetaOptions) {
         logEvent(o.root, j.songId, { type: 'job.queued', jobId: job.id, by: owner.id, kind: job.kind, tier: job.tier, priceUsd: job.priceUsd });
         logEvent(o.root, j.songId, { type: 'admin.retry', jobId: job.id, by: user.id, retryOf: j.id });
         pump(q);
-        return json(res, 202, publicJob(job));
+        return json(res, 202, publicJob(job, o.root));
       }
       const ap = /^\/beta\/admin\/jobs\/([\w-]+)\/approve$/.exec(path);
       if (ap && req.method === 'POST') {
@@ -300,7 +316,7 @@ export function createBetaServer(o: BetaOptions) {
         j.status = 'done';
         q.persist();
         logEvent(o.root, j.songId, { type: 'admin.approve', jobId: j.id, by: user.id });
-        return json(res, 200, publicJob(j));
+        return json(res, 200, publicJob(j, o.root));
       }
       // a song's history and its logs (admin only; every file stays inside that song's folder)
       const al = /^\/beta\/admin\/songs\/([\w-]+)\/(events|logs)(?:\/(.+))?$/.exec(path);
@@ -333,7 +349,7 @@ export function createBetaServer(o: BetaOptions) {
         return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
       if (path === '/beta/admin/feedback') return json(res, 200, [...db.feedback].reverse());
-      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, unsettled: j.unsettled, error: j.error })));
+      if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j, o.root), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });
     } catch (e) {
       json(res, 400, { error: (e as Error).message });

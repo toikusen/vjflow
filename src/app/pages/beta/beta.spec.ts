@@ -1,4 +1,4 @@
-import { BetaJob, BetaSong, jobProgress, JOB_STEPS, PREP_PRICE, songStage, TIER_INFO } from './beta';
+import { BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songStage, songView, TIER_INFO } from './beta';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'prep', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
@@ -60,5 +60,41 @@ describe('prices', () => {
   it('shows the fixed price of each version', () => {
     expect(PREP_PRICE).toBe(0.5);
     expect([TIER_INFO.none.price, TIER_INFO.img.price, TIER_INFO.hybrid.price]).toEqual([4, 6, 16]);
+  });
+});
+
+describe('songView', () => {
+  const prep = job({ id: 'p' });
+  const confirmed = { ...song, confirmedAt: '2026-10-27T01:00:00Z' };
+  const make = (id: string, o: Partial<BetaJob> = {}) => job({ id, kind: 'make', tier: 'none', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
+
+  it('follows the preparation and the timing', () => {
+    expect(songView(song, []).stage).toBe('preparing');
+    expect(songView(song, [job({ status: 'running' })]).stage).toBe('preparing');
+    expect(songView(song, [job({ status: 'failed' })]).stage).toBe('prepFailed');
+    expect(songView(song, [prep]).stage).toBe('timing');
+    expect(songView(confirmed, [prep])).toEqual({ stage: 'ready', prep, retrying: false, results: [], active: undefined, failedFor: undefined });
+  });
+  it('shows the running job, and an automatic retry', () => {
+    const run = make('2', { status: 'running' });
+    expect(songView(confirmed, [prep, run]).active).toBe(run);
+    expect(songView(confirmed, [prep, run]).retrying).toBe(false);
+    const retry = make('3', { status: 'queued', auto: true });
+    expect(songView(confirmed, [prep, make('2', { status: 'failed' }), retry]).retrying).toBe(true);
+  });
+  it('reports a failure only when nothing is active', () => {
+    expect(songView(confirmed, [prep, make('2', { status: 'failed', tier: 'img' })]).failedFor).toBe('img');
+    expect(songView(confirmed, [prep, make('2', { status: 'failed' }), make('3', { status: 'running' })]).failedFor).toBeUndefined();
+  });
+  it('lists results newest first, held ones included', () => {
+    const [a, b, c] = [make('1'), make('2', { status: 'admin' }), make('3', { status: 'failed' })];
+    expect(songView(confirmed, [prep, a, b, c]).results).toEqual([b, a]);
+  });
+});
+
+describe('minutesBetween', () => {
+  it('rounds up to whole minutes', () => {
+    expect(minutesBetween('2026-10-27T00:00:00Z', '2026-10-27T00:20:10Z')).toBe(21);
+    expect(minutesBetween(undefined, 'x')).toBeUndefined();
   });
 });

@@ -3,7 +3,7 @@
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'make'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'make'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number; retryOf?: string; auto?: boolean; style?: string }
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
 export const PREP_PRICE = 0.5;
@@ -104,3 +104,36 @@ export const FEEDBACK_CATEGORIES: { id: FeedbackCategory; label: string }[] = [
   { id: 'rhythm', label: '節奏轉場' },
   { id: 'other', label: '其他' },
 ];
+
+export interface SongView {
+  stage: 'preparing' | 'prepFailed' | 'timing' | 'ready';
+  prep?: BetaJob;
+  active?: BetaJob;
+  retrying: boolean;
+  failedFor?: BetaTier;
+  results: BetaJob[];
+}
+
+/** One song as the detail page shows it: its stage, the running make job, and the finished (or held) results, newest first. */
+export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
+  const mine = jobs.filter((j) => j.songId === song.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const prep = mine.filter((j) => j.kind === 'prep').at(-1);
+  const base = { prep, retrying: false, results: [] as BetaJob[] };
+  if (!prep || prep.status === 'queued' || prep.status === 'running') return { ...base, stage: 'preparing' };
+  if (prep.status === 'failed') return { ...base, stage: 'prepFailed' };
+  if (!song.confirmedAt) return { ...base, stage: 'timing' };
+  const makes = mine.filter((j) => j.kind === 'make');
+  const active = makes.find((j) => j.status === 'queued' || j.status === 'running');
+  const last = makes.at(-1);
+  return {
+    ...base,
+    stage: 'ready',
+    active,
+    retrying: active?.auto === true,
+    failedFor: !active && last?.status === 'failed' ? last.tier : undefined,
+    results: makes.filter((j) => j.status === 'done' || j.status === 'admin').reverse(),
+  };
+}
+
+/** Whole minutes from `a` to `b`, rounded up; undefined when either is missing. */
+export const minutesBetween = (a?: string, b?: string): number | undefined => (a && b ? Math.ceil((Date.parse(b) - Date.parse(a)) / 60000) : undefined);

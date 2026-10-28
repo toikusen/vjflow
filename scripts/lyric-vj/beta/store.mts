@@ -53,6 +53,8 @@ export const songDir = (root: string, id: string) => join(root, 'songs', id);
 /** The folder a job works in: its run folder, or the song folder for prep and legacy jobs. */
 export const runPath = (root: string, job: Job) => (job.runDir ? join(songDir(root, job.songId), job.runDir) : songDir(root, job.songId));
 /** A make job's finished video; legacy jobs (no run folder) wrote `video-<tier>.mp4` into the song folder. */
+/** The job's working folder: its run folder, or `<song>/make` for a legacy job. */
+export const workPath = (root: string, job: Job) => (job.runDir ? runPath(root, job) : join(songDir(root, job.songId), 'make'));
 export const videoFile = (root: string, job: Job) => (job.runDir ? join(runPath(root, job), 'video.mp4') : join(runPath(root, job), `video-${job.tier}.mp4`));
 
 export const emptyDb = (): Db => ({ users: [], songs: [], jobs: [], globalLimitUsd: 100, feedback: [] });

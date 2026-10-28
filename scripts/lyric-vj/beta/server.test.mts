@@ -600,3 +600,34 @@ test('feedback: owner posts and reads; others and running jobs are refused; ever
   assert.equal(readEvents(t.root, 's1').filter((e) => e.type === 'feedback.submitted').length, 2);
   t.beta.server.close();
 });
+
+test('a finished job shows its style from the treatment; a missing file shows none', async () => {
+  const t = await setup();
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const owner = t.beta.db.songs[0].userId;
+  const job = (id: string, status: 'done' | 'running', runDir?: string) => ({ id, userId: owner, songId: 's1', kind: 'make' as const, tier: 'none' as const, status, reservedUsd: 4, priceUsd: 4, createdAt: '2026-10-27T00:00:00Z', startedAt: '2026-10-27T00:00:00Z', endedAt: '2026-10-27T00:20:00Z', ...(runDir ? { runDir } : {}) });
+  t.beta.db.jobs.push(job('n', 'done', 'runs/n'), job('l', 'done'), job('m', 'done', 'runs/m'), job('x', 'running', 'runs/x'));
+  const treat = JSON.stringify({ design: { language: 'silkscreen' } });
+  mkdirSync(join(t.root, 'songs/s1/runs/n/base'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1/runs/n/base/treatment.json'), treat);
+  mkdirSync(join(t.root, 'songs/s1/make/base'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1/make/base/treatment.json'), treat);
+  const jobs = (await (await t.tester('/beta/jobs')).json()) as { id: string; style?: string; startedAt?: string }[];
+  const by = (id: string) => jobs.find((j) => j.id === id)!;
+  assert.equal(by('n').style, '絲網海報');
+  assert.equal(by('l').style, '絲網海報');
+  assert.equal(by('m').style, undefined);
+  assert.equal(by('x').style, undefined);
+  assert.equal(by('n').startedAt, '2026-10-27T00:00:00Z');
+});
+
+test('new feedback records the job style', async () => {
+  const t = await setup();
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const owner = t.beta.db.songs[0].userId;
+  t.beta.db.jobs.push({ id: 'd', userId: owner, songId: 's1', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, priceUsd: 4, createdAt: '2026-10-27T00:00:00Z', runDir: 'runs/d' });
+  mkdirSync(join(t.root, 'songs/s1/runs/d/base'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1/runs/d/base/treatment.json'), JSON.stringify({ design: { language: 'silkscreen' } }));
+  const r = await t.tester('/beta/jobs/d/feedback', { method: 'POST', body: JSON.stringify({ ok: true }) });
+  assert.equal((await r.json()).style, '絲網海報');
+});

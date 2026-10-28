@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
+import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
+import type { Interlude } from '../../src/app/lyric-vj/treatment';
 
 export interface Previous { concept: string; language: string; font: string }
 export interface Ref { media_type: string; data: string; name?: string }
@@ -117,4 +119,56 @@ export interface UserPromptParts {
 /** The director's user prompt; without a brief it is exactly the prompt direct.mts wrote before briefs existed. */
 export function userPrompt(p: UserPromptParts): string {
   return `${p.toolbox ? `${p.toolbox}\n\n` : ''}【輸出要求】shots 大約 ${p.expectShots} 個（每個 ${p.shotSec[0]}–${p.shotSec[1]} 秒，連續覆蓋整個範圍）；cues 必須包含下列全部 ${p.cueCount} 句。\n\n【這首歌的說明】\n${p.style ? `${p.style}\n` : ''}${p.brief ? `${p.brief}\n` : ''}${p.structure}\n\n【程式建議的爆點】（依結構產生，可以調整強度與長度，位置除非有明確理由不要改）\n${p.suggested}\n\n【關鍵詞（可以換色的詞）】\n${p.keyWords.join('、') || '（無）'}\n\n【重複段落】\n${p.repeat}\n\n【標題卡】\n${p.titleCards}\n\n【範圍】${p.win.start}–${p.win.end} 秒；BPM 約 ${p.tempo.toFixed(0)}\n【段落】\n${p.sections}\n【強拍】${p.downbeats}\n\n【歌詞】\n${p.cueLines}\n\n【模板】\n${p.catalog}\n\n【VJ 資料庫參考】（50 支歌詞 VJ 的分析，是觀察與推測，不是規則）\n${p.dbText}`;
+}
+
+const KIND_NAME: Record<UnsungWindow['kind'], string> = { intro: '前奏', interlude: '間奏', outro: '尾奏' };
+const mmss = (sec: number) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+/** A pictures entry needs a reason at least this long (characters, trimmed); shorter is read as no reason. */
+export const MIN_REASON = 8;
+
+/**
+ * The instruction block for the song's unsung windows: each listed as `mm:ss–mm:ss 前奏/間奏/尾奏`, backdrop by
+ * default, pictures only with a story reason. '' when there are no windows (the prompt then stays as it was).
+ */
+export function interludeText(windows: UnsungWindow[]): string {
+  if (!windows.length) return '';
+  const list = windows.map((w) => `- ${mmss(w.start)}–${mmss(w.end)} ${KIND_NAME[w.kind]}（${w.start.toFixed(1)}–${w.end.toFixed(1)} 秒）`).join('\n');
+  return `沒有歌詞的段落（interludes 每段一筆，start/end 照下面的秒數）：\n${list}\n- 預設 mode 填 backdrop：背景換段、圖形動態、節奏撐畫面，不放道具、角色或插圖，reason 填空字串。\n- 只有這首歌的故事在那裡需要一張畫面時才填 pictures，reason 寫一句理由（故事的哪一段要在這裡被看見，至少 ${MIN_REASON} 個字）；理由會顯示在概念卡上。`;
+}
+
+const span = (x: { start: number; end: number }) => `${x.start.toFixed(1)}–${x.end.toFixed(1)} 秒`;
+const overlap = (a: { start: number; end: number }, b: { start: number; end: number }) => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
+
+/**
+ * Makes the director's interludes one entry per window, in order: entries that overlap no window are dropped, a
+ * window's entry is the one covering most of it (others dropped), times snap to the window, pictures without a
+ * reason of MIN_REASON characters becomes backdrop, and a window with no entry gets backdrop. Mutates `t`; returns
+ * the fix lines (director.json `fixes`). No windows leaves no interludes.
+ */
+export function normaliseInterludes(t: { interludes?: Interlude[] }, windows: UnsungWindow[]): string[] {
+  const fixes: string[] = [];
+  const given = t.interludes ?? [];
+  const best = new Map<number, Interlude>();
+  for (const x of given) {
+    const hits = windows.map((w, i) => ({ i, o: overlap(x, w) })).filter((h) => h.o > 0).sort((a, b) => b.o - a.o);
+    if (!hits.length) { fixes.push(`interludes ${span(x)} 不在沒有歌詞的段落裡，刪除`); continue; }
+    const i = hits[0].i;
+    const prev = best.get(i);
+    if (!prev) { best.set(i, x); continue; }
+    const keepNew = overlap(x, windows[i]) > overlap(prev, windows[i]);
+    fixes.push(`interludes ${span(keepNew ? prev : x)} 和同一段重複，刪除`);
+    if (keepNew) best.set(i, x);
+  }
+  const out = windows.map((w, i): Interlude => {
+    const x = best.get(i);
+    if (!x) { fixes.push(`${span(w)}（${KIND_NAME[w.kind]}）導演沒有寫 interludes，補 backdrop`); return { start: w.start, end: w.end, mode: 'backdrop', reason: '' }; }
+    if (x.start !== w.start || x.end !== w.end) fixes.push(`interludes ${span(x)} 對齊到 ${span(w)}`);
+    const reason = typeof x.reason === 'string' ? x.reason : '';
+    const short = [...reason.trim()].length < MIN_REASON;
+    if (x.mode === 'pictures' && short) fixes.push(`interludes ${span(w)} 選了 pictures 但理由不到 ${MIN_REASON} 個字，改為 backdrop`);
+    return { start: w.start, end: w.end, mode: x.mode === 'pictures' && !short ? 'pictures' : 'backdrop', reason };
+  });
+  if (out.length) t.interludes = out;
+  else delete t.interludes;
+  return fixes;
 }

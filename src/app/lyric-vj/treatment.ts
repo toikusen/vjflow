@@ -116,6 +116,9 @@ export interface CueStyle {
 /** The longest line (characters, no spaces) that may be set as a shout. */
 export const SHOUT_MAX = 12;
 
+/** How one unsung stretch (intro, interlude, outro) looks: graphics only, or story pictures with a reason. */
+export interface Interlude { start: number; end: number; mode: 'backdrop' | 'pictures'; reason: string }
+
 export interface TreatmentV3 {
   concept: string;
   styleAnchor: { prompt: string; palette: Palette; fonts?: Fonts };
@@ -138,6 +141,8 @@ export interface TreatmentV3 {
   storyboard?: Scene[];
   /** The stills the design is judged by first, as times in the storyboard (rendered from this same treatment). */
   keyframes?: Keyframe[];
+  /** The director's choice per unsung window (structure.ts unsungWindows): backdrop unless a reason asks for pictures. */
+  interludes?: Interlude[];
 }
 
 export type ParamSpec =

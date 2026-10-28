@@ -6,7 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { deflateSync } from 'node:zlib';
-import { briefFields, briefText, designBriefText, loadRefs, readStyle, sipsArgs, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
+import { briefFields, briefText, designBriefText, interludeText, loadRefs, normaliseInterludes, readStyle, sipsArgs, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
+import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
+import type { Interlude } from '../../src/app/lyric-vj/treatment';
 
 const NAMES = '畫面裡絕對不能出現這些名字';
 const READING = 'briefReading 必填';
@@ -139,4 +141,87 @@ test('userPrompt puts the brief right after the person\'s text', () => {
   const p = userPrompt({ ...parts, brief: '導演須知：x' });
   assert.ok(p.includes('【這首歌的說明】\n一首夏天的歌\n導演須知：x\n結構：A B'));
   assert.ok(userPrompt({ ...parts, style: '', brief: '導演須知：x' }).includes('【這首歌的說明】\n導演須知：x\n結構：A B'));
+});
+
+const WINDOWS: UnsungWindow[] = [{ start: 0, end: 12.5, kind: 'intro' }, { start: 90, end: 106, kind: 'interlude' }, { start: 220, end: 238.4, kind: 'outro' }];
+
+test('interludeText is empty without windows', () => {
+  assert.equal(interludeText([]), '');
+});
+
+test('interludeText lists every window as mm:ss–mm:ss and its kind', () => {
+  const t = interludeText(WINDOWS);
+  for (const w of ['00:00–00:12 前奏', '01:30–01:46 間奏', '03:40–03:58 尾奏']) assert.ok(t.includes(w), w);
+});
+
+test('interludeText states the backdrop default and when pictures may be used', () => {
+  const t = interludeText(WINDOWS);
+  assert.ok(t.includes('backdrop') && t.includes('背景換段、圖形動態、節奏撐畫面') && t.includes('不放道具'));
+  assert.ok(t.includes('pictures') && t.includes('reason') && t.includes('故事'));
+});
+
+test('userPrompt carries the interlude block where the brief goes', () => {
+  const brief = [briefText({ candidates: [], hasRefs: false }), interludeText(WINDOWS)].filter(Boolean).join('\n');
+  assert.ok(userPrompt({ ...parts, brief }).includes(`【這首歌的說明】\n${parts.style}\n${interludeText(WINDOWS)}\n結構`));
+  // no windows and no brief: the prompt stays as it was
+  const none = [briefText({ candidates: [], hasRefs: false }), interludeText([])].filter(Boolean).join('\n');
+  assert.equal(userPrompt({ ...parts, brief: none }), legacy(parts, parts.style));
+});
+
+const withInterludes = (interludes?: Interlude[]) => ({ interludes });
+
+test('normaliseInterludes fills every window with backdrop when the director wrote none', () => {
+  const t = withInterludes();
+  const fixes = normaliseInterludes(t, WINDOWS);
+  assert.deepEqual(t.interludes, WINDOWS.map((w) => ({ start: w.start, end: w.end, mode: 'backdrop', reason: '' })));
+  assert.equal(fixes.length, 3);
+});
+
+test('normaliseInterludes drops entries outside every window', () => {
+  const t = withInterludes([{ start: 40, end: 50, mode: 'pictures', reason: '主角在雨中回頭看那扇窗' }]);
+  const fixes = normaliseInterludes(t, WINDOWS);
+  assert.ok(t.interludes!.every((x) => x.start !== 40));
+  assert.ok(fixes.some((f) => f.includes('40.0') && f.includes('刪除')));
+});
+
+test('normaliseInterludes snaps an entry to its window', () => {
+  const t = withInterludes([{ start: 91.2, end: 104, mode: 'pictures', reason: '間奏時兩人終於在月台重逢' }]);
+  const fixes = normaliseInterludes(t, WINDOWS);
+  assert.deepEqual(t.interludes![1], { start: 90, end: 106, mode: 'pictures', reason: '間奏時兩人終於在月台重逢' });
+  assert.ok(fixes.some((f) => f.includes('對齊')));
+});
+
+test('normaliseInterludes turns pictures with a short reason into backdrop', () => {
+  const t = withInterludes([{ start: 0, end: 12.5, mode: 'pictures', reason: '很好看' }, { start: 220, end: 238.4, mode: 'pictures', reason: '  1234567  ' }]);
+  const fixes = normaliseInterludes(t, WINDOWS);
+  assert.equal(t.interludes![0].mode, 'backdrop');
+  assert.equal(t.interludes![2].mode, 'backdrop');
+  assert.equal(fixes.filter((f) => f.includes('backdrop') && f.includes('理由')).length, 2);
+});
+
+test('normaliseInterludes keeps a pictures entry with a story reason and leaves a correct plan untouched', () => {
+  const plan: Interlude[] = [
+    { start: 0, end: 12.5, mode: 'backdrop', reason: '' },
+    { start: 90, end: 106, mode: 'pictures', reason: '間奏時兩人終於在月台重逢' },
+    { start: 220, end: 238.4, mode: 'backdrop', reason: '' },
+  ];
+  const t = withInterludes(structuredClone(plan));
+  assert.deepEqual(normaliseInterludes(t, WINDOWS), []);
+  assert.deepEqual(t.interludes, plan);
+});
+
+test('normaliseInterludes keeps one entry per window (the one covering most of it)', () => {
+  const t = withInterludes([{ start: 90, end: 93, mode: 'pictures', reason: '短短一下的回憶畫面閃過' }, { start: 93, end: 106, mode: 'backdrop', reason: '' }]);
+  const fixes = normaliseInterludes(t, WINDOWS);
+  assert.deepEqual(t.interludes![1], { start: 90, end: 106, mode: 'backdrop', reason: '' });
+  assert.equal(t.interludes!.length, 3);
+  assert.ok(fixes.some((f) => f.includes('刪除')));
+});
+
+test('normaliseInterludes with no windows removes any interludes', () => {
+  const t = withInterludes([{ start: 0, end: 5, mode: 'backdrop', reason: '' }]);
+  normaliseInterludes(t, []);
+  assert.equal(t.interludes, undefined);
+  const empty = withInterludes();
+  assert.deepEqual(normaliseInterludes(empty, []), []);
 });

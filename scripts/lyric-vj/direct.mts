@@ -26,14 +26,14 @@ interface DesignRecord { song: string; language?: LanguageId; system?: string; d
 import { LAYOUTS, PICTURES, SCENES, Signature, signatureFromDirector, stripSignature } from '../../src/app/lyric-vj/signature';
 import { finishDesign } from '../../src/app/lyric-vj/finish';
 import { MOMENT_KINDS, MOMENT_RULES } from '../../src/app/lyric-vj/moments';
-import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
+import { analyzeStructure, chorusSpans, describeStructure, keyWords, sameLines, splitSongTitle, suggestMoments, TITLE_CARDS, TitleCards, unsungWindows, wantedTitleGaps } from '../../src/app/lyric-vj/structure';
 import { sceneCount, Tier, TIERS } from '../../src/app/lyric-vj/tiers';
 import { jobIdFor, jobStatus } from './status.mts';
 import { PRICES, streamed } from './claude.mts';
 import { transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
-import { briefFields, briefText, designBriefText, loadRefs, type Previous, readStyle, userPrompt, withRefs } from './brief.mts';
+import { briefFields, briefText, designBriefText, interludeText, loadRefs, normaliseInterludes, type Previous, readStyle, userPrompt, withRefs } from './brief.mts';
 
 const { values: a } = parseArgs({
   options: {
@@ -315,6 +315,10 @@ const SCHEMA = {
         reveal: { type: 'string', enum: ['line', 'word'], description: 'word：字以固定速度依序出現（在句子前段載完，之後整句停留）；line：整句一起進場' },
         voice: { type: 'string', enum: ['me', 'them'], description: '介面型設計語言（手機介面）才填：這句在螢幕上是誰說的——me 主角自己（傳出的訊息、打的字），them 對方（收到的訊息、通知）。只有歌詞裡真的是對方說的話才填 them' },
         shout: { type: 'boolean', description: '偶像 Live 才填：這句是全員一起喊的短句（掛け声，12 字以內，例 ドドドド！、はい！、成員點名），做成主唱旁邊的大顆喊聲字' } } } },
+    // one optional field (its items are fully required): the concept card shows the reasons for pictures
+    interludes: { type: 'array', description: '沒有歌詞的段落（前奏、間奏、尾奏）各一筆：預設 backdrop；pictures 要寫和故事相連的理由', items: { type: 'object', additionalProperties: false, required: ['start', 'end', 'mode', 'reason'],
+      properties: { start: { type: 'number' }, end: { type: 'number' }, mode: { type: 'string', enum: ['backdrop', 'pictures'] },
+        reason: { type: 'string', description: 'pictures 時必填：故事為什麼要在這裡出現畫面；backdrop 填空字串' } } } },
   },
 };
 
@@ -444,10 +448,12 @@ ${MOMENT_KINDS.map((k) => `  - ${k}：${MOMENT_RULES[k].desc}（dur ${MOMENT_RUL
 // what designers do, from the database of designer lyric videos (knowledge.mts): a toolbox to pick from per song
 const toolboxFile = join('out', 'knowledge', 'toolbox.md');
 const TOOLBOX = existsSync(toolboxFile) ? `\n\n設計師常用手法（從大量設計師做的歌詞 MV 整理出來；是工具箱不是清單，依這首歌挑適合的，引擎做得到的才用）：\n${readFileSync(toolboxFile, 'utf8')}` : '';
+// the song's unsung stretches inside the range, clipped to it: the director decides each one (normaliseInterludes)
+const windows = unsungWindows(song).filter((w) => w.end > win.start && w.start < win.end).map((w) => ({ ...w, start: Math.max(w.start, win.start), end: Math.min(w.end, win.end) }));
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
 const USER = userPrompt({
   toolbox: TOOLBOX, expectShots, shotSec: style.shotSec, cueCount: cues.length, style: styleText,
-  brief: briefText({ style: styleText, previous, candidates, chosen: picked, hasRefs: refs.length > 0 }),
+  brief: [briefText({ style: styleText, previous, candidates, chosen: picked, hasRefs: refs.length > 0 }), interludeText(windows)].filter(Boolean).join('\n'),
   structure: describeStructure(structure), suggested: suggestedText, keyWords: keyWords(song), repeat: repeatText, titleCards: gapText, win,
   tempo: song.tempo, sections, downbeats: song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' '), cueLines, catalog, dbText: db.text,
 });
@@ -649,6 +655,7 @@ writeFileSync(join(out, 'shots.json'), JSON.stringify({ ...result.treatment, des
 const designed = await designPass(result.treatment, chosen);
 usage = { input: usage.input + designed.usage.input, output: usage.output + designed.usage.output };
 result = { ...designed.checked, fixes: [...result.fixes, ...designed.checked.fixes] };
+result.fixes.push(...normaliseInterludes(result.treatment, windows));
 writeFileSync(join(out, 'treatment.json'), JSON.stringify(result.treatment, null, 1));
 const [pin, pout] = PRICES[a.model!] ?? [NaN, NaN];
 const report = { model: a.model, seconds: Math.round((Date.now() - began) / 1000), ...usage, costUSD: +((usage.input * pin + usage.output * pout) / 1e6).toFixed(3), references: db.ids, fixes: result.fixes };

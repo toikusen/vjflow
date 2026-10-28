@@ -571,3 +571,32 @@ test('no automatic retry when the global budget cannot cover it', async () => {
   assert.deepEqual([skip.length, skip[0].retryOf, skip[0].reason], [1, t.beta.db.jobs[0].id, 'global-limit']);
   t.beta.server.close();
 });
+
+test('feedback: owner posts and reads; others and running jobs are refused; every report is kept', async () => {
+  const t = await setup();
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  const owner = t.beta.db.songs[0].userId;
+  const job = (id: string, status: 'done' | 'running', runDir?: string) => ({ id, userId: owner, songId: 's1', kind: 'make' as const, tier: 'none' as const, status, reservedUsd: 4, priceUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...(runDir ? { runDir } : {}) });
+  t.beta.db.jobs.push(job('d', 'done', 'runs/d'), job('r', 'running'));
+  mkdirSync(join(t.root, 'songs/s1/runs/d'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1/runs/d/song.json'), JSON.stringify({ duration: 10 }));
+  const body = (o: object) => ({ method: 'POST', body: JSON.stringify(o) });
+  const good = { ok: false, marks: [{ at: 2, category: 'lyrics', note: 'n' }], suggestion: '', action: 'none' };
+  const r = await t.tester('/beta/jobs/d/feedback', body(good));
+  assert.equal(r.status, 201);
+  assert.equal((await r.json()).userId, owner);
+  assert.equal((await t.tester('/beta/jobs/d/feedback', body({ ok: true }))).status, 201);
+  assert.equal((await t.tester('/beta/jobs/d/feedback', body({ ...good, marks: [{ at: 99, category: 'lyrics', note: '' }] }))).status, 400);
+  assert.equal((await (await t.tester('/beta/jobs/d/feedback')).json()).length, 2);
+  assert.equal((await (await t.admin('/beta/jobs/d/feedback')).json()).length, 2);
+  assert.equal((await t.admin('/beta/jobs/d/feedback', body(good))).status, 404);
+  assert.equal((await t.tester('/beta/jobs/r/feedback', body(good))).status, 409);
+  assert.equal((await t.tester('/beta/admin/feedback')).status, 403);
+  assert.equal((await (await t.admin('/beta/admin/feedback')).json()).length, 2);
+  const other = invite(t.beta.db, 'Other', 10);
+  const o = await fetch(`${t.base}/beta/jobs/d/feedback`, { ...body(good), headers: { cookie: `vjb=${other.token}`, 'content-type': 'application/json' } });
+  assert.equal(o.status, 404);
+  assert.equal((await fetch(`${t.base}/beta/jobs/d/feedback`, { headers: { cookie: `vjb=${other.token}` } })).status, 404);
+  assert.equal(readEvents(t.root, 's1').filter((e) => e.type === 'feedback.submitted').length, 2);
+  t.beta.server.close();
+});

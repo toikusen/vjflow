@@ -90,3 +90,17 @@ export function songStage(song: BetaSong, jobs: BetaJob[]): SongStage {
     }),
   };
 }
+
+export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'style' | 'rhythm' | 'other';
+export type FeedbackAction = 'fix' | 'redo' | 'none';
+export interface FeedbackMark { at: number; end?: number; category: FeedbackCategory; note: string }
+export interface BetaFeedback { id: string; jobId: string; songId: string; userId: string; ok: boolean; marks: FeedbackMark[]; suggestion: string; action: FeedbackAction; createdAt: string; tier?: BetaTier; style?: string }
+export const FEEDBACK_CATEGORIES: { id: FeedbackCategory; label: string }[] = [
+  { id: 'lyrics', label: '歌詞看不清' },
+  { id: 'timing', label: '時間不準' },
+  { id: 'picture', label: '圖片不搭' },
+  { id: 'empty', label: '畫面空' },
+  { id: 'style', label: '風格不對' },
+  { id: 'rhythm', label: '節奏轉場' },
+  { id: 'other', label: '其他' },
+];

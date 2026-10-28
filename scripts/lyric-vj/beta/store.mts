@@ -4,6 +4,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { Feedback } from './feedback.mts';
 
 export type Tier = 'none' | 'img' | 'hybrid';
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'admin';
@@ -36,7 +37,9 @@ export interface Job {
   /** Set when the cost fuse stopped the job; such a job never retries by itself. */
   fused?: boolean;
 }
-export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number }
+export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number;
+  /** Every problem report ever submitted, never overwritten. */
+  feedback: Feedback[] }
 
 /**
  * What a person pays, fixed per step: above the costs seen on the test songs (no image $2.2–2.6, with image $3.5–4.2,
@@ -52,7 +55,7 @@ export const runPath = (root: string, job: Job) => (job.runDir ? join(songDir(ro
 /** A make job's finished video; legacy jobs (no run folder) wrote `video-<tier>.mp4` into the song folder. */
 export const videoFile = (root: string, job: Job) => (job.runDir ? join(runPath(root, job), 'video.mp4') : join(runPath(root, job), `video-${job.tier}.mp4`));
 
-export const emptyDb = (): Db => ({ users: [], songs: [], jobs: [], globalLimitUsd: 100 });
+export const emptyDb = (): Db => ({ users: [], songs: [], jobs: [], globalLimitUsd: 100, feedback: [] });
 export const newId = () => randomBytes(9).toString('base64url');
 
 /**

@@ -7,6 +7,7 @@ import { extname, join, relative, resolve, sep } from 'node:path';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
+import { addFeedback, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
@@ -72,6 +73,10 @@ const cookie = (req: IncomingMessage, name: string) => (req.headers.cookie ?? ''
 
 /** What a person sees of a job (no logs: those can carry paths and keys' error text). */
 const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin && j.status === 'admin');
+/** The video's length in seconds from the run's song.json, or undefined when unreadable. */
+const videoDuration = (root: string, j: Job) => {
+  try { const d = JSON.parse(readFileSync(join(runPath(root, j), 'song.json'), 'utf8')).duration; return typeof d === 'number' && d >= 0 ? d : undefined; } catch { return undefined; }
+};
 const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto });
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
@@ -172,6 +177,21 @@ export function createBetaServer(o: BetaOptions) {
       if (vj && req.method === 'GET') {
         const j = db.jobs.find((x) => x.id === vj[1] && x.kind === 'make' && (x.userId === user.id || user.admin));
         return j && isViewable(j, user) ? sendFile(req, res, videoFile(o.root, j)) : json(res, 404, { error: '影片還沒完成' });
+      }
+      // problem reports on a finished video: only its owner posts; the owner or the admin reads; every report is kept
+      const fb = /^\/beta\/jobs\/([\w-]+)\/feedback$/.exec(path);
+      if (fb) {
+        const j = db.jobs.find((x) => x.id === fb[1] && x.kind === 'make' && (x.userId === user.id || (user.admin && req.method === 'GET')));
+        if (!j) return json(res, 404, { error: '找不到' });
+        if (req.method === 'GET') return json(res, 200, db.feedback.filter((f) => f.jobId === j.id).reverse());
+        if (req.method !== 'POST') return json(res, 404, { error: '找不到' });
+        if (j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
+        const p = parseFeedback(await readJson(req), videoDuration(o.root, j));
+        if (!p.ok) return json(res, 400, { error: p.error });
+        const f = addFeedback(db, j, p.value, user.id);
+        q.persist();
+        logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length });
+        return json(res, 201, f);
       }
       const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|cues|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
       if (sm) {
@@ -312,6 +332,7 @@ export function createBetaServer(o: BetaOptions) {
         if (!file || !existsSync(file) || !statSync(file).isFile()) return json(res, 404, { error: '找不到紀錄' });
         return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
+      if (path === '/beta/admin/feedback') return json(res, 200, [...db.feedback].reverse());
       if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });
     } catch (e) {

@@ -35,6 +35,14 @@ describe('jobProgress', () => {
     expect(make('畫道具', 11)).toMatchObject({ index: 3, pct: Math.round((11 / total) * 100), leftMin: Math.ceil(total - 11) });
   });
 
+  it('times the current step from its recorded start (the last entry of the phase after a restart)', () => {
+    const j = job({ kind: 'make', tier: 'img', status: 'running', phase: '畫道具', startedAt: '2026-10-27T00:00:00Z',
+      steps: [{ phase: '導演規劃段落與故事', at: '2026-10-27T00:00:00Z' }, { phase: '畫道具', at: '2026-10-27T00:20:00Z' }] });
+    expect(jobProgress(j, Date.parse('2026-10-27T00:21:00Z')).pct).toBe(Math.round(((9 + 1) / 30) * 100));
+    const again = { ...j, steps: [...j.steps!, { phase: '畫道具', at: '2026-10-27T00:30:00Z' }] };
+    expect(jobProgress(again, Date.parse('2026-10-27T00:31:00Z')).pct).toBe(Math.round(((9 + 1) / 30) * 100));
+  });
+
   it('holds a slow step under its estimate, never reaches 100, and reads old phase labels', () => {
     const slow = make('畫道具', 60);
     expect(slow.pct).toBe(Math.round(((9 + 4.5) / total) * 100));

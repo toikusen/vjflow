@@ -3,7 +3,7 @@
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'make'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'make'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; costUsd?: number }
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
 export const PREP_PRICE = 0.5;
@@ -40,8 +40,8 @@ export const JOB_STEPS: Record<'prep' | BetaTier, JobStep[]> = {
 export interface JobProgress { label: string; index: number; steps: JobStep[]; pct: number; leftMin: number }
 
 /**
- * How far a running job is: the steps before its current phase count in full, the current one by the time spent
- * since the job started beyond them, held under 90 % of its estimate so the bar never claims a step is done early.
+ * How far a running job is: the steps before its current phase count in full, the current one by the time since
+ * its recorded start (else since the job started, beyond them), held under 90 % of its estimate so the bar never claims a step is done early.
  */
 export function jobProgress(job: BetaJob, now = Date.now()): JobProgress {
   const steps = JOB_STEPS[job.kind === 'prep' ? 'prep' : job.tier!];
@@ -50,8 +50,10 @@ export function jobProgress(job: BetaJob, now = Date.now()): JobProgress {
   const index = Math.max(0, at);
   if (job.status !== 'running') return { label: '排隊中', index: 0, steps, pct: 0, leftMin: Math.ceil(total) };
   const before = steps.slice(0, index).reduce((s, x) => s + x.min, 0);
+  // the recorded start of the current step (the last entry of its phase: a restart can repeat one); else the old estimate
+  const stepAt = job.steps?.filter((x) => x.phase === job.phase).at(-1)?.at;
   const elapsed = job.startedAt ? (now - Date.parse(job.startedAt)) / 60_000 : 0;
-  const into = Math.min(Math.max(0, elapsed - before), steps[index].min * 0.9);
+  const into = Math.min(Math.max(0, stepAt ? (now - Date.parse(stepAt)) / 60_000 : elapsed - before), steps[index].min * 0.9);
   const doneMin = before + into;
   return { label: steps[index].label, index, steps, pct: Math.min(99, Math.round((doneMin / total) * 100)), leftMin: Math.max(1, Math.ceil(total - doneMin)) };
 }

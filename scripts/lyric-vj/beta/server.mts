@@ -70,7 +70,7 @@ const cookie = (req: IncomingMessage, name: string) => (req.headers.cookie ?? ''
 
 /** What a person sees of a job (no logs: those can carry paths and keys' error text). */
 const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin && j.status === 'admin');
-const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, failed: j.status === 'failed' });
+const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed' });
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
 /**

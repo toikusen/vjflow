@@ -378,3 +378,13 @@ test('an admin retry records who retried it', async () => {
   assert.equal(ev.find((e: { type: string }) => e.type === 'job.queued').by, t.beta.db.songs[0].userId);
   t.beta.server.close();
 });
+
+test('a tester sees steps and price on their jobs but never the platform cost', async () => {
+  const t = await setup();
+  t.beta.db.jobs.push({ id: 'j1', userId: t.beta.db.users[1].id, songId: 's1', kind: 'make', tier: 'img', status: 'done', reservedUsd: 6, priceUsd: 6, costUsd: 2.5, createdAt: '2026-10-27T00:00:00Z', steps: [{ phase: '畫道具', at: '2026-10-27T00:01:00Z' }] });
+  const [mine] = await (await t.tester('/beta/jobs')).json();
+  assert.deepEqual(mine.steps, [{ phase: '畫道具', at: '2026-10-27T00:01:00Z' }]);
+  assert.equal(mine.priceUsd, 6);
+  assert.equal('costUsd' in mine, false);
+  t.beta.server.close();
+});

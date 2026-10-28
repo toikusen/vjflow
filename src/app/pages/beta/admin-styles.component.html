@@ -1,0 +1,47 @@
+@if (message()) {
+  <p class="toast" role="status">{{ message() }}</p>
+}
+
+<div class="filters" role="radiogroup" aria-label="分級篩選">
+  @for (c of chips; track c.id) {
+    <button class="chip" type="button" role="radio" [attr.aria-checked]="filter() === c.id" [class.on]="filter() === c.id" (click)="filter.set(c.id)">{{ c.label }} {{ counts()[c.id] }}</button>
+  }
+</div>
+
+<div class="table">
+  <div class="t-head"><span>參考圖</span><span>名稱</span><span>適合什麼歌</span><span>分級</span><span class="r">接受</span><span class="r">調整</span><span class="r">重做</span><span class="r">接受率</span></div>
+  @for (s of rows(); track s.id) {
+    <div class="t-row">
+      <span class="collage" aria-hidden="true">
+        @if (s.image; as src) {
+          <img class="probe" [src]="src" alt="" (load)="readGrid(s.id, $any($event.target))" />
+          @if (tiles(s.id); as ts) {
+            @for (t of ts; track $index) {
+              <span class="tile"><i [style.background-image]="'url(' + src + ')'" [style.--cols]="t.cols" [style.--rows]="t.rows" [style.--c]="t.col" [style.--r]="t.row"></i></span>
+            }
+          }
+        }
+      </span>
+      <strong class="name">{{ s.name }}</strong>
+      <span class="suits">{{ s.suits }}</span>
+      <label class="tier" [attr.data-tone]="tierLabel[s.tier].tone">
+        <span class="glyph">{{ tierLabel[s.tier].icon }}</span>{{ tierLabel[s.tier].label }}
+        <select [value]="s.tier" (change)="setTier(s, $any($event.target).value)" [attr.aria-label]="s.name + ' 的分級'">
+          @for (t of tiers; track t) {
+            <option [value]="t" [selected]="t === s.tier">{{ tierLabel[t].icon }} {{ tierLabel[t].label }}</option>
+          }
+        </select>
+        <span class="caret">▾</span>
+      </label>
+      <span class="mono r" data-l="接受">{{ s.counts.accepted }}</span>
+      <span class="mono r" data-l="調整">{{ s.counts.adjusted }}</span>
+      <span class="mono r" data-l="重做">{{ s.counts.redone }}</span>
+      <span class="rate" data-l="接受率">
+        <span class="bar" aria-hidden="true"><i [style.width.%]="s.rate.pct"></i></span>
+        <span class="pct">{{ s.rate.label }}</span>
+      </span>
+    </div>
+  } @empty {
+    <p class="empty">{{ styles().length ? '這個分級還沒有風格' : '還沒有讀到風格' }}</p>
+  }
+</div>

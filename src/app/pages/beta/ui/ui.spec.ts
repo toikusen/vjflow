@@ -69,7 +69,7 @@ describe('shellFor', () => {
     expect(shellFor('beta-song')).toEqual({ active: 'songs', title: '', back: { href: '/my', label: '我的歌曲' }, ownTop: true });
     expect(shellFor('beta-styles')).toEqual({ active: 'styles', title: '風格' });
     expect(shellFor('beta-admin')).toEqual({ active: 'admin', title: '管理' });
-    expect(shellFor('beta-admin-song')).toEqual({ active: 'admin', title: '', back: { href: '/my/admin', label: '管理' } });
+    expect(shellFor('beta-admin-song')).toEqual({ active: 'admin', title: '', back: { href: '/my/admin', label: '管理' }, ownTop: true });
   });
   it('frames the timing editor only for a tester song', () => {
     expect(shellFor('timing', '?beta=abc')).toEqual({ active: 'songs', title: '歌詞時間', back: { href: '/my', label: '我的歌曲' }, ownTop: true });

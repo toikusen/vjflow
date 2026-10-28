@@ -1,48 +1,80 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, retriedBy, STATUS, TIER_INFO } from './beta';
+import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp } from './admin';
+import { AdminStylesComponent } from './admin-styles.component';
+import { BetaMe, BetaSong, songChip, songView } from './beta';
+import { PriceComponent } from './ui/price.component';
+import { StatusChipComponent } from './ui/status-chip.component';
 
 const POLL_MS = 5000;
-type AdminJob = BetaJob & { userId: string; reservedUsd: number; priceUsd?: number; costUsd?: number; chargedUsd?: number; unsettled?: string; error?: string };
+/** How many of the newest jobs the overview's queue card lists; the 工作 tab has them all. */
+const RECENT = 8;
+export type AdminTab = 'overview' | 'songs' | 'jobs' | 'styles';
+export const ADMIN_TABS: { id: AdminTab; label: string }[] = [
+  { id: 'overview', label: '總覽' },
+  { id: 'songs', label: '歌曲' },
+  { id: 'jobs', label: '工作' },
+  { id: 'styles', label: '風格' },
+];
 
-/** The beta admin: invite people, set limits, watch the queue, retry failed jobs, release held videos. */
+/** The beta admin (3c): KPIs, invites and limits, accounts and the job queue; the 歌曲, 工作 and 風格 tabs. */
 @Component({
   selector: 'app-beta-admin-page',
-  imports: [FormsModule],
+  imports: [NgTemplateOutlet, FormsModule, PriceComponent, StatusChipComponent, AdminStylesComponent],
   templateUrl: './beta-admin.page.html',
-  styleUrl: './beta.page.scss',
+  styleUrl: './beta-admin.page.scss',
 })
 export class BetaAdminPage {
+  protected readonly tabs = ADMIN_TABS;
+  protected readonly tab = signal<AdminTab>(this.tabFromUrl());
   protected readonly users = signal<BetaMe[]>([]);
   protected readonly jobs = signal<AdminJob[]>([]);
   protected readonly songs = signal<BetaSong[]>([]);
-  protected readonly total = signal({ globalLimitUsd: 0, spentUsd: 0 });
+  protected readonly totals = signal<AdminTotals>({ globalLimitUsd: 0, spentUsd: 0, platformSpentUsd: 0 });
   protected readonly message = signal('');
   protected readonly loginUrl = signal('');
+  protected readonly kpis = computed(() => kpis(this.users(), this.jobs(), this.songs(), this.totals()));
+  protected readonly stuck = computed(() => needHelp(this.songs(), this.jobs()));
   protected readonly sorted = computed(() => [...this.jobs()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-  protected readonly active = computed(() => this.jobs().filter((j) => j.status === 'queued' || j.status === 'running').length);
+  protected readonly recent = computed(() => this.sorted().slice(0, RECENT));
+  protected readonly queueNote = computed(() => {
+    const running = this.jobs().filter((j) => j.status === 'running').length;
+    const queued = this.jobs().filter((j) => j.status === 'queued').length;
+    return `一次一個 · ${running} 個在跑 · ${queued} 個排隊`;
+  });
   protected readonly songRows = computed(() =>
     this.songs().map((s) => {
       const mine = this.jobs().filter((j) => j.songId === s.id);
       const last = [s.createdAt, ...mine.map((j) => j.endedAt ?? j.startedAt ?? j.createdAt)].sort().at(-1)!;
-      return { id: s.id, title: s.title, owner: this.userName(s.userId), last, jobs: mine.length };
+      return { id: s.id, title: s.title, owner: this.userName(s.userId), last, jobs: mine.length, chip: songChip(songView(s, mine)) };
     }).sort((a, b) => b.last.localeCompare(a.last)),
   );
-  protected readonly status = STATUS;
-  protected readonly retriedBy = (j: AdminJob) => retriedBy(this.jobs(), j);
-  protected readonly charged = (j: AdminJob) => (j.chargedUsd ?? 0).toFixed(2);
   protected invite = { name: '', limitUsd: 25 };
   protected globalLimit = 0;
 
   constructor() {
     const timer = setInterval(() => this.poll(), POLL_MS);
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
-    this.poll().then(() => (this.globalLimit = this.total().globalLimitUsd));
+    this.poll().then(() => (this.globalLimit = this.totals().globalLimitUsd));
   }
 
+  protected readonly name = jobName;
+  protected readonly state = (j: AdminJob) => jobState(this.jobs(), j);
   protected userName = (id: string) => this.users().find((u) => u.id === id)?.name ?? id;
   protected songTitle = (id: string) => this.songs().find((s) => s.id === id)?.title ?? id;
-  protected what = (j: AdminJob) => (j.kind === 'prep' ? '準備歌曲' : TIER_INFO[j.tier!]?.name ?? j.tier);
+  protected songHref = (id: string) => `/my/admin/song?id=${encodeURIComponent(id)}`;
+  protected when = (iso: string) => iso.slice(5, 16).replace('T', ' ');
+  protected video = (j: AdminJob) => `/beta/jobs/${j.id}/video`;
+  protected retried = (j: AdminJob) => this.jobs().some((x) => x.retryOf === j.id);
+
+  protected show(tab: AdminTab) {
+    this.tab.set(tab);
+    const url = new URL(location.href);
+    if (tab === 'overview') url.searchParams.delete('tab');
+    else url.searchParams.set('tab', tab);
+    history.replaceState(null, '', url);
+  }
 
   protected async addUser() {
     const r = await this.send('POST', '/beta/admin/users', this.invite);
@@ -81,8 +113,18 @@ export class BetaAdminPage {
     return this.send('POST', `/beta/admin/jobs/${j.id}/approve`);
   }
 
-  protected video(j: AdminJob) {
-    return `/beta/jobs/${j.id}/video`;
+  protected async copyLink() {
+    try {
+      await navigator.clipboard.writeText(this.loginUrl());
+      this.message.set('已複製登入連結');
+    } catch {
+      this.message.set('無法複製，請手動選取連結');
+    }
+  }
+
+  private tabFromUrl(): AdminTab {
+    const t = new URLSearchParams(location.search).get('tab');
+    return ADMIN_TABS.some((x) => x.id === t) ? (t as AdminTab) : 'overview';
   }
 
   private async send(method: string, path: string, body?: unknown) {
@@ -102,7 +144,7 @@ export class BetaAdminPage {
       };
       const [u, jobs, songs] = await Promise.all([get('/beta/admin/users'), get('/beta/admin/jobs'), get('/beta/songs')]);
       this.users.set(u.users);
-      this.total.set({ globalLimitUsd: u.globalLimitUsd, spentUsd: u.platformSpentUsd ?? u.spentUsd });
+      this.totals.set({ globalLimitUsd: u.globalLimitUsd, spentUsd: u.spentUsd, platformSpentUsd: u.platformSpentUsd ?? 0 });
       this.jobs.set(jobs);
       this.songs.set(songs);
     } catch (e) {

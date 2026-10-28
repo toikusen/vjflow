@@ -1,0 +1,248 @@
+// 管理 · 風格表 (artboard 3e): filter pills, one grid row per style.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 13px;
+}
+
+p { margin: 0; }
+.mono { font: 600 13px var(--font-mono); }
+.r { text-align: right; }
+
+.toast {
+  padding: 12px 16px;
+  font-size: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--bad);
+  border-radius: 10px;
+}
+
+.filters {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  // on desktop the pills sit on the page header's row (3e); the header is in the parent, so they top the table here
+  margin-top: -56px;
+}
+
+.chip {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+
+  &:hover { border-color: var(--border-strong); }
+  &.on {
+    color: var(--bg);
+    background: var(--text);
+    border-color: var(--text);
+  }
+}
+
+.table {
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.t-head,
+.t-row {
+  display: grid;
+  grid-template-columns: 150px 150px minmax(0, 1fr) 150px 70px 70px 70px 110px;
+  gap: 14px;
+  align-items: center;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--divider);
+
+  > * { min-width: 0; }
+}
+
+.t-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.t-row:last-child { border-bottom: 0; }
+
+.collage {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  height: 48px;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--inset) 6px 12px);
+  border-radius: 6px;
+}
+
+.probe {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  container-type: size;
+
+  // one 16:9 frame of the strip, covering the tile (the same maths as the make form's style cards)
+  i {
+    --fw: max(100cqw, 100cqh * 16 / 9);
+    --fh: calc(var(--fw) * 9 / 16);
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    background-size: calc(var(--cols) * var(--fw)) calc(var(--rows) * var(--fh));
+    background-position: calc((100cqw - var(--fw)) / 2 - var(--c) * var(--fw)) calc((100cqh - var(--fh)) / 2 - var(--r) * var(--fh));
+  }
+}
+
+.name {
+  overflow: hidden;
+  font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.suits {
+  overflow: hidden;
+  color: var(--text-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.tier {
+  --c: var(--muted);
+  position: relative;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+
+  &[data-tone='ok'] { --c: var(--ok); }
+  &[data-tone='warn'] { --c: var(--warn); }
+  &:hover { border-color: var(--border-strong); }
+  &:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .glyph { font: 700 11px var(--font-mono); }
+
+  .caret {
+    margin-left: auto;
+    color: var(--faint);
+  }
+
+  // the native select sits on top, invisible, so the row keeps the design's look and the menu stays the browser's
+  select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+}
+
+.rate {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+
+  .bar {
+    width: 48px;
+    height: 4px;
+    overflow: hidden;
+    background: var(--border);
+    border-radius: 2px;
+
+    i {
+      display: block;
+      height: 100%;
+      background: var(--accent);
+      transition: width 0.3s ease;
+    }
+  }
+
+  .pct {
+    width: 36px;
+    font: 600 12px var(--font-mono);
+    color: var(--text-2);
+    text-align: right;
+  }
+}
+
+.empty {
+  padding: 18px;
+  color: var(--muted);
+}
+
+@media (max-width: 1100px) {
+  .filters {
+    justify-content: flex-start;
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .filters {
+    flex-wrap: wrap;
+  }
+
+  .t-head { display: none; }
+
+  .t-row {
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-areas:
+      'img img img'
+      'name name name'
+      'suits suits suits'
+      'tier tier tier'
+      'acc adj redo'
+      'rate rate rate';
+    gap: 8px;
+    padding: 12px 14px;
+
+    > [data-l]::before {
+      content: attr(data-l) '：';
+      margin-right: 4px;
+      font: 700 11px var(--font-body);
+      color: var(--faint);
+    }
+
+    .r { text-align: left; }
+  }
+
+  .collage { grid-area: img; }
+  .name { grid-area: name; }
+  .suits {
+    grid-area: suits;
+    white-space: normal;
+  }
+  .tier { grid-area: tier; }
+  .mono:nth-of-type(1) { grid-area: acc; }
+  .rate {
+    grid-area: rate;
+    justify-content: flex-start;
+  }
+}

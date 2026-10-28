@@ -2,123 +2,126 @@
   <p class="toast" role="status">{{ message() }}</p>
 }
 
-<main class="admin">
-  <a class="back muted" href="/my/admin">← 回管理</a>
+@if (song(); as s) {
+  <header class="head">
+    <a class="back" href="/my/admin">← 管理</a>
+    <span class="rule desk-only" aria-hidden="true"></span>
+    <h1>{{ s.title }}</h1>
+    <span class="sub desk-only">擁有者 {{ owner() }} · 建立 {{ when(s.createdAt) }}</span>
+    <span class="sub phone-only">{{ owner() }} · {{ when(s.createdAt).slice(0, 5) }}</span>
+  </header>
 
-  @if (song(); as s) {
-    <section class="panel">
-      <h2>{{ s.title }}</h2>
-      <div class="song-head">
-        <span class="muted">擁有者 {{ owner() }}</span>
-        <span class="muted">建立 {{ clock(s.createdAt) }}</span>
-        <span>使用者已扣 ${{ charged().toFixed(2) }}</span>
-        <span>平台成本 ${{ platform().toFixed(2) }}</span>
-      </div>
-    </section>
+  <div class="numbers">
+    <div class="num"><span class="n-label">使用者已付</span><strong class="n-value"><app-price [amount]="money().paid" [plain]="true" /></strong></div>
+    <div class="num"><span class="n-label">平台成本</span><strong class="n-value cost"><app-price [amount]="money().cost" [plain]="true" /></strong></div>
+    <div class="num"><span class="n-label">毛利</span><strong class="n-value" [class.ok]="money().margin.tone === 'ok'" [class.bad]="money().margin.tone === 'bad'">{{ money().margin.value }}</strong></div>
+  </div>
 
-    <section class="panel">
-      <h2>工作</h2>
+  <div class="seg phone-only" role="tablist" aria-label="內容">
+    @for (x of sections(); track x.id) {
+      <button class="seg-btn" type="button" role="tab" [attr.aria-selected]="section() === x.id" [class.on]="section() === x.id" (click)="section.set(x.id)">{{ x.label }}</button>
+    }
+  </div>
+
+  <div class="grid">
+    <section class="sec jobs">
       @for (j of newest(); track j.id) {
-        <div class="job">
-          <div class="job-head">
-            <strong>{{ what(j) }}</strong>
-            <span class="chip" [class.ok]="j.status === 'done'" [class.live]="j.status === 'running'" [class.bad]="j.status === 'failed'" [class.warn]="j.status === 'admin'">{{ status[j.status] }}</span>
-            @if (j.auto) {<span class="chip warn">自動重試</span>}
-            @if (j.retryOf) {<span class="chip">重跑自 {{ j.retryOf }}</span>}
-            @if (j.status === 'failed' && retriedBy(j); as next) {<span class="chip">已重跑 → {{ next }}</span>}
-            @if (j.fused) {<span class="chip bad">保險絲</span>}
-            <span class="muted">{{ clock(j.createdAt) }}</span>
-            <span>費用 ${{ j.chargedUsd.toFixed(2) }}</span>
-            <span>成本 ${{ (j.costUsd ?? 0).toFixed(2) }}</span>
-            @if (j.unsettled) {<span class="muted">中斷於 {{ j.unsettled }}</span>}
-          </div>
-          @if (j.error) {<p class="muted err sub">{{ j.error }}</p>}
-          @if (steps(j).length) {
-            <div class="table-wrap sub">
-              <table>
-                <thead><tr><th>步驟</th><th>開始</th><th>耗時</th></tr></thead>
-                <tbody>
-                  @for (st of steps(j); track $index) {
-                    <tr><td>{{ st.phase }}</td><td class="nowrap muted">{{ clock(st.at) }}</td><td>{{ st.secs === undefined ? '—' : st.secs + ' 秒' }}</td></tr>
-                  }
-                </tbody>
-              </table>
+        @let st = state(j);
+        @let isOpen = open().has(j.id);
+        <article class="job card" [class.open]="isOpen">
+          <button class="job-head" type="button" [attr.aria-expanded]="isOpen" (click)="toggle(j.id)">
+            <span class="jid">{{ j.id }}</span>
+            <span class="jname">{{ name(j) }}</span>
+            <app-status-chip [chip]="st.chip" look="text" />
+            @if (st.detail) {<span class="jnote desk-only">{{ st.detail }}</span>}
+            @if (note(j); as n) {<span class="jnote desk-only" [title]="n">{{ n }}</span>}
+            <span class="jmeta">
+              <span class="jtime">{{ when(j.createdAt) }}</span>
+              <span class="jpaid">付 <app-price [amount]="j.chargedUsd ?? 0" [plain]="true" /></span>
+              <span class="jcost">成本 <app-price [amount]="j.costUsd ?? 0" [plain]="true" /></span>
+            </span>
+            <span class="chev" aria-hidden="true">{{ isOpen ? '▾' : '▸' }}</span>
+            @if (headNote(j); as n) {<span class="jnote phone-only">{{ n }}</span>}
+          </button>
+          @if (isOpen) {
+            <div class="job-body">
+              <div class="steps">
+                <div class="s-head"><span>步驟</span><span>開始</span><span class="r">耗時</span></div>
+                @for (row of steps(j); track $index) {
+                  <div class="s-row"><span>{{ row.phase }}</span><span class="mono start">{{ row.start }}</span><span class="mono r dur">{{ row.dur }}</span></div>
+                } @empty {
+                  <p class="none">沒有步驟紀錄</p>
+                }
+              </div>
+              <div class="costs">
+                <div class="c-head"><span>費用項目</span><span>USD</span></div>
+                @for (c of costRows(j); track $index) {
+                  <div class="c-row"><span class="mono key">{{ c.key }}</span><span class="mono">{{ c.usd.toFixed(4) }}</span></div>
+                } @empty {
+                  <p class="none">沒有費用</p>
+                }
+                <div class="c-total"><span>合計</span><span class="mono cost"><app-price [amount]="j.costUsd ?? 0" [plain]="true" /></span></div>
+              </div>
             </div>
           }
-          @if (costRows(j).length) {
-            <div class="table-wrap sub">
-              <table>
-                <thead><tr><th>費用項目</th><th>USD</th></tr></thead>
-                <tbody>
-                  @for (c of costRows(j); track $index) {
-                    <tr><td>{{ c.key }}</td><td>${{ c.usd.toFixed(4) }}</td></tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          }
-        </div>
+        </article>
       } @empty {
-        <p class="muted">還沒有工作</p>
+        <p class="empty">還沒有工作</p>
       }
     </section>
 
-    <section class="panel">
-      <h2>時間線</h2>
-      <ul class="timeline">
+    <div class="side">
+      <section class="sec timeline card">
+        <h2>時間線</h2>
         @for (r of rows(); track $index) {
-          <li>
-            <span class="muted nowrap">{{ clock(r.at) }}</span>
-            <span [class]="'tone-' + r.tone">{{ r.title }}</span>
-            @if (r.detail) {<span class="muted">{{ r.detail }}</span>}
-            @if (r.jobId) {<span class="muted">{{ r.jobId }}</span>}
-          </li>
-        } @empty {
-          <li class="muted">沒有事件</li>
-        }
-      </ul>
-    </section>
-
-    <section class="panel">
-      <h2>Log</h2>
-      <div class="logs">
-        @for (l of logs(); track l.path) {
-          <button class="ghost-btn" type="button" (click)="showLog(l.path)">{{ l.path }}（{{ kb(l.bytes) }}）</button>
-        } @empty {
-          <p class="muted">沒有 log</p>
-        }
-      </div>
-      @if (openLog(); as o) {
-        <p class="muted">
-          {{ o.path }}@if (o.cut) { · 只顯示最後 2000 行}
-          · <a [href]="logUrl(o.path)" [attr.download]="o.path.split('/').pop()">下載完整 log</a>
-        </p>
-        <pre class="log-view">{{ o.text }}</pre>
-      }
-    </section>
-
-    <section class="panel">
-      <h2>使用者回報</h2>
-      @for (f of feedback(); track f.id) {
-        <div class="fb">
-          <div class="job-head">
-            <span class="chip" [class.ok]="f.ok" [class.warn]="!f.ok">{{ f.ok ? '滿意' : '有問題' }}</span>
-            <span class="muted">{{ clock(f.createdAt) }}</span>
-            <span class="muted">工作 {{ f.jobId }}</span>
-            <span>處理：{{ action[f.action] }}</span>
+          <div class="ev" [attr.data-tone]="r.tone">
+            <span class="mono t">{{ when(r.at) }}</span>
+            <span class="text">{{ r.title }}@if (r.detail) {<span class="ev-detail"> · {{ r.detail }}</span>}</span>
+            @if (r.jobId) {<span class="jtag">{{ r.jobId }}</span>} @else {<span></span>}
           </div>
-          @if (f.marks.length) {
-            <ul>
-              @for (m of f.marks; track $index) {
-                <li>{{ m.at }}{{ m.end !== undefined ? '–' + m.end : '' }} 秒 · {{ category(m.category) }}@if (m.note) { · {{ m.note }}}</li>
-              }
-            </ul>
+        } @empty {
+          <p class="none">沒有事件</p>
+        }
+      </section>
+
+      <section class="sec logs card">
+        <h2>Log @if (openLog(); as o) {<a class="dl" [href]="logUrl(o.path)" [attr.download]="o.path.split('/').pop()">下載完整 log</a>}</h2>
+        <div class="files">
+          @for (l of logs(); track l.path) {
+            <button class="file" type="button" [class.on]="openLog()?.path === l.path" (click)="showLog(l.path)">{{ l.path }} · {{ size(l.bytes) }}</button>
+          } @empty {
+            <p class="none">沒有 log</p>
           }
-          @if (f.suggestion) {<p>{{ f.suggestion }}</p>}
         </div>
-      } @empty {
-        <p class="muted">沒有回報</p>
-      }
-    </section>
-  }
-</main>
+        @if (openLog(); as o) {
+          @if (o.cut) {<p class="none">只顯示最後 2000 行</p>}
+          <pre class="log">{{ o.text }}</pre>
+        }
+      </section>
+
+      <section class="sec reports card">
+        <h2>使用者回報 · {{ feedback().length }}</h2>
+        @for (f of feedback(); track f.id) {
+          <div class="fb">
+            <div class="fb-head">
+              <span class="verdict" [class.ok]="f.ok" [class.warn]="!f.ok"><span class="glyph">{{ f.ok ? '✓' : '!' }}</span>{{ f.ok ? '沒問題' : '有問題' }}</span>
+              <span class="fb-meta">{{ when(f.createdAt) }} · {{ jobLabel(f.jobId) }} · 處理：{{ action[f.action] }}</span>
+            </div>
+            @for (m of f.marks; track $index) {
+              <div class="mark">
+                <span class="mono at">{{ mmss(m.at) }}@if (m.end !== undefined) {–{{ mmss(m.end) }}}</span>
+                <span class="cat">{{ category(m.category) }}</span>
+                @if (m.note) {<span class="mnote">{{ m.note }}</span>}
+              </div>
+            }
+            @if (f.suggestion) {<p class="suggest">建議：{{ f.suggestion }}</p>}
+          </div>
+        } @empty {
+          <p class="none">沒有回報</p>
+        }
+      </section>
+    </div>
+  </div>
+} @else if (message()) {
+  <a class="back" href="/my/admin">← 管理</a>
+}

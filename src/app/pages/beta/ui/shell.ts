@@ -9,7 +9,7 @@ const SHELL: Partial<Record<Page, ShellSpec>> = {
   'beta-song': { active: 'songs', title: '', back: { href: '/my', label: '我的歌曲' }, ownTop: true },
   'beta-styles': { active: 'styles', title: '風格' },
   'beta-admin': { active: 'admin', title: '管理' },
-  'beta-admin-song': { active: 'admin', title: '', back: { href: '/my/admin', label: '管理' } },
+  'beta-admin-song': { active: 'admin', title: '', back: { href: '/my/admin', label: '管理' }, ownTop: true },
 };
 
 /**

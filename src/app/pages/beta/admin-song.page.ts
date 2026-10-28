@@ -1,16 +1,21 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { ACTION, BetaEvent, BetaFeedback, BetaJob, BetaMe, BetaSong, FEEDBACK_CATEGORIES, retriedBy, STATUS, TIER_INFO, timeline } from './beta';
+import { AdminJob, clockTime, fileSize, jobName, jobState, mmss, shortDate, songMoney, stepRows } from './admin';
+import { ACTION, BetaEvent, BetaFeedback, BetaMe, BetaSong, FEEDBACK_CATEGORIES, timeline } from './beta';
+import { PriceComponent } from './ui/price.component';
+import { StatusChipComponent } from './ui/status-chip.component';
 
 const POLL_MS = 10000;
 const LOG_LINES = 2000;
-type AdminJob = BetaJob & { userId: string; reservedUsd: number; unsettled?: string; error?: string; fused?: boolean; costs?: { key: string; usd: number; phase?: string }[]; chargedUsd: number };
 interface LogFile { path: string; bytes: number }
+export type SongSection = 'jobs' | 'timeline' | 'logs' | 'reports';
 
-/** Admin view of one song (/my/admin/song?id=): jobs, steps, costs, event timeline, logs and user reports. */
+/** Admin view of one song (3d, /my/admin/song?id=): job cards with steps and costs, the event timeline, logs and the person's reports. */
 @Component({
   selector: 'app-beta-admin-song-page',
+  imports: [PriceComponent, StatusChipComponent],
   templateUrl: './admin-song.page.html',
-  styleUrls: ['./beta.page.scss', './admin-song.page.scss'],
+  styleUrl: './admin-song.page.scss',
+  host: { '[attr.data-section]': 'section()' },
 })
 export class BetaAdminSongPage {
   protected readonly id = new URLSearchParams(location.search).get('id') ?? '';
@@ -22,13 +27,20 @@ export class BetaAdminSongPage {
   protected readonly feedback = signal<BetaFeedback[]>([]);
   protected readonly message = signal('');
   protected readonly openLog = signal<{ path: string; text: string; cut: boolean } | undefined>(undefined);
-  protected readonly status = STATUS;
+  /** Which job cards are expanded; the newest job opens on load. */
+  protected readonly open = signal<Set<string>>(new Set());
+  /** The phone's segmented control: one section at a time (desktop shows them all). */
+  protected readonly section = signal<SongSection>('jobs');
   protected readonly action = ACTION;
-  protected readonly retriedBy = (j: AdminJob) => retriedBy(this.jobs(), j);
   protected readonly rows = computed(() => timeline(this.events()));
   protected readonly newest = computed(() => [...this.jobs()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-  protected readonly charged = computed(() => this.jobs().reduce((s, j) => s + j.chargedUsd, 0));
-  protected readonly platform = computed(() => this.jobs().reduce((s, j) => s + (j.costUsd ?? 0), 0));
+  protected readonly money = computed(() => songMoney(this.jobs()));
+  protected readonly sections = computed((): { id: SongSection; label: string }[] => [
+    { id: 'jobs', label: `工作 ${this.jobs().length}` },
+    { id: 'timeline', label: '時間線' },
+    { id: 'logs', label: 'Log' },
+    { id: 'reports', label: `回報 ${this.feedback().length}` },
+  ]);
 
   constructor() {
     this.load();
@@ -37,20 +49,45 @@ export class BetaAdminSongPage {
   }
 
   private readonly key = encodeURIComponent(this.id);
-  protected what = (j: AdminJob) => (j.kind === 'prep' ? '準備歌曲' : TIER_INFO[j.tier!]?.name ?? j.tier);
-  protected clock = (iso?: string) => (iso ? iso.slice(5, 19).replace('T', ' ') : '');
+  protected readonly name = jobName;
+  protected readonly state = (j: AdminJob) => jobState(this.jobs(), j);
+  protected readonly when = shortDate;
+  protected readonly clock = clockTime;
+  protected readonly mmss = mmss;
+  protected readonly size = fileSize;
+  protected readonly steps = stepRows;
   protected category = (id: string) => FEEDBACK_CATEGORIES.find((c) => c.id === id)?.label ?? id;
   protected costRows = (j: AdminJob) => j.costs ?? [];
   protected logUrl = (path: string) => `/beta/admin/songs/${this.key}/logs/${path.split('/').map(encodeURIComponent).join('/')}`;
-  protected kb = (bytes: number) => (bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`);
+  protected jobLabel = (id: string) => {
+    const j = this.jobs().find((x) => x.id === id);
+    return j ? `${id} ${jobName(j)}` : id;
+  };
 
-  /** Seconds from each step to the next one (the last step runs until the job ended). */
-  protected steps(j: AdminJob) {
-    const list = j.steps ?? [];
-    return list.map((s, i) => {
-      const end = list[i + 1]?.at ?? j.endedAt;
-      const secs = end ? Math.round((Date.parse(end) - Date.parse(s.at)) / 1000) : undefined;
-      return { phase: s.phase, at: s.at, secs };
+  /** The small note after a job's status: where it stopped, the error, a skipped auto-retry, what it re-ran. */
+  protected note(j: AdminJob): string {
+    const skipped = this.events().some((e) => e.type === 'job.autoretry.skipped' && e['retryOf'] === j.id);
+    return [
+      j.unsettled ? `中斷於 ${j.unsettled}` : '',
+      j.error ?? '',
+      skipped ? '略過自動重試（全站額度不足）' : '',
+      j.auto ? '自動重試' : '',
+      j.retryOf ? `重跑自 ${j.retryOf}` : '',
+      j.fused ? '保險絲' : '',
+    ].filter(Boolean).join(' · ');
+  }
+
+  /** The phone card's one note line: the status detail and the note, whichever exist. */
+  protected headNote(j: AdminJob): string {
+    return [this.state(j).detail, this.note(j)].filter(Boolean).join(' · ');
+  }
+
+  protected toggle(id: string) {
+    this.open.update((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   }
 
@@ -98,6 +135,8 @@ export class BetaAdminSongPage {
       this.feedback.set((feedback as BetaFeedback[]).filter((f) => f.songId === this.id));
       this.events.set(events);
       this.logs.set(logs);
+      const first = this.newest()[0];
+      if (first) this.open.set(new Set([first.id]));
       if (!song) this.message.set('找不到這首歌');
     } catch (e) {
       this.message.set((e as Error).message);

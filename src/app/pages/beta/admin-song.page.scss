@@ -1,16 +1,573 @@
-.back { display: inline-block; margin-bottom: 12px; }
-.song-head { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; margin-bottom: 16px; }
-.job { border-top: 1px solid var(--line, rgb(255 255 255 / 0.1)); padding: 12px 0; }
-.job-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
-.sub { margin-top: 8px; }
-.timeline { list-style: none; margin: 0; padding: 0; }
-.timeline li { display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 4px 0; }
-.timeline .tone-ok { color: var(--ok, #4ade80); }
-.timeline .tone-warn { color: var(--warn); }
-.timeline .tone-bad { color: var(--bad, #f87171); }
-.logs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-.log-view { max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; padding: 12px; border-radius: 8px; background: rgb(0 0 0 / 0.35); }
-.fb { border-top: 1px solid var(--line, rgb(255 255 255 / 0.1)); padding: 10px 0; }
-.fb ul { margin: 6px 0; padding-left: 18px; }
-/* the shared .table-wrap pulls its bottom edge up 20px (for panel-edge tables); inside a job that hides the last row under the next table */
-.job .table-wrap { margin: 8px 0 12px; }
+// 管理 · 歌曲製作紀錄 (artboard 3d): job cards with steps + costs, timeline, logs and reports; one column on phones.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  padding: 28px 40px 40px;
+  font-size: 14px;
+}
+
+h1, h2, p, pre { margin: 0; }
+.mono { font: 500 12px var(--font-mono); }
+.r { text-align: right; }
+.cost { color: var(--warn); }
+.ok { color: var(--ok); }
+.bad { color: var(--bad); }
+.phone-only { display: none; }
+
+.toast {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+}
+
+.card {
+  min-width: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+/* header: back · rule · title · owner · three numbers */
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+
+  h1 {
+    overflow: hidden;
+    font: 700 24px var(--font-display);
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+.back {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  &:hover { color: var(--text); }
+}
+
+.rule {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+
+.sub {
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.numbers {
+  display: flex;
+  gap: 24px;
+  justify-content: flex-end;
+  // the numbers share the header row on desktop
+  margin-top: -56px;
+}
+
+.num {
+  text-align: right;
+}
+
+.n-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.n-value {
+  display: block;
+  font: 700 18px var(--font-display);
+  font-variant-numeric: tabular-nums;
+}
+
+/* two columns */
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 20px;
+  align-items: start;
+}
+
+.sec.jobs,
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* job cards */
+
+.job-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  width: 100%;
+  padding: 14px 18px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+
+  .job.open & { border-bottom: 1px solid var(--border); }
+}
+
+.jid {
+  font: 600 11px var(--font-mono);
+  color: var(--faint);
+}
+
+.jname {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.jnote {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jmeta {
+  display: contents;
+}
+
+.jtime {
+  margin-left: auto;
+  font: 500 12px var(--font-mono);
+  color: var(--muted);
+}
+
+.jpaid,
+.jcost {
+  font: 600 13px var(--font-mono);
+}
+
+.jcost { color: var(--warn); }
+.chev { color: var(--muted); }
+
+.job-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+
+.steps {
+  padding: 6px 18px 12px;
+  border-right: 1px solid var(--border);
+}
+
+.costs {
+  padding: 6px 18px 12px;
+}
+
+.s-head,
+.s-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px 70px;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.c-head,
+.c-row,
+.c-total {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.s-head,
+.c-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.s-row,
+.c-row {
+  border-top: 1px solid var(--divider);
+}
+
+.start { color: var(--muted); }
+.dur { font-weight: 600; }
+.key {
+  overflow: hidden;
+  color: var(--text-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.c-total {
+  font-weight: 700;
+  border-top: 1px solid var(--border);
+  .mono { font-weight: 700; }
+}
+
+/* right column */
+
+.side .card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 18px;
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+}
+
+.side .timeline {
+  gap: 0;
+  h2 { margin-bottom: 8px; }
+}
+
+.ev {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  font-size: 12px;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--divider);
+
+  &:last-child { border-bottom: 0; }
+  &[data-tone='ok'] .text { color: var(--ok); }
+  &[data-tone='bad'] .text { color: var(--bad); }
+  &[data-tone='warn'] .text { color: var(--warn); }
+
+  .t {
+    font-size: 11px;
+    color: var(--faint);
+  }
+
+  .text { overflow-wrap: anywhere; }
+  .ev-detail { color: var(--muted); }
+}
+
+.jtag {
+  padding: 2px 6px;
+  font: 600 10px var(--font-mono);
+  color: var(--faint);
+  background: var(--inset);
+  border-radius: 4px;
+}
+
+.dl {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-text);
+  text-decoration: none;
+  &:hover { text-decoration: underline; }
+}
+
+.files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.file {
+  padding: 5px 9px;
+  font: 600 11px var(--font-mono);
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: background-color 0.15s, border-color 0.15s;
+
+  &:hover { border-color: var(--border-strong); }
+  &.on {
+    color: var(--text);
+    background: var(--border);
+    border-color: var(--border);
+  }
+}
+
+.log {
+  max-height: 480px;
+  padding: 12px;
+  overflow: auto;
+  font: 500 11px/1.6 var(--font-mono);
+  color: var(--text-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.fb {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.fb-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.verdict {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  font-weight: 700;
+  &.warn { color: var(--warn); }
+  .glyph { font: 700 11px var(--font-mono); }
+}
+
+.fb-meta { color: var(--muted); }
+
+.mark {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+
+  .at {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--accent-text);
+  }
+
+  .cat {
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+
+  .mnote { color: var(--text-2); }
+}
+
+.suggest {
+  padding-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  border-top: 1px solid var(--border);
+}
+
+.none,
+.empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.empty { padding: 18px; }
+
+@media (max-width: 1100px) {
+  .grid { grid-template-columns: 1fr; }
+}
+
+/* phone 390 (3d 手機): own top bar, three number cards, segmented control, one section at a time */
+
+@media (max-width: 720px) {
+  :host {
+    gap: 12px;
+    padding: 0 16px 20px;
+  }
+
+  .desk-only { display: none !important; }
+  .phone-only { display: flex; }
+
+  .toast { margin-top: 12px; }
+
+  .head {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    gap: 10px;
+    margin: 0 -16px;
+    padding: 14px 16px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--divider);
+
+    h1 {
+      margin-left: 4px;
+      font-size: 15px;
+    }
+
+    .sub {
+      margin-left: auto;
+      font-size: 11px;
+    }
+  }
+
+  .numbers {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 2px;
+  }
+
+  .num {
+    padding: 10px 12px;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .n-label { font-size: 10px; }
+  .n-value {
+    margin-top: 3px;
+    font-size: 15px;
+  }
+
+  .seg {
+    gap: 4px;
+    padding: 3px;
+    background: var(--inset);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+  }
+
+  .seg-btn {
+    flex: 1;
+    padding: 7px 2px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+
+    &.on {
+      color: var(--text);
+      background: var(--border);
+    }
+  }
+
+  .grid { gap: 12px; }
+
+  .sec,
+  .side .sec { display: none; }
+  :host([data-section='jobs']) .sec.jobs,
+  :host([data-section='timeline']) .sec.timeline,
+  :host([data-section='logs']) .sec.logs,
+  :host([data-section='reports']) .sec.reports { display: flex; }
+
+  .job { border-radius: 12px; }
+
+  .job-head {
+    gap: 6px 8px;
+    padding: 12px 14px;
+  }
+
+  .jid { font-size: 10px; }
+  .jname { font-size: 14px; }
+  .jtime,
+  .jpaid,
+  .jcost {
+    font-size: 11px;
+  }
+  // row 1: id · name · status · ▸ at the right; row 2: time · 付 · 成本; row 3: the note
+  .jmeta {
+    display: flex;
+    flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    order: 1;
+  }
+  .jtime { margin-left: 0; }
+  .chev { margin-left: auto; }
+  .jnote.phone-only {
+    flex-basis: 100%;
+    order: 2;
+    font-size: 11px;
+    white-space: normal;
+  }
+
+  .job-body {
+    grid-template-columns: 1fr;
+    padding: 4px 14px 10px;
+  }
+
+  .steps,
+  .costs {
+    padding: 0;
+    border: 0;
+  }
+
+  .s-head { display: none; }
+
+  .s-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 4px;
+    font-size: 12px;
+
+    .start {
+      font-size: 11px;
+      white-space: nowrap;
+      &::after { content: ' ·'; }
+    }
+    .dur {
+      text-align: left;
+      font-size: 11px;
+      color: var(--text);
+    }
+  }
+
+  .c-head {
+    padding: 10px 0 4px;
+    span:last-child { display: none; }
+    span:first-child::after { content: ''; }
+  }
+
+  .c-row {
+    padding: 6px 0;
+    font-size: 11px;
+    border: 0;
+  }
+
+  .ev {
+    grid-template-columns: 80px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .side .card { padding: 14px; }
+  .log { max-height: 60dvh; }
+}

@@ -1,6 +1,7 @@
 /** A song's status as the README names it (◐ ◷ ✓ ● ↻ ! ?); the tone picks the colour tokens. */
 export type StatusKind = 'preparing' | 'prepFailed' | 'timing' | 'ready' | 'making' | 'retrying' | 'help' | 'concept';
-export type StatusTone = 'info' | 'warn' | 'ok' | 'bad' | 'making';
+/** `muted` is the grey of a queued job or an unlisted style (admin pages): the chip's default colour. */
+export type StatusTone = 'info' | 'warn' | 'ok' | 'bad' | 'making' | 'muted';
 export interface StatusChip { icon: string; label: string; tone: StatusTone }
 
 export const STATUS_CHIP: Record<StatusKind, StatusChip> = {

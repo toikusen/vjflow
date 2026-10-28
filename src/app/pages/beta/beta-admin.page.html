@@ -2,107 +2,128 @@
   <p class="toast" role="status">{{ message() }}</p>
 }
 
-<main class="admin">
-  <div class="stats">
-    <div class="stat"><span class="muted">全站已用</span><strong>${{ total().spentUsd.toFixed(2) }}</strong></div>
-    <div class="stat"><span class="muted">總額度</span><strong>${{ total().globalLimitUsd.toFixed(2) }}</strong></div>
-    <div class="stat"><span class="muted">測試者</span><strong>{{ users().length }}</strong></div>
-    <div class="stat"><span class="muted">進行中工作</span><strong>{{ active() }}</strong></div>
-  </div>
+<header class="page-head">
+  <h1>管理</h1>
+  <nav class="tabs" aria-label="管理分頁">
+    @for (t of tabs; track t.id) {
+      <button class="tab" type="button" [class.on]="tab() === t.id" [attr.aria-current]="tab() === t.id ? 'page' : null" (click)="show(t.id)">{{ t.label }}</button>
+    }
+  </nav>
+</header>
 
-  @if (loginUrl()) {
-    <div class="callout"><p>登入連結（只顯示這一次）</p><code>{{ loginUrl() }}</code></div>
+@switch (tab()) {
+  @case ('overview') {
+    <div class="kpis">
+      @for (k of kpis(); track k.label) {
+        <div class="kpi" [attr.data-tone]="k.tone">
+          <span class="k-label">{{ k.label }}</span>
+          <strong class="k-value">{{ k.value }}</strong>
+          @if (k.label === '需要協助' && stuck()[0]; as s) {
+            <a class="k-sub" [href]="songHref(s.id)">{{ k.sub }}</a>
+          } @else {
+            <span class="k-sub">{{ k.sub }}</span>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="forms">
+      <form class="card row-form" (ngSubmit)="addUser()">
+        <span class="form-title">邀請測試者</span>
+        <input class="field grow" name="name" placeholder="名字" [(ngModel)]="invite.name" required maxlength="60" aria-label="名字" />
+        <label class="money"><span class="unit">$</span><input name="limit" type="number" min="0" step="1" [(ngModel)]="invite.limitUsd" aria-label="額度（USD）" /></label>
+        <button class="button primary small" type="submit">建立並產生連結</button>
+      </form>
+      <form class="card row-form" (ngSubmit)="saveGlobal()">
+        <span class="form-title">全站總額度</span>
+        <label class="money grow"><span class="unit">$</span><input name="global" type="number" min="0" step="0.01" [(ngModel)]="globalLimit" aria-label="全站總額度（USD）" /></label>
+        <button class="button small" type="submit">更新</button>
+      </form>
+    </div>
+
+    @if (loginUrl(); as url) {
+      <div class="card link-card">
+        <span class="form-title">登入連結（只顯示這一次）</span>
+        <code class="link">{{ url }}</code>
+        <button class="button small" type="button" (click)="copyLink()">複製</button>
+      </div>
+    }
+
+    <div class="two">
+      <section class="card">
+        <h2 class="card-head">帳號 · {{ users().length }}</h2>
+        <div class="t-head acc"><span>名字</span><span class="r">已用</span><span class="r">額度</span><span></span></div>
+        @for (u of users(); track u.id) {
+          <div class="t-row acc" [class.off]="u.disabled">
+            <span class="who" data-l="名字"><strong>{{ u.name }}</strong>@if (u.admin) {<span class="role admin">管理者</span>}@if (u.disabled) {<span class="role off">停用</span>}</span>
+            <span class="mono r" data-l="已用"><app-price [amount]="u.spentUsd" [plain]="true" /></span>
+            <span class="r" data-l="額度"><input #lim class="quota" type="number" min="0" [value]="u.limitUsd" (change)="setLimit(u, lim.value)" aria-label="額度" /></span>
+            <span class="acts" data-l="">
+              <button class="mini" type="button" (click)="newLink(u)">登入連結</button>
+              @if (!u.admin) {<button class="mini" type="button" (click)="toggle(u)">{{ u.disabled ? '恢復' : '停用' }}</button>}
+            </span>
+          </div>
+        } @empty {
+          <p class="empty">還沒有測試者</p>
+        }
+      </section>
+
+      <section class="card">
+        <h2 class="card-head">工作佇列 <span class="note">{{ queueNote() }}</span>@if (sorted().length > recent().length) {<button class="more" type="button" (click)="show('jobs')">全部 {{ sorted().length }} 個 →</button>}</h2>
+        <ng-container *ngTemplateOutlet="queue; context: { $implicit: recent() }" />
+      </section>
+    </div>
   }
 
-  <div class="admin-forms">
-    <section class="panel">
-      <h2>邀請測試者</h2>
-      <form (ngSubmit)="addUser()" class="inline">
-        <label class="field">名字<input name="name" [(ngModel)]="invite.name" required maxlength="60" /></label>
-        <label class="field narrow">額度（USD）<input name="limit" type="number" min="0" step="1" [(ngModel)]="invite.limitUsd" /></label>
-        <button class="cta small" type="submit">建立並產生連結</button>
-      </form>
+  @case ('songs') {
+    <section class="card">
+      <h2 class="card-head">歌曲 · {{ songRows().length }}</h2>
+      <div class="t-head songs"><span>歌名</span><span>擁有者</span><span>最後活動</span><span class="r">工作數</span><span>狀態</span></div>
+      @for (s of songRows(); track s.id) {
+        <a class="t-row songs" [href]="songHref(s.id)">
+          <strong class="title" data-l="歌名">{{ s.title }}</strong>
+          <span data-l="擁有者">{{ s.owner }}</span>
+          <span class="mono muted" data-l="最後活動">{{ when(s.last) }}</span>
+          <span class="mono r" data-l="工作數">{{ s.jobs }}</span>
+          <app-status-chip [chip]="s.chip" look="text" />
+        </a>
+      } @empty {
+        <p class="empty">還沒有歌曲</p>
+      }
     </section>
-    <section class="panel">
-      <h2>全站總額度</h2>
-      <form (ngSubmit)="saveGlobal()" class="inline">
-        <label class="field">USD<input name="global" type="number" min="0" step="1" [(ngModel)]="globalLimit" /></label>
-        <button class="cta small" type="submit">更新</button>
-      </form>
+  }
+
+  @case ('jobs') {
+    <section class="card">
+      <h2 class="card-head">工作 · {{ sorted().length }} <span class="note">{{ queueNote() }}</span></h2>
+      <ng-container *ngTemplateOutlet="queue; context: { $implicit: sorted() }" />
     </section>
-  </div>
+  }
 
-  <section class="panel">
-    <h2>帳號</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>名字</th><th>已用</th><th>額度</th><th></th></tr></thead>
-        <tbody>
-          @for (u of users(); track u.id) {
-            <tr [class.off]="u.disabled">
-              <td>{{ u.name }}@if (u.admin) {<span class="chip">管理者</span>}@if (u.disabled) {<span class="chip bad">停用</span>}</td>
-              <td>${{ u.spentUsd.toFixed(2) }}</td>
-              <td><input #lim class="num" type="number" min="0" [value]="u.limitUsd" (change)="setLimit(u, lim.value)" aria-label="額度" /></td>
-              <td class="acts">
-                <button class="ghost-btn" type="button" (click)="newLink(u)">新登入連結</button>
-                @if (!u.admin) {<button class="ghost-btn" type="button" (click)="toggle(u)">{{ u.disabled ? '恢復' : '停用' }}</button>}
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
+  @case ('styles') {
+    <app-admin-styles [jobs]="jobs()" />
+  }
+}
 
-  <section class="panel">
-    <h2>歌曲</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>歌名</th><th>擁有者</th><th>最後活動</th><th>工作數</th></tr></thead>
-        <tbody>
-          @for (s of songRows(); track s.id) {
-            <tr>
-              <td><a [href]="'/my/admin/song?id=' + s.id">{{ s.title }}</a></td>
-              <td>{{ s.owner }}</td>
-              <td class="nowrap muted">{{ s.last.slice(5, 16).replace('T', ' ') }}</td>
-              <td>{{ s.jobs }}</td>
-            </tr>
-          }
-        </tbody>
-      </table>
+<ng-template #queue let-list>
+  <div class="t-head q"><span>時間</span><span>誰</span><span>歌曲</span><span>內容</span><span>狀態</span><span class="r">使用者付</span><span class="r">平台成本</span></div>
+  @for (j of list; track j.id) {
+    @let st = state(j);
+    <div class="t-row q">
+      <span class="mono muted" data-l="時間">{{ when(j.createdAt) }}</span>
+      <span data-l="誰">{{ userName(j.userId) }}</span>
+      <a class="title" [href]="songHref(j.songId)" data-l="歌曲">{{ songTitle(j.songId) }}</a>
+      <span class="kind" data-l="內容">{{ name(j) }}</span>
+      <span class="status" data-l="狀態">
+        <app-status-chip [chip]="st.chip" look="text" />
+        @if (st.detail) {<span class="detail">{{ st.detail }}</span>}
+        @if (j.status === 'failed' && !retried(j)) {<button class="mini" type="button" (click)="retry(j)">重跑</button>}
+        @if (j.status === 'admin') {<a class="mini" [href]="video(j)" target="_blank">看影片</a><button class="mini go" type="button" (click)="approve(j)">放行</button>}
+      </span>
+      <span class="mono r" data-l="使用者付"><app-price [amount]="j.chargedUsd ?? 0" [plain]="true" /></span>
+      <span class="mono r cost" data-l="平台成本" [class.none]="j.costUsd === undefined">@if (j.costUsd !== undefined) {<app-price [amount]="j.costUsd" [plain]="true" />} @else {—}</span>
     </div>
-  </section>
-
-  <section class="panel">
-    <h2>工作</h2>
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>時間</th><th>誰</th><th>歌曲</th><th>內容</th><th>狀態</th><th>花費</th><th></th></tr></thead>
-        <tbody>
-          @for (j of sorted(); track j.id) {
-            <tr>
-              <td class="nowrap muted">{{ j.createdAt.slice(5, 16).replace('T', ' ') }}</td>
-              <td>{{ userName(j.userId) }}</td>
-              <td>{{ songTitle(j.songId) }}</td>
-              <td>{{ what(j) }}</td>
-              <td>
-                <span class="chip" [class.ok]="j.status === 'done'" [class.live]="j.status === 'running'" [class.bad]="j.status === 'failed'" [class.warn]="j.status === 'admin'">{{ status[j.status] }}</span>
-                @if (j.phase && j.status !== 'done') {<span class="muted"> {{ j.phase }}</span>}
-                @if (j.error) {<div class="muted err">{{ j.error }}</div>}
-              </td>
-              <td class="nowrap"><span class="muted">費用 ${{ charged(j) }}</span>
-                @if (j.costUsd !== undefined) {<div>成本 ${{ j.costUsd.toFixed(2) }}</div>}
-                @if (j.unsettled) {<div class="muted">中斷於 {{ j.unsettled }}</div>}</td>
-              <td class="acts">
-                @if (j.status === 'failed') {
-                  @if (retriedBy(j); as next) {<span class="muted">已重跑 → {{ next }}</span>} @else {<button class="ghost-btn" type="button" (click)="retry(j)">重跑</button>}
-                }
-                @if (j.status === 'admin') {<a class="ghost-btn" [href]="video(j)" target="_blank">看影片</a><button class="cta small" type="button" (click)="approve(j)">放行</button>}
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
-</main>
+  } @empty {
+    <p class="empty">還沒有工作</p>
+  }
+</ng-template>

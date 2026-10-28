@@ -5,11 +5,15 @@ import { songDir } from './store.mts';
 
 export type BetaEvent = { at: string; type: string; jobId?: string; by?: string; [k: string]: unknown };
 
-/** Appends one event to `songs/<songId>/events.jsonl`. */
+/** Appends one event to `songs/<songId>/events.jsonl`. A write that fails is reported on stderr and never reaches the caller: the log must not stop a job or the server. */
 export function logEvent(root: string, songId: string, e: Omit<BetaEvent, 'at'>, now: () => string = () => new Date().toISOString()) {
-  const dir = songDir(root, songId);
-  mkdirSync(dir, { recursive: true });
-  appendFileSync(join(dir, 'events.jsonl'), JSON.stringify({ at: now(), ...e }) + '\n');
+  try {
+    const dir = songDir(root, songId);
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(join(dir, 'events.jsonl'), JSON.stringify({ at: now(), ...e }) + '\n');
+  } catch (err) {
+    console.error(`event log write failed for song ${songId}:`, (err as Error).message);
+  }
 }
 
 /** A song's events in the order they happened; lines that do not parse are skipped. */

@@ -1,14 +1,27 @@
 // npx tsx --test scripts/lyric-vj/beta/server.test.mts
 import assert from 'node:assert/strict';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync } from 'node:fs';
 import { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test } from 'node:test';
+import { after, test } from 'node:test';
 import { createBetaServer, stopBeta } from './server.mts';
+import { killRunning } from './queue.mts';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { invite, save, emptyDb, runPath } from './store.mts';
+
+// every server and job a test starts is stopped when the file ends, so a failed assertion cannot leave the process hanging
+const started: ReturnType<typeof createBetaServer>[] = [];
+const create = (o: Parameters<typeof createBetaServer>[0]) => { const b = createBetaServer(o); started.push(b); return b; };
+after(() => {
+  for (const b of started) {
+    b.queue.stopping = true;
+    killRunning(b.db, 0);
+    b.server.closeAllConnections();
+    b.server.close();
+  }
+});
 
 async function setup() {
   const root = mkdtempSync(join(tmpdir(), 'beta-'));
@@ -17,7 +30,7 @@ async function setup() {
   const tester = invite(db, 'Tester', 10);
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
-  const beta = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##PHASE 製作中'; echo '##COST 2.5'` });
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##PHASE 製作中'; echo '##COST 2.5'` });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token?: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, redirect: 'manual', headers: { ...(token ? { cookie: `vjb=${token}` } : {}), 'content-type': 'application/json' } });
@@ -180,7 +193,7 @@ test('a legacy make job still queued at start gets a run folder and its video do
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   db.jobs.push({ id: 'old', userId: tester.user.id, songId: 's1', kind: 'make', tier: 'img', status: 'running', reservedUsd: 6, createdAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
-  const beta = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##COST 1'` });
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##COST 1'` });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const job = beta.db.jobs[0];
   assert.equal(job.runDir, 'runs/old');
@@ -197,7 +210,7 @@ async function runStub(script: string) {
   const tester = invite(db, 'Tester', 10);
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
-  const beta = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: () => script });
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: () => script });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, headers: { cookie: `vjb=${token}`, 'content-type': 'application/json' } });
@@ -237,7 +250,7 @@ test('a pipeline orphaned by a crash is stopped when the server starts again, an
   // a crash: the first server's record stays on disk with the job running; a second server starts on it
   const root = t.root;
   t.beta.server.close();
-  const second = createBetaServer({ root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+  const second = create({ root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
   let gone = false;
   for (let k = 0; k < 40 && !gone; k++) {
     await new Promise((ok) => setTimeout(ok, 50));
@@ -339,5 +352,29 @@ test('admin logs list and read; traversal and non-admins are refused', async () 
   assert.equal((await t.admin('/beta/admin/songs/nope/logs')).status, 404);
   assert.equal((await t.tester('/beta/admin/songs/s1/events')).status, 403);
   assert.equal((await t.tester('/beta/admin/songs/s1/logs/runs/j/direct.log')).status, 403);
+  t.beta.server.close();
+});
+
+test('a song folder that cannot be written does not stop the job', async () => {
+  const { writeFileSync } = await import('node:fs');
+  const t = await runStub("echo '##PHASE a'; echo '##COST 1 x'");
+  // a file where the song folder should be: every event write fails
+  mkdirSync(join(t.root, 'songs'), { recursive: true });
+  writeFileSync(join(t.root, 'songs/s1'), 'in the way');
+  await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  for (let k = 0; k < 50 && t.beta.db.jobs[0].status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  assert.deepEqual([t.beta.db.jobs[0].status, t.beta.db.jobs[0].costUsd], ['done', 1]);
+  t.beta.server.close();
+});
+
+test('an admin retry records who retried it', async () => {
+  const t = await runStub('true');
+  t.beta.db.jobs.push({ id: 'j1', userId: t.beta.db.songs[0].userId, songId: 's1', kind: 'make', tier: 'img', status: 'failed', reservedUsd: 6, runDir: 'runs/j1', createdAt: '2026-10-27T00:00:00Z' });
+  const adminId = t.beta.db.users.find((u) => u.admin)!.id;
+  const { id } = await (await t.admin('/beta/admin/jobs/j1/retry', { method: 'POST' })).json();
+  const ev = await (await t.admin('/beta/admin/songs/s1/events')).json();
+  const retry = ev.find((e: { type: string }) => e.type === 'admin.retry');
+  assert.deepEqual([retry.by, retry.retryOf, retry.jobId], [adminId, 'j1', id]);
+  assert.equal(ev.find((e: { type: string }) => e.type === 'job.queued').by, t.beta.db.songs[0].userId);
   t.beta.server.close();
 });

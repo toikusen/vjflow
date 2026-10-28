@@ -96,7 +96,7 @@ export function createBetaServer(o: BetaOptions) {
   pump(q);
 
   /** Queues a job for a song the person owns, inside their limit. */
-  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retryOf?: string) => {
+  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retry?: { of: string; by: string }) => {
     const why = refuse(db, user.id, kind, tier);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
@@ -105,7 +105,7 @@ export function createBetaServer(o: BetaOptions) {
     db.jobs.push(job);
     q.persist();
     logEvent(o.root, songId, { type: 'job.queued', jobId: id, by: user.id, kind, tier, priceUsd: job.priceUsd });
-    if (retryOf) logEvent(o.root, songId, { type: 'admin.retry', jobId: id, retryOf });
+    if (retry) logEvent(o.root, songId, { type: 'admin.retry', jobId: id, by: retry.by, retryOf: retry.of });
     pump(q);
     return { job };
   };
@@ -246,7 +246,7 @@ export function createBetaServer(o: BetaOptions) {
         const j = db.jobs.find((x) => x.id === rj[1] && x.status === 'failed');
         if (!j) return json(res, 404, { error: '找不到失敗的工作' });
         const owner = db.users.find((u) => u.id === j.userId)!;
-        const r = enqueue(owner, j.songId, j.kind, j.tier, j.runDir, j.id);
+        const r = enqueue(owner, j.songId, j.kind, j.tier, j.runDir, { of: j.id, by: user.id });
         return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
       }
       const ap = /^\/beta\/admin\/jobs\/([\w-]+)\/approve$/.exec(path);

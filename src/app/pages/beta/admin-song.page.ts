@@ -1,7 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { BetaEvent, BetaFeedback, BetaJob, BetaMe, BetaSong, FEEDBACK_CATEGORIES, TIER_INFO, timeline } from './beta';
+import { ACTION, BetaEvent, BetaFeedback, BetaJob, BetaMe, BetaSong, FEEDBACK_CATEGORIES, retriedBy, STATUS, TIER_INFO, timeline } from './beta';
 
-const STATUS: Record<BetaJob['status'], string> = { queued: '排隊中', running: '執行中', done: '完成', failed: '失敗', admin: '等你確認' };
 const POLL_MS = 10000;
 const LOG_LINES = 2000;
 type AdminJob = BetaJob & { userId: string; reservedUsd: number; unsettled?: string; error?: string; fused?: boolean; costs?: { key: string; usd: number; phase?: string }[]; chargedUsd: number };
@@ -24,6 +23,8 @@ export class BetaAdminSongPage {
   protected readonly message = signal('');
   protected readonly openLog = signal<{ path: string; text: string; cut: boolean } | undefined>(undefined);
   protected readonly status = STATUS;
+  protected readonly action = ACTION;
+  protected readonly retriedBy = (j: AdminJob) => retriedBy(this.jobs(), j);
   protected readonly rows = computed(() => timeline(this.events()));
   protected readonly newest = computed(() => [...this.jobs()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   protected readonly charged = computed(() => this.jobs().reduce((s, j) => s + j.chargedUsd, 0));

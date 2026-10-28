@@ -12,3 +12,5 @@
 .log-view { max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; padding: 12px; border-radius: 8px; background: rgb(0 0 0 / 0.35); }
 .fb { border-top: 1px solid var(--line, rgb(255 255 255 / 0.1)); padding: 10px 0; }
 .fb ul { margin: 6px 0; padding-left: 18px; }
+/* the shared .table-wrap pulls its bottom edge up 20px (for panel-edge tables); inside a job that hides the last row under the next table */
+.job .table-wrap { margin: 8px 0 12px; }

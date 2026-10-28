@@ -111,6 +111,8 @@ export interface SongView {
   active?: BetaJob;
   retrying: boolean;
   failedFor?: BetaTier;
+  /** True when the last failed job was the system's own automatic retry (so "the system retried" is true). */
+  failedAuto?: boolean;
   results: BetaJob[];
 }
 
@@ -131,8 +133,29 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
     active,
     retrying: active?.auto === true,
     failedFor: !active && last?.status === 'failed' ? last.tier : undefined,
+    failedAuto: !active && last?.status === 'failed' ? last.auto === true : undefined,
     results: makes.filter((j) => j.status === 'done' || j.status === 'admin').reverse(),
   };
+}
+
+/** The notice under a song whose last make job failed for good; claims an automatic retry only when one really failed. */
+export const failedNotice = (auto?: boolean) => (auto ? '上一次製作失敗，系統已自動重試仍未成功，管理者會協助處理' : '上一次製作失敗，管理者會協助處理');
+
+/** Job status as the admin pages read it. */
+export const STATUS: Record<BetaJob['status'], string> = { queued: '排隊中', running: '製作中', done: '完成', failed: '失敗', admin: '等你確認' };
+/** What a feedback report asked for, as the admin pages read it. */
+export const ACTION: Record<FeedbackAction, string> = { none: '只回報', fix: '修正', redo: '重做' };
+
+/** The id of the job that already re-ran `j` (its automatic or admin retry), if any. */
+export const retriedBy = (jobs: { id: string; retryOf?: string }[], j: { id: string }) => jobs.find((x) => x.retryOf === j.id)?.id;
+
+/** One line under a result card summarising the reports on it; empty when none. */
+export function feedbackLine(list: Pick<BetaFeedback, 'ok' | 'createdAt'>[]): string {
+  const last = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  if (!last) return '';
+  const d = new Date(last.createdAt);
+  const day = `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `已回報 ${list.length} 次・最近：${last.ok ? '沒問題' : '有問題'}・${day}`;
 }
 
 /** Whole minutes from `a` to `b`, rounded up; undefined when either is missing. */
@@ -163,7 +186,7 @@ export function timeline(events: BetaEvent[]): TimelineRow[] {
       case 'song.created': return row('建立歌曲');
       case 'audio.uploaded': return row('上傳音檔');
       case 'timing.saved': return row(e['confirmed'] ? '確認時間' : '儲存時間');
-      case 'job.queued': return row('排隊');
+      case 'job.queued': return row(e['auto'] ? '排隊（自動重試）' : '排隊');
       case 'job.started': return row('開始');
       case 'job.phase': return row(`步驟：${e['phase']}`);
       case 'job.cost': return row(`費用 $${Number(e['usd']).toFixed(3)}（${e['key']}）`);
@@ -178,7 +201,7 @@ export function timeline(events: BetaEvent[]): TimelineRow[] {
       case 'job.autoretry.skipped': return row('略過自動重試（全站額度不足）', 'warn', retry);
       case 'admin.retry': return row('管理者重跑', 'info', retry);
       case 'admin.approve': return row('管理者放行');
-      case 'feedback.submitted': return row('使用者回報', 'info', e['action'] ? `處理：${e['action']}` : undefined);
+      case 'feedback.submitted': return row('使用者回報', 'info', e['action'] ? `處理：${ACTION[e['action'] as FeedbackAction] ?? e['action']}` : undefined);
       case 'queue.orphan.timeout': return row('殘留程序未結束', 'bad');
       default: return row(e.type);
     }

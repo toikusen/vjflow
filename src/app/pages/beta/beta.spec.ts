@@ -1,4 +1,4 @@
-import { BetaEvent, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO } from './beta';
+import { BetaEvent, BetaFeedback, failedNotice, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, PREP_PRICE, songChip, songStage, songView, SongView, timeline, TIER_INFO } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -163,5 +163,39 @@ describe('timeline', () => {
     expect(rows[3].jobId).toBe('j');
     expect(rows[5].detail).toBe('boom');
     expect(rows[8].detail).toBe('重試 j');
+  });
+});
+
+describe('failure copy, retries and report summary', () => {
+  const confirmed = { ...song, confirmedAt: '2026-10-27T01:00:00Z' };
+  const prep = job({});
+  const mk = (id: string, o: Partial<BetaJob>) => job({ id, kind: 'make', tier: 'img', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
+
+  it('failedAuto is true only when the last failed job was an automatic retry', () => {
+    expect(songView(confirmed, [prep, mk('2', { status: 'failed', auto: true })]).failedAuto).toBe(true);
+    expect(songView(confirmed, [prep, mk('2', { status: 'failed' })]).failedAuto).toBe(false);
+    expect(songView(confirmed, [prep, mk('2', { status: 'failed' }), mk('3', { status: 'running' })]).failedAuto).toBeUndefined();
+  });
+
+  it('claims an automatic retry only when there was one', () => {
+    expect(failedNotice(true)).toBe('上一次製作失敗，系統已自動重試仍未成功，管理者會協助處理');
+    expect(failedNotice(false)).toBe('上一次製作失敗，管理者會協助處理');
+  });
+
+  it('finds the job that superseded a failed one', () => {
+    expect(retriedBy([{ id: 'a' }, { id: 'b', retryOf: 'a' }], { id: 'a' })).toBe('b');
+    expect(retriedBy([{ id: 'a' }], { id: 'a' })).toBeUndefined();
+  });
+
+  it('titles an automatic queue entry as such', () => {
+    expect(timeline([{ at: '2026-10-27T00:00:00Z', type: 'job.queued', auto: true }])[0].title).toBe('排隊（自動重試）');
+    expect(timeline([{ at: '2026-10-27T00:00:00Z', type: 'job.queued' }])[0].title).toBe('排隊');
+  });
+
+  it('summarises reports by count, latest verdict and date', () => {
+    const f = (ok: boolean, createdAt: string): Pick<BetaFeedback, 'ok' | 'createdAt'> => ({ ok, createdAt });
+    expect(feedbackLine([])).toBe('');
+    expect(feedbackLine([f(true, '2026-10-27T12:00:00'), f(false, '2026-10-28T12:00:00')])).toBe('已回報 2 次・最近：有問題・10-28');
+    expect(feedbackLine([f(true, '2026-10-27T12:00:00')])).toBe('已回報 1 次・最近：沒問題・10-27');
   });
 });

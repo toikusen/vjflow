@@ -1,6 +1,6 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, effect, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
-import { BetaJob, BetaSong, BetaTier, minutesBetween, songView, TIER_INFO } from './beta';
+import { BetaFeedback, BetaJob, BetaSong, BetaTier, failedNotice, feedbackLine, minutesBetween, songView, TIER_INFO } from './beta';
 import { BetaPage } from './beta.page';
 import { ReportFormComponent } from './report-form.component';
 
@@ -22,6 +22,17 @@ export class BetaSongPage extends BetaPage {
     const s = this.song();
     return s ? songView(s, this.jobs()) : undefined;
   });
+  /** Whether this song is the signed-in person's own; an admin looking at someone else's cannot make or report. */
+  protected readonly mine = computed(() => {
+    const s = this.song();
+    const m = this.me();
+    return !!s && !!m && s.userId === m.id;
+  });
+  protected readonly failedNotice = failedNotice;
+  /** Past reports per result job, read once when the page first sees the result (and again after a send). */
+  protected readonly reports = signal<Readonly<Record<string, BetaFeedback[]>>>({});
+  private readonly asked = new Set<string>();
+  protected readonly summary = (j: BetaJob) => feedbackLine(this.reports()[j.id] ?? []);
   protected readonly tierList = TIERS.map((id) => ({ id, ...TIER_INFO[id] }));
   protected readonly tierName = (t?: BetaTier) => (t ? TIER_INFO[t].name : '');
   protected readonly tierPrice = (t: BetaTier) => TIER_INFO[t].price;
@@ -37,6 +48,27 @@ export class BetaSongPage extends BetaPage {
   protected readonly reporting = signal<string | null>(null);
   /** Cards whose form was ever opened on this page; their forms stay mounted and keep their drafts. */
   protected readonly opened = signal<ReadonlySet<string>>(new Set());
+  constructor() {
+    super();
+    effect(() => {
+      for (const j of this.sv()?.results ?? []) if (j.status === 'done' && !this.asked.has(j.id)) this.loadReports(j.id);
+    });
+  }
+
+  private async loadReports(id: string) {
+    this.asked.add(id);
+    try {
+      const r = await fetch(`/beta/jobs/${id}/feedback`);
+      if (r.ok) this.setReports(id, (await r.json()) as BetaFeedback[]);
+    } catch {
+      // the summary is optional; the report button still works
+    }
+  }
+
+  protected setReports(id: string, list: BetaFeedback[]) {
+    this.reports.update((m) => ({ ...m, [id]: list }));
+  }
+
   protected toggleReport(id: string) {
     this.opened.update((s) => (s.has(id) ? s : new Set(s).add(id)));
     this.reporting.update((cur) => (cur === id ? null : id));

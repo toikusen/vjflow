@@ -33,6 +33,7 @@
             <span class="chip" [class.ok]="j.status === 'done'" [class.live]="j.status === 'running'" [class.bad]="j.status === 'failed'" [class.warn]="j.status === 'admin'">{{ status[j.status] }}</span>
             @if (j.auto) {<span class="chip warn">自動重試</span>}
             @if (j.retryOf) {<span class="chip">重跑自 {{ j.retryOf }}</span>}
+            @if (j.status === 'failed' && retriedBy(j); as next) {<span class="chip">已重跑 → {{ next }}</span>}
             @if (j.fused) {<span class="chip bad">保險絲</span>}
             <span class="muted">{{ clock(j.createdAt) }}</span>
             <span>費用 ${{ j.chargedUsd.toFixed(2) }}</span>
@@ -112,7 +113,7 @@
             <span class="chip" [class.ok]="f.ok" [class.warn]="!f.ok">{{ f.ok ? '滿意' : '有問題' }}</span>
             <span class="muted">{{ clock(f.createdAt) }}</span>
             <span class="muted">工作 {{ f.jobId }}</span>
-            <span>處理：{{ f.action }}</span>
+            <span>處理：{{ action[f.action] }}</span>
           </div>
           @if (f.marks.length) {
             <ul>

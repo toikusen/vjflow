@@ -1,10 +1,9 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, TIER_INFO } from './beta';
+import { BetaJob, BetaMe, BetaSong, retriedBy, STATUS, TIER_INFO } from './beta';
 
 const POLL_MS = 5000;
-const STATUS: Record<BetaJob['status'], string> = { queued: '排隊中', running: '執行中', done: '完成', failed: '失敗', admin: '等你確認' };
-type AdminJob = BetaJob & { userId: string; reservedUsd: number; priceUsd?: number; costUsd?: number; unsettled?: string; error?: string };
+type AdminJob = BetaJob & { userId: string; reservedUsd: number; priceUsd?: number; costUsd?: number; chargedUsd?: number; unsettled?: string; error?: string };
 
 /** The beta admin: invite people, set limits, watch the queue, retry failed jobs, release held videos. */
 @Component({
@@ -30,6 +29,8 @@ export class BetaAdminPage {
     }).sort((a, b) => b.last.localeCompare(a.last)),
   );
   protected readonly status = STATUS;
+  protected readonly retriedBy = (j: AdminJob) => retriedBy(this.jobs(), j);
+  protected readonly charged = (j: AdminJob) => (j.chargedUsd ?? 0).toFixed(2);
   protected invite = { name: '', limitUsd: 25 };
   protected globalLimit = 0;
 

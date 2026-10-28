@@ -62,7 +62,7 @@
 
     @if (v.stage === 'ready') {
       @if (v.failedFor) {
-        <p class="warn notice">上一次製作失敗，系統已自動重試仍未成功，管理者會協助處理</p>
+        <p class="warn notice">{{ failedNotice(v.failedAuto) }}</p>
       }
 
       @if (v.active; as a) {
@@ -75,6 +75,7 @@
         </section>
       }
 
+      @if (mine()) {
       <section class="song">
         <h2>製作新版本</h2>
         <div class="tiers pick" role="radiogroup" aria-label="製作新版本" (keydown)="moveTier($event)">
@@ -106,6 +107,7 @@
           }
         </div>
       </section>
+      }
 
       <section class="results">
         <div class="works-head">
@@ -196,13 +198,18 @@
       }
     </ul>
     @if (j.status === 'done') {
+      @if (summary(j)) {
+        <p class="fine report-summary">{{ summary(j) }}</p>
+      }
       <div class="result-actions">
         <a class="cta small" [href]="videoUrl(j)" download>下載 1080p</a>
-        <button class="ghost-btn" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)">回報這個作品</button>
+        @if (mine()) {
+          <button class="ghost-btn" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)">回報這個作品</button>
+        }
       </div>
       <!-- stays mounted once opened so a draft survives closing the form or opening another card -->
       @if (opened().has(j.id)) {
-        <app-report-form [job]="j" [video]="video" [hidden]="reporting() !== j.id" />
+        <app-report-form [job]="j" [video]="video" [hidden]="reporting() !== j.id" (reported)="setReports(j.id, $event)" />
       }
     }
   </div>

@@ -1,4 +1,4 @@
-import { Component, input, signal } from '@angular/core';
+import { Component, input, output, signal } from '@angular/core';
 import { BetaFeedback, BetaJob, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCategory } from './beta';
 
 const MAX_TEXT = 1000;
@@ -63,6 +63,9 @@ export class ReportFormComponent {
   readonly job = input.required<BetaJob>();
   /** The card's video: marks read its current time and clicking a mark seeks it. */
   readonly video = input<HTMLVideoElement | null>(null);
+
+  /** Every report on this video, emitted after a report went through. */
+  readonly reported = output<BetaFeedback[]>();
 
   protected readonly categories = FEEDBACK_CATEGORIES;
   protected readonly actions = ACTIONS;
@@ -149,6 +152,7 @@ export class ReportFormComponent {
       if (!r.ok) return this.error.set(`無法送出：${res?.error ?? `HTTP ${r.status}`}`);
       const all = await fetch(url).then((x) => (x.ok ? (x.json() as Promise<BetaFeedback[]>) : null)).catch(() => null);
       this.past.set(all ?? (res ? [res] : []));
+      this.reported.emit(this.past()!);
     } catch {
       this.error.set('無法送出：網路連線失敗');
     } finally {

@@ -19,6 +19,8 @@ export interface Queue {
   shell?: string;
   /** Set while the server shuts down: jobs killed then stay `running` (a restart re-queues them) and nothing new starts. */
   stopping?: boolean;
+  /** Set while the server waits for orphaned pipelines to exit: `pump` starts nothing. */
+  holding?: boolean;
   /** Told when a job starts, enters a phase, adds a measured cost or ends. */
   onEvent?: (job: Job, e: Omit<BetaEvent, 'at' | 'jobId'>) => void;
 }
@@ -79,16 +81,17 @@ export const killRunning = (db: Db, graceMs?: number, bootMs = Date.now() - upti
   return pids;
 };
 
-/** Resolves once none of the process groups exists any more, or after `timeoutMs` (default: past the 10 s SIGKILL escalation). */
-export async function waitGone(pids: number[], timeoutMs = 12_000, pollMs = 50) {
+/** Resolves with the pids whose group still exists: none once all are gone, or those left after `timeoutMs` (default: past the 10 s SIGKILL escalation). */
+export async function waitGone(pids: number[], timeoutMs = 12_000, pollMs = 50): Promise<number[]> {
   const alive = (pid: number) => { try { process.kill(-pid, 0); return true; } catch (e) { return (e as NodeJS.ErrnoException).code !== 'ESRCH'; } };
   const until = Date.now() + timeoutMs;
   while (pids.some(alive) && Date.now() < until) await new Promise((ok) => setTimeout(ok, pollMs));
+  return pids.filter(alive);
 }
 
 /** Starts the next queued job when nothing runs; call after any change to the queue. */
 export function pump(q: Queue) {
-  if (q.stopping) return;
+  if (q.stopping || q.holding) return;
   const job = nextJob(q.db);
   if (!job) return;
   const cmd = q.command(job, q.db);

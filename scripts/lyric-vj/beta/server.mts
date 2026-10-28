@@ -7,7 +7,7 @@ import { extname, join, relative, resolve, sep } from 'node:path';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
-import { killRunning, pump, Queue, waitGone } from './queue.mts';
+import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import { Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
 
@@ -52,6 +52,8 @@ export interface BetaOptions {
   root: string; command: Queue['command']; publicUrl: string; env?: Record<string, string>;
   /** The built pages (ng build); any other path gets index.html, whose own path check picks the page. */
   site?: string;
+  /** How long a restart waits for orphaned pipelines to exit before giving up on them (default 12 s; tests shorten it). */
+  orphanWaitMs?: number;
 }
 const PAGE: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8' };
 
@@ -77,9 +79,10 @@ const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admi
  * Shuts the queue down for a server exit: stops the running pipelines but leaves their jobs `running` in the record
  * (the next start re-queues them), starts nothing new, then calls `exit` once the kills have had their grace time.
  */
-export function stopBeta(b: { db: Db; queue: Queue }, exit: () => void = () => process.exit(0), graceMs = 2000) {
+export function stopBeta(b: { db: Db; queue: Queue; orphans?: number[] }, exit: () => void = () => process.exit(0), graceMs = 2000) {
   b.queue.stopping = true;
   killRunning(b.db, graceMs);
+  for (const pid of b.orphans ?? []) killGroup(pid, 0);
   b.queue.persist();
   setTimeout(exit, graceMs + 500);
 }
@@ -88,13 +91,22 @@ export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }) };
+  q.holding = true; // nothing starts, whatever gets enqueued, until the orphans are gone
+  const orphanSongs = new Map(db.jobs.filter((j) => j.status === 'running' && j.pid).map((j) => [j.pid!, j.songId]));
   const orphans = killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
   for (const j of requeueRunning(db)) logEvent(o.root, j.songId, { type: 'job.requeued', jobId: j.id });
   // make jobs queued before run folders existed get one now, so their output lands where videoFile looks
   for (const j of db.jobs) if (j.kind === 'make' && j.status === 'queued' && !j.runDir) j.runDir = `runs/${j.id}`;
   q.persist();
   // the rerun starts only once the orphaned groups are gone; with none, at once
-  const ready = orphans.length ? waitGone(orphans).then(() => pump(q)) : (pump(q), Promise.resolve());
+  const release = (left: number[]) => {
+    const bySong = new Map<string, number[]>();
+    for (const pid of left) bySong.set(orphanSongs.get(pid)!, [...(bySong.get(orphanSongs.get(pid)!) ?? []), pid]);
+    for (const [songId, pids] of bySong) logEvent(o.root, songId, { type: 'queue.orphan.timeout', pids });
+    q.holding = false;
+    pump(q);
+  };
+  const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).then(release) : (release([]), Promise.resolve());
 
   /** Queues a job for a song the person owns, inside their limit. */
   const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string, retry?: { of: string; by: string }) => {
@@ -295,7 +307,7 @@ export function createBetaServer(o: BetaOptions) {
       json(res, 400, { error: (e as Error).message });
     }
   });
-  return { server, db, queue: q, /** Resolves when the first pump has run (after any orphaned pipeline has exited). */ ready };
+  return { server, db, queue: q, orphans, /** Resolves when the first pump has run (after any orphaned pipeline has exited). */ ready };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

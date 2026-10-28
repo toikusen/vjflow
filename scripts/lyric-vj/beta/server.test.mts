@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { createBetaServer, stopBeta } from './server.mts';
-import { killRunning } from './queue.mts';
+import { killRunning, waitGone } from './queue.mts';
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { readEvents } from './events.mts';
@@ -425,4 +425,57 @@ test('a tester sees steps and price on their jobs but never the platform cost', 
   assert.equal(mine.priceUsd, 6);
   assert.equal('costUsd' in mine, false);
   t.beta.server.close();
+});
+
+/** A root whose record shows s1's job running under a pipeline that ignores SIGTERM for 3 s (a crash left it behind). */
+async function orphanRoot() {
+  const root = mkdtempSync(join(tmpdir(), 'beta-'));
+  const db = emptyDb();
+  const admin = invite(db, 'Admin', 100, true);
+  const tester = invite(db, 'Tester', 10);
+  for (const [id, u] of [['s1', tester.user.id], ['s2', admin.user.id]]) db.songs.push({ id, userId: u, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
+  const orphan = spawn('bash', ['-c', "trap '' TERM; echo up; sleep 3"], { detached: true, stdio: ['ignore', 'pipe', 'ignore'] });
+  await new Promise((ok) => orphan.stdout.once('data', ok)); // the trap is set before any signal goes out
+  const exitedAt = new Promise<number>((ok) => orphan.on('exit', () => ok(Date.now())));
+  db.jobs.push({ id: 'j0', userId: tester.user.id, songId: 's1', kind: 'make', tier: 'img', status: 'running', pid: orphan.pid, startedAt: new Date().toISOString(), createdAt: '2026-10-27T00:00:00Z', reservedUsd: 6, priceUsd: 6, runDir: 'runs/j0' });
+  save(join(root, 'db.json'), db);
+  return { root, admin, orphan, exitedAt, kill: () => { try { process.kill(-orphan.pid!, 'SIGKILL'); } catch { /* gone */ } } };
+}
+
+test('enqueuing during the startup wait does not start a job beside the orphan', async () => {
+  const o = await orphanRoot();
+  try {
+    const b = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+    await new Promise<void>((ok) => b.server.listen(0, '127.0.0.1', ok));
+    const r = await fetch(`http://127.0.0.1:${(b.server.address() as AddressInfo).port}/beta/songs/s2/make`, { method: 'POST', headers: { cookie: `vjb=${o.admin.token}`, 'content-type': 'application/json' }, body: JSON.stringify({ tier: 'img' }) });
+    assert.equal(r.status, 202);
+    assert.deepEqual(b.db.jobs.map((j) => j.status), ['queued', 'queued'], 'nothing starts while the orphan lives');
+    await b.ready;
+    const exited = await o.exitedAt;
+    const running = b.db.jobs.find((j) => j.status === 'running')!;
+    assert.ok(Date.parse(running.startedAt!) >= exited - 5, 'started after the orphan exited');
+  } finally { o.kill(); }
+});
+
+test('stopBeta during the startup wait kills the waited-on orphans', async () => {
+  const o = await orphanRoot();
+  try {
+    const b = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+    stopBeta(b, () => {}, 50);
+    const t0 = Date.now();
+    await o.exitedAt;
+    assert.ok(Date.now() - t0 < 1500, 'the orphan died well before its own 3 s');
+  } finally { o.kill(); }
+});
+
+test('waitGone reports survivors and the server logs queue.orphan.timeout', async () => {
+  const o = await orphanRoot();
+  try {
+    const b = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30', orphanWaitMs: 100 });
+    await b.ready;
+    const ev = readEvents(o.root, 's1').find((e) => e.type === 'queue.orphan.timeout');
+    assert.deepEqual(ev?.pids, [o.orphan.pid]);
+    assert.deepEqual(await waitGone([o.orphan.pid!], 50, 10), [o.orphan.pid]);
+    assert.deepEqual(await waitGone([2 ** 22 + 12345], 50, 10), []);
+  } finally { o.kill(); }
 });

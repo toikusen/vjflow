@@ -24,9 +24,9 @@
       </span>
       <strong class="name">{{ s.name }}</strong>
       <span class="suits">{{ s.suits }}</span>
-      <label class="tier" [attr.data-tone]="tierLabel[s.tier].tone">
+      <label class="tier" [attr.data-tone]="tierLabel[s.tier].tone" [class.saving]="saving().has(s.id)">
         <span class="glyph">{{ tierLabel[s.tier].icon }}</span>{{ tierLabel[s.tier].label }}
-        <select [value]="s.tier" (change)="setTier(s, $any($event.target).value)" [attr.aria-label]="s.name + ' 的分級'">
+        <select [value]="s.tier" [disabled]="saving().has(s.id)" (change)="setTier(s, $any($event.target).value)" [attr.aria-label]="s.name + ' 的分級'">
           @for (t of tiers; track t) {
             <option [value]="t" [selected]="t === s.tier">{{ tierLabel[t].icon }} {{ tierLabel[t].label }}</option>
           }

@@ -49,9 +49,14 @@ export class AdminStylesComponent {
     this.grids.update((m) => ({ ...m, [id]: stripGrid(img.naturalWidth, img.naturalHeight) }));
   }
 
+  /** Style ids whose tier change is still being saved; their select is disabled so a second change cannot race the rollback. */
+  protected readonly saving = signal<Set<string>>(new Set());
+
   /** Change a style's tier; the row updates at once and falls back if the server refuses. */
   protected async setTier(s: AdminStyle, tier: StyleTier) {
+    if (this.saving().has(s.id)) return;
     const before = s.tier;
+    this.saving.update((set) => new Set(set).add(s.id));
     this.styles.update((list) => list.map((x) => (x.id === s.id ? { ...x, tier } : x)));
     try {
       const r = await fetch(`/beta/admin/styles/${encodeURIComponent(s.id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tier }) });
@@ -60,6 +65,12 @@ export class AdminStylesComponent {
     } catch (e) {
       this.styles.update((list) => list.map((x) => (x.id === s.id ? { ...x, tier: before } : x)));
       this.message.set(`分級沒有存成功：${(e as Error).message}`);
+    } finally {
+      this.saving.update((set) => {
+        const next = new Set(set);
+        next.delete(s.id);
+        return next;
+      });
     }
   }
 

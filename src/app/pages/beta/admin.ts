@@ -114,10 +114,16 @@ export function stepRows(j: BetaJob): { phase: string; start: string; dur: strin
 /** Bytes as the log chips print them: `133 B`, `2.5 KB`, `1.2 MB`. */
 export const fileSize = (bytes: number): string => (bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`);
 
+/**
+ * What a job has cost the platform: while it is queued or running, at least its price (mirrors platformSpent in
+ * scripts/lyric-vj/beta/store.mts, so 3c's 全站 number and 3d's agree); once it ended, what it really cost.
+ */
+export const jobCost = (j: AdminJob): number => (isActive(j) ? Math.max(j.costUsd ?? 0, j.priceUsd ?? j.reservedUsd ?? 0) : j.costUsd ?? 0);
+
 /** What the people paid and what the platform spent on a song's jobs, and the margin between them. */
 export function songMoney(jobs: AdminJob[]): { paid: number; cost: number; margin: ReturnType<typeof margin> } {
   const paid = jobs.reduce((s, j) => s + (j.chargedUsd ?? 0), 0);
-  const cost = jobs.reduce((s, j) => s + (j.costUsd ?? 0), 0);
+  const cost = jobs.reduce((s, j) => s + jobCost(j), 0);
   return { paid, cost, margin: margin(paid, cost) };
 }
 
@@ -164,4 +170,3 @@ export const styleFilterCounts = (styles: AdminStyle[]): Record<StyleFilter, num
 });
 
 export const EMPTY_COUNTS: StyleCounts = { accepted: 0, adjusted: 0, redone: 0 };
-export const activeJobs = (jobs: BetaJob[]) => jobs.filter(isActive);

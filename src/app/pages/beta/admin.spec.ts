@@ -30,6 +30,12 @@ describe('money helpers', () => {
     expect(m.cost).toBeCloseTo(4.83);
     expect(m.margin).toEqual({ value: '+$1.67', tone: 'ok' });
   });
+  it('counts a queued or running job at no less than its price, like the site-wide platformSpent', () => {
+    expect(songMoney([job({ id: 'r', status: 'running', priceUsd: 13.5, chargedUsd: 13.5, costUsd: 3.1 })]).cost).toBe(13.5);
+    expect(songMoney([job({ id: 'r', status: 'running', priceUsd: 2, chargedUsd: 2, costUsd: 3.1 })]).cost).toBe(3.1);
+    expect(songMoney([job({ id: 'q', status: 'queued', priceUsd: undefined, reservedUsd: 0.5, chargedUsd: 0.5 })]).cost).toBe(0.5);
+    expect(songMoney([job({ id: 'd', status: 'done', priceUsd: 13.5, chargedUsd: 13.5, costUsd: 3.1 })]).cost).toBe(3.1);
+  });
 });
 
 describe('kpis', () => {

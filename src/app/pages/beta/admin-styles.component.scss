@@ -145,6 +145,10 @@ p { margin: 0; }
   &[data-tone='warn'] { --c: var(--warn); }
   &:hover { border-color: var(--border-strong); }
   &:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  &.saving {
+    opacity: 0.55;
+    cursor: progress;
+  }
 
   .glyph { font: 700 11px var(--font-mono); }
 

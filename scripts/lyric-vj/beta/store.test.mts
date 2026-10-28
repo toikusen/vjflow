@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { emptyDb, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, retryJob, runPath, save, spent, userByToken, videoFile } from './store.mts';
+import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, retryJob, runPath, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -23,7 +23,7 @@ test('a job is refused when its reserve would pass the person or the beta limit'
   const { user } = invite(db, 'A', 20);
   assert.equal(refuse(db, user.id, 'make', 'hybrid'), undefined);
   db.jobs.push(job({ userId: user.id, tier: 'hybrid', reservedUsd: 16, status: 'running' }));
-  assert.match(refuse(db, user.id, 'make', 'img') ?? '', /額度不足/);
+  assert.match(refuse(db, user.id, 'make', 'img', 's', TIER_TOTAL('img')) ?? '', /額度不足/);
   assert.equal(refuse(db, user.id, 'make', 'none'), undefined);
   // the measured cost replaces the reserve
   db.jobs[0].costUsd = 10.5;
@@ -105,4 +105,40 @@ test('retryJob copies the run and price, links retryOf, and the user pays once',
   assert.equal(retryJob(db, failed, { auto: false }).auto, undefined);
   db.jobs.pop(); r.status = 'done';
   assert.equal(spent(db, user.id), 6);
+});
+
+test('prices split into concept and the rest; a stop after the concept pays only the concept', () => {
+  assert.deepEqual(PRICE, { prep: 0.5, concept: 2.5, none: 1.5, img: 3.5, hybrid: 13.5 });
+  assert.equal(priceFor('concept', 'img'), 2.5);
+  assert.equal(priceFor('make', 'img'), 3.5);
+  assert.equal(priceFor('prep'), 0.5);
+  assert.equal(TIER_TOTAL('img'), 6);
+  assert.equal(TIER_TOTAL('none'), 4);
+  assert.equal(TIER_TOTAL('hybrid'), 16);
+});
+
+test('conceptAttempts: a system failure never uses up an attempt, and attempts count per tier', () => {
+  const db = emptyDb();
+  const c = (o: Partial<Job>) => job({ kind: 'concept', tier: 'img', ...o });
+  db.jobs.push(c({ id: 'a', status: 'failed' }), c({ id: 'a2', status: 'done', retryOf: 'a' }));
+  assert.equal(conceptAttempts(db, 's', 'img'), 1);
+  db.jobs.push(c({ id: 'b', status: 'failed' }), c({ id: 'b2', status: 'failed', retryOf: 'b' }));
+  assert.equal(conceptAttempts(db, 's', 'img'), 1);
+  db.jobs.push(c({ id: 'n', tier: 'none' }), c({ id: 'o', songId: 'other' }));
+  assert.equal(conceptAttempts(db, 's', 'img'), 1);
+  assert.equal(conceptAttempts(db, 's', 'none'), 1);
+});
+
+test('the 4th concept for a song and tier is refused', () => {
+  const db = emptyDb();
+  const { user } = invite(db, 'A', 100);
+  for (const id of ['1', '2', '3']) db.jobs.push(job({ id, userId: user.id, kind: 'concept', tier: 'img' }));
+  assert.equal(refuse(db, user.id, 'concept', 'img', 's'), '這個版本已試過 3 次概念，請聯絡管理者');
+  assert.equal(refuse(db, user.id, 'concept', 'none', 's'), undefined);
+  assert.equal(refuse(db, user.id, 'concept', 'img', 'other'), undefined);
+});
+
+test('a legacy make job keeps its stored price', () => {
+  assert.equal(charged(job({ priceUsd: 6 })), 6);
+  assert.equal(charged(job({ priceUsd: undefined, costUsd: 2.2 })), 2.2);
 });

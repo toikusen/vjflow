@@ -11,7 +11,7 @@ import { logEvent, readEvents } from './events.mts';
 import { addFeedback, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { charged, Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { charged, Db, hashToken, invite, Job, load, newId, platformSpent, priceFor, refuse, TIER_TOTAL, requeueRunning, retryJob, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -136,11 +136,13 @@ export function createBetaServer(o: BetaOptions) {
 
   /** Queues a job for a song the person owns, inside their limit. */
   const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string) => {
-    const why = refuse(db, user.id, kind, tier);
+    // until makes go through concepts, a direct make charges concept + rest, the same total as before the split
+    const price = kind === 'make' && tier ? TIER_TOTAL(tier) : priceFor(kind, tier);
+    const why = refuse(db, user.id, kind, tier, songId, price);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
     const id = newId();
-    const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: priceFor(kind, tier), priceUsd: priceFor(kind, tier), createdAt: new Date().toISOString() };
+    const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: price, priceUsd: price, createdAt: new Date().toISOString() };
     db.jobs.push(job);
     q.persist();
     logEvent(o.root, songId, { type: 'job.queued', jobId: id, by: user.id, kind, tier, priceUsd: job.priceUsd });
@@ -301,7 +303,7 @@ export function createBetaServer(o: BetaOptions) {
         const again = db.jobs.find((x) => x.retryOf === j.id);
         if (again) return json(res, 409, { error: `已經重跑過（見 ${again.id}）` });
         const owner = db.users.find((u) => u.id === j.userId)!;
-        const why = refuse(db, owner.id, j.kind, j.tier);
+        const why = refuse(db, owner.id, j.kind, j.tier, j.songId, j.priceUsd);
         if (why) return json(res, 409, { error: why });
         if (db.jobs.some((x) => x.songId === j.songId && (x.status === 'queued' || x.status === 'running'))) return json(res, 409, { error: '這首歌已經在排隊或製作中' });
         const job = retryJob(db, j, { auto: false });

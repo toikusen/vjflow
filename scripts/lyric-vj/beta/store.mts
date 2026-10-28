@@ -12,7 +12,7 @@ export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'admin';
 export interface User { id: string; name: string; tokenHash: string; admin: boolean; limitUsd: number; disabled?: boolean; createdAt: string }
 export interface Song { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
 export interface Job {
-  id: string; userId: string; songId: string; kind: 'prep' | 'make'; tier?: Tier; status: JobStatus;
+  id: string; userId: string; songId: string; kind: 'prep' | 'concept' | 'make'; tier?: Tier; status: JobStatus;
   /** Legacy: what was set aside before the job started. New jobs keep it equal to `priceUsd`. */
   reservedUsd: number;
   /** What the person pays for this job, fixed when it is queued; unset on legacy jobs. */
@@ -36,17 +36,32 @@ export interface Job {
   auto?: boolean;
   /** Set when the cost fuse stopped the job; such a job never retries by itself. */
   fused?: boolean;
+  /** A concept job's input: the concept text, the chosen language id (unset = the director picks), reference file names copied into the run, the adjust note, and the concept job it adjusts or redoes. */
+  inputs?: { concept: string; style?: string; refs: string[]; note?: string; from?: string };
+  /** What the person decided about a finished concept. */
+  decision?: 'accepted' | 'adjusted' | 'redone';
+  /** On the make job an acceptance created: the concept job it came from. */
+  conceptOf?: string;
 }
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number;
   /** Every problem report ever submitted, never overwritten. */
   feedback: Feedback[] }
 
 /**
- * What a person pays, fixed per step: above the costs seen on the test songs (no image $2.2–2.6, with image $3.5–4.2,
- * hybrid $10–11 plus about $3 of hand redraws). The platform absorbs a run that costs more.
+ * What a person pays, fixed per step (placeholders): each concept attempt, then the rest once the concept is accepted.
+ * Together they stay above the costs seen on the test songs; the platform absorbs a run that costs more.
  */
-export const PRICE: Record<'prep' | Tier, number> = { prep: 0.5, none: 4, img: 6, hybrid: 16 };
-export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'make' && tier ? PRICE[tier] : PRICE.prep);
+export const PRICE: Record<'prep' | 'concept' | Tier, number> = { prep: 0.5, concept: 2.5, none: 1.5, img: 3.5, hybrid: 13.5 };
+export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'concept' ? PRICE.concept : kind === 'make' && tier ? PRICE[tier] : PRICE.prep);
+/** One concept plus the rest: what a tier costs a person who accepts the first concept. */
+export const TIER_TOTAL = (tier: Tier) => PRICE.concept + PRICE[tier];
+export const MAX_CONCEPTS = 3;
+
+/** Concept attempts used for a song and tier: a concept job (not a retry) counts unless it and all its retries failed. */
+export function conceptAttempts(db: Db, songId: string, tier: Tier): number {
+  return db.jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.tier === tier && !j.retryOf)
+    .filter((j) => !(j.status === 'failed' && db.jobs.filter((r) => r.retryOf === j.id).every((r) => r.status === 'failed'))).length;
+}
 
 /** Where a song's files live. */
 export const songDir = (root: string, id: string) => join(root, 'songs', id);
@@ -91,11 +106,12 @@ export const spent = (db: Db, userId?: string) => db.jobs.filter((j) => !userId 
 /** What the platform pays: a finished job its measured cost; a job still waiting or running the larger of its price and its cost so far. */
 export const platformSpent = (db: Db) => db.jobs.reduce((s, j) => s + (j.status === 'queued' || j.status === 'running' ? Math.max(j.costUsd ?? 0, j.priceUsd ?? j.reservedUsd) : j.costUsd ?? 0), 0);
 
-/** Why a job may not be queued (in words for the person), or undefined when it may. */
-export function refuse(db: Db, userId: string, kind: Job['kind'], tier?: Tier): string | undefined {
+/** Why a job may not be queued (in words for the person; `price` overrides the step's price), or undefined when it may. */
+export function refuse(db: Db, userId: string, kind: Job['kind'], tier?: Tier, songId?: string, price?: number): string | undefined {
   const user = db.users.find((u) => u.id === userId);
   if (!user || user.disabled) return '帳號無法使用';
-  const cost = priceFor(kind, tier);
+  if (kind === 'concept' && songId && tier && conceptAttempts(db, songId, tier) >= MAX_CONCEPTS) return '這個版本已試過 3 次概念，請聯絡管理者';
+  const cost = price ?? priceFor(kind, tier);
   if (spent(db, userId) + cost > user.limitUsd) return `額度不足：剩 $${Math.max(0, user.limitUsd - spent(db, userId)).toFixed(2)}，這個步驟需要 $${cost.toFixed(2)}`;
   if (platformSpent(db) + cost > db.globalLimitUsd) return '本期封測的總額度已用完，請聯絡管理者';
   return undefined;

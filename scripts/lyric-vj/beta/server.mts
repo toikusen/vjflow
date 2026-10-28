@@ -88,6 +88,16 @@ const timingKey = (file: string) => {
   }
 };
 
+/** The sorted cue ids of a song.json, or '' when it cannot be read: a fix keeps the run's treatment, which styles only these lines. */
+const cueIdsKey = (file: string) => {
+  try {
+    const t = JSON.parse(readFileSync(file, 'utf8')) as SongTimeline;
+    return JSON.stringify(t.cues.map((c) => c.id).sort());
+  } catch {
+    return '';
+  }
+};
+
 /** The reference images of a song folder, in upload order. */
 const songRefs = (dir: string) => {
   const refs = join(dir, 'refs');
@@ -330,8 +340,11 @@ export function createBetaServer(o: BetaOptions) {
             const song = db.songs.find((s) => s.id === j.songId);
             if (!song?.confirmedAt) return json(res, 409, { error: '請先確認歌詞時間' });
             // the same comparison as a concept's acceptance: a render of the same timing would only repeat the video
-            const now = timingKey(join(songDir(o.root, j.songId), 'song.json'));
-            if (!now || now === timingKey(join(runPath(o.root, j), 'song.json'))) return json(res, 409, { error: '歌詞時間沒有變更' });
+            const current = join(songDir(o.root, j.songId), 'song.json'), made = join(runPath(o.root, j), 'song.json');
+            // the renderer draws only the lines the run's treatment styles: an added line would never show
+            if (cueIdsKey(current) !== cueIdsKey(made)) return json(res, 409, { error: '新增或刪除了歌詞，請重做' });
+            const now = timingKey(current);
+            if (!now || now === timingKey(made)) return json(res, 409, { error: '歌詞時間沒有變更' });
           }
           const r = enqueue(user, j.songId, 'fix', j.tier, { inputs: { from, kind, ranges: fixRanges(p.value.marks), feedbackId } });
           if ('error' in r) return json(res, 409, r);

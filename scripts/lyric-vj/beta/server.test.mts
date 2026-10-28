@@ -1068,7 +1068,7 @@ test('an upload far past the limit gets its 413 and the server keeps answering; 
 // ---- fix jobs: a finished video fixed in a new run (pictures removed in a range, or the new timing re-applied) ----
 
 const RETIMED = JSON.stringify({ duration: 10, cues: [{ id: 'c1', start: 1.3, end: 2, text: 'a' }] });
-async function fixRoot(o: { slow?: boolean; limit?: number; script?: string; sameTiming?: boolean; unconfirmed?: boolean } = {}) {
+async function fixRoot(o: { slow?: boolean; limit?: number; script?: string; sameTiming?: boolean; unconfirmed?: boolean; current?: string } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'beta-'));
   const db = emptyDb();
   const admin = invite(db, 'Admin', 100, true);
@@ -1079,7 +1079,7 @@ async function fixRoot(o: { slow?: boolean; limit?: number; script?: string; sam
   save(join(root, 'db.json'), db);
   for (const r of ['i', 'h', 'n']) { mkdirSync(join(root, 'songs/s1/runs', r), { recursive: true }); writeFileSync(join(root, 'songs/s1/runs', r, 'song.json'), SONG); }
   // the person retimed the song after these videos (a timing fix needs a change)
-  writeFileSync(join(root, 'songs/s1/song.json'), o.sameTiming ? SONG : RETIMED);
+  writeFileSync(join(root, 'songs/s1/song.json'), o.current ?? (o.sameTiming ? SONG : RETIMED));
   const seen: Job[] = [];
   const command = (job: Job) => { seen.push(job); return o.script ?? (o.slow ? 'sleep 30' : `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'`); };
   const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
@@ -1153,6 +1153,20 @@ test('fix: refused requests queue nothing and store no report', async () => {
   const kept = await fixRoot();
   assert.equal((await kept.tester('/beta/jobs/h/feedback', { json: fixBody('picture', { action: 'none' }) })).status, 201);
   kept.beta.server.close();
+});
+
+test('fix: a timing fix that adds or removes a lyric line is refused (the render draws only the styled lines)', async () => {
+  const added = JSON.stringify({ duration: 10, cues: [{ id: 'c1', start: 1.3, end: 2, text: 'a' }, { id: 'c2', start: 3, end: 4, text: 'b' }] });
+  const removed = JSON.stringify({ duration: 10, cues: [] });
+  const renamed = JSON.stringify({ duration: 10, cues: [{ id: 'c9', start: 1.3, end: 2, text: 'a' }] });
+  for (const current of [added, removed, renamed]) {
+    const t = await fixRoot({ current });
+    const r = await t.tester('/beta/jobs/i/feedback', { json: fixBody('timing') });
+    assert.deepEqual([r.status, (await r.json()).error], [409, '新增或刪除了歌詞，請重做']);
+    assert.equal(t.beta.db.feedback.length, 0);
+    assert.equal(t.beta.db.jobs.filter((j) => j.kind === 'fix').length, 0);
+    t.beta.server.close();
+  }
 });
 
 test('fix: refused while the song has a job queued or running, and over the limit', async () => {

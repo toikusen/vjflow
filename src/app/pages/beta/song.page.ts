@@ -2,6 +2,7 @@ import { Component, computed, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { BetaJob, BetaSong, BetaTier, minutesBetween, songView, TIER_INFO } from './beta';
 import { BetaPage } from './beta.page';
+import { ReportFormComponent } from './report-form.component';
 
 const TIERS = Object.keys(TIER_INFO) as BetaTier[];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -9,7 +10,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 /** One song (`/my/song?id=`): its info, the versions to make, the job in progress and every finished result. */
 @Component({
   selector: 'app-beta-song-page',
-  imports: [NgTemplateOutlet],
+  imports: [NgTemplateOutlet, ReportFormComponent],
   templateUrl: './song.page.html',
   styleUrls: ['./beta.page.scss', './song.page.scss'],
   host: { '(document:keydown.escape)': 'ask() && answer(false)' },
@@ -32,6 +33,11 @@ export class BetaSongPage extends BetaPage {
   });
   protected readonly minutes = (j: BetaJob) => minutesBetween(j.startedAt, j.endedAt);
   protected readonly videoUrl = (j: BetaJob) => `/beta/jobs/${j.id}/video`;
+  /** The result card whose report form is open (one at a time). */
+  protected readonly reporting = signal<string | null>(null);
+  protected toggleReport(id: string) {
+    this.reporting.update((cur) => (cur === id ? null : id));
+  }
 
   /** `MM-DD HH:mm` in local time. */
   protected stamp(iso?: string) {

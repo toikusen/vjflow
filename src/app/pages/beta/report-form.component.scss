@@ -1,0 +1,293 @@
+// The report form lives inside a result card; colors come from the global tokens in styles.scss.
+
+:host {
+  display: block;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+p {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.small,
+.fine {
+  font-size: 12px;
+}
+
+.fine {
+  color: #6a6a76;
+}
+
+.report,
+.thanks {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+button {
+  font: inherit;
+  color: var(--text);
+  cursor: pointer;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+}
+
+input,
+textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+
+  &::placeholder {
+    color: #5c5c68;
+  }
+
+  &:focus {
+    border-color: var(--accent-2);
+    box-shadow: 0 0 0 3px rgb(139 92 255 / 0.18);
+  }
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.big {
+  height: 44px;
+  font-size: 15px;
+  font-weight: 650;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  &.on {
+    background: var(--surface-3);
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+  }
+}
+
+.mark-now {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  font-weight: 650;
+  background: rgb(255 79 163 / 0.1);
+  border: 1px solid rgb(255 79 163 / 0.45);
+  border-radius: 10px;
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ff4fa3;
+  }
+}
+
+.marks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mark {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.mark-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time {
+  padding: 4px 8px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: #b9a3ff;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+}
+
+.ghost {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  white-space: nowrap;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+
+  &.small {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+    background: transparent;
+  }
+}
+
+.thanks .ghost {
+  justify-self: start;
+}
+
+.remove {
+  width: 32px;
+  height: 32px;
+  margin-left: auto;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+
+  &:hover {
+    color: var(--text);
+    background: var(--surface-3);
+  }
+}
+
+.cats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cat {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+
+  &.on {
+    color: var(--text);
+    background: rgb(139 92 255 / 0.18);
+    border-color: var(--accent-2);
+  }
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  button {
+    padding: 7px 0;
+    color: var(--muted);
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+
+    &.on {
+      color: var(--text);
+      background: var(--surface-3);
+      box-shadow: inset 0 0 0 1px var(--border-strong);
+    }
+  }
+}
+
+.err {
+  font-size: 13px;
+  color: var(--bad);
+}
+
+.send {
+  height: 40px;
+  font-size: 14px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--grad);
+  border: none;
+  border-radius: 10px;
+
+  &:disabled {
+    color: var(--muted);
+    background: var(--surface-3);
+  }
+}
+
+.thanks-line {
+  font-weight: 650;
+  color: var(--ok);
+}
+
+.past {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .when {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.tag {
+  padding: 1px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+
+  &.ok { color: var(--ok); }
+  &.bad { color: var(--warn); }
+}

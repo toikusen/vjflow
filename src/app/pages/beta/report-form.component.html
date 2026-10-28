@@ -1,0 +1,83 @@
+@if (past(); as list) {
+  <div class="thanks" role="status">
+    <p class="thanks-line">已收到回報，謝謝！</p>
+    <p class="muted small">這個作品的回報・{{ list.length }}</p>
+    <ul class="past">
+      @for (f of list; track f.id) {
+        <li>
+          <span [class]="f.ok ? 'tag ok' : 'tag bad'">{{ f.ok ? '沒問題' : '有問題' }}</span>
+          @if (f.marks.length) {
+            <span>標記 {{ f.marks.length }} 處</span>
+          }
+          <span class="muted when">{{ stamp(f.createdAt) }}</span>
+        </li>
+      }
+    </ul>
+    <button class="ghost" type="button" (click)="again()">再回報一次</button>
+  </div>
+} @else {
+  <div class="report">
+    <div class="choice" role="group" aria-label="這個作品">
+      <button type="button" class="big" [class.on]="choice() === 'ok'" [attr.aria-pressed]="choice() === 'ok'" (click)="pick('ok')">沒問題</button>
+      <button type="button" class="big" [class.on]="choice() === 'bad'" [attr.aria-pressed]="choice() === 'bad'" (click)="pick('bad')">有問題</button>
+    </div>
+
+    @if (choice() === 'ok') {
+      <input type="text" [attr.maxlength]="maxText" placeholder="想說的話（可不填）" aria-label="想說的話" [value]="okNote()" (input)="okNote.set($any($event.target).value)" />
+    }
+
+    @if (choice() === 'bad') {
+      <button type="button" class="mark-now" [disabled]="!video() || marks().length >= maxMarks" (click)="markNow()">
+        <span class="dot" aria-hidden="true"></span>標記目前時間
+      </button>
+      @if (marks().length >= maxMarks) {
+        <p class="muted small">最多標 {{ maxMarks }} 處</p>
+      }
+
+      @if (marks().length) {
+        <ol class="marks">
+          @for (m of marks(); track m.key) {
+            <li class="mark">
+              <div class="mark-head">
+                <button type="button" class="time" title="跳到這裡" (click)="seek(m)">
+                  {{ time(m.at) }}@if (m.end !== undefined) {<span>–{{ time(m.end) }}</span>}
+                </button>
+                <button type="button" class="ghost small" (click)="setEnd(m)">設為結束</button>
+                <button type="button" class="remove" aria-label="移除這個標記" (click)="remove(m.key)">×</button>
+              </div>
+              <div class="cats" role="group" aria-label="問題類別">
+                @for (c of categories; track c.id) {
+                  <button type="button" class="cat" [class.on]="m.category === c.id" [attr.aria-pressed]="m.category === c.id" (click)="patch(m.key, { category: c.id })">{{ c.label }}</button>
+                }
+              </div>
+              <input type="text" [attr.maxlength]="maxText" placeholder="備註（可不填）" aria-label="備註" [value]="m.note" (input)="patch(m.key, { note: $any($event.target).value })" />
+            </li>
+          }
+        </ol>
+      }
+
+      <label class="field">
+        建議
+        <textarea rows="3" [attr.maxlength]="maxText" placeholder="整體想怎麼改（可不填）" [value]="suggestion()" (input)="suggestion.set($any($event.target).value)"></textarea>
+      </label>
+
+      <div class="field">
+        處理方式
+        <div class="actions" role="radiogroup" aria-label="處理方式">
+          @for (a of actions; track a.id) {
+            <button type="button" role="radio" [class.on]="a.id === 'none'" [attr.aria-checked]="a.id === 'none'" [disabled]="a.id !== 'none'">{{ a.label }}</button>
+          }
+        </div>
+        <span class="fine">修正與重做即將開放</span>
+      </div>
+    }
+
+    @if (error()) {
+      <p class="err" role="alert">{{ error() }}</p>
+    }
+
+    @if (choice()) {
+      <button type="button" class="send" [disabled]="sending()" (click)="send()">送出</button>
+    }
+  </div>
+}

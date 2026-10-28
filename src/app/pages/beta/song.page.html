@@ -119,33 +119,12 @@
           @for (j of v.results; track j.id) {
             <article class="result">
               @if (j.status === 'done') {
-                <video [src]="videoUrl(j)" controls playsinline preload="metadata"></video>
+                <video #vid [src]="videoUrl(j)" controls playsinline preload="metadata"></video>
+                <ng-container *ngTemplateOutlet="resultBody; context: { $implicit: j, video: vid }" />
               } @else {
                 <div class="held"><p class="muted">已完成，管理者確認後就能下載</p></div>
+                <ng-container *ngTemplateOutlet="resultBody; context: { $implicit: j, video: null }" />
               }
-              <div class="result-body">
-                <div class="tier-head">
-                  <h4>{{ tierName(j.tier) }}</h4>
-                  @if (j.style) {
-                    <span class="chip">{{ j.style }}</span>
-                  }
-                </div>
-                <ul class="facts">
-                  <li>完成於 {{ stamp(j.endedAt) }}</li>
-                  @if (minutes(j) !== undefined) {
-                    <li>花費時間 約 {{ minutes(j) }} 分鐘</li>
-                  }
-                  @if (j.priceUsd !== undefined) {
-                    <li>費用 ${{ j.priceUsd }}</li>
-                  }
-                </ul>
-                <div class="result-actions">
-                  @if (j.status === 'done') {
-                    <a class="cta small" [href]="videoUrl(j)" download>下載 1080p</a>
-                  }
-                  <button class="ghost-btn" type="button">回報這個作品</button>
-                </div>
-              </div>
             </article>
           }
         </div>
@@ -196,5 +175,34 @@
         <li [class.done]="job.status === 'running' && $index < p.index" [class.now]="job.status === 'running' && $index === p.index">{{ x.label }}</li>
       }
     </ol>
+  </div>
+</ng-template>
+
+<ng-template #resultBody let-j let-video="video">
+  <div class="result-body">
+    <div class="tier-head">
+      <h4>{{ tierName(j.tier) }}</h4>
+      @if (j.style) {
+        <span class="chip">{{ j.style }}</span>
+      }
+    </div>
+    <ul class="facts">
+      <li>完成於 {{ stamp(j.endedAt) }}</li>
+      @if (minutes(j) !== undefined) {
+        <li>花費時間 約 {{ minutes(j) }} 分鐘</li>
+      }
+      @if (j.priceUsd !== undefined) {
+        <li>費用 ${{ j.priceUsd }}</li>
+      }
+    </ul>
+    @if (j.status === 'done') {
+      <div class="result-actions">
+        <a class="cta small" [href]="videoUrl(j)" download>下載 1080p</a>
+        <button class="ghost-btn" type="button" [class.on]="reporting() === j.id" [attr.aria-expanded]="reporting() === j.id" (click)="toggleReport(j.id)">回報這個作品</button>
+      </div>
+      @if (reporting() === j.id) {
+        <app-report-form [job]="j" [video]="video" />
+      }
+    }
   </div>
 </ng-template>

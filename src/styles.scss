@@ -1,13 +1,26 @@
 :root {
-  --bg: #0b0a12;
-  --surface: #14121f;
-  --surface-2: #1d1a2c;
-  --border: #2c2842;
-  --text: #ece9f7;
-  --muted: #9a94b8;
-  --accent: #ff3d9a;
+  --bg: #08080b;
+  --surface: #111116;
+  --surface-2: #19191f;
+  --surface-3: #22222a;
+  --border: #26262e;
+  --border-strong: #34343e;
+  --text: #f2f2f5;
+  --muted: #8b8b98;
+  --accent: #ff4fa3;
+  --accent-2: #8b5cff;
+  --grad: linear-gradient(135deg, #ff4fa3 0%, #8b5cff 100%);
+  --ok: #3ddc97;
   --warn: #ffc857;
+  --bad: #ff6b6b;
+  --radius: 14px;
   color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 html,
@@ -16,6 +29,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang TC', 'Noto Sans TC', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .btn {
@@ -27,6 +41,12 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+
+  &:hover:not(:disabled) {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+  }
 
   &:disabled {
     opacity: 0.45;
@@ -34,8 +54,8 @@ body {
   }
 
   &.primary {
-    background: var(--accent);
-    border-color: var(--accent);
+    background: var(--grad);
+    border-color: transparent;
     color: #fff;
   }
 

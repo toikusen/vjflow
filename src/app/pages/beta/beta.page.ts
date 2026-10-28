@@ -1,15 +1,26 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, BetaTier, songStage, TIER_INFO } from './beta';
+import { BetaJob, BetaMe, BetaSong, BetaTier, jobProgress, PREP_RESERVE, songStage, TIER_INFO } from './beta';
 
 const POLL_MS = 5000;
+
+/** What a confirmation pop-up shows before money is set aside. */
+interface Ask {
+  title: string;
+  body: string;
+  cost: number;
+  go: () => void;
+}
+const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文', ko: '韓文' };
 
 /** A tester's songs (served by scripts/lyric-vj/beta/server.mts): add one, confirm its timing, pick a version, download. */
 @Component({
   selector: 'app-beta-page',
-  imports: [FormsModule],
+  imports: [FormsModule, NgTemplateOutlet],
   templateUrl: './beta.page.html',
   styleUrl: './beta.page.scss',
+  host: { '(document:keydown.escape)': 'ask() && answer(false)' },
 })
 export class BetaPage {
   protected readonly me = signal<BetaMe | null>(null);
@@ -19,23 +30,66 @@ export class BetaPage {
   protected readonly busy = signal(false);
   protected readonly tiers = Object.entries(TIER_INFO) as [BetaTier, (typeof TIER_INFO)[BetaTier]][];
   protected readonly stage = (s: BetaSong) => songStage(s, this.jobs());
+  protected readonly progress = (j: BetaJob) => jobProgress(j);
+  protected readonly fileName = signal('');
+  protected readonly ask = signal<Ask | null>(null);
+  protected readonly prepReserve = PREP_RESERVE;
+  protected readonly langs = Object.entries(LANGS);
+  protected readonly langName = (l: string) => LANGS[l] ?? l;
+  protected readonly left = (m: BetaMe) => Math.max(0, m.limitUsd - m.spentUsd);
+  protected readonly usedPct = (m: BetaMe) => (m.limitUsd ? Math.min(100, (m.spentUsd / m.limitUsd) * 100) : 100);
   protected form = { title: '', artist: '', language: 'ja', lyrics: '' };
   private file: File | null = null;
+  private fileInput: HTMLInputElement | null = null;
 
   constructor() {
     const timer = setInterval(() => this.poll(), POLL_MS);
-    inject(DestroyRef).onDestroy(() => clearInterval(timer));
+    // leaving mid-upload cuts the audio off; once it is on the server the work goes on without this page
+    const stay = (e: BeforeUnloadEvent) => this.busy() && e.preventDefault();
+    addEventListener('beforeunload', stay);
+    inject(DestroyRef).onDestroy(() => {
+      clearInterval(timer);
+      removeEventListener('beforeunload', stay);
+    });
     this.poll();
   }
 
-  protected pick(e: Event) {
-    this.file = (e.target as HTMLInputElement).files?.[0] ?? null;
+  protected confirmAdd() {
+    if (!this.file) return this.message.set('請選擇音檔');
+    this.ask.set({
+      title: `上傳「${this.form.title}」`,
+      body: '上傳後會開始準備歌曲（分離人聲、自動對歌詞時間）。上傳過程中請勿關閉或離開這個頁面，上傳完成後就可以離開。',
+      cost: PREP_RESERVE,
+      go: () => this.add(),
+    });
   }
 
-  protected async add() {
+  protected confirmMake(song: BetaSong, tier: BetaTier) {
+    const t = TIER_INFO[tier];
+    this.ask.set({
+      title: `製作「${song.title}」${t.name}`,
+      body: `${t.about}製作${t.minutes}，開始後無法取消；可以離開頁面，完成後回來下載。`,
+      cost: t.reserve,
+      go: () => this.make(song, tier),
+    });
+  }
+
+  protected answer(yes: boolean) {
+    const a = this.ask();
+    this.ask.set(null);
+    if (yes) a?.go();
+  }
+
+  protected pick(e: Event) {
+    this.fileInput = e.target as HTMLInputElement;
+    this.file = this.fileInput.files?.[0] ?? null;
+    this.fileName.set(this.file?.name ?? '');
+  }
+
+  private async add() {
     if (!this.file) return this.message.set('請選擇音檔');
     this.busy.set(true);
-    this.message.set('上傳中…');
+    this.message.set('上傳中，請勿關閉或離開這個頁面…');
     try {
       const made = await fetch('/beta/songs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.form) });
       const song = await made.json();
@@ -44,7 +98,9 @@ export class BetaPage {
       if (!up.ok) throw new Error((await up.json()).error);
       this.form = { title: '', artist: '', language: this.form.language, lyrics: '' };
       this.file = null;
-      this.message.set('已上傳，系統正在準備歌詞時間，完成後請到「確認時間」。');
+      this.fileName.set('');
+      if (this.fileInput) this.fileInput.value = '';
+      this.message.set('已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 5–10 分鐘），完成後請回來「確認時間」。');
       await this.poll();
     } catch (e) {
       this.message.set(`上傳失敗：${(e as Error).message}`);
@@ -53,7 +109,7 @@ export class BetaPage {
     }
   }
 
-  protected async make(song: BetaSong, tier: BetaTier) {
+  private async make(song: BetaSong, tier: BetaTier) {
     const r = await fetch(`/beta/songs/${song.id}/make`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tier }) });
     this.message.set(r.ok ? `「${song.title}」已開始排隊製作${TIER_INFO[tier].name}。` : `無法開始：${(await r.json()).error}`);
     await this.poll();

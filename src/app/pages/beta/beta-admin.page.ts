@@ -21,6 +21,7 @@ export class BetaAdminPage {
   protected readonly message = signal('');
   protected readonly loginUrl = signal('');
   protected readonly sorted = computed(() => [...this.jobs()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+  protected readonly active = computed(() => this.jobs().filter((j) => j.status === 'queued' || j.status === 'running').length);
   protected readonly status = STATUS;
   protected invite = { name: '', limitUsd: 25 };
   protected globalLimit = 0;

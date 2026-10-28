@@ -8,7 +8,9 @@ import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { pump, Queue } from './queue.mts';
 import { randomBytes } from 'node:crypto';
-import { Db, hashToken, invite, Job, load, newId, refuse, requeueRunning, reserveFor, save, Song, spent, Tier, User, userByToken } from './store.mts';
+import { Db, hashToken, invite, Job, load, newId, refuse, requeueRunning, reserveFor, save, Song, songDir, spent, Tier, User, runPath, userByToken, videoFile } from './store.mts';
+
+export { songDir };
 
 const MAX_BODY = 100_000;
 const MAX_AUDIO = 80_000_000;
@@ -52,9 +54,6 @@ export interface BetaOptions {
 }
 const PAGE: Record<string, string> = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.png': 'image/png', '.woff2': 'font/woff2', '.json': 'application/json', '.txt': 'text/plain; charset=utf-8' };
 
-/** Where a song's files live. */
-export const songDir = (root: string, id: string) => join(root, 'songs', id);
-
 const json = (res: ServerResponse, status: number, body: unknown) =>
   res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(body));
 
@@ -69,6 +68,7 @@ const readJson = (req: IncomingMessage) =>
 const cookie = (req: IncomingMessage, name: string) => (req.headers.cookie ?? '').split(';').map((c) => c.trim().split('=')).find(([k]) => k === name)?.[1];
 
 /** What a person sees of a job (no logs: those can carry paths and keys' error text). */
+const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin && j.status === 'admin');
 const publicJob = (j: Job) => ({ id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, failed: j.status === 'failed' });
 const publicUser = (db: Db, u: User) => ({ id: u.id, name: u.name, admin: u.admin, disabled: !!u.disabled, limitUsd: u.limitUsd, spentUsd: +spent(db, u.id).toFixed(2) });
 
@@ -81,11 +81,12 @@ export function createBetaServer(o: BetaOptions) {
   pump(q);
 
   /** Queues a job for a song the person owns, inside their limit. */
-  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier) => {
+  const enqueue = (user: User, songId: string, kind: Job['kind'], tier?: Tier, runDir?: string) => {
     const why = refuse(db, user.id, kind, tier);
     if (why) return { error: why };
     if (db.jobs.some((j) => j.songId === songId && (j.status === 'queued' || j.status === 'running'))) return { error: '這首歌已經在排隊或製作中' };
-    const job: Job = { id: newId(), userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: reserveFor(kind, tier), createdAt: new Date().toISOString() };
+    const id = newId();
+    const job: Job = { id, runDir: kind === 'make' ? (runDir ?? `runs/${id}`) : undefined, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: reserveFor(kind, tier), createdAt: new Date().toISOString() };
     db.jobs.push(job);
     q.persist();
     pump(q);
@@ -131,6 +132,12 @@ export function createBetaServer(o: BetaOptions) {
         q.persist();
         return json(res, 201, song);
       }
+      // one run's finished video; one held for the admin's look reaches the person once the admin approves it
+      const vj = /^\/beta\/jobs\/([\w-]+)\/video$/.exec(path);
+      if (vj && req.method === 'GET') {
+        const j = db.jobs.find((x) => x.id === vj[1] && x.kind === 'make' && (x.userId === user.id || user.admin));
+        return j && isViewable(j, user) ? sendFile(req, res, videoFile(o.root, j)) : json(res, 404, { error: '影片還沒完成' });
+      }
       const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|cues|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
       if (sm) {
         const song = db.songs.find((s) => s.id === sm[1] && (s.userId === user.id || user.admin));
@@ -144,11 +151,11 @@ export function createBetaServer(o: BetaOptions) {
           const r = enqueue(user, song.id, 'prep');
           return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
         }
-        // a finished video; one held for the admin's look reaches the person once the admin approves it
+        // old links: the latest finished video of a version
         if (sm[2].startsWith('video/') && req.method === 'GET') {
           const tier = sm[2].slice(6);
-          const ready = db.jobs.some((j) => j.songId === song.id && j.kind === 'make' && j.tier === tier && (j.status === 'done' || (user.admin && j.status === 'admin')));
-          return ready ? sendFile(req, res, join(dir, `video-${tier}.mp4`)) : json(res, 404, { error: '影片還沒完成' });
+          const latest = db.jobs.filter((j) => j.songId === song.id && j.kind === 'make' && j.tier === tier && isViewable(j, user)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+          return latest ? sendFile(req, res, videoFile(o.root, latest)) : json(res, 404, { error: '影片還沒完成' });
         }
         if (!existsSync(songFile)) return json(res, 409, { error: '歌曲還在準備中' });
         const timeline: SongTimeline = JSON.parse(readFileSync(songFile, 'utf8'));
@@ -219,7 +226,7 @@ export function createBetaServer(o: BetaOptions) {
         const j = db.jobs.find((x) => x.id === rj[1] && x.status === 'failed');
         if (!j) return json(res, 404, { error: '找不到失敗的工作' });
         const owner = db.users.find((u) => u.id === j.userId)!;
-        const r = enqueue(owner, j.songId, j.kind, j.tier);
+        const r = enqueue(owner, j.songId, j.kind, j.tier, j.runDir);
         return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job));
       }
       const ap = /^\/beta\/admin\/jobs\/([\w-]+)\/approve$/.exec(path);
@@ -247,7 +254,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (!song) return { error: '找不到這首歌' };
     const dir = songDir(root, song.id);
     if (job.kind === 'prep') return `bash scripts/lyric-vj/beta/prep.sh ${q(dir)} ${q(song.language)} ${q([song.artist, song.title].filter(Boolean).join(' - '))}`;
-    return `bash scripts/lyric-vj/beta/make.sh ${q(dir)} ${q(job.tier ?? '')}`;
+    return `bash scripts/lyric-vj/beta/make.sh ${q(dir)} ${q(job.tier ?? '')} ${q(runPath(root, job))}`;
   };
   const { server } = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command, site: resolve('dist/vjflow/browser') });
   server.listen(4320, '127.0.0.1', () => console.log('beta backend on http://127.0.0.1:4320'));

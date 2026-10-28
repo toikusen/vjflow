@@ -21,7 +21,7 @@ describe('songStage', () => {
       job({ id: 'c', kind: 'make', tier: 'hybrid', status: 'running', phase: '畫故事畫面', createdAt: '2026-10-27T04:00:00Z' }),
       job({ id: 'd', kind: 'make', tier: 'none', status: 'admin', createdAt: '2026-10-27T05:00:00Z' }),
     ];
-    expect(songStage(s, jobs)).toEqual({ step: 'ready', making: [{ tier: 'hybrid', label: '畫故事畫面', job: jobs[3] }], done: ['img'], held: ['none'], failed: [] });
+    expect(songStage(s, jobs)).toEqual({ step: 'ready', making: [{ tier: 'hybrid', label: '畫故事畫面', job: jobs[3] }], done: ['img'], held: ['none'], failed: [], videos: [{ tier: 'img', jobId: 'b' }] });
   });
 });
 

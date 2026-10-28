@@ -122,8 +122,8 @@
                   <p class="meta">{{ t[1].minutes }}</p>
                   <div class="tier-foot">
                     @if (r.done.includes(t[0])) {
-                      <video [src]="video(s, t[0])" controls playsinline preload="metadata"></video>
-                      <a class="ghost-btn" [href]="video(s, t[0])" download>下載 1080p</a>
+                      <video [src]="video(r, t[0])" controls playsinline preload="metadata"></video>
+                      <a class="ghost-btn" [href]="video(r, t[0])" download>下載 1080p</a>
                     } @else if (r.held.includes(t[0])) {
                       <p class="muted">已完成，管理者確認後就能下載。</p>
                     } @else if (r.making.length && r.making[0].tier === t[0]) {

@@ -74,7 +74,7 @@ export class BetaAdminPage {
   }
 
   protected video(j: AdminJob) {
-    return `/beta/songs/${j.songId}/video/${j.tier}`;
+    return `/beta/jobs/${j.id}/video`;
   }
 
   private async send(method: string, path: string, body?: unknown) {

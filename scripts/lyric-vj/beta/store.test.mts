@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { emptyDb, invite, Job, load, nextJob, refuse, requeueRunning, save, spent, userByToken } from './store.mts';
+import { emptyDb, invite, Job, load, nextJob, refuse, requeueRunning, runPath, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -58,4 +58,11 @@ test('the job keys come from KEY=value files', async () => {
   writeFileSync(join(dir, 'a.env'), 'A_KEY=one\nexport B_KEY="two"\n# note\n');
   writeFileSync(join(dir, 'skip.txt'), 'C_KEY=no');
   assert.deepEqual(keyEnv(dir), { A_KEY: 'one', B_KEY: 'two' });
+});
+
+test('videoFile and runPath fall back to the song folder for legacy jobs', () => {
+  assert.equal(runPath('/r', job({ songId: 's' })), '/r/songs/s');
+  assert.equal(videoFile('/r', job({ songId: 's', tier: 'img' })), '/r/songs/s/video-img.mp4');
+  assert.equal(runPath('/r', job({ songId: 's', runDir: 'runs/j' })), '/r/songs/s/runs/j');
+  assert.equal(videoFile('/r', job({ songId: 's', runDir: 'runs/j' })), '/r/songs/s/runs/j/video.mp4');
 });

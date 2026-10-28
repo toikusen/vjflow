@@ -3,7 +3,7 @@
 // ponytail: whole-file JSON store, single writer; move to SQLite when more than one process writes.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export type Tier = 'none' | 'img' | 'hybrid';
 export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'admin';
@@ -17,6 +17,8 @@ export interface Job {
   /** The measured cost, when the steps report one. */
   costUsd?: number;
   createdAt: string; startedAt?: string; endedAt?: string; phase?: string; error?: string;
+  /** A make job's own folder, relative to the song folder (`runs/<jobId>`); unset for prep and for jobs made before run folders. */
+  runDir?: string;
 }
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number }
 
@@ -26,6 +28,13 @@ export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd:
  */
 export const RESERVE: Record<Job['kind'] | Tier, number> = { prep: 0.5, make: 0, none: 4, img: 6, hybrid: 16 };
 export const reserveFor = (kind: Job['kind'], tier?: Tier) => (kind === 'make' && tier ? RESERVE[tier] : RESERVE[kind]);
+
+/** Where a song's files live. */
+export const songDir = (root: string, id: string) => join(root, 'songs', id);
+/** The folder a job works in: its run folder, or the song folder for prep and legacy jobs. */
+export const runPath = (root: string, job: Job) => (job.runDir ? join(songDir(root, job.songId), job.runDir) : songDir(root, job.songId));
+/** A make job's finished video; legacy jobs (no run folder) wrote `video-<tier>.mp4` into the song folder. */
+export const videoFile = (root: string, job: Job) => (job.runDir ? join(runPath(root, job), 'video.mp4') : join(runPath(root, job), `video-${job.tier}.mp4`));
 
 export const emptyDb = (): Db => ({ users: [], songs: [], jobs: [], globalLimitUsd: 100 });
 export const newId = () => randomBytes(9).toString('base64url');

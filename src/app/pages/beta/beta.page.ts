@@ -115,8 +115,8 @@ export class BetaPage {
     await this.poll();
   }
 
-  protected video(song: BetaSong, tier: BetaTier) {
-    return `/beta/songs/${song.id}/video/${tier}`;
+  protected video(r: { videos: { tier: BetaTier; jobId: string }[] }, tier: BetaTier) {
+    return `/beta/jobs/${r.videos.find((v) => v.tier === tier)?.jobId}/video`;
   }
 
   private async poll() {

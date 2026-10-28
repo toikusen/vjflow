@@ -60,7 +60,7 @@ export type SongStage =
   | { step: 'preparing'; label: string; job?: BetaJob }
   | { step: 'prepFailed' }
   | { step: 'timing' }
-  | { step: 'ready'; making: { tier: BetaTier; label: string; job: BetaJob }[]; done: BetaTier[]; held: BetaTier[]; failed: BetaTier[] };
+  | { step: 'ready'; making: { tier: BetaTier; label: string; job: BetaJob }[]; done: BetaTier[]; held: BetaTier[]; failed: BetaTier[]; videos: { tier: BetaTier; jobId: string }[] };
 
 /** Where a song stands: being prepared, waiting for its timing, or ready with its versions' states. */
 export function songStage(song: BetaSong, jobs: BetaJob[]): SongStage {
@@ -82,5 +82,9 @@ export function songStage(song: BetaSong, jobs: BetaJob[]): SongStage {
     done: tiers(['done']),
     held: tiers(['admin']),
     failed: tiers(['failed']),
+    videos: (['none', 'img', 'hybrid'] as BetaTier[]).flatMap((tier) => {
+      const j = mine.filter((x) => x.kind === 'make' && x.tier === tier && x.status === 'done').at(-1);
+      return j ? [{ tier, jobId: j.id }] : [];
+    }),
   };
 }

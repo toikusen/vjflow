@@ -5,7 +5,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from
 import { homedir, uptime } from 'node:os';
 import { join } from 'node:path';
 import type { BetaEvent } from './events.mts';
-import { Db, Job, nextJob, retryJob } from './store.mts';
+import { Db, Job, nextJob, platformSpent, retryJob } from './store.mts';
 
 export interface Queue {
   db: Db;
@@ -89,9 +89,13 @@ export async function waitGone(pids: number[], timeoutMs = 12_000, pollMs = 50):
   return pids.filter(alive);
 }
 
-/** A system failure runs once more by itself; a fuse trip, a retry of a retry and an admin hold wait for the admin. */
+/** A system failure runs once more by itself (inside the global budget); a fuse trip, a retry of a retry and an admin hold wait for the admin. */
 function autoRetry(q: Queue, job: Job) {
   if (q.stopping || job.status !== 'failed' || job.fused || job.auto || job.retryOf) return;
+  if (platformSpent(q.db) + (job.priceUsd ?? job.reservedUsd) > q.db.globalLimitUsd) {
+    q.onEvent?.(job, { type: 'job.autoretry.skipped', retryOf: job.id, reason: 'global-limit' });
+    return;
+  }
   const next = retryJob(q.db, job, { auto: true });
   q.persist();
   q.onEvent?.(job, { type: 'job.autoretry', retryOf: job.id });

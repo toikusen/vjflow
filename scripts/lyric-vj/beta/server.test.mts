@@ -233,8 +233,9 @@ test('a job whose cost passes twice its price is stopped and not charged', async
 test('a failed job records the step it was in as unsettled', async () => {
   const t = await runStub("echo '##PHASE 畫道具'; echo '##COST 1.5 x'; exit 1");
   await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
-  for (let k = 0; k < 40 && t.beta.db.jobs[0].status !== 'failed'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  await waitFor(() => t.beta.db.jobs.length === 2 && t.beta.db.jobs.every((j) => j.status === 'failed'));
   const jobs = await (await t.admin('/beta/admin/jobs')).json();
+  assert.equal(t.beta.db.jobs[0].costUsd, 1.5);
   assert.equal(jobs[0].unsettled, '畫道具');
   assert.equal(jobs[0].priceUsd, 6);
   assert.equal((await (await t.admin('/beta/admin/users')).json()).platformSpentUsd, 3); // the failed run and its automatic retry
@@ -303,7 +304,8 @@ test('a shell that cannot start fails the job once and the queue moves on', asyn
   assert.equal(job.status, 'failed');
   assert.match(job.error ?? '', /無法啟動/);
   assert.ok(job.endedAt && job.unsettled && !job.pid);
-  assert.equal(readEvents(root, 's1').filter((e) => e.type === 'job.ended').length, 2); // the failed start and its one automatic retry, each ended once
+  assert.equal(beta.db.jobs.length, 2);
+  for (const j of beta.db.jobs) assert.equal(readEvents(root, 's1').filter((e) => e.type === 'job.ended' && e.jobId === j.id).length, 1);
   beta.server.close();
 });
 
@@ -554,5 +556,18 @@ test('an automatic retry resumes in the same run folder', async () => {
   await waitFor(() => t.beta.db.jobs.length === 2);
   assert.ok(t.beta.db.jobs[0].runDir);
   assert.equal(t.beta.db.jobs[1].runDir, t.beta.db.jobs[0].runDir);
+  t.beta.server.close();
+});
+
+test('no automatic retry when the global budget cannot cover it', async () => {
+  const t = await runStub("echo '##COST 3 x'; exit 1");
+  t.beta.db.globalLimitUsd = 8; // the first run may start (6), but after its measured 3 a retry needing 6 more would pass 8
+  await makeImg(t);
+  await waitFor(() => t.beta.db.jobs[0].status === 'failed');
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.equal(t.beta.db.jobs.length, 1);
+  const ev = await (await t.admin('/beta/admin/songs/s1/events')).json();
+  const skip = ev.filter((e: { type: string }) => e.type === 'job.autoretry.skipped');
+  assert.deepEqual([skip.length, skip[0].retryOf, skip[0].reason], [1, t.beta.db.jobs[0].id, 'global-limit']);
   t.beta.server.close();
 });

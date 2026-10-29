@@ -74,15 +74,21 @@ const DIRECT = [
 ];
 const TEXT = step('正在編排歌詞文字動態', 4, '編排文字動態');
 const TAIL = [step('正在畫背景剪影', 2, '畫背景剪影'), step('正在繪製並輸出影片', 10, '輸出影片')];
+const PROPS = step('正在設計並畫出插圖道具', 5, '畫道具');
+const STORY = [step('導演正在寫故事、設計角色', 8, '寫故事、畫角色'), step('正在畫故事畫面', 12, '畫故事畫面')];
 
-/** The steps of each job, in the order its script (prep.sh, concept, fix, make.sh) runs them. */
+/**
+ * The steps of each job, in the order its script (prep.sh, concept.sh, fix, make.sh) runs them. A make starts from an
+ * accepted concept, whose run already holds the director's treatment and the text plan of the 文字動態版 and 故事版
+ * (make.sh skips those on sight), so they are neither counted nor shown; the 插圖版 plans its text again with the props.
+ */
 export const JOB_STEPS: Record<'prep' | 'concept' | 'fix' | BetaTier, JobStep[]> = {
   concept: [...DIRECT, TEXT, step('正在準備示意畫面', 2, '準備示意畫面'), step('正在整理概念', 0.5, '整理概念')],
   fix: [step('套用修正', 1, '套用修正'), ...TAIL],
   prep: [step('讀取音檔', 0.5, '讀取音檔'), step('分離人聲與伴奏', 5, '分離人聲'), step('對齊歌詞時間', 8, '對齊歌詞時間'), step('檢查錯字', 3, '檢查錯字')],
-  none: [...DIRECT, TEXT, ...TAIL],
-  img: [...DIRECT, step('正在設計並畫出插圖道具', 5, '畫道具'), TEXT, ...TAIL],
-  hybrid: [...DIRECT, TEXT, step('導演正在寫故事、設計角色', 8, '寫故事、畫角色'), step('正在畫故事畫面', 12, '畫故事畫面'), ...TAIL],
+  none: [...TAIL],
+  img: [PROPS, TEXT, ...TAIL],
+  hybrid: [...STORY, ...TAIL],
 };
 
 /** The step list for a job: by its kind, and for a make job by its tier; anything unknown reads as the text version. */
@@ -99,7 +105,9 @@ export function jobProgress(job: BetaJob, now = Date.now()): JobProgress {
   const steps = jobSteps(job);
   const total = steps.reduce((s, x) => s + x.min, 0);
   const at = steps.findIndex((x) => x.phases.includes(job.phase ?? ''));
-  const index = Math.max(0, at);
+  // a phase outside the list (a step make.sh skipped, 等你確認概念, 完成) keeps the bar on the last step recorded
+  const known = (job.steps ?? []).map((x) => steps.findIndex((y) => y.phases.includes(x.phase))).filter((i) => i >= 0);
+  const index = at >= 0 ? at : Math.max(0, ...known);
   if (job.status !== 'running') return { label: '排隊中', index: 0, steps, pct: 0, leftMin: Math.ceil(total) };
   const before = steps.slice(0, index).reduce((s, x) => s + x.min, 0);
   // the recorded start of the current step (the last entry of its phase: a restart can repeat one); else the old estimate

@@ -24,24 +24,42 @@ describe('jobProgress', () => {
   const total = JOB_STEPS.img.reduce((s, x) => s + x.min, 0);
 
   it('counts earlier steps in full and the current one by time spent past them', () => {
-    expect(make('導演規劃段落與故事', 0)).toMatchObject({ index: 0, pct: 0, leftMin: total, label: '導演正在讀歌詞、規劃段落與故事' });
-    expect(make('畫道具', 11)).toMatchObject({ index: 3, pct: Math.round((11 / total) * 100), leftMin: Math.ceil(total - 11) });
+    expect(make('畫道具', 0)).toMatchObject({ index: 0, pct: 0, leftMin: total, label: '正在設計並畫出插圖道具' });
+    expect(make('編排文字動態', 7)).toMatchObject({ index: 1, pct: Math.round((7 / total) * 100), leftMin: Math.ceil(total - 7) });
+  });
+
+  it('a make starts from an accepted concept, so the director’s steps (and the text plan it already made) are not in its list', () => {
+    expect(JOB_STEPS.none.map((x) => x.label)).toEqual(['正在畫背景剪影', '正在繪製並輸出影片']);
+    expect(JOB_STEPS.img.map((x) => x.label)).toEqual(['正在設計並畫出插圖道具', '正在編排歌詞文字動態', '正在畫背景剪影', '正在繪製並輸出影片']);
+    expect(JOB_STEPS.hybrid.map((x) => x.label)).toEqual(['導演正在寫故事、設計角色', '正在畫故事畫面', '正在畫背景剪影', '正在繪製並輸出影片']);
+    expect(JOB_STEPS.none.reduce((s, x) => s + x.min, 0)).toBe(12);
+    expect(JOB_STEPS.hybrid.reduce((s, x) => s + x.min, 0)).toBe(32);
   });
 
   it('times the current step from its recorded start (the last entry of the phase after a restart)', () => {
-    const j = job({ kind: 'make', tier: 'img', status: 'running', phase: '畫道具', startedAt: '2026-10-27T00:00:00Z',
-      steps: [{ phase: '導演規劃段落與故事', at: '2026-10-27T00:00:00Z' }, { phase: '畫道具', at: '2026-10-27T00:20:00Z' }] });
-    expect(jobProgress(j, Date.parse('2026-10-27T00:21:00Z')).pct).toBe(Math.round(((9 + 1) / 30) * 100));
-    const again = { ...j, steps: [...j.steps!, { phase: '畫道具', at: '2026-10-27T00:30:00Z' }] };
-    expect(jobProgress(again, Date.parse('2026-10-27T00:31:00Z')).pct).toBe(Math.round(((9 + 1) / 30) * 100));
+    const j = job({ kind: 'make', tier: 'img', status: 'running', phase: '編排文字動態', startedAt: '2026-10-27T00:00:00Z',
+      steps: [{ phase: '畫道具', at: '2026-10-27T00:00:00Z' }, { phase: '編排文字動態', at: '2026-10-27T00:20:00Z' }] });
+    expect(jobProgress(j, Date.parse('2026-10-27T00:21:00Z')).pct).toBe(Math.round(((5 + 1) / total) * 100));
+    const again = { ...j, steps: [...j.steps!, { phase: '編排文字動態', at: '2026-10-27T00:30:00Z' }] };
+    expect(jobProgress(again, Date.parse('2026-10-27T00:31:00Z')).pct).toBe(Math.round(((5 + 1) / total) * 100));
   });
 
   it('holds a slow step under its estimate, never reaches 100, and reads old phase labels', () => {
-    const slow = make('畫道具', 60);
-    expect(slow.pct).toBe(Math.round(((9 + 4.5) / total) * 100));
+    const slow = make('編排文字動態', 60);
+    expect(slow.pct).toBe(Math.round(((5 + 3.6) / total) * 100));
     expect(slow.leftMin).toBeGreaterThanOrEqual(1);
-    expect(make('導演設計', 1).index).toBe(0);
+    expect(jobProgress(job({ kind: 'concept', tier: 'img', status: 'running', phase: '導演設計', startedAt: '2026-10-27T00:00:00Z' }), start + 60_000).index).toBe(0);
     expect(make('輸出影片', 999).pct).toBeLessThan(100);
+  });
+
+  it('a phase outside the list keeps the bar on the last recorded step instead of falling back to the first', () => {
+    const done = job({ kind: 'make', tier: 'none', status: 'running', phase: '完成', startedAt: '2026-10-27T00:00:00Z',
+      steps: [{ phase: '編排文字動態', at: '2026-10-27T00:00:00Z' }, { phase: '畫背景剪影', at: '2026-10-27T00:00:01Z' }, { phase: '輸出影片', at: '2026-10-27T00:02:00Z' }] });
+    expect(jobProgress(done, Date.parse('2026-10-27T00:10:00Z'))).toMatchObject({ index: 1, label: '正在繪製並輸出影片' });
+    const gate = job({ kind: 'concept', tier: 'none', status: 'running', phase: '等你確認概念', startedAt: '2026-10-27T00:00:00Z', steps: [{ phase: '整理概念', at: '2026-10-27T00:14:00Z' }] });
+    expect(jobProgress(gate, Date.parse('2026-10-27T00:15:00Z')).index).toBe(5);
+    // a skipped step's label with nothing recorded yet: the first step, as before
+    expect(jobProgress(job({ kind: 'make', tier: 'none', status: 'running', phase: '編排文字動態', startedAt: '2026-10-27T00:00:00Z' }), start).index).toBe(0);
   });
 
   it('a queued job has not started', () => {

@@ -52,7 +52,7 @@ describe('stepClocks', () => {
     { phase: '導演設計視覺風格', at: '2026-10-27T00:03:15Z' },
   ];
   it('done steps last until the next recorded start, the current one shows its time so far, later ones a dash', () => {
-    const j = job({ tier: 'none', status: 'running', phase: '導演設計視覺風格', startedAt: '2026-10-27T00:00:00Z', steps });
+    const j = job({ kind: 'concept', tier: 'none', status: 'running', phase: '導演設計視覺風格', startedAt: '2026-10-27T00:00:00Z', steps });
     expect(stepClocks(j, Date.parse('2026-10-27T00:04:00Z'))).toEqual([
       { state: 'done', time: '2:10' },
       { state: 'done', time: '1:05' },
@@ -63,7 +63,7 @@ describe('stepClocks', () => {
     ]);
   });
   it('a done step with no recorded start shows a dash; a queued job has only later steps', () => {
-    const j = job({ tier: 'none', status: 'running', phase: '編排文字動態', startedAt: '2026-10-27T00:00:00Z', steps: [{ phase: '編排文字動態', at: '2026-10-27T00:10:00Z' }] });
+    const j = job({ kind: 'concept', tier: 'none', status: 'running', phase: '編排文字動態', startedAt: '2026-10-27T00:00:00Z', steps: [{ phase: '編排文字動態', at: '2026-10-27T00:10:00Z' }] });
     expect(stepClocks(j, Date.parse('2026-10-27T00:11:00Z')).slice(0, 4)).toEqual([
       { state: 'done', time: '—' },
       { state: 'done', time: '—' },

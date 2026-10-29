@@ -1,5 +1,5 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { AdminJob, clockTime, fileSize, jobName, jobState, mmss, shortDate, songMoney, stepRows } from './admin';
+import { AdminJob, clockTime, fileSize, jobName, jobsChanged, jobState, mmss, shortDate, songMoney, stepRows } from './admin';
 import { ACTION, BetaEvent, BetaFeedback, BetaMe, BetaSong, FEEDBACK_CATEGORIES, timeline } from './beta';
 import { PriceComponent } from './ui/price.component';
 import { StatusChipComponent } from './ui/status-chip.component';
@@ -109,13 +109,22 @@ export class BetaAdminSongPage {
     return r.json();
   }
 
-  /** While one of this song's jobs is queued or running, re-read the jobs and events (logs and reports load on open or click). */
+  /**
+   * Every tick re-reads the jobs and events (two cheap GETs), whether or not something runs: a job the person queues
+   * after the page opened must show up. When a job came, went, changed status or ended, or an event was added (a
+   * report is one), the logs and reports are read again too.
+   */
   private async refresh() {
-    if (!this.jobs().some((j) => j.status === 'queued' || j.status === 'running')) return;
     try {
       const [jobs, events] = await Promise.all([this.get('/beta/admin/jobs'), this.get(`/beta/admin/songs/${this.key}/events`)]);
-      this.jobs.set((jobs as AdminJob[]).filter((j) => j.songId === this.id));
+      const next = (jobs as AdminJob[]).filter((j) => j.songId === this.id);
+      const more = jobsChanged(this.jobs(), next) || (events as BetaEvent[]).length !== this.events().length;
+      this.jobs.set(next);
       this.events.set(events);
+      if (!more) return;
+      const [feedback, logs] = await Promise.all([this.get('/beta/admin/feedback'), this.get(`/beta/admin/songs/${this.key}/logs`)]);
+      this.feedback.set((feedback as BetaFeedback[]).filter((f) => f.songId === this.id));
+      this.logs.set(logs);
     } catch (e) {
       this.message.set((e as Error).message);
     }

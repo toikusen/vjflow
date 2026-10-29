@@ -67,6 +67,19 @@ export function parseLimit(value: string): number | null {
   return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
+/**
+ * Whether a poll's jobs differ from the last ones in a way the admin song page's other lists depend on: a job came or
+ * went, or one changed status or ended (then there are new logs, and maybe a new report).
+ */
+export function jobsChanged(before: readonly BetaJob[], after: readonly BetaJob[]): boolean {
+  if (before.length !== after.length) return true;
+  const was = new Map(before.map((j) => [j.id, j]));
+  return after.some((j) => {
+    const b = was.get(j.id);
+    return !b || b.status !== j.status || b.endedAt !== j.endedAt;
+  });
+}
+
 /** What a job does, as the admin tables name it. */
 /** The 重跑 button's words: a re-run charges the person the job's price again, so the button says so. */
 export const retryLabel = (j: Pick<AdminJob, 'priceUsd' | 'reservedUsd'>): string => {

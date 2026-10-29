@@ -1,4 +1,4 @@
-import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
+import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobsChanged, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
 import { BetaMe, BetaSong } from './beta';
 
 const iso = (minAgo: number, now = Date.parse('2026-10-28T05:40:00Z')) => new Date(now - minAgo * 60e3).toISOString();
@@ -96,6 +96,18 @@ describe('parseLimit', () => {
     expect(parseLimit('-1')).toBeNull();
     expect(parseLimit('abc')).toBeNull();
     expect(parseLimit('Infinity')).toBeNull();
+  });
+});
+
+describe('jobsChanged', () => {
+  const a = job({ id: 'a', status: 'running' });
+  it('is true when a job came or went, or changed status or end time; false for the same jobs again', () => {
+    expect(jobsChanged([a], [{ ...a }])).toBe(false);
+    expect(jobsChanged([], [a])).toBe(true);
+    expect(jobsChanged([a], [])).toBe(true);
+    expect(jobsChanged([a], [{ ...a, status: 'done', endedAt: iso(1) }])).toBe(true);
+    expect(jobsChanged([a], [{ ...a, id: 'b' }])).toBe(true);
+    expect(jobsChanged([a], [{ ...a, phase: '輸出影片' }])).toBe(false);
   });
 });
 

@@ -78,10 +78,27 @@ export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'concept' 
 export const TIER_TOTAL = (tier: Tier) => PRICE.concept + PRICE[tier];
 export const MAX_CONCEPTS = 3;
 
-/** Concept attempts used for a song and tier: a concept job (not a retry) counts unless it and all its retries failed. */
+/** The job a retry chain started from: `retryOf` followed to the end (a retry of a retry included). */
+export function rootOf(db: Db, job: Job): Job {
+  const byId = new Map(db.jobs.map((j) => [j.id, j]));
+  const seen = new Set<string>();
+  let j = job;
+  while (j.retryOf && byId.has(j.retryOf) && !seen.has(j.id)) { seen.add(j.id); j = byId.get(j.retryOf)!; }
+  return j;
+}
+
+/**
+ * Concept attempts used for a song and tier: a concept job with every retry of it (and of those) counts once, unless
+ * every job of the chain failed (a system failure never uses up an attempt).
+ */
 export function conceptAttempts(db: Db, songId: string, tier: Tier): number {
-  return db.jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.tier === tier && !j.retryOf)
-    .filter((j) => !(j.status === 'failed' && db.jobs.filter((r) => r.retryOf === j.id).every((r) => r.status === 'failed'))).length;
+  const chains = new Map<string, Job[]>();
+  for (const j of db.jobs) {
+    if (j.kind !== 'concept' || j.songId !== songId || j.tier !== tier) continue;
+    const root = rootOf(db, j).id;
+    chains.set(root, [...(chains.get(root) ?? []), j]);
+  }
+  return [...chains.values()].filter((chain) => chain.some((j) => j.status !== 'failed')).length;
 }
 
 /** Where a song's files live. */

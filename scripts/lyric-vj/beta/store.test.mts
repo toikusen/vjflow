@@ -130,6 +130,18 @@ test('conceptAttempts: a system failure never uses up an attempt, and attempts c
   assert.equal(conceptAttempts(db, 's', 'none'), 1);
 });
 
+test('conceptAttempts: a retry of a retry that succeeds uses the attempt; a chain that failed throughout does not', () => {
+  const db = emptyDb();
+  const c = (o: Partial<Job>) => job({ kind: 'concept', tier: 'img', ...o });
+  // the job failed, its automatic retry failed, the admin's retry of that retry succeeded
+  db.jobs.push(c({ id: 'a', status: 'failed' }), c({ id: 'a2', status: 'failed', retryOf: 'a', auto: true }), c({ id: 'a3', status: 'done', retryOf: 'a2' }));
+  assert.equal(conceptAttempts(db, 's', 'img'), 1);
+  db.jobs.push(c({ id: 'b', status: 'failed' }), c({ id: 'b2', status: 'failed', retryOf: 'b', auto: true }), c({ id: 'b3', status: 'failed', retryOf: 'b2' }));
+  assert.equal(conceptAttempts(db, 's', 'img'), 1);
+  db.jobs.push(c({ id: 'c', status: 'failed' }), c({ id: 'c2', status: 'failed', retryOf: 'c' }), c({ id: 'c3', status: 'queued', retryOf: 'c2' }));
+  assert.equal(conceptAttempts(db, 's', 'img'), 2, 'a chain still running counts');
+});
+
 test('a concept is refused unless the whole version (concept and make) fits the limit; an explicit price still wins', () => {
   const db = emptyDb();
   const { user } = invite(db, 'A', 3);

@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { AdminJob, clockTime, fileSize, jobName, jobsChanged, jobState, mmss, shortDate, songMoney, stepRows } from './admin';
-import { ACTION, BetaEvent, BetaFeedback, BetaMe, BetaSong, FEEDBACK_CATEGORIES, timeline } from './beta';
+import { ACTION, BetaEvent, BetaFeedback, BetaMe, BetaSong, FEEDBACK_CATEGORIES, pollToast, timeline } from './beta';
 import { PriceComponent } from './ui/price.component';
 import { StatusChipComponent } from './ui/status-chip.component';
 
@@ -32,6 +32,8 @@ export class BetaAdminSongPage {
   /** The phone's segmented control: one section at a time (desktop shows them all). */
   protected readonly section = signal<SongSection>('jobs');
   protected readonly action = ACTION;
+  /** The toast the last failed poll wrote, cleared by the next poll that succeeds. */
+  private readonly toast = pollToast();
   protected readonly rows = computed(() => timeline(this.events()));
   protected readonly newest = computed(() => [...this.jobs()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   protected readonly money = computed(() => songMoney(this.jobs()));
@@ -121,12 +123,13 @@ export class BetaAdminSongPage {
       const more = jobsChanged(this.jobs(), next) || (events as BetaEvent[]).length !== this.events().length;
       this.jobs.set(next);
       this.events.set(events);
+      this.message.update((m) => this.toast.ok(m));
       if (!more) return;
       const [feedback, logs] = await Promise.all([this.get('/beta/admin/feedback'), this.get(`/beta/admin/songs/${this.key}/logs`)]);
       this.feedback.set((feedback as BetaFeedback[]).filter((f) => f.songId === this.id));
       this.logs.set(logs);
     } catch (e) {
-      this.message.set((e as Error).message);
+      this.message.set(this.toast.failed((e as Error).message));
     }
   }
 

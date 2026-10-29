@@ -127,6 +127,34 @@ export function pollOrder(): { begin: () => number; latest: (n: number) => boole
   return { begin: () => ++n, latest: (k) => k === n };
 }
 
+/**
+ * The toast a failed poll wrote (「HTTP 502」 while the tunnel blinks): `failed` records it, and `ok` on the next poll
+ * that succeeds clears it, and only it, so a toast an action wrote meanwhile stays.
+ */
+export function pollToast(): { failed: (why: string) => string; ok: (current: string) => string } {
+  let last: string | null = null;
+  return {
+    failed: (why) => (last = why),
+    ok: (current) => {
+      const clear = last !== null && current === last;
+      last = null;
+      return clear ? '' : current;
+    },
+  };
+}
+
+/**
+ * A response's JSON; a proxy's error page (a 502 while the tunnel is down) is not JSON and then reads as
+ * `{ error: 'HTTP 502' }`, so the caller shows a line instead of a SyntaxError nobody sees.
+ */
+export async function jsonOrError<T = unknown>(r: { status: number; json(): Promise<unknown> }): Promise<T & { error?: string }> {
+  try {
+    return (await r.json()) as T & { error?: string };
+  } catch {
+    return { error: `HTTP ${r.status}` } as T & { error?: string };
+  }
+}
+
 export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'style' | 'rhythm' | 'other';
 export type FeedbackAction = 'fix' | 'redo' | 'none';
 export interface FeedbackMark { at: number; end?: number; category: FeedbackCategory; note: string }

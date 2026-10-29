@@ -3,7 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp, parseLimit, retryLabel } from './admin';
 import { AdminStylesComponent } from './admin-styles.component';
-import { BetaMe, BetaSong, songChip, songView } from './beta';
+import { BetaMe, BetaSong, pollToast, songChip, songView } from './beta';
 import { PriceComponent } from './ui/price.component';
 import { StatusChipComponent } from './ui/status-chip.component';
 
@@ -52,6 +52,8 @@ export class BetaAdminPage {
   );
   /** The job whose 重跑 or 放行 is on its way to the server; its buttons are off until the answer. */
   protected readonly acting = signal<string | null>(null);
+  /** The toast the last failed poll wrote, cleared by the next poll that succeeds. */
+  private readonly toast = pollToast();
   protected invite = { name: '', limitUsd: 25 };
   protected globalLimit = 0;
 
@@ -168,8 +170,9 @@ export class BetaAdminPage {
       this.totals.set({ globalLimitUsd: u.globalLimitUsd, spentUsd: u.spentUsd, platformSpentUsd: u.platformSpentUsd ?? 0 });
       this.jobs.set(jobs);
       this.songs.set(songs);
+      this.message.update((m) => this.toast.ok(m));
     } catch (e) {
-      this.message.set((e as Error).message);
+      this.message.set(this.toast.failed((e as Error).message));
     }
   }
 }

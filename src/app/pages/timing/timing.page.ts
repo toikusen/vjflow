@@ -1,7 +1,7 @@
 import { EditResult, graphemeIndexAt, mergeLines, moveEdge, shiftAll, snapTo, splitLine } from './timing-edit';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
-import { BetaJob } from '../beta/beta';
+import { BetaJob, jsonOrError } from '../beta/beta';
 import { timingSaveWarning } from '../beta/make';
 import { Ask } from '../beta/ui/confirm';
 import { ConfirmDialogComponent } from '../beta/ui/confirm-dialog.component';
@@ -200,7 +200,15 @@ export class TimingPage {
     if (!this.beta) history.replaceState(null, '', `/timing?song=${encodeURIComponent(id)}`);
     const base = this.api(id);
     this.loading.set('讀取歌曲…');
-    const song: SongTimeline = await (await fetch(this.beta ? `${base}/timing` : base, { cache: 'no-store' })).json();
+    const r = await fetch(this.beta ? `${base}/timing` : base, { cache: 'no-store' }).catch(() => null);
+    const body = r ? await jsonOrError<SongTimeline>(r) : { error: '無法連線，請稍後再試' };
+    // a song still preparing (409), someone else's (404), or an error page: say so instead of 讀取歌曲… for ever
+    if (!r?.ok || body.error) {
+      this.loading.set(null);
+      this.message.set(`讀不到這首歌：${body.error ?? `HTTP ${r?.status}`}`);
+      return;
+    }
+    const song = body as SongTimeline;
     this.song.set(song);
     this.cues.set(song.cues.map((c) => ({ ...c })));
     this.singers.set((song.singers ?? []).map((x) => ({ ...x })));
@@ -572,8 +580,8 @@ export class TimingPage {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ cues: this.cues().map(({ id, start, end, text, singer }) => ({ id, start, end, text, singer: singer ?? '' })), confirm, accepted: [...this.touched()], singers: this.singers() }),
     });
-    const body = await r.json();
-    if (!r.ok) return this.message.set(`儲存失敗：${body.error}`);
+    const body = await jsonOrError<{ error?: string }>(r);
+    if (!r.ok) return this.message.set(`儲存失敗：${body.error ?? `HTTP ${r.status}`}`);
     this.dirty.set(false);
     // a design styles each line by id: added, removed or retyped lines need the design redone
     const before = this.song()!.cues;

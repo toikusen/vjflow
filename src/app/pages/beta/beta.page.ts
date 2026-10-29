@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, nextStep, pollOrder, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
+import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollOrder, pollToast, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
 import { Ask } from './ui/confirm';
@@ -72,6 +72,8 @@ export class BetaPage {
   /** The poll in flight, if any, and the order of polls: a tick waits while one runs, a late answer is dropped. */
   private polling: Promise<void> | null = null;
   private readonly polls = pollOrder();
+  /** The toast the last failed poll wrote, cleared by the next poll that succeeds. */
+  private readonly toast = pollToast();
 
   constructor() {
     const timer = setInterval(() => void (this.polling ?? this.poll()), POLL_MS);
@@ -139,7 +141,7 @@ export class BetaPage {
     let songId: string | null = null;
     try {
       const made = await fetch('/beta/songs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.form) });
-      const song = await made.json();
+      const song = await jsonOrError<{ id: string }>(made);
       if (!made.ok) throw new Error(song.error);
       songId = song.id;
       await this.uploadAudio(song.id, this.file);
@@ -173,8 +175,9 @@ export class BetaPage {
         this.songs.set([...songs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
         this.jobs.set(jobs);
         this.loaded.set(true);
+        this.message.update((m) => this.toast.ok(m));
       } catch (e) {
-        if (this.polls.latest(n)) this.message.set((e as Error).message);
+        if (this.polls.latest(n)) this.message.set(this.toast.failed((e as Error).message));
       }
     };
     const p = run().finally(() => {

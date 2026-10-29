@@ -1,4 +1,4 @@
-import { audioProblem, audioType, BetaEvent, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
+import { audioProblem, audioType, BetaEvent, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -83,6 +83,27 @@ describe('jobProgress', () => {
     const p = jobProgress(job({ kind: 'make', status: 'running', phase: '輸出影片', startedAt: '2026-10-27T00:00:00Z' }), start);
     expect(p.steps).toBe(JOB_STEPS.none);
     expect(() => jobProgress(job({ kind: 'other' as BetaJob['kind'], status: 'running' }))).not.toThrow();
+  });
+});
+
+describe('pollToast', () => {
+  it('clears the toast a failed poll wrote once a poll succeeds, and only that one', () => {
+    const t = pollToast();
+    expect(t.ok('已上傳')).toBe('已上傳');
+    expect(t.failed('HTTP 502')).toBe('HTTP 502');
+    expect(t.ok('HTTP 502')).toBe('');
+    // an action wrote over the poll's toast meanwhile: it stays
+    t.failed('Failed to fetch');
+    expect(t.ok('已上傳')).toBe('已上傳');
+    // once cleared, a later same text is not the poll's any more
+    expect(t.ok('Failed to fetch')).toBe('Failed to fetch');
+  });
+});
+
+describe('jsonOrError', () => {
+  it('reads JSON, and turns a non-JSON answer (a proxy error page) into an error line with the status', async () => {
+    expect(await jsonOrError({ status: 200, json: async () => ({ id: 'x' }) })).toEqual({ id: 'x' });
+    expect(await jsonOrError({ status: 502, json: async () => { throw new SyntaxError('Unexpected token <'); } })).toEqual({ error: 'HTTP 502' });
   });
 });
 

@@ -27,6 +27,14 @@ printf '%s\n' "$concept" > "$brief"
 prev=
 [ -n "$from" ] && ! [[ $from =~ ^[A-Za-z0-9_-]+$ ]] && { echo "ignoring invalid from: $from" >&2; from=; }
 [ -n "$from" ] && [ -f "$d/runs/$from/base/treatment.json" ] && prev=$d/runs/$from/base/treatment.json
+# the effective request of this concept (request.txt, what a make of it passes on): the concept text plus every
+# adjust note along the chain, oldest first. A redo starts the chain over: the notes were about a direction dropped
+request=$w/request.txt
+if [ -n "$from" ] && [ -n "$note" ]; then
+  { if [ -s "$d/runs/$from/request.txt" ]; then cat "$d/runs/$from/request.txt"; else printf '%s\n' "$concept"; fi; printf '\n使用者對上一版的意見：%s\n' "$note"; } > "$request"
+else
+  printf '%s\n' "$concept" > "$request"
+fi
 
 echo '##PHASE 導演規劃段落與故事'
 if [ ! -f "$w/base/treatment.json" ]; then

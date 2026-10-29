@@ -48,10 +48,12 @@ case $tier in
     echo '##PHASE 編排文字動態'
     plan "$w/noimg"
     echo '##PHASE 寫故事、畫角色'
-    # the accepted concept's words (brief.txt, written by concept.sh) and its first reference image reach the story
-    # the way the director got them: keyframes keeps them as the board's userStyle, which cutout then draws in
+    # the accepted concept's effective request (request.txt: its text plus the adjust notes of its chain, written by
+    # concept.sh; brief.txt on a run from before) and its first reference image reach the story the way the director
+    # got them: keyframes keeps them as the board's userStyle, which cutout then draws in
     kf=() # expanded as ${kf[@]+...}: an empty array is unbound under set -u in bash 3.2
-    [ -f "$w/brief.txt" ] && [ -n "$(tr -d '[:space:]' < "$w/brief.txt")" ] && kf+=(--style="$(cat "$w/brief.txt")")
+    req=$w/request.txt; [ -f "$req" ] || req=$w/brief.txt
+    [ -f "$req" ] && [ -n "$(tr -d '[:space:]' < "$req")" ] && kf+=(--style="$(cat "$req")")
     ref=; for f in "$w"/refs/*; do [ -f "$f" ] && { ref=$f; break; }; done
     [ -n "$ref" ] && kf+=(--style-ref "$ref")
     [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$w/noimg" --sheets-only --from 0 --to "$end" --out "$w/kf" ${kf[@]+"${kf[@]}"} > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }

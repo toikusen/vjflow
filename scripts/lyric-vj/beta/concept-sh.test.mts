@@ -11,7 +11,7 @@ import { test } from 'node:test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** A song with a previous concept run `c1` and a new run `c2` whose type plan and stills are already there. */
-function tree(inputs: Record<string, unknown>) {
+function tree(inputs: Record<string, unknown>, previousRequest?: string) {
   const t = mkdtempSync(join(tmpdir(), 'conceptsh-'));
   mkdirSync(join(t, 'repo/scripts/lyric-vj/beta'), { recursive: true });
   cpSync(join(here, 'concept.sh'), join(t, 'repo/scripts/lyric-vj/beta/concept.sh'));
@@ -20,6 +20,7 @@ function tree(inputs: Record<string, unknown>) {
   const song = join(t, 'song'), run = join(song, 'runs/c2');
   mkdirSync(join(song, 'runs/c1/base'), { recursive: true });
   writeFileSync(join(song, 'runs/c1/base/treatment.json'), '{}');
+  if (previousRequest !== undefined) writeFileSync(join(song, 'runs/c1/request.txt'), previousRequest);
   mkdirSync(join(run, 'noimg'), { recursive: true });
   mkdirSync(join(run, 'stills'));
   writeFileSync(join(song, 'song.json'), JSON.stringify({ duration: 10, cues: [] }));
@@ -56,6 +57,25 @@ test('concept.sh: the server tiers reach the director as --proven and --candidat
   delete env.VJ_PROVEN; delete env.VJ_CANDIDATES;
   assert.equal(spawnSync(none.cmd[0], none.cmd.slice(1), { encoding: 'utf8', env }).status, 0);
   assert.doesNotMatch(none.direct(), /--proven|--candidates/);
+});
+
+test('concept.sh: request.txt is the concept text plus every adjust note of the chain; a redo starts over', () => {
+  // first concept: its text alone
+  const first = tree({ concept: '水彩的夏天', refs: [] });
+  assert.equal(first.concept().status, 0);
+  assert.equal(readFileSync(join(first.run, 'request.txt'), 'utf8'), '水彩的夏天\n');
+  // second adjustment: the previous run's request (text + first note) plus this note
+  const second = tree({ concept: '水彩的夏天', note: '人物再大一點', from: 'c1', refs: [] }, '水彩的夏天\n\n使用者對上一版的意見：改成版畫\n');
+  assert.equal(second.concept().status, 0);
+  assert.equal(readFileSync(join(second.run, 'request.txt'), 'utf8'), '水彩的夏天\n\n使用者對上一版的意見：改成版畫\n\n使用者對上一版的意見：人物再大一點\n');
+  // an adjustment of a run from before request.txt existed starts from the concept text
+  const legacy = tree({ concept: '水彩的夏天', note: '改成版畫', from: 'c1', refs: [] });
+  assert.equal(legacy.concept().status, 0);
+  assert.equal(readFileSync(join(legacy.run, 'request.txt'), 'utf8'), '水彩的夏天\n\n使用者對上一版的意見：改成版畫\n');
+  // a redo drops the notes: they were about the direction being left
+  const redo = tree({ concept: '水彩的夏天', from: 'c1', refs: [] }, '水彩的夏天\n\n使用者對上一版的意見：改成版畫\n');
+  assert.equal(redo.concept().status, 0);
+  assert.equal(readFileSync(join(redo.run, 'request.txt'), 'utf8'), '水彩的夏天\n');
 });
 
 test('concept.sh: a redo passes the previous treatment without a note', () => {

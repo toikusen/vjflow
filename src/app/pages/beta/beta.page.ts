@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, nextStep, pollOrder, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
+import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, nextStep, pollOrder, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
 import { Ask } from './ui/confirm';
@@ -87,6 +87,9 @@ export class BetaPage {
 
   protected confirmAdd() {
     if (!this.file) return this.message.set('請選擇音檔');
+    // the server's own checks, before a song is created for a file it would refuse
+    const why = audioProblem(this.file);
+    if (why) return this.message.set(why);
     this.ask.set({
       eyebrow: this.form.title,
       title: '上傳並準備',
@@ -100,29 +103,56 @@ export class BetaPage {
     this.fileInput = e.target as HTMLInputElement;
     this.file = this.fileInput.files?.[0] ?? null;
     this.fileName.set(this.file?.name ?? '');
+    const why = this.file && audioProblem(this.file);
+    if (why) this.message.set(why);
+  }
+
+  /**
+   * Sends a song's audio (`PUT /beta/songs/:id/audio`); the server starts the preparation on success. Throws with the
+   * server's words when it refuses, or a connection line when the upload broke off.
+   */
+  protected async uploadAudio(songId: string, file: File): Promise<void> {
+    let up: Response;
+    try {
+      up = await fetch(`/beta/songs/${songId}/audio`, { method: 'PUT', headers: { 'content-type': audioType(file) ?? 'audio/mpeg' }, body: file });
+    } catch {
+      throw new Error('連線中斷，請確認網路後再試');
+    }
+    if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${up.status}`);
+  }
+
+  private clearComposer() {
+    this.form = { title: '', artist: '', language: this.form.language, lyrics: '' };
+    this.file = null;
+    this.fileName.set('');
+    if (this.fileInput) this.fileInput.value = '';
+    this.composing.set(false);
   }
 
   private async add() {
     if (!this.file) return this.message.set('請選擇音檔');
+    const why = audioProblem(this.file);
+    if (why) return this.message.set(why);
     this.busy.set(true);
     this.message.set('上傳中，請勿關閉或離開這個頁面…');
+    const title = this.form.title;
+    let songId: string | null = null;
     try {
       const made = await fetch('/beta/songs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.form) });
       const song = await made.json();
       if (!made.ok) throw new Error(song.error);
-      const up = await fetch(`/beta/songs/${song.id}/audio`, { method: 'PUT', headers: { 'content-type': this.file.type || 'audio/mpeg' }, body: this.file });
-      if (!up.ok) throw new Error((await up.json()).error);
-      this.form = { title: '', artist: '', language: this.form.language, lyrics: '' };
-      this.file = null;
-      this.fileName.set('');
-      if (this.fileInput) this.fileInput.value = '';
-      this.composing.set(false);
+      songId = song.id;
+      await this.uploadAudio(song.id, this.file);
+      this.clearComposer();
       this.message.set('已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 5–10 分鐘），完成後請回來「確認時間」。');
-      await this.poll();
     } catch (e) {
-      this.message.set(`上傳失敗：${(e as Error).message}`);
+      // the song exists once the audio failed: the form is cleared so a second try does not make a second song, and
+      // the song page offers 重新上傳音檔
+      if (songId) this.clearComposer();
+      this.message.set(songId ? `上傳失敗：${(e as Error).message}。歌曲「${title}」已建立，請到歌曲頁重新上傳音檔。` : `上傳失敗：${(e as Error).message}`);
     } finally {
       this.busy.set(false);
+      await this.poll();
     }
   }
 

@@ -2,7 +2,7 @@ import { Component, computed, effect, signal, untracked, viewChild } from '@angu
 import { NgTemplateOutlet } from '@angular/common';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { SongTimeline, toLrc, toSrt } from '../../lyric-vj/timeline';
-import { BetaFeedback, BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, coverTint, feedbackLine, minutesBetween, songKind, songView, SongView, TIER_INFO } from './beta';
+import { audioProblem, BetaFeedback, BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, coverTint, feedbackLine, minutesBetween, songKind, songView, SongView, TIER_INFO } from './beta';
 import { BetaPage } from './beta.page';
 import { ConceptCardComponent } from './concept-card.component';
 import { MakeFormComponent } from './make-form.component';
@@ -141,6 +141,30 @@ export class BetaSongPage extends BetaPage {
   protected play(id: string, video: HTMLVideoElement) {
     this.markPlayed(id);
     void video.play().catch(() => undefined);
+  }
+
+  /** Sends the audio again for a song whose first upload was refused or broke off; the server then starts the preparation. */
+  protected async reupload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || this.busy()) return;
+    const why = audioProblem(file);
+    if (why) {
+      input.value = '';
+      return this.message.set(why);
+    }
+    this.busy.set(true);
+    this.message.set('上傳中，請勿關閉或離開這個頁面…');
+    try {
+      await this.uploadAudio(this.id, file);
+      this.message.set('已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 5–10 分鐘），完成後請回來「確認時間」。');
+    } catch (err) {
+      this.message.set(`上傳失敗：${(err as Error).message}`);
+    } finally {
+      input.value = '';
+      this.busy.set(false);
+      await this.poll();
+    }
   }
 
   /** Opens 製作新版本 with a tier chosen and 想要的感覺 filled in (a redo from a report), and scrolls to it. */

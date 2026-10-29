@@ -21,6 +21,33 @@ export interface ConceptSummary {
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
 export const PREP_PRICE = 0.5;
+
+/** The audio upload limit; mirrors MAX_AUDIO in scripts/lyric-vj/beta/server.mts. */
+export const MAX_AUDIO_BYTES = 80_000_000;
+/** The content types `PUT /beta/songs/:id/audio` takes (AUDIO in server.mts). */
+const AUDIO_TYPES = new Set(['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-wav', 'audio/wave', 'audio/flac', 'audio/x-flac', 'audio/mp4', 'audio/x-m4a', 'audio/aac']);
+/** The type sent for a file the browser left untyped or typed oddly (Safari and .flac, say), by its extension. */
+const AUDIO_BY_EXT: Record<string, string> = { mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac' };
+/** The server's own refusals (server.mts), shown before the upload starts. */
+export const AUDIO_TOO_BIG = '音檔太大（上限 80 MB）';
+export const AUDIO_WRONG_TYPE = '請上傳 mp3、wav、flac、m4a 或 aac';
+export const AUDIO_EMPTY = '沒有收到音檔';
+
+/** The content type to send for an audio file: its own when the server takes it, else by its extension; null when the server would answer 415. */
+export function audioType(file: { name: string; type: string }): string | null {
+  const own = file.type.split(';')[0].trim().toLowerCase();
+  if (AUDIO_TYPES.has(own)) return own;
+  const ext = file.name.toLowerCase().split('.').pop() ?? '';
+  return AUDIO_BY_EXT[ext] ?? null;
+}
+
+/** Why a picked audio file cannot be uploaded (the server's words), or null when the upload may start. */
+export function audioProblem(file: { name: string; type: string; size: number }): string | null {
+  if (!audioType(file)) return AUDIO_WRONG_TYPE;
+  if (file.size > MAX_AUDIO_BYTES) return AUDIO_TOO_BIG;
+  if (!file.size) return AUDIO_EMPTY;
+  return null;
+}
 /** The concept fee every version starts with; mirrors PRICE.concept in scripts/lyric-vj/beta/store.mts. */
 export const CONCEPT_PRICE = 2.5;
 

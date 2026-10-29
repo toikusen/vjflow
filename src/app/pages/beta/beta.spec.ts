@@ -1,4 +1,4 @@
-import { BetaEvent, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
+import { audioProblem, audioType, BetaEvent, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -65,6 +65,24 @@ describe('jobProgress', () => {
     const p = jobProgress(job({ kind: 'make', status: 'running', phase: '輸出影片', startedAt: '2026-10-27T00:00:00Z' }), start);
     expect(p.steps).toBe(JOB_STEPS.none);
     expect(() => jobProgress(job({ kind: 'other' as BetaJob['kind'], status: 'running' }))).not.toThrow();
+  });
+});
+
+describe('audio pre-check (mirrors PUT /audio in server.mts)', () => {
+  it('sends the file’s own type when the server takes it, else one by its extension', () => {
+    expect(audioType({ name: 'a.mp3', type: 'audio/mpeg' })).toBe('audio/mpeg');
+    expect(audioType({ name: 'a.m4a', type: 'audio/x-m4a' })).toBe('audio/x-m4a');
+    expect(audioType({ name: 'a.flac', type: '' })).toBe('audio/flac');
+    expect(audioType({ name: 'A.M4A', type: 'application/octet-stream' })).toBe('audio/mp4');
+    expect(audioType({ name: 'a.ogg', type: 'audio/ogg' })).toBeNull();
+    expect(audioType({ name: 'a.aiff', type: '' })).toBeNull();
+  });
+
+  it('refuses a wrong type, a file over 80 MB and an empty file in the server’s words, before the upload starts', () => {
+    expect(audioProblem({ name: 'a.mp3', type: 'audio/mpeg', size: 80_000_000 })).toBeNull();
+    expect(audioProblem({ name: 'a.ogg', type: 'audio/ogg', size: 10 })).toBe('請上傳 mp3、wav、flac、m4a 或 aac');
+    expect(audioProblem({ name: 'a.wav', type: 'audio/wav', size: 80_000_001 })).toBe('音檔太大（上限 80 MB）');
+    expect(audioProblem({ name: 'a.wav', type: 'audio/wav', size: 0 })).toBe('沒有收到音檔');
   });
 });
 

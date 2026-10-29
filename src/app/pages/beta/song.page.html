@@ -35,7 +35,21 @@
         @if (v.prep; as j) {
           <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: j, prep: true }" />
         } @else {
-          <div class="empty"><p>等待上傳音檔</p></div>
+          <!-- the song was created but its audio never arrived (a refused or broken upload): the same song takes it again -->
+          <div class="empty reupload">
+            <p>音檔還沒上傳成功，這首歌還不能開始準備。</p>
+            @if (mine()) {
+              <label class="button soft" [class.off]="busy()">
+                <input type="file" accept="audio/*" hidden [disabled]="busy()" (change)="reupload($event)" aria-label="音檔" />
+                {{ busy() ? '上傳中…' : '重新上傳音檔' }}
+              </label>
+              @if (busy()) {
+                <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
+              } @else {
+                <p class="fine">mp3、wav、flac、m4a · 80 MB 以內 · 不另外收費</p>
+              }
+            }
+          </div>
         }
         <ng-container *ngTemplateOutlet="makeLater" />
       }

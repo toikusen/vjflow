@@ -215,6 +215,24 @@ a {
   border-radius: 16px;
 }
 
+.empty.reupload {
+  gap: 12px;
+
+  .button { cursor: pointer; }
+
+  .button.off {
+    pointer-events: none;
+    opacity: 0.6;
+  }
+
+  .fine {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .fine.warn { color: var(--warn); }
+}
+
 .thumb {
   width: 120px;
   height: 66px;

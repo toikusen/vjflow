@@ -483,7 +483,10 @@ h1, h2, p, pre { margin: 0; }
 
   .grid { gap: 12px; }
 
+  // `.sec.jobs` too: the base rule above (0,2,0) would otherwise beat a plain `.sec` here and keep the job list on
+  // every section
   .sec,
+  .sec.jobs,
   .side .sec { display: none; }
   :host([data-section='jobs']) .sec.jobs,
   :host([data-section='timeline']) .sec.timeline,

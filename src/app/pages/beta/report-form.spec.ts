@@ -1,5 +1,5 @@
 import { NOT_FIXABLE } from './beta';
-import { fixBody, formatTime, ReportDraft, sendLabel, validateReport } from './report-form.component';
+import { draftKey, fixBody, formatTime, hasDraft, packDraft, ReportDraft, sendLabel, StoredDraft, unpackDraft, validateReport } from './report-form.component';
 
 const draft = (o: Partial<ReportDraft>): ReportDraft => ({ ok: false, marks: [], suggestion: '', action: 'none', ...o });
 const mark = (o: Partial<ReportDraft['marks'][number]> = {}) => ({ at: 1, category: 'lyrics' as const, note: '', ...o });
@@ -74,6 +74,41 @@ describe('validateReport', () => {
     expect(validateReport(draft({ suggestion: 'a'.repeat(1001) }))).toBe('建議最多 1000 字');
     expect(validateReport(draft({ suggestion: ` ${'a'.repeat(1000)} ` }))).toBeNull();
     expect(validateReport(draft({ marks: [mark({ note: 'a'.repeat(1001) })] }))).toBe('備註最多 1000 字');
+  });
+});
+
+describe('report draft storage (survives the trip to the timing editor)', () => {
+  const stored: StoredDraft = { verdict: 'issue', marks: [{ at: 12.3, end: 15, category: 'timing', note: '晚了' }, { at: 40, category: null, note: '' }], suggestion: '整體早 0.2 秒', action: 'fix' };
+
+  it('keys the draft by job id', () => {
+    expect(draftKey('m1')).toBe('report:m1');
+  });
+
+  it('round-trips verdict, marks (with their end and category), suggestion and action', () => {
+    expect(unpackDraft(packDraft(stored))).toEqual(stored);
+  });
+
+  it('an untouched form stores nothing', () => {
+    expect(packDraft({ verdict: null, marks: [], suggestion: '', action: 'none' })).toBeNull();
+    expect(packDraft({ verdict: 'ok', marks: [], suggestion: '', action: 'none' })).not.toBeNull();
+  });
+
+  it('drops a missing, malformed or foreign draft instead of throwing, and cleans what it can keep', () => {
+    expect(unpackDraft(null)).toBeNull();
+    expect(unpackDraft('')).toBeNull();
+    expect(unpackDraft('{not json')).toBeNull();
+    expect(unpackDraft('[1,2]')).toBeNull();
+    expect(unpackDraft(JSON.stringify({ verdict: 'maybe', marks: [{ at: 'x' }, { at: 3, category: 'nope', end: -1 }], suggestion: 7, action: 'delete' })))
+      .toEqual({ verdict: null, marks: [{ at: 3, category: null, note: '' }], suggestion: '', action: 'none' });
+  });
+
+  it('hasDraft reads the given storage and is false when it throws', () => {
+    const store = new Map<string, string>([[draftKey('m1'), packDraft(stored)!]]);
+    const storage = { getItem: (k: string) => store.get(k) ?? null };
+    expect(hasDraft('m1', storage)).toBe(true);
+    expect(hasDraft('m2', storage)).toBe(false);
+    expect(hasDraft('m1', { getItem: () => { throw new Error('blocked'); } })).toBe(false);
+    expect(hasDraft('m1', null)).toBe(false);
   });
 });
 

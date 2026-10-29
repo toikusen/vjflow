@@ -1,4 +1,4 @@
-import { Component, computed, effect, ElementRef, input, output, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, ElementRef, input, output, signal, untracked, viewChild } from '@angular/core';
 import { BetaFeedback, BetaJob, BetaSong, BetaTier, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, JOB_STEPS, NOT_FIXABLE, TIER_INFO } from './beta';
 import { jobTitle, stamp } from './song';
 import { Ask } from './ui/confirm';
@@ -55,6 +55,58 @@ export function validateReport(r: ReportDraft, duration?: number, tier?: BetaTie
 export function sendLabel(action: FeedbackAction, ok: boolean): string {
   if (ok || action === 'none') return '送出回報';
   return action === 'fix' ? '送出回報並修正' : '送出回報，去製作新版本';
+}
+
+/** What the form holds before it is sent: kept in sessionStorage per job, so the page reload a timing edit causes does not lose it. */
+export interface StoredDraft { verdict: 'ok' | 'issue' | null; marks: DraftMark[]; suggestion: string; action: FeedbackAction }
+
+/** The sessionStorage key of a job's report draft. */
+export const draftKey = (jobId: string) => `report:${jobId}`;
+
+/** The draft as stored, or null when there is nothing to keep (untouched form). */
+export function packDraft(d: StoredDraft): string | null {
+  if (d.verdict === null && !d.marks.length && !d.suggestion && d.action === 'none') return null;
+  return JSON.stringify({ verdict: d.verdict, marks: d.marks.map(({ at, end, category, note }) => ({ at, ...(end !== undefined ? { end } : {}), category, note })), suggestion: d.suggestion, action: d.action });
+}
+
+const CATEGORIES = new Set<string>(FEEDBACK_CATEGORIES.map((c) => c.id));
+const ACTIONS = new Set<string>(['fix', 'redo', 'none']);
+
+/** A stored draft read back; null when missing, malformed or of another shape (dropped, never thrown on). */
+export function unpackDraft(text: string | null | undefined): StoredDraft | null {
+  if (!text) return null;
+  try {
+    const d = JSON.parse(text) as Partial<StoredDraft> | null;
+    if (!d || typeof d !== 'object' || !Array.isArray(d.marks)) return null;
+    const verdict = d.verdict === 'ok' || d.verdict === 'issue' ? d.verdict : null;
+    const marks: DraftMark[] = d.marks
+      .filter((m): m is DraftMark => !!m && typeof m === 'object' && isSec(Number(m.at)))
+      .map((m) => ({ at: Number(m.at), ...(m.end !== undefined && isSec(Number(m.end)) ? { end: Number(m.end) } : {}), category: CATEGORIES.has(String(m.category)) ? m.category : null, note: typeof m.note === 'string' ? m.note : '' }));
+    const suggestion = typeof d.suggestion === 'string' ? d.suggestion : '';
+    const action = ACTIONS.has(String(d.action)) ? (d.action as FeedbackAction) : 'none';
+    const out = { verdict, marks, suggestion, action };
+    return packDraft(out) ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a draft of this job's report is kept in this tab (the song page then reopens the form). */
+export function hasDraft(jobId: string, storage: Pick<Storage, 'getItem'> | null = sessionStorageOrNull()): boolean {
+  try {
+    return !!unpackDraft(storage?.getItem(draftKey(jobId)));
+  } catch {
+    return false;
+  }
+}
+
+/** sessionStorage, or null where reading it throws (a private window with site data blocked). */
+export function sessionStorageOrNull(): Storage | null {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 /** The confirm dialog's explanation of a fix, by what it does. */
@@ -135,6 +187,12 @@ export class ReportFormComponent {
   protected readonly label = computed(() => sendLabel(this.action(), this.verdict() === 'ok'));
   protected readonly timingUrl = computed(() => `/timing?beta=${this.song().id}`);
 
+  /** The job whose draft was restored from this tab's storage; set on the first run of the draft effect. */
+  private restoredFor: string | null = null;
+  /** The draft as last sent; the same draft is not stored again (a poll refreshing `job` must not revive it). */
+  private sentPacked: string | null = null;
+  private readonly storage = sessionStorageOrNull();
+
   constructor() {
     effect(() => {
       if (!this.open()) this.vid()?.nativeElement.pause();
@@ -143,6 +201,42 @@ export class ReportFormComponent {
     effect(() => {
       if (this.fixWhy() && this.action() === 'fix') this.action.set('none');
     });
+    // the draft lives in sessionStorage per job: 「先到歌詞時間改好」 is a whole-page navigation, and the way back reloads
+    // the page, so what was marked and written here would otherwise be gone. Restored once, then kept up to date.
+    effect(() => {
+      const id = this.job().id;
+      const packed = packDraft({ verdict: this.verdict(), marks: this.marks(), suggestion: this.suggestion(), action: this.action() });
+      if (this.restoredFor !== id) {
+        this.restoredFor = id;
+        untracked(() => this.restore(id));
+        return;
+      }
+      if (packed === this.sentPacked) return;
+      this.keep(id, packed);
+    });
+  }
+
+  private restore(id: string) {
+    let d: StoredDraft | null = null;
+    try {
+      d = unpackDraft(this.storage?.getItem(draftKey(id)));
+    } catch {
+      return;
+    }
+    if (!d) return;
+    this.verdict.set(d.verdict);
+    this.marks.set(d.marks.map((m) => ({ ...m, key: this.nextKey++ })));
+    this.suggestion.set(d.suggestion);
+    this.action.set(d.action);
+  }
+
+  private keep(id: string, packed: string | null) {
+    try {
+      if (packed) this.storage?.setItem(draftKey(id), packed);
+      else this.storage?.removeItem(draftKey(id));
+    } catch {
+      // storage full or blocked: the form still works, the draft just does not survive a reload
+    }
   }
 
   private current() {
@@ -246,6 +340,9 @@ export class ReportFormComponent {
       const res = (await r.json().catch(() => null)) as (BetaFeedback & { error?: string }) | null;
       if (!r.ok) return this.error.set(res?.error ?? `無法送出（HTTP ${r.status}）`);
       const all = await fetch(url).then((x) => (x.ok ? (x.json() as Promise<BetaFeedback[]>) : null)).catch(() => null);
+      // the report is in: the draft is no longer needed, and must not come back on the next reload
+      this.sentPacked = packDraft({ verdict: this.verdict(), marks: this.marks(), suggestion: this.suggestion(), action: this.action() });
+      this.keep(this.job().id, null);
       this.sent.set(body.action);
       this.past.set(all ?? (res ? [res] : []));
       this.reported.emit(this.past()!);

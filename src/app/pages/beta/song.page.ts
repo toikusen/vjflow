@@ -1,4 +1,4 @@
-import { Component, computed, effect, signal, viewChild } from '@angular/core';
+import { Component, computed, effect, signal, untracked, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { SongTimeline, toLrc, toSrt } from '../../lyric-vj/timeline';
@@ -6,7 +6,7 @@ import { BetaFeedback, BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, coverTint, fe
 import { BetaPage } from './beta.page';
 import { ConceptCardComponent } from './concept-card.component';
 import { MakeFormComponent } from './make-form.component';
-import { ReportFormComponent } from './report-form.component';
+import { hasDraft, ReportFormComponent } from './report-form.component';
 import { clock, failureCard, heroTone, jobTitle, jobTotal, stamp, stepClocks, timingNote } from './song';
 import { BalanceComponent } from './ui/balance.component';
 import { PriceComponent } from './ui/price.component';
@@ -80,7 +80,12 @@ export class BetaSongPage extends BetaPage {
   constructor() {
     super();
     effect(() => {
-      for (const j of this.sv()?.results ?? []) if (j.status === 'done' && !this.asked.has(j.id)) this.loadReports(j.id);
+      for (const j of this.sv()?.results ?? []) {
+        if (j.status !== 'done' || this.asked.has(j.id)) continue;
+        this.loadReports(j.id);
+        // a report half written before a timing edit (the editor sends the person back here) opens again where it was
+        if (hasDraft(j.id)) untracked(() => this.toggleReport(j.id));
+      }
     });
     effect(() => {
       if (!this.song()?.confirmedAt || this.askedTiming) return;

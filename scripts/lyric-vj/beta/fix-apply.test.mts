@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cutTimes, holdGap } from '../interludes.mts';
-import { applyPictureFix, cutSpans, KEEP_REASON, keptInterludes, NOTHING_TO_REMOVE, type FixPlan } from './fix-apply.mts';
+import { applyPictureFix, cutSpans, drawnSpans, KEEP_REASON, keptInterludes, NOTHING_TO_REMOVE, type FixPlan } from './fix-apply.mts';
 
 const cut = (beat: number, sprite: string) => ({ beat, sprite, fx: 'wall' });
 const plan = (): FixPlan => ({
@@ -118,6 +118,44 @@ test('keptInterludes: a base without interludes gets every unsung window as pict
   assert.equal(KEEP_REASON, '保留原版（修正不改間奏）');
 });
 
+// ---- C3 / FB-B1: only pictures the built treatment drew count as removed ----
+
+/** A built treatment whose sections start at the given seconds, each drawing the given sprite ('' for none). */
+const built = (sections: [number, string][]) => ({ graphics: { sections: sections.map(([start, sprite]) => ({ start, layers: [{ kind: 'paper' }, { kind: 'kinetic', ...(sprite ? { sprite } : {}) }] })) } });
+
+test('drawnSpans: each section with a sprite runs to the next section; sections without one draw nothing', () => {
+  assert.deepEqual(drawnSpans(built([[0, 'a'], [2, 'b'], [4, ''], [6, 'c']]), 12), [{ sprite: 'a', start: 0, end: 2 }, { sprite: 'b', start: 2, end: 4 }, { sprite: 'c', start: 6, end: 12 }]);
+  assert.deepEqual(drawnSpans({}, 12), []);
+});
+
+test('a cut the hold gap skipped is in the plan but was never drawn: marking its seconds removes nothing', () => {
+  // cuts at 0, 1 and 4 s with a 4 s hold: typeplan skipped the 1 s cut, and from 4 s there is no picture
+  const p: FixPlan = { shots: [{ shot: 's1', cuts: [cut(0, 'a'), cut(1, 'b'), cut(4, '')] }] };
+  const tl = { shots: [{ id: 's1', start: 0, end: 10, gap: 4 }], beats, duration: 10 };
+  assert.equal(applyPictureFix(p, [{ at: 4.5, end: 5 }], tl).removed, 1, 'the plan alone counts the skipped cut');
+  const r = applyPictureFix(p, [{ at: 4.5, end: 5 }], tl, drawnSpans(built([[0, 'a'], [4, '']]), 10));
+  assert.equal(r.removed, 0);
+});
+
+test('kept items no board drew, and a cut stripped for a backdrop interlude, do not count either', () => {
+  const kept: FixPlan = { shots: [{ shot: 's1', cuts: [cut(0, '')] }], parts: [{ from: 's1', keep: { style: 'stage', items: [{ sprite: 'k1', word: 'w' }] } }] };
+  assert.equal(applyPictureFix(kept, [{ at: 2, end: 3 }], timeline()).removed, 1);
+  assert.equal(applyPictureFix(kept, [{ at: 2, end: 3 }], timeline(), []).removed, 0);
+  // the plan's b at 2 s fell in a backdrop interlude: the built treatment has that section without a sprite
+  const r = applyPictureFix(plan(), [{ at: 2.5, end: 3 }], timeline(), drawnSpans(built([[0, 'a'], [2, ''], [6, 'c'], [8, 'd'], [10, 'e']]), 12));
+  assert.equal(r.removed, 0);
+});
+
+test('a drawn picture in the range counts, and its plan cut is blanked even when the plan places it later than 0', () => {
+  const r = applyPictureFix(plan(), [{ at: 2.5, end: 3 }], timeline(), drawnSpans(built([[0, 'a'], [2, 'b'], [6, 'c'], [8, 'd'], [10, 'e']]), 12));
+  assert.deepEqual([r.removed, sprites(r.plan)], [1, ['a', '', '', 'c', 'd', 'e']]);
+  // the first shot starts at 1 s, its first cut with it; typeplan starts the first section at 0, so a is on screen from 0
+  const late: FixPlan = { shots: [{ shot: 's1', cuts: [cut(0, 'a'), cut(4, 'b')] }] };
+  const tl = { shots: [{ id: 's1', start: 1, end: 8, gap: 0.45 }], beats, duration: 8 };
+  const edge = applyPictureFix(late, [{ at: 0.2, end: 0.5 }], tl, drawnSpans(built([[0, 'a'], [5, 'b']]), 8));
+  assert.deepEqual([edge.removed, sprites(edge.plan)], [1, ['', 'b']]);
+});
+
 // ---- fix.sh on a stub tree: a fake npx runs the real fix-apply and only echoes typeplan; make.sh is a stub ----
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -137,6 +175,8 @@ function fixTree() {
   writeFileSync(join(song, 'song.json'), JSON.stringify(songJson));
   writeFileSync(join(src, 'base/treatment.json'), JSON.stringify({ shots: [{ id: 's1', start: 0, end: 8 }, { id: 's2', start: 8, end: 12 }] }));
   writeFileSync(join(src, 'img/typeplan.json'), JSON.stringify(plan()));
+  // the built treatment: every cut of the plan landed
+  writeFileSync(join(src, 'img/treatment.json'), JSON.stringify(built([[0, 'a'], [2, 'b'], [4, ''], [6, 'c'], [8, 'd'], [10, 'e']])));
   writeFileSync(join(src, 'img/video/x.mp4'), 'v');
   writeFileSync(join(src, 'video.mp4'), 'v');
   const run = (from: string, to: string, ranges: string) => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/fix.sh'), song, 'img', join(song, 'runs', to), join(song, 'runs', from), 'picture', ranges], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}` } });
@@ -179,6 +219,16 @@ test('fix.sh: nothing to remove stops before the render with a no-retry line', (
   assert.match(r.stdout, new RegExp(`^##NORETRY ${NOTHING_TO_REMOVE}$`, 'm'));
   assert.match(r.stderr, new RegExp(NOTHING_TO_REMOVE));
   assert.ok(!existsSync(join(t.song, 'runs/f1/made')) && !existsSync(join(t.song, 'runs/f1/.fix-applied')));
+});
+
+test('fix.sh: a picture the built treatment never drew is nothing to remove, whatever the plan says', () => {
+  const t = fixTree();
+  // the cut at 2 s landed in a backdrop interlude: its section has no sprite
+  writeFileSync(join(t.src, 'img/treatment.json'), JSON.stringify(built([[0, 'a'], [2, ''], [4, ''], [6, 'c'], [8, 'd'], [10, 'e']])));
+  const r = t.run('m1', 'f1', '[{"at":2.5,"end":3}]');
+  assert.equal(r.status, 3, r.stderr + r.stdout);
+  assert.match(r.stdout, new RegExp(`^##NORETRY ${NOTHING_TO_REMOVE}$`, 'm'));
+  assert.ok(!existsSync(join(t.song, 'runs/f1/made')));
 });
 
 test('fix.sh: a symlink out of the song folder is refused; one inside it is copied as a link', () => {

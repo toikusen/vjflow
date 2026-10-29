@@ -3,11 +3,14 @@
 // sprite, a part's kept items (keep.items, shown through the part) and the thread's sprite (shown in the shots whose
 // level, or the level before, is above 0). Cut times use typeplan's own helpers (cutTimes, holdGap, landedEnd).
 // A blanked cut's sprite is also taken from the cuts after it that would now show it (blankFollowers).
+// What counts as removed is judged from the pictures the built treatment (img/treatment.json) really draws: the plan
+// holds cuts typeplan never landed (hold gap, a backdrop interlude, a diagram move, a sprite seated out) and kept
+// items no board ever showed, and taking those out changes nothing on screen (drawnSpans).
 // A base treatment without interludes (a run made before them) gets every unsung window as pictures, so the rebuild
 // changes only the marked ranges (keptInterludes).
 // Exit 3 (stderr NOTHING_TO_REMOVE) when the ranges hold no picture: a render would only repeat the old video.
 // usage: npx tsx scripts/lyric-vj/beta/fix-apply.mts --run <run dir> --kind picture --ranges '[{"at":2,"end":4}]'
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { unsungWindows } from '../../../src/app/lyric-vj/structure';
@@ -46,15 +49,39 @@ export function partSpans(plan: FixPlan, tl: FixTimeline) {
   return parts.map((part, k) => ({ part, start: at(part.from) ?? 0, end: (k + 1 < parts.length ? at(parts[k + 1].from) : undefined) ?? tl.duration }));
 }
 
-/** A copy of the plan without the pictures that show while any range plays, and how many pictures went. */
-export function applyPictureFix(plan: FixPlan, ranges: { at: number; end?: number }[], tl: FixTimeline): { plan: FixPlan; removed: number } {
+/** A picture the built treatment draws: its sprite and the seconds it is on screen. */
+export interface DrawnSpan { sprite: string; start: number; end: number }
+
+/**
+ * The pictures a built treatment really draws: each section's kinetic layer with a sprite, from the section's start
+ * to the next section's (the last to the song end). The sections are what typeplan landed: a cut it skipped or
+ * stripped has none.
+ */
+export function drawnSpans(treatment: { graphics?: { sections?: { start: number; layers: { kind: string; sprite?: string }[] }[] } }, duration: number): DrawnSpan[] {
+  const sections = [...(treatment.graphics?.sections ?? [])].sort((a, b) => a.start - b.start);
+  return sections.flatMap((s, i) => {
+    const sprite = s.layers.find((l) => l.kind === 'kinetic' && l.sprite)?.sprite;
+    return sprite ? [{ sprite, start: s.start, end: sections[i + 1]?.start ?? duration }] : [];
+  });
+}
+
+/**
+ * A copy of the plan without the pictures that show while any range plays, and how many pictures went. With `drawn`
+ * (the built treatment's pictures) only those count as removed, and a plan cut carrying a drawn picture over the same
+ * seconds is blanked even when the plan placed it a little later (typeplan starts the first section at 0); plan
+ * pictures the treatment never drew are blanked all the same, which changes nothing on screen.
+ */
+export function applyPictureFix(plan: FixPlan, ranges: { at: number; end?: number }[], tl: FixTimeline, drawn?: DrawnSpan[]): { plan: FixPlan; removed: number } {
   const next = structuredClone(plan);
   const spans = ranges.map((r) => ({ at: r.at, end: r.end ?? r.at + POINT_SPAN }));
   const hit = (start: number, end: number) => spans.some((r) => start < r.end && end > r.at);
+  const drawnHits = drawn?.filter((d) => hit(d.start, d.end));
   let removed = 0;
   const blanked = new Set<FixPlan['shots'][number]['cuts'][number]>();
   for (const { cut, start, end } of cutSpans(next, tl)) {
-    if (!cut.sprite || !hit(start, end)) continue;
+    if (!cut.sprite) continue;
+    const shown = drawnHits?.some((d) => d.sprite === cut.sprite && start < d.end && end > d.start);
+    if (!hit(start, end) && !shown) continue;
     blanked.add(cut);
     removed++;
   }
@@ -76,7 +103,7 @@ export function applyPictureFix(plan: FixPlan, ranges: { at: number; end?: numbe
       removed++;
     }
   }
-  return { plan: next, removed };
+  return { plan: next, removed: drawnHits ? drawnHits.length : removed };
 }
 
 /**
@@ -159,7 +186,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const plan = JSON.parse(readFileSync(file, 'utf8')) as FixPlan;
   const song = JSON.parse(readFileSync(join(a.run, 'song.json'), 'utf8')) as Song;
   const treatment = JSON.parse(readFileSync(join(a.run, 'base', 'treatment.json'), 'utf8'));
-  const r = applyPictureFix(plan, ranges, fixTimeline(song, treatment, plan));
+  const tl = fixTimeline(song, treatment, plan);
+  // the pictures the video really showed come from the built treatment; a run without one (never made by make.sh) falls back to the plan
+  const built = join(a.run, 'img', 'treatment.json');
+  if (!existsSync(built)) console.error(`fix-apply: no ${built}; counting the plan's pictures`);
+  const drawn = existsSync(built) ? drawnSpans(JSON.parse(readFileSync(built, 'utf8')), tl.duration) : undefined;
+  const r = applyPictureFix(plan, ranges, tl, drawn);
   if (!r.removed) {
     console.error(NOTHING_TO_REMOVE);
     process.exit(3);

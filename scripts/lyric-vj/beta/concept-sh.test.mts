@@ -26,9 +26,11 @@ function tree(inputs: Record<string, unknown>) {
   writeFileSync(join(run, 'inputs.json'), JSON.stringify(inputs));
   writeFileSync(join(run, 'noimg/treatment.json'), '{}');
   const log = join(t, 'npx.log');
-  const concept = (env: Record<string, string> = {}) => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/concept.sh'), song, run], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log, ...env } });
+  const cmd = ['bash', join(t, 'repo/scripts/lyric-vj/beta/concept.sh'), song, run];
+  const baseEnv = { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log } as Record<string, string>;
+  const concept = (env: Record<string, string> = {}) => spawnSync(cmd[0], cmd.slice(1), { encoding: 'utf8', env: { ...baseEnv, ...env } });
   const direct = () => (existsSync(log) ? readFileSync(log, 'utf8') : '').split('\n').find((l) => l.includes('direct.mts')) ?? '';
-  return { run, concept, direct };
+  return { run, cmd, env: baseEnv, concept, direct };
 }
 
 test('concept.sh: an adjustment passes the previous treatment and the note; the note stays out of brief.txt', () => {
@@ -39,6 +41,21 @@ test('concept.sh: an adjustment passes the previous treatment and the note; the 
   assert.match(d, /--previous \S+\/runs\/c1\/base\/treatment\.json/);
   assert.match(d, /--note=再亮一點/);
   assert.equal(readFileSync(join(t.run, 'brief.txt'), 'utf8'), '夏天的夜市\n');
+});
+
+test('concept.sh: the server tiers reach the director as --proven and --candidates; an empty proven list is passed too', () => {
+  const t = tree({ concept: 'c', refs: [] });
+  assert.equal(t.concept({ VJ_PROVEN: 'swiss,terminal', VJ_CANDIDATES: 'scrapbook' }).status, 0);
+  assert.match(t.direct(), /--proven=swiss,terminal --candidates scrapbook/);
+  const empty = tree({ concept: 'c', refs: [] });
+  assert.equal(empty.concept({ VJ_PROVEN: '' }).status, 0);
+  assert.match(empty.direct(), /--proven=(\s|$)/);
+  // outside the beta (no variables) the director keeps its code list
+  const none = tree({ concept: 'c', refs: [] });
+  const env = { ...none.env };
+  delete env.VJ_PROVEN; delete env.VJ_CANDIDATES;
+  assert.equal(spawnSync(none.cmd[0], none.cmd.slice(1), { encoding: 'utf8', env }).status, 0);
+  assert.doesNotMatch(none.direct(), /--proven|--candidates/);
 });
 
 test('concept.sh: a redo passes the previous treatment without a note', () => {

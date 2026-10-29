@@ -67,6 +67,8 @@ export const styleTier = (db: Db, id: string): StyleTier => db.styles?.[id]?.tie
 export const styleOffered = (db: Db, id: string) => Object.hasOwn(LANGUAGES, id) && styleTier(db, id) !== 'unlisted';
 /** The candidate languages, in catalog order (the director must give a reason when it picks one). */
 export const candidateIds = (db: Db) => Object.keys(LANGUAGES).filter((id) => styleTier(db, id) === 'candidate');
+/** The proven languages at run time, in catalog order: the set the director picks from without a reason. */
+export const provenIds = (db: Db) => Object.keys(LANGUAGES).filter((id) => styleTier(db, id) === 'proven');
 
 /**
  * What a person pays, fixed per step (placeholders): each concept attempt, then the rest once the concept is accepted.

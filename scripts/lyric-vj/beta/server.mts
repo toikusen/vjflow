@@ -13,7 +13,7 @@ import { addFeedback, fixKindFor, fixRanges, parseFeedback } from './feedback.mt
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { randomBytes } from 'node:crypto';
 import type { ConceptSummary } from './concept-summary.mts';
-import { candidateIds, charged, Db, hashToken, invite, Job, load, madeVideo, newId, platformSpent, PRICE, priceFor, refuse, requeueRunning, retryJob, save, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { candidateIds, charged, Db, hashToken, invite, Job, load, madeVideo, newId, platformSpent, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -218,7 +218,8 @@ export function createBetaServer(o: BetaOptions) {
   const db = load(dbFile);
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }),
     // the candidates as they are when the concept starts (the admin may change tiers while it waits)
-    jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
+    // the director's allowed set is the admin's tiers as they stand when the job starts (never the code's constants)
+    jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_PROVEN: provenIds(db).join(','), VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
   q.holding = true; // nothing starts, whatever gets enqueued, until the orphans are gone
   const orphanSongs = new Map(db.jobs.filter((j) => j.status === 'running' && j.pid).map((j) => [j.pid!, j.songId]));
   const orphans = killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun

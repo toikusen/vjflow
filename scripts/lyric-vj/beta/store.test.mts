@@ -4,7 +4,8 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, refuse, requeueRunning, retryJob, runPath, styleTier, styleOffered, candidateIds, save, spent, userByToken, videoFile } from './store.mts';
+import { PROVEN_LANGUAGES } from '../../../src/app/lyric-vj/languages';
+import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, provenIds, refuse, requeueRunning, retryJob, runPath, styleTier, styleOffered, candidateIds, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -195,4 +196,8 @@ test('style tiers default to proven for proven languages and unlisted otherwise;
   db.styles = { terminal: { tier: 'candidate' }, silkscreen: { tier: 'unlisted' } };
   assert.deepEqual([styleTier(db, 'terminal'), styleOffered(db, 'terminal'), styleOffered(db, 'silkscreen')], ['candidate', true, false]);
   assert.deepEqual(candidateIds(db), ['terminal']);
+  // the proven set at run time: silkscreen unlisted drops out, a promoted language comes in
+  assert.ok(!provenIds(db).includes('silkscreen') && provenIds(db).length === PROVEN_LANGUAGES.length - 1);
+  db.styles.terminal = { tier: 'proven' };
+  assert.ok(provenIds(db).includes('terminal') && !candidateIds(db).includes('terminal'));
 });

@@ -717,7 +717,7 @@ async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'co
     if (o.slow?.on) return `sleep 30`;
     writeFileSync(join(run, 'stills', 'still_1.00.png'), PNG);
     writeFileSync(join(run, 'concept.json'), JSON.stringify({ language: 'silkscreen', languageName: '絲網海報', font: 'f', palette: ['#000'], concept: 'c', concerns: o.concerns ?? '', candidateReason: o.candidateReason ?? '', stills: ['still_1.00.png'] }));
-    return `printf '%s' "$VJ_CANDIDATES" > '${run}/candidates.txt'`;
+    return `printf '%s' "$VJ_CANDIDATES" > '${run}/candidates.txt'; printf '%s' "$VJ_PROVEN" > '${run}/proven.txt'`;
   };
   const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
@@ -974,6 +974,8 @@ test('the style menu lists proven and candidate languages without tiers; the adm
   const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img', style: UNLISTED[0] } })).json();
   const job = await t.done(id);
   assert.equal(readFileSync(join(runPath(t.root, job), 'candidates.txt'), 'utf8'), [UNLISTED[0], UNLISTED[1]].join(','));
+  // the proven set the director gets is the admin's: the unlisted one is gone
+  assert.equal(readFileSync(join(runPath(t.root, job), 'proven.txt'), 'utf8'), PROVEN.slice(1).join(','));
   t.beta.server.close();
 });
 

@@ -6,8 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { deflateSync } from 'node:zlib';
-import { briefFields, briefText, designBriefText, interludeText, loadRefs, normaliseInterludes, readStyle, sipsArgs, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
+import { briefFields, briefText, designBriefText, interludeText, languageOffer, loadRefs, normaliseInterludes, readStyle, sipsArgs, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
+import { PROVEN_LANGUAGES } from '../../src/app/lyric-vj/languages';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 
 const NAMES = '畫面裡絕對不能出現這些名字';
@@ -15,6 +16,21 @@ const READING = 'briefReading 必填';
 const CHOSEN = '使用者指定了設計語言';
 const CANDIDATE = 'candidateReason';
 const ADJUST = '這是調整';
+
+test('languageOffer: the allowed set follows the run-time tiers, not the code constants', () => {
+  const [p0, p1] = PROVEN_LANGUAGES;
+  // an unlisted proven language is out; a language promoted to proven is in without being a candidate
+  const o = languageOffer({ proven: `${p1},terminal`, candidates: 'scrapbook,nope' });
+  assert.ok(!o.allowed.includes(p0) && o.allowed.includes('terminal') && !o.candidates.includes('terminal'));
+  assert.deepEqual([o.candidates, o.allowed], [['scrapbook'], [p1, 'terminal', 'scrapbook']]);
+  // an empty proven list is honoured (the admin unlisted them all); a candidate that is also proven is proven
+  assert.deepEqual(languageOffer({ proven: '', candidates: 'scrapbook' }).allowed, ['scrapbook']);
+  assert.deepEqual(languageOffer({ proven: 'scrapbook', candidates: 'scrapbook' }).candidates, []);
+  // without a proven list the code's constants stand in; a picked language is the only one
+  assert.deepEqual(languageOffer({ candidates: 'scrapbook' }).allowed, [...PROVEN_LANGUAGES, 'scrapbook']);
+  assert.deepEqual(languageOffer({ picked: 'terminal', proven: p0, candidates: 'scrapbook' }), { picked: 'terminal', candidates: [], allowed: ['terminal'] });
+  assert.equal(languageOffer({ picked: 'nope', proven: p0 }).picked, undefined);
+});
 
 test('briefText is empty with no inputs', () => {
   assert.equal(briefText({ candidates: [], hasRefs: false }), '');

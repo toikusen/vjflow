@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
+import { LANGUAGES, type LanguageId, PROVEN_LANGUAGES } from '../../src/app/lyric-vj/languages';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 
@@ -67,6 +68,20 @@ export function withRefs(text: string, refs: Ref[]) {
     ...refs.map((r) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: r.media_type, data: r.data } })),
     { type: 'text' as const, text },
   ];
+}
+
+const ids = (list: string | undefined) => [...new Set((list ?? '').split(',').map((x) => x.trim()))].filter((k): k is LanguageId => k in LANGUAGES);
+
+/**
+ * The design languages on offer to the director. `proven` and `candidates` are comma lists of ids as the beta server
+ * keeps them (the admin's tiers at run time); without a proven list the code's PROVEN_LANGUAGES stand in. A language
+ * the person picked is the only one. Unknown ids are dropped; a candidate that is also proven is proven.
+ */
+export function languageOffer(o: { picked?: string; proven?: string; candidates?: string }): { picked?: LanguageId; candidates: LanguageId[]; allowed: LanguageId[] } {
+  const picked = o.picked && o.picked in LANGUAGES ? (o.picked as LanguageId) : undefined;
+  const proven = o.proven === undefined ? PROVEN_LANGUAGES : ids(o.proven);
+  const candidates = picked ? [] : ids(o.candidates).filter((k) => !proven.includes(k));
+  return { picked, candidates, allowed: picked ? [picked] : [...proven, ...candidates] };
 }
 
 /** 「上一版…。」 with only the parts the previous treatment has; '' when it has none. */

@@ -16,7 +16,7 @@ import { facesFor, FONTS, hanOf, scriptOf } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS, MOTIF_RENDERS, MOTIF_VARIANTS } from '../../src/app/lyric-vj/motif';
 import { PEAK_STYLES, TECHNIQUES } from '../../src/app/lyric-vj/design';
 import { MEDIA } from '../../src/app/lyric-vj/medium';
-import { interfaceLook, type InterfaceLook, LANGUAGES, LanguageId, lookChanges, PROVEN_LANGUAGES, SHARED_MOTIFS, type SharedMotif } from '../../src/app/lyric-vj/languages';
+import { interfaceLook, type InterfaceLook, LANGUAGES, LanguageId, lookChanges, SHARED_MOTIFS, type SharedMotif } from '../../src/app/lyric-vj/languages';
 import { limitPulse, mainDecor, samenessIssues, validateLook } from '../../src/app/lyric-vj/look';
 import { StoryPlan, validateStory } from '../../src/app/lyric-vj/render/story';
 import { LAYER_KINDS } from '../../src/app/lyric-vj/render/graphics';
@@ -33,7 +33,7 @@ import { PRICES, streamed } from './claude.mts';
 import { transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
-import { briefFields, briefText, designBriefText, interludeText, loadRefs, normaliseInterludes, type Previous, readStyle, userPrompt, withRefs } from './brief.mts';
+import { briefFields, briefText, designBriefText, interludeText, languageOffer, loadRefs, normaliseInterludes, type Previous, readStyle, userPrompt, withRefs } from './brief.mts';
 
 const { values: a } = parseArgs({
   options: {
@@ -53,6 +53,7 @@ const { values: a } = parseArgs({
     'keep-story': { type: 'boolean', default: false }, // with --design-only: keep the treatment's story and its props (no props to draw again)
     'available-assets': { type: 'string' }, // with --design-only: assets.json of the pictures already made; photo layers may use only these
     refs: { type: 'string' }, // folder of the person's reference images (jpg/png/webp, at most 5): sent before the prompt text
+    proven: { type: 'string' }, // comma ids: the proven languages at run time (the beta admin's tiers); without it the code's PROVEN_LANGUAGES
     candidates: { type: 'string' }, // comma ids: candidate languages the director may also pick (without --language)
     previous: { type: 'string' }, // treatment.json of the previous concept: quoted to the director as 上一版
     note: { type: 'string' }, // the person's note on the previous concept: with --previous this is an adjustment, without a note a redo
@@ -83,16 +84,15 @@ mkdirSync(out, { recursive: true });
 // language and the concept being adjusted; none given leaves the prompts as they were
 const styleText = readStyle(a.style);
 const refs = a.refs ? loadRefs(a.refs) : [];
-const picked = a.language && a.language in LANGUAGES ? (a.language as LanguageId) : undefined;
-const candidates = picked ? [] : [...new Set((a.candidates ?? '').split(',').map((x) => x.trim()))].filter((k): k is LanguageId => k in LANGUAGES && !PROVEN_LANGUAGES.includes(k as LanguageId));
+const { picked, candidates, allowed: allowedLanguages } = languageOffer({ picked: a.language, proven: a.proven, candidates: a.candidates });
 const previous: Previous | undefined = a.previous ? (() => {
   const t = JSON.parse(readFileSync(a.previous, 'utf8')) as TreatmentV3 & { language?: string };
   return { concept: t.concept ?? '', language: t.design?.language ?? t.language ?? '', font: t.design?.font ?? '' };
 })() : undefined;
 const note = a.note?.trim() || undefined;
 // only proven languages are on offer (a song a paying user gets must come out usable) plus the candidates the
-// operator opened; a language the user picked is the only one
-const allowedLanguages: LanguageId[] = picked ? [picked] : [...PROVEN_LANGUAGES, ...candidates];
+// operator opened; a language the user picked is the only one. The beta passes both lists as the admin set them
+if (!allowedLanguages.length) { console.error('沒有可選的設計語言：--proven 與 --candidates 都是空的（管理者把全部下架了？）'); process.exit(2); }
 
 // ---- schema (structured output): only vocabulary the engine has
 // params are a list of {key, value} pairs: one optional field per template parameter would exceed the API's limit

@@ -34,6 +34,8 @@ if [ ! -f "$w/base/treatment.json" ]; then
   [ -n "$(tr -d '[:space:]' < "$brief")" ] && args+=(--style "@$brief")
   [ -d "$w/refs" ] && [ -n "$(ls -A "$w/refs" 2>/dev/null)" ] && args+=(--refs "$w/refs")
   [ -n "$lang" ] && args+=(--language "$lang")
+  # the admin's tiers at run time (server jobEnv): a set VJ_PROVEN, even empty, replaces the code's proven list
+  [ -n "${VJ_PROVEN+set}" ] && args+=(--proven="$VJ_PROVEN")
   [ -n "${VJ_CANDIDATES:-}" ] && args+=(--candidates "$VJ_CANDIDATES")
   [ -n "$prev" ] && args+=(--previous "$prev")
   [ -n "$note" ] && args+=(--note="$note")

@@ -66,18 +66,15 @@
                 @if (fc.reason) {
                   {{ fc.reason }}
                 } @else if (fc.price !== undefined) {
-                  這次的 <app-price [amount]="fc.price" digits="short" [plain]="true" /> 已退回你的餘額。管理者已收到通知，會查原因後幫你重跑或聯絡你。
+                  這次的 <app-price [amount]="fc.price" digits="short" [plain]="true" /> 已退回你的餘額。
                 } @else {
-                  這次的費用已退回你的餘額。管理者已收到通知，會查原因後幫你重跑或聯絡你。
+                  這次的費用已退回你的餘額。
                 }
               </p>
             </div>
             <div class="f-side">
               <p class="f-stamps">{{ fc.stamps.join(' · ') }}</p>
-              <button class="button" type="button" (click)="contacted.set(true)">聯絡管理者</button>
-              @if (contacted()) {
-                <p class="f-note" role="status">管理者已收到通知，不用另外聯絡。</p>
-              }
+              <p class="f-note">{{ fc.note }}</p>
             </div>
           </section>
         }

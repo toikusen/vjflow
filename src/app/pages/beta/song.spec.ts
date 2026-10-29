@@ -1,5 +1,5 @@
 import { BetaJob } from './beta';
-import { clock, failureCard, heroTone, jobTitle, jobTotal, stepClocks, timingNote } from './song';
+import { clock, FAILURE_NOTE, failureCard, heroTone, jobTitle, jobTotal, stepClocks, timingNote } from './song';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'make', tier: 'hybrid', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -78,8 +78,12 @@ describe('failureCard', () => {
   const first = job({ id: 'a', tier: 'none', status: 'failed', priceUsd: 4, endedAt: '2026-10-28T07:44:00' });
   const retry = job({ id: 'b', tier: 'none', status: 'failed', priceUsd: 4, auto: true, retryOf: 'a', endedAt: '2026-10-28T07:50:00' });
   it('names the tier, says whether the automatic retry also failed, and refunds that job’s price', () => {
-    expect(failureCard(retry, [first, retry])).toEqual({ title: '文字動態版製作失敗，自動重試也沒成功', price: 4, stamps: ['10-28 07:44 失敗', '10-28 07:50 重試失敗'] });
-    expect(failureCard(first, [first])).toEqual({ title: '文字動態版製作失敗', price: 4, stamps: ['10-28 07:44 失敗'] });
+    expect(failureCard(retry, [first, retry])).toEqual({ title: '文字動態版製作失敗，自動重試也沒成功', price: 4, stamps: ['10-28 07:44 失敗', '10-28 07:50 重試失敗'], note: FAILURE_NOTE });
+    expect(failureCard(first, [first])).toEqual({ title: '文字動態版製作失敗', price: 4, stamps: ['10-28 07:44 失敗'], note: FAILURE_NOTE });
+  });
+  it('says only what is true about what happens next: the failure is on record for the admin, nobody was notified', () => {
+    expect(failureCard(first, [first]).note).toBe('這次失敗已記錄，管理者會在後台看到');
+    expect(FAILURE_NOTE).not.toContain('通知');
   });
   it('names a failed concept by its tier and a failed fix as 修正', () => {
     const concept = job({ id: 'c', kind: 'concept', tier: 'hybrid', status: 'failed', priceUsd: 2.5, auto: true, retryOf: 'x', endedAt: '2026-10-28T07:50:00' });

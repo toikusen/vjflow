@@ -56,8 +56,6 @@ export class BetaSongPage extends BetaPage {
   protected readonly stepsOpen = signal(false);
   /** Result videos the person started; their native controls show from then on, in place of the play button. */
   protected readonly played = signal<ReadonlySet<string>>(new Set());
-  /** The failure card's 「聯絡管理者」 note. */
-  protected readonly contacted = signal(false);
   /** Past reports per result job, read once when the page first sees the result (and again after a send). */
   protected readonly reports = signal<Readonly<Record<string, BetaFeedback[]>>>({});
   private readonly asked = new Set<string>();

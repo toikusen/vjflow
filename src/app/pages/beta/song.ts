@@ -66,10 +66,17 @@ export function stamp(iso?: string) {
 export const NOTHING_TO_REMOVE_LINE = '標記的範圍裡沒有找到可以拿掉的圖，這次沒有收費。';
 
 /**
- * The 3b failure card for the latest failed make, concept or fix: what failed (and whether the automatic retry did too),
- * the refunded price, when, and for a fix with nothing to remove the reason in place of the refund line.
+ * What happens next after a failure: the truth, no more. Nothing is sent anywhere; the failed job shows up in the
+ * admin's 需要協助 list when the admin opens the admin page.
  */
-export function failureCard(failed: BetaJob, jobs: BetaJob[]): { title: string; price?: number; stamps: string[]; reason?: string } {
+export const FAILURE_NOTE = '這次失敗已記錄，管理者會在後台看到';
+
+/**
+ * The 3b failure card for the latest failed make, concept or fix: what failed (and whether the automatic retry did too),
+ * the refunded price, when, the note on what happens next, and for a fix with nothing to remove the reason in place of
+ * the refund line.
+ */
+export function failureCard(failed: BetaJob, jobs: BetaJob[]): { title: string; price?: number; stamps: string[]; note: string; reason?: string } {
   const name = TIER_INFO[failed.tier ?? 'none'].name;
   const what = failed.kind === 'concept' ? `${name}的概念產生失敗` : failed.kind === 'fix' ? '修正失敗' : `${name}製作失敗`;
   const first = failed.auto && failed.retryOf ? jobs.find((x) => x.id === failed.retryOf) : undefined;
@@ -78,6 +85,7 @@ export function failureCard(failed: BetaJob, jobs: BetaJob[]): { title: string; 
     title: failed.auto ? `${what}，自動重試也沒成功` : what,
     price: failed.priceUsd,
     stamps,
+    note: FAILURE_NOTE,
     ...(failed.nothingToRemove ? { reason: NOTHING_TO_REMOVE_LINE } : {}),
   };
 }

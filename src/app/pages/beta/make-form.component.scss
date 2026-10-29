@@ -138,6 +138,15 @@ h2, p, dl, dd {
 
 /* feeling and references */
 
+.wish-box > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.wish-box[open] > summary {
+  margin-bottom: 12px;
+}
+
 .wish {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 356px;

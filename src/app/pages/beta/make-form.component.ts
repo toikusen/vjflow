@@ -45,6 +45,8 @@ export class MakeFormComponent {
   protected readonly maxFeeling = MAX_FEELING;
   protected readonly maxRefs = MAX_REFS;
   protected readonly accept = REF_TYPES.join(',');
+  /** 想要的感覺 and 參考圖 are folded until opened (or a redo fills them in). */
+  protected readonly wishOpen = signal(false);
   protected readonly styles = signal<BetaStyle[]>([]);
   /** The picked style id; null is 交給導演 (the default). */
   protected readonly style = signal<string | null>(null);
@@ -90,8 +92,10 @@ export class MakeFormComponent {
 
   /** Scrolls the form into view and puts the cursor in 想要的感覺 (after a redo from a report). */
   reveal() {
+    this.wishOpen.set(true);
     this.host.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    this.host.nativeElement.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true });
+    // the textarea is inside the folded <details>: focus once the open state has rendered
+    setTimeout(() => this.host.nativeElement.querySelector<HTMLTextAreaElement>('textarea')?.focus({ preventScroll: true }));
   }
 
   private async loadStyles() {

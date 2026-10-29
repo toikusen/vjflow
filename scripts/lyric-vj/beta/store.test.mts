@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { PROVEN_LANGUAGES } from '../../../src/app/lyric-vj/languages';
-import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, provenIds, refuse, requeueRunning, retryJob, runPath, styleTier, styleOffered, candidateIds, save, spent, userByToken, videoFile } from './store.mts';
+import { charged, conceptAttempts, emptyDb, PRICE, priceFor, TIER_TOTAL, invite, Job, load, nextJob, platformSpent, provenIds, refuse, requeueRunning, retryJob, runPath, trackOrphans, styleTier, styleOffered, candidateIds, save, spent, userByToken, videoFile } from './store.mts';
 
 const job = (o: Partial<Job>): Job => ({ id: 'j', userId: 'u', songId: 's', kind: 'make', tier: 'none', status: 'done', reservedUsd: 4, createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -200,4 +200,17 @@ test('style tiers default to proven for proven languages and unlisted otherwise;
   assert.ok(!provenIds(db).includes('silkscreen') && provenIds(db).length === PROVEN_LANGUAGES.length - 1);
   db.styles.terminal = { tier: 'proven' };
   assert.ok(provenIds(db).includes('terminal') && !candidateIds(db).includes('terminal'));
+});
+
+test('a db saved before db.orphans existed loads, and trackOrphans merges old entries with running jobs', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'store-')), 'db.json');
+  const old = emptyDb();
+  old.jobs.push({ id: 'j1', userId: 'u', songId: 's', kind: 'make', tier: 'img', status: 'running', pid: 42, startedAt: '2026-10-28T01:00:00Z', createdAt: '2026-10-28T00:00:00Z', reservedUsd: 6 } as Job);
+  save(file, old);
+  const db = load(file);
+  assert.equal(db.orphans, undefined);
+  db.orphans = [{ pid: 7, jobId: 'j0', since: '2026-10-28T00:30:00Z' }, { pid: 8, jobId: 'jx', since: '2026-10-27T00:00:00Z' }];
+  const boot = Date.parse('2026-10-28T00:00:00Z');
+  assert.deepEqual(trackOrphans(db, boot).map((e) => e.pid), [7, 42], 'an entry from before boot is dropped; the running job is added');
+  assert.deepEqual(trackOrphans(db, boot).map((e) => e.pid), [7, 42], 'no duplicates on a second pass');
 });

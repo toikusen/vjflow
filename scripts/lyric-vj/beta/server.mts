@@ -11,9 +11,10 @@ import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa
 import { logEvent, readEvents } from './events.mts';
 import { addFeedback, fixKindFor, fixRanges, parseFeedback } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
+import { uptime } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import type { ConceptSummary } from './concept-summary.mts';
-import { candidateIds, charged, Db, hashToken, invite, Job, load, madeVideo, newId, platformSpent, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { candidateIds, charged, Db, hashToken, invite, Job, load, madeVideo, newId, platformSpent, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, trackOrphans, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -227,8 +228,13 @@ export function createBetaServer(o: BetaOptions) {
     // the director's allowed set is the admin's tiers as they stand when the job starts (never the code's constants)
     jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_PROVEN: provenIds(db).join(','), VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
   q.holding = true; // nothing starts, whatever gets enqueued, until the orphans are gone
-  const orphanSongs = new Map(db.jobs.filter((j) => j.status === 'running' && j.pid).map((j) => [j.pid!, j.songId]));
-  const orphans = killRunning(db); // a pipeline orphaned by a crash must not run beside its rerun
+  // a pipeline orphaned by a crash must not run beside its rerun; its pid is on record before the job's is cleared, so a
+  // second crash during the wait below still finds it next start
+  const known = trackOrphans(db, Date.now() - uptime() * 1000);
+  q.persist();
+  const orphanSongs = new Map(known.map((e) => [e.pid, db.jobs.find((j) => j.id === e.jobId)?.songId]));
+  const orphans = known.map((e) => e.pid);
+  for (const pid of orphans) killGroup(pid);
   for (const j of requeueRunning(db)) logEvent(o.root, j.songId, { type: 'job.requeued', jobId: j.id });
   // make jobs queued before run folders existed get one now, so their output lands where videoFile looks
   for (const j of db.jobs) if (j.kind === 'make' && j.status === 'queued' && !j.runDir) j.runDir = `runs/${j.id}`;
@@ -236,14 +242,15 @@ export function createBetaServer(o: BetaOptions) {
   // the rerun starts only once the orphaned groups are gone; with none, at once
   const release = (left: number[]) => {
     const bySong = new Map<string, number[]>();
-    for (const pid of left) bySong.set(orphanSongs.get(pid)!, [...(bySong.get(orphanSongs.get(pid)!) ?? []), pid]);
+    for (const pid of left) if (orphanSongs.get(pid)) bySong.set(orphanSongs.get(pid)!, [...(bySong.get(orphanSongs.get(pid)!) ?? []), pid]);
     // only survivors stay listed: a pid that has exited may belong to a stranger's group by the time stopBeta runs
     orphans.splice(0, orphans.length, ...left);
+    db.orphans = (db.orphans ?? []).filter((e) => left.includes(e.pid));
     try {
       for (const [songId, pids] of bySong) logEvent(o.root, songId, { type: 'queue.orphan.timeout', pids });
     } finally {
       q.holding = false;
-      pump(q);
+      try { q.persist(); } finally { pump(q); }
     }
   };
   const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).catch(() => orphans.slice()).then(release) : (release([]), Promise.resolve());

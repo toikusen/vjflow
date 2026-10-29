@@ -11,7 +11,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { LANGUAGES } from '../../../src/app/lyric-vj/languages';
 import { readEvents } from './events.mts';
-import { invite, save, emptyDb, runPath, type Job } from './store.mts';
+import { invite, load, save, emptyDb, runPath, type Job } from './store.mts';
 
 // every server and job a test starts is stopped when the file ends, so a failed assertion cannot leave the process hanging
 const started: ReturnType<typeof createBetaServer>[] = [];
@@ -513,6 +513,35 @@ test('once the orphans have exited the server forgets their pids, so stopBeta ne
     await b.ready;
     await o.exitedAt;
     assert.deepEqual(b.orphans, []);
+  } finally { o.kill(); }
+});
+
+test('a second crash during the startup wait still leaves the first orphan to be waited for', async () => {
+  const o = await orphanRoot();
+  try {
+    const first = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+    // the server dies here, mid-wait: nothing it does from now on reaches the record
+    Object.assign(first.queue, { stopping: true, persist: () => {} });
+    assert.equal(first.db.jobs[0].pid, undefined, 'the first start cleared the job pid');
+    const second = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+    assert.deepEqual(second.orphans, [o.orphan.pid], 'the orphan is known from db.orphans');
+    assert.deepEqual(second.db.orphans?.map((e) => [e.pid, e.jobId]), [[o.orphan.pid, 'j0']]);
+    assert.equal(second.db.jobs[0].status, 'queued', 'requeued jobs still read queued at once');
+    await second.ready;
+    const exited = await o.exitedAt;
+    const running = second.db.jobs.find((j) => j.status === 'running')!;
+    assert.ok(Date.parse(running.startedAt!) >= exited - 5, 'the rerun started only after the orphan exited');
+  } finally { o.kill(); }
+});
+
+test('an orphan entry is dropped from the record once its process is gone', async () => {
+  const o = await orphanRoot();
+  try {
+    const b = create({ root: o.root, publicUrl: 'https://beta.test', env: {}, command: () => 'sleep 30' });
+    assert.deepEqual(load(join(o.root, 'db.json')).orphans?.map((e) => e.pid), [o.orphan.pid], 'persisted before the wait');
+    await b.ready;
+    assert.deepEqual(b.db.orphans, []);
+    assert.deepEqual(load(join(o.root, 'db.json')).orphans, []);
   } finally { o.kill(); }
 });
 

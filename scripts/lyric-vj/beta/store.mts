@@ -59,7 +59,11 @@ export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd:
   /** Every problem report ever submitted, never overwritten. */
   feedback: Feedback[];
   /** The admin's tier per design language; a language not listed here takes its default (see styleTier). */
-  styles?: Record<string, { tier: StyleTier }> }
+  styles?: Record<string, { tier: StyleTier }>;
+  /** Pipelines a crash left behind, kept until each is confirmed gone (a db from before this field has none). */
+  orphans?: Orphan[] }
+/** A crash-orphaned pipeline's process group; `since` is when its job started (or when it was found, lacking that). */
+export interface Orphan { pid: number; jobId: string; since: string }
 
 /** A language's tier: the admin's choice, else `proven` for a proven language and `unlisted` for the rest. */
 export const styleTier = (db: Db, id: string): StyleTier => db.styles?.[id]?.tier ?? (LANGUAGES[id as LanguageId]?.proven ? 'proven' : 'unlisted');
@@ -172,6 +176,22 @@ export function invite(db: Db, name: string, limitUsd: number, admin = false) {
 }
 
 export const userByToken = (db: Db, token: string | undefined) => (token ? db.users.find((u) => u.tokenHash === hashToken(token) && !u.disabled) : undefined);
+
+/**
+ * Lists every running job's pid in `db.orphans` (call and persist before requeueRunning clears the pids), merged with
+ * the entries an earlier start left there, and returns them all. Like killRunning, an entry or job from before the
+ * machine booted is dropped: its pid may belong to an unrelated process now. Only liveness is checked beyond that.
+ */
+export function trackOrphans(db: Db, bootMs: number, now = new Date().toISOString()) {
+  const before = (since: string | undefined) => !!since && Date.parse(since) < bootMs;
+  const orphans = (db.orphans ?? []).filter((o) => !before(o.since));
+  for (const j of db.jobs) {
+    if (j.status !== 'running' || !j.pid || before(j.startedAt) || orphans.some((o) => o.pid === j.pid)) continue;
+    orphans.push({ pid: j.pid, jobId: j.id, since: j.startedAt ?? now });
+  }
+  db.orphans = orphans;
+  return orphans;
+}
 
 /** Jobs a restart interrupted go back to the queue (every pipeline step skips what it already wrote). */
 export function requeueRunning(db: Db) {

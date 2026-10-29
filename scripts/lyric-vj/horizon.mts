@@ -7,7 +7,7 @@
 //   spends nothing. The strips stay in <dir>, so every version of a song shares them.
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -79,8 +79,10 @@ if (a.apply) {
   for (const s of strips) assets[`hz:${s.id}`] = { kind: 'image', url: resolve(s.file) };
   // each skyline starts its layers on the next strip, so neighbouring sections do not repeat one horizon
   skylines(plan).forEach((l, n) => Object.assign(l, { art: strips.map((_, k) => `hz:${strips[(k + n) % strips.length].id}`) }));
-  writeFileSync(join(a.apply, 'treatment.json'), JSON.stringify(plan, null, 1));
-  writeFileSync(assetsFile, JSON.stringify(assets, null, 1));
+  // written beside and renamed into place: a plan cut short by a kill mid-write would make every retry fail at the render
+  const writeJson = (file: string, v: unknown) => { writeFileSync(`${file}.tmp`, JSON.stringify(v, null, 1)); renameSync(`${file}.tmp`, file); };
+  writeJson(join(a.apply, 'treatment.json'), plan);
+  writeJson(assetsFile, assets);
   console.log(`horizon: ${skylines(plan).length} skylines use the song's strips`);
 }
 console.log(`horizon: ${strips.map((s) => s.id).join(', ')}, $${usd.toFixed(3)}`);

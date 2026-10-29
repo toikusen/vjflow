@@ -57,7 +57,7 @@
           <div class="t-row acc" [class.off]="u.disabled">
             <span class="who" data-l="名字"><strong>{{ u.name }}</strong>@if (u.admin) {<span class="role admin">管理者</span>}@if (u.disabled) {<span class="role off">停用</span>}</span>
             <span class="mono r" data-l="已用"><app-price [amount]="u.spentUsd" [plain]="true" /></span>
-            <span class="r" data-l="額度"><input #lim class="quota" type="number" min="0" [value]="u.limitUsd" (change)="setLimit(u, lim.value)" aria-label="額度" /></span>
+            <span class="r" data-l="額度"><input #lim class="quota" type="number" min="0" [value]="u.limitUsd" (change)="setLimit(u, lim)" aria-label="額度" /></span>
             <span class="acts" data-l="">
               <button class="mini" type="button" (click)="newLink(u)">登入連結</button>
               @if (!u.admin) {<button class="mini" type="button" (click)="toggle(u)">{{ u.disabled ? '恢復' : '停用' }}</button>}

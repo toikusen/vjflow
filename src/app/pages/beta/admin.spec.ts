@@ -1,4 +1,4 @@
-import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobState, kpis, margin, mmss, needHelp, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
+import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
 import { BetaMe, BetaSong } from './beta';
 
 const iso = (minAgo: number, now = Date.parse('2026-10-28T05:40:00Z')) => new Date(now - minAgo * 60e3).toISOString();
@@ -49,9 +49,9 @@ describe('kpis', () => {
   ];
   it('builds the five cards from the totals, people, jobs and songs', () => {
     const k = kpis(users, jobs, songs, { globalLimitUsd: 100, spentUsd: 9.52, platformSpentUsd: 6.31 }, NOW);
-    expect(k.map((x) => x.label)).toEqual(['全站已用', '平台成本', '測試者', '進行中工作', '需要協助']);
-    expect(k[0]).toEqual({ label: '全站已用', value: '$9.52', sub: '總額度 $100 · 9.5%' });
-    expect(k[1]).toEqual({ label: '平台成本', value: '$6.31', sub: '毛利 +$3.21', tone: 'ok' });
+    expect(k.map((x) => x.label)).toEqual(['使用者已付', '平台成本', '測試者', '進行中工作', '需要協助']);
+    expect(k[0]).toEqual({ label: '使用者已付', value: '$9.52', sub: '毛利 +$3.21', tone: 'ok' });
+    expect(k[1]).toEqual({ label: '平台成本', value: '$6.31', sub: '總額度 $100 · 6.3%' });
     expect(k[2]).toEqual({ label: '測試者', value: '3', sub: '1 停用' });
     expect(k[3].value).toBe('1');
     expect(k[3].sub).toMatch(/^1 排隊 · 約等 \d+ 分$/);
@@ -67,11 +67,35 @@ describe('kpis', () => {
     expect(needHelp([song({ id: 'c' })], [job({ id: 'p', kind: 'prep', songId: 'c', status: 'failed' })])).toEqual([{ id: 'c', title: 'c', why: '準備失敗' }]);
     expect(needHelp([song({ id: 'a' })], [job({ id: 'p', kind: 'prep', songId: 'a' }), job({ id: 'm', songId: 'a', status: 'failed' })])[0].why).toBe('製作失敗');
   });
+  it('counts a video held for the admin’s release (the person waits on it), a failure first when both apply', () => {
+    const prep = job({ id: 'p', kind: 'prep', songId: 'a' });
+    expect(needHelp([song({ id: 'a' })], [prep, job({ id: 'h', songId: 'a', status: 'admin', tier: 'hybrid' })])).toEqual([{ id: 'a', title: 'a', why: '等你放行' }]);
+    expect(needHelp([song({ id: 'a' })], [prep, job({ id: 'h', songId: 'a', status: 'admin', createdAt: iso(50) }), job({ id: 'f', songId: 'a', status: 'failed', createdAt: iso(10) })])[0].why).toBe('製作失敗');
+    expect(needHelp([song({ id: 'a' })], [prep, job({ id: 'd', songId: 'a', status: 'done' })])).toEqual([]);
+  });
+  it('measures the limit by the platform’s cost, as the server does, not by what the people paid', () => {
+    const k = kpis([], [], [], { globalLimitUsd: 100, spentUsd: 0, platformSpentUsd: 31.2 }, NOW);
+    expect(k[1].sub).toBe('總額度 $100 · 31.2%');
+    expect(k[0]).toEqual({ label: '使用者已付', value: '$0.00', sub: '毛利 -$31.20', tone: 'bad' });
+  });
   it('handles no limit and no people without dividing by zero', () => {
     const k = kpis([], [], [], { globalLimitUsd: 0, spentUsd: 0, platformSpentUsd: 0 }, NOW);
-    expect(k[0].sub).toBe('總額度 $0 · —');
+    expect(k[1].sub).toBe('總額度 $0 · —');
     expect(k[2].sub).toBe('全部啟用');
     expect(k[3].sub).toBe('0 排隊');
+  });
+});
+
+describe('parseLimit', () => {
+  it('takes a number from 0 up, and refuses an empty, negative or non-numeric field (a cleared field is not 0)', () => {
+    expect(parseLimit('25')).toBe(25);
+    expect(parseLimit(' 0 ')).toBe(0);
+    expect(parseLimit('12.5')).toBe(12.5);
+    expect(parseLimit('')).toBeNull();
+    expect(parseLimit('   ')).toBeNull();
+    expect(parseLimit('-1')).toBeNull();
+    expect(parseLimit('abc')).toBeNull();
+    expect(parseLimit('Infinity')).toBeNull();
   });
 });
 

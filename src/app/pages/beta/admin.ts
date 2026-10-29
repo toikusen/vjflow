@@ -22,9 +22,13 @@ export function margin(paidUsd: number, costUsd: number): { value: string; tone:
 const isActive = (j: BetaJob) => j.status === 'queued' || j.status === 'running';
 const short = (s: string, n = 8) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
-/** The 3c KPI cards: 全站已用 / 平台成本（毛利） / 測試者 / 進行中工作 / 需要協助. */
+/**
+ * The 3c KPI cards: 使用者已付（毛利） / 平台成本（對總額度） / 測試者 / 進行中工作 / 需要協助. The limit is measured against
+ * the platform's cost, as the server does (platformSpent against globalLimitUsd in store.mts), not against what the
+ * people were charged: a failed job charges 0 and still cost the platform.
+ */
 export function kpis(users: BetaMe[], jobs: AdminJob[], songs: BetaSong[], t: AdminTotals, now = Date.now()): Kpi[] {
-  const pct = t.globalLimitUsd > 0 ? `${Math.round((t.spentUsd / t.globalLimitUsd) * 1000) / 10}%` : '—';
+  const pct = t.globalLimitUsd > 0 ? `${Math.round((t.platformSpentUsd / t.globalLimitUsd) * 1000) / 10}%` : '—';
   const m = margin(t.spentUsd, t.platformSpentUsd);
   const off = users.filter((u) => u.disabled).length;
   const running = jobs.filter((j) => j.status === 'running');
@@ -32,23 +36,35 @@ export function kpis(users: BetaMe[], jobs: AdminJob[], songs: BetaSong[], t: Ad
   const wait = [...running, ...queued].reduce((s, j) => s + jobProgress(j, now).leftMin, 0);
   const help = needHelp(songs, jobs);
   return [
-    { label: '全站已用', value: money(t.spentUsd), sub: `總額度 $${formatPrice(t.globalLimitUsd, 'short')} · ${pct}` },
-    { label: '平台成本', value: money(t.platformSpentUsd), sub: `毛利 ${m.value}`, tone: m.tone },
+    { label: '使用者已付', value: money(t.spentUsd), sub: `毛利 ${m.value}`, tone: m.tone },
+    { label: '平台成本', value: money(t.platformSpentUsd), sub: `總額度 $${formatPrice(t.globalLimitUsd, 'short')} · ${pct}` },
     { label: '測試者', value: String(users.length), sub: off ? `${off} 停用` : '全部啟用' },
     { label: '進行中工作', value: String(running.length), sub: `${queued.length} 排隊${wait ? ` · 約等 ${wait} 分` : ''}` },
     { label: '需要協助', value: String(help.length), sub: help[0] ? `${short(help[0].title)} ${help[0].why}` : '沒有卡住的歌', tone: help.length ? 'bad' : undefined },
   ];
 }
 
-/** Songs whose last job failed for good (no retry running): the admin has to act. */
+/** Songs the admin has to act on: the last job failed for good (no retry running), or a video waits for the admin's release. */
 export function needHelp(songs: BetaSong[], jobs: AdminJob[]): { id: string; title: string; why: string }[] {
   return songs.flatMap((s) => {
     const v = songView(s, jobs);
     const kind = songKind(v);
     if (kind === 'prepFailed') return [{ id: s.id, title: s.title, why: '準備失敗' }];
-    if (kind !== 'help') return [];
-    return [{ id: s.id, title: s.title, why: v.failedAuto ? '重試失敗' : '製作失敗' }];
+    if (kind === 'help') return [{ id: s.id, title: s.title, why: v.failedAuto ? '重試失敗' : '製作失敗' }];
+    // a video held for a look (a kept key shot, a covered lyric): the person waits until the admin releases it
+    if (v.results.some((j) => j.status === 'admin')) return [{ id: s.id, title: s.title, why: '等你放行' }];
+    return [];
   });
+}
+
+/**
+ * An admin's limit field as a number, or null when it should not be sent: empty (a cleared field is not 0, which would
+ * stop the person at once), not a number, or negative.
+ */
+export function parseLimit(value: string): number | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : null;
 }
 
 /** What a job does, as the admin tables name it. */

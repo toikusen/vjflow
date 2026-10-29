@@ -1,7 +1,7 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp, retryLabel } from './admin';
+import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp, parseLimit, retryLabel } from './admin';
 import { AdminStylesComponent } from './admin-styles.component';
 import { BetaMe, BetaSong, songChip, songView } from './beta';
 import { PriceComponent } from './ui/price.component';
@@ -88,8 +88,15 @@ export class BetaAdminPage {
     }
   }
 
-  protected setLimit(u: BetaMe, value: string) {
-    return this.send('PATCH', `/beta/admin/users/${u.id}`, { limitUsd: Number(value) });
+  /** A cleared or malformed field is put back to the person's limit and nothing is sent: Number('') is 0, which would stop them at once. */
+  protected setLimit(u: BetaMe, field: HTMLInputElement) {
+    const n = parseLimit(field.value);
+    if (n === null) {
+      field.value = String(u.limitUsd);
+      this.message.set('額度要填 0 以上的數字，已還原');
+      return null;
+    }
+    return this.send('PATCH', `/beta/admin/users/${u.id}`, { limitUsd: n });
   }
 
   protected async newLink(u: BetaMe) {

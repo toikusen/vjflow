@@ -90,6 +90,15 @@ test('designBriefText: a redo asks for a different font and colour; an adjustmen
   assert.ok(adjust.includes(ADJUST) && adjust.includes('保留上一版的') && !adjust.includes('這是重做'));
 });
 
+test('designBriefText: the adjust note reaches the design stage even without original text; the reading stands alone', () => {
+  const prev = { concept: 'c', language: 'silkscreen', font: 'Noto Sans TC' };
+  const t = designBriefText({ style: '', note: '請改用紅色明體', previous: prev, hasRefs: false });
+  assert.ok(t.includes('請改用紅色明體') && t.includes('意見提到的地方一定要改') && t.includes(ADJUST) && !t.includes('使用者寫的話'));
+  const reading = designBriefText({ style: '  ', briefReading: '你寫的『夏天』我理解成：強光', hasRefs: false });
+  assert.ok(reading.includes('導演的理解：你寫的『夏天』我理解成：強光'));
+  assert.equal(designBriefText({ style: '', note: '  ', briefReading: '', hasRefs: false }), '');
+});
+
 test('designBriefText is empty with no inputs and carries the reading, previous font and refs', () => {
   assert.equal(designBriefText({ hasRefs: false }), '');
   const t = designBriefText({ style: '夏天', briefReading: '你寫的『夏天』我理解成：強光', previous: { concept: 'c', language: 'silkscreen', font: 'Noto Sans TC' }, hasRefs: true });

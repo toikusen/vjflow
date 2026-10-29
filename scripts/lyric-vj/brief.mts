@@ -114,7 +114,10 @@ export function briefText(o: { style?: string; note?: string; previous?: Previou
 /** The same wishes for the design pass (font, colour, texture are decided there); '' when there are none. */
 export function designBriefText(o: { style?: string; briefReading?: string; note?: string; previous?: Previous; hasRefs: boolean }): string {
   const rules: string[] = [];
-  if (o.style?.trim()) rules.push(`使用者寫的話：${o.style.trim()}${o.briefReading?.trim() ? `\n  導演的理解：${o.briefReading.trim()}` : ''}\n  色彩、字型、質感照這個理解做；名字只轉譯成視覺特徵，不能畫出名字、角色或標誌。`);
+  // what the person wrote: their text, their note on the previous version (an adjustment), the director's reading of
+  // both; each on its own, so a note with no original text still reaches the design
+  const said = [o.style?.trim() && `使用者寫的話：${o.style.trim()}`, o.note?.trim() && `使用者對上一版的意見：「${o.note.trim()}」`, o.briefReading?.trim() && `導演的理解：${o.briefReading.trim()}`].filter(Boolean);
+  if (said.length) rules.push(`${said.join('\n  ')}\n  色彩、字型、質感照這個理解做${o.note?.trim() ? '，意見提到的地方一定要改' : ''}；名字只轉譯成視覺特徵，不能畫出名字、角色或標誌。`);
   if (o.hasRefs) rules.push('使用者附了參考圖（在這則訊息最前面）：色彩、光線與質感往它靠，不要照抄畫面，也不要畫出圖裡的人物、角色、文字或標誌。');
   const font = o.previous?.font.trim();
   if (o.previous && o.note?.trim()) rules.push(`這是調整：${font ? `上一版用字型 ${font}；` : ''}使用者沒有要求改字型或色調時就保留上一版的。`);

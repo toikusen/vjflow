@@ -1,6 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, coverTint, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollOrder, pollToast, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
+import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, coverTint, errorOf, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollOrder, pollToast, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
 import { Ask } from './ui/confirm';
@@ -36,6 +36,8 @@ export class BetaPage {
   protected readonly filter = signal<SongFilter>('all');
   /** Phones show the add-song form as its own full page, opened from an entry row. */
   protected readonly composing = signal(false);
+  /** The song whose audio this page is sending now: its card says so instead of 等音檔 until the poll after the upload. */
+  private readonly uploadingId = signal<string | null>(null);
   /** Each song as its card shows it: state, chip, cover tint, subtitle, progress (while something runs) and next step. */
   protected readonly cards = computed(() =>
     this.songs().map((song) => {
@@ -50,7 +52,7 @@ export class BetaPage {
         tint: coverTint(song.id),
         meta: [song.artist, this.langName(song.language), made ? `${made} 個成品` : '尚無成品'].filter(Boolean).join(' · '),
         pct: progress?.pct,
-        next: nextStep(view, progress),
+        next: song.id === this.uploadingId() ? { label: '上傳中…', to: 'song' as const } : nextStep(view, progress),
       };
     }),
   );
@@ -120,7 +122,7 @@ export class BetaPage {
     } catch {
       throw new Error('連線中斷，請確認網路後再試');
     }
-    if (!up.ok) throw new Error(((await up.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${up.status}`);
+    if (!up.ok) throw new Error(errorOf(await jsonOrError(up), up.status));
   }
 
   private clearComposer() {
@@ -142,8 +144,9 @@ export class BetaPage {
     try {
       const made = await fetch('/beta/songs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.form) });
       const song = await jsonOrError<{ id: string }>(made);
-      if (!made.ok) throw new Error(song.error);
+      if (!made.ok) throw new Error(errorOf(song, made.status));
       songId = song.id;
+      this.uploadingId.set(song.id);
       await this.uploadAudio(song.id, this.file);
       this.clearComposer();
       this.message.set('已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 5–10 分鐘），完成後請回來「確認時間」。');
@@ -155,6 +158,7 @@ export class BetaPage {
     } finally {
       this.busy.set(false);
       await this.poll();
+      this.uploadingId.set(null);
     }
   }
 

@@ -53,6 +53,7 @@ describe('balance', () => {
 describe('STATUS_CHIP', () => {
   it('pairs each song status with its README icon, label and tone', () => {
     expect(STATUS_CHIP.preparing).toEqual({ icon: '◐', label: '準備中', tone: 'info' });
+    expect(STATUS_CHIP.noAudio).toEqual({ icon: '!', label: '等音檔', tone: 'warn' });
     expect(STATUS_CHIP.timing).toEqual({ icon: '◷', label: '待確認時間', tone: 'warn' });
     expect(STATUS_CHIP.ready).toEqual({ icon: '✓', label: '可製作', tone: 'ok' });
     expect(STATUS_CHIP.making).toEqual({ icon: '●', label: '製作中', tone: 'making' });

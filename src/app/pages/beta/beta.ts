@@ -33,13 +33,24 @@ export const AUDIO_TOO_BIG = '音檔太大（上限 80 MB）';
 export const AUDIO_WRONG_TYPE = '請上傳 mp3、wav、flac、m4a 或 aac';
 export const AUDIO_EMPTY = '沒有收到音檔';
 
-/** The content type to send for an audio file: its own when the server takes it, else by its extension; null when the server would answer 415. */
+/**
+ * The content type to send for an audio file: its own when the server takes it, else by its extension. Null (the
+ * server would answer 415) only when the type or the extension is known and not allowed; a file with neither (no type,
+ * no extension) goes as mp3, as before, and the server decides.
+ */
 export function audioType(file: { name: string; type: string }): string | null {
   const own = file.type.split(';')[0].trim().toLowerCase();
   if (AUDIO_TYPES.has(own)) return own;
-  const ext = file.name.toLowerCase().split('.').pop() ?? '';
-  return AUDIO_BY_EXT[ext] ?? null;
+  const dot = file.name.lastIndexOf('.');
+  const ext = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : '';
+  if (ext) return AUDIO_BY_EXT[ext] ?? null;
+  const untyped = !own || own === 'application/octet-stream';
+  return untyped ? 'audio/mpeg' : null;
 }
+
+/** The error line of a failed answer: the server's `error`, else the status, so no toast ever reads 「undefined」. */
+export const errorOf = (body: { error?: unknown } | null | undefined, status: number): string =>
+  typeof body?.error === 'string' && body.error ? body.error : `HTTP ${status}`;
 
 /** Why a picked audio file cannot be uploaded (the server's words), or null when the upload may start. */
 export function audioProblem(file: { name: string; type: string; size: number }): string | null {
@@ -50,16 +61,6 @@ export function audioProblem(file: { name: string; type: string; size: number })
 }
 /** The concept fee every version starts with; mirrors PRICE.concept in scripts/lyric-vj/beta/store.mts. */
 export const CONCEPT_PRICE = 2.5;
-
-/**
- * The three versions. `concept` and `rest` mirror PRICE.concept and PRICE[tier] in scripts/lyric-vj/beta/store.mts;
- * `price` is what the person pays in all (TIER_TOTAL there); `min` is the rough minutes from concept to video.
- */
-export const TIER_INFO: Record<BetaTier, { name: string; about: string; concept: number; rest: number; price: number; min: number }> = {
-  none: { name: '文字動態版', about: '只有歌詞文字與圖形動態，沒有插圖。', concept: CONCEPT_PRICE, rest: 1.5, price: CONCEPT_PRICE + 1.5, min: 25 },
-  img: { name: '插圖版', about: '文字動態加上配合歌詞的插圖道具。', concept: CONCEPT_PRICE, rest: 3.5, price: CONCEPT_PRICE + 3.5, min: 30 },
-  hybrid: { name: '故事版', about: '依歌詞編出故事，有角色與畫面。', concept: CONCEPT_PRICE, rest: 13.5, price: CONCEPT_PRICE + 13.5, min: 45 },
-};
 
 /** One step of a job as the person reads it; `phases` are the ##PHASE labels its script prints for it. */
 export interface JobStep { phases: string[]; label: string; min: number }
@@ -89,6 +90,23 @@ export const JOB_STEPS: Record<'prep' | 'concept' | 'fix' | BetaTier, JobStep[]>
   none: [...TAIL],
   img: [PROPS, TEXT, ...TAIL],
   hybrid: [...STORY, ...TAIL],
+};
+
+/** The whole minutes a job kind is estimated to take, as every 約 N 分鐘 in a confirm dialog states it. */
+export const stepsMin = (kind: keyof typeof JOB_STEPS): number => Math.round(JOB_STEPS[kind].reduce((s, x) => s + x.min, 0));
+
+const tierInfo = (tier: BetaTier, name: string, about: string, rest: number) =>
+  ({ name, about, concept: CONCEPT_PRICE, rest, price: CONCEPT_PRICE + rest, min: stepsMin('concept') + stepsMin(tier) });
+
+/**
+ * The three versions. `concept` and `rest` mirror PRICE.concept and PRICE[tier] in scripts/lyric-vj/beta/store.mts;
+ * `price` is what the person pays in all (TIER_TOTAL there); `min` is the minutes from concept to video, the concept
+ * steps plus the make steps, each rounded as its dialog states it, so the card's 約 N 分 is the two dialogs' sum.
+ */
+export const TIER_INFO: Record<BetaTier, { name: string; about: string; concept: number; rest: number; price: number; min: number }> = {
+  none: tierInfo('none', '文字動態版', '只有歌詞文字與圖形動態，沒有插圖。', 1.5),
+  img: tierInfo('img', '插圖版', '文字動態加上配合歌詞的插圖道具。', 3.5),
+  hybrid: tierInfo('hybrid', '故事版', '依歌詞編出故事，有角色與畫面。', 13.5),
 };
 
 /** The step list for a job: by its kind, and for a make job by its tier; anything unknown reads as the text version. */
@@ -201,6 +219,8 @@ export function fixBlock(s: FixState): string | null {
 
 export interface SongView {
   stage: 'preparing' | 'prepFailed' | 'timing' | 'ready';
+  /** Preparing with no prep job at all: the song was created but its audio never arrived (a refused or broken upload). */
+  noAudio?: boolean;
   prep?: BetaJob;
   active?: BetaJob;
   retrying: boolean;
@@ -221,7 +241,8 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   const mine = jobs.filter((j) => j.songId === song.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const prep = mine.filter((j) => j.kind === 'prep').at(-1);
   const base = { prep, retrying: false, results: [] as BetaJob[], concepts: [] as BetaJob[] };
-  if (!prep || prep.status === 'queued' || prep.status === 'running') return { ...base, stage: 'preparing' };
+  if (!prep) return { ...base, stage: 'preparing', noAudio: true };
+  if (prep.status === 'queued' || prep.status === 'running') return { ...base, stage: 'preparing' };
   if (prep.status === 'failed') return { ...base, stage: 'prepFailed' };
   if (!song.confirmedAt) return { ...base, stage: 'timing' };
   // a concept or fix run is work in progress too: the song is busy until it ends
@@ -269,6 +290,7 @@ export type SongChip = StatusChip;
 
 /** Which state a song is in, as its chip names it; a running job first, then a concept waiting for the person, then a failure. */
 export function songKind(v: SongView): StatusKind {
+  if (v.stage === 'preparing' && v.noAudio) return 'noAudio';
   if (v.stage !== 'ready') return v.stage;
   if (v.active) return v.retrying ? 'retrying' : 'making';
   if (v.concept) return 'concept';
@@ -292,8 +314,10 @@ export function nextStep(v: SongView, progress?: Pick<JobProgress, 'leftMin'>): 
       return song(progress ? `約剩 ${progress.leftMin} 分` : '看進度');
     case 'timing': return { label: '確認時間', to: 'timing' };
     case 'concept': return song('看概念');
+    case 'noAudio': return song('重新上傳音檔');
+    // the page shows what failed and that it is on record; there is no contact action to name
     case 'help':
-    case 'prepFailed': return song('聯絡管理者');
+    case 'prepFailed': return song('看失敗原因');
     default: return song('製作新版本');
   }
 }
@@ -306,7 +330,7 @@ export const SONG_FILTERS: { id: SongFilter; label: string }[] = [
   { id: 'running', label: '進行中' },
   { id: 'made', label: '有成品' },
 ];
-const FILTER_KINDS: Partial<Record<SongFilter, StatusKind[]>> = { todo: ['timing', 'concept', 'help', 'prepFailed'], running: ['preparing', 'making', 'retrying'] };
+const FILTER_KINDS: Partial<Record<SongFilter, StatusKind[]>> = { todo: ['noAudio', 'timing', 'concept', 'help', 'prepFailed'], running: ['preparing', 'making', 'retrying'] };
 
 export function inFilter(f: SongFilter, v: SongView): boolean {
   if (f === 'all') return true;

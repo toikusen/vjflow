@@ -1,4 +1,4 @@
-import { audioProblem, audioType, BetaEvent, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
+import { audioProblem, audioType, BetaEvent, errorOf, stepsMin, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -117,11 +117,37 @@ describe('audio pre-check (mirrors PUT /audio in server.mts)', () => {
     expect(audioType({ name: 'a.aiff', type: '' })).toBeNull();
   });
 
+  it('refuses only a known type or extension the server does not take; with neither known the server decides', () => {
+    expect(audioType({ name: 'track', type: '' })).toBe('audio/mpeg');
+    expect(audioType({ name: 'track', type: 'application/octet-stream' })).toBe('audio/mpeg');
+    expect(audioType({ name: '.hidden', type: '' })).toBe('audio/mpeg');
+    expect(audioType({ name: 'track', type: 'audio/ogg' })).toBeNull();
+    expect(audioType({ name: 'a.ogg', type: '' })).toBeNull();
+    expect(audioProblem({ name: 'track', type: '', size: 10 })).toBeNull();
+  });
+
   it('refuses a wrong type, a file over 80 MB and an empty file in the server’s words, before the upload starts', () => {
     expect(audioProblem({ name: 'a.mp3', type: 'audio/mpeg', size: 80_000_000 })).toBeNull();
     expect(audioProblem({ name: 'a.ogg', type: 'audio/ogg', size: 10 })).toBe('請上傳 mp3、wav、flac、m4a 或 aac');
     expect(audioProblem({ name: 'a.wav', type: 'audio/wav', size: 80_000_001 })).toBe('音檔太大（上限 80 MB）');
     expect(audioProblem({ name: 'a.wav', type: 'audio/wav', size: 0 })).toBe('沒有收到音檔');
+  });
+});
+
+describe('errorOf', () => {
+  it('reads the server’s error line, else the status, never 「undefined」', () => {
+    expect(errorOf({ error: '歌曲還在準備中' }, 409)).toBe('歌曲還在準備中');
+    expect(errorOf({}, 500)).toBe('HTTP 500');
+    expect(errorOf({ error: '' }, 400)).toBe('HTTP 400');
+    expect(errorOf({ error: 42 }, 400)).toBe('HTTP 400');
+    expect(errorOf(null, 502)).toBe('HTTP 502');
+  });
+});
+
+describe('TIER_INFO.min', () => {
+  it('is the concept dialog’s minutes plus the accept dialog’s, from the same step lists', () => {
+    for (const t of ['none', 'img', 'hybrid'] as const) expect(TIER_INFO[t].min).toBe(stepsMin('concept') + stepsMin(t));
+    expect(stepsMin('concept')).toBe(Math.round(JOB_STEPS.concept.reduce((s, x) => s + x.min, 0)));
   });
 });
 
@@ -139,6 +165,8 @@ describe('songView', () => {
 
   it('follows the preparation and the timing', () => {
     expect(songView(song, []).stage).toBe('preparing');
+    expect(songView(song, []).noAudio).toBe(true);
+    expect(songView(song, [job({ status: 'running' })]).noAudio).toBeUndefined();
     expect(songView(song, [job({ status: 'running' })]).stage).toBe('preparing');
     expect(songView(song, [job({ status: 'failed' })]).stage).toBe('prepFailed');
     expect(songView(song, [prep]).stage).toBe('timing');
@@ -233,6 +261,7 @@ describe('songKind, nextStep and the list filters', () => {
   const result = job({ id: 'r', kind: 'make', tier: 'none', status: 'done' });
   const views: Record<string, SongView> = {
     preparing: { ...base, stage: 'preparing' },
+    noAudio: { ...base, stage: 'preparing', noAudio: true },
     prepFailed: { ...base, stage: 'prepFailed' },
     timing: { ...base, stage: 'timing' },
     concept: { ...base, concept },
@@ -244,7 +273,7 @@ describe('songKind, nextStep and the list filters', () => {
   };
   it('names the state as the chip does', () => {
     expect(Object.fromEntries(Object.entries(views).map(([k, v]) => [k, songKind(v)]))).toEqual({
-      preparing: 'preparing', prepFailed: 'prepFailed', timing: 'timing', concept: 'concept', making: 'making', retrying: 'retrying', help: 'help', ready: 'ready', readyMade: 'ready',
+      preparing: 'preparing', noAudio: 'noAudio', prepFailed: 'prepFailed', timing: 'timing', concept: 'concept', making: 'making', retrying: 'retrying', help: 'help', ready: 'ready', readyMade: 'ready',
     });
   });
   it('says what to do next in each state', () => {
@@ -254,18 +283,20 @@ describe('songKind, nextStep and the list filters', () => {
     expect(nextStep(views['concept'])).toEqual({ label: '看概念', to: 'song' });
     expect(nextStep(views['making'], { leftMin: 21 })).toEqual({ label: '約剩 21 分', to: 'song' });
     expect(nextStep(views['retrying'], { leftMin: 9 })).toEqual({ label: '約剩 9 分', to: 'song' });
-    expect(nextStep(views['help'])).toEqual({ label: '聯絡管理者', to: 'song' });
-    expect(nextStep(views['prepFailed'])).toEqual({ label: '聯絡管理者', to: 'song' });
+    expect(nextStep(views['noAudio'])).toEqual({ label: '重新上傳音檔', to: 'song' });
+    // the song page has no contact action: the card names what it really opens
+    expect(nextStep(views['help'])).toEqual({ label: '看失敗原因', to: 'song' });
+    expect(nextStep(views['prepFailed'])).toEqual({ label: '看失敗原因', to: 'song' });
     expect(nextStep(views['ready'])).toEqual({ label: '製作新版本', to: 'song' });
     expect(nextStep(views['readyMade'])).toEqual({ label: '製作新版本', to: 'song' });
   });
   it('sorts songs into 要你處理, 進行中 and 有成品', () => {
     const pick = (f: Parameters<typeof inFilter>[0]) => Object.keys(views).filter((k) => inFilter(f, views[k]));
     expect(pick('all')).toEqual(Object.keys(views));
-    expect(pick('todo')).toEqual(['prepFailed', 'timing', 'concept', 'help']);
+    expect(pick('todo')).toEqual(['noAudio', 'prepFailed', 'timing', 'concept', 'help']);
     expect(pick('running')).toEqual(['preparing', 'making', 'retrying']);
     expect(pick('made')).toEqual(['help', 'readyMade']);
-    expect(filterCounts(Object.values(views))).toEqual({ all: 9, todo: 4, running: 3, made: 2 });
+    expect(filterCounts(Object.values(views))).toEqual({ all: 10, todo: 5, running: 3, made: 2 });
     expect(filterCounts([])).toEqual({ all: 0, todo: 0, running: 0, made: 0 });
   });
 });

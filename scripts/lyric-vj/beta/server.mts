@@ -48,14 +48,20 @@ function sendFile(req: IncomingMessage, res: ServerResponse, file: string, heade
   if (!type || !existsSync(file)) return void res.writeHead(404).end();
   const size = statSync(file).size;
   const range = /bytes=(\d+)-(\d*)/.exec(req.headers.range ?? '');
+  // a read that fails after the headers went out (the file removed meanwhile, an I/O error) must end this response,
+  // not the server: an unhandled stream error would take the process down
+  const stream = (opts?: { start: number; end: number }) => createReadStream(file, opts).on('error', () => res.destroy()).pipe(res);
   if (range) {
     const start = Number(range[1]);
     const end = Math.min(size - 1, range[2] ? Number(range[2]) : size - 1);
+    // a range the file cannot satisfy (start past its end, or past the end asked for) is answered before any header
+    // is written: createReadStream would throw on it, after a 206 had already gone out
+    if (!Number.isFinite(start) || start >= size || start > end) return void res.writeHead(416, { 'content-range': `bytes */${size}` }).end();
     res.writeHead(206, { 'content-type': type, 'content-range': `bytes ${start}-${end}/${size}`, 'accept-ranges': 'bytes', 'content-length': end - start + 1, 'x-content-type-options': 'nosniff', ...headers });
-    return void createReadStream(file, { start, end }).pipe(res);
+    return void stream({ start, end });
   }
   res.writeHead(200, { 'content-type': type, 'content-length': size, 'accept-ranges': 'bytes', 'x-content-type-options': 'nosniff', ...headers });
-  createReadStream(file).pipe(res);
+  stream();
 }
 
 /**
@@ -603,6 +609,8 @@ export function createBetaServer(o: BetaOptions) {
       if (path === '/beta/admin/jobs') return json(res, 200, db.jobs.map((j) => ({ ...publicJob(j, o.root, true), userId: j.userId, reservedUsd: j.reservedUsd, priceUsd: j.priceUsd, costUsd: j.costUsd, costs: j.costs, fused: j.fused, chargedUsd: charged(j), unsettled: j.unsettled, error: j.error })));
       return json(res, 404, { error: '找不到' });
     } catch (e) {
+      // headers already out (a stream half sent): nothing more can be written, so the connection ends instead
+      if (res.headersSent) return void res.destroy();
       json(res, 400, { error: (e as Error).message });
     }
   });

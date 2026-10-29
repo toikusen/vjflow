@@ -3,7 +3,7 @@ import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
-export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string }
+export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string; timingSkipped?: boolean }
 export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
 
 /** What a concept job was asked for (`job.inputs` on the server). */

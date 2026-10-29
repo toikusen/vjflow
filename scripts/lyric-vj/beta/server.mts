@@ -388,7 +388,7 @@ export function createBetaServer(o: BetaOptions) {
         logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length, ...(fixJobId ? { fixJobId } : {}) });
         return json(res, 201, f);
       }
-      const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|cues|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
+      const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|timing\/skip|cues|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
       if (sm) {
         const song = db.songs.find((s) => s.id === sm[1] && (s.userId === user.id || user.admin));
         if (!song) return json(res, 404, { error: '找不到這首歌' });
@@ -407,6 +407,7 @@ export function createBetaServer(o: BetaOptions) {
           // the first upload.* by name, the alignment caches) and never read the new file
           for (const f of readdirSync(dir)) if (f.startsWith('upload.') || PREP_MADE.test(f)) rmSync(join(dir, f), { force: true });
           renameSync(tmp, join(dir, `upload${ext}`));
+          song.timingSkipped = undefined;
           song.confirmedAt = undefined; // a timing confirmed on the old audio, if the failed prep got that far
           logEvent(o.root, song.id, { type: 'audio.uploaded', by: user.id });
           const r = enqueue(user, song.id, 'prep');
@@ -420,6 +421,18 @@ export function createBetaServer(o: BetaOptions) {
         }
         if (!existsSync(songFile)) return json(res, 409, { error: '歌曲還在準備中' });
         if (sm[2] === 'timing' && req.method === 'GET') return json(res, 200, JSON.parse(readFileSync(songFile, 'utf8')));
+        // 不確認直接製作: the auto timing counts as confirmed (the renderer's gate reads song.json), marked as skipped
+        if (sm[2] === 'timing/skip' && req.method === 'POST') {
+          if (song.userId !== user.id) return json(res, 403, { error: '只有歌曲的主人可以這樣做' });
+          if (song.confirmedAt) return json(res, 409, { error: '歌詞時間已經確認過了' });
+          const now = new Date().toISOString();
+          writeFileSync(songFile, JSON.stringify({ ...JSON.parse(readFileSync(songFile, 'utf8')), timingConfirmedAt: now, timingSkipped: true }, null, 1));
+          song.confirmedAt = now;
+          song.timingSkipped = true;
+          q.persist();
+          logEvent(o.root, song.id, { type: 'timing.skipped', by: user.id });
+          return json(res, 200, { ok: true, confirmedAt: now });
+        }
         if (sm[2].startsWith('audio/') && req.method === 'GET') return sendFile(req, res, join(dir, sm[2] === 'audio/mix' ? 'mix.mp3' : 'vocals.wav'));
         if (sm[2] === 'cues' && req.method === 'PUT') {
           const b = (await readJson(req)) as { cues?: TimingEdit[]; confirm?: boolean; accepted?: string[]; singers?: { name: string; color: string }[] };
@@ -431,6 +444,7 @@ export function createBetaServer(o: BetaOptions) {
           const timeline: SongTimeline = JSON.parse(readFileSync(songFile, 'utf8'));
           if (!Array.isArray(b.cues)) return json(res, 400, { error: '格式錯誤' });
           const next = applyTimingEdit(timeline, b.cues, !!b.confirm, undefined, Array.isArray(b.accepted) ? b.accepted.map(String) : [], b.singers);
+          if (b.confirm) { delete (next as { timingSkipped?: boolean }).timingSkipped; song.timingSkipped = undefined; }
           if (!existsSync(join(dir, 'song.orig.json'))) writeFileSync(join(dir, 'song.orig.json'), JSON.stringify(timeline));
           writeFileSync(songFile, JSON.stringify(next, null, 1));
           song.confirmedAt = next.timingConfirmedAt;

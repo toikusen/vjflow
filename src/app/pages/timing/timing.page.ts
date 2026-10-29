@@ -112,6 +112,13 @@ export class TimingPage {
   protected readonly nowLabel = computed(() => playingLabel(this.playingIndex(), this.playing(), this.song()?.duration ?? 0));
   /** The line on screen in the lyrics-only preview. */
   protected readonly current = computed(() => this.cues().find((c) => this.time() >= c.start && this.time() < c.end) ?? null);
+  /** The preview stage: the line sung now, else the next one dimmed so a gap shows what comes. */
+  protected readonly stageLine = computed(() => {
+    const c = this.current();
+    if (c) return { cue: c, next: false };
+    const n = this.cues().find((x) => x.start > this.time());
+    return n ? { cue: n, next: true } : null;
+  });
   /** The line being sung: the last one that has started (stays on it through short gaps). */
   protected readonly playingIndex = computed(() => {
     const t = this.time();

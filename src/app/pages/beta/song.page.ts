@@ -9,6 +9,7 @@ import { MakeFormComponent } from './make-form.component';
 import { hasDraft, ReportFormComponent } from './report-form.component';
 import { canReupload, clock, draftsToReopen, failureCard, heroTone, jobTitle, jobTotal, PREP_FAILED_NOTE, safeName, stamp, stepClocks, timingNote, videoFileName } from './song';
 import { BalanceComponent } from './ui/balance.component';
+import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
 import { StatusChip } from './ui/status';
 import { StatusChipComponent } from './ui/status-chip.component';
@@ -19,7 +20,7 @@ const RETRY_CHIP: StatusChip = { icon: '↻', label: '自動重試中 · 第一�
 /** One song (`/my/song?id=`): hero, the job in progress (or the failure), a concept awaiting a decision, every finished result, then 製作新版本. */
 @Component({
   selector: 'app-beta-song-page',
-  imports: [NgTemplateOutlet, ConceptCardComponent, MakeFormComponent, ReportFormComponent, BalanceComponent, PriceComponent, StatusChipComponent],
+  imports: [NgTemplateOutlet, ConceptCardComponent, MakeFormComponent, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
   templateUrl: './song.page.html',
   styleUrl: './song.page.scss',
 })
@@ -174,6 +175,31 @@ export class BetaSongPage extends BetaPage {
       this.message.set(`上傳失敗：${(err as Error).message}`);
     } finally {
       input.value = '';
+      this.busy.set(false);
+      await this.poll();
+    }
+  }
+
+  /** 不確認，直接製作: warns that unchecked lines may be off, then takes the automatic timing as it is. */
+  protected askSkip() {
+    this.ask.set({
+      eyebrow: this.song()?.title,
+      title: '不確認歌詞時間，直接製作？',
+      body: '歌詞時間是自動對的，沒有檢查的話，影片裡可能有歌詞和歌聲對不上的地方。確定沒問題再繼續；之後仍可回來修正時間。',
+      cost: 0,
+      confirmLabel: '沒問題，直接製作',
+      go: () => void this.skipTiming(),
+    });
+  }
+
+  private async skipTiming() {
+    this.busy.set(true);
+    try {
+      const r = await fetch(`/beta/songs/${this.id}/timing/skip`, { method: 'POST' });
+      if (!r.ok) this.message.set(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? '操作失敗，請稍後再試');
+    } catch {
+      this.message.set('連線失敗，請稍後再試');
+    } finally {
       this.busy.set(false);
       await this.poll();
     }

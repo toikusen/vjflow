@@ -1292,3 +1292,23 @@ test('fix: a system failure of a fix still retries by itself at the fix price', 
   assert.equal(seen.nothingToRemove, undefined);
   t.beta.server.close();
 });
+
+test('不確認直接製作: the owner skips the timing check once; song.json counts as confirmed and is marked; a later confirm clears the mark', async () => {
+  const t = await setup();
+  const song = t.beta.db.songs[0];
+  assert.equal((await t.tester('/beta/songs/s1/timing/skip', { method: 'POST' })).status, 409, 'already confirmed');
+  song.confirmedAt = undefined;
+  assert.equal((await t.admin('/beta/songs/s1/timing/skip', { method: 'POST' })).status, 403, 'not the admin\'s song');
+  const r = await t.tester('/beta/songs/s1/timing/skip', { method: 'POST' });
+  assert.equal(r.status, 200);
+  assert.ok(song.confirmedAt && song.timingSkipped);
+  const file = JSON.parse(readFileSync(join(t.root, 'songs/s1/song.json'), 'utf8'));
+  assert.ok(file.timingConfirmedAt && file.timingSkipped);
+  assert.deepEqual(file.cues, JSON.parse(SONG).cues, 'the lines are untouched');
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'timing.skipped'));
+  const c = await t.tester('/beta/songs/s1/cues', { method: 'PUT', body: JSON.stringify({ cues: [{ id: 'c1', start: 1, end: 2 }], confirm: true }) });
+  assert.equal(c.status, 200);
+  assert.equal(song.timingSkipped, undefined);
+  assert.equal(JSON.parse(readFileSync(join(t.root, 'songs/s1/song.json'), 'utf8')).timingSkipped, undefined);
+  t.beta.server.close();
+});

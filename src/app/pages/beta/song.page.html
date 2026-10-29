@@ -17,7 +17,7 @@
       <p class="sub">
         @if (s.artist) {<span>{{ s.artist }} · </span>}{{ langName(s.language) }}@if (duration(); as d) {<span> · {{ clock(d) }}</span>}
         @if (v.stage === 'ready') {
-          <span class="timing-bit"> · 歌詞時間已確認 <a [href]="'/timing?beta=' + s.id">再看一次</a>@if (v.concepts.length) {<span class="timing-warn">{{ timingNote(v.concepts.length) }}</span>}</span>
+          <span class="timing-bit"> · {{ s.timingSkipped ? '歌詞時間未檢查（直接製作）' : '歌詞時間已確認' }} <a [href]="'/timing?beta=' + s.id">再看一次</a>@if (v.concepts.length) {<span class="timing-warn">{{ timingNote(v.concepts.length) }}</span>}</span>
         }
       </p>
     </div>
@@ -60,6 +60,9 @@
       @case ('timing') {
         <section class="callout">
           <p>歌詞時間已自動對好，請檢查後確認，才能開始製作。</p>
+          @if (mine()) {
+            <button class="button" type="button" [disabled]="busy()" (click)="askSkip()">不確認，直接製作</button>
+          }
           <a class="button soft" [href]="'/timing?beta=' + s.id">確認時間</a>
         </section>
         <ng-container *ngTemplateOutlet="makeLater" />
@@ -275,3 +278,5 @@
     <p class="report-line">{{ lastReport(j) }}</p>
   }
 </ng-template>
+
+<app-confirm [ask]="ask()" [left]="null" (closed)="ask.set(null)" />

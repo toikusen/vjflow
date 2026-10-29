@@ -230,7 +230,8 @@ kbd {
 .editor {
   display: grid;
   flex: 1;
-  grid-template-columns: 480px minmax(0, 1fr);
+  // the player and its preview get the larger share; the table keeps room for a line of lyric
+  grid-template-columns: minmax(480px, 11fr) minmax(520px, 9fr);
   min-height: 0;
 }
 
@@ -263,6 +264,32 @@ kbd {
 .player {
   gap: 14px;
   padding: 18px;
+}
+
+/* the plain-subtitle preview: the lyric alone on black, as it will sit over the video */
+.stage {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  // short windows and the one-column layout keep the waveform in view
+  max-height: 36vh;
+  padding: 24px;
+  background: #000;
+  border-radius: 10px;
+}
+
+.stage-line {
+  margin: 0;
+  font-size: clamp(22px, 2.6vw, 44px);
+  font-weight: 800;
+  line-height: 1.3;
+  color: #fff;
+  text-align: center;
+  overflow-wrap: anywhere;
+
+  &.next {
+    opacity: 0.35;
+  }
 }
 
 .wavebox {
@@ -508,7 +535,7 @@ kbd {
 .thead,
 .row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) 110px 110px 150px;
+  grid-template-columns: 40px minmax(0, 1fr) 72px 72px 120px;
   gap: 12px;
   align-items: center;
   padding: 10px 24px;
@@ -786,6 +813,18 @@ kbd {
 @media (max-width: 720px) {
   .desk {
     display: none !important;
+  }
+
+  // the phone's player sticks to the top: the preview is a strip, not a 16:9 screen
+  .stage {
+    aspect-ratio: auto;
+    min-height: 64px;
+    max-height: none;
+    padding: 10px 12px;
+  }
+
+  .stage-line {
+    font-size: 18px;
   }
 
   .phone {

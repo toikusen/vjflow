@@ -98,6 +98,11 @@
   <div class="editor">
     <aside class="left">
       <section class="card player">
+        <div class="stage" aria-live="off">
+          @if (stageLine(); as l) {
+            <p class="stage-line" [class.next]="l.next" [style.color]="singers().length && !l.next ? singerColor(l.cue.singer) : null">{{ l.cue.text }}</p>
+          }
+        </div>
         <div class="wavebox">
           <canvas #wave class="wave" (mousedown)="down($event)" (mousemove)="move($event)" (mouseup)="up()" (mouseleave)="up()" (wheel)="wheel($event)"></canvas>
           <span class="wave-hint desk">滾輪縮放 · Shift＋滾輪移動 · 目前 {{ viewSec().toFixed(0) }} 秒</span>

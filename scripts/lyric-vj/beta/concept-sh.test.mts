@@ -98,3 +98,14 @@ test('concept.sh: a redo passes the previous treatment without a note', () => {
   assert.match(d, /--previous \S+\/runs\/c1\/base\/treatment\.json/);
   assert.doesNotMatch(d, /--note/);
 });
+
+test('concept.sh: the admin\'s rules file reaches the director and the type planner as --lessons; an empty file is not passed to the director', () => {
+  const t = tree({ concept: 'c', refs: [] });
+  const lessons = join(t.run, '..', 'lessons.json');
+  writeFileSync(lessons, JSON.stringify({ lessons: [{ id: 'a', text: '間奏不放圖片', scope: 'both' }] }));
+  assert.equal(t.concept({ VJ_LESSONS: lessons }).status, 0);
+  assert.match(t.direct(), new RegExp(`--lessons ${lessons.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}`));
+  const none = tree({ concept: 'c', refs: [] });
+  assert.equal(none.concept().status, 0);
+  assert.doesNotMatch(none.direct(), /--lessons/);
+});

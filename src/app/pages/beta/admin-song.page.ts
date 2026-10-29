@@ -1,5 +1,6 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { AdminJob, clockTime, fileSize, jobName, jobsChanged, jobState, mmss, shortDate, songMoney, stepRows } from './admin';
+import { AdminJob, clockTime, fileSize, jobName, jobsChanged, jobState, lessonSeed, mmss, shortDate, songMoney, stepRows } from './admin';
+import { AdminLessonsComponent, LessonSeed } from './admin-lessons.component';
 import { ACTION, BetaEvent, BetaFeedback, BetaMe, BetaSong, FEEDBACK_CATEGORIES, pollToast, timeline } from './beta';
 import { PriceComponent } from './ui/price.component';
 import { StatusChipComponent } from './ui/status-chip.component';
@@ -12,7 +13,7 @@ export type SongSection = 'jobs' | 'timeline' | 'logs' | 'reports';
 /** Admin view of one song (3d, /my/admin/song?id=): job cards with steps and costs, the event timeline, logs and the person's reports. */
 @Component({
   selector: 'app-beta-admin-song-page',
-  imports: [PriceComponent, StatusChipComponent],
+  imports: [PriceComponent, StatusChipComponent, AdminLessonsComponent],
   templateUrl: './admin-song.page.html',
   styleUrl: './admin-song.page.scss',
   host: { '[attr.data-section]': 'section()' },
@@ -25,6 +26,9 @@ export class BetaAdminSongPage {
   protected readonly events = signal<BetaEvent[]>([]);
   protected readonly logs = signal<LogFile[]>([]);
   protected readonly feedback = signal<BetaFeedback[]>([]);
+  /** A report handed to the rules form (「寫成規則」): its draft text and id. */
+  protected readonly seed = signal<LessonSeed | undefined>(undefined);
+  protected readonly lessonSeed = (f: BetaFeedback) => lessonSeed(f, this.category);
   protected readonly message = signal('');
   protected readonly openLog = signal<{ path: string; text: string; cut: boolean } | undefined>(undefined);
   /** Which job cards are expanded; the newest job opens on load. */

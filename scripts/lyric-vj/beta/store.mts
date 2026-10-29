@@ -57,11 +57,19 @@ export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; fe
 /** True for the jobs that make a video a person watches: a make, or a fix of one (a new version beside the old). */
 export const madeVideo = (j: Pick<Job, 'kind'>) => j.kind === 'make' || j.kind === 'fix';
 export type StyleTier = 'proven' | 'candidate' | 'unlisted';
+export type LessonScope = 'director' | 'typeplan' | 'both';
+/** A rule for every later song, written by the admin (often from one report, kept as `feedbackId`): who reads it is `scope`. */
+export interface Lesson { id: string; text: string; scope: LessonScope; createdAt: string; by: string; feedbackId?: string; songId?: string; style?: string }
+export const LESSON_SCOPES: LessonScope[] = ['director', 'typeplan', 'both'];
+/** A lesson's text: one rule, 4–300 characters. */
+export const MAX_LESSON = 300;
 export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd: number;
   /** Every problem report ever submitted, never overwritten. */
   feedback: Feedback[];
   /** The admin's tier per design language; a language not listed here takes its default (see styleTier). */
   styles?: Record<string, { tier: StyleTier }>;
+  /** The rules the admin wrote from people's reports, for every later song (lesson-rules.mts reads them in the pipeline). */
+  lessons?: Lesson[];
   /** Pipelines a crash left behind, kept until each is confirmed gone (a db from before this field has none). */
   orphans?: Orphan[] }
 /** A crash-orphaned pipeline's process group; `since` is when its job started (or when it was found, lacking that). */

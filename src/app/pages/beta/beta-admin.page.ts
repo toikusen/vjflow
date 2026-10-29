@@ -3,6 +3,7 @@ import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp, parseLimit, retryLabel } from './admin';
 import { AdminStylesComponent } from './admin-styles.component';
+import { AdminLessonsComponent } from './admin-lessons.component';
 import { BetaMe, BetaSong, pollToast, songChip, songView } from './beta';
 import { PriceComponent } from './ui/price.component';
 import { StatusChipComponent } from './ui/status-chip.component';
@@ -21,7 +22,7 @@ export const ADMIN_TABS: { id: AdminTab; label: string }[] = [
 /** The beta admin (3c): KPIs, invites and limits, accounts and the job queue; the 歌曲, 工作 and 風格 tabs. */
 @Component({
   selector: 'app-beta-admin-page',
-  imports: [NgTemplateOutlet, FormsModule, PriceComponent, StatusChipComponent, AdminStylesComponent],
+  imports: [NgTemplateOutlet, FormsModule, PriceComponent, StatusChipComponent, AdminStylesComponent, AdminLessonsComponent],
   templateUrl: './beta-admin.page.html',
   styleUrl: './beta-admin.page.scss',
 })

@@ -147,3 +147,15 @@ test('make.sh: a fault a fresh render may mend throws the render away and fails 
   assert.equal(existsSync(join(t.run, 'video.mp4')), false);
   assert.equal(existsSync(join(t.run, 'noimg/video')), false, 'the render folder is gone, so the rerun renders afresh');
 });
+
+test('make.sh: the admin\'s rules file reaches the type planner as --lessons when the queue sets it', () => {
+  // (the img tier plans; the none tier's plan is the concept's, already there)
+  const t = tree({ tier: 'img' });
+  assert.equal(t.make({ VJ_LESSONS: '/x/lessons.json' }).status, 0);
+  assert.match(t.call('typeplan.mts'), /--lessons \/x\/lessons\.json --out/);
+  const none = tree({ tier: 'img' });
+  const env = { ...process.env } as Record<string, string>;
+  delete env['VJ_LESSONS'];
+  assert.equal(none.make().status, 0);
+  assert.doesNotMatch(none.call('typeplan.mts'), /--lessons/);
+});

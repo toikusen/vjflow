@@ -115,10 +115,13 @@
               </div>
             }
             @if (f.suggestion) {<p class="suggest">建議：{{ f.suggestion }}</p>}
+            <button class="to-rule" type="button" (click)="seed.set({ text: lessonSeed(f), feedbackId: f.id })">寫成規則</button>
           </div>
         } @empty {
           <p class="none">沒有回報</p>
         }
+        <h3 class="rules-head">規則 <span class="note">從回報寫成每首歌都要遵守的一句話；導演和文字動態都會讀</span></h3>
+        <app-admin-lessons [seed]="seed()" />
       </section>
     </div>
   </div>

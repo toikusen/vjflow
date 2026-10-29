@@ -1,4 +1,4 @@
-import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobsChanged, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts } from './admin';
+import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobsChanged, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts, lessonSeed } from './admin';
 import { BetaMe, BetaSong } from './beta';
 
 const iso = (minAgo: number, now = Date.parse('2026-10-28T05:40:00Z')) => new Date(now - minAgo * 60e3).toISOString();
@@ -192,5 +192,14 @@ describe('retryLabel', () => {
     expect(retryLabel(job({ id: 'b', priceUsd: 13.5 }))).toBe('重跑（再扣 $13.5）');
     expect(retryLabel(job({ id: 'c', priceUsd: undefined, reservedUsd: 4 }))).toBe('重跑（再扣 $4）');
     expect(retryLabel(job({ id: 'd', priceUsd: 0, reservedUsd: 0 }))).toBe('重跑');
+  });
+});
+
+describe('lessonSeed', () => {
+  it('drafts a rule from the report: the suggestion, else the marks with their categories', () => {
+    const cat = (id: string) => ({ lyrics: '歌詞看不清', picture: '圖片' } as Record<string, string>)[id] ?? id;
+    expect(lessonSeed({ suggestion: ' 間奏不要圖 ', marks: [] }, cat)).toBe('間奏不要圖');
+    expect(lessonSeed({ suggestion: '', marks: [{ at: 1, category: 'lyrics', note: '白字疊白底' }, { at: 5, category: 'picture', note: '' }] } as never, cat)).toBe('歌詞看不清：白字疊白底；圖片');
+    expect(lessonSeed({ suggestion: '', marks: [] }, cat)).toBe('');
   });
 });

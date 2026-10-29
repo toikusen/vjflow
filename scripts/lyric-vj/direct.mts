@@ -34,6 +34,7 @@ import { transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
 import { briefFields, briefText, designBriefText, interludeText, languageOffer, loadKit, loadRefs, normaliseInterludes, type Previous, previousStory, readStyle, userPrompt, withKit, withRefs } from './brief.mts';
+import { lessonsBlock, readLessons } from './lesson-rules.mts';
 
 const { values: a } = parseArgs({
   options: {
@@ -49,6 +50,7 @@ const { values: a } = parseArgs({
     'design-language': { type: 'string' }, // with --design-only: redo the design in another language // designs of the songs made before: the next one must differ
     'keep-assets': { type: 'string' }, // existing treatment: rewrite shots/cues/design but keep its generated assets
     'qa-notes': { type: 'string' }, // with --design-only: frame-check findings (qa.mts) the new design must fix
+    lessons: { type: 'string' }, // the admin's rules from people's reports (beta lessons.json; lesson-rules.mts), read by both passes
     'design-attempts': { type: 'string', default: '3' }, // most design calls (each retry is a paid call)
     'keep-story': { type: 'boolean', default: false }, // with --design-only: keep the treatment's story and its props (no props to draw again)
     'available-assets': { type: 'string' }, // with --design-only: assets.json of the pictures already made; photo layers may use only these
@@ -460,12 +462,13 @@ const TOOLBOX = existsSync(toolboxFile) ? `\n\n設計師常用手法（從大量
 // the song's unsung stretches inside the range, clipped to it: the director decides each one (normaliseInterludes)
 const windows = unsungWindows(song).filter((w) => w.end > win.start && w.start < win.end).map((w) => ({ ...w, start: Math.max(w.start, win.start), end: Math.min(w.end, win.end) }));
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
+const lessons = readLessons(a.lessons);
 const USER = userPrompt({
   toolbox: TOOLBOX, expectShots, shotSec: style.shotSec, cueCount: cues.length, style: styleText,
   brief: [briefText({ style: styleText, note, previous, candidates, chosen: picked, hasRefs: refs.length > 0 }), interludeText(windows)].filter(Boolean).join('\n'),
   structure: describeStructure(structure), suggested: suggestedText, keyWords: keyWords(song), repeat: repeatText, titleCards: gapText, win,
   tempo: song.tempo, sections, downbeats: song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' '), cueLines, catalog, dbText: db.text,
-});
+}) + lessonsBlock(lessons, 'director');
 writeFileSync(join(out, 'prompt.txt'), SYSTEM + '\n\n' + USER);
 
 const keep: TreatmentV3 | undefined = a['keep-assets'] ? JSON.parse(readFileSync(a['keep-assets'], 'utf8')) : undefined;
@@ -517,8 +520,8 @@ ${sys.variety ? `- 每首的差異（必須做）：${sys.variety.rule}\n${(() =
   const wish = designBriefText({ style: styleText, briefReading: (base as { briefReading?: string }).briefReading, note, previous, chosen: picked, hasRefs: refs.length > 0 });
   // the chosen language's quality bar (the frames of the song it was proven on) after the brief: the director sees what
   // the finish must reach, not only the words for it (the beta's finished videos never met the kit before)
-  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withKit(withRefs(userD + qaNotes + wish, refs), loadKit(language, LANGUAGES[language].kit)) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
-  writeFileSync(join(out, 'design_prompt.txt'), userD + qaNotes + wish);
+  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withKit(withRefs(userD + qaNotes + wish + lessonsBlock(lessons, 'director'), refs), loadKit(language, LANGUAGES[language].kit)) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
+  writeFileSync(join(out, 'design_prompt.txt'), userD + qaNotes + wish + lessonsBlock(lessons, 'director'));
   let checked!: ReturnType<typeof validateTreatment>;
   const usage = { input: 0, output: 0 };
   for (let attempt = 0; attempt < Math.max(1, Math.min(3, Number(a['design-attempts']) || 3)); attempt++) {

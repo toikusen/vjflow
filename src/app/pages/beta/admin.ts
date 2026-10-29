@@ -1,5 +1,5 @@
 // What the admin pages (3c 總覽, 3d 歌曲製作紀錄, 3e 風格表) compute from the server's admin routes.
-import { BetaJob, BetaMe, BetaSong, jobProgress, retriedBy, songKind, songView, TIER_INFO } from './beta';
+import { BetaJob, BetaMe, BetaSong, jobProgress, retriedBy, songKind, songView, TIER_INFO, BetaFeedback } from './beta';
 import { formatPrice } from './ui/price';
 import { StatusChip } from './ui/status';
 
@@ -205,3 +205,12 @@ export const styleFilterCounts = (styles: AdminStyle[]): Record<StyleFilter, num
 });
 
 export const EMPTY_COUNTS: StyleCounts = { accepted: 0, adjusted: 0, redone: 0 };
+
+/**
+ * A first draft of a rule from one report, for the admin to rewrite as a rule for every song: the suggestion when
+ * there is one, else the marks' notes with their categories; '' for a bare 沒問題.
+ */
+export function lessonSeed(f: Pick<BetaFeedback, 'suggestion' | 'marks'>, category: (id: string) => string): string {
+  if (f.suggestion?.trim()) return f.suggestion.trim();
+  return f.marks.map((m) => [category(m.category), m.note?.trim()].filter(Boolean).join('：')).filter(Boolean).join('；');
+}

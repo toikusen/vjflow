@@ -29,7 +29,7 @@ echo '##PHASE 導演規劃段落與故事'
 
 plan() { # <out> [--sprites dir]
   [ -f "$1/treatment.json" ] && return
-  npx tsx scripts/lyric-vj/typeplan.mts --song "$S" --treatment "$w/base/treatment.json" --backdrops "$w/base/treatment.json" --out "$@" > "$1.log" 2>&1
+  npx tsx scripts/lyric-vj/typeplan.mts --song "$S" --treatment "$w/base/treatment.json" --backdrops "$w/base/treatment.json" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} --out "$@" > "$1.log" 2>&1
   cost_json "$1/typeplan.json" "plan-$(basename "$1")"
 }
 

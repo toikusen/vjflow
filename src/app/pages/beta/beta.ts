@@ -179,6 +179,14 @@ export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'styl
 export type FeedbackAction = 'fix' | 'redo' | 'none';
 export interface FeedbackMark { at: number; end?: number; category: FeedbackCategory; note: string }
 export interface BetaFeedback { id: string; jobId: string; songId: string; userId: string; ok: boolean; marks: FeedbackMark[]; suggestion: string; action: FeedbackAction; createdAt: string; tier?: BetaTier; style?: string }
+export type LessonScope = 'director' | 'typeplan' | 'both';
+/** A rule the admin wrote for every later song (mirrors Lesson in scripts/lyric-vj/beta/store.mts). */
+export interface BetaLesson { id: string; text: string; scope: LessonScope; createdAt: string; by: string; feedbackId?: string; songId?: string; style?: string }
+export const LESSON_SCOPES: { id: LessonScope; label: string; hint: string }[] = [
+  { id: 'director', label: '導演', hint: '故事、段落、圖片、風格、顏色、字型' },
+  { id: 'typeplan', label: '文字動態', hint: '刀、招式、版型、進退場、道具位置' },
+  { id: 'both', label: '兩者', hint: '每一步都要遵守' },
+];
 export const FEEDBACK_CATEGORIES: { id: FeedbackCategory; label: string }[] = [
   { id: 'lyrics', label: '歌詞看不清' },
   { id: 'timing', label: '時間不準' },

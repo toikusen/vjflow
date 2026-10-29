@@ -1,0 +1,32 @@
+@if (message()) {
+  <p class="toast" role="status">{{ message() }}</p>
+}
+
+<form class="add" (submit)="$event.preventDefault(); add()">
+  <label class="field">
+    <span class="lbl">寫成一條每首歌都要遵守的規則@if (feedbackId()) {<span class="from"> · 從回報 {{ feedbackId() }}</span>}</span>
+    <textarea rows="2" [ngModel]="text()" (ngModelChange)="text.set($event)" name="text" maxlength="300" placeholder="例：間奏只做背景變換，不放圖片（除非歌詞在講畫面裡的事）"></textarea>
+  </label>
+  <div class="row">
+    <label class="field scope">
+      <span class="lbl">說給誰聽</span>
+      <select [ngModel]="scope()" (ngModelChange)="scope.set($event)" name="scope">
+        @for (s of scopes; track s.id) {<option [value]="s.id">{{ s.label }} · {{ s.hint }}</option>}
+      </select>
+    </label>
+    <button class="go" type="submit" [disabled]="busy() || text().trim().length < 4">加入規則</button>
+  </div>
+</form>
+
+<ul class="list">
+  @for (l of lessons(); track l.id) {
+    <li class="lesson">
+      <span class="scope-tag">{{ scopeLabel(l.scope) }}</span>
+      <span class="text">{{ l.text }}</span>
+      <span class="meta">{{ l.createdAt.slice(0, 10) }}@if (l.style) { · {{ l.style }}}@if (l.songId) { · <a [href]="'/my/admin/song?id=' + l.songId">歌</a>}</span>
+      <button class="del" type="button" (click)="remove(l)" [disabled]="busy()" [attr.aria-label]="'刪掉規則：' + l.text">刪掉</button>
+    </li>
+  } @empty {
+    <li class="none">還沒有規則。從歌曲頁的回報按「寫成規則」，或直接在上面寫。</li>
+  }
+</ul>

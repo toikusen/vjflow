@@ -46,6 +46,7 @@ if [ ! -f "$w/base/treatment.json" ]; then
   [ -n "${VJ_PROVEN+set}" ] && args+=(--proven="$VJ_PROVEN")
   [ -n "${VJ_CANDIDATES:-}" ] && args+=(--candidates "$VJ_CANDIDATES")
   [ -n "$prev" ] && args+=(--previous "$prev")
+  [ -n "${VJ_LESSONS:-}" ] && [ -s "$VJ_LESSONS" ] && args+=(--lessons "$VJ_LESSONS")
   [ -n "$note" ] && args+=(--note="$note")
   npx tsx scripts/lyric-vj/direct.mts "${args[@]}" 2>&1 | tee "$w/direct.log" | awk '/^attempt [0-9]+: 0 errors/ { print "##PHASE 導演設計視覺風格"; fflush() } /^attempt [0-9]+: [1-9]/ { print "##PHASE 導演修正故事草稿"; fflush() }'
   cost_json "$w/base/director.json" direct
@@ -53,7 +54,7 @@ fi
 
 echo '##PHASE 編排文字動態'
 if [ ! -f "$w/noimg/treatment.json" ]; then
-  npx tsx scripts/lyric-vj/typeplan.mts --song "$S" --treatment "$w/base/treatment.json" --backdrops "$w/base/treatment.json" --out "$w/noimg" > "$w/noimg.log" 2>&1
+  npx tsx scripts/lyric-vj/typeplan.mts --song "$S" --treatment "$w/base/treatment.json" --backdrops "$w/base/treatment.json" --out "$w/noimg" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} > "$w/noimg.log" 2>&1
   cost_json "$w/noimg/typeplan.json" plan-noimg
 fi
 

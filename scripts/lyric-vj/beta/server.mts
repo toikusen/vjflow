@@ -14,7 +14,7 @@ import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { uptime } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import type { ConceptSummary } from './concept-summary.mts';
-import { candidateIds, charged, Db, hashToken, invite, Job, load, madeVideo, newId, platformSpent, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, trackOrphans, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { candidateIds, charged, Db, hashToken, invite, Job, LESSON_SCOPES, LessonScope, load, madeVideo, MAX_LESSON, newId, platformSpent, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, trackOrphans, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
@@ -256,10 +256,15 @@ export function stopBeta(b: { db: Db; queue: Queue; orphans?: number[] }, exit: 
 export function createBetaServer(o: BetaOptions) {
   const dbFile = join(o.root, 'db.json');
   const db = load(dbFile);
+  // the admin's rules, as the pipeline reads them (lesson-rules.mts): rewritten whenever they change
+  const lessonsFile = join(o.root, 'lessons.json');
+  const writeLessons = () => writeFileSync(lessonsFile, JSON.stringify({ lessons: db.lessons ?? [] }, null, 1));
+  writeLessons();
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }),
     // the candidates as they are when the concept starts (the admin may change tiers while it waits)
     // the director's allowed set is the admin's tiers as they stand when the job starts (never the code's constants)
-    jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_PROVEN: provenIds(db).join(','), VJ_CANDIDATES: candidateIds(db).join(',') } : {}),
+    // every concept and make reads the admin's rules from the lessons file as it stands when the job starts
+    jobEnv: (job): Record<string, string> => ({ ...(job.kind === 'concept' ? { VJ_PROVEN: provenIds(db).join(','), VJ_CANDIDATES: candidateIds(db).join(',') } : {}), ...(job.kind === 'concept' || madeVideo(job) ? { VJ_LESSONS: lessonsFile } : {}) }),
     // a video whose checks all passed (make.sh's gate) reaches the person whatever its style: a candidate's or an
     // unlisted one's goes out with a note for the admin's later review (the user, 2026-10-29: a hold nobody is free to
     // take leaves the person without their video); only one whose language cannot be read at all waits
@@ -705,6 +710,32 @@ export function createBetaServer(o: BetaOptions) {
         return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
       if (path === '/beta/admin/feedback') return json(res, 200, [...db.feedback].reverse());
+      // the admin's rules for every later song: written from a report (or free), read by the director and the type planner
+      if (path === '/beta/admin/lessons' && req.method === 'GET') return json(res, 200, [...(db.lessons ?? [])].reverse());
+      if (path === '/beta/admin/lessons' && req.method === 'POST') {
+        const b = (await readJson(req)) as { text?: unknown; scope?: unknown; feedbackId?: unknown };
+        const text = typeof b.text === 'string' ? b.text.trim() : '';
+        if ([...text].length < 4 || [...text].length > MAX_LESSON) return json(res, 400, { error: `規則要 4–${MAX_LESSON} 字` });
+        if (!LESSON_SCOPES.includes(b.scope as LessonScope)) return json(res, 400, { error: '要說給誰聽：director、typeplan 或 both' });
+        const from = typeof b.feedbackId === 'string' ? db.feedback.find((f) => f.id === b.feedbackId) : undefined;
+        if (b.feedbackId !== undefined && !from) return json(res, 404, { error: '找不到這筆回報' });
+        const lesson = { id: newId(), text, scope: b.scope as LessonScope, createdAt: new Date().toISOString(), by: user.id, ...(from ? { feedbackId: from.id, songId: from.songId, style: from.style } : {}) };
+        (db.lessons ??= []).push(lesson);
+        q.persist();
+        writeLessons();
+        if (from) logEvent(o.root, from.songId, { type: 'lesson.added', lessonId: lesson.id, feedbackId: from.id, by: user.id });
+        return json(res, 201, lesson);
+      }
+      const lp = /^\/beta\/admin\/lessons\/([\w-]+)$/.exec(path);
+      if (lp && req.method === 'DELETE') {
+        const i = (db.lessons ?? []).findIndex((l) => l.id === lp[1]);
+        if (i < 0) return json(res, 404, { error: '找不到這條規則' });
+        const [gone] = db.lessons!.splice(i, 1);
+        q.persist();
+        writeLessons();
+        if (gone.songId) logEvent(o.root, gone.songId, { type: 'lesson.removed', lessonId: gone.id, by: user.id });
+        return json(res, 200, { id: gone.id });
+      }
       // every design language and its tier: proven and candidate ones are on the menu, candidates make the director give a reason
       if (path === '/beta/admin/styles' && req.method === 'GET')
         return json(res, 200, Object.entries(LANGUAGES).map(([id, l]) => ({ id, name: l.name, suits: l.suits, proven: !!l.proven, tier: styleTier(db, id), image: styleImage(id) ? `/beta/styles/${id}/image` : null })));

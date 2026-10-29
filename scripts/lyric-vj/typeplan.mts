@@ -25,6 +25,7 @@ import { feltTempo } from '../../src/app/lyric-vj/timeline';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import { cutTimes, holdGap, landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
 import { Assignment, bindSprites } from './bind-sprites.mts';
+import { lessonsBlock, readLessons } from './lesson-rules.mts';
 
 export { stripUnsungSprites };
 
@@ -45,6 +46,8 @@ const { values: a } = parseArgs({ options: {
   plan: { type: 'string' },
   // the accepted plan (the concept's noimg typeplan.json): kept as it is, one small call only places the sprites into its cuts
   bind: { type: 'string' },
+  // the admin's rules from people's reports (beta lessons.json; lesson-rules.mts)
+  lessons: { type: 'string' },
   // keep the language's own paper medium and grain (the style test: does the old look carry over to type-only?)
   'keep-medium': { type: 'boolean', default: false },
   // a treatment in the song's design language (its approved song): its section stacks become backdrops the planner
@@ -345,7 +348,7 @@ ${backdrops.map((x) => `- ${x.id}：${x.what}`).join('\n')}
 這首歌的速度 ${song.tempo.toFixed(0)} BPM，整首平均能量 ${meanEnergy.toFixed(2)}。${slow ? `這是慢歌、要讓情緒慢慢醞釀：format.pace 用 held（或主歌 held、只有最後的副歌稍快的 mixed）；一刀停久，靠字的進場、停留和背景構圖本身的慢動作撐住畫面；招式只選安靜的（微粒、星空、霧、緩慢的線和光），快閃、震動、爆炸、放射線、glitch、快速跑碼這類動感的招式整首不超過三刀，flash 和 cam 的 shake、snap 不用。\n` : ''}${titleRoom ? '' : `第一句在 ${firstSung.toFixed(1)} 秒就開始唱，沒有前奏可以放片頭：不要用 credits（團名和歌名不是一定要出現）。\n`}鏡頭（id、時間、拍數、段落類型與能量；底下是這個鏡頭的每一句歌詞 id 和內容）：
 ${shots.map((s) => `${s.id} ${s.start.toFixed(1)}–${s.end.toFixed(1)}s ${s.beats} 拍 ${s.part?.type ?? ''} ${(s.part?.energy ?? 0).toFixed(2)}${s.lines.length ? s.lines.map((l) => `\n  ${l.id} ${l.text}`).join('') : ' （沒有歌詞）'}`).join('\n')}
 
-每個鏡頭都要輸出（照上面的順序，一個都不能少）。`;
+每個鏡頭都要輸出（照上面的順序，一個都不能少）。${lessonsBlock(readLessons(a.lessons), 'typeplan')}`;
 
 // one structured call (the client is made per call: a rebuild without a key never needs one)
 const call = (content: string, schema: object, max: number) => new Anthropic({ maxRetries: 8 }).messages.stream({ model: a.model!, max_tokens: max, messages: [{ role: 'user', content }], output_config: { effort: 'medium', format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageStreamParams).finalMessage();

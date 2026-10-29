@@ -774,7 +774,7 @@ async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'co
     if (o.slow?.on) return `sleep 30`;
     writeFileSync(join(run, 'stills', 'still_1.00.png'), PNG);
     writeFileSync(join(run, 'concept.json'), JSON.stringify({ language: 'silkscreen', languageName: '絲網海報', font: 'f', palette: ['#000'], concept: 'c', concerns: o.concerns ?? '', candidateReason: o.candidateReason ?? '', stills: ['still_1.00.png'] }));
-    return `printf '%s' "$VJ_CANDIDATES" > '${run}/candidates.txt'; printf '%s' "$VJ_PROVEN" > '${run}/proven.txt'`;
+    return `printf '%s' "$VJ_CANDIDATES" > '${run}/candidates.txt'; printf '%s' "$VJ_PROVEN" > '${run}/proven.txt'; printf '%s' "$VJ_LESSONS" > '${run}/lessons.txt'`;
   };
   const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
@@ -1081,6 +1081,34 @@ test('a video whose checks passed reaches the person whatever its style (a candi
     }
     t.beta.server.close();
   }
+});
+
+test('lessons: the admin writes a rule from a report (or free); the file every concept and make reads is rewritten; delete removes it', async () => {
+  const t = await gate();
+  assert.equal((await t.tester('/beta/admin/lessons')).status, 403);
+  assert.deepEqual(await (await t.admin('/beta/admin/lessons')).json(), []);
+  assert.deepEqual(JSON.parse(readFileSync(join(t.root, 'lessons.json'), 'utf8')), { lessons: [] }, 'written at start, so a job never finds it missing');
+  assert.equal((await t.admin('/beta/admin/lessons', { json: { text: '短', scope: 'both' } })).status, 400);
+  assert.equal((await t.admin('/beta/admin/lessons', { json: { text: '間奏不放圖片，只做背景變換', scope: 'everyone' } })).status, 400);
+  assert.equal((await t.admin('/beta/admin/lessons', { json: { text: '間奏不放圖片，只做背景變換', scope: 'both', feedbackId: 'nope' } })).status, 404);
+  // from a report: the lesson remembers it
+  t.beta.db.feedback.push({ id: 'fb1', jobId: 'j', songId: 's1', userId: 'u', ok: false, marks: [], suggestion: '間奏不要圖', action: 'report', createdAt: '2026-10-29T00:00:00Z', style: '絲網海報' } as never);
+  const r = await t.admin('/beta/admin/lessons', { json: { text: '間奏不放圖片，只做背景變換', scope: 'director', feedbackId: 'fb1' } });
+  assert.equal(r.status, 201);
+  const made = await r.json();
+  assert.deepEqual([made.text, made.scope, made.feedbackId, made.songId, made.style], ['間奏不放圖片，只做背景變換', 'director', 'fb1', 's1', '絲網海報']);
+  const free = await (await t.admin('/beta/admin/lessons', { json: { text: '字一定要看得清楚', scope: 'both' } })).json();
+  assert.deepEqual(((await (await t.admin('/beta/admin/lessons')).json()) as { id: string }[]).map((l) => l.id), [free.id, made.id], 'newest first');
+  assert.deepEqual(JSON.parse(readFileSync(join(t.root, 'lessons.json'), 'utf8')).lessons.map((l: { id: string }) => l.id), [made.id, free.id]);
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'lesson.added' && e['lessonId'] === made.id));
+  // a concept job sees the file
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  const job = await t.done(id);
+  assert.equal(readFileSync(join(runPath(t.root, job), 'lessons.txt'), 'utf8'), join(t.root, 'lessons.json'));
+  assert.equal((await t.admin(`/beta/admin/lessons/${free.id}`, { method: 'DELETE' })).status, 200);
+  assert.equal((await t.admin(`/beta/admin/lessons/${free.id}`, { method: 'DELETE' })).status, 404);
+  assert.deepEqual(JSON.parse(readFileSync(join(t.root, 'lessons.json'), 'utf8')).lessons.map((l: { id: string }) => l.id), [made.id]);
+  t.beta.server.close();
 });
 
 test('an admin retry of a legacy failed job checks the limit against what it set aside', async () => {

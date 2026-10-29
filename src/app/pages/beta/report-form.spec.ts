@@ -1,5 +1,6 @@
-import { NOT_FIXABLE } from './beta';
-import { draftKey, fixBody, formatTime, hasDraft, packDraft, ReportDraft, sendLabel, StoredDraft, unpackDraft, validateReport } from './report-form.component';
+import { TestBed } from '@angular/core/testing';
+import { BetaJob, BetaSong, NOT_FIXABLE } from './beta';
+import { actionAfterMarks, draftKey, fixBody, ReportFormComponent, formatTime, hasDraft, packDraft, ReportDraft, sendLabel, StoredDraft, unpackDraft, validateReport } from './report-form.component';
 
 const draft = (o: Partial<ReportDraft>): ReportDraft => ({ ok: false, marks: [], suggestion: '', action: 'none', ...o });
 const mark = (o: Partial<ReportDraft['marks'][number]> = {}) => ({ at: 1, category: 'lyrics' as const, note: '', ...o });
@@ -125,5 +126,70 @@ describe('sendLabel and fixBody', () => {
     expect(fixBody('timing')).toContain('歌詞時間');
     expect(fixBody('timing')).toContain('原本的版本保留');
     expect(fixBody(undefined)).toBe(fixBody('picture'));
+  });
+});
+
+describe('actionAfterMarks', () => {
+  const m = (...c: (string | null)[]) => c.map((category) => ({ category: category as 'timing' | null }));
+
+  it('drops 修正 only when the named marks no longer allow it', () => {
+    expect(actionAfterMarks('fix', m('timing'), 'none')).toBe('fix');
+    expect(actionAfterMarks('fix', m('timing', 'lyrics'), 'none')).toBe('none');
+    expect(actionAfterMarks('fix', m('picture'), 'none')).toBe('none');
+    expect(actionAfterMarks('fix', m('picture'), 'img')).toBe('fix');
+    expect(actionAfterMarks('redo', m('lyrics'), 'none')).toBe('redo');
+  });
+
+  it('keeps 修正 while a new mark has no category yet', () => {
+    expect(actionAfterMarks('fix', m('timing', null), 'none')).toBe('fix');
+    expect(actionAfterMarks('fix', [], 'none')).toBe('fix');
+  });
+});
+
+describe('ReportFormComponent draft', () => {
+  const job = { id: 'm1', songId: 's', kind: 'make', tier: 'none', status: 'done', createdAt: '2026-10-27T00:00:00Z' } as BetaJob;
+  const song = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' } as BetaSong;
+  const settle = () => new Promise((r) => setTimeout(r));
+  const mount = async (active = false) => {
+    const f = TestBed.createComponent(ReportFormComponent);
+    f.componentRef.setInput('job', job);
+    f.componentRef.setInput('song', song);
+    f.componentRef.setInput('active', active);
+    await f.whenStable();
+    return f;
+  };
+  const button = (el: HTMLElement, text: string) => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!;
+  const click = async (f: Awaited<ReturnType<typeof mount>>, text: string) => {
+    button(f.nativeElement, text).click();
+    await f.whenStable();
+    await settle();
+    await f.whenStable();
+  };
+
+  beforeEach(() => sessionStorage.clear());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('stores a new draft after 再回報一次 even when it repeats the report just sent', async () => {
+    const sent = { id: 'f1', jobId: 'm1', ok: true, marks: [], suggestion: '', action: 'none', createdAt: '2026-10-28T00:00:00Z' };
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => ({ ok: true, status: 200, json: async () => (init?.method === 'POST' ? sent : [sent]) })));
+    const f = await mount();
+    await click(f, '沒問題');
+    expect(sessionStorage.getItem(draftKey('m1'))).not.toBeNull();
+    await click(f, '送出');
+    expect(sessionStorage.getItem(draftKey('m1'))).toBeNull();
+    await click(f, '再回報一次');
+    await click(f, '沒問題');
+    expect(unpackDraft(sessionStorage.getItem(draftKey('m1')))?.verdict).toBe('ok');
+  });
+
+  it('keeps a restored 修正 while a job runs, shown off with its reason', async () => {
+    const draft: StoredDraft = { verdict: 'issue', marks: [{ at: 3, category: 'timing', note: '' }], suggestion: '', action: 'fix' };
+    sessionStorage.setItem(draftKey('m1'), packDraft(draft)!);
+    const f = await mount(true);
+    const fix = button(f.nativeElement, '修正');
+    expect(fix.getAttribute('aria-checked')).toBe('true');
+    expect(fix.getAttribute('aria-disabled')).toBe('true');
+    expect(fix.textContent).toContain('這首歌已經在排隊或製作中');
+    expect(unpackDraft(sessionStorage.getItem(draftKey('m1')))?.action).toBe('fix');
   });
 });

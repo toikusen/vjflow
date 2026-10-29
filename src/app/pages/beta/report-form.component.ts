@@ -1,5 +1,5 @@
 import { Component, computed, effect, ElementRef, input, output, signal, untracked, viewChild } from '@angular/core';
-import { BetaFeedback, BetaJob, BetaSong, BetaTier, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, JOB_STEPS, NOT_FIXABLE, TIER_INFO } from './beta';
+import { BetaFeedback, BetaJob, BetaSong, BetaTier, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE, stepsMin, TIER_INFO } from './beta';
 import { jobTitle, stamp } from './song';
 import { Ask } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
@@ -11,7 +11,7 @@ const MAX_MARKS = 20;
 const END_SLACK = 0.5;
 /** Marker badge colours, by the mark's place on the timeline (the 2d artboard: coral, then amber). */
 const MARK_COLORS = ['var(--accent)', 'var(--warn)', 'var(--info)', 'var(--ok)'];
-const FIX_MIN = Math.round(JOB_STEPS.fix.reduce((s, x) => s + x.min, 0));
+const FIX_MIN = stepsMin('fix');
 
 /** A mark being written: the category is picked after the time is marked. */
 export interface DraftMark { at: number; end?: number; category: FeedbackCategory | null; note: string }
@@ -109,6 +109,18 @@ export function sessionStorageOrNull(): Storage | null {
   }
 }
 
+/**
+ * The action after the marks changed: a 修正 the categorised marks no longer allow (a category other than
+ * picture/timing, mixed categories, pictures on a version without them) falls back to 只回報; anything else stays.
+ * A mark still without a category, a running job or a short balance does not reset it: 修正 is kept, shown off with
+ * its reason, and 送出 refuses it until that clears.
+ */
+export function actionAfterMarks(action: FeedbackAction, marks: readonly { category: FeedbackCategory | null }[], tier?: BetaTier): FeedbackAction {
+  if (action !== 'fix') return action;
+  const named = marks.filter((m) => m.category);
+  return named.length && !fixAllowed(named, tier) ? 'none' : action;
+}
+
 /** The confirm dialog's explanation of a fix, by what it does. */
 export const fixBody = (kind: 'picture' | 'timing' | undefined) =>
   kind === 'timing'
@@ -197,10 +209,6 @@ export class ReportFormComponent {
     effect(() => {
       if (!this.open()) this.vid()?.nativeElement.pause();
     });
-    // a fix the marks no longer allow falls back to 只回報
-    effect(() => {
-      if (this.fixWhy() && this.action() === 'fix') this.action.set('none');
-    });
     // the draft lives in sessionStorage per job: 「先到歌詞時間改好」 is a whole-page navigation, and the way back reloads
     // the page, so what was marked and written here would otherwise be gone. Restored once, then kept up to date.
     effect(() => {
@@ -271,12 +279,18 @@ export class ReportFormComponent {
     if (this.verdict() !== 'issue') this.verdict.set('issue');
     const m: FormMark = { key: this.nextKey++, at: this.current(), category: null, note: '' };
     this.marks.update((l) => [...l, m].sort((a, b) => a.at - b.at));
+    this.marksChanged();
+  }
+
+  /** After a mark edit by the person: a 修正 the marks no longer allow falls back to 只回報. */
+  private marksChanged() {
+    this.action.update((a) => actionAfterMarks(a, this.marks(), this.job().tier));
     this.error.set('');
   }
 
   protected patch(key: number, p: Partial<DraftMark>) {
     this.marks.update((l) => l.map((m) => (m.key === key ? { ...m, ...p } : m)));
-    this.error.set('');
+    this.marksChanged();
   }
 
   protected setEnd(m: FormMark) {
@@ -287,7 +301,7 @@ export class ReportFormComponent {
 
   protected remove(key: number) {
     this.marks.update((l) => l.filter((m) => m.key !== key));
-    this.error.set('');
+    this.marksChanged();
   }
 
   protected seek(m: DraftMark) {
@@ -302,6 +316,8 @@ export class ReportFormComponent {
     this.action.set('none');
     this.error.set('');
     this.past.set(null);
+    // a new report may well repeat the last one (「同一處還是不對」): it is a draft again, and is kept again
+    this.sentPacked = null;
   }
 
   private draft(): ReportDraft {

@@ -1,10 +1,16 @@
 // What the song page shows that is not the song's state itself: hero tone, result names and totals, step clocks, the failure card.
-import { BetaJob, jobProgress, TIER_INFO } from './beta';
+import { BetaJob, jobProgress, SongView, TIER_INFO } from './beta';
 import { StatusKind } from './ui/status';
 
-/** The hero's colour: blue while preparing (3a), red when help is needed (3b), else a shade of the cover tint (1b-2). */
+/** The hero's colour: blue while preparing (3a), red when help is needed (3b) or the audio never arrived, else a shade of the cover tint (1b-2). */
 export type HeroTone = 'info' | 'bad' | 'cover';
-export const heroTone = (k: StatusKind): HeroTone => (k === 'preparing' ? 'info' : k === 'help' || k === 'prepFailed' ? 'bad' : 'cover');
+export const heroTone = (k: StatusKind): HeroTone => (k === 'preparing' ? 'info' : k === 'help' || k === 'prepFailed' || k === 'noAudio' ? 'bad' : 'cover');
+
+/**
+ * Whether the song page offers 重新上傳音檔: the audio never arrived, or the preparation failed. Mirrors the server,
+ * which takes a new PUT /audio while no prep job other than a failed one stands.
+ */
+export const canReupload = (v: Pick<SongView, 'stage' | 'noAudio'>): boolean => v.stage === 'prepFailed' || (v.stage === 'preparing' && !!v.noAudio);
 
 /**
  * The hero's note beside 歌詞時間已確認 while concepts await a decision: a conditional, since the timing may well stay as
@@ -82,6 +88,16 @@ export const NOTHING_TO_REMOVE_LINE = '標記的範圍裡沒有找到可以拿�
  * admin's 需要協助 list when the admin opens the admin page.
  */
 export const FAILURE_NOTE = '這次失敗已記錄，管理者會在後台看到';
+
+/** The prepFailed card's line: on record, and the one thing the person can do (the server takes a new PUT /audio). */
+export const PREP_FAILED_NOTE = '準備失敗，這次失敗已記錄；可以重新上傳音檔再試一次。';
+
+/**
+ * The results whose report form opens by itself on load: a half-written report (a draft in this tab) on the viewer's
+ * own song, each once. Someone else's song (an admin looking) never opens one, as it cannot be sent from there.
+ */
+export const draftsToReopen = (results: readonly Pick<BetaJob, 'id' | 'status'>[], mine: boolean, checked: ReadonlySet<string>, has: (id: string) => boolean): string[] =>
+  mine ? results.filter((j) => j.status === 'done' && !checked.has(j.id) && has(j.id)).map((j) => j.id) : [];
 
 /**
  * The 3b failure card for the latest failed make, concept or fix: what failed (and whether the automatic retry did too),

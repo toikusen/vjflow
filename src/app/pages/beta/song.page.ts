@@ -7,7 +7,7 @@ import { BetaPage } from './beta.page';
 import { ConceptCardComponent } from './concept-card.component';
 import { MakeFormComponent } from './make-form.component';
 import { hasDraft, ReportFormComponent } from './report-form.component';
-import { clock, failureCard, heroTone, jobTitle, jobTotal, safeName, stamp, stepClocks, timingNote, videoFileName } from './song';
+import { canReupload, clock, draftsToReopen, failureCard, heroTone, jobTitle, jobTotal, PREP_FAILED_NOTE, safeName, stamp, stepClocks, timingNote, videoFileName } from './song';
 import { BalanceComponent } from './ui/balance.component';
 import { PriceComponent } from './ui/price.component';
 import { StatusChip } from './ui/status';
@@ -48,6 +48,8 @@ export class BetaSongPage extends BetaPage {
   protected readonly stamp = stamp;
   protected readonly clock = clock;
   protected readonly timingNote = timingNote;
+  protected readonly canReupload = canReupload;
+  protected readonly prepFailedNote = PREP_FAILED_NOTE;
   protected readonly conceptPrice = CONCEPT_PRICE;
   protected readonly totals = TIERS.map((t) => TIER_INFO[t].price);
   /** The song's length from its timing (for the hero and the `1080p · m:ss` label), once the timing is confirmed. */
@@ -75,6 +77,8 @@ export class BetaSongPage extends BetaPage {
   /** Cards whose form was ever opened on this page; their forms stay mounted and keep their drafts. */
   protected readonly opened = signal<ReadonlySet<string>>(new Set());
   private askedTiming = false;
+  /** Results already reopened from a draft, so a later poll does not toggle their form shut. */
+  private readonly draftChecked = new Set<string>();
 
   constructor() {
     super();
@@ -82,8 +86,15 @@ export class BetaSongPage extends BetaPage {
       for (const j of this.sv()?.results ?? []) {
         if (j.status !== 'done' || this.asked.has(j.id)) continue;
         this.loadReports(j.id);
-        // a report half written before a timing edit (the editor sends the person back here) opens again where it was
-        if (hasDraft(j.id)) untracked(() => this.toggleReport(j.id));
+      }
+    });
+    // a report half written before a timing edit (the editor sends the person back here) opens again where it was;
+    // tracked on mine() too, since the session may answer after the first poll
+    effect(() => {
+      const ids = draftsToReopen(this.sv()?.results ?? [], this.mine(), this.draftChecked, hasDraft);
+      for (const id of ids) {
+        this.draftChecked.add(id);
+        untracked(() => this.toggleReport(id));
       }
     });
     effect(() => {

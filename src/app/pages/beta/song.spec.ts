@@ -1,5 +1,5 @@
 import { BetaJob } from './beta';
-import { clock, FAILURE_NOTE, failureCard, heroTone, jobTitle, jobTotal, safeName, stepClocks, timingNote, videoFileName } from './song';
+import { canReupload, clock, draftsToReopen, FAILURE_NOTE, PREP_FAILED_NOTE, failureCard, heroTone, jobTitle, jobTotal, safeName, stepClocks, timingNote, videoFileName } from './song';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'make', tier: 'hybrid', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -8,6 +8,7 @@ describe('heroTone', () => {
     expect(heroTone('preparing')).toBe('info');
     expect(heroTone('help')).toBe('bad');
     expect(heroTone('prepFailed')).toBe('bad');
+    expect(heroTone('noAudio')).toBe('bad');
     for (const k of ['making', 'retrying', 'ready', 'timing', 'concept'] as const) expect(heroTone(k)).toBe('cover');
   });
 });
@@ -106,5 +107,34 @@ describe('failureCard', () => {
     const fix = job({ id: 'f', kind: 'fix', tier: 'img', status: 'failed', priceUsd: 1, nothingToRemove: true, endedAt: '2026-10-28T07:50:00' });
     expect(failureCard(fix, [fix])).toMatchObject({ title: '修正失敗', reason: '標記的範圍裡沒有找到可以拿掉的圖，這次沒有收費。' });
     expect(failureCard({ ...fix, nothingToRemove: undefined }, []).reason).toBeUndefined();
+  });
+});
+
+describe('re-upload after a failed or missing upload (mirrors taken() in server.mts)', () => {
+  it('is offered when the audio never arrived or the preparation failed, not while it runs or after', () => {
+    expect(canReupload({ stage: 'preparing', noAudio: true })).toBe(true);
+    expect(canReupload({ stage: 'prepFailed' })).toBe(true);
+    expect(canReupload({ stage: 'preparing' })).toBe(false);
+    expect(canReupload({ stage: 'timing' })).toBe(false);
+    expect(canReupload({ stage: 'ready' })).toBe(false);
+  });
+
+  it('the prepFailed line states what is true and what the person can do, with no promise of help', () => {
+    expect(PREP_FAILED_NOTE).toBe('準備失敗，這次失敗已記錄；可以重新上傳音檔再試一次。');
+    for (const line of [PREP_FAILED_NOTE, FAILURE_NOTE]) expect(line).not.toMatch(/會協助|已通知|會聯絡|聯絡管理者/);
+  });
+});
+
+describe('draftsToReopen', () => {
+  const results = [job({ id: 'a' }), job({ id: 'b' }), job({ id: 'c', status: 'running' })];
+  const has = (id: string) => id !== 'b';
+
+  it('reopens the viewer’s own results that have a draft, once each', () => {
+    expect(draftsToReopen(results, true, new Set(), has)).toEqual(['a']);
+    expect(draftsToReopen(results, true, new Set(['a']), has)).toEqual([]);
+  });
+
+  it('never reopens a form on someone else’s song', () => {
+    expect(draftsToReopen(results, false, new Set(), has)).toEqual([]);
   });
 });

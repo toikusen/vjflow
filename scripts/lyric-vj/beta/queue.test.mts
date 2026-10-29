@@ -39,3 +39,36 @@ test('a ##NORETRY line marks the job and becomes its error', () => {
   assert.equal(readLine(j, '##NORETRY 標記的範圍裡沒有可以拿掉的圖'), true);
   assert.deepEqual([j.noRetry, j.error], [true, '標記的範圍裡沒有可以拿掉的圖']);
 });
+
+// ---- C2: a fuse that trips as the process exits still ends the job failed and unpaid ----
+
+const ran = async (script: string) => {
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { emptyDb, charged } = await import('./store.mts');
+  const { pump } = await import('./queue.mts');
+  const db = emptyDb();
+  const job: Job = { id: 'j', userId: 'u', songId: 's', kind: 'concept', tier: 'img', status: 'queued', reservedUsd: 2.5, priceUsd: 2.5, createdAt: '2026-10-29T00:00:00Z' };
+  db.jobs.push(job);
+  const events: string[] = [];
+  pump({ db, persist: () => {}, command: () => script, logDir: mkdtempSync(join(tmpdir(), 'queue-')), env: {}, onEvent: (_j, e) => events.push(e.type) });
+  for (let k = 0; k < 50 && job.status === 'running'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  return { job, events, charged: charged(job) };
+};
+
+test('a cost past the fuse printed right before exit 0 ends the job failed, fused and charged nothing', async () => {
+  const r = await ran("echo '##COST 13 x'; exit 0");
+  assert.deepEqual([r.job.status, r.job.fused, r.job.error, r.charged], ['failed', true, '成本超過上限，已通知管理者', 0]);
+  assert.ok(r.events.indexOf('job.fused') < r.events.indexOf('job.ended'));
+});
+
+test('the last line without a newline goes through the fuse too', async () => {
+  const r = await ran("printf '##COST 13 x'");
+  assert.deepEqual([r.job.status, r.job.fused, r.job.costUsd, r.charged], ['failed', true, 13, 0]);
+});
+
+test('a cost under the fuse with exit 0 is still a done job at its price', async () => {
+  const r = await ran("echo '##COST 4 x'; exit 0");
+  assert.deepEqual([r.job.status, r.job.fused, r.charged], ['done', undefined, 2.5]);
+});

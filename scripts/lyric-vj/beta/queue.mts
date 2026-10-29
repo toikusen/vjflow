@@ -143,19 +143,23 @@ export function pump(q: Queue) {
   };
   let fused = false;
   let rest = '';
+  // the fuse: a run that costs more than twice its price is stopped (the whole group, or bash's children keep the pipe
+  // open); the trip is recorded at once, so a crash right after still shows it
+  const fuse = () => {
+    if (fused || job.costUsd === undefined || !(job.costUsd > 2 * (job.priceUsd ?? Infinity))) return;
+    fused = true;
+    job.fused = true;
+    job.error = '成本超過上限，已通知管理者';
+    q.persist();
+    q.onEvent?.(job, { type: 'job.fused', costUsd: job.costUsd, priceUsd: job.priceUsd });
+    killGroup(child.pid!);
+  };
   const take = (b: Buffer) => {
     appendFileSync(log, b);
     const lines = (rest + b.toString()).split(/\r|\n/);
     rest = lines.pop() ?? '';
     if (lines.map((l) => read(l)).some(Boolean)) q.persist();
-    // the fuse: a run that costs more than twice its price is stopped (the whole group, or bash's children keep the pipe open)
-    if (!fused && job.costUsd !== undefined && job.costUsd > 2 * (job.priceUsd ?? Infinity)) {
-      fused = true;
-      job.fused = true;
-      job.error = '成本超過上限，已通知管理者';
-      q.onEvent?.(job, { type: 'job.fused', costUsd: job.costUsd, priceUsd: job.priceUsd });
-      killGroup(child.pid!);
-    }
+    fuse();
   };
   child.stdout.on('data', take);
   child.stderr.on('data', take);
@@ -173,11 +177,16 @@ export function pump(q: Queue) {
   child.on('close', (code) => {
     if (q.stopping || ended) return;
     ended = true;
+    // the last line without a newline (a cost printed right before the exit) goes through the fuse too
     if (rest) read(rest);
-    // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10
-    const failed = code !== 0 && code !== 10;
+    fuse();
+    // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10.
+    // A tripped fuse ends the job failed whatever the exit code (the process may have exited 0 before the kill
+    // reached it): the person is charged nothing, the admin sees the fuse
+    const status = fused ? 'failed' : code === 0 ? 'done' : code === 10 ? 'admin' : 'failed';
+    const failed = status === 'failed';
     Object.assign(job, {
-      status: code === 0 ? 'done' : code === 10 ? 'admin' : 'failed',
+      status,
       endedAt: now(),
       error: failed ? (fused || job.noRetry ? job.error : `exit ${code}`) : undefined,
       unsettled: failed ? job.phase : undefined,

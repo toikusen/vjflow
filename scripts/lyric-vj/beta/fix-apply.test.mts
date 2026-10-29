@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -228,6 +228,16 @@ test('fix.sh: a picture the built treatment never drew is nothing to remove, wha
   const r = t.run('m1', 'f1', '[{"at":2.5,"end":3}]');
   assert.equal(r.status, 3, r.stderr + r.stdout);
   assert.match(r.stdout, new RegExp(`^##NORETRY ${NOTHING_TO_REMOVE}$`, 'm'));
+  assert.ok(!existsSync(join(t.song, 'runs/f1/made')));
+});
+
+test('fix.sh: a run without a built treatment cannot tell what showed, so the fix is refused unpaid', () => {
+  const t = fixTree();
+  rmSync(join(t.src, 'img/treatment.json'));
+  const r = t.run('m1', 'f1', '[{"at":2.5,"end":3}]');
+  assert.equal(r.status, 3, r.stderr + r.stdout);
+  assert.match(r.stdout, /^##NORETRY /m);
+  assert.match(r.stderr, /no .*img\/treatment\.json/);
   assert.ok(!existsSync(join(t.song, 'runs/f1/made')));
 });
 

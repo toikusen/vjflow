@@ -8,7 +8,8 @@
 // items no board ever showed, and taking those out changes nothing on screen (drawnSpans).
 // A base treatment without interludes (a run made before them) gets every unsung window as pictures, so the rebuild
 // changes only the marked ranges (keptInterludes).
-// Exit 3 (stderr NOTHING_TO_REMOVE) when the ranges hold no picture: a render would only repeat the old video.
+// Exit 3 (stderr NOTHING_TO_REMOVE) when the ranges hold no picture, or the run has no built treatment to tell: a
+// render would only repeat the old video.
 // usage: npx tsx scripts/lyric-vj/beta/fix-apply.mts --run <run dir> --kind picture --ranges '[{"at":2,"end":4}]'
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -187,11 +188,15 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const song = JSON.parse(readFileSync(join(a.run, 'song.json'), 'utf8')) as Song;
   const treatment = JSON.parse(readFileSync(join(a.run, 'base', 'treatment.json'), 'utf8'));
   const tl = fixTimeline(song, treatment, plan);
-  // the pictures the video really showed come from the built treatment; a run without one (never made by make.sh) falls back to the plan
+  // the pictures the video really showed come from the built treatment; without it (a run make.sh never built) what
+  // showed cannot be known, and a fix that may change nothing is refused like one with nothing to remove
   const built = join(a.run, 'img', 'treatment.json');
-  if (!existsSync(built)) console.error(`fix-apply: no ${built}; counting the plan's pictures`);
-  const drawn = existsSync(built) ? drawnSpans(JSON.parse(readFileSync(built, 'utf8')), tl.duration) : undefined;
-  const r = applyPictureFix(plan, ranges, tl, drawn);
+  if (!existsSync(built)) {
+    console.error(`fix-apply: no ${built}: cannot tell which pictures showed, refusing`);
+    console.error(NOTHING_TO_REMOVE);
+    process.exit(3);
+  }
+  const r = applyPictureFix(plan, ranges, tl, drawnSpans(JSON.parse(readFileSync(built, 'utf8')), tl.duration));
   if (!r.removed) {
     console.error(NOTHING_TO_REMOVE);
     process.exit(3);

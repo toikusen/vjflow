@@ -54,7 +54,8 @@ const { values: a } = parseArgs({
     'available-assets': { type: 'string' }, // with --design-only: assets.json of the pictures already made; photo layers may use only these
     refs: { type: 'string' }, // folder of the person's reference images (jpg/png/webp, at most 5): sent before the prompt text
     candidates: { type: 'string' }, // comma ids: candidate languages the director may also pick (without --language)
-    previous: { type: 'string' }, // treatment.json of the concept being adjusted: quoted to the director as 上一版
+    previous: { type: 'string' }, // treatment.json of the previous concept: quoted to the director as 上一版
+    note: { type: 'string' }, // the person's note on the previous concept: with --previous this is an adjustment, without a note a redo
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -88,6 +89,7 @@ const previous: Previous | undefined = a.previous ? (() => {
   const t = JSON.parse(readFileSync(a.previous, 'utf8')) as TreatmentV3 & { language?: string };
   return { concept: t.concept ?? '', language: t.design?.language ?? t.language ?? '', font: t.design?.font ?? '' };
 })() : undefined;
+const note = a.note?.trim() || undefined;
 // only proven languages are on offer (a song a paying user gets must come out usable) plus the candidates the
 // operator opened; a language the user picked is the only one
 const allowedLanguages: LanguageId[] = picked ? [picked] : [...PROVEN_LANGUAGES, ...candidates];
@@ -453,7 +455,7 @@ const windows = unsungWindows(song).filter((w) => w.end > win.start && w.start <
 const expectShots = Math.round((win.end - win.start) / ((style.shotSec[0] + style.shotSec[1]) / 2));
 const USER = userPrompt({
   toolbox: TOOLBOX, expectShots, shotSec: style.shotSec, cueCount: cues.length, style: styleText,
-  brief: [briefText({ style: styleText, previous, candidates, chosen: picked, hasRefs: refs.length > 0 }), interludeText(windows)].filter(Boolean).join('\n'),
+  brief: [briefText({ style: styleText, note, previous, candidates, chosen: picked, hasRefs: refs.length > 0 }), interludeText(windows)].filter(Boolean).join('\n'),
   structure: describeStructure(structure), suggested: suggestedText, keyWords: keyWords(song), repeat: repeatText, titleCards: gapText, win,
   tempo: song.tempo, sections, downbeats: song.downbeats.filter((b) => b >= win.start && b < win.end).map((b) => b.toFixed(2)).join(' '), cueLines, catalog, dbText: db.text,
 });
@@ -505,7 +507,7 @@ ${sys.variety ? `- 每首的差異（必須做）：${sys.variety.rule}\n${(() =
   })()}`;
   const qaNotes = a['qa-notes'] && existsSync(a['qa-notes']) ? `\n\n【上一版設計的畫面檢查發現這些問題，這一版必須避免】\n${readFileSync(a['qa-notes'], 'utf8')}` : '';
   const userD = `為這首歌設計 design、graphics、story${sys.motif ? ' 與 motif' : ''}。企劃的鏡頭與歌詞版型已定，你決定字型、色彩、質感、爆點樣式，以及畫面的圖形：graphics 是用程式畫的圖層組合（取代滿版背景圖），依段落切換。\n\n${sysText}\n\n${GRAPHICS_RULES}\n\n${DESIGN_RULES}\n\n${STORY_RULES}\n\n${sys.motif ? MOTIF_RULES : ''}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【鏡頭】\n${base.shots.map((x) => `${x.id} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s ${x.template}${x.params['attachKind'] === 'photo' || x.params['attachKind'] === 'sticker' ? `（傳了一則${x.params['attachKind'] === 'photo' ? '照片' : '貼圖'} ${x.params['attach']}，${x.params['attachVoice'] === 'them' ? '對方' : '自己'}傳的${x.params['attachKind'] === 'sticker' ? '：story 的 props 要列出這個 id，what 寫貼圖的樣子' : ''}）` : ''}`).join('\n')}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
-  const wish = designBriefText({ style: styleText, briefReading: (base as { briefReading?: string }).briefReading, previous, hasRefs: refs.length > 0 });
+  const wish = designBriefText({ style: styleText, briefReading: (base as { briefReading?: string }).briefReading, note, previous, hasRefs: refs.length > 0 });
   const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withRefs(userD + qaNotes + wish, refs) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
   writeFileSync(join(out, 'design_prompt.txt'), userD + qaNotes + wish);
   let checked!: ReturnType<typeof validateTreatment>;

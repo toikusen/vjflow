@@ -18,10 +18,12 @@ cost_log() { local c; c=$(grep -oE '\$[0-9]+\.[0-9]+' "$1" | tail -1 | tr -d '$'
 # one inputs.json field, "" when absent; a corrupt file aborts
 field() { python3 -c "import json,sys;v=json.load(open(sys.argv[1])).get(sys.argv[2]);print(v if isinstance(v,str) else '')" "$w/inputs.json" "$1"; }
 
-# the person's words for the director: the concept text, then (adjusting) their note on the previous version
+# the person's words for the director: the concept text (brief.txt, also the style text of the later steps); their
+# note on the previous version goes separately as --note, so the director reads a note as an adjustment and `from`
+# without one as a redo
 brief=$w/brief.txt
 concept=$(field concept); note=$(field note); lang=$(field style); from=$(field from)
-{ printf '%s\n' "$concept"; n=$note; [ -n "$n" ] && printf '\n使用者對上一版的意見：%s\n' "$n"; } > "$brief" || true
+printf '%s\n' "$concept" > "$brief"
 prev=
 [ -n "$from" ] && ! [[ $from =~ ^[A-Za-z0-9_-]+$ ]] && { echo "ignoring invalid from: $from" >&2; from=; }
 [ -n "$from" ] && [ -f "$d/runs/$from/base/treatment.json" ] && prev=$d/runs/$from/base/treatment.json
@@ -34,6 +36,7 @@ if [ ! -f "$w/base/treatment.json" ]; then
   [ -n "$lang" ] && args+=(--language "$lang")
   [ -n "${VJ_CANDIDATES:-}" ] && args+=(--candidates "$VJ_CANDIDATES")
   [ -n "$prev" ] && args+=(--previous "$prev")
+  [ -n "$note" ] && args+=(--note="$note")
   npx tsx scripts/lyric-vj/direct.mts "${args[@]}" 2>&1 | tee "$w/direct.log" | awk '/^attempt [0-9]+: 0 errors/ { print "##PHASE 導演設計視覺風格"; fflush() } /^attempt [0-9]+: [1-9]/ { print "##PHASE 導演修正故事草稿"; fflush() }'
   cost_json "$w/base/director.json" direct
 fi

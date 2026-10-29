@@ -89,16 +89,21 @@ export function briefText(o: { style?: string; note?: string; previous?: Previou
   else if (o.hasRefs) rules.push('briefReading 必填：一兩句，用「你給的參考圖我理解成：…」的句型，說出你從圖裡取了哪些具體的視覺特徵。');
   if (o.chosen) rules.push(`使用者指定了設計語言「${o.chosen}」：照用，不要換。如果你判斷它不適合這首歌，在 concerns 用一兩句具體說明哪裡不合、畫面會受什麼影響；適合就填空字串。`);
   else if (o.candidates.length) rules.push(`設計語言清單裡標【候選】的（${o.candidates.join('、')}）還在試：只有它明顯比驗收過的更適合這首歌才選；選了就在 candidateReason 寫一兩句理由（這首歌的哪個特質需要它），選驗收過的就填空字串。`);
-  if (o.previous) rules.push(`這是調整：${previousText(o.previous)}${o.note?.trim() ? `使用者的意見：「${o.note.trim()}」。` : ''}使用者沒有要求改的（設計語言、字型、色調、故事）都保留，只改意見提到的地方。`);
+  // a previous version with a note is an adjustment (what the note leaves alone stays); without a note it is a redo:
+  // a new direction, the previous version quoted only so it is not repeated
+  if (o.previous && o.note?.trim()) rules.push(`這是調整：${previousText(o.previous)}使用者的意見：「${o.note.trim()}」。使用者沒有要求改的（設計語言、字型、色調、故事）都保留，只改意見提到的地方。`);
+  else if (o.previous) rules.push(`這是重做：${previousText(o.previous)}使用者要的是一個明顯不同的方向：概念不能和上一版重複，字型、色調、故事都要換${o.chosen ? '' : '，設計語言也考慮換'}。上一版只是用來避開，沒有任何部分要保留。`);
   return block(rules);
 }
 
 /** The same wishes for the design pass (font, colour, texture are decided there); '' when there are none. */
-export function designBriefText(o: { style?: string; briefReading?: string; previous?: Previous; hasRefs: boolean }): string {
+export function designBriefText(o: { style?: string; briefReading?: string; note?: string; previous?: Previous; hasRefs: boolean }): string {
   const rules: string[] = [];
   if (o.style?.trim()) rules.push(`使用者寫的話：${o.style.trim()}${o.briefReading?.trim() ? `\n  導演的理解：${o.briefReading.trim()}` : ''}\n  色彩、字型、質感照這個理解做；名字只轉譯成視覺特徵，不能畫出名字、角色或標誌。`);
   if (o.hasRefs) rules.push('使用者附了參考圖（在這則訊息最前面）：色彩、光線與質感往它靠，不要照抄畫面，也不要畫出圖裡的人物、角色、文字或標誌。');
-  if (o.previous) rules.push(`這是調整：${o.previous.font.trim() ? `上一版用字型 ${o.previous.font.trim()}；` : ''}使用者沒有要求改字型或色調時就保留上一版的。`);
+  const font = o.previous?.font.trim();
+  if (o.previous && o.note?.trim()) rules.push(`這是調整：${font ? `上一版用字型 ${font}；` : ''}使用者沒有要求改字型或色調時就保留上一版的。`);
+  else if (o.previous) rules.push(`這是重做：${font ? `上一版用字型 ${font}，` : ''}這次的字型與色調都要和上一版明顯不同。`);
   return rules.length ? `\n\n【使用者的要求】\n${rules.map((r) => `- ${r}`).join('\n')}` : '';
 }
 

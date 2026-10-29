@@ -52,6 +52,28 @@ test('briefText: an adjustment quotes the previous version and keeps the rest', 
   assert.ok(t.includes('沒有要求改的'));
 });
 
+test('briefText: a redo names the previous concept only as something not to repeat, never the adjust keep-rules', () => {
+  const t = briefText({ previous: { concept: '夜晚的城市', language: 'silkscreen', font: 'Noto Sans TC' }, candidates: [], hasRefs: false });
+  assert.ok(t.includes('這是重做') && t.includes('上一版') && t.includes('夜晚的城市') && t.includes('不能和上一版重複'));
+  for (const r of [ADJUST, '沒有要求改的', '都保留', '只改意見提到的地方']) assert.ok(!t.includes(r), r);
+  assert.ok(t.includes('設計語言也考慮換'));
+  // a language the person picked stays: the redo changes everything else
+  const picked = briefText({ previous: { concept: '夜晚的城市', language: 'silkscreen', font: 'Noto Sans TC' }, chosen: 'silkscreen', candidates: [], hasRefs: false });
+  assert.ok(picked.includes('這是重做') && picked.includes(CHOSEN) && !picked.includes('設計語言也考慮換'));
+  // a blank note is a redo too; a real note is the adjustment
+  assert.ok(briefText({ previous: { concept: 'c', language: 'l', font: 'f' }, note: '  ', candidates: [], hasRefs: false }).includes('這是重做'));
+  assert.ok(briefText({ previous: { concept: 'c', language: 'l', font: 'f' }, note: '亮一點', candidates: [], hasRefs: false }).includes(ADJUST));
+});
+
+test('designBriefText: a redo asks for a different font and colour; an adjustment keeps them', () => {
+  const prev = { concept: 'c', language: 'silkscreen', font: 'Noto Sans TC' };
+  const redo = designBriefText({ previous: prev, hasRefs: false });
+  assert.ok(redo.includes('這是重做') && redo.includes('Noto Sans TC') && redo.includes('明顯不同'));
+  for (const r of [ADJUST, '保留']) assert.ok(!redo.includes(r), r);
+  const adjust = designBriefText({ previous: prev, note: '亮一點', hasRefs: false });
+  assert.ok(adjust.includes(ADJUST) && adjust.includes('保留上一版的') && !adjust.includes('這是重做'));
+});
+
 test('designBriefText is empty with no inputs and carries the reading, previous font and refs', () => {
   assert.equal(designBriefText({ hasRefs: false }), '');
   const t = designBriefText({ style: '夏天', briefReading: '你寫的『夏天』我理解成：強光', previous: { concept: 'c', language: 'silkscreen', font: 'Noto Sans TC' }, hasRefs: true });

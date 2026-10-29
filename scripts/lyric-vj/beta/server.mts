@@ -128,7 +128,11 @@ export const saveBody = (req: IncomingMessage, file: string, max: number) =>
     const drop = (why: string) => { req.destroy(); out.once('close', () => rmSync(file, { force: true })); out.destroy(); fail(new Error(why)); };
     req.on('data', (c: Buffer) => { n += c.length; if (n > max) drop('音檔太大（上限 80 MB）'); });
     req.pipe(out);
-    out.on('finish', () => (n ? ok() : fail(new Error('沒有收到音檔'))));
+    out.on('finish', () => {
+      if (n) return ok();
+      out.once('close', () => rmSync(file, { force: true }));
+      fail(new Error('沒有收到音檔'));
+    });
     out.on('error', fail);
     // 'close' also follows a complete body (then the write stream finishes by itself): only an incomplete one is a cut
     req.on('close', () => { if (!req.complete) drop('上傳中斷'); });

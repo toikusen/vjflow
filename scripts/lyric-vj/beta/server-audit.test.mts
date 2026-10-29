@@ -134,6 +134,19 @@ test('saveBody: a cut before the file is even open leaves no file behind', async
   assert.ok(!existsSync(file), 'the open that completed after the cut created the file again');
 });
 
+test('saveBody: an empty body is refused and leaves no file behind', async () => {
+  const { saveBody } = await import('./server.mts');
+  const { PassThrough } = await import('node:stream');
+  const dir = mkdtempSync(join(tmpdir(), 'savebody-'));
+  const file = join(dir, '.upload-x.mp3');
+  const req = Object.assign(new PassThrough(), { complete: true }) as unknown as import('node:http').IncomingMessage;
+  const saved = saveBody(req, file, 1000);
+  req.end();
+  await assert.rejects(saved, /沒有收到音檔/);
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.ok(!existsSync(file));
+});
+
 // ---- NEW (review): two uploads at once for one song ----
 
 test('audio: of two overlapping uploads one is taken and one refused; the taken file is whole and alone', async () => {

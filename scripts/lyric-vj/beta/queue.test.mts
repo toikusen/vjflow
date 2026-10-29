@@ -58,7 +58,8 @@ const ran = async (script: string) => {
 };
 
 test('a cost past the fuse printed right before exit 0 ends the job failed, fused and charged nothing', async () => {
-  const r = await ran("echo '##COST 13 x'; exit 0");
+  // SIGTERM is ignored, so close() sees exit code 0 whatever the fuse's kill did: the exit-0 path, never the killed one
+  const r = await ran("trap '' TERM; echo '##COST 13 x'; exit 0");
   assert.deepEqual([r.job.status, r.job.fused, r.job.error, r.charged], ['failed', true, '成本超過上限，已通知管理者', 0]);
   assert.ok(r.events.indexOf('job.fused') < r.events.indexOf('job.ended'));
 });
@@ -68,7 +69,7 @@ test('the last line without a newline goes through the fuse too', async () => {
   assert.deepEqual([r.job.status, r.job.fused, r.job.costUsd, r.charged], ['failed', true, 13, 0]);
 });
 
-test('a cost under the fuse with exit 0 is still a done job at its price', async () => {
+test('guard (passes before the fix too): a cost under the fuse with exit 0 is still a done job at its price', async () => {
   const r = await ran("echo '##COST 4 x'; exit 0");
   assert.deepEqual([r.job.status, r.job.fused, r.charged], ['done', undefined, 2.5]);
 });

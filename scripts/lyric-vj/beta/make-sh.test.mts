@@ -73,7 +73,7 @@ test('make.sh: a video file left by an unfinished render is rendered again, not 
   assert.equal(readFileSync(join(t.run, 'video.mp4'), 'utf8'), 'fresh\n');
 });
 
-test('make.sh: a finished render (metrics.json beside the video) is resumed, not rendered again', () => {
+test('make.sh guard (passes before the fix too): a finished render (metrics.json beside the video) is resumed, not rendered again', () => {
   const t = tree();
   writeFileSync(join(t.run, 'noimg/video/lyric-vj_vocal_0-10s.mp4'), 'made\n');
   writeFileSync(join(t.run, 'noimg/video/metrics.json'), '{}');

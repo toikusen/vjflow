@@ -10,8 +10,11 @@ import { test } from 'node:test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/** A song with one none-tier run whose director and type plan are done; the fake render leaves a fresh mp4 and metrics.json. */
-function tree() {
+/**
+ * A song with one run whose director and type plan are done; the fake render leaves a fresh mp4 and metrics.json.
+ * `concept` adds what concept.sh leaves in an accepted run: brief.txt and reference images.
+ */
+function tree(o: { tier?: 'none' | 'hybrid'; concept?: { brief?: string; refs?: string[] } } = {}) {
   const t = mkdtempSync(join(tmpdir(), 'makesh-'));
   mkdirSync(join(t, 'repo/scripts/lyric-vj/beta'), { recursive: true });
   cpSync(join(here, 'make.sh'), join(t, 'repo/scripts/lyric-vj/beta/make.sh'));
@@ -32,11 +35,34 @@ function tree() {
   writeFileSync(join(run, 'song.json'), JSON.stringify({ duration: 10, cues: [] }));
   writeFileSync(join(run, 'base/treatment.json'), '{}');
   writeFileSync(join(run, 'noimg/treatment.json'), '{}');
+  if (o.concept?.brief !== undefined) writeFileSync(join(run, 'brief.txt'), o.concept.brief);
+  if (o.concept?.refs?.length) mkdirSync(join(run, 'refs'));
+  for (const r of o.concept?.refs ?? []) writeFileSync(join(run, 'refs', r), 'jpg');
   const log = join(t, 'npx.log');
-  const make = () => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/make.sh'), song, 'none', run], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log } });
+  const make = () => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/make.sh'), song, o.tier ?? 'none', run], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log } });
   const calls = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
-  return { run, make, calls };
+  const call = (step: string) => calls().split('\n').find((l) => l.includes(step)) ?? '';
+  return { run, make, calls, call };
 }
+
+test('make.sh hybrid: the accepted concept text and first reference image reach keyframes; cutout draws from that board', () => {
+  const t = tree({ tier: 'hybrid', concept: { brief: '水彩的夏天夜市\n', refs: ['ref-2.png', 'ref-1.jpg'] } });
+  const r = t.make();
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const kf = t.call('keyframes.mts');
+  assert.match(kf, /--sheets-only --from 0 --to 10\.00 --out \S+\/kf --style=水彩的夏天夜市 --style-ref \S+\/runs\/m1\/refs\/ref-1\.jpg$/);
+  assert.match(t.call('cutout.mts'), /--keyframes \S+\/runs\/m1\/kf --treatment \S+\/base\/treatment\.json/);
+});
+
+test('make.sh hybrid: a blank brief and no refs add nothing to keyframes', () => {
+  const t = tree({ tier: 'hybrid', concept: { brief: ' \n' } });
+  const r = t.make();
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.doesNotMatch(t.call('keyframes.mts'), /--style/);
+  const bare = tree({ tier: 'hybrid' });
+  assert.equal(bare.make().status, 0);
+  assert.doesNotMatch(bare.call('keyframes.mts'), /--style/);
+});
 
 test('make.sh: a video file left by an unfinished render is rendered again, not handed over', () => {
   const t = tree();

@@ -1,7 +1,7 @@
 // npx tsx scripts/lyric-vj/keyframes.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Board, drawnBox, frameCount, frameTimes, badLook, longHolds, sidePaper, withoutBlankNotes } from './keyframes.mts';
+import { Board, drawnBox, frameCount, frameTimes, badLook, imageMime, longHolds, sidePaper, withoutBlankNotes } from './keyframes.mts';
 
 test('each frame holds from its line until the next frame; the first opens the passage; frames off it are dropped', () => {
   const cues = [{ id: 'c1', start: 36.1, end: 39, text: '' }, { id: 'c2', start: 44, end: 47, text: '' }, { id: 'c9', start: 90, end: 92, text: '' }];
@@ -46,4 +46,8 @@ test('a frame is redrawn when it is panels, or shows people where the board has 
   assert.equal(badLook({ panels: false, people: 1 }, []), true);
   assert.equal(badLook({ panels: false, people: 2 }, ['he']), false);
   assert.equal(badLook({ panels: false, people: 0 }, []), false);
+});
+
+test('imageMime: a png or webp style ref is labelled as such, anything else as jpeg', () => {
+  assert.deepEqual(['ref-1.PNG', 'r.webp', 'r.jpg', 'r.jpeg', 'r'].map(imageMime), ['image/png', 'image/webp', 'image/jpeg', 'image/jpeg', 'image/jpeg']);
 });

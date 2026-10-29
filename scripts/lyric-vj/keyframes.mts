@@ -11,7 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { extname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { persistQuiet, sectionArcRule, unsungFrameRule } from './interludes.mts';
 import { lessonsText } from './lessons.mts';
@@ -38,6 +38,8 @@ export function longHolds(times: { start: number; end: number }[], max = 12): [n
 }
 
 /** How many frames a passage takes: one per 7.5 s, 5 to 32. */
+/** The media type of a reference image by its extension: the person's refs (make.sh --style-ref) are jpg, png or webp. */
+export const imageMime = (f: string) => ({ '.png': 'image/png', '.webp': 'image/webp' } as Record<string, string>)[extname(f).toLowerCase()] ?? 'image/jpeg';
 export const frameCount = (seconds: number) => Math.max(5, Math.min(32, Math.round(seconds / 7.5)));
 
 /** A frame's description without the writer's own notes on blank areas (it drew a white haze where it asked for one). */
@@ -202,7 +204,7 @@ ${keepPeople ? `- people：人物已經定好，照抄這些 id 和外觀，不�
   board.frames.forEach((f, i) => console.log(`  ${i + 1}. ${f.cue} [${f.who.join(',')}] ${f.feeling}｜${f.change}`));
 
   const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });
-  const img = (f: string) => ({ type: 'image', mime_type: 'image/jpeg', data: readFileSync(f).toString('base64') });
+  const img = (f: string) => ({ type: 'image', mime_type: imageMime(f), data: readFileSync(f).toString('base64') });
   const draw = async (file: string, text: string, refs: string[], ratio = '16:9') => {
     if (existsSync(file)) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

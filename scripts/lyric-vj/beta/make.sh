@@ -48,7 +48,13 @@ case $tier in
     echo '##PHASE 編排文字動態'
     plan "$w/noimg"
     echo '##PHASE 寫故事、畫角色'
-    [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$w/noimg" --sheets-only --from 0 --to "$end" --out "$w/kf" > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
+    # the accepted concept's words (brief.txt, written by concept.sh) and its first reference image reach the story
+    # the way the director got them: keyframes keeps them as the board's userStyle, which cutout then draws in
+    kf=() # expanded as ${kf[@]+...}: an empty array is unbound under set -u in bash 3.2
+    [ -f "$w/brief.txt" ] && [ -n "$(tr -d '[:space:]' < "$w/brief.txt")" ] && kf+=(--style="$(cat "$w/brief.txt")")
+    ref=; for f in "$w"/refs/*; do [ -f "$f" ] && { ref=$f; break; }; done
+    [ -n "$ref" ] && kf+=(--style-ref "$ref")
+    [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$w/noimg" --sheets-only --from 0 --to "$end" --out "$w/kf" ${kf[@]+"${kf[@]}"} > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
     echo '##PHASE 畫故事畫面'
     [ -f "$w/cut/treatment.json" ] || { npx tsx scripts/lyric-vj/cutout.mts --song "$S" --keyframes "$w/kf" --treatment "$w/base/treatment.json" --from 0 --to "$end" --out "$w/cut" > "$w/cut.log" 2>&1; cost_log "$w/cut.log" cutout; }
     tr=$w/cut ;;

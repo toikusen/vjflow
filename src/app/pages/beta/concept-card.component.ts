@@ -1,5 +1,5 @@
 import { afterRenderEffect, Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
-import { BetaJob, BetaSong, CONCEPT_PRICE, JOB_STEPS, TIER_INFO } from './beta';
+import { BetaJob, BetaSong, CONCEPT_PRICE, stepsMin, TIER_INFO } from './beta';
 import { acceptBlock, adjustBlock, conceptHead, interludeLines, MAX_NOTE, redoBlock, stillLabel } from './concept';
 import { feelingLength } from './make';
 import { Ask } from './ui/confirm';
@@ -7,7 +7,6 @@ import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
 
 type Decision = 'accept' | 'adjust' | 'redo';
-const stepsMin = (k: keyof typeof JOB_STEPS) => Math.round(JOB_STEPS[k].reduce((s, x) => s + x.min, 0));
 
 /**
  * 概念卡 (2a): the director's concept for one version, waiting for the person. 接受 starts the make at the tier's rest

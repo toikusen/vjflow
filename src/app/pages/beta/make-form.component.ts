@@ -1,5 +1,5 @@
 import { Component, computed, effect, ElementRef, inject, input, model, output, signal } from '@angular/core';
-import { BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, JOB_STEPS, TIER_INFO } from './beta';
+import { BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, stepsMin, TIER_INFO } from './beta';
 import { defaultTier, feelingLength, makeBlock, makeBody, MAX_FEELING, MAX_REFS, refProblem, REF_TYPES, StripGrid, stripGrid, stripTiles } from './make';
 import { Ask, bill } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
@@ -12,7 +12,7 @@ export interface BetaStyle { id: string; name: string; suits: string; image: str
 const TIERS = Object.keys(TIER_INFO) as BetaTier[];
 /** Up to this many cards (交給導演 included) the grid shows them all; past it, a scroller and the range hint. */
 const GRID_CARDS = 6;
-const CONCEPT_MIN = Math.round(JOB_STEPS.concept.reduce((s, x) => s + x.min, 0));
+const CONCEPT_MIN = stepsMin('concept');
 
 /**
  * 製作新版本 (1b-2 lower part, 2e): tier, 想要的感覺, references and style, then 產生概念 through the confirm dialog (2b).

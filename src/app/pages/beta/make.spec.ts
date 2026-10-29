@@ -6,9 +6,10 @@ const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: '
 
 describe('TIER_INFO prices', () => {
   it('carries the concept fee and the rest, adding up to the total', () => {
-    expect(TIER_INFO.none).toMatchObject({ concept: 2.5, rest: 1.5, price: 4, min: 25 });
-    expect(TIER_INFO.img).toMatchObject({ concept: 2.5, rest: 3.5, price: 6, min: 30 });
-    expect(TIER_INFO.hybrid).toMatchObject({ concept: 2.5, rest: 13.5, price: 16, min: 45 });
+    // concept 16 + make 12 / 21 / 32 min (stepsMin), the sum the two confirm dialogs state
+    expect(TIER_INFO.none).toMatchObject({ concept: 2.5, rest: 1.5, price: 4, min: 28 });
+    expect(TIER_INFO.img).toMatchObject({ concept: 2.5, rest: 3.5, price: 6, min: 37 });
+    expect(TIER_INFO.hybrid).toMatchObject({ concept: 2.5, rest: 13.5, price: 16, min: 48 });
     expect(CONCEPT_PRICE).toBe(2.5);
   });
 });

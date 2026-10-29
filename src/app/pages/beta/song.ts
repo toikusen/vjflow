@@ -6,6 +6,15 @@ import { StatusKind } from './ui/status';
 export type HeroTone = 'info' | 'bad' | 'cover';
 export const heroTone = (k: StatusKind): HeroTone => (k === 'preparing' ? 'info' : k === 'help' || k === 'prepFailed' ? 'bad' : 'cover');
 
+/**
+ * The hero's note beside 歌詞時間已確認 while concepts await a decision: a conditional, since the timing may well stay as
+ * it is (the server refuses to accept a pending concept once the timing changed). Empty when none is pending.
+ */
+export function timingNote(pending: number): string {
+  if (pending <= 0) return '';
+  return pending === 1 ? '（若再改時間，待確認的概念要重新產生）' : `（若再改時間，${pending} 個待確認的概念都要重新產生）`;
+}
+
 /** A job as a card names it: its tier, plus a tag for a fix (依回報修正) or a concept run. */
 export function jobTitle(j: BetaJob): { name: string; tag?: string } {
   const name = TIER_INFO[j.tier ?? 'none'].name;

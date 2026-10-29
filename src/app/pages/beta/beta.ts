@@ -147,15 +147,17 @@ export interface SongView {
   results: BetaJob[];
   /** The failed make, concept or fix job behind `failedFor`, for the failure card. */
   failed?: BetaJob;
-  /** The newest finished concept the person has not accepted, adjusted or redone yet. */
+  /** The newest finished concept the person has not accepted, adjusted or redone yet (the first of `concepts`). */
   concept?: BetaJob;
+  /** Every finished concept awaiting a decision, newest first: the server keeps one pending per version, each paid for. */
+  concepts: BetaJob[];
 }
 
 /** One song as the detail page shows it: its stage, the running make, concept or fix job, and the finished (or held) make and fix results, newest first. */
 export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   const mine = jobs.filter((j) => j.songId === song.id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const prep = mine.filter((j) => j.kind === 'prep').at(-1);
-  const base = { prep, retrying: false, results: [] as BetaJob[] };
+  const base = { prep, retrying: false, results: [] as BetaJob[], concepts: [] as BetaJob[] };
   if (!prep || prep.status === 'queued' || prep.status === 'running') return { ...base, stage: 'preparing' };
   if (prep.status === 'failed') return { ...base, stage: 'prepFailed' };
   if (!song.confirmedAt) return { ...base, stage: 'timing' };
@@ -164,6 +166,7 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
   // the latest make, concept or fix decides whether the song needs help; a later success clears an older failure
   const last = mine.filter((j) => j.kind !== 'prep').at(-1);
   const failed = !active && last?.status === 'failed' ? last : undefined;
+  const concepts = mine.filter((j) => j.kind === 'concept' && j.status === 'done' && !j.decision).reverse();
   return {
     ...base,
     stage: 'ready',
@@ -174,7 +177,8 @@ export function songView(song: BetaSong, jobs: BetaJob[]): SongView {
     failed,
     // a fix re-renders a result into a new video, so it is a result of its own
     results: mine.filter((j) => (j.kind === 'make' || j.kind === 'fix') && (j.status === 'done' || j.status === 'admin')).reverse(),
-    concept: mine.filter((j) => j.kind === 'concept' && j.status === 'done' && !j.decision).at(-1),
+    concept: concepts[0],
+    concepts,
   };
 }
 

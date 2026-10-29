@@ -1,5 +1,5 @@
 import { BetaJob } from './beta';
-import { clock, failureCard, heroTone, jobTitle, jobTotal, stepClocks } from './song';
+import { clock, failureCard, heroTone, jobTitle, jobTotal, stepClocks, timingNote } from './song';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'make', tier: 'hybrid', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -9,6 +9,14 @@ describe('heroTone', () => {
     expect(heroTone('help')).toBe('bad');
     expect(heroTone('prepFailed')).toBe('bad');
     for (const k of ['making', 'retrying', 'ready', 'timing', 'concept'] as const) expect(heroTone(k)).toBe('cover');
+  });
+});
+
+describe('timingNote', () => {
+  it('states the condition (若再改時間) rather than a fact, counts several pending concepts, and is empty with none', () => {
+    expect(timingNote(1)).toBe('（若再改時間，待確認的概念要重新產生）');
+    expect(timingNote(2)).toBe('（若再改時間，2 個待確認的概念都要重新產生）');
+    expect(timingNote(0)).toBe('');
   });
 });
 

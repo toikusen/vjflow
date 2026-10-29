@@ -1,5 +1,5 @@
 import { BetaJob, CONCEPT_PRICE, TIER_INFO } from './beta';
-import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, refProblem, rootOf, stripGrid, stripTiles, timingSaveWarning } from './make';
+import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, pendingConcepts, refProblem, rootOf, stripGrid, stripTiles, timingSaveWarning } from './make';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T00:00:00Z', decision: 'accepted', ...o });
 const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 20, uploading: false, submitting: false, feeling: '', ...o });
@@ -95,6 +95,22 @@ describe('timingSaveWarning', () => {
     expect(timingSaveWarning([job({ decision: 'accepted' })], 's')).toBeNull();
     expect(timingSaveWarning([job({ decision: undefined, status: 'running' })], 's')).toBeNull();
     expect(timingSaveWarning([{ ...pending, songId: 'x' }], 's')).toBeNull();
+  });
+
+  it('names every pending version when more than one concept waits (one per version is possible)', () => {
+    const none = job({ id: 'n', tier: 'none', decision: undefined, createdAt: '2026-10-28T01:00:00Z' });
+    const img = job({ id: 'i', tier: 'img', decision: undefined, createdAt: '2026-10-28T02:00:00Z' });
+    expect(timingSaveWarning([none, img], 's')?.body).toBe('這首歌有 2 個概念（插圖版、文字動態版）還在等你決定。歌詞時間儲存後，那些概念就不能再接受，要重新產生概念（每個 $2.5）才能製作。現在儲存不會扣款。');
+  });
+});
+
+describe('pendingConcepts', () => {
+  it('lists every finished, undecided concept of the song, newest first', () => {
+    const none = job({ id: 'n', tier: 'none', decision: undefined, createdAt: '2026-10-28T01:00:00Z' });
+    const img = job({ id: 'i', tier: 'img', decision: undefined, createdAt: '2026-10-28T02:00:00Z' });
+    const jobs = [none, img, job({ id: 'd', decision: 'accepted' }), job({ id: 'r', decision: undefined, status: 'running' }), { ...img, id: 'x', songId: 'x' }];
+    expect(pendingConcepts(jobs, 's').map((j) => j.id)).toEqual(['i', 'n']);
+    expect(pendingConcepts([], 's')).toEqual([]);
   });
 });
 

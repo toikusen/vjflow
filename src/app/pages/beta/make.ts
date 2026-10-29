@@ -1,5 +1,5 @@
 // Pure rules of the 製作新版本 form; the limits mirror scripts/lyric-vj/beta/server.mts and store.mts.
-import { BetaJob, BetaTier, TIER_INFO } from './beta';
+import { BetaJob, BetaTier, CONCEPT_PRICE, TIER_INFO } from './beta';
 import { formatPrice } from './ui/price';
 
 export const MAX_FEELING = 500;
@@ -50,24 +50,34 @@ export function conceptAttempts(jobs: readonly BetaJob[], songId: string, tier: 
   return [...chains.values()].filter((chain) => chain.some((j) => j.status !== 'failed')).length;
 }
 
-/** A finished concept of this song nobody has decided on yet (the newest), if any. */
-export const pendingConcept = (jobs: readonly BetaJob[], songId: string): BetaJob | undefined =>
-  jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.status === 'done' && !j.decision).sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+/**
+ * The finished concepts of this song nobody has decided on yet, newest first. The server keeps one pending per
+ * version, so a song can have up to three (a 文字動態版 and a 插圖版 concept at once, say), each paid for.
+ */
+export const pendingConcepts = (jobs: readonly BetaJob[], songId: string): BetaJob[] =>
+  jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.status === 'done' && !j.decision).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+/** The newest finished concept of this song nobody has decided on yet, if any. */
+export const pendingConcept = (jobs: readonly BetaJob[], songId: string): BetaJob | undefined => pendingConcepts(jobs, songId)[0];
 
 export interface TimingSaveWarning { title: string; body: string }
 
 /**
- * The warning before a timing save when a finished concept of the song awaits a decision: the make reuses the concept's
- * snapshot of the timing, so once the timing changes the server refuses the accept and the concept has to be produced
- * again (another attempt at the concept fee). Saving itself charges nothing. Null when no concept is pending.
+ * The warning before a timing save when finished concepts of the song await a decision: the make reuses the concept's
+ * snapshot of the timing, so once the timing changes the server refuses the accept and every pending concept has to be
+ * produced again (another attempt at the concept fee each). Saving itself charges nothing. Null when none is pending.
  */
 export function timingSaveWarning(jobs: readonly BetaJob[], songId: string): TimingSaveWarning | null {
-  const pending = pendingConcept(jobs, songId);
-  if (!pending) return null;
-  const fee = formatPrice(TIER_INFO[pending.tier ?? 'none'].concept, 'short');
+  const pending = pendingConcepts(jobs, songId);
+  if (!pending.length) return null;
+  const fee = formatPrice(CONCEPT_PRICE, 'short');
+  const names = pending.map((j) => TIER_INFO[j.tier ?? 'none'].name).join('、');
+  const which = pending.length === 1 ? `一個${names}的概念` : ` ${pending.length} 個概念（${names}）`;
+  const those = pending.length === 1 ? '那個概念' : '那些概念';
+  const each = pending.length === 1 ? `$${fee}` : `每個 $${fee}`;
   return {
     title: '儲存後，待確認的概念要重新產生',
-    body: `這首歌有一個${TIER_INFO[pending.tier ?? 'none'].name}的概念還在等你決定。歌詞時間儲存後，那個概念就不能再接受，要重新產生概念（$${fee}）才能製作。現在儲存不會扣款。`,
+    body: `這首歌有${which}還在等你決定。歌詞時間儲存後，${those}就不能再接受，要重新產生概念（${each}）才能製作。現在儲存不會扣款。`,
   };
 }
 

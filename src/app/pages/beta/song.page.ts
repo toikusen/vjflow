@@ -7,7 +7,7 @@ import { BetaPage } from './beta.page';
 import { ConceptCardComponent } from './concept-card.component';
 import { MakeFormComponent } from './make-form.component';
 import { ReportFormComponent } from './report-form.component';
-import { clock, failureCard, heroTone, jobTitle, jobTotal, stamp, stepClocks } from './song';
+import { clock, failureCard, heroTone, jobTitle, jobTotal, stamp, stepClocks, timingNote } from './song';
 import { BalanceComponent } from './ui/balance.component';
 import { PriceComponent } from './ui/price.component';
 import { StatusChip } from './ui/status';
@@ -47,6 +47,7 @@ export class BetaSongPage extends BetaPage {
   protected readonly failure = (j: BetaJob) => failureCard(j, this.jobs());
   protected readonly stamp = stamp;
   protected readonly clock = clock;
+  protected readonly timingNote = timingNote;
   protected readonly conceptPrice = CONCEPT_PRICE;
   protected readonly totals = TIERS.map((t) => TIER_INFO[t].price);
   /** The song's length from its timing (for the hero and the `1080p · m:ss` label), once the timing is confirmed. */

@@ -85,7 +85,7 @@ describe('songView', () => {
     expect(songView(song, [job({ status: 'running' })]).stage).toBe('preparing');
     expect(songView(song, [job({ status: 'failed' })]).stage).toBe('prepFailed');
     expect(songView(song, [prep]).stage).toBe('timing');
-    expect(songView(confirmed, [prep])).toEqual({ stage: 'ready', prep, retrying: false, results: [], active: undefined, failedFor: undefined });
+    expect(songView(confirmed, [prep])).toEqual({ stage: 'ready', prep, retrying: false, results: [], concepts: [], active: undefined, failedFor: undefined });
   });
   it('shows the running job, and an automatic retry', () => {
     const run = make('2', { status: 'running' });
@@ -105,6 +105,15 @@ describe('songView', () => {
     expect(songView(confirmed, [prep, c('2', { status: 'running' })]).concept).toBeUndefined();
     expect(songView(confirmed, [prep, c('2', { decision: 'adjusted' }), c('3')]).concept?.id).toBe('3');
     expect(songView(confirmed, [prep, c('2')]).results).toEqual([]);
+  });
+  it('lists every pending concept, newest first, so a paid concept of another version is not hidden behind the newest', () => {
+    const c = (id: string, o: Partial<BetaJob> = {}) => job({ id, kind: 'concept', tier: 'hybrid', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
+    const none = c('2', { tier: 'none' });
+    const img = c('3', { tier: 'img' });
+    const v = songView(confirmed, [prep, none, img, c('4', { decision: 'adjusted' }), c('5', { status: 'running' })]);
+    expect(v.concepts).toEqual([img, none]);
+    expect(v.concept).toBe(img);
+    expect(songView(confirmed, [prep]).concepts).toEqual([]);
   });
   it('keeps a pending concept (with its summary and concerns) beside older results, on the 3rd attempt too', () => {
     const c = (id: string, o: Partial<BetaJob> = {}) => job({ id, kind: 'concept', tier: 'hybrid', createdAt: `2026-10-27T0${id}:00:00Z`, ...o });
@@ -161,7 +170,7 @@ describe('songView with concept and fix jobs', () => {
 });
 
 describe('songKind, nextStep and the list filters', () => {
-  const base: SongView = { stage: 'ready', retrying: false, results: [] };
+  const base: SongView = { stage: 'ready', retrying: false, results: [], concepts: [] };
   const active = job({ kind: 'make', tier: 'img', status: 'running' });
   const concept = job({ id: 'c', kind: 'concept', tier: 'hybrid', status: 'done' });
   const result = job({ id: 'r', kind: 'make', tier: 'none', status: 'done' });
@@ -237,7 +246,7 @@ describe('pageFor', () => {
 });
 
 describe('songChip', () => {
-  const base: SongView = { stage: 'ready', retrying: false, results: [] };
+  const base: SongView = { stage: 'ready', retrying: false, results: [], concepts: [] };
   const active = job({ kind: 'make', tier: 'img', status: 'running' });
   const concept = job({ id: 'c', kind: 'concept', tier: 'hybrid', status: 'done' });
   it('names each stage with its icon and tone', () => {

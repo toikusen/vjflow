@@ -1,7 +1,7 @@
 @let h = head();
-<section class="concept" aria-labelledby="concept-h">
+<section class="concept" [attr.aria-labelledby]="'concept-h-' + job().id">
   <header class="c-head">
-    <h2 id="concept-h">{{ h.title }}</h2>
+    <h2 [id]="'concept-h-' + job().id">{{ h.title }}</h2>
     <span class="attempt">第 {{ h.attempt }} 次 · 最多 3 次</span>
     <p class="fee">概念費 <app-price [amount]="job().priceUsd ?? conceptPrice" digits="short" [plain]="true" /> 已扣 · 接受後再扣製作 <app-price [amount]="h.rest" digits="short" [plain]="true" /></p>
   </header>

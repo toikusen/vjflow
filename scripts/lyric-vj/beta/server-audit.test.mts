@@ -1,7 +1,7 @@
 // npx tsx --test scripts/lyric-vj/beta/server-audit.test.mts
 // The 2026-10-29 audit's server fixes, each against a real server on an ephemeral port.
 import assert from 'node:assert/strict';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { connect } from 'node:net';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -121,12 +121,48 @@ test('audio: an upload cut mid-body leaves no upload file, and the server keeps 
   assert.equal((await t.tester('/beta/me')).status, 200);
 });
 
+test('saveBody: a cut before the file is even open leaves no file behind', async () => {
+  const { saveBody } = await import('./server.mts');
+  const { PassThrough } = await import('node:stream');
+  const dir = mkdtempSync(join(tmpdir(), 'savebody-'));
+  const file = join(dir, 'upload.mp3');
+  const req = Object.assign(new PassThrough(), { complete: false }) as unknown as import('node:http').IncomingMessage;
+  const saved = saveBody(req, file, 1000);
+  req.destroy(); // 'close' follows on the next tick, before the write stream's open has completed
+  await assert.rejects(saved, /上傳中斷/);
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.ok(!existsSync(file), 'the open that completed after the cut created the file again');
+});
+
+// ---- NEW (review): two uploads at once for one song ----
+
+test('audio: of two overlapping uploads one is taken and one refused; the taken file is whole and alone', async () => {
+  const t = await setup();
+  const head = (type: string, len: number) => `PUT /beta/songs/s1/audio HTTP/1.1\r\nhost: x\r\ncookie: vjb=${t.testerToken}\r\ncontent-type: ${type}\r\ncontent-length: ${len}\r\nconnection: close\r\n\r\n`;
+  const a = rawRequest(t.port, head('audio/mpeg', 6));
+  const b = rawRequest(t.port, head('audio/wav', 6));
+  a.sock.write('aaa'); b.sock.write('bbb');
+  await new Promise((ok) => setTimeout(ok, 200)); // both passed the checks and are writing
+  a.sock.write('aaa');
+  await new Promise((ok) => setTimeout(ok, 200));
+  b.sock.write('bbb');
+  await new Promise((ok) => setTimeout(ok, 200));
+  const [ra, rb] = await Promise.all([a.reply(), b.reply()]);
+  assert.match(ra, /^HTTP\/1\.1 202/);
+  assert.match(rb, /^HTTP\/1\.1 409/);
+  assert.match(rb, /已經上傳過音檔/);
+  assert.deepEqual(readdirSync(t.dir).filter((f) => /upload/.test(f)), ['upload.mp3']);
+  assert.equal(readFileSync(join(t.dir, 'upload.mp3'), 'utf8'), 'aaaaaa');
+  assert.equal(t.beta.db.jobs.filter((j) => j.kind === 'prep').length, 1);
+});
+
 // ---- FB-B5: a new upload after a failed prep replaces what the old one left ----
 
 test('audio: after a failed prep a new upload removes the old upload, mix, stems and song.json', async () => {
   const t = await setup();
   t.beta.db.jobs.push({ id: 'p0', userId: t.beta.db.songs[0].userId, songId: 's1', kind: 'prep', status: 'failed', reservedUsd: 0.5, priceUsd: 0.5, createdAt: '2026-10-28T00:00:00Z' });
-  for (const f of ['upload.aac', 'vocals.wav', 'vocals_kim.wav', 'song.orig.json', 'proofread.log']) writeFileSync(join(t.dir, f), 'old');
+  // the stems, the alignment caches song.mts resumes from (asr/force per stem, mms_alt) and the timing
+  for (const f of ['upload.aac', 'vocals.wav', 'vocals_kim.wav', 'asr.json', 'asr_alt.json', 'force.json', 'force_alt.json', 'force_main.json', 'force_main_alt.json', 'mms_alt.json', 'stage_main.json', 'song.orig.json', 'proofread.log']) writeFileSync(join(t.dir, f), 'old');
   const r = await t.tester('/beta/songs/s1/audio', { method: 'PUT', body: Buffer.from('new mp3'), headers: { 'content-type': 'audio/mpeg' } });
   assert.equal(r.status, 202);
   assert.deepEqual(readdirSync(t.dir).filter((f) => f !== 'events.jsonl').sort(), ['upload.mp3']);

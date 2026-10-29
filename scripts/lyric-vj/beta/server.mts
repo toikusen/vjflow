@@ -1,7 +1,7 @@
 // The closed beta's backend: invited people log in with their link, see their own songs and jobs, and queue work
 // within their limit; the admin invites people, sets limits and retries failed jobs.
 // npx tsx scripts/lyric-vj/beta/server.mts   (listens on 127.0.0.1:4320; the tunnel points at it)
-import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,8 +35,8 @@ const IMAGE: Record<string, { ext: string; magic: (b: Buffer) => boolean }> = {
 };
 /** Reference names are the server's own; nothing else under a song's refs/ is ever served. */
 const REF_NAME = /^ref-(\d+)\.(jpg|png|webp)$/;
-/** What prep.sh derives from an upload (each step resumes from these when they exist). */
-const PREP_MADE = /^(mix\.mp3|vocals.*\.wav|song\.json|song\.orig\.json|proofread\.log)$/;
+/** What prep.sh and song.mts derive from an upload (each step resumes from these when they exist: the mix, the stems, the alignment caches, the timing). */
+const PREP_MADE = /^(mix\.mp3|vocals.*\.wav|asr.*\.json|force.*\.json|mms_alt\.json|stage_.*\.json|song\.json|song\.orig\.json|proofread\.log)$/;
 /** A money amount from a request body: a finite number of dollars, zero or more; anything else is undefined. */
 const usd = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
 const TIERS_OF_STYLE: StyleTier[] = ['proven', 'candidate', 'unlisted'];
@@ -119,11 +119,13 @@ const songRefs = (dir: string) => {
  * mid-body rejects it the same way: the pipe would never end the file, leaving the promise, the descriptor and half
  * a file behind.
  */
-const saveBody = (req: IncomingMessage, file: string, max: number) =>
+export const saveBody = (req: IncomingMessage, file: string, max: number) =>
   new Promise<void>((ok, fail) => {
     let n = 0;
     const out = createWriteStream(file);
-    const drop = (why: string) => { req.destroy(); out.destroy(); rmSync(file, { force: true }); fail(new Error(why)); };
+    // the file goes once the stream has closed: a cut before its open completed would otherwise leave the file the
+    // open then creates
+    const drop = (why: string) => { req.destroy(); out.once('close', () => rmSync(file, { force: true })); out.destroy(); fail(new Error(why)); };
     req.on('data', (c: Buffer) => { n += c.length; if (n > max) drop('音檔太大（上限 80 MB）'); });
     req.pipe(out);
     out.on('finish', () => (n ? ok() : fail(new Error('沒有收到音檔'))));
@@ -383,11 +385,17 @@ export function createBetaServer(o: BetaOptions) {
         if (sm[2] === 'audio' && req.method === 'PUT') {
           const ext = AUDIO[(req.headers['content-type'] ?? '').split(';')[0].trim()];
           if (!ext) return json(res, 415, { error: '請上傳 mp3、wav、flac、m4a 或 aac' });
-          if (db.jobs.some((j) => j.songId === song.id && j.kind === 'prep' && j.status !== 'failed')) return json(res, 409, { error: '這首歌已經上傳過音檔' });
-          await saveBody(req, join(dir, `upload${ext}`), MAX_AUDIO);
-          // what a failed prep left of the old audio goes, or prep.sh would resume from it (its mix.mp3, the first
-          // upload.* by name) and never read the new file
-          for (const f of readdirSync(dir)) if ((f.startsWith('upload.') && f !== `upload${ext}`) || PREP_MADE.test(f)) rmSync(join(dir, f), { force: true });
+          const taken = () => db.jobs.some((j) => j.songId === song.id && j.kind === 'prep' && j.status !== 'failed');
+          if (taken()) return json(res, 409, { error: '這首歌已經上傳過音檔' });
+          // each upload arrives in a file of its own: two at once for one song must not write into, or delete, each
+          // other's; the first body to complete takes the song, the other is refused once its body is in
+          const tmp = join(dir, `.upload-${newId()}${ext}`);
+          await saveBody(req, tmp, MAX_AUDIO);
+          if (taken()) { rmSync(tmp, { force: true }); return json(res, 409, { error: '這首歌已經上傳過音檔' }); }
+          // what a failed prep left of the old audio goes, or prep.sh and song.mts would resume from it (its mix.mp3,
+          // the first upload.* by name, the alignment caches) and never read the new file
+          for (const f of readdirSync(dir)) if (f.startsWith('upload.') || PREP_MADE.test(f)) rmSync(join(dir, f), { force: true });
+          renameSync(tmp, join(dir, `upload${ext}`));
           song.confirmedAt = undefined; // a timing confirmed on the old audio, if the failed prep got that far
           logEvent(o.root, song.id, { type: 'audio.uploaded', by: user.id });
           const r = enqueue(user, song.id, 'prep');

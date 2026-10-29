@@ -106,14 +106,14 @@ export function jobState(jobs: BetaJob[], j: AdminJob, now = Date.now()): JobSta
     return { chip: { icon: '●', label: '製作中', tone: 'making' }, detail: `${j.phase ?? p.label} ${p.pct}%` };
   }
   if (j.status === 'queued') return { chip: { icon: '◷', label: '排隊', tone: 'muted' }, detail: j.auto ? '自動重試' : '' };
-  if (j.status === 'admin') return { chip: { icon: '?', label: '等確認', tone: 'warn' }, detail: '等管理者放行' };
+  if (j.status === 'admin') return { chip: { icon: '?', label: '等確認', tone: 'warn' }, detail: j.phase ?? '等管理者放行' };
   if (j.status === 'failed') {
     const again = retriedBy(jobs, j);
     const why = again ? `已重跑 → ${again}` : j.auto ? '重試失敗' : j.fused ? '保險絲' : '失敗';
     return { chip: { icon: '!', label: '失敗', tone: 'bad' }, detail: (j.priceUsd ?? 0) > 0 && !again ? `${why} · 已退款` : why };
   }
   if (j.kind === 'concept' && !j.decision) return { chip: { icon: '?', label: '等確認', tone: 'warn' }, detail: `第 ${conceptAttempt(jobs, j)} 次` };
-  const note = j.kind === 'concept' ? { accepted: '已接受', adjusted: '要求調整', redone: '換了方向' }[j.decision!] : '';
+  const note = j.kind === 'concept' ? { accepted: '已接受', adjusted: '要求調整', redone: '換了方向' }[j.decision!] : (j.autoReleased ?? '');
   return { chip: { icon: '✓', label: '完成', tone: 'ok' }, detail: note ?? '' };
 }
 

@@ -3,6 +3,7 @@
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
 import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
+import { coverOf, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
 import { burstBox, drawGlassCrack, drawKit, glassOf, glassPieces, KIT_KINDS, kitPattern, KitLayer, KitPattern, PHONE_MX, PHONE_MY, phoneBox } from './kit';
@@ -334,43 +335,7 @@ const reported = new Set<string>();
 /** Reports a code layer's failure or slowness once per message (the render's console, read by codelayer.mts). */
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
 
-// lyric cover: a sprite's opaque cells (24 × 24, measured once per picture) drawn inside the lyric box
-const COVER_GRID = 24;
-const masks = new Map<CanvasImageSource, Uint8Array>();
-function maskOf(img: CanvasImageSource & { width: number; height: number }) {
-  let m = masks.get(img);
-  if (m) return m;
-  m = new Uint8Array(COVER_GRID * COVER_GRID);
-  try {
-    const c = new OffscreenCanvas(COVER_GRID, COVER_GRID);
-    const x = c.getContext('2d')!;
-    x.drawImage(img, 0, 0, COVER_GRID, COVER_GRID);
-    const d = x.getImageData(0, 0, COVER_GRID, COVER_GRID).data;
-    for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 128 ? 1 : 0;
-  } catch {
-    m.fill(1);
-  }
-  masks.set(img, m);
-  return m;
-}
-/** Shares of the lyric box hidden by one sprite draw, and of the sprite inside the box (dest box in its transform). */
-export function coverOf(img: CanvasImageSource & { width: number; height: number }, m: DOMMatrix, dx: number, dy: number, dw: number, dh: number, r: Rect) {
-  const mask = maskOf(img);
-  const cell = (Math.abs(m.a * m.d - m.b * m.c) * dw * dh) / (COVER_GRID * COVER_GRID);
-  let hidden = 0;
-  let solid = 0;
-  for (let j = 0; j < COVER_GRID; j++)
-    for (let i = 0; i < COVER_GRID; i++) {
-      if (!mask[j * COVER_GRID + i]) continue;
-      solid += cell;
-      const lx = dx + ((i + 0.5) / COVER_GRID) * dw;
-      const ly = dy + ((j + 0.5) / COVER_GRID) * dh;
-      const x = m.a * lx + m.c * ly + m.e;
-      const y = m.b * lx + m.d * ly + m.f;
-      if (x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1) hidden += cell;
-    }
-  return [hidden / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0)), hidden / Math.max(1, solid)] as const;
-}
+// lyric cover: measured in cover.ts (shared with the kinetic cuts' characters)
 const covered = new Set<string>();
 // which sprite a picture is: kept across frames (a drawing caches what f.img returned)
 const ids = new Map<CanvasImageSource, string>();
@@ -427,12 +392,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     const id = ids.get(pic);
     if (!lyric || !base || !id) return;
     const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, lyric);
-    const key = `${id}@${cam.index}`;
-    // a big sprite across the lyric, or a small one sitting on its words
-    if ((share > 0.08 || (inside > 0.5 && share > 0.015)) && !covered.has(key)) {
-      covered.add(key);
-      console.error(`code layer: lyric covered: ${id} hides ${Math.round(share * 100)}% of the lyric box (${Math.round(inside * 100)}% of it inside) at ${t.toFixed(1)} s (shot ${cam.index})`);
-    }
+    watchCover(`${id}@${cam.index}`, id, share, inside, t, `shot ${cam.index}`);
   };
   // every drawImage while the drawing runs: a sprite copied onto the drawing's own canvas (tinted, made solid) passes
   // its name to that canvas when the canvas is about the sprite's size; a sprite drawn on the frame is measured
@@ -3096,7 +3056,8 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
     const taken = placed.filter((p) => only(p.i));
     order.forEach((i) => {
       const l = layers[i];
-      if (l.kind === 'code') {
+      // the lyric box reaches the layers that watch their pictures against it (drawCode's sprites, a kinetic cut's character)
+      if (l.kind === 'code' || l.kind === 'kinetic') {
         out[i] = { ...l, lyric: lyrics };
         return;
       }

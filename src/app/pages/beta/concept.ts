@@ -23,10 +23,10 @@ export function conceptHead(c: BetaJob, jobs: readonly BetaJob[]): ConceptHead {
   };
 }
 
-/** 「示意 n」, plus the still's time when its name is render.mts's `still_<seconds>.png`. */
-export function stillLabel(name: string, i: number): string {
+/** 「示意 n」, plus the still's time when its name is render.mts's `still_<seconds>.png`, plus what the plan says it shows. */
+export function stillLabel(name: string, i: number, note = ''): string {
   const t = /^still_(\d+(?:\.\d+)?)\.(png|jpe?g)$/.exec(name);
-  return t ? `示意 ${i + 1} · ${clock(Number(t[1]))}` : `示意 ${i + 1}`;
+  return `${t ? `示意 ${i + 1} · ${clock(Number(t[1]))}` : `示意 ${i + 1}`}${note.trim() ? ` · ${note.trim()}` : ''}`;
 }
 
 /**
@@ -56,10 +56,10 @@ export function acceptBlock(s: Common & { concerns: boolean; confirmed: boolean;
   return common(s, s.rest);
 }
 
-/** Why 依意見調整 is off (its button's text), or null. */
-export function adjustBlock(s: Common & { note: string }): string | null {
+/** Why 依意見調整 is off (its button's text), or null. A switch of style (`restyle`) is enough without a note. */
+export function adjustBlock(s: Common & { note: string; restyle?: boolean }): string | null {
   const n = feelingLength(s.note.trim());
-  if (!n) return '填一句意見後才能送出';
+  if (!n && !s.restyle) return '填一句意見或換一個風格後才能送出';
   if (n > MAX_NOTE) return '意見最多 500 字';
   return common(s, CONCEPT_PRICE);
 }

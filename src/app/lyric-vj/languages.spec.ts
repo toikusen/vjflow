@@ -7,6 +7,11 @@ describe('design languages', () => {
   it('offers the director only the user-approved ones (cel80s on sweet timer came out unusable)', () => {
     expect([...PROVEN_LANGUAGES].sort()).toEqual(['dossier', 'pictogram', 'risograph', 'silkscreen', 'spy-titles']);
   });
+  it('shelves the looks judged unfit or duplicate on 2026-10-29; a shelved language is never proven', () => {
+    const shelved = Object.entries(LANGUAGES).filter(([, l]) => l.shelved).map(([id]) => id).sort();
+    expect(shelved).toEqual(['aizome', 'art-deco', 'cel80s', 'citypop', 'claymation', 'cyanotype', 'dark-glitch', 'hologram', 'ink-wash', 'neon-stage', 'stained-glass', 'watercolor']);
+    expect(shelved.filter((id) => PROVEN_LANGUAGES.includes(id as never))).toEqual([]);
+  });
   it('use only catalog fonts and real templates, and each says how to draw it', () => {
     const fonts = new Set(FONTS.map((f) => f.family));
     for (const [id, l] of Object.entries(LANGUAGES)) {

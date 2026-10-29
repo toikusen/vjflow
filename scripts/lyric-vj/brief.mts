@@ -8,7 +8,11 @@ import { LANGUAGES, type LanguageId, PROVEN_LANGUAGES } from '../../src/app/lyri
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 
-export interface Previous { concept: string; language: string; font: string }
+/** The previous concept as the next one is told about it; `story` (scenes, shot order, moments) is quoted on a restyle. */
+export interface Previous { concept: string; language: string; font: string; story?: string }
+
+/** A switch of design language on an adjustment: the person picked a language other than the previous version's. */
+const restyled = (o: { previous?: Previous; chosen?: string }) => !!(o.previous?.language.trim() && o.chosen && o.chosen !== o.previous.language.trim());
 export interface Ref { media_type: string; data: string; name?: string }
 
 const MEDIA: Record<string, string> = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
@@ -70,6 +74,28 @@ export function withRefs(text: string, refs: Ref[]) {
   ];
 }
 
+/** The frames of the song a proven language was accepted on (languages.ts kit), or undefined when the language has none. */
+export function loadKit(language: string, kit: { song: string; craft: string } | undefined, dir = 'scripts/lyric-vj/references/kits'): (Ref & { song: string; craft: string }) | undefined {
+  const file = join(dir, `${language}.jpg`);
+  if (!kit || !existsSync(file)) return undefined;
+  return { name: `${language}.jpg`, media_type: 'image/jpeg', data: readFileSync(file).toString('base64'), song: kit.song, craft: kit.craft };
+}
+
+/**
+ * The design message with the language's quality bar after it: a labelled block (so it never reads as the person's
+ * reference image, which comes first and whose rules differ) and the frames of the accepted song. The bar lends only
+ * material, printing technique and finish; the song's own subject, composition, signature and horizon stay its own.
+ */
+export function withKit(content: ReturnType<typeof withRefs>, kit: ReturnType<typeof loadKit>) {
+  if (!kit) return content;
+  const blocks = typeof content === 'string' ? [{ type: 'text' as const, text: content }] : content;
+  return [
+    ...blocks,
+    { type: 'text' as const, text: `【質感基準】下面這張是同一個設計語言、使用者驗收通過的作品（${kit.song}）的畫面。只借它的材質、印刷技法、字的處理和完成度（${kit.craft}）；這首歌的主題、構圖、簽名物件、地平線、色彩都要是自己的，不要照抄畫面，也不要畫出圖裡的東西。` },
+    { type: 'image' as const, source: { type: 'base64' as const, media_type: kit.media_type, data: kit.data } },
+  ];
+}
+
 const ids = (list: string | undefined) => [...new Set((list ?? '').split(',').map((x) => x.trim()))].filter((k): k is LanguageId => k in LANGUAGES);
 
 /**
@@ -82,6 +108,30 @@ export function languageOffer(o: { picked?: string; proven?: string; candidates?
   const proven = o.proven === undefined ? PROVEN_LANGUAGES : ids(o.proven);
   const candidates = picked ? [] : ids(o.candidates).filter((k) => !proven.includes(k));
   return { picked, candidates, allowed: picked ? [picked] : [...proven, ...candidates] };
+}
+
+type StorySource = { assets?: { id: string; prompt?: string }[]; shots?: { start: number; end: number; asset?: string }[]; moments?: { kind: string; at: number }[]; arc?: { start: number; level: number | string }[] };
+
+/**
+ * The previous treatment's story in a few lines, for a restyle: each picture's subject (prompt cut to 120 characters),
+ * the picture order over time (back-to-back shots of one picture merged), the moments and the arc. '' when it has none.
+ */
+export function previousStory(t: StorySource): string {
+  const cut = (x: string) => (x.length > 120 ? `${x.slice(0, 120)}…` : x);
+  const assets = (t.assets ?? []).filter((x) => x.prompt?.trim()).map((x) => `  ${x.id}：${cut(x.prompt!.trim())}`);
+  const runs = (t.shots ?? []).filter((x) => x.asset).reduce<{ start: number; end: number; asset: string }[]>((acc, x) => {
+    const last = acc.at(-1);
+    if (last?.asset === x.asset) last.end = x.end;
+    else acc.push({ start: x.start, end: x.end, asset: x.asset! });
+    return acc;
+  }, []);
+  const lines = [
+    assets.length && `畫面：\n${assets.join('\n')}`,
+    runs.length && `畫面順序：${runs.map((r) => `${r.start.toFixed(1)}–${r.end.toFixed(1)} 秒 ${r.asset}`).join('；')}`,
+    t.moments?.length && `爆點：${t.moments.map((m) => `${m.at.toFixed(1)} 秒 ${m.kind}`).join('、')}`,
+    t.arc?.length && `情緒曲線：${t.arc.map((x) => `${x.start.toFixed(1)} 秒 ${x.level}`).join('、')}`,
+  ];
+  return lines.filter(Boolean).join('\n');
 }
 
 /** 「上一版…。」 with only the parts the previous treatment has; '' when it has none. */
@@ -106,13 +156,14 @@ export function briefText(o: { style?: string; note?: string; previous?: Previou
   else if (o.candidates.length) rules.push(`設計語言清單裡標【候選】的（${o.candidates.join('、')}）還在試：只有它明顯比驗收過的更適合這首歌才選；選了就在 candidateReason 寫一兩句理由（這首歌的哪個特質需要它），選驗收過的就填空字串。`);
   // a previous version with a note is an adjustment (what the note leaves alone stays); without a note it is a redo:
   // a new direction, the previous version quoted only so it is not repeated
-  if (o.previous && o.note?.trim()) rules.push(`這是調整：${previousText(o.previous)}使用者的意見：「${o.note.trim()}」。使用者沒有要求改的（設計語言、字型、色調、故事）都保留，只改意見提到的地方。`);
+  if (o.previous && restyled(o)) rules.push(`這是換風格：${previousText(o.previous)}使用者把設計語言換成「${o.chosen}」${o.note?.trim() ? `，另外的意見：「${o.note.trim()}」` : ''}。故事、段落安排、情緒曲線、爆點時間和每段畫面的內容都照上一版保留；鏡頭模板、字型、色調、質感改成適合「${o.chosen}」的，素材 prompt 的主題不變、畫風跟著新的設計語言。${o.previous.story?.trim() ? `\n上一版的故事：\n${o.previous.story.trim()}` : ''}`);
+  else if (o.previous && o.note?.trim()) rules.push(`這是調整：${previousText(o.previous)}使用者的意見：「${o.note.trim()}」。使用者沒有要求改的（設計語言、字型、色調、故事）都保留，只改意見提到的地方。`);
   else if (o.previous) rules.push(`這是重做：${previousText(o.previous)}使用者要的是一個明顯不同的方向：概念不能和上一版重複，字型、色調、故事都要換${o.chosen ? '' : '，設計語言也考慮換'}。上一版只是用來避開，沒有任何部分要保留。`);
   return block(rules);
 }
 
 /** The same wishes for the design pass (font, colour, texture are decided there); '' when there are none. */
-export function designBriefText(o: { style?: string; briefReading?: string; note?: string; previous?: Previous; hasRefs: boolean }): string {
+export function designBriefText(o: { style?: string; briefReading?: string; note?: string; previous?: Previous; chosen?: string; hasRefs: boolean }): string {
   const rules: string[] = [];
   // what the person wrote: their text, their note on the previous version (an adjustment), the director's reading of
   // both; each on its own, so a note with no original text still reaches the design
@@ -120,7 +171,8 @@ export function designBriefText(o: { style?: string; briefReading?: string; note
   if (said.length) rules.push(`${said.join('\n  ')}\n  色彩、字型、質感照這個理解做${o.note?.trim() ? '，意見提到的地方一定要改' : ''}；名字只轉譯成視覺特徵，不能畫出名字、角色或標誌。`);
   if (o.hasRefs) rules.push('使用者附了參考圖（在這則訊息最前面）：色彩、光線與質感往它靠，不要照抄畫面，也不要畫出圖裡的人物、角色、文字或標誌。');
   const font = o.previous?.font.trim();
-  if (o.previous && o.note?.trim()) rules.push(`這是調整：${font ? `上一版用字型 ${font}；` : ''}使用者沒有要求改字型或色調時就保留上一版的。`);
+  if (o.previous && restyled(o)) rules.push(`這是換風格：設計語言換成「${o.chosen}」，字型與色調照新的設計語言重新決定${font ? `，不必沿用上一版的 ${font}` : ''}。`);
+  else if (o.previous && o.note?.trim()) rules.push(`這是調整：${font ? `上一版用字型 ${font}；` : ''}使用者沒有要求改字型或色調時就保留上一版的。`);
   else if (o.previous) rules.push(`這是重做：${font ? `上一版用字型 ${font}，` : ''}這次的字型與色調都要和上一版明顯不同。`);
   return rules.length ? `\n\n【使用者的要求】\n${rules.map((r) => `- ${r}`).join('\n')}` : '';
 }

@@ -24,6 +24,7 @@ import { TEMPLATES as TEMPLATE_SPECS } from '../../src/app/lyric-vj/templates';
 import { feltTempo } from '../../src/app/lyric-vj/timeline';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import { cutTimes, holdGap, landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
+import { Assignment, bindSprites } from './bind-sprites.mts';
 
 export { stripUnsungSprites };
 
@@ -42,6 +43,8 @@ const { values: a } = parseArgs({ options: {
   // translation, so turning it on later is a rebuild with --plan, not a new director call
   translate: { type: 'boolean', default: false },
   plan: { type: 'string' },
+  // the accepted plan (the concept's noimg typeplan.json): kept as it is, one small call only places the sprites into its cuts
+  bind: { type: 'string' },
   // keep the language's own paper medium and grain (the style test: does the old look carry over to type-only?)
   'keep-medium': { type: 'boolean', default: false },
   // a treatment in the song's design language (its approved song): its section stacks become backdrops the planner
@@ -344,13 +347,51 @@ ${shots.map((s) => `${s.id} ${s.start.toFixed(1)}–${s.end.toFixed(1)}s ${s.bea
 
 每個鏡頭都要輸出（照上面的順序，一個都不能少）。`;
 
+// one structured call (the client is made per call: a rebuild without a key never needs one)
+const call = (content: string, schema: object, max: number) => new Anthropic({ maxRetries: 8 }).messages.stream({ model: a.model!, max_tokens: max, messages: [{ role: 'user', content }], output_config: { effort: 'medium', format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageStreamParams).finalMessage();
+
+// --bind: the accepted plan's cuts with the drawn props placed into them. The person accepted the concept's cuts, lyric
+// layouts, backdrops and pace (sweet timer's img re-plan turned 99 accepted cuts into 137 others), so none of that is
+// re-decided: the call sees the fixed cuts and the props and says only which cut takes which prop at what size.
+const BIND_SCHEMA = {
+  type: 'object', additionalProperties: false, required: ['assignments'],
+  properties: { assignments: { type: 'array', description: '只列要放道具的刀', items: { type: 'object', additionalProperties: false, required: ['shot', 'beat', 'sprite', 'size', 'why'], properties: {
+    shot: { type: 'string', description: '鏡頭 id（照企劃）' }, beat: { type: 'integer', description: '那一刀的 beat（照企劃，不能新增刀）' },
+    sprite: { type: 'string', enum: sprites.map((x) => x.id) }, size: { type: 'number', description: '高度佔畫面比例：0.5 遠、0.9 全身、1.6 特寫' }, why: { type: 'string', description: '一句：為什麼這個東西在這一刀' },
+  } } } },
+};
+const bindPrompt = (p: Plan) => `你是這首歌的歌詞 MV 導演。企劃已經定稿、也經人確認：每個鏡頭的版型、每一刀的招式、背景詞、構圖和節奏都不能改，也不能加刀或減刀。現在只做一件事：把這首歌畫好的道具／人物（去背圖，印成這首歌的三色，當貼紙站在歌詞的另一側；一刀之內不動，換刀才換位置）放進合適的刀裡。
+道具（id：是什麼（在這首歌裡的角色））：
+${sprites.map((x) => `- ${x.id}：${x.what}${roleOf(x.id) ? `（${roleOf(x.id)}）` : ''}`).join('\n')}
+${t.concept ? `美術指導替這首歌定的概念：${t.concept}\n` : ''}${p.vision ? `這首歌的視覺方向：${p.vision.change}（${p.vision.kinds.join('+')}）\n` : ''}${p.parts?.length ? `段落的世界：\n${p.parts.map((x) => `- 從 ${x.from}：${x.what}${x.keep?.items?.length ? `（這段常在的東西：${x.keep.items.map((i) => i.word || i.sprite).filter(Boolean).join('、')}）` : ''}`).join('\n')}\n` : ''}${p.meets?.length ? `重點句（只有這些句子照歌詞放道具）：${p.meets.map((m) => `${m.cue} ${m.why}`).join('；')}\n` : ''}
+規則：
+- 道具跟著段落的世界出現，不是唱到什麼就出什麼；只有重點句才精準對上那句歌詞。
+- 不是每一刀都要有：純字與圖形的刀讓節奏有呼吸，大約三分之一到一半的刀有道具就夠；${unsungRule(unsung, t.interludes)}
+- 同一個東西連著幾刀出現時用遠（0.5）、全身（0.9）、特寫（1.6）交替，同一個鏡頭裡最多兩種道具，不要刀刀換東西。
+- 歌詞在中央（side 是 center）或招式佔滿畫面中央（版型 punch、scatter、beat-cut、array、orbit、ribbon、tunnel；招式 ${[...COVER_FX].join('、')}）的刀：道具放小（size ≤ 0.6）或不放。
+- 圖表類招式（${[...DIAGRAM_FX].join('、')}）的刀不放道具：圖表站在道具的位置。
+- 道具和歌詞分站兩側，歌詞長的刀 size 不要超過 1.0。
+- 同一個段落裡同一個道具保持一致（程式會讓同一個東西不跨側跳）。
+
+鏡頭與刀（照企劃；beat 從 0 起算）：
+${p.shots.map((ps) => { const s = shots.find((x) => x.id === ps.shot); return `${ps.shot} ${s ? `${s.start.toFixed(1)}–${s.end.toFixed(1)}s ${s.part?.type ?? ''}` : ''} 版型 ${ps.lyric.template}/${ps.lyric.side}${ps.backdrop ? ` 構圖 ${ps.backdrop}` : ''}${s?.lines.length ? s.lines.map((l) => `\n  ${l.id} ${l.text}`).join('') : '\n  （沒有歌詞）'}${ps.cuts.map((c) => `\n  刀 beat ${c.beat} ${c.fx}${c.words.length ? `（背景詞 ${c.words.join('、')}）` : ''}`).join('')}`; }).join('\n')}
+
+只輸出要放道具的刀（assignments）。`;
+
 // --plan: rebuild the treatment from a plan already written (a renderer change, no new director call)
 let usage = { input_tokens: 0, output_tokens: 0 };
 let plan: Plan;
 if (a.plan) plan = JSON.parse(readFileSync(a.plan, 'utf8')) as Plan;
-else {
-  const client = new Anthropic({ maxRetries: 8 });
-  const call = (content: string, schema: object, max: number) => client.messages.stream({ model: a.model!, max_tokens: max, messages: [{ role: 'user', content }], output_config: { effort: 'medium', format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageStreamParams).finalMessage();
+else if (a.bind) {
+  plan = JSON.parse(readFileSync(a.bind, 'utf8')) as Plan;
+  if (sprites.length) {
+    const msg = await call(bindPrompt(plan), BIND_SCHEMA, 16000);
+    usage = { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens };
+    const bound = bindSprites(plan, (JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"assignments":[]}') as { assignments: Assignment[] }).assignments, sprites);
+    plan = bound.plan;
+    console.log(`bind: ${bound.applied} cuts take a prop${bound.ignored.length ? `, dropped ${bound.ignored.join(' ')}` : ''}`);
+  } else console.log('bind: no sprite library, the accepted plan stands as it is');
+} else {
   const shared = a.vision ? (JSON.parse(readFileSync(a.vision, 'utf8')) as Plan) : undefined;
   const first = shared ? undefined : await call(`${prompt}\n\n這一步只決定整首的視覺方向（vision、parts、meets、previews、clip），刀和每一句之後再排。`, VISION_SCHEMA, 16000);
   const vision = (shared ? { vision: shared.vision, parts: shared.parts, meets: shared.meets, previews: shared.previews, clip: shared.clip } : JSON.parse(first!.content.find((b) => b.type === 'text')?.text ?? '{}')) as Pick<Plan, 'vision' | 'parts' | 'meets' | 'previews' | 'clip'>;
@@ -359,10 +400,23 @@ else {
   const msg = await call(`${prompt}\n\n已經定好的視覺方向（照著排刀，不要改）：\n${JSON.stringify(vision)}`, SCHEMA, 100000);
   usage = { input_tokens: (first?.usage.input_tokens ?? 0) + msg.usage.input_tokens, output_tokens: (first?.usage.output_tokens ?? 0) + msg.usage.output_tokens };
   plan = { ...(JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"shots":[]}') as Plan), ...vision };
+  // shots the plan left out or left without cuts: one more call asks for those alone (a skipped shot keeps the previous
+  // backdrop running into it; it used to be a log line, then a hold for the admin — now it is filled before anyone sees it)
+  const lacking = shots.filter((s) => !plan.shots.some((p) => p.shot === s.id && p.cuts?.length)).map((s) => s.id);
+  if (lacking.length) {
+    const again = await call(`${prompt}\n\n已經定好的視覺方向（照著排刀，不要改）：\n${JSON.stringify(vision)}\n\n上一版漏了這些鏡頭（沒有排、或沒有刀）：${lacking.join('、')}。只輸出這些鏡頭（shots 只含它們，每個都要有刀，照它們在歌裡的位置接上前後的段落），其他欄位照上一版填。`, SCHEMA, 32000);
+    usage = { input_tokens: usage.input_tokens + again.usage.input_tokens, output_tokens: usage.output_tokens + again.usage.output_tokens };
+    const fill = JSON.parse(again.content.find((b) => b.type === 'text')?.text ?? '{"shots":[]}') as Plan;
+    const got = new Map(fill.shots.filter((p) => lacking.includes(p.shot) && p.cuts?.length).map((p) => [p.shot, p]));
+    const order = new Map(shots.map((s, i) => [s.id, i]));
+    plan.shots = [...plan.shots.filter((p) => !got.has(p.shot)), ...got.values()].sort((a, b) => (order.get(a.shot) ?? 1e9) - (order.get(b.shot) ?? 1e9));
+    console.log(`plan: filled ${got.size}/${lacking.length} missing shots (${lacking.join(' ')})`);
+  }
 }
 const usd = (usage.input_tokens * 4 + usage.output_tokens * 20) / 1e6;
-if (!a.plan) writeFileSync(join(out, 'typeplan.json'), JSON.stringify({ ...plan, costUSD: +usd.toFixed(3) }, null, 1));
-if (!a.plan) {
+if (!a.plan) writeFileSync(join(out, 'typeplan.json'), JSON.stringify({ ...plan, costUSD: +usd.toFixed(3), ...(a.bind ? { boundFrom: a.bind } : {}) }, null, 1));
+// the history of moves and motifs is of plans made here; a bound plan's were recorded when it was made
+if (!a.plan && !a.bind) {
   const fx: Record<string, number> = {};
   for (const c of plan.shots.flatMap((x) => x.cuts)) fx[c.fx] = (fx[c.fx] ?? 0) + 1;
   const motifs = [...new Set(plan.shots.flatMap((x) => backdrops.find((b) => b.id === x.backdrop)?.layers.map(motifOf) ?? []).filter(Boolean))];
@@ -381,10 +435,12 @@ tr.graphics.story = [];
 // flat print: no photo plates to grade, so the language's duotone and paper medium only greyed the inks
 tr.design = { ...tr.design, ...(a['keep-medium'] ? {} : { medium: 'clean', grain: 0.1, paper: 0.2 }), colorScript: (tr.design.colorScript ?? []).map((c: object) => ({ ...c, duotone: 0, image: 1 })), ...(plan.finish && !quietType ? { finish: plan.finish } : {}), ...(quietType ? { quiet: true } : {}) };
 // every line's own motion and emphasis (an emphasis word not found in the line is dropped)
+const unknownCues: string[] = [];
+const unknownShots: string[] = [];
 for (const ps of plan.shots)
   for (const l of ps.lines ?? []) {
     const cue = tr.cues.find((c: { cueId: string }) => c.cueId === l.cue);
-    if (!cue) continue;
+    if (!cue) { unknownCues.push(l.cue); continue; }
     Object.assign(cue, { enter: l.enter, exit: l.exit, idle: l.idle, trail: l.trail || undefined });
     const mark = (word: string, method: string) => {
       const at = word ? cueText(l.cue).indexOf(word) : -1;
@@ -410,7 +466,7 @@ if (a.translate)
   });
 for (const p of plan.shots) {
   const shot = tr.shots.find((x: { id: string }) => x.id === p.shot);
-  if (!shot) continue;
+  if (!shot) { unknownShots.push(p.shot); continue; }
   const side = p.lyric.side;
   shot.template = p.lyric.template;
   shot.params = p.lyric.template === 'vertical' ? { position: side, dim: 0, step: 0.6, lift: 60 } : p.lyric.template === 'stair' ? { side: side === 'center' ? 'right' : side, dim: 0 } : p.lyric.template === 'quiet' ? { position: side === 'right' ? 'auto' : side, dim: 0 } : SIDED.has(p.lyric.template) ? { position: side, dim: 0 } : { dim: 0 };
@@ -419,6 +475,9 @@ for (const p of plan.shots) {
   if (pos?.values && shot.params.position && !pos.values.includes(shot.params.position)) shot.params.position = 'auto';
 }
 writeFileSync(join(out, 'treatment.json'), JSON.stringify(tr));
+// what the plan left out or named wrongly (a shot with no cuts keeps the previous backdrop running into it): the
+// delivery gate (beta/quality.mts) holds such a video for the admin instead of handing it over
+writeFileSync(join(out, 'plan-check.json'), JSON.stringify({ missing, unknownShots: [...new Set(unknownShots)], unknownCues: [...new Set(unknownCues)] }, null, 1));
 // no sprite library: a type-and-graphics-only video with no pictures at all
 writeFileSync(join(out, 'assets.json'), a.sprites ? readFileSync(join(a.sprites, 'assets.json')) : '{}');
 console.log(`typeplan: ${plan.shots.length}/${shots.length} shots, ${layers.length} cuts${missing.length ? `, missing ${missing.join(' ')}` : ''}, $${usd.toFixed(3)} (in ${usage.input_tokens}, out ${usage.output_tokens})`);

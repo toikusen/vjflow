@@ -27,9 +27,9 @@
           <ul class="stills">
             @for (n of s.stills; track n; let i = $index) {
               <li>
-                <button class="still" type="button" [attr.aria-label]="'放大' + label(n, i)" (click)="zoomed.set(n)">
-                  <img [src]="stillUrl(n)" [alt]="label(n, i)" />
-                  <span class="s-label">{{ label(n, i) }}</span>
+                <button class="still" type="button" [attr.aria-label]="'放大' + label(n, i, s.stillNotes?.[i])" (click)="zoomed.set(n)">
+                  <img [src]="stillUrl(n)" [alt]="label(n, i, s.stillNotes?.[i])" />
+                  <span class="s-label">{{ label(n, i, s.stillNotes?.[i]) }}</span>
                   <span class="s-zoom" aria-hidden="true">⤢</span>
                 </button>
               </li>
@@ -98,7 +98,16 @@
               <h3>依意見調整</h3>
               <app-price class="o-price" [amount]="conceptPrice" digits="short" [plain]="true" />
             </div>
-            <p class="o-text">保留這個方向，告訴導演要改哪裡。</p>
+            <p class="o-text">保留這個方向，告訴導演要改哪裡；也可以只換風格，故事照舊。</p>
+            @if (otherStyles().length) {
+              <label class="sr" for="concept-style">風格</label>
+              <select id="concept-style" [value]="restyle()" (change)="pickStyle($any($event.target).value)">
+                <option value="">風格維持「{{ s.languageName }}」</option>
+                @for (st of otherStyles(); track st.id) {
+                  <option [value]="st.id">換成「{{ st.name }}」</option>
+                }
+              </select>
+            }
             <label class="sr" for="concept-note">想調整的地方</label>
             <textarea id="concept-note" rows="1" [maxLength]="maxNote" placeholder="例如：霓虹少一點，文字再大一些" [value]="note()" (input)="edit($any($event.target).value)"></textarea>
             @if (noteCount() > 0) {

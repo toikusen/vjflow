@@ -29,6 +29,8 @@ describe('stillLabel', () => {
   it('numbers the still and reads its time from the still_<t>.png name', () => {
     expect(stillLabel('still_75.40.png', 0)).toBe('示意 1 · 1:15');
     expect(stillLabel('frame.png', 2)).toBe('示意 3');
+    expect(stillLabel('still_75.40.png', 0, '副歌鋪滿')).toBe('示意 1 · 1:15 · 副歌鋪滿');
+    expect(stillLabel('frame.png', 2, ' ')).toBe('示意 3');
   });
 });
 
@@ -68,7 +70,8 @@ describe('adjustBlock and redoBlock', () => {
   const ok = { active: false, left: 5, submitting: false };
   it('adjust needs a note of 1–500 characters', () => {
     expect(adjustBlock({ ...ok, note: '霓虹少一點' })).toBeNull();
-    expect(adjustBlock({ ...ok, note: '   ' })).toBe('填一句意見後才能送出');
+    expect(adjustBlock({ ...ok, note: '   ' })).toBe('填一句意見或換一個風格後才能送出');
+    expect(adjustBlock({ ...ok, note: '   ', restyle: true })).toBeNull();
     expect(adjustBlock({ ...ok, note: '字'.repeat(MAX_NOTE) })).toBeNull();
     expect(adjustBlock({ ...ok, note: '😀'.repeat(MAX_NOTE + 1) })).toBe('意見最多 500 字');
   });

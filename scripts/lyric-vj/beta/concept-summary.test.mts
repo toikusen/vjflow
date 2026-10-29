@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { stillTimes, summarize, writeSummary } from './concept-summary.mts';
+import { stillPicks, stillTimes, summarize, writeSummary } from './concept-summary.mts';
 
 const w = (p: string, o: unknown) => { mkdirSync(join(p, '..'), { recursive: true }); writeFileSync(p, JSON.stringify(o)); };
 
@@ -22,8 +22,24 @@ function fixture() {
   return run;
 }
 
-test('stillTimes picks the middle of the first sung line of the shots at 20, 50 and 80 percent', () => {
-  assert.deepEqual(stillTimes(fixture()), [24, 55, 83]);
+test('stillTimes without a plan spreads six points over the song, one per shot (four shots give four), in time order', () => {
+  assert.deepEqual(stillTimes(fixture()), [4, 24, 55, 83]);
+});
+
+test('stillPicks puts the plan\'s preview shots first with their notes, fills the rest evenly, and sorts by time', () => {
+  const run = fixture();
+  w(join(run, 'noimg/typeplan.json'), { previews: [{ shot: 's3', note: '副歌鋪滿' }, { shot: 's1', note: '冷色起點' }, { shot: 'nope', note: 'x' }] });
+  assert.deepEqual(stillPicks(run), [{ t: 4, note: '冷色起點' }, { t: 24, note: '' }, { t: 55, note: '副歌鋪滿' }, { t: 83, note: '' }]);
+});
+
+test('summarize lists stills in time order with the plan\'s notes beside them', () => {
+  const run = fixture();
+  w(join(run, 'noimg/typeplan.json'), { previews: [{ shot: 's4', note: '收尾' }] });
+  w(join(run, 'stills', 'still_4.00.png'), 0);
+  w(join(run, 'stills', 'still_100.50.png'), 0);
+  const s = summarize(run);
+  assert.deepEqual(s.stills, ['still_4.00.png', 'still_24.00.png', 'still_55.00.png', 'still_83.00.png', 'still_100.50.png']);
+  assert.deepEqual(s.stillNotes, ['', '', '', '收尾', '']);
 });
 
 test('summarize gathers language, unique palette, concept text and the stills', () => {
@@ -52,7 +68,7 @@ const timesRun = (shots: unknown[], duration = 100) => {
   return run;
 };
 
-test('two points in one shot still give three distinct times when shots allow', () => {
+test('points landing in one shot move on to later shots: three shots give three distinct times', () => {
   const run = timesRun([{ id: 'a', start: 0, end: 60 }, { id: 'b', start: 60, end: 85 }, { id: 'c', start: 85, end: 100 }]);
   const t = stillTimes(run);
   assert.equal(new Set(t).size, 3);

@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { deflateSync } from 'node:zlib';
-import { briefFields, briefText, designBriefText, interludeText, languageOffer, loadRefs, normaliseInterludes, readStyle, sipsArgs, userPrompt, withRefs, type UserPromptParts } from './brief.mts';
+import { briefFields, briefText, previousStory, designBriefText, interludeText, languageOffer, loadKit, loadRefs, normaliseInterludes, readStyle, sipsArgs, userPrompt, withKit, withRefs, type UserPromptParts } from './brief.mts';
 import type { UnsungWindow } from '../../src/app/lyric-vj/structure';
-import { PROVEN_LANGUAGES } from '../../src/app/lyric-vj/languages';
+import { LANGUAGES, PROVEN_LANGUAGES } from '../../src/app/lyric-vj/languages';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 
 const NAMES = '畫面裡絕對不能出現這些名字';
@@ -157,6 +157,30 @@ test('withRefs: plain text without refs, images before the text with them', () =
   assert.deepEqual(c, [{ type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAA' } }, { type: 'text', text: 'hi' }]);
 });
 
+test('loadKit: the proven language\'s frames with its song and craft; none for a language without a kit or a file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'kits-'));
+  writeFileSync(join(dir, 'silkscreen.jpg'), Buffer.from([0xff, 0xd8]));
+  const k = loadKit('silkscreen', { song: '行星', craft: '網版的粗粒' }, dir)!;
+  assert.deepEqual([k.name, k.media_type, k.data, k.song, k.craft], ['silkscreen.jpg', 'image/jpeg', Buffer.from([0xff, 0xd8]).toString('base64'), '行星', '網版的粗粒']);
+  assert.equal(loadKit('silkscreen', undefined, dir), undefined, 'no kit on the language');
+  assert.equal(loadKit('swiss', { song: 'x', craft: 'y' }, dir), undefined, 'no file');
+  // every proven language in the repo has its kit file
+  for (const id of PROVEN_LANGUAGES) assert.ok(loadKit(id, LANGUAGES[id].kit), `${id} has a kit image`);
+});
+
+test('withKit: the labelled quality bar and its image come after the message; the person\'s references stay first and unlabelled as the bar', () => {
+  const kit = { name: 'k.jpg', media_type: 'image/jpeg', data: 'KKK', song: '行星', craft: '粗粒' };
+  assert.equal(withKit('hi', undefined), 'hi');
+  const plain = withKit('hi', kit) as { type: string; text?: string; source?: { data: string } }[];
+  assert.deepEqual(plain.map((b) => b.type), ['text', 'text', 'image']);
+  assert.equal(plain[0].text, 'hi');
+  assert.match(plain[1].text!, /【質感基準】.*行星.*粗粒.*不要照抄畫面/);
+  assert.equal(plain[2].source!.data, 'KKK');
+  const withUser = withKit(withRefs('hi', [{ media_type: 'image/png', data: 'UUU' }]), kit) as { type: string; source?: { data: string } }[];
+  assert.deepEqual(withUser.map((b) => b.type), ['image', 'text', 'text', 'image']);
+  assert.deepEqual([withUser[0].source!.data, withUser[3].source!.data], ['UUU', 'KKK']);
+});
+
 test('readStyle reads an @file and keeps plain text as is', () => {
   const f = join(mkdtempSync(join(tmpdir(), 'style-')), 'brief.txt');
   writeFileSync(f, '夏天的海\n\n使用者對上一版的意見：亮一點\n');
@@ -271,4 +295,29 @@ test('normaliseInterludes with no windows removes any interludes', () => {
   assert.equal(t.interludes, undefined);
   const empty = withInterludes();
   assert.deepEqual(normaliseInterludes(empty, []), []);
+});
+
+test('briefText/designBriefText: picking another language on an adjustment keeps the story and quotes it', () => {
+  const previous = { concept: '夜晚的城市', language: 'silkscreen', font: 'Noto Sans TC', story: '畫面順序：0.0–5.0 秒 stage' };
+  const t = briefText({ previous, chosen: 'ukiyoe', candidates: [], hasRefs: false });
+  assert.ok(t.includes('這是換風格') && t.includes('「ukiyoe」') && t.includes('0.0–5.0 秒 stage'));
+  assert.ok(!t.includes('這是重做') && !t.includes('這是調整'));
+  assert.ok(briefText({ previous, chosen: 'ukiyoe', note: '再亮', candidates: [], hasRefs: false }).includes('「再亮」'));
+  // the same language is no restyle: a picked style's redo stays a redo
+  assert.ok(briefText({ previous, chosen: 'silkscreen', candidates: [], hasRefs: false }).includes('這是重做'));
+  const d = designBriefText({ previous, chosen: 'ukiyoe', hasRefs: false });
+  assert.ok(d.includes('這是換風格') && d.includes('Noto Sans TC') && !d.includes('保留上一版'));
+});
+
+test('previousStory: subjects, merged picture order, moments and arc', () => {
+  const s = previousStory({
+    assets: [{ id: 'a', prompt: 'x'.repeat(130) }, { id: 'b', prompt: ' ' }],
+    shots: [{ start: 0, end: 2, asset: 'a' }, { start: 2, end: 4, asset: 'a' }, { start: 4, end: 6 }, { start: 6, end: 8, asset: 'b' }],
+    moments: [{ kind: 'drop', at: 3 }],
+    arc: [{ start: 0, level: 2 }],
+  });
+  assert.ok(s.includes(`a：${'x'.repeat(120)}…`) && !s.includes('b：'));
+  assert.ok(s.includes('0.0–4.0 秒 a；6.0–8.0 秒 b'));
+  assert.ok(s.includes('3.0 秒 drop') && s.includes('0.0 秒 2'));
+  assert.equal(previousStory({}), '');
 });

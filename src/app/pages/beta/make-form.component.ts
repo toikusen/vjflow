@@ -179,7 +179,7 @@ export class MakeFormComponent {
     this.ask.set({
       eyebrow: `${this.song().title} · ${t.name}`,
       title: '先產生概念',
-      body: `導演會依你的選擇提出風格、配色和三張示意畫面，你確認後才會開始製作完整影片（${t.name}，再 $${formatPrice(t.rest, 'short')}）。產生概念約 ${CONCEPT_MIN} 分鐘，可以離開頁面。`,
+      body: `導演會依你的選擇提出風格、配色和示意畫面，你確認後才會開始製作完整影片（${t.name}，再 $${formatPrice(t.rest, 'short')}）。產生概念約 ${CONCEPT_MIN} 分鐘，可以離開頁面。`,
       cost: CONCEPT_PRICE,
       go: () => this.make(tier),
     });

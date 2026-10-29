@@ -127,6 +127,10 @@ describe('jobName and jobState', () => {
     expect(jobState([], job({ id: 'a', status: 'queued' }), NOW)).toEqual({ chip: { icon: '◷', label: '排隊', tone: 'muted' }, detail: '' });
     expect(jobState([], job({ id: 'a', status: 'queued', auto: true }), NOW).detail).toBe('自動重試');
     expect(jobState([], job({ id: 'a', status: 'admin' }), NOW)).toEqual({ chip: { icon: '?', label: '等確認', tone: 'warn' }, detail: '等管理者放行' });
+    // the hold's reason (the job's last phase) is what the admin reads before releasing
+    expect(jobState([], job({ id: 'a', status: 'admin', phase: '等管理者確認：候選風格 瑞士' }), NOW).detail).toBe('等管理者確認：候選風格 瑞士');
+    // a video that went out without a look says why, for the admin's later review
+    expect(jobState([], job({ id: 'a', status: 'done', autoReleased: '候選風格「瑞士」：檢查全過，直接交付，有空看一下' }), NOW).detail).toBe('候選風格「瑞士」：檢查全過，直接交付，有空看一下');
     expect(jobState([], job({ id: 'a' }), NOW)).toEqual({ chip: { icon: '✓', label: '完成', tone: 'ok' }, detail: '' });
   });
   it('explains a failure: retried, auto-retry failed with refund, or plain', () => {

@@ -167,21 +167,54 @@ const isViewable = (j: Job, user: User) => j.status === 'done' || (user.admin &&
 const videoDuration = (root: string, j: Job) => {
   try { const d = JSON.parse(readFileSync(join(runPath(root, j), 'song.json'), 'utf8')).duration; return typeof d === 'number' && d >= 0 ? d : undefined; } catch { return undefined; }
 };
-const styleCache = new Map<string, string>();
-/** The Chinese name of a make job's design language, from its treatment.json; cached by job id once found. */
-export function jobStyle(root: string, job: Job): string | undefined {
+const languageCache = new Map<string, LanguageId>();
+/** The folder of a tier's final treatment inside a run (make.sh's `$tr`). */
+const TIER_DIR: Record<Tier, string> = { none: 'noimg', img: 'img', hybrid: 'cut' };
+/**
+ * A make (or fix) job's design language id. For display (default): the tier's final treatment, else the base one, cached
+ * by job id once found. For the delivery decision (`strict`): only the treatment that was rendered — the tier's final
+ * one (a job without a tier, from before tiers, has only base) — read afresh; undefined when it is missing, unparsable
+ * or names no known language, never the base language in its place (a base in a proven language must not vouch for a
+ * final one that cannot be read).
+ */
+export function jobLanguage(root: string, job: Job, strict = false): LanguageId | undefined {
   if (!madeVideo(job)) return undefined;
-  const hit = styleCache.get(job.id);
+  const hit = strict ? undefined : languageCache.get(job.id);
   if (hit) return hit;
-  try {
-    const id = JSON.parse(readFileSync(join(workPath(root, job), 'base', 'treatment.json'), 'utf8'))?.design?.language as LanguageId;
-    const name = LANGUAGES[id]?.name;
-    if (name) styleCache.set(job.id, name);
-    return name;
-  } catch {
-    return undefined;
+  const final = job.tier ? TIER_DIR[job.tier] : 'base';
+  for (const dir of strict ? [final] : [final, 'base']) {
+    try {
+      const id = JSON.parse(readFileSync(join(workPath(root, job), dir, 'treatment.json'), 'utf8'))?.design?.language;
+      if (typeof id !== 'string' || !Object.hasOwn(LANGUAGES, id)) continue;
+      if (!strict) languageCache.set(job.id, id as LanguageId);
+      return id as LanguageId;
+    } catch { /* the next folder, if any */ }
   }
+  return undefined;
 }
+/** The delivery gate's report for a run (make.sh writes quality.json), or undefined when there is none. */
+const qualityReport = (root: string, job: Job): { findings: string[]; fileOk: boolean } | undefined => {
+  try { return JSON.parse(readFileSync(join(runPath(root, job), 'quality.json'), 'utf8')); } catch { return undefined; }
+};
+/** How long a held video waits for the admin before it goes out by itself (the user, 2026-10-29: 4 hours). */
+export const HOLD_HOURS = 4;
+/**
+ * Releases every video held longer than HOLD_HOURS whose file can be handed over: the person waits hours at most, the
+ * reasons stay on the job for the admin's later review. Returns the jobs released.
+ */
+export function releaseStale(db: Db, root: string, persist: () => void, now = Date.now(), hours = HOLD_HOURS): Job[] {
+  const stale = db.jobs.filter((j) => j.status === 'admin' && madeVideo(j) && j.endedAt && now - Date.parse(j.endedAt) >= hours * 3600_000
+    && existsSync(videoFile(root, j)) && qualityReport(root, j)?.fileOk !== false);
+  for (const j of stale) {
+    j.status = 'done';
+    j.autoReleased = `等了 ${hours} 小時沒人處理，自動放行（${j.phase ?? '原因不明'}）`;
+    logEvent(root, j.songId, { type: 'admin.autorelease', jobId: j.id, phase: j.phase, hours });
+  }
+  if (stale.length) persist();
+  return stale;
+}
+/** The Chinese name of a make job's design language. */
+export const jobStyle = (root: string, job: Job): string | undefined => { const id = jobLanguage(root, job); return id && LANGUAGES[id].name; };
 const conceptCache = new Map<string, ConceptSummary>();
 /** A finished concept job's summary from its concept.json; cached by job id once read. */
 export function jobConcept(root: string, job: Job): ConceptSummary | undefined {
@@ -202,7 +235,7 @@ const publicJob = (j: Job, root?: string, admin = false) => {
   const c = root ? jobConcept(root, j) : undefined;
   const concept = c && !admin ? (({ candidateReason: _, ...rest }) => rest)(c) : c;
   return { id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto, style: root && (j.status === 'done' || j.status === 'admin') ? jobStyle(root, j) : undefined,
-    inputs: j.inputs, decision: j.decision, conceptOf: j.conceptOf, concept,
+    inputs: j.inputs, decision: j.decision, conceptOf: j.conceptOf, concept, autoReleased: admin ? j.autoReleased : undefined,
     // why a fix failed without the raw error text: its only ##NORETRY reason is an empty range
     nothingToRemove: j.kind === 'fix' && j.status === 'failed' && j.noRetry ? true : undefined };
 };
@@ -226,7 +259,21 @@ export function createBetaServer(o: BetaOptions) {
   const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }),
     // the candidates as they are when the concept starts (the admin may change tiers while it waits)
     // the director's allowed set is the admin's tiers as they stand when the job starts (never the code's constants)
-    jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_PROVEN: provenIds(db).join(','), VJ_CANDIDATES: candidateIds(db).join(',') } : {}) };
+    jobEnv: (job): Record<string, string> => (job.kind === 'concept' ? { VJ_PROVEN: provenIds(db).join(','), VJ_CANDIDATES: candidateIds(db).join(',') } : {}),
+    // a video whose checks all passed (make.sh's gate) reaches the person whatever its style: a candidate's or an
+    // unlisted one's goes out with a note for the admin's later review (the user, 2026-10-29: a hold nobody is free to
+    // take leaves the person without their video); only one whose language cannot be read at all waits
+    hold: (job) => {
+      if (!madeVideo(job)) return undefined;
+      const id = jobLanguage(o.root, job, true);
+      if (!id) return '等管理者確認：讀不到成品的設計語言';
+      const tier = styleTier(db, id);
+      if (tier !== 'proven') job.autoReleased = `${tier === 'candidate' ? '候選' : '已下架'}風格「${LANGUAGES[id].name}」：檢查全過，直接交付，有空看一下`;
+      return undefined;
+    } };
+  // a hold nobody took in time goes out by itself with its reasons on record; a file that cannot be handed over never does
+  releaseStale(db, o.root, q.persist);
+  setInterval(() => releaseStale(db, o.root, q.persist), 5 * 60 * 1000).unref();
   q.holding = true; // nothing starts, whatever gets enqueued, until the orphans are gone
   // a pipeline orphaned by a crash must not run beside its rerun; its pid is on record before the job's is cleared, so a
   // second crash during the wait below still finds it next start
@@ -534,10 +581,15 @@ export function createBetaServer(o: BetaOptions) {
           return json(res, 202, publicJob(r.job, o.root));
         }
         const note = dc[2] === 'adjust' ? (typeof b.note === 'string' ? b.note.trim() : '') : undefined;
-        if (note !== undefined && (!note || chars(note) > MAX_CONCEPT)) return json(res, 400, { error: '請寫下想調整的地方（最多 500 字）' });
+        // an adjust may switch the design language (the story stays): a style on the menu, other than the concept's own
+        const restyle = dc[2] === 'adjust' && b.style !== undefined ? b.style : undefined;
+        if (restyle !== undefined && (typeof restyle !== 'string' || !Object.hasOwn(LANGUAGES, restyle) || !(user.admin || styleOffered(db, restyle)) || restyle === summary.language))
+          return json(res, 400, { error: '請選一個選單上、和目前不同的風格' });
+        if (note !== undefined && ((!note && !restyle) || chars(note) > MAX_CONCEPT)) return json(res, 400, { error: '請寫下想調整的地方（最多 500 字）' });
         const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
         // the chain keeps its style even if the admin has since unlisted it: deliberate continuity for the person's pick
-        const r = enqueue(user, j.songId, 'concept', j.tier, { inputs: { concept: j.inputs?.concept ?? '', style: j.inputs?.style, refs: j.inputs?.refs ?? [], note, from }, refsFrom: join(runPath(o.root, j), 'refs') });
+        const style = restyle ?? j.inputs?.style;
+        const r = enqueue(user, j.songId, 'concept', j.tier, { inputs: { concept: j.inputs?.concept ?? '', style, refs: j.inputs?.refs ?? [], note: note || undefined, from }, refsFrom: join(runPath(o.root, j), 'refs') });
         if ('error' in r) return json(res, 409, r);
         j.decision = note !== undefined ? 'adjusted' : 'redone';
         q.persist();
@@ -614,6 +666,9 @@ export function createBetaServer(o: BetaOptions) {
       if (ap && req.method === 'POST') {
         const j = db.jobs.find((x) => x.id === ap[1] && x.status === 'admin');
         if (!j) return json(res, 404, { error: '找不到等待確認的工作' });
+        // a look can accept a candidate style or a short line; it cannot mend a file that is not a video
+        if (madeVideo(j) && !existsSync(videoFile(o.root, j))) return json(res, 409, { error: '成品檔案不在，不能放行' });
+        if (madeVideo(j) && qualityReport(o.root, j)?.fileOk === false) return json(res, 409, { error: '成品檔案不可交付（無法解析或缺影音軌），不能放行' });
         j.status = 'done';
         q.persist();
         logEvent(o.root, j.songId, { type: 'admin.approve', jobId: j.id, by: user.id });

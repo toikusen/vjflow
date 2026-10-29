@@ -31,8 +31,20 @@ function tree(inputs: Record<string, unknown>, previousRequest?: string) {
   const baseEnv = { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log } as Record<string, string>;
   const concept = (env: Record<string, string> = {}) => spawnSync(cmd[0], cmd.slice(1), { encoding: 'utf8', env: { ...baseEnv, ...env } });
   const direct = () => (existsSync(log) ? readFileSync(log, 'utf8') : '').split('\n').find((l) => l.includes('direct.mts')) ?? '';
-  return { run, cmd, env: baseEnv, concept, direct };
+  const calls = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
+  return { run, cmd, env: baseEnv, concept, direct, calls };
 }
+
+test('concept.sh: the song\'s horizons are drawn before the stills and applied to the noimg plan, so the stills show the skylines the video will have', () => {
+  const t = tree({ concept: 'c', refs: [] });
+  assert.equal(t.concept().status, 0);
+  const lines = t.calls().split('\n');
+  const horizon = lines.findIndex((l) => l.includes('horizon.mts'));
+  const stills = lines.findIndex((l) => l.includes('render.mts'));
+  // (the stub tree already holds stills/, so the render step may be skipped: then only the order matters when it ran)
+  assert.ok(horizon >= 0 && (stills < 0 || stills > horizon), `horizon before the stills: ${lines.join(' | ')}`);
+  assert.match(lines[horizon], /--out \S+\/runs\/c2\/horizon --apply \S+\/runs\/c2\/noimg/);
+});
 
 test('concept.sh: an adjustment passes the previous treatment and the note; the note stays out of brief.txt', () => {
   const t = tree({ concept: '夏天的夜市', note: '再亮一點', from: 'c1', refs: [] });

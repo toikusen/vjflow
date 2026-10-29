@@ -57,6 +57,10 @@ if [ ! -f "$w/noimg/treatment.json" ]; then
   cost_json "$w/noimg/typeplan.json" plan-noimg
 fi
 
+# the song's own horizons before the stills: the person then sees the skylines the video will have (make.sh applies the
+# same strips, drawn once here and kept in $w/horizon, so this costs nothing twice); a plan without skylines spends nothing
+echo '##PHASE 畫背景剪影'
+[ -f "$w/noimg/treatment.json" ] && { npx tsx scripts/lyric-vj/horizon.mts --song "$S" --treatment "$w/base/treatment.json" --out "$w/horizon" --apply "$w/noimg" > "$w/horizon-concept.log" 2>&1 && cost_log "$w/horizon-concept.log" horizon || echo "horizon skipped"; }
 echo '##PHASE 準備示意畫面'
 if [ ! -d "$w/stills" ]; then
   rm -rf "$w/stills.tmp"

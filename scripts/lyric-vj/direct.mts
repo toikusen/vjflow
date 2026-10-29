@@ -10,7 +10,7 @@ import { timingGate } from '../../src/app/lyric-vj/timing-qa';
 import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, SYMBOLS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
-import { attachmentErrors, checkStyle, STYLES } from '../../src/app/lyric-vj/styles';
+import { attachmentErrors, checkStyle, STYLES, templatesFor } from '../../src/app/lyric-vj/styles';
 import { editorPass } from '../../src/app/lyric-vj/compose';
 import { facesFor, FONTS, hanOf, scriptOf } from '../../src/app/lyric-vj/fonts';
 import { MOTIF_FORMS, MOTIF_KINDS, MOTIF_RENDERS, MOTIF_VARIANTS } from '../../src/app/lyric-vj/motif';
@@ -33,7 +33,7 @@ import { PRICES, streamed } from './claude.mts';
 import { transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { phraseBoundaries, phrases } from '../../src/app/lyric-vj/phrases';
 import { loadDb, references } from './references.mts';
-import { briefFields, briefText, designBriefText, interludeText, languageOffer, loadRefs, normaliseInterludes, type Previous, readStyle, userPrompt, withRefs } from './brief.mts';
+import { briefFields, briefText, designBriefText, interludeText, languageOffer, loadKit, loadRefs, normaliseInterludes, type Previous, previousStory, readStyle, userPrompt, withKit, withRefs } from './brief.mts';
 
 const { values: a } = parseArgs({
   options: {
@@ -70,6 +70,8 @@ const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
 // lanes carries a translation in its bottom bar: offered only when the buyer supplied one (cue.sub), never by default
 const hasSub = song.cues.some((c) => !!(c as { sub?: string }).sub?.trim());
 const offered = (id: string) => id !== 'scene' && (id !== 'lanes' || hasSub);
+const style = STYLES[a['style-id']!];
+if (!style) throw new Error(`未知風格 ${a['style-id']}`);
 // Chinese lyrics need Traditional Chinese faces (Japanese ones draw other glyph forms or miss characters)
 const script = scriptOf(song.cues.map((c) => c.text).join(''));
 const readable = (family: string) => hanOf(family) === undefined || (script === 'zh' ? hanOf(family) === 'tc' : hanOf(family) === 'ja');
@@ -87,12 +89,16 @@ const refs = a.refs ? loadRefs(a.refs) : [];
 const { picked, candidates, allowed: allowedLanguages } = languageOffer({ picked: a.language, proven: a.proven, candidates: a.candidates });
 const previous: Previous | undefined = a.previous ? (() => {
   const t = JSON.parse(readFileSync(a.previous, 'utf8')) as TreatmentV3 & { language?: string };
-  return { concept: t.concept ?? '', language: t.design?.language ?? t.language ?? '', font: t.design?.font ?? '' };
+  return { concept: t.concept ?? '', language: t.design?.language ?? t.language ?? '', font: t.design?.font ?? '', story: previousStory(t) };
 })() : undefined;
 const note = a.note?.trim() || undefined;
 // only proven languages are on offer (a song a paying user gets must come out usable) plus the candidates the
 // operator opened; a language the user picked is the only one. The beta passes both lists as the admin set them
 if (!allowedLanguages.length) { console.error('沒有可選的設計語言：--proven 與 --candidates 都是空的（管理者把全部下架了？）'); process.exit(2); }
+// the templates the schema offers: a chosen language's own valid set (the style's list and the language's agree), else
+// the union over the languages on offer — the per-language check below still holds the pairing (a schema cannot)
+const templateChoices = [...new Set((picked ? [picked] : allowedLanguages).flatMap((k) => templatesFor(style, LANGUAGES[k])))].filter((id) => Object.hasOwn(TEMPLATES, id) && offered(id));
+if (!templateChoices.length) { console.error(`沒有可用的模板：風格「${style.name}」與設計語言 ${(picked ? [picked] : allowedLanguages).join('、')} 沒有交集`); process.exit(2); }
 
 // ---- schema (structured output): only vocabulary the engine has
 // params are a list of {key, value} pairs: one optional field per template parameter would exceed the API's limit
@@ -301,7 +307,7 @@ const SCHEMA = {
       properties: { id: str, kind: { type: 'string', enum: ['image', 'video'] }, prompt: { type: 'string', description: 'English. Scene only, never any text.' },
         from: { type: 'string', description: 'video: id of the image used as its first frame' }, layering: { type: 'string', enum: ['single'] } } } },
     shots: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'start', 'end', 'template', 'params', 'camera', 'transitionIn'],
-      properties: { id: str, start: { type: 'number' }, end: { type: 'number' }, template: { type: 'string', enum: Object.keys(TEMPLATES).filter(offered) },
+      properties: { id: str, start: { type: 'number' }, end: { type: 'number' }, template: { type: 'string', enum: templateChoices },
         params: { type: 'array', description: '只列要改變預設值的參數', items: { type: 'object', additionalProperties: false, required: ['key', 'value'],
           properties: { key: { type: 'string', description: '模板的參數名稱' }, value: { type: 'string', description: '數字、true/false 或選項名稱' } } } },
         asset: str,
@@ -371,8 +377,6 @@ const SYSTEMS_TEXT = `設計語言（language，最重要的決定）：每首�
 ${allowedLanguages.map((k) => `- ${k}（${LANGUAGES[k].name}）${candidates.includes(k) ? '【候選：選它要寫 candidateReason】' : ''}${recentLanguages.has(k) ? '【最近用過：最適合這首才選，選了就要讓配色、字型、媒材與質感明顯不同】' : ''}：${LANGUAGES[k].essence} 適合：${LANGUAGES[k].suits}。模板：${LANGUAGES[k].templates.join('、')}${LANGUAGES[k].kit ? `。質感要點（驗收通過的${LANGUAGES[k].kit!.song}）：${LANGUAGES[k].kit!.craft}` : ''}`).join('\n')}
 最近做過的歌（這首要和它們明顯不同）：
 ${recentText}`;
-const style = STYLES[a['style-id']!];
-if (!style) throw new Error(`未知風格 ${a['style-id']}`);
 const tier = a.tier as Tier;
 if (!TIERS[tier]) throw new Error(`未知版本 ${a.tier}（still | standard | rich）`);
 const scenes = sceneCount(tier, win, repeatSec);
@@ -510,8 +514,10 @@ ${sys.variety ? `- 每首的差異（必須做）：${sys.variety.rule}\n${(() =
   })()}`;
   const qaNotes = a['qa-notes'] && existsSync(a['qa-notes']) ? `\n\n【上一版設計的畫面檢查發現這些問題，這一版必須避免】\n${readFileSync(a['qa-notes'], 'utf8')}` : '';
   const userD = `為這首歌設計 design、graphics、story${sys.motif ? ' 與 motif' : ''}。企劃的鏡頭與歌詞版型已定，你決定字型、色彩、質感、爆點樣式，以及畫面的圖形：graphics 是用程式畫的圖層組合（取代滿版背景圖），依段落切換。\n\n${sysText}\n\n${GRAPHICS_RULES}\n\n${DESIGN_RULES}\n\n${STORY_RULES}\n\n${sys.motif ? MOTIF_RULES : ''}\n\n【歌曲】${song.title}\n【概念】${base.concept}\n【背景圖的內容】\n${base.assets.filter((x) => x.kind === 'image').map((x) => `- ${x.id}: ${x.prompt}`).join('\n')}\n【結構】${describeStructure(structure)}\n【段落】\n${sections}\n【鏡頭】\n${base.shots.map((x) => `${x.id} ${x.start.toFixed(1)}–${x.end.toFixed(1)}s ${x.template}${x.params['attachKind'] === 'photo' || x.params['attachKind'] === 'sticker' ? `（傳了一則${x.params['attachKind'] === 'photo' ? '照片' : '貼圖'} ${x.params['attach']}，${x.params['attachVoice'] === 'them' ? '對方' : '自己'}傳的${x.params['attachKind'] === 'sticker' ? '：story 的 props 要列出這個 id，what 寫貼圖的樣子' : ''}）` : ''}`).join('\n')}\n【關鍵詞】${keyWords(song).join('、')}\n【歌詞】\n${cues.map((c) => `${c.start.toFixed(1)}s ${c.text}`).join('\n')}`;
-  const wish = designBriefText({ style: styleText, briefReading: (base as { briefReading?: string }).briefReading, note, previous, hasRefs: refs.length > 0 });
-  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withRefs(userD + qaNotes + wish, refs) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
+  const wish = designBriefText({ style: styleText, briefReading: (base as { briefReading?: string }).briefReading, note, previous, chosen: picked, hasRefs: refs.length > 0 });
+  // the chosen language's quality bar (the frames of the song it was proven on) after the brief: the director sees what
+  // the finish must reach, not only the words for it (the beta's finished videos never met the kit before)
+  const dMessages: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: 'user', content: withKit(withRefs(userD + qaNotes + wish, refs), loadKit(language, LANGUAGES[language].kit)) as Anthropic.Beta.Messages.BetaMessageParam['content'] }];
   writeFileSync(join(out, 'design_prompt.txt'), userD + qaNotes + wish);
   let checked!: ReturnType<typeof validateTreatment>;
   const usage = { input: 0, output: 0 };
@@ -602,6 +608,7 @@ status.stage('director', { state: 'running', done: 0, total: 3, message: undefin
 process.on('uncaughtExceptionMonitor', (e) => status.stage('director', { state: 'failed', message: String(e).slice(0, 300) }));
 let result: ReturnType<typeof validateTreatment> | undefined;
 let chosen: LanguageId = 'neon-stage';
+const pacing = (e: string) => /^鏡頭 \S+ 長 [\d.]+ 秒，這個風格要/.test(e);
 for (let attempt = 0; attempt < 3; attempt++) {
   const message = await streamed({
       model: a.model!, max_tokens: 64000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
@@ -634,8 +641,14 @@ for (let attempt = 0; attempt < 3; attempt++) {
   if (!lang) result.errors.push(`language ${chosen} 不存在`);
   else {
     if (!allowedLanguages.includes(chosen)) result.errors.push(`language ${chosen} 不在可選的設計語言裡，請改選：${allowedLanguages.join('、')}`);
-    const bad = draft.shots.filter((x) => !lang.templates.includes(x.template));
-    if (bad.length) result.errors.push(`「${lang.name}」不能用這些模板：${bad.map((x) => `${x.id}=${x.template}`).join('、')}（可用：${lang.templates.join('、')}）`);
+    // (the language's templates are checked by checkStyle, with the style's, as one rule: templatesFor)
+  }
+  // a shot a little off the style's pacing still renders fine: the director gets one go at it, then it is a note, not
+  // a third paid attempt (neon-stage on 第六感 died on one 8.6 s shot where the style asks 3.5–8; 72 of the retries in
+  // 51 runs were pacing alone)
+  if (attempt >= 1 && result.errors.length && result.errors.every(pacing)) {
+    result.fixes.push(...result.errors.map((e) => `接受：${e}`));
+    result.errors = [];
   }
   console.log(`attempt ${attempt}: ${result.errors.length} errors, ${result.fixes.length} fixes`);
   // every attempt on record (why it went back, what it cost), also when the run is stopped half way
@@ -644,13 +657,6 @@ for (let attempt = 0; attempt < 3; attempt++) {
   if (!result.errors.length) break;
   messages.push({ role: 'assistant', content: message.content as Anthropic.Beta.Messages.BetaContentBlockParam[] });
   messages.push({ role: 'user', content: `程式驗證未通過，請修正後輸出完整的企劃 JSON：\n${result.errors.map((e) => `- ${e}`).join('\n')}` });
-}
-// a shot a little off the style's pacing still renders fine: after the last attempt it is a note, not a failed song
-// (neon-stage on 第六感 died on one 8.6 s shot where the style asks 3.5–8)
-const pacing = (e: string) => /^鏡頭 \S+ 長 [\d.]+ 秒，這個風格要/.test(e);
-if (result && result.errors.length && result.errors.every(pacing)) {
-  result.fixes.push(...result.errors.map((e) => `接受：${e}`));
-  result.errors = [];
 }
 if (!result || result.errors.length) throw new Error('導演 3 次仍未通過驗證：\n' + result?.errors.join('\n'));
 result.fixes.push(...editorPass(result.treatment, sameLines(song)));

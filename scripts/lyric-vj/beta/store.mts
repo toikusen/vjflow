@@ -49,6 +49,8 @@ export interface Job {
   decision?: 'accepted' | 'adjusted' | 'redone';
   /** On the make job an acceptance created: the concept job it came from. */
   conceptOf?: string;
+  /** Why this video reached the person without the admin's look (a candidate style whose checks all passed; a hold nobody took in time): for the admin's later review. */
+  autoReleased?: string;
 }
 export interface ConceptInputs { concept: string; style?: string; refs: string[]; note?: string; from?: string; kind?: undefined; ranges?: undefined }
 export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; feedbackId?: string; concept?: undefined; style?: undefined; refs?: undefined; note?: undefined }
@@ -65,8 +67,14 @@ export interface Db { users: User[]; songs: Song[]; jobs: Job[]; globalLimitUsd:
 /** A crash-orphaned pipeline's process group; `since` is when its job started (or when it was found, lacking that). */
 export interface Orphan { pid: number; jobId: string; since: string }
 
-/** A language's tier: the admin's choice, else `proven` for a proven language and `unlisted` for the rest. */
-export const styleTier = (db: Db, id: string): StyleTier => db.styles?.[id]?.tier ?? (LANGUAGES[id as LanguageId]?.proven ? 'proven' : 'unlisted');
+/**
+ * A language's tier: the admin's choice, else `proven` for a proven language, `unlisted` for a shelved one and
+ * `candidate` for the rest (on the menu, but its video waits for the admin's look).
+ */
+export const styleTier = (db: Db, id: string): StyleTier => {
+  const l = LANGUAGES[id as LanguageId];
+  return db.styles?.[id]?.tier ?? (l?.proven ? 'proven' : l?.shelved ? 'unlisted' : 'candidate');
+};
 /** True when the person may pick the language: its tier is proven or candidate. */
 export const styleOffered = (db: Db, id: string) => Object.hasOwn(LANGUAGES, id) && styleTier(db, id) !== 'unlisted';
 /** The candidate languages, in catalog order (the director must give a reason when it picks one). */

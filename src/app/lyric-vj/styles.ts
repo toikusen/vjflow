@@ -1,6 +1,6 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
-import { LANGUAGES, type LanguageId } from './languages';
+import { type DesignLanguage, LANGUAGES, type LanguageId } from './languages';
 import { MOVING_FORMS, motifStateAt } from './motif';
 import { analyzeStructure, chorusSpans, sameLines, TitleCards, titleGaps, wantedTitleGaps } from './structure';
 import { sceneCount, Tier, TIERS } from './tiers';
@@ -49,6 +49,17 @@ export const STYLES: Record<string, StylePreset> = {
 /** Time an input field takes to type a line out before the whole line can be read (s). */
 const INPUT_TYPING = 0.4;
 
+/**
+ * The templates a treatment may use: an interface language's own list (it has its own layout); otherwise the ones both
+ * the style and the language allow (the two lists used to be checked apart, and 138 of the director's retries were
+ * templates one list allowed and the other refused). The director's schema offers this same set.
+ */
+export function templatesFor(style: Pick<StylePreset, 'templates'>, lang?: Pick<DesignLanguage, 'templates' | 'layout'>): string[] {
+  if (!lang) return style.templates;
+  if (lang.layout) return lang.templates;
+  return style.templates.filter((x) => lang.templates.includes(x));
+}
+
 export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimeline, win: Window, tier: Tier = 'standard', titleCards: TitleCards = 'ends'): string[] {
   // a storyboard design is drawn by its parts and checked by its own rules (scene.ts) and on its frames: the caption
   // rules here (pictures per tier, templates per shot, shot lengths) do not apply to it
@@ -68,10 +79,9 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
   // a chosen design language brings its own templates and its own picture rules: the style's list left out the phone's
   // chat, notify and input, and the two checks sent 天文対話 back and forth until it failed
   const lang = LANGUAGES[((t as { language?: string }).language ?? t.design?.language) as LanguageId];
-  // (only an interface language, one with its own layout; the others stay held to both lists, as before)
-  const templates = lang?.layout ? lang.templates : style.templates;
+  const templates = templatesFor(style, lang);
   for (const s of t.shots) {
-    if (!templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於${lang?.layout ? `設計語言「${lang.name}」` : `風格「${style.name}」`}`);
+    if (!templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於${lang ? `設計語言「${lang.name}」${lang.layout ? '' : `在風格「${style.name}」裡`}` : `風格「${style.name}」`}（可用：${templates.join('、')}）`);
     if (!s.asset && !(lang?.photos === false || lang?.photos === 'attached')) errors.push(`鏡頭 ${s.id} 沒有素材；這個風格每個鏡頭都要有素材`);
   }
   // title cards over the gaps the user asked for (a design option, not a rule of the style)

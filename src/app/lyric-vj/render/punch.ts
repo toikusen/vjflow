@@ -72,7 +72,8 @@ export const punch: TemplateRenderer = {
     if (after) tagSource(small[before ? 1 : 0], rt.cue.text, k1);
     for (const g of [...echo, ...kw, ...small.flat()]) group.add(g.mesh);
 
-    const smallRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'fade' }, showFrom: rt.showFrom + 0.1 * rt.pace };
+    // the small lines fade in a beat after the keyword — unless readFix landed the line at once (rushed): then they are up with it
+    const smallRt: CueRuntime = rt.rushed ? rt : { ...rt, style: { ...rt.style, enter: 'fade' }, showFrom: rt.showFrom + 0.1 * rt.pace };
     const bounce = p['bounce'] as number;
     const shake = method === 'shake';
 

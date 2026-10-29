@@ -131,20 +131,18 @@ for (const sheet of plan.sheets) {
   execFileSync('uv', ['run', '-q', '--with', 'numpy', '--with', 'pillow', '--with', 'scipy', 'python', 'scripts/lyric-vj/key_sprites.py', sheetFile(sheet.id), dir, '--min', '0.003'], { stdio: ['ignore', 'ignore', 'inherit'] });
   const frames: { file: string }[] = JSON.parse(readFileSync(join(dir, 'frames.json'), 'utf8')).frames;
   const used = new Set(Object.values(names).flatMap((x) => Object.values(x).map(([id]) => id)));
-  // a hero's sheet holds one drawing: when one piece came out it is the hero (the review tends to reject a great wave
-  // for the boats in it)
+  // a hero's sheet holds one drawing; one piece out of it is the hero, but it is still looked at: only for being whole
+  // and the thing asked for (a half-keyed or broken drawing used to pass here unseen), never for taste — the review
+  // tends to reject a great wave for the boats in it, so that judgement is kept out of the question
   const [only] = sheet.items;
-  if (sheet.items.length === 1 && frames.length === 1 && !used.has(only.id)) {
-    names[dir] = { '0': [only.id, only.what.slice(0, 80)] };
-    continue;
-  }
+  const hero = sheet.items.length === 1 && frames.length === 1 && !used.has(only.id);
   // a numbered contact sheet of what was cut out
   const numbered = join(out, `numbered_${sheet.id}.json`);
   writeFileSync(numbered, JSON.stringify({ [dir]: Object.fromEntries(frames.map((_, i) => [String(i), [String(i), '']])) }));
   execFileSync('uv', ['run', '-q', '--with', 'pillow', 'python', 'scripts/lyric-vj/sprite_library.py', numbered, join(out, `numbered_${sheet.id}`)], { stdio: 'ignore' });
   const look = readFileSync(join(out, `numbered_${sheet.id}`, 'contact.jpg')).toString('base64');
   const named = await ask<{ frames: { n: number; keep: boolean; id: string; what: string }[] }>([
-    { type: 'text', text: `這張是去背後切出來的素材，每張下面的數字是編號。原本要求畫的是：\n${sheet.items.map((x) => `${x.id}: ${x.what}`).join('\n')}\n逐一判斷每個編號：是不是完整、畫對、可以用的物件（畫壞的、多出來的怪東西、殘缺、黏到雜訊的 keep=false），可以用的給 id（盡量用上面的 id；同一種的其他姿勢加後綴，id 不能重複）和一句中文說明（是什麼、姿勢或方向）。` },
+    { type: 'text', text: `${hero ? '這是這首歌的主角圖（只有一張，就是要求畫的那個）。只判斷它是不是完整、沒畫壞、沒黏到雜訊、確實是要求的東西；構圖、風格、喜不喜歡都不是理由，是就 keep=true 並用上面的 id。\n' : ''}這張是去背後切出來的素材，每張下面的數字是編號。原本要求畫的是：\n${sheet.items.map((x) => `${x.id}: ${x.what}`).join('\n')}\n逐一判斷每個編號：是不是完整、畫對、可以用的物件（畫壞的、多出來的怪東西、殘缺、黏到雜訊的 keep=false），可以用的給 id（盡量用上面的 id；同一種的其他姿勢加後綴，id 不能重複）和一句中文說明（是什麼、姿勢或方向）。` },
     { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: look } },
   ], {
     type: 'object', additionalProperties: false, required: ['frames'],

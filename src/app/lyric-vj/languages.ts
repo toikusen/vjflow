@@ -51,6 +51,14 @@ export interface DesignLanguage {
    */
   proven?: boolean;
   /**
+   * Off the menu for now (its default tier is `unlisted`; the admin may still list it): judged unfit in the 2026-10-11
+   * style batch (cel80s, claymation, stained-glass, neon-stage, art-deco, cyanotype, aizome), a duplicate of a listed
+   * look (hologram, dark-glitch of terminal / y2k), or waiting for a paint texture the renderer cannot draw yet
+   * (watercolor, ink-wash, citypop). Every other language defaults to `candidate`: on the menu, picked with a reason,
+   * its video held for the admin's look until a song passes the user and it becomes proven.
+   */
+  shelved?: boolean;
+  /**
    * The style kit of a proven language: the user-approved song it was proven on (its frames are
    * scripts/lyric-vj/references/kits/<id>.jpg, shown to the director and the reviewer as the quality bar) and what
    * makes that look work, in words the drawing must follow.
@@ -236,6 +244,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '孤獨、網路、深夜、未來、機械感、科技、通訊、內省的歌',
   },
   cel80s: {
+    shelved: true,
     own: ['sunburst'],
     chroma: ['#FF3AA7', '#3AF0FF'],
     koma: 12,
@@ -334,6 +343,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '溫柔、可愛、童話、日常、夜空的歌',
   },
   'neon-stage': {
+    shelved: true,
     own: [],
     name: '霓虹舞台',
     essence: '黑底上的霓虹訊號：細格線、取景器框、城市照片被壓成單色長條，副歌換成旋轉的放射紋和警示膠帶；一個程式畫的發光主題物件貫穿全曲。',
@@ -351,6 +361,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '電子、搖滾、地下偶像、強烈節奏的歌',
   },
   'art-deco': {
+    shelved: true,
     own: ['sunburst'],
     koma: 12,
     name: '裝飾藝術',
@@ -386,6 +397,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '理工、未來、計畫、夢想、構築感的歌',
   },
   'ink-wash': {
+    shelved: true,
     own: ['seal', 'face'],
     koma: 12,
     name: '水墨',
@@ -405,6 +417,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '中華風、古風、禪意、山水、孤獨或抒情的歌',
   },
   'stained-glass': {
+    shelved: true,
     own: [],
     name: '彩繪玻璃',
     essence: '從石造大殿內部看見的彩繪玻璃窗：深色鉛條框住寶石般的玻璃，只有被陽光照到的地方才活起來；光的顏色就代表時間。',
@@ -462,6 +475,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '節奏明快、可愛、資訊感、電子流行的歌',
   },
   watercolor: {
+    shelved: true,
     own: [],
     koma: 12,
     name: '水彩手帳',
@@ -481,6 +495,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '旅行、日常、溫柔、回憶、青春的歌',
   },
   hologram: {
+    shelved: true,
     own: [],
     name: '全像介面',
     essence: '物體被掃描成發光的線框，目標框鎖定、資訊引線拉出，數值在鎖定的那一刻變成強調色。一個冷色加一個暖色。',
@@ -611,6 +626,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '和風可愛、祭典、新年、少女、輕快的歌',
   },
   aizome: {
+    shelved: true,
     own: [],
     koma: 12,
     name: '藍染',
@@ -630,6 +646,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '夏天、清涼、寧靜、和風、成熟的歌',
   },
   citypop: {
+    shelved: true,
     own: [],
     text: { ghost: [0.03, 0.03] },
     name: 'City Pop',
@@ -724,6 +741,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '校園、青春、畢業、友情、懷念的歌',
   },
   cyanotype: {
+    shelved: true,
     own: [],
     name: '藍曬',
     essence: '一張曬圖法做出的相片：深普魯士藍的紙上，放在上面的東西（葉子、花、羽毛、蕾絲、手）留下白色的剪影，邊緣因為光的滲透而柔和；紙張帶刷痕與水漬。',
@@ -742,6 +760,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '回憶、植物、安靜、思念、抒情的歌',
   },
   claymation: {
+    shelved: true,
     own: ['heart'],
     koma: 12,
     text: { ghost: [0.05, 0.05] },
@@ -1007,6 +1026,7 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
     suits: '偶像、應援、MIX、Call 多、live 感強的歌',
   },
   'dark-glitch': {
+    shelved: true,
     own: [],
     chroma: ['#FF1E3C', '#1EE6FF'],
     name: '黑紅故障',

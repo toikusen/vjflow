@@ -188,18 +188,19 @@ test('retryJob carries a concept job\'s inputs and a make job\'s accepted concep
   assert.equal(retryJob(db, job({ id: 'm', kind: 'make', tier: 'img', status: 'failed', conceptOf: 'c' }), { auto: true }).conceptOf, 'c');
 });
 
-test('style tiers default to proven for proven languages and unlisted otherwise; the admin overrides them', () => {
+test('style tiers default to proven, unlisted for a shelved language and candidate otherwise; the admin overrides them', () => {
   const db = emptyDb();
   assert.equal(styleTier(db, 'silkscreen'), 'proven');
-  assert.equal(styleTier(db, 'terminal'), 'unlisted');
+  assert.equal(styleTier(db, 'cel80s'), 'unlisted');
+  assert.deepEqual([styleTier(db, 'terminal'), styleOffered(db, 'terminal'), styleOffered(db, 'cel80s')], ['candidate', true, false]);
   assert.equal(styleOffered(db, 'nope'), false);
-  db.styles = { terminal: { tier: 'candidate' }, silkscreen: { tier: 'unlisted' } };
-  assert.deepEqual([styleTier(db, 'terminal'), styleOffered(db, 'terminal'), styleOffered(db, 'silkscreen')], ['candidate', true, false]);
-  assert.deepEqual(candidateIds(db), ['terminal']);
+  db.styles = { cel80s: { tier: 'candidate' }, terminal: { tier: 'unlisted' }, silkscreen: { tier: 'unlisted' } };
+  assert.deepEqual([styleTier(db, 'cel80s'), styleOffered(db, 'cel80s'), styleOffered(db, 'terminal'), styleOffered(db, 'silkscreen')], ['candidate', true, false, false]);
+  assert.ok(candidateIds(db).includes('cel80s') && !candidateIds(db).includes('terminal'));
   // the proven set at run time: silkscreen unlisted drops out, a promoted language comes in
   assert.ok(!provenIds(db).includes('silkscreen') && provenIds(db).length === PROVEN_LANGUAGES.length - 1);
-  db.styles.terminal = { tier: 'proven' };
-  assert.ok(provenIds(db).includes('terminal') && !candidateIds(db).includes('terminal'));
+  db.styles.cel80s = { tier: 'proven' };
+  assert.ok(provenIds(db).includes('cel80s') && !candidateIds(db).includes('cel80s'));
 });
 
 test('a db saved before db.orphans existed loads, and trackOrphans merges old entries with running jobs', () => {

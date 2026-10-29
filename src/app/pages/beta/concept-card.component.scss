@@ -349,6 +349,17 @@ h3 {
     }
   }
 
+  select {
+    width: 100%;
+    padding: 9px 12px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+  }
+
   textarea {
     width: 100%;
     min-height: 40px;

@@ -149,6 +149,10 @@ const pageUrl = `${base}${url(join(out, 'render', 'render.html'))}?job=${url(joi
 
 const browser = await chromium.launch({ channel: 'chrome', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
 const getFont = fontCache(resolve('out/font-cache'));
+// every renderer fault any page reported (a code layer that failed to compile or threw, a page error, a texture that
+// did not load): written into metrics.json so the delivery gate (beta/quality.mts) sees them, not only the log
+const rendererErrors = new Set<string>();
+const fault = (msg: string) => { rendererErrors.add(msg); console.error(msg); };
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   // Google Fonts from the disk cache shared by every worktree (out/ is shared; font-cache.mts). A miss with no network
@@ -160,11 +164,14 @@ async function openPage(): Promise<Page> {
     if (!font) return void (fontMiss.push(u), await route.abort());
     await route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } });
   });
-  page.on('pageerror', (e) => console.error('page error:', e.message));
+  page.on('pageerror', (e) => fault(`page error: ${e.message}`));
   // a texture that fails to load surfaces only as 'page error: Event': name the file
-  page.on('requestfailed', (r) => console.error('request failed:', r.url(), r.failure()?.errorText));
-  page.on('response', (r) => r.status() >= 400 && console.error('http', r.status(), r.url()));
-  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && console.error(m.text()));
+  page.on('requestfailed', (r) => fault(`request failed: ${r.url()} ${r.failure()?.errorText ?? ''}`));
+  page.on('response', (r) => r.status() >= 400 && fault(`http ${r.status()} ${r.url()}`));
+  // of the code layer's reports a layer that failed to compile, threw, or drew nothing is a fault; its diagnostics
+  // (lyric cover shares, slow frames, camera tracks, scene use) stay in the log, judged by their own rules (make.sh's
+  // hides > 40 %)
+  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|track |scene-use )/.test(m.text()) ? console.error(m.text()) : fault(m.text())));
   // a busy machine (several songs at once) can miss the ready timeout: one more try with longer patience before the
   // song fails (three style tests started together all timed out, then rendered fine one by one)
   for (let attempt = 0; ; attempt++) {
@@ -243,7 +250,7 @@ try {
     writeFileSync(join(out, 'scene-qa.json'), JSON.stringify(sceneQa, null, 1));
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, rendererErrors: [...rendererErrors] }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     // a storyboard that fails its check on the finished frames is not rendered: no half-made output
@@ -341,7 +348,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, rendererErrors: [...rendererErrors] }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

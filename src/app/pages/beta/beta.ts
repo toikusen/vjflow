@@ -4,7 +4,7 @@ import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string; timingSkipped?: boolean }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; autoReleased?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
 
 /** What a concept job was asked for (`job.inputs` on the server). */
 export interface BetaJobInputs { concept?: string; style?: string; refs?: string[]; note?: string; from?: string }
@@ -16,6 +16,8 @@ export interface BetaJobInputs { concept?: string; style?: string; refs?: string
 export interface ConceptSummary {
   language: string; languageName: string; font: string; palette: string[];
   concept: string; briefReading?: string; concerns?: string; stills: string[];
+  /** Per still, what the plan said that moment shows ('' for a fill); absent on an older concept. */
+  stillNotes?: string[];
   interludes?: { start: number; end: number; mode: 'backdrop' | 'pictures'; reason?: string }[];
 }
 
@@ -106,7 +108,7 @@ const tierInfo = (tier: BetaTier, name: string, about: string, rest: number) =>
 export const TIER_INFO: Record<BetaTier, { name: string; about: string; concept: number; rest: number; price: number; min: number }> = {
   none: tierInfo('none', '文字動態版', '只有歌詞文字與圖形動態，沒有插圖。', 1.5),
   img: tierInfo('img', '插圖版', '文字動態加上配合歌詞的插圖道具。', 3.5),
-  hybrid: tierInfo('hybrid', '故事版', '依歌詞編出故事，有角色與畫面。', 13.5),
+  hybrid: tierInfo('hybrid', '故事版', '依歌詞編出故事，有角色與畫面；成品會依故事重新構圖，示意畫面代表風格與配色。', 13.5),
 };
 
 /** The step list for a job: by its kind, and for a make job by its tier; anything unknown reads as the text version. */

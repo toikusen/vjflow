@@ -5,7 +5,7 @@ import { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { betaCommand, createBetaServer, stopBeta } from './server.mts';
+import { betaCommand, createBetaServer, releaseStale, songDir as songDir2, stopBeta } from './server.mts';
 import { killRunning, waitGone } from './queue.mts';
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -16,6 +16,8 @@ import { invite, load, save, emptyDb, runPath, type Job } from './store.mts';
 // every server and job a test starts is stopped when the file ends, so a failed assertion cannot leave the process hanging
 const started: ReturnType<typeof createBetaServer>[] = [];
 const create = (o: Parameters<typeof createBetaServer>[0]) => { const b = createBetaServer(o); started.push(b); return b; };
+/** Shell appended to a stub make/fix: a base treatment in a proven language, so the video is handed over rather than held. */
+const provenTreatment = (run: string, tier: string | undefined = 'img') => { const t = JSON.stringify({ design: { language: Object.entries(LANGUAGES).find(([, l]) => l.proven)![0] } }); const dirs = ['base', ({ none: 'noimg', img: 'img', hybrid: 'cut' } as Record<string, string>)[tier ?? ''] ?? 'base']; return dirs.map((d) => ` && mkdir -p '${run}/${d}' && echo '${t}' > '${run}/${d}/treatment.json'`).join(''); };
 after(() => {
   for (const b of started) {
     b.queue.stopping = true;
@@ -37,7 +39,7 @@ async function setup() {
   mkdirSync(join(root, 'songs/s1'), { recursive: true });
   writeFileSync(join(root, 'songs/s1/song.json'), SONG);
   // a concept job snapshots the timing and leaves a summary to accept; any job leaves a video (only make jobs serve one)
-  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${job.kind === 'concept' ? ` && cp '${join(root, 'songs/s1/song.json')}' '${runPath(root, job)}/song.json' && echo '{"stills":[]}' > '${runPath(root, job)}/concept.json'` : ''}; echo '##PHASE 製作中'; echo '##COST 2.5'` });
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${job.kind === 'concept' ? ` && cp '${join(root, 'songs/s1/song.json')}' '${runPath(root, job)}/song.json' && echo '{"stills":[]}' > '${runPath(root, job)}/concept.json'` : provenTreatment(runPath(root, job), job.tier)}; echo '##PHASE 製作中'; echo '##COST 2.5'` });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;
   const as = (token?: string) => (path: string, init: RequestInit = {}) => fetch(base + path, { ...init, redirect: 'manual', headers: { ...(token ? { cookie: `vjb=${token}` } : {}), 'content-type': 'application/json' } });
@@ -119,6 +121,28 @@ test('a video is downloadable once its job is done; a held one only after the ad
   assert.equal((await t.admin('/beta/songs/s1/video/hybrid')).status, 200);
   assert.equal((await t.admin('/beta/admin/jobs/h/approve', { method: 'POST' })).status, 200);
   assert.equal((await get()).status, 200);
+  t.beta.server.close();
+});
+
+test('a video held longer than HOLD_HOURS goes out by itself with its reason on record; one whose file cannot be handed over stays', async () => {
+  const t = await setup();
+  const dir = songDir2(t.root, 's1');
+  mkdirSync(join(dir, 'runs/old'), { recursive: true });
+  mkdirSync(join(dir, 'runs/bad'), { recursive: true });
+  mkdirSync(join(dir, 'runs/new'), { recursive: true });
+  for (const r of ['old', 'bad', 'new']) writeFileSync(join(dir, `runs/${r}/video.mp4`), 'mp4');
+  writeFileSync(join(dir, 'runs/bad/quality.json'), JSON.stringify({ findings: ['影片檔無法解析'], fileOk: false }));
+  const owner = t.beta.db.songs[0].userId;
+  const held = (id: string, endedAt: string) => ({ id, userId: owner, songId: 's1', kind: 'make' as const, tier: 'img' as const, status: 'admin' as const, reservedUsd: 6, createdAt: endedAt, endedAt, runDir: `runs/${id}`, phase: '等管理者確認：2 句低於閱讀時間規則' });
+  const now = Date.parse('2026-10-29T12:00:00Z');
+  t.beta.db.jobs.push(held('old', '2026-10-29T07:00:00Z'), held('bad', '2026-10-29T07:00:00Z'), held('new', '2026-10-29T10:00:00Z'));
+  const out = releaseStale(t.beta.db, t.root, () => undefined, now);
+  assert.deepEqual(out.map((j) => j.id), ['old']);
+  const by = (id: string) => t.beta.db.jobs.find((j) => j.id === id)!;
+  assert.deepEqual([by('old').status, by('bad').status, by('new').status], ['done', 'admin', 'admin']);
+  assert.equal(by('old').autoReleased, '等了 4 小時沒人處理，自動放行（等管理者確認：2 句低於閱讀時間規則）');
+  assert.equal((await t.tester('/beta/jobs/old/video')).status, 200);
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'admin.autorelease' && e.jobId === 'old'));
   t.beta.server.close();
 });
 
@@ -206,7 +230,7 @@ test('a legacy make job still queued at start gets a run folder and its video do
   db.songs.push({ id: 's1', userId: tester.user.id, title: 'T', artist: 'A', language: 'ja', createdAt: '2026-10-27T00:00:00Z', confirmedAt: '2026-10-27T00:00:00Z' });
   db.jobs.push({ id: 'old', userId: tester.user.id, songId: 's1', kind: 'make', tier: 'img', status: 'running', reservedUsd: 6, createdAt: '2026-10-27T00:00:00Z' });
   save(join(root, 'db.json'), db);
-  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'; echo '##COST 1'` });
+  const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command: (job) => `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${provenTreatment(runPath(root, job), job.tier)}; echo '##COST 1'` });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const job = beta.db.jobs[0];
   assert.equal(job.runDir, 'runs/old');
@@ -720,14 +744,17 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(32)]);
 const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(32)]);
 const PROVEN = Object.entries(LANGUAGES).filter(([, l]) => l.proven).map(([id]) => id);
-const UNLISTED = Object.entries(LANGUAGES).filter(([, l]) => !l.proven).map(([id]) => id);
+const UNLISTED = Object.entries(LANGUAGES).filter(([, l]) => l.shelved).map(([id]) => id);
+const CANDIDATE = Object.entries(LANGUAGES).filter(([, l]) => !l.proven && !l.shelved).map(([id]) => id);
+/** The menu in catalog order: every language but the shelved ones. */
+const ON_MENU = Object.keys(LANGUAGES).filter((id) => !UNLISTED.includes(id));
 
 /**
  * A root where the tester owns confirmed song s1 and every job is a stub: a concept job writes concept.json (with the
  * given concerns), one still and the VJ_CANDIDATES it saw; a make job writes its video. `fail` picks jobs whose first
  * (non-retry) run exits 1.
  */
-async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'concept' | 'make'; limit?: number; slow?: { on: boolean } } = {}) {
+async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'concept' | 'make'; limit?: number; slow?: { on: boolean }; make?: (run: string) => string } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'beta-'));
   const db = emptyDb();
   const admin = invite(db, 'Admin', 100, true);
@@ -741,7 +768,8 @@ async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'co
     const run = runPath(root, job);
     if (o.fail === job.kind && !job.retryOf) return 'exit 1';
     mkdirSync(join(run, 'stills'), { recursive: true });
-    if (job.kind === 'make') return `echo mp4 > '${run}/video.mp4'`;
+    // a make leaves its video and a base treatment in a proven language (any other language, or none, is held for the admin)
+    if (job.kind === 'make') return o.make?.(run) ?? `true${provenTreatment(run, job.tier)}; echo mp4 > '${run}/video.mp4'`;
     if (!existsSync(join(run, 'song.json'))) writeFileSync(join(run, 'song.json'), readFileSync(join(root, 'songs/s1/song.json')));
     if (o.slow?.on) return `sleep 30`;
     writeFileSync(join(run, 'stills', 'still_1.00.png'), PNG);
@@ -924,6 +952,21 @@ test('adjust and redo queue a new concept in a new run from the previous one; th
   t.beta.server.close();
 });
 
+test('adjust can switch to another offered style: the note becomes optional and the new job carries the style', async () => {
+  const t = await gate();
+  const { id: a } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img', concept: '夜晚' } })).json();
+  await t.done(a); // the concept came out as silkscreen
+  const other = PROVEN.find((x) => x !== 'silkscreen')!;
+  for (const style of ['silkscreen', UNLISTED[0], 'nope', 7]) assert.equal((await t.tester(`/beta/jobs/${a}/adjust`, { json: { style } })).status, 400, String(style));
+  const r = await t.tester(`/beta/jobs/${a}/adjust`, { json: { note: '', style: other } });
+  assert.equal(r.status, 202);
+  const nextId = (await r.json()).id;
+  const jb = t.beta.db.jobs.find((j) => j.id === nextId)!;
+  assert.deepEqual(jb.inputs, { concept: '夜晚', style: other, refs: [], from: a });
+  assert.equal(t.beta.db.jobs.find((j) => j.id === a)!.decision, 'adjusted');
+  t.beta.server.close();
+});
+
 test('adjust refuses a concept whose run folder is not a run of the same song', async () => {
   const t = await gate();
   const uid = t.beta.db.songs[0].userId;
@@ -979,7 +1022,7 @@ test('the style menu lists proven and candidate languages without tiers; the adm
   const t = await gate();
   assert.equal((await t.anon('/beta/styles')).status, 401);
   const list = (await (await t.tester('/beta/styles')).json()) as { id: string; name: string; suits: string; image: string | null }[];
-  assert.deepEqual(list.map((s) => s.id), PROVEN);
+  assert.deepEqual(list.map((s) => s.id), ON_MENU);
   for (const s of list) assert.deepEqual(Object.keys(s).sort(), ['id', 'image', 'name', 'suits']);
   const withImage = list.find((s) => s.image)!;
   const img = await t.tester(withImage.image!);
@@ -1002,10 +1045,42 @@ test('the style menu lists proven and candidate languages without tiers; the adm
   assert.equal((await t.tester('/beta/songs/s1/make', { json: { tier: 'img', style: PROVEN[0] } })).status, 400, 'an unlisted style cannot be picked');
   const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img', style: UNLISTED[0] } })).json();
   const job = await t.done(id);
-  assert.equal(readFileSync(join(runPath(t.root, job), 'candidates.txt'), 'utf8'), [UNLISTED[0], UNLISTED[1]].join(','));
+  assert.equal(readFileSync(join(runPath(t.root, job), 'candidates.txt'), 'utf8'), Object.keys(LANGUAGES).filter((id) => CANDIDATE.includes(id) || id === UNLISTED[0] || id === UNLISTED[1]).join(','));
   // the proven set the director gets is the admin's: the unlisted one is gone
   assert.equal(readFileSync(join(runPath(t.root, job), 'proven.txt'), 'utf8'), PROVEN.slice(1).join(','));
   t.beta.server.close();
+});
+
+test('a video whose checks passed reaches the person whatever its style (a candidate\'s or an unlisted one\'s with a note for the admin); only an unreadable final treatment waits', async () => {
+  const name = (id: string) => LANGUAGES[id as keyof typeof LANGUAGES].name;
+  // [final img/treatment.json content, expected status, expected phase, expected autoReleased]; the base is always proven
+  const cases = [
+    [JSON.stringify({ design: { language: CANDIDATE[0] } }), 'done', undefined, `候選風格「${name(CANDIDATE[0])}」：檢查全過，直接交付，有空看一下`],
+    [JSON.stringify({ design: { language: UNLISTED[0] } }), 'done', undefined, `已下架風格「${name(UNLISTED[0])}」：檢查全過，直接交付，有空看一下`],
+    [JSON.stringify({ design: { language: 'nope' } }), 'admin', '等管理者確認：讀不到成品的設計語言', undefined],
+    ['{not json', 'admin', '等管理者確認：讀不到成品的設計語言', undefined],
+    ['', 'admin', '等管理者確認：讀不到成品的設計語言', undefined],
+    [JSON.stringify({ design: { language: PROVEN[0] } }), 'done', undefined, undefined],
+  ] as const;
+  for (const [final, status, phase, released] of cases) {
+    const t = await gate({ make: (run) => `mkdir -p '${run}/base' '${run}/img'; echo '${JSON.stringify({ design: { language: PROVEN[0] } })}' > '${run}/base/treatment.json'; ` + (final ? `printf '%s' '${final}' > '${run}/img/treatment.json'; ` : '') + `echo mp4 > '${run}/video.mp4'` });
+    const concept = await t.done((await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json()).id);
+    const { id } = await (await t.tester(`/beta/jobs/${concept.id}/accept`, { json: {} })).json();
+    await waitFor(() => ['admin', 'done'].includes(t.beta.db.jobs.find((j) => j.id === id)?.status ?? ''));
+    const job = t.beta.db.jobs.find((j) => j.id === id)!;
+    assert.deepEqual([job.status, job.phase, job.error, job.autoReleased], [status, phase ?? job.phase, undefined, released], final || '(no final treatment)');
+    if (phase) assert.equal(job.steps?.at(-1)?.phase, phase, 'the hold is a recorded step');
+    // the note is the admin's: the owner's view of the job has none
+    const seen = (await (await (released ? t.admin : t.tester)(`/beta/jobs`)).json()) as { id: string; autoReleased?: string }[];
+    assert.equal(seen.find((x) => x.id === id)?.autoReleased, released);
+    if (released) assert.equal(((await (await t.tester('/beta/jobs')).json()) as { id: string; autoReleased?: string }[]).find((x) => x.id === id)?.autoReleased, undefined);
+    assert.equal((await t.tester(`/beta/jobs/${id}/video`)).status, status === 'admin' ? 404 : 200);
+    if (status === 'admin') {
+      assert.equal((await t.admin(`/beta/admin/jobs/${id}/approve`, { method: 'POST' })).status, 200);
+      assert.equal((await t.tester(`/beta/jobs/${id}/video`)).status, 200);
+    }
+    t.beta.server.close();
+  }
 });
 
 test('an admin retry of a legacy failed job checks the limit against what it set aside', async () => {
@@ -1129,7 +1204,7 @@ async function fixRoot(o: { slow?: boolean; limit?: number; script?: string; sam
   // the person retimed the song after these videos (a timing fix needs a change)
   writeFileSync(join(root, 'songs/s1/song.json'), o.current ?? (o.sameTiming ? SONG : RETIMED));
   const seen: Job[] = [];
-  const command = (job: Job) => { seen.push(job); return o.script ?? (o.slow ? 'sleep 30' : `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'`); };
+  const command = (job: Job) => { seen.push(job); return o.script ?? (o.slow ? 'sleep 30' : `mkdir -p '${runPath(root, job)}' && echo mp4 > '${runPath(root, job)}/video.mp4'${provenTreatment(runPath(root, job), job.tier)}`); };
   const beta = create({ root, publicUrl: 'https://beta.test', env: {}, command });
   await new Promise<void>((ok) => beta.server.listen(0, '127.0.0.1', ok));
   const base = `http://127.0.0.1:${(beta.server.address() as AddressInfo).port}`;

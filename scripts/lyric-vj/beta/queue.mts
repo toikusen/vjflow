@@ -26,6 +26,8 @@ export interface Queue {
   holding?: boolean;
   /** Told when a job starts, enters a phase, adds a measured cost or ends. */
   onEvent?: (job: Job, e: Omit<BetaEvent, 'at' | 'jobId'>) => void;
+  /** Why a job that exited 0 waits for the admin instead of reaching the person (its last phase), or undefined. */
+  hold?: (job: Job) => string | undefined;
 }
 
 /**
@@ -183,7 +185,14 @@ export function pump(q: Queue) {
     // a job that needs the admin (a key shot no try drew cleanly) says so on its last line: exit 10.
     // A tripped fuse ends the job failed whatever the exit code (the process may have exited 0 before the kill
     // reached it): the person is charged nothing, the admin sees the fuse
-    const status = fused ? 'failed' : code === 0 ? 'done' : code === 10 ? 'admin' : 'failed';
+    // the server may hold a clean exit too (a candidate language's video): its reason becomes the last phase
+    const held = !fused && code === 0 ? q.hold?.(job) : undefined;
+    if (held) {
+      job.phase = held;
+      (job.steps ??= []).push({ phase: held, at: now() });
+      q.onEvent?.(job, { type: 'job.phase', phase: held });
+    }
+    const status = fused ? 'failed' : held || code === 10 ? 'admin' : code === 0 ? 'done' : 'failed';
     const failed = status === 'failed';
     Object.assign(job, {
       status,

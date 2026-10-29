@@ -2,6 +2,7 @@ import { afterRenderEffect, Component, computed, ElementRef, input, output, sign
 import { BetaJob, BetaSong, CONCEPT_PRICE, stepsMin, TIER_INFO } from './beta';
 import { acceptBlock, adjustBlock, conceptHead, interludeLines, MAX_NOTE, redoBlock, stillLabel } from './concept';
 import { feelingLength } from './make';
+import type { BetaStyle } from './make-form.component';
 import { Ask } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
@@ -36,6 +37,10 @@ export class ConceptCardComponent {
   /** 「我了解，仍要用這個風格」. */
   protected readonly confirmed = signal(false);
   protected readonly note = signal('');
+  /** The style an adjustment switches to ('' keeps the concept's own); the menu is `GET /beta/styles`. */
+  protected readonly restyle = signal('');
+  protected readonly styles = signal<BetaStyle[]>([]);
+  protected readonly otherStyles = computed(() => this.styles().filter((s) => s.id !== this.summary()?.language));
   protected readonly submitting = signal(false);
   /** The server's refusal of the last decision (shown under the buttons). */
   protected readonly error = signal('');
@@ -55,12 +60,13 @@ export class ConceptCardComponent {
   protected readonly noteCount = computed(() => feelingLength(this.note()));
   private readonly common = computed(() => ({ active: this.active(), left: this.left(), submitting: this.submitting() }));
   protected readonly acceptWhy = computed(() => acceptBlock({ ...this.common(), concerns: !!this.concerns(), confirmed: this.confirmed(), rest: this.head().rest }));
-  protected readonly adjustWhy = computed(() => adjustBlock({ ...this.common(), note: this.note() }));
+  protected readonly adjustWhy = computed(() => adjustBlock({ ...this.common(), note: this.note(), restyle: !!this.restyle() }));
   protected readonly redoWhy = computed(() => redoBlock(this.common()));
   protected readonly stillUrl = (name: string) => `/beta/jobs/${this.job().id}/stills/${name}`;
   protected readonly label = stillLabel;
 
   constructor() {
+    void this.loadStyles();
     afterRenderEffect(() => {
       const d = this.lightbox()?.nativeElement;
       if (d && !d.open) d.showModal?.();
@@ -76,6 +82,20 @@ export class ConceptCardComponent {
   protected edit(text: string) {
     this.note.set(text);
     this.error.set('');
+  }
+
+  protected pickStyle(id: string) {
+    this.restyle.set(id);
+    this.error.set('');
+  }
+
+  private async loadStyles() {
+    try {
+      const r = await fetch('/beta/styles');
+      if (r.ok) this.styles.set((await r.json()) as BetaStyle[]);
+    } catch {
+      // the menu stays empty: adjusting with a note still works
+    }
   }
 
   protected closeZoom() {
@@ -105,10 +125,13 @@ export class ConceptCardComponent {
       });
     }
     if (kind === 'adjust') {
+      const to = this.otherStyles().find((s) => s.id === this.restyle())?.name;
       return this.ask.set({
         eyebrow,
-        title: '依意見調整',
-        body: `導演會保留這個方向，照你的意見重新提出風格、配色和三張示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`,
+        title: to ? `換成「${to}」` : '依意見調整',
+        body: to
+          ? `導演會保留這個故事和段落安排，改用「${to}」重新設計${this.note().trim() ? '（也照你的意見修改）' : ''}，並提出配色和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`
+          : `導演會保留這個方向，照你的意見重新提出風格、配色和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`,
         cost: CONCEPT_PRICE,
         go: () => this.send('adjust'),
       });
@@ -116,7 +139,7 @@ export class ConceptCardComponent {
     this.ask.set({
       eyebrow,
       title: '換一個方向',
-      body: `導演會重新提一個完全不同的概念和三張示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`,
+      body: `導演會重新提一個完全不同的概念和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`,
       cost: CONCEPT_PRICE,
       go: () => this.send('redo'),
     });
@@ -126,7 +149,7 @@ export class ConceptCardComponent {
     if (this.submitting()) return;
     this.submitting.set(true);
     this.error.set('');
-    const body = kind === 'accept' ? { confirmConcerns: this.confirmed() } : kind === 'adjust' ? { note: this.note().trim() } : {};
+    const body = kind === 'accept' ? { confirmConcerns: this.confirmed() } : kind === 'adjust' ? { note: this.note().trim(), ...(this.restyle() ? { style: this.restyle() } : {}) } : {};
     try {
       const r = await fetch(`/beta/jobs/${this.job().id}/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       // a proxy error page (502) is not JSON
@@ -135,6 +158,7 @@ export class ConceptCardComponent {
       const title = this.song().title;
       const name = this.tierName();
       this.note.set('');
+      this.restyle.set('');
       this.decided.emit(
         kind === 'accept' ? `「${title}」已開始製作${name}，完成後會出現在成品。`
           : kind === 'adjust' ? `導演正在依你的意見調整「${title}」的概念，好了會請你確認。`

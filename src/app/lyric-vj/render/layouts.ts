@@ -255,8 +255,10 @@ export const quote: TemplateRenderer = {
     close.x = left + lastW + size * 0.55;
     close.y = bottom - size * 0.55;
     group.add(open.mesh, close.mesh);
-    // typed: a steady character rate over the first part of the line, after the opening bracket lands
-    const typed: CueRuntime = { ...rt, style: { ...rt.style, reveal: 'word', enter: rt.style.enter === 'ink' ? 'ink' : 'fade' }, showFrom: rt.showFrom + 0.15 * rt.pace };
+    // typed: a steady character rate over the first part of the line, after the opening bracket lands — unless readFix
+    // landed the line at once (rushed): then the typing would eat the reading time it was given (sweet timer's five
+    // short-read lines were all quotes typed over their read-cut), so the whole line is up with the bracket
+    const typed: CueRuntime = rt.rushed ? rt : { ...rt, style: { ...rt.style, reveal: 'word', enter: rt.style.enter === 'ink' ? 'ink' : 'fade' }, showFrom: rt.showFrom + 0.15 * rt.pace };
     return {
       group,
       update(t: number) {

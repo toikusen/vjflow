@@ -4,6 +4,7 @@
 // so nothing here needs to know about the song; `age` is the time since the cut.
 
 import { drawMove, Env, Flow, kn, MORE, MORE_FX } from './kinetic-more';
+import { coverOf, CoverRect, watchCover } from './cover';
 import { BoardLayer, drawBoard } from './board';
 import { drawStage, StageLayer } from './stage';
 import { halftone, lineArt, lineStage } from './print';
@@ -24,6 +25,9 @@ export interface KineticLayer {
   accent: Rgb;
   /** A cut-out from the sprite library (id without `spr:`), printed in ink and paper. */
   sprite?: string;
+  /** The lyric box on the frame while a line is up, and how much of it is up (graphics.ts attaches both): the character is measured against it. */
+  lyric?: CoverRect;
+  lyricWeight?: number;
   /** Where the character stands; the lyric goes on the other side. */
   side?: 'left' | 'right' | 'center';
   /** Character height as a fraction of the frame (1.6 crops to a close-up from the top). */
@@ -285,6 +289,8 @@ const rgb = (h: Rgb) => {
 /** Draws one kinetic cut. */
 export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, clock: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, now = (l.at ?? 0) + clock) {
   const age = camTime(l.cam, clock);
+  // the frame's coordinates, for measuring the character against the lyric box while the line is fully up
+  const frame = l.lyric && (l.lyricWeight ?? 1) > 0.85 ? ctx.getTransform?.()?.inverse?.() : undefined;
   // a card meant to be read (a title, a chapter) laid bare over someone else's picture takes the ink that reads on what
   // is actually under it: a light title set for its own dark ground vanished on 世界のつづき's cream coast (2026-10-22)
   // decided once a card, from its first frame (re-deciding every frame flickered as the picture under it moved)
@@ -547,6 +553,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       if (l.under) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;
       ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
+      // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
+      if (frame && l.lyric && l.sprite) {
+        const [share, inside] = coverOf(art as CanvasImageSource & { width: number; height: number }, frame.multiply(ctx.getTransform()), (-w / 2) * s, (-h / 2) * s, w * s, h * s, l.lyric);
+        watchCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, inside, now, `cut ${(l.at ?? 0).toFixed(1)}`);
+      }
       ctx.restore();
     }
   }

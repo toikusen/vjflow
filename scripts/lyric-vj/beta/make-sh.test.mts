@@ -2,7 +2,7 @@
 // make.sh on a stub tree: a fake npx stands in for every step (the render writes what render.mts writes).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
  * A song with one run whose director and type plan are done; the fake render leaves a fresh mp4 and metrics.json.
  * `concept` adds what concept.sh leaves in an accepted run: brief.txt, request.txt and reference images.
  */
-function tree(o: { tier?: 'none' | 'hybrid'; concept?: { brief?: string; request?: string; refs?: string[] } } = {}) {
+function tree(o: { tier?: 'none' | 'img' | 'hybrid'; plan?: boolean; concept?: { brief?: string; request?: string; refs?: string[] } } = {}) {
   const t = mkdtempSync(join(tmpdir(), 'makesh-'));
   mkdirSync(join(t, 'repo/scripts/lyric-vj/beta'), { recursive: true });
   cpSync(join(here, 'make.sh'), join(t, 'repo/scripts/lyric-vj/beta/make.sh'));
@@ -25,6 +25,14 @@ function tree(o: { tier?: 'none' | 'hybrid'; concept?: { brief?: string; request
     'if [[ "$2" == *render.mts ]]; then',
     '  while [ $# -gt 0 ]; do [ "$1" = --out ] && out=$2; shift; done',
     '  mkdir -p "$out"; echo fresh > "$out/lyric-vj_vocal_0-10s.mp4"; echo "{}" > "$out/metrics.json"',
+    // its log (make.sh redirects the render\'s output there): HIDES names a lyric-cover share
+    '  [ -n "$HIDES" ] && echo "code layer: lyric covered: p1 hides ${HIDES}% of the lyric box"',
+    'fi',
+    // the delivery gate: QUALITY_HOLD names the fault, else the video passes
+    'if [[ "$2" == *quality.mts ]]; then',
+    '  [ -n "$QUALITY_RERENDER" ] && { echo "quality: 渲染器出錯 1 筆"; exit 20; }',
+    '  [ -n "$QUALITY_HOLD" ] && { echo "quality: $QUALITY_HOLD"; echo "quality: 第二項"; exit 10; }',
+    '  echo "quality: ok"',
     'fi',
     '',
   ].join('\n'), { mode: 0o755 });
@@ -35,12 +43,13 @@ function tree(o: { tier?: 'none' | 'hybrid'; concept?: { brief?: string; request
   writeFileSync(join(run, 'song.json'), JSON.stringify({ duration: 10, cues: [] }));
   writeFileSync(join(run, 'base/treatment.json'), '{}');
   writeFileSync(join(run, 'noimg/treatment.json'), '{}');
+  if (o.plan) writeFileSync(join(run, 'noimg/typeplan.json'), '{"shots":[]}');
   if (o.concept?.brief !== undefined) writeFileSync(join(run, 'brief.txt'), o.concept.brief);
   if (o.concept?.request !== undefined) writeFileSync(join(run, 'request.txt'), o.concept.request);
   if (o.concept?.refs?.length) mkdirSync(join(run, 'refs'));
   for (const r of o.concept?.refs ?? []) writeFileSync(join(run, 'refs', r), 'jpg');
   const log = join(t, 'npx.log');
-  const make = () => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/make.sh'), song, o.tier ?? 'none', run], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log } });
+  const make = (env: Record<string, string> = {}) => spawnSync('bash', [join(t, 'repo/scripts/lyric-vj/beta/make.sh'), song, o.tier ?? 'none', run], { encoding: 'utf8', env: { ...process.env, ...env, PATH: `${join(t, 'bin')}:${process.env.PATH}`, NPX_LOG: log } });
   const calls = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
   const call = (step: string) => calls().split('\n').find((l) => l.includes(step)) ?? '';
   return { run, make, calls, call };
@@ -81,13 +90,60 @@ test('make.sh: a video file left by an unfinished render is rendered again, not 
   assert.equal(readFileSync(join(t.run, 'video.mp4'), 'utf8'), 'fresh\n');
 });
 
-test('make.sh guard (passes before the fix too): a finished render (metrics.json beside the video) is resumed, not rendered again', () => {
+test('make.sh: a finished render of the same inputs is resumed, not rendered again; one of other inputs, or without its manifest, is', () => {
   const t = tree();
-  writeFileSync(join(t.run, 'noimg/video/lyric-vj_vocal_0-10s.mp4'), 'made\n');
-  writeFileSync(join(t.run, 'noimg/video/metrics.json'), '{}');
+  assert.equal(t.make().status, 0);
+  assert.equal((t.calls().match(/render\.mts/g) ?? []).length, 1);
+  assert.match(readFileSync(join(t.run, 'noimg/video/manifest.txt'), 'utf8'), /^[0-9a-f]{16}$/);
+  // the same inputs again: resumed
   const r = t.make();
   assert.equal(r.status, 0, r.stderr + r.stdout);
-  assert.doesNotMatch(t.calls(), /render\.mts/);
-  assert.equal(readFileSync(join(t.run, 'video.mp4'), 'utf8'), 'made\n');
+  assert.equal((t.calls().match(/render\.mts/g) ?? []).length, 1, 'no second render');
   assert.match(r.stdout, /##PHASE 完成/);
+  // the treatment changed under it (a retry after horizon or a renderer fix): rendered again
+  writeFileSync(join(t.run, 'noimg/treatment.json'), '{"changed":1}');
+  assert.equal(t.make().status, 0);
+  assert.equal((t.calls().match(/render\.mts/g) ?? []).length, 2, 'a render for the new treatment');
+  // a video and metrics from before manifests existed are not trusted either
+  rmSync(join(t.run, 'noimg/video/manifest.txt'));
+  assert.equal(t.make().status, 0);
+  assert.equal((t.calls().match(/render\.mts/g) ?? []).length, 3);
+});
+
+test('make.sh: the delivery gate runs on the finished file and its plan check; a fault holds the video (exit 10) with the reason as the phase', () => {
+  const t = tree();
+  const r = t.make({ QUALITY_HOLD: '2 句可讀時間不足：x', HIDES: '55' });
+  assert.equal(r.status, 10, r.stderr + r.stdout);
+  // every finding, and every other hold reason, in the one phase line
+  assert.match(r.stdout, /##PHASE 等管理者確認：2 句可讀時間不足：x；第二項；有歌詞被遮住 55%/);
+  assert.doesNotMatch(r.stdout, /##PHASE 完成/);
+  const gate = t.call('quality.mts');
+  assert.match(gate, /--video \S+\/runs\/m1\/video\.mp4 --metrics \S+\/noimg\/video\/metrics\.json --plan-check \S+\/noimg\/plan-check\.json --expected-sec 10\.00 --fps 30 --report \S+\/runs\/m1\/quality\.json/);
+  // the video is made (the admin can watch it) even though it is held
+  assert.equal(readFileSync(join(t.run, 'video.mp4'), 'utf8'), 'fresh\n');
+});
+
+test('make.sh hybrid: the gate reads the plan check from noimg/, where the hybrid plan ran', () => {
+  const t = tree({ tier: 'hybrid' });
+  t.make();
+  assert.match(t.call('quality.mts'), /--metrics \S+\/cut\/video\/metrics\.json --plan-check \S+\/noimg\/plan-check\.json/);
+});
+
+test('make.sh img: an accepted concept\'s plan is bound with the props, not planned again; without one the img tier plans afresh', () => {
+  const t = tree({ tier: 'img', plan: true });
+  assert.equal(t.make().status, 0);
+  assert.match(t.call('typeplan.mts'), /--out \S+\/runs\/m1\/img --sprites \S+\/props\/library --bind \S+\/runs\/m1\/noimg\/typeplan\.json/);
+  const fresh = tree({ tier: 'img' });
+  assert.equal(fresh.make().status, 0);
+  assert.match(fresh.call('typeplan.mts'), /--sprites \S+\/props\/library $/);
+  assert.doesNotMatch(fresh.call('typeplan.mts'), /--bind/);
+});
+
+test('make.sh: a fault a fresh render may mend throws the render away and fails the job (the queue runs it once more), never hands the file over', () => {
+  const t = tree();
+  const r = t.make({ QUALITY_RERENDER: '1' });
+  assert.equal(r.status, 1, r.stderr + r.stdout);
+  assert.match(r.stdout, /##PHASE 成品有渲染錯誤，整段重做/);
+  assert.equal(existsSync(join(t.run, 'video.mp4')), false);
+  assert.equal(existsSync(join(t.run, 'noimg/video')), false, 'the render folder is gone, so the rerun renders afresh');
 });

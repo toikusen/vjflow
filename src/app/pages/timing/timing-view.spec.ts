@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { clock, clockShort, hint, lineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
+import { clock, clockShort, hint, leaveGuard, lineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
+
+describe('leaveGuard', () => {
+  it('asks before leaving only while there are unsaved changes', () => {
+    let dirty = false;
+    const guard = leaveGuard(() => dirty);
+    const event = () => { const e = { prevented: false, preventDefault() { this.prevented = true; } }; return e; };
+    const clean = event(); guard(clean); expect(clean.prevented).toBe(false);
+    dirty = true;
+    const unsaved = event(); guard(unsaved); expect(unsaved.prevented).toBe(true);
+  });
+});
 
 describe('clock', () => {
   it('splits minutes:seconds from the hundredths and keeps the width', () => {

@@ -12,6 +12,14 @@ type TimedLine = { start: number; end: number; text: string; singer?: string };
 export const timingChanged = (before: readonly TimedLine[], after: readonly TimedLine[]): boolean =>
   before.length !== after.length || after.some((c, i) => c.start !== before[i].start || c.end !== before[i].end || c.text !== before[i].text || (c.singer ?? null) !== (before[i].singer ?? null));
 
+/**
+ * The `beforeunload` handler: with unsaved changes the browser asks before the page goes (a tab closed, the back
+ * button, a tap on the shell's bottom tabs); otherwise it lets it go. The same shape the list page uses for an upload.
+ */
+export const leaveGuard = (dirty: () => boolean) => (e: { preventDefault(): void }): void => {
+  if (dirty()) e.preventDefault();
+};
+
 /** A beta tester's song page, where the editor goes back to and where a confirmed timing sends them. */
 export const songPageHref = (songId: string): string => `/my/song?id=${encodeURIComponent(songId)}`;
 

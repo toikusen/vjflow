@@ -8,7 +8,7 @@ import { ConfirmDialogComponent } from '../beta/ui/confirm-dialog.component';
 import { StatusChipComponent } from '../beta/ui/status-chip.component';
 import { applyProof, exportIssues, LyricProof, proofNote, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
-import { clock, hint, Hint, lineTag, LineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
+import { clock, hint, Hint, leaveGuard, lineTag, LineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
 
 interface SongItem {
   id: string;
@@ -138,9 +138,13 @@ export class TimingPage {
       raf.id = requestAnimationFrame(tick);
     };
     raf.id = requestAnimationFrame(tick);
+    // unsaved edits (twenty lines moved on a phone, say) must not vanish on a back tap or a switch of app
+    const stay = leaveGuard(() => this.dirty());
+    addEventListener('beforeunload', stay);
     inject(DestroyRef).onDestroy(() => {
       cancelAnimationFrame(raf.id);
       this.audio.pause();
+      removeEventListener('beforeunload', stay);
     });
     effect(() => {
       const i = this.playingIndex();

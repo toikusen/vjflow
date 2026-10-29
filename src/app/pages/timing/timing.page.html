@@ -62,6 +62,10 @@
               <button class="button" type="button" (click)="shiftEverything(shiftBy.value)">套用</button>
             </label>
             <div class="menu-row phone">
+              <!-- the phone has no room for the draft button in the bar; red lines keep 確認 off, so this is its only save -->
+              <button class="button" type="button" role="menuitem" [disabled]="!dirty()" (click)="save(false); more.set(false)">儲存草稿</button>
+            </div>
+            <div class="menu-row phone">
               <button class="chip" type="button" [class.on]="ripple()" [attr.aria-pressed]="ripple()" (click)="ripple.set(!ripple())">{{ ripple() ? '✓ ' : '' }}後面一起移</button>
               <span class="speed" role="group" aria-label="速度">
                 @for (v of speeds; track v) {

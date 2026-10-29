@@ -1,5 +1,7 @@
 // ffmpeg helpers shared by the lyric-VJ scripts.
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { renameSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import sharp from 'sharp';
 
 /** Decodes any audio file to mono float32 PCM at `sampleRate` (ffmpeg handles mp3 encoder delay consistently). */
@@ -31,4 +33,24 @@ export async function keyStrip(src: string, dst: string) {
     if (v > 128) top = Math.min(top, Math.floor(i / w));
   }
   await sharp(rgba, { raw: { width: w, height: h, channels: 4 } }).extract({ left: 0, top: Math.max(0, top - 4), width: w, height: h - Math.max(0, top - 4) }).png().toFile(dst);
+}
+
+/** Runs a command to completion, rejecting on a non-zero exit. */
+export function run(cmd: string, args: string[]) {
+  return new Promise((r, j) => spawn(cmd, args, { stdio: 'inherit' }).on('close', (c) => (c ? j(new Error(`${cmd} ${c}`)) : r(null))));
+}
+
+/**
+ * The silent video with `audio` from `start` for `length` seconds, written to `file`. ffmpeg writes a hidden temporary
+ * beside it (same extension, so the container is the same) that is renamed into place only when it finished: a mux
+ * killed midway leaves no file under the final name, which the pipeline would take for a finished video.
+ */
+export async function mux(video: string, audio: string, file: string, offset: number, start: number, length: number) {
+  // delay as a filter: asetpts would reset an input offset (-itsoffset) to zero
+  const pre = offset > 0 ? `adelay=${(offset * 1000).toFixed(1)}:all=1,` : '';
+  const af = `${pre}atrim=start=${start + Math.max(0, -offset)}:duration=${length},asetpts=PTS-STARTPTS`;
+  const tmp = join(dirname(file), `.tmp-${basename(file)}`);
+  await run('ffmpeg', ['-loglevel', 'error', '-y', '-i', video, '-i', audio, '-map', '0:v', '-map', '1:a', '-af', af,
+    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-shortest', ...(file.endsWith('.mp4') ? ['-movflags', '+faststart'] : []), tmp]);
+  renameSync(tmp, file);
 }

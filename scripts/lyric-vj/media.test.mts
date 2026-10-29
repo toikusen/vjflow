@@ -27,3 +27,43 @@ test('a drawn horizon band becomes a mask cropped to its top', async () => {
   assert.equal(data[3], 0); // sky above the band is clear
   assert.equal(data[(info.height - 1) * info.width * 4 + 3], 255); // the band is solid
 });
+
+// ---- C4: a mux lands under its final name only once ffmpeg finished ----
+
+async function fakeFfmpeg(exit: number) {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const bin = mkdtempSync(join(tmpdir(), 'ffmpeg-'));
+  // writes its output file (the last argument), as ffmpeg does before it is killed, then exits as told
+  writeFileSync(join(bin, 'ffmpeg'), `#!/bin/bash\nprintf '%s' "$*" > "\${@: -1}"\nexit ${exit}\n`, { mode: 0o755 });
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  return { bin, restore: () => { process.env.PATH = path; } };
+}
+
+test('mux writes a hidden temporary and renames it into place when ffmpeg succeeds', async () => {
+  const { mux } = await import('./media.mts');
+  const { existsSync, readdirSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const ff = await fakeFfmpeg(0);
+  try {
+    const out = join(ff.bin, 'out.mp4');
+    await mux('v.mp4', 'a.mp3', out, 0, 0, 10);
+    assert.ok(existsSync(out));
+    assert.match(readFileSync(out, 'utf8'), /\+faststart .*\.tmp-out\.mp4$/, 'ffmpeg wrote the temporary, under the same extension');
+    assert.ok(!readdirSync(ff.bin).some((f) => f.startsWith('.tmp-')));
+  } finally { ff.restore(); }
+});
+
+test('a mux that fails leaves nothing under the final name', async () => {
+  const { mux } = await import('./media.mts');
+  const { existsSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const ff = await fakeFfmpeg(1);
+  try {
+    const out = join(ff.bin, 'out.mp4');
+    await assert.rejects(mux('v.mp4', 'a.mp3', out, 0, 0, 10), /ffmpeg 1/);
+    assert.ok(!existsSync(out));
+  } finally { ff.restore(); }
+});

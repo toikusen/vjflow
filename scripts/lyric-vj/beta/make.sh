@@ -59,8 +59,10 @@ esac
 echo '##PHASE 畫背景剪影'
 npx tsx scripts/lyric-vj/horizon.mts --song "$S" --treatment "$w/base/treatment.json" --out "$w/horizon" --apply "$tr" > "$w/horizon-$tier.log" 2>&1 && cost_log "$w/horizon-$tier.log" horizon || echo "horizon skipped"
 echo '##PHASE 輸出影片'
-# render.mts refuses to finish with a black stretch left (blackSpans), so a made file has picture throughout
-ls "$tr/video/"lyric-vj_vocal_0-*.mp4 > /dev/null 2>&1 || npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$tr/treatment.json" --assets "$tr/assets.json" --start 0 --end "$end" --fps 30 --workers 2 --out "$tr/video" > "$w/render-$tier.log" 2>&1
+# render.mts refuses to finish with a black stretch left (blackSpans), so a made file has picture throughout.
+# A retry resumes only on a finished render: metrics.json is written after the mux, so a video file alone (a render
+# killed midway, or one whose mux never ran) is rendered again rather than handed over
+{ [ -f "$tr/video/metrics.json" ] && ls "$tr/video/"lyric-vj_vocal_0-*.mp4 > /dev/null 2>&1; } || npx tsx scripts/lyric-vj/render.mts --song "$S" --treatment "$tr/treatment.json" --assets "$tr/assets.json" --start 0 --end "$end" --fps 30 --workers 2 --out "$tr/video" > "$w/render-$tier.log" 2>&1
 rm -rf "$tr/video/render" "$tr/video/segments"
 cp "$(ls "$tr/video/"lyric-vj_vocal_0-*.mp4 | head -1)" "$out.tmp" && mv "$out.tmp" "$out"
 [ "$tier" = hybrid ] && grep -q 'key shot kept' "$w/cut.log" && { echo '##PHASE 等管理者確認一張畫面'; exit 10; }

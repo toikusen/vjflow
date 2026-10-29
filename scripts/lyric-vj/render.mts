@@ -20,7 +20,7 @@ import { TEMPLATES } from '../../src/app/lyric-vj/templates';
 import { alignOffset, SongTimeline, vocalActivity } from '../../src/app/lyric-vj/timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import type { AssetSource, Entrance, RenderJob } from '../../src/app/lyric-vj/render/engine';
-import { blackSpans, decode } from './media.mts';
+import { blackSpans, decode, mux, run } from './media.mts';
 import { MEDIA, MediumId } from '../../src/app/lyric-vj/medium';
 import { DEFAULT_DESIGN } from '../../src/app/lyric-vj/design';
 
@@ -352,16 +352,4 @@ try {
 } finally {
   await browser.close();
   server.close();
-}
-
-async function mux(video: string, audio: string, file: string, offset: number, start: number, length: number) {
-  // delay as a filter: asetpts would reset an input offset (-itsoffset) to zero
-  const pre = offset > 0 ? `adelay=${(offset * 1000).toFixed(1)}:all=1,` : '';
-  const af = `${pre}atrim=start=${start + Math.max(0, -offset)}:duration=${length},asetpts=PTS-STARTPTS`;
-  await run('ffmpeg', ['-loglevel', 'error', '-y', '-i', video, '-i', audio, '-map', '0:v', '-map', '1:a', '-af', af,
-    '-c:v', 'copy', '-c:a', 'aac', '-b:a', '256k', '-shortest', ...(file.endsWith('.mp4') ? ['-movflags', '+faststart'] : []), file]);
-}
-
-function run(cmd: string, args: string[]) {
-  return new Promise((r, j) => spawn(cmd, args, { stdio: 'inherit' }).on('close', (c) => (c ? j(new Error(`${cmd} ${c}`)) : r(null))));
 }

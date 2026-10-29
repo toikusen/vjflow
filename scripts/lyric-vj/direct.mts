@@ -274,6 +274,9 @@ ${FONT_LIST}
 - peak：依歌曲個性選爆點樣式，不要每首都用放射光（rays）。
 - medium：依歌曲的質地選媒材，它決定整支片「摸起來」是什麼材料，是讓背景不像 AI 插畫的關鍵。不要因為安全就選 clean；只有電子、未來、光感強的歌才用 clean。媒材要和字型、色彩是同一個世界（例：紙上手繪配明朝或手寫字；蠟筆配圓體；像素點陣配點陣字；底片配古典明朝）。
 - 文字不要加描邊殘影（punch 的 outline 保持 false），乾淨的字比特效字更像設計師作品。`;
+// the API compiles the schema into a grammar with a size cap, and this one sits at the edge (concept jobs failed on
+// 「The compiled grammar is too large」 2026-10-29): a field goes in only when its case can occur in this run
+const anyLanguage = (has: (l: (typeof LANGUAGES)[LanguageId]) => unknown) => allowedLanguages.some((id) => has(LANGUAGES[id]));
 const SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['language', 'concept', 'styleAnchor', 'assets', 'shots', 'cues', 'arc', 'moments'],
@@ -283,8 +286,8 @@ const SCHEMA = {
     language: { type: 'string', enum: allowedLanguages, description: '這首歌的設計語言（先決定，鏡頭只能用它的模板）' },
     // the director's reading of the person's wishes, shown on the concept card (beta/concept-summary.mts)
     briefReading: { type: 'string', description: '使用者有寫字或附參考圖時必填：「你寫的『…』我理解成：…」' },
-    concerns: { type: 'string', description: '使用者指定的設計語言不適合這首歌時，一兩句說明哪裡不合；適合或沒有指定就填空字串' },
-    candidateReason: { type: 'string', description: '選了標【候選】的設計語言時必填：這首歌為什麼需要它；否則填空字串' },
+    ...(picked ? { concerns: { type: 'string', description: '使用者指定的設計語言不適合這首歌時，一兩句說明哪裡不合；適合就填空字串' } } : {}),
+    ...(candidates.length ? { candidateReason: { type: 'string', description: '選了標【候選】的設計語言時必填：這首歌為什麼需要它；否則填空字串' } } : {}),
     concept: { type: 'string', description: '繁體中文，一兩句：這段畫面的視覺故事' },
     styleAnchor: {
       type: 'object', additionalProperties: false, required: ['prompt', 'palette'],
@@ -315,8 +318,8 @@ const SCHEMA = {
         accents: { type: 'array', items: { type: 'integer' } },
         enter: { type: 'string', enum: ENTER_KINDS }, exit: { type: 'string', enum: EXIT_KINDS },
         reveal: { type: 'string', enum: ['line', 'word'], description: 'word：字以固定速度依序出現（在句子前段載完，之後整句停留）；line：整句一起進場' },
-        voice: { type: 'string', enum: ['me', 'them'], description: '介面型設計語言（手機介面）才填：這句在螢幕上是誰說的——me 主角自己（傳出的訊息、打的字），them 對方（收到的訊息、通知）。只有歌詞裡真的是對方說的話才填 them' },
-        shout: { type: 'boolean', description: '偶像 Live 才填：這句是全員一起喊的短句（掛け声，12 字以內，例 ドドドド！、はい！、成員點名），做成主唱旁邊的大顆喊聲字' } } } },
+        ...(anyLanguage((l) => l.layout) ? { voice: { type: 'string', enum: ['me', 'them'], description: '介面型設計語言（手機介面）才填：這句在螢幕上是誰說的——me 主角自己（傳出的訊息、打的字），them 對方（收到的訊息、通知）。只有歌詞裡真的是對方說的話才填 them' } } : {}),
+        ...(anyLanguage((l) => l.callBoard) ? { shout: { type: 'boolean', description: '偶像 Live 才填：這句是全員一起喊的短句（掛け声，12 字以內，例 ドドドド！、はい！、成員點名），做成主唱旁邊的大顆喊聲字' } } : {}) } } },
     // one optional field (its items are fully required): the concept card shows the reasons for pictures
     interludes: { type: 'array', description: '沒有歌詞的段落（前奏、間奏、尾奏）各一筆：預設 backdrop；pictures 要寫和故事相連的理由', items: { type: 'object', additionalProperties: false, required: ['start', 'end', 'mode', 'reason'],
       properties: { start: { type: 'number' }, end: { type: 'number' }, mode: { type: 'string', enum: ['backdrop', 'pictures'] },

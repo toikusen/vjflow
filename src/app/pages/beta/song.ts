@@ -23,6 +23,18 @@ export function jobTitle(j: BetaJob): { name: string; tag?: string } {
   return { name };
 }
 
+/** A song title as a file name: the characters no file system takes are replaced. */
+export const safeName = (title: string): string => title.replace(/[\\/:*?"<>|]/g, '_').trim();
+
+/**
+ * The name a downloaded video saves as: `<title>-<version>[-修正].mp4` (the URL ends in `video`, and Safari adds no
+ * extension), so several songs and versions do not overwrite each other.
+ */
+export function videoFileName(song: { title: string }, j: BetaJob): string {
+  const t = jobTitle(j);
+  return `${safeName(song.title) || 'video'}-${t.name}${j.kind === 'fix' ? '-修正' : ''}.mp4`;
+}
+
 /** What the person paid for a job: a make job made from a concept adds that concept's fee (so 故事版 reads $16, not $13.5). */
 export function jobTotal(j: BetaJob, jobs: BetaJob[]): number | undefined {
   if (j.priceUsd === undefined) return undefined;

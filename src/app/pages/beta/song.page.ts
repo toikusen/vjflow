@@ -7,7 +7,7 @@ import { BetaPage } from './beta.page';
 import { ConceptCardComponent } from './concept-card.component';
 import { MakeFormComponent } from './make-form.component';
 import { hasDraft, ReportFormComponent } from './report-form.component';
-import { clock, failureCard, heroTone, jobTitle, jobTotal, stamp, stepClocks, timingNote } from './song';
+import { clock, failureCard, heroTone, jobTitle, jobTotal, safeName, stamp, stepClocks, timingNote, videoFileName } from './song';
 import { BalanceComponent } from './ui/balance.component';
 import { PriceComponent } from './ui/price.component';
 import { StatusChip } from './ui/status';
@@ -69,6 +69,7 @@ export class BetaSongPage extends BetaPage {
   protected readonly madeTiers = (v: SongView) => v.results.map((j) => j.tier);
   protected readonly minutes = (j: BetaJob) => minutesBetween(j.startedAt, j.endedAt);
   protected readonly videoUrl = (j: BetaJob) => `/beta/jobs/${j.id}/video`;
+  protected readonly videoName = videoFileName;
   /** The result card whose report form is showing (one at a time). */
   protected readonly reporting = signal<string | null>(null);
   /** Cards whose form was ever opened on this page; their forms stay mounted and keep their drafts. */
@@ -110,7 +111,7 @@ export class BetaSongPage extends BetaPage {
       : toSrt(t.cues);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
-    a.download = `${(this.song()?.title ?? 'lyrics').replace(/[\\/:*?"<>|]/g, '_')}.${kind}`;
+    a.download = `${safeName(this.song()?.title ?? '') || 'lyrics'}.${kind}`;
     a.click();
     URL.revokeObjectURL(a.href);
   }

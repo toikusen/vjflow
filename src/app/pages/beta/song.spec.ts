@@ -1,5 +1,5 @@
 import { BetaJob } from './beta';
-import { clock, FAILURE_NOTE, failureCard, heroTone, jobTitle, jobTotal, stepClocks, timingNote } from './song';
+import { clock, FAILURE_NOTE, failureCard, heroTone, jobTitle, jobTotal, safeName, stepClocks, timingNote, videoFileName } from './song';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'make', tier: 'hybrid', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -34,6 +34,15 @@ describe('jobTitle and jobTotal', () => {
     expect(jobTotal(job({ priceUsd: 4 }), [])).toBe(4);
     expect(jobTotal(job({ kind: 'fix', priceUsd: 1, conceptOf: 'c' }), [concept])).toBe(1);
     expect(jobTotal(job({}), [])).toBeUndefined();
+  });
+});
+
+describe('videoFileName', () => {
+  it('names a download by song and version, a fix marked, with path characters replaced and an empty title covered', () => {
+    expect(videoFileName({ title: '行星' }, job({ tier: 'img' }))).toBe('行星-插圖版.mp4');
+    expect(videoFileName({ title: 'a/b:c?' }, job({ kind: 'fix', tier: 'none' }))).toBe('a_b_c_-文字動態版-修正.mp4');
+    expect(videoFileName({ title: '  ' }, job({ tier: 'hybrid' }))).toBe('video-故事版.mp4');
+    expect(safeName('x<y>|z')).toBe('x_y__z');
   });
 });
 

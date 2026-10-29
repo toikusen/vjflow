@@ -124,7 +124,7 @@
                   <div class="r-body">
                     <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
                     <div class="r-actions">
-                      <a class="button strong" [href]="videoUrl(j)" download>下載 1080p</a>
+                      <a class="button strong" [href]="videoUrl(j)" [attr.download]="videoName(s, j)">下載 1080p</a>
                       @if (mine()) {
                         <button class="button" type="button" [attr.aria-expanded]="false" (click)="toggleReport(j.id)"><span class="desk">回報這個作品</span><span class="phone">回報</span></button>
                       }

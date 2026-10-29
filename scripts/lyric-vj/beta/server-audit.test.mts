@@ -79,3 +79,79 @@ test('audio: a file that cannot be read ends the response and the server keeps s
     chmodSync(join(t.dir, 'mix.mp3'), 0o644);
   }
 });
+
+/** A raw request whose body the test sends by hand; `reply` resolves with the response text once the server answers. */
+function rawRequest(port: number, head: string) {
+  const sock = connect(port, '127.0.0.1');
+  let reply = '';
+  const done = new Promise<string>((ok) => { sock.on('data', (d) => { reply += d; }); sock.on('close', () => ok(reply)); sock.on('error', () => ok(reply)); });
+  sock.write(head);
+  return { sock, reply: () => { sock.end(); return done; }, text: () => reply };
+}
+
+// ---- C6: a timing save is checked once its body has arrived ----
+
+test('cues: a concept that starts while the body is still arriving refuses the save', async () => {
+  const t = await setup();
+  const body = JSON.stringify({ cues: [] });
+  const req = rawRequest(t.port, `PUT /beta/songs/s1/cues HTTP/1.1\r\nhost: x\r\ncookie: vjb=${t.testerToken}\r\ncontent-type: application/json\r\ncontent-length: ${Buffer.byteLength(body)}\r\nconnection: close\r\n\r\n`);
+  await new Promise((ok) => setTimeout(ok, 200)); // the handler has passed the point where it used to check
+  const make = await t.tester('/beta/songs/s1/make', { json: { tier: 'none' } });
+  assert.equal(make.status, 202);
+  await waitFor(() => t.beta.db.jobs[0]?.status === 'running');
+  const before = JSON.parse(await (await t.tester('/beta/songs/s1/timing')).text());
+  req.sock.write(body);
+  const reply = await req.reply();
+  assert.match(reply, /^HTTP\/1\.1 409/);
+  assert.match(reply, /概念製作中/);
+  assert.deepEqual(JSON.parse(await (await t.tester('/beta/songs/s1/timing')).text()), before, 'the timing was not written');
+});
+
+// ---- FB-B4: an upload the client abandons leaves no half file ----
+
+test('audio: an upload cut mid-body leaves no upload file, and the server keeps serving', async () => {
+  const t = await setup();
+  const req = rawRequest(t.port, `PUT /beta/songs/s1/audio HTTP/1.1\r\nhost: x\r\ncookie: vjb=${t.testerToken}\r\ncontent-type: audio/mpeg\r\ncontent-length: 100000\r\n\r\n`);
+  req.sock.write(Buffer.alloc(1000, 1));
+  await new Promise((ok) => setTimeout(ok, 200));
+  req.sock.destroy();
+  await new Promise((ok) => setTimeout(ok, 300));
+  assert.deepEqual(readdirSync(t.dir).filter((f) => f.startsWith('upload.')), []);
+  assert.equal(t.beta.db.jobs.length, 0, 'no prep was queued');
+  assert.equal((await t.tester('/beta/me')).status, 200);
+});
+
+// ---- FB-B5: a new upload after a failed prep replaces what the old one left ----
+
+test('audio: after a failed prep a new upload removes the old upload, mix, stems and song.json', async () => {
+  const t = await setup();
+  t.beta.db.jobs.push({ id: 'p0', userId: t.beta.db.songs[0].userId, songId: 's1', kind: 'prep', status: 'failed', reservedUsd: 0.5, priceUsd: 0.5, createdAt: '2026-10-28T00:00:00Z' });
+  for (const f of ['upload.aac', 'vocals.wav', 'vocals_kim.wav', 'song.orig.json', 'proofread.log']) writeFileSync(join(t.dir, f), 'old');
+  const r = await t.tester('/beta/songs/s1/audio', { method: 'PUT', body: Buffer.from('new mp3'), headers: { 'content-type': 'audio/mpeg' } });
+  assert.equal(r.status, 202);
+  assert.deepEqual(readdirSync(t.dir).filter((f) => f !== 'events.jsonl').sort(), ['upload.mp3']);
+  assert.equal(t.beta.db.songs[0].confirmedAt, undefined);
+  assert.equal(t.beta.db.jobs.at(-1)?.kind, 'prep');
+});
+
+// ---- FB-B8: admin amounts are finite numbers, zero or more ----
+
+test('admin: a limit that is not a finite number is refused rather than read as 0 or saved as null', async () => {
+  const t = await setup();
+  for (const bad of [null, '', true, 'Infinity', -1, 'abc', [5]]) {
+    const r = await t.admin('/beta/admin/users', { json: { name: 'N', limitUsd: bad } });
+    assert.equal(r.status, 400, `invite with ${JSON.stringify(bad)}`);
+    const g = await t.admin('/beta/admin/limit', { method: 'PUT', json: { globalLimitUsd: bad } });
+    assert.equal(g.status, 400, `global limit ${JSON.stringify(bad)}`);
+  }
+  assert.equal(t.beta.db.users.length, 2);
+  assert.equal(t.beta.db.globalLimitUsd, 100);
+  const tester = t.beta.db.users[1];
+  const patch = await t.admin(`/beta/admin/users/${tester.id}`, { method: 'PATCH', json: { limitUsd: null } });
+  assert.deepEqual([patch.status, tester.limitUsd], [400, 50]);
+  assert.equal((await t.admin(`/beta/admin/users/${tester.id}`, { method: 'PATCH', json: { limitUsd: 0 } })).status, 200);
+  assert.equal(tester.limitUsd, 0);
+  assert.equal((await t.admin('/beta/admin/users', { json: { name: 'N', limitUsd: 20 } })).status, 201);
+  assert.equal((await t.admin('/beta/admin/limit', { method: 'PUT', json: { globalLimitUsd: 250 } })).status, 200);
+  assert.equal(t.beta.db.globalLimitUsd, 250);
+});

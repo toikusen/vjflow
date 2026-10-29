@@ -35,6 +35,10 @@ const IMAGE: Record<string, { ext: string; magic: (b: Buffer) => boolean }> = {
 };
 /** Reference names are the server's own; nothing else under a song's refs/ is ever served. */
 const REF_NAME = /^ref-(\d+)\.(jpg|png|webp)$/;
+/** What prep.sh derives from an upload (each step resumes from these when they exist). */
+const PREP_MADE = /^(mix\.mp3|vocals.*\.wav|song\.json|song\.orig\.json|proofread\.log)$/;
+/** A money amount from a request body: a finite number of dollars, zero or more; anything else is undefined. */
+const usd = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : undefined);
 const TIERS_OF_STYLE: StyleTier[] = ['proven', 'candidate', 'unlisted'];
 const REFERENCES = fileURLToPath(new URL('../references/', import.meta.url));
 /** A language's picture for the style menu: its kit image, else its sample strip. */
@@ -110,15 +114,22 @@ const songRefs = (dir: string) => {
   return existsSync(refs) ? readdirSync(refs).filter((n) => REF_NAME.test(n)).sort((a, b) => Number(REF_NAME.exec(a)![1]) - Number(REF_NAME.exec(b)![1])) : [];
 };
 
-/** Saves a request body to a file, refusing past `max` bytes (the partial file is removed). */
+/**
+ * Saves a request body to a file, refusing past `max` bytes (the partial file is removed). A client that goes away
+ * mid-body rejects it the same way: the pipe would never end the file, leaving the promise, the descriptor and half
+ * a file behind.
+ */
 const saveBody = (req: IncomingMessage, file: string, max: number) =>
   new Promise<void>((ok, fail) => {
     let n = 0;
     const out = createWriteStream(file);
-    req.on('data', (c: Buffer) => { n += c.length; if (n > max) { req.destroy(); out.destroy(); rmSync(file, { force: true }); fail(new Error('音檔太大（上限 80 MB）')); } });
+    const drop = (why: string) => { req.destroy(); out.destroy(); rmSync(file, { force: true }); fail(new Error(why)); };
+    req.on('data', (c: Buffer) => { n += c.length; if (n > max) drop('音檔太大（上限 80 MB）'); });
     req.pipe(out);
     out.on('finish', () => (n ? ok() : fail(new Error('沒有收到音檔'))));
     out.on('error', fail);
+    // 'close' also follows a complete body (then the write stream finishes by itself): only an incomplete one is a cut
+    req.on('close', () => { if (!req.complete) drop('上傳中斷'); });
   });
 
 export interface BetaOptions {
@@ -373,6 +384,10 @@ export function createBetaServer(o: BetaOptions) {
           if (!ext) return json(res, 415, { error: '請上傳 mp3、wav、flac、m4a 或 aac' });
           if (db.jobs.some((j) => j.songId === song.id && j.kind === 'prep' && j.status !== 'failed')) return json(res, 409, { error: '這首歌已經上傳過音檔' });
           await saveBody(req, join(dir, `upload${ext}`), MAX_AUDIO);
+          // what a failed prep left of the old audio goes, or prep.sh would resume from it (its mix.mp3, the first
+          // upload.* by name) and never read the new file
+          for (const f of readdirSync(dir)) if ((f.startsWith('upload.') && f !== `upload${ext}`) || PREP_MADE.test(f)) rmSync(join(dir, f), { force: true });
+          song.confirmedAt = undefined; // a timing confirmed on the old audio, if the failed prep got that far
           logEvent(o.root, song.id, { type: 'audio.uploaded', by: user.id });
           const r = enqueue(user, song.id, 'prep');
           return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job, o.root));
@@ -384,13 +399,16 @@ export function createBetaServer(o: BetaOptions) {
           return latest ? sendFile(req, res, videoFile(o.root, latest)) : json(res, 404, { error: '影片還沒完成' });
         }
         if (!existsSync(songFile)) return json(res, 409, { error: '歌曲還在準備中' });
-        const timeline: SongTimeline = JSON.parse(readFileSync(songFile, 'utf8'));
-        if (sm[2] === 'timing' && req.method === 'GET') return json(res, 200, timeline);
+        if (sm[2] === 'timing' && req.method === 'GET') return json(res, 200, JSON.parse(readFileSync(songFile, 'utf8')));
         if (sm[2].startsWith('audio/') && req.method === 'GET') return sendFile(req, res, join(dir, sm[2] === 'audio/mix' ? 'mix.mp3' : 'vocals.wav'));
         if (sm[2] === 'cues' && req.method === 'PUT') {
+          const b = (await readJson(req)) as { cues?: TimingEdit[]; confirm?: boolean; accepted?: string[]; singers?: { name: string; color: string }[] };
+          // checked once the body is here: while it arrived another tab may have accepted a concept (its make now runs
+          // on the timing as it was) or the song may have changed, and a save then would be lost or wrong
           if (db.jobs.some((j) => j.songId === song.id && madeVideo(j) && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '影片製作中，時間不能再改' });
           if (db.jobs.some((j) => j.songId === song.id && j.kind === 'concept' && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '概念製作中，時間不能再改' });
-          const b = (await readJson(req)) as { cues?: TimingEdit[]; confirm?: boolean; accepted?: string[]; singers?: { name: string; color: string }[] };
+          if (!existsSync(songFile)) return json(res, 409, { error: '歌曲還在準備中' });
+          const timeline: SongTimeline = JSON.parse(readFileSync(songFile, 'utf8'));
           if (!Array.isArray(b.cues)) return json(res, 400, { error: '格式錯誤' });
           const next = applyTimingEdit(timeline, b.cues, !!b.confirm, undefined, Array.isArray(b.accepted) ? b.accepted.map(String) : [], b.singers);
           if (!existsSync(join(dir, 'song.orig.json'))) writeFileSync(join(dir, 'song.orig.json'), JSON.stringify(timeline));
@@ -505,8 +523,8 @@ export function createBetaServer(o: BetaOptions) {
       if (path === '/beta/admin/users' && req.method === 'POST') {
         const b = await readJson(req);
         const name = String(b.name ?? '').trim().slice(0, 60);
-        const limit = Number(b.limitUsd);
-        if (!name || !(limit >= 0)) return json(res, 400, { error: '請填名字和額度' });
+        const limit = usd(b.limitUsd);
+        if (!name || limit === undefined) return json(res, 400, { error: '請填名字和額度' });
         const { user: u, token } = invite(db, name, limit, b.admin === true);
         q.persist();
         return json(res, 201, { user: publicUser(db, u), loginUrl: `${o.publicUrl}/beta/login?t=${token}` });
@@ -516,7 +534,11 @@ export function createBetaServer(o: BetaOptions) {
         const u = db.users.find((x) => x.id === pu[1]);
         if (!u) return json(res, 404, { error: '找不到帳號' });
         const b = await readJson(req);
-        if (b.limitUsd !== undefined && Number(b.limitUsd) >= 0) u.limitUsd = Number(b.limitUsd);
+        if (b.limitUsd !== undefined) {
+          const limit = usd(b.limitUsd);
+          if (limit === undefined) return json(res, 400, { error: '額度不正確' });
+          u.limitUsd = limit;
+        }
         if (typeof b.disabled === 'boolean' && u.id !== user.id) u.disabled = b.disabled;
         // a fresh login link (the tunnel's address changed, or a link was lost); the old one stops working
         let loginUrl: string | undefined;
@@ -529,8 +551,8 @@ export function createBetaServer(o: BetaOptions) {
         return json(res, 200, { ...publicUser(db, u), loginUrl });
       }
       if (path === '/beta/admin/limit' && req.method === 'PUT') {
-        const v = Number((await readJson(req)).globalLimitUsd);
-        if (!(v >= 0)) return json(res, 400, { error: '金額不正確' });
+        const v = usd((await readJson(req)).globalLimitUsd);
+        if (v === undefined) return json(res, 400, { error: '金額不正確' });
         db.globalLimitUsd = v;
         q.persist();
         return json(res, 200, { globalLimitUsd: v });

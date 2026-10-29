@@ -374,6 +374,14 @@ const SCHEMA = obj({
   }) },
 });
 
+/**
+ * The look every drawn image is asked for: the person's own style when the board carries one (userStyle), else the
+ * flat poster look that keeps the AI sheen down.
+ */
+export const lookText = (board: Pick<Board, 'style' | 'userStyle'>, look: Pick<Look, 'ink' | 'accent' | 'paper'>) => board.userStyle
+  ? `In this song's style: ${board.style}. Spot colours: ink ${look.ink}, accent ${look.accent}, paper ${look.paper}.`
+  : `Flat graphic poster design for this song (${board.style.split('.')[0]}), in its spot colours: ink ${look.ink}, accent ${look.accent}, paper ${look.paper}. Large calm areas of flat colour or bare paper, simplified geometric shapes, halftone dots only in shadows, clean confident edges, very little detail. Designed, not rendered: no glow, no soft gradients, no painterly texture.`;
+
 async function main() {
   const { values: a } = parseArgs({ options: { song: { type: 'string' }, keyframes: { type: 'string' }, treatment: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'keep-look': { type: 'string' }, recheck: { type: 'boolean' } } });
   for (const line of readFileSync(join(homedir(), '.config/vjflow/anthropic.env'), 'utf8').split('\n')) { const m = line.match(/^([A-Z_]+)=(.*)$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim(); }
@@ -474,10 +482,7 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     writeFileSync(file, Buffer.from(r.output_image.data, 'base64'));
     usd += 0.101;
   };
-  // the user's own style is followed as they asked; without one the flat poster look keeps the AI sheen down
-  const LOOK = board.userStyle
-    ? `In this song's style: ${board.style}. Spot colours: ink ${spec.look.ink}, accent ${spec.look.accent}, paper ${spec.look.paper}.`
-    : `Flat graphic poster design for this song (${board.style.split('.')[0]}), in its spot colours: ink ${spec.look.ink}, accent ${spec.look.accent}, paper ${spec.look.paper}. Large calm areas of flat colour or bare paper, simplified geometric shapes, halftone dots only in shadows, clean confident edges, very little detail. Designed, not rendered: no glow, no soft gradients, no painterly texture.`;
+  const LOOK = lookText(board, spec.look);
   const NO_TEXT = 'Absolutely no text, letters, numbers, signs or watermarks anywhere.';
   const cast = join(kf, 'cast.jpg');
   await Promise.all(spec.sets.map((s) => {

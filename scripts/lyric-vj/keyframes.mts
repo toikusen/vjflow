@@ -40,6 +40,17 @@ export function longHolds(times: { start: number; end: number }[], max = 12): [n
 /** How many frames a passage takes: one per 7.5 s, 5 to 32. */
 /** The media type of a reference image by its extension: the person's refs (make.sh --style-ref) are jpg, png or webp. */
 export const imageMime = (f: string) => ({ '.png': 'image/png', '.webp': 'image/webp' } as Record<string, string>)[extname(f).toLowerCase()] ?? 'image/jpeg';
+/**
+ * The style the person asked for, kept on the board for cutout: their text when they gave one; with only a reference
+ * image, the writer's style (the sheets were drawn in the reference's technique), so cutout follows it rather than
+ * falling back to its flat-poster default. Neither given leaves no userStyle.
+ */
+export function withUserStyle<B extends { style: string; userStyle?: string }>(board: B, style?: string, styleRef?: string): B {
+  if (style) board.userStyle = style;
+  else if (styleRef) board.userStyle = board.style;
+  else delete board.userStyle;
+  return board;
+}
 export const frameCount = (seconds: number) => Math.max(5, Math.min(32, Math.round(seconds / 7.5)));
 
 /** A frame's description without the writer's own notes on blank areas (it drew a white haze where it asked for one). */
@@ -190,7 +201,7 @@ ${keepPeople ? `- people：人物已經定好，照抄這些 id 和外觀，不�
     }
     // a style the user asked for wins over the one the approved cast was drawn in
     if (keepPeople) Object.assign(board, { people: keepPeople.people, ...(a.style ? {} : { style: keepPeople.style }) });
-    if (a.style) board.userStyle = a.style;
+    withUserStyle(board, a.style, a['style-ref']);
     for (const f of board.frames) f.shows = withoutBlankNotes(f.shows) || f.change;
     writeFileSync(boardFile, JSON.stringify(board, null, 1));
   }

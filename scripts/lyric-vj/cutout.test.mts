@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { arrange, redrawFlagged, calmShot, calmSong, diversify, headIn, limiter, tiles, oddCutout, offLyric, onBeat, overlapping, paintedWindow, Shot, shotCode, windowOff } from './cutout.mts';
+import { arrange, redrawFlagged, calmShot, calmSong, diversify, headIn, limiter, lookText, tiles, oddCutout, offLyric, onBeat, overlapping, paintedWindow, Shot, shotCode, windowOff } from './cutout.mts';
 
 test('cut-outs keep out of the lyric third', () => {
   assert.equal(offLyric(-0.8, 'left'), -0.2);
@@ -150,4 +150,13 @@ test('a hand flag redraws the same pose, keeps the first clean redraw, else the 
   n = 0; writeFileSync(file, 'first');
   const kept = await redrawFlagged(file, redraw, async () => ({ body: 'fail', hands: 'pass', usd: 0 }));
   assert.deepEqual([kept.redrawn, readFileSync(file, 'utf8'), existsSync(file.replace('.jpg', '.handflag.jpg'))], [false, 'first', false]);
+});
+
+test('lookText: a board with a userStyle is drawn in its style; without one the flat poster default applies', () => {
+  const look = { ink: '#111', accent: '#c00', paper: '#fef' };
+  const own = lookText({ style: 'soft watercolour, thin ink lines. Warm light.', userStyle: 'soft watercolour, thin ink lines. Warm light.' }, look);
+  assert.ok(own.includes("In this song's style: soft watercolour, thin ink lines. Warm light.") && own.includes('ink #111'));
+  assert.ok(!own.includes('no painterly texture') && !own.includes('Flat graphic poster'));
+  const flat = lookText({ style: 'soft watercolour. Warm light.' }, look);
+  assert.ok(flat.includes('Flat graphic poster design for this song (soft watercolour)') && flat.includes('no painterly texture'));
 });

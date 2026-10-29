@@ -24,10 +24,30 @@ export function makeBody(f: MakeForm): MakeBody {
 /** Characters, not UTF-16 units, as the server counts them. */
 export const feelingLength = (s: string) => [...s].length;
 
-/** Concept attempts for a song and tier, as store.mts counts them: not retries, and not one that failed with all its retries. */
+/** The id of the job a retry chain started from: `retryOf` followed to its end (a retry of a retry included). */
+export function rootOf(jobs: readonly BetaJob[], job: BetaJob): string {
+  const byId = new Map(jobs.map((j) => [j.id, j]));
+  const seen = new Set<string>();
+  let j = job;
+  while (j.retryOf && byId.has(j.retryOf) && !seen.has(j.id)) {
+    seen.add(j.id);
+    j = byId.get(j.retryOf)!;
+  }
+  return j.id;
+}
+
+/**
+ * Concept attempts for a song and tier, as store.mts counts them: a concept job with every retry of it (and of those)
+ * counts once, unless the whole chain failed (a system failure never uses up an attempt).
+ */
 export function conceptAttempts(jobs: readonly BetaJob[], songId: string, tier: BetaTier): number {
-  const failedForGood = (j: BetaJob) => j.status === 'failed' && jobs.filter((r) => r.retryOf === j.id).every((r) => r.status === 'failed');
-  return jobs.filter((j) => j.kind === 'concept' && j.songId === songId && j.tier === tier && !j.retryOf && !failedForGood(j)).length;
+  const chains = new Map<string, BetaJob[]>();
+  for (const j of jobs) {
+    if (j.kind !== 'concept' || j.songId !== songId || j.tier !== tier) continue;
+    const root = rootOf(jobs, j);
+    chains.set(root, [...(chains.get(root) ?? []), j]);
+  }
+  return [...chains.values()].filter((chain) => chain.some((j) => j.status !== 'failed')).length;
 }
 
 /** A finished concept of this song nobody has decided on yet (the newest), if any. */

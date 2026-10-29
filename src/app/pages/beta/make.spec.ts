@@ -1,5 +1,5 @@
 import { BetaJob, CONCEPT_PRICE, TIER_INFO } from './beta';
-import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, refProblem, stripGrid, stripTiles, timingSaveWarning } from './make';
+import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, refProblem, rootOf, stripGrid, stripTiles, timingSaveWarning } from './make';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T00:00:00Z', decision: 'accepted', ...o });
 const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 20, uploading: false, submitting: false, feeling: '', ...o });
@@ -54,6 +54,19 @@ describe('conceptAttempts', () => {
     expect(conceptAttempts(jobs, 's', 'hybrid')).toBe(3);
     expect(conceptAttempts(jobs, 's', 'img')).toBe(1);
     expect(conceptAttempts(jobs, 's', 'none')).toBe(0);
+  });
+
+  it('follows a retry chain to its root: a success at any depth counts the chain once, a chain that all failed not at all', () => {
+    const chain = [
+      job({ id: 'a', status: 'failed', decision: undefined }),
+      job({ id: 'b', status: 'failed', retryOf: 'a', auto: true, decision: undefined }),
+      job({ id: 'c', status: 'done', retryOf: 'b', decision: undefined }),
+    ];
+    expect(conceptAttempts(chain, 's', 'hybrid')).toBe(1);
+    expect(conceptAttempts(chain.slice(0, 2), 's', 'hybrid')).toBe(0);
+    // a retry whose root is missing from the list is a chain of its own
+    expect(conceptAttempts(chain.slice(2), 's', 'hybrid')).toBe(1);
+    expect(rootOf(chain, chain[2])).toBe('a');
   });
 });
 

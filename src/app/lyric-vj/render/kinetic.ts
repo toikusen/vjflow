@@ -358,8 +358,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     }
     ctx.translate(-W / 2, -H / 2);
   }
-  // a rack focus: the background comes into focus as the cut lands (the character drawn sharp over it)
-  if (l.cam === 'rack') ctx.filter = `blur(${(9 * (1 - ease(clock / 0.7))).toFixed(1)}px)`;
+  // a rack focus: the background comes into focus as the cut lands (the character drawn sharp over it). The blur is
+  // applied once to the drawn cut (below), never as a filter while drawing: a filter on the context blurs every
+  // primitive on its own, and a field of thousands of dots under it (halftone, 終わりじゃない 169.8 s, 2026-10-30)
+  // stalled Chrome's GPU process until WebGL lost its context and the rest of the song came out black
+  const rackBlur = l.cam === 'rack' ? 9 * (1 - ease(clock / 0.7)) : 0;
   // the character printed in the cut's inks, sized and placed before the move (some moves print it themselves)
   const pic = l.sprite ? (image(`spr:${l.sprite}`) as (CanvasImageSource & { width: number; height: number }) | undefined) : undefined;
   const size = l.size ?? 0.85;
@@ -531,7 +534,15 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       ctx.globalCompositeOperation = 'source-over';
     }
   }
-  if (l.cam === 'rack') ctx.filter = 'none';
+  if (rackBlur > 0.3 && ctx.canvas) {
+    // the whole canvas replaced by its blurred copy in one filtered draw ('copy': nothing sharp left under it)
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'copy';
+    ctx.filter = `blur(${rackBlur.toFixed(1)}px)`;
+    ctx.drawImage(ctx.canvas, 0, 0);
+    ctx.restore();
+  }
   // behind the lines up, a keyline of the cut's ground round each letter; again over the character (unkeyed, dark type
   // sank into a dark figure)
   veil?.(ctx, 1);

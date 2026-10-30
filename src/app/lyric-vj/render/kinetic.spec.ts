@@ -133,5 +133,20 @@ describe('the song\'s thread', () => {
     expect(MORE['glide'].draw(e)).toBe(false);
     expect(MORE['glide'].draw({ ...e, art: { img: {} as CanvasImageSource, w: 300, h: 300, y: 500 } })).toBe(true);
   });
+  it('blurs a rack focus once, after the move is drawn, never as a filter on every primitive', () => {
+    // a filter set while a dot field draws blurred every dot on its own and lost the WebGL context (終わりじゃない, 2026-10-30)
+    const calls: string[] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: (_, k) => (k === 'canvas' ? {} : k === 'measureText' ? () => ({ width: 100 }) : (...args: unknown[]) => calls.push(String(k)) && args),
+      set: (_, k, v) => (calls.push(`${String(k)}=${String(v)}`), true),
+    });
+    const l: KineticLayer = { kind: 'kinetic', fx: 'dots', words: ['詞'], ink: '#111111', paper: '#eeeeee', accent: '#dd3322', cam: 'rack' };
+    drawKinetic(ctx, l, 0.1, { pulse: 0 }, () => undefined);
+    const blurs = calls.map((c, i) => [c, i] as const).filter(([c]) => /^filter=blur/.test(c));
+    expect(blurs.length).toBe(1);
+    expect(blurs[0][1]).toBeGreaterThan(calls.lastIndexOf('arc'));
+    expect(calls[blurs[0][1] + 1]).toBe('drawImage');
+  });
+
 });
 

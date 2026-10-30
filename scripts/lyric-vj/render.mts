@@ -147,7 +147,9 @@ await new Promise((r) => server.once('listening', r));
 const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 const pageUrl = `${base}${url(join(out, 'render', 'render.html'))}?job=${url(join(out, 'job.json'))}`;
 
-const browser = await chromium.launch({ channel: 'chrome', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
+// Playwright's own Chromium (full build, new headless), pinned by package.json: the system Chrome updates itself, and
+// its 10-28 update (Skia Graphite) changed canvas behaviour under a running pipeline (終わりじゃない, 2026-10-30)
+const browser = await chromium.launch({ channel: 'chromium', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
 const getFont = fontCache(resolve('out/font-cache'));
 // every renderer fault any page reported (a code layer that failed to compile or threw, a page error, a texture that
 // did not load): written into metrics.json so the delivery gate (beta/quality.mts) sees them, not only the log

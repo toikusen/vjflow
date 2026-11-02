@@ -1487,7 +1487,10 @@ export class LyricVjEngine {
   private kineticInks(t0: number, t1: number): { ink: string; paper: string } | undefined {
     const g = this.job.treatment.graphics;
     if (!g) return undefined;
-    const ks = g.sections.filter((s, i) => s.start < t1 && (g.sections[i + 1]?.start ?? Infinity) > t0).flatMap((s) => s.layers.filter((l) => l.kind === 'kinetic')) as { ink: string; paper: string }[];
+    // a full picture under the line (a story frame) is its ground, not the faint print laid over it: the line takes its
+    // colour and halo from the picture (三年後的大雪's story frames under the line director: navy type lost in a crowd)
+    const full = (s: { layers: { kind: string; mode?: string }[] }) => s.layers.some((l) => l.kind === 'photo' && l.mode === 'full');
+    const ks = g.sections.filter((s, i) => s.start < t1 && (g.sections[i + 1]?.start ?? Infinity) > t0 && !full(s as never)).flatMap((s) => s.layers.filter((l) => l.kind === 'kinetic')) as { ink: string; paper: string }[];
     return ks.length ? { ink: ks[0].ink, paper: ks[0].paper } : undefined;
   }
 

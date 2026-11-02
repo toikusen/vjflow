@@ -4,6 +4,8 @@
 // cut's camera, hit and transition, and the song's type finish. No drawing is generated and no code is written, so a
 // song costs one call.
 // npx tsx scripts/lyric-vj/typeplan.mts --song song.json --treatment treatment.json --sprites library --out <dir>
+import type { SignatureMoment } from '../../src/app/lyric-vj/signature-moments';
+import { withMoments } from './moments.mts';
 import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -291,7 +293,7 @@ const SCHEMA = {
 };
 type Line = { rows?: number[]; relay?: boolean; oval?: boolean; breath?: number; icon?: SymbolName; fine?: FineTier; budget?: boolean; textCam?: TextCam; hit?: ScreenHit; inkState?: InkState; linger?: number; handoff?: Handoff; cue: string; enter: string; exit: string; idle: string; trail: boolean; emphasis: string; method: string; symbol: string; emphasis2: string; method2: string; zh: string };
 type Cut = { tune?: Record<string, number>; mark?: string; yields?: boolean; rig?: CameraRig; transitionSec?: number; transitionDir?: number; beat: number; fx: string; flow?: string; label?: string; words: string[]; sprite: string; size: number; heart: boolean; dark: boolean; cam: string; flash: string; transition: string };
-type Plan = { vision?: { kinds: string[]; change: string; why: string }; parts?: { from: string; shift: string; what: string; warmth?: number; order?: number; keep?: { style: string; items: { sprite: string; word: string }[] }; backdrops?: string[] }[]; meets?: { cue: string; why: string }[]; previews?: { shot: string; note: string }[]; clip?: { from: string; to: string; why: string }; fresh?: { technique: string; cue: string; why: string }[]; backbone: string; thread?: { what: string; mark?: string; sprite?: string; why: string }; document: boolean; print: string; format?: { pace: string; ground: string; why: string }; devices?: { revise: string; document: string; why: string }; flowRule?: string; styles?: { fx: string; style: number; why: string }[]; finish: string; shots: { shot: string; chapter: string; level?: number; backdrop?: string; lyric: { template: string; side: string }; lines: Line[]; cuts: Cut[] }[] };
+type Plan = { signature?: SignatureMoment[]; vision?: { kinds: string[]; change: string; why: string }; parts?: { from: string; shift: string; what: string; warmth?: number; order?: number; keep?: { style: string; items: { sprite: string; word: string }[] }; backdrops?: string[] }[]; meets?: { cue: string; why: string }[]; previews?: { shot: string; note: string }[]; clip?: { from: string; to: string; why: string }; fresh?: { technique: string; cue: string; why: string }[]; backbone: string; thread?: { what: string; mark?: string; sprite?: string; why: string }; document: boolean; print: string; format?: { pace: string; ground: string; why: string }; devices?: { revise: string; document: string; why: string }; flowRule?: string; styles?: { fx: string; style: number; why: string }[]; finish: string; shots: { shot: string; chapter: string; level?: number; backdrop?: string; lyric: { template: string; side: string }; lines: Line[]; cuts: Cut[] }[] };
 
 /** The capped techniques, for the prompt: id and how often a song may use it. */
 function rareList() {
@@ -504,7 +506,8 @@ for (const p of plan.shots) {
   const pos = (TEMPLATE_SPECS[p.lyric.template]?.params as Record<string, { values?: string[] }> | undefined)?.['position'];
   if (pos?.values && shot.params.position && !pos.values.includes(shot.params.position)) shot.params.position = 'auto';
 }
-writeFileSync(join(out, 'treatment.json'), JSON.stringify(tr));
+// the line director's signature moments ride on its plan: on the treatment for the renderer
+writeFileSync(join(out, 'treatment.json'), JSON.stringify(plan.signature ? withMoments(tr, plan.signature) : tr));
 // what the plan left out or named wrongly (a shot with no cuts keeps the previous backdrop running into it): the
 // delivery gate (beta/quality.mts) holds such a video for the admin instead of handing it over
 writeFileSync(join(out, 'plan-check.json'), JSON.stringify({ missing, unknownShots: [...new Set(unknownShots)], unknownCues: [...new Set(unknownCues)] }, null, 1));

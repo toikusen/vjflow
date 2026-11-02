@@ -1,5 +1,6 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import type { SignatureMoment } from './signature-moments';
 import type { WorldLine } from './render/world-layout';
 import { WORLD_TEMPLATES } from './templates-world';
 import type { TextCam } from './render/text-cam';
@@ -183,6 +184,8 @@ export interface TreatmentV3 {
   keyframes?: Keyframe[];
   /** The director's choice per unsung window (structure.ts unsungWindows): backdrop unless a reason asks for pictures. */
   interludes?: Interlude[];
+  /** The paid tiers' signature moments (signature-moments.ts), drawn over the frame by render/signature.ts. */
+  signature?: SignatureMoment[];
 }
 
 export type ParamSpec =

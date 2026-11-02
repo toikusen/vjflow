@@ -1,7 +1,7 @@
 // Render page entry (bundled by scripts/lyric-vj/render.mts): exposes ready / renderAt / metrics to the driver.
 import { LyricVjEngine, RenderJob } from './engine';
 import { loadJobFonts } from './job-fonts';
-import { isSignature, SIGNATURE_IDS, signatureCues, signatureLayer, signatureMetrics } from './signature-spike'; // ponytail: 20 s test, off without its flag
+import { isSignature, signatureCues, signatureIds, signatureLayer, signatureWindows } from './signature';
 
 declare global {
   interface Window {
@@ -28,6 +28,7 @@ const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasE
 window.vjReady = engine.init();
 window.renderAt = (t) => engine.renderAt(t);
 const stage = document.getElementById('stage') as HTMLCanvasElement;
+// signature moments (paid tiers): drawn over the engine's frame, their lines taken off it
 const signature = isSignature(job) ? await signatureLayer(job) : null;
 if (signature) engine.onCues = signatureCues as never;
 window.grabAt = async (t, quality) => {
@@ -38,7 +39,11 @@ window.vjLyrics = (on) => engine.showLyrics(on);
 window.vjMetrics = () => {
   engine.buildAll();
   const m = engine.metrics();
-  return signature ? { ...m, cues: [...m.cues.filter((c) => !SIGNATURE_IDS.has(c.id)), ...(signatureMetrics(job) as unknown as typeof m.cues)] } : m;
+  if (!signature) return m;
+  // the moments' lines are measured from their own timeline, on the engine's exits for them
+  signatureWindows(m.cues);
+  const ids = signatureIds(job);
+  return { ...m, cues: [...m.cues.filter((c) => !ids.has(c.id)), ...(signature.metrics() as unknown as typeof m.cues)] };
 };
 window.vjRows = () => engine.rowBreaks();
 window.vjSceneQa = () =>

@@ -35,13 +35,14 @@ plan() { # <out> [--sprites dir]; on the line director's base when $pb is set
 }
 
 # The paid line director (VJ_LINEDIRECT=1, off until its side-by-side samples are accepted): each line its own stack and
+# reasons; VJ_MOMENTS=1 with it asks for signature moments too (kept on line/signature.json and the plan).
 # reasons, read off the paid plan in noimg/ (planned first when a run has none). Its reply is kept in line/direction.json,
 # so a retried job spends nothing again; line/final is that plan built into a treatment.
 linedirect() {
   plan "$w/noimg"
   echo '##PHASE 導演逐句編排'
   mkdir -p "$w/line"
-  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} ${props:+--props} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
+  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} ${props:+--props} ${VJ_MOMENTS:+--moments} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
   pb=$w/line/base.json
 }
 

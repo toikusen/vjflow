@@ -13,6 +13,8 @@ import { feltTempo } from '../../src/app/lyric-vj/timeline';
 import { charsPerSec, Cue, levelOf } from './lineplan-core.mts';
 import { Ctx, directedPlan, Direction, directionSchema, directorBase, directorPrompt, PaidPlan, paidClock, screenGroundsOf, SongIn, usdOf } from './linedirect-core.mts';
 import { lessonsBlock, readLessons } from './lesson-rules.mts';
+import { overusedForms, recordMoments } from '../../src/app/lyric-vj/signature-moments';
+import { buildMoments } from './moments.mts';
 
 const { values: a } = parseArgs({ options: {
   song: { type: 'string' }, base: { type: 'string' }, paid: { type: 'string' }, out: { type: 'string' },
@@ -28,6 +30,9 @@ const { values: a } = parseArgs({ options: {
   lessons: { type: 'string' },
   // the picture tier: some lines stand to one side so its props have the other
   props: { type: 'boolean', default: false },
+  // signature moments: the director picks up to three lines for a drawn moment (checked, then written for the renderer)
+  moments: { type: 'boolean', default: false },
+  history: { type: 'string', default: 'out/design-history.json' },
 } });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
 for (const line of existsSync(env) ? readFileSync(env, 'utf8').split('\n') : []) {
@@ -62,13 +67,14 @@ const ctxFor = (d?: Direction): Ctx => {
 };
 const lang = base.design.language as keyof typeof LANGUAGES;
 const script = (base.design.colorScript ?? [])[1] ?? (base.design.colorScript ?? [])[0] ?? {};
-const prompt = directorPrompt(song, ctxFor(), { language: String(lang ?? ''), languageWhat: String((LANGUAGES[lang] as { name?: string } | undefined)?.name ?? ''), concept: base.concept ?? '', backbone: paid.backbone ?? '', change: paid.vision?.change ?? '', palette: `墨 ${script.shadow}、紙 ${script.highlight}、強調 ${script.accent}`, parts: partsIn, lessons: lessonsBlock(readLessons(a.lessons), 'typeplan'), props: a.props });
+const history = (existsSync(a.history!) ? JSON.parse(readFileSync(a.history!, 'utf8')) : []) as { song: string; moments?: string[] }[];
+const prompt = directorPrompt(song, ctxFor(), { language: String(lang ?? ''), languageWhat: String((LANGUAGES[lang] as { name?: string } | undefined)?.name ?? ''), concept: base.concept ?? '', backbone: paid.backbone ?? '', change: paid.vision?.change ?? '', palette: `墨 ${script.shadow}、紙 ${script.highlight}、強調 ${script.accent}`, parts: partsIn, lessons: lessonsBlock(readLessons(a.lessons), 'typeplan'), props: a.props, moments: a.moments ? { overused: overusedForms(history, song.title) } : undefined });
 writeFileSync(join(out, 'prompt.txt'), prompt);
 
 const spent = () => (existsSync(a.costs!) ? readFileSync(a.costs!, 'utf8').split('\n').filter(Boolean).reduce((s, l) => s + (JSON.parse(l).usd ?? 0), 0) : 0);
 const kept = join(out, 'direction.json');
 const ask = async (): Promise<Direction> => {
-  const schema = directionSchema();
+  const schema = directionSchema(a.moments);
   const budget = Number(a.budget);
   const client = new Anthropic({ maxRetries: 4 });
   const counted = (await client.messages.countTokens({ model: a.model!, messages: [{ role: 'user', content: prompt }], output_config: { format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageCountTokensParams)).input_tokens;
@@ -105,6 +111,17 @@ if (a.metrics) {
   console.log(`metrics: ${rejected.size} lines back to the composer (${[...rejected].join(' ')})`);
 }
 const { plan, shots, decisions, fallbacks } = directedPlan(song, direction, ctxFor(direction), paid, paidShots, partsIn, felt, rejected);
+// the moments through their guards: the kept ones go with the plan (typeplan --plan puts them on the treatment), the
+// dropped ones are fallbacks like any other; the song's forms go into the design history for the next songs' directors
+if (a.moments) {
+  const asks = direction?.moments ?? [];
+  const { kept, dropped } = buildMoments(song as never, a.song!, asks);
+  for (const d of dropped) fallbacks.push({ cue: d.ask.cues.join('+'), field: 'moment', said: `${d.ask.form}/${d.ask.variant} 「${d.ask.word}」`, reason: d.reason });
+  writeFileSync(join(out, 'signature.json'), JSON.stringify({ moments: kept, dropped }, null, 1));
+  Object.assign(plan, { signature: kept });
+  writeFileSync(a.history!, JSON.stringify(recordMoments(history, song.title, kept), null, 1));
+  console.log(`moments: ${kept.length} kept (${kept.map((k) => `${k.form}/${k.variant} ${k.cues.join('+')} 「${k.word}」`).join('; ')}), ${dropped.length} dropped${direction && !direction.moments ? ' (the kept reply has none: rerun with --fresh to ask)' : ''}`);
+}
 writeFileSync(join(out, 'plan.json'), JSON.stringify(plan, null, 1));
 writeFileSync(join(out, 'base.json'), JSON.stringify(directorBase(base, plan as never, shots)));
 writeFileSync(join(out, 'decisions.json'), JSON.stringify({ reading: direction?.reading, techniques: direction?.techniques, tune: direction?.tune, decisions, fallbacks }, null, 1));

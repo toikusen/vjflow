@@ -164,3 +164,11 @@ console.log('linedirect: ok');
   assert.ok(directorPrompt(song, ctx, { ...facts, props: true }).includes('這一版有插圖'), 'props: told to leave a side');
   assert.ok(!directorPrompt(song, ctx, facts).includes('這一版有插圖'), 'no props: not told');
 }
+
+// signature moments: only a run that asks gets the field and the offer
+assert.ok(!('moments' in directionSchema().properties), 'the schema has no moments unless asked');
+assert.ok(directionSchema(true).required.includes('moments'), 'asked, moments are required');
+assert.ok(!directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '' }).includes('專屬時刻'), 'no offer unless asked');
+const offered = directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', moments: { overused: ['shape/chain'] } });
+assert.ok(offered.includes('strike/tear') && offered.includes('shape/wave') && offered.includes('這首避免：shape/chain'), 'the forms on offer and the overused ones');
+assert.ok(!offered.includes('strike/burn'), 'a variant not drawn is not offered');

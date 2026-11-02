@@ -12,6 +12,7 @@ import { HANDOFF_KINDS, HandoffKind } from '../../src/app/lyric-vj/render/lyric-
 import { isLineGround } from '../../src/app/lyric-vj/render/line-grounds';
 import { wordBreaks } from '../../src/app/lyric-vj/phrases';
 import { splitSongTitle } from '../../src/app/lyric-vj/structure';
+import { MomentAsk, MOMENT_FORMS, SHAPE_WORDS, STRIKE_WORDS } from '../../src/app/lyric-vj/signature-moments';
 import type { FineTier, SymbolName } from '../../src/app/lyric-vj/treatment';
 import { ARRIVAL_APART, ARRIVAL_SHARE, ARRIVALS_SHARE, BACKGROUNDS, BREATH_MIN, CARRIER_APART, CARRIER_SHARE, CARRIERS, charsPerSec, composePlan, Cue, DEVICE_SHARE, DISTINCT_SHARE, EXIT_LAYOUT, EXIT_PAPER, EXIT_SHARE, fallbackParts, fitsCalm, FIXED_LAYOUT, GROUND_HELP, HANDOFF_APART, KEEPS_EXIT, keyOf, LAYOUT_SHARE, levelOf, MARK_SHARE, Meaning, NOT_CALM_EXIT, OWN_EXIT, PAIR_APART, PAIR_SHARE, PairKind, PAPER_EXITS, QUIET_BACKGROUNDS, Recipe, RECIPES, RING_MAX, SongPart, SPATIAL, SPATIAL_SHARE, TRACKED } from './lineplan-core.mts';
 import { cutTimes } from './interludes.mts';
@@ -54,6 +55,8 @@ export interface Direction {
   parts: { from: string; tension: number; why: string }[];
   tune: { key: string; value: number; cue: string; why: string }[];
   lines: LineChoice[];
+  /** Signature moments (signature-moments.ts), only when the run asked for them; checked by checkMoments. */
+  moments?: MomentAsk[];
 }
 
 /** Moves never drawn, whatever a director asks: a camera HUD, invented readings, RGB fringes, lyric wallpaper. */
@@ -604,7 +607,7 @@ const CONDITIONS: [string, string, string][] = [
 const LINE_EXIT_HELP: Record<string, string> = { 'band-out': '整帶抽走（決斷、切斷）', 'slat-close': '百葉收攏（壓抑、藏起）', 'line-fold': '壓成一筆線（結束、句點）', 'tile-scatter': '紙片切開散掉（解散、再見；只給紙面）', 'echo-travel': '單色回聲滑走', 'radial-leave': '從一點推開（爆發）', 'glyph-shed': '字掉碎屑（崩塌、失去）', 'wave-dissolve': '波紋蒸散（B40：消逝、疲憊、夢）', 'pore-out': '從毛孔褪去（時間磨損）', 'focus-out': '失焦（忘記、遠去）', 'rail-leave': '沿軌道離開（出發、離站）', 'gravity-pass': '整句往下掉（墜落）', 'node-fold': '收成一個節點（未完待續）' };
 
 /** The director's call: everything it may choose, with the conditions, then the song. */
-export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; languageWhat: string; concept: string; backbone: string; change: string; palette: string; parts: { id: string; cue: string; start: number; what: string; energy: number }[]; lessons: string; props?: boolean }) {
+export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; languageWhat: string; concept: string; backbone: string; change: string; palette: string; parts: { id: string; cue: string; start: number; what: string; energy: number }[]; lessons: string; props?: boolean; moments?: { overused: string[] } }) {
   const beats = new Map(lineBeats(song.cues, song.duration).map((b) => [b.id, b]));
   const together = setTogetherLines(song.cues);
   const n = song.cues.length;
@@ -673,7 +676,7 @@ ${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大
 - emphasis：這句最該被看見的一段，原樣取自歌詞、不切開詞；method 怎麼標（color、mark、weight、scale、box、shake）。紙面類程式會固定用 color。
 - ground：這句站在什麼上，整首世界和背景已定，這只是字後面的小事件。空字串交給程式。紙面材質：${grounds}。動態：${moves}（這些是真的畫出那個東西，雨就是雨、流星就是流星，歌詞或段落真的有才用）。特殊：horizon-light（角落落日：黃昏、海、告別）、surface-crack（裂紋：破碎、突破）、fold-mark（落款：承諾，要有 icon）。紙面類版面後面只能用安靜的材質。同一個不連用。
 - tune：有些東西的數量可以照歌詞：${TUNABLE.join('、')}。歌詞真的說了多少或暗示多或少才填，例如「三顆流星」meteor.n=3、滿天星 stars.n 取高。沒有就空陣列。要 ground 真的用到那一招才有效果。
-- techniques：這首歌最重要的三到六個手法或決定（可以是「整段 hold」這種判斷，不只是招式 id），用在哪、為什麼。
+${facts.moments ? momentsPrompt(facts.moments.overused) : ''}- techniques：這首歌最重要的三到六個手法或決定（可以是「整段 hold」這種判斷，不只是招式 id），用在哪、為什麼。
 - icon：這首歌唯一的圖示，只有整首反覆出現同一個東西才選（${SYMBOLS.join('、')}），否則空字串。
 - reading：一句話，這首歌真正在講什麼。
 
@@ -698,13 +701,27 @@ export function wordPieces(text: string): string[] {
   return stops.slice(1).map((e, i) => cs.slice(stops[i], e).join('').trim()).filter(Boolean);
 }
 
-export function directionSchema() {
+const WORD_HELP = (words: Record<string, RegExp>, v: string) => words[v].source.replace(/[\[\]\\u]/g, '').replace(/\|/g, '、');
+/** The moments on offer, with the words each needs: only when a run asks for them. */
+export function momentsPrompt(overused: string[]) {
+  const strike = MOMENT_FORMS.strike.map((v) => `strike/${v}（動詞 ${WORD_HELP(STRIKE_WORDS, v)}）`).join('、');
+  const shape = MOMENT_FORMS.shape.map((v) => `shape/${v}（名詞 ${WORD_HELP(SHAPE_WORDS, v)}）`).join('、');
+  return `- moments（專屬時刻）：整首挑 0 到 3 個時刻，至少隔 30 秒，沒有真正合適的句子就空陣列。每個時刻：cues、form、variant、word、why。
+  - strike「動作打在字上」：這句唱到那個動詞時，動作作用在字下的紙上。${strike}。cues 填一句（這句自己的紙在動詞處撕開、兩半留著）或兩句（前一句是被打的東西，印在一張紙牌上；這句是打的那句，整句像一條腿踢上去，例如「東亞病夫的招牌」+「已被我一腳踢開」）；兩句時前一句要讀得完才會被打。
+  - shape「字變成那個東西」：句子沿著它說的東西的形狀排，跟著它動。${shape}。chain 是句子分成兩節、中間一段鏈條，隨後面的口令（哼哼哈兮）擺動；wave 是字騎在水面上；fall 是字一顆顆落下。cues 填那一句。
+  - word 必須原樣出現在那句歌詞裡（括號裡的應援不算），而且真的是那個意思：「割と」不是動詞，「心」不是形狀。程式會逐項檢查，不合的時刻會被拿掉，句子本身不受影響。
+  - 時刻會把那句整個接管（版面、進退場都由時刻畫），所以那句的 layout 等欄位照填但會被覆蓋。${overused.length ? `最近的歌用過太多次、這首避免：${overused.join('、')}。` : ''}why 一句、二十字內，講這句為什麼配這個形式。
+`;
+}
+
+export function directionSchema(moments = false) {
   const str = (description?: string) => ({ type: 'string', ...(description ? { description } : {}) });
   const whyProps = Object.fromEntries(['cut', 'layout', 'enter', 'idle', 'exit', 'decor'].map((k) => [k, str()]));
   return {
-    type: 'object', additionalProperties: false, required: ['reading', 'icon', 'techniques', 'parts', 'tune', 'lines'],
+    type: 'object', additionalProperties: false, required: ['reading', 'icon', 'techniques', 'parts', 'tune', 'lines', ...(moments ? ['moments'] : [])],
     properties: {
       reading: str(), icon: str(),
+      ...(moments ? { moments: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cues', 'form', 'variant', 'word', 'why'], properties: { cues: { type: 'array', items: str() }, form: { type: 'string', enum: Object.keys(MOMENT_FORMS) }, variant: str(), word: str(), why: str() } } } } : {}),
       techniques: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'where', 'why'], properties: { id: str(), where: str(), why: str() } } },
       parts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'tension', 'why'], properties: { from: str(), tension: { type: 'number' }, why: str() } } },
       tune: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['key', 'value', 'cue', 'why'], properties: { key: str(), value: { type: 'number' }, cue: str(), why: str() } } },

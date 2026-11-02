@@ -98,7 +98,20 @@ export function obi(e: WorldEnv) {
   });
 }
 const G: Record<string, HandGround> = {};
-for (const m of MOTIFS) G[`chiyogami/${m}`] = (e) => { sheetAt(e, m, e.seed % 3); foldShade(e, 1); obi(e); };
+/** One printed sheet laid askew on the plain washi, high and off to one side: the paper's own corner of the frame, never full-bleed. */
+const cardAt = (e: WorldEnv, m: Motif, turn = 0) => {
+  const c = e.ctx;
+  c.drawImage(fibred('cg-obi', e.paper, e.slots.ink2, 700), 0, 0);
+  const side = e.seed % 2 ? 1 : -1;
+  atBase(e, () => {
+    c.save();
+    c.translate(W * (0.5 + 0.24 * side) + 10 * Math.sin(e.now * 0.18), H * 0.38 + 8 * Math.cos(e.now * 0.15));
+    c.rotate(-0.13 * side);
+    lifted(c, 30, 8 * side, 12, 0.35, () => { c.fillStyle = c.createPattern(patternTile(m, e.slots, turn), 'repeat')!; c.fillRect(-W * 0.23, -H * 0.38, W * 0.46, H * 0.76); });
+    c.restore();
+  });
+};
+for (const m of MOTIFS) G[`chiyogami/${m}`] = (e) => { cardAt(e, m, e.seed % 3); foldShade(e, 1); obi(e); };
 G['chiyogami/patchwork'] = (e) => {
   const c = e.ctx;
   // squares of different papers, each a little askew on the stack

@@ -154,6 +154,8 @@
 
 目標：ukiyoe、papercut、paper-lantern、chiyogami、woodcut、chalkboard、aizome、crayon。程式：`src/app/lyric-vj/style-worlds-hand.ts`（資料）、`render/world-b2-*.ts`（每世界一檔）、`render/world-craft.ts`（共用）、`render/world-glyph-hand.ts`（字面）、`render/world-packs.ts`（登記）。看圖工具：`scripts/lyric-vj/world-stills.mts`（全尺寸靜幀，`--pieces` 把每個場面強制放到有唱的句子上）。工作檔在 `out/research/styles2/`。8 種都已接上。其他修正：`wall-word` 只顯示正在唱的那句（`layer.world.lines`）；彩繪玻璃碎裂時字所在的那格留著；dark-glitch、gothic-lolita 加淺色切換（`tape-wall`、`leaf-wall`）；同文極短 cue 併回前一句（`withoutEchoes`，c049）；世界句子用 `CueLayer.poses` 回報真實位置；帶 Call 的句子在世界裡不併句、不換版。終端機：不再重新點陣化（`phosphor`），行距 1.36、字距 0.08，桌面視窗放不下時離開（`leaves`），場面視窗只放在不碰字的格子。frame 的 `tooth` 會露出物件平面的對角接縫，第 2 批三個世界改為 0。檢查工具鏈在 scratchpad 的 `redo.sh`，結果在 `out/research/styles2/run/`；樣片在 `~/Desktop/vj/output/風格第2批_2026-11-02/`。
 
+第二輪（使用者：woodcut 快、papercut／aizome 慢都不改；四個紙類世界都留）：閘門 3 的 9 項修到 0，做法是讓每個世界有自己的版面位置，不靠改色。ukiyoe 的字放在天空與兩側直排，山與海收成中段一條帶子，前景用 `lowMist` 遮成白紙；paper-lantern 的字放在中間的窗，紙層退到下三分之一；chiyogami 的花紋改成一張斜放的卡（`cardAt`），不再滿版，紙帶全部斜放，出場慢拉到摺線再壓平；woodcut 的字放在版的下半部；crayon 每一級都用 `colour-over`（0.56 秒）換畫面。chalkboard 擦痕上的對角線原因是噪點 x、y 共用同一個亂數，已修。注意：閘門 3 的「墨」是指偏離畫面最常見色調的像素，主要受背景大面積影響，只移動字的位置效果有限；`ukiyoe/sky-title` 往上移會讓三句疊放時最上面那句出畫（snow c042–c044 讀不到），所以維持在 0.26。結果在 `out/research/styles2/run4/`。
+
 ## 第 1 批第三輪判斷（2026-11-02）
 
 使用者：除了終端機文字擠在一起看不清楚，其他可以。方向通過，第 2 批沿用同一做法；終端機在第 2 批內修。

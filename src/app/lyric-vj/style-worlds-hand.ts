@@ -329,7 +329,7 @@ const crayon: StyleWorld = {
   motion: { enters: ['scrawl-on', 'stuck-on'], exits: ['peel-page', 'rub-out'], holds: ['crayon-boil'], curve: '八張一秒，每張手抖一點' },
   grounds: { levels: lv(['crayon/plain-page', 'crayon/hills'], ['crayon/hills', 'crayon/hatch-field', 'crayon/loops', 'crayon/wax-night'], ['crayon/rainbow', 'crayon/hatch-field', 'crayon/loops']), quiet: ['crayon/plain-page', 'crayon/wax-night', 'crayon/hills'] },
   decor: [{ id: 'crayon/page-border', why: '孩子沿紙邊畫的框，說明這是一頁', budget: '每頁一圈' }, { id: 'crayon/scribble-sun', why: '角落的太陽塗鴉是孩子畫的第一個東西', budget: '每頁一個' }],
-  transitions: { line: lv([''], ['colour-over', ''], ['colour-over']), part: lv(['colour-over'], ['colour-over'], ['colour-over']), own: ['colour-over'], banned: ['shatter', 'blinds', 'stripes', 'whip'], family: 'scribble' },
+  transitions: { line: lv(['colour-over', ''], ['colour-over'], ['colour-over']), part: lv(['colour-over'], ['colour-over'], ['colour-over']), own: ['colour-over'], banned: ['shatter', 'blinds', 'stripes', 'whip'], family: 'scribble' },
   peak: { loud: 'crayon/everything', calm: 'crayon/one-star', how: '快歌彩虹畫滿；慢歌白紙上一顆星' },
   pieces: ['scribble-flood', 'wash-resist', 'page-turn', 'rainbow-arc'],
   pieceWords: { 'scribble-flood': /亂|煩|討厭|嫌|笑|跳|もう/, 'wash-resist': /雨|水|淚|涙|洗|星|雪/, 'page-turn': /故事|下一|明天|翻|次|物語|書/, 'rainbow-arc': /虹|彩|天|空|夢|光|晴/ },

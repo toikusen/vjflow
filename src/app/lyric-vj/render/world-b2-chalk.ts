@@ -169,7 +169,7 @@ const rub: ObjectPaint = (c, w, h, s, seed, look) => {
   g.lineWidth = (h / n) * 1.5;
   for (let i = 0; i < n; i++) { const y = ((i + 0.5) / n) * h; const [a, b] = [g.lineWidth * 0.6 + 40 * hash(i, seed), w - g.lineWidth * 0.6 - 40 * hash(i, seed + 1)]; g.beginPath(); g.moveTo(a, y); g.bezierCurveTo(w * 0.3, y - 10, w * 0.7, y + 10, b, y); g.stroke(); }
   g.globalCompositeOperation = 'destination-out';
-  for (let i = 0; i < w * h * 0.002; i++) { g.globalAlpha = 0.5; g.fillRect(hash(i, seed + look) * w, hash(i, seed + 2) * h, 1 + 4 * hash(i, 3), 1 + 2 * hash(i, 4)); }
+  for (let i = 0; i < w * h * 0.002; i++) { g.globalAlpha = 0.5; g.fillRect(hash(i, seed + 101 + look) * w, hash(i, seed + 2) * h, 1 + 4 * hash(i, 3), 1 + 2 * hash(i, 4)); }
   c.drawImage(sc, 0, 0);
 };
 export const CHALK = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'chalk-rub': rub } as Record<string, ObjectPaint> };

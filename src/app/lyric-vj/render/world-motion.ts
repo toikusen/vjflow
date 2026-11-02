@@ -91,9 +91,10 @@ export const WORLD_ENTERS: Record<string, WorldMove> = {
   'glow-up': { sec: 0.62, glyph: ({ q, u, v }) => ({ a: easeOut(q * 1.6 - 0.5 * Math.hypot(u - 0.5, v - 0.5), 2) }) },
   'stand-up': { sec: 0.44, block: (q) => ({ dy: -90 * (1 - easeOut(q, 4)), sy: 0.8 + 0.2 * easeOut(q, 4), a: clamp01(q * 5) }) },
   // chiyogami: a band wrapped on, a paper turned over
-  'band-wrap': { sec: 0.4, clip: (q) => ({ axis: 'x', at: easeOut(q, 3) }), block: (q) => ({ dx: -40 * (1 - easeOut(q, 3)) }) },
-  'paper-turn': { sec: 0.36, block: (q) => ({ sy: Math.max(0.04, Math.abs(Math.cos((1 - easeOut(q, 2)) * Math.PI * 0.5))) }) },
-  'tag-lay': { sec: 0.3, block: (q) => ({ sx: 1.1 - 0.1 * easeOut(q, 3), sy: 1.1 - 0.1 * easeOut(q, 3), r: 0.08 * (1 - easeOut(q, 3)), a: clamp01(q * 6) }) },
+  // the hand pulls slowly to the crease and the paper snaps flat there: most of the change comes late
+  'band-wrap': { sec: 0.62, clip: (q) => ({ axis: 'x', at: easeIn(q, 1.6) }), block: (q) => ({ dx: -40 * (1 - easeIn(q, 1.6)) }) },
+  'paper-turn': { sec: 0.56, block: (q) => ({ sy: Math.max(0.04, q < 0.7 ? 0.35 * easeOut(q / 0.7, 2) : 0.35 + 0.65 * easeOut((q - 0.7) / 0.3, 3)) }) },
+  'tag-lay': { sec: 0.54, block: (q) => ({ sx: 1.1 - 0.1 * easeIn(q, 2), sy: 1.1 - 0.1 * easeIn(q, 2), r: 0.1 * (1 - easeIn(q, 2)), a: clamp01(q * 6) }) },
   // woodcut: the knife, stroke by stroke; the block slammed down on the press
   'knife-cut': { sec: 0.4, glyph: ({ q, i, n, seed }) => { const k = clamp01(q * (n + 1) - i); return { a: k > 0 ? (hashOf(Math.floor(q * 12), i + seed) > 0.25 || k >= 1 ? 1 : 0.5) : 0 }; } },
   'press-slam': { sec: 0.22, block: (q) => ({ sx: 1.12 - 0.12 * easeOut(q, 5), sy: 1.12 - 0.12 * easeOut(q, 5), a: clamp01(q * 8) }) },

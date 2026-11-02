@@ -112,7 +112,8 @@ const GROUNDS: Record<string, HandGround> = {
   'crayon/one-star': (e) => { GROUNDS['crayon/plain-page'](e); },
 };
 const INS: Record<string, HandIn> = {
-  'colour-over': { sec: 0.34, draw: (e, q) => { const c = e.ctx; atBase(e, () => dryMark(c, (d) => { const k = q; const pts: Pt[] = []; for (let i = 0; i <= 12; i++) pts.push([i % 2 ? W + 80 : -80, (i / 12) * H]); d.globalAlpha = 1; strokePts(d, partOf(pts, 1).map(([x, y]) => [x + k * (W + 300) * (x > 0 ? 1 : 1), y]), 120, e.paper); }, 4, 0.2)); } },
+  // the new page is coloured in by hand, sweep by sweep: slower than a cut, so the change keeps coming after the line lands
+  'colour-over': { sec: 0.56, draw: (e, q) => { const c = e.ctx; atBase(e, () => dryMark(c, (d) => { const k = q; const pts: Pt[] = []; for (let i = 0; i <= 12; i++) pts.push([i % 2 ? W + 80 : -80, (i / 12) * H]); d.globalAlpha = 1; strokePts(d, partOf(pts, 1).map(([x, y]) => [x + k * (W + 300) * (x > 0 ? 1 : 1), y]), 120, e.paper); }, 4, 0.2)); } },
 };
 const wax = (e: WorldEnv) => kept(`cr-wax|${e.slots.plate}|${e.slots.faint}`, W, H, (c) => {
   dryMark(c as unknown as CanvasRenderingContext2D, (d) => { for (let i = 0; i < 34; i++) strokePts(d, star(hash(i, 14) * W, hash(i, 15) * H, 50 + 60 * hash(i, 16), hash(i, 17)), 14, e.slots.plate); for (let i = 0; i < 8; i++) strokePts(d, scribble(hash(i, 18) * W, hash(i, 19) * H, 70, 6, i), 12, e.slots.plate); }, 3, 0.8);

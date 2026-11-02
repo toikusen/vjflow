@@ -163,13 +163,23 @@ const rainTile = (e: WorldEnv, tone: string) => kept(`uk-rain|${tone}`, 900, 900
   }
   c.globalAlpha = 1;
 });
+/** The foreground lost in mist, as in a Hiroshige print: the land is a band across the middle, the bottom of the sheet bare paper. */
+const lowMist = (e: WorldEnv) => {
+  const c = e.ctx;
+  const g = c.createLinearGradient(0, H * 0.68, 0, H * 0.8);
+  g.addColorStop(0, `${e.paper}00`);
+  g.addColorStop(1, e.paper);
+  c.fillStyle = g;
+  c.fillRect(-20, H * 0.68, W + 40, H * 0.34);
+};
 const hills = (e: WorldEnv) => {
   const c = e.ctx;
   const pan = -e.now * (10 + 16 * e.level);
-  tiled(c, range(e, 0.66, 300, mixHex(e.slots.faint, e.slots.ink2, 0.3), e.seed % 3), pan * 0.4);
-  drift(e, e.paper, H * 0.6, 58, 5, e.seed, 0.92);
-  tiled(c, range(e, 0.82, 260, mixHex(e.slots.ink2, e.paper, 0.1), (e.seed % 3) + 5), pan * 0.9);
-  drift(e, mixHex(e.paper, e.slots.faint, 0.3), H * 0.8, 44, 9, e.seed + 2, 0.9);
+  tiled(c, range(e, 0.56, 300, mixHex(e.slots.faint, e.slots.ink2, 0.3), e.seed % 3), pan * 0.4);
+  drift(e, e.paper, H * 0.52, 58, 5, e.seed, 0.92);
+  tiled(c, range(e, 0.68, 260, mixHex(e.slots.ink2, e.paper, 0.1), (e.seed % 3) + 5), pan * 0.9);
+  lowMist(e);
+  drift(e, mixHex(e.paper, e.slots.faint, 0.3), H * 0.74, 44, 9, e.seed + 2, 0.9);
 };
 const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/far-range': (e) => { e.ctx.drawImage(sheet(e, 0.5, e.slots.faint), 0, 0); hills(e); drift(e, e.paper, H * 0.2, 46, -7, e.seed + 5, 0.9); mistUnderWords(e); },
@@ -178,13 +188,15 @@ const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/sea-swell': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 0.42, e.slots.faint), 0, 0);
-    [0, 1, 2, 3].forEach((row) => tiled(c, swellRow(e, row), e.now * (row % 2 ? -1 : 1) * (22 + row * 18) * (0.6 + e.level) + 30 * Math.sin(e.now * 0.7 + row), H * 0.34 + row * 136 + 12 * Math.sin(e.now * 0.9 + row * 1.4)));
+    [0, 1, 2, 3].forEach((row) => tiled(c, swellRow(e, row), e.now * (row % 2 ? -1 : 1) * (22 + row * 18) * (0.6 + e.level) + 30 * Math.sin(e.now * 0.7 + row), H * 0.3 + row * 104 + 12 * Math.sin(e.now * 0.9 + row * 1.4)));
+    lowMist(e);
     mistUnderWords(e);
   },
   'ukiyoe/rain': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 0.86, mixHex(e.slots.faint, e.slots.ink2, 0.5)), 0, 0);
-    tiled(c, range(e, 0.76, 380, mixHex(e.slots.ink2, e.paper, 0.34), e.seed % 3), -e.now * 3);
+    tiled(c, range(e, 0.66, 380, mixHex(e.slots.ink2, e.paper, 0.34), e.seed % 3), -e.now * 3);
+    lowMist(e);
     flood(e, mixHex(e.slots.ink2, e.paper, 0.4), 0.16);
     const [tile, tone] = [rainTile(e, key(e)), 0];
     const y = (e.now * 620) % 900;
@@ -196,7 +208,8 @@ const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/snow-night': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 1, mixHex(e.slots.ink2, e.paper, 0.2)), 0, 0);
-    tiled(c, range(e, 0.74, 320, mixHex(e.paper, e.slots.faint, 0.28), e.seed % 3), -e.now * 2);
+    tiled(c, range(e, 0.64, 320, mixHex(e.paper, e.slots.faint, 0.28), e.seed % 3), -e.now * 2);
+    lowMist(e);
     c.fillStyle = e.paper;
     for (let i = 0; i < 300; i++) { const k = fractOf(hash(i, 5) + e.now * (0.03 + 0.05 * hash(i, 6))); c.globalAlpha = 0.5 + 0.5 * hash(i, 7); c.beginPath(); c.arc(hash(i, 8) * W + 26 * Math.sin(e.now * 0.6 + i), k * H, 1.6 + 3.4 * hash(i, 9), 0, TAU); c.fill(); }
     c.globalAlpha = 1;

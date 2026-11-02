@@ -94,12 +94,13 @@ function tunnel(e: WorldEnv, opt: { x?: number; rise?: number; count?: number } 
     for (let d = n - 1; d >= 0; d--) {
       const near = 1 - d / (N - 1);
       const px = sway * (20 + 100 * near) + (opt.x ?? 0) * (d % 2 ? 1 : -1) * (0.6 + near);
-      // the sheets stand at different heights, the nearest lowest, never into the words
-      const top = Math.max(low, H * (0.56 + 0.075 * (d === N - 1 ? 0 : N - 1 - d)) ) + (opt.rise ?? 0) * (1 + d * 0.2);
+      // the sheets stand at different heights, the nearest lowest, never into the words; they keep to the bottom third
+      // and the hangings to the top edge, so the lit opening holds the middle of the frame
+      const top = Math.max(low, H * (0.66 + 0.06 * (d === N - 1 ? 0 : N - 1 - d)) ) + (opt.rise ?? 0) * (1 + d * 0.2);
       const k = ease((e.age - d * 0.04) / 0.5, 3);
       const y = top + (1 - k) * 60 + 3 * Math.sin(e.now * 0.8 + d);
       c.drawImage(sheet(e, d), -230 + px, y - 100);
-      if (d < 4) { const ty = Math.min(high, H * (0.2 - 0.03 * (3 - d))) - 300 - (opt.rise ?? 0); c.drawImage(hanging(e, d), -230 - px * 0.7, ty + 16 * Math.sin(e.now * 0.5 + d)); }
+      if (d < 4) { const ty = Math.min(high, H * (0.14 - 0.03 * (3 - d))) - 300 - (opt.rise ?? 0); c.drawImage(hanging(e, d), -230 - px * 0.7, ty + 16 * Math.sin(e.now * 0.5 + d)); }
     }
     const sides = (Math.sin(e.now * 0.2) + 1) * 8;
     const g = c.createLinearGradient(0, 0, 150, 0);

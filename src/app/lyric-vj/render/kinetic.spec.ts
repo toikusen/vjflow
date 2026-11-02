@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { camTime, DOC_KINDS, drawKinetic, fitInRoom, freeBand, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
@@ -150,3 +151,29 @@ describe('the song\'s thread', () => {
 
 });
 
+describe('a hushed move over a backdrop (line director)', () => {
+  /** A context that records what is painted, standing in for the sheet's offscreen one too. */
+  const recording = (calls: string[]) =>
+    new Proxy({} as CanvasRenderingContext2D, {
+      get: (_, k) => (k === 'canvas' ? document.createElement('canvas') : k === 'measureText' ? () => ({ width: 100 }) : k === 'createImageData' ? (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }) : k.toString().startsWith('create') ? () => ({ addColorStop: () => undefined }) : (...args: unknown[]) => void calls.push(`${String(k)}:${args.length}`)),
+      set: () => true,
+    });
+  const layer = (bare: boolean): KineticLayer => ({ kind: 'kinetic', fx: 'flow', words: [], ink: '#111111', paper: '#ff0000', accent: '#dd3322', yields: true, bare, lyric: { x0: 800, y0: 400, x1: 1100, y1: 600 }, lyricWeight: 1 });
+  const paint = (l: KineticLayer) => {
+    const calls: string[] = [];
+    vi.stubGlobal('OffscreenCanvas', class { getContext = () => recording([]); });
+    drawKinetic(recording(calls), l, 1, { pulse: 0 }, () => undefined);
+    vi.unstubAllGlobals();
+    return calls;
+  };
+
+  it('puts the backdrop back in the words\' box, nine-argument copy and all, with no paper over it', () => {
+    const calls = paint(layer(true));
+    expect(calls).toContain('drawImage:9');
+    expect(calls.filter((c) => c === 'fillRect:4').length).toBe(paint({ ...layer(true), lyric: undefined }).filter((c) => c === 'fillRect:4').length);
+  });
+
+  it('still lays its own paper when it has no backdrop', () => {
+    expect(paint(layer(false))).not.toContain('drawImage:9');
+  });
+});

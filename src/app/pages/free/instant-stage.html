@@ -1,0 +1,54 @@
+<div class="studio" [class.plain]="plain()">
+  <div class="view">
+    @if (error()) {
+      <p class="error" role="alert">{{ error() }}</p>
+    }
+    @if (warn()) {
+      <p class="warn">{{ warn() }}</p>
+    }
+
+    <div class="frame" #stage [class.empty]="!ready()">
+      @if (slow() && !exporting()) {
+        <div class="working" role="status" [attr.aria-label]="busy()"></div>
+      }
+      @if (!ready()) {
+        <div class="waiting"><ng-content /></div>
+      }
+    </div>
+    <audio #audio preload="metadata" (ended)="playing.set(false)"></audio>
+
+    @if (ready()) {
+      @if (timingNote(); as n) {
+        <p class="warn">{{ n }}</p>
+      }
+      <section class="controls">
+        <button type="button" class="button" (click)="toggle()">{{ playing() ? '暫停' : '播放' }}</button>
+        <span class="time">{{ clock(t()) }} / {{ clock(duration()) }}</span>
+        <input class="seek" type="range" min="0" [max]="duration()" step="0.1" [value]="t()" (input)="seek(+$any($event.target).value)" aria-label="播放位置" />
+      </section>
+      <section class="actions">
+        <button type="button" class="button" [disabled]="!!busy()" (click)="reroll()">換一版</button>
+        @if (exporting()) {
+          <button type="button" class="button" (click)="cancelExport()">取消匯出</button>
+          <span class="time">{{ (progress() * 100).toFixed(0) }}%</span>
+        } @else {
+          <button type="button" class="button strong" [disabled]="!!busy() || !!exportBlocked" (click)="export()">匯出 720p 影片</button>
+        }
+        @if (busy() && !exporting()) {
+          <span class="time">{{ busy() }}</span>
+        }
+      </section>
+      @if (exportBlocked) {
+        <p class="warn">{{ exportBlocked }}</p>
+      }
+      @if (exported(); as x) {
+        <p class="done"><a class="button strong" [href]="x.url" [download]="x.name">下載影片</a> <span>{{ x.note }}。影片只在這個分頁裡，離開前請先下載。</span></p>
+      }
+      @if (!plain()) {
+        <p class="meta">{{ note() }}</p>
+      }
+    }
+  </div>
+
+  <div class="styles"><app-style-picker [groups]="styleGroups" [selected]="styleId()" [rails]="plain()" (picked)="setStyle($event)" /></div>
+</div>

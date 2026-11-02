@@ -6,9 +6,6 @@ import { existsSync, readFileSync } from 'node:fs';
 export type LessonScope = 'director' | 'typeplan' | 'both';
 export interface Lesson { id: string; text: string; scope: LessonScope; createdAt?: string; feedbackId?: string; songId?: string; style?: string; by?: string }
 
-/** At most this many rules reach a prompt (the newest first): a long list of old rules drowns the song's own brief. */
-export const MAX_LESSONS = 30;
-
 /** The lessons in a file written by the beta server ({ lessons: [...] } or a bare array); [] when missing or unreadable. */
 export function readLessons(file?: string): Lesson[] {
   if (!file || !existsSync(file)) return [];
@@ -22,11 +19,11 @@ export function readLessons(file?: string): Lesson[] {
 }
 
 /**
- * The prompt block for one reader: the rules in its scope (and `both`), newest first, at most MAX_LESSONS; '' when
+ * The prompt block for one reader: every rule in its scope (and `both`), newest first; '' when
  * there are none, so a prompt without lessons stays exactly as it was.
  */
-export function lessonsBlock(lessons: Lesson[], reader: 'director' | 'typeplan', max = MAX_LESSONS): string {
-  const mine = lessons.filter((l) => l.scope === reader || l.scope === 'both').sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, max);
+export function lessonsBlock(lessons: Lesson[], reader: 'director' | 'typeplan'): string {
+  const mine = lessons.filter((l) => l.scope === reader || l.scope === 'both').sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
   if (!mine.length) return '';
   return `\n\n【使用者回饋整理出的規則（每一首都要遵守）】\n${mine.map((l) => `- ${l.text.trim()}`).join('\n')}`;
 }

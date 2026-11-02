@@ -1,0 +1,31 @@
+<div class="search">
+  <p class="privacy">只有你輸入的歌名和歌手會送到公開歌詞庫 LRCLIB（對方也會看到你的網路位址）。音檔和其他內容都留在這個瀏覽器裡。歌詞由網友提供，請自行確認內容與使用權利。</p>
+  <div class="fields">
+    <label>歌名 <input [ngModel]="track()" (ngModelChange)="track.set($event)" (keydown.enter)="search()" /></label>
+    <label>歌手 <input [ngModel]="artist()" (ngModelChange)="artist.set($event)" (keydown.enter)="search()" /></label>
+    <button type="button" [disabled]="busy() || !track().trim()" (click)="search()">{{ busy() ? '查詢中' : '查詢' }}</button>
+  </div>
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  @if (hits(); as list) {
+    @if (!list.length) {
+      <p class="none">查不到。可以換個寫法，或直接貼上歌詞，再編輯歌詞時間。</p>
+    }
+    <ul>
+      @for (h of list; track h.id) {
+        <li>
+          <button type="button" class="hit" [class.on]="open()?.id === h.id" (click)="open.set(h)">
+            <span class="name">{{ h.track }}</span>
+            <span class="by">{{ h.artist }}{{ h.album ? '・' + h.album : '' }}</span>
+            <span class="tags">{{ h.duration ? clock(h.duration) : '長度不明' }}・{{ h.synced ? '有時間' : '只有文字' }}{{ far(h) ? '・長度和音檔不同' : '' }}</span>
+          </button>
+        </li>
+      }
+    </ul>
+  }
+  @if (open(); as h) {
+    <pre class="review">{{ h.synced ?? h.plain }}</pre>
+    <button type="button" class="use" (click)="chosen.emit(h)">用這份歌詞</button>
+  }
+</div>

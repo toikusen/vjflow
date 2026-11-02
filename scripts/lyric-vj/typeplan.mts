@@ -13,12 +13,19 @@ import { NEEDS_ART, DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_F
 import { TRANSITION_KINDS, transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { LOOPS, QUIET_LOOPS } from '../../src/app/lyric-vj/render/kinetic-loops';
 import { GLYPH_FINISHES } from '../../src/app/lyric-vj/design';
-import { EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, IDLE_KINDS, REVISE_LOOKS } from '../../src/app/lyric-vj/treatment';
+import { EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, IDLE_KINDS, REVISE_LOOKS, SymbolName } from '../../src/app/lyric-vj/treatment';
 import { overCreator, useCap } from '../../src/app/lyric-vj/origin-rules';
 import { TRANSITION_KINDS as ALL_TRANSITIONS } from '../../src/app/lyric-vj/render/transition';
 import { capBy, capEach, capRound, DIAGRAM_FX, FLOWS, MORE, MOVE_SHARE, ROUND_FX } from '../../src/app/lyric-vj/render/kinetic-more';
 import type { BoardLayer } from '../../src/app/lyric-vj/render/board';
+import type { TextCam } from '../../src/app/lyric-vj/render/text-cam';
+import type { CameraRig } from '../../src/app/lyric-vj/render/camera-rig';
+import type { InkState } from '../../src/app/lyric-vj/render/glyph-state';
+import type { Handoff } from '../../src/app/lyric-vj/render/lyric-handoff';
+import type { ScreenHit } from '../../src/app/lyric-vj/render/screen-hit';
+import { isLineGround } from '../../src/app/lyric-vj/render/line-grounds';
 import { Backdrop, capMotifs, COVER_FX, harvestBackdrops, legiblePair, motifOf, StoredLayer } from '../../src/app/lyric-vj/backdrops';
+import { mergeShots, NOTHING_TO_REPLAN, replanBrief, ReplanMark, shotsToReplan } from './replan.mts';
 import { EMPH_HELP, ENTER_HELP, EXIT_HELP, FX_HELP, IDLE_HELP, SIDED, TEMPLATES } from './typehelp.mts';
 import { TEMPLATES as TEMPLATE_SPECS } from '../../src/app/lyric-vj/templates';
 import { feltTempo } from '../../src/app/lyric-vj/timeline';
@@ -44,6 +51,12 @@ const { values: a } = parseArgs({ options: {
   // translation, so turning it on later is a rebuild with --plan, not a new director call
   translate: { type: 'boolean', default: false },
   plan: { type: 'string' },
+  // --replan <typeplan.json> --marks '<json>': a fix from a report — the shots the marks fall in are planned again with
+  // the notes (one call on those shots only), the rest of that plan stands; exit 3 when no shot is marked
+  replan: { type: 'string' },
+  marks: { type: 'string' },
+  // the report's overall note (整體建議), told beside the marks
+  note: { type: 'string' },
   // the accepted plan (the concept's noimg typeplan.json): kept as it is, one small call only places the sprites into its cuts
   bind: { type: 'string' },
   // the admin's rules from people's reports (beta lessons.json; lesson-rules.mts)
@@ -276,8 +289,8 @@ const SCHEMA = {
     } } },
   } } }, finish: { type: 'string', enum: ['', ...GLYPH_FINISHES], description: '整首歌詞字的印刷質感：dots 點陣、extrude 立體擠出、chalk 粉筆、distress 做舊、stripes 斜線、gradient 漸層；空字串素面' } },
 };
-type Line = { cue: string; enter: string; exit: string; idle: string; trail: boolean; emphasis: string; method: string; symbol: string; emphasis2: string; method2: string; zh: string };
-type Cut = { beat: number; fx: string; flow?: string; label?: string; words: string[]; sprite: string; size: number; heart: boolean; dark: boolean; cam: string; flash: string; transition: string };
+type Line = { rows?: number[]; relay?: boolean; oval?: boolean; breath?: number; icon?: SymbolName; fine?: FineTier; budget?: boolean; textCam?: TextCam; hit?: ScreenHit; inkState?: InkState; linger?: number; handoff?: Handoff; cue: string; enter: string; exit: string; idle: string; trail: boolean; emphasis: string; method: string; symbol: string; emphasis2: string; method2: string; zh: string };
+type Cut = { tune?: Record<string, number>; mark?: string; yields?: boolean; rig?: CameraRig; transitionSec?: number; transitionDir?: number; beat: number; fx: string; flow?: string; label?: string; words: string[]; sprite: string; size: number; heart: boolean; dark: boolean; cam: string; flash: string; transition: string };
 type Plan = { vision?: { kinds: string[]; change: string; why: string }; parts?: { from: string; shift: string; what: string; warmth?: number; order?: number; keep?: { style: string; items: { sprite: string; word: string }[] }; backdrops?: string[] }[]; meets?: { cue: string; why: string }[]; previews?: { shot: string; note: string }[]; clip?: { from: string; to: string; why: string }; fresh?: { technique: string; cue: string; why: string }[]; backbone: string; thread?: { what: string; mark?: string; sprite?: string; why: string }; document: boolean; print: string; format?: { pace: string; ground: string; why: string }; devices?: { revise: string; document: string; why: string }; flowRule?: string; styles?: { fx: string; style: number; why: string }[]; finish: string; shots: { shot: string; chapter: string; level?: number; backdrop?: string; lyric: { template: string; side: string }; lines: Line[]; cuts: Cut[] }[] };
 
 /** The capped techniques, for the prompt: id and how often a song may use it. */
@@ -394,6 +407,18 @@ else if (a.bind) {
     plan = bound.plan;
     console.log(`bind: ${bound.applied} cuts take a prop${bound.ignored.length ? `, dropped ${bound.ignored.join(' ')}` : ''}`);
   } else console.log('bind: no sprite library, the accepted plan stands as it is');
+} else if (a.replan) {
+  const old = JSON.parse(readFileSync(a.replan, 'utf8')) as Plan;
+  const marks = JSON.parse(a.marks ?? '[]') as ReplanMark[];
+  const ids = shotsToReplan(shots, marks);
+  if (!ids.length) { console.error(NOTHING_TO_REPLAN); process.exit(3); }
+  const vision = { vision: old.vision, parts: old.parts, meets: old.meets, previews: old.previews, clip: old.clip };
+  const msg = await call(`${prompt}\n\n已經定好的視覺方向（照著排刀，不要改）：\n${JSON.stringify(vision)}\n\n${replanBrief(shots, old, marks, ids, a.note)}`, SCHEMA, 32000);
+  usage = { input_tokens: msg.usage.input_tokens, output_tokens: msg.usage.output_tokens };
+  const fill = JSON.parse(msg.content.find((b) => b.type === 'text')?.text ?? '{"shots":[]}') as Plan;
+  const merged = mergeShots(old, fill, ids);
+  plan = merged.plan;
+  console.log(`replan: ${merged.got.length}/${ids.length} shots planned again (${merged.got.join(' ') || 'none'})${merged.kept.length ? `, kept as they were ${merged.kept.join(' ')}` : ''}`);
 } else {
   const shared = a.vision ? (JSON.parse(readFileSync(a.vision, 'utf8')) as Plan) : undefined;
   const first = shared ? undefined : await call(`${prompt}\n\n這一步只決定整首的視覺方向（vision、parts、meets、previews、clip），刀和每一句之後再排。`, VISION_SCHEMA, 16000);
@@ -417,9 +442,9 @@ else if (a.bind) {
   }
 }
 const usd = (usage.input_tokens * 4 + usage.output_tokens * 20) / 1e6;
-if (!a.plan) writeFileSync(join(out, 'typeplan.json'), JSON.stringify({ ...plan, costUSD: +usd.toFixed(3), ...(a.bind ? { boundFrom: a.bind } : {}) }, null, 1));
-// the history of moves and motifs is of plans made here; a bound plan's were recorded when it was made
-if (!a.plan && !a.bind) {
+if (!a.plan) writeFileSync(join(out, 'typeplan.json'), JSON.stringify({ ...plan, costUSD: +usd.toFixed(3), ...(a.bind ? { boundFrom: a.bind } : {}), ...(a.replan ? { replanned: shotsToReplan(shots, JSON.parse(a.marks ?? '[]') as ReplanMark[]) } : {}) }, null, 1));
+// the history of moves and motifs is of plans made here; a bound or re-planned plan's were recorded when it was made
+if (!a.plan && !a.bind && !a.replan) {
   const fx: Record<string, number> = {};
   for (const c of plan.shots.flatMap((x) => x.cuts)) fx[c.fx] = (fx[c.fx] ?? 0) + 1;
   const motifs = [...new Set(plan.shots.flatMap((x) => backdrops.find((b) => b.id === x.backdrop)?.layers.map(motifOf) ?? []).filter(Boolean))];
@@ -444,7 +469,7 @@ for (const ps of plan.shots)
   for (const l of ps.lines ?? []) {
     const cue = tr.cues.find((c: { cueId: string }) => c.cueId === l.cue);
     if (!cue) { unknownCues.push(l.cue); continue; }
-    Object.assign(cue, { enter: l.enter, exit: l.exit, idle: l.idle, trail: l.trail || undefined });
+    Object.assign(cue, { enter: l.enter, exit: l.exit, idle: l.idle, trail: l.trail || undefined, ...(l.textCam ? { textCam: l.textCam } : {}), ...(l.hit ? { hit: l.hit } : {}), ...(l.fine ? { fine: l.fine } : {}), ...(l.breath ? { breath: l.breath } : {}), ...(l.oval ? { oval: true } : {}), ...(l.relay ? { relay: true } : {}), ...(l.icon ? { icon: l.icon } : {}), ...(l.inkState ? { inkState: l.inkState } : {}), ...(l.linger ? { linger: l.linger } : {}), ...(l.budget ? { budget: true } : {}), ...(l.handoff ? { handoff: l.handoff } : {}), ...(l.rows ? { rows: l.rows } : {}) });
     const mark = (word: string, method: string) => {
       const at = word ? cueText(l.cue).indexOf(word) : -1;
       return at >= 0 ? [{ from: at, to: at + [...word].length, method, ...(method === 'symbol' ? { symbol: l.symbol || 'sparkle' } : {}) }] : [];
@@ -473,6 +498,8 @@ for (const p of plan.shots) {
   const side = p.lyric.side;
   shot.template = p.lyric.template;
   shot.params = p.lyric.template === 'vertical' ? { position: side, dim: 0, step: 0.6, lift: 60 } : p.lyric.template === 'stair' ? { side: side === 'center' ? 'right' : side, dim: 0 } : p.lyric.template === 'quiet' ? { position: side === 'right' ? 'auto' : side, dim: 0 } : SIDED.has(p.lyric.template) ? { position: side, dim: 0 } : { dim: 0 };
+  // the line composer's own settings for a layout (a key word up to the frame's safe width)
+  Object.assign(shot.params, (p.lyric as { params?: object }).params);
   // a side the template has no setting for (handwrite and typewriter go left, centre or auto): auto finds the empty side
   const pos = (TEMPLATE_SPECS[p.lyric.template]?.params as Record<string, { values?: string[] }> | undefined)?.['position'];
   if (pos?.values && shot.params.position && !pos.values.includes(shot.params.position)) shot.params.position = 'auto';
@@ -598,15 +625,16 @@ export function buildCuts(p: Plan) {
       // a shot's first cut always lands (it carries the shot's backdrop: a held ballad skipped one and kept the last
       // shot's sky for 6 s); the hold applies between the cuts inside a shot
       if (i > 0 && sections.length && at - sections[sections.length - 1].start < gap) continue;
-      const want = capped.get(c) ?? c.fx;
-      let fx = KINETIC_FX.includes(want as never) ? want : 'wall';
+      const want = c.yields ? c.fx : capped.get(c) ?? c.fx;
+      // the line composer has already kept its own shares and picked from its own grounds: what it chose stands
+      let fx = KINETIC_FX.includes(want as never) || (c.yields && isLineGround(want)) ? want : 'wall';
       // no intro to hold a title card: the cut takes the song's quiet stars instead
       if (fx === 'credits' && !titleRoom) fx = 'stars';
-      if (!MOVES.includes(fx)) fx = 'motes';
+      if (!c.yields && !MOVES.includes(fx)) fx = 'motes';
       // the same move twice in a row: the next one in the list that is not round (capRound counted the circles)
       // (and never a round move straight after another: pulse, bleed, pulse closing 三年後的大雪 read as circles again)
       const afterRound = ROUND_FX.has(last);
-      for (let k = 1; k < KINETIC_FX.length && (fx === last || ((k > 1 || afterRound) && ROUND_FX.has(fx)) || !MOVES.includes(fx) || (k > 1 && (ran.get(fx) ?? 0) >= moveCap)); k++) fx = KINETIC_FX[(KINETIC_FX.indexOf(want as never) + k) % KINETIC_FX.length];
+      for (let k = 1; !c.yields && k < KINETIC_FX.length && (fx === last || ((k > 1 || afterRound) && ROUND_FX.has(fx)) || !MOVES.includes(fx) || (k > 1 && (ran.get(fx) ?? 0) >= moveCap)); k++) fx = KINETIC_FX[(KINETIC_FX.indexOf(want as never) + k) % KINETIC_FX.length];
       last = fx;
       ran.set(fx, (ran.get(fx) ?? 0) + 1);
       const nextBeat = [...ps.cuts].sort((x, y) => x.beat - y.beat).find((x) => x.beat > c.beat)?.beat;
@@ -649,6 +677,9 @@ export function buildCuts(p: Plan) {
       if (tookPicture) removed++;
       shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;
+      if (c.yields) layer.yields = true;
+      if (c.mark) layer.mark = c.mark as KineticLayer['mark'];
+      if (c.tune) layer.tune = c.tune;
       // the song's one variant of the move, and its direction when the move has one (MORE flows)
       const style = p.styles?.find((x) => x.fx === fx)?.style;
       // a variant few of the 535 videos use is a technique of its own: past its one or two uses the cut takes the plain one
@@ -689,9 +720,10 @@ export function buildCuts(p: Plan) {
         layer.meta = { fig: ps.chapter || undefined, kind: (p.devices?.document ?? 'blueprint') as NonNullable<KineticLayer['meta']>['kind'], n: Math.max(1, n + 1), total: song.cues.length };
       }
       if (c.cam) layer.cam = c.cam as KineticLayer['cam'];
+      if (c.rig) layer.rig = c.rig;
       if (c.flash) layer.flash = c.flash as KineticLayer['flash'];
       // a rare transition past its one or two uses becomes a hard cut
-      const tk = c.transition && sections.length && !held2 ? c.transition : '';
+      const tk = c.transition && sections.length && (!held2 || c.transitionSec) ? c.transition : '';
       if (tk) transitions.set(tk, (transitions.get(tk) ?? 0) + 1);
       // a move that paints the whole frame would hide the backdrop: that cut keeps its own paper
       if (board) {
@@ -704,7 +736,7 @@ export function buildCuts(p: Plan) {
       if (part?.warmth !== undefined) warmest = Math.max(warmest, part.warmth);
       const wash = warmWash(part?.warmth === undefined ? undefined : Math.max(part.warmth, residual(warmest)));
       const over = [...(back && !COVER_FX.has(fx) ? [...back.layers.map((l) => ({ ...l, t0: held.t0 })), { ...layer, bare: true }] : [layer]), ...wash];
-      sections.push({ start: +at.toFixed(3), layers: over, ...(tk && transitions.get(tk)! <= useCap(`tr:${tk}`) ? { transition: { kind: tk } } : {}) });
+      sections.push({ start: +at.toFixed(3), layers: over, ...(tk && transitions.get(tk)! <= useCap(`tr:${tk}`) ? { transition: { kind: tk, ...(c.transitionSec ? { dur: c.transitionSec, dir: c.transitionDir } : {}) } } : {}) });
     }
   }
   if (sections.length) sections[0].start = 0;

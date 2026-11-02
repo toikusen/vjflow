@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { atLength, rectEdge } from './layouts';
+import { atLength, quoteParts, rectEdge } from './layouts';
+
+describe('quoteParts', () => {
+  it('strips the marks of a line that is one quoted phrase and keeps the big brackets', () => {
+    expect(quoteParts('「あと一曲」')).toEqual({ text: 'あと一曲', marks: true });
+    expect(quoteParts(' “see you” ')).toEqual({ text: 'see you', marks: true });
+  });
+  it('keeps a line that quotes part of itself whole, without the big brackets', () => {
+    expect(quoteParts('「またね！」って笑って 手を振ろう')).toEqual({ text: '「またね！」って笑って 手を振ろう', marks: false });
+    expect(quoteParts('まだ足りない 「ありがとう」')).toEqual({ text: 'まだ足りない 「ありがとう」', marks: false });
+  });
+  it('a plain line gets the big brackets', () => {
+    expect(quoteParts('ライトが消えても  夢は消えない')).toEqual({ text: 'ライトが消えても 夢は消えない', marks: true });
+  });
+});
 
 describe('ribbon curve', () => {
   it('finds the x at an arc length on a sampled curve', () => {

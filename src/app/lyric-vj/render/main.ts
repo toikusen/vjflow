@@ -1,21 +1,7 @@
 // Render page entry (bundled by scripts/lyric-vj/render.mts): exposes ready / renderAt / metrics to the driver.
-import { SCENE_FONTS } from './scene-parts';
-import { contrastFace, DEFAULT_FAMILY, FONTS, googleFontsUrl, readingLatin } from '../fonts';
-import { quietFace } from './quiet';
 import { LyricVjEngine, RenderJob } from './engine';
-
-/** Every family a job can draw with: its faces, their quiet and contrast partners, and any font named in its look. */
-function jobFamilies(job: RenderJob): string[] {
-  const d = job.treatment.design;
-  const main = job.fonts?.family ?? d?.font ?? DEFAULT_FAMILY;
-  const named = new Set<string>();
-  // graphic layers (stamps, seals, labels) may name their own font
-  JSON.stringify(job.treatment.graphics ?? {}, (k, v) => (k === 'font' && typeof v === 'string' && named.add(v), v));
-  JSON.stringify(job.treatment.storyboard ?? [], (k, v) => (k === 'font' && typeof v === 'string' && named.add(v), v));
-  if (job.treatment.storyboard?.length) SCENE_FONTS.forEach((f) => named.add(f));
-  const accent = d?.accentFont ?? 'Montserrat';
-  return [...new Set([main, job.fonts?.display, job.fonts?.body, job.fonts?.script, accent, readingLatin(accent), 'Montserrat', quietFace(main), contrastFace(main), DEFAULT_FAMILY, 'Zen Old Mincho', ...named])].filter((f): f is string => !!f && FONTS.some((x) => x.family === f));
-}
+import { loadJobFonts } from './job-fonts';
+import { isSignature, SIGNATURE_IDS, signatureCues, signatureLayer, signatureMetrics } from './signature-spike'; // ponytail: 20 s test, off without its flag
 
 declare global {
   interface Window {
@@ -23,7 +9,9 @@ declare global {
     renderAt: (t: number) => Promise<void>;
     /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
     grabAt: (t: number, quality: number) => Promise<string>;
+    vjLyrics: (on: boolean) => void;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
+    vjRows: () => ReturnType<LyricVjEngine['rowBreaks']>;
     vjSceneQa: () => ReturnType<LyricVjEngine['sceneQa']>;
     vjMotionQa: (everyFrame?: string[]) => ReturnType<LyricVjEngine['motionQa']>;
   }
@@ -32,22 +20,27 @@ declare global {
 const job: RenderJob = await (await fetch(new URLSearchParams(location.search).get('job')!)).json();
 // QA renders log sprite boxes per frame (graphics.ts)
 (globalThis as { __vjTrack?: boolean }).__vjTrack = !!job.track;
-// the stylesheet must be in place before document.fonts.load can find the faces; only this song's faces are asked for
-await new Promise<void>((resolve, reject) => {
-  const link = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: googleFontsUrl(jobFamilies(job)), onload: () => resolve(), onerror: reject });
-  document.head.append(link);
-});
+await loadJobFonts(job);
 // a transparent page for the lyric layer
 if (job.layer === 'text') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
+(window as unknown as { vjEngine: LyricVjEngine }).vjEngine = engine;
 window.vjReady = engine.init();
 window.renderAt = (t) => engine.renderAt(t);
 const stage = document.getElementById('stage') as HTMLCanvasElement;
+const signature = isSignature(job) ? await signatureLayer(job) : null;
+if (signature) engine.onCues = signatureCues as never;
 window.grabAt = async (t, quality) => {
   await engine.renderAt(t);
-  return stage.toDataURL('image/jpeg', quality);
+  return (signature ? signature.compose(stage, t) : stage).toDataURL('image/jpeg', quality);
 };
-window.vjMetrics = () => engine.metrics();
+window.vjLyrics = (on) => engine.showLyrics(on);
+window.vjMetrics = () => {
+  engine.buildAll();
+  const m = engine.metrics();
+  return signature ? { ...m, cues: [...m.cues.filter((c) => !SIGNATURE_IDS.has(c.id)), ...(signatureMetrics(job) as unknown as typeof m.cues)] } : m;
+};
+window.vjRows = () => engine.rowBreaks();
 window.vjSceneQa = () =>
   engine.sceneQa(async (t) => {
     await engine.renderAt(t);

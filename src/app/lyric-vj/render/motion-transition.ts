@@ -2,6 +2,10 @@
 // new one (b) are each drawn whole to their own canvas, then composited with transforms, blur and light at progress
 // k (0 → 1). Read frame by frame from the @ai_yunon_ai「画面切り替え40選」catalogue (2026-10-19): most land in 8–15
 // frames, the light and blur ones in 20–25.
+import { tornLine } from './material';
+import { drawSheet, sheetSeed } from './paper-surface';
+import { bandSpan, CHAIN_EDGES, chainTurn, handoffProgress, pageEdge } from './lyric-handoff';
+
 type Pic = CanvasImageSource;
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 interface Env {
@@ -12,6 +16,11 @@ interface Env {
   w: number;
   h: number;
   seed: number;
+  /** Line handoffs: where the frame opens (px) and which way it goes. */
+  seam?: number;
+  dir?: number;
+  /** Line handoffs: what the band and the panels' backs are made of. */
+  ink?: string;
 }
 interface Move {
   sec: number;
@@ -20,6 +29,8 @@ interface Move {
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+/** The same curve as the type (lyric-handoff.ts handoffProgress). */
+const handoffEase = (x: number) => handoffProgress({ from: 0, to: 1 }, x);
 const outCubic = (x: number) => 1 - (1 - clamp01(x)) ** 3;
 const inCubic = (x: number) => clamp01(x) ** 3;
 const inOut = (x: number) => {
@@ -652,14 +663,157 @@ export const MOTION = {
   },
 } satisfies Record<string, Move>;
 
+/** Draws the part of `p` from `a` to `b` along x (or y) moved by `by` px. */
+function part(e: Env, p: Pic, axis: 'x' | 'y', a: number, b: number, by: number) {
+  const { ctx, w, h } = e;
+  const span = b - a;
+  if (span <= 0) return;
+  if (axis === 'x') ctx.drawImage(p, a, 0, span, h, a + by, 0, span, h);
+  else ctx.drawImage(p, 0, a, w, span, 0, a + by, w, span);
+}
+
+/**
+ * The line composer's handoffs (lyric-handoff.ts): the type moves on these same numbers. Kept out of MOTION so the
+ * director's list of transitions does not offer them; they mean nothing without a line moving with them.
+ */
+export const LINE_MOTION = {
+  'lyric-push': {
+    sec: 0.3, mood: '整組畫面側推換句',
+    draw: (e) => {
+      const m = handoffEase(e.k) * e.w * (e.dir ?? 1);
+      put(e, e.a, { x: -m });
+      put(e, e.b, { x: (e.dir ?? 1) * e.w - m });
+    },
+  },
+  'lyric-split': {
+    sec: 0.32, mood: '沿前句留白分屏換句',
+    draw: (e) => {
+      const seam = e.seam ?? e.w * 0.38, m = handoffEase(e.k);
+      e.ctx.drawImage(e.b, 0, 0, e.w, e.h);
+      part(e, e.a, 'x', 0, seam, -seam * m);
+      part(e, e.a, 'x', seam, e.w, (e.w - seam) * m);
+    },
+  },
+  'lyric-door': {
+    sec: 0.32, mood: '上下開門換句',
+    draw: (e) => {
+      const seam = e.seam ?? e.h * 0.62, m = handoffEase(e.k);
+      e.ctx.drawImage(e.b, 0, 0, e.w, e.h);
+      part(e, e.a, 'y', 0, seam, -seam * m);
+      part(e, e.a, 'y', seam, e.h, (e.h - seam) * m);
+    },
+  },
+  'lyric-page': {
+    sec: 0.36, mood: '沿前句留白翻頁換句',
+    draw: (e) => {
+      const dir = e.dir ?? 1, seam = e.seam ?? e.w * 0.38, m = handoffEase(e.k);
+      const reach = pageEdge(dir, m, seam);
+      const [farA, farB] = dir > 0 ? [seam, e.w] : [0, seam];
+      const [nearA, nearB] = dir > 0 ? [0, seam] : [seam, e.w];
+      // the far side shows the new page from the start, the near one the old until the page lands on it
+      e.ctx.drawImage(e.b, 0, 0, e.w, e.h);
+      e.ctx.drawImage(e.a, nearA, 0, nearB - nearA, e.h, nearA, 0, nearB - nearA, e.h);
+      const pic = reach >= 0 ? e.a : e.b;
+      const [from, to] = reach >= 0 ? [farA, farB] : [nearA, nearB];
+      const edge = seam + dir * reach;
+      const [x0, x1] = edge < seam ? [edge, seam] : [seam, edge];
+      if (x1 - x0 < 1) return;
+      e.ctx.drawImage(pic, from, 0, to - from, e.h, x0, 0, x1 - x0, e.h);
+      e.ctx.globalAlpha = 0.28 * Math.sin(Math.PI * m);
+      e.ctx.fillStyle = e.ink ?? '#000';
+      e.ctx.fillRect(x0, 0, x1 - x0, e.h);
+      e.ctx.globalAlpha = 1;
+    },
+  },
+  'lyric-signal': {
+    sec: 0.42, mood: '單色紙粒局部切換接句',
+    // the grain itself is laid over the type (engine), on the two lines' own place: under it the picture only swaps
+    draw: (e) => e.ctx.drawImage(handoffEase(e.k) < 0.5 ? e.a : e.b, 0, 0, e.w, e.h),
+  },
+  'lyric-palette': {
+    sec: 0.34, mood: '紙色色紙掃過換配色',
+    // a whole sheet in the song's paper tint, torn along its leading edges, covers the old picture and uncovers the new: nothing is mixed, so nothing goes grey
+    draw: (e) => {
+      const dir = e.dir ?? 1, m = handoffEase(e.k), q = m < 0.5 ? m * 2 : (m - 0.5) * 2;
+      e.ctx.drawImage(m < 0.5 ? e.a : e.b, 0, 0, e.w, e.h);
+      const tear = tornLine(24, 7, 16);
+      const edge = (at: number): [number, number][] => tear.map((off, i) => [at + off + (i - 12) * 3, (e.h * i) / 24]);
+      const lead = -60 + (e.w + 120) * q;
+      const [near, far] = m < 0.5 ? [edge(-200), edge(lead)] : [edge(lead), edge(e.w + 200)];
+      const flip = ([x, y]: [number, number]): [number, number] => [dir > 0 ? x : e.w - x, y];
+      e.ctx.save();
+      e.ctx.beginPath();
+      [...near.map(flip), ...[...far].reverse().map(flip)].forEach(([x, y], i) => (i ? e.ctx.lineTo(x, y) : e.ctx.moveTo(x, y)));
+      e.ctx.closePath();
+      e.ctx.fillStyle = e.ink ?? '#fff';
+      e.ctx.fill();
+      e.ctx.clip();
+      drawSheet(e.ctx, sheetSeed(), 0, 0, e.w, e.h);
+      e.ctx.restore();
+    },
+  },
+  'lyric-aperture': {
+    sec: 0.46, mood: '偏心橢圓光圈收放接句',
+    // the iris itself is drawn over the type (engine): under it the picture only has to change while it is shut
+    draw: (e) => e.ctx.drawImage(handoffEase(e.k) < 0.5 ? e.a : e.b, 0, 0, e.w, e.h),
+  },
+  'lyric-band': {
+    sec: 0.34, mood: '斜帶掃過接句',
+    draw: (e) => {
+      const b = bandSpan(e.dir ?? 1, handoffEase(e.k));
+      // y up in the band's numbers, y down here; the corners are far past the frame along the band's own edge
+      const point = (along: number, across: number) => [e.w / 2 + b.ux * along - b.uy * across, e.h / 2 - b.uy * along - b.ux * across] as const;
+      const strip = (a: number, c: number) => {
+        e.ctx.beginPath();
+        [point(a, -3000), point(a, 3000), point(c, 3000), point(c, -3000)].forEach(([x, y], i) => (i ? e.ctx.lineTo(x, y) : e.ctx.moveTo(x, y)));
+        e.ctx.closePath();
+      };
+      e.ctx.drawImage(e.b, 0, 0, e.w, e.h);
+      e.ctx.save();
+      strip(b.lead, 5000);
+      e.ctx.clip();
+      e.ctx.drawImage(e.a, 0, 0, e.w, e.h);
+      e.ctx.restore();
+      strip(b.trail, b.lead);
+      e.ctx.fillStyle = e.ink ?? '#000';
+      e.ctx.fill();
+      // the band is a strip of the sheet, not a flat colour going past
+      e.ctx.save();
+      strip(b.trail, b.lead);
+      e.ctx.clip();
+      drawSheet(e.ctx, sheetSeed(), 0, 0, e.w, e.h);
+      e.ctx.restore();
+    },
+  },
+  'lyric-chain': {
+    sec: 0.36, mood: '不等寬面板連鎖翻面接句',
+    draw: (e) => {
+      const dir = e.dir ?? 1;
+      // what a turning panel uncovers is the new page, not a flat ground behind both
+      e.ctx.drawImage(e.b, 0, 0, e.w, e.h);
+      CHAIN_EDGES.slice(0, -1).forEach((at, i) => {
+        const q = chainTurn(i, e.k);
+        const [c0, c1] = [at * e.w, CHAIN_EDGES[i + 1] * e.w];
+        const [x0, x1] = dir > 0 ? [e.w - c1, e.w - c0] : [c0, c1];
+        const width = x1 - x0;
+        const pic = q < 0.5 ? e.a : e.b;
+        const shown = Math.max(1, width * Math.abs(Math.cos(Math.PI * q)));
+        e.ctx.drawImage(pic, x0, 0, width, e.h, x0 + (width - shown) / 2, 0, shown, e.h);
+      });
+    },
+  },
+} satisfies Record<string, Move>;
+
 export type MotionKind = keyof typeof MOTION;
+export type LineMotionKind = keyof typeof LINE_MOTION;
 export const MOTION_KINDS = Object.keys(MOTION) as MotionKind[];
-export const isMotion = (k: string): k is MotionKind => k in MOTION;
+export const isLineMotion = (k: string): k is LineMotionKind => k in LINE_MOTION;
+export const isMotion = (k: string): k is MotionKind | LineMotionKind => k in MOTION || isLineMotion(k);
 
 let offA: OffscreenCanvas | undefined;
 let offB: OffscreenCanvas | undefined;
 /** One frame of a motion transition: both sides are drawn to their own canvas first. */
-export function drawMotionTransition(ctx: Ctx, kind: MotionKind, k: number, w: number, h: number, seed: number, drawPrev: (c: CanvasRenderingContext2D) => void, drawNew: (c: CanvasRenderingContext2D) => void) {
+export function drawMotionTransition(ctx: Ctx, kind: MotionKind | LineMotionKind, k: number, w: number, h: number, seed: number, drawPrev: (c: CanvasRenderingContext2D) => void, drawNew: (c: CanvasRenderingContext2D) => void, opts: { seam?: number; dir?: number; ink?: string; ground?: string } = {}) {
   offA ??= new OffscreenCanvas(w, h);
   offB ??= new OffscreenCanvas(w, h);
   for (const [off, draw] of [[offA, drawPrev], [offB, drawNew]] as const) {
@@ -670,9 +824,10 @@ export function drawMotionTransition(ctx: Ctx, kind: MotionKind, k: number, w: n
     c.restore();
   }
   ctx.save();
-  // what neither side covers (a panel turned edge-on, a page curling) shows black, as between two shots
-  ctx.fillStyle = '#000';
+  // what neither side covers (a panel turned edge-on, a page curling) shows black, as between two shots; a song on its
+  // own sheet shows that sheet
+  ctx.fillStyle = opts?.ground ?? '#000';
   ctx.fillRect(0, 0, w, h);
-  MOTION[kind].draw({ ctx, a: offA, b: offB, k: clamp01(k), w, h, seed });
+  (isLineMotion(kind) ? LINE_MOTION[kind] : MOTION[kind]).draw({ ctx, a: offA, b: offB, k: clamp01(k), w, h, seed, ...opts });
   ctx.restore();
 }

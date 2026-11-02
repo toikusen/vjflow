@@ -29,7 +29,7 @@ describe('warp', () => {
   });
 });
 
-import { coverOf } from './graphics';
+import { coverOf } from './cover';
 
 describe('lyric cover', () => {
   // a picture with no readable pixels counts as fully opaque (the safe side)

@@ -101,7 +101,7 @@ export type Layer = Base &
  * x/y centre in −1..1, w/h fractions of the frame; `lines` are the song's own words for its content; it pops in
  * `delay` s after the section starts.
  */
-export type UiLayer = { kind: 'ui'; type: 'terminal' | 'log' | 'code' | 'files' | 'error' | 'progress' | 'loading' | 'cursor'; color: Rgb; alert?: Rgb; skin?: 'term' | 'mac' | 'win'; cascade?: number; x?: number; y?: number; w?: number; h?: number; title?: string; lines?: string[]; delay?: number };
+export type UiLayer = { kind: 'ui'; leaves?: boolean; type: 'terminal' | 'log' | 'code' | 'files' | 'error' | 'progress' | 'loading' | 'cursor'; color: Rgb; alert?: Rgb; skin?: 'term' | 'mac' | 'win'; /** Words only: no sizes, timestamps or percentages made up for the window. */ plain?: boolean; cascade?: number; x?: number; y?: number; w?: number; h?: number; title?: string; lines?: string[]; delay?: number };
 
 export interface LookSection {
   start: number;
@@ -160,7 +160,14 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   const prev = i > 0 ? look.sections[i - 1] : undefined;
   const dur = tr ? (tr.dur ?? TRANSITION_SEC[tr.kind]) : 0;
   const k = tr && prev && !(globalThis as { __vjProbe?: boolean }).__vjProbe ? (t - sec.start) / dur : 1;
-  if (k < 1 && tr && prev) drawTransition(ctx, tr, k, Math.round(sec.start * 10), (c) => drawLayers(c, adjust(prev.layers), prev, t, beat, image, codeTime), (c) => drawLayers(c, own, sec, t, beat, image, codeTime));
+  // a composer transition that moves or scales a picture shows the song's paper past it, never the empty canvas
+  const sheet = k < 1 && tr && prev ? (sec.layers.find((l) => l.kind === 'kinetic' && l.yields) as KineticLayer | undefined) : undefined;
+  const ground = sheet && (sheet.dark ? sheet.ink : sheet.paper);
+  if (ground) {
+    ctx.fillStyle = ground;
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (k < 1 && tr && prev) drawTransition(ctx, ground ? { ...tr, ground } : tr, k, Math.round(sec.start * 10), (c) => drawLayers(c, adjust(prev.layers), prev, t, beat, image, codeTime), (c) => drawLayers(c, own, sec, t, beat, image, codeTime));
   else drawLayers(ctx, own, sec, t, beat, image, codeTime);
   drawLayers(ctx, all.slice(sec.layers.length), sec, t, beat, image, codeTime);
   const sub = look.subtitles?.find((s) => t >= s.start && t < s.end);
@@ -206,7 +213,7 @@ export function drawTransition(ctx: CanvasRenderingContext2D, tr: SectionTransit
 }
 
 function paintTransition(ctx: CanvasRenderingContext2D, tr: SectionTransition, k: number, seed: number, drawPrev: (c: CanvasRenderingContext2D) => void, drawNew: (c: CanvasRenderingContext2D) => void) {
-  if (isMotion(tr.kind)) drawMotionTransition(ctx, tr.kind, k, W, H, seed, drawPrev, drawNew);
+  if (isMotion(tr.kind)) drawMotionTransition(ctx, tr.kind, k, W, H, seed, drawPrev, drawNew, { seam: tr.seam, dir: tr.dir, ink: tr.ink, ground: tr.ground });
   else if (tr.kind === 'shatter') {
     // the screen breaks: the new section underneath, the old one on top cut into glass shards that crack, hang for a
     // moment, then fall and turn away, the ones round the impact first
@@ -1558,6 +1565,7 @@ function uiBox(l: UiLayer) {
 const cascadeOf = (l: UiLayer) => Math.max(1, Math.min(8, Math.round(l.cascade ?? 1)));
 
 /** A computer window: the look's phosphor glass, or a Mac / Windows window (one system per song); its content moves with time. */
+export { ui as drawUiWindow };
 function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) {
   const n = cascadeOf(l);
   if (n > 1) {
@@ -1701,7 +1709,7 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
         const k = Math.floor(off) + i;
         const y = bar + 12 + lh * (i + 0.5 - (off % 1));
         const line = text[((k % text.length) + text.length) % text.length];
-        const pre = l.type === 'log' ? `[${(k * 0.731 + 10).toFixed(3).padStart(8, ' ')}] ` : `${String((k % 99) + 1).padStart(2, ' ')}  `;
+        const pre = l.plain ? '> ' : l.type === 'log' ? `[${(k * 0.731 + 10).toFixed(3).padStart(8, ' ')}] ` : `${String((k % 99) + 1).padStart(2, ' ')}  `;
         ctx.globalAlpha *= l.type === 'code' ? 1 : 0.55 + 0.45 * hash(k, 3);
         ctx.fillText(pre + line, 14, y);
         ctx.globalAlpha /= l.type === 'code' ? 1 : 0.55 + 0.45 * hash(k, 3);
@@ -1727,9 +1735,9 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
           ctx.strokeRect(18, y - 11, 16, 22);
           ctx.fillText(x, 46, y, w - 190);
           ctx.textAlign = 'right';
-          ctx.fillText(`${(hash(i, 5) * 900 + 12).toFixed(0)} KB`, w - 20, y);
+          if (!l.plain) ctx.fillText(`${(hash(i, 5) * 900 + 12).toFixed(0)} KB`, w - 20, y);
           ctx.textAlign = 'left';
-        } else ctx.fillText(`${x.padEnd(18, ' ')} ${(hash(i, 5) * 900 + 12).toFixed(0).padStart(4, ' ')}KB`, 14, y);
+        } else ctx.fillText(l.plain ? x : `${x.padEnd(18, ' ')} ${(hash(i, 5) * 900 + 12).toFixed(0).padStart(4, ' ')}KB`, 14, y);
       });
       break;
     }
@@ -1788,7 +1796,7 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
     case 'progress': {
       // fills over about eight seconds, then holds at 100 %
       const p = Math.min(1, local / 8);
-      ctx.fillText(`${text[0]}...  ${Math.floor(p * 100)}%`, 14, bar + 28, w - 28);
+      ctx.fillText(l.plain ? `${text[0]}...` : `${text[0]}...  ${Math.floor(p * 100)}%`, 14, bar + 28, w - 28);
       if (os) {
         // a continuous rounded bar in the system accent
         ctx.fillStyle = sk.line;
@@ -2849,7 +2857,8 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
     return l.kind === 'photo' || (l as StoryLayer).key ? l : ({ ...l, opacity: 0 } as Layer);
   }
   // a window with nowhere to go (huge beat-cut type over the whole frame) steps back behind the line instead
-  return l.kind === 'ui' ? { ...l, opacity: 0.45 } : l;
+  // (a world's desktop has windows to spare: one leaves rather than lie under the words)
+  return l.kind === 'ui' ? { ...l, opacity: l.leaves ? 0 : 0.45 } : l;
 }
 
 /**

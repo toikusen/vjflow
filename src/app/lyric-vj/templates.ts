@@ -109,6 +109,211 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       dim: { type: 'number', min: 0, max: 0.8, default: 0.4, description: '背景壓暗程度' },
     },
   },
+  'lyric-carrier': {
+    id: 'lyric-carrier',
+    description: '歌詞載體：不對稱切角的紙牌承載整句，紙與字共用樞紐、遮罩與閱讀區。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '紙牌的位置' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'paper-feed': {
+    id: 'paper-feed',
+    description: '連續紙面：單側壓紙條依閱讀順序送出紙面，文字留在閱讀位置。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '載體的位置' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'memory-card': {
+    id: 'memory-card',
+    description: '紙卡：不規則相紙邊與單角壓片，疊在另一張紙卡上。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '載體的位置' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'index-pull': {
+    id: 'index-pull',
+    description: '索引抽片：從畫面底部不等寬的索引片中抽出一張，展開成閱讀面。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '載體的位置' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'lyric-band': {
+    id: 'lyric-band',
+    description: '條帶：纖維紙帶以小斜角貼入，鈍角端頭。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '載體的位置' },
+      cross: { type: 'boolean', default: false, description: '閱讀前先有一條空白紙帶交叉掃過' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'phrase-panels': {
+    id: 'phrase-panels',
+    description: '翻牌：詞組各占一張不等寬圓角片，依序翻面。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '載體的位置' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'contrast-split': {
+    id: 'contrast-split',
+    description: '雙色交界：一條偏置、可轉向的分界同時決定底色分區與字的明暗。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'editorial': {
+    id: 'editorial',
+    description: '編輯版面：主句與附句各有欄寬與字階，依演唱順序由上而下讀。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'corner-anchor': {
+    id: 'corner-anchor',
+    description: '轉角：橫直兩個詞組共用一個轉角，整組內縮在畫面內。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'cross-anchor': {
+    id: 'cross-anchor',
+    description: '交叉：兩個詞組在共有的字上交叉，該字只畫一次，四周留間距。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'turn-box': {
+    id: 'turn-box',
+    description: '扁長紙盒：紙盒轉面把句子正對讀者。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'center', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'frame-feed': {
+    id: 'frame-feed',
+    description: '接觸印樣：一條短框紙帶送格，句子在鎖定的一格裡。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'center', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'lightbox-entry': {
+    id: 'lightbox-entry',
+    description: '霧玻璃燈箱：鏡頭推進小燈箱，紙粒散去後展成主句。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'center', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'balance-line': {
+    id: 'balance-line',
+    description: '弧片平衡：兩個詞組坐在一片柔性弧片上，先失衡再落定。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'center', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'dot-display': {
+    id: 'dot-display',
+    description: '暖白點陣帶：字送入顯示面後完整停住，再整帶熄退。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'center', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'note-panel': {
+    id: 'note-panel',
+    description: '便箋：紙頁的折角與頁籤圈出歌詞，像未寄出的話。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'phrase-grid': {
+    id: 'phrase-grid',
+    description: '稿格：完整字元依詞組落入不封口的稿格。逐句編排器使用。',
+    defaultEnter: 'cell-land',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'counterweight': {
+    id: 'counterweight',
+    description: '對重：字塊與一個切面扁橢圓在畫面兩側平衡，尺寸由字塊推算。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      side: { type: 'enum', values: ['left', 'right', 'center'], default: 'left', description: '版面的方向' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'panel-route': {
+    id: 'panel-route',
+    description: '分格巡覽：詞組各占一格曲邊橫格，鏡頭走過後停在完整版面。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'reply-thread': {
+    id: 'reply-thread',
+    description: '對答泡泡：幾個字的一問一答，大泡泡輪流出現在畫面中央，舊訊息被往上推；沒有手機外框。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'fade',
+    params: {
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
+  'build-cut': {
+    id: 'build-cut',
+    description: '累積構圖：詞按演唱順序一段段落下，舊的詞讓位，唱完時整句已組成一張海報。逐句編排器使用。',
+    defaultEnter: 'cut',
+    defaultExit: 'collapse',
+    params: {
+      soft: { type: 'boolean', default: false, description: '慢歌：動作放慢、字級對比降低、字重減輕' },
+      dim: { type: 'number', min: 0, max: 0.8, default: 0, description: '背景壓暗程度' },
+    },
+  },
   'title-card': {
     id: 'title-card',
     description: '標題卡：歌名（大）與歌手名（小）在兩條細線間逐字浮現，有團體 LOGO 時一起出現。只用在沒有歌詞的前奏、間奏、尾奏。不需要歌詞；若有歌詞落在這個鏡頭，會以小字放在下方。',

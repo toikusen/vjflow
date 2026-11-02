@@ -8,6 +8,15 @@ import { coverOf, CoverRect, watchCover } from './cover';
 import { BoardLayer, drawBoard } from './board';
 import { drawStage, StageLayer } from './stage';
 import { halftone, lineArt, lineStage } from './print';
+import { CameraRig, rigBack } from './camera-rig';
+import type { SymbolName } from '../treatment';
+import { drawFlood, drawLineGround, isLineGround } from './line-grounds';
+import { clearWordsAfter, drawWorldGround, isWorldGround, WorldEnv, worldInAt } from './world-grounds';
+import { reservePaper } from './world-ink';
+import { pieceAt } from './world-pieces';
+import type { Slots } from './world-objects';
+import { hushOf, isFlood, maskedByLine, ovalOf, rayStart } from './material';
+import { drawSheet, sheetSeed } from './paper-surface';
 
 type Rgb = string;
 export const CORE_FX = ['wall', 'ring', 'tunnel', 'bars', 'stack', 'split', 'rays', 'boxes', 'grid', 'dots'] as const;
@@ -17,6 +26,10 @@ export type KineticFx = string;
 
 export interface KineticLayer {
   kind: 'kinetic';
+  /** A style world's ground: its slots, how loud the part is, the world's way in. */
+  world?: { slots: Slots; level: number; enter?: string; sheet?: boolean; piece?: string; words?: string; /** The lines around a set piece: it shows only the one being sung. */ lines?: { a: number; b: number; t: string }[]; title?: string };
+  /** A print world's scheme, for what reads the slots beyond ink and paper. */
+  sheetInks?: Slots;
   fx: KineticFx;
   /** The song's words this cut is built from (the lyric line itself is drawn by the lyric layout, not here). */
   words: string[];
@@ -44,6 +57,14 @@ export interface KineticLayer {
    * from a close-up of the character (@ai_cpocoder's shots).
    */
   cam?: KineticCam;
+  /** Knob values the paid director read from the lyric (knobs.ts); line director only. */
+  tune?: Record<string, number>;
+  /** The song's own sign, pressed where a fold-mark lands. Line composer only. */
+  mark?: SymbolName;
+  /** A camera shared with the line sung over this cut (camera-rig.ts); line composer only. */
+  rig?: CameraRig;
+  /** Line composer only: printed on the song's one sheet of paper, and a move that crosses the frame is printed back evenly while a line is up. */
+  yields?: boolean;
   /** A two-frame hit as the cut lands: black, white or the whole frame inverted. */
   flash?: 'black' | 'white' | 'invert';
   /** How the character is printed: two-ink duotone (default), line art drawn on, or a halftone dot screen. */
@@ -95,7 +116,6 @@ export interface KineticLayer {
   busy?: [number, number, number, number][];
 }
 /** Moves whose words are meant to be read (a title card, a chapter card). */
-const READ_FX = new Set(['credits', 'chapter']);
 const cardInk = new WeakMap<KineticLayer, boolean>();
 
 const lum = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
@@ -155,6 +175,9 @@ let veil: ((ctx: CanvasRenderingContext2D, alpha: number) => void) | undefined;
 /** Set by the engine around each frame's look: lays the cut's ground back behind the lines that are up. */
 export const setLineVeil = (fn?: (ctx: CanvasRenderingContext2D, alpha: number) => void) => (veil = fn);
 export const lineVeil = () => veil;
+let backPush: { x: number; y: number; scale: number; dy?: number; blur?: number } | undefined;
+/** Set by the engine each frame: a line leaving radially takes the backdrop with it (line-exit.ts). */
+export const setBackPush = (p?: typeof backPush) => (backPush = p);
 
 /** Moves that frame or repeat the cut's figure: without one they draw an empty window. */
 /** How strongly a character behind the lines shows: enough to read as the picture, faint next to the letters. */
@@ -287,14 +310,17 @@ const rgb = (h: Rgb) => {
 };
 
 /** Draws one kinetic cut. */
+
 export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, clock: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, now = (l.at ?? 0) + clock) {
   const age = camTime(l.cam, clock);
   // the frame's coordinates, for measuring the character against the lyric box while the line is fully up
   const frame = l.lyric && (l.lyricWeight ?? 1) > 0.85 ? ctx.getTransform?.()?.inverse?.() : undefined;
-  // a card meant to be read (a title, a chapter) laid bare over someone else's picture takes the ink that reads on what
-  // is actually under it: a light title set for its own dark ground vanished on 世界のつづき's cream coast (2026-10-22)
-  // decided once a card, from its first frame (re-deciding every frame flickered as the picture under it moved)
-  if (l.bare && READ_FX.has(l.fx) && !cardInk.has(l)) cardInk.set(l, readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper));
+  // a graphic laid bare over someone else's picture (a backdrop) takes the ink that reads on what is actually under
+  // it: a light title set for its own dark ground vanished on 世界のつづき's cream coast (2026-10-22), and a staff, its
+  // notes and the line-art props drawn in the song's dark ink vanished on 終わりじゃない's black album pages (2026-10-30),
+  // so every move decides, not only the cards. Decided once a layer, from its first frame (re-deciding every frame
+  // flickered as the picture under it moved)
+  if (l.bare && !cardInk.has(l)) cardInk.set(l, readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper));
   const dark = cardInk.get(l) ?? l.dark;
   const paper = dark ? l.ink : l.paper;
   const ink = dark ? l.paper : l.ink;
@@ -331,9 +357,23 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   };
   ctx.save();
   if (!l.bare) drawGround(ctx, l.ground, paper, ink, seed);
+  // over a backdrop (line director) the ground a hushed move falls back to is that backdrop, not flat paper
+  const under = l.yields && l.bare && hushOf(l.fx) > 0 ? keepFrame(ctx) : undefined;
   const k = ease(age / 0.18);
   // a dolly zoom pushes the world in; the character is drawn back at its own size (it holds while the world rushes)
   const zoom = 1 + 0.35 * ease(clock / 2.2);
+  if (l.rig) {
+    const p = rigBack(l.rig, now);
+    ctx.translate(W / 2 + p.x, H / 2 - p.y);
+    ctx.rotate(-p.rot);
+    ctx.scale(p.scale, p.scale * (1 + 0.25 * p.lay));
+    ctx.translate(-W / 2, -H / 2);
+  }
+  if (l.yields && backPush) {
+    ctx.translate(backPush.x, backPush.y + (backPush.dy ?? 0));
+    ctx.scale(backPush.scale, backPush.scale);
+    ctx.translate(-backPush.x, -backPush.y);
+  }
   // the camera on the background (the lyric stays level above it)
   if (l.cam) {
     ctx.translate(W / 2, H / 2);
@@ -362,7 +402,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // applied once to the drawn cut (below), never as a filter while drawing: a filter on the context blurs every
   // primitive on its own, and a field of thousands of dots under it (halftone, 終わりじゃない 169.8 s, 2026-10-30)
   // stalled Chrome's GPU process until WebGL lost its context and the rest of the song came out black
-  const rackBlur = l.cam === 'rack' ? 9 * (1 - ease(clock / 0.7)) : 0;
+  const rackBlur = l.yields && backPush?.blur ? backPush.blur : l.cam === 'rack' ? 9 * (1 - ease(clock / 0.7)) : 0;
   // the character printed in the cut's inks, sized and placed before the move (some moves print it themselves)
   const pic = l.sprite ? (image(`spr:${l.sprite}`) as (CanvasImageSource & { width: number; height: number }) | undefined) : undefined;
   const size = l.size ?? 0.85;
@@ -468,15 +508,18 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       // speed lines from the figure, with a dot ring
       // this song's burst: denser or sparser, thinner or bolder spokes (vary, kinetic-more)
       const n = kn(l, 'rays.n'), w = kn(l, 'rays.w');
+      const oval = l.yields && l.lyric ? ovalOf(l.lyric) : undefined;
+      const [cx, cy] = oval ? [oval.cx, oval.cy] : [fx, H / 2];
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + seed;
-        const r0 = 260 + hash(i, seed) * 120;
+        // over a line each ray stops on its own length along an uneven oval round the words, as drawn speed lines do
+        const r0 = oval ? rayStart(oval, a, i, seed) : 260 + hash(i, seed) * 120;
         ctx.strokeStyle = i % 9 === 0 ? l.accent : ink;
         ctx.lineWidth = w + hash(i, seed + 2) * w * 1.5;
         ctx.globalAlpha = 0.8;
         ctx.beginPath();
-        ctx.moveTo(fx + Math.cos(a) * r0, H / 2 + Math.sin(a) * r0);
-        ctx.lineTo(fx + Math.cos(a) * (r0 + 900 * k), H / 2 + Math.sin(a) * (r0 + 900 * k));
+        ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+        ctx.lineTo(cx + Math.cos(a) * (r0 + (oval ? 1300 : 900) * k), cy + Math.sin(a) * (r0 + (oval ? 1300 : 900) * k));
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
@@ -526,8 +569,33 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       break;
     }
     default: {
+      if (l.world && isWorldGround(l.fx)) {
+        const env: WorldEnv = { ctx, age, now, seed, paper, ink, slots: l.world.slots, rect: l.lyric, weight: l.lyric ? (l.lyricWeight ?? 1) : 0, pulse: beat.pulse, level: l.world.level };
+        drawWorldGround(env, l.fx);
+        const coming = worldInAt(l.world.enter, age);
+        if (coming) coming.w.draw(env, coming.q);
+        const piece = pieceAt(l.world.piece, age);
+        if (piece) {
+          ctx.save();
+          if (env.base) ctx.setTransform(env.base);
+          // (a set piece only ever has the line being sung right now: nothing large behind the words may be a line not yet or no longer sung)
+          const sung = l.world.lines?.find((x) => now >= x.a - 0.1 && now < x.b + 0.05);
+          piece.p.draw({ ...env, base: undefined, words: l.world.lines ? (sung?.t ?? '') : (l.world.words ?? ''), sung: sung ? Math.min(1, Math.max(0, (now - sung.a) / Math.max(0.2, sung.b - sung.a))) : undefined, title: l.world.title ?? '' }, piece.q, age);
+          ctx.restore();
+          ctx.save();
+          if (env.base) ctx.setTransform(env.base);
+          if (piece.p.reserve && env.rect) reservePaper(ctx, seed, env.rect, env.paper, (piece.p.clear ?? 0.55) * env.weight);
+          else clearWordsAfter({ ...env, base: undefined }, piece.p.clear ?? 0.55);
+          ctx.restore();
+        }
+        break;
+      }
+      if (isLineGround(l.fx)) {
+        drawLineGround({ ctx, age, paper, ink, accent: l.accent, seed, song: l.song, mood: l.mood, rect: l.lyric, weight: l.lyric ? (l.lyricWeight ?? 1) : 0, mark: l.mark, pulse: beat.pulse }, l.fx);
+        break;
+      }
       const move = MORE[l.fx];
-      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, room: l.room, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
+      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
       own = drawMove(move, env, l.flow);
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
@@ -540,7 +608,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalCompositeOperation = 'copy';
     ctx.filter = `blur(${rackBlur.toFixed(1)}px)`;
-    ctx.drawImage(ctx.canvas, 0, 0);
+    // a blur thins the canvas's own edge to nothing: a whole-frame one is drawn a little over the frame
+    if (l.yields && backPush?.blur) ctx.drawImage(ctx.canvas, -12, -12, W + 24, H + 24);
+    else ctx.drawImage(ctx.canvas, 0, 0);
     ctx.restore();
   }
   // behind the lines up, a keyline of the cut's ground round each letter; again over the character (unkeyed, dark type
@@ -584,6 +654,36 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     }
     ctx.filter = 'none';
     ctx.restore();
+  }
+  if (l.yields) {
+    // the frame's own coordinates, whatever this cut's camera did: paper does not move with the picture
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const back = hushOf(l.fx) * (l.lyric ? (l.lyricWeight ?? 1) : 0);
+    if (back > 0) {
+      ctx.globalAlpha = back;
+      ctx.fillStyle = paper;
+      if (under) ctx.drawImage(under, 0, 0);
+      else ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
+    // what crosses the frame stops dead at the words' box: a hard cut, the ground as it is, nothing soft
+    if (l.lyric && (l.lyricWeight ?? 1) > 0 && maskedByLine(l.fx)) {
+      ctx.fillStyle = paper;
+      const r = l.lyric;
+      const [x, y, w, h] = [r.x0 - 14, r.y0 - 14, r.x1 - r.x0 + 28, r.y1 - r.y0 + 28];
+      if (under) ctx.drawImage(under, x, y, w, h, x, y, w, h);
+      else ctx.fillRect(x, y, w, h);
+    }
+    if (!l.bare && isFlood(paper) && !l.world) drawFlood(ctx, sheetSeed(), paper, ink, l.accent);
+    ctx.restore();
+    // a world's ground has its own surface: paper fibres on a wall of lamps would be a lie
+    if (!l.world || l.world.sheet) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      drawSheet(ctx, sheetSeed(), 0, 0, W, H);
+      ctx.restore();
+    }
   }
   if (l.thread) drawThread(ctx, l.thread, ink, l.accent, clock, l.thread.sprite ? (image(`spr:${l.thread.sprite}`) as (CanvasImageSource & { width: number; height: number }) | undefined) : undefined, paper);
   if (l.meta) drawMeta(ctx, l.meta, ink, l.accent, clock);
@@ -657,6 +757,16 @@ export function oppositeSide(rects: { from: number; to: number; x0: number; x1: 
 
 const grains = new Map<string, CanvasImageSource>();
 /** The cut's paper: one flat colour, a printed paper with fibres and specks, or the colour deepening toward the foot. */
+let kept: OffscreenCanvas | undefined;
+/** A copy of the frame as it stands, on one canvas reused every frame. */
+function keepFrame(ctx: CanvasRenderingContext2D) {
+  kept ??= new OffscreenCanvas(W, H);
+  const c = kept.getContext('2d')!;
+  c.clearRect(0, 0, W, H);
+  c.drawImage(ctx.canvas, 0, 0, W, H);
+  return kept;
+}
+
 function drawGround(ctx: CanvasRenderingContext2D, ground: Ground | undefined, paper: Rgb, ink: Rgb, seed: number) {
   ctx.fillStyle = paper;
   ctx.fillRect(0, 0, W, H);

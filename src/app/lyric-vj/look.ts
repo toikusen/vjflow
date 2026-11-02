@@ -4,6 +4,7 @@
 import { GraphicsLook, Layer, LAYER_KINDS, LookSection, spreadWindows } from './render/graphics';
 import { contrast } from './contrast';
 import { LOUD_TRANSITIONS, parseTransition } from './render/transition';
+import { isLineMotion } from './render/motion-transition';
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -58,7 +59,8 @@ export function validateLook(look: GraphicsLook | undefined, assets: string[], s
   let shaped = 0;
   const used = new Map<string, number>();
   sections.forEach((sec, i) => {
-    if (!sec.transition) return;
+    // a handoff is timed to the lines, off the beat on purpose, and the composer has already judged its fit
+    if (!sec.transition || isLineMotion(sec.transition.kind)) return;
     const before = sections[i - 1]?.transition;
     const again = (used.get(sec.transition.kind) ?? 0) >= 2;
     // only where the music changes section (within 1.5 s of a boundary), when the boundaries are known

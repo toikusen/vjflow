@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MOTION, MOTION_KINDS } from './motion-transition';
+import { drawMotionTransition, MOTION, MOTION_KINDS } from './motion-transition';
 import { TRANSITION_KINDS, TRANSITION_MOOD, TRANSITION_SEC } from './transition';
 
 describe('motion transitions', () => {
@@ -19,6 +19,22 @@ describe('motion transitions', () => {
       expect([kind, run(kind, 0).includes('a')]).toEqual([kind, true]);
       expect([kind, run(kind, 1).at(-1)]).toEqual([kind, 'b']);
     }
+  });
+
+  it('show the song\'s sheet, not black, where neither picture covers', () => {
+    const fills: string[] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: () => () => undefined,
+      set: (_, p, v) => (p === 'fillStyle' && fills.push(v), true),
+    });
+    const g = globalThis as unknown as { OffscreenCanvas?: unknown };
+    const had = g.OffscreenCanvas;
+    g.OffscreenCanvas = class { getContext = () => ctx; };
+    drawMotionTransition(ctx, 'spinzoom', 0.5, 1920, 1080, 1, () => undefined, () => undefined, { ground: '#fce8ee' });
+    drawMotionTransition(ctx, 'spinzoom', 0.5, 1920, 1080, 1, () => undefined, () => undefined);
+    if (had) g.OffscreenCanvas = had;
+    else delete g.OffscreenCanvas;
+    expect(fills).toEqual(['#fce8ee', '#000']);
   });
 
   it('are listed with the shape reveals, each with a length and a meaning', () => {

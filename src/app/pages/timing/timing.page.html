@@ -33,13 +33,17 @@
   }
 } @else {
   <header class="top">
-    <a class="back" [href]="backHref">← {{ song()!.title }}</a>
+    @if (local()) {
+      <span class="back">{{ song()!.title }}</span>
+    } @else {
+      <a class="back" [href]="backHref">← {{ song()!.title }}</a>
+    }
     <span class="vr desk"></span>
     <h1 class="title">歌詞時間</h1>
     <div class="counts desk">
-      <app-status-chip [chip]="{ icon: '!', label: counts().red + ' 句必須修正', tone: 'bad' }" />
-      <app-status-chip [chip]="{ icon: '?', label: counts().yellow + ' 句建議確認', tone: 'warn' }" />
-      <app-status-chip [chip]="{ icon: '✓', label: counts().ok + ' 句已確認', tone: 'ok' }" />
+      @for (chip of chips(); track chip.tone) {
+        <app-status-chip [chip]="chip" />
+      }
       @if (song()!.timingConfirmedAt && !dirty()) {
         <span class="confirmed">時間軸已確認</span>
       }
@@ -52,19 +56,15 @@
             <div class="menu-row">
               <button class="button" type="button" role="menuitem" (click)="download('lrc'); more.set(false)" title="目前編輯器裡的時間（LRC：0.01 秒）">下載 LRC</button>
               <button class="button" type="button" role="menuitem" (click)="download('srt'); more.set(false)" title="目前編輯器裡的時間（SRT：0.001 秒）">下載 SRT</button>
-              <button class="button" type="button" role="menuitem" [disabled]="!canUndo()" (click)="undo()">復原</button>
-              <button class="button" type="button" role="menuitem" [disabled]="!canRedo()" (click)="redo()">重做</button>
+              <button class="button" type="button" role="menuitem" [disabled]="!canUndo() || readOnly()" (click)="undo()">復原</button>
+              <button class="button" type="button" role="menuitem" [disabled]="!canRedo() || readOnly()" (click)="redo()">重做</button>
             </div>
             <label class="menu-row shift" title="整首歌每一句一起移動（負數往前）；有句子會超出歌曲就整批不套用">
               <span>整首平移</span>
-              <input #shiftBy type="number" step="0.05" value="0" />
+              <input #shiftBy type="number" step="0.05" value="0" [disabled]="readOnly()" />
               <span>秒</span>
-              <button class="button" type="button" (click)="shiftEverything(shiftBy.value)">套用</button>
+              <button class="button" type="button" [disabled]="readOnly()" (click)="shiftEverything(shiftBy.value)">套用</button>
             </label>
-            <div class="menu-row phone">
-              <!-- the phone has no room for the draft button in the bar; red lines keep 確認 off, so this is its only save -->
-              <button class="button" type="button" role="menuitem" [disabled]="!dirty()" (click)="save(false); more.set(false)">儲存草稿</button>
-            </div>
             <div class="menu-row phone">
               <button class="chip" type="button" [class.on]="ripple()" [attr.aria-pressed]="ripple()" (click)="ripple.set(!ripple())">{{ ripple() ? '✓ ' : '' }}後面一起移</button>
               <span class="speed" role="group" aria-label="速度">
@@ -83,10 +83,28 @@
           </div>
         }
       </div>
-      <button class="button desk" type="button" [disabled]="!dirty()" (click)="save(false)">儲存草稿</button>
-      <button class="button primary" type="button" [disabled]="counts().red > 0" (click)="save(true)" [title]="counts().red ? '還有必須修正的句子' : ''"><span class="desk">確認時間軸，可以製作了</span><span class="phone">確認時間軸</span></button>
+      @if (local()) {
+        <button class="button primary" type="button" (click)="finish()">完成，回到影片</button>
+      } @else {
+        <!-- the only save on a phone too: red lines keep 確認 off, and the draft keeps the work -->
+        <button class="button" type="button" [disabled]="!dirty() || !!saving() || !!lock()" (click)="save(false)">{{ saving() === 'draft' ? '儲存中…' : '儲存草稿' }}</button>
+        @if (blocker()) {
+          <span class="why" id="confirm-why">{{ blocker() }}</span>
+        }
+        <button class="button primary" type="button" [disabled]="counts().red > 0 || !!saving() || !!lock()" (click)="save(true)" [attr.aria-describedby]="blocker() ? 'confirm-why' : null">
+          @if (saving() === 'confirm') {
+            儲存中…
+          } @else {
+            <span class="desk">確認時間軸，可以製作了</span><span class="phone">確認時間軸</span>
+          }
+        </button>
+      }
     </div>
   </header>
+
+  @if (lock(); as l) {
+    <p class="lock" role="status">{{ l.message }}</p>
+  }
 
   @if (message(); as m) {
     <p class="toast" role="status">{{ m }}</p>
@@ -104,7 +122,7 @@
           }
         </div>
         <div class="wavebox">
-          <canvas #wave class="wave" (mousedown)="down($event)" (mousemove)="move($event)" (mouseup)="up()" (mouseleave)="up()" (wheel)="wheel($event)"></canvas>
+          <canvas #wave class="wave" [class.locked]="readOnly()" (mousedown)="down($event)" (mousemove)="move($event)" (mouseup)="up()" (mouseleave)="up()" (wheel)="wheel($event)"></canvas>
           <span class="wave-hint desk">滾輪縮放 · Shift＋滾輪移動 · 目前 {{ viewSec().toFixed(0) }} 秒</span>
         </div>
         <div class="transport">
@@ -128,49 +146,62 @@
           <button class="chip" type="button" [class.on]="ripple()" [attr.aria-pressed]="ripple()" (click)="ripple.set(!ripple())" title="改一句的開始時間時，後面還沒改過的句子一起移動同樣的秒數（按住 Alt 可臨時反轉）">{{ ripple() ? '✓ ' : '' }}後面一起移</button>
           <button class="chip" type="button" [class.on]="loop()" [attr.aria-pressed]="loop()" (click)="loop.set(!loop())" title="L">{{ loop() ? '✓ ' : '' }}循環這一句</button>
         </div>
+        @if (local()) {
+          <p class="key-hint desk">唱到選取這句時按 <kbd>Enter</kbd>：這句從現在開始，並跳到下一句</p>
+        }
         <div class="pcounts phone">
-          @if (counts().red) {
-            <app-status-chip [chip]="{ icon: '!', label: counts().red + ' 句必須修正', tone: 'bad' }" />
+          @for (chip of chips(); track chip.tone) {
+            @if (chip.tone !== 'bad' || counts().red) {
+              <app-status-chip [chip]="chip" />
+            }
           }
-          <app-status-chip [chip]="{ icon: '?', label: counts().yellow + ' 句建議確認', tone: 'warn' }" />
-          <app-status-chip [chip]="{ icon: '✓', label: counts().ok + ' 句已確認', tone: 'ok' }" />
+          <button class="chip" type="button" [class.on]="onlyProblems()" (click)="onlyProblems.set(!onlyProblems())">{{ onlyProblems() ? '看全部' : '只看需要確認的' }}</button>
           <button class="button soft tiny" type="button" (click)="nextProblem()">下一個待確認</button>
         </div>
       </section>
 
-      <section class="card keys desk">
-        <h2>聽著歌，按一下就對好</h2>
-        <dl>
-          <dt><kbd>Enter</kbd></dt>
-          <dd>把選中這句的開始設為現在，並跳到下一句</dd>
-          <dt><kbd>N</kbd></dt>
-          <dd>跳到下一個待確認</dd>
-          <dt><kbd>← →</kbd></dt>
-          <dd>微調 0.05 秒（Shift：微調結束）</dd>
-        </dl>
-        <button class="link" type="button" (click)="more.set(true); $event.stopPropagation()">全部快捷鍵 →</button>
-      </section>
+      @if (!local()) {
+        <section class="card guide">
+          <div class="guide-head">
+            <h2>怎麼檢查</h2>
+            <button class="link" type="button" [attr.aria-expanded]="guideOpen()" aria-controls="timing-guide" (click)="guideOpen.set(!guideOpen())">{{ guideOpen() ? '收起' : '展開' }}</button>
+          </div>
+          @if (guideOpen()) {
+            <ol class="steps" id="timing-guide">
+              <li><span class="num">1</span><span>開著「只看需要確認的」，列表只列出系統標出來的句子（按「看全部」可看每一句）</span></li>
+              <li><span class="num">2</span><span>按「聽」；對得上就按「我確認沒問題」（或「保留現在的」），會自動跳到下一句；對不上才改開始／結束（或唱到時按「設為現在」）</span></li>
+              <li><span class="num">3</span><span>沒有需要確認的句子後，按「確認時間軸」</span></li>
+            </ol>
+            <button class="link desk" type="button" (click)="more.set(true); $event.stopPropagation()">全部快捷鍵 →</button>
+          }
+        </section>
 
-      <section class="card singers">
-        <div class="singers-head">
-          <div>
-            <h2>演唱者</h2>
-            <p>團體歌可設定成員與代表色，每句選是誰唱的</p>
-          </div>
-          <button class="button small" type="button" (click)="addSinger()">＋ 新增</button>
-        </div>
-        @for (m of singers(); track $index; let k = $index) {
-          <div class="singer">
-            <input type="color" [value]="m.color" (change)="editSinger(k, { color: $any($event.target).value })" title="代表色" />
-            <input class="name" [value]="m.name" (change)="editSinger(k, { name: $any($event.target).value })" />
-            <button class="x" type="button" (click)="removeSinger(k)" title="移除">✕</button>
-          </div>
+        @if (!singersOpen()) {
+          <button class="card singers-fold" type="button" aria-expanded="false" (click)="singersOpen.set(true)">團體歌？設定演唱者 ▸</button>
+        } @else {
+          <section class="card singers">
+            <div class="singers-head">
+              <div>
+                <h2>演唱者</h2>
+                <p>團體歌可設定成員與代表色，每句選是誰唱的</p>
+              </div>
+              <button class="button small" type="button" [disabled]="readOnly()" (click)="addSinger()">＋ 新增</button>
+            </div>
+            @for (m of singers(); track $index; let k = $index) {
+              <div class="singer">
+                <input type="color" [value]="m.color" [disabled]="readOnly()" (change)="editSinger(k, { color: $any($event.target).value })" title="代表色" />
+                <input class="name" [value]="m.name" [readOnly]="readOnly()" (change)="editSinger(k, { name: $any($event.target).value })" />
+                <button class="x" type="button" [disabled]="readOnly()" (click)="removeSinger(k)" title="移除">✕</button>
+              </div>
+            }
+          </section>
         }
-      </section>
+      }
 
       <div class="todo desk">
         <span class="glyph" [class.bad]="counts().red">{{ counts().red ? '!' : counts().yellow ? '?' : '✓' }}</span>
         <span>{{ todo() }}</span>
+        <button class="chip" type="button" [class.on]="onlyProblems()" (click)="onlyProblems.set(!onlyProblems())">{{ onlyProblems() ? '看全部' : '只看需要確認的' }}</button>
         <button class="button soft small" type="button" (click)="nextProblem()" title="N">下一個待確認 · N</button>
       </div>
     </aside>
@@ -178,78 +209,97 @@
     <section class="table">
       <div class="thead desk"><span>#</span><span>歌詞</span><span>開始</span><span>結束</span><span>狀態</span></div>
       <ol class="rows" #list (wheel)="userScrolled()" (touchmove)="userScrolled()">
+        @if (nothingToCheck()) {
+          <li class="empty">目前沒有需要確認的句子，可以按「{{ local() ? '完成' : '確認時間軸' }}」</li>
+        }
         @for (c of cues(); track c.id; let i = $index) {
-          <li [attr.data-index]="i" [attr.data-status]="statuses()[i]" [class.selected]="i === selected()" [class.playing]="i === playingIndex() && playing()" (click)="selected.set(i)">
-            <div class="row">
-              <span class="n">{{ rowNumber(i) }}</span>
-              <span class="lyric">
-                @if (singers().length) {
-                  <span class="dot" [style.background]="singerColor(c.singer)"></span>
-                }
-                <input #txt class="text" [value]="c.text" (click)="$event.stopPropagation(); selected.set(i)" (keydown)="$event.stopPropagation()" (keydown.enter)="$any($event.target).blur()" (change)="retype(i, $any($event.target).value)" title="點一下修改歌詞" aria-label="歌詞" />
-              </span>
-              <span class="times"><span class="t">{{ sec(c.start) }}</span><span class="t">{{ sec(c.end) }}</span></span>
-              <span class="tag" [attr.data-tone]="tag(i).tone"><span class="glyph">{{ tag(i).icon }}</span>{{ tag(i).label }}</span>
-            </div>
-            @if (i === selected()) {
-              <div class="tools" (click)="$event.stopPropagation()">
-                <span class="lab desk">開始</span>
-                <span class="step">
-                  <button type="button" (click)="nudge(i, 'start', -0.05)" aria-label="開始提早 0.05 秒">−</button>
-                  <input type="number" step="0.01" [value]="sec(c.start)" (change)="edit(i, 'start', $any($event.target).value)" aria-label="開始時間" />
-                  <button type="button" (click)="nudge(i, 'start', 0.05)" aria-label="開始延後 0.05 秒">＋</button>
-                </span>
-                <button class="button primary small" type="button" (click)="setNow(i, 'start')" title="把開始設為播放中的時間"><span class="desk">設為現在</span><span class="phone">開始設為現在</span></button>
-                <span class="lab desk end-lab">結束</span>
-                <span class="step">
-                  <button type="button" (click)="nudge(i, 'end', -0.05)" aria-label="結束提早 0.05 秒">−</button>
-                  <input type="number" step="0.01" [value]="sec(c.end)" (change)="edit(i, 'end', $any($event.target).value)" aria-label="結束時間" />
-                  <button type="button" (click)="nudge(i, 'end', 0.05)" aria-label="結束延後 0.05 秒">＋</button>
-                </span>
-                <button class="button small" type="button" (click)="setNow(i, 'end')" title="把結束設為播放中的時間"><span class="desk">設為現在</span><span class="phone">結束設為現在</span></button>
-                <span class="ops">
+          @if (shown()[i]) {
+            <li [attr.data-index]="i" [attr.data-status]="statuses()[i]" [class.selected]="i === selected()" [class.playing]="i === playingIndex() && playing()" (click)="selected.set(i)">
+              <div class="row">
+                <span class="n">{{ rowNumber(i) }}</span>
+                <span class="lyric">
                   @if (singers().length) {
-                    <label class="who">
-                      <span class="dot" [style.background]="singerColor(c.singer)"></span>
-                      <select [value]="c.singer ?? ''" (change)="setSinger(i, $any($event.target).value)" aria-label="誰唱">
-                        <option value="" [selected]="!c.singer">全員</option>
-                        @for (m of singers(); track m.name) {
-                          <option [value]="m.name" [selected]="c.singer === m.name">{{ m.name }}</option>
-                        }
-                      </select>
-                    </label>
+                    <span class="dot" [style.background]="singerColor(c.singer)"></span>
                   }
-                  <button type="button" (click)="playLine(i)" title="從這句前 1 秒播放">▶ <span class="desk">聽這句</span><span class="phone">聽</span></button>
-                  <button type="button" (click)="split(i, txt)" title="在文字游標處切開，切點時間是目前播放位置">✂ <span class="desk">拆句</span><span class="phone">拆</span></button>
-                  <button type="button" (click)="mergeNext(i)" title="和下一句合併">⤵ <span class="desk">併入下句</span><span class="phone">併</span></button>
-                  <button type="button" (click)="addAfter(i)" title="在下面新增一句">＋<span class="desk"> 插入</span></button>
-                  <button type="button" (click)="remove(i)" title="刪除這一句"><span class="desk">刪除</span><span class="phone">刪</span></button>
+                  <input #txt class="text" [value]="c.text" [readOnly]="readOnly()" (click)="$event.stopPropagation(); selected.set(i)" (keydown)="$event.stopPropagation()" (keydown.enter)="$any($event.target).blur()" (change)="retype(i, $any($event.target).value)" title="點一下修改歌詞" aria-label="歌詞" />
                 </span>
+                <span class="times"><span class="t">{{ sec(c.start) }}</span><span class="t">{{ sec(c.end) }}</span></span>
+                <span class="tag" [attr.data-tone]="tag(i).tone"><span class="glyph">{{ tag(i).icon }}</span>{{ tag(i).label }}</span>
               </div>
-            }
-            @if (hint(i); as h) {
-              <div class="hint" (click)="$event.stopPropagation()">
-                <span class="hint-text">{{ h.before }}@if (h.value !== undefined) {<b>{{ h.value.toFixed(2) }}</b>}{{ h.after }}</span>
-                @if (h.value !== undefined) {
-                  <button class="button soft tiny" type="button" (click)="useStart(i, h.value)">{{ h.take }}</button>
-                }
-                <button class="button tiny" type="button" (click)="accept(i)" title="聽過確認時間是對的">{{ h.keep }}</button>
-              </div>
-            }
-            @if (c.proof?.length) {
-              <div class="hint" (click)="$event.stopPropagation()">
-                @for (p of c.proof; track p.at) {
-                  <span class="hint-text">疑似錯字「{{ p.wrong }}」→「{{ p.right }}」<small>{{ p.why }}</small></span>
-                  <button class="button soft tiny" type="button" (click)="fixProof(i, p, true)">改成「{{ p.right }}」</button>
-                  <button class="button tiny" type="button" (click)="fixProof(i, p, false)" title="歌詞本來就是這樣寫">不用改</button>
-                }
-              </div>
-            }
-          </li>
+              @if (i === selected()) {
+                <div class="tools" (click)="$event.stopPropagation()">
+                  <span class="lab desk">開始</span>
+                  <span class="step">
+                    <button type="button" [disabled]="readOnly()" (click)="nudge(i, 'start', -0.05)" aria-label="開始提早 0.05 秒">−</button>
+                    <input type="number" step="0.01" [value]="sec(c.start)" [readOnly]="readOnly()" (change)="edit(i, 'start', $any($event.target).value)" aria-label="開始時間" />
+                    <button type="button" [disabled]="readOnly()" (click)="nudge(i, 'start', 0.05)" aria-label="開始延後 0.05 秒">＋</button>
+                  </span>
+                  <button class="button primary small" type="button" [disabled]="readOnly()" (click)="setNow(i, 'start')" title="把開始設為播放中的時間"><span class="desk">設為現在</span><span class="phone">開始設為現在</span></button>
+                  <span class="lab desk end-lab">結束</span>
+                  <span class="step">
+                    <button type="button" [disabled]="readOnly()" (click)="nudge(i, 'end', -0.05)" aria-label="結束提早 0.05 秒">−</button>
+                    <input type="number" step="0.01" [value]="sec(c.end)" [readOnly]="readOnly()" (change)="edit(i, 'end', $any($event.target).value)" aria-label="結束時間" />
+                    <button type="button" [disabled]="readOnly()" (click)="nudge(i, 'end', 0.05)" aria-label="結束延後 0.05 秒">＋</button>
+                  </span>
+                  <button class="button small" type="button" [disabled]="readOnly()" (click)="setNow(i, 'end')" title="把結束設為播放中的時間"><span class="desk">設為現在</span><span class="phone">結束設為現在</span></button>
+                  <span class="ops">
+                    @if (singers().length) {
+                      <label class="who">
+                        <span class="dot" [style.background]="singerColor(c.singer)"></span>
+                        <select [value]="c.singer ?? ''" [disabled]="readOnly()" (change)="setSinger(i, $any($event.target).value)" aria-label="誰唱">
+                          <option value="" [selected]="!c.singer">全員</option>
+                          @for (m of singers(); track m.name) {
+                            <option [value]="m.name" [selected]="c.singer === m.name">{{ m.name }}</option>
+                          }
+                        </select>
+                      </label>
+                    }
+                    <button type="button" (click)="playLine(i)" title="從這句前 1 秒播放">▶ <span class="desk">聽這句</span><span class="phone">聽</span></button>
+                    <button type="button" [disabled]="readOnly()" (click)="split(i, txt)" title="在文字游標處切開，切點時間是目前播放位置">✂ <span class="desk">拆句</span><span class="phone">拆</span></button>
+                    <button type="button" [disabled]="readOnly()" (click)="mergeNext(i)" title="和下一句合併">⤵ <span class="desk">併入下句</span><span class="phone">併</span></button>
+                    <button type="button" [disabled]="readOnly()" (click)="addAfter(i)" title="在下面新增一句">＋<span class="desk"> 插入</span></button>
+                    <button type="button" [disabled]="readOnly()" (click)="remove(i)" title="刪除這一句"><span class="desk">刪除</span><span class="phone">刪</span></button>
+                  </span>
+                </div>
+              }
+              @if (hint(i); as h) {
+                <div class="hint" (click)="$event.stopPropagation()">
+                  <span class="hint-text">{{ h.before }}@if (h.value !== undefined) {<b>{{ h.value.toFixed(2) }}</b>}{{ h.after }}</span>
+                  @if (h.value !== undefined) {
+                    <button class="button soft tiny" type="button" [disabled]="readOnly()" (click)="useStart(i, h.value)">{{ h.take }}</button>
+                  }
+                  <button class="button tiny" type="button" [disabled]="readOnly()" (click)="accept(i)" title="聽過確認時間是對的">{{ h.keep }}</button>
+                </div>
+              }
+              @if (c.proof?.length) {
+                <div class="hint" (click)="$event.stopPropagation()">
+                  @for (p of c.proof; track p.at) {
+                    <span class="hint-text">疑似錯字「{{ p.wrong }}」→「{{ p.right }}」<small>{{ p.why }}</small></span>
+                    <button class="button soft tiny" type="button" [disabled]="readOnly()" (click)="fixProof(i, p, true)">改成「{{ p.right }}」</button>
+                    <button class="button tiny" type="button" [disabled]="readOnly()" (click)="fixProof(i, p, false)" title="歌詞本來就是這樣寫">不用改</button>
+                  }
+                </div>
+              }
+            </li>
+          }
         }
       </ol>
     </section>
   </div>
+
+  @if (local() && cues()[selected()]; as c) {
+    <div class="tap-bar">
+      <button class="button" type="button" [disabled]="!canUndo()" (click)="undo()">復原</button>
+      <!-- pointerdown: a click would land only when the thumb lifts -->
+      <button class="tap-big" type="button" (pointerdown)="tapSelected()">
+        @if (playing()) {
+          <small>第 {{ selected() + 1 }} 句從現在開始</small>{{ c.text }}
+        } @else {
+          ▶ 播放，唱到這句時再按
+        }
+      </button>
+    </div>
+  }
 }
 
 <app-confirm [ask]="ask()" [left]="null" (closed)="ask.set(null)" />

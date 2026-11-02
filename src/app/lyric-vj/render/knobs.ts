@@ -219,8 +219,16 @@ export const KNOBS: Record<string, Knob> = {
   'glide.sec': ['飛過畫面的秒數', 2.6, 4.5, false, -1],
 };
 
+/** The key a song's knobs and paper come from: its title, turned by a reroll so counts and sizes change with it. */
+export const songKeyOf = (title: string, reroll?: number) => [...title].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7) ^ (reroll === undefined ? 0 : Math.imul(reroll + 1, 0x9e3779b1));
+
 /** What a knob's value depends on: the song (its id) and its mood (calm 0 … lively 1). */
-export interface Tuning { song?: number; mood?: number }
+export interface Tuning {
+  song?: number;
+  mood?: number;
+  /** Values the paid director set from the lyric (meteor.n from a line that counts them): they win over the song's own pick, inside the knob's range. */
+  tune?: Record<string, number>;
+}
 const hash = (a: number, b = 0) => {
   const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return s - Math.floor(s);
@@ -238,9 +246,16 @@ export const vary = (e: Tuning, key: string, lo: number, hi: number, lean?: 1 | 
   return lo + (lean ? 0.5 * u + 0.5 * (lean > 0 ? m : 1 - m) : u) * (hi - lo);
 };
 const varyInt = (e: Tuning, key: string, lo: number, hi: number, lean?: 1 | -1) => Math.round(vary(e, key, lo - 0.49, hi + 0.49, lean));
+/** A value set from the lyric, kept to what the move can draw. */
+export const tuned = (k: Knob, v: number) => {
+  const x = Math.min(k[2], Math.max(k[1], v));
+  return k[3] ? Math.round(x) : x;
+};
 /** A knob of the move (knobs.ts) in this song. */
 export const kn = (e: Tuning, key: string) => {
   const k = KNOBS[key];
   if (!k) throw new Error(`no knob ${key}`);
+  const set = e.tune?.[key];
+  if (set !== undefined) return tuned(k, set);
   return k[3] ? varyInt(e, key, k[1], k[2], k[4]) : vary(e, key, k[1], k[2], k[4]);
 };

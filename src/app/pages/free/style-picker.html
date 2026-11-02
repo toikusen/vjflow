@@ -1,0 +1,20 @@
+<section class="picker" [class.rails]="rails()" aria-label="風格">
+  <div class="head">
+    <h2>風格</h2>
+    <button type="button" class="plain" [class.on]="!selected()" [attr.aria-pressed]="!selected()" (click)="picked.emit('')">依歌曲配色</button>
+  </div>
+  @for (g of groups(); track g.name) {
+    @if (g.cards.length) {
+      <h3>{{ g.name }}</h3>
+      <div class="cards">
+        @for (c of g.cards; track c.id) {
+          <button type="button" class="card" [class.on]="selected() === c.id" [attr.aria-pressed]="selected() === c.id" (click)="picked.emit(c.id)">
+            <img [src]="'/' + c.image" alt="" width="240" height="135" loading="lazy" />
+            <strong>{{ c.name }}</strong>
+            <span>{{ c.line }}</span>
+          </button>
+        }
+      </div>
+    }
+  }
+</section>

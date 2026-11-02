@@ -52,6 +52,8 @@ export interface Env {
   song?: number;
   /** How lively the song is, 0 calm … 1 lively: speeds and counts lean with it (knobs.ts). */
   mood?: number;
+  /** Knob values read from the lyric (knobs.ts Tuning). */
+  tune?: Record<string, number>;
   /** The stretch of the frame (x, px) the lines sung over the cut leave free ([0, 0]: none; unset: nobody sings). */
   room?: [number, number];
   /** How many different words the cut has: a move that labels its parts has no more parts than that. */

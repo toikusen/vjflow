@@ -3,13 +3,13 @@
 // shape: the same k always gives the same frame, so scrubbing anywhere in the timeline is exact.
 // Shapes picked from the @ai_yunon_ai transition catalogue (out_effects/summary.md).
 import type { Rgb } from './graphics';
-import { MOTION, MOTION_KINDS, MotionKind } from './motion-transition';
+import { LINE_MOTION, LineMotionKind, MOTION, MOTION_KINDS, MotionKind } from './motion-transition';
 
 /** Shape reveals (this file) and motion transitions where both pictures move (motion-transition.ts). */
-export type TransitionKind = MaskKind | MotionKind;
+export type TransitionKind = MaskKind | MotionKind | LineMotionKind;
 export type MaskKind = 'circle' | 'clock' | 'diagonal' | 'stripes' | 'quad' | 'brush' | 'liquid' | 'impact' | 'diamond' | 'iris' | 'checker' | 'bars' | 'drip' | 'zigzag' | 'star' | 'pinwheel' | 'corners' | 'grid' | 'ripple' | 'wave' | 'shatter' | 'heart';
 export const MASK_KINDS: MaskKind[] = ['circle', 'clock', 'diagonal', 'stripes', 'quad', 'brush', 'liquid', 'impact', 'diamond', 'iris', 'checker', 'bars', 'drip', 'zigzag', 'star', 'pinwheel', 'corners', 'grid', 'ripple', 'wave', 'shatter', 'heart'];
-export const TRANSITION_KINDS: TransitionKind[] = [...MASK_KINDS, ...MOTION_KINDS];
+export const TRANSITION_KINDS: (MaskKind | MotionKind)[] = [...MASK_KINDS, ...MOTION_KINDS];
 /** The strong ones: never two in a row (they read as a showreel). */
 export const LOUD_TRANSITIONS = new Set<TransitionKind>(['shatter', 'impact', 'checker', 'zigzag', 'bars', 'quad', 'drip', 'grid', 'pinwheel']);
 
@@ -19,6 +19,13 @@ export interface SectionTransition {
   dur?: number;
   /** A coloured edge that leads the reveal (a band of this colour runs just ahead of the new section). */
   color?: Rgb;
+  /** Line handoffs only: where the frame opens (px) and which way the picture goes (lyric-handoff.ts). */
+  seam?: number;
+  dir?: number;
+  /** What shows where neither picture covers (composer: the song's sheet; default black). */
+  ground?: string;
+  /** Line handoffs only: the band's and the panels' backs' colour. */
+  ink?: string;
 }
 
 /** Default length by kind: shape reveals are quick, liquids slower. */
@@ -52,13 +59,13 @@ const MASK_MOOD: Record<MaskKind, string> = {
   heart: '愛心打開：喜歡、心動、可愛、應援',
 };
 
-export const TRANSITION_MOOD = { ...MASK_MOOD, ...Object.fromEntries(MOTION_KINDS.map((k) => [k, MOTION[k].mood])) } as Record<TransitionKind, string>;
+export const TRANSITION_MOOD = { ...MASK_MOOD, ...Object.fromEntries(MOTION_KINDS.map((k) => [k, MOTION[k].mood])) } as Record<MaskKind | MotionKind, string>;
 
 /** The transitions and what each says, as one line for a director's prompt. */
 export const transitionGuide = () => TRANSITION_KINDS.map((k) => `${k}（${TRANSITION_MOOD[k]}）`).join('、');
 
 const MASK_SEC: Record<MaskKind, number> = { circle: 0.6, clock: 0.7, diagonal: 0.5, stripes: 0.55, quad: 0.6, brush: 0.6, liquid: 0.9, impact: 0.45, diamond: 0.6, iris: 0.55, checker: 0.7, bars: 0.6, drip: 0.9, zigzag: 0.45, star: 0.6, pinwheel: 0.7, corners: 0.6, grid: 0.7, ripple: 0.8, wave: 0.7, shatter: 1.1, heart: 0.65 };
-export const TRANSITION_SEC = { ...MASK_SEC, ...Object.fromEntries(MOTION_KINDS.map((k) => [k, MOTION[k].sec])) } as Record<TransitionKind, number>;
+export const TRANSITION_SEC = { ...MASK_SEC, ...Object.fromEntries(MOTION_KINDS.map((k) => [k, MOTION[k].sec])), ...Object.fromEntries(Object.entries(LINE_MOTION).map(([k, m]) => [k, m.sec])) } as Record<TransitionKind, number>;
 
 const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2);
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -332,7 +339,7 @@ export function transitionAccent(ctx: CanvasRenderingContext2D, kind: Transition
 export function parseTransition(v: unknown): SectionTransition | undefined {
   if (typeof v !== 'string' || !v.trim()) return undefined;
   const [kind, dur, color] = v.split(':').map((x) => x.trim());
-  if (!TRANSITION_KINDS.includes(kind as TransitionKind)) return undefined;
+  if (!TRANSITION_KINDS.includes(kind as MaskKind)) return undefined;
   const d = Number(dur);
   return { kind: kind as TransitionKind, ...(d > 0 ? { dur: Math.min(1.5, Math.max(0.25, d)) } : {}), ...(/^#[0-9a-f]{6}$/i.test(color ?? '') ? { color } : {}) };
 }

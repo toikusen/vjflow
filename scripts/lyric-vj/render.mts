@@ -41,6 +41,7 @@ const { values: a } = parseArgs({
     layer: { type: 'string' }, // text | back: one compositing layer (text = ProRes 4444 with alpha)
     entrance: { type: 'string', default: 'whole' }, // fast lines: whole (quick entrance, default) | stagger (comparison) | cut (fallback)
     'motion-frames': { type: 'string' }, // QA: line ids whose motion check runs on every frame (60 fps), comma-separated
+    live: { type: 'boolean', default: false }, // build each line near its time, as the browser preview does (composer plans only)
   },
 });
 if (!['whole', 'stagger', 'cut'].includes(a.entrance!)) throw new Error(`--entrance 只能是 whole、stagger 或 cut（收到 ${a.entrance}）`);
@@ -109,6 +110,7 @@ const job: RenderJob = {
   layer: a.layer === 'text' || a.layer === 'back' ? a.layer : undefined,
   track: !!a.track,
   entrance: a.entrance as Entrance,
+  ...(a.live ? { live: true } : {}),
 };
 // which code and options made this render, so reports from different versions are never mixed up
 const git = (...args: string[]) => {

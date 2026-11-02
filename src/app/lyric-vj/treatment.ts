@@ -1,5 +1,11 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import type { WorldLine } from './render/world-layout';
+import { WORLD_TEMPLATES } from './templates-world';
+import type { TextCam } from './render/text-cam';
+import type { ScreenHit } from './render/screen-hit';
+import type { InkState } from './render/glyph-state';
+import type { Handoff } from './render/lyric-handoff';
 import { applyStoryboard, checkScenes, resolveTime, type Keyframe, type Scene } from './scene';
 import type { GraphicsLook } from './render/graphics';
 import type { CustomSceneSpec } from './render/custom-scene';
@@ -10,16 +16,23 @@ import { MotifPlan, validateMotif } from './motif';
 import { validateMoments } from './moments';
 import { applySignature, signatureErrors, stripSignature } from './signature';
 import { validateLook } from './look';
-import { phraseBoundaries } from './phrases';
+import { phraseBoundaries, wordBreaks } from './phrases';
 import { COLOR_SHARE, COLOR_WORDS, colourWords, sameLines } from './structure';
 import { SongTimeline } from './timeline';
 
 // dash … swing: motions from the 534-video knowledge base (high-speed slide, gravity drop, z-zoom through the lens,
 // scattered strokes gathering, spin, a faint pre-shown line lit as sung, tracking in, a hanging swing)
-export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise' | 'dash' | 'drop' | 'zoom' | 'gather' | 'spin' | 'prelight' | 'spread' | 'swing' | 'decode' | 'slice' | 'flip' | 'stretch' | 'shuffle' | 'settle' | 'flicker' | 'squash' | 'windup' | 'karaoke';
-export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash' | 'drop' | 'shrink' | 'dash' | 'dust' | 'spin' | 'zoom' | 'melt' | 'scramble' | 'split' | 'domino' | 'pixel' | 'shatter';
+/** Motions only the line composer (scripts/lyric-vj/lineplan-core.mts) sets; the director's lists leave them out. */
+export type LineEnter = 'scale-steps' | 'frame-run' | 'balance-seat' | 'display-feed' | 'edge-light' | 'box-turn' | 'frame-advance' | 'frame-dive' | 'rip' | 'snapin' | 'band-in' | 'matrix-light' | 'tether-drop' | 'paper-feed' | 'fold-open' | 'card-land' | 'card-develop' | 'index-lift' | 'band-stick' | 'panel-flip' | 'soft-float' | 'cell-land' | 'reply-land' | 'curve-arrive' | 'panel-open' | 'phrase-mark' | 'wave-reveal' | 'corner-land' | 'outline-seat' | 'slat-face' | 'grain-resolve';
+export type LineExit = 'collapse' | 'fold-close' | 'band-out' | 'slat-close' | 'line-fold' | 'tile-scatter' | 'echo-travel' | 'radial-leave' | 'glyph-shed' | 'wave-dissolve' | 'pore-out' | 'focus-out' | 'rail-leave' | 'gravity-pass' | 'box-turn' | 'frame-advance' | 'display-off' | 'node-fold';
+export type LineIdle = 'climb' | 'ink-state' | 'tether-settle' | 'balance-rest' | 'side-light' | 'reflection-rest' | 'breath-rule' | 'frame-lights';
+export const LINE_ENTERS: LineEnter[] = ['scale-steps', 'frame-run', 'balance-seat', 'display-feed', 'edge-light', 'box-turn', 'frame-advance', 'frame-dive', 'rip', 'snapin', 'band-in', 'matrix-light', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', 'cell-land', 'reply-land', 'curve-arrive', 'panel-open', 'phrase-mark', 'wave-reveal', 'corner-land', 'outline-seat', 'slat-face', 'grain-resolve'];
+export const LINE_EXITS: LineExit[] = ['collapse', 'fold-close', 'band-out', 'slat-close', 'line-fold', 'tile-scatter', 'echo-travel', 'radial-leave', 'glyph-shed', 'wave-dissolve', 'pore-out', 'focus-out', 'rail-leave', 'gravity-pass', 'box-turn', 'frame-advance', 'display-off', 'node-fold'];
+export const LINE_IDLES: LineIdle[] = ['climb', 'ink-state', 'tether-settle', 'balance-rest', 'side-light', 'reflection-rest', 'breath-rule', 'frame-lights'];
+export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise' | 'dash' | 'drop' | 'zoom' | 'gather' | 'spin' | 'prelight' | 'spread' | 'swing' | 'decode' | 'slice' | 'flip' | 'stretch' | 'shuffle' | 'settle' | 'flicker' | 'squash' | 'windup' | 'karaoke' | LineEnter;
+export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash' | 'drop' | 'shrink' | 'dash' | 'dust' | 'spin' | 'zoom' | 'melt' | 'scramble' | 'split' | 'domino' | 'pixel' | 'shatter' | LineExit;
 /** How a landed line moves while it is held (unset: a slight per-character wave). */
-export type IdleKind = 'still' | 'drift' | 'push' | 'wave' | 'float' | 'shake' | 'boil' | 'hop' | 'thump';
+export type IdleKind = 'still' | 'drift' | 'push' | 'wave' | 'float' | 'shake' | 'boil' | 'hop' | 'thump' | LineIdle;
 export const IDLE_KINDS: IdleKind[] = ['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump'];
 export type Camera = 'static' | 'push' | 'pan' | 'parallax';
 export type TransitionIn = 'cut' | 'flash' | 'wipe' | 'dissolve' | 'glitch';
@@ -89,8 +102,13 @@ export interface Emphasis {
 export type ReviseLook = 'caret' | 'tape' | 'scribble' | 'stamp';
 export const REVISE_LOOKS: ReviseLook[] = ['caret', 'tape', 'scribble', 'stamp'];
 
+/** Real words only: the song's title, the part's name, the line's own key phrase. An empty `text` is the rule alone. */
+export interface FineTier { kind: 'title' | 'section' | 'key' | 'rule'; text: string; }
+
 export interface CueStyle {
   cueId: string;
+  /** A style world's own stack for this line (render/world-layout.ts); only the composer on a style world sets it. */
+  world?: WorldLine;
   shot: string;
   /** Line breaks as character indexes into the cue text, ascending. */
   rows?: number[];
@@ -100,6 +118,28 @@ export interface CueStyle {
   enter: EnterKind;
   exit: ExitKind;
   idle?: IdleKind;
+  /** The line's own camera while it is up (render/text-cam.ts); unset: only the shared drift. */
+  textCam?: TextCam;
+  /** A few frames' hit on the picture behind the line as it lands (render/screen-hit.ts). */
+  hit?: ScreenHit;
+  /** The surface the line keeps for all of its reading (render/glyph-state.ts); line composer only. */
+  inkState?: InkState;
+  /** Reading is paid for from the exit first: a line short of time keeps its entrance and loses its exit (render/reading-window.ts); line composer only. */
+  budget?: boolean;
+  /** How long past its last syllable the line may stay, s (unset: the renderer's default); line composer only. */
+  linger?: number;
+  /** Seconds the line's last sound is held: a hand-drawn breath under its last phrase. Line composer only. */
+  breath?: number;
+  /** The accent walks along the line to its key word before reading starts, and stays there. Line composer only. */
+  relay?: boolean;
+  /** A hand-drawn ring round the whole line. Line composer only. */
+  oval?: boolean;
+  /** The song's one icon, standing on the same ground as the line, in the space the block leaves. Line composer only. */
+  icon?: SymbolName;
+  /** The small tier beside the line: a hairline and, optionally, a few real words; shown only with it. Line composer only. */
+  fine?: FineTier;
+  /** How the picture changes hands from the line before to this one (render/lyric-handoff.ts); line composer only. */
+  handoff?: Handoff;
   /** Faint copies follow each character where it was a moment ago (an echo trail behind a fast entrance or exit). */
   trail?: boolean;
   variant?: string;
@@ -177,10 +217,13 @@ export interface ValidationResult {
 export const SNAP_SEC = 0.15;
 
 /** Validates against the timeline and the template catalog; repairs boundaries, ranges and missing styles. */
-export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: Window, templates: Record<string, TemplateSpec>): ValidationResult {
+export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: Window, templates0: Record<string, TemplateSpec>): ValidationResult {
+  const templates = input.design?.world ? { ...templates0, ...WORLD_TEMPLATES } : templates0;
   const t: TreatmentV3 = structuredClone(input);
   const errors: string[] = [];
   const fixes: string[] = [];
+  // the line director's rows were cut at the composer's word breaks, which the plain phrase table does not all share
+  const rowStops = (text: string) => (t.design?.lineDirect ? wordBreaks(text) : phraseBoundaries(text));
   const cues = cuesIn(song, win);
   // a storyboard makes its own locked shots first: what follows validates them like any other
   const taken = applyStoryboard(t as never, cues);
@@ -278,8 +321,8 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     }
     if (cs.rows && !cs.rows.every((r, i) => Number.isInteger(r) && r > 0 && r < len && (i === 0 || r > cs.rows![i - 1]))) {
       errors.push(`歌詞 ${cs.cueId} 的換行位置必須是 1..${len - 1} 之間遞增的整數`);
-    } else if (cs.rows?.some((r) => !phraseBoundaries(cue.text).has(r))) {
-      const b = [...phraseBoundaries(cue.text)].filter((x) => x > 0 && x < len);
+    } else if (cs.rows?.some((r) => !rowStops(cue.text).has(r))) {
+      const b = [...rowStops(cue.text)].filter((x) => x > 0 && x < len);
       const rows = [...new Set(cs.rows.map((r) => b.reduce((best, x) => (Math.abs(x - r) < Math.abs(best - r) ? x : best), b[0] ?? r)))];
       fixes.push(`歌詞 ${cs.cueId} 的換行 ${cs.rows.join(',')} 切開了一個詞，移到 ${rows.join(',')}`);
       cs.rows = rows.length ? rows : undefined;
@@ -299,8 +342,9 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       fixes.push(`歌詞 ${cs.cueId} 不是短喊聲（shout 只給 ${SHOUT_MAX} 字以內的掛け声），已改回一般歌詞`);
       delete cs.shout;
     }
-    if (!ENTER_KINDS.includes(cs.enter)) errors.push(`歌詞 ${cs.cueId} 的 enter 必須是 ${ENTER_KINDS.join('/')}`);
-    if (!EXIT_KINDS.includes(cs.exit)) errors.push(`歌詞 ${cs.cueId} 的 exit 必須是 ${EXIT_KINDS.join('/')}`);
+    // the composer's own motions only on the composer's own lines: a director treatment never reaches them
+    if (![...ENTER_KINDS, ...(cs.budget ? LINE_ENTERS : [])].includes(cs.enter)) errors.push(`歌詞 ${cs.cueId} 的 enter 必須是 ${ENTER_KINDS.join('/')}`);
+    if (![...EXIT_KINDS, ...(cs.budget ? LINE_EXITS : [])].includes(cs.exit)) errors.push(`歌詞 ${cs.cueId} 的 exit 必須是 ${EXIT_KINDS.join('/')}`);
     return true;
   });
   for (const c of cues) {
@@ -327,6 +371,8 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     const src = same.get(cs.cueId);
     const s0 = src && t.cues.find((x) => x.cueId === src);
     if (!s0) continue;
+    // sameLines reads past punctuation: the line director's offsets only carry over to the very same text (信じられる？ cut 信じられる after its 信)
+    if (t.design?.lineDirect && cueById.get(cs.cueId)?.text !== cueById.get(src!)?.text) continue;
     if (JSON.stringify(s0.emphasis ?? null) !== JSON.stringify(cs.emphasis ?? null) || JSON.stringify(s0.rows ?? null) !== JSON.stringify(cs.rows ?? null)) {
       cs.emphasis = s0.emphasis && structuredClone(s0.emphasis);
       cs.rows = s0.rows && [...s0.rows];

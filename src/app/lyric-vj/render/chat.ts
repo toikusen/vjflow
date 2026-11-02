@@ -103,6 +103,56 @@ export function breakCost(cs: string[], b: number): number {
   return 3;
 }
 
+/** One closed contour, box and tail together, so a stroke along it can never part from the fill. In px from the box's top left; `x` mirrors the sender's side. */
+export function bubblePath(w: number, h: number, r: number, mine: boolean, ox = 0, oy = 0) {
+  const x = (v: number) => ox + (mine ? w - v : v);
+  const y = (v: number) => oy + v;
+  const p = new Path2D();
+  p.moveTo(x(r), y(0));
+  p.lineTo(x(w - r), y(0));
+  p.arcTo(x(w), y(0), x(w), y(r), r);
+  p.lineTo(x(w), y(h - r));
+  p.arcTo(x(w), y(h), x(w - r), y(h), r);
+  p.lineTo(x(r + 34), y(h));
+  p.quadraticCurveTo(x(10), y(h + 2), x(-16), y(h + 22));
+  p.quadraticCurveTo(x(0), y(h + 4), x(0), y(h - r));
+  p.lineTo(x(0), y(r));
+  p.arcTo(x(0), y(0), x(r), y(0), r);
+  p.closePath();
+  return p;
+}
+
+/** The composer's bubble: paper-toned, resting on a soft contact shadow, its fine edge following the one contour of box and tail. */
+export function finishedPlate(w: number, h: number, fill: string, rim: string, mine: boolean, scale: number): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
+  const pad = 56 * scale;
+  const c = new OffscreenCanvas(Math.ceil(w + pad * 2), Math.ceil(h + pad * 2));
+  const g = c.getContext('2d')!;
+  g.translate(pad, pad);
+  g.scale(scale, scale);
+  const path = bubblePath(w / scale, h / scale, Math.min(h / scale / 2, 40), mine);
+  g.save();
+  g.shadowColor = 'rgba(0,0,0,0.26)';
+  g.shadowBlur = 22 * scale;
+  g.shadowOffsetY = 8 * scale;
+  g.fillStyle = fill;
+  g.fill(path);
+  g.restore();
+  const shade = g.createLinearGradient(0, 0, 0, h / scale);
+  shade.addColorStop(0, 'rgba(255,255,255,0.14)');
+  shade.addColorStop(1, 'rgba(0,0,0,0.07)');
+  g.fillStyle = shade;
+  g.fill(path);
+  g.strokeStyle = rim;
+  g.lineWidth = 2.5;
+  g.lineJoin = 'round';
+  g.stroke(path);
+  const tex = new THREE.CanvasTexture(c as unknown as HTMLCanvasElement);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(c.width, c.height), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false }));
+  mesh.userData['noVeil'] = true;
+  return mesh;
+}
+
 /** A bubble's plate as a texture: a rounded box with a small tail at the bottom on the sender's side. */
 export function plate(w: number, h: number, fill: string, mine: boolean | undefined, glow?: string, corner = 1): THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> {
   // room round the box for the tail, and for a glow (a message lit up over a dark scene)
@@ -181,6 +231,12 @@ export function attachmentOf(p: Record<string, unknown>, shotStart: number) {
   return { kind, id: kind === 'sticker' && !id.startsWith('spr:') ? `spr:${id}` : id, at: shotStart + Number(p['attachAt'] ?? 0), mine: p['attachVoice'] !== 'them' } as const;
 }
 
+/** An exchange of a few words, no app around it: big bubbles in a narrow column at the frame's centre, nothing read-marked. */
+export const replyThread: TemplateRenderer = {
+  persist: 'shot',
+  cue: (rt) => chat.cue({ ...rt, params: { ...rt.params, side: 'alternate', size: 116, edge: 0.27, read: 'none', paper: true } }),
+};
+
 export const chat: TemplateRenderer = {
   persist: 'shot',
   // a photo or a sticker sent in the thread: a message without words, pushed up by the lines after it like any other
@@ -234,6 +290,7 @@ export const chat: TemplateRenderer = {
     const family = rt.fonts.body;
     const size = Number(p['size'] ?? 64);
     const b = bubbleOf(rt.cue.text, family, size);
+    const edge = W * Number(p['edge'] ?? 0.43);
     const firstText = (rt.shotText ?? [rt.cue.text])[0] ?? rt.cue.text;
     const firstMine = rt.firstVoice ? rt.firstVoice === 'me' : isMine(p['side'], 0);
     const view = closeUp(Number(p['zoom'] ?? 1), order === 0 ? b : bubbleOf(firstText, family, size), firstMine);
@@ -241,9 +298,10 @@ export const chat: TemplateRenderer = {
     const accent = rt.palette.accent;
     // the other person's bubble: light grey in a light app, dark grey in dark mode
     const dark = p['theme'] === 'dark';
-    const other = dark ? '#2C2C2E' : '#ECECEF';
+    const onPaper = !!p['paper'];
+    const other = onPaper ? `#${new THREE.Color(rt.palette.background).lerp(new THREE.Color('#ffffff'), 0.62).getHexString()}` : dark ? '#2C2C2E' : '#ECECEF';
     // white on a dark bubble, near-black on a light one
-    const ink = mine ? (contrast('#FFFFFF', accent) >= 3 ? '#FFFFFF' : '#1C1C1E') : dark ? '#F2F2F7' : '#1C1C1E';
+    const ink = mine ? (contrast('#FFFFFF', accent) >= 3 ? '#FFFFFF' : '#1C1C1E') : onPaper ? rt.palette.text : dark ? '#F2F2F7' : '#1C1C1E';
     // camera (zoom) → send (pop, push up) → the message, built at the close-up's resolution and scaled down, so the
     // type is crisp when the camera is close
     const group = new THREE.Group();
@@ -253,11 +311,10 @@ export const chat: TemplateRenderer = {
     sent.add(inner);
     const R = zoom;
     inner.scale.setScalar(1 / R);
-    const bubble = plate(b.w * R, b.h * R, mine ? accent : other, mine, p['glow'] ? (mine ? accent : '#FFFFFF') : undefined, Number(p['corner'] ?? 1));
+    const bubble = onPaper ? finishedPlate(b.w * R, b.h * R, mine ? accent : other, `#${new THREE.Color(mine ? accent : rt.palette.text).lerp(new THREE.Color(mine ? '#000000' : rt.palette.background), mine ? 0.28 : 0.55).getHexString()}`, mine, R) : plate(b.w * R, b.h * R, mine ? accent : other, mine, p['glow'] ? (mine ? accent : '#FFFFFF') : undefined, Number(p['corner'] ?? 1));
     bubble.renderOrder = -1;
     inner.add(bubble);
     // the thread's column: messages hug the right edge (mine) or the left (theirs), like a real chat
-    const edge = W * 0.43;
     const cx = mine ? edge - b.w / 2 : -edge + b.w / 2;
     bubble.position.set(cx * R, (b.h / 2) * R, 0);
     const style: GlyphStyle = { family, weight: 700, size: Math.round(b.size * R) };

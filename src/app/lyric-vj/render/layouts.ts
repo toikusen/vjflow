@@ -8,6 +8,7 @@
 // quote   — a line as spoken dialogue: big corner brackets drawn first, the words typed in between
 // orbit   — the line set along an arc that slowly turns, characters following the curve
 import * as THREE from 'three';
+import { paperGlyph } from './paper-surface';
 import { chunks, balancedRows } from '../phrases';
 import { keywordRange } from './punch';
 import { advanceOf, clamp01, easeOutBack, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth, sizeCap } from './glyphs';
@@ -24,7 +25,7 @@ function fit(rows: string[], family: string, share: number, lo: number, hi: numb
 }
 
 /** Colours the emphasised glyphs (colour / glow) in the accent, the way every template does. */
-function tint(rt: CueRuntime, glyphs: Glyph[]) {
+export function tint(rt: CueRuntime, glyphs: Glyph[]) {
   const accent = readable(rt.palette.accent, rt.palette.background, 7);
   for (const g of glyphs) {
     const m = g.src !== undefined ? emphasisOf(rt, g.src) : undefined;
@@ -193,16 +194,17 @@ export const couplet: TemplateRenderer = {
     const rule = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: color(rt.palette.accent), transparent: true, depthTest: false, depthWrite: false }));
     if (merged || firstHalf) group.add(rule);
     const ruleH = lineH * Math.max(...parts.map((p) => p.rows)) * 2 + size * 1.4;
-    const enterRt: CueRuntime = { ...rt, style: { ...rt.style, enter: rt.style.enter === 'cut' ? 'cut' : 'wipe' } };
+    const enterRt: CueRuntime = { ...rt, style: { ...rt.style, enter: rt.style.enter === 'cut' || rt.style.enter === 'reply-land' ? rt.style.enter : 'wipe' } };
     // in a merged pair the answer is sung where its first character is (its share of the line's time)
-    const answerAt = merged ? rt.showFrom + (cut! / [...rt.cue.text].length) * (rt.cue.end - rt.cue.start) : Infinity;
+    // (a composer line is read as one: a half held back to its syllable would take its reading away)
+    const answerAt = !merged ? Infinity : rt.style.budget ? rt.showFrom : rt.showFrom + (cut! / [...rt.cue.text].length) * (rt.cue.end - rt.cue.start);
     const answerRt: CueRuntime = { ...enterRt, showFrom: answerAt };
     const owner = new Map(parts.flatMap((p) => p.glyphs.map((g) => [g, p.second] as const)));
     return {
       group,
       update(t: number) {
         // once the answer arrives, the first half steps back
-        const answered = easeOutCubic((t - Math.min(answerAt, rt.later?.[0] ?? Infinity)) / 0.4);
+        const answered = merged && rt.style.budget ? 0 : easeOutCubic((t - Math.min(answerAt, rt.later?.[0] ?? Infinity)) / 0.4);
         glyphs.forEach((g) => {
           const second = owner.get(g)!;
           const m = glyphMotion(merged && second ? answerRt : enterRt, g, glyphs.length, t, 0.035);
@@ -223,9 +225,21 @@ export const couplet: TemplateRenderer = {
 };
 
 // ---------------------------------------------------------------------------------------------------------- quote
+const QUOTE_MARKS = /[「」『』“”"]/;
+/**
+ * What the quote layout sets: a line that is one quoted phrase loses its own marks (the layout's big brackets stand
+ * in); a line that quotes only part of itself (「またね！」って笑って 手を振ろう) keeps its text whole and gets no big
+ * brackets, or the marks doubled up and the layout's 」 sat over the lyric's (終わりじゃない, 2026-10-30).
+ */
+export function quoteParts(raw: string): { text: string; marks: boolean } {
+  const text = raw.replace(/[\s　]+/g, ' ').trim();
+  const wrapped = /^[「『“"][^「」『』“”"]*[」』”"]$/.test(text);
+  if (wrapped) return { text: text.slice(1, -1), marks: true };
+  return { text, marks: !QUOTE_MARKS.test(text) };
+}
 export const quote: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
-    const text = rt.cue.text.replace(/[\s　]+/g, ' ').trim().replace(/^[「『“"]|[」』”"]$/g, '');
+    const { text, marks } = quoteParts(rt.cue.text);
     const latin = !/[぀-ヿ一-鿿]/.test(text);
     const rows = [...text].length > 11 ? chunks(text, 2) : [text];
     const size = fit(rows, rt.fonts.body, 0.6, 90, 170);
@@ -254,7 +268,9 @@ export const quote: TemplateRenderer = {
     open.y = top + size * 0.55;
     close.x = left + lastW + size * 0.55;
     close.y = bottom - size * 0.55;
-    group.add(open.mesh, close.mesh);
+    if (marks) group.add(open.mesh, close.mesh);
+    // the composer's brackets are cut from the song's sheet and lie on the page, rather than flat paint
+    const cast = rt.style.budget && marks ? [open, close].map((g) => paperGlyph(g.mesh, `#${accent.getHexString()}`, size * 0.1)) : [];
     // typed: a steady character rate over the first part of the line, after the opening bracket lands — unless readFix
     // landed the line at once (rushed): then the typing would eat the reading time it was given (sweet timer's five
     // short-read lines were all quotes typed over their read-cut), so the whole line is up with the bracket
@@ -267,12 +283,14 @@ export const quote: TemplateRenderer = {
         open.mesh.position.set(open.x, open.y, 0);
         open.mesh.scale.setScalar(Math.max(0.001, po));
         open.mesh.material.opacity = clamp01((t - rt.showFrom) * 5) * (1 - out);
+        if (cast[0]) cast[0].opacity = 0.28 * open.mesh.material.opacity;
         // the closing bracket lands when the typing is done
         const done = revealAt(typed, 1) + 0.1;
         const pc = easeOutBack((t - done) / 0.3);
         close.mesh.position.set(close.x, close.y, 0);
         close.mesh.scale.setScalar(Math.max(0.001, pc));
         close.mesh.material.opacity = clamp01((t - done) * 5) * (1 - out);
+        if (cast[1]) cast[1].opacity = 0.28 * close.mesh.material.opacity;
         glyphs.forEach((g) => {
           const m = glyphMotion(typed, g, glyphs.length, t, 0.03);
           g.mesh.position.set(g.x + m.dx, g.y + m.dy, 0);

@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { lessonsBlock, MAX_LESSONS, readLessons } from './lesson-rules.mts';
+import { lessonsBlock, readLessons } from './lesson-rules.mts';
 
 const L = (id: string, text: string, scope: 'director' | 'typeplan' | 'both', createdAt: string) => ({ id, text, scope, createdAt });
 
@@ -14,9 +14,9 @@ test('lessonsBlock: a reader gets its own rules and the shared ones, newest firs
   assert.equal(lessonsBlock(ls, 'typeplan'), '\n\n【使用者回饋整理出的規則（每一首都要遵守）】\n- 副歌回到同一組招式\n- 字一定要看得清楚');
   assert.equal(lessonsBlock([], 'director'), '');
   assert.equal(lessonsBlock([L('x', 'only typeplan', 'typeplan', '2026-10-29')], 'director'), '');
-  const many = Array.from({ length: MAX_LESSONS + 5 }, (_, i) => L(`r${i}`, `rule ${i}`, 'both', `2026-${String(100 + i)}`));
+  const many = Array.from({ length: 120 }, (_, i) => L(`r${i}`, `rule ${i}`, 'both', `2026-${String(100 + i)}`));
   const block = lessonsBlock(many, 'director');
-  assert.equal(block.split('\n- ').length - 1, MAX_LESSONS);
+  assert.equal(block.split('\n- ').length - 1, 120, 'every rule reaches the prompt');
   assert.match(block, /rule 34/, 'the newest are kept');
   assert.doesNotMatch(block, /- rule 0\n/);
 });

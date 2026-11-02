@@ -113,4 +113,31 @@ describe('lyrics edited after the design', () => {
     expect(r.errors).toEqual([]);
     expect(r.treatment.cues.map((c) => c.cueId)).toEqual(['new1']);
   });
+  it("keeps the composer's own motions away from a director treatment", () => {
+    const t = base();
+    t.cues[0].enter = 'scale-steps';
+    t.cues[0].exit = 'radial-leave';
+    const errors = validateTreatment(t, song, win, TEMPLATES).errors.join('\n');
+    expect(errors).toMatch(/c001 的 enter/);
+    expect(errors).toMatch(/c001 的 exit/);
+    t.cues[0].budget = true;
+    expect(validateTreatment(t, song, win, TEMPLATES).errors).toEqual([]);
+  });
 });
+
+describe('a repeated line on a line-directed song', () => {
+  const twins = { ...song, cues: [song.cues[0], { ...song.cues[1], text: '信じられる？ 信じられる？' }, { ...song.cues[2], text: '信じられる 信じられる', timingSource: 'lrclib', confidence: 'verified' }] } as SongTimeline;
+  const rowsFor = (lineDirect: boolean) => {
+    const t = base();
+    t.design = { ...(t.design ?? {}), lineDirect } as TreatmentV3['design'];
+    t.cues = [t.cues[0], { ...t.cues[1], cueId: 'c002', rows: [7] }, { ...t.cues[1], cueId: 'c003', rows: [6] }];
+    return validateTreatment(t, twins, win, TEMPLATES).treatment.cues.find((c) => c.cueId === 'c003')?.rows;
+  };
+  it('keeps its own breaks when the texts differ by a mark', () => {
+    expect(rowsFor(true)).toEqual([6]);
+  });
+  it('leaves the paid rule as it was', () => {
+    expect(rowsFor(false)).toEqual([7]);
+  });
+});
+

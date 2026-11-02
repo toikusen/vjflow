@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 import { nearestWeight } from '../fonts';
 import { typeset } from '../typeset';
+import { dotPitch, exteriorOf } from './glyph-state';
+import { applySurface } from './world-glyph';
 
 export interface GlyphStyle {
   family: string;
@@ -11,7 +13,14 @@ export interface GlyphStyle {
   outline?: number; // stroke width in px; 0/undefined = filled
   shadow?: boolean; // soft dark halo so body text reads over bright plates
   embolden?: number; // extra stroke width in px: thin handwriting faces read from the back of a live house
+  even?: boolean; // every character one size and advance: for layouts that place characters on a grid of their own
   kanaScale?: number; // hiragana set this much smaller than kanji/katakana, sitting on the same baseline
+  dots?: boolean; // a readable dot screen over the whole character (glyph-state.ts)
+  press?: number; // only the hard thickness behind a character, this many px deep
+  bevel?: boolean; // the face's edges fall away inside the ink, no stroke grows
+  glowEdge?: boolean; // only the outline just outside a character, with a light held tight to it
+  soft?: number; // a matte, rounded body with a shallow side this many px deep (glyph-state.ts softDepth)
+  surface?: string; // what a style world's character is made of (world-glyph.ts); its picture holds its own colours
 }
 
 export interface Glyph {
@@ -52,6 +61,20 @@ export interface Piece {
   h: number;
 }
 const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number; pieces?: Piece[] }>();
+/** Live use: the oldest glyph pictures past `max` let go, none that a line up is showing (a later line draws them again). */
+export function trimGlyphCache(max: number, keep: Set<THREE.Texture>) {
+  for (const [key, entry] of cache) {
+    if (cache.size <= max) return;
+    if (keep.has(entry.texture)) continue;
+    entry.texture.dispose();
+    cache.delete(key);
+  }
+}
+export const glyphCacheSize = () => cache.size;
+export const clearGlyphCache = () => {
+  cache.forEach((e) => e.texture.dispose());
+  cache.clear();
+};
 const measureCtx = document.createElement('canvas').getContext('2d')!;
 
 const fontOf = (s: GlyphStyle, scale = 1) => `${nearestWeight(s.family, s.weight)} ${s.size * scale}px "${s.family}"`;
@@ -96,10 +119,15 @@ export const setInkGhost = (g: typeof inkGhost) => (inkGhost = g);
 /** A glyph's texture for a style (cached): the text effects swap in outline or contrast-face versions of a glyph. */
 /** The thickest stroke a glyph may be emboldened by, as a share of its size (more closes its counters). */
 export const EMBOLDEN_MAX = 0.04;
+/** A Han character packs many strokes into the same box as a kana: it takes half the stroke (歌 at the full 3.5 % ran into one blot, 終わりじゃない 2026-10-30). */
+export const EMBOLDEN_MAX_HAN = 0.02;
+/** The stroke a glyph is really emboldened by: the asked width, held under the cap for its script. */
+export const emboldenFor = (char: string, s: Pick<GlyphStyle, 'size' | 'embolden'>): number =>
+  Math.min(s.embolden ?? 0, s.size * (/\p{Script=Han}/u.test(char) ? EMBOLDEN_MAX_HAN : EMBOLDEN_MAX));
 export const glyphTexture = (char: string, s: GlyphStyle) => texture(char, s);
 
 function texture(char: string, s: GlyphStyle) {
-  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow || s.outline ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}|${finish}`;
+  const key = `${char}|${s.family}|${s.weight}|${s.size}|${s.outline ?? 0}|${s.shadow || s.outline ? halo : 0}|${s.embolden ?? 0}|${ghost.join(',')}|${piecesOn ? 1 : 0}|${finish}${s.dots ? '|dots' : ''}${s.press ? `|press${s.press}` : ''}${s.bevel ? '|bevel' : ''}${s.glowEdge ? '|edge' : ''}${s.soft ? `|soft${s.soft}` : ''}${s.surface ? `|${s.surface}` : ''}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const advance = advanceOf(char, s);
@@ -114,7 +142,12 @@ function texture(char: string, s: GlyphStyle) {
   ctx.font = fontOf(s);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  if (s.outline) {
+  if (s.press) {
+    ctx.fillStyle = '#fff';
+    for (let i = Math.round(s.press); i > 0; i -= 1) ctx.fillText(char, w / 2 + i * 0.86, h / 2 + i);
+  } else if (s.glowEdge) {
+    paperEdge(ctx, canvas, w, h, s, char);
+  } else if (s.outline) {
     ctx.lineJoin = 'round';
     if (halo === MIXED_HALO) {
       // a hollow word over light and dark keeps a dark edge on both sides of its stroke, or it vanishes on the light part
@@ -132,7 +165,7 @@ function texture(char: string, s: GlyphStyle) {
       if (!s.embolden) return;
       // an added stroke stays under 4 % of the size: thicker, it filled the gaps inside 愛 and 甩 and the letters ran
       // into one blot (我愛台妹, 2026-10-21); every caller is held to it
-      ctx.lineWidth = Math.min(s.embolden, s.size * EMBOLDEN_MAX);
+      ctx.lineWidth = emboldenFor(char, s);
       ctx.lineJoin = 'round';
       ctx.strokeStyle = style;
       ctx.strokeText(char, w / 2, h / 2);
@@ -166,8 +199,16 @@ function texture(char: string, s: GlyphStyle) {
       ctx.fillStyle = 'rgb(70,70,78)';
       ctx.fillText(char, w / 2 + i, h / 2 + i);
     }
+    // the side first, the same grey-times-colour shade as an extrusion, but shallow and straight down: it never reaches across a counter
+    if (s.soft) for (let i = Math.round(s.soft); i > 0; i -= 1) {
+      ctx.fillStyle = 'rgb(128,128,136)';
+      ctx.fillText(char, w / 2, h / 2 + i);
+    }
     draw('#fff');
+    if (s.soft || s.bevel) softFace(ctx, w, h, s, char);
+    if (s.dots) dotScreen(ctx, canvas, w, h, dotPitch(s.size, inkShare(char, s)), char, s);
     if (finish && finish !== 'extrude') applyFinish(ctx, finish, w, h, s.size, char);
+    if (s.surface) applySurface(canvas, ctx, s.surface, char, s.size, SS);
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -176,6 +217,112 @@ function texture(char: string, s: GlyphStyle) {
   if (piecesOn) entry.pieces = piecesOf(canvas, w, h);
   cache.set(key, entry);
   return entry;
+}
+
+/**
+ * Light on a paper edge: only the rim of the character's outer shape, on the side the song's one light falls on. It is
+ * cut to what the outside reaches, so no counter can fill, however dense the character.
+ */
+function paperEdge(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, w: number, h: number, s: GlyphStyle, char: string) {
+  const mask = document.createElement('canvas');
+  mask.width = canvas.width;
+  mask.height = canvas.height;
+  const m = mask.getContext('2d', { willReadFrequently: true })!;
+  m.scale(SS, SS);
+  m.font = ctx.font;
+  m.textAlign = 'center';
+  m.textBaseline = 'middle';
+  m.fillStyle = '#fff';
+  m.fillText(char, w / 2, h / 2);
+  const px = m.getImageData(0, 0, mask.width, mask.height);
+  const out = exteriorOf((i) => px.data[i * 4 + 3], mask.width, mask.height);
+  const solid = document.createElement('canvas');
+  solid.width = mask.width;
+  solid.height = mask.height;
+  const g = solid.getContext('2d')!;
+  const fill = g.createImageData(mask.width, mask.height);
+  out.forEach((v, i) => { if (!v) fill.data.set([255, 255, 255, 255], i * 4); });
+  g.putImageData(fill, 0, 0);
+  const r = Math.max(2, s.size * 0.022) * SS;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (let k = 0; k < 10; k++) {
+    const a = (k / 10) * Math.PI * 2;
+    // thin all round, a little deeper towards the light, high on the left
+    const reach = r * (0.34 + 0.66 * Math.max(0, Math.cos(a - Math.PI * 1.25)));
+    ctx.drawImage(solid, Math.cos(a) * reach, Math.sin(a) * reach);
+  }
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.drawImage(solid, 0, 0);
+  ctx.restore();
+}
+
+/** A matte, pillowed face: light falls away towards each stroke's lower edge, inside the ink only, so no stroke grows. */
+function softFace(ctx: CanvasRenderingContext2D, w: number, h: number, s: GlyphStyle, char: string) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.shadowColor = 'rgba(60,60,70,0.55)';
+  ctx.shadowBlur = s.size * 0.05;
+  ctx.shadowOffsetY = -s.size * 0.02 * SS;
+  ctx.fillStyle = 'rgba(255,255,255,1)';
+  ctx.fillText(char, w / 2, h / 2 + s.size * 0.02);
+  ctx.restore();
+}
+
+/**
+ * A dot screen that keeps the character whole: the holes sit only in the stroke's inside, a rim's width from every edge,
+ * and let some ink through. A thin stroke has no inside, so it stays solid; the outline of every stroke is unbroken,
+ * and a dense character keeps its shape where a punched grid turned 鬱 into a mesh.
+ */
+function dotScreen(ctx: CanvasRenderingContext2D, canvas: HTMLCanvasElement, w: number, h: number, pitch: number, char: string, s: GlyphStyle) {
+  const dots = document.createElement('canvas');
+  dots.width = canvas.width;
+  dots.height = canvas.height;
+  const d = dots.getContext('2d')!;
+  d.scale(SS, SS);
+  d.font = fontOf(s);
+  d.textAlign = 'center';
+  d.textBaseline = 'middle';
+  d.fillStyle = d.strokeStyle = '#fff';
+  d.fillText(char, w / 2, h / 2);
+  d.globalCompositeOperation = 'destination-out';
+  d.lineJoin = 'round';
+  d.lineWidth = s.size * 0.05;
+  d.strokeText(char, w / 2, h / 2);
+  d.globalCompositeOperation = 'destination-in';
+  d.beginPath();
+  for (let y = pitch / 2, row = 0; y < h; y += pitch * 0.9, row++)
+    for (let x = pitch / 2 + (row % 2 ? pitch / 2 : 0); x < w; x += pitch) {
+      d.moveTo(x + pitch * 0.25, y);
+      d.arc(x, y, pitch * 0.25, 0, Math.PI * 2);
+    }
+  d.fill();
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.globalAlpha = 0.6;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(dots, 0, 0);
+  ctx.restore();
+}
+
+const inkShares = new Map<string, number>();
+/** How much of a character's square is ink, 0..1, measured on the character as drawn in this face. */
+export function inkShare(char: string, s: GlyphStyle): number {
+  const key = `${char}|${s.family}|${s.weight}`;
+  const hit = inkShares.get(key);
+  if (hit !== undefined) return hit;
+  const N = 96;
+  const c = Object.assign(document.createElement('canvas'), { width: N, height: N }).getContext('2d', { willReadFrequently: true })!;
+  c.font = fontOf({ ...s, size: N * 0.9 });
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(char, N / 2, N / 2);
+  const px = c.getImageData(0, 0, N, N).data;
+  let ink = 0;
+  for (let i = 3; i < px.length; i += 4) if (px[i] > 127) ink++;
+  const share = ink / (N * N * 0.81);
+  inkShares.set(key, share);
+  return share;
 }
 
 /** Cuts the drawn glyph into its finish: a dot matrix, hatching, grain or wear (seeded by the character). */
@@ -234,7 +381,7 @@ function applyFinish(ctx: CanvasRenderingContext2D, f: string, w: number, h: num
 export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepresentation, tracking = 0): Glyph[] {
   const out: Glyph[] = [];
   let x = 0;
-  const ts = typesetOn ? typeset(text, s.size >= 110) : [...text].map(() => ({ scale: 1, advance: 1, gapBefore: 0 }));
+  const ts = typesetOn && !s.even ? typeset(text, s.size >= 110) : [...text].map(() => ({ scale: 1, advance: 1, gapBefore: 0 }));
   [...text].forEach((char, index) => {
     // the song's kana scale shapes display type (big words); body rows keep even sizes, or the rule shows everywhere
     const k = s.kanaScale ?? (s.size >= 130 ? defaultKana : 1);
@@ -245,6 +392,7 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
     const t = texture(char, cs);
     const mat = new THREE.MeshBasicMaterial({ map: t.texture, color, transparent: true, depthTest: false, depthWrite: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.w, t.h), mat);
+    mesh.userData['size'] = cs.size;
     if (t.pieces && t.pieces.length > 1) {
       // the glyph draws nothing itself; its strokes are children that follow its opacity and colour (syncPieces)
       mesh.geometry.setDrawRange(0, 0);

@@ -1,9 +1,15 @@
 // What a template gets per cue, and the motion shared by templates (entrances, exits, emphasis, accents).
 import * as THREE from 'three';
+import { ARRIVAL_SEC } from './arrival';
+import { CARRIER_SEC, SOFT_FLOAT_SEC } from './carrier-moves';
+import { SOLID_EXITS } from './line-exit';
 import { Fonts } from '../fonts';
 import { TimelineCue } from '../timeline';
 import { CueStyle, EnterKind, Palette, ParamValue, Shot } from '../treatment';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, hash } from './glyphs';
+import { readingSec } from './reading-window';
+
+export { readingSec };
 
 /** Text shows this long before the voice so it is readable on the first sung syllable. */
 export const LEAD = 0.2; // shown a little before the voice so it is read as it is sung (0.2 s)
@@ -64,6 +70,8 @@ export interface CueLayer {
   readable(): [number, number];
   /** Laid out in frame px from edge to edge (lyric lanes): neither fitted into the safe area nor drifted. */
   framed?: boolean;
+  /** Where the line stands and for how long, when it knows better than a measure of its meshes (a world line that changes set). */
+  poses?(): { from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }[];
 }
 
 export interface ShotLayer {
@@ -186,6 +194,8 @@ export const DRAWN = {
   /** Random signs flicker through each place, this long each, before the character settles. */
   decode: { fold: 0.045, faces: 8 },
   slice: { sec: 0.4 },
+  /** The slice at speed: the halves meet in five film frames. */
+  rip: { sec: 0.21 },
   flip: { sec: 0.45 },
   stretch: { sec: 0.55 },
   /** The line's characters swap places and run home along small arcs (kittenjam 洗牌重排). */
@@ -196,20 +206,30 @@ export const DRAWN = {
   windup: { sec: 0.85 },
   /** The whole line waits faint while a ball hops from character to character as each is sung (kittenjam 卡拉OK小球). */
   karaoke: { sec: 0.25 },
+  /** A few wide strips of the line slide home inside their own masks (band-clip.ts). */
+  bandIn: { sec: 0.42 },
+  /** The line waits unlit and its rows light from the top (glyph-state.ts). */
+  matrixLight: { sec: 0.5 },
+  /** Characters dropping into their cells (phrase-grid), and an answer settling beside what it answers. */
+  cellLand: { sec: 0.32 },
+  replyLand: { sec: 0.34 },
 } as const;
 
 export function enterSec(enter: EnterKind, pace: number): number {
   const paced: Record<EnterKind, number> = {
     cut: 0, fade: 0, slam: PACED_SEC, pop: PACED_SEC, wipe: 0.21,
     ink: DRAWN.ink.fillFrom + DRAWN.ink.fill, flap: DRAWN.flap.fold * DRAWN.flap.faces, slot: DRAWN.slot.reel + DRAWN.slot.land, rise: DRAWN.rise.sec, focus: DRAWN.focus.sec,
-    decode: DRAWN.decode.fold * DRAWN.decode.faces, slice: DRAWN.slice.sec, flip: DRAWN.flip.sec, stretch: DRAWN.stretch.sec,
-    shuffle: DRAWN.shuffle.sec, squash: DRAWN.squash.sec, windup: DRAWN.windup.sec, karaoke: DRAWN.karaoke.sec, settle: PACED_SEC * MOTION_SEC.settle, flicker: PACED_SEC * MOTION_SEC.flicker,
+    decode: DRAWN.decode.fold * DRAWN.decode.faces, slice: DRAWN.slice.sec, rip: DRAWN.rip.sec, snapin: SNAPIN_SEC, flip: DRAWN.flip.sec, stretch: DRAWN.stretch.sec,
+    shuffle: DRAWN.shuffle.sec, squash: DRAWN.squash.sec, windup: DRAWN.windup.sec, karaoke: DRAWN.karaoke.sec, 'band-in': DRAWN.bandIn.sec, 'matrix-light': DRAWN.matrixLight.sec, 'cell-land': DRAWN.cellLand.sec, 'reply-land': DRAWN.replyLand.sec, ...CARRIER_SEC, ...ARRIVAL_SEC, 'soft-float': SOFT_FLOAT_SEC, settle: PACED_SEC * MOTION_SEC.settle, flicker: PACED_SEC * MOTION_SEC.flicker,
     dash: PACED_SEC * MOTION_SEC.dash, drop: PACED_SEC * MOTION_SEC.drop, zoom: PACED_SEC * MOTION_SEC.zoom, gather: PACED_SEC * MOTION_SEC.gather, spin: PACED_SEC * MOTION_SEC.spin, prelight: PACED_SEC, spread: PACED_SEC * MOTION_SEC.spread, swing: PACED_SEC * MOTION_SEC.swing,
   };
   return enter === 'fade' ? FADE_SEC : paced[enter] * pace;
 }
 
 /** The motion entrances' length as a multiple of PACED_SEC (a drop needs room to bounce, a gather to travel). */
+/** Arrives from larger, nearly there at once, and spends the rest settling: solid from the first frames. */
+const SNAPIN_SEC = 0.25;
+const easeOutExpo = (x: number) => (x >= 1 ? 1 : 1 - 2 ** (-10 * x));
 const MOTION_SEC = { dash: 0.8, drop: 1.5, zoom: 0.9, gather: 1.3, spin: 1.1, spread: 1.4, swing: 2.4, settle: 2.2, flicker: 1.6 } as const;
 /** Bounces twice on the way in (a gravity drop landing on an unseen floor). */
 const bounce = (p: number) => {
@@ -256,6 +276,12 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       dy = 520 * v('drop.far', 0.7, 1.2) * (1 - bounce(m('drop')));
       opacity = clamp01(m('drop') * 5);
       break;
+    case 'snapin': {
+      const q = clamp01((t - start) / (SNAPIN_SEC * rt.pace));
+      scale = 1 + 1.1 * v('snapin.from', 0.7, 1.2) * (1 - easeOutExpo(q));
+      opacity = clamp01(q * 10);
+      break;
+    }
     case 'zoom':
       scale = 1 + 3 * v('zoom.depth', 0.6, 1.3) * (1 - easeOutCubic(m('zoom')));
       opacity = clamp01(m('zoom') * 3);
@@ -317,6 +343,29 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       opacity = clamp01(p * 2.5);
       dx = (1 - easeOutCubic(p)) * -24 * v('wipe.far', 0.7, 1.4);
       break;
+    case 'cell-land': {
+      // a whole character set down into its cell from just above, square by the time it stops
+      const q = clamp01((t - start) / (DRAWN.cellLand.sec * rt.pace));
+      dy = 64 * v('cell.far', 0.7, 1.4) * (1 - easeOutCubic(q));
+      scale = 1 + v('cell.grow', 0.1, 0.22) * (1 - q);
+      opacity = clamp01(q * 4);
+      break;
+    }
+    case 'reply-land': {
+      // an answer comes across from its own side and stops short of what it answers, as one block
+      const q = clamp01((t - start) / (DRAWN.replyLand.sec * rt.pace));
+      dx = -150 * v('reply.far', 0.7, 1.35) * (1 - easeOutCubic(q));
+      opacity = clamp01(q * 5);
+      break;
+    }
+    case 'soft-float': {
+      // rises from below on its own soft spring, slowing to a stop: nothing left of it when reading starts
+      const q = clamp01((t - start) / (SOFT_FLOAT_SEC * rt.pace));
+      dy = -130 * v('soft.far', 0.8, 1.2) * (1 - q) ** 2 * Math.cos(q * 4.2);
+      scale = 1 + 0.06 * (1 - q) * Math.sin(q * Math.PI);
+      opacity = clamp01(q * 5);
+      break;
+    }
     case 'fade':
       opacity = easeOutCubic((t - (rt.style.reveal === 'word' ? start : rt.showFrom)) / FADE_SEC);
       break;
@@ -328,9 +377,19 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
   const held = clamp01((t - start - enterSec) / 0.6);
   const idle = rt.style.idle;
   const since = Math.max(0, t - start - enterSec);
+  // the whole line grows in steps from its first frame up to its fitted size, so its largest pose is the one the frame
+  // was checked at; the steps end inside the entrance, beat-long only if that leaves room, so reading sees one size
+  if (idle === 'climb' && !restPose) scale *= [0.74, 0.86, 1][Math.min(2, Math.floor(Math.max(0, t - rt.showFrom) / Math.min(60 / (rt.bpm ?? 120), Math.max(0.1, enterSec / 2))))];
   if (held > 0 && !restPose)
     switch (idle) {
       case 'still':
+      case 'ink-state':
+      case 'tether-settle':
+      case 'balance-rest':
+      case 'frame-lights':
+      case 'side-light':
+      case 'reflection-rest':
+      case 'breath-rule':
         break;
       case 'drift': // the line slides slowly up and right while it is held
         dx += since * 6 * v('idle.drift', 0.6, 1);
@@ -432,7 +491,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       }
     }
     // a domino keeps each character up until it has fallen
-    if (rt.style.exit !== 'domino') opacity *= 1 - clamp01(q);
+    if (rt.style.exit !== 'domino' && !SOLID_EXITS.has(rt.style.exit)) opacity *= 1 - clamp01(q);
   } else if (t > rt.exitAt + rt.exitDur || (rt.style.exit === 'cut' && t > rt.exitAt)) opacity = 0;
   return { scale, opacity, dx, dy, rot };
 }
@@ -463,9 +522,6 @@ export function readable(hex: string, background: string, min = 4.5): string {
   return light ? '#000000' : '#ffffff';
 }
 
-/** Seconds a line needs on screen, fully in, to be read: chars / 12 + 1 s, at most 90 % of the time it is sung. */
-export const readingSec = (text: string, start: number, end: number) => Math.min([...text.replace(/\s/g, '')].length / 12 + 1, 0.9 * (end - start + 0.4));
-
 /**
  * What to change so a line that is not up long enough to be read gets its reading time: first it holds into the free
  * time after it (up to `limit`, when the next line or the shot's end needs the screen); if that is not enough it lands
@@ -479,8 +535,10 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
   const hold = Math.min(short, room);
   short -= hold;
   if (short <= 0.05) return { style: rt.style, exitAt: rt.exitAt + hold, exitDur: rt.exitDur, rushed: rt.rushed, adjust: [...(rt.adjust ?? []), 'read-hold'] };
+  // the composer's lines get every frame: its reading is what the time goes to, so even the blink out comes off the exit
+  const cutOut = rt.style.budget ? 1 / 30 : 0.08;
   // rushed: templates that set a line in pieces (scatter, stair rows, typing) put them all up at once
-  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: Math.max(rt.exitAt, limit - 0.08), exitDur: 0.08, rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
+  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: Math.max(rt.exitAt, limit - cutOut), exitDur: cutOut, rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
 }
 
 /**
@@ -492,7 +550,7 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
 export type PaceAdjust = 'fast-cut' | 'fast-short' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-short' | 'read-cut';
 
 /** Entrances too slow for a line sung faster than it reads (pop and fade are quick enough to keep). */
-const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'settle', 'flicker']);
+const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'settle', 'flicker', 'band-in', 'matrix-light', 'cell-land', 'reply-land', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', ...(Object.keys(ARRIVAL_SEC) as EnterKind[])]);
 /** The quick entrance closest in feel: impacts pop, the rest fade. */
 const SHORT_ENTER = (e: EnterKind): EnterKind => (e === 'slam' || e === 'flap' || e === 'slot' ? 'pop' : 'fade');
 

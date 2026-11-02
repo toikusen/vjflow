@@ -32,6 +32,34 @@ export function moveEdge<T extends Span>(list: T[], i: number, edge: 'start' | '
   return out;
 }
 
+/** The song's last moments stay clear of a line's start, and lines this close cannot both be read, s. */
+const REFLOW_GAP = 0.15;
+
+/**
+ * Lines back in order and inside the song after a large move: estimated times can be seconds off, so one tap may carry a
+ * run of lines past the next line a person fixed, or past the end of the audio. A line that overran goes back in front of
+ * the next `pinned` line, a line left behind is pushed on, and no line is ever dropped.
+ */
+export function reflow<T extends Span>(list: readonly T[], duration: number, pinned: (line: T) => boolean = () => false): T[] {
+  const out = list.map((c) => ({ ...c }));
+  const gap = Math.min(REFLOW_GAP, duration / (out.length + 2));
+  const last = duration - 2 * gap;
+  out.reduceRight((cap, c) => {
+    c.start = Math.max(0, Math.min(c.start, cap));
+    return (pinned(c) ? c.start : cap) - gap;
+  }, last);
+  out.forEach((c, i) => (c.start = Math.max(c.start, i ? out[i - 1].start + gap : 0)));
+  out.reduceRight((cap, c) => (c.start = Math.min(c.start, cap)) - gap, last);
+  out.forEach((c, i) => {
+    c.start = +c.start.toFixed(3);
+    c.end = +Math.min(out[i + 1]?.start ?? duration, Math.max(c.end, c.start + MIN)).toFixed(3);
+  });
+  return out;
+}
+
+/** A tap lands about this long after the sound it answers (reaction time), s. */
+export const TAP_REACTION = 0.12;
+
 /** The candidate nearest t if it is within `within` seconds, else t (Shift-drag snapping). */
 export function snapTo(t: number, candidates: number[], within: number): number {
   const near = candidates.reduce((best, x) => (Math.abs(x - t) < Math.abs(best - t) ? x : best), Infinity);

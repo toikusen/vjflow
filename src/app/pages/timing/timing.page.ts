@@ -1,6 +1,6 @@
-import { EditResult, graphemeIndexAt, mergeLines, moveEdge, shiftAll, snapTo, splitLine } from './timing-edit';
+import { EditResult, graphemeIndexAt, mergeLines, moveEdge, reflow, shiftAll, snapTo, splitLine, TAP_REACTION } from './timing-edit';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
-import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, signal, viewChild } from '@angular/core';
+import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
 import { BetaJob, jsonOrError } from '../beta/beta';
 import { timingSaveWarning } from '../beta/make';
 import { Ask } from '../beta/ui/confirm';
@@ -8,7 +8,7 @@ import { ConfirmDialogComponent } from '../beta/ui/confirm-dialog.component';
 import { StatusChipComponent } from '../beta/ui/status-chip.component';
 import { applyProof, exportIssues, LyricProof, proofNote, SongTimeline, TimelineCue, toLrc, toSrt, vocalActivity, voicedSpans } from '../../lyric-vj/timeline';
 import { checkLines, ISSUE_LABEL, LineCheck } from '../../lyric-vj/timing-qa';
-import { clock, hint, Hint, leaveGuard, lineTag, LineTag, playingLabel, remaining, rowNumber, sec, SHORTCUTS, songPageHref, timingChanged } from './timing-view';
+import { busyLock, BusyLock, clock, confirmBlocker, countChips, GUIDE_SEEN_KEY, hint, Hint, leaveGuard, lineTag, LineTag, localChips, localTag, nextProblemIndex, peaksOf, playingLabel, readFlag, remaining, rowNumber, sec, SHORTCUTS, singleFlight, songPageHref, stepRow, timingChanged, visibleRows, writeFlag } from './timing-view';
 
 interface SongItem {
   id: string;
@@ -20,6 +20,22 @@ interface SongItem {
 
 type Status = 'red' | 'yellow' | 'ok';
 
+/**
+ * A song the editor holds only in memory: nothing is fetched or saved through a server. The host owns the file and the
+ * lines; `keep` hands it every edit and says whether the work is safe, and `song.cues` carry a `review` note on the lines
+ * still to be checked.
+ */
+export interface LocalTiming {
+  song: SongTimeline;
+  /** A blob URL of the person's own file. */
+  audioUrl: string;
+  /** Per 10 ms, as peaksOf gives them; the waveform stays empty without. */
+  peaks?: Float32Array;
+  /** Lines a person already set: they stop a ripple and read as checked. */
+  settled: ReadonlySet<string>;
+  keep: (cues: TimelineCue[], settled: ReadonlySet<string>) => boolean;
+}
+
 const QA_LABELS = new Set(Object.values(ISSUE_LABEL));
 const VIEW_SEC = 16; // seconds visible on the waveform at first; the wheel zooms between these
 const VIEW_MIN = 2;
@@ -28,10 +44,11 @@ const NUDGE = 0.05;
 const EDGE_LISTEN = 0.5; // Q/W/E/D play this long before/after a line's start or end
 const SNAP = 0.15; // Shift while dragging: an edge within this of a beat, a voice onset or a line edge lands on it
 const SPEEDS = [0.5, 1, 1.5];
+const JOBS_POLL_MS = 5000; // how often a tester's editor re-reads /beta/jobs for a job that locks the timing
 
 /**
  * Lyric timing editor: the song plays over a lyrics-only preview while each line's start/end is checked live against
- * the vocal stem. Red lines must be fixed; yellow lines were uncertain for the aligner. Nothing is generated until the
+ * the vocal stem. Red lines need the person's look (fixed, or kept with 「我確認沒問題」); yellow lines were uncertain for the aligner. Nothing is generated until the
  * user confirms the timeline here.
  */
 @Component({
@@ -40,7 +57,11 @@ const SPEEDS = [0.5, 1, 1.5];
   templateUrl: './timing.page.html',
   styleUrl: './timing.page.scss',
 })
-export class TimingPage {
+export class TimingPage implements OnInit {
+  /** Set by a host that brings its own song (/free): no list, no server, no jobs. Read from ngOnInit on, never earlier. */
+  readonly local = input<LocalTiming>();
+  /** A local song is finished with, at this playhead time. */
+  readonly done = output<number>();
   protected readonly songs = signal<SongItem[]>([]);
   /** A beta tester's song (/timing?beta=<id>): read and saved through scripts/lyric-vj/beta/server.mts, no song list. */
   protected readonly beta = new URLSearchParams(location.search).get('beta');
@@ -66,6 +87,7 @@ export class TimingPage {
   private readonly active = signal<boolean[] | null>(null);
   private peaks: Float32Array | null = null; // per 10 ms, max |sample| of the vocal stem
   private readonly audio = new Audio();
+  private poll = { id: 0, gone: false };
   private readonly canvas = viewChild<ElementRef<HTMLCanvasElement>>('wave');
   /** Seconds the waveform shows (wheel to zoom, to place edges on the beat). */
   protected readonly viewSec = signal(VIEW_SEC);
@@ -90,6 +112,21 @@ export class TimingPage {
   protected readonly backHref = this.beta ? songPageHref(this.beta) : '/timing';
   /** The warning before a save that would void a tester's pending concept (beta mode only); saving charges nothing. */
   protected readonly ask = signal<Ask | null>(null);
+  /** Which save button is waiting on the server (both stay off meanwhile). */
+  protected readonly saving = signal<'draft' | 'confirm' | null>(null);
+  /**
+   * A tester's concept, video or fix running on this song (polled from /beta/jobs): the editor is read-only until it
+   * ends. Edits made before stay in memory. The server refuses a save then too; this only says so up front.
+   */
+  protected readonly lock = signal<BusyLock | null>(null);
+  /** Edits are off while a job locks the timing or a save is on the way (the reload after it would drop them). */
+  protected readonly readOnly = computed(() => !!this.lock() || !!this.saving());
+  /** The 「怎麼檢查」 guide: open on the first visit, folded on later ones. */
+  protected readonly guideOpen = signal(!readFlag(() => localStorage.getItem(GUIDE_SEEN_KEY)));
+  /** 「只看需要確認的」: the list shows only red/yellow lines and the selected one (a tester starts here; nothing is remembered). */
+  protected readonly onlyProblems = signal(!!this.beta);
+  /** The 演唱者 card: one line until opened; open from the start when the song already has singers. */
+  protected readonly singersOpen = signal(false);
 
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
   protected readonly statuses = computed<Status[]>(() =>
@@ -101,6 +138,9 @@ export class TimingPage {
       return aligner.length && !this.touched().has(c.id) ? 'yellow' : 'ok';
     }),
   );
+  protected readonly shown = computed(() => visibleRows(this.statuses(), this.selected(), this.onlyProblems()));
+  /** The filter is on and every line is fine: the list shows a single line saying so. */
+  protected readonly nothingToCheck = computed(() => this.onlyProblems() && !this.shown().some(Boolean));
   protected readonly counts = computed(() => ({
     red: this.statuses().filter((s) => s === 'red').length,
     yellow: this.statuses().filter((s) => s === 'yellow').length,
@@ -108,7 +148,9 @@ export class TimingPage {
   }));
   /** The big readout split so the hundredths can be smaller; both parts keep their width. */
   protected readonly clock = computed(() => clock(this.time()));
-  protected readonly todo = computed(() => remaining(this.counts().red, this.counts().yellow));
+  protected readonly todo = computed(() => (this.local() ? this.chips()[0].label.replace(/^(\d+)/, '還有 $1') : remaining(this.counts().red, this.counts().yellow)));
+  protected readonly chips = computed(() => (this.local() ? localChips(this.counts()) : countChips(this.counts())));
+  protected readonly blocker = computed(() => confirmBlocker(this.counts().red));
   protected readonly nowLabel = computed(() => playingLabel(this.playingIndex(), this.playing(), this.song()?.duration ?? 0));
   /** The line on screen in the lyrics-only preview. */
   protected readonly current = computed(() => this.cues().find((c) => this.time() >= c.start && this.time() < c.end) ?? null);
@@ -148,11 +190,15 @@ export class TimingPage {
     // unsaved edits (twenty lines moved on a phone, say) must not vanish on a back tap or a switch of app
     const stay = leaveGuard(() => this.dirty());
     addEventListener('beforeunload', stay);
+    const poll = { id: 0, gone: false };
     inject(DestroyRef).onDestroy(() => {
       cancelAnimationFrame(raf.id);
       this.audio.pause();
       removeEventListener('beforeunload', stay);
+      poll.gone = true;
+      clearInterval(poll.id);
     });
+    this.poll = poll;
     effect(() => {
       const i = this.playingIndex();
       if (!this.follow() || !this.playing() || i < 0 || i === this.lastFollow) return;
@@ -163,9 +209,55 @@ export class TimingPage {
     });
     this.audio.onplay = () => this.playing.set(true);
     this.audio.onpause = () => this.playing.set(false);
+    // a local song is kept by its host edit by edit; `dirty` stays up only if that failed, and the guard then asks
+    effect(() => {
+      const host = this.local();
+      if (!host || !this.dirty()) return;
+      this.dirty.set(!host.keep(this.cues(), this.touched()));
+    });
+  }
+
+  ngOnInit() {
+    const host = this.local();
+    if (host) return this.openLocal(host);
+    if (this.beta) {
+      const beta = this.beta;
+      const poll = this.poll;
+      // a reply that lands after the page is gone must not touch it
+      // one read at a time: a slow reply must not land after (and overwrite) a newer one
+      const check = singleFlight(async () => {
+        const jobs = await this.fetchJobs();
+        if (poll.gone || !jobs) return; // an unreadable list keeps the last answer
+        this.lock.set(busyLock(jobs, beta));
+        if (this.lock()) this.drag = null;
+      });
+      void check();
+      poll.id = window.setInterval(() => void check(), JOBS_POLL_MS);
+    }
     if (!this.beta) void this.loadList();
     const id = this.songId();
     if (id) void this.open(id);
+  }
+
+  /**
+   * Opens the host's song. Estimated times can be seconds off, so unlike a saved song: the lines after a moved line move
+   * with it, and the selection stays where Enter left it instead of following times that are not right yet.
+   */
+  private openLocal(host: LocalTiming) {
+    this.song.set(host.song);
+    this.cues.set(host.song.cues.map((c) => ({ ...c })));
+    this.touched.set(new Set(host.settled));
+    this.onlyProblems.set(false);
+    this.follow.set(false);
+    this.ripple.set(true);
+    this.peaks = host.peaks ?? null;
+    this.selected.set(Math.max(0, this.statuses().findIndex((s) => s !== 'ok')));
+    this.audio.src = host.audioUrl;
+  }
+
+  protected finish() {
+    this.audio.pause();
+    this.done.emit(this.audio.currentTime);
   }
 
   protected issueText(i: number): string {
@@ -177,11 +269,12 @@ export class TimingPage {
   /** The status column of row i. */
   protected tag(i: number): LineTag {
     const c = this.cues()[i];
-    return lineTag(this.statuses()[i], { listening: i === this.selected() && i === this.playingIndex() && this.playing(), verified: c.confidence === 'verified' || this.touched().has(c.id) });
+    return (this.local() ? localTag : lineTag)(this.statuses()[i], { listening: i === this.selected() && i === this.playingIndex() && this.playing(), verified: c.confidence === 'verified' || this.touched().has(c.id) });
   }
 
   /** The line under row i when it needs a look: a fix to take or the reason, and a way to keep it. */
   protected hint(i: number): Hint | null {
+    if (this.local() && i !== this.selected()) return null; // every line of a new song is estimated: one note, not a list of them
     return hint(this.cues()[i], this.checks()[i], this.statuses()[i], this.issueText(i));
   }
 
@@ -217,8 +310,10 @@ export class TimingPage {
     }
     const song = body as SongTimeline;
     this.song.set(song);
+    writeFlag(() => localStorage.setItem(GUIDE_SEEN_KEY, '1'));
     this.cues.set(song.cues.map((c) => ({ ...c })));
     this.singers.set((song.singers ?? []).map((x) => ({ ...x })));
+    this.singersOpen.set(this.singers().length > 0);
     this.touched.set(new Set());
     this.undoStack = [];
     this.redoStack = [];
@@ -233,13 +328,7 @@ export class TimingPage {
       const decoded = await new AudioContext().decodeAudioData(buf);
       const ch = decoded.getChannelData(0);
       this.active.set(vocalActivity(ch, decoded.sampleRate));
-      const hop = Math.round(decoded.sampleRate / 100);
-      this.peaks = new Float32Array(Math.floor(ch.length / hop));
-      for (let i = 0; i < this.peaks.length; i++) {
-        let m = 0;
-        for (let j = i * hop; j < (i + 1) * hop; j++) m = Math.max(m, Math.abs(ch[j]));
-        this.peaks[i] = m;
-      }
+      this.peaks = peaksOf(ch, decoded.sampleRate);
       this.selected.set(Math.max(0, this.statuses().findIndex((s) => s !== 'ok')));
       this.loading.set(null);
     } catch {
@@ -247,8 +336,17 @@ export class TimingPage {
     }
   }
 
+  /** True (and the reason shown) while a job locks the timing or a save is on the way: every edit entry checks this first. */
+  private locked(): boolean {
+    const l = this.lock();
+    if (l) this.message.set(l.message);
+    else if (this.saving()) this.message.set('儲存中，存好後才能繼續改');
+    return !!l || !!this.saving();
+  }
+
   // ---- editing
   private setLine(i: number, patch: Partial<Pick<TimelineCue, 'start' | 'end'>>, ripple = this.ripple(), snapshot = true) {
+    if (this.locked()) return;
     if (snapshot) this.remember();
     const list = this.cues().map((c) => ({ ...c }));
     const c = list[i];
@@ -256,6 +354,8 @@ export class TimingPage {
     if (patch.start !== undefined) {
       const before = c.start;
       const shift = Math.max(lo, patch.start) - before;
+      // a line estimated seconds early ends before the moment it is really sung: it goes there whole
+      if (this.local() && !ripple && patch.start >= c.end - 0.1) c.end = patch.start + c.end - before;
       // ripple: alignment errors come in runs (one late line pushes every following one), so the lines after move
       // with it until the next line the user already fixed
       if (ripple && Math.abs(shift) > 0.001) {
@@ -271,7 +371,7 @@ export class TimingPage {
     }
     // a back-to-back neighbour follows the shared edge (timing-edit.ts)
     if (patch.end !== undefined) list.splice(0, list.length, ...moveEdge(list, i, 'end', patch.end, this.song()!.duration));
-    this.cues.set(list);
+    this.cues.set(this.local() ? reflow(list, this.song()!.duration, (x) => x.id === c.id || this.touched().has(x.id)) : list);
     this.touched.update((s) => new Set(s).add(c.id));
     this.dirty.set(true);
   }
@@ -294,6 +394,7 @@ export class TimingPage {
   }
 
   protected undo() {
+    if (this.locked()) return;
     const s = this.undoStack.pop();
     if (!s) return;
     this.redoStack.push(this.snapshot());
@@ -305,6 +406,7 @@ export class TimingPage {
   }
 
   protected redo() {
+    if (this.locked()) return;
     const s = this.redoStack.pop();
     if (!s) return;
     this.undoStack.push(this.snapshot());
@@ -329,16 +431,15 @@ export class TimingPage {
   }
 
   /** The next line still to check (red first, then yellow), after the selected one; wraps around. */
-  protected nextProblem() {
-    const st = this.statuses();
-    const n = st.length;
-    const from = this.selected();
-    const find = (want: Status) => Array.from({ length: n }, (_, k) => (from + 1 + k) % n).find((j) => st[j] === want);
-    const j = find('red') ?? find('yellow');
-    if (j === undefined) return this.message.set('沒有待確認的句子了');
+  protected nextProblem(quiet = false) {
+    const j = nextProblemIndex(this.statuses(), this.selected(), this.shown());
+    if (j === undefined) return quiet ? undefined : this.message.set('沒有待確認的句子了');
     this.selected.set(j);
     this.scrollTo(j);
-    this.audio.currentTime = Math.max(0, this.cues()[j].start - 1);
+    const at = Math.max(0, this.cues()[j].start - 1);
+    // while playing, following must not pull the selection back to the line sung in the lead-in second
+    this.lastFollow = this.cues().reduce((k, c, x) => (c.start <= at ? x : k), -1);
+    this.audio.currentTime = at;
   }
 
   /** Shift-drag: the nearest beat, voice onset or other line edge within SNAP. */
@@ -350,8 +451,9 @@ export class TimingPage {
   }
 
   protected setNow(i: number, edge: 'start' | 'end') {
+    if (this.locked()) return;
     // a tap lands ~0.12 s after the sound (reaction time); a start then snaps to the voice onset nearby
-    let t = this.audio.currentTime - (edge === 'start' ? 0.12 : 0);
+    let t = this.audio.currentTime - (edge === 'start' ? TAP_REACTION : 0);
     const spans = this.active() ? voicedSpans(this.active()!) : [];
     if (edge === 'start') {
       const onset = spans.map((x) => x[0]).filter((o) => o >= t - 0.3 && o <= t + 0.15).sort((a, b) => Math.abs(a - t) - Math.abs(b - t))[0];
@@ -360,27 +462,54 @@ export class TimingPage {
     this.setLine(i, { [edge]: t });
   }
 
+  /** Enter's edit: line i starts now and the next line is up. */
+  private setAndStep(i: number) {
+    this.setNow(i, 'start');
+    this.lastFollow = i; // the line just tapped is now playing: following must not pull the selection back to it
+    this.selected.set(Math.min(this.cues().length - 1, i + 1));
+    this.scrollTo(this.selected());
+  }
+
+  /** The phone's big button (a local song): what Enter does while the song plays; before that it starts the song. */
+  protected tapSelected() {
+    if (this.audio.paused) return void this.audio.play();
+    this.setAndStep(this.selected());
+    // the new selection opens its controls on the next render; here the editor scrolls, not the list, and at once: the next tap may be a second away
+    setTimeout(() => this.list()?.nativeElement.querySelector(`[data-index="${this.selected()}"]`)?.scrollIntoView({ block: 'nearest' }));
+  }
+
   protected useStart(i: number, t: number) {
+    if (this.locked()) return;
     this.setLine(i, { start: t });
     this.playLine(i);
+    this.advance();
   }
 
   protected accept(i: number) {
+    if (this.locked()) return;
     this.remember();
     this.touched.update((s) => new Set(s).add(this.cues()[i].id));
     this.dirty.set(true);
+    this.advance();
+  }
+
+  /** With 「只看需要確認的」 on, a line just settled hands over to the next one to check (none left: the list says so). */
+  private advance() {
+    if (this.onlyProblems()) this.nextProblem(true);
   }
 
   // ---- singers
   private static readonly SWATCHES = ['#ff5c8a', '#4fb3ff', '#ffd23f', '#5ce1a1', '#b38bff', '#ff8a3d', '#f4f2ee', '#ff4d4d'];
 
   protected addSinger() {
+    if (this.locked()) return;
     const n = this.singers().length;
     this.singers.update((l) => [...l, { name: `成員${n + 1}`, color: TimingPage.SWATCHES[n % TimingPage.SWATCHES.length] }]);
     this.dirty.set(true);
   }
 
   protected editSinger(k: number, patch: Partial<{ name: string; color: string }>) {
+    if (this.locked()) return;
     const old = this.singers()[k];
     const name = patch.name?.trim();
     if (patch.name !== undefined && (!name || this.singers().some((x, j) => j !== k && x.name === name))) return;
@@ -391,6 +520,7 @@ export class TimingPage {
   }
 
   protected removeSinger(k: number) {
+    if (this.locked()) return;
     const gone = this.singers()[k].name;
     this.singers.update((l) => l.filter((_, j) => j !== k));
     this.cues.update((l) => l.map((c) => (c.singer === gone ? { ...c, singer: undefined } : c)));
@@ -398,6 +528,7 @@ export class TimingPage {
   }
 
   protected setSinger(i: number, name: string) {
+    if (this.locked()) return;
     this.remember();
     this.cues.update((l) => l.map((c, j) => (j === i ? { ...c, singer: name || undefined } : c)));
     this.dirty.set(true);
@@ -410,7 +541,7 @@ export class TimingPage {
   /** Retypes a line (a misheard or missing word); its per-character times are rebuilt on save. */
   protected retype(i: number, value: string) {
     const text = value.trim();
-    if (!text || text === this.cues()[i].text) return;
+    if (this.locked() || !text || text === this.cues()[i].text) return;
     this.remember();
     this.cues.update((l) => l.map((c, j) => (j === i ? { ...c, text } : c)));
     this.touched.update((s) => new Set(s).add(this.cues()[i].id));
@@ -422,6 +553,7 @@ export class TimingPage {
    * dismissed; either way it leaves the line's review.
    */
   protected fixProof(i: number, p: LyricProof, take: boolean) {
+    if (this.locked()) return;
     this.remember();
     const c = this.cues()[i];
     const rest = { proof: c.proof?.filter((x) => x !== p), review: c.review?.filter((r) => r !== proofNote(p)) };
@@ -432,6 +564,7 @@ export class TimingPage {
 
   /** A new line after line i: in the gap before the next line, or the second half of line i when there is none. */
   protected addAfter(i: number) {
+    if (this.locked()) return;
     this.remember();
     const list = this.cues().map((c) => ({ ...c }));
     const c = list[i];
@@ -454,7 +587,7 @@ export class TimingPage {
   }
 
   protected remove(i: number) {
-    if (this.cues().length <= 1) return;
+    if (this.locked() || this.cues().length <= 1) return;
     this.remember();
     this.cues.update((l) => l.filter((_, j) => j !== i));
     this.selected.set(Math.min(i, this.cues().length - 1));
@@ -462,6 +595,7 @@ export class TimingPage {
   }
 
   private apply(r: EditResult<TimelineCue>, touch: string[]) {
+    if (this.locked()) return;
     if (!r.ok) return this.message.set(r.message);
     this.remember();
     this.cues.set(r.lines);
@@ -504,6 +638,7 @@ export class TimingPage {
   }
 
   protected edit(i: number, edge: 'start' | 'end', value: string) {
+    if (this.locked()) return;
     const v = Number(value);
     if (Number.isFinite(v)) this.setLine(i, { [edge]: v });
   }
@@ -539,6 +674,9 @@ export class TimingPage {
     const i = this.selected();
     const c = this.cues()[i];
     const mod = e.metaKey || e.ctrlKey;
+    // read-only: the editing keys (undo/redo, Enter, ←/→) do nothing but say why; listening keys keep working
+    const editKey = (mod && (e.code === 'KeyZ' || e.code === 'KeyY')) || (!mod && ['Enter', 'ArrowLeft', 'ArrowRight'].includes(e.code));
+    if (editKey && this.locked()) return e.preventDefault();
     if (mod && e.code === 'KeyZ') e.shiftKey ? this.redo() : this.undo();
     else if (mod && e.code === 'KeyY') this.redo();
     else if (mod) return;
@@ -552,18 +690,11 @@ export class TimingPage {
     else if (e.code === 'BracketLeft') this.setSpeed(SPEEDS[Math.max(0, SPEEDS.indexOf(this.speed()) - 1)]);
     else if (e.code === 'BracketRight') this.setSpeed(SPEEDS[Math.min(SPEEDS.length - 1, SPEEDS.indexOf(this.speed()) + 1)]);
     else if (e.code === 'Space') this.toggle();
-    else if (e.code === 'Enter') {
-      this.setNow(i, 'start');
-      this.lastFollow = i; // the line just tapped is now playing: following must not pull the selection back to it
-      this.selected.set(Math.min(this.cues().length - 1, i + 1));
-      this.scrollTo(this.selected());
-    } else if (e.code === 'ArrowLeft') this.nudge(i, e.shiftKey ? 'end' : 'start', -NUDGE, e.altKey !== this.ripple());
+    else if (e.code === 'Enter') this.setAndStep(i);
+    else if (e.code === 'ArrowLeft') this.nudge(i, e.shiftKey ? 'end' : 'start', -NUDGE, e.altKey !== this.ripple());
     else if (e.code === 'ArrowRight') this.nudge(i, e.shiftKey ? 'end' : 'start', NUDGE, e.altKey !== this.ripple());
-    else if (e.code === 'ArrowUp') {
-      this.selected.set(Math.max(0, i - 1));
-      this.scrollTo(this.selected());
-    } else if (e.code === 'ArrowDown') {
-      this.selected.set(Math.min(this.cues().length - 1, i + 1));
+    else if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+      this.selected.set(stepRow(this.shown(), i, e.code === 'ArrowUp' ? -1 : 1));
       this.scrollTo(this.selected());
     }
     else return;
@@ -577,18 +708,11 @@ export class TimingPage {
    */
   protected async save(confirm: boolean, warned = false) {
     const id = this.songId();
-    if (!id) return;
-    if (this.beta && !warned && timingChanged(this.song()?.cues ?? [], this.cues())) {
-      const warning = timingSaveWarning(await this.betaJobs(), id);
-      if (warning) return this.ask.set({ ...warning, eyebrow: this.song()?.title, cost: 0, confirmLabel: confirm ? '仍要確認' : '仍要儲存', go: () => void this.save(confirm, true) });
-    }
-    const r = await fetch(`${this.api(id)}/cues`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ cues: this.cues().map(({ id, start, end, text, singer }) => ({ id, start, end, text, singer: singer ?? '' })), confirm, accepted: [...this.touched()], singers: this.singers() }),
-    });
-    const body = await jsonOrError<{ error?: string }>(r);
-    if (!r.ok) return this.message.set(`儲存失敗：${body.error ?? `HTTP ${r.status}`}`);
+    if (!id || this.locked()) return;
+    this.saving.set(confirm ? 'confirm' : 'draft');
+    this.drag = null;
+    const sent = await this.put(id, confirm, warned).finally(() => this.saving.set(null));
+    if (!sent) return;
     this.dirty.set(false);
     // a design styles each line by id: added, removed or retyped lines need the design redone
     const before = this.song()!.cues;
@@ -600,13 +724,46 @@ export class TimingPage {
     if (!this.beta) await this.loadList();
   }
 
-  /** The tester's jobs, for the pending-concept check; a failed read means no warning (the server still refuses the accept). */
-  private async betaJobs(): Promise<BetaJob[]> {
+  /**
+   * Sends the lines; false when nothing was saved (the person is asked first, or the server or the network said no,
+   * with the reason in the toast). The server's own refusal (a job started meanwhile) stays the last line of defence.
+   */
+  private async put(id: string, confirm: boolean, warned: boolean): Promise<boolean> {
+    if (this.beta && !warned && timingChanged(this.song()?.cues ?? [], this.cues())) {
+      const warning = timingSaveWarning((await this.fetchJobs()) ?? [], id);
+      if (warning) {
+        this.ask.set({ ...warning, eyebrow: this.song()?.title, cost: 0, confirmLabel: confirm ? '仍要確認' : '仍要儲存', go: () => void this.save(confirm, true) });
+        return false;
+      }
+    }
+    try {
+      const r = await fetch(`${this.api(id)}/cues`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ cues: this.cues().map(({ id, start, end, text, singer }) => ({ id, start, end, text, singer: singer ?? '' })), confirm, accepted: [...this.touched()], singers: this.singers() }),
+      });
+      const body = await jsonOrError<{ error?: string }>(r);
+      if (!r.ok) {
+        this.message.set(`儲存失敗：${body.error ?? `HTTP ${r.status}`}`);
+        return false;
+      }
+      return true;
+    } catch {
+      this.message.set('儲存失敗，請檢查網路後再試');
+      return false;
+    }
+  }
+
+  /**
+   * The tester's jobs, for the pending-concept warning and the read-only lock; null when unreadable (no warning then,
+   * and the lock keeps its last answer: the server still refuses what it must).
+   */
+  private async fetchJobs(): Promise<BetaJob[] | null> {
     try {
       const r = await fetch('/beta/jobs', { cache: 'no-store' });
-      return r.ok ? ((await r.json()) as BetaJob[]) : [];
+      return r.ok ? ((await r.json()) as BetaJob[]) : null;
     } catch {
-      return [];
+      return null;
     }
   }
 
@@ -685,7 +842,7 @@ export class TimingPage {
     const t = this.timeAt(e);
     const px = this.viewSec() / this.canvas()!.nativeElement.getBoundingClientRect().width;
     const near = (a: number) => Math.abs(a - t) < 6 * px;
-    const i = this.cues().findIndex((c) => near(c.start) || near(c.end));
+    const i = this.readOnly() ? -1 : this.cues().findIndex((c) => near(c.start) || near(c.end));
     if (i >= 0) {
       // Alt flips "move the rest with it" for this drag; one undo step for the whole drag
       this.drag = { index: i, edge: near(this.cues()[i].start) ? 'start' : 'end', ripple: e.altKey !== this.ripple() };
@@ -695,7 +852,7 @@ export class TimingPage {
   }
 
   protected move(e: MouseEvent) {
-    if (!this.drag) return;
+    if (!this.drag || this.readOnly()) return;
     const t = this.timeAt(e);
     this.setLine(this.drag.index, { [this.drag.edge]: e.shiftKey ? this.snapped(t, this.drag.index) : t }, this.drag.ripple, false);
   }

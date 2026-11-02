@@ -1,0 +1,102 @@
+<div class="page">
+  <header>
+    <h1>免費版</h1>
+    <p>貼上歌詞就開始，影片在你的瀏覽器裡產生。</p>
+  </header>
+
+  <div class="work">
+    <section class="form">
+      <div class="source">
+        <button type="button" [class.on]="paste()" (click)="paste.set(true)">我的歌</button>
+        <button type="button" [class.on]="!paste()" (click)="paste.set(false)">測試歌曲</button>
+      </div>
+      @if (paste()) {
+        <label>歌詞（每行一句）
+          <textarea rows="10" [ngModel]="lrc()" (ngModelChange)="typed($event)" (paste)="noteTheRest()"></textarea>
+        </label>
+        @if (parsed().problem) {
+          <p class="error">{{ parsed().problem }}</p>
+        } @else if (parsed().lines.length) {
+          <p class="hint">共 {{ parsed().lines.length }} 句{{ timedLines() ? '，其中 ' + timedLines() + ' 句有時間' : '' }}{{ parsed().skipped ? '，略過 ' + parsed().skipped + ' 行' : '' }}。</p>
+        }
+        @if (timingNote()) {
+          <p class="estimate">{{ timingNote() }}</p>
+        } @else if (fromLibrary() && timedLines()) {
+          <p class="estimate">時間來自公開歌詞庫 LRCLIB，請聽過再用。</p>
+        }
+        @if (audioName() && parsed().lines.length) {
+          <button type="button" class="primary" [disabled]="!!stage().busy() || analysing()" (click)="openEditor()">{{ analysing() ? '分析歌曲中' : '編輯歌詞時間' }}</button>
+        }
+        @if (resume(); as w) {
+          <div class="offer">
+            <p>這個音檔有上次的歌詞時間。接續的話，會換掉歌詞框現在的內容。</p>
+            <div class="row">
+              <button type="button" class="small" (click)="takeResume(true)">接續上次</button>
+              <button type="button" class="small" (click)="takeResume(false)">不用</button>
+            </div>
+          </div>
+        }
+        @if (!timedLines() && offer(); as h) {
+          <div class="offer">
+            <p>公開歌詞庫有這首歌的時間：{{ h.artist }} - {{ h.track }}（{{ clock(h.duration) }}）。看過再決定，用了會換掉歌詞框的內容。</p>
+            @if (offerFar() > lookupFar) {
+              <p class="warn">長度和音檔差 {{ offerFar() }} 秒，可能是另一個版本，時間要再對過。</p>
+            }
+            <pre>{{ h.synced }}</pre>
+            <div class="row">
+              <button type="button" class="small" (click)="useOffer()">用這份時間</button>
+              <button type="button" class="small" (click)="offer.set(undefined)">不用</button>
+            </div>
+            <p class="hint">只有歌名和歌手離開這個瀏覽器（LRCLIB 也會看到你的網路位址），音檔和歌詞都不會。歌詞由網友提供，請自行確認內容與使用權利。</p>
+          </div>
+        } @else if (lookupNote()) {
+          <p class="hint">{{ lookupNote() }}</p>
+        }
+        <div class="row lyric-tools">
+          <label class="file">匯入 .lrc <input type="file" accept=".lrc,.txt,text/plain" (change)="pickLyricFile($event)" /></label>
+          <button type="button" [class.on]="searching()" (click)="searching.set(!searching())">查公開歌詞庫</button>
+          @if (timedLines()) {
+            <a class="save" [href]="lrcHref()" [download]="(title() || 'lyrics') + '.lrc'">下載 LRC</a>
+          }
+        </div>
+        @if (searching()) {
+          <app-lyric-search [seconds]="audioSeconds()" (chosen)="useHit($event)" />
+        }
+        <label>音檔<input type="file" accept="audio/*" (change)="pickFile($event)" /></label>
+        <p class="hint">
+          @if (audioName()) {
+            {{ audioName() }}，{{ clock(audioSeconds()) }}。{{ audioNote() }}。
+          }
+          音檔留在這個瀏覽器裡，不會上傳。
+        </p>
+        @if (last(); as w) {
+          <p class="hint">上次的進度還在，重新選擇「{{ w.name }}」就能接續。</p>
+        }
+        @if (unsaved()) {
+          <p class="warn">這個瀏覽器存不了進度，重新整理會遺失，請先下載 LRC。</p>
+        }
+        <label>歌名<input [ngModel]="title()" (ngModelChange)="title.set($event); refreshSoon()" placeholder="歌手 - 歌名" /></label>
+      } @else {
+        <label>歌曲
+          <select [ngModel]="songId()" (ngModelChange)="songId.set($event)">
+            <option value="">選一首</option>
+            @for (s of songs(); track s.id) {
+              <option [value]="s.id">{{ s.title }}（{{ clock(s.duration) }}，{{ s.lines }} 句）</option>
+            }
+          </select>
+        </label>
+        <button type="button" class="primary" [disabled]="!!stage().busy()" (click)="stage().generate()">生成</button>
+      }
+    </section>
+
+    <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="fileTitle()" [timingNote]="timingNote()" (changed)="remember()" (again)="refresh()">
+      <span>貼上歌詞就會在這裡出現</span>
+    </app-instant-stage>
+  </div>
+</div>
+
+@if (editing(); as song) {
+  <div class="timing-sheet">
+    <app-timing-page [local]="song" (done)="closeEditor($event)" />
+  </div>
+}

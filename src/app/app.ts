@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, isDevMode } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { JobsPage } from './pages/admin/jobs.page';
 import { GeneratorPage } from './pages/generator/generator.page';
@@ -9,6 +9,7 @@ import { BetaAdminPage } from './pages/beta/beta-admin.page';
 import { BetaAdminSongPage } from './pages/beta/admin-song.page';
 import { BetaSongPage } from './pages/beta/song.page';
 import { BetaStylesPage } from './pages/beta/styles.page';
+import { FreePage } from './pages/free/free.page';
 import { pageFor } from './pages/beta/route';
 import { BetaShellComponent } from './pages/beta/ui/shell.component';
 import { shellFor } from './pages/beta/ui/shell';
@@ -17,7 +18,7 @@ import { BetaSession } from './pages/beta/ui/session';
 // ponytail: a path check instead of the router; switch to @angular/router when pages need parameters or guards
 @Component({
   selector: 'app-root',
-  imports: [NgTemplateOutlet, GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaAdminSongPage, BetaSongPage, BetaStylesPage, BetaShellComponent],
+  imports: [NgTemplateOutlet, GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaAdminSongPage, BetaSongPage, BetaStylesPage, BetaShellComponent, FreePage],
   template: `@if (shell; as s) {
       <app-beta-shell [spec]="s" [me]="session.me()"><ng-container *ngTemplateOutlet="pages" /></app-beta-shell>
     } @else {
@@ -49,6 +50,12 @@ import { BetaSession } from './pages/beta/ui/session';
         @case ('beta') {
           <app-beta-page />
         }
+        @case ('free') {
+          <app-free-page />
+        }
+        @case ('free-off') {
+          <p style="padding: 48px 24px; text-align: center">免費版尚未開放。</p>
+        }
         @default {
           <app-generator-page />
         }
@@ -56,7 +63,7 @@ import { BetaSession } from './pages/beta/ui/session';
     </ng-template>`,
 })
 export class App {
-  protected readonly page = pageFor(location.pathname);
+  protected readonly page = pageFor(location.pathname, { free: isDevMode() });
   protected readonly shell = shellFor(this.page, location.search);
   protected readonly session = inject(BetaSession);
 

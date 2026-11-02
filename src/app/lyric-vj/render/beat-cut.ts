@@ -2,48 +2,14 @@
 // the whole line comes back big once it is sung. The designer move of re-composing the frame every 1–2 beats in a
 // chorus. No small copy of the line underneath: the pieces cycling over it read as the line repeating.
 import * as THREE from 'three';
-import { balancedRows, phraseBoundaries, phrases } from '../phrases';
+import { balancedRows, cutPieces } from '../phrases';
 import { advanceOf, clamp01, easeOutCubic, Glyph, GlyphStyle, hash, makeGlyphs, placeRow } from './glyphs';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, readable, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
 
-/** Longest piece cut in big: a longer one cannot be set large enough to read and ran off the frame. */
-export const MAX_PIECE = 6;
-
-/** The line as 2–6 pieces of 2–6 characters (particles join the word before them; long phrases split again). */
-export function cutPieces(text: string): { text: string; from: number }[] {
-  const out: { text: string; from: number }[] = [];
-  let at = 0;
-  // Chinese is all Han: its words come from the segmenter, the Japanese "never cut a kanji run" rule would keep a
-  // Chinese line in one piece
-  const zh = !/[\u3040-\u30ff]/.test(text) && /\p{Script=Han}/u.test(text);
-  const split = (p: string): string[] => {
-    const cs = [...p.trim()];
-    if (cs.length <= MAX_PIECE) return [p];
-    // cut nearest the middle, at a phrase boundary when there is one, never inside a kanji run (六|感 or 年甲|斐)
-    const kanji = (c?: string) => !zh && !!c && /\p{Script=Han}/u.test(c);
-    const ok = cs.map((_, i) => i).filter((i) => i >= 2 && cs.length - i >= 2 && !(kanji(cs[i - 1]) && kanji(cs[i])) && !/^[、。，,ーっゃゅょぁぃぅぇぉ]/.test(cs[i]));
-    const bounds = phraseBoundaries(p.trim());
-    const byMiddle = (x: number, y: number) => Math.abs(x - cs.length / 2) - Math.abs(y - cs.length / 2);
-    // prefer where a kanji word ends (六感|またがって), then a phrase boundary, then the middle
-    const cut = ok.filter((i) => kanji(cs[i - 1]) && !kanji(cs[i])).sort(byMiddle)[0] ?? ok.filter((i) => bounds.has(i)).sort(byMiddle)[0] ?? ok.sort(byMiddle)[0];
-    return cut === undefined ? [p] : [cs.slice(0, cut).join(''), cs.slice(cut).join('')].flatMap(split);
-  };
-  // phrases can split a kanji compound (六|感): rejoin pieces that meet kanji to kanji
-  const kanjiEnd = /\p{Script=Han}$/u;
-  const kanjiStart = /^\p{Script=Han}/u;
-  const joined = phrases(text).reduce<string[]>((acc, p) => (!zh && acc.length && kanjiEnd.test(acc[acc.length - 1]) && kanjiStart.test(p) ? [...acc.slice(0, -1), acc[acc.length - 1] + p] : [...acc, p]), []);
-  for (const p of joined.flatMap(split)) {
-    const from = [...text].indexOf([...p.trim()][0] ?? '', at);
-    at = from + [...p].length;
-    const prev = out[out.length - 1];
-    if (prev && ([...p.trim()].length < 2 || (out.length >= 6 && [...prev.text].length < MAX_PIECE))) prev.text += p;
-    else out.push({ text: p.trim(), from: Math.max(0, from) });
-  }
-  return out.filter((x) => x.text);
-}
+export { cutPieces, MAX_PIECE } from '../phrases';
 
 /** A piece must hold this long to be read; shorter ones merge into the next. */
 export const MIN_HOLD = 0.5;
@@ -181,7 +147,7 @@ export const beatCut: TemplateRenderer = {
           b.gs.forEach((g) => (g.mesh.material.opacity = Math.min(1, p * 2) * out));
         }
       },
-      readable: () => [whole ? rt.showFrom + 0.12 : recapAt, rt.exitAt],
+      readable: () => [whole ? rt.showFrom + (rt.style.budget && rt.adjust?.includes('read-cut') ? 1 / 30 : 0.12) : recapAt, rt.exitAt],
     };
   },
 };

@@ -3,6 +3,13 @@ import { Env, kn, MORE } from './kinetic-more';
 import { KNOBS } from './knobs';
 
 describe('move knobs', () => {
+  it('takes a count set from the lyric, kept to what the move can draw', () => {
+    expect(kn({ song: 3, tune: { 'meteor.n': 3 } }, 'meteor.n')).toBe(3);
+    expect(kn({ song: 3, tune: { 'meteor.n': 40 } }, 'meteor.n')).toBe(KNOBS['meteor.n'][2]);
+    expect(kn({ song: 3, tune: { 'meteor.n': 3.4 } }, 'meteor.n')).toBe(3);
+    expect(kn({ song: 3, tune: {} }, 'meteor.n')).toBe(kn({ song: 3 }, 'meteor.n'));
+  });
+
   const stub = () =>
     new Proxy({} as CanvasRenderingContext2D, {
       get: (_, k) => (k === 'measureText' ? () => ({ width: 100 }) : k.toString().startsWith('create') ? () => ({ addColorStop: () => undefined }) : () => undefined),

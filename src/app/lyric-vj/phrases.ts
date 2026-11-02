@@ -3,9 +3,62 @@
 // auxiliaries) are glued to the word before them. Spaces always separate.
 const KANA_ONLY = /^[぀-ゟー]+$/;
 
+let wordSafe = false;
+/** The line composer's stricter breaks (wordBreaks) for everything that wraps or cuts a line; off for the paid path. */
+export const setWordSafe = (on: boolean) => (wordSafe = on);
+export const isWordSafe = () => wordSafe;
+
+const HIRA = /^[\u3041-\u309f]$/;
+const KATA = /^[\u30a0-\u30ff\uff66-\uff9f]$/;
+const LATIN = /^[A-Za-z0-9'’]$/;
+const HAN = /^\p{Script=Han}$/u;
+const GAP = /^[\s　、。，．,.!?！？︕︖…‥・）)」』】”]$/;
+const OPENER = /^[（(「『【“]$/;
+const NO_HEAD = /^[ぁぃぅぇぉっゃゅょゎんァィゥェォッャュョヮンー〜～、。，．,.!?！？︕︖）」』】”’…]$/;
+/** Kana that can close a word or phrase: a hiragana run is only ever broken after one of these. */
+// what finishes a verb stays on it: わから|ない, いか|ないな
+const VERB_TAIL = /^(?:な[いくかけ]|ま[すせし]|たい|れる|られ|せる|させ|ちゃ|じゃ)/;
+const PHRASE_END = /(?:[はを]|けど|から|まで|より|ない|たい|だけ|しか|ながら)$/;
+
+/**
+ * The places a composer line may break, in code points, 0 and the end included. ICU's word boundaries, less what ICU
+ * cuts too finely: nothing inside a katakana, Latin or (Japanese) kanji run, in a run of one-character Chinese words
+ * the dictionary did not know (雙|截|棍), or in hiragana except after a word that can end a phrase.
+ */
+export function wordBreaks(text: string): Set<number> {
+  const cs = [...text];
+  const ja = /[\u3040-\u30ff]/.test(text);
+  const segs = [...new Intl.Segmenter(ja ? 'ja' : 'zh-Hant', { granularity: 'word' }).segment(text)].map((s) => [...s.segment].length);
+  const out = new Set<number>([0, cs.length]);
+  let at = 0;
+  segs.forEach((n, k) => {
+    const prevLen = segs[k - 1] ?? 0;
+    at += k ? prevLen : 0;
+    if (!k) return;
+    const [a, b] = [cs[at - 1], cs[at]];
+    if (OPENER.test(a)) return;
+    if (GAP.test(a) && !GAP.test(b) && !NO_HEAD.test(b)) return void out.add(at);
+    if (GAP.test(b) || NO_HEAD.test(b)) return;
+    if ((KATA.test(a) && KATA.test(b)) || (LATIN.test(a) && LATIN.test(b))) return;
+    if (ja) {
+      // okurigana and particles stay with what they follow; kanji runs are one word to the eye
+      if (HIRA.test(b) && !HIRA.test(a)) return;
+      if (HAN.test(a) && HAN.test(b)) return;
+      if (HIRA.test(a) && HIRA.test(b)) {
+        const run = cs.slice(0, at).join('').match(/[\u3041-\u309f]+$/)![0];
+        const next = cs.slice(at).join('').match(/^[\u3041-\u309f\u30a0-\u30ff\p{Script=Han}]+/u)?.[0] ?? '';
+        if ([...run].length < 2 || [...next].length < 2 || !PHRASE_END.test(run) || VERB_TAIL.test(next)) return;
+      }
+    } else if (HAN.test(a) && HAN.test(b) && prevLen === 1 && n === 1) return;
+    out.add(at);
+  });
+  return out;
+}
+
 /** Character indexes (code points) where a phrase may start or end, including 0 and the text length. */
 export function phraseBoundaries(text: string): Set<number> {
   // Chinese: the word segmenter's words as they are (a Han run is many words, not one: 氣沉|丹田|手心|開)
+  if (wordSafe) return wordBreaks(text);
   if (!/[\u3040-\u30ff]/.test(text) && /\p{Script=Han}/u.test(text)) {
     const out = new Set<number>([0]);
     let pos = 0;
@@ -35,9 +88,9 @@ export function phraseBoundaries(text: string): Set<number> {
   // kinsoku: no phrase starts with small kana, a long mark or closing punctuation, and a kanji run is never cut
   // (六|感 was a separate "word" to the segmenter)
   const cs = [...text];
-  const NO_HEAD = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮー〜、。，．,.!?！？）」』】]/;
-  const HAN = /\p{Script=Han}/u;
-  for (const b of [...out]) if (b > 0 && b < cs.length && (NO_HEAD.test(cs[b]) || (HAN.test(cs[b - 1]) && HAN.test(cs[b])))) out.delete(b);
+  const NO_START = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮー〜、。，．,.!?！？）」』】]/;
+  const IDEO = /\p{Script=Han}/u;
+  for (const b of [...out]) if (b > 0 && b < cs.length && (NO_START.test(cs[b]) || (IDEO.test(cs[b - 1]) && IDEO.test(cs[b])))) out.delete(b);
   return out;
 }
 
@@ -115,3 +168,42 @@ export function balancedRows(text: string, rows: number): string[] {
   const edges = [0, ...best.at, cs.length];
   return edges.slice(1).map((e, i) => cs.slice(edges[i], e).join('').trim()).filter(Boolean);
 }
+
+/** Longest piece cut in big: a longer one cannot be set large enough to read and ran off the frame. */
+export const MAX_PIECE = 6;
+
+/** The line as 2–6 pieces of 2–6 characters (particles join the word before them; long phrases split again). */
+export function cutPieces(text: string): { text: string; from: number }[] {
+  const out: { text: string; from: number }[] = [];
+  let at = 0;
+  // Chinese is all Han: its words come from the segmenter, the Japanese "never cut a kanji run" rule would keep a
+  // Chinese line in one piece
+  const zh = !/[\u3040-\u30ff]/.test(text) && /\p{Script=Han}/u.test(text);
+  const split = (p: string): string[] => {
+    const cs = [...p.trim()];
+    if (cs.length <= MAX_PIECE) return [p];
+    // cut nearest the middle, at a phrase boundary when there is one, never inside a kanji run (六|感 or 年甲|斐)
+    const kanji = (c?: string) => !zh && !!c && /\p{Script=Han}/u.test(c);
+    // the composer's lines keep a word whole even if the piece stays long: the floor on type size has the last word
+    const legal = wordSafe ? wordBreaks(p.trim()) : undefined;
+    const ok = cs.map((_, i) => i).filter((i) => (!legal || legal.has(i)) && i >= 2 && cs.length - i >= 2 && !(kanji(cs[i - 1]) && kanji(cs[i])) && !/^[、。，,ーっゃゅょぁぃぅぇぉ]/.test(cs[i]));
+    const bounds = phraseBoundaries(p.trim());
+    const byMiddle = (x: number, y: number) => Math.abs(x - cs.length / 2) - Math.abs(y - cs.length / 2);
+    // prefer where a kanji word ends (六感|またがって), then a phrase boundary, then the middle
+    const cut = ok.filter((i) => kanji(cs[i - 1]) && !kanji(cs[i])).sort(byMiddle)[0] ?? ok.filter((i) => bounds.has(i)).sort(byMiddle)[0] ?? ok.sort(byMiddle)[0];
+    return cut === undefined ? [p] : [cs.slice(0, cut).join(''), cs.slice(cut).join('')].flatMap(split);
+  };
+  // phrases can split a kanji compound (六|感): rejoin pieces that meet kanji to kanji
+  const kanjiEnd = /\p{Script=Han}$/u;
+  const kanjiStart = /^\p{Script=Han}/u;
+  const joined = phrases(text).reduce<string[]>((acc, p) => (!zh && acc.length && kanjiEnd.test(acc[acc.length - 1]) && kanjiStart.test(p) ? [...acc.slice(0, -1), acc[acc.length - 1] + p] : [...acc, p]), []);
+  for (const p of joined.flatMap(split)) {
+    const from = [...text].indexOf([...p.trim()][0] ?? '', at);
+    at = from + [...p].length;
+    const prev = out[out.length - 1];
+    if (prev && ([...p.trim()].length < 2 || (out.length >= 6 && [...prev.text].length < MAX_PIECE))) prev.text += p;
+    else out.push({ text: p.trim(), from: Math.max(0, from) });
+  }
+  return out.filter((x) => x.text);
+}
+

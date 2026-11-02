@@ -15,6 +15,8 @@ export interface ExportOptions {
   from?: number;
   /** A solid ground under a transparent picture (a text-layer engine): green or black for keying in an editor. */
   matte?: string;
+  /** The picture in white, its alpha kept (with a matte): the clean key JIZURA's green screen gives, the style's colours gone. */
+  white?: boolean;
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
 }
@@ -104,6 +106,7 @@ export async function exportVideo(o: ExportOptions): Promise<{ blob: Blob; codec
     const small = new OffscreenCanvas(WIDTH, HEIGHT);
     const ctx = small.getContext('2d', { alpha: false })!;
     ctx.imageSmoothingQuality = 'high';
+    const ink = o.white ? new OffscreenCanvas(WIDTH, HEIGHT).getContext('2d')! : undefined;
     const send = async (f: number) => {
       const frame = new VideoFrame(small, { timestamp: Math.round((f / fps) * 1e6), duration: Math.round(1e6 / fps) });
       video.encode(frame, { keyFrame: f % (fps * 2) === 0 });
@@ -125,7 +128,14 @@ export async function exportVideo(o: ExportOptions): Promise<{ blob: Blob; codec
         ctx.fillStyle = o.matte;
         ctx.fillRect(0, 0, WIDTH, HEIGHT);
       }
-      ctx.drawImage(o.canvas, 0, 0, WIDTH, HEIGHT);
+      if (ink) {
+        ink.globalCompositeOperation = 'copy';
+        ink.drawImage(o.canvas, 0, 0, WIDTH, HEIGHT);
+        ink.globalCompositeOperation = 'source-in';
+        ink.fillStyle = '#ffffff';
+        ink.fillRect(0, 0, WIDTH, HEIGHT);
+        ctx.drawImage(ink.canvas, 0, 0);
+      } else ctx.drawImage(o.canvas, 0, 0, WIDTH, HEIGHT);
       await send(f);
     }
     await video.flush();

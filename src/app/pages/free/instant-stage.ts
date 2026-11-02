@@ -13,8 +13,8 @@ const QUIET_WAIT = 300;
 const LEAD_IN = 1;
 
 /** What an export makes: the video, the lyrics alone on a key colour, or each layer's frames into a folder. */
-export type ExportKind = 'mp4' | 'green' | 'black' | 'layers';
-const MATTE = { green: '#00b140', black: '#000000' } as const;
+export type ExportKind = 'mp4' | 'green' | 'green-white' | 'black' | 'layers';
+const MATTE = { green: '#00b140', 'green-white': '#00b140', black: '#000000' } as const;
 /** A name a file system takes. */
 const fileSafe = (s: string) => s.replace(/[\\/:*?"<>|]/g, ' ').trim() || 'video';
 
@@ -303,7 +303,7 @@ export class InstantStage implements OnInit, OnDestroy {
           return;
         }
         const audio = await this.audioFile()();
-        const out = await exportVideo({ engine, canvas, duration: seconds, from: start, audio, fps: 30, matte: kind === 'mp4' ? undefined : MATTE[kind], signal: this.abort.signal, onProgress });
+        const out = await exportVideo({ engine, canvas, duration: seconds, from: start, audio, fps: 30, matte: kind === 'mp4' ? undefined : MATTE[kind], white: kind === 'green-white', signal: this.abort.signal, onProgress });
         const name = `${base}${kind === 'mp4' ? '' : `_${kind}`}.mp4`;
         this.dropExport();
         const note = exportNote(out.blob.size, this.plain(), { seconds: out.seconds, realtime: seconds / out.seconds, video: out.codecs.video, audio: out.codecs.audio });

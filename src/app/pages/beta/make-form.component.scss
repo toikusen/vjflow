@@ -276,12 +276,32 @@ textarea {
 
 /* styles */
 
+.style-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.director-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.style-box > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.style-box[open] > summary {
+  margin-bottom: 12px;
+}
+
 .styles-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: -8px;
+  margin-bottom: 12px;
 }
 
 .hint {

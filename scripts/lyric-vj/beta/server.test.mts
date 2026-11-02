@@ -5,7 +5,7 @@ import { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
-import { betaCommand, createBetaServer, releaseStale, songDir as songDir2, stopBeta } from './server.mts';
+import { betaCommand, createBetaServer, MAX_LYRICS, releaseStale, songDir as songDir2, stopBeta } from './server.mts';
 import { killRunning, waitGone } from './queue.mts';
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -768,8 +768,9 @@ async function gate(o: { concerns?: string; candidateReason?: string; fail?: 'co
     const run = runPath(root, job);
     if (o.fail === job.kind && !job.retryOf) return 'exit 1';
     mkdirSync(join(run, 'stills'), { recursive: true });
-    // a make leaves its video and a base treatment in a proven language (any other language, or none, is held for the admin)
-    if (job.kind === 'make') return o.make?.(run) ?? `true${provenTreatment(run, job.tier)}; echo mp4 > '${run}/video.mp4'`;
+    // a make or a fix leaves its video and a base treatment in a proven language (any other language, or none, is held for the admin)
+    // (a fix copies its source run's timing snapshot, as fix.sh does)
+    if (job.kind === 'make' || job.kind === 'fix') return o.make?.(run) ?? `true${provenTreatment(run, job.tier)}${job.kind === 'fix' ? ` && cp '${join(root, 'songs/s1/song.json')}' '${run}/song.json'` : ''}; echo mp4 > '${run}/video.mp4'`;
     if (!existsSync(join(run, 'song.json'))) writeFileSync(join(run, 'song.json'), readFileSync(join(root, 'songs/s1/song.json')));
     if (o.slow?.on) return `sleep 30`;
     writeFileSync(join(run, 'stills', 'still_1.00.png'), PNG);
@@ -880,6 +881,51 @@ test('accepting a concept queues the make in the same run at the tier price: con
   assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 6);
   assert.equal((await t.tester(`/beta/jobs/${make.id}/video`)).status, 200);
   assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'concept.accepted' && e.jobId === id));
+  t.beta.server.close();
+});
+
+test('remake: another take on a result (same tier plans anew) or another tier from it (takes its plan too), at the rest price; a fix carries its concept', async () => {
+  const t = await gate();
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'none' } })).json();
+  const concept = await t.done(id);
+  const accepted = await (await t.tester(`/beta/jobs/${id}/accept`, { json: {} })).json();
+  const first = accepted.id as string;
+  assert.ok(first, JSON.stringify(accepted));
+  assert.equal((await t.tester(`/beta/jobs/${first}/remake`, { json: {} })).status, 409, 'not finished yet');
+  await t.done(first);
+  const crun = runPath(t.root, concept);
+  mkdirSync(join(crun, 'base'), { recursive: true }); mkdirSync(join(crun, 'noimg'), { recursive: true });
+  writeFileSync(join(crun, 'base', 'treatment.json'), '{}'); writeFileSync(join(crun, 'noimg', 'typeplan.json'), '{"shots":[]}'); writeFileSync(join(crun, 'brief.txt'), 'b');
+  assert.equal((await t.other(`/beta/jobs/${first}/remake`, { json: {} })).status, 404);
+  assert.equal((await t.tester(`/beta/jobs/${first}/remake`, { json: { tier: 'nope' } })).status, 400);
+  // the same tier: another take, the plan is not carried
+  const r = await t.tester(`/beta/jobs/${first}/remake`, { json: {} });
+  assert.equal(r.status, 202);
+  const againId = (await r.json()).id as string;
+  const again = t.beta.db.jobs.find((j) => j.id === againId)!;
+  assert.deepEqual([again.tier, again.priceUsd, again.conceptOf, again.runDir !== concept.runDir], ['none', 1.5, id, true]);
+  let run = runPath(t.root, again);
+  assert.deepEqual([existsSync(join(run, 'base/treatment.json')), existsSync(join(run, 'song.json')), existsSync(join(run, 'brief.txt')), existsSync(join(run, 'noimg'))], [true, true, true, false]);
+  assert.equal((await t.tester(`/beta/jobs/${first}/remake`, { json: { tier: 'hybrid' } })).status, 409, 'one job at a time');
+  await t.done(again.id);
+  // another tier from the same result: the accepted plan comes along for the props / the story to build on
+  const r2 = await t.tester(`/beta/jobs/${first}/remake`, { json: { tier: 'hybrid' } });
+  assert.equal(r2.status, 202);
+  const storyId = (await r2.json()).id as string;
+  const story = t.beta.db.jobs.find((j) => j.id === storyId)!;
+  assert.deepEqual([story.kind, story.tier, story.priceUsd, story.conceptOf], ['make', 'hybrid', 13.5, id]);
+  run = runPath(t.root, story);
+  assert.deepEqual([existsSync(join(run, 'noimg/typeplan.json')), existsSync(join(run, 'base/treatment.json'))], [true, true]);
+  await t.done(story.id);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 2.5 + 1.5 + 1.5 + 13.5, 'one concept fee, three makes at their rest prices');
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'concept.remade' && e.makeJobId === story.id && e.tier === 'hybrid' && e.fromJobId === first));
+  // a fix of the first video carries the concept, so it can be remade from as well
+  const fb = await (await t.tester(`/beta/jobs/${first}/feedback`, { json: { ok: false, marks: [{ at: 1, category: 'lyrics', note: 'x' }], suggestion: '', action: 'fix' } })).json();
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  assert.deepEqual([fb.fixJobId, fix.conceptOf], [fix.id, id]);
+  await t.done(fix.id);
+  const r3 = await t.tester(`/beta/jobs/${fix.id}/remake`, { json: { tier: 'img' } });
+  assert.equal(r3.status, 202, JSON.stringify(await r3.clone().json()));
   t.beta.server.close();
 });
 
@@ -1083,6 +1129,21 @@ test('a video whose checks passed reaches the person whatever its style (a candi
   }
 });
 
+test('lessons: a rule can be edited: the file is rewritten, the first text is kept once, bad input is refused', async () => {
+  const t = await gate();
+  const made = await (await t.admin('/beta/admin/lessons', { json: { text: '原本的規則內容', scope: 'typeplan' } })).json();
+  const patch = (body: object, id = made.id) => t.admin(`/beta/admin/lessons/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+  assert.equal((await t.tester(`/beta/admin/lessons/${made.id}`, { method: 'PATCH', body: '{}' })).status, 403);
+  assert.equal((await patch({ text: '短' })).status, 400);
+  assert.equal((await patch({ scope: 'everyone' })).status, 400);
+  assert.equal((await patch({ text: '補充過的規則' }, 'nope')).status, 404);
+  const one = await (await patch({ text: ' 補充過的規則 ', scope: 'both' })).json();
+  assert.deepEqual([one.text, one.source, one.scope], ['補充過的規則', '原本的規則內容', 'both']);
+  assert.equal((await (await patch({ text: '再補充一次的規則' })).json()).source, '原本的規則內容', 'the first text stays');
+  assert.equal(JSON.parse(readFileSync(join(t.root, 'lessons.json'), 'utf8')).lessons[0].text, '再補充一次的規則');
+  t.beta.server.close();
+});
+
 test('lessons: the admin writes a rule from a report (or free); the file every concept and make reads is rewritten; delete removes it', async () => {
   const t = await gate();
   assert.equal((await t.tester('/beta/admin/lessons')).status, 403);
@@ -1254,7 +1315,7 @@ test('fix: a picture fix on img queues a fix job at the fix price in a fresh run
   assert.deepEqual([fix.tier, fix.priceUsd, fix.reservedUsd, fix.userId, fix.songId], ['img', 1, 1, t.beta.db.songs[0].userId, 's1']);
   assert.equal(fix.runDir, `runs/${fix.id}`);
   assert.notEqual(fix.runDir, 'runs/i');
-  assert.deepEqual(fix.inputs, { from: 'i', kind: 'picture', ranges: [{ at: 2, end: 4 }, { at: 5, end: 6 }], feedbackId: fb.id });
+  assert.deepEqual(fix.inputs, { from: 'i', kind: 'picture', ranges: [{ at: 2, end: 4, category: 'picture' }, { at: 5, end: 6, category: 'picture', note: 'x' }], feedbackId: fb.id });
   assert.equal(fb.fixJobId, fix.id);
   assert.equal(t.beta.db.feedback[0].fixJobId, fix.id);
   const q = readEvents(t.root, 's1').find((e) => e.type === 'job.queued');
@@ -1282,9 +1343,9 @@ test('fix: timing is accepted on every tier', async () => {
 test('fix: refused requests queue nothing and store no report', async () => {
   const t = await fixRoot();
   const status = async (id: string, body: object) => { const r = await t.tester(`/beta/jobs/${id}/feedback`, { json: body }); return [r.status, (await r.json()).error]; };
-  assert.deepEqual(await status('h', fixBody('picture')), [400, '這類問題目前只能重做或只回報']);
-  assert.deepEqual(await status('n', fixBody('picture')), [400, '這類問題目前只能重做或只回報']);
-  assert.deepEqual(await status('i', fixBody('lyrics')), [400, '這類問題目前只能重做或只回報']);
+  assert.deepEqual(await status('h', fixBody('picture')), [400, '故事版目前只能修歌詞時間，其他請重做或只回報']);
+  assert.deepEqual(await status('h', fixBody('lyrics')), [400, '故事版目前只能修歌詞時間，其他請重做或只回報']);
+  assert.deepEqual(await status('i', fixBody('lyrics', { marks: [], suggestion: '整體沒特色' })), [400, '這類問題目前只能重做或只回報']);
   assert.deepEqual(await status('legacy', fixBody('timing')), [409, '這支舊影片無法修正，請重做']);
   assert.equal(t.beta.db.feedback.length, 0);
   t.beta.server.close();
@@ -1304,6 +1365,66 @@ test('fix: refused requests queue nothing and store no report', async () => {
   const kept = await fixRoot();
   assert.equal((await kept.tester('/beta/jobs/h/feedback', { json: fixBody('picture', { action: 'none' }) })).status, 201);
   kept.beta.server.close();
+});
+
+test('fix: marks of other kinds on none and img queue a replan fix whose ranges carry the notes; the command passes them to fix.sh', async () => {
+  const t = await fixRoot();
+  const marks = [{ at: 1.1, category: 'lyrics', note: '「」被遮住' }, { at: 3.7, category: 'picture', note: '橢圓變星形' }, { at: 6, end: 9, category: 'style', note: '' }];
+  const r = await t.tester('/beta/jobs/n/feedback', { json: fixBody('lyrics', { marks, suggestion: ' 插圖太深 ' }) });
+  assert.equal(r.status, 201);
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  assert.deepEqual([fix.tier, fix.priceUsd, fix.inputs?.kind, fix.inputs?.suggestion], ['none', 1, 'replan', '插圖太深']);
+  assert.deepEqual(fix.inputs?.ranges, [{ at: 1.1, end: 3.1, category: 'lyrics', note: '「」被遮住' }, { at: 3.7, end: 5.7, category: 'picture', note: '橢圓變星形' }, { at: 6, end: 9, category: 'style' }]);
+  const cmd = betaCommand(t.root)(fix, t.beta.db);
+  assert.ok(typeof cmd === 'string' && cmd.includes('fix.sh') && cmd.includes("'replan'") && cmd.includes('橢圓變星形') && cmd.endsWith("'插圖太深'"), String(cmd));
+  t.beta.server.close();
+  const img = await fixRoot();
+  assert.equal((await img.tester('/beta/jobs/i/feedback', { json: fixBody('picture', { marks: [{ at: 2, category: 'picture', note: '' }, { at: 4, category: 'empty', note: 'x' }] }) })).status, 201, 'mixed marks on img re-plan');
+  assert.equal(img.beta.db.jobs.find((j) => j.kind === 'fix')!.inputs?.kind, 'replan');
+  img.beta.server.close();
+});
+
+test('fix from a report: a 只回報 with fixable marks can be fixed later, once; others and hybrid are refused', async () => {
+  const t = await fixRoot();
+  const sent = await (await t.tester('/beta/jobs/n/feedback', { json: fixBody('lyrics', { action: 'none', marks: [{ at: 2, category: 'lyrics', note: '太粗' }] }) })).json();
+  assert.equal(sent.action, 'none');
+  assert.equal((await t.admin(`/beta/feedback/${sent.id}/fix`, { json: {} })).status, 404, 'only the person who reported');
+  const r = await t.tester(`/beta/feedback/${sent.id}/fix`, { json: {} });
+  assert.equal(r.status, 202);
+  const job = await r.json();
+  const fix = t.beta.db.jobs.find((j) => j.kind === 'fix')!;
+  assert.deepEqual([job.id, fix.inputs?.kind, fix.inputs?.feedbackId, fix.inputs?.from], [fix.id, 'replan', sent.id, 'n']);
+  assert.equal(t.beta.db.feedback[0].fixJobId, fix.id, 'the report now names its fix');
+  assert.deepEqual((await (await t.tester('/beta/jobs/n/feedback')).json())[0].fixJobId, fix.id);
+  assert.equal((await t.tester(`/beta/feedback/${sent.id}/fix`, { json: {} })).status, 409, 'once per report');
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'feedback.fix' && e.feedbackId === sent.id && e.fixJobId === fix.id));
+  await waitFor(() => fix.status === 'done');
+  const h = await (await t.tester('/beta/jobs/h/feedback', { json: fixBody('lyrics', { action: 'none' }) })).json();
+  assert.deepEqual([(await t.tester(`/beta/feedback/${h.id}/fix`, { json: {} })).status, t.beta.db.jobs.filter((j) => j.kind === 'fix').length], [409, 1]);
+  const okOnly = await (await t.tester('/beta/jobs/i/feedback', { json: { ok: true, marks: [], suggestion: 'nice', action: 'none' } })).json();
+  assert.equal((await t.tester(`/beta/feedback/${okOnly.id}/fix`, { json: {} })).status, 409);
+  assert.equal((await t.tester('/beta/feedback/nope/fix', { json: {} })).status, 404);
+  t.beta.server.close();
+});
+
+test('triage: the admin files a report or puts it back; proposals.json shows beside it; only the admin may', async () => {
+  const t = await fixRoot();
+  const f = await (await t.tester('/beta/jobs/n/feedback', { json: fixBody('lyrics', { action: 'none' }) })).json();
+  writeFileSync(join(t.root, 'proposals.json'), JSON.stringify({ [f.id]: { summary: '渲染問題', items: [{ outcome: 'code', text: '修渲染器' }] } }));
+  const list = await (await t.admin('/beta/admin/feedback')).json();
+  assert.deepEqual(list[0].proposal, { summary: '渲染問題', items: [{ outcome: 'code', text: '修渲染器' }] });
+  assert.equal(t.beta.db.feedback[0].triage, undefined);
+  assert.equal((t.beta.db.feedback[0] as { proposal?: unknown }).proposal, undefined, 'a proposal is shown, never stored on the report');
+  const put = (body: object, who = t.admin) => who(`/beta/admin/feedback/${f.id}/triage`, { method: 'PUT', json: body });
+  assert.equal((await put({ outcomes: ['code'] }, t.tester)).status, 403);
+  assert.equal((await put({ outcomes: [] })).status, 400);
+  assert.equal((await t.admin('/beta/admin/feedback/nope/triage', { method: 'PUT', json: { outcomes: ['code'] } })).status, 404);
+  assert.equal((await put({ outcomes: ['code', 'rule'], note: '已修' })).status, 200);
+  assert.deepEqual([t.beta.db.feedback[0].triage?.outcomes, t.beta.db.feedback[0].triage?.note], [['code', 'rule'], '已修']);
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'feedback.triaged' && e.feedbackId === f.id));
+  assert.equal((await t.admin(`/beta/admin/feedback/${f.id}/triage`, { method: 'DELETE' })).status, 200);
+  assert.equal(t.beta.db.feedback[0].triage, undefined);
+  t.beta.server.close();
 });
 
 test('fix: a timing fix that adds or removes a lyric line is refused (the render draws only the styled lines)', async () => {
@@ -1362,7 +1483,7 @@ test('the shell command of a fix job runs fix.sh with the source run, the kind a
   db.songs.push({ id: 's1', userId: 'u', title: 'T', artist: 'A', language: 'ja', createdAt: 'x' });
   const job = (kind: 'picture' | 'timing'): Job => ({ id: 'f1', userId: 'u', songId: 's1', kind: 'fix', tier: 'img', status: 'queued', reservedUsd: 1, priceUsd: 1, createdAt: 'x', runDir: 'runs/f1', inputs: { from: 'm1', kind, ranges: [{ at: 2, end: 4 }] } });
   const cmd = betaCommand(root);
-  assert.equal(cmd(job('picture'), db), `bash scripts/lyric-vj/beta/fix.sh '/r/songs/s1' 'img' '/r/songs/s1/runs/f1' '/r/songs/s1/runs/m1' 'picture' '[{"at":2,"end":4}]'`);
+  assert.equal(cmd(job('picture'), db), `bash scripts/lyric-vj/beta/fix.sh '/r/songs/s1' 'img' '/r/songs/s1/runs/f1' '/r/songs/s1/runs/m1' 'picture' '[{"at":2,"end":4}]' ''`);
   assert.match(cmd(job('timing'), db) as string, /fix\.sh .* 'timing' /);
   assert.deepEqual(cmd({ ...job('timing'), inputs: { from: '../x', kind: 'timing', ranges: [] } }, db), { error: '找不到要修正的影片' });
   assert.match(cmd({ ...job('timing'), kind: 'make' }, db) as string, /^bash scripts\/lyric-vj\/beta\/make\.sh '\/r\/songs\/s1' 'img' '\/r\/songs\/s1\/runs\/f1'$/);
@@ -1413,5 +1534,38 @@ test('不確認直接製作: the owner skips the timing check once; song.json co
   assert.equal(c.status, 200);
   assert.equal(song.timingSkipped, undefined);
   assert.equal(JSON.parse(readFileSync(join(t.root, 'songs/s1/song.json'), 'utf8')).timingSkipped, undefined);
+  t.beta.server.close();
+});
+
+test('/ goes to /my; a bad login link gets a readable page; lyrics past the limit are refused, not cut', async () => {
+  const t = await setup();
+  const root = await t.anon('/');
+  assert.equal(root.status, 302);
+  assert.equal(root.headers.get('location'), '/my');
+  const bad = await t.anon('/beta/login?t=bad');
+  assert.equal(bad.status, 401);
+  assert.match(bad.headers.get('content-type') ?? '', /^text\/html; charset=utf-8/);
+  assert.match(await bad.text(), /登入連結無效/);
+  const song = (lyrics: string) => t.tester('/beta/songs', { method: 'POST', body: JSON.stringify({ title: 'X', lyrics, language: 'zh' }) });
+  const long = await song('a'.repeat(MAX_LYRICS + 1));
+  assert.equal(long.status, 400);
+  assert.equal((await long.json()).error, '歌詞最多 20000 字');
+  assert.equal((await song('a'.repeat(MAX_LYRICS))).status, 201);
+  t.beta.server.close();
+});
+
+test('a held video shows when it goes out by itself, only when it will', async () => {
+  const t = await setup();
+  const dir = songDir2(t.root, 's1');
+  mkdirSync(join(dir, 'runs/ok'), { recursive: true });
+  writeFileSync(join(dir, 'runs/ok/video.mp4'), 'mp4');
+  const owner = t.beta.db.songs[0].userId;
+  const endedAt = '2026-10-29T07:00:00.000Z';
+  const held = (id: string) => ({ id, userId: owner, songId: 's1', kind: 'make' as const, tier: 'img' as const, status: 'admin' as const, reservedUsd: 6, createdAt: endedAt, endedAt, runDir: `runs/${id}`, phase: '等管理者確認' });
+  t.beta.db.jobs.push(held('ok'), held('gone'));
+  const jobs = await (await t.tester('/beta/jobs')).json();
+  const by = (id: string) => jobs.find((j: { id: string }) => j.id === id);
+  assert.equal(by('ok').autoReleaseAt, '2026-10-29T11:00:00.000Z');
+  assert.equal(by('gone').autoReleaseAt, undefined);
   t.beta.server.close();
 });

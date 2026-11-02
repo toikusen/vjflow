@@ -1,13 +1,14 @@
 // What the beta pages read from scripts/lyric-vj/beta/server.mts, and where a song stands.
+import { formatPrice } from './ui/price';
 import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
 export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string; timingSkipped?: boolean }
-export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; autoReleased?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
+export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; autoReleased?: string; autoReleaseAt?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
 
 /** What a concept job was asked for (`job.inputs` on the server). */
-export interface BetaJobInputs { concept?: string; style?: string; refs?: string[]; note?: string; from?: string }
+export interface BetaJobInputs { concept?: string; style?: string; refs?: string[]; note?: string; from?: string; kind?: FixKind; feedbackId?: string }
 
 /**
  * A finished concept as the gate shows it; mirrors ConceptSummary in scripts/lyric-vj/beta/concept-summary.mts
@@ -22,7 +23,6 @@ export interface ConceptSummary {
 }
 
 /** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
-export const PREP_PRICE = 0.5;
 
 /** The audio upload limit; mirrors MAX_AUDIO in scripts/lyric-vj/beta/server.mts. */
 export const MAX_AUDIO_BYTES = 80_000_000;
@@ -97,6 +97,16 @@ export const JOB_STEPS: Record<'prep' | 'concept' | 'fix' | BetaTier, JobStep[]>
 /** The whole minutes a job kind is estimated to take, as every 約 N 分鐘 in a confirm dialog states it. */
 export const stepsMin = (kind: keyof typeof JOB_STEPS): number => Math.round(JOB_STEPS[kind].reduce((s, x) => s + x.min, 0));
 
+/**
+ * The whole flow in one line, for the upload confirm; the empty list's four steps read the same constants.
+ * `maxConcepts` is MAX_CONCEPTS (make.ts imports this file, so it is passed in).
+ */
+export function flowSummary(maxConcepts: number): string {
+  const short = (x: number) => `$${formatPrice(x, 'short')}`;
+  const makes = (['none', 'img', 'hybrid'] as const).map((t) => short(TIER_INFO[t].rest)).join('／');
+  return `準備約 ${stepsMin('prep')} 分鐘（免費）→ 檢查歌詞時間 → 免費做 720p 影片；要導演製作再付費：導演提概念（${short(CONCEPT_PRICE)}，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 ${maxConcepts} 次）→ 接受後製作（${makes}）；只上傳你有權使用的音樂；歌曲建立後不能刪除或改名。`;
+}
+
 const tierInfo = (tier: BetaTier, name: string, about: string, rest: number) =>
   ({ name, about, concept: CONCEPT_PRICE, rest, price: CONCEPT_PRICE + rest, min: stepsMin('concept') + stepsMin(tier) });
 
@@ -106,16 +116,22 @@ const tierInfo = (tier: BetaTier, name: string, about: string, rest: number) =>
  * steps plus the make steps, each rounded as its dialog states it, so the card's 約 N 分 is the two dialogs' sum.
  */
 export const TIER_INFO: Record<BetaTier, { name: string; about: string; concept: number; rest: number; price: number; min: number }> = {
-  none: tierInfo('none', '文字動態版', '只有歌詞文字與圖形動態，沒有插圖。', 1.5),
-  img: tierInfo('img', '插圖版', '文字動態加上配合歌詞的插圖道具。', 3.5),
-  hybrid: tierInfo('hybrid', '故事版', '依歌詞編出故事，有角色與畫面；成品會依故事重新構圖，示意畫面代表風格與配色。', 13.5),
+  none: tierInfo('none', '文字動態版', '只有歌詞文字與圖形動態。', 1.5),
+  img: tierInfo('img', '插圖版', '文字動態加上插圖道具。', 3.5),
+  hybrid: tierInfo('hybrid', '故事版', '依歌詞編出故事，有角色與畫面。', 13.5),
 };
 
 /** The step list for a job: by its kind, and for a make job by its tier; anything unknown reads as the text version. */
 const jobSteps = (job: BetaJob): JobStep[] =>
   (job.kind === 'make' ? JOB_STEPS[job.tier ?? 'none'] : JOB_STEPS[job.kind]) ?? JOB_STEPS.none;
 
-export interface JobProgress { label: string; index: number; steps: JobStep[]; pct: number; leftMin: number }
+/**
+ * `stepMin` is how long the current step has run (whole minutes, since the last recorded step, else since the start);
+ * `overdue` is true once the job has run longer than all its steps' estimates together. `leftMin` is the whole estimate
+ * while queued; while running it stops falling once a step outruns its estimate, so the person's pages show it only
+ * for a queued job (the admin's queue wait still sums it).
+ */
+export interface JobProgress { label: string; index: number; steps: JobStep[]; pct: number; leftMin: number; stepMin: number; overdue: boolean; queued: boolean }
 
 /**
  * How far a running job is: the steps before its current phase count in full, the current one by the time since
@@ -128,14 +144,16 @@ export function jobProgress(job: BetaJob, now = Date.now()): JobProgress {
   // a phase outside the list (a step make.sh skipped, 等你確認概念, 完成) keeps the bar on the last step recorded
   const known = (job.steps ?? []).map((x) => steps.findIndex((y) => y.phases.includes(x.phase))).filter((i) => i >= 0);
   const index = at >= 0 ? at : Math.max(0, ...known);
-  if (job.status !== 'running') return { label: '排隊中', index: 0, steps, pct: 0, leftMin: Math.ceil(total) };
+  if (job.status !== 'running') return { label: '排隊中', index: 0, steps, pct: 0, leftMin: Math.ceil(total), stepMin: 0, overdue: false, queued: true };
   const before = steps.slice(0, index).reduce((s, x) => s + x.min, 0);
   // the recorded start of the current step (the last entry of its phase: a restart can repeat one); else the old estimate
   const stepAt = job.steps?.filter((x) => x.phase === job.phase).at(-1)?.at;
   const elapsed = job.startedAt ? (now - Date.parse(job.startedAt)) / 60_000 : 0;
   const into = Math.min(Math.max(0, stepAt ? (now - Date.parse(stepAt)) / 60_000 : elapsed - before), steps[index].min * 0.9);
   const doneMin = before + into;
-  return { label: steps[index].label, index, steps, pct: Math.min(99, Math.round((doneMin / total) * 100)), leftMin: Math.max(1, Math.ceil(total - doneMin)) };
+  const lastAt = job.steps?.at(-1)?.at ?? job.startedAt;
+  const stepMin = lastAt ? Math.max(0, Math.floor((now - Date.parse(lastAt)) / 60_000)) : 0;
+  return { label: steps[index].label, index, steps, pct: Math.min(99, Math.round((doneMin / total) * 100)), leftMin: Math.max(1, Math.ceil(total - doneMin)), stepMin, overdue: elapsed > total, queued: false };
 }
 
 /**
@@ -178,10 +196,33 @@ export async function jsonOrError<T = unknown>(r: { status: number; json(): Prom
 export type FeedbackCategory = 'lyrics' | 'timing' | 'picture' | 'empty' | 'style' | 'rhythm' | 'other';
 export type FeedbackAction = 'fix' | 'redo' | 'none';
 export interface FeedbackMark { at: number; end?: number; category: FeedbackCategory; note: string }
-export interface BetaFeedback { id: string; jobId: string; songId: string; userId: string; ok: boolean; marks: FeedbackMark[]; suggestion: string; action: FeedbackAction; createdAt: string; tier?: BetaTier; style?: string }
+export interface BetaFeedback { id: string; jobId: string; songId: string; userId: string; ok: boolean; marks: FeedbackMark[]; suggestion: string; action: FeedbackAction; createdAt: string; tier?: BetaTier; style?: string; fixJobId?: string; triage?: BetaTriage; proposal?: BetaProposal }
+
+/** Where a report ended up (mirrors TriageOutcome in scripts/lyric-vj/beta/feedback.mts). */
+export type TriageOutcome = 'code' | 'rule' | 'check' | 'song';
+export const TRIAGE_OUTCOMES: { id: TriageOutcome; label: string; hint: string }[] = [
+  { id: 'code', label: '改程式', hint: '渲染或流程的毛病' },
+  { id: 'rule', label: '寫規則', hint: '導演或排版器的判斷' },
+  { id: 'check', label: '加檢查', hint: '出貨前能量測的問題' },
+  { id: 'song', label: '只屬於這首', hint: '不變成通則' },
+];
+export interface BetaTriage { outcomes: TriageOutcome[]; note?: string; at: string; by: string }
+export interface BetaProposalItem { outcome: TriageOutcome; text: string; scope?: LessonScope }
+/** Suggested handling from proposals.json, shown beside a report; only the admin's click applies it. */
+export interface BetaProposal { summary?: string; items: BetaProposalItem[] }
+
+/**
+ * The report a result can still be fixed from (依這份回報修正): its newest one sent as 只回報 with marks a fix can work on,
+ * when no fix job was queued for it yet. Undefined otherwise.
+ */
+export function fixableReport(list: readonly BetaFeedback[], job: Pick<BetaJob, 'tier'>, jobs: readonly Pick<BetaJob, 'kind' | 'inputs'>[]): BetaFeedback | undefined {
+  const last = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).at(-1);
+  if (!last || last.ok || last.action !== 'none' || !fixAllowed(last.marks, job.tier)) return undefined;
+  return last.fixJobId || jobs.some((j) => j.kind === 'fix' && j.inputs?.feedbackId === last.id) ? undefined : last;
+}
 export type LessonScope = 'director' | 'typeplan' | 'both';
 /** A rule the admin wrote for every later song (mirrors Lesson in scripts/lyric-vj/beta/store.mts). */
-export interface BetaLesson { id: string; text: string; scope: LessonScope; createdAt: string; by: string; feedbackId?: string; songId?: string; style?: string }
+export interface BetaLesson { id: string; text: string; scope: LessonScope; createdAt: string; by: string; feedbackId?: string; songId?: string; style?: string; source?: string }
 export const LESSON_SCOPES: { id: LessonScope; label: string; hint: string }[] = [
   { id: 'director', label: '導演', hint: '故事、段落、圖片、風格、顏色、字型' },
   { id: 'typeplan', label: '文字動態', hint: '刀、招式、版型、進退場、道具位置' },
@@ -197,22 +238,28 @@ export const FEEDBACK_CATEGORIES: { id: FeedbackCategory; label: string }[] = [
   { id: 'other', label: '其他' },
 ];
 
+/** A category's label (its id when unknown, so an older report still reads). */
+export const categoryLabel = (id: string): string => FEEDBACK_CATEGORIES.find((c) => c.id === id)?.label ?? id;
+
 /** The fix fee; mirrors PRICE.fix in scripts/lyric-vj/beta/store.mts. */
 export const FIX_PRICE = 1;
-/** What a fix job does: take the pictures out of the marked stretches, or re-apply the song's new timing. */
-export type FixKind = 'picture' | 'timing';
-/** Mirrors fixKindFor in scripts/lyric-vj/beta/feedback.mts: `picture` or `timing` when every mark (at least one) is that category, else undefined. */
-export function fixKindFor(marks: readonly { category: FeedbackCategory | null }[]): FixKind | undefined {
-  const kind = marks[0]?.category;
-  return (kind === 'picture' || kind === 'timing') && marks.every((m) => m.category === kind) ? kind : undefined;
+/** What a fix job does: take the pictures out of the marked stretches, re-apply the song's new timing, or plan the marked shots again with the notes. */
+export type FixKind = 'picture' | 'timing' | 'replan';
+/**
+ * Mirrors fixKindFor in scripts/lyric-vj/beta/feedback.mts: `timing` when every mark (at least one) is 時間不準, `picture`
+ * when every mark is 圖片不搭 on 插圖版, else `replan` on 文字動態版 and 插圖版; nothing on 故事版, without marks, or with a mark still uncategorised.
+ */
+export function fixKindFor(marks: readonly { category: FeedbackCategory | null }[], tier?: BetaTier): FixKind | undefined {
+  if (!marks.length || marks.some((m) => !m.category)) return undefined;
+  if (marks.every((m) => m.category === 'timing')) return 'timing';
+  if (marks.every((m) => m.category === 'picture') && tier === 'img') return 'picture';
+  return tier === 'none' || tier === 'img' ? 'replan' : undefined;
 }
-/** Whether the server's parseFeedback accepts a fix for these marks on this tier: pictures come out of 插圖版 only, timing on any tier. */
-export const fixAllowed = (marks: readonly { category: FeedbackCategory | null }[], tier?: BetaTier): boolean => {
-  const kind = fixKindFor(marks);
-  return !!kind && (kind !== 'picture' || tier === 'img');
-};
-/** The server's answer to a fix it cannot do (NOT_FIXABLE in feedback.mts). */
+/** Whether the server's parseFeedback accepts a fix for these marks on this tier (fixKindFor). */
+export const fixAllowed = (marks: readonly { category: FeedbackCategory | null }[], tier?: BetaTier): boolean => !!fixKindFor(marks, tier);
+/** The server's answers to a fix it cannot do (NOT_FIXABLE / NOT_FIXABLE_HYBRID in feedback.mts). */
 export const NOT_FIXABLE = '這類問題目前只能重做或只回報';
+export const NOT_FIXABLE_HYBRID = '故事版目前只能修歌詞時間，其他請重做或只回報';
 
 export interface FixState { marks: readonly { category: FeedbackCategory | null }[]; tier?: BetaTier; active?: boolean; left?: number | null }
 
@@ -220,10 +267,10 @@ export interface FixState { marks: readonly { category: FeedbackCategory | null 
 export function fixBlock(s: FixState): string | null {
   if (!s.marks.length) return '先標出有問題的地方';
   if (s.marks.some((m) => !m.category)) return '每個標記請選一個類別';
-  if (!fixAllowed(s.marks, s.tier)) return fixKindFor(s.marks) === 'picture' ? '只有插圖版能拿掉圖片' : NOT_FIXABLE;
+  if (!fixAllowed(s.marks, s.tier)) return s.tier === 'hybrid' ? NOT_FIXABLE_HYBRID : NOT_FIXABLE;
   if (s.active) return '這首歌已經在排隊或製作中';
   // in cents, so float noise never makes a balance look short
-  if (s.left !== undefined && s.left !== null && Math.round(FIX_PRICE * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡管理者';
+  if (s.left !== undefined && s.left !== null && Math.round(FIX_PRICE * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡邀請你的人';
   return null;
 }
 
@@ -314,21 +361,22 @@ export const songChip = (v: SongView): SongChip => STATUS_CHIP[songKind(v)];
 /** The 「下一步 →」 link on a song card: its words, and whether it opens the timing editor or the song page. */
 export interface NextStep { label: string; to: 'song' | 'timing' }
 
-/** What the person does next with a song; `progress` is the running job's (prep or make), for the minutes left. */
-export function nextStep(v: SongView, progress?: Pick<JobProgress, 'leftMin'>): NextStep {
+/** What the person does next with a song; `progress` is the active job's (prep or make): the estimate while queued, the step while running. */
+export function nextStep(v: SongView, progress?: Pick<JobProgress, 'leftMin' | 'queued' | 'index' | 'steps'>): NextStep {
   const song = (label: string): NextStep => ({ label, to: 'song' });
   switch (songKind(v)) {
     case 'preparing':
     case 'making':
     case 'retrying':
-      return song(progress ? `約剩 ${progress.leftMin} 分` : '看進度');
+      if (!progress) return song('看進度');
+      return song(progress.queued ? `排隊中 · 約 ${progress.leftMin} 分` : `步驟 ${progress.index + 1}／${progress.steps.length}`);
     case 'timing': return { label: '確認時間', to: 'timing' };
     case 'concept': return song('看概念');
     case 'noAudio': return song('重新上傳音檔');
     // the page shows what failed and that it is on record; there is no contact action to name
     case 'help':
     case 'prepFailed': return song('看失敗原因');
-    default: return song('製作新版本');
+    default: return song('做影片');
   }
 }
 

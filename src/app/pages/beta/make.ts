@@ -92,16 +92,25 @@ export function defaultTier(jobs: readonly BetaJob[], songId: string, made: read
   return TIERS.find((t) => !have.has(t)) ?? TIERS[0];
 }
 
+/**
+ * The confirm line saying which concept attempt a new 產生概念 would be (n of MAX_CONCEPTS, counted as store.mts
+ * counts them) and that it cannot be called off once sent.
+ */
+export function attemptLine(jobs: readonly BetaJob[], song: { id: string; title: string }, tier: BetaTier): string {
+  const n = conceptAttempts(jobs, song.id, tier) + 1;
+  return `這是「${song.title}」${TIER_INFO[tier].name}的第 ${n}／${MAX_CONCEPTS} 次概念（含第一次；照意見調整、換一個方向都算一次）。送出後不能自行取消。`;
+}
+
 /** Why 產生概念 is off right now (the line under the button), or null when the person may go ahead. */
 export function makeBlock(s: MakeState): string | null {
   if (s.active) return '目前有工作在進行，完成後才能再製作。';
   const undecided = s.jobs.some((j) => j.kind === 'concept' && j.songId === s.songId && j.tier === s.tier && j.status === 'done' && !j.decision);
   if (undecided) return '這個版本有一個概念還沒決定';
-  if (conceptAttempts(s.jobs, s.songId, s.tier) >= MAX_CONCEPTS) return '這個版本已試過 3 次概念，請聯絡管理者';
+  if (conceptAttempts(s.jobs, s.songId, s.tier) >= MAX_CONCEPTS) return '這個版本已試過 3 次概念，請聯絡邀請你的人';
   // the whole version (concept and make), in cents so float noise never makes a balance look short: a balance that
   // covers the concept alone would leave the person with a concept they cannot accept
   const price = TIER_INFO[s.tier].price;
-  if (s.left !== null && Math.round(price * 100) > Math.round(s.left * 100)) return `餘額不足以完成這個版本（需 $${formatPrice(price, 'short')}），請聯絡管理者`;
+  if (s.left !== null && Math.round(price * 100) > Math.round(s.left * 100)) return `餘額不足以完成這個版本（需 $${formatPrice(price, 'short')}），請聯絡邀請你的人`;
   if (s.submitting) return '送出中…';
   if (s.uploading) return '參考圖上傳中，請稍候。';
   if (feelingLength(s.feeling) > MAX_FEELING) return '想要的感覺最多 500 字';

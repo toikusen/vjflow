@@ -1,5 +1,5 @@
 import { Component, computed, effect, ElementRef, input, output, signal, untracked, viewChild } from '@angular/core';
-import { BetaFeedback, BetaJob, BetaSong, BetaTier, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE, stepsMin, TIER_INFO } from './beta';
+import { BetaFeedback, BetaJob, BetaSong, BetaTier, categoryLabel, FEEDBACK_CATEGORIES, FeedbackAction, FeedbackCategory, FIX_PRICE, fixableReport, fixAllowed, fixBlock, FixKind, fixKindFor, NOT_FIXABLE, NOT_FIXABLE_HYBRID, stepsMin, TIER_INFO } from './beta';
 import { jobTitle, stamp } from './song';
 import { Ask } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
@@ -47,7 +47,7 @@ export function validateReport(r: ReportDraft, duration?: number, tier?: BetaTie
     if (m.note.trim().length > MAX_TEXT) return `備註最多 ${MAX_TEXT} 字`;
   }
   if (!r.ok && !r.marks.length && !suggestion) return '請標出哪裡有問題，或寫下建議';
-  if (r.action === 'fix' && !fixAllowed(r.marks, tier)) return NOT_FIXABLE;
+  if (r.action === 'fix' && !fixAllowed(r.marks, tier)) return tier === 'hybrid' ? NOT_FIXABLE_HYBRID : NOT_FIXABLE;
   return null;
 }
 
@@ -122,14 +122,16 @@ export function actionAfterMarks(action: FeedbackAction, marks: readonly { categ
 }
 
 /** The confirm dialog's explanation of a fix, by what it does. */
-export const fixBody = (kind: 'picture' | 'timing' | undefined) =>
+export const fixBody = (kind: FixKind | undefined) =>
   kind === 'timing'
     ? `會用你改好的歌詞時間重新輸出一支新影片，畫面不變，原本的版本保留。約 ${FIX_MIN} 分鐘，可以離開頁面。`
-    : `會把標記範圍裡的圖片拿掉，其餘照舊，重新輸出一支新影片，原本的版本保留。約 ${FIX_MIN} 分鐘，可以離開頁面。`;
+    : kind === 'replan'
+      ? `導演會照你每個標記寫的意見，只重新編排標記到的鏡頭（版型、招式、進退場），其他鏡頭和整體風格照舊，重新輸出一支新影片，原本的版本保留。約 ${FIX_MIN} 分鐘，可以離開頁面。`
+      : `會把標記範圍裡的圖片拿掉，其餘照舊，重新輸出一支新影片，原本的版本保留。約 ${FIX_MIN} 分鐘，可以離開頁面。`;
 
 /**
- * 回報這個作品 (2d), opened inside a result card: the video with a mark timeline on the left; on the right ① 沒問題／有問題,
- * ② the marks with a category each, ③ a suggestion and how to handle it (修正 $1 through the confirm dialog, 重做 → 製作新版本, 只回報 · 免費).
+ * 回報這個作品 (2d), opened inside a result card: the video with a mark timeline on the left; on the right 沒問題／有問題,
+ * the marks with a category each, a suggestion and how to handle it (修正 $1 through the confirm dialog, 重做 → 製作新版本, 只回報 · 免費).
  */
 @Component({
   selector: 'app-report-form',
@@ -149,17 +151,30 @@ export class ReportFormComponent {
   readonly left = input<number | null>(null);
   /** The song's length from its timing, used for the timeline until the video reports its own. */
   readonly duration = input<number | null>(null);
+  /** The reports already sent on this video (the page loads them), shown above a new one so none reads as lost. */
+  readonly reports = input<readonly BetaFeedback[]>([]);
+  /** Opened from 接著做's 標記問題並修正: the form starts at 有問題 with 修正 chosen and says what a fix needs. */
+  readonly fix = input(false);
 
   /** Every report on this video, emitted after a report went through. */
   readonly reported = output<BetaFeedback[]>();
   /** A fix was queued; the text is for the page's toast (the page then polls). */
   readonly started = output<string>();
+  /** 依這份回報修正 from the thanks panel: the report just sent as 只回報, whose marks a fix can work on (the page confirms and queues it). */
+  readonly fixFrom = output<BetaFeedback>();
   /** A 重做 report went through: the page opens 製作新版本 with these. */
   readonly redo = output<RedoRequest>();
   /** The person folded the form. */
   readonly closed = output<void>();
 
   protected readonly categories = FEEDBACK_CATEGORIES;
+  protected readonly categoryLabel = categoryLabel;
+  /** After a send: the report just sent, when it was 只回報 with marks a fix can work on, so the fix is one click away here. */
+  protected readonly fixableSent = computed(() => (this.sent() === 'none' ? fixableReport(this.past() ?? [], this.job(), []) : undefined));
+  /** Whether one past report can still be fixed from (只回報, marks a fix can work on, not fixed yet): the button sits by it in the list. */
+  protected readonly fixableOne = (f: BetaFeedback) => !!fixableReport([f], this.job(), []);
+  /** Past reports, newest first, with the one just sent folded in. */
+  protected readonly history = computed(() => [...(this.past() ?? this.reports())].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   protected readonly maxMarks = MAX_MARKS;
   protected readonly maxText = MAX_TEXT;
   protected readonly fixPrice = FIX_PRICE;
@@ -193,7 +208,7 @@ export class ReportFormComponent {
   protected readonly pct = computed(() => (this.length() > 0 ? Math.min(100, (this.now() / this.length()) * 100) : 0));
   protected readonly pos = (m: DraftMark) => (this.length() > 0 ? Math.min(100, (m.at / this.length()) * 100) : 0);
   protected readonly color = (i: number) => MARK_COLORS[i % MARK_COLORS.length];
-  protected readonly fixKind = computed(() => fixKindFor(this.marks()));
+  protected readonly fixKind = computed(() => fixKindFor(this.marks(), this.job().tier));
   /** Why 修正 is off right now, or null. */
   protected readonly fixWhy = computed(() => fixBlock({ marks: this.marks(), tier: this.job().tier, active: this.active(), left: this.left() }));
   protected readonly label = computed(() => sendLabel(this.action(), this.verdict() === 'ok'));
@@ -231,11 +246,18 @@ export class ReportFormComponent {
     } catch {
       return;
     }
-    if (!d) return;
+    if (!d) return this.startFix();
     this.verdict.set(d.verdict);
     this.marks.set(d.marks.map((m) => ({ ...m, key: this.nextKey++ })));
     this.suggestion.set(d.suggestion);
     this.action.set(d.action);
+  }
+
+  /** A form opened to fix (no draft to restore): 有問題 picked and 修正 chosen, so the person only marks and sends. */
+  private startFix() {
+    if (!this.fix()) return;
+    this.verdict.set('issue');
+    this.action.set('fix');
   }
 
   private keep(id: string, packed: string | null) {
@@ -268,7 +290,8 @@ export class ReportFormComponent {
   }
 
   protected choose(a: FeedbackAction) {
-    if (a === 'fix' && this.fixWhy()) return;
+    // a click on the greyed 修正 answers with the reason, in the error line, not in silence
+    if (a === 'fix' && this.fixWhy()) return this.error.set(this.fixWhy()!);
     this.action.set(a);
     this.error.set('');
   }
@@ -305,8 +328,13 @@ export class ReportFormComponent {
   }
 
   protected seek(m: DraftMark) {
+    this.seekTo(m.at);
+  }
+
+  /** Jumps the video to a second (a mark being written, or one of a past report). */
+  protected seekTo(at: number) {
     const v = this.vid()?.nativeElement;
-    if (v) v.currentTime = m.at;
+    if (v) v.currentTime = at;
   }
 
   protected again() {

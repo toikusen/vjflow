@@ -575,16 +575,10 @@ h1, h2, p, pre { margin: 0; }
   .log { max-height: 60dvh; }
 }
 
-.to-rule {
-  margin-top: 6px;
-  padding: 4px 10px;
-  font: inherit;
+.to-reports {
+  display: inline-block;
+  margin-top: 10px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--muted);
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
+  color: var(--accent-text);
 }
-.rules-head { margin: 18px 0 8px; font-size: 14px; .note { font-weight: 400; color: var(--muted); } }

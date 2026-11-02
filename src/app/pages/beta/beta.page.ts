@@ -1,18 +1,25 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, coverTint, errorOf, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollOrder, pollToast, PREP_PRICE, songChip, SongFilter, SONG_FILTERS, songView, SongView } from './beta';
+import { audioProblem, audioType, BetaJob, BetaMe, BetaSong, CONCEPT_PRICE, coverTint, errorOf, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollToast, songChip, SongFilter, SONG_FILTERS, songView, SongView, stepsMin, TIER_INFO } from './beta';
+import { MAX_CONCEPTS } from './make';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
 import { Ask } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
-import { BetaSession } from './ui/session';
+import { BetaSession, pollGate, signedOutBy } from './ui/session';
 import { StatusChipComponent } from './ui/status-chip.component';
 
 const POLL_MS = 5000;
 
 export type { Ask } from './ui/confirm';
 const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文', ko: '韓文' };
+/** The lyrics limit; mirrors the server's 400 「歌詞最多 20000 字」. */
+export const LYRICS_MAX = 20000;
+/** Why the add-song form cannot go yet for its language: none is picked by default, so the person chooses one. */
+export const languageProblem = (language: string): string | null => (LANGS[language] ? null : '請選擇歌詞的語言');
+/** Thrown by a fetch whose answer was 401, so the page shows its signed-out panel instead of a toast. */
+const SIGNED_OUT = new Error('signed out');
 
 /** A tester's songs (served by scripts/lyric-vj/beta/server.mts): add one; each card opens its song page. */
 @Component({
@@ -24,7 +31,10 @@ const LANGS: Record<string, string> = { ja: '日文', zh: '中文', en: '英文'
 })
 export class BetaPage {
   /** Shared with the shell, so its balance pill follows this page's poll. */
-  protected readonly me = inject(BetaSession).me;
+  private readonly session = inject(BetaSession);
+  protected readonly me = this.session.me;
+  /** A /beta request answered 401 (no or stale invite link): the page shows only how to get a new link. */
+  protected readonly signedOut = signal(false);
   protected readonly songs = signal<BetaSong[]>([]);
   protected readonly jobs = signal<BetaJob[]>([]);
   protected readonly message = signal('');
@@ -60,7 +70,12 @@ export class BetaPage {
   protected readonly shown = computed(() => this.cards().filter((c) => inFilter(this.filter(), c.view)));
   protected readonly fileName = signal('');
   protected readonly ask = signal<Ask | null>(null);
-  protected readonly prepPrice = PREP_PRICE;
+  protected readonly prepMin = stepsMin('prep');
+  protected readonly conceptPrice = CONCEPT_PRICE;
+  protected readonly conceptMin = stepsMin('concept');
+  protected readonly maxConcepts = MAX_CONCEPTS;
+  protected readonly tiers = [TIER_INFO.none, TIER_INFO.img, TIER_INFO.hybrid];
+  protected readonly lyricsMax = LYRICS_MAX;
   protected readonly langs = Object.entries(LANGS);
   protected readonly langName = (l: string) => LANGS[l] ?? l;
   /** What the signed-in person has left, null until `/beta/me` answers. */
@@ -68,12 +83,12 @@ export class BetaPage {
     const m = this.me();
     return m ? balance(m).left : null;
   };
-  protected form = { title: '', artist: '', language: 'ja', lyrics: '' };
+  protected form = { title: '', artist: '', language: '', lyrics: '' };
   private file: File | null = null;
   private fileInput: HTMLInputElement | null = null;
-  /** The poll in flight, if any, and the order of polls: a tick waits while one runs, a late answer is dropped. */
+  /** The poll in flight, if any, and the order of polls: a tick waits while one runs, a late answer or one begun before a 401 is dropped. */
   private polling: Promise<void> | null = null;
-  private readonly polls = pollOrder();
+  private readonly polls = pollGate();
   /** The toast the last failed poll wrote, cleared by the next poll that succeeds. */
   private readonly toast = pollToast();
 
@@ -92,13 +107,13 @@ export class BetaPage {
   protected confirmAdd() {
     if (!this.file) return this.message.set('請選擇音檔');
     // the server's own checks, before a song is created for a file it would refuse
-    const why = audioProblem(this.file);
+    const why = audioProblem(this.file) ?? languageProblem(this.form.language);
     if (why) return this.message.set(why);
     this.ask.set({
       eyebrow: this.form.title,
       title: '上傳並準備',
-      body: '上傳後會開始準備歌曲（分離人聲、自動對歌詞時間）。上傳過程中請勿關閉或離開這個頁面，上傳完成後就可以離開。',
-      cost: PREP_PRICE,
+      body: `會分離人聲、自動對歌詞時間，約 ${this.prepMin} 分鐘。上傳中請別離開這一頁，傳完就可以離開。`,
+      cost: 0,
       go: () => this.add(),
     });
   }
@@ -122,6 +137,7 @@ export class BetaPage {
     } catch {
       throw new Error('連線中斷，請確認網路後再試');
     }
+    if (signedOutBy(up.status)) throw SIGNED_OUT;
     if (!up.ok) throw new Error(errorOf(await jsonOrError(up), up.status));
   }
 
@@ -133,24 +149,41 @@ export class BetaPage {
     this.composing.set(false);
   }
 
+  /** Forgets the person and their songs after a 401; polls still in flight cannot bring them back. */
+  private signOut() {
+    this.polls.signOut();
+    this.session.signOut();
+    this.songs.set([]);
+    this.jobs.set([]);
+    this.loaded.set(false);
+    this.composing.set(false);
+    this.message.set('');
+    this.signedOut.set(true);
+  }
+
   private async add() {
-    if (!this.file) return this.message.set('請選擇音檔');
-    const why = audioProblem(this.file);
+    // the file and fields as confirmed: a pick while the upload runs must not change what is sent
+    const file = this.file;
+    const form = { ...this.form };
+    if (!file) return this.message.set('請選擇音檔');
+    const why = audioProblem(file);
     if (why) return this.message.set(why);
     this.busy.set(true);
     this.message.set('上傳中，請勿關閉或離開這個頁面…');
-    const title = this.form.title;
+    const title = form.title;
     let songId: string | null = null;
     try {
-      const made = await fetch('/beta/songs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(this.form) });
+      const made = await fetch('/beta/songs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(form) });
+      if (signedOutBy(made.status)) throw SIGNED_OUT;
       const song = await jsonOrError<{ id: string }>(made);
       if (!made.ok) throw new Error(errorOf(song, made.status));
       songId = song.id;
       this.uploadingId.set(song.id);
-      await this.uploadAudio(song.id, this.file);
+      await this.uploadAudio(song.id, file);
       this.clearComposer();
-      this.message.set('已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 5–10 分鐘），完成後請回來「確認時間」。');
+      this.message.set(`已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 ${this.prepMin} 分鐘），完成後請回來「確認時間」。`);
     } catch (e) {
+      if (e === SIGNED_OUT) return this.signOut();
       // the song exists once the audio failed: the form is cleared so a second try does not make a second song, and
       // the song page offers 重新上傳音檔
       if (songId) this.clearComposer();
@@ -167,22 +200,27 @@ export class BetaPage {
       const n = this.polls.begin();
       const get = async <T,>(path: string): Promise<T> => {
         const r = await fetch(path, { cache: 'no-store' });
-        if (r.status === 401) throw new Error('請用邀請連結登入');
+        if (signedOutBy(r.status)) throw SIGNED_OUT;
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       };
-      try {
-        const [me, songs, jobs] = await Promise.all([get<BetaMe>('/beta/me'), get<BetaSong[]>('/beta/songs'), get<BetaJob[]>('/beta/jobs')]);
-        // a newer poll (after an action) began meanwhile: its answer is the fresher one
-        if (!this.polls.latest(n)) return;
-        this.me.set(me);
-        this.songs.set([...songs].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-        this.jobs.set(jobs);
-        this.loaded.set(true);
-        this.message.update((m) => this.toast.ok(m));
-      } catch (e) {
-        if (this.polls.latest(n)) this.message.set(this.toast.failed((e as Error).message));
+      // settled one by one, so a 401 still counts when another request of the batch failed first
+      const [me, songs, jobs] = await Promise.allSettled([get<BetaMe>('/beta/me'), get<BetaSong[]>('/beta/songs'), get<BetaJob[]>('/beta/jobs')]);
+      const failed = [me, songs, jobs].filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => r.reason);
+      // a 401 counts even from an older poll; a network error or another status keeps the old lists and is a toast
+      if (failed.includes(SIGNED_OUT)) return this.signOut();
+      if (failed.length) {
+        if (this.polls.latest(n)) this.message.set(this.toast.failed(failed[0] instanceof Error ? failed[0].message : String(failed[0])));
+        return;
       }
+      // a newer poll (after an action) began meanwhile: its answer is the fresher one
+      if (!this.polls.latest(n) || me.status !== 'fulfilled' || songs.status !== 'fulfilled' || jobs.status !== 'fulfilled') return;
+      this.signedOut.set(false);
+      this.me.set(me.value);
+      this.songs.set([...songs.value].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      this.jobs.set(jobs.value);
+      this.loaded.set(true);
+      this.message.update((m) => this.toast.ok(m));
     };
     const p = run().finally(() => {
       if (this.polling === p) this.polling = null;

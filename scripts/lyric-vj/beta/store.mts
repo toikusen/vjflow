@@ -53,13 +53,13 @@ export interface Job {
   autoReleased?: string;
 }
 export interface ConceptInputs { concept: string; style?: string; refs: string[]; note?: string; from?: string; kind?: undefined; ranges?: undefined }
-export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; feedbackId?: string; concept?: undefined; style?: undefined; refs?: undefined; note?: undefined }
+export interface FixInputs { from: string; kind: FixKind; ranges: FixRange[]; feedbackId?: string; /** The report's 整體建議, read by a replan beside the marks. */ suggestion?: string; concept?: undefined; style?: undefined; refs?: undefined; note?: undefined }
 /** True for the jobs that make a video a person watches: a make, or a fix of one (a new version beside the old). */
 export const madeVideo = (j: Pick<Job, 'kind'>) => j.kind === 'make' || j.kind === 'fix';
 export type StyleTier = 'proven' | 'candidate' | 'unlisted';
 export type LessonScope = 'director' | 'typeplan' | 'both';
 /** A rule for every later song, written by the admin (often from one report, kept as `feedbackId`): who reads it is `scope`. */
-export interface Lesson { id: string; text: string; scope: LessonScope; createdAt: string; by: string; feedbackId?: string; songId?: string; style?: string }
+export interface Lesson { id: string; text: string; scope: LessonScope; createdAt: string; by: string; feedbackId?: string; songId?: string; style?: string; /** The text it was first written with, kept once it is edited (ties it to the suggestion it came from). */ source?: string }
 export const LESSON_SCOPES: LessonScope[] = ['director', 'typeplan', 'both'];
 /** A lesson's text: one rule, 4–300 characters. */
 export const MAX_LESSON = 300;
@@ -94,7 +94,9 @@ export const provenIds = (db: Db) => Object.keys(LANGUAGES).filter((id) => style
  * What a person pays, fixed per step (placeholders): each concept attempt, then the rest once the concept is accepted.
  * Together they stay above the costs seen on the test songs; the platform absorbs a run that costs more.
  */
-export const PRICE: Record<'prep' | 'concept' | 'fix' | Tier, number> = { prep: 0.5, concept: 2.5, fix: 1, none: 1.5, img: 3.5, hybrid: 13.5 };
+export const PRICE: Record<'prep' | 'concept' | 'fix' | Tier, number> = { prep: 0, concept: 2.5, fix: 1, none: 1.5, img: 3.5, hybrid: 13.5 };
+/** Preparation is free; the platform still expects it to cost under this, and the fuse trips at twice it. */
+export const PREP_RESERVE = 0.5;
 export const priceFor = (kind: Job['kind'], tier?: Tier) => (kind === 'concept' ? PRICE.concept : kind === 'fix' ? PRICE.fix : kind === 'make' && tier ? PRICE[tier] : PRICE.prep);
 /** One concept plus the rest: what a tier costs a person who accepts the first concept. */
 export const TIER_TOTAL = (tier: Tier) => PRICE.concept + PRICE[tier];

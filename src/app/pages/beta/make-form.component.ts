@@ -1,6 +1,6 @@
 import { Component, computed, effect, ElementRef, inject, input, model, output, signal } from '@angular/core';
 import { BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, stepsMin, TIER_INFO } from './beta';
-import { defaultTier, feelingLength, makeBlock, makeBody, MAX_FEELING, MAX_REFS, refProblem, REF_TYPES, StripGrid, stripGrid, stripTiles } from './make';
+import { attemptLine, defaultTier, feelingLength, makeBlock, makeBody, MAX_FEELING, MAX_REFS, refProblem, REF_TYPES, StripGrid, stripGrid, stripTiles } from './make';
 import { Ask, bill } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { formatPrice } from './ui/price';
@@ -13,6 +13,12 @@ const TIERS = Object.keys(TIER_INFO) as BetaTier[];
 /** Up to this many cards (交給導演 included) the grid shows them all; past it, a scroller and the range hint. */
 const GRID_CARDS = 6;
 const CONCEPT_MIN = stepsMin('concept');
+/** What the concept's preview frames leave out, per tier (said in the 產生概念 confirm, not on the cards). */
+const PREVIEW_NOTE: Record<BetaTier, string> = {
+  none: '',
+  img: '示意畫面先不含插圖，接受後才畫道具。',
+  hybrid: '成品會依故事重新構圖，示意畫面代表風格與配色。',
+};
 
 /**
  * 製作新版本 (1b-2 lower part, 2e): tier, 想要的感覺, references and style, then 產生概念 through the confirm dialog (2b).
@@ -50,6 +56,8 @@ export class MakeFormComponent {
   protected readonly styles = signal<BetaStyle[]>([]);
   /** The picked style id; null is 交給導演 (the default). */
   protected readonly style = signal<string | null>(null);
+  /** The style list is folded until opened. */
+  protected readonly styleOpen = signal(false);
   protected readonly refs = signal<string[]>([]);
   protected readonly uploading = signal(false);
   /** The make request is on its way; the button stays off so a second click sends nothing. */
@@ -68,6 +76,10 @@ export class MakeFormComponent {
   });
   protected readonly info = computed(() => TIER_INFO[this.chosen()]);
   protected readonly count = computed(() => feelingLength(this.feeling()));
+  protected readonly styleName = computed(() => {
+    const id = this.style();
+    return id === null ? null : (this.styles().find((s) => s.id === id)?.name ?? id);
+  });
   protected readonly many = computed(() => this.styles().length + 1 > GRID_CARDS);
   protected readonly block = computed(() =>
     makeBlock({ songId: this.song().id, tier: this.chosen(), jobs: this.jobs(), active: this.active(), left: this.left(), uploading: this.uploading(), submitting: this.submitting(), feeling: this.feeling() }),
@@ -179,7 +191,7 @@ export class MakeFormComponent {
     this.ask.set({
       eyebrow: `${this.song().title} · ${t.name}`,
       title: '先產生概念',
-      body: `導演會依你的選擇提出風格、配色和示意畫面，你確認後才會開始製作完整影片（${t.name}，再 $${formatPrice(t.rest, 'short')}）。產生概念約 ${CONCEPT_MIN} 分鐘，可以離開頁面。`,
+      body: `導演會依你的選擇提出風格、配色和示意畫面，你確認後才會開始製作完整影片（${t.name}，再 $${formatPrice(t.rest, 'short')}）。產生概念約 ${CONCEPT_MIN} 分鐘，可以離開頁面。${PREVIEW_NOTE[tier]}${attemptLine(this.jobs(), this.song(), tier)}`,
       cost: CONCEPT_PRICE,
       go: () => this.make(tier),
     });

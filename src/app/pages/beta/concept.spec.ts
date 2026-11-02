@@ -1,5 +1,5 @@
 import { BetaJob, ConceptSummary } from './beta';
-import { acceptBlock, adjustBlock, conceptHead, interludeLines, MAX_NOTE, redoBlock, stillLabel } from './concept';
+import { acceptBlock, acceptNote, adjustBlock, conceptHead, interludeLines, MAX_NOTE, redoBlock, REPLACE_NOTE, stillLabel } from './concept';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'c', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T02:00:00Z', ...o });
 const summary = (o: Partial<ConceptSummary> = {}): ConceptSummary => ({ language: 'neon', languageName: '霓虹城市', font: 'Noto Sans TC', palette: [], concept: '故事', stills: [], ...o });
@@ -60,7 +60,7 @@ describe('acceptBlock', () => {
   });
   it('stops while a job runs, when the rest is more than what is left (in cents), and while sending', () => {
     expect(acceptBlock({ ...ok, active: true })).toBe('這首歌已經在排隊或製作中');
-    expect(acceptBlock({ ...ok, left: 13.49 })).toBe('餘額不足，請聯絡管理者');
+    expect(acceptBlock({ ...ok, left: 13.49 })).toBe('餘額不足，請聯絡邀請你的人');
     expect(acceptBlock({ ...ok, left: 0.1 + 0.2 + 13.2 })).toBeNull();
     expect(acceptBlock({ ...ok, submitting: true })).toBe('送出中…');
   });
@@ -79,8 +79,20 @@ describe('adjustBlock and redoBlock', () => {
     for (const f of [(o: typeof ok) => adjustBlock({ ...o, note: 'x' }), redoBlock]) {
       expect(f(ok)).toBeNull();
       expect(f({ ...ok, active: true })).toBe('這首歌已經在排隊或製作中');
-      expect(f({ ...ok, left: 2.49 })).toBe('餘額不足，請聯絡管理者');
+      expect(f({ ...ok, left: 2.49 })).toBe('餘額不足，請聯絡邀請你的人');
       expect(f({ ...ok, submitting: true })).toBe('送出中…');
     }
+  });
+});
+
+describe('confirm notes', () => {
+  it('warns of the admin look only for the 故事版; no accept can be called off', () => {
+    expect(acceptNote('hybrid')).toBe('完成前可能要管理者看一眼關鍵畫面。送出後不能自行取消。');
+    expect(acceptNote('none')).toBe('送出後不能自行取消。');
+    expect(acceptNote('img')).toBe('送出後不能自行取消。');
+  });
+
+  it('says a new concept replaces this one', () => {
+    expect(REPLACE_NOTE).toBe('成功送出後，目前這個概念就不能再選回。送出後不能自行取消。');
   });
 });

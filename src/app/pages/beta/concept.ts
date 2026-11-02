@@ -1,5 +1,5 @@
 // Pure rules of the concept card (2a); the limits and refusals mirror scripts/lyric-vj/beta/server.mts.
-import { BetaJob, CONCEPT_PRICE, ConceptSummary, TIER_INFO } from './beta';
+import { BetaJob, BetaTier, CONCEPT_PRICE, ConceptSummary, TIER_INFO } from './beta';
 import { feelingLength, MAX_CONCEPTS, conceptAttempts } from './make';
 import { clock } from './song';
 
@@ -45,7 +45,7 @@ interface Common { active: boolean; left: number | null; submitting: boolean }
 /** The first reason shared by every decision: a running job (the server's words), a short balance in cents, a request on its way. */
 function common(s: Common, cost: number): string | null {
   if (s.active) return '這首歌已經在排隊或製作中';
-  if (s.left !== null && Math.round(cost * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡管理者';
+  if (s.left !== null && Math.round(cost * 100) > Math.round(s.left * 100)) return '餘額不足，請聯絡邀請你的人';
   if (s.submitting) return '送出中…';
   return null;
 }
@@ -56,7 +56,7 @@ export function acceptBlock(s: Common & { concerns: boolean; confirmed: boolean;
   return common(s, s.rest);
 }
 
-/** Why 依意見調整 is off (its button's text), or null. A switch of style (`restyle`) is enough without a note. */
+/** Why 照意見調整 is off (its button's text), or null. A switch of style (`restyle`) is enough without a note. */
 export function adjustBlock(s: Common & { note: string; restyle?: boolean }): string | null {
   const n = feelingLength(s.note.trim());
   if (!n && !s.restyle) return '填一句意見或換一個風格後才能送出';
@@ -66,3 +66,9 @@ export function adjustBlock(s: Common & { note: string; restyle?: boolean }): st
 
 /** Why 換一個方向 is off, or null. */
 export const redoBlock = (s: Common): string | null => common(s, CONCEPT_PRICE);
+
+/** Added to the 照意見調整 and 換一個方向 confirms: a new concept replaces this one for good. */
+export const REPLACE_NOTE = '成功送出後，目前這個概念就不能再選回。送出後不能自行取消。';
+
+/** Added to every accept confirm: the 故事版 may wait on the admin for its key frames, and no make can be called off. */
+export const acceptNote = (tier: BetaTier): string => `${tier === 'hybrid' ? '完成前可能要管理者看一眼關鍵畫面。' : ''}送出後不能自行取消。`;

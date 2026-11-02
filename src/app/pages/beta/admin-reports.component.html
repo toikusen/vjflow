@@ -1,0 +1,100 @@
+@if (message()) {
+  <p class="toast" role="status">{{ message() }}</p>
+}
+
+<div class="filters" role="group" aria-label="回報篩選">
+  @for (x of filters(); track x.id) {
+    <button class="filter" type="button" [class.on]="filter() === x.id" [attr.aria-pressed]="filter() === x.id" (click)="filter.set(x.id)">{{ x.label }}</button>
+  }
+</div>
+
+<div class="queue">
+  @for (f of shown(); track f.id) {
+    <article class="report">
+      <header class="r-head">
+        <a class="song" [href]="songHref(f.songId)">{{ songTitle(f.songId) }}</a>
+        <span class="meta">{{ version(f) }}@if (f.style) { · {{ f.style }}} · {{ userName(f.userId) }} · {{ when(f.createdAt) }}</span>
+        <span class="verdict" [class.warn]="!f.ok">{{ f.ok ? '沒問題' : '有問題' }}</span>
+        @if (f.fixJobId) {
+          <span class="fixed">已跑修正</span>
+        }
+      </header>
+
+      @for (m of f.marks; track $index) {
+        <div class="mark">
+          <a class="at" [href]="videoAt(f, m.at)" target="_blank" rel="noopener">{{ mmss(m.at) }}@if (m.end !== undefined) {–{{ mmss(m.end) }}}</a>
+          <span class="cat">{{ category(m.category) }}</span>
+          @if (m.note) {
+            <span class="mnote">{{ m.note }}</span>
+          }
+        </div>
+      }
+      @if (f.suggestion) {
+        <p class="suggest">{{ f.suggestion }}</p>
+      }
+
+      @if (f.proposal; as p) {
+        <div class="proposal">
+          <h3>處理建議</h3>
+          @if (p.summary) {
+            <p class="p-sum">{{ p.summary }}</p>
+          }
+          <ul>
+            @for (i of p.items; track $index) {
+              <li>
+                <span class="o-tag">{{ label(i.outcome) }}</span>
+                <span class="p-text">{{ i.text }}</span>
+                @if (i.outcome === 'rule' && !ruleOf(f, i)) {
+                  <button class="small" type="button" [disabled]="busy()" (click)="adopt(f, i)">採用</button>
+                }
+              </li>
+              @if (i.outcome === 'rule' && ruleOf(f, i); as l) {
+                <li class="adopted">
+                  <span class="taken">已寫入規則</span>
+                  @if (editing() === l.id) {
+                    <textarea rows="3" maxlength="300" aria-label="修改規則" [value]="editText()" (input)="editText.set($any($event.target).value)"></textarea>
+                    <button class="small go" type="button" [disabled]="busy() || editText().trim().length < 4" (click)="saveEdit(l)">儲存</button>
+                    <button class="small" type="button" (click)="editing.set(null)">取消</button>
+                  } @else {
+                    @if (l.text !== i.text.trim()) {
+                      <span class="p-text">{{ l.text }}</span>
+                    } @else {
+                      <span class="p-text"></span>
+                    }
+                    <button class="small" type="button" [disabled]="busy()" (click)="startEdit(l)">修改補充</button>
+                    <button class="small" type="button" [disabled]="busy()" (click)="cancelRule(l)">取消規則</button>
+                  }
+                </li>
+              }
+            }
+          </ul>
+        </div>
+      }
+
+      <div class="triage">
+        @if (f.triage; as t) {
+          <p class="filed">已處理：@for (o of t.outcomes; track o) {<span class="o-tag">{{ label(o) }}</span>}@if (t.note) { {{ t.note }}}</p>
+          <button class="small" type="button" [disabled]="busy()" (click)="reopen(f)">改回待處理</button>
+        } @else {
+          <div class="picks" role="group" aria-label="處理方式">
+            @for (o of outcomes; track o.id) {
+              <label class="pick" [title]="o.hint"><input type="checkbox" [checked]="picked(f).includes(o.id)" (change)="toggle(f, o.id)" /> {{ o.label }}</label>
+            }
+          </div>
+          <input class="note" type="text" maxlength="1000" placeholder="備註（可不填）" aria-label="備註" [value]="notes()[f.id] ?? ''" (input)="setNote(f, $any($event.target).value)" />
+          <div class="acts">
+            <button class="small" type="button" (click)="draft(f)">寫成規則</button>
+            <button class="small go" type="button" [disabled]="busy() || !picked(f).length" (click)="file(f)">標為已處理</button>
+          </div>
+        }
+      </div>
+    </article>
+  } @empty {
+    <p class="none">{{ filter() === 'pending' ? '沒有待處理的回報' : '沒有回報' }}</p>
+  }
+</div>
+
+<section class="rules" id="rules">
+  <h2>規則 <span>導演和文字動態每一首都會讀，全部有效</span></h2>
+  <app-admin-lessons [seed]="seed()" (changed)="reloadLessons()" />
+</section>

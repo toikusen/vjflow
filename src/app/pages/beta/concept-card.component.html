@@ -94,50 +94,41 @@
         <div class="divider" aria-hidden="true"></div>
         @if (h.more) {
           <div class="option">
-            <div class="o-head">
-              <h3>依意見調整</h3>
-              <app-price class="o-price" [amount]="conceptPrice" digits="short" [plain]="true" />
-            </div>
-            <p class="o-text">保留這個方向，告訴導演要改哪裡；也可以只換風格，故事照舊。</p>
-            @if (otherStyles().length) {
-              <label class="sr" for="concept-style">風格</label>
-              <select id="concept-style" [value]="restyle()" (change)="pickStyle($any($event.target).value)">
-                <option value="">風格維持「{{ s.languageName }}」</option>
-                @for (st of otherStyles(); track st.id) {
-                  <option [value]="st.id">換成「{{ st.name }}」</option>
-                }
-              </select>
-            }
+            <h3>不滿意？</h3>
             <label class="sr" for="concept-note">想調整的地方</label>
-            <textarea id="concept-note" rows="1" [maxLength]="maxNote" placeholder="例如：霓虹少一點，文字再大一些" [value]="note()" (input)="edit($any($event.target).value)"></textarea>
+            <textarea id="concept-note" rows="3" [maxLength]="maxNote" placeholder="例如：霓虹少一點，文字再大一些" [value]="note()" (input)="edit($any($event.target).value)"></textarea>
             @if (noteCount() > 0) {
               <p class="count">{{ noteCount() }} / {{ maxNote }}</p>
             }
-            <button class="button o-go" type="button" [disabled]="!!adjustWhy()" (click)="confirm('adjust')">
-              @if (adjustWhy(); as why) {
-                {{ why }}
+            @if (otherStyles().length) {
+              @if (restyleOpen()) {
+                <label class="sr" for="concept-style">風格</label>
+                <select id="concept-style" [value]="restyle()" (change)="pickStyle($any($event.target).value)">
+                  <option value="">風格維持「{{ s.languageName }}」</option>
+                  @for (st of otherStyles(); track st.id) {
+                    <option [value]="st.id">換成「{{ st.name }}」</option>
+                  }
+                </select>
               } @else {
-                送出意見 · <app-price [amount]="conceptPrice" digits="short" [plain]="true" />
+                <button class="restyle-link" type="button" (click)="restyleOpen.set(true)">換個風格 ▸</button>
               }
-            </button>
-          </div>
-          <div class="option row">
-            <div>
-              <h3>換一個方向</h3>
-              <p class="o-text">導演重新提一個完全不同的概念。</p>
-              @if (redoWhy(); as why) {
-                <p class="why left">{{ why }}</p>
-              }
+            }
+            <div class="o-buttons">
+              <button class="button" type="button" [disabled]="!!adjustWhy()" [attr.title]="adjustWhy()" (click)="confirm('adjust')">照意見調整 · <app-price [amount]="conceptPrice" digits="short" [plain]="true" /></button>
+              <button class="button" type="button" [disabled]="!!redoWhy()" (click)="confirm('redo')">換一個方向 · <app-price [amount]="conceptPrice" digits="short" [plain]="true" /></button>
             </div>
-            <button class="button" type="button" [disabled]="!!redoWhy()" (click)="confirm('redo')"><app-price [amount]="conceptPrice" digits="short" [plain]="true" /></button>
+            @if (optionWhy(); as why) {
+              <p class="why left">{{ why }}</p>
+            }
+            <p class="o-text">調整會保留這個方向；換方向是重新提一個完全不同的概念。</p>
           </div>
         } @else {
-          <p class="limit">已試過 3 次，請聯絡管理者</p>
+          <p class="limit">已試過 3 次，請聯絡邀請你的人</p>
         }
       </aside>
     </div>
   } @else {
-    <p class="missing">讀不到這個概念的內容，請聯絡管理者。</p>
+    <p class="missing">讀不到這個概念的內容，請聯絡邀請你的人。</p>
   }
 </section>
 

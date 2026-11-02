@@ -1,5 +1,5 @@
 // What the admin pages (3c 總覽, 3d 歌曲製作紀錄, 3e 風格表) compute from the server's admin routes.
-import { BetaJob, BetaMe, BetaSong, jobProgress, retriedBy, songKind, songView, TIER_INFO, BetaFeedback } from './beta';
+import { BetaJob, BetaMe, BetaSong, jobProgress, retriedBy, songKind, songView, TIER_INFO, BetaFeedback, TriageOutcome, BetaLesson } from './beta';
 import { formatPrice } from './ui/price';
 import { StatusChip } from './ui/status';
 
@@ -214,3 +214,18 @@ export function lessonSeed(f: Pick<BetaFeedback, 'suggestion' | 'marks'>, catego
   if (f.suggestion?.trim()) return f.suggestion.trim();
   return f.marks.map((m) => [category(m.category), m.note?.trim()].filter(Boolean).join('：')).filter(Boolean).join('；');
 }
+
+export type ReportFilter = 'pending' | 'done' | 'all';
+/** Mirrors isPending in scripts/lyric-vj/beta/feedback.mts: not triaged, and it says something. */
+export const isPendingReport = (f: Pick<BetaFeedback, 'triage' | 'ok' | 'marks' | 'suggestion'>) => !f.triage && (!f.ok || !!f.marks.length || !!f.suggestion);
+/** The reports a filter shows, oldest first while pending (the queue), newest first otherwise. */
+export function filterReports(list: readonly BetaFeedback[], filter: ReportFilter): BetaFeedback[] {
+  const by = (a: BetaFeedback, b: BetaFeedback) => (filter === 'pending' ? 1 : -1) * a.createdAt.localeCompare(b.createdAt);
+  return list.filter((f) => (filter === 'all' ? true : filter === 'done' ? !!f.triage : isPendingReport(f))).sort(by);
+}
+/** The outcomes a report starts with in the form: its verdict, else what the proposal suggests, without repeats. */
+export const startOutcomes = (f: Pick<BetaFeedback, 'triage' | 'proposal'>): TriageOutcome[] => f.triage?.outcomes ?? [...new Set((f.proposal?.items ?? []).map((i) => i.outcome))];
+
+/** The rule written from a suggestion of this report, if any: matched on the text it started with, so an edit keeps the link. */
+export const ruleFrom = (lessons: readonly BetaLesson[], feedbackId: string, text: string): BetaLesson | undefined =>
+  lessons.find((l) => l.feedbackId === feedbackId && (l.source ?? l.text) === text.trim());

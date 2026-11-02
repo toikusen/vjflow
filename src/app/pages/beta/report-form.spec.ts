@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { BetaJob, BetaSong, NOT_FIXABLE } from './beta';
+import { BetaJob, BetaSong, NOT_FIXABLE, NOT_FIXABLE_HYBRID } from './beta';
 import { actionAfterMarks, draftKey, fixBody, ReportFormComponent, formatTime, hasDraft, packDraft, ReportDraft, sendLabel, StoredDraft, unpackDraft, validateReport } from './report-form.component';
 
 const draft = (o: Partial<ReportDraft>): ReportDraft => ({ ok: false, marks: [], suggestion: '', action: 'none', ...o });
@@ -32,12 +32,13 @@ describe('validateReport', () => {
     expect(validateReport(draft({ marks: [mark()] }))).toBeNull();
   });
 
-  it('a fix needs marks the server can fix: pictures on 插圖版, timing on any tier', () => {
+  it('a fix needs marks the server can fix: timing on any tier, anything marked on 文字動態版 and 插圖版, only timing on 故事版', () => {
     expect(validateReport(draft({ marks: [mark({ category: 'picture' })], action: 'fix' }), 10, 'img')).toBeNull();
-    expect(validateReport(draft({ marks: [mark({ category: 'picture' })], action: 'fix' }), 10, 'hybrid')).toBe(NOT_FIXABLE);
+    expect(validateReport(draft({ marks: [mark({ category: 'picture' })], action: 'fix' }), 10, 'hybrid')).toBe(NOT_FIXABLE_HYBRID);
     expect(validateReport(draft({ marks: [mark({ category: 'timing' })], action: 'fix' }), 10, 'none')).toBeNull();
-    expect(validateReport(draft({ marks: [mark({ category: 'timing' }), mark({ category: 'picture' })], action: 'fix' }), 10, 'img')).toBe(NOT_FIXABLE);
-    expect(validateReport(draft({ marks: [mark()], action: 'fix' }), 10, 'img')).toBe(NOT_FIXABLE);
+    expect(validateReport(draft({ marks: [mark({ category: 'timing' }), mark({ category: 'picture' })], action: 'fix' }), 10, 'img')).toBeNull();
+    expect(validateReport(draft({ marks: [mark()], action: 'fix' }), 10, 'img')).toBeNull();
+    expect(validateReport(draft({ marks: [mark()], action: 'fix' }), 10, 'hybrid')).toBe(NOT_FIXABLE_HYBRID);
     expect(validateReport(draft({ suggestion: 'x', action: 'fix' }), 10, 'img')).toBe(NOT_FIXABLE);
     // a mark without a category is reported as such before the fix rule
     expect(validateReport(draft({ marks: [mark({ category: null })], action: 'fix' }), 10, 'img')).toBe('每個標記請選一個類別');
@@ -126,6 +127,8 @@ describe('sendLabel and fixBody', () => {
     expect(fixBody('timing')).toContain('歌詞時間');
     expect(fixBody('timing')).toContain('原本的版本保留');
     expect(fixBody(undefined)).toBe(fixBody('picture'));
+    expect(fixBody('replan')).toContain('只重新編排標記到的鏡頭');
+    expect(fixBody('replan')).toContain('原本的版本保留');
   });
 });
 
@@ -134,8 +137,9 @@ describe('actionAfterMarks', () => {
 
   it('drops 修正 only when the named marks no longer allow it', () => {
     expect(actionAfterMarks('fix', m('timing'), 'none')).toBe('fix');
-    expect(actionAfterMarks('fix', m('timing', 'lyrics'), 'none')).toBe('none');
-    expect(actionAfterMarks('fix', m('picture'), 'none')).toBe('none');
+    expect(actionAfterMarks('fix', m('timing', 'lyrics'), 'none')).toBe('fix');
+    expect(actionAfterMarks('fix', m('timing', 'lyrics'), 'hybrid')).toBe('none');
+    expect(actionAfterMarks('fix', m('picture'), 'none')).toBe('fix');
     expect(actionAfterMarks('fix', m('picture'), 'img')).toBe('fix');
     expect(actionAfterMarks('redo', m('lyrics'), 'none')).toBe('redo');
   });
@@ -189,7 +193,9 @@ describe('ReportFormComponent draft', () => {
     const fix = button(f.nativeElement, '修正');
     expect(fix.getAttribute('aria-checked')).toBe('true');
     expect(fix.getAttribute('aria-disabled')).toBe('true');
-    expect(fix.textContent).toContain('這首歌已經在排隊或製作中');
+    // the reason stands in the lead line above the steps and under the options, not inside the small button
+    expect((f.nativeElement as HTMLElement).querySelector('.fix-lead')?.textContent).toContain('這首歌已經在排隊或製作中');
+    expect((f.nativeElement as HTMLElement).querySelector('.fix-note.warn')?.textContent).toContain('這首歌已經在排隊或製作中');
     expect(unpackDraft(sessionStorage.getItem(draftKey('m1')))?.action).toBe('fix');
   });
 });

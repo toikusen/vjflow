@@ -4,7 +4,7 @@
 
 @if (song(); as s) {
   @let v = sv()!;
-  <header class="hero" [attr.data-tone]="tone(v)" [class.compact]="compact(v)" [style.--tint]="tint(s)">
+  <header class="hero" [attr.data-tone]="tone(v)" [style.--tint]="tint(s)">
     <a class="back" href="/my">← 我的歌曲</a>
     @if (me(); as m) {
       <app-balance class="bal desk" [me]="m" look="compact" />
@@ -21,12 +21,6 @@
         }
       </p>
     </div>
-    @if (v.stage === 'ready' && !compact(v)) {
-      <div class="files">
-        <button class="button" type="button" (click)="download('lrc')">下載 LRC</button>
-        <button class="button" type="button" (click)="download('srt')">下載 SRT</button>
-      </div>
-    }
   </header>
 
   <main class="body">
@@ -41,7 +35,6 @@
             <ng-container *ngTemplateOutlet="reuploadTpl" />
           </div>
         }
-        <ng-container *ngTemplateOutlet="makeLater" />
       }
       @case ('prepFailed') {
         <section class="failure">
@@ -59,13 +52,12 @@
       }
       @case ('timing') {
         <section class="callout">
-          <p>歌詞時間已自動對好，請檢查後確認，才能開始製作。</p>
+          <p>{{ timingCallout(mine()) }}</p>
+          <a class="button strong" [href]="'/timing?beta=' + s.id">檢查歌詞時間</a>
           @if (mine()) {
-            <button class="button" type="button" [disabled]="busy()" (click)="askSkip()">不確認，直接製作</button>
+            <button class="link skip" type="button" [disabled]="busy()" (click)="askSkip()">略過檢查，直接製作</button>
           }
-          <a class="button soft" [href]="'/timing?beta=' + s.id">確認時間</a>
         </section>
-        <ng-container *ngTemplateOutlet="makeLater" />
       }
       @case ('ready') {
         @if (v.failed; as f) {
@@ -95,6 +87,17 @@
           <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: a, prep: false }" />
         }
 
+        <!-- the way to a video is the instant flow; only the song's owner has it. The rest of the page is the paid part -->
+        @if (mine()) {
+          <app-song-flow [song]="s" [pending]="v.concepts.length" (paid)="toPaid()" />
+          <div class="paid-head" id="paid">
+            <h2>付費版本</h2>
+            <p>由導演製作，會扣額度。</p>
+          </div>
+        } @else {
+          <p class="read-only" role="note">這是別人的歌，只能檢視。做影片只有歌曲主人可以使用。</p>
+        }
+
         <!-- one card per pending concept (the server keeps one per version), newest first, each with its own tier head -->
         @if (mine()) {
           @for (c of v.concepts; track c.id) {
@@ -102,64 +105,171 @@
           }
         }
 
-        <section class="results" aria-labelledby="results-h">
-          <div class="section-head">
-            <h2 id="results-h">成品</h2>
-            <span>{{ v.results.length ? v.results.length + ' 個版本' : '0 個' }}</span>
-          </div>
-          @for (j of v.results; track j.id) {
-            <article class="result" [class.reporting]="reporting() === j.id">
-              @if (j.status === 'done') {
-                <!-- the expanded card (2d) is the report form itself: it carries its own video and the mark timeline -->
-                @if (reporting() !== j.id) {
-                  <div class="media">
-                    <video #vid [src]="videoUrl(j)" [controls]="played().has(j.id)" playsinline preload="metadata" (play)="markPlayed(j.id)"></video>
-                    @if (!played().has(j.id)) {
-                      <button class="play" type="button" aria-label="播放" (click)="play(j.id, vid)"></button>
-                      <span class="res">1080p@if (duration(); as d) { · {{ clock(d) }}}</span>
+        <!-- the base version's concept, folded to a strip above the workspace: it changes with 以這版為底, so it says whose it is -->
+        @if (baseOf(v); as b) {
+          @if (conceptOf(b); as c) {
+            @let cs = c.concept!;
+            <details class="panel concept-panel">
+              <summary>
+                <h2>{{ v.results.length > 1 ? versionLabel(b) + ' 的概念' : '這首歌的概念' }}</h2>
+                <span class="chip">{{ cs.languageName }}</span>
+                @if (cs.font) {
+                  <span class="c-font">{{ cs.font }}</span>
+                }
+                @if (cs.palette.length) {
+                  <span class="swatches" [attr.aria-label]="'配色 ' + cs.palette.slice(0, 5).join(' ')">
+                    @for (col of cs.palette.slice(0, 5); track $index) {
+                      <i class="swatch" [style.background]="col" [attr.title]="col"></i>
                     }
+                  </span>
+                }
+                @if (cs.concept) {
+                  <span class="c-line">{{ cs.concept }}</span>
+                }
+                <span class="c-more" aria-hidden="true">▾</span>
+              </summary>
+              <div class="c-body">
+                @if (cs.concept) {
+                  <p class="c-story">{{ cs.concept }}</p>
+                }
+                @if (interludes(cs).length) {
+                  <p class="c-note">{{ interludes(cs).join('；') }}</p>
+                }
+                @if (cs.stills.length) {
+                  <ul class="c-stills">
+                    @for (n of cs.stills; track n; let i = $index) {
+                      <li><img [src]="stillUrl(c, n)" [alt]="stillLabel(n, i, cs.stillNotes?.[i])" [title]="stillLabel(n, i, cs.stillNotes?.[i])" loading="lazy" /></li>
+                    }
+                  </ul>
+                }
+                <p class="c-note">接受於 {{ stamp(c.endedAt) }}</p>
+              </div>
+            </details>
+          }
+        }
+
+        <!-- the workspace: versions on the left, 接著做 (from the base version) pinned on the right; a report takes the whole width -->
+        @if (v.results.length || !mine()) {
+        <div class="work" [class.reporting]="!!reporting()">
+          <section class="results" aria-labelledby="results-h">
+            <div class="section-head">
+              <h2 id="results-h">版本</h2>
+              <span>{{ v.results.length ? v.results.length + ' 個' : '0 個' }}</span>
+              @if (v.results.length > 1) {
+                <span class="hint desk">最新的在上面 · 「接著做」以你選的那一版為底</span>
+              }
+            </div>
+            @for (j of v.results; track j.id) {
+              <article class="result" [id]="'result-' + j.id" [class.reporting]="reporting() === j.id" [class.base]="isBase(v, j)">
+                @if (j.status === 'done') {
+                  <!-- the expanded card (2d) is the report form itself: it carries its own video and the mark timeline -->
+                  @if (reporting() !== j.id) {
+                    <div class="media">
+                      <video #vid [src]="videoUrl(j)" [controls]="played().has(j.id)" playsinline preload="metadata" (play)="markPlayed(j.id)"></video>
+                      @if (!played().has(j.id)) {
+                        <button class="play" type="button" aria-label="播放" (click)="play(j.id, vid)"></button>
+                        <span class="res">1080p@if (duration(); as d) { · {{ clock(d) }}}</span>
+                      }
+                      @if (isBase(v, j) && v.results.length > 1) {
+                        <span class="base-chip">目前基底</span>
+                      }
+                    </div>
+                    <div class="r-body">
+                      <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
+                      <div class="r-actions">
+                        <a class="button strong" [href]="videoUrl(j)" [attr.download]="videoName(s, j)">下載 1080p</a>
+                        @if (mine()) {
+                          <button class="button" type="button" [attr.aria-expanded]="false" (click)="toggleReport(j.id)"><span class="desk">回報問題</span><span class="phone">回報</span></button>
+                          @if (!isBase(v, j)) {
+                            <button class="button soft" type="button" (click)="base.set(j.id)">以這版為底</button>
+                          } @else if (v.results.length > 1) {
+                            <button class="button soft to-next" type="button" (click)="toNext()">目前基底 · 前往接著做</button>
+                          }
+                        }
+                      </div>
+                    </div>
+                  }
+                  <!-- stays mounted once opened so a draft survives folding the form or opening another card -->
+                  @if (opened().has(j.id)) {
+                    <app-report-form
+                      [job]="j"
+                      [song]="s"
+                      [reports]="reports()[j.id] ?? []"
+                      [fix]="fixIntent() === j.id"
+                      [open]="reporting() === j.id"
+                      [active]="!!v.active"
+                      [left]="left()"
+                      [duration]="duration()"
+                      (reported)="setReports(j.id, $event)"
+                      (started)="started($event)"
+                      (fixFrom)="askFix($event, j)"
+                      (redo)="redo($event.tier, $event.feeling)"
+                      (closed)="toggleReport(j.id)"
+                    />
+                  }
+                } @else {
+                  <div class="media">
+                    <p class="held">
+                      @for (line of heldInfo(j); track $index) {
+                        <span>{{ line }}</span>
+                      }
+                    </p>
                   </div>
                   <div class="r-body">
                     <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
-                    <div class="r-actions">
-                      <a class="button strong" [href]="videoUrl(j)" [attr.download]="videoName(s, j)">下載 1080p</a>
-                      @if (mine()) {
-                        <button class="button" type="button" [attr.aria-expanded]="false" (click)="toggleReport(j.id)"><span class="desk">回報這個作品</span><span class="phone">回報</span></button>
-                      }
-                    </div>
                   </div>
                 }
-                <!-- stays mounted once opened so a draft survives folding the form or opening another card -->
-                @if (opened().has(j.id)) {
-                  <app-report-form
-                    [job]="j"
-                    [song]="s"
-                    [open]="reporting() === j.id"
-                    [active]="!!v.active"
-                    [left]="left()"
-                    [duration]="duration()"
-                    (reported)="setReports(j.id, $event)"
-                    (started)="started($event)"
-                    (redo)="redo($event.tier, $event.feeling)"
-                    (closed)="toggleReport(j.id)"
-                  />
-                }
-              } @else {
-                <div class="media"><p class="held">已完成，管理者確認後就能下載</p></div>
-                <div class="r-body">
-                  <ng-container *ngTemplateOutlet="resultInfo; context: { $implicit: j }" />
-                </div>
-              }
-            </article>
-          } @empty {
-            <div class="empty">
-              <span class="thumb" aria-hidden="true"></span>
-              <p>還沒有成品。第一個成品完成後會出現在這裡，可以播放、下載 1080p 與回報。</p>
-            </div>
-          }
-        </section>
+              </article>
+            } @empty {
+              <div class="empty">
+                <span class="thumb" aria-hidden="true"></span>
+                <p>還沒有成品。第一個成品完成後會出現在這裡，可以播放、下載 1080p 與回報。</p>
+              </div>
+            }
+          </section>
 
-        @if (mine()) {
+          @if (mine() && baseOf(v); as b) {
+            @let wait = nextHeld(b);
+            <aside #side class="side" [class.tall]="!sideFits()">
+              <section class="panel next-panel" aria-labelledby="next-h">
+                <div class="panel-head">
+                  <h2 id="next-h">接著做</h2>
+                  <span>以 <strong>{{ versionLabel(b) }}</strong> 為底@if (conceptOf(b)) { · 概念不重新收費}</span>
+                </div>
+                @if (wait) {
+                  <p class="c-note wait">{{ wait }}</p>
+                }
+                @if (b.status === 'done') {
+                  <div class="row">
+                    <div class="txt"><strong>修正 {{ versionLabel(b) }} 的問題</strong><p>看影片標記哪裡不對、寫下想怎麼改，只重做標記處</p></div>
+                    <span class="price"><app-price [amount]="fixPrice" digits="short" [plain]="true" /></span>
+                    <button class="button" type="button" [disabled]="!!v.active || busy()" (click)="openReport(b)">標記問題並修正</button>
+                  </div>
+                }
+                @if (conceptOf(b)) {
+                  @for (step of nextSteps(b); track step.tier) {
+                    <div class="row">
+                      <div class="txt"><strong>{{ step.title }}</strong><p>{{ step.desc }}</p></div>
+                      <span class="price"><app-price [amount]="step.price" digits="short" [plain]="true" /></span>
+                      <button class="button" [class.primary]="step.primary" type="button" [disabled]="!!v.active || busy() || !!wait" (click)="askRemake(b, step.tier)">{{ step.action }}</button>
+                    </div>
+                  }
+                } @else {
+                  <p class="c-note">這版沒有留下概念資料，只能回報、修正或換個概念。</p>
+                }
+                <div class="row last">
+                  <div class="txt"><strong class="quiet">換個概念</strong><p>重新請導演提案（可寫想要的感覺、放參考圖、選風格），確認後再製作</p></div>
+                  <span class="price quiet"><app-price [amount]="conceptPrice" digits="short" [plain]="true" /> 起</span>
+                  <button class="button soft" type="button" [disabled]="!!v.active || !!wait" (click)="openNewConcept()">產生新概念</button>
+                </div>
+              </section>
+            </aside>
+          }
+        </div>
+        }
+
+        <!-- 製作新版本: the first concept's form as before; once there are versions it opens from 換個概念 -->
+        @if (mine() && (!v.results.length || newConcept())) {
           <app-make-form
             [song]="s"
             [jobs]="jobs()"
@@ -178,7 +288,12 @@
   <!-- the shell hides its phone top bar on this page, so the back link stays here when there is no hero -->
   <main class="body">
     <a class="back" href="/my">← 我的歌曲</a>
-    @if (loaded()) {
+    @if (signedOut()) {
+      <section class="signed-out" role="alert">
+        <h2>尚未登入，或登入連結已失效</h2>
+        <p>請向邀請你的人要一條新連結（平台網址可能已更換，舊連結會失效）。</p>
+      </section>
+    } @else if (loaded()) {
       <div class="empty"><p>找不到這首歌</p></div>
     }
   </main>
@@ -188,22 +303,15 @@
 <ng-template #reuploadTpl>
   @if (mine()) {
     <label class="button soft" [class.off]="busy()">
-      <input type="file" accept="audio/*" hidden [disabled]="busy()" (change)="reupload($event)" aria-label="音檔" />
+      <input type="file" accept=".mp3,.wav,.flac,.m4a,.aac,audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/mp4,audio/x-m4a,audio/aac" hidden [disabled]="busy()" (change)="reupload($event)" aria-label="音檔" />
       {{ busy() ? '上傳中…' : '重新上傳音檔' }}
     </label>
     @if (busy()) {
       <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
     } @else {
-      <p class="fine">mp3、wav、flac、m4a · 80 MB 以內 · 不另外收費</p>
+      <p class="fine">mp3、wav、flac、m4a、aac · 80 MB 以內<br />失敗的那次不收費；重新準備照常 <app-price [amount]="prepPrice" [plain]="true" /></p>
     }
   }
-</ng-template>
-
-<ng-template #makeLater>
-  <section class="later">
-    <span class="num" aria-hidden="true">2</span>
-    <p><strong>製作新版本</strong> · 等歌詞時間確認後開放。三種方案 <app-price [amount]="totals[0]" digits="short" [plain]="true" /> / <app-price [amount]="totals[1]" digits="short" [plain]="true" /> / <app-price [amount]="totals[2]" digits="short" [plain]="true" />，都先產生概念（<app-price [amount]="conceptPrice" digits="short" [plain]="true" />）再製作。</p>
-  </section>
 </ng-template>
 
 <ng-template #progressTpl let-job let-prep="prep">
@@ -225,27 +333,15 @@
         <div class="pc-step">
           <strong>{{ queued ? '排隊中' : p.label }}</strong>
           @if (queued) {
-            <p class="pc-meta">前面的工作完成後就會開始，預計需要約 {{ p.leftMin }} 分鐘。</p>
+            <p class="pc-meta">尚未開始；輪到你後約 {{ p.leftMin }} 分鐘，不含排隊的等待時間。</p>
           } @else {
-            <p class="pc-meta">步驟 {{ p.index + 1 }} / {{ p.steps.length }} · 約剩 {{ p.leftMin }} 分鐘<span class="desk"> · 可以離開頁面</span></p>
+            <p class="pc-meta">步驟 {{ p.index + 1 }}／{{ p.steps.length }} · 本步驟已進行 {{ p.stepMin }} 分@if (p.overdue) { · 已超過預估，仍在執行}<span class="desk"> · 可以離開頁面</span></p>
           }
         </div>
       </div>
       <div class="bar" aria-hidden="true"><i [style.width.%]="p.pct"></i></div>
-      <button class="steps-toggle" type="button" [attr.aria-expanded]="stepsOpen()" (click)="stepsOpen.set(!stepsOpen())">看全部 {{ p.steps.length }} 個步驟 {{ stepsOpen() ? '▴' : '▾' }}</button>
-    </div>
-    <div class="pc-steps" [class.open]="stepsOpen()">
-      <ol class="steps" [class.one]="prep">
-        @for (c of clocks(job); track $index) {
-          <li [class]="c.state">
-            <span class="badge" aria-hidden="true">{{ c.state === 'done' ? '✓' : c.state === 'now' ? '' : $index + 1 }}</span>
-            <span class="name">{{ p.steps[$index].label }}</span>
-            <span class="time">{{ c.time }}</span>
-          </li>
-        }
-      </ol>
       @if (prep) {
-        <p class="note">準備好後會請你確認每句歌詞的時間，確認後才能製作。</p>
+        <p class="note">準備好後會請你確認每句歌詞的時間，確認後就能免費做影片。</p>
       }
     </div>
   </section>
@@ -254,7 +350,7 @@
 <ng-template #resultInfo let-j>
   @let t = title(j);
   <div class="r-head">
-    <h3>{{ t.name }}</h3>
+    <h3>{{ t.name }}@if (t.version) { <span class="ver">v{{ t.version }}</span>}</h3>
     @if (t.tag) {
       <span class="tag fix">{{ t.tag }}</span>
     }
@@ -276,6 +372,10 @@
   </dl>
   @if (j.status === 'done' && lastReport(j)) {
     <p class="report-line">{{ lastReport(j) }}</p>
+  }
+  <!-- a report sent as 只回報 whose marks a fix can work on: the fix can still be asked for here -->
+  @if (mine() && fixable(j); as f) {
+    <button class="button soft fix-from" type="button" [disabled]="!!sv()?.active || busy()" (click)="askFix(f, j)">依這份回報修正 · <app-price [amount]="fixPrice" digits="short" [plain]="true" /></button>
   }
 </ng-template>
 

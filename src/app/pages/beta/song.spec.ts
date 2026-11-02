@@ -1,5 +1,5 @@
 import { BetaJob } from './beta';
-import { canReupload, clock, draftsToReopen, FAILURE_NOTE, PREP_FAILED_NOTE, failureCard, heroTone, jobTitle, jobTotal, safeName, stepClocks, timingNote, videoFileName } from './song';
+import { canReupload, clock, draftsToReopen, FAILURE_NOTE, PREP_FAILED_NOTE, failureCard, fitsViewport, heldLines, heroTone, hhmm, nextHeld, SKIP_TIMING_BODY, jobTitle, jobTotal, resultConcept, safeName, stepClocks, nextSteps, timingNote, versionOf, videoFileName } from './song';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'make', tier: 'hybrid', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -21,6 +21,24 @@ describe('timingNote', () => {
   });
 });
 
+describe('resultConcept', () => {
+  const summary = { language: 'ink', languageName: '墨', font: 'F', palette: ['#000'], concept: 'story', stills: [] };
+  const concept = job({ id: 'c', kind: 'concept', decision: 'accepted', concept: summary });
+  it('finds the accepted concept of a make or fix by conceptOf, of an older fix through its source run, and nothing for a make without one', () => {
+    expect(resultConcept(job({ id: 'm', conceptOf: 'c' }), [concept])).toBe(concept);
+    expect(resultConcept(job({ id: 'f', kind: 'fix', conceptOf: 'c' }), [concept])).toBe(concept);
+    // the make ran in the concept's run, so a fix's `from` is the concept's id
+    expect(resultConcept(job({ id: 'f', kind: 'fix', inputs: { from: 'c' } }), [concept])).toBe(concept);
+    const fix1 = job({ id: 'f1', kind: 'fix', inputs: { from: 'c' } });
+    expect(resultConcept(job({ id: 'f2', kind: 'fix', inputs: { from: 'f1' } }), [concept, fix1])).toBe(concept);
+    expect(resultConcept(job({ id: 'm' }), [concept])).toBeUndefined();
+    expect(resultConcept(job({ id: 'f', kind: 'fix', inputs: { from: 'gone' } }), [concept])).toBeUndefined();
+  });
+  it('ignores a concept job whose summary the server did not return', () => {
+    expect(resultConcept(job({ id: 'm', conceptOf: 'c' }), [job({ id: 'c', kind: 'concept' })])).toBeUndefined();
+  });
+});
+
 describe('jobTitle and jobTotal', () => {
   it('names a result by its tier, and marks a fix', () => {
     expect(jobTitle(job({}))).toEqual({ name: '故事版' });
@@ -35,6 +53,37 @@ describe('jobTitle and jobTotal', () => {
     expect(jobTotal(job({ priceUsd: 4 }), [])).toBe(4);
     expect(jobTotal(job({ kind: 'fix', priceUsd: 1, conceptOf: 'c' }), [concept])).toBe(1);
     expect(jobTotal(job({}), [])).toBeUndefined();
+  });
+});
+
+describe('versionOf', () => {
+  const a = job({ id: 'a', tier: 'none', createdAt: '2026-10-30T01:00:00Z' });
+  const b = job({ id: 'b', tier: 'none', kind: 'fix', createdAt: '2026-10-30T02:00:00Z' });
+  const other = job({ id: 'o', tier: 'img', createdAt: '2026-10-30T00:00:00Z' });
+  const held = job({ id: 'h', tier: 'none', status: 'admin', createdAt: '2026-10-30T03:00:00Z' });
+  const running = job({ id: 'r', tier: 'none', status: 'running', createdAt: '2026-10-30T04:00:00Z' });
+  const jobs = [running, held, b, a, other];
+  it('numbers finished makes and fixes of one tier by creation, oldest first; other tiers and unfinished jobs do not count', () => {
+    expect(versionOf(a, jobs)).toBe(1);
+    expect(versionOf(b, jobs)).toBe(2);
+    expect(versionOf(held, jobs)).toBe(3);
+    expect(versionOf(other, jobs)).toBe(1);
+    expect(versionOf(running, jobs)).toBeUndefined();
+    expect(versionOf(a)).toBeUndefined();
+    expect(jobTitle(b, jobs)).toEqual({ name: '文字動態版', tag: '依回報修正', version: 2 });
+    expect(videoFileName({ title: '歌' }, b, jobs)).toBe('歌-文字動態版-v2-修正.mp4');
+  });
+});
+
+describe('nextSteps', () => {
+  it('puts another take of the own tier first, upgrades as primary, a step down not, each at the rest price', () => {
+    const fromNone = nextSteps('none');
+    expect(fromNone.map((s) => [s.tier, s.price, s.primary])).toEqual([['none', 1.5, false], ['img', 3.5, true], ['hybrid', 13.5, true]]);
+    expect(fromNone[0].title).toBe('同概念再做一版');
+    const fromHybrid = nextSteps('hybrid');
+    expect(fromHybrid.map((s) => s.tier)).toEqual(['hybrid', 'none', 'img']);
+    expect(fromHybrid[0].title).toBe('同概念再做一版');
+    expect(fromHybrid[1]).toMatchObject({ title: '做文字動態版', primary: false });
   });
 });
 
@@ -92,7 +141,7 @@ describe('failureCard', () => {
     expect(failureCard(first, [first])).toEqual({ title: '文字動態版製作失敗', price: 4, stamps: ['10-28 07:44 失敗'], note: FAILURE_NOTE });
   });
   it('says only what is true about what happens next: the failure is on record for the admin, nobody was notified', () => {
-    expect(failureCard(first, [first]).note).toBe('這次失敗已記錄，管理者會在後台看到');
+    expect(failureCard(first, [first]).note).toBe('這次失敗已記錄，管理者會在後台看到。需要協助請聯絡邀請你的人。');
     expect(FAILURE_NOTE).not.toContain('通知');
   });
   it('names a failed concept by its tier and a failed fix as 修正', () => {
@@ -120,7 +169,8 @@ describe('re-upload after a failed or missing upload (mirrors taken() in server.
   });
 
   it('the prepFailed line states what is true and what the person can do, with no promise of help', () => {
-    expect(PREP_FAILED_NOTE).toBe('準備失敗，這次失敗已記錄；可以重新上傳音檔再試一次。');
+    expect(PREP_FAILED_NOTE).toBe('準備失敗，這次失敗已記錄；可以重新上傳音檔再試一次。需要協助請聯絡邀請你的人。');
+    expect(FAILURE_NOTE).toBe('這次失敗已記錄，管理者會在後台看到。需要協助請聯絡邀請你的人。');
     for (const line of [PREP_FAILED_NOTE, FAILURE_NOTE]) expect(line).not.toMatch(/會協助|已通知|會聯絡|聯絡管理者/);
   });
 });
@@ -136,5 +186,50 @@ describe('draftsToReopen', () => {
 
   it('never reopens a form on someone else’s song', () => {
     expect(draftsToReopen(results, false, new Set(), has)).toEqual([]);
+  });
+});
+
+describe('fitsViewport', () => {
+  it('needs the panel plus both 24px margins to fit the window', () => {
+    expect(fitsViewport(620, 668)).toBe(true);
+    expect(fitsViewport(621, 668)).toBe(false);
+  });
+});
+
+describe('hhmm', () => {
+  // local times, so the day check holds in any time zone
+  const now = new Date(2026, 9, 30, 15, 0).getTime();
+  it('gives the time alone today and adds the date on another day', () => {
+    expect(hhmm(new Date(2026, 9, 30, 9, 5).toISOString(), now)).toBe('09:05');
+    expect(hhmm(new Date(2026, 9, 31, 0, 10).toISOString(), now)).toBe('10-31 00:10');
+    expect(hhmm(undefined, now)).toBe('');
+  });
+});
+
+describe('heldLines', () => {
+  const now = new Date(2026, 9, 30, 15, 0).getTime();
+  const ended = new Date(2026, 9, 30, 14, 20).toISOString();
+  it('says what the result waits on and since when, falling back to 品質檢查, then who to contact', () => {
+    expect(heldLines({ endedAt: ended }, now)).toEqual(['正在等管理者確認：品質檢查', '從 14:20 起', '需要協助請聯絡邀請你的人']);
+    expect(heldLines({ phase: '關鍵畫面', endedAt: ended }, now)[0]).toBe('正在等管理者確認：關鍵畫面');
+  });
+
+  it('adds the auto release time when the server gives one, with the date on another day', () => {
+    const at = new Date(2026, 9, 31, 2, 0).toISOString();
+    expect(heldLines({ endedAt: ended, autoReleaseAt: at }, now)).toContain('預計 10-31 02:00 起自動放行（每 5 分鐘檢查一次）');
+    expect(heldLines({}, now)).toEqual(['正在等管理者確認：品質檢查', '需要協助請聯絡邀請你的人']);
+  });
+});
+
+describe('nextHeld', () => {
+  it('holds 接著做 only while the base version waits for the admin', () => {
+    expect(nextHeld({ status: 'admin' })).toBe('等管理者放行後才能接著做');
+    expect(nextHeld({ status: 'done' })).toBeNull();
+  });
+});
+
+describe('SKIP_TIMING_BODY', () => {
+  it('states the risk and the fees of changing the timing later', () => {
+    expect(SKIP_TIMING_BODY).toBe('歌詞時間是自動對的，沒有檢查的話，影片裡可能有歌詞和歌聲對不上的地方。之後改時間本身免費；已做好的影片要套用新時間要另付修正費 $1；還沒確認的概念要重新產生（$2.5）。');
   });
 });

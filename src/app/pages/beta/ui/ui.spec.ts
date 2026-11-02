@@ -1,6 +1,8 @@
-import { balance } from './balance';
+import { languageProblem } from '../beta.page';
+import { balance, panelAfter, QUOTA_HELP } from './balance';
 import { askRows, bill } from './confirm';
 import { formatPrice } from './price';
+import { pollGate, signedOutBy } from './session';
 import { shellFor } from './shell';
 import { STATUS_CHIP } from './status';
 
@@ -87,5 +89,59 @@ describe('askRows', () => {
     expect(askRows({ cost: 2.5 }, 4)).toEqual({ cost: 2.5, left: 4, after: 1.5, short: false });
     expect(askRows({ cost: 0 }, 4)).toBeNull();
     expect(askRows({ cost: 0 }, null)).toBeNull();
+  });
+});
+
+describe('panelAfter', () => {
+  it('toggles on the 額度 button', () => {
+    expect(panelAfter(false, 'toggle')).toBe(true);
+    expect(panelAfter(true, 'toggle')).toBe(false);
+  });
+  it('closes on Escape or a click outside the pill, and never opens from them', () => {
+    expect(panelAfter(true, 'escape')).toBe(false);
+    expect(panelAfter(true, 'outside')).toBe(false);
+    expect(panelAfter(false, 'escape')).toBe(false);
+    expect(panelAfter(false, 'outside')).toBe(false);
+  });
+  it('sends people to whoever invited them, not to a payment', () => {
+    expect(QUOTA_HELP.join('')).toContain('請聯絡邀請你的人');
+    expect(QUOTA_HELP.join('')).toContain('不需要付款');
+  });
+});
+
+describe('signedOutBy', () => {
+  it('is a 401 only; other statuses are errors, not a sign-out', () => {
+    expect(signedOutBy(401)).toBe(true);
+    for (const s of [200, 403, 404, 500, 502]) expect(signedOutBy(s)).toBe(false);
+  });
+});
+
+describe('pollGate', () => {
+  it('keeps only the newest poll', () => {
+    const g = pollGate();
+    const a = g.begin();
+    const b = g.begin();
+    expect(g.latest(a)).toBe(false);
+    expect(g.latest(b)).toBe(true);
+  });
+  it('drops a slow poll that began before a 401, so it cannot refill the lists', () => {
+    const g = pollGate();
+    const slow = g.begin();
+    g.signOut();
+    expect(g.latest(slow)).toBe(false);
+  });
+  it('takes a poll begun after the 401 (signed in again)', () => {
+    const g = pollGate();
+    g.begin();
+    g.signOut();
+    expect(g.latest(g.begin())).toBe(true);
+  });
+});
+
+describe('languageProblem', () => {
+  it('asks for a language until one of the four is picked', () => {
+    expect(languageProblem('')).toBe('請選擇歌詞的語言');
+    expect(languageProblem('fr')).toBe('請選擇歌詞的語言');
+    for (const l of ['ja', 'zh', 'en', 'ko']) expect(languageProblem(l)).toBeNull();
   });
 });

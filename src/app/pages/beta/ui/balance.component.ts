@@ -1,13 +1,12 @@
-import { Component, computed, DestroyRef, inject, input, signal } from '@angular/core';
+import { Component, computed, ElementRef, inject, input, signal } from '@angular/core';
 import { BetaMe } from '../beta';
-import { balance } from './balance';
+import { balance, PanelEvent, panelAfter, QUOTA_HELP } from './balance';
 import { PriceComponent } from './price.component';
 
-const NOTE_MS = 2500;
-
 /**
- * The balance pill: what is left, a 4 px bar of the share left, and 「儲值」 (not built yet: it shows 「即將推出」).
- * `full` sits in a desktop page header, `compact` in a song hero, `phone` in the shell's 56 px top bar.
+ * The balance pill: what is left, a 4 px bar of the share left, and 「額度」, which opens a small panel under the pill
+ * (balance and limit, who provides the quota, whom to ask). `full` sits in a desktop page header, `compact` in a song
+ * hero, `phone` in the shell's 56 px top bar. `drop="up"` opens the panel above the pill (the phone 我 sheet sits at the bottom).
  */
 @Component({
   selector: 'app-balance',
@@ -20,12 +19,17 @@ const NOTE_MS = 2500;
     @if (look() === 'full') {
       <span class="bar" aria-hidden="true"><i [style.width.%]="b().pct"></i></span>
     }
-    <button class="top-up" type="button" (click)="showNote()">儲值</button>
-    @if (note()) {
-      <span class="note" role="status">即將推出</span>
+    <button class="top-up" type="button" [attr.aria-expanded]="open()" (click)="on('toggle')">額度</button>
+    @if (open()) {
+      <div class="panel" role="region" aria-label="額度">
+        <p class="line">餘額 <app-price [amount]="b().left" /> ／ 額度 <app-price [amount]="me().limitUsd" /></p>
+        @for (t of help; track t) {
+          <p>{{ t }}</p>
+        }
+      </div>
     }
   `,
-  host: { '[class]': 'look()' },
+  host: { '[class]': 'look()', '[class.up]': "drop() === 'up'", '(document:click)': 'outside($event)', '(document:keydown.escape)': "on('escape')" },
   styles: `
     :host {
       position: relative;
@@ -74,19 +78,38 @@ const NOTE_MS = 2500;
         background: var(--border-strong);
       }
     }
-    .note {
+    // anchored to the pill's right edge, which sits at a page's right gutter, so it never runs off a 390 px screen
+    .panel {
       position: absolute;
       top: calc(100% + 6px);
       right: 0;
       z-index: 30;
-      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: max-content;
+      max-width: min(300px, calc(100vw - 32px));
+      padding: 12px 14px;
       font-size: 12px;
-      font-weight: 700;
-      white-space: nowrap;
+      line-height: 1.5;
+      text-align: left;
       color: var(--text-2);
       background: var(--surface-2);
       border: 1px solid var(--border-strong);
       border-radius: 10px;
+      box-shadow: var(--shadow-float);
+      p {
+        margin: 0;
+      }
+      .line {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text);
+      }
+    }
+    :host(.up) .panel {
+      top: auto;
+      bottom: calc(100% + 6px);
     }
     :host(.compact) {
       gap: 10px;
@@ -121,17 +144,17 @@ const NOTE_MS = 2500;
 export class BalanceComponent {
   readonly me = input.required<BetaMe>();
   readonly look = input<'full' | 'compact' | 'phone'>('full');
+  readonly drop = input<'down' | 'up'>('down');
   protected readonly b = computed(() => balance(this.me()));
-  protected readonly note = signal(false);
-  private timer?: ReturnType<typeof setTimeout>;
+  protected readonly open = signal(false);
+  protected readonly help = QUOTA_HELP;
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
 
-  constructor() {
-    inject(DestroyRef).onDestroy(() => clearTimeout(this.timer));
+  protected on(e: PanelEvent) {
+    this.open.update((o) => panelAfter(o, e));
   }
 
-  protected showNote() {
-    this.note.set(true);
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.note.set(false), NOTE_MS);
+  protected outside(e: MouseEvent) {
+    if (this.open() && !this.host.nativeElement.contains(e.target as Node)) this.on('outside');
   }
 }

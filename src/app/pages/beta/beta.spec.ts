@@ -1,4 +1,4 @@
-import { audioProblem, audioType, BetaEvent, errorOf, stepsMin, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, PREP_PRICE, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE } from './beta';
+import { audioProblem, audioType, BetaEvent, errorOf, flowSummary, stepsMin, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE, NOT_FIXABLE_HYBRID, fixableReport } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -63,7 +63,20 @@ describe('jobProgress', () => {
   });
 
   it('a queued job has not started', () => {
-    expect(jobProgress(job({ kind: 'make', tier: 'none', status: 'queued' }))).toMatchObject({ label: '排隊中', pct: 0 });
+    expect(jobProgress(job({ kind: 'make', tier: 'none', status: 'queued' }))).toMatchObject({ label: '排隊中', pct: 0, stepMin: 0, overdue: false, queued: true, leftMin: stepsMin('none') });
+    expect(make('畫道具', 1).queued).toBe(false);
+  });
+
+  it('says how long the current step has run: since the last recorded step, else since the start', () => {
+    expect(make('畫道具', 3.5).stepMin).toBe(3);
+    const j = job({ kind: 'make', tier: 'img', status: 'running', phase: '編排文字動態', startedAt: '2026-10-27T00:00:00Z', steps: [{ phase: '畫道具', at: '2026-10-27T00:00:00Z' }, { phase: '編排文字動態', at: '2026-10-27T00:06:00Z' }] });
+    expect(jobProgress(j, Date.parse('2026-10-27T00:08:30Z')).stepMin).toBe(2);
+  });
+
+  it('is overdue only once the job has run longer than all its estimates together', () => {
+    expect(make('輸出影片', total).overdue).toBe(false);
+    expect(make('輸出影片', total + 1)).toMatchObject({ overdue: true, leftMin: 1 });
+    expect(make('畫道具', 1).overdue).toBe(false);
   });
 
   it('a concept job runs its own steps, so its ETA covers the concept only, not a whole make', () => {
@@ -151,9 +164,14 @@ describe('TIER_INFO.min', () => {
   });
 });
 
+describe('TIER_INFO.about', () => {
+  it('keeps the cards to one short clause; the preview caveats live in the 產生概念 confirm', () => {
+    expect([TIER_INFO.none.about, TIER_INFO.img.about, TIER_INFO.hybrid.about]).toEqual(['只有歌詞文字與圖形動態。', '文字動態加上插圖道具。', '依歌詞編出故事，有角色與畫面。']);
+  });
+});
+
 describe('prices', () => {
   it('shows the fixed price of each version', () => {
-    expect(PREP_PRICE).toBe(0.5);
     expect([TIER_INFO.none.price, TIER_INFO.img.price, TIER_INFO.hybrid.price]).toEqual([4, 6, 16]);
   });
 });
@@ -277,18 +295,20 @@ describe('songKind, nextStep and the list filters', () => {
     });
   });
   it('says what to do next in each state', () => {
-    expect(nextStep(views['preparing'], { leftMin: 4 })).toEqual({ label: '約剩 4 分', to: 'song' });
+    // queued: the whole estimate; running: only the step, since the minutes left stop falling once a step runs long
+    expect(nextStep(views['preparing'], { leftMin: 17, queued: true, index: 0, steps: JOB_STEPS.prep })).toEqual({ label: '排隊中 · 約 17 分', to: 'song' });
+    expect(nextStep(views['preparing'], { leftMin: 4, queued: false, index: 2, steps: JOB_STEPS.prep })).toEqual({ label: '步驟 3／4', to: 'song' });
     expect(nextStep(views['preparing'])).toEqual({ label: '看進度', to: 'song' });
     expect(nextStep(views['timing'])).toEqual({ label: '確認時間', to: 'timing' });
     expect(nextStep(views['concept'])).toEqual({ label: '看概念', to: 'song' });
-    expect(nextStep(views['making'], { leftMin: 21 })).toEqual({ label: '約剩 21 分', to: 'song' });
-    expect(nextStep(views['retrying'], { leftMin: 9 })).toEqual({ label: '約剩 9 分', to: 'song' });
+    expect(nextStep(views['making'], { leftMin: 21, queued: false, index: 0, steps: JOB_STEPS.img })).toEqual({ label: '步驟 1／4', to: 'song' });
+    expect(nextStep(views['retrying'], { leftMin: 9, queued: true, index: 0, steps: JOB_STEPS.img })).toEqual({ label: '排隊中 · 約 9 分', to: 'song' });
     expect(nextStep(views['noAudio'])).toEqual({ label: '重新上傳音檔', to: 'song' });
     // the song page has no contact action: the card names what it really opens
     expect(nextStep(views['help'])).toEqual({ label: '看失敗原因', to: 'song' });
     expect(nextStep(views['prepFailed'])).toEqual({ label: '看失敗原因', to: 'song' });
-    expect(nextStep(views['ready'])).toEqual({ label: '製作新版本', to: 'song' });
-    expect(nextStep(views['readyMade'])).toEqual({ label: '製作新版本', to: 'song' });
+    expect(nextStep(views['ready'])).toEqual({ label: '做影片', to: 'song' });
+    expect(nextStep(views['readyMade'])).toEqual({ label: '做影片', to: 'song' });
   });
   it('sorts songs into 要你處理, 進行中 and 有成品', () => {
     const pick = (f: Parameters<typeof inFilter>[0]) => Object.keys(views).filter((k) => inFilter(f, views[k]));
@@ -424,37 +444,69 @@ describe('failure copy, retries and report summary', () => {
 describe('fix rules (mirror scripts/lyric-vj/beta/feedback.mts)', () => {
   const m = (...cats: (FeedbackCategory | null)[]) => cats.map((category) => ({ category }));
 
-  it('fixKindFor: picture or timing only when every mark agrees', () => {
+  it('fixKindFor: timing when all marks are timing; picture when all are picture on img; else replan on none/img', () => {
     expect(fixKindFor([])).toBeUndefined();
-    expect(fixKindFor(m('picture', 'picture'))).toBe('picture');
+    expect(fixKindFor(m('picture', 'picture'), 'img')).toBe('picture');
+    expect(fixKindFor(m('picture', 'picture'), 'none')).toBe('replan');
     expect(fixKindFor(m('timing'))).toBe('timing');
-    expect(fixKindFor(m('picture', 'timing'))).toBeUndefined();
+    expect(fixKindFor(m('picture', 'timing'), 'img')).toBe('replan');
+    expect(fixKindFor(m('lyrics'), 'none')).toBe('replan');
+    expect(fixKindFor(m('lyrics'), 'hybrid')).toBeUndefined();
     expect(fixKindFor(m('lyrics'))).toBeUndefined();
-    expect(fixKindFor(m('picture', null))).toBeUndefined();
+    expect(fixKindFor(m('picture', null), 'none')).toBeUndefined();
   });
 
-  it('fixAllowed: pictures on img only, timing on every tier, nothing else', () => {
+  it('fixAllowed: timing on every tier; pictures on img; anything else marked re-plans on none and img, never on hybrid', () => {
     expect(fixAllowed(m('picture'), 'img')).toBe(true);
-    expect(fixAllowed(m('picture'), 'none')).toBe(false);
+    expect(fixAllowed(m('picture'), 'none')).toBe(true);
     expect(fixAllowed(m('picture'), 'hybrid')).toBe(false);
     expect(fixAllowed(m('picture'), undefined)).toBe(false);
     for (const tier of ['none', 'img', 'hybrid'] as const) expect(fixAllowed(m('timing', 'timing'), tier)).toBe(true);
-    expect(fixAllowed(m('empty'), 'img')).toBe(false);
+    expect(fixAllowed(m('empty'), 'img')).toBe(true);
+    expect(fixAllowed(m('empty', 'style'), 'none')).toBe(true);
+    expect(fixAllowed(m('empty'), 'hybrid')).toBe(false);
     expect(fixAllowed([], 'img')).toBe(false);
+  });
+
+  it('fixableReport: the newest 只回報 with fixable marks and no fix yet', () => {
+    const fb = (o: Partial<BetaFeedback>): BetaFeedback => ({ id: 'f', jobId: 'j', songId: 's', userId: 'u', ok: false, marks: m('lyrics') as BetaFeedback['marks'], suggestion: '', action: 'none', createdAt: '2026-10-30T00:00:00Z', ...o });
+    const none = { tier: 'none' as const };
+    expect(fixableReport([fb({})], none, [])?.id).toBe('f');
+    expect(fixableReport([fb({ id: 'old', createdAt: '2026-10-29T00:00:00Z' }), fb({})], none, [])?.id).toBe('f');
+    expect(fixableReport([fb({ ok: true })], none, [])).toBeUndefined();
+    expect(fixableReport([fb({ action: 'redo' })], none, [])).toBeUndefined();
+    expect(fixableReport([fb({ marks: [] })], none, [])).toBeUndefined();
+    expect(fixableReport([fb({})], { tier: 'hybrid' }, [])).toBeUndefined();
+    expect(fixableReport([fb({ fixJobId: 'x' })], none, [])).toBeUndefined();
+    expect(fixableReport([fb({})], none, [{ kind: 'fix', inputs: { feedbackId: 'f' } }])).toBeUndefined();
+    expect(fixableReport([], none, [])).toBeUndefined();
   });
 
   it('fixBlock gives one reason in order: marks, kind and tier, busy song, balance', () => {
     expect(FIX_PRICE).toBe(1);
     expect(fixBlock({ marks: [], tier: 'img' })).toBe('先標出有問題的地方');
     expect(fixBlock({ marks: m('picture', null), tier: 'img' })).toBe('每個標記請選一個類別');
-    expect(fixBlock({ marks: m('lyrics'), tier: 'img' })).toBe(NOT_FIXABLE);
-    expect(fixBlock({ marks: m('picture', 'timing'), tier: 'img' })).toBe(NOT_FIXABLE);
-    expect(fixBlock({ marks: m('picture'), tier: 'hybrid' })).toBe('只有插圖版能拿掉圖片');
+    expect(fixBlock({ marks: m('lyrics'), tier: undefined })).toBe(NOT_FIXABLE);
+    expect(fixBlock({ marks: m('lyrics'), tier: 'img', left: 5 })).toBeNull();
+    expect(fixBlock({ marks: m('picture', 'timing'), tier: 'img', left: 5 })).toBeNull();
+    expect(fixBlock({ marks: m('picture'), tier: 'hybrid' })).toBe(NOT_FIXABLE_HYBRID);
+    expect(fixBlock({ marks: m('lyrics'), tier: 'hybrid' })).toBe(NOT_FIXABLE_HYBRID);
     expect(fixBlock({ marks: m('picture'), tier: 'img', active: true })).toBe('這首歌已經在排隊或製作中');
-    expect(fixBlock({ marks: m('timing'), tier: 'none', left: 0.99 })).toBe('餘額不足，請聯絡管理者');
+    expect(fixBlock({ marks: m('timing'), tier: 'none', left: 0.99 })).toBe('餘額不足，請聯絡邀請你的人');
     expect(fixBlock({ marks: m('timing'), tier: 'none', left: 1 })).toBeNull();
     expect(fixBlock({ marks: m('timing'), tier: 'none', left: 0.1 + 0.9 })).toBeNull();
     expect(fixBlock({ marks: m('picture'), tier: 'img', left: null })).toBeNull();
     expect(fixBlock({ marks: m('picture', 'picture'), tier: 'img', left: 14.5 })).toBeNull();
+  });
+});
+
+describe('flowSummary', () => {
+  it('states the whole flow from the same prices and minutes the empty list shows', () => {
+    const line = flowSummary(3);
+    expect(line).toBe(
+      `準備約 ${stepsMin('prep')} 分鐘（免費）→ 檢查歌詞時間 → 免費做 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$1.5／$3.5／$13.5）；只上傳你有權使用的音樂；歌曲建立後不能刪除或改名。`,
+    );
+    expect(stepsMin('concept')).toBe(16);
+    expect(line).toContain(`$${TIER_INFO.hybrid.rest}`);
   });
 });

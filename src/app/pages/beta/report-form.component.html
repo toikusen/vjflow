@@ -1,5 +1,5 @@
 <div class="head">
-  <h3>回報這個作品</h3>
+  <h3>{{ fix() ? '標記問題並修正' : '回報這個作品' }}</h3>
   <span class="meta">{{ meta() }}</span>
   <button class="button fold" type="button" (click)="closed.emit()">收合</button>
 </div>
@@ -33,6 +33,12 @@
           @case ('redo') {
             <p class="thanks-next">已記下。往下到「製作新版本」，方案與想要的感覺已經幫你填好，照一般價格重新製作。</p>
           }
+          @case ('none') {
+            @if (fixableSent(); as f) {
+              <p class="thanks-next">想照這些標記修正的話，不用再標一次：</p>
+              <button class="button primary" type="button" [disabled]="active()" (click)="fixFrom.emit(f)">依這份回報修正 · <app-price [amount]="fixPrice" digits="short" [plain]="true" /></button>
+            }
+          }
         }
         <p class="past-count">這個作品的回報 · {{ list.length }}</p>
         <ul class="past">
@@ -52,8 +58,52 @@
         <button class="button" type="button" (click)="again()">再回報一次</button>
       </div>
     } @else {
+      @if (fix() || action() === 'fix') {
+        <!-- one line up top: what a fix costs, or why it is off -->
+        <div class="fix-lead" [class.warn]="!!fixWhy()" role="status">
+          @if (fixWhy(); as why) {
+            <strong>還不能修正：{{ why }}</strong>
+          } @else {
+            <strong>修正只改你標記的地方（<app-price [amount]="fixPrice" digits="short" [plain]="true" />）</strong>
+          }
+        </div>
+      }
+      @if (history().length) {
+        <!-- what was already said about this video, in full: the marks with their time, category and note, and the suggestion -->
+        <details class="history">
+          <summary>之前的回報 · {{ history().length }}</summary>
+          @for (f of history(); track f.id) {
+            <article class="h-item">
+              <p class="h-head">
+                <span [class]="f.ok ? 'tag ok' : 'tag bad'">{{ f.ok ? '沒問題' : '有問題' }}</span>
+                @if (f.action !== 'none') {
+                  <span>{{ f.action === 'fix' ? '修正' : '重做' }}</span>
+                }
+                @if (f.fixJobId) {
+                  <span class="tag ok">已修正</span>
+                }
+                <span class="when">{{ stamp(f.createdAt) }}</span>
+              </p>
+              @if (f.marks.length) {
+                <ul class="h-marks">
+                  @for (m of f.marks; track $index) {
+                    <li><button type="button" class="h-time" (click)="seekTo(m.at)">{{ time(m.at) }}</button> {{ categoryLabel(m.category) }}@if (m.note) { · {{ m.note }}}</li>
+                  }
+                </ul>
+              }
+              @if (f.suggestion) {
+                <p class="h-sug">{{ f.suggestion }}</p>
+              }
+              <!-- the same fix the card offers, here beside the report it would use -->
+              @if (fixableOne(f)) {
+                <button class="button soft h-fix" type="button" [disabled]="active()" (click)="fixFrom.emit(f)">依這份回報修正 · <app-price [amount]="fixPrice" digits="short" [plain]="true" /></button>
+              }
+            </article>
+          }
+        </details>
+      }
       <section class="step">
-        <p class="step-h">① 這個版本</p>
+        <p class="step-h">這個版本</p>
         <div class="seg" role="group" aria-label="這個版本">
           <button type="button" [class.on]="verdict() === 'ok'" [attr.aria-pressed]="verdict() === 'ok'" (click)="pick('ok')">✓ 沒問題</button>
           <button type="button" [class.on]="verdict() === 'issue'" [attr.aria-pressed]="verdict() === 'issue'" (click)="pick('issue')">! 有問題</button>
@@ -62,7 +112,7 @@
 
       @if (verdict() === 'issue') {
         <section class="step">
-          <p class="step-h"><span>② 標記 · {{ marks().length }} 個</span><span>點影片下方的按鈕新增</span></p>
+          <p class="step-h"><span>標記 · {{ marks().length }} 個</span><span>點影片下方的按鈕新增</span></p>
           @for (m of marks(); track m.key) {
             <div class="mark">
               <div class="mark-head">
@@ -87,7 +137,7 @@
 
       @if (verdict(); as vd) {
         <section class="step last">
-          <p class="step-h">{{ vd === 'ok' ? '② 想說的話' : '③ 整體建議與處理' }}</p>
+          <p class="step-h">{{ vd === 'ok' ? '想說的話' : '整體建議與處理' }}</p>
           <textarea rows="3" [attr.maxlength]="maxText" [placeholder]="vd === 'ok' ? '想說的話（可不填）' : '整體想怎麼改（可不填）'" aria-label="整體建議" [value]="suggestion()" (input)="suggestion.set($any($event.target).value)"></textarea>
 
           @if (vd === 'issue') {
@@ -95,11 +145,7 @@
               <button type="button" class="act" role="radio" [class.on]="action() === 'fix'" [class.off]="!!fixWhy()" [attr.aria-checked]="action() === 'fix'" [attr.aria-disabled]="!!fixWhy()" (click)="choose('fix')">
                 <strong>修正</strong>
                 <small>只改標記處</small>
-                @if (fixWhy(); as why) {
-                  <span class="why">{{ why }}</span>
-                } @else {
-                  <span class="price"><app-price [amount]="fixPrice" digits="short" [plain]="true" /></span>
-                }
+                <span class="price"><app-price [amount]="fixPrice" digits="short" [plain]="true" /></span>
               </button>
               <button type="button" class="act" role="radio" [class.on]="action() === 'redo'" [attr.aria-checked]="action() === 'redo'" (click)="choose('redo')">
                 <strong>重做</strong>
@@ -111,8 +157,14 @@
                 <span class="free">免費</span>
               </button>
             </div>
+            @if (fixWhy(); as why) {
+              <p class="fix-note warn">修正還不能選：{{ why }}</p>
+            }
             @if (action() === 'fix' && fixKind() === 'timing') {
               <p class="fix-note">修正會用新的歌詞時間重新輸出。<a [href]="timingUrl()">先到歌詞時間改好</a>，再送出。</p>
+            }
+            @if (action() === 'fix' && fixKind() === 'replan') {
+              <p class="fix-note">修正只會重排標記到的鏡頭，其他照舊。請在每個標記寫清楚哪裡不對、想怎麼改，導演照著改。</p>
             }
             @if (action() === 'redo') {
               <p class="fix-note">送出後會記下這份回報，並帶你到「製作新版本」：方案選好、想要的感覺填好，照一般價格重新製作。</p>

@@ -1,33 +1,36 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { AdminJob, AdminTotals, jobName, jobState, kpis, needHelp, parseLimit, retryLabel } from './admin';
+import { AdminJob, AdminTotals, isPendingReport, jobName, jobState, kpis, needHelp, parseLimit, retryLabel } from './admin';
+import { AdminReportsComponent } from './admin-reports.component';
 import { AdminStylesComponent } from './admin-styles.component';
-import { AdminLessonsComponent } from './admin-lessons.component';
-import { BetaMe, BetaSong, pollToast, songChip, songView } from './beta';
+import { BetaFeedback, BetaMe, BetaSong, pollToast, songChip, songView } from './beta';
 import { PriceComponent } from './ui/price.component';
 import { StatusChipComponent } from './ui/status-chip.component';
 
 const POLL_MS = 5000;
 /** How many of the newest jobs the overview's queue card lists; the 工作 tab has them all. */
 const RECENT = 8;
-export type AdminTab = 'overview' | 'songs' | 'jobs' | 'styles';
+export type AdminTab = 'overview' | 'songs' | 'jobs' | 'reports' | 'styles';
 export const ADMIN_TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: '總覽' },
   { id: 'songs', label: '歌曲' },
   { id: 'jobs', label: '工作' },
+  { id: 'reports', label: '回報' },
   { id: 'styles', label: '風格' },
 ];
 
 /** The beta admin (3c): KPIs, invites and limits, accounts and the job queue; the 歌曲, 工作 and 風格 tabs. */
 @Component({
   selector: 'app-beta-admin-page',
-  imports: [NgTemplateOutlet, FormsModule, PriceComponent, StatusChipComponent, AdminStylesComponent, AdminLessonsComponent],
+  imports: [NgTemplateOutlet, FormsModule, PriceComponent, StatusChipComponent, AdminStylesComponent, AdminReportsComponent],
   templateUrl: './beta-admin.page.html',
   styleUrl: './beta-admin.page.scss',
 })
 export class BetaAdminPage {
-  protected readonly tabs = ADMIN_TABS;
+  /** Reports still to review, shown on the 回報 tab so they are seen from anywhere in 管理. */
+  protected readonly pendingReports = signal(0);
+  protected readonly tabs = computed(() => ADMIN_TABS.map((t) => ({ ...t, label: t.id === 'reports' && this.pendingReports() ? `${t.label} · ${this.pendingReports()}` : t.label })));
   protected readonly tab = signal<AdminTab>(this.tabFromUrl());
   protected readonly users = signal<BetaMe[]>([]);
   protected readonly jobs = signal<AdminJob[]>([]);
@@ -166,7 +169,8 @@ export class BetaAdminPage {
         if (!r.ok) throw new Error(r.status === 403 ? '只有管理者可以使用' : r.status === 401 ? '請用邀請連結登入' : `HTTP ${r.status}`);
         return r.json();
       };
-      const [u, jobs, songs] = await Promise.all([get('/beta/admin/users'), get('/beta/admin/jobs'), get('/beta/songs')]);
+      const [u, jobs, songs, feedback] = await Promise.all([get('/beta/admin/users'), get('/beta/admin/jobs'), get('/beta/songs'), get('/beta/admin/feedback')]);
+      this.pendingReports.set((feedback as BetaFeedback[]).filter(isPendingReport).length);
       this.users.set(u.users);
       this.totals.set({ globalLimitUsd: u.globalLimitUsd, spentUsd: u.spentUsd, platformSpentUsd: u.platformSpentUsd ?? 0 });
       this.jobs.set(jobs);

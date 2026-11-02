@@ -1,0 +1,65 @@
+.flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  h2 {
+    margin: 0;
+    font: 700 20px var(--font-display);
+  }
+  p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+}
+.free {
+  padding: 2px 8px;
+  color: var(--on-accent);
+  font: 800 12px var(--font-body);
+  background: var(--accent);
+  border-radius: 999px;
+}
+.timing {
+  margin-left: auto;
+  color: var(--accent-text);
+  font-size: 13px;
+}
+.use {
+  margin: 10px 0 0;
+  font-size: 13px;
+}
+.paid {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  p {
+    margin: 0 auto 0 0;
+  }
+  strong {
+    color: var(--text);
+  }
+  .button {
+    flex: none;
+  }
+}
+@media (max-width: 720px) {
+  .paid {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .timing {
+    margin-left: 0;
+  }
+}

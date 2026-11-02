@@ -1,5 +1,5 @@
 import { BetaJob, CONCEPT_PRICE, TIER_INFO } from './beta';
-import { conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, pendingConcepts, refProblem, rootOf, stripGrid, stripTiles, timingSaveWarning } from './make';
+import { attemptLine, conceptAttempts, defaultTier, feelingLength, makeBlock, makeBody, MakeState, pendingConcepts, refProblem, rootOf, stripGrid, stripTiles, timingSaveWarning } from './make';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'concept', tier: 'hybrid', status: 'done', createdAt: '2026-10-28T00:00:00Z', decision: 'accepted', ...o });
 const state = (o: Partial<MakeState> = {}): MakeState => ({ songId: 's', tier: 'hybrid', jobs: [], active: false, left: 20, uploading: false, submitting: false, feeling: '', ...o });
@@ -133,20 +133,20 @@ describe('makeBlock', () => {
 
   it('stops after 3 concept attempts for the tier', () => {
     const jobs = ['a', 'b', 'c'].map((id) => job({ id }));
-    expect(makeBlock(state({ jobs }))).toBe('這個版本已試過 3 次概念，請聯絡管理者');
+    expect(makeBlock(state({ jobs }))).toBe('這個版本已試過 3 次概念，請聯絡邀請你的人');
     expect(makeBlock(state({ jobs, tier: 'none' }))).toBeNull();
   });
 
   it('stops when the whole version (concept and make) costs more than what is left, in cents, naming the total', () => {
-    expect(makeBlock(state({ left: 15.99 }))).toBe('餘額不足以完成這個版本（需 $16），請聯絡管理者');
+    expect(makeBlock(state({ left: 15.99 }))).toBe('餘額不足以完成這個版本（需 $16），請聯絡邀請你的人');
     expect(makeBlock(state({ left: 16 }))).toBeNull();
     expect(makeBlock(state({ left: 0.1 + 15.9 }))).toBeNull();
     expect(makeBlock(state({ left: null }))).toBeNull();
     // enough for the concept alone is not enough: the accept would be refused afterwards
-    expect(makeBlock(state({ left: 3 }))).toBe('餘額不足以完成這個版本（需 $16），請聯絡管理者');
+    expect(makeBlock(state({ left: 3 }))).toBe('餘額不足以完成這個版本（需 $16），請聯絡邀請你的人');
     expect(makeBlock(state({ left: 4, tier: 'none' }))).toBeNull();
-    expect(makeBlock(state({ left: 3.99, tier: 'none' }))).toBe('餘額不足以完成這個版本（需 $4），請聯絡管理者');
-    expect(makeBlock(state({ left: 5.99, tier: 'img' }))).toBe('餘額不足以完成這個版本（需 $6），請聯絡管理者');
+    expect(makeBlock(state({ left: 3.99, tier: 'none' }))).toBe('餘額不足以完成這個版本（需 $4），請聯絡邀請你的人');
+    expect(makeBlock(state({ left: 5.99, tier: 'img' }))).toBe('餘額不足以完成這個版本（需 $6），請聯絡邀請你的人');
   });
 
   it('stays off while the make request is on its way, so a second click sends nothing', () => {
@@ -191,5 +191,16 @@ describe('style strip tiles', () => {
     expect(stripTiles({ cols: 4, rows: 2 })).toEqual([{ col: 0, row: 0 }, { col: 1, row: 0 }, { col: 2, row: 0 }]);
     expect(stripTiles({ cols: 2, rows: 1 })).toEqual([{ col: 0, row: 0 }, { col: 1, row: 0 }, { col: 0, row: 0 }]);
     expect(stripTiles({ cols: 1, rows: 1 })).toEqual([{ col: 0, row: 0 }, { col: 0, row: 0 }, { col: 0, row: 0 }]);
+  });
+});
+
+describe('attemptLine', () => {
+  const song = { id: 's', title: '行星' };
+  it('numbers the next attempt out of 3 by the tier, counting as conceptAttempts does', () => {
+    expect(attemptLine([], song, 'hybrid')).toBe('這是「行星」故事版的第 1／3 次概念（含第一次；照意見調整、換一個方向都算一次）。送出後不能自行取消。');
+    const jobs = [job({ id: 'a' }), job({ id: 'b', retryOf: 'a' }), job({ id: 'c', status: 'failed' }), job({ id: 'd', tier: 'img' })];
+    expect(attemptLine(jobs, song, 'hybrid')).toContain('故事版的第 2／3 次概念');
+    expect(attemptLine(jobs, song, 'img')).toContain('插圖版的第 2／3 次概念');
+    expect(attemptLine(jobs, { ...song, id: 'other' }, 'hybrid')).toContain('第 1／3 次');
   });
 });

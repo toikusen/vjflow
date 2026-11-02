@@ -145,10 +145,10 @@ export function pump(q: Queue) {
   };
   let fused = false;
   let rest = '';
-  // the fuse: a run that costs more than twice its price is stopped (the whole group, or bash's children keep the pipe
+  // the fuse: a run that costs more than twice its price (a free step: its reserve) is stopped (the whole group, or bash's children keep the pipe
   // open); the trip is recorded at once, so a crash right after still shows it
   const fuse = () => {
-    if (fused || job.costUsd === undefined || !(job.costUsd > 2 * (job.priceUsd ?? Infinity))) return;
+    if (fused || job.costUsd === undefined || !(job.costUsd > 2 * (job.priceUsd === undefined ? Infinity : Math.max(job.priceUsd, job.reservedUsd)))) return;
     fused = true;
     job.fused = true;
     job.error = '成本超過上限，已通知管理者';

@@ -1,7 +1,7 @@
 // The closed beta's backend: invited people log in with their link, see their own songs and jobs, and queue work
 // within their limit; the admin invites people, sets limits and retries failed jobs.
 // npx tsx scripts/lyric-vj/beta/server.mts   (listens on 127.0.0.1:4320; the tunnel points at it)
-import { copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,18 +9,18 @@ import { LANGUAGES, LanguageId } from '../../../src/app/lyric-vj/languages';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
-import { addFeedback, fixKindFor, fixRanges, parseFeedback } from './feedback.mts';
+import { addFeedback, FeedbackMark, fixKindFor, fixRanges, NOT_FIXABLE, NOT_FIXABLE_HYBRID, parseFeedback, parseTriage, readProposals } from './feedback.mts';
 import { killGroup, killRunning, pump, Queue, waitGone } from './queue.mts';
 import { uptime } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import type { ConceptSummary } from './concept-summary.mts';
-import { candidateIds, charged, Db, hashToken, invite, Job, LESSON_SCOPES, LessonScope, load, madeVideo, MAX_LESSON, newId, platformSpent, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, trackOrphans, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
+import { candidateIds, charged, Db, hashToken, invite, Job, LESSON_SCOPES, LessonScope, load, madeVideo, MAX_LESSON, newId, platformSpent, PREP_RESERVE, PRICE, priceFor, provenIds, refuse, requeueRunning, retryJob, save, trackOrphans, Song, songDir, spent, styleOffered, styleTier, StyleTier, Tier, User, runPath, userByToken, videoFile, workPath } from './store.mts';
 
 export { songDir };
 
 const MAX_BODY = 100_000;
 const MAX_AUDIO = 80_000_000;
-const MAX_LYRICS = 20_000;
+export const MAX_LYRICS = 20_000;
 const TIERS: Tier[] = ['none', 'img', 'hybrid'];
 const LANGS = ['ja', 'zh', 'en', 'ko'];
 const AUDIO: Record<string, string> = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/flac': '.flac', 'audio/x-flac': '.flac', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac' };
@@ -198,13 +198,18 @@ const qualityReport = (root: string, job: Job): { findings: string[]; fileOk: bo
 };
 /** How long a held video waits for the admin before it goes out by itself (the user, 2026-10-29: 4 hours). */
 export const HOLD_HOURS = 4;
+const BAD_LOGIN_PAGE = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>登入連結無效</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#111;color:#eee;font:16px/1.6 system-ui,sans-serif}main{max-width:26rem;margin:16px;padding:24px;background:#1c1c1c;border:1px solid #333;border-radius:12px}h1{margin:0 0 8px;font-size:1.25rem}p{margin:0;color:#bbb}</style></head>
+<body><main><h1>登入連結無效或已失效</h1><p>請向邀請你的人要一條新連結（平台網址可能已更換，舊連結會失效）。</p></main></body></html>`;
+/** Whether a held video can go out by itself once its wait is over: a made video, a valid end time, a deliverable file. */
+const releasable = (root: string, j: Job) => j.status === 'admin' && madeVideo(j) && Number.isFinite(Date.parse(j.endedAt ?? ''))
+  && existsSync(videoFile(root, j)) && qualityReport(root, j)?.fileOk !== false;
 /**
  * Releases every video held longer than HOLD_HOURS whose file can be handed over: the person waits hours at most, the
  * reasons stay on the job for the admin's later review. Returns the jobs released.
  */
 export function releaseStale(db: Db, root: string, persist: () => void, now = Date.now(), hours = HOLD_HOURS): Job[] {
-  const stale = db.jobs.filter((j) => j.status === 'admin' && madeVideo(j) && j.endedAt && now - Date.parse(j.endedAt) >= hours * 3600_000
-    && existsSync(videoFile(root, j)) && qualityReport(root, j)?.fileOk !== false);
+  const stale = db.jobs.filter((j) => releasable(root, j) && now - Date.parse(j.endedAt!) >= hours * 3600_000);
   for (const j of stale) {
     j.status = 'done';
     j.autoReleased = `等了 ${hours} 小時沒人處理，自動放行（${j.phase ?? '原因不明'}）`;
@@ -236,6 +241,8 @@ const publicJob = (j: Job, root?: string, admin = false) => {
   const concept = c && !admin ? (({ candidateReason: _, ...rest }) => rest)(c) : c;
   return { id: j.id, songId: j.songId, kind: j.kind, tier: j.tier, status: j.status, phase: j.phase, createdAt: j.createdAt, startedAt: j.startedAt, endedAt: j.endedAt, steps: j.steps, priceUsd: j.priceUsd, failed: j.status === 'failed', retryOf: j.retryOf, auto: j.auto, style: root && (j.status === 'done' || j.status === 'admin') ? jobStyle(root, j) : undefined,
     inputs: j.inputs, decision: j.decision, conceptOf: j.conceptOf, concept, autoReleased: admin ? j.autoReleased : undefined,
+    // when a held video goes out by itself; absent when it will not (missing or undeliverable file)
+    autoReleaseAt: root && releasable(root, j) ? new Date(Date.parse(j.endedAt!) + HOLD_HOURS * 3600_000).toISOString() : undefined,
     // why a fix failed without the raw error text: its only ##NORETRY reason is an empty range
     nothingToRemove: j.kind === 'fix' && j.status === 'failed' && j.noRetry ? true : undefined };
 };
@@ -311,6 +318,37 @@ export function createBetaServer(o: BetaOptions) {
   const conceptRunId = (songId: string, from: string | undefined) =>
     from && /^[\w-]+$/.test(from) && db.jobs.some((j) => j.kind === 'concept' && j.songId === songId && j.runDir === `runs/${from}`) ? from : undefined;
 
+  /** The concept job a result was made from: a make names it (conceptOf); a fix copied its source run, named by `inputs.from` (a run id = that job's id). */
+  const conceptJobOf = (db: Db, j: Job, depth = 0): Job | undefined => {
+    if (j.conceptOf) return db.jobs.find((x) => x.id === j.conceptOf && x.kind === 'concept');
+    if (j.kind !== 'fix' || !j.inputs?.from || depth > 8) return undefined;
+    const src = db.jobs.find((x) => x.id === j.inputs!.from);
+    return src ? (src.kind === 'concept' ? src : conceptJobOf(db, src, depth + 1)) : undefined;
+  };
+
+  /**
+   * Queues the fix a report's marks allow on a finished video (fixKindFor), in a fresh run of its own: a timing fix
+   * needs the song retimed since the video (same lines), else a render would only repeat it.
+   */
+  const queueFix = (user: User, j: Job, marks: FeedbackMark[], feedbackId: string, suggestion = '') => {
+    const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
+    if (!from) return { error: '這支舊影片無法修正，請重做' };
+    const kind = fixKindFor(marks, j.tier);
+    if (!kind) return { error: NOT_FIXABLE };
+    if (kind === 'timing') {
+      const song = db.songs.find((s) => s.id === j.songId);
+      if (!song?.confirmedAt) return { error: '請先確認歌詞時間' };
+      // the same comparison as a concept's acceptance: a render of the same timing would only repeat the video
+      const current = join(songDir(o.root, j.songId), 'song.json'), made = join(runPath(o.root, j), 'song.json');
+      // the renderer draws only the lines the run's treatment styles: an added line would never show
+      if (cueIdsKey(current) !== cueIdsKey(made)) return { error: '新增或刪除了歌詞，請重做' };
+      const now = timingKey(current);
+      if (!now || now === timingKey(made)) return { error: '歌詞時間沒有變更' };
+    }
+    // the fix carries its source's concept, so its own card shows the design and can be made again from
+    return enqueue(user, j.songId, 'fix', j.tier, { inputs: { from, kind, ranges: fixRanges(marks), feedbackId, ...(suggestion.trim() ? { suggestion: suggestion.trim() } : {}) }, conceptOf: conceptJobOf(db, j)?.id });
+  };
+
   /**
    * Queues a job for a song the person owns, inside their limit. A concept job gets a fresh run folder holding its
    * inputs.json and a copy of the chosen refs from `refsFrom` (so a later change to the song's refs cannot touch it);
@@ -329,7 +367,7 @@ export function createBetaServer(o: BetaOptions) {
     const id = newId();
     const price = priceFor(kind, tier);
     const runDir = kind === 'prep' ? undefined : kind === 'concept' ? `runs/${id}` : (extra.runDir ?? `runs/${id}`);
-    const job: Job = { id, runDir, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: price, priceUsd: price, createdAt: new Date().toISOString(),
+    const job: Job = { id, runDir, userId: user.id, songId, kind, tier, status: 'queued', reservedUsd: kind === 'prep' ? PREP_RESERVE : price, priceUsd: price, createdAt: new Date().toISOString(),
       ...(extra.conceptOf ? { conceptOf: extra.conceptOf } : {}), ...(kind === 'fix' && extra.inputs ? { inputs: extra.inputs } : {}) };
     if (kind === 'concept') {
       const run = runPath(o.root, job);
@@ -352,6 +390,7 @@ export function createBetaServer(o: BetaOptions) {
     const url = new URL(req.url ?? '/', 'http://x');
     const path = url.pathname;
     try {
+      if (path === '/') return void res.writeHead(302, { location: '/my' }).end();
       if (!path.startsWith('/beta/') && o.site) {
         const file = resolve(o.site, '.' + decodeURIComponent(path));
         const page = file.startsWith(resolve(o.site) + '/') && existsSync(file) && statSync(file).isFile() ? file : join(o.site, 'index.html');
@@ -362,7 +401,7 @@ export function createBetaServer(o: BetaOptions) {
       // the invite link: the token becomes an HttpOnly cookie and leaves the address bar
       if (path === '/beta/login') {
         const t = url.searchParams.get('t') ?? '';
-        if (!userByToken(db, t)) return json(res, 401, { error: '登入連結無效' });
+        if (!userByToken(db, t)) return void res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' }).end(BAD_LOGIN_PAGE);
         const secure = req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '';
         return void res.writeHead(302, { 'set-cookie': `vjb=${t}; HttpOnly; SameSite=Lax; Path=/; Max-Age=7776000${secure}`, location: '/my' }).end();
       }
@@ -383,6 +422,7 @@ export function createBetaServer(o: BetaOptions) {
       if (path === '/beta/songs' && req.method === 'POST') {
         const b = await readJson(req);
         const text = (k: string, max: number) => String(b[k] ?? '').trim().slice(0, max);
+        if (String(b.lyrics ?? '').trim().length > MAX_LYRICS || String(b.translation ?? '').trim().length > MAX_LYRICS) return json(res, 400, { error: `歌詞最多 ${MAX_LYRICS} 字` });
         const [title, artist, lyrics, translation, language] = [text('title', 120), text('artist', 120), text('lyrics', MAX_LYRICS), text('translation', MAX_LYRICS), text('language', 4)];
         if (!title || !lyrics) return json(res, 400, { error: '請填歌名和歌詞' });
         if (!LANGS.includes(language)) return json(res, 400, { error: '語言不正確' });
@@ -418,20 +458,7 @@ export function createBetaServer(o: BetaOptions) {
         const feedbackId = newId();
         let fixJobId: string | undefined;
         if (p.value.action === 'fix') {
-          const from = j.runDir?.startsWith('runs/') ? j.runDir.slice(5) : '';
-          if (!from) return json(res, 409, { error: '這支舊影片無法修正，請重做' });
-          const kind = fixKindFor(p.value.marks)!;
-          if (kind === 'timing') {
-            const song = db.songs.find((s) => s.id === j.songId);
-            if (!song?.confirmedAt) return json(res, 409, { error: '請先確認歌詞時間' });
-            // the same comparison as a concept's acceptance: a render of the same timing would only repeat the video
-            const current = join(songDir(o.root, j.songId), 'song.json'), made = join(runPath(o.root, j), 'song.json');
-            // the renderer draws only the lines the run's treatment styles: an added line would never show
-            if (cueIdsKey(current) !== cueIdsKey(made)) return json(res, 409, { error: '新增或刪除了歌詞，請重做' });
-            const now = timingKey(current);
-            if (!now || now === timingKey(made)) return json(res, 409, { error: '歌詞時間沒有變更' });
-          }
-          const r = enqueue(user, j.songId, 'fix', j.tier, { inputs: { from, kind, ranges: fixRanges(p.value.marks), feedbackId } });
+          const r = queueFix(user, j, p.value.marks, feedbackId, p.value.suggestion);
           if ('error' in r) return json(res, 409, r);
           fixJobId = r.job.id;
         }
@@ -562,6 +589,52 @@ export function createBetaServer(o: BetaOptions) {
         const r = enqueue(user, song.id, 'concept', tier, { inputs: { concept, style, refs: refs as string[] }, refsFrom: join(songDir(o.root, song.id), 'refs') });
         return 'error' in r ? json(res, 409, r) : json(res, 202, publicJob(r.job, o.root));
       }
+      // another video from a finished result (make or fix) whose concept the person accepted, in any tier: a fresh run
+      // carries the director's design (base/, the timing snapshot, the brief and refs); the same tier plans its type anew
+      // (another take on the same concept), another tier also takes the result's type plan (noimg/), which 插圖版 binds
+      // its props into and 故事版 builds its frames on — so the video is the concept and cuts the person already saw.
+      // The target tier's rest price, no concept fee. A different timing means a different song: the concept is stale
+      const rm = /^\/beta\/jobs\/([\w-]+)\/remake$/.exec(path);
+      if (rm && req.method === 'POST') {
+        const j = db.jobs.find((x) => x.id === rm[1] && (x.kind === 'make' || x.kind === 'fix') && x.userId === user.id);
+        if (!j) return json(res, 404, { error: '找不到這個成品' });
+        const b = await readJson(req);
+        const tier = (b.tier ?? j.tier) as Tier;
+        if (!TIERS.includes(tier)) return json(res, 400, { error: '方案不正確' });
+        const c = conceptJobOf(db, j);
+        if (j.status !== 'done' || !c || c.decision !== 'accepted' || !jobConcept(o.root, c)) return json(res, 409, { error: '只能沿用接受過的概念' });
+        const from = runPath(o.root, j);
+        if (timingKey(join(songDir(o.root, j.songId), 'song.json')) !== timingKey(join(from, 'song.json')) || !timingKey(join(from, 'song.json')))
+          return json(res, 409, { error: '歌詞時間已修改，請重新產生概念' });
+        const id = newId();
+        const run = join(songDir(o.root, j.songId), 'runs', id);
+        mkdirSync(run, { recursive: true });
+        const files = ['song.json', 'base', 'brief.txt', 'request.txt', 'inputs.json', 'refs', ...(tier !== j.tier ? ['noimg/typeplan.json', 'noimg/treatment.json', 'noimg/assets.json', 'noimg/plan-check.json'] : [])];
+        for (const n of files) if (existsSync(join(from, n))) { mkdirSync(join(run, n, '..'), { recursive: true }); cpSync(join(from, n), join(run, n), { recursive: true }); }
+        const r = enqueue(user, j.songId, 'make', tier, { runDir: `runs/${id}`, conceptOf: c.id });
+        if ('error' in r) { rmSync(run, { recursive: true, force: true }); return json(res, 409, r); }
+        logEvent(o.root, j.songId, { type: 'concept.remade', jobId: c.id, by: user.id, fromJobId: j.id, tier, makeJobId: r.job.id });
+        return json(res, 202, publicJob(r.job, o.root));
+      }
+
+      // a fix from a report sent as 只回報 (the person decides after reading the answer, or the fix came later): the
+      // same checks as a fix asked for at submission; once per report
+      const ff = /^\/beta\/feedback\/([\w-]+)\/fix$/.exec(path);
+      if (ff && req.method === 'POST') {
+        const f = db.feedback.find((x) => x.id === ff[1] && x.userId === user.id);
+        if (!f) return json(res, 404, { error: '找不到這份回報' });
+        if (f.fixJobId || db.jobs.some((x) => x.kind === 'fix' && x.inputs?.feedbackId === f.id)) return json(res, 409, { error: '這份回報已經修正過了' });
+        const j = db.jobs.find((x) => x.id === f.jobId && madeVideo(x) && x.userId === user.id);
+        if (!j || j.status !== 'done') return json(res, 409, { error: '影片還沒完成' });
+        if (!fixKindFor(f.marks, j.tier)) return json(res, 409, { error: j.tier === 'hybrid' && f.marks.length ? NOT_FIXABLE_HYBRID : NOT_FIXABLE });
+        const r = queueFix(user, j, f.marks, f.id, f.suggestion);
+        if ('error' in r) return json(res, 409, r);
+        f.fixJobId = r.job.id;
+        q.persist();
+        logEvent(o.root, j.songId, { type: 'feedback.fix', jobId: j.id, by: user.id, feedbackId: f.id, fixJobId: r.job.id, kind: r.job.inputs?.kind });
+        return json(res, 202, publicJob(r.job, o.root));
+      }
+
       // the person's decision on a finished concept: accept it (the make runs in its folder), adjust it with a note, or try again
       const dc = /^\/beta\/jobs\/([\w-]+)\/(accept|adjust|redo)$/.exec(path);
       if (dc && req.method === 'POST') {
@@ -709,7 +782,26 @@ export function createBetaServer(o: BetaOptions) {
         if (!file || !existsSync(file) || !statSync(file).isFile()) return json(res, 404, { error: '找不到紀錄' });
         return void res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' }).end(readFileSync(file));
       }
-      if (path === '/beta/admin/feedback') return json(res, 200, [...db.feedback].reverse());
+      if (path === '/beta/admin/feedback') {
+        // the suggested handling is read fresh: proposals.json is written beside the server (reports.mts names what waits)
+        const proposals = readProposals(join(o.root, 'proposals.json'));
+        return json(res, 200, [...db.feedback].reverse().map((f) => (proposals[f.id] ? { ...f, proposal: proposals[f.id] } : f)));
+      }
+      // the admin's verdict on a report: where it went, or (DELETE) back to 待處理
+      const tr = /^\/beta\/admin\/feedback\/([\w-]+)\/triage$/.exec(path);
+      if (tr && (req.method === 'PUT' || req.method === 'DELETE')) {
+        const f = db.feedback.find((x) => x.id === tr[1]);
+        if (!f) return json(res, 404, { error: '找不到這筆回報' });
+        if (req.method === 'DELETE') delete f.triage;
+        else {
+          const p = parseTriage(await readJson(req));
+          if (!p.ok) return json(res, 400, { error: p.error });
+          f.triage = { ...p.value, at: new Date().toISOString(), by: user.id };
+        }
+        q.persist();
+        logEvent(o.root, f.songId, { type: 'feedback.triaged', feedbackId: f.id, by: user.id, outcomes: f.triage?.outcomes ?? [] });
+        return json(res, 200, f);
+      }
       // the admin's rules for every later song: written from a report (or free), read by the director and the type planner
       if (path === '/beta/admin/lessons' && req.method === 'GET') return json(res, 200, [...(db.lessons ?? [])].reverse());
       if (path === '/beta/admin/lessons' && req.method === 'POST') {
@@ -727,6 +819,20 @@ export function createBetaServer(o: BetaOptions) {
         return json(res, 201, lesson);
       }
       const lp = /^\/beta\/admin\/lessons\/([\w-]+)$/.exec(path);
+      if (lp && req.method === 'PATCH') {
+        const l = (db.lessons ?? []).find((x) => x.id === lp[1]);
+        if (!l) return json(res, 404, { error: '找不到這條規則' });
+        const b = (await readJson(req)) as { text?: unknown; scope?: unknown };
+        const text = typeof b.text === 'string' ? b.text.trim() : l.text;
+        if ([...text].length < 4 || [...text].length > MAX_LESSON) return json(res, 400, { error: `規則要 4–${MAX_LESSON} 字` });
+        if (b.scope !== undefined && !LESSON_SCOPES.includes(b.scope as LessonScope)) return json(res, 400, { error: '要說給誰聽：director、typeplan 或 both' });
+        if (text !== l.text) { l.source ??= l.text; l.text = text; }
+        if (b.scope !== undefined) l.scope = b.scope as LessonScope;
+        q.persist();
+        writeLessons();
+        if (l.songId) logEvent(o.root, l.songId, { type: 'lesson.edited', lessonId: l.id, by: user.id });
+        return json(res, 200, l);
+      }
       if (lp && req.method === 'DELETE') {
         const i = (db.lessons ?? []).findIndex((l) => l.id === lp[1]);
         if (i < 0) return json(res, 404, { error: '找不到這條規則' });
@@ -770,7 +876,7 @@ export const betaCommand = (root: string) => (job: Job, db: Db): string | { erro
   if (job.kind === 'fix') {
     const from = job.inputs?.from ?? '';
     if (!/^[\w-]+$/.test(from) || !job.inputs?.kind) return { error: '找不到要修正的影片' };
-    return `bash scripts/lyric-vj/beta/fix.sh ${shq(dir)} ${shq(job.tier ?? '')} ${shq(runPath(root, job))} ${shq(join(dir, 'runs', from))} ${shq(job.inputs.kind)} ${shq(JSON.stringify(job.inputs.ranges ?? []))}`;
+    return `bash scripts/lyric-vj/beta/fix.sh ${shq(dir)} ${shq(job.tier ?? '')} ${shq(runPath(root, job))} ${shq(join(dir, 'runs', from))} ${shq(job.inputs.kind)} ${shq(JSON.stringify(job.inputs.ranges ?? []))} ${shq(job.inputs.suggestion ?? '')}`;
   }
   return `bash scripts/lyric-vj/beta/make.sh ${shq(dir)} ${shq(job.tier ?? '')} ${shq(runPath(root, job))}`;
 };

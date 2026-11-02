@@ -1,6 +1,6 @@
 import { afterRenderEffect, Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
 import { BetaJob, BetaSong, CONCEPT_PRICE, stepsMin, TIER_INFO } from './beta';
-import { acceptBlock, adjustBlock, conceptHead, interludeLines, MAX_NOTE, redoBlock, stillLabel } from './concept';
+import { acceptBlock, acceptNote, adjustBlock, conceptHead, interludeLines, MAX_NOTE, redoBlock, REPLACE_NOTE, stillLabel } from './concept';
 import { feelingLength } from './make';
 import type { BetaStyle } from './make-form.component';
 import { Ask } from './ui/confirm';
@@ -11,7 +11,7 @@ type Decision = 'accept' | 'adjust' | 'redo';
 
 /**
  * 概念卡 (2a): the director's concept for one version, waiting for the person. 接受 starts the make at the tier's rest
- * price; 依意見調整 (with a note) and 換一個方向 start another concept at $2.5 while fewer than 3 attempts were made.
+ * price; 照意見調整 (a note or a style) and 換一個方向, folded into one 不滿意？ block, start another concept at $2.5 while fewer than 3 attempts were made.
  * Every decision goes through the confirm dialog (2b); one request at a time.
  */
 @Component({
@@ -39,6 +39,8 @@ export class ConceptCardComponent {
   protected readonly note = signal('');
   /** The style an adjustment switches to ('' keeps the concept's own); the menu is `GET /beta/styles`. */
   protected readonly restyle = signal('');
+  /** The style menu stays behind 「換個風格 ▸」 until clicked. */
+  protected readonly restyleOpen = signal(false);
   protected readonly styles = signal<BetaStyle[]>([]);
   protected readonly otherStyles = computed(() => this.styles().filter((s) => s.id !== this.summary()?.language));
   protected readonly submitting = signal(false);
@@ -62,6 +64,8 @@ export class ConceptCardComponent {
   protected readonly acceptWhy = computed(() => acceptBlock({ ...this.common(), concerns: !!this.concerns(), confirmed: this.confirmed(), rest: this.head().rest }));
   protected readonly adjustWhy = computed(() => adjustBlock({ ...this.common(), note: this.note(), restyle: !!this.restyle() }));
   protected readonly redoWhy = computed(() => redoBlock(this.common()));
+  /** The line under the two buttons: a shared blocker, else 調整's own once a note or a style is given (its empty state needs no words). */
+  protected readonly optionWhy = computed(() => this.redoWhy() ?? (this.note().trim() || this.restyle() ? this.adjustWhy() : null));
   protected readonly stillUrl = (name: string) => `/beta/jobs/${this.job().id}/stills/${name}`;
   protected readonly label = stillLabel;
 
@@ -119,7 +123,7 @@ export class ConceptCardComponent {
       return this.ask.set({
         eyebrow,
         title: '接受概念，開始製作',
-        body: `${kept}導演會照這個概念製作完整影片（${name}），約 ${stepsMin(this.job().tier ?? 'none')} 分鐘，可以離開頁面。中途不會另外收費。`,
+        body: `${kept}導演會照這個概念製作完整影片（${name}），約 ${stepsMin(this.job().tier ?? 'none')} 分鐘，可以離開頁面。中途不會另外收費。${acceptNote(this.job().tier ?? 'none')}`,
         cost: this.head().rest,
         go: () => this.send('accept'),
       });
@@ -128,10 +132,10 @@ export class ConceptCardComponent {
       const to = this.otherStyles().find((s) => s.id === this.restyle())?.name;
       return this.ask.set({
         eyebrow,
-        title: to ? `換成「${to}」` : '依意見調整',
+        title: to ? `換成「${to}」` : '照意見調整',
         body: to
-          ? `導演會保留這個故事和段落安排，改用「${to}」重新設計${this.note().trim() ? '（也照你的意見修改）' : ''}，並提出配色和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`
-          : `導演會保留這個方向，照你的意見重新提出風格、配色和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`,
+          ? `導演會保留這個故事和段落安排，改用「${to}」重新設計${this.note().trim() ? '（也照你的意見修改）' : ''}，並提出配色和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。${REPLACE_NOTE}`
+          : `導演會保留這個方向，照你的意見重新提出風格、配色和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。${REPLACE_NOTE}`,
         cost: CONCEPT_PRICE,
         go: () => this.send('adjust'),
       });
@@ -139,7 +143,7 @@ export class ConceptCardComponent {
     this.ask.set({
       eyebrow,
       title: '換一個方向',
-      body: `導演會重新提一個完全不同的概念和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。`,
+      body: `導演會重新提一個完全不同的概念和示意畫面。約 ${conceptMin} 分鐘，可以離開頁面。${REPLACE_NOTE}`,
       cost: CONCEPT_PRICE,
       go: () => this.send('redo'),
     });

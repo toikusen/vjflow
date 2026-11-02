@@ -1,4 +1,4 @@
-import { Component, effect, input, signal } from '@angular/core';
+import { Component, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BetaLesson, LESSON_SCOPES, LessonScope } from './beta';
 
@@ -18,6 +18,11 @@ export interface LessonSeed { text: string; feedbackId?: string }
 })
 export class AdminLessonsComponent {
   readonly seed = input<LessonSeed | undefined>(undefined);
+  /** The list changed here, for a page that shows the rules beside their reports. */
+  readonly changed = output<void>();
+  /** The rule being edited, and its text so far. */
+  protected readonly editing = signal<string | null>(null);
+  protected readonly draftText = signal('');
   protected readonly lessons = signal<BetaLesson[]>([]);
   protected readonly text = signal('');
   protected readonly scope = signal<LessonScope>('both');
@@ -37,7 +42,7 @@ export class AdminLessonsComponent {
     });
   }
 
-  protected async load() {
+  async load() {
     try {
       const r = await fetch('/beta/admin/lessons', { cache: 'no-store' });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -56,11 +61,35 @@ export class AdminLessonsComponent {
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${r.status}`);
       const made = (await r.json()) as BetaLesson;
       this.lessons.update((list) => [made, ...list]);
+      this.changed.emit();
       this.text.set('');
       this.feedbackId.set(undefined);
       this.message.set('');
     } catch (e) {
       this.message.set(`規則沒有存成功：${(e as Error).message}`);
+    } finally {
+      this.busy.set(false);
+    }
+  }
+
+  protected startEdit(l: BetaLesson) {
+    this.editing.set(l.id);
+    this.draftText.set(l.text);
+  }
+
+  protected async saveEdit(l: BetaLesson) {
+    if (this.busy()) return;
+    this.busy.set(true);
+    try {
+      const r = await fetch(`/beta/admin/lessons/${encodeURIComponent(l.id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: this.draftText() }) });
+      if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${r.status}`);
+      const next = (await r.json()) as BetaLesson;
+      this.lessons.update((list) => list.map((x) => (x.id === l.id ? next : x)));
+      this.editing.set(null);
+      this.message.set('');
+      this.changed.emit();
+    } catch (e) {
+      this.message.set(`規則沒有改成功：${(e as Error).message}`);
     } finally {
       this.busy.set(false);
     }
@@ -73,6 +102,7 @@ export class AdminLessonsComponent {
       const r = await fetch(`/beta/admin/lessons/${encodeURIComponent(l.id)}`, { method: 'DELETE' });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${r.status}`);
       this.lessons.update((list) => list.filter((x) => x.id !== l.id));
+      this.changed.emit();
       this.message.set('');
     } catch (e) {
       this.message.set(`規則沒有刪掉：${(e as Error).message}`);

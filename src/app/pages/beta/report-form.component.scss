@@ -427,10 +427,32 @@ textarea {
   }
 }
 
+/* what a fix costs (or why it is off), one line before the steps */
+.fix-lead {
+  padding: 12px 22px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-2);
+  background: var(--inset);
+  border-bottom: 1px solid var(--border);
+
+  strong {
+    color: var(--text);
+  }
+
+  &.warn strong {
+    color: var(--warn);
+  }
+}
+
 .fix-note {
   font-size: 12px;
   line-height: 1.6;
   color: var(--muted);
+
+  &.warn {
+    color: var(--warn);
+  }
 
   a {
     color: var(--accent-text);
@@ -458,6 +480,65 @@ textarea {
   flex-direction: column;
   gap: 10px;
   padding: 20px 22px;
+}
+
+/* the reports already sent, folded above a new one */
+.history {
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-2);
+
+  summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+}
+
+.h-item {
+  margin-top: 12px;
+}
+
+.h-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.h-marks {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1.5;
+}
+
+.h-time {
+  padding: 0 6px;
+  font: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  background: none;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.h-sug {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  color: var(--text-2);
+}
+
+.h-fix {
+  margin-top: 10px;
+  font-size: 12px;
 }
 
 .thanks-line {

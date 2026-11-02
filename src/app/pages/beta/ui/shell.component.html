@@ -2,7 +2,7 @@
   <a class="logo" href="/my" aria-label="VJFlow 我的歌曲">VJ</a>
   <nav class="side-nav">
     <a class="tab" href="/my" [class.on]="spec().active === 'songs'" [attr.aria-current]="spec().active === 'songs' ? 'page' : null"><span class="ico square"></span>歌曲</a>
-    <a class="tab" href="/my/styles" [class.on]="spec().active === 'styles'" [attr.aria-current]="spec().active === 'styles' ? 'page' : null"><span class="ico round"></span>風格</a>
+    <!-- 風格 is hidden until its page has content (it only says 即將推出); the route and styles.page.ts stay -->
     @if (me()?.admin) {
       <a class="tab" href="/my/admin" [class.on]="spec().active === 'admin'" [attr.aria-current]="spec().active === 'admin' ? 'page' : null"><span class="ico box"></span>管理</a>
     }
@@ -33,8 +33,8 @@
     <div class="sheet-head">
       <span class="avatar">{{ m.name.slice(0, 1).toUpperCase() }}</span>
       <strong>{{ m.name }}</strong>
+      <app-balance class="sheet-pill" [me]="m" look="phone" drop="up" />
     </div>
-    <p class="sheet-line">餘額 <app-price [amount]="balance(m).left" /> ／ 額度 <app-price [amount]="m.limitUsd" /></p>
     @if (m.admin) {
       <a class="button soft" href="/my/admin">管理</a>
     }
@@ -43,6 +43,6 @@
 
 <nav class="phone-tabs" aria-label="主選單">
   <a class="tab" href="/my" [class.on]="!sheet() && spec().active === 'songs'" [attr.aria-current]="spec().active === 'songs' ? 'page' : null"><span class="ico square"></span>歌曲</a>
-  <a class="tab" href="/my/styles" [class.on]="!sheet() && spec().active === 'styles'" [attr.aria-current]="spec().active === 'styles' ? 'page' : null"><span class="ico round"></span>風格</a>
+  <!-- 風格 is hidden until its page has content (it only says 即將推出); the route and styles.page.ts stay -->
   <button class="tab" type="button" [class.on]="sheet() || spec().active === 'admin'" [attr.aria-expanded]="sheet()" (click)="sheet.set(!sheet())"><span class="ico dot"></span>我</button>
 </nav>

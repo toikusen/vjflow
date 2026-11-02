@@ -67,6 +67,17 @@ textarea { resize: vertical; }
   white-space: nowrap;
 }
 .text { line-height: 1.5; }
+.btns { display: flex; gap: 6px; }
+.edit {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font: inherit;
+  color: var(--text);
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
 .meta { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .del {
   padding: 4px 8px;
@@ -83,5 +94,5 @@ textarea { resize: vertical; }
 
 @media (max-width: 600px) {
   .lesson { grid-template-columns: auto 1fr; }
-  .meta, .del { grid-column: 2; justify-self: start; }
+  .meta, .btns { grid-column: 2; justify-self: start; }
 }

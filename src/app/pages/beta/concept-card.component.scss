@@ -334,21 +334,6 @@ h3 {
     color: var(--text);
   }
 
-  &.row {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-
-    .button {
-      flex: none;
-      min-height: 0;
-      padding: 9px 14px;
-      font-size: 13px;
-      border-color: var(--border-strong);
-      border-radius: 9px;
-    }
-  }
-
   select {
     width: 100%;
     padding: 9px 12px;
@@ -378,25 +363,10 @@ h3 {
   }
 }
 
-.o-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.o-price {
-  font: 700 13px var(--font-display);
-}
-
 .o-text {
-  margin-top: 3px;
   font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
-
-  .o-head + & {
-    margin-top: 0;
-  }
 }
 
 .count {
@@ -406,13 +376,32 @@ h3 {
   text-align: right;
 }
 
-.o-go {
-  min-height: 0;
-  padding: 10px;
-  font-size: 13px;
-  white-space: normal;
-  border-color: var(--border-strong);
-  border-radius: 9px;
+.restyle-link {
+  align-self: flex-start;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent-text);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* two buttons side by side; they stack once the column is too narrow for both */
+.o-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .button {
+    flex: 1 1 130px;
+    min-height: 0;
+    padding: 10px;
+    font-size: 13px;
+    white-space: normal;
+    border-color: var(--border-strong);
+    border-radius: 9px;
+  }
 }
 
 .limit {

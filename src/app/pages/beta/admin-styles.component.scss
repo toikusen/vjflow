@@ -23,9 +23,17 @@ p { margin: 0; }
 .filters {
   display: flex;
   gap: 6px;
-  justify-content: flex-end;
-  // on desktop the pills sit on the page header's row (3e); the header is in the parent, so they top the table here
+  // on desktop the pills sit on the page header's row (3e); the header is in the parent, so they top the table here.
+  // As wide as the pills, not the row: a full-width row lay over the 管理 tabs and took their clicks
+  align-self: flex-end;
   margin-top: -56px;
+}
+
+// too narrow to share the header's row with the tabs: the pills stay under it
+@media (max-width: 1100px) {
+  .filters {
+    margin-top: 0;
+  }
 }
 
 .chip {

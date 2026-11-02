@@ -42,14 +42,14 @@ test('a ##NORETRY line marks the job and becomes its error', () => {
 
 // ---- C2: a fuse that trips as the process exits still ends the job failed and unpaid ----
 
-const ran = async (script: string) => {
+const ran = async (script: string, kind: Job['kind'] = 'concept', price = 2.5, reserve = price) => {
   const { mkdtempSync } = await import('node:fs');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
   const { emptyDb, charged } = await import('./store.mts');
   const { pump } = await import('./queue.mts');
   const db = emptyDb();
-  const job: Job = { id: 'j', userId: 'u', songId: 's', kind: 'concept', tier: 'img', status: 'queued', reservedUsd: 2.5, priceUsd: 2.5, createdAt: '2026-10-29T00:00:00Z' };
+  const job: Job = { id: 'j', userId: 'u', songId: 's', kind, tier: 'img', status: 'queued', reservedUsd: reserve, priceUsd: price, createdAt: '2026-10-29T00:00:00Z' };
   db.jobs.push(job);
   const events: string[] = [];
   pump({ db, persist: () => {}, command: () => script, logDir: mkdtempSync(join(tmpdir(), 'queue-')), env: {}, onEvent: (_j, e) => events.push(e.type) });
@@ -72,4 +72,11 @@ test('the last line without a newline goes through the fuse too', async () => {
 test('guard (passes before the fix too): a cost under the fuse with exit 0 is still a done job at its price', async () => {
   const r = await ran("echo '##COST 4 x'; exit 0");
   assert.deepEqual([r.job.status, r.job.fused, r.charged], ['done', undefined, 2.5]);
+});
+
+test('a free prep is fused past twice its reserve, not by any cost at all', async () => {
+  const under = await ran("echo '##COST 0.4 x'; exit 0", 'prep', 0, 0.5);
+  assert.deepEqual([under.job.status, under.job.fused, under.charged], ['done', undefined, 0]);
+  const over = await ran("echo '##COST 1.2 x'; exit 0", 'prep', 0, 0.5);
+  assert.deepEqual([over.job.status, over.job.fused, over.charged], ['failed', true, 0]);
 });

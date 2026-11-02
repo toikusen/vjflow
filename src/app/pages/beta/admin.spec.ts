@@ -1,4 +1,4 @@
-import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobsChanged, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts, lessonSeed } from './admin';
+import { acceptance, AdminJob, clockTime, conceptAttempt, fileSize, jobName, jobsChanged, jobState, kpis, margin, mmss, needHelp, parseLimit, retryLabel, shortDate, signedMoney, songMoney, stepRows, styleCounts, styleFilterCounts, lessonSeed, filterReports, isPendingReport, ruleFrom, startOutcomes } from './admin';
 import { BetaMe, BetaSong } from './beta';
 
 const iso = (minAgo: number, now = Date.parse('2026-10-28T05:40:00Z')) => new Date(now - minAgo * 60e3).toISOString();
@@ -192,6 +192,33 @@ describe('retryLabel', () => {
     expect(retryLabel(job({ id: 'b', priceUsd: 13.5 }))).toBe('重跑（再扣 $13.5）');
     expect(retryLabel(job({ id: 'c', priceUsd: undefined, reservedUsd: 4 }))).toBe('重跑（再扣 $4）');
     expect(retryLabel(job({ id: 'd', priceUsd: 0, reservedUsd: 0 }))).toBe('重跑');
+  });
+});
+
+describe('reports queue', () => {
+  const r = (id: string, o: object = {}) => ({ id, ok: false, marks: [], suggestion: '', createdAt: `2026-10-${id}T00:00:00Z`, ...o }) as never;
+  const filed = { triage: { outcomes: ['code'], at: 'x', by: 'y' } };
+  const list = [r('28'), r('29', filed), r('30'), r('27', { ok: true })];
+  it('shows what waits oldest first, the filed and everything newest first; a bare 沒問題 does not wait', () => {
+    expect(filterReports(list, 'pending').map((f) => f.id)).toEqual(['28', '30']);
+    expect(filterReports(list, 'done').map((f) => f.id)).toEqual(['29']);
+    expect(filterReports(list, 'all').map((f) => f.id)).toEqual(['30', '29', '28', '27']);
+    expect(isPendingReport(r('1', { ok: true, suggestion: '讚' }))).toBe(true);
+  });
+  it('starts the form from the verdict, else from the proposal, without repeats', () => {
+    expect(startOutcomes({ proposal: { items: [{ outcome: 'code', text: 'a' }, { outcome: 'code', text: 'b' }, { outcome: 'rule', text: 'c' }] } })).toEqual(['code', 'rule']);
+    expect(startOutcomes({ triage: { outcomes: ['song'], at: 'x', by: 'y' }, proposal: { items: [{ outcome: 'code', text: 'a' }] } })).toEqual(['song']);
+    expect(startOutcomes({})).toEqual([]);
+  });
+});
+
+describe('ruleFrom', () => {
+  const l = (o: object) => ({ id: 'l', feedbackId: 'f', text: '規則', ...o }) as never;
+  it('finds the rule of a suggestion, also after an edit, and only for that report', () => {
+    expect(ruleFrom([l({})], 'f', ' 規則 ')).toBeTruthy();
+    expect(ruleFrom([l({ text: '補充過', source: '規則' })], 'f', '規則')).toBeTruthy();
+    expect(ruleFrom([l({ text: '補充過', source: '規則' })], 'f', '補充過')).toBeUndefined();
+    expect(ruleFrom([l({})], 'g', '規則')).toBeUndefined();
   });
 });
 

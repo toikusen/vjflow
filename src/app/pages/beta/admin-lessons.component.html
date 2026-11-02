@@ -22,11 +22,23 @@
   @for (l of lessons(); track l.id) {
     <li class="lesson">
       <span class="scope-tag">{{ scopeLabel(l.scope) }}</span>
-      <span class="text">{{ l.text }}</span>
+      @if (editing() === l.id) {
+        <textarea class="edit" rows="2" maxlength="300" aria-label="修改規則" [value]="draftText()" (input)="draftText.set($any($event.target).value)"></textarea>
+      } @else {
+        <span class="text">{{ l.text }}</span>
+      }
       <span class="meta">{{ l.createdAt.slice(0, 10) }}@if (l.style) { · {{ l.style }}}@if (l.songId) { · <a [href]="'/my/admin/song?id=' + l.songId">歌</a>}</span>
-      <button class="del" type="button" (click)="remove(l)" [disabled]="busy()" [attr.aria-label]="'刪掉規則：' + l.text">刪掉</button>
+      <span class="btns">
+        @if (editing() === l.id) {
+          <button class="del" type="button" (click)="saveEdit(l)" [disabled]="busy() || draftText().trim().length < 4">儲存</button>
+          <button class="del" type="button" (click)="editing.set(null)">取消</button>
+        } @else {
+          <button class="del" type="button" (click)="startEdit(l)" [attr.aria-label]="'修改規則：' + l.text">修改</button>
+          <button class="del" type="button" (click)="remove(l)" [disabled]="busy()" [attr.aria-label]="'刪掉規則：' + l.text">刪掉</button>
+        }
+      </span>
     </li>
   } @empty {
-    <li class="none">還沒有規則。從歌曲頁的回報按「寫成規則」，或直接在上面寫。</li>
+    <li class="none">還沒有規則。在上面的回報按「採用」或「寫成規則」，或直接在這裡寫。</li>
   }
 </ul>

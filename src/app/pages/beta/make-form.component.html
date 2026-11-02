@@ -67,57 +67,63 @@
   </div>
   </details>
 
-  <div class="styles-head">
-    <span class="label" id="styles-h">風格</span>
+  <!-- the style list folds away: the director picks one from the lyrics unless the person opens it and chooses -->
+  <div class="style-pick">
+    <p class="director-note">不選的話交給導演，依歌詞挑最適合的風格。</p>
+    <details class="style-box" [open]="styleOpen()" (toggle)="styleOpen.set($any($event.target).open)">
+    <summary class="label" id="styles-h">自己選風格<span class="opt">（選填）</span>@if (styleName(); as n) {<span class="opt"> · 已選：{{ n }}</span>}</summary>
     @if (many()) {
-      <span class="hint desk">← 左右捲動 · 1–6 / {{ styles().length }} →</span>
-      <span class="hint phone">全部 {{ styles().length }} 種 →</span>
+      <div class="styles-head">
+        <span class="hint desk">← 左右捲動 · 1–6 / {{ styles().length }} →</span>
+        <span class="hint phone">全部 {{ styles().length }} 種 →</span>
+      </div>
     }
-  </div>
-  <div class="styles" role="radiogroup" aria-labelledby="styles-h" [class.many]="many()" (keydown)="moveStyle($event)">
-    <button
-      type="button"
-      class="style director"
-      role="radio"
-      data-id=""
-      [attr.aria-checked]="style() === null"
-      [attr.tabindex]="style() === null ? 0 : -1"
-      [class.on]="style() === null"
-      (click)="style.set(null)"
-    >
-      <span class="radio" aria-hidden="true"></span>
-      <span class="s-text">
-        <strong>交給導演</strong>
-        <small>導演讀過歌詞後，挑最適合這首歌的風格。</small>
-      </span>
-    </button>
-    @for (st of styles(); track st.id) {
+    <div class="styles" role="radiogroup" aria-labelledby="styles-h" [class.many]="many()" (keydown)="moveStyle($event)">
       <button
         type="button"
-        class="style"
+        class="style director"
         role="radio"
-        [attr.data-id]="st.id"
-        [attr.aria-checked]="style() === st.id"
-        [attr.tabindex]="style() === st.id ? 0 : -1"
-        [class.on]="style() === st.id"
-        (click)="style.set(st.id)"
+        data-id=""
+        [attr.aria-checked]="style() === null"
+        [attr.tabindex]="style() === null ? 0 : -1"
+        [class.on]="style() === null"
+        (click)="style.set(null)"
       >
-        <span class="collage" aria-hidden="true">
-          @if (st.image; as src) {
-            <img class="probe" [src]="src" alt="" (load)="readGrid(st.id, $any($event.target))" />
-            @if (tiles(st.id); as ts) {
-              @for (t of ts; track $index) {
-                <span class="tile"><i [style.background-image]="'url(' + src + ')'" [style.--cols]="t.cols" [style.--rows]="t.rows" [style.--c]="t.col" [style.--r]="t.row"></i></span>
-              }
-            }
-          }
-        </span>
+        <span class="radio" aria-hidden="true"></span>
         <span class="s-text">
-          <strong>{{ st.name }}</strong>
-          <small>{{ st.suits }}</small>
+          <strong>交給導演</strong>
+          <small>導演讀過歌詞後，挑最適合這首歌的風格。</small>
         </span>
       </button>
-    }
+      @for (st of styles(); track st.id) {
+        <button
+          type="button"
+          class="style"
+          role="radio"
+          [attr.data-id]="st.id"
+          [attr.aria-checked]="style() === st.id"
+          [attr.tabindex]="style() === st.id ? 0 : -1"
+          [class.on]="style() === st.id"
+          (click)="style.set(st.id)"
+        >
+          <span class="collage" aria-hidden="true">
+            @if (st.image; as src) {
+              <img class="probe" [src]="src" alt="" (load)="readGrid(st.id, $any($event.target))" />
+              @if (tiles(st.id); as ts) {
+                @for (t of ts; track $index) {
+                  <span class="tile"><i [style.background-image]="'url(' + src + ')'" [style.--cols]="t.cols" [style.--rows]="t.rows" [style.--c]="t.col" [style.--r]="t.row"></i></span>
+                }
+              }
+            }
+          </span>
+          <span class="s-text">
+            <strong>{{ st.name }}</strong>
+            <small>{{ st.suits }}</small>
+          </span>
+        </button>
+      }
+    </div>
+    </details>
   </div>
 
   @if (stylesFailed()) {

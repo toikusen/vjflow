@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadPick, paidLine, readProblem, savePick, songAudioUrl, songTimingUrl, timingCallout } from './song-flow';
+import { draftSong, loadPick, paidLine, readProblem, savePick, songAudioUrl, songTimingUrl, timingCallout } from './song-flow';
 
 const memory = () => {
   const m = new Map<string, string>();
@@ -42,5 +42,13 @@ describe('song flow', () => {
   it('puts a waiting paid concept before the sales line', () => {
     expect(paidLine(0)).toContain('付費');
     expect(paidLine(2)).toContain('2 個');
+  });
+  it('drafts a song over the sung stretches, keeping stamps the person gave', () => {
+    const song = draftSong('一二三四\n[00:30.00]五六七八\n九十', 'X', 60, { stretches: [{ start: 10, end: 50 }] });
+    expect(song.cues.map((c) => c.text)).toEqual(['一二三四', '五六七八', '九十']);
+    expect(song.cues[0].start).toBeGreaterThanOrEqual(10);
+    expect(song.cues[1].start).toBe(30);
+    expect(song.cues[2].start).toBeGreaterThan(30);
+    expect(song.duration).toBe(60);
   });
 });

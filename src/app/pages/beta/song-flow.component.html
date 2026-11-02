@@ -3,16 +3,20 @@
     <h2 id="flow-h">做影片</h2>
     <span class="free">免費</span>
     <p>選一個風格，馬上看到成果。720p 影片在你的瀏覽器裡產生，不扣額度。</p>
-    <a class="timing" [href]="timingHref()">編輯歌詞時間</a>
+    @if (!draft()) {
+      <a class="timing" [href]="timingHref()">編輯歌詞時間</a>
+    }
   </div>
 
-  <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="song().title" [timingNote]="timingNote()" [plain]="true" (changed)="remember()" (again)="stage().request('first')">
+  <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="song().title" [timingNote]="timingNote()" [exportHold]="exportHold()" [plain]="true" (changed)="remember()" (again)="stage().request('first')">
     <button class="button primary" type="button" [disabled]="!!stage().busy()" (click)="stage().generate('first')">{{ stage().busy() ? '生成中…' : '立即生成' }}</button>
-    <p class="use">用這首歌確認過的歌詞和音檔，不用等。</p>
+    <p class="use">{{ draft() ? '用你剛上傳的歌詞和音檔，不用等準備完成。' : '用這首歌的歌詞和音檔，不用等。' }}</p>
   </app-instant-stage>
 
+  @if (!draft()) {
   <div class="paid">
     <p><strong>想要更專屬的版本？</strong> {{ paidLine() }}</p>
     <button class="button" type="button" (click)="paid.emit()">看付費方案</button>
   </div>
+  }
 </section>

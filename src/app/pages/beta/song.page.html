@@ -28,6 +28,9 @@
       @case ('preparing') {
         @if (v.prep; as j) {
           <ng-container *ngTemplateOutlet="progressTpl; context: { $implicit: j, prep: true }" />
+          @if (mine()) {
+            <app-song-flow [song]="s" [draft]="true" />
+          }
         } @else {
           <!-- the song was created but its audio never arrived (a refused or broken upload): the same song takes it again -->
           <div class="empty reupload">
@@ -58,6 +61,9 @@
             <button class="link skip" type="button" [disabled]="busy()" (click)="askSkip()">略過檢查，直接製作</button>
           }
         </section>
+        @if (mine()) {
+          <app-song-flow [song]="s" (paid)="askSkip()" />
+        }
       }
       @case ('ready') {
         @if (v.failed; as f) {

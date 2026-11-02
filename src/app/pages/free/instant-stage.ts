@@ -41,6 +41,8 @@ export class InstantStage implements OnInit, OnDestroy {
   readonly title = input('');
   /** Shown over the transport: why these times are not to be trusted yet. */
   readonly timingNote = input('');
+  /** Why the export waits, in the person's words: the button stays off and says so. */
+  readonly exportHold = input('');
   /** A person's page: the style cards beside the picture on a wide screen, no engine figures. */
   readonly plain = input(false);
   /** The seed or style changed: a page that stores them does so now. */

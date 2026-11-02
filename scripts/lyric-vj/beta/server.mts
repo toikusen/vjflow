@@ -24,7 +24,7 @@ export const MAX_LYRICS = 20_000;
 const TIERS: Tier[] = ['none', 'img', 'hybrid'];
 const LANGS = ['ja', 'zh', 'en', 'ko'];
 const AUDIO: Record<string, string> = { 'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/wave': '.wav', 'audio/flac': '.flac', 'audio/x-flac': '.flac', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a', 'audio/aac': '.aac' };
-const SERVE: Record<string, string> = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+const SERVE: Record<string, string> = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.flac': 'audio/flac', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.mp4': 'video/mp4', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
 const MAX_CONCEPT = 500;
 const MAX_REFS = 5;
 const MAX_REF_BYTES = 10_000_000;
@@ -467,7 +467,7 @@ export function createBetaServer(o: BetaOptions) {
         logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length, ...(fixJobId ? { fixJobId } : {}) });
         return json(res, 201, f);
       }
-      const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|timing\/skip|cues|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
+      const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|timing\/skip|cues|lyrics|audio\/upload|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
       if (sm) {
         const song = db.songs.find((s) => s.id === sm[1] && (s.userId === user.id || user.admin));
         if (!song) return json(res, 404, { error: '找不到這首歌' });
@@ -497,6 +497,12 @@ export function createBetaServer(o: BetaOptions) {
           const tier = sm[2].slice(6);
           const latest = db.jobs.filter((j) => j.songId === song.id && madeVideo(j) && j.tier === tier && isViewable(j, user)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
           return latest ? sendFile(req, res, videoFile(o.root, latest)) : json(res, 404, { error: '影片還沒完成' });
+        }
+        // while it is prepared, the song page drafts a video from the person's own lyrics and audio
+        if (sm[2] === 'lyrics' && req.method === 'GET') return json(res, 200, { lyrics: readFileSync(join(dir, 'lyrics.txt'), 'utf8') });
+        if (sm[2] === 'audio/upload' && req.method === 'GET') {
+          const upload = readdirSync(dir).find((f) => f.startsWith('upload.'));
+          return upload ? sendFile(req, res, join(dir, upload)) : json(res, 404, { error: '音檔還沒上傳' });
         }
         if (!existsSync(songFile)) return json(res, 409, { error: '歌曲還在準備中' });
         if (sm[2] === 'timing' && req.method === 'GET') return json(res, 200, JSON.parse(readFileSync(songFile, 'utf8')));

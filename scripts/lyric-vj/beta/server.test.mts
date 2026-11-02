@@ -103,6 +103,10 @@ test('a new song keeps the person\'s lyrics, takes one audio upload and queues i
   // not someone else's
   const other = await t.admin(`/beta/songs/${song.id}/timing`);
   assert.equal(other.status, 409); // the admin may look, but it is still being prepared
+  // while it is prepared, the owner's lyrics and upload are there for a draft video
+  assert.deepEqual(await (await t.tester(`/beta/songs/${song.id}/lyrics`)).json(), { lyrics: '一行\n二行\n' });
+  const up = await t.tester(`/beta/songs/${song.id}/audio/upload`);
+  assert.deepEqual([up.status, up.headers.get('content-type'), [...new Uint8Array(await up.arrayBuffer())]], [200, 'audio/mpeg', [1, 2, 3]]);
   t.beta.server.close();
 });
 

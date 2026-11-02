@@ -32,14 +32,14 @@
           <button type="button" class="button" (click)="cancelExport()">取消匯出</button>
           <span class="time">{{ (progress() * 100).toFixed(0) }}%</span>
         } @else {
-          <button type="button" class="button strong" [disabled]="!!busy() || !!exportBlocked" (click)="export()">匯出 720p 影片</button>
+          <button type="button" class="button strong" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export()">匯出 720p 影片</button>
         }
         @if (busy() && !exporting()) {
           <span class="time">{{ busy() }}</span>
         }
       </section>
-      @if (exportBlocked) {
-        <p class="warn">{{ exportBlocked }}</p>
+      @if (exportBlocked || exportHold()) {
+        <p class="warn">{{ exportBlocked || exportHold() }}</p>
       }
       @if (exported(); as x) {
         <p class="done"><a class="button strong" [href]="x.url" [download]="x.name">下載影片</a> <span>{{ x.note }}。影片只在這個分頁裡，離開前請先下載。</span></p>

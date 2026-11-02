@@ -22,8 +22,6 @@ export interface ConceptSummary {
   interludes?: { start: number; end: number; mode: 'backdrop' | 'pictures'; reason?: string }[];
 }
 
-/** The fee when a song is uploaded (vocals split, lyric timing); mirrors PRICE.prep in scripts/lyric-vj/beta/store.mts. */
-
 /** The audio upload limit; mirrors MAX_AUDIO in scripts/lyric-vj/beta/server.mts. */
 export const MAX_AUDIO_BYTES = 80_000_000;
 /** The content types `PUT /beta/songs/:id/audio` takes (AUDIO in server.mts). */

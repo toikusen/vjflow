@@ -1,10 +1,28 @@
 // What the song page's instant flow keeps and says; the page shows it, nothing here touches the server.
+import type { AudioReading } from '../../lyric-vj/free-audio';
+import { parseLyrics } from '../../lyric-vj/free-lyrics';
+import { songFromLines } from '../../lyric-vj/free-song';
+import { estimateStarts } from '../../lyric-vj/free-sung';
+import type { SongTimeline } from '../../lyric-vj/timeline';
 
 /** The style and version a person last had on a song, so a return to the page finds the same picture. */
 export interface FlowPick { styleId: string; seed?: number }
 
 export const songAudioUrl = (id: string) => `/beta/songs/${id}/audio/mix`;
 export const songTimingUrl = (id: string) => `/beta/songs/${id}/timing`;
+export const songLyricsUrl = (id: string) => `/beta/songs/${id}/lyrics`;
+export const songUploadUrl = (id: string) => `/beta/songs/${id}/audio/upload`;
+
+/** Shown over the draft: the times are guessed from the audio until the preparation has aligned them. */
+export const DRAFT_NOTE = '歌詞時間是估算的，可能差好幾秒。正在背景校準（約 15 分鐘），好了會自動換成準確的時間，那時再匯出。';
+export const DRAFT_HOLD = '時間校準好之後才能匯出。';
+
+/** A song while it is prepared: the person's own lyrics (their stamps where they gave some) over the sung stretches heard in the tab. */
+export function draftSong(lyrics: string, title: string, seconds: number, { rhythm, stretches }: AudioReading): SongTimeline {
+  const { lines } = parseLyrics(lyrics);
+  const starts = estimateStarts(lines.map((l) => l.text), stretches, rhythm);
+  return songFromLines(lines.map((l, i) => ({ ...l, start: l.start ?? starts[i] })), { title, bpm: rhythm?.tempo ?? 110, duration: seconds, exact: true, rhythm });
+}
 const key = (id: string) => `song-flow:${id}`;
 
 /** The stored pick, or none; storage may be off or hold anything. */

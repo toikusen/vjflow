@@ -62,7 +62,10 @@ case $tier in
     tr=$w/img ;;
   hybrid)
     echo '##PHASE 編排文字動態'
-    plan "$w/noimg"
+    # the story's frames are laid over the line director's plan when it is on (its lines keep their own motion and
+    # emphasis; the frames set them vertical on their quiet side)
+    tp=$w/noimg
+    if [ "${VJ_LINEDIRECT:-}" = 1 ]; then linedirect; plan "$w/line/final" --plan "$w/line/plan.json"; tp=$w/line/final; else plan "$w/noimg"; fi
     echo '##PHASE 寫故事、畫角色'
     # the accepted concept's effective request (request.txt: its text plus the adjust notes of its chain, written by
     # concept.sh; brief.txt on a run from before) and its first reference image reach the story the way the director
@@ -72,7 +75,7 @@ case $tier in
     [ -f "$req" ] && [ -n "$(tr -d '[:space:]' < "$req")" ] && kf+=(--style="$(cat "$req")")
     ref=; for f in "$w"/refs/*; do [ -f "$f" ] && { ref=$f; break; }; done
     [ -n "$ref" ] && kf+=(--style-ref "$ref")
-    [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$w/noimg" --sheets-only --from 0 --to "$end" --out "$w/kf" ${kf[@]+"${kf[@]}"} > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
+    [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$tp" --sheets-only --from 0 --to "$end" --out "$w/kf" ${kf[@]+"${kf[@]}"} > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
     echo '##PHASE 畫故事畫面'
     [ -f "$w/cut/treatment.json" ] || { npx tsx scripts/lyric-vj/cutout.mts --song "$S" --keyframes "$w/kf" --treatment "$w/base/treatment.json" --from 0 --to "$end" --out "$w/cut" > "$w/cut.log" 2>&1; cost_log "$w/cut.log" cutout; }
     tr=$w/cut ;;
@@ -100,8 +103,8 @@ cp "$(ls "$tr/video/"lyric-vj_vocal_0-*.mp4 | head -1)" "$out.tmp" && mv "$out.t
 # the delivery gate (quality.mts): lines too short to read, renderer faults, shots the plan skipped, a file that is not
 # a whole 1920×1080 30 fps video with sound — each holds the finished video for the admin (exit 10), never hands it over.
 # Every hold reason is collected first (the admin sees the whole list), then one exit. The hybrid tier's cut/ carries
-# no plan-check: its plan ran in noimg/
-pc=$tr/plan-check.json; [ "$tier" = hybrid ] && pc=$w/noimg/plan-check.json
+# no plan-check: its plan ran in noimg/ (line/final with the line director)
+pc=$tr/plan-check.json; [ "$tier" = hybrid ] && pc=${tp:-$w/noimg}/plan-check.json
 rc=0; npx tsx scripts/lyric-vj/beta/quality.mts --video "$out" --metrics "$tr/video/metrics.json" --plan-check "$pc" --expected-sec "$end" --fps 30 --report "$w/quality.json" | tee "$w/quality-$tier.log" || rc=$?
 # a fault a fresh render may mend (a renderer error, a file that is not a video): the render is thrown away and the job
 # fails, which the queue runs once more by itself (resumed up to the render); a second such failure stays failed, unpaid

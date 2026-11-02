@@ -185,3 +185,12 @@ test('make.sh without VJ_LINEDIRECT: no line director, the paid plan as before',
   assert.equal(t.call('linedirect.mts'), '');
   assert.match(t.call('render.mts'), /--treatment \S+\/noimg\/treatment\.json/);
 });
+
+test('make.sh hybrid with VJ_LINEDIRECT=1: the story frames are laid over the line plan, and the gate reads its plan check', () => {
+  const t = tree({ tier: 'hybrid' });
+  const r = t.make({ VJ_LINEDIRECT: '1' });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(t.call('keyframes.mts'), /--plan \S+\/runs\/m1\/line\/final --sheets-only/);
+  assert.match(t.call('quality.mts'), /--plan-check \S+\/line\/final\/plan-check\.json/);
+  assert.doesNotMatch(t.call('linedirect.mts'), /--props/);
+});

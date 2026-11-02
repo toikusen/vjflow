@@ -251,3 +251,26 @@ test('fix.sh: a symlink out of the song folder is refused; one inside it is copi
   assert.match(r.stderr, /symlink/);
   assert.ok(!existsSync(join(t.song, 'runs/f2')));
 });
+
+test('fix.sh: a picture fix of a run the line director planned rebuilds on its base, not the paid one', () => {
+  const t = fixTree();
+  mkdirSync(join(t.src, 'line'), { recursive: true });
+  writeFileSync(join(t.src, 'line/base.json'), readFileSync(join(t.src, 'base/treatment.json')));
+  const r = t.run('m1', 'f1', '[{"at":2.5,"end":3}]');
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(readFileSync(join(t.song, 'runs/f1/fix-plan.log'), 'utf8'), /--treatment \S+\/runs\/f1\/line\/base\.json --backdrops \S+\/line\/base\.json/);
+});
+
+test('fix.sh: a text-tier replan of a line-director run re-plans the paid plan and has the line plan made again from the kept reply', () => {
+  const t = fixTree();
+  mkdirSync(join(t.src, 'noimg'), { recursive: true });
+  writeFileSync(join(t.src, 'noimg/typeplan.json'), '{"shots":[]}');
+  mkdirSync(join(t.src, 'line/final'), { recursive: true });
+  for (const f of ['base.json', 'plan.json', 'direction.json', 'final/treatment.json']) writeFileSync(join(t.src, 'line', f), '{}');
+  const to = join(t.song, 'runs/f3');
+  const r = spawnSync('bash', [join(t.song, '../repo/scripts/lyric-vj/beta/fix.sh'), t.song, 'none', to, t.src, 'replan', '[{"at":2.5,"end":3}]', '慢一點'], { encoding: 'utf8', env: { ...process.env, PATH: `${join(t.song, '../bin')}:${process.env.PATH}` } });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(readFileSync(join(to, 'fix-plan.log'), 'utf8'), /--treatment \S+\/runs\/f3\/base\/treatment\.json .*--out \S+\/runs\/f3\/noimg .*--replan/);
+  assert.ok(!existsSync(join(to, 'line/plan.json')) && !existsSync(join(to, 'line/final')), 'the line plan is made again');
+  assert.ok(existsSync(join(to, 'line/direction.json')), 'from the kept reply: no new call');
+});

@@ -37,20 +37,26 @@ if [ ! -f "$run/.fix-applied" ]; then
   # a source that is itself a fix carries its own marker and record: they are this fix's to write
   rsync -a --exclude='/video.mp4*' --exclude='video/' --exclude='stills/' --exclude='stills.tmp/' --exclude='*.log' --exclude='/.fix-applied' --exclude='/fix.json' "$from/" "$run/"
   rm -rf "$run/$td/video"
+  # a run the line director planned (make.sh with VJ_LINEDIRECT=1): the picture plan stands on its base, not the paid one
+  lined=; [ -f "$run/line/base.json" ] && lined=1
+  pb=$run/base/treatment.json; [ -n "$lined" ] && [ "$tier" = img ] && pb=$run/line/base.json
   if [ "$kind" = picture ]; then
     rc=0; npx tsx scripts/lyric-vj/beta/fix-apply.mts --run "$run" --kind picture --ranges "$ranges" || rc=$?
     [ "$rc" = 3 ] && { echo '##NORETRY 標記的範圍裡沒有可以拿掉的圖'; exit 3; }
     [ "$rc" = 0 ] || exit "$rc"
     # the same arguments as make.sh's plan() for img, so the rebuilt assets match the run's props
-    npx tsx scripts/lyric-vj/typeplan.mts --song "$run/song.json" --treatment "$run/base/treatment.json" --backdrops "$run/base/treatment.json" --out "$run/img" --sprites "$run/props/library" --plan "$run/img/typeplan.json" > "$run/fix-plan.log" 2>&1
+    npx tsx scripts/lyric-vj/typeplan.mts --song "$run/song.json" --treatment "$pb" --backdrops "$pb" --out "$run/img" --sprites "$run/props/library" --plan "$run/img/typeplan.json" > "$run/fix-plan.log" 2>&1
   elif [ "$kind" = replan ]; then
     # the same arguments as make.sh's plan() for the tier, plus the plan to re-plan in and the marks with their notes
     sp=(); [ "$tier" = img ] && sp=(--sprites "$run/props/library")
-    rc=0; npx tsx scripts/lyric-vj/typeplan.mts --song "$run/song.json" --treatment "$run/base/treatment.json" --backdrops "$run/base/treatment.json" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} --out "$run/$td" ${sp[@]+"${sp[@]}"} --replan "$run/$td/typeplan.json" --marks "$ranges" ${note:+--note "$note"} > "$run/fix-plan.log" 2>&1 || rc=$?
+    rc=0; npx tsx scripts/lyric-vj/typeplan.mts --song "$run/song.json" --treatment "$pb" --backdrops "$pb" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} --out "$run/$td" ${sp[@]+"${sp[@]}"} --replan "$run/$td/typeplan.json" --marks "$ranges" ${note:+--note "$note"} > "$run/fix-plan.log" 2>&1 || rc=$?
     [ "$rc" = 3 ] && { echo '##NORETRY 標記的範圍裡沒有鏡頭可以重排'; exit 3; }
     [ "$rc" = 0 ] || exit "$rc"
     # the director's call on those shots is this fix's own spend (make.sh skips the plan step: its output exists)
     c=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('costUSD') or 0)" "$run/$td/typeplan.json"); awk -v c="$c" 'BEGIN{exit !(c>0)}' && echo "##COST $c replan" || true
+    # the text tier's video is the line director's plan read off the paid one just re-planned: it is made again from
+    # the kept direction (no new call). ponytail: the notes reach the paid plan's shots, not the director's line choices
+    [ -n "$lined" ] && [ "$tier" = none ] && rm -rf "$run/line/plan.json" "$run/line/base.json" "$run/line/final"
   else
     cp "$d/song.json" "$run/song.json.tmp" && mv "$run/song.json.tmp" "$run/song.json"
     python3 -c "import json,sys,datetime;json.dump({'kind':'timing','ranges':json.loads(sys.argv[2]),'at':datetime.datetime.now(datetime.timezone.utc).isoformat()},open(sys.argv[1],'w'))" "$run/fix.json" "$ranges"

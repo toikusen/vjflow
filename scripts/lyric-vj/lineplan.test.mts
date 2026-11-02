@@ -612,14 +612,13 @@ console.log('lineplan ok');
   assert.ok(Object.values(BACKGROUNDS).flat().every((f) => isLineGround(f) || KINETIC_FX.includes(f)), 'every background is one the renderer has');
   assert.ok(!Object.values(BACKGROUNDS).flat().some((f) => ['split', 'bolt', 'crack', 'beams', 'spiral', 'stamp', 'film', 'bokeh', 'beatbg', 'invert', 'glitch'].includes(f)), 'nothing that strokes through or flashes under a line');
   assert.ok(Object.keys(GROUND_HELP).length === LINE_GROUNDS.length, 'the reading is told what each one is');
-  // never made-up detail: the title, the part's name or words the line sings
+  // never made-up detail: the title or words the line sings
   const line = { id: 'x', start: 10, end: 13, text: '慢慢走到天亮 我還在' };
-  const tiers = Array.from({ length: 12 }, (_, i) => fineFor(line, '天亮', i, 5, '雙截棍', undefined));
+  const tiers = Array.from({ length: 12 }, (_, i) => fineFor(line, '天亮', i, 5, '雙截棍'));
   assert.ok(tiers.some((t) => !t), 'not every line has one');
   assert.ok(tiers.flatMap((t) => (t ? [t] : [])).every((t) => (t.kind === 'key' ? line.text.includes(t.text) : t.kind === 'title' ? t.text === '雙截棍' : t.kind === 'rule' && t.text === '')), 'its words are real');
-  assert.equal(fineFor(line, '天亮', 3, 5, '雙截棍', '副歌')?.text, '副歌', 'a new part names itself');
-  assert.equal(fineFor({ ...line, text: '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十', end: 11 }, '一二', 0, 5, 't', undefined), undefined, 'a line sung too fast has nothing beside it');
-  assert.notEqual(fineFor(line, '慢慢走到天亮我還在', 2, 5, 't', undefined)?.kind, 'key', 'a phrase that is the whole line is not set again');
+  assert.equal(fineFor({ ...line, text: '一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十', end: 11 }, '一二', 0, 5, 't'), undefined, 'a line sung too fast has nothing beside it');
+  assert.notEqual(fineFor(line, '慢慢走到天亮我還在', 2, 5, 't')?.kind, 'key', 'a phrase that is the whole line is not set again');
   // what the base treatment was made for stays behind
   const base = { language: 'spy-titles', concept: 'x', moments: [{ kind: 'drop', at: 10 }], arc: [{ start: 0, level: 1 }], motif: {}, styleAnchor: { palette: {} }, shots: [{ id: 's', camera: 'push' }], design: { font: 'f', language: 'spy-titles', signature: { layout: 'linear' }, techniques: ['echo', 'title-hook'], peak: 'vacuum', grain: 0.1 } };
   const clean = composerBase(base, { shots: [{ shot: 'L1', lines: [{ cue: 'c' }] }] }, [{ id: 'L1', start: 0, end: 1 }], { ink: '#000000', paper: '#ffffff', accent: '#ff0000' });

@@ -24,6 +24,9 @@
       <section class="controls">
         <button type="button" class="button" (click)="toggle()">{{ playing() ? '暫停' : '播放' }}</button>
         <span class="time">{{ clock(t()) }} / {{ clock(duration()) }}</span>
+        @if (styleName(); as n) {
+          <span class="style-now">風格：{{ n }}</span>
+        }
         <input class="seek" type="range" min="0" [max]="duration()" step="0.1" [value]="t()" (input)="seek(+$any($event.target).value)" aria-label="播放位置" />
       </section>
       <section class="actions">

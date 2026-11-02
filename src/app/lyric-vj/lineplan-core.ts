@@ -719,19 +719,16 @@ export function exitFor(text: string, template: string, entrance: string, spare:
   return [...fits].sort((a, b) => (used.get(a) ?? 0) - (used.get(b) ?? 0) || hash(`${roll}:${a}`) - hash(`${roll}:${b}`))[0];
 }
 
-/** What a song's parts are called, for the small tier: the song's own analysis, nothing invented. */
-const SECTION_NAME: Record<string, string> = { verse: '主歌', chorus: '副歌', bridge: '橋段', intro: '前奏', outro: '尾奏', prechorus: '導歌', 'pre-chorus': '導歌' };
-
 /**
  * The small tier for a line, if it has one: a song keeps to the kinds it leans to, and a line gets one only when it has
- * room in time. Only real words: the title, the part's name on the part's first line, the line's own key phrase.
+ * room in time. Only real words: the title or the line's own key phrase. (Part names such as 副歌 read as a label
+ * pasted on the video, 2026-11-02 owner review.)
  */
-export function fineFor(c: Cue, key: string, lineNo: number, seed: number, title: string, section: string | undefined): FineTier | undefined {
+export function fineFor(c: Cue, key: string, lineNo: number, seed: number, title: string): FineTier | undefined {
   const lean = seed % 3;
   const beat = (lineNo + seed) % 4;
   const whole = [...spoken(c.text).replace(/\s/g, '')].length;
   if (charsPerSec(c) > 9) return undefined;
-  if (section) return { kind: 'section', text: section };
   if (beat === 1) return undefined;
   const short = [...key].length >= 2 && [...key].length <= 8 && [...key].length <= whole - 2;
   if (beat === 2 && short) return { kind: 'key', text: key };
@@ -784,12 +781,6 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   const nightPart = falls && falls.drop >= 0.095 && !force.director && (!W || W.flip === 'part') ? falls.p : undefined;
   const afterNight = nightPart ? meaning.parts[meaning.parts.indexOf(nightPart) + 1] : undefined;
   const fineTitle = splitSongTitle(song.title).title;
-  const sectionAtLine = (c: Cue) => {
-    const all = song.sections ?? [];
-    const i = all.findIndex((x) => c.start >= x.start && c.start < x.end);
-    // a label where the part changes kind, not at each stretch the analysis cut it into
-    return i >= 0 && all[i - 1]?.type !== all[i].type && cues.find((x) => x.start >= all[i].start && x.start < all[i].end)?.id === c.id ? SECTION_NAME[all[i].type] : undefined;
-  };
   const hands = planHandoffs(cues, [...beatOf.values()], new Set(meaning.parts.slice(1).map((p) => p.from)), calm, seed, force.hands, new Set([...leadIds, ...(nightPart ? [nightPart.from] : []), ...(afterNight ? [afterNight.from] : [])]), new Set([...(nightPart ? [nightPart.from] : []), ...(afterNight ? [afterNight.from] : [])]), !!force.director, rolled ? RIG_ROOM : 0);
   if (W && !W.handoffs) hands.clear();
   // a whole-line entrance forced for inspection plays: a handoff would replace it with a cut
@@ -1039,7 +1030,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
       cuts.splice(1);
       seals += 1;
     }
-    const fine = paperLine && !recipe.wline ? fineFor(c, key, lineNo, seed, fineTitle, sectionAtLine(c)) : undefined;
+    const fine = paperLine && !recipe.wline ? fineFor(c, key, lineNo, seed, fineTitle) : undefined;
     const hand = hands.get(c.id);
     // a line that travels shares its camera with the backdrop; never one a handoff is already carrying
     const rigRoom = (devices.get('rig') ?? 0) < deviceCap && distinct < distinctCap;

@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, DOC_KINDS, drawKinetic, fitInRoom, freeBand, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, DOC_KINDS, drawKinetic, fitInRoom, freeBand, freeRows, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -91,6 +91,17 @@ describe('the song\'s thread', () => {
       drawKinetic(ctx, { kind: 'kinetic', fx: 'motes', words: [], ink: '#111111', paper: '#eeeeee', accent: '#dd3322', thread: { mark, level: 0.8, from: 0.2 } }, 0.3, { pulse: 0 }, () => undefined);
       expect([mark, calls.includes('fill') || calls.includes('stroke')]).toEqual([mark, true]);
     }
+  });
+
+  it('centred lines: the character takes the taller free band above or below them, if there is one', () => {
+    // (frame 1920 × 1080)
+    const mid = [{ from: 0, to: 2, y0: 380, y1: 620 }];
+    expect(freeRows(mid, 0, 2)).toEqual([652, 1080]);
+    const low = [{ from: 0, to: 2, y0: 640, y1: 900 }];
+    expect(freeRows(low, 0, 2)).toEqual([0, 608]);
+    // two lines filling the frame between them leave no band
+    expect(freeRows([{ from: 0, to: 2, y0: 120, y1: 500 }, { from: 1, to: 3, y0: 480, y1: 940 }], 0, 3)).toBeUndefined();
+    expect(freeRows(mid, 5, 6)).toBeUndefined();
   });
 
   it('plans the floor: the character fits in the room the lyric leaves on its side', () => {

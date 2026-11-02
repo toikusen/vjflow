@@ -604,7 +604,7 @@ const CONDITIONS: [string, string, string][] = [
 const LINE_EXIT_HELP: Record<string, string> = { 'band-out': '整帶抽走（決斷、切斷）', 'slat-close': '百葉收攏（壓抑、藏起）', 'line-fold': '壓成一筆線（結束、句點）', 'tile-scatter': '紙片切開散掉（解散、再見；只給紙面）', 'echo-travel': '單色回聲滑走', 'radial-leave': '從一點推開（爆發）', 'glyph-shed': '字掉碎屑（崩塌、失去）', 'wave-dissolve': '波紋蒸散（B40：消逝、疲憊、夢）', 'pore-out': '從毛孔褪去（時間磨損）', 'focus-out': '失焦（忘記、遠去）', 'rail-leave': '沿軌道離開（出發、離站）', 'gravity-pass': '整句往下掉（墜落）', 'node-fold': '收成一個節點（未完待續）' };
 
 /** The director's call: everything it may choose, with the conditions, then the song. */
-export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; languageWhat: string; concept: string; backbone: string; change: string; palette: string; parts: { id: string; cue: string; start: number; what: string; energy: number }[]; lessons: string }) {
+export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; languageWhat: string; concept: string; backbone: string; change: string; palette: string; parts: { id: string; cue: string; start: number; what: string; energy: number }[]; lessons: string; props?: boolean }) {
   const beats = new Map(lineBeats(song.cues, song.duration).map((b) => [b.id, b]));
   const together = setTogetherLines(song.cues);
   const n = song.cues.length;
@@ -651,7 +651,7 @@ ${CONDITIONS.map(([k, v, w]) => `- ${k}｜${v}｜${w}`).join('\n')}
 - 「餘」是這句讀完之後還剩的秒數，所有動作的時間都從這裡出；手法要 0.5–1.3 秒，餘不到就用素版。
 - 標「併句」的句子唱得太快不能分開讀，程式會把它和相鄰句放同一個畫面，版面你不用決定：layout 填 stack、cut 填 hold、enter 填 cut、其他照填，理由寫短。
 - 標「同 cXXX」的句子是重複句：副歌回來通常用同一組，sameAs 填那句 id（其他欄位仍要填，但會被那句覆蓋；why 寫這次為什麼一樣）。要讓第二次不一樣，就 sameAs 留空，並在 why 寫這次哪裡變了。
-${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大部分句子 hold。\n' : ''}
+${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大部分句子 hold。\n' : ''}${facts.props ? `- 這一版有插圖：畫好的道具和人物會站在字的另一側。每段要有幾句把字放到左或右（side 填 left 或 right，layout 用能靠邊的：${SIDE_TEMPLATES.join('、')}），讓道具有地方站；整首大約三分之一的句子。重點句、落點仍可置中。\n` : ''}
 【退場 exit】
 一般：${PLAIN_EXITS.filter((e) => !(c.calm && LOUD_EXITS.has(e))).map((e) => `${e}（${EXIT_HELP[e] ?? '瞬間壓扁收掉'}）`).join('、')}
 有意思的：${LINE_EXIT_KINDS.filter((k) => !(k in OWN_LAYOUT_EXIT) && !(c.calm && NOT_CALM_EXIT.has(k))).map((k) => `${k} ${LINE_EXIT_SEC[k]}s（${LINE_EXIT_HELP[k]}）`).join('、')}（只給 stair、punch、quote、stack、vertical、couplet、editorial、corner-anchor、build-cut；餘要夠；每種最多 ${Math.max(1, Math.ceil(n * EXIT_SHARE))} 句，同一種不連用）。
@@ -689,6 +689,9 @@ ${rows.join('\n')}
 }
 
 /** The breaks the composer's word rules allow, so the director does not guess at them. */
+/** Layouts whose recipes may stand to one side, so a picture tier's prop has the other. */
+export const SIDE_TEMPLATES = [...new Set(RECIPES.filter((r) => r.sides.some((s) => s !== 'center')).map((r) => r.template))];
+
 export function wordPieces(text: string): string[] {
   const cs = [...text];
   const stops = [...wordBreaks(text)].sort((a, b) => a - b);

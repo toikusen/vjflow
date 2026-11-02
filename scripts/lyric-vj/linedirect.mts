@@ -26,6 +26,8 @@ const { values: a } = parseArgs({ options: {
   // a render's metrics.json: lines it floored or could not fit go back to the composer, for no new call
   metrics: { type: 'string' },
   lessons: { type: 'string' },
+  // the picture tier: some lines stand to one side so its props have the other
+  props: { type: 'boolean', default: false },
 } });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
 for (const line of existsSync(env) ? readFileSync(env, 'utf8').split('\n') : []) {
@@ -60,7 +62,7 @@ const ctxFor = (d?: Direction): Ctx => {
 };
 const lang = base.design.language as keyof typeof LANGUAGES;
 const script = (base.design.colorScript ?? [])[1] ?? (base.design.colorScript ?? [])[0] ?? {};
-const prompt = directorPrompt(song, ctxFor(), { language: String(lang ?? ''), languageWhat: String((LANGUAGES[lang] as { name?: string } | undefined)?.name ?? ''), concept: base.concept ?? '', backbone: paid.backbone ?? '', change: paid.vision?.change ?? '', palette: `墨 ${script.shadow}、紙 ${script.highlight}、強調 ${script.accent}`, parts: partsIn, lessons: lessonsBlock(readLessons(a.lessons), 'typeplan') });
+const prompt = directorPrompt(song, ctxFor(), { language: String(lang ?? ''), languageWhat: String((LANGUAGES[lang] as { name?: string } | undefined)?.name ?? ''), concept: base.concept ?? '', backbone: paid.backbone ?? '', change: paid.vision?.change ?? '', palette: `墨 ${script.shadow}、紙 ${script.highlight}、強調 ${script.accent}`, parts: partsIn, lessons: lessonsBlock(readLessons(a.lessons), 'typeplan'), props: a.props });
 writeFileSync(join(out, 'prompt.txt'), prompt);
 
 const spent = () => (existsSync(a.costs!) ? readFileSync(a.costs!, 'utf8').split('\n').filter(Boolean).reduce((s, l) => s + (JSON.parse(l).usd ?? 0), 0) : 0);

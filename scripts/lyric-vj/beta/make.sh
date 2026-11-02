@@ -41,7 +41,7 @@ linedirect() {
   plan "$w/noimg"
   echo '##PHASE 導演逐句編排'
   mkdir -p "$w/line"
-  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
+  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} ${props:+--props} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
   pb=$w/line/base.json
 }
 
@@ -57,7 +57,7 @@ case $tier in
     # an accepted concept's plan (noimg/typeplan.json) is kept: only the props are placed into its cuts (--bind), so the
     # video is the concept the person accepted; a run from before the concept gate plans afresh
     # with the line director the props are placed into its plan instead, on its base
-    if [ "${VJ_LINEDIRECT:-}" = 1 ]; then linedirect; plan "$w/img" --sprites "$w/props/library" --bind "$w/line/plan.json"
+    if [ "${VJ_LINEDIRECT:-}" = 1 ]; then props=1 linedirect; plan "$w/img" --sprites "$w/props/library" --bind "$w/line/plan.json"
     elif [ -f "$w/noimg/typeplan.json" ]; then plan "$w/img" --sprites "$w/props/library" --bind "$w/noimg/typeplan.json"; else plan "$w/img" --sprites "$w/props/library"; fi
     tr=$w/img ;;
   hybrid)

@@ -101,6 +101,8 @@ export interface KineticLayer {
    * character is shrunk and slid to stand inside it, so it never reaches under the lyric.
    */
   room?: [number, number];
+  /** Lines centred over the cut: the free height above or below them, where the character stands smaller (layRooms). */
+  rows?: [number, number];
   /**
    * The lines leave the character no room (centred, or too little beside them): it stands behind them, faded
    * (UNDER_ALPHA), instead of leaving the cut (dropping it emptied a minute of プラトニックチョロイン).
@@ -627,10 +629,13 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     for (const cx of copies) {
       ctx.save();
       if (l.cam === 'vertigo') (ctx.translate(W / 2, H / 2), ctx.scale(1 / zoom, 1 / zoom), ctx.translate(-W / 2, -H / 2));
-      ctx.translate(cx, size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2);
+      // above or below centred lines: smaller, on the floor of the band below or hung in the band above
+      const rs = l.rows ? Math.min(fit.s, (l.rows[1] - l.rows[0] - 24) / h) : fit.s;
+      const y = l.rows ? (l.rows[1] >= H - 1 ? H - (h * rs) / 2 : l.rows[0] + 16 + (h * rs) / 2) : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
+      ctx.translate(cx, y);
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(0.05 * Math.exp(-5 * clock) * Math.sin(13 * clock) * (seed % 2 ? 1 : -1));
-      ctx.scale(pop * fit.s * (l.flip ? -1 : 1), pop * fit.s);
+      ctx.scale(pop * rs * (l.flip ? -1 : 1), pop * rs);
       if (l.under) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;
       ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
@@ -726,6 +731,21 @@ export function freeBand(rects: { from: number; to: number; x0: number; x1: numb
   const band: [number, number] = side === 'left' ? [0, Math.min(...on.map((r) => r.x0)) - margin] : [Math.max(...on.map((r) => r.x1)) + margin, W];
   return band[1] - band[0] >= W / 5 ? band : undefined;
 }
+
+/**
+ * Lines centred over a cut leave no side: the free height above or below them, the taller, when it can hold a small
+ * figure (a fifth of the frame and more), else undefined and the figure stands behind them faded.
+ */
+export function freeRows(rects: { from: number; to: number; y0: number; y1: number }[], from: number, to: number, margin = 32): [number, number] | undefined {
+  const on = rects.filter((r) => Math.min(to, r.to) - Math.max(from, r.from) > 0);
+  if (!on.length) return undefined;
+  const above: [number, number] = [0, Math.min(...on.map((r) => r.y0)) - margin];
+  const below: [number, number] = [Math.max(...on.map((r) => r.y1)) + margin, H];
+  const best = below[1] - below[0] >= above[1] - above[0] ? below : above;
+  return best[1] - best[0] >= H * ROWS_MIN ? best : undefined;
+}
+/** The least free height (share of the frame) a character is fitted into above or below centred lines. */
+export const ROWS_MIN = 0.2;
 
 /** Where a character w px wide stands at fx inside a free band: its scale (≤ 1) and its centre. */
 export function fitInRoom(room: [number, number], w: number, fx: number, pad = 24): { s: number; x: number } {

@@ -157,3 +157,10 @@ assert.equal(IDLE_KINDS.length, 9);
 assert.equal(Object.keys(TEMPLATES).length, 15);
 assert.ok(RECIPES.length > 90);
 console.log('linedirect: ok');
+
+// the picture tier's director is asked to leave its props a side, and only it
+{
+  const facts = { language: 'x', languageWhat: 'x', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '' };
+  assert.ok(directorPrompt(song, ctx, { ...facts, props: true }).includes('這一版有插圖'), 'props: told to leave a side');
+  assert.ok(!directorPrompt(song, ctx, facts).includes('這一版有插圖'), 'no props: not told');
+}

@@ -53,7 +53,7 @@ import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { freeBand, oppositeSide, setBackPush, setLineVeil } from './kinetic';
+import { freeBand, freeRows, oppositeSide, setBackPush, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -1320,7 +1320,13 @@ export class LyricVjEngine {
           // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
           // stands behind them faded (sweet timer's carriage, wand and moon sat on its lines; dropping it instead left
           // プラトニックチョロイン a minute without pictures)
-          else if (l.sprite && rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) l.under = true;
+          // (centred lines with a band free above or below them first: the line director centres most lines, and every
+          // prop of 世界のつづき's picture tier went behind its words, 2026-11-02)
+          else if (l.sprite && rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
+            const rows = freeRows(this.lyricRects.map((r) => ({ from: r.from, to: r.to, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until);
+            if (rows) l.rows = rows;
+            else l.under = true;
+          }
         }
       });
     }

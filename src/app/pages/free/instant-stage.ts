@@ -299,7 +299,7 @@ export class InstantStage implements OnInit, OnDestroy {
           await write(`${base}_back.mp4`, behind.blob);
           if (this.song) await write(`${base}.lrc`, songLrc(this.song));
           this.dropExport();
-          this.saved.set(`已寫入資料夾「${base}」：front 資料夾是歌詞（透明背景，${Math.round(seconds * 30)} 張 720p PNG，每秒 30 張），${base}_back.mp4 是背景和音樂，另附歌詞 LRC。把 front 疊在 back 上就是原本的畫面。`);
+          this.saved.set(`已寫入資料夾「${base}」：front 資料夾是歌詞（透明背景，${Math.round(seconds * 30)} 張 720p PNG，每秒 30 張），${base}_back.mp4 是背景和音樂，另附歌詞 LRC。把 front 疊在 back 上就接近原本的畫面；整體的發光、顆粒和調色只在背景裡，歌詞層沒有，可以在 AE 裡自己加。`);
           return;
         }
         const audio = await this.audioFile()();

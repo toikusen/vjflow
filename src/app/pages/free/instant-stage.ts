@@ -79,7 +79,7 @@ export class InstantStage implements OnInit, OnDestroy {
     { kind: 'green-white', name: '白字綠幕', use: '白字，去背最乾淨' },
     { kind: 'green', name: '綠幕影片', use: '保留顏色，光暈會帶綠邊' },
     { kind: 'layers', name: '分層', use: '歌詞 PNG＋背景影片，0.5–3 GB' },
-    { kind: 'lrc', name: '歌詞 LRC', use: '每句的時間，做字幕' },
+    { kind: 'lrc', name: '歌詞 LRC', use: '每句的時間，字幕用' },
   ];
   /** What a layered export left on disk, in words. */
   protected readonly saved = signal('');

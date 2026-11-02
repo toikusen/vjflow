@@ -134,30 +134,124 @@
   cursor: pointer;
 }
 
-.more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
+
+.formats {
   margin: 0;
-  color: var(--muted);
-  font-size: 13px;
-  .link {
-    padding: 0;
-    color: var(--accent-text);
-    font: inherit;
-    background: none;
-    border: 0;
+  summary {
+    width: fit-content;
+    color: var(--text-2);
+    font-size: 13px;
     cursor: pointer;
-    &:disabled {
-      color: var(--muted);
-      cursor: default;
+    &:focus-visible {
+      outline: 2px solid var(--text-2);
+      outline-offset: 3px;
+      border-radius: 4px;
     }
   }
 }
-
-.more-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.tile {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 2px;
+  align-content: start;
+  align-items: start;
+  padding: 10px;
+  color: var(--text);
+  text-align: left;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  strong {
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .use {
+    grid-column: 2;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  &:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--text-2);
+    outline-offset: 2px;
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+/* a 16:9 thumbnail of what the file looks like */
+.mini {
+  grid-row: 1 / span 2;
+  align-self: center;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 3px;
+  i {
+    font: 700 12px var(--font-body);
+    font-style: normal;
+  }
+  &[data-look='black'] {
+    background: #000;
+    i { color: #ffb3a4; text-shadow: 0 0 4px #ff6a4d, 0 0 8px #ff6a4d; }
+  }
+  &[data-look='green-white'] {
+    background: #00b140;
+    i { color: #fff; text-shadow: 0 0 4px #ffffffaa; }
+  }
+  &[data-look='green'] {
+    background: #00b140;
+    i { color: #ffb3a4; text-shadow: 0 0 4px #ff6a4d; }
+  }
+  /* the lyric sheet lifted off the picture under it */
+  &[data-look='layers'] {
+    background: var(--surface-2);
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 5px 4px 1px 10px;
+      background: linear-gradient(135deg, #6a4f86, #2f4a7a);
+      border-radius: 2px;
+    }
+    i {
+      position: relative;
+      color: #fff;
+      transform: translate(-6px, -3px);
+      text-shadow: 0 0 0 #000, 1px 1px 0 #000;
+    }
+  }
+  /* timed lines instead of a picture */
+  &[data-look='lrc'] {
+    background: var(--surface-2);
+    i { display: none; }
+    &::before {
+      content: '';
+      width: 30px;
+      height: 15px;
+      background:
+        linear-gradient(var(--faint), var(--faint)) 0 1px / 7px 2px no-repeat,
+        linear-gradient(var(--text-2), var(--text-2)) 10px 1px / 20px 2px no-repeat,
+        linear-gradient(var(--faint), var(--faint)) 0 7px / 7px 2px no-repeat,
+        linear-gradient(var(--text-2), var(--text-2)) 10px 7px / 14px 2px no-repeat,
+        linear-gradient(var(--faint), var(--faint)) 0 13px / 7px 2px no-repeat,
+        linear-gradient(var(--text-2), var(--text-2)) 10px 13px / 17px 2px no-repeat;
+    }
+  }
 }

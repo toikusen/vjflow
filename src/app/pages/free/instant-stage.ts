@@ -73,6 +73,14 @@ export class InstantStage implements OnInit, OnDestroy {
   protected readonly duration = signal(0);
   protected readonly note = signal('');
   protected readonly stats = signal<LiveStats | undefined>(undefined);
+  /** The formats beside the plain video, each with what it is for. */
+  protected readonly formats: { kind: Exclude<ExportKind, 'mp4'> | 'lrc'; name: string; use: string }[] = [
+    { kind: 'black', name: '黑底影片', use: '用濾色疊圖，發光完整' },
+    { kind: 'green-white', name: '白字綠幕', use: '白字，去背最乾淨' },
+    { kind: 'green', name: '綠幕影片', use: '保留顏色，光暈會帶綠邊' },
+    { kind: 'layers', name: '分層', use: '歌詞 PNG＋背景影片，0.5–3 GB' },
+    { kind: 'lrc', name: '歌詞 LRC', use: '每句的時間，做字幕' },
+  ];
   /** What a layered export left on disk, in words. */
   protected readonly saved = signal('');
   protected readonly exported = signal<{ url: string; name: string; note: string } | undefined>(undefined);

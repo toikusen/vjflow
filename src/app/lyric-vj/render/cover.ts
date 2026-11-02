@@ -60,6 +60,9 @@ export const HOLD_SHARE = 0.4;
  */
 export function watchCover(key: string, id: string, share: number, inside: number, t: number, where: string, log: (line: string) => void = (x) => console.error(x)): string | undefined {
   if (!covers(share, inside)) return undefined;
+  // a probe (engine.ts backdropAt: a line's backdrop sampled while the song is laid out) draws a picture before room is
+  // made for it: not a frame anyone sees (every Tokyo Drift report, up to 103 %, came from them, 2026-11-02)
+  if ((globalThis as { __vjProbe?: boolean }).__vjProbe) return undefined;
   const seen = worst.get(key);
   if (seen !== undefined && share < seen + STEP && !(seen <= HOLD_SHARE && share > HOLD_SHARE)) return undefined;
   worst.set(key, share);

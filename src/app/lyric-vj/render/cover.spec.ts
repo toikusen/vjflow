@@ -39,3 +39,18 @@ describe('cover', () => {
     expect(inside2).toBeCloseTo(0.5, 2);
   });
 });
+
+describe('watchCover in a probe', () => {
+  it('reports nothing while the engine samples a backdrop: no frame is drawn there', async () => {
+    const { resetCover, watchCover } = await import('./cover');
+    resetCover();
+    const g = globalThis as { __vjProbe?: boolean };
+    g.__vjProbe = true;
+    try {
+      expect(watchCover('a@1', 'a', 0.9, 0.9, 1, 'cut 1', () => undefined)).toBeUndefined();
+    } finally {
+      g.__vjProbe = false;
+    }
+    expect(watchCover('a@1', 'a', 0.9, 0.9, 1, 'cut 1', () => undefined)).toMatch(/hides 90%/);
+  });
+});

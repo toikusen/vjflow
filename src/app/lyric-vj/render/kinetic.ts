@@ -184,6 +184,8 @@ export const setBackPush = (p?: typeof backPush) => (backPush = p);
 /** Moves that frame or repeat the cut's figure: without one they draw an empty window. */
 /** How strongly a character behind the lines shows: enough to read as the picture, faint next to the letters. */
 export const UNDER_ALPHA = 0.65;
+/** The height (share of the frame) a figure with no room is kept to, in its bottom corner. */
+export const UNDER_H = 0.36;
 export const NEEDS_ART = new Set(['window', 'aura', 'grid', 'glide']);
 
 export const THREAD_MARKS = ['flame', 'star', 'heart', 'moon', 'sun', 'note', 'drop', 'flower'] as const;
@@ -630,9 +632,12 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       ctx.save();
       if (l.cam === 'vertigo') (ctx.translate(W / 2, H / 2), ctx.scale(1 / zoom, 1 / zoom), ctx.translate(-W / 2, -H / 2));
       // above or below centred lines: smaller, on the floor of the band below or hung in the band above
-      const rs = l.rows ? Math.min(fit.s, (l.rows[1] - l.rows[0] - 24) / h) : fit.s;
-      const y = l.rows ? (l.rows[1] >= H - 1 ? H - (h * rs) / 2 : l.rows[0] + 16 + (h * rs) / 2) : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
-      ctx.translate(cx, y);
+      // no room the whole cut (lines all over it, a rap verse): a small figure in its bottom corner, faded behind them,
+      // not a full-size one behind the words (Tokyo Drift's line plan: a revolver behind both lines of 134–136 s)
+      const corner = l.under && l.fx !== 'grid' ? underCorner(w, h, fit.s, !!l.flip) : undefined;
+      const rs = corner ? corner.s : l.rows ? Math.min(fit.s, (l.rows[1] - l.rows[0] - 24) / h) : fit.s;
+      const y = corner ? corner.y : l.rows ? (l.rows[1] >= H - 1 ? H - (h * rs) / 2 : l.rows[0] + 16 + (h * rs) / 2) : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
+      ctx.translate(corner ? corner.x : cx, y);
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(0.05 * Math.exp(-5 * clock) * Math.sin(13 * clock) * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * (l.flip ? -1 : 1), pop * rs);
@@ -746,6 +751,12 @@ export function freeRows(rects: { from: number; to: number; y0: number; y1: numb
 }
 /** The least free height (share of the frame) a character is fitted into above or below centred lines. */
 export const ROWS_MIN = 0.2;
+
+/** A figure with no room over its cut: kept to UNDER_H of the frame in the bottom corner of its side (left when flipped). */
+export function underCorner(w: number, h: number, s: number, left: boolean, pad = 24): { s: number; x: number; y: number } {
+  const k = Math.min(s, (H * UNDER_H) / h);
+  return { s: k, x: left ? pad + (w * k) / 2 : W - pad - (w * k) / 2, y: H - (h * k) / 2 };
+}
 
 /** Where a character w px wide stands at fx inside a free band: its scale (≤ 1) and its centre. */
 export function fitInRoom(room: [number, number], w: number, fx: number, pad = 24): { s: number; x: number } {

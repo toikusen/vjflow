@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, DOC_KINDS, drawKinetic, fitInRoom, freeBand, freeRows, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, DOC_KINDS, drawKinetic, fitInRoom, freeBand, freeRows, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -91,6 +91,17 @@ describe('the song\'s thread', () => {
       drawKinetic(ctx, { kind: 'kinetic', fx: 'motes', words: [], ink: '#111111', paper: '#eeeeee', accent: '#dd3322', thread: { mark, level: 0.8, from: 0.2 } }, 0.3, { pulse: 0 }, () => undefined);
       expect([mark, calls.includes('fill') || calls.includes('stroke')]).toEqual([mark, true]);
     }
+  });
+
+  it('no room over the cut: the character is kept small in the bottom corner of its side', () => {
+    // a full-height close-up (1080 px) shrinks to UNDER_H of the frame, feet on the floor, inside the frame's edge
+    const right = underCorner(800, 1080, 1, false);
+    expect(right.s).toBeCloseTo(UNDER_H);
+    expect(right.y + (1080 * right.s) / 2).toBeCloseTo(1080);
+    expect(right.x + (800 * right.s) / 2).toBeCloseTo(1920 - 24);
+    expect(underCorner(800, 1080, 1, true).x - (800 * right.s) / 2).toBeCloseTo(24);
+    // a figure already smaller keeps its size
+    expect(underCorner(200, 200, 1, false).s).toBe(1);
   });
 
   it('centred lines: the character takes the taller free band above or below them, if there is one', () => {

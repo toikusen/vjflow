@@ -71,7 +71,8 @@ export class InstantStage implements OnInit, OnDestroy {
   /** Why this browser cannot export; the button says so instead of failing halfway. */
   protected readonly exportBlocked = exportBlocker();
   protected readonly exporting = computed(() => this.busy() === '匯出中');
-  readonly styleName = computed(() => this.styles.find((s) => s.id === this.styleId())?.name ?? '');
+  /** No style picked is the picker's 依歌曲配色: the composer's own look for the song. */
+  readonly styleName = computed(() => this.styles.find((s) => s.id === this.styleId())?.name ?? '依歌曲配色');
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
   private readonly audioEl = viewChild.required<ElementRef<HTMLAudioElement>>('audio');
   private player?: LivePlayer;

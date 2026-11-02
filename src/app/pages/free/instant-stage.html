@@ -7,7 +7,7 @@
       <p class="warn">{{ warn() }}</p>
     }
 
-    <div class="frame" #stage [class.empty]="!ready()">
+    <div class="frame" #stage [class.empty]="!ready()" (click)="ready() && toggle()">
       @if (slow() && !exporting()) {
         <div class="working" role="status" [attr.aria-label]="busy()"></div>
       }

@@ -1,4 +1,4 @@
-import { Component, computed, ElementRef, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
 import { FREE_STYLES, styleGroups } from '../../lyric-vj/free-styles';
 import type { Meaning } from '../../lyric-vj/lineplan-core';
 import type { SongTimeline } from '../../lyric-vj/timeline';
@@ -73,6 +73,7 @@ export class InstantStage implements OnInit, OnDestroy {
   protected readonly exporting = computed(() => this.busy() === '匯出中');
   /** No style picked is the picker's 依歌曲配色: the composer's own look for the song. */
   readonly styleName = computed(() => this.styles.find((s) => s.id === this.styleId())?.name ?? '依歌曲配色');
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
   private readonly audioEl = viewChild.required<ElementRef<HTMLAudioElement>>('audio');
   private player?: LivePlayer;
@@ -192,12 +193,16 @@ export class InstantStage implements OnInit, OnDestroy {
   }
 
   /** Another version of the same song, from where the song is playing. */
+  /** 換一版: another style, picked at random, in a new version; the picker shows where it went. */
   reroll() {
     return this.guard('換版中', async () => {
       this.dropExport();
+      const others = this.styles.filter((s) => s.id !== this.styleId());
+      this.styleId.set(others[Math.floor(Math.random() * others.length)].id);
       this.seed.update((s) => (s ?? 0) + 1);
       this.changed.emit();
       await this.build();
+      this.host.nativeElement.querySelector('.card.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
     });
   }
 

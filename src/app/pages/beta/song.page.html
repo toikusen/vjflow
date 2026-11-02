@@ -309,7 +309,7 @@
     @if (busy()) {
       <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
     } @else {
-      <p class="fine">mp3、wav、flac、m4a、aac · 80 MB 以內<br />失敗的那次不收費；重新準備照常 <app-price [amount]="prepPrice" [plain]="true" /></p>
+      <p class="fine">mp3、wav、flac、m4a、aac · 80 MB 以內<br />重新準備免費</p>
     }
   }
 </ng-template>
@@ -323,7 +323,7 @@
       <p class="eyebrow">
         <i class="dot" aria-hidden="true"></i>
         @if (prep) {
-          準備歌曲 · 已付 <app-price [amount]="job.priceUsd ?? prepPrice" digits="fixed" [plain]="true" />
+          準備歌曲@if (job.priceUsd) { · 已付 <app-price [amount]="job.priceUsd" digits="fixed" [plain]="true" />} @else { · 免費}
         } @else {
           {{ queued ? '排隊中' : '進行中' }} · {{ t.name }}@if (t.tag) { · {{ t.tag }}}@if (total(job); as x) { · <app-price [amount]="x" digits="short" [plain]="true" />}
         }

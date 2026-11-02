@@ -26,6 +26,9 @@ export class SongFlowComponent implements AfterViewInit {
   readonly paid = output<void>();
 
   protected readonly stage = viewChild.required(InstantStage);
+  // the optional query: the heading reads it before the stage exists
+  private readonly stageNow = viewChild(InstantStage);
+  protected readonly styleNow = computed(() => this.stageNow()?.styleName() ?? '');
   protected readonly paidLine = computed(() => paidLine(this.pending()));
   protected readonly timingHref = computed(() => `/timing?beta=${this.song().id}`);
   protected readonly timingNote = computed(() =>

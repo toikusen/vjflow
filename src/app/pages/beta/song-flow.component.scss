@@ -12,10 +12,13 @@
     margin: 0;
     font: 700 20px var(--font-display);
   }
-  p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 13px;
+}
+.style-now {
+  color: var(--muted);
+  font-size: 14px;
+  strong {
+    color: var(--text);
+    font-weight: 700;
   }
 }
 .free {

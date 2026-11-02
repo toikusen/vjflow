@@ -2,7 +2,9 @@
   <div class="head">
     <h2 id="flow-h">做影片</h2>
     <span class="free">免費</span>
-    <p>選一個風格，馬上看到成果。720p 影片在你的瀏覽器裡產生，不扣額度。</p>
+    @if (styleNow(); as n) {
+      <span class="style-now">風格：<strong>{{ n }}</strong></span>
+    }
     @if (!draft()) {
       <a class="timing" [href]="timingHref()">編輯歌詞時間</a>
     }

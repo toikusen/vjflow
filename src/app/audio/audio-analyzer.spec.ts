@@ -1,4 +1,4 @@
-import { analyzeAudio } from './audio-analyzer.service';
+import { analyzeAudio, estimatePeriod } from './audio-analyzer.service';
 import { AudioBufferLike } from './audio-analysis.model';
 import { getFeaturesAt } from './audio-features';
 
@@ -68,5 +68,39 @@ describe('analyzeAudio summary', () => {
     const { summary } = await analyzeAudio(toneTrack([]));
     expect(summary.centroidHz).toBe(0);
     expect(summary.chroma.every((v) => v === 0)).toBe(true);
+  });
+});
+
+/**
+ * Onset curve for a quarter-note pulse at `bpm` with an eighth-note off-beat and dotted-eighth ghosts (a 4:3 relation,
+ * 97 BPM against 129 BPM): the shape that made the old single-lag, 120-weighted detector store 129 for 97 BPM songs.
+ */
+function pulseWithGhosts(bpm: number, seconds: number, frameInterval: number, ghost: number, accents = [1, 0.7]): Float32Array {
+  const onset = new Float32Array(Math.round(seconds / frameInterval));
+  const quarter = 60 / bpm;
+  const add = (t: number, v: number) => {
+    const i = Math.round(t / frameInterval);
+    if (i < onset.length) onset[i] += v;
+  };
+  for (let t = 0; t < seconds; t += quarter) {
+    add(t, accents[0]);
+    add(t + quarter / 2, accents[1]);
+  }
+  for (let t = 0; t < seconds; t += (quarter * 3) / 4) add(t, ghost);
+  return onset;
+}
+
+describe('estimatePeriod', () => {
+  const fi = 0.0232;
+  const bpmOf = (onset: Float32Array) => 60 / (estimatePeriod(onset, fi) * fi);
+
+  it('keeps a 97 BPM pulse (194 BPM eighth grid) instead of the 129 BPM dotted-eighth peak', () => {
+    expect(Math.abs(bpmOf(pulseWithGhosts(97, 60, fi, 0.7)) - 97)).toBeLessThan(3);
+    expect(Math.abs(bpmOf(pulseWithGhosts(97, 60, fi, 0.8)) - 97)).toBeLessThan(3);
+    expect(Math.abs(bpmOf(pulseWithGhosts(97, 60, fi, 0.9, [1, 1])) - 97)).toBeLessThan(3);
+  });
+
+  it('keeps ordinary tempos near 100, 107 and 128 BPM', () => {
+    for (const bpm of [100, 107, 128]) expect(Math.abs(bpmOf(pulseWithGhosts(bpm, 60, fi, 0)) - bpm)).toBeLessThan(2);
   });
 });

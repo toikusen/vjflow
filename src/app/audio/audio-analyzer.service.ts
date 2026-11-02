@@ -154,19 +154,29 @@ function onsetEnvelope(flux: Float32Array): Float32Array {
   return out;
 }
 
-/** Beat period in frames via autocorrelation weighted towards ~120 BPM. */
-function estimatePeriod(onset: Float32Array, frameInterval: number): number {
+/**
+ * Beat period in frames. Each candidate lag is scored as autocorrelation at the lag plus a quarter of the autocorrelation
+ * at half the lag, so a pulse that carries an off-beat (eighth) grid beats an unrelated 4:3 peak (97 vs 129 BPM). The
+ * 120 BPM prior is a wide log-Gaussian (sigma 2.5 octaves): it breaks ties without dragging broad peaks towards 120.
+ * Replayed on 18 stored songs (docs/research/2026-11-02-beat-audit.md) this fixes all 3:4 and slow cases.
+ */
+export function estimatePeriod(onset: Float32Array, frameInterval: number): number {
   const minLag = Math.floor(60 / 180 / frameInterval);
   const maxLag = Math.ceil(60 / 70 / frameInterval);
   const preferred = 60 / 120 / frameInterval;
   const len = Math.min(onset.length, Math.round(90 / frameInterval));
   let best = preferred;
   let bestScore = 0;
-  const scores = new Float64Array(maxLag + 2);
-  for (let lag = minLag; lag <= maxLag + 1; lag++) {
+  const autocorr = (lag: number) => {
+    if (lag < 1 || lag >= len) return 0;
     let s = 0;
     for (let i = lag; i < len; i++) s += onset[i] * onset[i - lag];
-    scores[lag] = s * Math.exp(-0.5 * Math.log2(lag / preferred) ** 2 / 0.9 ** 2);
+    return s / (len - lag);
+  };
+  const scores = new Float64Array(maxLag + 2);
+  for (let lag = minLag; lag <= maxLag + 1; lag++) {
+    const s = autocorr(lag) + 0.25 * autocorr(Math.round(lag / 2));
+    scores[lag] = s * Math.exp(-0.5 * Math.log2(lag / preferred) ** 2 / 2.5 ** 2);
   }
   for (let lag = minLag + 1; lag <= maxLag; lag++) {
     if (scores[lag] > bestScore && scores[lag] >= scores[lag - 1] && scores[lag] >= scores[lag + 1]) {

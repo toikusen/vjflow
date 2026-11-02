@@ -44,6 +44,18 @@
       @if (exportBlocked || exportHold()) {
         <p class="warn">{{ exportBlocked || exportHold() }}</p>
       }
+      @if (!exporting()) {
+        <p class="more">
+          其他格式：
+          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export(undefined, undefined, 'green')">綠幕影片</button>
+          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export(undefined, undefined, 'black')">黑底影片</button>
+          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export(undefined, undefined, 'layers')">分層（歌詞透明 PNG＋背景影片）</button>
+          <button type="button" class="link" [disabled]="!!busy() || !!exportHold()" (click)="exportLrc()">歌詞 LRC</button>
+        </p>
+      }
+      @if (saved(); as s) {
+        <p class="done">{{ s }}</p>
+      }
       @if (exported(); as x) {
         <p class="done"><a class="button strong" [href]="x.url" [download]="x.name">下載影片</a> <span>{{ x.note }}。影片只在這個分頁裡，離開前請先下載。</span></p>
       }

@@ -13,6 +13,8 @@ export interface ExportOptions {
   /** The song's audio file; unset, a silent video. */
   audio?: ArrayBuffer;
   from?: number;
+  /** A solid ground under a transparent picture (a text-layer engine): green or black for keying in an editor. */
+  matte?: string;
   onProgress?: (done: number, total: number) => void;
   signal?: AbortSignal;
 }
@@ -119,6 +121,10 @@ export async function exportVideo(o: ExportOptions): Promise<{ blob: Blob; codec
     for (let f = 0; f < frames; f++) {
       stopped();
       await o.engine.renderAt(from + f / fps);
+      if (o.matte) {
+        ctx.fillStyle = o.matte;
+        ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      }
       ctx.drawImage(o.canvas, 0, 0, WIDTH, HEIGHT);
       await send(f);
     }
@@ -132,4 +138,36 @@ export async function exportVideo(o: ExportOptions): Promise<{ blob: Blob; codec
   muxer.finalize();
   o.onProgress?.(frames, frames);
   return { blob: new Blob([muxer.target.buffer], { type: 'video/mp4' }), codecs, seconds: (performance.now() - began) / 1000 };
+}
+
+/** One layer's engine and the folder its frames go to. */
+export interface FrameLayer { engine: Pick<LyricVjEngine, 'renderAt'>; canvas: HTMLCanvasElement; dir: FileSystemDirectoryHandle; name: string }
+
+/** `name_000123.png`: numbered so an editor reads the folder as an image sequence. */
+export const frameName = (name: string, f: number) => `${name}_${String(f).padStart(6, '0')}.png`;
+
+/**
+ * 720p PNG frames, with alpha, of each layer into its own folder: every layer is drawn at the same moment before the
+ * next frame, so the folders line up frame for frame. Written straight to disk: a song's frames do not fit in memory.
+ */
+export async function exportFrames(o: { layers: FrameLayer[]; duration: number; from?: number; fps?: number; onProgress?: (done: number, total: number) => void; signal?: AbortSignal }) {
+  const fps = o.fps ?? 30;
+  const from = o.from ?? 0;
+  const frames = Math.round(o.duration * fps);
+  const small = new OffscreenCanvas(WIDTH, HEIGHT);
+  const ctx = small.getContext('2d')!;
+  ctx.imageSmoothingQuality = 'high';
+  for (let f = 0; f < frames; f++) {
+    if (o.signal?.aborted) throw new DOMException('匯出已取消', 'AbortError');
+    for (const l of o.layers) {
+      await l.engine.renderAt(from + f / fps);
+      ctx.clearRect(0, 0, WIDTH, HEIGHT);
+      ctx.drawImage(l.canvas, 0, 0, WIDTH, HEIGHT);
+      const file = await (await l.dir.getFileHandle(frameName(l.name, f), { create: true })).createWritable();
+      await file.write(await small.convertToBlob({ type: 'image/png' }));
+      await file.close();
+    }
+    if (f % 15 === 0) o.onProgress?.(f, frames);
+  }
+  o.onProgress?.(frames, frames);
 }

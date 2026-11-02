@@ -132,3 +132,14 @@ describe('draftLines', () => {
     expect(draftLines(many, 100, 30).at(-1)!.start!).toBeLessThan(30);
   });
 });
+
+describe('songLrc', () => {
+  it('writes each line at its start, a break where a line stops before the next', async () => {
+    const { songLrc, parseLyrics } = await import('./free-lyrics');
+    const lrc = songLrc({ title: 'X', cues: [{ text: '一', start: 1, end: 2.9 }, { text: '二', start: 3, end: 4 }, { text: '三', start: 20.5, end: 22 }] });
+    expect(lrc.split('\n')[0]).toBe('[ti:X]');
+    expect(lrc).toContain('[00:01.00]一');
+    expect(lrc).toContain('[00:04.00]\n[00:20.50]三');
+    expect(parseLyrics(lrc).lines.filter((l) => l.text).map((l) => [l.text, l.start])).toEqual([['一', 1], ['二', 3], ['三', 20.5]]);
+  });
+});

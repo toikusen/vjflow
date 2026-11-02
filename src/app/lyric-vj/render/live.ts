@@ -31,6 +31,7 @@ export class LivePlayer {
   settled: Promise<void> = Promise.resolve();
   /** Set for a song with no audio: the clock runs from here. */
   private silent?: { at: number; t: number; playing: boolean };
+  private job?: RenderJob;
   /** The moment shown while the song waits at its very start: the first line, being read. */
   poster?: number;
   onFrame?: (t: number) => void;
@@ -43,6 +44,7 @@ export class LivePlayer {
    * up in what the page has, and the same job is built again once they are in (`settled`).
    */
   async load(job: RenderJob) {
+    this.job = job;
     const turn = ++this.turn;
     const began = performance.now();
     const made = this.make(job);
@@ -89,6 +91,14 @@ export class LivePlayer {
     this.engine!.setQuality(1);
     this.engine!.preview = false;
     return { engine: this.engine!, canvas: this.canvas! };
+  }
+
+  /** A second engine on the job on screen that draws one layer only, for a layered export; the caller disposes it. */
+  async layerEngine(layer: 'text' | 'back') {
+    const canvas = Object.assign(document.createElement('canvas'), { width: 1920, height: 1080 });
+    const engine = new LyricVjEngine(canvas, { ...this.job!, live: true, layer });
+    await engine.init();
+    return { engine, canvas };
   }
 
   /** Back to the preview after an export. */

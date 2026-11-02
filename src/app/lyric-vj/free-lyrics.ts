@@ -218,3 +218,7 @@ export function fitToAudio<T extends LyricLine>(lines: readonly T[], duration: n
   const kept = lines.filter((l) => (l.start ?? 0) < duration - MIN_LINE_GAP);
   return { kept, dropped: lines.length - kept.length };
 }
+
+/** A song's lines as an .lrc file, for subtitles or another editor. */
+export const songLrc = (song: { title: string; cues: readonly { text: string; start: number; end: number }[] }) =>
+  `[ti:${song.title}]\n${formatLines(song.cues.map((c) => ({ text: c.text, start: c.start, end: c.end })))}\n`;

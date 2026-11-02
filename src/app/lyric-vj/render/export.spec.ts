@@ -23,3 +23,10 @@ describe('derived glyph pictures', () => {
     expect(map.has('k299')).toBe(true);
   });
 });
+
+describe('frameName', () => {
+  it('numbers frames so an editor reads them as one sequence', async () => {
+    const { frameName } = await import('./export');
+    expect([frameName('front', 0), frameName('back', 1234)]).toEqual(['front_000000.png', 'back_001234.png']);
+  });
+});

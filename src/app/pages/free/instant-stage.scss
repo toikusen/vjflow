@@ -133,3 +133,25 @@
 .frame:not(.empty) {
   cursor: pointer;
 }
+
+.more {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  .link {
+    padding: 0;
+    color: var(--accent-text);
+    font: inherit;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    &:disabled {
+      color: var(--muted);
+      cursor: default;
+    }
+  }
+}

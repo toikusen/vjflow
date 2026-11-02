@@ -73,8 +73,9 @@ assert.ok(none(refused(full({ c2: { decor: 'icon' } }), ctx, { icon: 'flower' })
 assert.ok(!none(refused(cues.slice(1).map((c) => line(c.id))), 'c0', 'line'), 'a line left out is logged');
 const quick: Cue[] = [{ id: 'q0', start: 1, end: 2, text: '這是一句唱得飛快的歌詞' }, { id: 'q1', start: 2.1, end: 3.1, text: '後面還有更快的一句歌' }, { id: 'q2', start: 8, end: 11, text: '後面這句慢' }];
 assert.deepEqual([...setTogetherLines(quick)], ['q0', 'q1'], 'too fast to read apart: set together');
-const q = refused(quick.map((c) => line(c.id)), { ...ctx, song: { ...song, cues: quick } });
-assert.ok(!none(q, 'q0', 'layout') && none(q, 'q2', 'layout'), 'the director cannot pull them apart');
+const q = checkDirection(direction(quick.map((c) => line(c.id))), { ...ctx, song: { ...song, cues: quick } });
+assert.ok(!q.accepted.get('q0')?.recipe && !q.accepted.get('q1')?.recipe && q.accepted.get('q2')?.recipe, 'the director cannot pull them apart');
+assert.ok(none(q.fallbacks, 'q0', 'layout'), 'lines set together by rule are not logged as a mistake of the director');
 const same = resolveSame([line('c0', { layout: 'punch', enter: 'pop' }), line('c7', { sameAs: 'c0', layout: 'stair', enter: 'fade' })]).get('c7')!;
 assert.equal(same.layout, 'punch', 'a repeat takes the earlier line');
 assert.equal(same.cue, 'c7');

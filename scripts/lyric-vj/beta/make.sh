@@ -27,24 +27,38 @@ echo '##PHASE 導演規劃段落與故事'
 # direct.mts logs "attempt N: E errors" after each story draft, then designs the look: those lines become phases
 [ -f "$w/base/treatment.json" ] || { npx tsx scripts/lyric-vj/direct.mts --song "$S" --start 0 --end "$end" --out "$w/base" --style-id emotional --tier still --history out/design-history.json 2>&1 | tee "$w/direct.log" | awk '/^attempt [0-9]+: 0 errors/ { print "##PHASE 導演設計視覺風格"; fflush() } /^attempt [0-9]+: [1-9]/ { print "##PHASE 導演修正故事草稿"; fflush() }'; cost_json "$w/base/director.json" direct; }
 
-plan() { # <out> [--sprites dir]
+plan() { # <out> [--sprites dir]; on the line director's base when $pb is set
   [ -f "$1/treatment.json" ] && return
-  npx tsx scripts/lyric-vj/typeplan.mts --song "$S" --treatment "$w/base/treatment.json" --backdrops "$w/base/treatment.json" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} --out "$@" > "$1.log" 2>&1
+  local b=${pb:-$w/base/treatment.json}
+  npx tsx scripts/lyric-vj/typeplan.mts --song "$S" --treatment "$b" --backdrops "$b" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} --out "$@" > "$1.log" 2>&1
   cost_json "$1/typeplan.json" "plan-$(basename "$1")"
+}
+
+# The paid line director (VJ_LINEDIRECT=1, off until its side-by-side samples are accepted): each line its own stack and
+# reasons, read off the paid plan in noimg/ (planned first when a run has none). Its reply is kept in line/direction.json,
+# so a retried job spends nothing again; line/final is that plan built into a treatment.
+linedirect() {
+  plan "$w/noimg"
+  echo '##PHASE 導演逐句編排'
+  mkdir -p "$w/line"
+  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
+  pb=$w/line/base.json
 }
 
 case $tier in
   none)
     echo '##PHASE 編排文字動態'
-    plan "$w/noimg"
-    tr=$w/noimg ;;
+    if [ "${VJ_LINEDIRECT:-}" = 1 ]; then linedirect; plan "$w/line/final" --plan "$w/line/plan.json"; tr=$w/line/final
+    else plan "$w/noimg"; tr=$w/noimg; fi ;;
   img)
     echo '##PHASE 畫道具'
     [ -f "$w/props/library/library.json" ] || { npx tsx scripts/lyric-vj/props.mts --song "$S" --treatment "$w/base/treatment.json" --out "$w/props" > "$w/props.log" 2>&1; cost_json "$w/props/props.json" props; }
     echo '##PHASE 編排文字動態'
     # an accepted concept's plan (noimg/typeplan.json) is kept: only the props are placed into its cuts (--bind), so the
     # video is the concept the person accepted; a run from before the concept gate plans afresh
-    if [ -f "$w/noimg/typeplan.json" ]; then plan "$w/img" --sprites "$w/props/library" --bind "$w/noimg/typeplan.json"; else plan "$w/img" --sprites "$w/props/library"; fi
+    # with the line director the props are placed into its plan instead, on its base
+    if [ "${VJ_LINEDIRECT:-}" = 1 ]; then linedirect; plan "$w/img" --sprites "$w/props/library" --bind "$w/line/plan.json"
+    elif [ -f "$w/noimg/typeplan.json" ]; then plan "$w/img" --sprites "$w/props/library" --bind "$w/noimg/typeplan.json"; else plan "$w/img" --sprites "$w/props/library"; fi
     tr=$w/img ;;
   hybrid)
     echo '##PHASE 編排文字動態'

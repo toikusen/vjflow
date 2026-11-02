@@ -235,7 +235,8 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
     const text = spoken(cue.text);
     const level = c.levelOf(cue);
     accepted.set(cue.id, a);
-    if (together.has(cue.id)) return void refuse(cue.id, 'layout', l.layout, 'lines sung too fast to read apart share a shot (composer rule)');
+    // lines sung too fast to read apart share a shot the composer lays out: the prompt says so, so this is no refusal
+    if (together.has(cue.id)) return;
     if (skip > 0) {
       skip -= 1;
       return;

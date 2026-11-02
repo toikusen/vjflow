@@ -159,3 +159,27 @@ test('make.sh: the admin\'s rules file reaches the type planner as --lessons whe
   assert.equal(none.make().status, 0);
   assert.doesNotMatch(none.call('typeplan.mts'), /--lessons/);
 });
+
+test('make.sh with VJ_LINEDIRECT=1: the line director reads the paid plan, its plan is built on its base and rendered', () => {
+  const t = tree({ tier: 'none' });
+  const r = t.make({ VJ_LINEDIRECT: '1' });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(r.stdout, /##PHASE 導演逐句編排/);
+  assert.match(t.call('linedirect.mts'), /--base \S+\/base\/treatment\.json --paid \S+\/runs\/m1\/noimg --out \S+\/runs\/m1\/line --costs \S+\/line\/costs\.jsonl/);
+  assert.match(t.call('--plan'), /--treatment \S+\/line\/base\.json --backdrops \S+\/line\/base\.json --out \S+\/line\/final --plan \S+\/line\/plan\.json/);
+  assert.match(t.call('render.mts'), /--treatment \S+\/line\/final\/treatment\.json/);
+});
+
+test('make.sh img with VJ_LINEDIRECT=1: the props are bound into the line director\'s plan, on its base', () => {
+  const t = tree({ tier: 'img', plan: true });
+  const r = t.make({ VJ_LINEDIRECT: '1' });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(t.call('--bind'), /--treatment \S+\/line\/base\.json .*--out \S+\/runs\/m1\/img --sprites \S+\/props\/library --bind \S+\/line\/plan\.json/);
+});
+
+test('make.sh without VJ_LINEDIRECT: no line director, the paid plan as before', () => {
+  const t = tree({ tier: 'none' });
+  assert.equal(t.make().status, 0);
+  assert.equal(t.call('linedirect.mts'), '');
+  assert.match(t.call('render.mts'), /--treatment \S+\/noimg\/treatment\.json/);
+});

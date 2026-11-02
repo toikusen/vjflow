@@ -219,6 +219,11 @@ export function fitToAudio<T extends LyricLine>(lines: readonly T[], duration: n
   return { kept, dropped: lines.length - kept.length };
 }
 
-/** A song's lines as an .lrc file, for subtitles or another editor. */
-export const songLrc = (song: { title: string; cues: readonly { text: string; start: number; end: number }[] }) =>
-  `[ti:${song.title}]\n${formatLines(song.cues.map((c) => ({ text: c.text, start: c.start, end: c.end })))}\n`;
+/**
+ * A song's lines as an .lrc file, for subtitles or another editor. With a range (a part exported alone), only the lines
+ * sung in it, timed from its start like the video they go with.
+ */
+export function songLrc(song: { title: string; cues: readonly { text: string; start: number; end: number }[] }, from = 0, to = Infinity) {
+  const lines = song.cues.filter((c) => c.end > from && c.start < to).map((c) => ({ text: c.text, start: Math.max(0, c.start - from), end: Math.min(to, c.end) - from }));
+  return `[ti:${song.title}]\n${formatLines(lines)}\n`;
+}

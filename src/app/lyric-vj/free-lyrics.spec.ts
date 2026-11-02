@@ -142,4 +142,11 @@ describe('songLrc', () => {
     expect(lrc).toContain('[00:04.00]\n[00:20.50]三');
     expect(parseLyrics(lrc).lines.filter((l) => l.text).map((l) => [l.text, l.start])).toEqual([['一', 1], ['二', 3], ['三', 20.5]]);
   });
+  it('for a part, keeps the lines sung in it, timed from its start', async () => {
+    const { songLrc } = await import('./free-lyrics');
+    const lrc = songLrc({ title: 'X', cues: [{ text: '一', start: 1, end: 2.9 }, { text: '二', start: 3, end: 4 }, { text: '三', start: 20.5, end: 22 }] }, 2.5, 10);
+    expect(lrc).not.toContain('三');
+    expect(lrc).toContain('[00:00.00]一');
+    expect(lrc).toContain('[00:00.50]二');
+  });
 });

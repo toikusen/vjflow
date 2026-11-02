@@ -297,9 +297,9 @@ export class InstantStage implements OnInit, OnDestroy {
           await exportFrames({ layers: [{ ...front, dir: await dir.getDirectoryHandle('front', { create: true }), name: 'front' }], duration: seconds, from: start, fps: 30, signal: this.abort.signal, onProgress: half(0) });
           const behind = await exportVideo({ ...back, duration: seconds, from: start, audio: await this.audioFile()(), fps: 30, signal: this.abort.signal, onProgress: half(1) });
           await write(`${base}_back.mp4`, behind.blob);
-          if (this.song) await write(`${base}.lrc`, songLrc(this.song));
+          if (this.song) await write(`${base}.lrc`, songLrc(this.song, start, start + seconds));
           this.dropExport();
-          this.saved.set(`已寫入資料夾「${base}」：front 資料夾是歌詞（透明背景，${Math.round(seconds * 30)} 張 720p PNG，每秒 30 張），${base}_back.mp4 是背景和音樂，另附歌詞 LRC。把 front 疊在 back 上就接近原本的畫面；整體的發光、顆粒和調色只在背景裡，歌詞層沒有，可以在 AE 裡自己加。`);
+          this.saved.set(`已寫入資料夾「${base}」：front 資料夾是歌詞（透明背景，${Math.round(seconds * 30)} 張 720p PNG，每秒 30 張），${base}_back.mp4 是背景和音樂，另附歌詞 LRC。把 front 疊在 back 上就是原本的畫面。字本身的發光在 front 裡；整個畫面的顆粒和調色只套在 back，字上沒有。`);
           return;
         }
         const audio = await this.audioFile()();

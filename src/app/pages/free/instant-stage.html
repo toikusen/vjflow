@@ -47,11 +47,12 @@
       @if (!exporting()) {
         <p class="more">
           其他格式：
-          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export(undefined, undefined, 'green')">綠幕影片</button>
+          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" title="發光的字（霓虹、螢光）去背時光暈會混到綠色，這類風格建議用黑底或分層" (click)="export(undefined, undefined, 'green')">綠幕影片</button>
           <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export(undefined, undefined, 'black')">黑底影片</button>
-          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" (click)="export(undefined, undefined, 'layers')">分層（歌詞透明 PNG＋背景影片）</button>
+          <button type="button" class="link" [disabled]="!!busy() || !!exportBlocked || !!exportHold()" title="寫進你選的資料夾。歌詞是每秒 30 張透明 PNG，整首約 0.5～3 GB，依風格而定" (click)="export(undefined, undefined, 'layers')">分層（歌詞透明 PNG＋背景影片）</button>
           <button type="button" class="link" [disabled]="!!busy() || !!exportHold()" (click)="exportLrc()">歌詞 LRC</button>
         </p>
+        <p class="more-note">發光的字建議用黑底或分層，綠幕會讓光暈混到綠色。分層整首約 0.5～3 GB，會寫進你選的資料夾。</p>
       }
       @if (saved(); as s) {
         <p class="done">{{ s }}</p>

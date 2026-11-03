@@ -416,6 +416,41 @@ h1, h2, p, ol {
   color: var(--faint);
 }
 
+/* lyrics without audio: the picture is a silent preview, and says so on it and under it */
+
+.preview-mark {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: #000000a6;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.preview-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  p {
+    flex: 1 1 260px;
+    min-width: 0;
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-2);
+  }
+}
+
 /* the status strip: three cells that light up in order */
 
 .strip {

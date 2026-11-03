@@ -14,6 +14,8 @@
       @if (!ready()) {
         <div class="waiting"><ng-content /></div>
       }
+      <!-- a page's own mark over the picture (the new-song screen's preview label) -->
+      <ng-content select="[over]" />
     </div>
     <audio #audio preload="metadata" (ended)="playing.set(false)"></audio>
 
@@ -31,7 +33,9 @@
       </section>
       <section class="actions">
         <button type="button" class="button" [disabled]="!!busy()" (click)="reroll()">換一版</button>
-        @if (exporting()) {
+        @if (silent()) {
+          <!-- a song with no audio is only a preview: nothing to export -->
+        } @else if (exporting()) {
           <button type="button" class="button" (click)="cancelExport()">取消匯出</button>
           <span class="time">{{ (progress() * 100).toFixed(0) }}%</span>
         } @else {
@@ -42,10 +46,10 @@
         }
       </section>
       <!-- (the rail page shows the hold in its own status strip) -->
-      @if (exportBlocked || (exportHold() && !rail())) {
+      @if (!silent() && (exportBlocked || (exportHold() && !rail()))) {
         <p class="warn">{{ exportBlocked || exportHold() }}</p>
       }
-      @if (!exporting()) {
+      @if (!exporting() && !silent()) {
         <details class="formats">
           <summary>其他格式</summary>
           <div class="tiles">

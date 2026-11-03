@@ -8,7 +8,7 @@ import { BEAT_RATE } from '../../lyric-vj/beat-detect';
 import { InstantStage, StageSong } from '../free/instant-stage';
 import { audioProblem, audioType, errorOf, songView } from './beta';
 import { BetaPage } from './beta.page';
-import { canSave, clock, fileTitle, guessLanguage, guessTitle, putWithProgress, SAVE_REST, sheetRows, SongLanguage, stripSteps } from './new-song';
+import { canSave, clock, fileTitle, guessLanguage, guessTitle, previewSong, putWithProgress, SAVE_REST, sheetRows, SongLanguage, stripSteps } from './new-song';
 import { DRAFT_HOLD, draftSong, readProblem, songAudioUrl, songTimingUrl } from './song-flow';
 import { BalanceComponent } from './ui/balance.component';
 import { signedOutBy } from './ui/session';
@@ -19,7 +19,8 @@ const LANGS: { id: SongLanguage; name: string }[] = [{ id: 'ja', name: '日文' 
 const ACCEPT = '.mp3,.wav,.flac,.m4a,.aac,audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/mp4,audio/x-m4a,audio/aac';
 
 /**
- * 做一支新影片 (`/my/new`): the picture is where the audio goes; the lyrics are a sheet beside it. With both, the video
+ * 做一支新影片 (`/my/new`): the picture is where the audio goes; the lyrics are a sheet beside it. Lyrics alone play as a
+ * silent preview on even times (nothing is saved or exported from it). With both, the video
  * runs at once from the local file on guessed times; the song is saved and its audio sent in the background once the
  * lyrics have rested, and the picture moves to the server's timing when the preparation is done. The page is the song
  * page from then on (the address changes under it), so nothing on screen is interrupted.
@@ -54,6 +55,8 @@ export class NewSongPage extends BetaPage {
     }
   });
   protected readonly rows = computed(() => sheetRows(this.lyrics()));
+  /** Lyrics and no audio yet: the picture plays them silently on even times, to try styles on before the song is in. */
+  protected readonly preview = computed(() => !this.file() && this.parsed().lines > 0 && !this.saved());
   protected readonly songId = signal('');
   protected readonly saved = computed(() => !!this.songId());
   protected readonly uploadPct = signal<number | null>(null);
@@ -83,6 +86,8 @@ export class NewSongPage extends BetaPage {
   private rest = 0;
   private saving = false;
   private moved = false;
+  /** A preview of the lyrics alone was asked for (and the stage is there to ask). */
+  private previewed = false;
 
   constructor() {
     super();
@@ -180,11 +185,22 @@ export class NewSongPage extends BetaPage {
     });
   }
 
-  /** The picture soon after a change, the save once the lyrics rest (SAVE_REST). */
+  /** The picture soon after a change, the save once the lyrics rest (SAVE_REST); lyrics alone get only the picture. */
   private schedule() {
     clearTimeout(this.typing);
     clearTimeout(this.rest);
-    if (!this.file() || !this.parsed().lines || this.saved()) return;
+    if (this.saved()) return;
+    if (!this.parsed().lines) {
+      // the lyrics were taken away: the preview goes with them, and the invitation is back
+      if (this.previewed && !this.file()) this.stage().clear();
+      this.previewed = false;
+      return;
+    }
+    if (!this.file()) {
+      this.previewed = true;
+      this.typing = window.setTimeout(() => this.stage().request(), TYPING_REST);
+      return;
+    }
     this.typing = window.setTimeout(() => this.stage().request('first'), TYPING_REST);
     this.rest = window.setTimeout(() => void this.save(), SAVE_REST);
   }
@@ -199,7 +215,8 @@ export class NewSongPage extends BetaPage {
       if (!audio.src.endsWith(songAudioUrl(id))) audio.src = songAudioUrl(id);
       return { song };
     }
-    if (!this.file() || !this.read) throw new Error('請先選擇音檔');
+    if (!this.file()) return { song: previewSong(this.lyrics(), this.title()), silent: true };
+    if (!this.read) throw new Error('請先選擇音檔');
     const { seconds, reading } = await this.read;
     return { song: draftSong(this.lyrics(), this.title() || fileTitle(this.file()!.name), seconds, reading) };
   };

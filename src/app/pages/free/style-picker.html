@@ -1,7 +1,6 @@
 <section class="picker" [class.rails]="rails()" [class.row]="row()" aria-label="風格">
   <div class="head">
     <h2>風格</h2>
-    <button type="button" class="plain" [class.on]="!selected()" [attr.aria-pressed]="!selected()" (click)="picked.emit('')">依歌曲配色</button>
   </div>
   @for (g of groups(); track g.name) {
     @if (g.cards.length) {

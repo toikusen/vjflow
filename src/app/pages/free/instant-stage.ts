@@ -65,7 +65,7 @@ export class InstantStage implements OnInit, OnDestroy {
   readonly styleId = signal('');
   /** The style chosen for the song when its person picked none (shown as 推薦). */
   readonly recommended = signal('');
-  /** The person picked a style (依歌曲配色 included): no recommendation over it. */
+  /** The person picked a style: no recommendation over it. */
   private chose = false;
   private recommendedFor = '';
   readonly seed = signal<number | undefined>(undefined);
@@ -95,9 +95,9 @@ export class InstantStage implements OnInit, OnDestroy {
   /** Why this browser cannot export; the button says so instead of failing halfway. */
   protected readonly exportBlocked = exportBlocker();
   protected readonly exporting = computed(() => this.busy() === '匯出中');
-  /** No style picked is the picker's 依歌曲配色: the composer's own look for the song. */
+  /** The style's name as the controls show it, marked when it is the song's recommendation. */
   readonly styleName = computed(() => {
-    const name = this.styles.find((s) => s.id === this.styleId())?.name ?? '依歌曲配色';
+    const name = this.styles.find((s) => s.id === this.styleId())?.name ?? '';
     return this.styleId() && this.styleId() === this.recommended() ? `${name}（推薦）` : name;
   });
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
@@ -106,8 +106,10 @@ export class InstantStage implements OnInit, OnDestroy {
   private player?: LivePlayer;
   private song?: SongTimeline;
   private meaning?: Meaning;
-  private silent = false;
-  private autoplayed = false;
+  /** The song on screen has no audio: a draft to watch, with nothing to export. */
+  readonly silent = signal(false);
+  /** Which kinds of song have started by themselves: lyrics alone once, and the song again when its audio comes. */
+  private readonly autoplayed = new Set<'silent' | 'audio'>();
   private job?: Parameters<LivePlayer['load']>[0];
   /** What to do again once the stage is free: the song changed, or only its style. */
   private pending?: 'song' | 'picture';
@@ -157,16 +159,16 @@ export class InstantStage implements OnInit, OnDestroy {
   private async build() {
     const [{ freeJob }, { LivePlayer }] = await Promise.all([import('../../lyric-vj/free-plan'), import('../../lyric-vj/render/live')]);
     this.player ??= new LivePlayer(this.stage().nativeElement, this.audio);
-    this.player.setSilent(this.silent);
+    this.player.setSilent(this.silent());
     this.player.onFrame = (t) => {
       this.t.set(t);
       this.playing.set(this.player!.playing);
       // a draft with no audio has no end to stop at: it plays round, for reading it through
-      if (this.silent && this.player!.playing && t >= this.duration()) this.player!.seek(0);
+      if (this.silent() && this.player!.playing && t >= this.duration()) this.player!.seek(0);
     };
     // nothing picked yet: the song opens in the style recommended for it (still the person's to change)
     // (and a new song left on the last one's recommendation gets its own)
-    if (!this.chose && (!this.styleId() || (this.styleId() === this.recommended() && this.recommendedFor !== this.song!.title))) {
+    if (!this.styleId() || (!this.chose && this.styleId() === this.recommended() && this.recommendedFor !== this.song!.title)) {
       const { recommendStyle } = await import('../../lyric-vj/free-styles');
       this.styleId.set(recommendStyle(this.song!));
       this.recommended.set(this.styleId());
@@ -210,17 +212,19 @@ export class InstantStage implements OnInit, OnDestroy {
     else void this.generate(start);
   }
 
-  /** @param start `first` plays from just before the first line, `silent` plays a song with no audio, once per page. */
+  /** @param start `first` plays from just before the first line, once per page; a `silent` song plays by itself once too. */
   generate(start?: 'first') {
     return this.guard('生成中', async () => {
       this.dropExport();
       this.warn.set('');
       const { song, meaning, silent } = await this.source()();
-      [this.song, this.meaning, this.silent] = [song, meaning, !!silent];
+      [this.song, this.meaning] = [song, meaning];
+      this.silent.set(!!silent);
       await this.build();
       // lyrics alone are a draft to watch: there is no song to wait for a person to start
-      if ((this.silent || start) && !this.autoplayed) {
-        this.autoplayed = true;
+      const kind = silent ? 'silent' : 'audio';
+      if ((silent || start) && !this.autoplayed.has(kind)) {
+        this.autoplayed.add(kind);
         if (start) this.player!.seek(Math.max(0, (this.job?.cues[0]?.start ?? 0) - LEAD_IN));
         // a browser may refuse sound without a fresh click: the picture stands and the play button works
         void this.player!.play().catch(() => undefined);

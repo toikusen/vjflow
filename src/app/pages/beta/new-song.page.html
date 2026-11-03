@@ -84,6 +84,16 @@
               <p class="drop-line">{{ parsed().lines ? '生成中…' : '貼上歌詞就能看到' }}</p>
             </div>
           }
+          <!-- one element per block: a block is projected by its single root -->
+          @if (preview()) {
+            <span over class="preview-mark" aria-hidden="true">無聲預覽</span>
+          }
+          @if (preview()) {
+            <div under class="preview-bar">
+              <p>無聲預覽：歌詞先照字數平均排開。放進音檔後，會照歌曲的時間重做。</p>
+              <label class="button primary pick">選擇音檔<input type="file" [accept]="accept" hidden (change)="pickInput($event)" aria-label="音檔" /></label>
+            </div>
+          }
           @if (file()) {
             <ol under class="strip" aria-label="狀態">
               @for (s of strip(); track $index) {

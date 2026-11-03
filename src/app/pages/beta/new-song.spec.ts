@@ -1,4 +1,4 @@
-import { canSave, fileTitle, guessLanguage, guessTitle, SAVE_REST, sheetRows, stripSteps } from './new-song';
+import { canSave, fileTitle, guessLanguage, guessTitle, PREVIEW_BPM, previewSong, SAVE_REST, sheetRows, stripSteps } from './new-song';
 
 describe('sheetRows', () => {
   it('marks headings and section labels as lines the video never shows, keeps the rest', () => {
@@ -72,5 +72,36 @@ describe('stripSteps', () => {
   });
   it('never claims 100 % before the server answered', () => {
     expect(stripSteps({ ...base, uploadPct: 100 })[0].label).toBe('上傳 99%');
+  });
+});
+
+describe('previewSong', () => {
+  const beat = 60 / PREVIEW_BPM;
+  const starts = (text: string) => previewSong(text, 'T').cues.map((c) => c.start);
+  it('lays every sung line in order, a longer line held longer, each a few seconds at most', () => {
+    const song = previewSong('# 夜航\n短\n這一句比較長一點的歌詞在這裡\n短', '');
+    expect(song.cues.map((c) => c.text)).toEqual(['短', '這一句比較長一點的歌詞在這裡', '短']);
+    const [a, b, c] = song.cues.map((x) => x.start);
+    expect(b - a).toBeLessThan(c - b);
+    for (const x of song.cues) expect(x.end - x.start).toBeLessThanOrEqual(6);
+    expect(song.title).toBe('歌詞預覽');
+    expect(song.duration).toBeGreaterThan(c);
+  });
+  it('rests a bar where the sheet starts a new part (a label or a blank line), never before the first line', () => {
+    const plain = starts('一\n二\n三');
+    expect(starts('[Verse]\n一\n二\n三')).toEqual(plain);
+    const parted = starts('一\n二\n\n[Chorus]\n三');
+    expect(parted[1]).toBeCloseTo(plain[1], 3);
+    expect(parted[2] - plain[2]).toBeCloseTo(4 * beat, 3);
+  });
+  it('keeps stamps the lyrics give', () => {
+    expect(starts('[00:10.00]一\n[00:20.00]二')).toEqual([10, 20]);
+  });
+  it('lays the song on an even beat grid at the preview tempo', () => {
+    const song = previewSong('一\n二', 'T');
+    expect(song.beats[1] - song.beats[0]).toBeCloseTo(beat, 3);
+  });
+  it('has nothing to show without a sung line', () => {
+    expect(() => previewSong('[Verse]', 'T')).toThrow();
   });
 });

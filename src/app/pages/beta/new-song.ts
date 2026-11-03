@@ -1,6 +1,8 @@
 // What the new-song screen decides by itself: which lines of the sheet are sung, the song's name and language, when
 // the song is saved, and what the status strip says. Nothing here touches the server.
-import { HEADING } from '../../lyric-vj/free-lyrics';
+import { draftLines, HEADING, parseLyrics, placeLines } from '../../lyric-vj/free-lyrics';
+import { songFromLines } from '../../lyric-vj/free-song';
+import type { SongTimeline } from '../../lyric-vj/timeline';
 
 export type SongLanguage = 'ja' | 'zh' | 'en' | 'ko';
 
@@ -20,6 +22,41 @@ export function sheetRows(text: string): SheetRow[] {
     if (SECTION.test(line) && !STAMP.test(line)) return { text: raw, kind: 'section' };
     return { text: raw, kind: 'line' };
   });
+}
+
+/** The tempo a preview with no audio is laid on, and the rest where the sheet starts a new part, beats. */
+export const PREVIEW_BPM = 96;
+const PREVIEW_BREAK = 4;
+
+/**
+ * The lyrics alone as a song to watch before the audio is in: each line held by its length (draftLines), a bar's rest
+ * where the sheet starts a new part (a section label or a blank line), at an even tempo. Lyrics with their own stamps
+ * keep them. Throws like parseLyrics, and when there is no line.
+ */
+export function previewSong(lyrics: string, title: string): SongTimeline {
+  const { lines } = parseLyrics(lyrics);
+  const o = { title: title.trim() || '歌詞預覽', bpm: PREVIEW_BPM };
+  const placed = placeLines(lines);
+  if (placed) return songFromLines(placed, o);
+  const drafted = draftLines(lines, PREVIEW_BPM);
+  const breaks = partBreaks(lyrics);
+  // the sheet and the parse disagree only on rows the sheet cannot judge alone: then no rests, never misplaced ones
+  const rest = breaks.length === drafted.length ? (60 / PREVIEW_BPM) * PREVIEW_BREAK : 0;
+  let shift = 0;
+  return songFromLines(drafted.map((l, i) => ({ ...l, start: l.start! + (shift += breaks[i] ? rest : 0) })), o);
+}
+
+/** For each sung row of the sheet: whether a new part starts at it (a section label or a blank line since the last sung row). */
+function partBreaks(text: string): boolean[] {
+  const out: boolean[] = [];
+  let gap = false;
+  for (const r of sheetRows(text)) {
+    if (r.kind === 'line') {
+      out.push(gap && out.length > 0);
+      gap = false;
+    } else if (r.kind !== 'heading') gap = true;
+  }
+  return out;
 }
 
 /** A file's name without its extension. */

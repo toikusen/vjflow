@@ -194,3 +194,21 @@ test('make.sh hybrid with VJ_LINEDIRECT=1: the story frames are laid over the li
   assert.match(t.call('quality.mts'), /--plan-check \S+\/line\/final\/plan-check\.json/);
   assert.doesNotMatch(t.call('linedirect.mts'), /--props/);
 });
+
+test('make.sh with VJ_PAID_WORLD=1: the line director is told the world, the buyer\'s style when the run has one, else auto; off, no world', () => {
+  const t = tree({ tier: 'none' });
+  const r = t.make({ VJ_LINEDIRECT: '1', VJ_PAID_WORLD: '1' });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(t.call('linedirect.mts'), / --world auto/, 'no inputs.json: the director picks');
+  const s = tree({ tier: 'img', plan: true });
+  writeFileSync(join(s.run, 'inputs.json'), JSON.stringify({ concept: 'x', style: 'silkscreen' }));
+  assert.equal(s.make({ VJ_LINEDIRECT: '1', VJ_PAID_WORLD: '1' }).status, 0);
+  assert.match(s.call('linedirect.mts'), / --world silkscreen/, 'the buyer\'s style names the world');
+  assert.match(s.call('--bind'), /--bind \S+\/line\/plan\.json/, 'the props are bound into the world plan');
+  const off = tree({ tier: 'none' });
+  assert.equal(off.make({ VJ_LINEDIRECT: '1' }).status, 0);
+  assert.doesNotMatch(off.call('linedirect.mts'), /--world/);
+  const noDirector = tree({ tier: 'none' });
+  assert.equal(noDirector.make({ VJ_PAID_WORLD: '1' }).status, 0);
+  assert.equal(noDirector.call('linedirect.mts'), '', 'the world switch alone turns nothing on');
+});

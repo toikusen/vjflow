@@ -15,7 +15,9 @@ export function buildMoments(song: MomentsSong, songFile: string, asks: MomentAs
   const times = sungTimesOf(song, songFile);
   const sources: Record<string, string> = {};
   for (const [id, t] of times) sources[id] = t.source;
-  const { kept, dropped } = checkMoments(asks, song.cues, (id) => times.get(id), undefined, apart);
+  // a director writes the variant as the prompt lists it now and then (shape/fall): the variant is what follows its form
+  const plain = asks.map((a) => ({ ...a, variant: a.variant.startsWith(`${a.form}/`) ? a.variant.slice(a.form.length + 1) : a.variant }));
+  const { kept, dropped } = checkMoments(plain, song.cues, (id) => times.get(id), undefined, apart);
   return { kept, dropped, sources };
 }
 

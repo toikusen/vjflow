@@ -192,3 +192,65 @@ assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五
   const many = checkDirection(direction(full(Object.fromEntries(cues.map((c) => [c.id, { decor: 'fine-note', noteKind: 'scene', note: '雨夜' }])))), ctx);
   assert.equal([...many.accepted.values()].filter((a) => a.note).length, NOTE_PER_PART, 'a part carries at most NOTE_PER_PART notes');
 }
+
+// on a style world (paid-world.mts): the director chooses inside the world's closed pool
+{
+  const { poolOf } = await import('../../src/app/lyric-vj/style-world');
+  const { worldById } = await import('../../src/app/lyric-vj/style-worlds');
+  const { planWorldOf } = await import('./paid-world.mts');
+  const { worldStackOf } = await import('./linedirect-core.mts');
+  const silk = worldById('silk')!;
+  const W = poolOf(silk, RECIPES, 0);
+  const wctx: Ctx = { ...ctx, world: W };
+  const ws = worldStackOf('silk/top-slab', 'squeegee', 'plate-lift', 'press-set', 1, W)!;
+  assert.equal(ws.recipe.wline?.set, 'silk/top-slab');
+  assert.deepEqual(ws.fixes, [], 'the set\'s own moves stand');
+  const fixed = worldStackOf('silk/top-slab', 'fade', 'glyph-shed', 'still', 1, W)!;
+  assert.deepEqual([fixed.recipe.wline?.enter, fixed.recipe.wline?.exit, fixed.fixes], ['squeegee', 'plate-lift', ['enter', 'exit', 'idle']], 'moves not the set\'s take its first, each named');
+  assert.equal(worldStackOf('stair', 'fade', 'still', 'still', 1, W), undefined, 'an open layout names no set');
+  const wline = (cue: string, over: Partial<LineChoice> = {}) => line(cue, { layout: 'silk/top-slab', enter: 'squeegee', idle: 'press-set', exit: 'plate-lift', side: 'center', ...over });
+  const wfull = (edit: Record<string, Partial<LineChoice>> = {}) => cues.map((c) => wline(c.id, edit[c.id]));
+  const ok = checkDirection(direction(wfull()), wctx);
+  assert.equal(ok.fallbacks.length, 0, `world sets pass: ${JSON.stringify(ok.fallbacks)}`);
+  assert.equal(ok.accepted.get('c0')?.recipe?.template, 'world-set');
+  assert.equal(ok.accepted.get('c0')?.exit, undefined, 'a world set\'s exit is in its recipe, not a separate choice');
+  const out = checkDirection(direction(wfull({ c1: { layout: 'stair', enter: 'fade', idle: 'still', exit: 'fade' } })), wctx);
+  assert.ok(out.fallbacks.some((f) => f.cue === 'c1' && f.field === 'layout' && /pool/.test(f.reason)), 'an open stack outside the pool goes back to the composer');
+  const shared = checkDirection(direction(wfull({ c1: { layout: 'punch', enter: 'slam', idle: 'thump', exit: 'fade' } })), wctx);
+  assert.equal(shared.accepted.get('c1')?.recipe?.template, 'punch', 'a shared stack the world lets in stands');
+  const tooMany = checkDirection(direction(cues.map((c) => line(c.id, { layout: 'punch', enter: 'slam', idle: 'thump', exit: 'fade' }))), wctx);
+  assert.ok(tooMany.fallbacks.some((f) => f.field === 'layout' && /share/.test(f.reason)), 'shared stacks past their share of the world go back');
+  const split = checkDirection(direction(wfull({ c1: { cut: 'split', pieces: ['整條街的燈都', '熄了'] } })), wctx);
+  assert.ok(split.accepted.get('c1')?.hold && split.fallbacks.some((f) => f.cue === 'c1' && f.field === 'cut'), 'a world set holds the line whole, the split logged');
+  const ground = checkDirection(direction(wfull({ c1: { ground: 'herringbone' }, c2: { ground: 'rain' } })), wctx);
+  assert.equal(ground.accepted.get('c1')?.ground, 'herringbone', 'a ground of the world at this level stands');
+  assert.ok(!ground.accepted.get('c2')?.ground && ground.fallbacks.some((f) => f.cue === 'c2' && f.field === 'ground'), 'a ground outside the world is refused');
+  const cam = checkDirection(direction(wfull({ c1: { lineCam: 'lean' }, c2: { hit: 'zoom' } })), { ...wctx, levelOf: () => 2 });
+  assert.ok(cam.fallbacks.some((f) => f.cue === 'c1' && f.field === 'lineCam'), 'a world set carries its own motion');
+  assert.ok(cam.fallbacks.some((f) => f.cue === 'c2' && f.field === 'hit'), 'no hit a world does not have');
+  // a world without paper devices: no small marks but the director's own words, no drawn exits, no handoffs
+  const chalk = worldById('chalkboard')!;
+  const C = poolOf(chalk, RECIPES, 0);
+  assert.ok(!C.devices && !C.handoffs);
+  const cline = (cue: string, over: Partial<LineChoice> = {}) => line(cue, { layout: 'chalkboard/lesson', enter: 'chalk-write', idle: 'hand-shake', exit: 'wipe-off', side: 'center', ...over });
+  const cd = checkDirection(direction(cues.map((c) => cline(c.id, c.id === 'c1' ? { decor: 'oval' } : c.id === 'c2' ? { decor: 'fine-note', noteKind: 'echo', note: '整條街的燈' } : c.id === 'c3' ? { handoff: 'relay' } : {}))), { ...ctx, world: C });
+  assert.ok(cd.fallbacks.some((f) => f.cue === 'c1' && f.field === 'decor'), 'no ring in a world without paper devices');
+  assert.equal(cd.accepted.get('c2')?.note, '整條街的燈', 'the director\'s own words still stand');
+  assert.ok(cd.fallbacks.some((f) => f.cue === 'c3' && f.field === 'handoff'), 'no handoff in a world without them');
+  // the plan on the world: its lines are world lines, no backdrop or paid finish, the world recorded on the plan
+  const pw = planWorldOf(silk, song, false, '理由', 'director');
+  const wb = directedPlan(song, direction(wfull({ c2: { layout: 'stair', enter: 'fade', idle: 'still' } })), wctx, paid, paidShots, parts, song.beats, new Set(), pw);
+  const wshots = wb.plan.shots as unknown as { lines: Record<string, unknown>[]; cuts: Record<string, unknown>[]; lyric: { template: string }; backdrop: string }[];
+  const wshot = (id: string) => wshots.find((s) => s.lines.some((l) => l['cue'] === id))!;
+  assert.equal((wshot('c0').lines[0]['world'] as { set: string }).set, 'silk/top-slab', 'the director\'s set reaches the line');
+  assert.equal(wshot('c0').lyric.template, 'world-set');
+  assert.ok((wshot('c2').lines[0]['world'] as { set?: string } | undefined)?.set, 'a line the director lost keeps a set the composer chose in the world');
+  assert.ok(wshots.every((s) => !s.backdrop), 'no backdrop of the old design');
+  assert.ok(wshots.every((s) => s.cuts.every((c) => typeof c['scheme'] === 'number')), 'every cut carries the world\'s scheme');
+  assert.equal(wb.plan.finish, '', 'no paid finish on a world');
+  assert.deepEqual((wb.plan as { world?: unknown }).world, pw, 'the plan carries its world');
+  assert.equal(wb.plan.backbone, '骨幹', 'the paid reading stays');
+  assert.equal(wb.decisions.find((x) => x['cue'] === 'c0')?.['set'], 'silk/top-slab', 'the set is in the decisions');
+  const wprompt = directorPrompt(song, wctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', world: { w: silk, pool: W } });
+  assert.ok(wprompt.includes('silk/top-slab') && wprompt.includes('風格世界') && !wprompt.includes('horizon-light'), 'the director reads the world\'s kit, not the open one');
+}

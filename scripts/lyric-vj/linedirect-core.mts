@@ -14,7 +14,9 @@ import { wordBreaks } from '../../src/app/lyric-vj/phrases';
 import { splitSongTitle } from '../../src/app/lyric-vj/structure';
 import { MomentAsk, MOMENT_FORMS, SHAPE_WORDS, STRIKE_WORDS } from '../../src/app/lyric-vj/signature-moments';
 import type { FineTier, SymbolName } from '../../src/app/lyric-vj/treatment';
-import { ARRIVAL_APART, ARRIVAL_SHARE, ARRIVALS_SHARE, BACKGROUNDS, BREATH_MIN, CARRIER_APART, CARRIER_SHARE, CARRIERS, charsPerSec, composePlan, Cue, DEVICE_SHARE, DISTINCT_SHARE, EXIT_LAYOUT, EXIT_PAPER, EXIT_SHARE, fallbackParts, fitsCalm, FIXED_LAYOUT, GROUND_HELP, HANDOFF_APART, KEEPS_EXIT, keyOf, LAYOUT_SHARE, levelOf, MARK_SHARE, Meaning, NOT_CALM_EXIT, OWN_EXIT, PAIR_APART, PAIR_SHARE, PairKind, PAPER_EXITS, QUIET_BACKGROUNDS, Recipe, RECIPES, RING_MAX, SongPart, SPATIAL, SPATIAL_SHARE, TRACKED } from './lineplan-core.mts';
+import { ARRIVAL_APART, ARRIVAL_SHARE, ARRIVALS_SHARE, BACKGROUNDS, BREATH_MIN, CARRIER_APART, CARRIER_SHARE, CARRIERS, charsPerSec, composePlan, Cue, DEVICE_SHARE, DISTINCT_SHARE, EXIT_LAYOUT, EXIT_PAPER, EXIT_SHARE, fallbackParts, fitsCalm, FIXED_LAYOUT, GROUND_HELP, HANDOFF_APART, KEEPS_EXIT, keyOf, LAYOUT_SHARE, levelOf, MARK_SHARE, Meaning, NOT_CALM_EXIT, OWN_EXIT, PAIR_APART, PAIR_SHARE, PairKind, PAPER_EXITS, QUIET_BACKGROUNDS, Recipe, RECIPES, RING_MAX, SHARED_SHARE, SongPart, SPATIAL, SPATIAL_SHARE, TRACKED, type WorldPool } from './lineplan-core.mts';
+import { type PlanWorld, worldKitPrompt } from './paid-world.mts';
+import type { StyleWorld } from '../../src/app/lyric-vj/style-world';
 import { cutTimes } from './interludes.mts';
 import { ENTER_HELP, EXIT_HELP, IDLE_HELP } from './typehelp.mts';
 
@@ -212,7 +214,29 @@ export interface Accepted {
   why: Why;
   evidence: string;
 }
-export interface Ctx { song: SongIn; calm: boolean; partWhat: (cue: string) => string; levelOf: (c: Cue) => number; screenGrounds: string[] }
+export interface Ctx {
+  song: SongIn; calm: boolean; partWhat: (cue: string) => string; levelOf: (c: Cue) => number; screenGrounds: string[];
+  /** The style world the song is drawn in (paid-world.mts): its closed pool is all a line may stand in. */
+  world?: WorldPool;
+}
+
+/**
+ * A world set the director named, as the composer's recipe for it: the set's own enter and exit when the director's
+ * are its, else the set's first (each swap named in `fixes`); the level nearest the line's. Undefined when the layout
+ * names no set of this world.
+ */
+export function worldStackOf(layout: string, enter: string, exit: string, idle: string, level: number, W: WorldPool): { recipe: Recipe; fixes: string[] } | undefined {
+  const own = W.recipes.filter((r) => r.wline?.set === layout);
+  if (!own.length) return undefined;
+  const fixes: string[] = [];
+  const enters = [...new Set(own.map((r) => r.wline!.enter))];
+  const exits = [...new Set(own.map((r) => r.wline!.exit))];
+  const e = enters.includes(enter) ? enter : (fixes.push('enter'), enters[0]);
+  const x = exits.includes(exit) ? exit : (fixes.push('exit'), exits[0]);
+  if (idle !== own[0].wline!.hold) fixes.push('idle');
+  const recipe = own.filter((r) => r.wline!.enter === e && r.wline!.exit === x).sort((a, b) => Math.abs(a.level - level) - Math.abs(b.level - level))[0] ?? own[0];
+  return { recipe: { ...recipe }, fixes };
+}
 
 /** The lines that must stay one shot because neither can be read alone: the composer's own rule, applied before anything else. */
 export function setTogetherLines(cues: Cue[]) {
@@ -288,23 +312,40 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
         return;
       }
     }
-    const r = stackOf(l.layout, l.enter, l.idle, level, c.calm);
+    const W = c.world;
+    const ws = W ? worldStackOf(l.layout, l.enter, l.exit, l.idle, level, W) : undefined;
+    const r = ws?.recipe ?? stackOf(l.layout, l.enter, l.idle, level, c.calm);
     const whole = (reason: string) => refuse(cue.id, 'layout', `${l.layout}/${l.enter}/${l.idle}`, reason);
     if (!r) return void whole('the kit has no such stack');
     const count_ = glyphs(cue.text);
     if (count_ < (r.min ?? 0) || count_ > (r.max ?? Infinity)) return void whole(`${count_} characters is outside this layout's ${r.min ?? 0}–${r.max ?? '∞'}`);
-    if (SHAPED[r.template] && !SHAPED[r.template](cue.text)) return void whole('the line does not have the shape this layout needs');
-    if (spare < (r.spare ?? 0)) return void whole(`needs ${r.spare}s beyond reading, the line has ${spare.toFixed(2)}s`);
-    if (SPLIT_LAYOUTS.has(r.template) !== (l.cut === 'split')) return void whole(`cut says ${l.cut}, layout says otherwise`);
-    if (c.calm && (!fitsCalm(r) || LOUD_ENTERS.has(r.enter) || LOUD_IDLES.has(r.idle))) return void whole('too loud for a song felt rather than shouted');
-    if (beat?.payoff && !['still', 'drift', 'float', 'tether-settle', 'balance-rest', 'side-light', 'ink-state', 'reflection-rest', 'frame-lights'].includes(r.idle)) return void whole('a payoff line stays up long and still');
-    // a device the words do not name needs the director to quote what gives it its reason
-    if (r.fit && !r.fit.test(cue.text) && !(l.evidence && (cue.text.includes(l.evidence) || c.partWhat(cue.id).includes(l.evidence)))) return void whole('a device with no quoted evidence from the line or its part');
-    if (r.fit && (count('distinct') >= caps.distinct || count(r.id) >= caps.device)) return void whole('this song has spent its distinctive devices');
+    // a world's own set: the set is the choice; what it refuses is a column with Latin, a loud set on a calm song, a split
+    if (ws) {
+      if (r.fit && !r.fit.test(cue.text)) return void whole('a column set takes Han and kana only');
+      if (c.calm && r.wline?.loud) return void whole('a loud set on a song felt rather than shouted');
+      if (l.cut === 'split') refuse(cue.id, 'cut', l.cut, 'a world set holds the line whole');
+      a.hold = true;
+      for (const f of ws.fixes) refuse(cue.id, f, l[f as 'enter' | 'exit' | 'idle'], `not one of ${l.layout}'s moves: its own taken`);
+    } else if (W) {
+      // a shared stack: only the ones this world lets in, up to their share of the lines (the composer's own rule)
+      if (!W.recipes.some((x) => x.id === r.id)) return void whole(`not in ${W.id}'s pool`);
+      if (count('shared') >= Math.floor(i * SHARED_SHARE + 1)) return void whole('shared stacks past their share of this world');
+    }
+    if (!ws) {
+      if (SHAPED[r.template] && !SHAPED[r.template](cue.text)) return void whole('the line does not have the shape this layout needs');
+      if (spare < (r.spare ?? 0)) return void whole(`needs ${r.spare}s beyond reading, the line has ${spare.toFixed(2)}s`);
+      if (SPLIT_LAYOUTS.has(r.template) !== (l.cut === 'split')) return void whole(`cut says ${l.cut}, layout says otherwise`);
+      if (c.calm && (!fitsCalm(r) || LOUD_ENTERS.has(r.enter) || LOUD_IDLES.has(r.idle))) return void whole('too loud for a song felt rather than shouted');
+      if (beat?.payoff && !['still', 'drift', 'float', 'tether-settle', 'balance-rest', 'side-light', 'ink-state', 'reflection-rest', 'frame-lights'].includes(r.idle)) return void whole('a payoff line stays up long and still');
+      // a device the words do not name needs the director to quote what gives it its reason
+      if (r.fit && !r.fit.test(cue.text) && !(l.evidence && (cue.text.includes(l.evidence) || c.partWhat(cue.id).includes(l.evidence)))) return void whole('a device with no quoted evidence from the line or its part');
+      if (r.fit && (count('distinct') >= caps.distinct || count(r.id) >= caps.device)) return void whole('this song has spent its distinctive devices');
+    }
+    if (W && !ws) bump('shared');
     if (CARRIERS.has(r.template) && (count('carrier') >= caps.carrier || i - lastCarrier < CARRIER_APART)) return void whole('papers past their share, or two too close');
     if (SPATIAL.has(r.template) && (count('spatial') >= caps.spatial || count(r.template) >= caps.layout || i - lastSpatial < CARRIER_APART)) return void whole('spatial layouts past their share, or two too close');
     if (isArrival(r.enter) && (count('arrival') >= caps.arrivals || count(r.enter) >= caps.arrival || i - lastArrival < ARRIVAL_APART)) return void whole('whole-line entrances past their share, or two too close');
-    if (r.fit) {
+    if (r.fit && !ws) {
       bump('distinct');
       bump(r.id);
     }
@@ -329,8 +370,11 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
       if (rows) a.rows = rows;
       else refuse(cue.id, 'pieces', l.pieces.join('|'), 'pieces are not the line, or cut a word');
     }
-    // the way out
+    // the way out (a world set's is in its recipe, checked above)
     const exitOk = (() => {
+      if (ws) return false;
+      // a world without paper devices draws no line exits on its shared stacks
+      if (W && !W.devices && !PLAIN_EXITS.includes(l.exit)) return false;
       // a surface held by pieces of its own is cut away from them by a drawn exit
       if (KEEPS_EXIT(r) && !QUIET_EXITS.has(l.exit)) return false;
       if (l.exit in OWN_LAYOUT_EXIT) return OWN_LAYOUT_EXIT[l.exit] === r.template && r.exit === l.exit;
@@ -347,10 +391,10 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
         bump(`exit:${l.exit}`);
         lastExit = l.exit;
       }
-    } else refuse(cue.id, 'exit', l.exit, 'does not fit this layout, its seconds or its share');
+    } else if (!ws) refuse(cue.id, 'exit', l.exit, 'does not fit this layout, its seconds or its share');
     // the handoff from the line before
     if (l.handoff) {
-      const ok = HANDOFF_KINDS.includes(l.handoff as HandoffKind) && l.handoff !== 'palette' && i > 0 && i - lastHand >= HANDOFF_APART && count('hand') < caps.device && !isArrival(r.enter) && !FIXED_LAYOUT.has(r.template) && !FIXED_LAYOUT.has(accepted.get(cues[i - 1].id)?.recipe?.template ?? '');
+      const ok = (!W || W.handoffs) && HANDOFF_KINDS.includes(l.handoff as HandoffKind) && l.handoff !== 'palette' && i > 0 && i - lastHand >= HANDOFF_APART && count('hand') < caps.device && !isArrival(r.enter) && !FIXED_LAYOUT.has(r.template) && !FIXED_LAYOUT.has(accepted.get(cues[i - 1].id)?.recipe?.template ?? '');
       if (ok) {
         a.hand = l.handoff as HandoffKind;
         bump('hand');
@@ -364,6 +408,8 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
     const decorOk = (() => {
       if (!l.decor || l.decor === 'none') return true;
       if (!DECORS.includes(l.decor)) return false;
+      // a world without paper devices draws none of the small marks; the director's own words it still sets
+      if (W && !W.devices && l.decor !== 'fine-note') return false;
       if (l.decor === 'fine-rule' || l.decor === 'fine-title' || l.decor === 'fine-key') return charsPerSec(cue) <= 9;
       if (l.decor === 'fine-note') {
         const why = noteRefusal(l.noteKind, l.note ?? '', cue.text, cues.slice(0, i).map((x) => x.text), (c.song.singers ?? []).map((x) => x.name));
@@ -390,19 +436,28 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
         a.note = l.note.trim();
       }
     } else refuse(cue.id, 'decor', l.decor, 'its condition does not hold on this line');
-    // the line's own camera
+    // the line's own camera (a world set carries its own motion: none on top)
     if (l.lineCam) {
-      if (l.lineCam === 'lean' ? !isArrival(r.enter) : LINE_CAMS.includes(l.lineCam) && !(c.calm && l.lineCam !== 'phrase-track')) a.lineCam = l.lineCam;
+      if (!ws && (l.lineCam === 'lean' ? !isArrival(r.enter) : LINE_CAMS.includes(l.lineCam) && !(c.calm && l.lineCam !== 'phrase-track'))) a.lineCam = l.lineCam;
       else refuse(cue.id, 'lineCam', l.lineCam, 'not on this line');
     }
     if (l.hit) {
-      if (['zoom', 'tile'].includes(l.hit) && !c.calm && level === 2 && !isArrival(r.enter) && (l.hit !== 'tile' || count('tile') < 3)) {
+      if (['zoom', 'tile'].includes(l.hit) && (!W || W.pace.hits.includes(l.hit as 'zoom' | 'tile')) && !c.calm && level === 2 && !isArrival(r.enter) && (l.hit !== 'tile' || count('tile') < 3)) {
         a.hit = l.hit;
         if (l.hit === 'tile') bump('tile');
       } else refuse(cue.id, 'hit', l.hit, 'hits belong to the loud parts of a loud song');
     }
-    // what the line stands on
-    if (l.ground) {
+    // what the line stands on: in a world, only its grounds, and never under a set that stands on its own
+    if (l.ground && W) {
+      // (a world's pool is small by design: a ground has no share of the song here, only the line before to differ from)
+      const on = c.calm ? W.quiet : W.grounds[Math.min(2, level) as 0 | 1 | 2];
+      const ok = !r.wline?.ground && on.includes(l.ground) && l.ground !== lastGround;
+      if (ok) {
+        a.ground = l.ground;
+        bump(`ground:${l.ground}`);
+        lastGround = l.ground;
+      } else refuse(cue.id, 'ground', l.ground, `not one of ${W.id}'s grounds at this level, the same as the line before, or under a set with its own`);
+    } else if (l.ground) {
       const own = CARRIERS.has(r.template) || SPATIAL.has(r.template) || r.template === 'contrast-split';
       const on = own ? QUIET_BACKGROUNDS[c.calm ? 0 : (Math.min(2, level) as 0 | 1 | 2)] : [...BACKGROUNDS[0], ...BACKGROUNDS[1], ...BACKGROUNDS[2], ...c.screenGrounds];
       const device = DEVICE_GROUNDS.includes(l.ground) && !own && count(l.ground) < 2 && (l.ground !== 'fold-mark' || SYMBOLS.includes(d.icon as SymbolName));
@@ -497,7 +552,9 @@ interface PlanCut { fx: string; [k: string]: unknown }
  * The composer's plan under the director's force, then each accepted choice written over it and the paid design laid
  * back: world, parts, pace, finish. A line the director lost keeps exactly what the composer gave it.
  */
-export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, paid: PaidPlan, paidShots: { id: string; start: number; end: number }[], paidParts: { cue: string; what: string; energy: number }[], feltBeats: number[], rejected = new Set<string>()) {
+export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, paid: PaidPlan, paidShots: { id: string; start: number; end: number }[], paidParts: { cue: string; what: string; energy: number }[], feltBeats: number[], rejected = new Set<string>(), pw?: PlanWorld) {
+  // on a world (paid-world.mts) the composer draws from its closed pool; the paid design keeps only the concept and parts
+  const W = c.world;
   const checked = d ? checkDirection(d, c) : { accepted: new Map<string, Accepted>(), fallbacks: [] as Fallback[] };
   const { accepted, fallbacks } = checked;
   for (const id of rejected) if (accepted.delete(id)) fallbacks.push({ cue: id, field: 'line', said: '', reason: 'the render fell short on this line (size floor or reading): composer choice' });
@@ -514,7 +571,7 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
     if (a.lineCam && a.lineCam !== 'lean') rigs.set(id, a.lineCam as 'phrase-track' | 'arc' | 'ground');
   }
   const meaning = meaningFrom(d, song, paidParts, c.calm);
-  const { plan, shots } = composePlan(song, meaning, c.calm, { director: true, custom, holds, hands, pairs, rigs });
+  const { plan, shots } = composePlan(song, meaning, c.calm, { director: true, custom, holds, hands, pairs, rigs, world: W });
   // a pair the composer's own rules would not make (a handoff beside it, say) is both lines' fallback
   const hasPair = (id: string) => plan.shots.some((p) => (p.lines as { cue: string }[]).length > 1 && (p.lines as { cue: string }[]).some((l) => l.cue === id));
   for (const [id, a] of accepted) if (a.join && !hasPair(id)) fallbacks.push({ cue: id, field: 'joinNext', said: a.join, reason: 'the composer would not set these two together' });
@@ -527,12 +584,13 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
   const lastUsed = { ground: '' };
   for (const ps of planned) {
     const s = shots.find((x) => x.id === ps.shot)!;
-    ps.backdrop = backAt(s.start + 0.02);
+    // a world has its own grounds: no backdrop of the old design, no paid cut in the unsung stretches
+    ps.backdrop = W ? '' : backAt(s.start + 0.02);
     // a dark cut swaps the paper it paints; laid on a backdrop it paints none, and the line would take the light ink on
     // a light picture (pink on 雙截棍's yellow). Only a lit edge needs the dark, and it brings its own
     if (ps.backdrop && !ps.lines.some((l) => l['inkState'] === 'edge')) for (const x of ps.cuts) x['dark'] = false;
     if (!ps.lines.length) {
-      const own = unsungCuts(clock, s, feltBeats);
+      const own = W ? [] : unsungCuts(clock, s, feltBeats);
       if (own.length) ps.cuts = own as unknown as PlanCut[];
       continue;
     }
@@ -569,7 +627,7 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
       const lost = fallbacks.filter((f) => f.cue === l.cue);
       // a line the composer laid out keeps what the director said only as what it asked for: the reasons do not describe it
       const own = !!a?.recipe;
-      decisions.push({ cue: l.cue, text: cue.text, by: own ? 'director' : 'composer', cut: ps.cuts.length > 1 || SPLIT_LAYOUTS.has(ps.lyric.template) ? 'split' : 'hold', layout: ps.lyric.template, enter: l['enter'], idle: l['idle'], exit: l['exit'], decor: a?.decor ?? '', ground: ps.cuts[0]?.fx, cuts: ps.cuts.length, ...(a?.rows ? { rows: a.rows } : {}), why: own ? said?.why : undefined, asked: own ? undefined : said && { layout: said.layout, enter: said.enter, idle: said.idle, why: said.why }, evidence: said?.evidence, fallback: lost.map((f) => `${f.field}: ${f.reason}`) });
+      decisions.push({ cue: l.cue, text: cue.text, by: own ? 'director' : 'composer', cut: (!W && ps.cuts.length > 1) || SPLIT_LAYOUTS.has(ps.lyric.template) ? 'split' : 'hold', layout: ps.lyric.template, ...((l['world'] as { set?: string } | undefined)?.set ? { set: (l['world'] as { set: string }).set } : {}), enter: l['enter'], idle: l['idle'], exit: l['exit'], decor: a?.decor ?? '', ground: ps.cuts[0]?.fx, cuts: ps.cuts.length, ...(a?.rows ? { rows: a.rows } : {}), why: own ? said?.why : undefined, asked: own ? undefined : said && { layout: said.layout, enter: said.enter, idle: said.idle, why: said.why }, evidence: said?.evidence, fallback: lost.map((f) => `${f.field}: ${f.reason}`) });
       l['direct'] = { why: own ? said?.why : undefined, fallback: lost.length ? lost.map((f) => f.field) : undefined };
     }
   }
@@ -595,12 +653,14 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
       parts: plain,
       backbone: paid.backbone ?? plan.backbone,
       thread: paid.thread ?? plan.thread,
-      format: paid.format ?? plan.format,
-      devices: paid.devices ?? plan.devices,
-      flowRule: paid.flowRule ?? plan.flowRule,
-      styles: paid.styles ?? plan.styles,
-      finish: paid.finish ?? '',
-      print: paid.print ?? plan.print,
+      // a world's pace, finish and print are its own (the free tier's): the old design's only off a world
+      format: W ? plan.format : paid.format ?? plan.format,
+      devices: W ? plan.devices : paid.devices ?? plan.devices,
+      flowRule: W ? plan.flowRule : paid.flowRule ?? plan.flowRule,
+      styles: W ? plan.styles : paid.styles ?? plan.styles,
+      finish: W ? '' : paid.finish ?? '',
+      print: W ? plan.print : paid.print ?? plan.print,
+      ...(pw ? { world: pw } : {}),
       // the corner's chapter-and-line counter reads as an instrument readout over a line: the small tier takes its place
       document: false,
       fresh: (d?.techniques ?? []).map((t) => ({ technique: t.id, cue: t.where, why: t.why })),
@@ -649,7 +709,7 @@ const CONDITIONS: [string, string, string][] = [
 const LINE_EXIT_HELP: Record<string, string> = { 'band-out': '整帶抽走（決斷、切斷）', 'slat-close': '百葉收攏（壓抑、藏起）', 'line-fold': '壓成一筆線（結束、句點）', 'tile-scatter': '紙片切開散掉（解散、再見；只給紙面）', 'echo-travel': '單色回聲滑走', 'radial-leave': '從一點推開（爆發）', 'glyph-shed': '字掉碎屑（崩塌、失去）', 'wave-dissolve': '波紋蒸散（B40：消逝、疲憊、夢）', 'pore-out': '從毛孔褪去（時間磨損）', 'focus-out': '失焦（忘記、遠去）', 'rail-leave': '沿軌道離開（出發、離站）', 'gravity-pass': '整句往下掉（墜落）', 'node-fold': '收成一個節點（未完待續）' };
 
 /** The director's call: everything it may choose, with the conditions, then the song. */
-export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; languageWhat: string; concept: string; backbone: string; change: string; palette: string; parts: { id: string; cue: string; start: number; what: string; energy: number }[]; lessons: string; props?: boolean; moments?: { overused: string[] } }) {
+export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; languageWhat: string; concept: string; backbone: string; change: string; palette: string; parts: { id: string; cue: string; start: number; what: string; energy: number }[]; lessons: string; props?: boolean; moments?: { overused: string[] }; world?: { w: StyleWorld; pool: WorldPool } }) {
   const beats = new Map(lineBeats(song.cues, song.duration).map((b) => [b.id, b]));
   const together = setTogetherLines(song.cues);
   const n = song.cues.length;
@@ -669,7 +729,7 @@ export function directorPrompt(song: SongIn, c: Ctx, facts: { language: string; 
 先讀完整首，再決定每一句。沒有理由的句子就用最素的：一句好好排、好好停住，比塞滿招式更貴。招式清單是選項，不是待辦；每一項都有適用條件，不符合就不要用。
 
 這首歌已經定案的設計（照著走，不要改）：
-- 語言：${facts.language}（${facts.languageWhat}）
+- ${facts.world ? `風格世界：${facts.world.w.name}（${facts.world.w.id}）` : `語言：${facts.language}（${facts.languageWhat}）`}
 - 配色：${facts.palette}
 - 概念：${facts.concept}
 - 骨幹：${facts.backbone}
@@ -686,21 +746,21 @@ ${facts.parts.map((p) => `- ${p.id}（從 ${p.cue}，${p.start.toFixed(1)}s，�
 【主從】
 字是畫面的主體，不是字幕。每一句都要有大小主從：hold 的句子優先用 punch（重點詞放到滿版，其他字小），emphasis 就是那個大字，所以要選得準、不可太長（2 到 8 字）；只有兩段真的等重才用 stack 或 couplet。連續三句都是中等大小的 stack 就是失敗，即使是快歌、長句也一樣：快歌的長句更要抓一個詞放大，其他字退成小字。
 
-【版面與手法】layout、enter、idle 要是下面其中一組，或「素版」。
+${facts.world ? worldKitPrompt(facts.world.w, facts.world.pool, c.calm, n) : `【版面與手法】layout、enter、idle 要是下面其中一組，或「素版」。
 素版：layout 選 ${[...OPEN_TEMPLATES].join('、')}；enter 選 ${[...OPEN_ENTERS].map((e) => `${e}（${ENTER_HELP[e] ?? e}）`).join('、')}；idle 選 ${[...OPEN_IDLES].map((e) => `${e}（${IDLE_HELP[e] ?? e}）`).join('、')}。素版不需要理由以外的條件，也是大部分句子該用的。build-cut、beat-cut 自己決定每段怎麼落下：enter 一律填 cut、idle 填 still。
 有條件的手法（格式：layout + enter + idle｜畫面｜適用條件）：
 ${CONDITIONS.map(([k, v, w]) => `- ${k}｜${v}｜${w}`).join('\n')}
 - 字數限制（超過會退回規則版）：lyric-carrier 14 字內、dot-display 10 字內、balance-line 18 字內、punch 的特殊進場（edge-light、soft-float、outline-seat）12–14 字內。括號裡的應援（例如「(かい!)」）算在字數內但不算 pieces 的一段，pieces 不要寫它。
 - 用有條件的手法時 evidence 必須填這句歌詞或段落說明裡原樣出現的幾個字，作為它成立的根據；比喻也算，但要真的是這個意思。
-- 份量上限（程式會擋，超過的句子退回規則版）：這首 ${n} 句，紙面類 ${Math.max(2, Math.ceil(n * CARRIER_SHARE))} 句且至少隔 ${CARRIER_APART} 句；空間版面（editorial、corner、cross、grid、balance、route）${Math.max(1, Math.ceil(n * SPATIAL_SHARE))} 句，每種 ${Math.max(1, Math.ceil(n * LAYOUT_SHARE))} 句；整句進場類（curve-arrive、panel-open、phrase-mark、wave-reveal、corner-land、outline-seat、slat-face、grain-resolve、edge-light、scale-steps）整首 ${Math.max(2, Math.ceil(n * ARRIVALS_SHARE))} 句，每種 ${Math.max(1, Math.ceil(n * ARRIVAL_SHARE))} 句且至少隔 ${ARRIVAL_APART} 句；所有有條件的手法合計 ${Math.max(3, Math.ceil(n * DISTINCT_SHARE))} 句。
-- 「餘」是這句讀完之後還剩的秒數，所有動作的時間都從這裡出；手法要 0.5–1.3 秒，餘不到就用素版。
-- 標「併句」的句子唱得太快不能分開讀，程式會把它和相鄰句放同一個畫面，版面你不用決定：layout 填 stack、cut 填 hold、enter 填 cut、其他照填，理由寫短。
+- 份量上限（程式會擋，超過的句子退回規則版）：這首 ${n} 句，紙面類 ${Math.max(2, Math.ceil(n * CARRIER_SHARE))} 句且至少隔 ${CARRIER_APART} 句；空間版面（editorial、corner、cross、grid、balance、route）${Math.max(1, Math.ceil(n * SPATIAL_SHARE))} 句，每種 ${Math.max(1, Math.ceil(n * LAYOUT_SHARE))} 句；整句進場類（curve-arrive、panel-open、phrase-mark、wave-reveal、corner-land、outline-seat、slat-face、grain-resolve、edge-light、scale-steps）整首 ${Math.max(2, Math.ceil(n * ARRIVALS_SHARE))} 句，每種 ${Math.max(1, Math.ceil(n * ARRIVAL_SHARE))} 句且至少隔 ${ARRIVAL_APART} 句；所有有條件的手法合計 ${Math.max(3, Math.ceil(n * DISTINCT_SHARE))} 句。`}
+- 「餘」是這句讀完之後還剩的秒數，所有動作的時間都從這裡出；手法要 0.5–1.3 秒，餘不到就用${facts.world ? '最素的版面' : '素版'}。
+- 標「併句」的句子唱得太快不能分開讀，程式會把它和相鄰句放同一個畫面，版面你不用決定：layout 填 ${facts.world ? facts.world.pool.pairSet : 'stack'}、cut 填 hold、enter 填 cut、其他照填，理由寫短。
 - 標「同 cXXX」的句子是重複句：副歌回來通常用同一組，sameAs 填那句 id（其他欄位仍要填，但會被那句覆蓋；why 寫這次為什麼一樣）。要讓第二次不一樣，就 sameAs 留空，並在 why 寫這次哪裡變了。
-${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大部分句子 hold。\n' : ''}${facts.props ? `- 這一版有插圖：畫好的道具和人物會站在字的另一側。每段要有幾句把字放到左或右（side 填 left 或 right，layout 用能靠邊的：${SIDE_TEMPLATES.join('、')}），讓道具有地方站；整首大約三分之一的句子。重點句、落點仍可置中。\n` : ''}
-【退場 exit】
+${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大部分句子 hold。\n' : ''}${facts.props ? (facts.world ? '- 這一版有插圖：畫好的道具和人物會站在字留出的空間（世界版面的字置中時站在字的上方或下方，共用版面可以靠邊：side 填 left 或 right）。重點句、落點用大的版面；其他句子挑字少、位置偏一邊的版面，讓道具有地方站。\n' : `- 這一版有插圖：畫好的道具和人物會站在字的另一側。每段要有幾句把字放到左或右（side 填 left 或 right，layout 用能靠邊的：${SIDE_TEMPLATES.join('、')}），讓道具有地方站；整首大約三分之一的句子。重點句、落點仍可置中。\n`) : ''}
+${facts.world ? '' : `【退場 exit】
 一般：${PLAIN_EXITS.filter((e) => !(c.calm && LOUD_EXITS.has(e))).map((e) => `${e}（${EXIT_HELP[e] ?? '瞬間壓扁收掉'}）`).join('、')}
 有意思的：${LINE_EXIT_KINDS.filter((k) => !(k in OWN_LAYOUT_EXIT) && !(c.calm && NOT_CALM_EXIT.has(k))).map((k) => `${k} ${LINE_EXIT_SEC[k]}s（${LINE_EXIT_HELP[k]}）`).join('、')}（只給 stair、punch、quote、stack、vertical、couplet、editorial、corner-anchor、build-cut；餘要夠；每種最多 ${Math.max(1, Math.ceil(n * EXIT_SHARE))} 句，同一種不連用）。
-沒有特別意思就用 fade 或 rise，不要為了變化換退場。
+`}沒有特別意思就用 fade 或 rise，不要為了變化換退場。
 
 【裝飾 decor，一句一個或 none】
 大部分 none。裝飾要有理由，放著沒有意義的東西不准出現。
@@ -717,7 +777,7 @@ ${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大
 - lineCam：大多數空字串。lean 歪斜視角慢慢落定（不安、疏離、猶豫，B45）；phrase-track 鏡頭一段段找到字（尋找、慢慢靠近）；arc、ground 句子帶著鏡頭走（旅程、接近、回望）。
 - hit：段落第一句或最重的落拍才用 zoom（瞬間衝擊）或 tile（畫面碎格，整首最多 3 次），安靜處不用。
 - emphasis：這句最該被看見的一段，原樣取自歌詞、不切開詞；method 怎麼標（color、mark、weight、scale、box、shake）。紙面類程式會固定用 color。
-- ground：這句站在什麼上，整首世界和背景已定，這只是字後面的小事件。空字串交給程式。紙面材質：${grounds}。動態：${moves}（這些是真的畫出那個東西，雨就是雨、流星就是流星，歌詞或段落真的有才用）。特殊：horizon-light（角落落日：黃昏、海、告別）、surface-crack（裂紋：破碎、突破）、fold-mark（落款：承諾，要有 icon）。紙面類版面後面只能用安靜的材質。同一個不連用。
+${facts.world ? '- ground：只能選上面風格世界列的，空字串交給程式。' : `- ground：這句站在什麼上，整首世界和背景已定，這只是字後面的小事件。空字串交給程式。紙面材質：${grounds}。動態：${moves}（這些是真的畫出那個東西，雨就是雨、流星就是流星，歌詞或段落真的有才用）。特殊：horizon-light（角落落日：黃昏、海、告別）、surface-crack（裂紋：破碎、突破）、fold-mark（落款：承諾，要有 icon）。紙面類版面後面只能用安靜的材質。同一個不連用。`}
 - tune：有些東西的數量可以照歌詞：${TUNABLE.join('、')}。歌詞真的說了多少或暗示多或少才填，例如「三顆流星」meteor.n=3、滿天星 stars.n 取高。沒有就空陣列。要 ground 真的用到那一招才有效果。
 ${facts.moments ? momentsPrompt(facts.moments.overused) : ''}- techniques：這首歌最重要的三到六個手法或決定（可以是「整段 hold」這種判斷，不只是招式 id），用在哪、為什麼。
 - icon：這首歌唯一的圖示，只有整首反覆出現同一個東西才選（${SYMBOLS.join('、')}），否則空字串。

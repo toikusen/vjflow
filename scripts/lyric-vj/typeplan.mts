@@ -35,6 +35,7 @@ import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import { cutTimes, holdGap, landedEnd, stripUnsungSprites, unsungRule } from './interludes.mts';
 import { Assignment, bindSprites } from './bind-sprites.mts';
 import { lessonsBlock, readLessons } from './lesson-rules.mts';
+import { type PlanWorld, worldTreatment } from './paid-world.mts';
 
 export { stripUnsungSprites };
 
@@ -293,7 +294,7 @@ const SCHEMA = {
 };
 type Line = { rows?: number[]; relay?: boolean; oval?: boolean; breath?: number; icon?: SymbolName; fine?: FineTier; budget?: boolean; textCam?: TextCam; hit?: ScreenHit; inkState?: InkState; linger?: number; handoff?: Handoff; cue: string; enter: string; exit: string; idle: string; trail: boolean; emphasis: string; method: string; symbol: string; emphasis2: string; method2: string; zh: string };
 type Cut = { tune?: Record<string, number>; mark?: string; yields?: boolean; rig?: CameraRig; transitionSec?: number; transitionDir?: number; beat: number; fx: string; flow?: string; label?: string; words: string[]; sprite: string; size: number; heart: boolean; dark: boolean; cam: string; flash: string; transition: string };
-type Plan = { signature?: SignatureMoment[]; vision?: { kinds: string[]; change: string; why: string }; parts?: { from: string; shift: string; what: string; warmth?: number; order?: number; keep?: { style: string; items: { sprite: string; word: string }[] }; backdrops?: string[] }[]; meets?: { cue: string; why: string }[]; previews?: { shot: string; note: string }[]; clip?: { from: string; to: string; why: string }; fresh?: { technique: string; cue: string; why: string }[]; backbone: string; thread?: { what: string; mark?: string; sprite?: string; why: string }; document: boolean; print: string; format?: { pace: string; ground: string; why: string }; devices?: { revise: string; document: string; why: string }; flowRule?: string; styles?: { fx: string; style: number; why: string }[]; finish: string; shots: { shot: string; chapter: string; level?: number; backdrop?: string; lyric: { template: string; side: string }; lines: Line[]; cuts: Cut[] }[] };
+type Plan = { /** The style world the plan was composed in (paid-world.mts): its treatment is built the free tier's way. */ world?: PlanWorld; signature?: SignatureMoment[]; vision?: { kinds: string[]; change: string; why: string }; parts?: { from: string; shift: string; what: string; warmth?: number; order?: number; keep?: { style: string; items: { sprite: string; word: string }[] }; backdrops?: string[] }[]; meets?: { cue: string; why: string }[]; previews?: { shot: string; note: string }[]; clip?: { from: string; to: string; why: string }; fresh?: { technique: string; cue: string; why: string }[]; backbone: string; thread?: { what: string; mark?: string; sprite?: string; why: string }; document: boolean; print: string; format?: { pace: string; ground: string; why: string }; devices?: { revise: string; document: string; why: string }; flowRule?: string; styles?: { fx: string; style: number; why: string }[]; finish: string; shots: { shot: string; chapter: string; level?: number; backdrop?: string; lyric: { template: string; side: string }; lines: Line[]; cuts: Cut[] }[] };
 
 /** The capped techniques, for the prompt: id and how often a song may use it. */
 function rareList() {
@@ -453,6 +454,18 @@ if (!a.plan && !a.bind && !a.replan) {
   writeFileSync(HISTORY, JSON.stringify([...history.filter((h) => h.song !== song.title), { song: song.title, at: new Date().toISOString(), fx, motifs }], null, 1));
 }
 
+// a plan on a style world: its treatment is the free tier's (composerTreatment on the world's closed pool), with the
+// plan's props and signature moments on it; nothing of the old design's backdrops, moves or finish comes in
+if (plan.world) {
+  const trw = worldTreatment(JSON.parse(readFileSync(a.song!, 'utf8')), plan as never, t, plan.world);
+  const planned = new Set(plan.shots.filter((p) => p.cuts?.length).map((p) => p.shot));
+  const missingW = shots.filter((s) => !planned.has(s.id)).map((s) => s.id);
+  writeFileSync(join(out, 'treatment.json'), JSON.stringify(plan.signature ? withMoments(trw, plan.signature) : trw));
+  writeFileSync(join(out, 'plan-check.json'), JSON.stringify({ missing: missingW, unknownShots: plan.shots.filter((p) => !shots.some((s) => s.id === p.shot)).map((p) => p.shot), unknownCues: [] }, null, 1));
+  writeFileSync(join(out, 'assets.json'), a.sprites ? readFileSync(join(a.sprites, 'assets.json')) : '{}');
+  console.log(`typeplan: world ${plan.world.id} (scheme ${plan.world.scheme}, ${plan.world.font}), ${plan.shots.length}/${shots.length} shots, ${trw.graphics!.sections.length} cuts, ${plan.shots.flatMap((p) => p.cuts).filter((c) => c.sprite).length} props${missingW.length ? `, missing ${missingW.join(' ')}` : ''}, $${usd.toFixed(3)} (in ${usage.input_tokens}, out ${usage.output_tokens})`);
+  process.exit(0);
+}
 quietType = calm && !!plan.vision?.kinds?.includes('mood');
 if (plan.flowRule) console.log(`flow: ${plan.flowRule}`);
 for (const x of plan.styles ?? []) console.log(`style: ${x.fx} ${x.style} ${x.why}`);

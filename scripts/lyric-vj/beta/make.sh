@@ -38,11 +38,16 @@ plan() { # <out> [--sprites dir]; on the line director's base when $pb is set
 # reasons; VJ_MOMENTS=1 with it asks for signature moments too (kept on line/signature.json and the plan).
 # reasons, read off the paid plan in noimg/ (planned first when a run has none). Its reply is kept in line/direction.json,
 # so a retried job spends nothing again; line/final is that plan built into a treatment.
+# VJ_PAID_WORLD=1 with it draws the song in one of the free tier's style worlds (paid-world.mts): the buyer's style
+# (inputs.json, a language id) names the world when one has it, else the director picks one; the plan carries the
+# world, and typeplan --plan / --bind build its treatment the free way
+paid_world() { python3 -c "import json,os,sys;f=sys.argv[1];v=json.load(open(f)).get('style') if os.path.exists(f) else '';print(v if isinstance(v,str) and v else 'auto')" "$w/inputs.json"; }
 linedirect() {
   plan "$w/noimg"
   echo '##PHASE 導演逐句編排'
   mkdir -p "$w/line"
-  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} ${props:+--props} ${VJ_MOMENTS:+--moments} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
+  local world=; [ "${VJ_PAID_WORLD:-}" = 1 ] && world=$(paid_world)
+  [ -f "$w/line/plan.json" ] || { npx tsx scripts/lyric-vj/linedirect.mts --song "$S" --base "$w/base/treatment.json" --paid "$w/noimg" --out "$w/line" --costs "$w/line/costs.jsonl" ${VJ_LESSONS:+--lessons "$VJ_LESSONS"} ${props:+--props} ${VJ_MOMENTS:+--moments} ${world:+--world "$world"} > "$w/line.log" 2>&1; cost_log "$w/line.log" linedirect; }
   pb=$w/line/base.json
 }
 

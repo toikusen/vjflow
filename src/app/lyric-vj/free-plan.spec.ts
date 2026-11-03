@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { freeJob, isCalm, validMeaning } from './free-plan';
+import { composerTreatment, FREE_BASE, freeJob, isCalm, validMeaning } from './free-plan';
+import { FREE_STYLES } from './free-styles';
+import { composerBase } from './lineplan-core';
 import type { SongTimeline } from './timeline';
 
 const lines = ['我走過那條路', '風吹過你的臉', '天亮了我還在等', '夜裡的光慢慢熄滅', '我們說好不回頭', '你的名字還在這裡'];
@@ -28,5 +30,30 @@ describe('freeJob', () => {
     expect(v.parts[0].tension).toBe(1);
     expect(v.keys).toEqual([]);
     expect(validMeaning({ ...m, palette: 'none' }, cues)).toBeUndefined();
+  });
+});
+
+describe('composerTreatment with props (the paid picture tier on a world)', () => {
+  const style = FREE_STYLES.find((x) => x.id === 'silk')!;
+  const made = () => {
+    const { plan, treatment } = freeJob(song, { style });
+    const shots = treatment.shots.map((s) => ({ id: s.id, start: s.start, end: s.end }));
+    const base = composerBase(FREE_BASE(), plan, shots, { ink: '#111', paper: '#eee', accent: '#c00' });
+    return { plan: plan as unknown as { shots: { lines: unknown[]; cuts: Record<string, unknown>[] }[] }, base };
+  };
+  const layersOf = (tr: ReturnType<typeof composerTreatment>) => tr.graphics!.sections.flatMap((s) => s.layers as { sprite?: string; size?: number; side?: string }[]);
+  it('a prop bound into a cut reaches its layer, smaller and to a side under a centred line', () => {
+    const { plan, base } = made();
+    const sung = plan.shots.find((s) => s.lines.length)!;
+    sung.cuts[0]['sprite'] = 'lamp';
+    sung.cuts[0]['size'] = 1.2;
+    const prop = layersOf(composerTreatment(song, plan as never, base as never, { ink: '#111', paper: '#eee', accent: '#c00', heart: '#c0c' }, style.world)).find((l) => l.sprite === 'lamp')!;
+    expect(prop).toBeTruthy();
+    expect(prop.size).toBeLessThanOrEqual(0.75);
+    expect(prop.side).not.toBe('center');
+  });
+  it('a free plan has no props: nothing changes', () => {
+    const { plan, base } = made();
+    expect(layersOf(composerTreatment(song, plan as never, base as never, { ink: '#111', paper: '#eee', accent: '#c00', heart: '#c0c' }, style.world)).some((l) => l.sprite)).toBe(false);
   });
 });

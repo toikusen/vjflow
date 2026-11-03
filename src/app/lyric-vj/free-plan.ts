@@ -26,7 +26,7 @@ const EMPHATIC = new Set(['rays', 'bubble', 'stamp']);
 /** Moves whose parts are the cut's words: a composer cut has none (typeplan.mts WORDED). */
 const WORDED: Record<string, number> = { hang: 1, bubble: 1, tiles: 1, flap: 1, chat: 1, strike: 1, morse: 1, beforeafter: 1, measure: 1, loop: 3, layers: 3 };
 
-interface PlanCut { piece?: string; at?: number; scheme?: number; level?: number; beat: number; fx: string; heart?: boolean; dark: boolean; yields?: boolean; mark?: string; tune?: Record<string, number>; cam?: string; rig?: unknown; flash?: string; transition?: string; transitionSec?: number; transitionDir?: number; size?: number }
+interface PlanCut { piece?: string; at?: number; scheme?: number; level?: number; beat: number; fx: string; heart?: boolean; dark: boolean; yields?: boolean; mark?: string; tune?: Record<string, number>; cam?: string; rig?: unknown; flash?: string; transition?: string; transitionSec?: number; transitionDir?: number; size?: number; /** A drawn prop standing in the cut (the paid picture tier binds them; a free plan has none). */ sprite?: string }
 interface PlanLine { cue: string; enter: string; exit: string; idle: string; trail?: boolean; emphasis: string; method: string; emphasis2?: string; method2?: string; [k: string]: unknown }
 interface PlanShot { shot: string; lyric: { template: string; side: string; params?: object }; lines: PlanLine[]; cuts: PlanCut[] }
 interface Plan { vision?: { kinds?: string[] }; parts?: { from: string }[]; format?: { pace?: string }; finish?: string; shots: PlanShot[] }
@@ -105,6 +105,8 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   const sections: { start: number; layers: (KineticLayer | UiLayer)[]; transition?: { kind: string; dur?: number; dir?: number } }[] = [];
   const transitions = new Map<string, number>();
   let hold: Hold | undefined;
+  // the prop of the cut before and where it stood: the same one across the frame on the next cut reads as a jump
+  let shown = { sprite: '', side: '' };
   for (const s of shots) {
     const ps = plan.shots.find((x) => x.shot === s.id);
     if (!ps?.cuts.length) continue;
@@ -123,9 +125,13 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       const runsTo = landedEnd(times, i, gap, s.end);
       if (0 < (WORDED[fx] ?? 0)) fx = 'motes';
       const held2 = calm && hold?.part === partKey ? hold : undefined;
-      const side = DIAGRAM_FX.has(fx) && away === 'center' ? (sections.length % 2 ? 'left' : 'right') : away;
+      // a diagram, or a prop, under a centred lyric would sit on it: it takes a side, alternating, a figure smaller
+      const figure = !!c.sprite && !DIAGRAM_FX.has(fx);
+      const side = (DIAGRAM_FX.has(fx) || figure) && away === 'center' ? (sections.length % 2 ? 'left' : 'right') : away;
       const pal = world ? world.palette[c.scheme ?? 0] : undefined;
-      const layer: KineticLayer = { kind: 'kinetic', fx: fx as KineticLayer['fx'], words: [], ink: pal?.ink ?? ink, paper: pal?.ground ?? paper, accent: pal?.accent ?? (c.heart ? heart : accent), seed: sections.length + 1, side: side as KineticLayer['side'], size: Math.min(1.7, Math.max(0.4, c.size || 0.85)), flip: side === 'left' };
+      const layer: KineticLayer = { kind: 'kinetic', fx: fx as KineticLayer['fx'], words: [], ink: pal?.ink ?? ink, paper: pal?.ground ?? paper, accent: pal?.accent ?? (c.heart ? heart : accent), seed: sections.length + 1, side: side as KineticLayer['side'], size: Math.min(figure && away === 'center' ? 0.75 : 1.7, Math.max(0.4, c.size || 0.85)), flip: side === 'left' };
+      if (figure && (shown.sprite !== c.sprite || shown.side === side)) layer.sprite = c.sprite;
+      shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;
       layer.yields = true;
       if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })), title: titleOf } : {}) };

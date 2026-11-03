@@ -40,9 +40,12 @@ export class SongFlowComponent implements AfterViewInit {
 
   ngAfterViewInit() {
     const pick = loadPick(this.song().id);
-    if (!pick) return;
-    this.stage().styleId.set(pick.styleId);
-    this.stage().seed.set(pick.seed);
+    if (pick) {
+      this.stage().styleId.set(pick.styleId);
+      this.stage().seed.set(pick.seed);
+    }
+    // the free video is built on arrival (in the browser, a second or so) and waits for 播放; 立即生成 stays as the retry
+    void this.stage().generate();
   }
 
   protected readonly source = async (): Promise<StageSong> => {

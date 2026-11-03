@@ -94,9 +94,9 @@ function tunnel(e: WorldEnv, opt: { x?: number; rise?: number; count?: number } 
     for (let d = n - 1; d >= 0; d--) {
       const near = 1 - d / (N - 1);
       const px = sway * (20 + 100 * near) + (opt.x ?? 0) * (d % 2 ? 1 : -1) * (0.6 + near);
-      // the sheets stand at different heights, the nearest lowest, never into the words; they keep to the bottom third
+      // the sheets stand at different heights, the nearest lowest, never into the words; they keep to the bottom fifth
       // and the hangings to the top edge, so the lit opening holds the middle of the frame
-      const top = Math.max(low, H * (0.66 + 0.06 * (d === N - 1 ? 0 : N - 1 - d)) ) + (opt.rise ?? 0) * (1 + d * 0.2);
+      const top = Math.max(low, H * (0.8 + 0.035 * (d === N - 1 ? 0 : N - 1 - d)) ) + (opt.rise ?? 0) * (1 + d * 0.2);
       const k = ease((e.age - d * 0.04) / 0.5, 3);
       const y = top + (1 - k) * 60 + 3 * Math.sin(e.now * 0.8 + d);
       c.drawImage(sheet(e, d), -230 + px, y - 100);

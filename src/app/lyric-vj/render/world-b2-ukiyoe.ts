@@ -163,23 +163,35 @@ const rainTile = (e: WorldEnv, tone: string) => kept(`uk-rain|${tone}`, 900, 900
   }
   c.globalAlpha = 1;
 });
+/**
+ * How far a band of land or sea drops so its highest point stands clear below a row of words: the mist under the words
+ * never slices a peak or a crest into a sliver. `top` is the highest the band reaches when it is not moved.
+ */
+const dropFor = (e: WorldEnv, top: number) => {
+  const r = e.rect;
+  if (!r || e.weight <= 0 || r.x1 - r.x0 < W * 0.4) return 0;
+  return Math.min(H * 0.3, Math.max(0, r.y1 + H * 0.12 - top)) * Math.min(1, e.weight * 4);
+};
 /** The foreground lost in mist, as in a Hiroshige print: the land is a band across the middle, the bottom of the sheet bare paper. */
-const lowMist = (e: WorldEnv) => {
+const lowMist = (e: WorldEnv, drop = 0) => {
   const c = e.ctx;
-  const g = c.createLinearGradient(0, H * 0.68, 0, H * 0.8);
+  // the mist rises with the land only half as far: a dropped band keeps its foot in the mist, the bottom of the sheet stays paper
+  const y = Math.min(H * 0.74, H * 0.68 + drop * 0.5);
+  const g = c.createLinearGradient(0, y, 0, y + H * 0.12);
   g.addColorStop(0, `${e.paper}00`);
   g.addColorStop(1, e.paper);
   c.fillStyle = g;
-  c.fillRect(-20, H * 0.68, W + 40, H * 0.34);
+  c.fillRect(-20, y, W + 40, H - y + 20);
 };
 const hills = (e: WorldEnv) => {
   const c = e.ctx;
   const pan = -e.now * (10 + 16 * e.level);
-  tiled(c, range(e, 0.56, 300, mixHex(e.slots.faint, e.slots.ink2, 0.3), e.seed % 3), pan * 0.4);
-  drift(e, e.paper, H * 0.52, 58, 5, e.seed, 0.92);
-  tiled(c, range(e, 0.68, 260, mixHex(e.slots.ink2, e.paper, 0.1), (e.seed % 3) + 5), pan * 0.9);
-  lowMist(e);
-  drift(e, mixHex(e.paper, e.slots.faint, 0.3), H * 0.74, 44, 9, e.seed + 2, 0.9);
+  const d = dropFor(e, H * 0.56 - 330);
+  tiled(c, range(e, 0.56, 300, mixHex(e.slots.faint, e.slots.ink2, 0.3), e.seed % 3), pan * 0.4, d);
+  drift(e, e.paper, H * 0.52 + d, 58, 5, e.seed, 0.92);
+  tiled(c, range(e, 0.68, 260, mixHex(e.slots.ink2, e.paper, 0.1), (e.seed % 3) + 5), pan * 0.9, d);
+  lowMist(e, d);
+  drift(e, mixHex(e.paper, e.slots.faint, 0.3), H * 0.74 + d, 44, 9, e.seed + 2, 0.9);
 };
 const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/far-range': (e) => { e.ctx.drawImage(sheet(e, 0.5, e.slots.faint), 0, 0); hills(e); drift(e, e.paper, H * 0.2, 46, -7, e.seed + 5, 0.9); mistUnderWords(e); },
@@ -188,15 +200,17 @@ const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/sea-swell': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 0.42, e.slots.faint), 0, 0);
-    [0, 1, 2, 3].forEach((row) => tiled(c, swellRow(e, row), e.now * (row % 2 ? -1 : 1) * (22 + row * 18) * (0.6 + e.level) + 30 * Math.sin(e.now * 0.7 + row), H * 0.3 + row * 104 + 12 * Math.sin(e.now * 0.9 + row * 1.4)));
-    lowMist(e);
+    const d = dropFor(e, H * 0.3 + 70);
+    [0, 1, 2, 3].forEach((row) => tiled(c, swellRow(e, row), e.now * (row % 2 ? -1 : 1) * (22 + row * 18) * (0.6 + e.level) + 30 * Math.sin(e.now * 0.7 + row), H * 0.3 + d + row * 104 + 12 * Math.sin(e.now * 0.9 + row * 1.4)));
+    lowMist(e, d);
     mistUnderWords(e);
   },
   'ukiyoe/rain': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 0.86, mixHex(e.slots.faint, e.slots.ink2, 0.5)), 0, 0);
-    tiled(c, range(e, 0.66, 380, mixHex(e.slots.ink2, e.paper, 0.34), e.seed % 3), -e.now * 3);
-    lowMist(e);
+    const d = dropFor(e, H * 0.66 - 420);
+    tiled(c, range(e, 0.66, 380, mixHex(e.slots.ink2, e.paper, 0.34), e.seed % 3), -e.now * 3, d);
+    lowMist(e, d);
     flood(e, mixHex(e.slots.ink2, e.paper, 0.4), 0.16);
     const [tile, tone] = [rainTile(e, key(e)), 0];
     const y = (e.now * 620) % 900;
@@ -208,8 +222,9 @@ const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/snow-night': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 1, mixHex(e.slots.ink2, e.paper, 0.2)), 0, 0);
-    tiled(c, range(e, 0.64, 320, mixHex(e.paper, e.slots.faint, 0.28), e.seed % 3), -e.now * 2);
-    lowMist(e);
+    const d = dropFor(e, H * 0.64 - 350);
+    tiled(c, range(e, 0.64, 320, mixHex(e.paper, e.slots.faint, 0.28), e.seed % 3), -e.now * 2, d);
+    lowMist(e, d);
     c.fillStyle = e.paper;
     for (let i = 0; i < 300; i++) { const k = fractOf(hash(i, 5) + e.now * (0.03 + 0.05 * hash(i, 6))); c.globalAlpha = 0.5 + 0.5 * hash(i, 7); c.beginPath(); c.arc(hash(i, 8) * W + 26 * Math.sin(e.now * 0.6 + i), k * H, 1.6 + 3.4 * hash(i, 9), 0, TAU); c.fill(); }
     c.globalAlpha = 1;
@@ -230,10 +245,10 @@ const INS: Record<string, HandIn> = {
 };
 
 /** The great swell, drawn as one heaving shape: body bands, then the crest breaking into claws of foam. */
-function bigWave(c: CanvasRenderingContext2D, e: WorldEnv, k: number, lean: number, seed: number) {
+function bigWave(c: CanvasRenderingContext2D, e: WorldEnv, k: number, lean: number, seed: number, floor = 0) {
   const s = e.slots;
   const crestX = W * (0.16 + 0.72 * lean);
-  const top = H * (1.1 - 1.0 * k);
+  const top = Math.max(H * (1.1 - 1.0 * k), floor);
   const front = (t: number): Pt => {
     // from the trough on the right, up the back and over the lip
     const x = crestX + (W * 1.1) * (1 - t) - 240 * Math.sin(t * Math.PI) * k;
@@ -303,9 +318,12 @@ const PIECES: Record<string, Piece> = {
   'great-swell': { sec: 2.6, clear: 0.9, draw: (e, q) => {
     const c = e.ctx;
     const k = q < 0.5 ? ease(q / 0.5, 2) : 1;
-    bigWave(c, e, k, 0.14 + 0.5 * inOut(q), e.seed);
+    // a row of words high on the sheet rides above the wave: the whole wave, lip and claws, rises to just below it
+    const r = e.rect && e.weight > 0 && e.rect.x1 - e.rect.x0 >= W * 0.4 && e.rect.y1 < H * 0.62 ? e.rect : undefined;
+    const floor = r ? r.y1 + 60 : 0;
+    bigWave(c, e, k, 0.14 + 0.5 * inOut(q), e.seed, floor);
     if (q > 0.62) { const f = easeIn((q - 0.62) / 0.38, 2); c.fillStyle = e.paper; c.globalAlpha = 1; for (let i = 0; i < 7; i++) { const x = W * 1.3 - f * (W * 2.6) + (i % 2) * 220; c.beginPath(); c.roundRect(x, (i * H) / 7, W * 1.7, H / 7 + 40, 60); c.fill(); } }
-    foamUnderWords(e);
+    if (!r) foamUnderWords(e);
   } },
   'kasumi-part': { sec: 2.2, clear: 0, draw: (e, q) => {
     const c = e.ctx;

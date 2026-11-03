@@ -110,3 +110,83 @@ describe('shiftAll', () => {
     expect(shiftAll([{ start: 1, end: 2 }], NaN, 10).ok).toBe(false);
   });
 });
+
+describe('moveLine', () => {
+  type L = { id: string; start: number; end: number; text: string; singer?: string; charStarts?: number[]; charTimed?: boolean };
+  const line = (id: string, start: number, end: number, extra: Partial<L> = {}): L => ({ id, start, end, text: id, ...extra });
+  // b sits out of order between a and c; c and d are back to back; a gap of 4 s after d, then e
+  const song = () => [line('a', 1, 3), line('x', 20, 22, { singer: 'Mia', charStarts: [20, 21], charTimed: true }), line('c', 4, 6), line('d', 6, 8), line('e', 12, 14)];
+  const ordered = (l: L[]) => l.every((c, i) => c.start < c.end && (i === 0 || l[i - 1].end <= c.start));
+
+  it('fills the gap at the new place and leaves the old place empty', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const r = moveLine(song(), 'x', 4, 60);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.lines.map((c) => c.id)).toEqual(['a', 'c', 'd', 'x', 'e']);
+    expect(r.lines[3]).toEqual({ id: 'x', start: 8.05, end: 11.95, text: 'x', singer: 'Mia' });
+    expect(r.lines.filter((c) => c.id !== 'x')).toEqual(song().filter((c) => c.id !== 'x'));
+    expect(ordered(r.lines)).toBe(true);
+  });
+
+  it('drops the per-character times and keeps the other fields', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const r = moveLine(song(), 'x', 4, 60);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.lines[3].charStarts).toBeUndefined();
+    expect(r.lines[3].charTimed).toBeUndefined();
+    expect(r.lines[3].singer).toBe('Mia');
+  });
+
+  it('caps a long gap at 8 s from its start', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const r = moveLine(song(), 'x', 5, 60);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.lines.map((c) => c.id)).toEqual(['a', 'c', 'd', 'e', 'x']);
+    expect(r.lines[4]).toMatchObject({ start: 14.05, end: 22.05 });
+  });
+
+  it('runs to the song end when last and the gap is short', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const r = moveLine(song(), 'x', 5, 17);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.lines[4]).toMatchObject({ id: 'x', start: 14.05, end: 17 });
+  });
+
+  it('takes the second half of the previous line when there is no gap', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const r = moveLine(song(), 'x', 3, 60);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.lines.map((c) => [c.id, c.start, c.end])).toEqual([['a', 1, 3], ['c', 4, 5], ['x', 5, 6], ['d', 6, 8], ['e', 12, 14]]);
+    expect(ordered(r.lines)).toBe(true);
+  });
+
+  it('moves to the very start: from 0 up to the first line, or the first half of it when there is no room', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const r = moveLine(song(), 'c', 0, 60);
+    if (!r.ok) throw new Error(r.message);
+    expect(r.lines.map((c) => c.id)).toEqual(['c', 'a', 'x', 'd', 'e']);
+    expect(r.lines[0]).toMatchObject({ start: 0, end: 0.95 });
+    const tight = moveLine([line('a', 0.2, 2), line('b', 3, 4)], 'b', 0, 10);
+    if (!tight.ok) throw new Error(tight.message);
+    expect(tight.lines.map((c) => [c.id, c.start, c.end])).toEqual([['b', 0.2, 1.1], ['a', 1.1, 2]]);
+  });
+
+  it('moves a line backwards into a gap under 8 s, whole', async () => {
+    const { moveLine } = await import('./timing-edit');
+    const list = [line('a', 1, 3), line('c', 4, 6), line('b', 8, 9)];
+    const r = moveLine(list, 'b', 1, 60);
+    if (!r.ok) throw new Error(r.message);
+    // the gap after a (3 → 4) is 0.9 s: b takes it whole
+    expect(r.lines.map((c) => [c.id, c.start, c.end])).toEqual([['a', 1, 3], ['b', 3.05, 3.95], ['c', 4, 6]]);
+    expect(ordered(r.lines)).toBe(true);
+  });
+
+  it('is a no-op on either side of its own place, and refuses an unknown line or position', async () => {
+    const { moveLine } = await import('./timing-edit');
+    expect(moveLine(song(), 'x', 1, 60)).toEqual({ ok: true, lines: song() });
+    expect(moveLine(song(), 'x', 2, 60)).toEqual({ ok: true, lines: song() });
+    expect(moveLine(song(), 'c', 2, 60)).toEqual({ ok: true, lines: song() });
+    expect(moveLine(song(), 'zz', 0, 60).ok).toBe(false);
+    expect(moveLine(song(), 'x', 6, 60).ok).toBe(false);
+  });
+});

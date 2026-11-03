@@ -129,6 +129,53 @@ export function mergeLines<T extends EditLine>(list: readonly T[], id: string): 
   return { ok: true, lines: [...list.slice(0, i), merged, ...list.slice(i + 2)] };
 }
 
+/** Space kept between a moved line and its new neighbours, s. */
+const MOVE_PAD = 0.05;
+/** A gap shorter than this cannot hold a line: it takes half of a neighbour instead (as 插入 does), s. */
+const MOVE_MIN_GAP = 0.6;
+/** A moved line fills its gap up to this long: a longer gap is an interlude, not the line's time, s. */
+const MOVE_MAX = 8;
+
+/** Whether gap `toIndex` (see moveLine) is right next to line `id`: moving there changes nothing. */
+export function sameGap(list: readonly { id: string }[], id: string, toIndex: number): boolean {
+  const i = list.findIndex((c) => c.id === id);
+  return toIndex === i || toIndex === i + 1;
+}
+
+/**
+ * Moves line `id` whole to gap `toIndex` of the list as it is now (0 = before the first line, `list.length` = after the
+ * last), for a line the alignment put out of order. It takes the free time there: from the previous line's end to the
+ * next line's start (the song's end after the last), at most MOVE_MAX; with no room it takes the second half of the
+ * previous line (the first half of the next one at the very start). Its old place is left empty, its per-character
+ * times are dropped (they belonged to the old time) and everything else stays with it.
+ */
+export function moveLine<T extends EditLine>(list: readonly T[], id: string, toIndex: number, duration: number): EditResult<T> {
+  const i = list.findIndex((c) => c.id === id);
+  if (i < 0) return { ok: false, message: '找不到這一句' };
+  if (!(Number.isInteger(toIndex) && toIndex >= 0 && toIndex <= list.length)) return { ok: false, message: '移動的位置不在列表裡' };
+  if (sameGap(list, id, toIndex)) return { ok: true, lines: [...list] };
+  const rest = list.filter((_, j) => j !== i).map((c) => ({ ...c }));
+  const at = toIndex > i ? toIndex - 1 : toIndex;
+  const prev = rest[at - 1];
+  const next = rest[at];
+  const r = (t: number) => +t.toFixed(3);
+  let start = prev ? prev.end + MOVE_PAD : 0;
+  let end = Math.min(next ? next.start - MOVE_PAD : duration, start + MOVE_MAX);
+  if (end - start < MOVE_MIN_GAP && prev) {
+    start = r((prev.start + prev.end) / 2);
+    end = prev.end;
+    prev.end = start;
+  } else if (end - start < MOVE_MIN_GAP && next) {
+    end = r((next.start + next.end) / 2);
+    start = next.start;
+    next.start = end;
+  }
+  const moved = { ...list[i], start: r(start), end: r(end) } as T;
+  delete moved.charStarts;
+  delete moved.charTimed;
+  return { ok: true, lines: [...rest.slice(0, at), moved, ...rest.slice(at)] };
+}
+
 /** Moves every line by `delta` seconds; refused as a whole if any line would leave [0, duration] (no clamping). */
 export function shiftAll<T extends Span & { charStarts?: number[] }>(list: readonly T[], delta: number, duration: number): EditResult<T> {
   if (!Number.isFinite(delta) || delta === 0) return { ok: false, message: '請輸入要平移的秒數' };

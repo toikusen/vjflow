@@ -1,4 +1,4 @@
-import { EditResult, graphemeIndexAt, mergeLines, moveEdge, reflow, shiftAll, snapTo, splitLine, TAP_REACTION } from './timing-edit';
+import { EditResult, graphemeIndexAt, mergeLines, moveEdge, moveLine, reflow, sameGap, shiftAll, snapTo, splitLine, TAP_REACTION } from './timing-edit';
 import { phraseBoundaries } from '../../lyric-vj/phrases';
 import { Component, computed, DestroyRef, effect, ElementRef, HostListener, inject, input, OnInit, output, signal, viewChild } from '@angular/core';
 import { BetaJob, jsonOrError } from '../beta/beta';
@@ -110,7 +110,7 @@ export class TimingPage implements OnInit {
   protected readonly help = signal(false);
   protected readonly guideSteps = [
     '列表列出每一句，系統標出來要確認的句子是紅色或黃色（按「只看需要確認的」可以只看那幾句）',
-    '按「聽」；對得上就按「我確認沒問題」（或「保留現在的」），會自動跳到下一句；對不上才改開始／結束（或唱到時按「設為現在」）',
+    '按「聽」；對得上就按「我確認沒問題」（或「保留現在的」）；對不上才改開始／結束（或唱到時按「設為現在」），整句放錯位置就按「移動」',
     '沒有需要確認的句子後，按「確認時間軸」',
   ];
   protected readonly sec = sec;
@@ -134,6 +134,10 @@ export class TimingPage implements OnInit {
   protected readonly onlyProblems = signal(false);
   /** The 演唱者 card: one line until opened; open from the start when the song already has singers. */
   protected readonly singersOpen = signal(false);
+  /** 「移動」: the id of the line being moved; every gap in the list then offers 「移到這裡」. */
+  protected readonly moving = signal<string | null>(null);
+  protected readonly sameGap = (id: string, gap: number) => sameGap(this.cues(), id, gap);
+  protected readonly cue = (id: string) => this.cues().find((c) => c.id === id);
 
   protected readonly checks = computed<LineCheck[]>(() => (this.active() ? checkLines(this.cues(), this.active()!) : []));
   protected readonly statuses = computed<Status[]>(() =>
@@ -319,6 +323,7 @@ export class TimingPage implements OnInit {
     }
     const song = body as SongTimeline;
     this.song.set(song);
+    this.moving.set(null);
     writeFlag(() => localStorage.setItem(GUIDE_SEEN_KEY, '1'));
     this.cues.set(song.cues.map((c) => ({ ...c })));
     this.singers.set((song.singers ?? []).map((x) => ({ ...x })));
@@ -491,7 +496,6 @@ export class TimingPage implements OnInit {
     if (this.locked()) return;
     this.setLine(i, { start: t });
     this.playLine(i);
-    this.advance();
   }
 
   protected accept(i: number) {
@@ -499,12 +503,6 @@ export class TimingPage implements OnInit {
     this.remember();
     this.touched.update((s) => new Set(s).add(this.cues()[i].id));
     this.dirty.set(true);
-    this.advance();
-  }
-
-  /** A line just settled hands over to the next one to check (none left: the list says so). */
-  private advance() {
-    this.nextProblem(true);
   }
 
   // ---- singers
@@ -613,6 +611,26 @@ export class TimingPage implements OnInit {
     this.message.set(null);
   }
 
+  /** Starts moving line i (a line the alignment put out of order): the list then shows where it can go. */
+  protected startMove(i: number) {
+    if (this.locked()) return;
+    this.moving.set(this.cues()[i].id);
+  }
+
+  /** Puts the line being moved into gap `gap` (0 = before the first line); its time becomes the free time there. */
+  protected moveTo(gap: number) {
+    const id = this.moving();
+    if (!id || this.locked()) return;
+    this.moving.set(null);
+    if (sameGap(this.cues(), id, gap)) return;
+    const r = moveLine(this.cues(), id, gap, this.song()!.duration);
+    this.apply(r, [id]);
+    if (!r.ok) return;
+    const i = this.cues().findIndex((c) => c.id === id);
+    this.selected.set(i);
+    setTimeout(() => this.scrollTo(i));
+  }
+
   /** Splits line i where the caret is in its text, at the playhead (the right half becomes a new line). */
   protected split(i: number, input: HTMLInputElement) {
     const c = this.cues()[i];
@@ -689,6 +707,7 @@ export class TimingPage implements OnInit {
     if (mod && e.code === 'KeyZ') e.shiftKey ? this.redo() : this.undo();
     else if (mod && e.code === 'KeyY') this.redo();
     else if (mod) return;
+    else if (e.code === 'Escape' && this.moving()) this.moving.set(null);
     else if (e.code === 'Escape' && (this.more() || this.help())) [this.more, this.help].forEach((s) => s.set(false));
     else if (e.code === 'KeyQ') this.playRange(c.start - EDGE_LISTEN, c.start);
     else if (e.code === 'KeyW') this.playRange(c.start, c.start + EDGE_LISTEN);

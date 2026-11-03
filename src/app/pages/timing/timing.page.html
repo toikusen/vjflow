@@ -226,8 +226,13 @@
           <li class="empty">目前沒有需要確認的句子，可以按「{{ local() ? '完成' : '確認時間軸' }}」</li>
         }
         @for (c of cues(); track c.id; let i = $index) {
+          @if (moving(); as m) {
+            @if (shown()[i] && !sameGap(m, i)) {
+              <li class="gap"><button type="button" [disabled]="readOnly()" (click)="moveTo(i)">移到這裡</button></li>
+            }
+          }
           @if (shown()[i]) {
-            <li [attr.data-index]="i" [attr.data-status]="statuses()[i]" [class.selected]="i === selected()" [class.playing]="i === playingIndex() && playing()" (click)="selected.set(i)">
+            <li [attr.data-index]="i" [attr.data-status]="statuses()[i]" [class.selected]="i === selected()" [class.moving]="c.id === moving()" [class.playing]="i === playingIndex() && playing()" (click)="selected.set(i)">
               <div class="row">
                 <span class="n">{{ rowNumber(i) }}</span>
                 <span class="lyric">
@@ -270,6 +275,7 @@
                     <button type="button" (click)="playLine(i)" title="從這句前 1 秒播放">▶ <span class="desk">聽這句</span><span class="phone">聽</span></button>
                     <button type="button" [disabled]="readOnly()" (click)="split(i, txt)" title="在文字游標處切開，切點時間是目前播放位置">✂ <span class="desk">拆句</span><span class="phone">拆</span></button>
                     <button type="button" [disabled]="readOnly()" (click)="mergeNext(i)" title="和下一句合併">⤵ <span class="desk">併入下句</span><span class="phone">併</span></button>
+                    <button type="button" [disabled]="readOnly()" [class.on]="c.id === moving()" (click)="c.id === moving() ? moving.set(null) : startMove(i)" title="整句移到別的位置（自動對齊放錯順序時用）">⇅ <span class="desk">移動</span><span class="phone">移</span></button>
                     <button type="button" [disabled]="readOnly()" (click)="addAfter(i)" title="在下面新增一句">＋<span class="desk"> 插入</span></button>
                     <button type="button" [disabled]="readOnly()" (click)="remove(i)" title="刪除這一句"><span class="desk">刪除</span><span class="phone">刪</span></button>
                   </span>
@@ -296,7 +302,18 @@
             </li>
           }
         }
+        @if (moving(); as m) {
+          @if (!sameGap(m, cues().length)) {
+            <li class="gap"><button type="button" [disabled]="readOnly()" (click)="moveTo(cues().length)">移到這裡</button></li>
+          }
+        }
       </ol>
+      @if (moving(); as m) {
+        <div class="move-bar" role="status">
+          <span>把「{{ cue(m)?.text }}」移到哪裡？按兩句之間的「移到這裡」，時間會填進那裡的空檔</span>
+          <button class="button small" type="button" (click)="moving.set(null)">取消</button>
+        </div>
+      }
     </section>
   </div>
 

@@ -150,3 +150,14 @@ describe('songLrc', () => {
     expect(lrc).toContain('[00:00.50]二');
   });
 });
+
+describe('a heading line', () => {
+  it('names the song and is never a sung line; section tags and spoken lines read as before', async () => {
+    const { parseLyrics } = await import('./free-lyrics');
+    const r = parseLyrics('# エラー！えらいこっちゃ！\n\n[Intro - 8-bit game startup]\n[Spoken, playful female voice]\n「システム起動っ！」\n[Verse 1]\n朝からアラーム　鳴りっぱなし\n「再起動！」（まだだよ！）\n[End]');
+    expect(r.title).toBe('エラー！えらいこっちゃ！');
+    expect(r.lines.map((l) => l.text)).toEqual(['「システム起動っ！」', '朝からアラーム　鳴りっぱなし', '「再起動！」（まだだよ！）']);
+    expect(parseLyrics('[ti:LRC title]\n# heading\nline').title).toBe('LRC title');
+    expect(parseLyrics('#hashtag line').lines.map((l) => l.text)).toEqual(['#hashtag line']);
+  });
+});

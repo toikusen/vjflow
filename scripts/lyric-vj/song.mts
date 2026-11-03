@@ -12,6 +12,7 @@ import { alignLyrics, alignMainLines, AsrWord, cleanLyricLine, combineTimings, F
 import { checkLines, ISSUE_LABEL } from '../../src/app/lyric-vj/timing-qa';
 import { alignOffset, beatStrengths, checkTiming, downbeats, holdToVoice, keepGivenStarts, keepLyricOrder, placeInVoice, keepUserTiming, phraseStarts, snapToVoice, SongTimeline, TimelineCue, vocalActivity, voicedSpans } from '../../src/app/lyric-vj/timeline';
 import { decode } from './media.mts';
+import { HEADING } from '../../src/app/lyric-vj/free-lyrics';
 
 const { values: a } = parseArgs({
   options: {
@@ -103,7 +104,8 @@ if (a.lrc) {
     // no usable synced lyrics: time the known text with Whisper on the vocal stem
     const text = a.lyrics ? readFileSync(a.lyrics, 'utf8') : hit && !hit.synced ? hit.text : undefined;
     if (!text) throw new Error(`LRCLIB ${lrclib ? '的時間未通過人聲檢查' : '找不到歌詞'}；請提供 --lrc 或 --lyrics（純文字歌詞）`);
-    const lines = text.split('\n').map((l) => cleanLyricLine(l.replace(/^\[[^\]]*\]/, ''))).filter(Boolean);
+    // (a heading line, 「# Title」, names the song and is never sung: it is not timed)
+    const lines = text.split('\n').filter((l) => !HEADING.test(l.trim())).map((l) => cleanLyricLine(l.replace(/^\[[^\]]*\]/, ''))).filter(Boolean);
     const txt = join(a.out, 'lyrics.txt');
     writeFileSync(txt, lines.join('\n'));
     const primary = timeOn(a.vocals, '', lines, txt, active);

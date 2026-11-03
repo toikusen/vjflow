@@ -81,6 +81,9 @@ export const formatLines = (lines: readonly LyricLine[]) =>
  * Plain text, LRC, or both in one text. Throws, naming the line, on a stamp that cannot be read. Stamped lines go in time
  * order and an unstamped line stays after the line it followed; a line stamped twice is sung twice.
  */
+/** A Markdown heading line: `# Title`, `## Title`. */
+export const HEADING = /^#{1,6}\s+(.+)$/;
+
 export function parseLyrics(input: string): ParsedLyrics {
   const text = cleanText(input);
   if (text.length > MAX_LYRIC_CHARS) throw new Error(`歌詞太長（超過 ${MAX_LYRIC_CHARS} 字），請確認貼上的是一首歌。`);
@@ -90,6 +93,13 @@ export function parseLyrics(input: string): ParsedLyrics {
   for (const [n, raw] of text.split(/\r\n?|\n/).entries()) {
     const line = raw.trim();
     if (!line) continue;
+    // a heading (「# Title」 as lyrics sites and AI songwriters write them) names the song: it is never sung
+    const heading = HEADING.exec(line);
+    if (heading) {
+      if (!tags.has('ti')) tags.set('ti', heading[1].trim());
+      skipped++;
+      continue;
+    }
     if (ONLY_TOKEN.test(line) && !TIME.test(line.slice(1, -1).trim()) && !NEAR_TIME.test(line.slice(1, -1))) {
       const tag = /^([a-zA-Z]+)\s*:(.*)$/.exec(line.slice(1, -1));
       if (tag) tags.set(tag[1].toLowerCase(), tag[2].trim());

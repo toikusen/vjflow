@@ -573,7 +573,7 @@ function draw(ctx: CanvasRenderingContext2D, l: Layer, t: number, age: number, b
       return;
     }
     case 'band':
-      return band(ctx, l, t);
+      return band(ctx, l, t, age);
     case 'shapes': {
       const n = l.count ?? 12;
       const s = l.size ?? 60;
@@ -1846,13 +1846,28 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
   ctx.restore();
 }
 
-function band(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'band' }>, t: number) {
+/**
+ * How much of a plain band shows `age` s into its section: it is drawn across as the section lands, holds, then fades.
+ * A plain stripe held all section read as a line stuck on the picture (世界のつづき's paid tiers, 2026-11-03); tape
+ * and marquee bands move along themselves and stay.
+ */
+export function bandShow(age: number): { reach: number; alpha: number } {
+  return { reach: clamp01(age / BAND_IN), alpha: 1 - clamp01((age - BAND_IN - BAND_HOLD) / BAND_OUT) };
+}
+const [BAND_IN, BAND_HOLD, BAND_OUT] = [0.35, 2.5, 0.6];
+const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+
+function band(ctx: CanvasRenderingContext2D, l: Extract<Layer, { kind: 'band' }>, t: number, age: number) {
   const h = l.height ?? 110;
   ctx.translate(W / 2, H / 2 - (l.y ?? 0) * H / 2);
   ctx.rotate(((l.angle ?? -8) * Math.PI) / 180);
   const L = W * 1.6;
+  const moving = l.type === 'tape' || l.type === 'marquee';
+  const show = moving ? { reach: 1, alpha: 1 } : bandShow(age);
+  if (show.alpha <= 0 || show.reach <= 0) return;
+  ctx.globalAlpha *= show.alpha;
   ctx.fillStyle = l.color;
-  ctx.fillRect(-L / 2, -h / 2, L, h);
+  ctx.fillRect(-L / 2, -h / 2, L * show.reach, h);
   if (l.type === 'tape' || l.type === 'marquee') {
     // diagonal hazard stripes (tape) or dots (marquee bulbs), scrolling along the band
     ctx.beginPath();

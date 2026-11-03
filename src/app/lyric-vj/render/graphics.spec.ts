@@ -361,3 +361,14 @@ describe('kit layers', () => {
     expect(out.opacity).toBe(0);
   });
 });
+
+describe('bandShow', () => {
+  it('draws a plain band across as its section lands, holds it, then lets it go', async () => {
+    const { bandShow } = await import('./graphics');
+    expect(bandShow(0)).toEqual({ reach: 0, alpha: 1 });
+    expect(bandShow(1)).toEqual({ reach: 1, alpha: 1 });
+    expect(bandShow(2.85).alpha).toBe(1);
+    expect(bandShow(3.15).alpha).toBeCloseTo(0.5);
+    expect(bandShow(4).alpha).toBe(0);
+  });
+});

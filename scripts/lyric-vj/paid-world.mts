@@ -107,3 +107,17 @@ export function worldTreatment(song: Parameters<typeof composerTreatment>[0], pl
   tr.design = { ...tr.design!, font: pw.font };
   return tr;
 }
+
+/**
+ * The story tier's drawing style on a world, when the buyer named none: the world's print and its inks, so the story's
+ * sheets and frames are drawn in the world the lines live in (keyframes' board style; cutout draws in it).
+ */
+export function worldDrawStyle(pw: PlanWorld): string {
+  const w = worldById(pw.id);
+  if (!w) throw new Error(`no such world: ${pw.id}`);
+  const p = pw.palette;
+  return `${w.language} print look: ${w.name}, ${w.what}, ${w.provenance.process}. Flat areas in a few spot inks only: ink ${p.ink}, accent ${p.accent}, a second colour ${p.heart}, on paper ${p.paper}. Never: ${w.refuses.join('、')}.`;
+}
+
+/** The story pages on a world: its paper and inks stand in for the ones cutout's art director picked. */
+export const worldPageLook = <L extends { paper: string; ink: string; accent: string }>(look: L, pw: PlanWorld): L => ({ ...look, paper: pw.palette.paper, ink: pw.palette.ink, accent: pw.palette.accent });

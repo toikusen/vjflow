@@ -5,7 +5,7 @@ import { composePlan, RECIPES, type Cue } from './lineplan-core.mts';
 import { poolOf } from '../../src/app/lyric-vj/style-world';
 import { STYLE_WORLDS, worldById } from '../../src/app/lyric-vj/style-worlds';
 import { FREE_BASE } from '../../src/app/lyric-vj/free-plan';
-import { overusedWorlds, planWorldOf, recordWorld, worldBase, worldCandidates, worldKitPrompt, worldPickPrompt, worldPoolOf, worldTreatment } from './paid-world.mts';
+import { overusedWorlds, planWorldOf, recordWorld, worldBase, worldCandidates, worldKitPrompt, worldPickPrompt, worldPoolOf, worldTreatment, worldDrawStyle, worldPageLook } from './paid-world.mts';
 
 const texts = ['我等你回來到天亮', '整條街的燈都熄了', '你說過的話還留著', '我把信寫到最後一頁', '風吹過河面的時候', '我一個人走回家'];
 const cues: Cue[] = texts.map((t, i) => ({ id: `c${i}`, start: 10 + i * 5, end: 10 + i * 5 + 3, text: t }));
@@ -76,4 +76,15 @@ test('worldBase and worldTreatment: the free tier\'s treatment on the world, the
   assert.ok(prop!.size! <= 0.75 && prop!.side !== 'center', 'smaller and to a side under a centred world line');
   assert.ok(layers.some((l) => l.world), 'the cuts are world grounds');
   assert.ok(tr.cues.some((c) => (c as { world?: unknown }).world), 'the lines are world lines');
+});
+
+test('the story tier on a world: drawn in its print and inks, its pages on its paper', () => {
+  const pw = planWorldOf(worldById('riso')!, song, false, '理由', 'director');
+  const style = worldDrawStyle(pw);
+  assert.match(style, /risograph/, 'the world\'s print');
+  for (const c of [pw.palette.ink, pw.palette.accent, pw.palette.paper]) assert.ok(style.includes(c), `its ink ${c}`);
+  assert.ok(style.includes(worldById('riso')!.refuses[0]), 'what the world refuses');
+  const look = worldPageLook({ paper: '#000', ink: '#111', accent: '#222', texture: 'grain', border: 6 }, pw);
+  assert.deepEqual([look.paper, look.ink, look.accent, look.texture, look.border], [pw.palette.paper, pw.palette.ink, pw.palette.accent, 'grain', 6], 'the inks are the world\'s, the rest the art director\'s');
+  assert.throws(() => worldDrawStyle({ ...pw, id: 'nope' }));
 });

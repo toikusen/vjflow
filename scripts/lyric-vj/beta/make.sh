@@ -81,9 +81,12 @@ case $tier in
     [ -f "$req" ] && [ -n "$(tr -d '[:space:]' < "$req")" ] && kf+=(--style="$(cat "$req")")
     ref=; for f in "$w"/refs/*; do [ -f "$f" ] && { ref=$f; break; }; done
     [ -n "$ref" ] && kf+=(--style-ref "$ref")
-    [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$tp" --sheets-only --from 0 --to "$end" --out "$w/kf" ${kf[@]+"${kf[@]}"} > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
+    # on a style world (VJ_PAID_WORLD=1) the story is drawn in the world's print (keyframes, unless the concept named a
+    # style) and its pages take the world's paper and inks (cutout)
+    wj=; [ "${VJ_PAID_WORLD:-}" = 1 ] && [ -f "$w/line/world.json" ] && wj=$w/line/world.json
+    [ -f "$w/kf/treatment.json" ] || { npx tsx scripts/lyric-vj/keyframes.mts --song "$S" --treatment "$w/base/treatment.json" --plan "$tp" --sheets-only --from 0 --to "$end" --out "$w/kf" ${kf[@]+"${kf[@]}"} ${wj:+--world "$wj"} > "$w/kf.log" 2>&1; cost_log "$w/kf.log" keyframes; }
     echo '##PHASE 畫故事畫面'
-    [ -f "$w/cut/treatment.json" ] || { npx tsx scripts/lyric-vj/cutout.mts --song "$S" --keyframes "$w/kf" --treatment "$w/base/treatment.json" --from 0 --to "$end" --out "$w/cut" > "$w/cut.log" 2>&1; cost_log "$w/cut.log" cutout; }
+    [ -f "$w/cut/treatment.json" ] || { npx tsx scripts/lyric-vj/cutout.mts --song "$S" --keyframes "$w/kf" --treatment "$w/base/treatment.json" --from 0 --to "$end" --out "$w/cut" ${wj:+--world "$wj"} > "$w/cut.log" 2>&1; cost_log "$w/cut.log" cutout; }
     tr=$w/cut ;;
   *) echo "unknown tier $tier" >&2; exit 2 ;;
 esac

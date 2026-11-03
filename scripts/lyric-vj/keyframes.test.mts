@@ -1,7 +1,7 @@
 // npx tsx scripts/lyric-vj/keyframes.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Board, drawnBox, frameCount, frameCue, frameTimes, badLook, imageMime, longHolds, withUserStyle, sidePaper, withoutBlankNotes } from './keyframes.mts';
+import { Board, drawnBox, frameCount, frameCue, frameTimes, badLook, imageMime, longHolds, withUserStyle, sidePaper, withoutBlankNotes, paperCorner } from './keyframes.mts';
 
 test('each frame holds from its line until the next frame; the first opens the passage; frames off it are dropped', () => {
   const cues = [{ id: 'c1', start: 36.1, end: 39, text: '' }, { id: 'c2', start: 44, end: 47, text: '' }, { id: 'c9', start: 90, end: 92, text: '' }];
@@ -62,4 +62,16 @@ test('withUserStyle: the text wins, a reference image alone keeps the writer\'s 
 test('a frame cue given as the line start time is read back to that line, or to an unsung window', () => {
   const cues = [{ id: 'c001', start: 1.0 }, { id: 'c002', start: 2.9 }, { id: 'c006', start: 36.1 }];
   assert.deepEqual(['c002', '2.9', '36.0', '18.1', '@18.1'].map((c) => frameCue(c, cues)), ['c002', 'c002', 'c006', '@18.1', '@18.1']);
+});
+
+test('paperCorner: a top corner left as bare paper is caught; a pale foot (snow) or a painted frame is not', () => {
+  const [w, h] = [40, 30];
+  const frame = (paint: (x: number, y: number) => boolean) => {
+    const rgb = new Uint8Array(w * h * 3);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) rgb.set(paint(x, y) ? [40, 50, 90] : [245, 243, 238], (y * w + x) * 3);
+    return rgb;
+  };
+  assert.equal(paperCorner(frame(() => true), w, h), false);
+  assert.equal(paperCorner(frame((x, y) => !(x >= 28 && y < 12)), w, h), true, 'a blank block top right');
+  assert.equal(paperCorner(frame((_, y) => y < 18), w, h), false, 'a snowfield at the foot');
 });

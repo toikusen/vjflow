@@ -108,6 +108,8 @@ export interface KineticLayer {
    * (UNDER_ALPHA), instead of leaving the cut (dropping it emptied a minute of プラトニックチョロイン).
    */
   under?: boolean;
+  /** The boxes (frame px) of the lines sung over a prop's cut: a prop sent to a corner takes one clear of them (layRooms). */
+  over?: [number, number, number, number][];
   /** What stays through the cut's part of the song (board.ts): evidence filling a board, a place's standing things. */
   board?: BoardLayer;
   /** Where the board may lay its pieces this cut (freeZone); null when the lines fill the frame. */
@@ -186,6 +188,13 @@ export const setBackPush = (p?: typeof backPush) => (backPush = p);
 export const UNDER_ALPHA = 0.65;
 /** The height (share of the frame) a figure with no room is kept to, in its bottom corner. */
 export const UNDER_H = 0.36;
+/**
+ * The least height (share of the frame) a prop is shown at: fitted smaller than this beside or over the lines it reads
+ * as a speck (三年後的大雪's bench, hourglass at a fifth of the frame, 2026-11-03), and it goes to a free corner instead.
+ */
+export const PROP_MIN_H = 0.26;
+/** A prop hung above centred lines keeps this share of the frame clear over it: a camera push cuts what touches the edge. */
+export const EDGE_PAD = 0.08;
 export const NEEDS_ART = new Set(['window', 'aura', 'grid', 'glide']);
 
 export const THREAD_MARKS = ['flame', 'star', 'heart', 'moon', 'sun', 'note', 'drop', 'flower'] as const;
@@ -628,20 +637,24 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     // the floor plan: one character shrinks and slides into the room the lyric leaves it (feet kept on the floor)
     const fit = l.fx !== 'grid' && l.room && l.room[1] > l.room[0] ? fitInRoom(l.room, w, fx) : { s: 1, x: fx };
     const copies = l.fx === 'grid' ? Array.from({ length: cols }, (_, i) => ((i + 0.5) / cols) * W) : [fit.x];
+    // above or below centred lines: smaller, on the floor of the band below or centred in the band above, clear of the edge
+    const rowsAt = l.rows && l.fx !== 'grid' ? rowsPlace(l.rows, h, fit.s) : undefined;
+    // too small where it was fitted (a narrow side, a thin band) reads as a speck: the corner takes it at a readable size
+    const speck = l.fx !== 'grid' && ((!!l.rows && !rowsAt) || (!!l.room && l.room[1] > l.room[0] && h * fit.s < H * PROP_MIN_H));
     for (const cx of copies) {
       ctx.save();
       if (l.cam === 'vertigo') (ctx.translate(W / 2, H / 2), ctx.scale(1 / zoom, 1 / zoom), ctx.translate(-W / 2, -H / 2));
-      // above or below centred lines: smaller, on the floor of the band below or hung in the band above
-      // no room the whole cut (lines all over it, a rap verse): a small figure in its bottom corner, faded behind them,
-      // not a full-size one behind the words (Tokyo Drift's line plan: a revolver behind both lines of 134–136 s)
-      const corner = l.under && l.fx !== 'grid' ? underCorner(w, h, fit.s, !!l.flip) : undefined;
-      const rs = corner ? corner.s : l.rows ? Math.min(fit.s, (l.rows[1] - l.rows[0] - 24) / h) : fit.s;
-      const y = corner ? corner.y : l.rows ? (l.rows[1] >= H - 1 ? H - (h * rs) / 2 : l.rows[0] + 16 + (h * rs) / 2) : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
+      // no room the whole cut (lines all over it, a rap verse): a small figure in a bottom corner, faded only when the
+      // lines reach that corner, not a full-size one behind the words (Tokyo Drift's line plan: a revolver behind both
+      // lines of 134–136 s)
+      const corner = (l.under || speck) && l.fx !== 'grid' ? cornerPlace(w, h, l.under ? fit.s : 1, !!l.flip, l.over ?? []) : undefined;
+      const rs = corner ? corner.s : rowsAt ? rowsAt.s : fit.s;
+      const y = corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
       ctx.translate(corner ? corner.x : cx, y);
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(0.05 * Math.exp(-5 * clock) * Math.sin(13 * clock) * (seed % 2 ? 1 : -1));
-      ctx.scale(pop * rs * (l.flip ? -1 : 1), pop * rs);
-      if (l.under) ctx.globalAlpha *= UNDER_ALPHA;
+      ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);
+      if (corner && !corner.clear) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;
       ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
       // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
@@ -756,6 +769,36 @@ export const ROWS_MIN = 0.2;
 export function underCorner(w: number, h: number, s: number, left: boolean, pad = 24): { s: number; x: number; y: number } {
   const k = Math.min(s, (H * UNDER_H) / h);
   return { s: k, x: left ? pad + (w * k) / 2 : W - pad - (w * k) / 2, y: H - (h * k) / 2 };
+}
+
+/**
+ * A figure in the free band above or below centred lines (freeRows): below, it stands on the frame's floor; above, it is
+ * centred in the band and kept EDGE_PAD clear of the top (never hung at the very edge). Undefined when the band would
+ * fit it under PROP_MIN_H of the frame.
+ */
+export function rowsPlace(rows: [number, number], h: number, s: number): { s: number; y: number } | undefined {
+  const floor = rows[1] >= H - 1;
+  const top = Math.max(rows[0] + 16, H * EDGE_PAD);
+  const bottom = floor ? H : rows[1] - 16;
+  const k = Math.min(s, (bottom - top) / h);
+  if (h * k < H * PROP_MIN_H) return undefined;
+  return { s: k, y: floor ? H - (h * k) / 2 : (top + bottom) / 2 };
+}
+
+/**
+ * A figure sent to a bottom corner (no room, or too little): UNDER_H of the frame at most, on its own side when the lines
+ * leave that corner clear, else the other one when that is clear; `clear` false when both are taken (it fades behind).
+ */
+export function cornerPlace(w: number, h: number, s: number, left: boolean, over: [number, number, number, number][], pad = 24): { s: number; x: number; y: number; left: boolean; clear: boolean } {
+  const at = (onLeft: boolean) => {
+    const c = underCorner(w, h, s, onLeft, pad);
+    const [x0, y0, x1, y1] = [c.x - (w * c.s) / 2, c.y - (h * c.s) / 2, c.x + (w * c.s) / 2, c.y + (h * c.s) / 2];
+    return { ...c, left: onLeft, clear: !over.some(([a, b, c2, d]) => a < x1 + 16 && c2 > x0 - 16 && b < y1 + 16 && d > y0 - 16) };
+  };
+  const own = at(left);
+  if (own.clear) return own;
+  const other = at(!left);
+  return other.clear ? other : own;
 }
 
 /** Where a character w px wide stands at fx inside a free band: its scale (≤ 1) and its centre. */

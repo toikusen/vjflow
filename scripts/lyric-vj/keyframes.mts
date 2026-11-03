@@ -19,6 +19,7 @@ import { lessonsText } from './lessons.mts';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 import sharp from 'sharp';
+import { type PlanWorld, worldDrawStyle } from './paid-world.mts';
 
 type Cue = { id: string; start: number; end: number; text: string };
 export type Board = {
@@ -137,6 +138,25 @@ export function sidePaper(rgb: Uint8Array | Buffer, w: number, h: number, side: 
   return paper / ((x1 - x0) * h);
 }
 
+/**
+ * Whether a drawn frame left a top corner unpainted: a block a quarter wide and a third high that is nearly all bare
+ * paper (三年後的大雪's painted frame 19 had a blank paper rectangle over the bridge, 2026-11-03). Top corners only: a
+ * snowfield at the foot is paper-pale by right.
+ */
+export function paperCorner(rgb: Uint8Array | Buffer, w: number, h: number, share = 0.9) {
+  const [cw, ch] = [Math.floor(w / 4), Math.floor(h / 3)];
+  const bare = (x0: number) => {
+    let n = 0;
+    for (let y = 0; y < ch; y++)
+      for (let x = x0; x < x0 + cw; x++) {
+        const k = (y * w + x) * 3, lo = Math.min(rgb[k], rgb[k + 1], rgb[k + 2]), hi = Math.max(rgb[k], rgb[k + 1], rgb[k + 2]);
+        if (lo >= 232 && hi - lo <= 28) n++;
+      }
+    return n / (cw * ch) >= share;
+  };
+  return bare(0) || bare(w - cw);
+}
+
 /** The frames in song seconds, each held until the next (the last until the passage ends); frames off the passage dropped. */
 export function frameTimes(b: Board, cues: Cue[], from: number, to: number) {
   // a frame keyed '@seconds' lands on a moment nobody sings (an interlude, the outro)
@@ -146,7 +166,9 @@ export function frameTimes(b: Board, cues: Cue[], from: number, to: number) {
 
 if (process.argv[1]?.endsWith('keyframes.mts')) {
   // --cast / --people: an approved cast sheet and the board whose people (and style) it was drawn from, kept as they are
-  const { values: a } = parseArgs({ options: { cast: { type: 'string' }, people: { type: 'string' }, song: { type: 'string' }, treatment: { type: 'string' }, plan: { type: 'string' }, 'style-ref': { type: 'string' }, style: { type: 'string' }, 'sheets-only': { type: 'boolean' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' } } });
+  const { values: a } = parseArgs({ options: { cast: { type: 'string' }, people: { type: 'string' }, song: { type: 'string' }, treatment: { type: 'string' }, plan: { type: 'string' }, 'style-ref': { type: 'string' }, style: { type: 'string' }, 'sheets-only': { type: 'boolean' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, world: { type: 'string' } } });
+  // --world <line/world.json>: a paid song on a style world is drawn in that world's print unless the buyer named a style
+  if (a.world && !a.style) a.style = worldDrawStyle(JSON.parse(readFileSync(a.world, 'utf8')) as PlanWorld);
   const envFile = join(homedir(), '.config/vjflow/anthropic.env');
   for (const line of existsSync(envFile) ? readFileSync(envFile, 'utf8').split('\n') : []) {
     const m = line.match(/^([A-Z_]+)=(.*)$/);

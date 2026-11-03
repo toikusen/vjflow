@@ -64,6 +64,26 @@ function settle(p: Plan) {
   if (overCreator(['device:kinetic-format']).length) throw new Error('kinetic-format over its creator limit');
 }
 
+/**
+ * A world's ground for a cut that would repeat the cut before (a world's pool is small: riso has four, and a director's
+ * choice laid over the composer's put 三年後的大雪 on the same grain block twice running, 2026-11-03): another of the
+ * grounds at the same level as `fx` (the quiet ones on a calm song), never the one before nor the peak's. `fx` itself
+ * when it differs already or the world has no other.
+ */
+export function unrepeatGround(world: StyleWorld, fx: string, before: string, calm: boolean, salt: number): string {
+  if (fx !== before) return fx;
+  const levels = Object.values(world.grounds.levels);
+  const pool = calm ? world.grounds.quiet : (levels.find((l) => l.includes(fx)) ?? [...world.grounds.quiet, ...levels.flat()]);
+  const other = [...new Set(pool)].filter((g) => g !== before && g !== world.peak.loud && g !== world.peak.calm);
+  return other.length ? other[salt % other.length] : fx;
+}
+
+/**
+ * A prop's least size on a world (share of the frame's height): a world prints it in two of its inks on a busy ground,
+ * and the binder's 0.4–0.5 for centred lines left 三年後的大雪's props specks (2026-11-03).
+ */
+export const WORLD_PROP_MIN = 0.55;
+
 /** typeplan.mts --plan on a composer plan: the treatment the renderer reads. */
 export function composerTreatment(song0: SongTimeline, plan0: Plan, base: TreatmentV3, palette: { ink: string; paper: string; accent: string; heart: string }, world?: StyleWorld): TreatmentV3 {
   const felt = feltTempo(song0);
@@ -124,12 +144,14 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       if (!c.yields) throw new Error(`a composer cut always yields (${c.fx})`);
       const runsTo = landedEnd(times, i, gap, s.end);
       if (0 < (WORDED[fx] ?? 0)) fx = 'motes';
+      // the same ground twice running reads as a cut that did not happen
+      if (world && sections.length) fx = unrepeatGround(world, fx, (sections[sections.length - 1].layers[0] as KineticLayer).fx, calm, sections.length);
       const held2 = calm && hold?.part === partKey ? hold : undefined;
       // a diagram, or a prop, under a centred lyric would sit on it: it takes a side, alternating, a figure smaller
       const figure = !!c.sprite && !DIAGRAM_FX.has(fx);
       const side = (DIAGRAM_FX.has(fx) || figure) && away === 'center' ? (sections.length % 2 ? 'left' : 'right') : away;
       const pal = world ? world.palette[c.scheme ?? 0] : undefined;
-      const layer: KineticLayer = { kind: 'kinetic', fx: fx as KineticLayer['fx'], words: [], ink: pal?.ink ?? ink, paper: pal?.ground ?? paper, accent: pal?.accent ?? (c.heart ? heart : accent), seed: sections.length + 1, side: side as KineticLayer['side'], size: Math.min(figure && away === 'center' ? 0.75 : 1.7, Math.max(0.4, c.size || 0.85)), flip: side === 'left' };
+      const layer: KineticLayer = { kind: 'kinetic', fx: fx as KineticLayer['fx'], words: [], ink: pal?.ink ?? ink, paper: pal?.ground ?? paper, accent: pal?.accent ?? (c.heart ? heart : accent), seed: sections.length + 1, side: side as KineticLayer['side'], size: Math.min(figure && away === 'center' ? 0.75 : 1.7, Math.max(world ? WORLD_PROP_MIN : 0.4, c.size || 0.85)), flip: side === 'left' };
       if (figure && (shown.sprite !== c.sprite || shown.side === side)) layer.sprite = c.sprite;
       shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;

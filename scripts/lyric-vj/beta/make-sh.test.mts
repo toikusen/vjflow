@@ -212,3 +212,22 @@ test('make.sh with VJ_PAID_WORLD=1: the line director is told the world, the buy
   assert.equal(noDirector.make({ VJ_PAID_WORLD: '1' }).status, 0);
   assert.equal(noDirector.call('linedirect.mts'), '', 'the world switch alone turns nothing on');
 });
+
+test('make.sh hybrid with VJ_PAID_WORLD=1: the story is drawn in the line director\'s world, keyframes and cutout told it', () => {
+  const t = tree({ tier: 'hybrid' });
+  // the line director's world (linedirect.mts keeps it in line/world.json)
+  mkdirSync(join(t.run, 'line'), { recursive: true });
+  writeFileSync(join(t.run, 'line/world.json'), '{"id":"riso"}');
+  const r = t.make({ VJ_LINEDIRECT: '1', VJ_PAID_WORLD: '1' });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(t.call('linedirect.mts'), / --world auto/);
+  assert.match(t.call('keyframes.mts'), /--plan \S+\/line\/final --sheets-only .* --world \S+\/line\/world\.json/, 'the board is drawn in the world');
+  assert.match(t.call('cutout.mts'), /--world \S+\/line\/world\.json/, 'the pages take the world\'s inks');
+  assert.match(t.call('render.mts'), /--treatment \S+\/cut\/treatment\.json/);
+  // off: the story as before
+  const off = tree({ tier: 'hybrid' });
+  mkdirSync(join(off.run, 'line'), { recursive: true });
+  writeFileSync(join(off.run, 'line/world.json'), '{"id":"riso"}');
+  assert.equal(off.make({ VJ_LINEDIRECT: '1' }).status, 0);
+  assert.doesNotMatch(off.call('keyframes.mts') + off.call('cutout.mts'), /--world/);
+});

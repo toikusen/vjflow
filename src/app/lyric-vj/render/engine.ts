@@ -1314,6 +1314,8 @@ export class LyricVjEngine {
           }
           const side = oppositeSide(rects, sec.start, until);
           if (side) Object.assign(l, { side, flip: side === 'left' });
+          // the lines' boxes over the cut: a prop sent to a corner takes the one they leave clear
+          if (l.sprite) l.over = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
           const room = side && l.sprite ? freeBand(rects, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
           if (room) l.room = room;

@@ -7,7 +7,11 @@ import { Box, finePlace } from './material';
 
 const W = 1920;
 const H = 1080;
-export const FINE_SIZE = 30;
+/**
+ * The small words' size (px on the 1080 frame). 30 px read only on a big screen (三年後的大雪's scene notes in a corner,
+ * 2026-11-03): this is the least a laptop reads; a block that leaves no margin for it gets none (finePlace).
+ */
+export const FINE_SIZE = 44;
 
 export interface FineLayer {
   group: THREE.Group;

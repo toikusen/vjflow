@@ -243,7 +243,7 @@ const FRAME_INSET = 64;
  * the small type at the rule's end. `reach` is the rule's share of the block. Nothing when the block leaves no margin.
  */
 export function finePlace(r: Box, typeLen: number, w: number, h: number, reach = 0.8, end: 1 | -1 = 1): FinePlace | undefined {
-  const [gap, drop] = [22, 40];
+  const [gap, drop] = [22, 56];
   const fits = (y0: number, y1: number) => y0 >= FRAME_INSET * 0.7 && y1 <= h - FRAME_INSET * 0.7;
   const bw = r.x1 - r.x0;
   const across = (y: number, textY: number): FinePlace => {

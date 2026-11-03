@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, DOC_KINDS, drawKinetic, fitInRoom, freeBand, freeRows, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitInRoom, freeBand, freeRows, PROP_MIN_H, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -113,6 +113,32 @@ describe('the song\'s thread', () => {
     // two lines filling the frame between them leave no band
     expect(freeRows([{ from: 0, to: 2, y0: 120, y1: 500 }, { from: 1, to: 3, y0: 480, y1: 940 }], 0, 3)).toBeUndefined();
     expect(freeRows(mid, 5, 6)).toBeUndefined();
+  });
+
+  it('a prop in the band above centred lines is centred in it, clear of the top edge; below it stands on the floor', () => {
+    const above = rowsPlace([0, 600], 400, 1)!;
+    expect(above.y - (400 * above.s) / 2).toBeGreaterThanOrEqual(1080 * EDGE_PAD - 0.01);
+    expect(above.y + (400 * above.s) / 2).toBeLessThanOrEqual(600);
+    // a tall figure is shrunk to the band less the edge, still centred
+    const tall = rowsPlace([0, 600], 1080, 1)!;
+    expect(tall.y - (1080 * tall.s) / 2).toBeGreaterThanOrEqual(1080 * EDGE_PAD - 0.01);
+    const below = rowsPlace([700, 1080], 300, 1)!;
+    expect(below.y + (300 * below.s) / 2).toBeCloseTo(1080);
+    // a band that would leave it a speck: no place there
+    expect(rowsPlace([0, 330], 1080, 1)).toBeUndefined();
+    expect(1080 * PROP_MIN_H).toBeGreaterThan(250);
+  });
+
+  it('a prop sent to a corner takes the one the lines leave clear, and fades only when both are taken', () => {
+    // a line low on the right: the right corner is taken, the left is clear
+    const right = [[1100, 700, 1900, 1000]] as [number, number, number, number][];
+    const c = cornerPlace(600, 600, 1, false, right);
+    expect([c.left, c.clear]).toEqual([true, true]);
+    expect(c.s).toBeCloseTo((1080 * UNDER_H) / 600);
+    // nothing near the bottom: its own side, clear
+    expect(cornerPlace(600, 600, 1, false, [[400, 100, 1500, 400]])).toMatchObject({ left: false, clear: true });
+    // a line across the whole foot: its own side, behind the line
+    expect(cornerPlace(600, 600, 1, false, [[0, 800, 1920, 1000]])).toMatchObject({ left: false, clear: false });
   });
 
   it('plans the floor: the character fits in the room the lyric leaves on its side', () => {

@@ -14,8 +14,9 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { lessonsText } from './lessons.mts';
 import sharp from 'sharp';
-import { Board, frameTimes, look } from './keyframes.mts';
+import { Board, frameTimes, look, paperCorner } from './keyframes.mts';
 import { interludesFor, quietBoard } from './interludes.mts';
+import { type PlanWorld, worldPageLook } from './paid-world.mts';
 
 export type Actor = { sprite: string; then: string; at: number; x: number; ground: number; h: number; flip: boolean; enter: 'none' | 'fade'; wind: boolean };
 export type Prop = { sprite: string; x: number; y: number; h: number; motion: 'still' | 'fall' | 'flutter' | 'hang'; front: boolean; walk: number };
@@ -399,7 +400,9 @@ export const lookText = (board: Pick<Board, 'style' | 'userStyle'>, look: Pick<L
   : `Flat graphic poster design for this song (${board.style.split('.')[0]}), in its spot colours: ink ${look.ink}, accent ${look.accent}, paper ${look.paper}. Large calm areas of flat colour or bare paper, simplified geometric shapes, halftone dots only in shadows, clean confident edges, very little detail. Designed, not rendered: no glow, no soft gradients, no painterly texture.`;
 
 async function main() {
-  const { values: a } = parseArgs({ options: { song: { type: 'string' }, keyframes: { type: 'string' }, treatment: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'keep-look': { type: 'string' }, recheck: { type: 'boolean' } } });
+  const { values: a } = parseArgs({ options: { song: { type: 'string' }, keyframes: { type: 'string' }, treatment: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3.1-flash-image' }, 'keep-look': { type: 'string' }, recheck: { type: 'boolean' }, world: { type: 'string' } } });
+  // --world <line/world.json>: the pages take the world's paper and inks (the story on the world the lines live in)
+  const world = a.world ? (JSON.parse(readFileSync(a.world, 'utf8')) as PlanWorld) : undefined;
   for (const line of readFileSync(join(homedir(), '.config/vjflow/anthropic.env'), 'utf8').split('\n')) { const m = line.match(/^([A-Z_]+)=(.*)$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim(); }
   const kf = a.keyframes!, out = a.out!, from = +a.from!, to = +a.to!;
   mkdirSync(join(out, 'spr'), { recursive: true });
@@ -434,7 +437,7 @@ async function main() {
     const prompt = `你是 MV 美術指導。下面是〈${song.title}〉已經定好的分鏡（每格一句歌詞）。這次不要每格畫一張完整插畫，改成設計感的「舞台」：少數幾張平面設計背景（沒有人），加上去背的人物和道具立繪，每格用程式擺放、移動。
 ${lessonsText() ? `過去作品的使用者回饋整理出的經驗（一定要遵守）：\n${lessonsText()}\n` : ''}規則：
 最近其他歌用過的版面語言：${JSON.stringify(history.slice(-6))}
-${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要改：${JSON.stringify(keptLook)}\n` : ''}- 背景（sets）：每個地點最多 2 張（例如遠景、近景），全部共用；描述用英文，寫清楚構圖：大面積平塗色塊或留白的紙、簡化的幾何形、地平線或地面在畫面下方 1/4 左右讓人物站；不要人。
+${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要改：${JSON.stringify(keptLook)}\n` : ''}${world ? `這首活在風格世界 ${world.id}：look 的 paper ${world.palette.paper}、ink ${world.palette.ink}、accent ${world.palette.accent} 已定（程式會套上），只決定其他欄位。\n` : ''}- 背景（sets）：每個地點最多 2 張（例如遠景、近景），全部共用；描述用英文，寫清楚構圖：大面積平塗色塊或留白的紙、簡化的幾何形、地平線或地面在畫面下方 1/4 左右讓人物站；不要人。
 - 立繪（sprites）：主角每人約 格數÷3 個姿勢（整首 30 多格就要 10–12 個），配角 6–8 個，短段落按比例減少；道具最多 4 個。每個姿勢的輪廓、朝向、手勢、表情都要明顯不同（左右翻轉、放大縮小不算新姿勢）。分配時先想每格這個人在做什麼（表演、聆聽、調侃、拒絕、驚訝、邀請、轉折、收尾），再決定需要哪些姿勢。相鄰兩格同一人不能用同一個姿勢，五格內同一姿勢最多兩次。每張只畫一個人或一個東西，英文描述姿勢、表情、手上拿什麼（道具在誰手上、圍巾戴著還是拿著，要和劇情一致）。立繪和背景分開畫、對不準：姿勢必須自己站得住（站、走、轉身、低頭、伸手、回頭），不要靠欄杆、倚牆、坐椅子這種要靠背景東西的姿勢。who 填人物 id（道具填 []）。
 - subject：每格先決定畫面主角是 people（人物）、object（物體特寫）或 place（場景空鏡）。整首約 ${calm ? '30–40%（慢歌：只有場景、或場景加幾樣物品的畫面最能留住氣氛，可以有純背景的空鏡）' : '20–30%'} 的格用 object/place 穿插（上限 40%；關鍵動作和情緒反應的格一定要有人物，無人鏡頭只放在轉場、氣氛和交代前因後果的地方），放在：前奏或第一次進入新地點（攤位亮燈、路口）、動作的前因後果（手機震動、兩杯飲料、機車鑰匙、車燈亮起）、主歌轉副歌或間奏（霓虹倒影、音箱）、情緒轉折（沒喝完的飲料、空座位）、結尾回到開場的地方。用「人物意圖 → 物件／環境變化 → 人物反應」銜接，物體要是故事裡的東西，同一個母題（同一個攤位、同一條路）在不同時間反覆出現。object/place 格：mode 用 painted，actors 空，shows 用英文寫這個畫面（不能有人），who 空。
 - 只有兩個人的身體真的碰在一起（擁抱、牽手、親吻、靠在對方身上）或特寫身體局部的格，mode 用 painted（整張畫）；說話、對看、指著對方、遞東西、一起站著都用 cutout，兩人分開站、姿勢互相回應。people 的 painted 格規則（生圖最容易畫錯人體，付費產品絕對不能出錯）：who 最多 2 人；畫面裡除了這 2 人不能有任何其他人（沒有路人、人群、背景人物）；不畫手碰臉或遮眼睛、三人以上互動、抱起人、多人疊在一起；共騎機車容易畫錯，改用 object 鏡頭（車燈亮起、車子遠去）表現。shows 用英文寫清楚構圖；contact 寫誰的哪隻手碰誰的哪裡（沒有就空字串）；support 寫每個人的重量靠什麼（站在地上、坐在椅子上）；fallback 用英文寫一個不畫人也能交代同一件事的鏡頭（物體或場景）。key：這格是不是故事少了就看不懂的關鍵事件（相遇、擁抱、分離、告別、和好、結局）；key 為 true 的格不能被換成無人鏡頭。simple 用英文寫同一個動作的簡化構圖，讓看得到的手越少越好，但動作仍看得懂（擁抱→側後方近景、臉靠在肩上、手藏在對方身後；戴帽→只見帽子落在頭上和兩人的笑臉；依偎→兩人肩靠肩的背影）。所有 people 的 painted 格都用「手越少越好」的構圖：接觸用身體、頭、肩膀表現，手藏在對方身後、口袋裡或畫面外。cutout 格的 who、contact、support、fallback 填空字串或空陣列，shows 簡短描述即可。整段 painted（含 object/place）不超過一半。
@@ -477,6 +480,9 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     writeFileSync(historyFile, JSON.stringify([...history, { song: song.title, shapes: made.look.shapes, texture: made.look.texture, ambience: made.look.ambience }], null, 1));
   }
   const spec = JSON.parse(readFileSync(specFile, 'utf8')) as Spec;
+  if (world) spec.look = worldPageLook(spec.look, world);
+  // a spec kept from before the floor rule (a reused story) is held to it too: two floor words a song at most
+  spec.shots = sparseFloors(spec.shots);
   // shape names are checked here, not in the schema (the enum twice made the response grammar too large)
   const known = (x: string) => (SHAPES as readonly string[]).includes(x);
   spec.look.shapes = spec.look.shapes.filter(known);
@@ -649,6 +655,18 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     return draw(paintFile(s), `One frame of an animated music video. ${LOOK} ${cast_} ${existsSync(place) ? 'The place as in the setting sheet (second image).' : ''}\nScene: ${scene}\nThe main subject in the ${side === 'left' ? 'right' : 'left'} two thirds; the ${side} third is quiet scenery (the lyrics go there). One continuous full-bleed 16:9 image, a single scene.${wrong ? ` The last attempt was wrong: ${wrong}. Do not repeat that.` : ''} ${NO_TEXT}`, [cast, ...(existsSync(place) ? [place] : [])], '16:9');
   };
   const painted = spec.shots.filter((s) => s.mode === 'painted');
+  const bareCorner = async (file: string) => {
+    const { data, info } = await sharp(file).resize(192, 108, { fit: 'fill' }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    return paperCorner(data, info.width, info.height);
+  };
+  // a whole-frame picture with a corner left unpainted reads as a hole in the page (inside a window the page's own
+  // paper is round it anyway): a kept one (a reused story) is set aside and drawn again
+  const whole = (s: Shot) => s.layout?.shape === 'full';
+  for (const s of painted)
+    if (whole(s) && existsSync(paintFile(s)) && (await bareCorner(paintFile(s)))) {
+      console.log(`paint ${s.frame}: a corner left as bare paper, drawn again`);
+      renameSync(paintFile(s), paintFile(s).replace('.jpg', '.corner.jpg'));
+    }
   await Promise.all(painted.map(async (s) => {
     // a frame kept from an earlier run was checked when it was drawn
     if (existsSync(paintFile(s))) return;
@@ -659,6 +677,12 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     const tries = s.key && s.simple ? 5 : 3;
     for (let k = 0; k < tries; k++) {
       await paint(s, wrong, false, k >= 3);
+      if (whole(s) && (await bareCorner(paintFile(s)))) {
+        wrong = 'a corner of the picture was left as blank, unpainted paper';
+        console.log(`paint ${s.frame} try ${k + 1}: ${wrong}`);
+        renameSync(paintFile(s), paintFile(s).replace('.jpg', `.reject${k}.jpg`));
+        continue;
+      }
       const v = await verify(paintFile(s), cast, who.map((id) => board.people.find((p) => p.id === id)!).filter(Boolean), s.contact, s.support, s.shows || f?.shows || '');
       usd += v.usd;
       log({ kind: 'paint', id: String(s.frame), file: paintFile(s), status: v.status, problems: v.problems ? [v.problems] : [], tries: k + 1 });

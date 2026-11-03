@@ -39,7 +39,7 @@ describe('checkMoments', () => {
     expect(checkMoments([ask({ cues: ['c018', 'c019'] })], cues, early).dropped[0].reason).toMatch(/struck before it can be read/);
   });
   it('keeps moments 30 s apart and at most three, in song order', () => {
-    const asks = [ask({ cues: ['c030'], form: 'shape', variant: 'fall', word: '雪' }), ask({ cues: ['c020'], form: 'shape', variant: 'chain', word: '雙截棍' }), ask({ cues: ['c021'], form: 'shape', variant: 'chain', word: '雙截棍' })];
+    const asks = [ask({ cues: ['c030'], form: 'shape', variant: 'fall', word: '飄雪' }), ask({ cues: ['c020'], form: 'shape', variant: 'chain', word: '雙截棍' }), ask({ cues: ['c021'], form: 'shape', variant: 'chain', word: '雙截棍' })];
     const { kept, dropped } = checkMoments(asks, cues, sungOf);
     expect(kept.map((k) => k.cues[0])).toEqual(['c020', 'c030']);
     expect(dropped[0].reason).toContain(`${MOMENTS_APART} s`);
@@ -91,9 +91,9 @@ describe('the new forms and variants', () => {
     expect(checkMoments([ask({ cues: ['c040'], variant: 'burn', word: '融化' })], all, sung).dropped[0].reason).toMatch(/not a strike\/burn word/);
   });
   it('refuses a circle for a line too long to go round it', () => {
-    const long = [{ id: 'c050', start: 300, end: 309, text: '知らない小径の途中 錆びた踏切の向こうで笑う 君の輪郭' }];
+    const long = [{ id: 'c050', start: 300, end: 309, text: '知らない小径の途中 錆びた踏切の向こうで笑う 丸い月' }];
     const s50 = (id: string) => ({ times: [...long[0].text].map((_, i) => 300 + 0.2 * i), source: 'vote' });
-    expect(checkMoments([ask({ cues: ['c050'], form: 'shape', variant: 'circle', word: '輪郭' })], long, s50).dropped[0].reason).toMatch(/too long for shape\/circle/);
+    expect(checkMoments([ask({ cues: ['c050'], form: 'shape', variant: 'circle', word: '月' })], long, s50).dropped[0].reason).toMatch(/too long for shape\/circle/);
   });
   it('takes two lines only for the tear', () => {
     const pair = checkMoments([ask({ cues: ['c018', 'c019'], variant: 'burn', word: '踢' })], cues, sungOf);
@@ -121,6 +121,43 @@ describe('the new forms and variants', () => {
     expect(ownCues({ form: 'echo', cues: ['c031', 'c042'] })).toEqual(['c042']);
     expect(ownCues({ form: 'strike', cues: ['c018', 'c019'] })).toEqual(['c018', 'c019']);
     expect(ownCues({ form: 'shape', cues: ['c020'], repeat: 'c021' })).toEqual(['c020', 'c021']);
+  });
+  it('needs the whole word of the line, of the sense, not a character inside a longer word of another sense', () => {
+    const lines = [
+      { id: 'j1', start: 10, end: 14, text: '暗闇 振り切ってゆこう' },
+      { id: 'j2', start: 50, end: 55, text: '途切れた糸が靡く方角には水たまり' },
+      { id: 'j3', start: 90, end: 94, text: '糸を切って 歩き出す' },
+      { id: 'z1', start: 130, end: 134, text: '一刀切斷所有牽掛' },
+      { id: 'j4', start: 170, end: 174, text: '光る星 夜空に消えてしまって' },
+      { id: 'j5', start: 210, end: 214, text: '君の輪郭' },
+      { id: 'z2', start: 250, end: 254, text: '停不下來的我' },
+      { id: 'j6', start: 290, end: 294, text: '時は止まらない' },
+      { id: 'z3', start: 330, end: 334, text: '積み上げた日々は消えず' },
+    ];
+    const s = (id: string) => { const c = lines.find((x) => x.id === id)!; return { times: [...c.text].map((_, i) => c.start + 0.1 * i), source: 'vote' }; };
+    const forms = { ...MOMENT_FORMS, strike: [...MOMENT_FORMS.strike, 'wipe'] };
+    const one = (id: string, form: string, variant: string, word: string) => checkMoments([ask({ cues: [id], form, variant, word })], lines, s, forms);
+    // 振り切る (to shake off) and 途切れる (to break off) are not a blade
+    expect(one('j1', 'strike', 'slice', '切').dropped[0].reason).toMatch(/hangs off 「振り」/);
+    expect(one('j1', 'strike', 'slice', '振り切って').dropped[0].reason).toMatch(/not a strike\/slice word/);
+    expect(one('j2', 'strike', 'slice', '切').dropped[0].reason).toMatch(/part of the word 「切れ」/);
+    expect(one('j2', 'strike', 'slice', '途切れた').dropped[0].reason).toMatch(/not a strike\/slice word/);
+    // a thread cut: the literal sense, the whole word given
+    expect(one('j3', 'strike', 'slice', '切って').kept).toHaveLength(1);
+    expect(one('z1', 'strike', 'slice', '切斷').kept).toHaveLength(1);
+    expect(one('j4', 'strike', 'wipe', '消えて').kept[0].at).toBeCloseTo(170 + 0.1 * 7, 3);
+    // an outline is not a ring; a word given as a character of it is refused before its length is
+    expect(one('j5', 'shape', 'circle', '輪').dropped[0].reason).toMatch(/part of the word 「輪郭」/);
+    expect(one('j5', 'shape', 'circle', '輪郭').dropped[0].reason).toMatch(/not a shape\/circle word/);
+    // negations: nothing stops, nothing vanishes
+    expect(one('z2', 'freeze', 'stop', '停').dropped[0].reason).toMatch(/negated/);
+    expect(one('z2', 'freeze', 'stop', '停不下來').dropped[0].reason).toMatch(/negated/);
+    expect(one('j6', 'freeze', 'stop', '止まらない').dropped[0].reason).toMatch(/negated/);
+    expect(one('z3', 'strike', 'wipe', '消えず').dropped[0].reason).toMatch(/negated/);
+  });
+  it('lands on the sense\'s own character inside a Chinese word', () => {
+    const { kept } = checkMoments([ask({ cues: ['c030'], form: 'shape', variant: 'fall', word: '飄雪' })], cues, sungOf);
+    expect(kept[0].at).toBeCloseTo(120 + 0.1 * 7, 3);
   });
   it('matches latin words at a word start and lists every variant\'s words', () => {
     expect(WORDS_OF.shape['circle'].test('rings')).toBe(true);

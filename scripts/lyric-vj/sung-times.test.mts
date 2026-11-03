@@ -28,12 +28,12 @@ test('times a line from the trusted alignment and spreads the rest evenly', () =
   assert.equal(t.get('c009')!.source, 'even');
 });
 
-test('builds a moment on them and puts it on a treatment without the line\'s small tier', () => {
-  const { kept, dropped } = buildMoments(song, songFile, [{ cues: ['c008'], form: 'shape', variant: 'fall', word: '雪', why: '' }]);
+test('builds a moment on them (the whole word 飄雪, landing on 雪) and puts it on a treatment without the line\'s small tier', () => {
+  const { kept, dropped } = buildMoments(song, songFile, [{ cues: ['c008'], form: 'shape', variant: 'fall', word: '飄雪', why: '' }]);
   assert.equal(dropped.length, 0);
   assert.equal(kept[0].at, 46.5);
   // a variant written with its form in front (shape/fall, as the prompt lists it) is the same ask
-  const prefixed = buildMoments(song, songFile, [{ cues: ['c008'], form: 'shape', variant: 'shape/fall', word: '雪', why: '' }]);
+  const prefixed = buildMoments(song, songFile, [{ cues: ['c008'], form: 'shape', variant: 'shape/fall', word: '飄雪', why: '' }]);
   assert.equal(prefixed.dropped.length, 0);
   assert.equal(prefixed.kept[0].variant, 'fall');
   const tr = withMoments({ cues: [{ cueId: 'c008', fine: { kind: 'rule' }, hit: 'tile' }, { cueId: 'c009', fine: { kind: 'rule' } }] }, kept);

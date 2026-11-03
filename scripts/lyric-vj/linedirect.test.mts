@@ -172,8 +172,10 @@ assert.ok(!directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept:
 const offered = directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', moments: { overused: ['shape/chain'] } });
 assert.ok(offered.includes('strike/tear') && offered.includes('shape/wave') && offered.includes('這首避免：shape/chain'), 'the forms on offer and the overused ones');
 assert.ok(['strike/burn', 'strike/melt', 'strike/slice', 'strike/fly', 'shape/circle', 'freeze/stop', 'echo/ghost'].every((v) => offered.includes(v)), 'every drawn variant is offered');
-assert.ok(!offered.includes('strike/wipe') && !offered.includes('shape/rise'), 'the held-back variants are not offered');
-assert.ok(offered.includes('燃') && offered.includes('瞬間'), 'with the words it needs');
+assert.ok(offered.includes('strike/wipe') && offered.includes('shape/rise'), 'the wipe and the smoke rise, passed, are offered');
+assert.ok(offered.includes('燃') && offered.includes('瞬間'), 'with the senses it can show');
+// the director is asked for the line's meaning, the whole word, and told zero is normal; a character inside another word is no reason
+assert.ok(offered.includes('空陣列是正常的') && offered.includes('整個詞') && offered.includes('振り切って') && offered.includes('輪郭'), 'moments by meaning: the whole word, the refused examples, zero as the norm');
 assert.ok(!offered.includes('shape/spiral') && !offered.includes('shape/heart'), 'a variant not drawn is not offered');
 assert.deepEqual(directionSchema(true).properties.moments.items.properties.form.enum, ['strike', 'shape', 'freeze', 'echo'], 'the schema offers every form');
 

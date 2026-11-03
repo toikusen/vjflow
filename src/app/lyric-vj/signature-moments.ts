@@ -1,33 +1,42 @@
-// Signature moments (專屬時刻), the paid tiers' own: the line director picks up to three lines of a song and each
-// gets a drawn moment of a fixed form, with the lyric word that earns it. The forms are few and each is drawn by
-// the renderer (render/signature.ts); this is what both sides agree on: the forms on offer, the words each form
-// needs, and the guards a director's ask must pass. A failed guard drops the moment and never the line.
+// Signature moments (專屬時刻), the paid tiers' own: the line director picks up to three lines of a song, each for
+// what the line means (it is about burning, melting, flying away…), and each gets a drawn moment of a fixed form,
+// with the whole word of the line that carries that meaning. The forms are few and each is drawn by the renderer
+// (render/signature.ts); this is what both sides agree on: the forms on offer, the senses each can show, and the
+// guards a director's ask must pass (a character inside a longer word of another sense is no evidence). A failed
+// guard drops the moment and never the line; a song with no fitting line gets none, which is the usual case.
 import { readingSec } from './render/reading-window';
 import { isSungChar, wordIndex } from './sung-times';
 
 export type MomentForm = 'strike' | 'shape' | 'freeze' | 'echo';
-/**
- * The variants drawn so far, by form: a director may only ask for these. strike/wipe and shape/rise are drawn
- * (render/signature-forms.ts) but held back: on the 2026-11-03 test songs the wipe read as a glitch on small type and
- * the rise as ghosted text running into the next line, short of the approved tear and chain.
- */
+/** The variants drawn so far, by form: a director may only ask for these. */
 export const MOMENT_FORMS: Record<MomentForm, string[]> = {
-  strike: ['tear', 'burn', 'melt', 'slice', 'fly'],
-  shape: ['chain', 'wave', 'fall', 'circle'],
+  strike: ['tear', 'burn', 'melt', 'slice', 'wipe', 'fly'],
+  shape: ['chain', 'wave', 'fall', 'circle', 'rise'],
   freeze: ['stop'],
   echo: ['ghost'],
 };
+/**
+ * Variants drawn (render/signature-forms.ts) but held back from the director until they pass the tear/chain bar on
+ * three songs: a hand-written spec may still render them (moments.mts --held) for that check. None at the moment:
+ * the wipe (read whole, then one stroke) and the rise (smoke off the standing line) passed on 2026-11-03.
+ */
+export const HELD_FORMS: Partial<Record<MomentForm, string[]>> = {};
+export const withHeld = (forms: Record<MomentForm, string[]> = MOMENT_FORMS): Record<MomentForm, string[]> =>
+  Object.fromEntries(Object.entries(forms).map(([f, vs]) => [f, [...vs, ...(HELD_FORMS[f as MomentForm] ?? [])]])) as Record<MomentForm, string[]>;
 
-/** The words a variant needs, as the director is told them (zh, ja, en): any one of them in the asked word passes. */
+/**
+ * The senses a variant can show (zh, ja, en), as the director is told them. Not a matcher: the director picks a line
+ * for what it means, and gives the whole word of the line that carries it; senseOf then checks the word is of that kind.
+ */
 export const WORD_LISTS: Record<MomentForm, Record<string, string[]>> = {
   // the verb a strike needs in the line: the action lands on the line when it is sung
   strike: {
     tear: ['踢', '打', '破', '碎', '撕', '裂', '砸', '撞', '踹', '壊', '砕', '蹴', '殴', 'kick', 'break', 'smash', 'tear', 'crash'],
-    burn: ['燒', '焚', '燃', '焼', 'burn', 'ignite'],
-    melt: ['融', '溶', '滴', '化掉', '化開', 'とけ', 'melt', 'drip'],
+    burn: ['燒', '焚', '焚き付け', '燃', '焼', 'burn', 'ignite'],
+    melt: ['融', '溶', '滴', '化掉', '化開', 'とけ', '溶け', 'melt', 'drip'],
     slice: ['切', '斬', '割', '斩', 'cut', 'slice', 'slash'],
-    wipe: ['擦', '消', '抹', '拭', 'wipe', 'erase'],
-    fly: ['放手', '手放', '丟', '扔', '甩', '捨', '投', '拋', '抛', '飛', '飄', 'fly', 'throw', 'let go', 'blow away'],
+    wipe: ['擦', '消', '抹', '拭', '消失', 'wipe', 'erase', 'vanish'],
+    fly: ['放手', '手放', '丟', '扔', '甩', '捨', '投', '拋', '抛', '飛', '飄', '吹き飛', 'fly', 'throw', 'let go', 'blow away'],
   },
   // the thing a shape names: the line is laid along it and moves like it
   shape: {
@@ -35,19 +44,103 @@ export const WORD_LISTS: Record<MomentForm, Record<string, string[]>> = {
     wave: ['波', '浪', '海', '潮', 'wave', 'sea', 'ocean', 'tide'],
     fall: ['雨', '淚', '涙', '雪', '葉', '花瓣', '花びら', 'rain', 'tear', 'snow', 'leaf', 'leaves', 'petal'],
     circle: ['月', '輪', '環', '戒指', '圓', '円', '丸', '鐘', '時計', 'まる', 'moon', 'ring', 'circle', 'clock'],
-    rise: ['煙', '泡', '昇', '升', '氣球', '風船', '花火', '煙火', 'smoke', 'bubble', 'balloon', 'rise'],
+    // smoke only: the bubble, balloon, firework and plain lift are drawn but wait for a line that means them, seen on a song
+    rise: ['煙', '煙霧', 'けむり', 'smoke'],
   },
   // the word that stops time: the frame holds while only this line moves
-  freeze: { stop: ['停', '止', '凍', '瞬間', '一瞬', 'ストップ', 'stop', 'freeze', 'frozen'] },
+  freeze: { stop: ['停', '止', '立ち止', '凍', '瞬間', '一瞬', 'ストップ', 'stop', 'freeze', 'frozen'] },
   // an echo's word is the one both lines sing (checked against the earlier line, not a list)
   echo: { ghost: [] },
 };
 const escape = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// a latin word starts a word (ring, rings, not bring); a CJK one may sit inside a longer word (融 in 融化)
-const anyOf = (words: string[]) => (words.length ? new RegExp(words.map((w) => (/^[a-z ]+$/i.test(w) ? `\\b${escape(w)}` : escape(w))).join('|'), 'iu') : undefined);
+const latin = (w: string) => /^[a-z ]+$/i.test(w);
+// a latin sense starts a word (ring, rings, not bring); a CJK one may sit inside the word (踢 in 踢開)
+const anyOf = (words: string[]) => (words.length ? new RegExp(words.map((w) => (latin(w) ? `\\b${escape(w)}` : escape(w))).join('|'), 'iu') : undefined);
 export const WORDS_OF = Object.fromEntries(Object.entries(WORD_LISTS).map(([f, vs]) => [f, Object.fromEntries(Object.entries(vs).flatMap(([v, ws]) => { const r = anyOf(ws); return r ? [[v, r]] : []; }))])) as Record<MomentForm, Record<string, RegExp>>;
 export const STRIKE_WORDS = WORDS_OF.strike;
 export const SHAPE_WORDS = WORDS_OF.shape;
+
+// ---- the evidence word: a whole word of the line, of the variant's sense ----
+
+export type Script = 'ja' | 'zh' | 'en';
+/** The script a line is written in, for its word segmenter: kana makes it Japanese, Han alone Chinese, else English. */
+export const scriptOf = (text: string): Script => (/[\p{Script=Hiragana}\p{Script=Katakana}ー]/u.test(text) ? 'ja' : /\p{Script=Han}/u.test(text) ? 'zh' : 'en');
+const LOCALE: Record<Script, string> = { ja: 'ja', zh: 'zh-Hant', en: 'en' };
+const KANA = /^[\p{Script=Hiragana}\p{Script=Katakana}ー]*$/u;
+const CONTENT = /[\p{Script=Han}\p{Script=Katakana}]/u;
+const NEGATED: Record<Script, RegExp> = { ja: /^(?:ない|ず|ぬ|ません|なかった|なく)/u, zh: /^[不沒没未別别]/u, en: /(?:\bnot|n't|\bnever|\bno)\s+(?:\w+\s+)?$/i };
+
+interface Seg { from: number; to: number; text: string; wordLike: boolean }
+/** The line's words by Intl.Segmenter, in code points. */
+function segmentsOf(text: string, script: Script): Seg[] {
+  const out: Seg[] = [];
+  let at = 0;
+  for (const s of new Intl.Segmenter(LOCALE[script], { granularity: 'word' }).segment(text)) {
+    const n = [...s.segment].length;
+    out.push({ from: at, to: at + n, text: s.segment, wordLike: !!s.isWordLike });
+    at += n;
+  }
+  return out;
+}
+
+/**
+ * Why `word` (at code point `at` of the line) is not a whole word of the line, or '' when it is. By Intl.Segmenter's
+ * words: a Japanese word may not start or end inside a segment (切 in 途切れ), nor, for a verb, hang off a kanji or
+ * katakana segment glued before it (切 in 振り切って: a compound verb, another sense; a noun after its adjective, 丸い月,
+ * stands); a Chinese dictionary phrase longer than two characters (一腳踢開) is open at every character, two-character
+ * words are not (雪 in 飄雪: the word is 飄雪). A negated word (止まらない, 停不下來, never burn) is not the thing happening.
+ */
+export function notWholeWord(text: string, word: string, at: number, verb = true): string {
+  const script = scriptOf(text);
+  const segs = segmentsOf(text, script);
+  const n = [...word].length;
+  const end = at + n;
+  const bounds = new Set<number>();
+  for (const s of segs) {
+    bounds.add(s.from);
+    bounds.add(s.to);
+    if (script === 'zh' && s.wordLike && s.to - s.from > 2) for (let i = s.from + 1; i < s.to; i++) bounds.add(i);
+  }
+  const holder = (i: number) => segs.find((s) => s.from <= i && i < s.to)?.text ?? '';
+  if (!bounds.has(at)) return `「${word}」 is part of the word 「${holder(at)}」`;
+  if (!bounds.has(end)) return `「${word}」 is part of the word 「${holder(end - 1)}」`;
+  if (script === 'ja' && verb) {
+    const before = segs.find((s) => s.to === at);
+    if (before?.wordLike && CONTENT.test(before.text)) return `「${word}」 hangs off 「${before.text}」 (${before.text}${word}): a compound, another sense`;
+  }
+  const after = [...text].slice(end).join('');
+  const before = [...text].slice(0, at).join('');
+  // the negation may follow the word (止まら|ない) or be inside the word given (止まらない, 停不下來)
+  const inside = script === 'ja' ? /(?:ない|ず|ぬ|ません|なかった)$/u.test(word) : script === 'zh' && NEGATED.zh.test([...word].slice(1).join(''));
+  if (inside || (script === 'en' ? NEGATED.en.test(before) : NEGATED[script].test(after))) return `「${word}」 is negated here`;
+  return '';
+}
+
+/**
+ * Whether `word` carries one of the variant's senses, and where in the word the sense sits (code points): a Japanese
+ * or English word is of the sense when it begins with it (消えて, 焚き付けろ, burning), the rest an inflection (kana or
+ * letters), so 輪郭 is not a ring and 振り切って not a cut; a Chinese word when it holds it (踢開, 飄雪).
+ */
+export function senseOf(form: MomentForm, variant: string, word: string, script: Script): { ok: boolean; at: number } {
+  const senses = WORD_LISTS[form]?.[variant] ?? [];
+  if (!senses.length) return { ok: true, at: 0 };
+  const chars = [...word];
+  for (const s of senses) {
+    if (latin(s)) {
+      const m = new RegExp(`\\b${escape(s)}`, 'iu').exec(word);
+      if (m && (script !== 'en' || m.index === 0)) return { ok: true, at: [...word.slice(0, m.index)].length };
+      continue;
+    }
+    const sc = [...s];
+    if (script === 'zh') {
+      const i = chars.findIndex((_, k) => sc.every((c, j) => chars[k + j] === c));
+      if (i >= 0) return { ok: true, at: i };
+      continue;
+    }
+    if (sc.every((c, j) => chars[j] === c) && KANA.test(chars.slice(sc.length).join(''))) return { ok: true, at: 0 };
+  }
+  return { ok: false, at: -1 };
+}
 /** The most sung characters a variant can lay out readably: a circle's rims hold about twenty. */
 export const MAX_SUNG: Record<string, number> = { 'shape/circle': 20 };
 /** Strikes that may take the line before as the thing struck (the spike's signboard and kick). */
@@ -114,8 +207,11 @@ export function checkMoments(asks: MomentAsk[], cues: MomentCue[], sungOf: SungO
     const word = (ask.word ?? '').trim();
     const idx = wordIndex(actor.text, word);
     if (idx < 0) { drop(`the word 「${word}」 is not in the line`); continue; }
-    const need = WORDS_OF[ask.form as MomentForm][ask.variant];
-    if (need && !need.test(word)) { drop(`「${word}」 is not a ${ask.form}/${ask.variant} word`); continue; }
+    // the evidence is a whole word of the line, of the variant's sense: a character inside a longer word is none
+    const partial = notWholeWord(actor.text, word, idx, ask.form === 'strike' || ask.form === 'freeze');
+    if (partial) { drop(partial); continue; }
+    const sense = senseOf(ask.form as MomentForm, ask.variant, word, scriptOf(actor.text));
+    if (!sense.ok) { drop(`「${word}」 is not a ${ask.form}/${ask.variant} word`); continue; }
     const most = MAX_SUNG[`${ask.form}/${ask.variant}`];
     if (most && spokenOf(actor.text).length > most) { drop(`「${actor.text}」 is too long for ${ask.form}/${ask.variant} (${most} characters at most)`); continue; }
     // the echo's evidence: the words both lines sing, more than a particle
@@ -131,7 +227,8 @@ export function checkMoments(asks: MomentAsk[], cues: MomentCue[], sungOf: SungO
       sungSource[c.id] = s.source;
     }
     if (missing) { drop(`no sung times for ${missing}`); continue; }
-    const at = sung[actor.id][idx];
+    // the moment lands on the sense's own character (踢 in 踢開, 雪 in 飄雪), not the word's first
+    const at = sung[actor.id][idx + sense.at];
     // the struck line is read whole before the strike; a line that is its own moment reads from its last character to the next line
     const object = !echo && hits.length === 2 ? hits[0].c : undefined;
     if (object && at - lastSung(object.text, sung[object.id]) < readingSec(mainOf(object.text), object.start, object.end) - 0.05) { drop(`「${object.text}」 is struck before it can be read`); continue; }

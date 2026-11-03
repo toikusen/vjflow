@@ -842,24 +842,24 @@ export function wordPieces(text: string): string[] {
 }
 
 const WORD_HELP = (form: MomentForm, v: string) => WORD_LISTS[form][v].join('、');
-/** The moments on offer, every drawn variant with the words it needs: only when a run asks for them. */
+/** The moments on offer, every drawn variant with the senses it can show: only when a run asks for them. */
 export function momentsPrompt(overused: string[]) {
-  const list = (form: MomentForm, what: string, about: Record<string, string>) => MOMENT_FORMS[form].map((v) => `${form}/${v}（${about[v] ?? ''}；${what} ${WORD_HELP(form, v)}）`).join('、');
-  const strike = list('strike', '動詞', {
+  const list = (form: MomentForm, what: string, about: Record<string, string>) => MOMENT_FORMS[form].map((v) => `${form}/${v}（${about[v] ?? ''}；${what}：${WORD_HELP(form, v)}）`).join('、');
+  const strike = list('strike', '能畫的意思', {
     tear: '紙在動詞處撕開飛散', burn: '字印在紙上，從字下點燃，燒到字邊留焦邊與餘燼，句子走時整張燒掉', melt: '字從動詞起往下垂、滴落',
-    slice: '一刀斜斜劃過，上半截沿刀口錯開', wipe: '一隻手沿句子抹過，抹過的字拖出墨痕、變淡但讀得到', fly: '句子鬆開飄起（放手、飛ぶ）或被甩出去（丟、吹き飛ばす），句子走時飛出畫面',
+    slice: '一刀斜斜劃過，上半截沿刀口錯開', wipe: '句子讀完後，在最後一刻被一抹擦掉', fly: '句子鬆開飄起（放手、飛ぶ）或被甩出去（丟、吹き飛ばす），句子走時飛出畫面',
   });
-  const shape = list('shape', '名詞', {
+  const shape = list('shape', '能畫的東西', {
     chain: '句子分兩節、中間鏈條，隨後面的口令擺動', wave: '字騎在水面上', fall: '字一顆顆落下（雨直落、雪和花瓣飄落）',
-    circle: '句子沿圓排（20 字以內；月是淡圓盤、時鐘隨拍跳動、戒指有一道反光、まる是筆畫出一圈）', rise: '句子整排往上飄（泡、煙、氣球、花火各有樣子）',
+    circle: '句子沿圓排（20 字以內；月是淡圓盤、時鐘隨拍跳動、戒指有一道反光、まる是筆畫出一圈）', rise: '字留在原位讀完，煙從字上冒出、捲著往上散開變淡（目前只畫煙）',
   });
-  return `- moments（專屬時刻）：整首挑 0 到 3 個時刻，至少隔 30 秒，沒有真正合適的句子就空陣列。每個時刻：cues、form、variant、word、why。
+  return `- moments（專屬時刻）：整首挑 0 到 3 個時刻，至少隔 30 秒。時刻是把這句歌詞「說的事」畫出來：這句真的在說燒掉、融化、切斷、放手飛走、停住、波浪、下雪……（字面或比喻都算），畫面才做那件事。不是句子裡有某個字就用那個特效；一個字只是嵌在別的詞裡、或是另一個意思，都不算理由。大多數歌沒有這樣的句子，空陣列是正常的；寧可零個，不要硬配。每個時刻：cues、form、variant、word、why。
   - strike「動作打在字上」：唱到那個動詞時，動作作用在字或字下的紙上。${strike}。cues 填一句；只有 tear 可以填兩句（前一句是被打的東西，印在一張紙牌上；這句是打的那句，整句像一條腿踢上去，例如「東亞病夫的招牌」+「已被我一腳踢開」），兩句時前一句要讀得完才會被打。
   - shape「字變成那個東西」：句子沿著它說的東西的形狀排，跟著它動。${shape}。cues 填那一句。
-  - freeze「時間停住」：唱到停住的字，整個畫面凍結一拍、變灰，只有這句字繼續唱、慢慢推近，再一起恢復。freeze/stop（字 ${WORD_HELP('freeze', 'stop')}）。cues 填那一句；「停不下來」「止まらない」這種否定不算。
+  - freeze「時間停住」：唱到停住的字，整個畫面凍結一拍、變灰，只有這句字繼續唱、慢慢推近，再一起恢復。freeze/stop（能畫的意思：${WORD_HELP('freeze', 'stop')}）。cues 填那一句；「停不下來」「止まらない」這種否定不算。
   - echo「回聲」：這句在回應前面唱過的某一句（不是同一句重唱），那句以淡影浮回來，墊在這句下面，共同的詞對齊。echo/ghost：cues 填兩句，先填前面那句、再填這句；word 是兩句都有的詞（至少兩個字）。
-  - word 必須原樣出現在那句歌詞裡（括號裡的應援不算），而且真的是那個意思：「割と」不是切、「切記」不是切、「心」不是形狀。程式會逐項檢查，不合的時刻會被拿掉，句子本身不受影響。
-  - 時刻會把那句整個接管（版面、進退場都由時刻畫），所以那句的 layout 等欄位照填但會被覆蓋。${overused.length ? `最近的歌用過太多次、這首避免：${overused.join('、')}。` : ''}why 一句、二十字內，講這句為什麼配這個形式。
+  - word 填那句歌詞裡承載這個意思的「整個詞」，照原樣抄（消えて、焚き付けろ、手放せ、踢開、飄雪），不是從詞裡挑一個字出來；括號裡的應援不算。這個詞要真的是那個意思：「振り切って」是甩開、「途切れた」是斷掉，都不是刀切；「切記」「割と」不是切；「輪郭」是輪廓不是圓；「消えず」「止まらない」是否定；「心」不是形狀。程式會逐項檢查（整個詞、意思、否定、字數），不合的時刻會被拿掉，句子本身不受影響。
+  - 時刻會把那句整個接管（版面、進退場都由時刻畫），所以那句的 layout 等欄位照填但會被覆蓋。${overused.length ? `最近的歌用過太多次、這首避免：${overused.join('、')}。` : ''}why 一句、二十字內，先講這句在說什麼事，再講畫面做那件事為什麼對；只說「有這個字」不算理由。
 `;
 }
 

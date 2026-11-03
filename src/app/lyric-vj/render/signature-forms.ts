@@ -4,9 +4,10 @@
 // lands, how quickly the line is sung, how long it is, which thing the noun names, and the song's own paper and inks.
 import type { RenderJob } from './engine';
 import type * as Sig from './signature';
-import { lastSung, ownCues, SignatureMoment } from '../signature-moments';
+import { lastSung, mainOf, ownCues, SignatureMoment } from '../signature-moments';
+import { readingSec } from './reading-window';
 import { isSungChar, wordIndex } from '../sung-times';
-import { circleLayout, clamp, dripOf, easeOut, Feel, feelOf, flyDrift, freezeSpan, hashOf, jolt, mix, RAD, riseAt, rng, sliceShift, tickAt } from './signature-motion';
+import { circleLayout, clamp, dripOf, easeOut, Feel, feelOf, flyDrift, freezeSpan, hashOf, jolt, mix, RAD, rng, sliceShift, tickAt } from './signature-motion';
 
 type Ctx = Sig.Ctx;
 type Inks = Sig.Inks;
@@ -20,8 +21,8 @@ export interface Kit {
   family: string;
   grain: number;
   song: number;
-  glyph: (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press?: number, pressInk?: string) => void;
-  stampIn: (c: Ctx, ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press?: number, pressInk?: string, kick?: number) => void;
+  glyph: (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press?: number, pressInk?: string, halo?: string) => void;
+  stampIn: (c: Ctx, ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press?: number, pressInk?: string, kick?: number, halo?: string) => void;
   shadowed: (draw: () => void, blur?: number, dy?: number) => void;
   alive: (id: string, t: number) => number;
   metric: (id: string, text: string, from: number, to: number, show: number, last: number) => Record<string, unknown>;
@@ -31,7 +32,6 @@ export interface Kit {
   drawAsides: (asides: Sig.Aside[], t: number, inks: Inks, until: number) => void;
   partsOf: typeof Sig.partsOf;
   inksAt: typeof Sig.inksAt;
-  onDark: typeof Sig.onDark;
   boardPaper: typeof Sig.boardPaper;
   mixHex: typeof Sig.mixHex;
   canvas: typeof Sig.canvas;
@@ -120,7 +120,7 @@ function stampRow(k: Kit, c: Ctx, p: Pass, t: number, inks: Inks, y: number, dx 
   p.main.forEach((ch, i) => {
     if (/\s/.test(ch.ch)) return;
     const s = p.isWord(i) ? p.size * 1.12 : p.size;
-    k.stampIn(c, ch.ch, p.xs[i] + dx, y + p.ys[i], s, ch.at, t, inks.ink, inks.ghost, 6, inks.press);
+    k.stampIn(c, ch.ch, p.xs[i] + dx, y + p.ys[i], s, ch.at, t, inks.ink, inks.ghost, 6, inks.press, 0.32, inks.halo);
   });
 }
 
@@ -286,16 +286,14 @@ function buildBurn(k: Kit, m: SignatureMoment): Built {
 // ---- strike / melt ----
 /** From the verb the line's ink sags and runs: every stroke slumps a little, a few run long and drip off. */
 function buildMelt(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 150, 1500);
   const cache = new Map<string, HTMLCanvasElement>();
-  const glyphPic = (ch: string, size: number, ink: string, press: string) => {
-    const key = `${ch}|${size}|${ink}`;
+  const glyphPic = (ch: string, size: number, ink: string, press: string, halo = '') => {
+    const key = `${ch}|${size}|${ink}|${halo}`;
     let c = cache.get(key);
     if (!c) {
       c = k.canvas(Math.ceil(size * 1.3), Math.ceil(size * 1.5));
-      k.glyph(c.getContext('2d')!, ch, c.width / 2, c.height * 0.45, size, ink, 6, press);
+      k.glyph(c.getContext('2d')!, ch, c.width / 2, c.height * 0.45, size, ink, 6, press, halo);
       cache.set(key, c);
     }
     return c;
@@ -303,10 +301,9 @@ function buildMelt(k: Kit, m: SignatureMoment): Built {
   const Y = 500;
   return {
     from: passes[0].enter - 0.05, to: () => lastExit(passes).at + lastExit(passes).dur + 0.3, jolts: [], region: [200, 380, 1720, 720],
-    draw(t, light) {
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
-      const inks = light ? inks0 : dark;
       const x = k.x;
       const hold = k.alive(p.id, t);
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
@@ -320,10 +317,10 @@ function buildMelt(k: Kit, m: SignatureMoment): Built {
         const from = Math.max(c.at + 0.12, p.wordTime + Math.abs(i - wi) * 0.07);
         const e = t - from + going * 2;
         if (t < c.at || e <= 0) {
-          k.stampIn(x, c.ch, p.xs[i], Y + p.ys[i], size, c.at, t, inks.ink, inks.ghost, 6, inks.press);
+          k.stampIn(x, c.ch, p.xs[i], Y + p.ys[i], size, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.32, inks.halo);
           return;
         }
-        const g = glyphPic(c.ch, size, inks.ink, inks.press);
+        const g = glyphPic(c.ch, size, inks.ink, inks.press, inks.halo);
         const [gw, gh] = [g.width, g.height];
         const [x0, y0] = [p.xs[i] - gw / 2, Y + p.ys[i] - gh * 0.45];
         const sag = size * 0.08 * easeOut(e / 1.5);
@@ -354,8 +351,6 @@ function buildMelt(k: Kit, m: SignatureMoment): Built {
 // ---- strike / slice ----
 /** The verb cuts the line along one slant: a blade flashes through, the upper half slides off along the cut and holds there. */
 function buildSlice(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 150, 1500);
   const Y = 520;
   const cuts = passes.map((p) => {
@@ -368,11 +363,10 @@ function buildSlice(k: Kit, m: SignatureMoment): Built {
   });
   return {
     from: passes[0].enter - 0.05, to: () => lastExit(passes).at + lastExit(passes).dur + 0.4, jolts: passes.map((p) => jolt(p.wordTime, 0.3 + 0.5 * p.feel.force)), region: [200, 380, 1720, 680],
-    draw(t, light) {
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
       const cut = cuts[passes.indexOf(p)];
-      const inks = light ? inks0 : dark;
       const x = k.x;
       const hold = k.alive(p.id, t);
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
@@ -444,100 +438,114 @@ function buildSlice(k: Kit, m: SignatureMoment): Built {
 }
 
 // ---- strike / wipe ----
-/** From the verb a hand wipes along the line: what it passes smears in the wiping direction and fades, still readable; as the line goes it is wiped clean. */
+/**
+ * The line stands whole and is read; nothing touches the type while it reads. At its last moment, once its reading
+ * time has passed and its last character is sung, one stroke of a cloth wipes the whole line away: the ink smears
+ * along the stroke for a breath and is gone, before the next line comes where it can.
+ */
 function buildWipe(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 150, 1500);
   const Y = 520;
-  const sweep = (p: Pass, t: number, from: number, dur: number) => {
-    const u = clamp((t - from) / dur);
-    const s = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
-    return mix(p.span[0] - 90, p.span[1] + 90, s);
+  /** When the stroke starts and how long it takes: a quick line is wiped quicker. */
+  const strokeOf = (p: Pass) => {
+    const want = 0.42 - 0.12 * p.feel.pace;
+    const read = p.enter + 0.2 + readingSec(mainOf(p.cue.text), p.cue.start, p.cue.end);
+    const next = k.nextStart(p.id);
+    const from = Math.max(p.last + 0.08, Math.min(read, Math.max(next - 0.05 - want, p.exit().at)));
+    // a line sung to its last breath is wiped quicker, so the stroke is done as the next line comes
+    const dur = Math.max(0.18, Math.min(want, next - 0.02 - from));
+    return { from, dur };
   };
+  const SLANT = Math.tan(16 * RAD);
   return {
-    from: passes[0].enter - 0.05, to: () => lastExit(passes).at + 0.55, jolts: [], region: [200, 380, 1720, 680],
-    draw(t, light) {
+    from: passes[0].enter - 0.05, to: () => { const s = strokeOf(passes[passes.length - 1]); return s.from + s.dur + 0.3; }, jolts: [], region: [200, 400, 1720, 660],
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
-      const inks = light ? inks0 : dark;
+      const { from, dur } = strokeOf(p);
+      if (t >= from + dur + 0.25) return;
       const x = k.x;
-      k.drawAsides(p.parts.asides, t, inks, p.exit().at);
+      k.drawAsides(p.parts.asides, t, inks, from);
       const RH = Math.round(p.size * (2.4 + (p.rows - 1) * 1.25));
       const row = rowCanvas(k, p, t, inks, RH);
       const top = Y - RH / 2;
-      const dur = 0.5 + 0.4 * (1 - p.feel.pace);
-      // the hand never runs ahead of the singing: it stops past the last character sung so far
-      const sungTo = Math.max(...p.main.map((c, i) => (c.at <= t && !/\s/.test(c.ch) ? p.xs[i] + p.size * 0.6 : -Infinity)));
-      const first = t >= p.wordTime ? Math.min(sweep(p, t, p.wordTime, dur), sungTo) : -Infinity;
-      const goFrom = p.exit().at - 0.1;
-      const second = t >= goFrom ? sweep(p, t, goFrom, 0.42) : -Infinity;
-      const clipX = (a: number, b: number, draw: () => void) => {
-        if (b <= a) return;
-        x.save();
-        x.beginPath();
-        x.rect(a, top - 40, b - a, RH + 80);
-        x.clip();
-        draw();
-        x.restore();
-      };
-      // the hand's strokes take the ink off in streaks, like a cloth across a board: what it passed reads through the
-      // streaks it left; the second pass, as the line goes, takes the rest
-      const rc = row.getContext('2d')!;
-      const r = rng(Math.round(p.wordTime * 100));
-      const streaks = (to: number, n: number, alpha: number) => {
-        const from = p.span[0] - 90;
-        if (to <= from) return;
-        rc.globalCompositeOperation = 'destination-out';
-        rc.lineCap = 'round';
-        for (let j = 0; j < n; j++) {
-          const yy = RH * (0.18 + 0.64 * ((j + r()) / n));
-          const [a0, a1] = [from + r() * 70, to - r() * 40];
-          if (a1 <= a0) continue;
-          rc.strokeStyle = `rgba(0,0,0,${alpha * (0.55 + 0.45 * r())})`;
-          rc.lineWidth = 3 + r() * (RH / n) * (n > 20 ? 0.9 : 0.5);
-          rc.beginPath();
-          rc.moveTo(a0, yy);
-          rc.quadraticCurveTo((a0 + a1) / 2, yy + (r() - 0.5) * 8, a1, yy + (r() - 0.5) * 6);
-          rc.stroke();
-        }
-        rc.globalCompositeOperation = 'source-over';
-      };
-      if (first > -Infinity) streaks(first, 14, 1);
-      if (second > -Infinity) {
-        streaks(second, 30, 1);
-        rc.globalCompositeOperation = 'destination-out';
-        rc.fillRect(0, 0, Math.max(0, second - 120), RH);
-        rc.globalCompositeOperation = 'source-over';
+      if (t < from) {
+        x.drawImage(row, 0, top);
+        return;
       }
-      // the ink the hand dragged along, faint, behind it
-      if (first > -Infinity) clipX(p.span[0] - 90, first, () => {
-        for (const j of [3, 2, 1]) {
-          x.globalAlpha = 0.07;
-          x.drawImage(row, j * 10, top);
-        }
-        x.globalAlpha = 1;
-      });
+      // the stroke: its leading edge slants like a cloth held at an angle, easing across the line in one go
+      const u = clamp((t - from) / dur);
+      const s = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+      const [x0, x1] = [p.span[0] - 120, p.span[1] + 140];
+      const edge = mix(x0, x1, s);
+      const edgeAt = (y: number) => edge + (y - RH / 2) * SLANT;
+      const rc = row.getContext('2d')!;
+      // what the cloth passed is gone, with a short feather at the edge
+      rc.globalCompositeOperation = 'destination-out';
+      const g = rc.createLinearGradient(edge - 50, 0, edge + 30, 0);
+      g.addColorStop(0, 'rgba(0,0,0,1)');
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      rc.fillStyle = g;
+      rc.beginPath();
+      rc.moveTo(-200, 0);
+      rc.lineTo(edgeAt(0) + 30, 0);
+      rc.lineTo(edgeAt(RH) + 30, RH);
+      rc.lineTo(-200, RH);
+      rc.closePath();
+      rc.fill();
+      rc.globalCompositeOperation = 'source-over';
+      // the ink dragged along the stroke, just behind the edge, thinning as it goes
+      const whole = rowCanvas(k, p, t, inks, RH);
+      x.save();
+      x.beginPath();
+      x.moveTo(edgeAt(-40) - 170, top - 40);
+      x.lineTo(edgeAt(-40) + 20, top - 40);
+      x.lineTo(edgeAt(RH + 40) + 20, top + RH + 40);
+      x.lineTo(edgeAt(RH + 40) - 170, top + RH + 40);
+      x.closePath();
+      x.clip();
+      for (const [dx, a] of [[22, 0.14], [46, 0.09], [72, 0.05]] as const) {
+        x.globalAlpha = a * (1 - u * 0.5);
+        x.drawImage(whole, -dx, top);
+      }
+      x.restore();
+      x.globalAlpha = 1;
       x.drawImage(row, 0, top);
+      // the cloth itself: a soft band at the edge, the keyline's pole, so the stroke is seen on any ground
+      if (u < 1) {
+        x.save();
+        x.globalAlpha = 0.16 * (1 - Math.abs(2 * u - 1) ** 3);
+        const tone = inks.halo ?? k.mixHex(inks.ink, inks.paper, 0.5);
+        const band = x.createLinearGradient(edge - 70, 0, edge + 20, 0);
+        band.addColorStop(0, 'rgba(0,0,0,0)');
+        band.addColorStop(0.5, tone);
+        band.addColorStop(1, 'rgba(0,0,0,0)');
+        x.fillStyle = band;
+        x.beginPath();
+        x.moveTo(edgeAt(-60) - 70, top - 60);
+        x.lineTo(edgeAt(-60) + 20, top - 60);
+        x.lineTo(edgeAt(RH + 60) + 20, top + RH + 60);
+        x.lineTo(edgeAt(RH + 60) - 70, top + RH + 60);
+        x.closePath();
+        x.fill();
+        x.restore();
+      }
     },
-    metrics: metricsOf(k, passes),
+    metrics: () => passes.map((p) => k.metric(p.id, p.cue.text, p.enter + 0.12, strokeOf(p).from, p.enter, p.last)),
   };
 }
 
 // ---- strike / fly ----
 /** From the verb the line is let go: it lifts and drifts (放手, 飛ぶ) or is hurled off-centre (丟, 吹き飛ばす); as the line goes it flies out of the frame. */
 function buildFly(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 150, 1500);
   const hurl = /[丟扔甩投拋抛]|飛ばす|吹き飛|throw|toss|blow/i.test(m.word);
   const Y = 540;
   return {
     from: passes[0].enter - 0.05, to: () => lastExit(passes).at + 1.2, jolts: hurl ? passes.map((p) => jolt(p.wordTime, 0.45)) : [], region: [200, 360, 1720, 700],
-    draw(t, light) {
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
-      const inks = light ? inks0 : dark;
       const x = k.x;
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
       const n = p.main.length;
@@ -560,7 +568,7 @@ function buildFly(k: Kit, m: SignatureMoment): Built {
           x.save();
           x.translate(p.xs[i] + d.dx, Y + p.ys[i] + d.dy);
           x.rotate(d.rot);
-          k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press);
+          k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.32, inks.halo);
           x.restore();
         });
       };
@@ -581,8 +589,6 @@ function buildFly(k: Kit, m: SignatureMoment): Built {
  * ticks round on the beats, a ring has a glint going round it, a plain round is drawn by a pen as the word is sung.
  */
 function buildCircle(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m);
   const kind = /[鐘]|時計|clock/i.test(m.word) ? 'clock' : /月|moon/i.test(m.word) ? 'moon' : /[輪環]|戒指|ring/i.test(m.word) ? 'ring' : 'round';
   // a long line goes round both rims, broken where the row would break
@@ -590,11 +596,10 @@ function buildCircle(k: Kit, m: SignatureMoment): Built {
   const turn = hashOf(m.word + passes[0].cue.text) % 2 ? 1 : -1;
   return {
     from: passes[0].enter - 0.05, to: () => lastExit(passes).at + lastExit(passes).dur + 0.05, jolts: [], region: [400, 160, 1520, 760],
-    draw(t, light) {
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
       const L = lay[passes.indexOf(p)];
-      const inks = light ? inks0 : dark;
       const x = k.x;
       const hold = k.alive(p.id, t) * easeOut((t - p.enter) / 0.15);
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
@@ -665,7 +670,7 @@ function buildCircle(k: Kit, m: SignatureMoment): Built {
         x.save();
         x.translate(cx + Math.cos(a) * L.r, cy + Math.sin(a) * L.r);
         x.rotate(L.under[i] ? a - Math.PI / 2 : a + Math.PI / 2);
-        k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press);
+        k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.32, inks.halo);
         x.restore();
       });
       x.restore();
@@ -675,42 +680,112 @@ function buildCircle(k: Kit, m: SignatureMoment): Built {
 }
 
 // ---- shape / rise ----
-/** The line floats up as one, each character popping as it is sung and swaying on its own: a bubble's ring, smoke's trail, a firework's burst, a lift's streak. */
+/**
+ * The line stands and reads; from each character, once sung, the thing it names rises above the type: smoke in wisps
+ * that curl, widen and thin as they climb, soft-edged, never over the words; bubbles as rings wobbling up; a balloon's
+ * slow sway; a firework's burst; a plain lift's streak. As the line goes it lifts and thins into the same.
+ */
 function buildRise(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 140, 1500);
   const kind = /泡|bubble/i.test(m.word) ? 'bubble' : /花火|煙火/.test(m.word) ? 'burst' : /煙|smoke/i.test(m.word) ? 'smoke' : /氣球|風船|balloon/i.test(m.word) ? 'balloon' : 'lift';
-  const { speed, wobble } = { bubble: { speed: 80, wobble: 6 }, burst: { speed: 70, wobble: 2 }, smoke: { speed: 60, wobble: 8 }, balloon: { speed: 64, wobble: 4 }, lift: { speed: 100, wobble: 1.5 } }[kind];
-  const Y = 760;
+  const Y = 640;
+  // a soft puff, drawn once per colour: every wisp is puffs of it along its path
+  const puffs = new Map<string, HTMLCanvasElement>();
+  const puffOf = (color: string) => {
+    let c = puffs.get(color);
+    if (!c) {
+      c = k.canvas(96, 96);
+      const g = c.getContext('2d')!;
+      const grad = g.createRadialGradient(48, 48, 0, 48, 48, 48);
+      grad.addColorStop(0, color);
+      grad.addColorStop(0.3, color);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 96, 96);
+      puffs.set(color, c);
+    }
+    return c;
+  };
+  const rgba = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+  interface Wisp { i: number; born: number; phase: number; drift: number; life: number; big: boolean; turn: number }
+  // a wisp now and then off a sung character, more off the named word; the line's going sends up the rest
+  const wispsOf = (p: Pass): Wisp[] => {
+    const r = rng(k.song + Math.round(p.wordTime * 10));
+    const out: Wisp[] = [];
+    const wisp = (i: number, born: number, big: boolean): Wisp => ({ i, born, phase: r() * 6.3, drift: (r() - 0.5) * 40, life: 2.6 + r() * 0.8, big, turn: r() < 0.5 ? -1 : 1 });
+    p.main.forEach((c, i) => {
+      if (!isSungChar(c.ch)) return;
+      if (p.isWord(i)) for (let j = 0; j < 3; j++) out.push(wisp(i, c.at + 0.08 + j * 0.9 + r() * 0.3, true));
+      else if (i % 2 === 0) out.push(wisp(i, c.at + 0.15 + r() * 0.5, false));
+      if (p.isWord(i) || i % 3 === 0) out.push(wisp(i, p.exit().at - 0.05 + i * 0.03, true));
+    });
+    return out;
+  };
+  const wisps = passes.map(wispsOf);
   return {
-    from: passes[0].enter - 0.05, to: () => lastExit(passes).at + 1.1, jolts: [], region: [200, 360, 1720, 760],
-    draw(t, light) {
+    from: passes[0].enter - 0.05, to: () => lastExit(passes).at + 1.4, jolts: [], region: [200, 540, 1720, 740],
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
-      const inks = light ? inks0 : dark;
       const x = k.x;
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
-      const first = p.main.find((c) => isSungChar(c.ch))?.at ?? p.enter;
-      const v = speed * (1 + 0.5 * p.feel.pace);
-      const lineDy = -Math.min(400, v * Math.max(0, t - first));
       const goFrom = p.exit().at - 0.05;
+      const topOf = (i: number) => Y + p.ys[i] - p.size * 0.62;
+      const lineTop = Math.min(...p.main.map((_, i) => topOf(i)));
+      // what rises off the type
+      if (kind === 'smoke' || kind === 'bubble') {
+        const puff = puffOf(rgba(inks.ghost, 0.9));
+        x.save();
+        for (const w of wisps[passes.indexOf(p)]) {
+          const age = t - w.born;
+          if (age < 0 || age > w.life) continue;
+          const x0 = p.xs[w.i];
+          // the wisp's head rises and curls, the curl widening as it goes; its trail is its earlier heads, each puff
+          // wider and thinner with its own age, so the whole bends like a ribbon of smoke and thins out at the top
+          const steps = kind === 'smoke' ? 16 : 1;
+          for (let s = 0; s < steps; s++) {
+            const a = age - s * 0.11;
+            if (a < 0) break;
+            const climb = (130 + (w.big ? 50 : 0)) * a + 18 * a * a;
+            const curl = w.turn * (w.big ? 70 : 50) * Math.sin(a * 1.7 + w.phase) * Math.min(1, a * 0.8) + w.drift * a;
+            const px = x0 + curl;
+            const py = lineTop - 10 - climb;
+            const spread = (w.big ? 18 : 13) + (w.big ? 64 : 46) * Math.pow(a, 0.8);
+            const thin = Math.pow(1 - a / w.life, 1.5);
+            if (kind === 'smoke') {
+              x.globalAlpha = 0.11 * thin * clamp(a * 3) * (1 - s * 0.03);
+              x.drawImage(puff, px - spread, py - spread, spread * 2, spread * 2);
+            } else {
+              // a bubble: one ring the width of its age, a glint on its shoulder
+              const rr = 6 + 14 * Math.min(1, a / 1.2);
+              x.globalAlpha = 0.6 * thin;
+              x.strokeStyle = inks.ink;
+              x.lineWidth = 2;
+              x.beginPath();
+              x.arc(px, py, rr, 0, 7);
+              x.stroke();
+              x.strokeStyle = '#ffffff';
+              x.beginPath();
+              x.arc(px, py, rr * 0.7, -2.4, -1.6);
+              x.stroke();
+            }
+          }
+        }
+        x.restore();
+      }
+      // the line itself: at rest while it reads, each character popping as sung; going, it lifts and thins away
       p.main.forEach((c, i) => {
         if (/\s/.test(c.ch)) return;
         const s = p.isWord(i) ? p.size * 1.12 : p.size;
-        const r = riseAt(t, c.at, i * 1.9 + hashOf(c.ch), 0, wobble);
         const u = Math.max(0, t - goFrom - i * 0.03);
-        const away = -(160 * u + 500 * u * u);
-        // the line goes up and out of sight as the next comes, not through it
-        const fade = clamp(1 - u / 0.35);
-        const [px, py] = [p.xs[i] + r.dx, Y + p.ys[i] + lineDy + away];
-        const sung = t >= c.at;
+        const away = -(120 * u + 420 * u * u);
+        const fade = clamp(1 - u / 0.32);
+        if (fade <= 0) return;
         const e = t - c.at;
+        const sung = t >= c.at;
+        const sway = kind === 'balloon' && sung ? { dx: 8 * Math.sin(e * 1.6 + i), dy: -10 * Math.min(1, e / 1.5), rot: 3 * RAD * Math.sin(e * 1.3 + i) } : { dx: 0, dy: 0, rot: 0 };
+        const [px, py] = [p.xs[i] + sway.dx, Y + p.ys[i] + sway.dy + away];
         x.save();
-        if (sung && kind === 'smoke') for (let j = 2; j >= 1; j--) {
-          x.globalAlpha = 0.07 * clamp(e * 2) * fade;
-          k.glyph(x, c.ch, px - wobble * Math.sin(e * 2 + j + i), py + j * 34, s * (1 + 0.12 * j), inks.ink);
-        }
         x.globalAlpha = fade;
         if (sung && kind === 'lift') {
           x.strokeStyle = inks.accent;
@@ -723,22 +798,8 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
           x.globalAlpha = fade;
         }
         x.translate(px, py);
-        if (kind === 'balloon' && sung) x.rotate(6 * RAD * Math.sin(e * 2.4 + i));
-        x.scale(r.scale, r.scale);
-        k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.15);
-        if (sung && kind === 'bubble') {
-          x.strokeStyle = inks.ink;
-          x.globalAlpha = 0.45 * fade;
-          x.lineWidth = 3;
-          x.beginPath();
-          x.arc(0, 0, s * 0.66, 0, 7);
-          x.stroke();
-          x.strokeStyle = '#ffffff';
-          x.globalAlpha = 0.75 * fade;
-          x.beginPath();
-          x.arc(0, 0, s * 0.54, -2.5, -1.7);
-          x.stroke();
-        }
+        x.rotate(sway.rot);
+        k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.15, inks.halo);
         if (sung && kind === 'burst' && e < 0.5) {
           x.strokeStyle = inks.accent;
           x.globalAlpha = (1 - e / 0.5) * fade;
@@ -754,6 +815,7 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
         }
         x.restore();
       });
+      x.globalAlpha = 1;
     },
     metrics: metricsOf(k, passes),
   };
@@ -762,15 +824,13 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
 // ---- freeze ----
 /** The frame stops on the stopping word (the engine renders the held time) and greys; only this line goes on, sung and pushing in, until the world resumes. */
 function buildFreeze(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 150, 1500);
   const p0 = passes[0];
   const [from, until] = freezeSpan(p0.wordTime, p0.last, k.job.beats);
   return {
     stageAt: (t) => (t >= from && t < until ? from : undefined),
     from: p0.enter - 0.05, to: () => lastExit(passes).at + lastExit(passes).dur + 0.05, jolts: [], region: [200, 400, 1720, 680],
-    draw(t, light) {
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
       const x = k.x;
@@ -795,7 +855,6 @@ function buildFreeze(k: Kit, m: SignatureMoment): Built {
           x.restore();
         }
       }
-      const inks = light ? inks0 : dark;
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
       const push = p === p0 ? 1 + 0.07 * easeOut((t - from) / Math.max(0.3, until - from)) : 1;
       x.save();
@@ -813,8 +872,6 @@ function buildFreeze(k: Kit, m: SignatureMoment): Built {
 // ---- echo ----
 /** The answering line, and under it the earlier line it answers, faint, its shared word under this one's, surfacing as the shared word is sung. */
 function buildEcho(k: Kit, m: SignatureMoment): Built {
-  const inks0 = k.inksAt(k.job, m.at);
-  const dark = k.onDark(inks0);
   const passes = passesOf(k, m, 140, 1450);
   const earlier = k.cueOf(m.cues[0]);
   const old = k.partsOf(earlier.text, [...earlier.text].map(() => 0), '').main;
@@ -833,11 +890,10 @@ function buildEcho(k: Kit, m: SignatureMoment): Built {
   const olds = passes.map(layOld);
   return {
     from: passes[0].enter - 0.05, to: () => lastExit(passes).at + lastExit(passes).dur + 0.05, jolts: [], region: [200, 340, 1720, 760],
-    draw(t, light) {
+    draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
       const o = olds[passes.indexOf(p)];
-      const inks = light ? inks0 : dark;
       const x = k.x;
       const hold = k.alive(p.id, t);
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
@@ -852,7 +908,7 @@ function buildEcho(k: Kit, m: SignatureMoment): Built {
         x.save();
         for (const [dx, k2] of [[-2, 0.5], [2, 0.5], [0, 1]] as const) {
           x.globalAlpha = a * k2;
-          k.glyph(x, c.ch, o.xs[i] + dx, o.y + 24 * (1 - up), o.size, ink);
+          k.glyph(x, c.ch, o.xs[i] + dx, o.y + 24 * (1 - up), o.size, ink, 0, '', inks.halo);
         }
         x.restore();
       });

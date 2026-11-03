@@ -11,12 +11,17 @@ const fract = (x: number) => x - Math.floor(x);
 const hash = (a: number, b = 0) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 
+// (the grid work below runs once per sheet and pour, on the frame that first needs it: written without tuples or
+// closures, the same arithmetic in the same order, so a new wash costs a hitch and not a frozen picture)
 export const smoothNoise = (x: number, y: number, seed: number) => {
-  const [ix, iy] = [Math.floor(x), Math.floor(y)];
-  const [u, v] = [x - ix, y - iy];
-  const [su, sv] = [u * u * (3 - 2 * u), v * v * (3 - 2 * v)];
-  const at = (a: number, b: number) => hash(a + seed, b - seed * 2);
-  return at(ix, iy) * (1 - su) * (1 - sv) + at(ix + 1, iy) * su * (1 - sv) + at(ix, iy + 1) * (1 - su) * sv + at(ix + 1, iy + 1) * su * sv;
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  const u = x - ix;
+  const v = y - iy;
+  const su = u * u * (3 - 2 * u);
+  const sv = v * v * (3 - 2 * v);
+  const s2 = seed * 2;
+  return hash(ix + seed, iy - s2) * (1 - su) * (1 - sv) + hash(ix + 1 + seed, iy - s2) * su * (1 - sv) + hash(ix + seed, iy + 1 - s2) * (1 - su) * sv + hash(ix + 1 + seed, iy + 1 - s2) * su * sv;
 };
 
 interface Sheet { cost: Float32Array; pool: Float32Array }
@@ -53,18 +58,19 @@ function sheetOf(seed: number): Sheet {
 /** Water closes round a slow speck of paper: left in, the sheet's specks read as a rash of round white dots inside a wash. */
 function closeIslands(T: Float32Array, r = 4) {
   // a round reach: a square one prints its corners into the wash's edge as stairs
-  const disc: [number, number][] = [];
-  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + 1) disc.push([dx, dy]);
-  const sweep = (pick: (a: number, b: number) => number) => {
+  const offsets: number[] = [];
+  for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (dx * dx + dy * dy <= r * r + 1) offsets.push(dy * GW + dx);
+  const disc = Int32Array.from(offsets);
+  for (const least of [true, false]) {
     const S = T.slice();
     for (let y = r; y < GH - r; y++) for (let x = r; x < GW - r; x++) {
-      let v = S[y * GW + x];
-      for (const [dx, dy] of disc) v = pick(v, S[(y + dy) * GW + x + dx]);
-      T[y * GW + x] = v;
+      const i = y * GW + x;
+      let v = S[i];
+      if (least) for (let k = 0; k < disc.length; k++) v = Math.min(v, S[i + disc[k]]);
+      else for (let k = 0; k < disc.length; k++) v = Math.max(v, S[i + disc[k]]);
+      T[i] = v;
     }
-  };
-  sweep(Math.min);
-  sweep(Math.max);
+  }
 }
 
 const fields = new Map<string, Float32Array>();
@@ -75,48 +81,64 @@ function arrival(seed: number, pours: Pt[]): Float32Array {
   if (hit) return hit;
   const { cost } = sheetOf(seed);
   const T = new Float32Array(GW * GH).fill(Infinity);
-  const heap: number[] = [];
-  const keys: number[] = [];
+  // a binary heap in typed arrays (the keys stay doubles: they are compared against the float32 field as before)
+  let heap = new Int32Array(1 << 16);
+  let keys = new Float64Array(1 << 16);
+  let size = 0;
   const push = (i: number, t: number) => {
-    let n = heap.length;
-    heap.push(i);
-    keys.push(t);
+    if (size === heap.length) {
+      const [h, k] = [new Int32Array(size * 2), new Float64Array(size * 2)];
+      h.set(heap);
+      k.set(keys);
+      [heap, keys] = [h, k];
+    }
+    let n = size++;
+    heap[n] = i;
+    keys[n] = t;
     while (n > 0) {
       const p = (n - 1) >> 1;
       if (keys[p] <= t) break;
-      [heap[n], heap[p]] = [heap[p], heap[n]];
-      [keys[n], keys[p]] = [keys[p], keys[n]];
+      const hi = heap[n];
+      heap[n] = heap[p];
+      heap[p] = hi;
+      const ki = keys[n];
+      keys[n] = keys[p];
+      keys[p] = ki;
       n = p;
     }
   };
-  const pop = () => {
-    const [i, t] = [heap[0], keys[0]];
-    const [li, lt] = [heap.pop()!, keys.pop()!];
-    if (heap.length) {
-      heap[0] = li;
-      keys[0] = lt;
+  for (const [x, y] of pours) { const i = Math.floor(y * (GH - 1)) * GW + Math.floor(x * (GW - 1)); T[i] = 0; push(i, 0); }
+  while (size) {
+    const i = heap[0];
+    const t = keys[0];
+    size--;
+    if (size) {
+      heap[0] = heap[size];
+      keys[0] = keys[size];
       let n = 0;
       for (;;) {
-        const [l, r] = [2 * n + 1, 2 * n + 2];
+        const l = 2 * n + 1;
+        const r = l + 1;
         let m = n;
-        if (l < heap.length && keys[l] < keys[m]) m = l;
-        if (r < heap.length && keys[r] < keys[m]) m = r;
+        if (l < size && keys[l] < keys[m]) m = l;
+        if (r < size && keys[r] < keys[m]) m = r;
         if (m === n) break;
-        [heap[n], heap[m]] = [heap[m], heap[n]];
-        [keys[n], keys[m]] = [keys[m], keys[n]];
+        const hi = heap[n];
+        heap[n] = heap[m];
+        heap[m] = hi;
+        const ki = keys[n];
+        keys[n] = keys[m];
+        keys[m] = ki;
         n = m;
       }
     }
-    return [i, t];
-  };
-  for (const [x, y] of pours) { const i = Math.floor(y * (GH - 1)) * GW + Math.floor(x * (GW - 1)); T[i] = 0; push(i, 0); }
-  while (heap.length) {
-    const [i, t] = pop();
     if (t > T[i]) continue;
-    const [x, y] = [i % GW, Math.floor(i / GW)];
+    const x = i % GW;
+    const y = Math.floor(i / GW);
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       if (!dx && !dy) continue;
-      const [nx, ny] = [x + dx, y + dy];
+      const nx = x + dx;
+      const ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= GW || ny >= GH) continue;
       const j = ny * GW + nx;
       const nt = t + cost[j] * (dx && dy ? 1.41 : 1);

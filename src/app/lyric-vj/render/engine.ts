@@ -53,6 +53,7 @@ import { LANGUAGES } from '../languages';
 import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
+import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
 import { freeBand, freeRows, oppositeSide, setBackPush, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
@@ -1606,7 +1607,7 @@ export class LyricVjEngine {
     const [x0, y0] = [Math.max(0, Math.floor(r.x0)), Math.max(0, Math.floor(r.y0))];
     const [w, h] = [Math.min(W, Math.ceil(r.x1)) - x0, Math.min(H, Math.ceil(r.y1)) - y0];
     if (w < 1 || h < 1) return true;
-    const d = this.gfx.ctx.getImageData(x0, y0, w, h).data;
+    const d = readBack(this.gfx.ctx, x0, y0, w, h);
     const rgb = [0, 0, 0];
     let n = 0;
     for (let i = 0; i < d.length; i += 4 * 53, n++) for (let c = 0; c < 3; c++) rgb[c] += d[i + c];

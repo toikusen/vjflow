@@ -17,6 +17,7 @@ import { pieceAt } from './world-pieces';
 import type { Slots } from './world-objects';
 import { hushOf, isFlood, maskedByLine, ovalOf, rayStart } from './material';
 import { drawSheet, sheetSeed } from './paper-surface';
+import { readBack } from './readback';
 
 type Rgb = string;
 export const CORE_FX = ['wall', 'ring', 'tunnel', 'bars', 'stack', 'split', 'rays', 'boxes', 'grid', 'dots'] as const;
@@ -136,7 +137,7 @@ export function readsDark(ctx: CanvasRenderingContext2D, a: Rgb, b: Rgb): boolea
   let sum = 0;
   try {
     for (const x of [0.3, 0.5, 0.7]) for (const y of [0.35, 0.5, 0.65]) {
-      const d = ctx.getImageData(Math.round(W * x), Math.round(H * y), 1, 1).data;
+      const d = readBack(ctx, Math.round(W * x), Math.round(H * y), 1, 1);
       sum += lum(d[0], d[1], d[2]);
     }
   } catch {

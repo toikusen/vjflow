@@ -72,6 +72,11 @@ export class LivePlayer {
 
   private async show({ engine, canvas }: ReturnType<LivePlayer['make']>, turn: number) {
     await engine.init();
+    // the picture on screen gets a frame between the build and the new one's first (its lines and shaders): two
+    // shorter stops instead of one long one
+    // (a timer too: a tab in the background draws no frames)
+    await new Promise((r) => { requestAnimationFrame(r); setTimeout(r, 100); });
+    if (turn !== this.turn) return engine.dispose(false);
     await engine.renderAt(this.shownAt(this.time()));
     // a newer plan took over while this one was built
     if (turn !== this.turn) return engine.dispose(false);

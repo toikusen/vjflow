@@ -5,6 +5,18 @@ import { unsungWindows, type UnsungWindow } from '../../src/app/lyric-vj/structu
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
 import { MIN_REASON } from './brief.mts';
 
+/**
+ * A frame's cue as the rest reads it: a line id, or `@seconds` for a window nobody sings in. A writer that answered
+ * the line's start time instead (「2.9」 for c002, 三年後的大雪 2026-11-03: 26 of 33 frames lost, nothing drawn) is
+ * read back to the line starting there, else to `@seconds`.
+ */
+export function frameCue(cue: string, cues: { id: string; start: number }[]): string {
+  if (!/^\d+(\.\d+)?$/.test(cue.trim())) return cue;
+  const t = Number(cue);
+  const line = cues.reduce<{ id: string; start: number } | undefined>((best, c) => (Math.abs(c.start - t) <= 0.5 && (!best || Math.abs(c.start - t) < Math.abs(best.start - t)) ? c : best), undefined);
+  return line ? line.id : `@${t}`;
+}
+
 const KIND_NAME: Record<UnsungWindow['kind'], string> = { intro: '前奏', interlude: '間奏', outro: '尾奏' };
 const overlap = (a: { start: number; end: number }, b: { start: number; end: number }) => Math.max(0, Math.min(a.end, b.end) - Math.max(a.start, b.start));
 const span = (x: { start: number; end: number }) => `${x.start.toFixed(1)}–${x.end.toFixed(1)} 秒`;
@@ -89,7 +101,8 @@ export function quietFrames<F extends { cue: string; who: string[] }>(frames: F[
   const backdrop = windowModes(windows, interludes).filter((w) => w.mode === 'backdrop');
   const clearedFrames: F[] = [];
   const out = frames.map((f) => {
-    const t = f.cue.startsWith('@') ? Number(f.cue.slice(1)) : cues.find((c) => c.id === f.cue)?.start;
+    const cue = frameCue(f.cue, cues);
+    const t = cue.startsWith('@') ? Number(cue.slice(1)) : cues.find((c) => c.id === cue)?.start;
     if (t === undefined || !f.who.length || !backdrop.some((w) => t >= w.start && t < w.end)) return f;
     clearedFrames.push(f);
     return { ...f, who: [] };

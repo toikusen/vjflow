@@ -443,8 +443,13 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
       const text = msg.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('');
       try {
         const m = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)) as Spec;
-        if (m.look && m.sets?.length && m.sprites?.length && m.shots?.length) made = m;
-        else console.log('spec: incomplete answer, asked again');
+        const missing = (['look', 'sets', 'sprites', 'shots'] as const).filter((k) => (k === 'look' ? !m.look : !m[k]?.length));
+        if (!missing.length) made = m;
+        else {
+          // what came back is kept: a failure that names nothing cannot be fixed (三年後的大雪, 2026-11-03)
+          writeFileSync(join(out, `spec.incomplete.${k + 1}.json`), text);
+          console.log(`spec: incomplete answer (no ${missing.join(', ')}; ${msg.stop_reason}), asked again`);
+        }
       } catch {
         console.log(`spec: unreadable answer (${msg.stop_reason}), asked again`);
       }

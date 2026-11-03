@@ -13,7 +13,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { homedir } from 'node:os';
 import { extname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { persistQuiet, sectionArcRule, unsungFrameRule } from './interludes.mts';
+import { frameCue, persistQuiet, sectionArcRule, unsungFrameRule } from './interludes.mts';
+export { frameCue };
 import { lessonsText } from './lessons.mts';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import type { Interlude } from '../../src/app/lyric-vj/treatment';
@@ -51,18 +52,6 @@ export function withUserStyle<B extends { style: string; userStyle?: string }>(b
   else delete board.userStyle;
   return board;
 }
-/**
- * A frame's cue as the rest reads it: a line id, or `@seconds` for a window nobody sings in. A writer that answered
- * the line's start time instead (「2.9」 for c002, 三年後的大雪 2026-11-03: 26 of 33 frames lost, nothing drawn) is
- * read back to the line starting there, else to `@seconds`.
- */
-export function frameCue(cue: string, cues: { id: string; start: number }[]): string {
-  if (!/^\d+(\.\d+)?$/.test(cue.trim())) return cue;
-  const t = Number(cue);
-  const line = cues.reduce<{ id: string; start: number } | undefined>((best, c) => (Math.abs(c.start - t) <= 0.5 && (!best || Math.abs(c.start - t) < Math.abs(best.start - t)) ? c : best), undefined);
-  return line ? line.id : `@${t}`;
-}
-
 export const frameCount = (seconds: number) => Math.max(5, Math.min(32, Math.round(seconds / 7.5)));
 
 /** A frame's description without the writer's own notes on blank areas (it drew a white haze where it asked for one). */
@@ -151,7 +140,7 @@ export function sidePaper(rgb: Uint8Array | Buffer, w: number, h: number, side: 
 /** The frames in song seconds, each held until the next (the last until the passage ends); frames off the passage dropped. */
 export function frameTimes(b: Board, cues: Cue[], from: number, to: number) {
   // a frame keyed '@seconds' lands on a moment nobody sings (an interlude, the outro)
-  const at = b.frames.map((f) => ({ f, t: f.cue.startsWith('@') ? Number(f.cue.slice(1)) : cues.find((c) => c.id === f.cue)?.start })).filter((x): x is { f: Board['frames'][number]; t: number } => x.t !== undefined && x.t >= from - 0.5 && x.t < to).sort((x, y) => x.t - y.t);
+  const at = b.frames.map((f) => ({ f, cue: frameCue(f.cue, cues) })).map(({ f, cue }) => ({ f, t: cue.startsWith('@') ? Number(cue.slice(1)) : cues.find((c) => c.id === cue)?.start })).filter((x): x is { f: Board['frames'][number]; t: number } => x.t !== undefined && x.t >= from - 0.5 && x.t < to).sort((x, y) => x.t - y.t);
   return at.map((x, i) => ({ ...x.f, start: i ? x.t : from, end: at[i + 1]?.t ?? to }));
 }
 
@@ -217,8 +206,11 @@ ${keepPeople ? `- people：人物已經定好，照抄這些 id 和外觀，不�
     for (const f of board.frames) f.shows = withoutBlankNotes(f.shows) || f.change;
     writeFileSync(boardFile, JSON.stringify(board, null, 1));
   }
-  // (a kept board too: one written before this read its times as nothing)
-  for (const f of board.frames) f.cue = frameCue(f.cue, song.cues);
+  // (a kept board too: one written before this read its times as nothing; saved, so cutout reads the same frames)
+  if (board.frames.some((f) => frameCue(f.cue, song.cues) !== f.cue)) {
+    for (const f of board.frames) f.cue = frameCue(f.cue, song.cues);
+    writeFileSync(boardFile, JSON.stringify(board, null, 1));
+  }
   {
     const q = persistQuiet(boardFile, board, song, base.interludes, to);
     board = q.board;

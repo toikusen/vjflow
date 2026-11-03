@@ -106,6 +106,13 @@ export class TimingPage implements OnInit {
   /** The 更多 menu (downloads, undo, whole-song shift, every shortcut). */
   protected readonly more = signal(false);
   protected readonly shortcuts = SHORTCUTS;
+  /** The 「?」 panel: how to check, and every shortcut. */
+  protected readonly help = signal(false);
+  protected readonly guideSteps = [
+    '列表列出每一句，系統標出來要確認的句子是紅色或黃色（按「只看需要確認的」可以只看那幾句）',
+    '按「聽」；對得上就按「我確認沒問題」（或「保留現在的」），會自動跳到下一句；對不上才改開始／結束（或唱到時按「設為現在」）',
+    '沒有需要確認的句子後，按「確認時間軸」',
+  ];
   protected readonly sec = sec;
   protected readonly rowNumber = rowNumber;
   /** Back to the tester's song page, or to the dashboard's song list. */
@@ -278,10 +285,12 @@ export class TimingPage implements OnInit {
     return hint(this.cues()[i], this.checks()[i], this.statuses()[i], this.issueText(i));
   }
 
-  /** The 更多 menu closes on a click anywhere outside it. */
+  /** The 更多 menu and the 「?」 panel close on a click anywhere outside them. */
   @HostListener('document:click', ['$event'])
   protected outside(e: MouseEvent) {
-    if (this.more() && !(e.target as HTMLElement).closest('.more')) this.more.set(false);
+    if ((e.target as HTMLElement).closest('.more')) return;
+    this.more.set(false);
+    this.help.set(false);
   }
 
   /** Where a song's timing, audio and cues are served. */
@@ -680,7 +689,7 @@ export class TimingPage implements OnInit {
     if (mod && e.code === 'KeyZ') e.shiftKey ? this.redo() : this.undo();
     else if (mod && e.code === 'KeyY') this.redo();
     else if (mod) return;
-    else if (e.code === 'Escape' && this.more()) this.more.set(false);
+    else if (e.code === 'Escape' && (this.more() || this.help())) [this.more, this.help].forEach((s) => s.set(false));
     else if (e.code === 'KeyQ') this.playRange(c.start - EDGE_LISTEN, c.start);
     else if (e.code === 'KeyW') this.playRange(c.start, c.start + EDGE_LISTEN);
     else if (e.code === 'KeyE') this.playRange(c.end - EDGE_LISTEN, c.end);

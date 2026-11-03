@@ -50,7 +50,7 @@
     </div>
     <div class="top-actions">
       <div class="more" (keydown.escape)="more.set(false)">
-        <button class="button" type="button" aria-haspopup="menu" [attr.aria-expanded]="more()" (click)="more.set(!more())"><span class="desk">更多 ▾</span><span class="phone">⋯</span></button>
+        <button class="button" type="button" aria-haspopup="menu" [attr.aria-expanded]="more()" (click)="more.set(!more()); help.set(false)"><span class="desk">更多 ▾</span><span class="phone">⋯</span></button>
         @if (more()) {
           <div class="menu" role="menu" aria-label="更多">
             <div class="menu-row">
@@ -73,8 +73,21 @@
                 }
               </span>
             </div>
-            <div class="menu-title">全部快捷鍵</div>
-            <dl class="keys-all">
+          </div>
+        }
+      </div>
+      <div class="more" (keydown.escape)="help.set(false)">
+        <button class="button help" type="button" aria-label="使用說明" title="使用說明" [attr.aria-expanded]="help()" (click)="help.set(!help()); more.set(false)">?</button>
+        @if (help()) {
+          <div class="menu" role="dialog" aria-label="使用說明">
+            <div class="menu-head">使用說明</div>
+            <ol class="steps">
+              @for (s of guideSteps; track $index) {
+                <li><span class="num">{{ $index + 1 }}</span><span>{{ s }}</span></li>
+              }
+            </ol>
+            <div class="menu-title desk">全部快捷鍵</div>
+            <dl class="keys-all desk">
               @for (k of shortcuts; track k.keys) {
                 <dt><kbd>{{ k.keys }}</kbd></dt>
                 <dd>{{ k.what }}</dd>
@@ -168,11 +181,11 @@
           </div>
           @if (guideOpen()) {
             <ol class="steps" id="timing-guide">
-              <li><span class="num">1</span><span>列表列出每一句，系統標出來要確認的句子是紅色或黃色（按「只看需要確認的」可以只看那幾句）</span></li>
-              <li><span class="num">2</span><span>按「聽」；對得上就按「我確認沒問題」（或「保留現在的」），會自動跳到下一句；對不上才改開始／結束（或唱到時按「設為現在」）</span></li>
-              <li><span class="num">3</span><span>沒有需要確認的句子後，按「確認時間軸」</span></li>
+              @for (s of guideSteps; track $index) {
+                <li><span class="num">{{ $index + 1 }}</span><span>{{ s }}</span></li>
+              }
             </ol>
-            <button class="link desk" type="button" (click)="more.set(true); $event.stopPropagation()">全部快捷鍵 →</button>
+            <button class="link desk" type="button" (click)="help.set(true); $event.stopPropagation()">全部快捷鍵 →</button>
           }
         </section>
 

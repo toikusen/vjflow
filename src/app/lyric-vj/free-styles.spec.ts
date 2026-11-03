@@ -46,3 +46,22 @@ describe('free styles', () => {
     for (const c of styleGroups().flatMap((g) => g.cards)) expect([...c.line].length, c.id).toBeLessThanOrEqual(14);
   });
 });
+
+describe('recommendStyle', () => {
+  const lines = (n: number, text: string, sec: number) => Array.from({ length: n }, (_, i) => ({ start: i * sec, end: i * sec + sec * 0.9, text }));
+  it('opens a slow song in ink, film, paper or quiet print, and a busy one in light, bold print, strokes or paper', async () => {
+    const { FREE_STYLES, recommendStyle } = await import('./free-styles');
+    const fam = (id: string) => FREE_STYLES.find((s) => s.id === id)!.world.family;
+    const slow = recommendStyle({ title: '雪', cues: lines(10, '雪がふる', 4) });
+    const busy = recommendStyle({ title: 'Drift', cues: lines(10, '一二三四五六七八九十一二三四五', 2) });
+    expect(['wet', 'film', 'layered', 'print']).toContain(fam(slow));
+    expect(['emissive', 'print', 'stroke', 'layered']).toContain(fam(busy));
+  });
+  it('never opens in a world too particular to offer unasked, and always opens a song the same way', async () => {
+    const { recommendStyle } = await import('./free-styles');
+    const picks = Array.from({ length: 60 }, (_, i) => recommendStyle({ title: `song ${i}`, cues: lines(8, '一二三四五六七八九十', 2) }));
+    expect(picks.some((p) => ['dark-glitch', 'terminal', 'file', 'gothic-lolita'].includes(p))).toBe(false);
+    expect(new Set(picks).size).toBeGreaterThan(3);
+    expect(recommendStyle({ title: 'song 1', cues: lines(8, '一二三四五六七八九十', 2) })).toBe(picks[1]);
+  });
+});

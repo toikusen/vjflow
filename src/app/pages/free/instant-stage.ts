@@ -61,6 +61,11 @@ export class InstantStage implements OnInit, OnDestroy {
   protected readonly styleGroups = styleGroups();
   readonly styles = FREE_STYLES;
   readonly styleId = signal('');
+  /** The style chosen for the song when its person picked none (shown as 推薦). */
+  readonly recommended = signal('');
+  /** The person picked a style (依歌曲配色 included): no recommendation over it. */
+  private chose = false;
+  private recommendedFor = '';
   readonly seed = signal<number | undefined>(undefined);
   readonly busy = signal('');
   /** Busy for longer than a person would not notice. */
@@ -89,7 +94,10 @@ export class InstantStage implements OnInit, OnDestroy {
   protected readonly exportBlocked = exportBlocker();
   protected readonly exporting = computed(() => this.busy() === '匯出中');
   /** No style picked is the picker's 依歌曲配色: the composer's own look for the song. */
-  readonly styleName = computed(() => this.styles.find((s) => s.id === this.styleId())?.name ?? '依歌曲配色');
+  readonly styleName = computed(() => {
+    const name = this.styles.find((s) => s.id === this.styleId())?.name ?? '依歌曲配色';
+    return this.styleId() && this.styleId() === this.recommended() ? `${name}（推薦）` : name;
+  });
   private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly stage = viewChild.required<ElementRef<HTMLElement>>('stage');
   private readonly audioEl = viewChild.required<ElementRef<HTMLAudioElement>>('audio');
@@ -154,6 +162,14 @@ export class InstantStage implements OnInit, OnDestroy {
       // a draft with no audio has no end to stop at: it plays round, for reading it through
       if (this.silent && this.player!.playing && t >= this.duration()) this.player!.seek(0);
     };
+    // nothing picked yet: the song opens in the style recommended for it (still the person's to change)
+    // (and a new song left on the last one's recommendation gets its own)
+    if (!this.chose && (!this.styleId() || (this.styleId() === this.recommended() && this.recommendedFor !== this.song!.title))) {
+      const { recommendStyle } = await import('../../lyric-vj/free-styles');
+      this.styleId.set(recommendStyle(this.song!));
+      this.recommended.set(this.styleId());
+      this.recommendedFor = this.song!.title;
+    }
     const t0 = performance.now();
     const { job, palette } = freeJob(this.song!, { seed: this.seed(), meaning: this.meaning, style: this.styles.find((s) => s.id === this.styleId()) });
     const planMs = performance.now() - t0;
@@ -226,6 +242,7 @@ export class InstantStage implements OnInit, OnDestroy {
 
   setStyle(id: string) {
     if (this.exporting()) return;
+    this.chose = true;
     this.styleId.set(id);
     this.changed.emit();
     if (!this.ready()) return this.again.emit();

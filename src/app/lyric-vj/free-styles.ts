@@ -60,3 +60,26 @@ export function styleGroups(styles: readonly FreeStyle[] = FREE_STYLES) {
   const named = new Set(GROUPS.flatMap((g) => g.families));
   return GROUPS.map((g, i) => ({ name: g.name, cards: styles.filter((s) => g.families.includes(s.world.family) || (i === GROUPS.length - 1 && !named.has(s.world.family))).map(cardOf) }));
 }
+
+/** Worlds too particular in mood to be offered unasked (horror, a terminal, a case file, gothic): a person picks them. */
+const NOT_DEFAULT = new Set(['dark-glitch', 'terminal', 'file', 'gothic-lolita']);
+const CALM_FAMILIES: StyleWorld['family'][] = ['wet', 'film', 'layered', 'print'];
+const LIVELY_FAMILIES: StyleWorld['family'][] = ['emissive', 'print', 'stroke', 'layered'];
+const CALM_PRINT = new Set(['silk-cold', 'riso']);
+
+/**
+ * The style a song opens in when its person has picked none, by rule (the free tier calls no model): a song sung
+ * slowly (under 3 characters a second, the line director's own line) leans to ink, film, paper and quiet print; a
+ * busy one to light, bold print, hand strokes and paper. Within those, the title chooses, so a song always opens the
+ * same and songs spread across the styles. (2026-11-03 owner: the plain look made the free tier's first impression.)
+ */
+export function recommendStyle(song: { title: string; cues: readonly { start: number; end: number; text: string }[] }, styles: readonly FreeStyle[] = FREE_STYLES): string {
+  const sung = song.cues.reduce((s, c) => s + Math.max(0, c.end - c.start), 0);
+  const chars = song.cues.reduce((s, c) => s + [...c.text.replace(/\s/g, '')].length, 0);
+  const calm = chars / Math.max(1, sung) < 3;
+  const pool = styles.filter((s) => !NOT_DEFAULT.has(s.id) && (calm ? CALM_FAMILIES : LIVELY_FAMILIES).includes(s.world.family) && (s.world.family !== 'print' || CALM_PRINT.has(s.id) === calm));
+  const from = pool.length ? pool : styles;
+  let h = 2166136261;
+  for (const ch of song.title) h = Math.imul(h ^ ch.codePointAt(0)!, 16777619) >>> 0;
+  return from[h % from.length].id;
+}

@@ -64,7 +64,7 @@
 
     <section class="stage-col" aria-label="畫面">
       <div class="zone" [class.dragging]="dragging()" [class.empty]="!file()" (dragover)="over($event)" (dragleave)="dragging.set(false)" (drop)="drop($event)">
-        <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="title()" [timingNote]="timingNote()" [exportHold]="exportHold()" [plain]="true" [rail]="true">
+        <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="title()" [exportHold]="exportHold()" [plain]="true" [rail]="true">
           @if (!file()) {
             <div class="invite">
               <div class="demo" aria-hidden="true">

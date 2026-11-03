@@ -41,7 +41,8 @@
           <span class="time">{{ busy() }}</span>
         }
       </section>
-      @if (exportBlocked || exportHold()) {
+      <!-- (the rail page shows the hold in its own status strip) -->
+      @if (exportBlocked || (exportHold() && !rail())) {
         <p class="warn">{{ exportBlocked || exportHold() }}</p>
       }
       @if (!exporting()) {

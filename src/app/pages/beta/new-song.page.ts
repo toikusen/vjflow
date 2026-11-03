@@ -9,7 +9,7 @@ import { InstantStage, StageSong } from '../free/instant-stage';
 import { audioProblem, audioType, errorOf, jobProgress, songView } from './beta';
 import { BetaPage } from './beta.page';
 import { canSave, clock, fileTitle, guessLanguage, guessTitle, putWithProgress, SAVE_REST, sheetRows, SongLanguage, stripSteps } from './new-song';
-import { DRAFT_HOLD, DRAFT_NOTE, draftSong, readProblem, songAudioUrl, songTimingUrl } from './song-flow';
+import { DRAFT_HOLD, draftSong, readProblem, songAudioUrl, songTimingUrl } from './song-flow';
 import { BalanceComponent } from './ui/balance.component';
 import { signedOutBy } from './ui/session';
 
@@ -72,7 +72,6 @@ export class NewSongPage extends BetaPage {
     const prep = v?.prep && v.stage === 'preparing' ? jobProgress(v.prep) : undefined;
     return stripSteps({ uploadPct: this.uploadPct(), uploadError: this.uploadError(), uploaded: this.uploaded(), prepLeftMin: prep?.leftMin, prepFailed: v?.stage === 'prepFailed', aligned: this.aligned() });
   });
-  protected readonly timingNote = computed(() => (this.aligned() ? '' : DRAFT_NOTE));
   protected readonly exportHold = computed(() => (this.aligned() ? '' : DRAFT_HOLD));
   protected readonly timingHref = computed(() => `/timing?beta=${this.songId()}`);
   protected readonly stage = viewChild.required(InstantStage);

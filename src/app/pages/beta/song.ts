@@ -152,6 +152,9 @@ export const nextHeld = (base: Pick<BetaJob, 'status'>): string | null => (base.
 /** The confirm body of 略過檢查，直接製作: what an unchecked timing risks and what changing it later costs. */
 export const SKIP_TIMING_BODY = `歌詞時間是自動對的，沒有檢查的話，影片裡可能有歌詞和歌聲對不上的地方。之後改時間本身免費；已做好的影片要套用新時間要另付修正費 $${formatPrice(FIX_PRICE, 'short')}；還沒確認的概念要重新產生（$${formatPrice(CONCEPT_PRICE, 'short')}）。`;
 
+/** The confirm body of 刪除歌曲: what goes from the person's view (the server keeps the record and the files aside). */
+export const DELETE_BODY = '刪除後，這首歌和它的影片都會從你的列表消失。';
+
 /** The line a fix with nothing to remove shows in place of the refund line (the server sends only the flag, not its error). */
 export const NOTHING_TO_REMOVE_LINE = '標記的範圍裡沒有找到可以拿掉的圖，這次沒有收費。';
 

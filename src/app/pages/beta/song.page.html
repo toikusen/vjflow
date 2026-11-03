@@ -13,7 +13,26 @@
     <div class="cover" aria-hidden="true">{{ s.title.slice(0, 1) }}</div>
     <div class="hero-text">
       <app-status-chip class="hero-chip" [class.banner]="v.retrying" [chip]="heroChip(v)" />
-      <h1>{{ s.title }}</h1>
+      <!-- the owner's title is a button: a click opens it for a new name (Enter saves, Esc leaves it) -->
+      @if (renaming() !== null) {
+        <h1 class="renaming">
+          <input #rename class="rename-box" [value]="renaming()" maxlength="120" aria-label="歌名" [disabled]="busy()"
+            (input)="renaming.set(rename.value)" (keydown.enter)="$event.preventDefault(); saveTitle()" (keydown.escape)="renaming.set(null)" (blur)="saveTitle()" />
+        </h1>
+      } @else if (mine()) {
+        <h1><button class="title-button" type="button" title="改歌名" (click)="startRename(s.title)">{{ s.title }}</button></h1>
+      } @else {
+        <h1>{{ s.title }}</h1>
+      }
+      @if (mine()) {
+        <details class="more" #more>
+          <summary class="button soft more-button" aria-label="更多" title="更多">⋯</summary>
+          <div class="menu" role="menu">
+            <button type="button" role="menuitem" (click)="more.open = false; startRename(s.title)">改歌名</button>
+            <button type="button" role="menuitem" class="danger" [disabled]="!!v.active || busy()" (click)="more.open = false; askDelete()">刪除歌曲</button>
+          </div>
+        </details>
+      }
       <p class="sub">
         @if (s.artist) {<span>{{ s.artist }} · </span>}{{ langName(s.language) }}@if (duration(); as d) {<span> · {{ clock(d) }}</span>}
         @if (v.stage === 'ready') {

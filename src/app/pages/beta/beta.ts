@@ -102,7 +102,7 @@ export const stepsMin = (kind: keyof typeof JOB_STEPS): number => Math.round(JOB
 export function flowSummary(maxConcepts: number): string {
   const short = (x: number) => `$${formatPrice(x, 'short')}`;
   const makes = (['none', 'img', 'hybrid'] as const).map((t) => short(TIER_INFO[t].rest)).join('／');
-  return `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（${short(CONCEPT_PRICE)}，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 ${maxConcepts} 次）→ 接受後製作（${makes}）；只上傳你有權使用的音樂；歌曲建立後不能刪除或改名。`;
+  return `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（${short(CONCEPT_PRICE)}，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 ${maxConcepts} 次）→ 接受後製作（${makes}）；只上傳你有權使用的音樂。`;
 }
 
 const tierInfo = (tier: BetaTier, name: string, about: string, rest: number) =>
@@ -418,6 +418,8 @@ export function timeline(events: BetaEvent[]): TimelineRow[] {
     const retry = e['retryOf'] ? `重試 ${e['retryOf']}` : undefined;
     switch (e.type) {
       case 'song.created': return row('建立歌曲');
+      case 'song.renamed': return row('改歌名', 'info', typeof e['title'] === 'string' ? e['title'] : undefined);
+      case 'song.deleted': return row('刪除歌曲', 'warn');
       case 'audio.uploaded': return row('上傳音檔');
       case 'timing.saved': return row(e['confirmed'] ? '確認時間' : '儲存時間');
       case 'job.queued': return row(e['auto'] ? '排隊（自動重試）' : '排隊');

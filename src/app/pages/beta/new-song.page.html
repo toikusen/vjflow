@@ -1,0 +1,102 @@
+<header class="page-head desk-only">
+  <a class="back" href="/my">← 我的歌曲</a>
+  <h1>做一支新影片</h1>
+  @if (me(); as m) {
+    <app-balance [me]="m" />
+  }
+</header>
+
+@if (message()) {
+  <p class="toast" role="status">{{ message() }}</p>
+}
+
+@if (signedOut()) {
+  <section class="signed-out" role="alert">
+    <h2>尚未登入，或登入連結已失效</h2>
+    <p>請向邀請你的人要一條新連結（平台網址可能已更換，舊連結會失效）。用新連結打開後就會回到這裡。</p>
+  </section>
+} @else {
+  <div class="work">
+    <section class="sheet-col" aria-labelledby="sheet-h">
+      <div class="sheet-head">
+        <h2 id="sheet-h">歌詞</h2>
+        @if (saved()) {
+          <a class="edit" [href]="timingHref()">修改歌詞</a>
+        } @else if (parsed().lines) {
+          <span class="muted">共 {{ parsed().lines }} 句@if (parsed().skipped) { · 略過 {{ parsed().skipped }} 行}</span>
+        }
+      </div>
+      <!-- the box is see-through; the sheet under it carries the words and their marks and scrolls with it -->
+      <div class="paper" [class.locked]="saved()">
+        <div #sheet class="mirror" aria-hidden="true">
+          @for (r of rows(); track $index) {
+            <div class="row" [attr.data-kind]="r.kind">{{ r.text }}@if (r.kind === 'section' || r.kind === 'heading') {<span class="skip">{{ r.kind === 'heading' ? '歌名' : '不會出現在影片' }}</span>}</div>
+          }
+        </div>
+        @if (!saved()) {
+          <textarea class="box" name="lyrics" [ngModel]="lyrics()" (ngModelChange)="typed($event)" (scroll)="scrolled($any($event.target))" spellcheck="false" placeholder="貼上歌詞，一行一句。[Verse] 這類段落標記和 # 歌名 會自動辨識。" aria-label="歌詞"></textarea>
+        }
+      </div>
+      @if (parsed().problem; as p) {
+        <p class="fine bad" role="alert">{{ p }}</p>
+      }
+      <div class="fields">
+        <label>歌名<input name="title" [ngModel]="title()" (ngModelChange)="nameTyped($event)" [readonly]="saved()" maxlength="120" [placeholder]="file() ? '自動：檔名' : '自動：# 歌名或檔名'" /></label>
+        <label>歌手<input name="artist" [ngModel]="artist()" (ngModelChange)="artist.set($event)" [readonly]="saved()" maxlength="120" placeholder="選填" /></label>
+        <div class="lang" role="radiogroup" aria-label="語言">
+          <span class="lang-name">語言</span>
+          <div class="segmented">
+            @for (l of langOptions; track l.id) {
+              <button type="button" role="radio" [disabled]="saved()" [attr.aria-checked]="language() === l.id" [class.on]="language() === l.id" (click)="pickLanguage(l.id)">{{ l.name }}</button>
+            }
+          </div>
+          @if (!language() && !saved()) {
+            <span class="fine">貼上歌詞後自動辨識</span>
+          }
+        </div>
+      </div>
+      @if (saved()) {
+        <p class="fine">歌名可以到歌曲頁改。</p>
+      } @else {
+        <p class="fine">只上傳你有權使用的音樂。</p>
+      }
+    </section>
+
+    <section class="stage-col" aria-label="畫面">
+      <div class="zone" [class.dragging]="dragging()" [class.empty]="!file()" (dragover)="over($event)" (dragleave)="dragging.set(false)" (drop)="drop($event)">
+        <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="title()" [timingNote]="timingNote()" [exportHold]="exportHold()" [plain]="true" [rail]="true">
+          @if (!file()) {
+            <div class="invite">
+              <div class="demo" aria-hidden="true">
+                <span>夜晚的橋邊在飄雪</span>
+                <span>朝からアラーム</span>
+                <span>we walk along the river</span>
+                <span>오늘도 사랑해</span>
+              </div>
+              <p class="drop-line"><span class="desk-only">把音檔拖到這裡</span><span class="phone-only">點一下選音檔</span></p>
+              <label class="button primary pick">選擇音檔<input type="file" [accept]="accept" hidden (change)="pickInput($event)" aria-label="音檔" /></label>
+              <p class="fine">mp3、wav、flac、m4a、aac · 80 MB 以內</p>
+            </div>
+          } @else {
+            <div class="invite">
+              <canvas #wave class="wave" aria-hidden="true"></canvas>
+              <p class="file-line">{{ file()!.name }}@if (seconds()) { · {{ clock(seconds()) }}}</p>
+              <p class="drop-line">{{ parsed().lines ? '生成中…' : '貼上歌詞就能看到' }}</p>
+            </div>
+          }
+          @if (file()) {
+            <ol under class="strip" aria-label="狀態">
+              @for (s of strip(); track $index) {
+                <li [attr.data-state]="s.state"><i aria-hidden="true"></i><span>{{ s.label }}</span>
+                  @if ($index === 0 && s.state === 'bad') {
+                    <button type="button" class="button retry" (click)="upload()">重試</button>
+                  }
+                </li>
+              }
+            </ol>
+          }
+        </app-instant-stage>
+      </div>
+    </section>
+  </div>
+}

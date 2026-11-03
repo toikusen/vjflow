@@ -1,10 +1,11 @@
-export type Page = 'free' | 'free-off' | 'beta-admin-song' | 'beta-admin' | 'beta-song' | 'beta-styles' | 'beta' | 'admin' | 'timing' | 'studio' | 'home';
+export type Page = 'free' | 'free-off' | 'beta-admin-song' | 'beta-admin' | 'beta-song' | 'beta-new' | 'beta-styles' | 'beta' | 'admin' | 'timing' | 'studio' | 'home';
 
 // longer prefixes first: /my/admin/song before /my/admin before /my
 const ROUTES: [string, Page][] = [
   ['/my/admin/song', 'beta-admin-song'],
   ['/my/admin', 'beta-admin'],
   ['/my/song', 'beta-song'],
+  ['/my/new', 'beta-new'],
   ['/my/styles', 'beta-styles'],
   ['/my', 'beta'],
   ['/admin', 'admin'],

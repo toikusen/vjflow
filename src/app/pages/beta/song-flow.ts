@@ -4,6 +4,7 @@ import { parseLyrics } from '../../lyric-vj/free-lyrics';
 import { songFromLines } from '../../lyric-vj/free-song';
 import { estimateStarts } from '../../lyric-vj/free-sung';
 import type { SongTimeline } from '../../lyric-vj/timeline';
+import { stepsMin } from './beta';
 
 /** The style and version a person last had on a song, so a return to the page finds the same picture. */
 export interface FlowPick { styleId: string; seed?: number }
@@ -14,7 +15,7 @@ export const songLyricsUrl = (id: string) => `/beta/songs/${id}/lyrics`;
 export const songUploadUrl = (id: string) => `/beta/songs/${id}/audio/upload`;
 
 /** Shown over the draft: the times are guessed from the audio until the preparation has aligned them. */
-export const DRAFT_NOTE = '歌詞時間是估算的，可能差好幾秒。正在背景校準（約 15 分鐘），好了會自動換成準確的時間，那時再匯出。';
+export const DRAFT_NOTE = `歌詞時間是估算的，可能差好幾秒。正在背景校準（約 ${stepsMin('prep')} 分鐘），好了會自動換成準確的時間，那時再匯出。`;
 export const DRAFT_HOLD = '時間校準好之後才能匯出。';
 
 /** A song while it is prepared: the person's own lyrics (their stamps where they gave some) over the sung stretches heard in the tab. */

@@ -1,4 +1,4 @@
-<div class="studio" [class.plain]="plain()">
+<div class="studio" [class.plain]="plain()" [class.rail]="rail()">
   <div class="view">
     @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
@@ -70,5 +70,7 @@
     }
   </div>
 
-  <div class="styles"><app-style-picker [groups]="styleGroups" [selected]="styleId()" [rails]="plain()" (picked)="setStyle($event)" /></div>
+  <!-- a page's own line between the transport and the styles (the new-song screen's status strip) -->
+  <ng-content select="[under]" />
+  <div class="styles"><app-style-picker [groups]="styleGroups" [selected]="styleId()" [rails]="plain()" [row]="rail()" (picked)="setStyle($event)" /></div>
 </div>

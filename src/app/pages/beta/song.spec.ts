@@ -1,5 +1,5 @@
 import { BetaJob } from './beta';
-import { canReupload, clock, draftsToReopen, FAILURE_NOTE, PREP_FAILED_NOTE, failureCard, fitsViewport, heldLines, heroTone, hhmm, nextHeld, SKIP_TIMING_BODY, jobTitle, jobTotal, resultConcept, safeName, stepClocks, nextSteps, timingNote, versionOf, videoFileName } from './song';
+import { canReupload, clock, DELETE_BODY, draftsToReopen, FAILURE_NOTE, PREP_FAILED_NOTE, failureCard, fitsViewport, heldLines, heroTone, hhmm, nextHeld, SKIP_TIMING_BODY, jobTitle, jobTotal, resultConcept, safeName, stepClocks, nextSteps, timingNote, versionOf, videoFileName } from './song';
 
 const job = (o: Partial<BetaJob>): BetaJob => ({ id: 'j', songId: 's', kind: 'make', tier: 'hybrid', status: 'done', createdAt: '2026-10-27T00:00:00Z', ...o });
 
@@ -231,5 +231,11 @@ describe('nextHeld', () => {
 describe('SKIP_TIMING_BODY', () => {
   it('states the risk and the fees of changing the timing later', () => {
     expect(SKIP_TIMING_BODY).toBe('歌詞時間是自動對的，沒有檢查的話，影片裡可能有歌詞和歌聲對不上的地方。之後改時間本身免費；已做好的影片要套用新時間要另付修正費 $1；還沒確認的概念要重新產生（$2.5）。');
+  });
+});
+
+describe('DELETE_BODY', () => {
+  it('says what leaves the person\'s view, and nothing about the files the server keeps', () => {
+    expect(DELETE_BODY).toBe('刪除後，這首歌和它的影片都會從你的列表消失。');
   });
 });

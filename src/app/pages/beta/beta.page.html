@@ -20,52 +20,13 @@
 } @else if (!loaded()) {
   <p class="empty loading" aria-live="polite">讀取中…</p>
 } @else {
-  @if (composing()) {
-    <button class="back phone-only" type="button" (click)="composing.set(false)">← 我的歌曲</button>
-  } @else {
-    <button class="entry phone-only" type="button" (click)="composing.set(true)">
-      <span class="note-icon" aria-hidden="true">♪</span>
-      <span class="entry-text"><strong>新增歌曲</strong><span class="muted">選音檔、填歌名與歌詞 · 免費</span></span>
-      <span class="muted" aria-hidden="true">›</span>
-    </button>
-  }
+  <!-- the one way in: the new-song screen, where the audio goes straight into the picture -->
+  <a class="entry" href="/my/new">
+    <span class="note-icon" aria-hidden="true">♪</span>
+    <span class="entry-text"><strong>做一支新影片</strong><span class="muted">放進音檔、貼上歌詞，馬上看到影片 · 免費</span></span>
+    <span class="go-arrow muted" aria-hidden="true">›</span>
+  </a>
 
-  <form class="composer" [class.open]="composing()" (ngSubmit)="confirmAdd()" aria-label="新增歌曲">
-    <label class="drop" [class.has]="fileName()">
-      <input type="file" accept=".mp3,.wav,.flac,.m4a,.aac,audio/mpeg,audio/wav,audio/x-wav,audio/flac,audio/x-flac,audio/mp4,audio/x-m4a,audio/aac" [disabled]="busy()" (change)="pick($event)" required aria-label="音檔" />
-      <span class="note-icon" aria-hidden="true">♪</span>
-      @if (fileName(); as f) {
-        <strong class="file">{{ f }}</strong>
-        <span class="muted">點一下或拖放換檔案</span>
-      } @else {
-        <strong>新增歌曲</strong>
-        <span class="muted">拖放音檔到這裡<br />mp3、wav、flac、m4a、aac · 80 MB 以內</span>
-      }
-    </label>
-    <div class="names">
-      <input name="title" [(ngModel)]="form.title" [disabled]="busy()" required maxlength="120" placeholder="歌名 · 必填" aria-label="歌名" />
-      <input name="artist" [(ngModel)]="form.artist" [disabled]="busy()" maxlength="120" placeholder="歌手 · 選填" aria-label="歌手" />
-    </div>
-    <div class="segmented" role="radiogroup" aria-label="語言" aria-required="true">
-      @for (l of langs; track l[0]) {
-        <button type="button" role="radio" [disabled]="busy()" [attr.aria-checked]="form.language === l[0]" [class.on]="form.language === l[0]" (click)="form.language = l[0]">{{ l[1] }}</button>
-      }
-    </div>
-    <div class="lyrics-box">
-      <textarea class="lyrics" name="lyrics" [(ngModel)]="form.lyrics" [disabled]="busy()" required [maxlength]="lyricsMax" placeholder="歌詞 · 一行一句，照唱的順序，重複的段落也要寫出來" aria-label="歌詞"></textarea>
-      <span class="count fine" aria-live="polite">{{ form.lyrics.length }} / {{ lyricsMax }}</span>
-    </div>
-    <div class="go">
-      <button class="button primary" type="submit" [disabled]="busy() || !fileName()">@if (busy()) {上傳中…} @else {上傳並準備 · 免費}</button>
-      @if (busy()) {
-        <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
-      } @else {
-        <p class="fine">上傳完就能預覽免費版，歌詞時間在背景自動對準。<br />只上傳你有權使用的音樂。</p>
-      }
-    </div>
-  </form>
-
-  <!-- on phones the open form is its own page; wider screens show everything (CSS), so a resize never strands the list -->
   <div class="list">
     <div class="filters" role="group" aria-label="篩選">
       @for (f of filters; track f.id) {
@@ -77,15 +38,15 @@
 
     @if (loaded() && !songs().length) {
       <div class="empty start">
-        <p>還沒有歌曲，從上面上傳第一首。</p>
+        <p>還沒有歌曲，從「做一支新影片」開始。</p>
         <ol class="steps">
-          <li><span aria-hidden="true">①</span>上傳音檔與歌詞，馬上挑風格、預覽影片（免費）</li>
+          <li><span aria-hidden="true">①</span>放進音檔、貼上歌詞，馬上挑風格、看影片（免費）</li>
           <li><span aria-hidden="true">②</span>系統在背景對準歌詞時間，約 {{ prepMin }} 分鐘；好了檢查一下每句的時間</li>
           <li><span aria-hidden="true">③</span>免費匯出 720p 影片</li>
           <li><span aria-hidden="true">④</span>想要更專屬的版本，再付費請導演提出概念與示意畫面（<app-price [amount]="conceptPrice" digits="short" [plain]="true" />，約 {{ conceptMin }} 分鐘，每個方案含第一次共 {{ maxConcepts }} 次）</li>
           <li><span aria-hidden="true">⑤</span>接受後才製作完整影片（@for (t of tiers; track t.name) {<span>{{ t.name }} <app-price [amount]="t.rest" digits="short" [plain]="true" /></span>@if (!$last) {／}}）</li>
         </ol>
-        <p class="fine">只上傳你有權使用的音樂；歌曲建立後不能刪除或改名；金額為美元，封測額度由管理者提供。</p>
+        <p class="fine">只上傳你有權使用的音樂；金額為美元，封測額度由管理者提供。</p>
       </div>
     } @else if (loaded() && !shown().length) {
       <p class="empty">這個分類目前沒有歌曲。</p>

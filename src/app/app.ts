@@ -8,6 +8,7 @@ import { BetaPage } from './pages/beta/beta.page';
 import { BetaAdminPage } from './pages/beta/beta-admin.page';
 import { BetaAdminSongPage } from './pages/beta/admin-song.page';
 import { BetaSongPage } from './pages/beta/song.page';
+import { NewSongPage } from './pages/beta/new-song.page';
 import { BetaStylesPage } from './pages/beta/styles.page';
 import { FreePage } from './pages/free/free.page';
 import { pageFor } from './pages/beta/route';
@@ -18,7 +19,7 @@ import { BetaSession } from './pages/beta/ui/session';
 // ponytail: a path check instead of the router; switch to @angular/router when pages need parameters or guards
 @Component({
   selector: 'app-root',
-  imports: [NgTemplateOutlet, GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaAdminSongPage, BetaSongPage, BetaStylesPage, BetaShellComponent, FreePage],
+  imports: [NgTemplateOutlet, GeneratorPage, JobsPage, TimingPage, StudioPage, BetaPage, BetaAdminPage, BetaAdminSongPage, BetaSongPage, NewSongPage, BetaStylesPage, BetaShellComponent, FreePage],
   template: `@if (shell; as s) {
       <app-beta-shell [spec]="s" [me]="session.me()"><ng-container *ngTemplateOutlet="pages" /></app-beta-shell>
     } @else {
@@ -43,6 +44,9 @@ import { BetaSession } from './pages/beta/ui/session';
         }
         @case ('beta-song') {
           <app-beta-song-page />
+        }
+        @case ('beta-new') {
+          <app-new-song-page />
         }
         @case ('beta-styles') {
           <app-beta-styles-page />
@@ -69,6 +73,6 @@ export class App {
 
   constructor() {
     // the song pages poll /beta/me themselves; the admin and style pages only need it once for the shell
-    if (this.shell && this.page !== 'beta' && this.page !== 'beta-song') this.session.load();
+    if (this.shell && this.page !== 'beta' && this.page !== 'beta-song' && this.page !== 'beta-new') this.session.load();
   }
 }

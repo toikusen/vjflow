@@ -32,11 +32,11 @@ a {
   --hero: color-mix(in srgb, var(--tint) 35%, var(--bg));
   // one row: back, small cover, title and subtitle, then the chip and the balance on the right
   display: grid;
-  grid-template-columns: auto 56px minmax(0, 1fr) auto auto;
+  grid-template-columns: auto 56px minmax(0, 1fr) auto auto auto;
   grid-template-rows: auto auto;
   grid-template-areas:
-    'back cover title chip bal'
-    'back cover sub chip bal';
+    'back cover title chip more bal'
+    'back cover sub chip more bal';
   column-gap: 20px;
   padding: 24px 40px;
   background: linear-gradient(180deg, var(--hero), var(--bg));
@@ -103,6 +103,111 @@ a {
   letter-spacing: -0.01em;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+// the owner's title is a button that looks like the title; a click opens the box in its place
+.title-button {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: text;
+
+  &:hover {
+    color: var(--accent-text);
+  }
+}
+
+.renaming {
+  overflow: visible;
+}
+
+.rename-box {
+  width: 100%;
+  min-width: 0;
+  margin: -4px -8px;
+  padding: 2px 8px;
+  font: inherit;
+  letter-spacing: inherit;
+  color: var(--text);
+  background: var(--inset);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  outline: none;
+}
+
+/* the more menu: rename and delete, off the hero's main row */
+
+.more {
+  grid-area: more;
+  grid-row: 1 / -1;
+  position: relative;
+  align-self: center;
+
+  summary {
+    list-style: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+
+  .more-button {
+    min-width: 40px;
+    padding-inline: 10px;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    min-width: 160px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    box-shadow: var(--shadow-cover);
+
+    button {
+      padding: 10px 12px;
+      font: inherit;
+      font-size: 14px;
+      color: var(--text);
+      text-align: left;
+      background: none;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+
+      &:hover:not(:disabled) {
+        background: var(--surface-2);
+      }
+
+      &.danger {
+        color: var(--bad);
+      }
+
+      &:disabled {
+        color: var(--muted);
+        cursor: not-allowed;
+      }
+    }
+  }
 }
 
 .sub {
@@ -884,8 +989,8 @@ a {
     grid-template-rows: auto auto auto auto;
     grid-template-areas:
       'back back bal'
-      'cover title title'
-      'cover sub sub'
+      'cover title more'
+      'cover sub more'
       'chip chip chip';
     column-gap: 14px;
     padding: 14px 16px 18px;
@@ -904,6 +1009,13 @@ a {
 
     .hero-chip {
       grid-area: chip;
+    }
+
+    .more {
+      grid-area: more;
+      grid-row: 2 / 4;
+      align-self: start;
+      margin-top: 14px;
     }
 
     .cover {

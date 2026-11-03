@@ -1,7 +1,7 @@
 import { Component, computed, effect, ElementRef, signal, untracked, viewChild } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { SongTimeline } from '../../lyric-vj/timeline';
-import { audioProblem, BetaFeedback, BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, coverTint, feedbackLine, FIX_PRICE, fixableReport, fixKindFor, minutesBetween, songKind, songView, SongView, stepsMin, TIER_INFO } from './beta';
+import { audioProblem, BetaFeedback, BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, coverTint, errorOf, feedbackLine, FIX_PRICE, fixableReport, fixKindFor, jsonOrError, minutesBetween, songKind, songView, SongView, stepsMin, TIER_INFO } from './beta';
 import { BetaPage } from './beta.page';
 import { ConceptCardComponent } from './concept-card.component';
 import { MakeFormComponent } from './make-form.component';
@@ -9,7 +9,7 @@ import { SongFlowComponent } from './song-flow.component';
 import { timingCallout } from './song-flow';
 import { fixBody, hasDraft, ReportFormComponent } from './report-form.component';
 import { interludeLines, stillLabel } from './concept';
-import { canReupload, clock, draftsToReopen, failureCard, fitsViewport, heldLines, heroTone, jobTitle, jobTotal, nextHeld, nextSteps, PREP_FAILED_NOTE, resultConcept, SKIP_TIMING_BODY, stamp, timingNote, videoFileName } from './song';
+import { canReupload, clock, DELETE_BODY, draftsToReopen, failureCard, fitsViewport, heldLines, heroTone, jobTitle, jobTotal, nextHeld, nextSteps, PREP_FAILED_NOTE, resultConcept, SKIP_TIMING_BODY, stamp, timingNote, videoFileName } from './song';
 import { BalanceComponent } from './ui/balance.component';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
@@ -60,6 +60,9 @@ export class BetaSongPage extends BetaPage {
   protected readonly prepFailedNote = PREP_FAILED_NOTE;
   /** The song's length from its timing (for the hero and the `1080p · m:ss` label), once the timing is confirmed. */
   protected readonly duration = signal<number | null>(null);
+  /** The title as it is being retyped; null when it is not. */
+  protected readonly renaming = signal<string | null>(null);
+  private readonly renameBox = viewChild<ElementRef<HTMLInputElement>>('rename');
   /** Result videos the person started; their native controls show from then on, in place of the play button. */
   protected readonly played = signal<ReadonlySet<string>>(new Set());
   /** Past reports per result job, read once when the page first sees the result (and again after a send). */
@@ -169,6 +172,56 @@ export class BetaSongPage extends BetaPage {
   protected play(id: string, video: HTMLVideoElement) {
     this.markPlayed(id);
     void video.play().catch(() => undefined);
+  }
+
+  protected startRename(title: string) {
+    this.renaming.set(title);
+    // the box mounts on this change: focus once it has rendered
+    setTimeout(() => this.renameBox()?.nativeElement.select());
+  }
+
+  /** `PATCH /beta/songs/:id { title }`: the new name, trimmed; an empty or unchanged one only closes the box. */
+  protected async saveTitle() {
+    const next = this.renaming()?.trim() ?? '';
+    const song = this.song();
+    this.renaming.set(null);
+    if (!song || !next || next === song.title) return;
+    this.busy.set(true);
+    try {
+      const r = await fetch(`/beta/songs/${this.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: next }) });
+      if (!r.ok) return this.message.set(`改名失敗：${errorOf(await jsonOrError(r), r.status)}`);
+      this.songs.update((list) => list.map((s) => (s.id === song.id ? { ...s, title: next } : s)));
+    } catch {
+      this.message.set('改名失敗：連線中斷，請確認網路後再試');
+    } finally {
+      this.busy.set(false);
+      await this.poll();
+    }
+  }
+
+  /** 刪除歌曲: one confirm, since it cannot be undone from here; then back to the list. */
+  protected askDelete() {
+    this.ask.set({
+      eyebrow: this.song()?.title,
+      title: '刪除歌曲',
+      body: DELETE_BODY,
+      cost: 0,
+      confirmLabel: '刪除',
+      go: () => void this.deleteSong(),
+    });
+  }
+
+  private async deleteSong() {
+    this.busy.set(true);
+    try {
+      const r = await fetch(`/beta/songs/${this.id}`, { method: 'DELETE' });
+      if (!r.ok) return this.message.set(`刪除失敗：${errorOf(await jsonOrError(r), r.status)}`);
+      location.assign('/my');
+    } catch {
+      this.message.set('刪除失敗：連線中斷，請確認網路後再試');
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   /** Sends the audio again for a song whose first upload was refused or broke off; the server then starts the preparation. */

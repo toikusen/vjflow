@@ -7,6 +7,7 @@ export interface ShellSpec { active: ShellTab; title: string; back?: { href: str
 const SHELL: Partial<Record<Page, ShellSpec>> = {
   beta: { active: 'songs', title: '我的歌曲' },
   'beta-song': { active: 'songs', title: '', back: { href: '/my', label: '我的歌曲' }, ownTop: true },
+  'beta-new': { active: 'songs', title: '做一支新影片', back: { href: '/my', label: '我的歌曲' } },
   'beta-styles': { active: 'styles', title: '風格' },
   'beta-admin': { active: 'admin', title: '管理' },
   'beta-admin-song': { active: 'admin', title: '', back: { href: '/my/admin', label: '管理' }, ownTop: true },

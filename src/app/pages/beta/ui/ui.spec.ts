@@ -1,4 +1,3 @@
-import { languageProblem } from '../beta.page';
 import { balance, panelAfter, QUOTA_HELP } from './balance';
 import { askRows, bill } from './confirm';
 import { formatPrice } from './price';
@@ -70,6 +69,7 @@ describe('shellFor', () => {
   it('marks the tab and the phone top bar for each beta page', () => {
     expect(shellFor('beta')).toEqual({ active: 'songs', title: '我的歌曲' });
     expect(shellFor('beta-song')).toEqual({ active: 'songs', title: '', back: { href: '/my', label: '我的歌曲' }, ownTop: true });
+    expect(shellFor('beta-new')).toEqual({ active: 'songs', title: '做一支新影片', back: { href: '/my', label: '我的歌曲' } });
     expect(shellFor('beta-styles')).toEqual({ active: 'styles', title: '風格' });
     expect(shellFor('beta-admin')).toEqual({ active: 'admin', title: '管理' });
     expect(shellFor('beta-admin-song')).toEqual({ active: 'admin', title: '', back: { href: '/my/admin', label: '管理' }, ownTop: true });
@@ -135,13 +135,5 @@ describe('pollGate', () => {
     g.begin();
     g.signOut();
     expect(g.latest(g.begin())).toBe(true);
-  });
-});
-
-describe('languageProblem', () => {
-  it('asks for a language until one of the four is picked', () => {
-    expect(languageProblem('')).toBe('請選擇歌詞的語言');
-    expect(languageProblem('fr')).toBe('請選擇歌詞的語言');
-    for (const l of ['ja', 'zh', 'en', 'ko']) expect(languageProblem(l)).toBeNull();
   });
 });

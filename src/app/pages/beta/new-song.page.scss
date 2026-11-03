@@ -1,0 +1,536 @@
+// 做一支新影片: the lyric sheet on the left, the picture (which is also where the audio goes) on the right.
+
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px 40px 48px;
+  font-size: 14px;
+}
+
+h1, h2, p, ol {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+@media (min-width: 721px) {
+  .phone-only {
+    display: none !important;
+  }
+}
+
+.page-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+
+  h1 {
+    font: 700 26px var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  app-balance {
+    margin-left: auto;
+  }
+}
+
+.back {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text);
+  }
+}
+
+.toast {
+  padding: 12px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+}
+
+.signed-out {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px 24px;
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+
+  h2 {
+    font-size: 18px;
+  }
+
+  p {
+    color: var(--muted);
+  }
+}
+
+.fine {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+
+  &.bad {
+    color: var(--bad);
+  }
+}
+
+.work {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+/* the lyric sheet */
+
+.sheet-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sheet-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+
+  h2 {
+    font: 700 16px var(--font-body);
+  }
+
+  .muted,
+  .edit {
+    margin-left: auto;
+    font-size: 12px;
+  }
+
+  .edit {
+    color: var(--accent-text);
+  }
+}
+
+.paper {
+  position: relative;
+  min-height: 420px;
+  max-height: 70vh;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--border-strong);
+  }
+
+  &:focus-within {
+    border-color: var(--accent-text);
+  }
+
+  &.locked {
+    border-color: var(--border);
+
+    .mirror {
+      position: static;
+      overflow: auto;
+      max-height: 70vh;
+    }
+  }
+}
+
+// the box and its mirror share every metric that places a glyph, so each mark lands on its own line
+.mirror,
+.box {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  font: 14px/1.7 var(--font-body);
+  letter-spacing: normal;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+.mirror {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--text);
+  pointer-events: none;
+}
+
+.row {
+  position: relative;
+
+  &:empty::before {
+    content: '\200b';
+  }
+
+  &[data-kind='section'],
+  &[data-kind='heading'] {
+    color: var(--faint);
+  }
+}
+
+.skip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+  background: var(--surface-2);
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.box {
+  position: relative;
+  display: block;
+  height: 100%;
+  min-height: 420px;
+  max-height: 70vh;
+  color: transparent;
+  caret-color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  resize: vertical;
+  outline: none;
+
+  &::placeholder {
+    color: var(--faint);
+  }
+
+  &::selection {
+    background: #ff6a4d55;
+  }
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  label {
+    display: grid;
+    grid-template-columns: 40px 1fr;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  input {
+    width: 100%;
+    min-width: 0;
+    padding: 10px 12px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--inset);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    transition: border-color 0.15s;
+
+    &::placeholder {
+      color: var(--faint);
+    }
+
+    &:hover {
+      border-color: var(--border-strong);
+    }
+
+    &:read-only {
+      color: var(--text-2);
+      background: transparent;
+      border-color: transparent;
+      padding-inline: 0;
+    }
+  }
+}
+
+.lang {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13px;
+  color: var(--muted);
+
+  .fine {
+    grid-column: 2;
+  }
+}
+
+.segmented {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  padding: 3px;
+  background: var(--inset);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+
+  button {
+    padding: 7px 4px;
+    font: inherit;
+    font-size: 13px;
+    color: var(--muted);
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background-color 0.15s;
+
+    &:hover:not(.on):not(:disabled) {
+      background: var(--surface-2);
+    }
+
+    &.on {
+      font-weight: 700;
+      color: var(--text);
+      background: var(--border);
+    }
+
+    &:disabled:not(.on) {
+      opacity: 0.5;
+      cursor: default;
+    }
+  }
+}
+
+/* the picture, which is also where the audio goes */
+
+.stage-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.zone {
+  border-radius: 14px;
+  transition: box-shadow 0.15s;
+
+  &.dragging {
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+}
+
+.invite {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  color: var(--text-2);
+
+  .fine {
+    color: var(--faint);
+  }
+}
+
+.drop-line {
+  font: 700 18px var(--font-display);
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.pick {
+  position: relative;
+  z-index: 1;
+}
+
+.file-line {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+// a faint loop of lyric motion behind the invitation: what the picture will do, without a picture to show yet
+.demo {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+
+  span {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    font: 700 clamp(22px, 4vw, 44px) var(--font-display);
+    color: var(--text);
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    animation: demo-line 12s ease-in-out infinite;
+
+    &:nth-child(2) { animation-delay: 3s; }
+    &:nth-child(3) { animation-delay: 6s; }
+    &:nth-child(4) { animation-delay: 9s; }
+  }
+}
+
+@keyframes demo-line {
+  0% { opacity: 0; transform: translate(-50%, -30%) scale(0.96); }
+  6% { opacity: 0.16; transform: translate(-50%, -50%) scale(1); }
+  20% { opacity: 0.16; transform: translate(-50%, -54%) scale(1.02); }
+  26%, 100% { opacity: 0; transform: translate(-50%, -80%) scale(1.04); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo span {
+    animation: none;
+    opacity: 0.08;
+    transform: translate(-50%, -50%);
+
+    &:nth-child(n + 2) {
+      display: none;
+    }
+  }
+}
+
+.wave {
+  width: min(100%, 520px);
+  height: 64px;
+  color: var(--faint);
+}
+
+/* the status strip: three cells that light up in order */
+
+.strip {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+
+    span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    i {
+      flex: none;
+      width: 8px;
+      height: 8px;
+      background: var(--faint);
+      border-radius: 50%;
+    }
+
+    &[data-state='now'] {
+      color: var(--text);
+      border-color: var(--accent);
+
+      i {
+        background: var(--accent);
+        box-shadow: 0 0 0 3px #ff6a4d33;
+      }
+    }
+
+    &[data-state='done'] {
+      color: var(--ok);
+      background: var(--ok-bg);
+      border-color: var(--ok-border);
+
+      i {
+        background: var(--ok);
+      }
+    }
+
+    &[data-state='bad'] {
+      color: var(--bad);
+      background: var(--bad-bg);
+      border-color: var(--bad-border);
+
+      span {
+        white-space: normal;
+      }
+
+      i {
+        background: var(--bad);
+      }
+    }
+  }
+}
+
+.retry {
+  min-height: 30px;
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+  .work {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  // the picture first: a phone taps it to pick the audio; the sheet follows
+  .stage-col {
+    order: -1;
+  }
+
+  .paper,
+  .box {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 720px) {
+  :host {
+    gap: 14px;
+    padding: 14px 16px 32px;
+  }
+
+  .strip {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .strip li[data-state='next'] {
+    display: none;
+  }
+
+  .fields label,
+  .lang {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .drop-line {
+    font-size: 16px;
+  }
+}

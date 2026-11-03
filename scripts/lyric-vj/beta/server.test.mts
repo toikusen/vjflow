@@ -1573,3 +1573,57 @@ test('a held video shows when it goes out by itself, only when it will', async (
   assert.equal(by('gone').autoReleaseAt, undefined);
   t.beta.server.close();
 });
+
+test('rename: the owner changes a title under the creation rules; others and an empty title are refused', async () => {
+  const t = await setup();
+  const patch = (as: typeof t.tester, body: unknown) => as('/beta/songs/s1', { method: 'PATCH', body: JSON.stringify(body) });
+  assert.equal((await patch(t.admin, { title: 'Not mine' })).status, 404);
+  assert.equal((await patch(t.tester, { title: '  ' })).status, 400);
+  assert.equal((await patch(t.tester, {})).status, 400);
+  const ok = await patch(t.tester, { title: '  新歌名  ' });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).title, '新歌名');
+  assert.equal((await (await t.tester('/beta/songs')).json())[0].title, '新歌名');
+  // the same cap as at creation
+  const long = await patch(t.tester, { title: 'x'.repeat(200) });
+  assert.equal((await long.json()).title.length, 120);
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'song.renamed'));
+  t.beta.server.close();
+});
+
+test('delete: a soft delete the owner alone can do, refused while a job runs; the song leaves every list and route, its folder moves aside, its charges stay', async () => {
+  const t = await setup();
+  const del = (as: typeof t.tester) => as('/beta/songs/s1', { method: 'DELETE' });
+  assert.equal((await del(t.admin)).status, 404);
+  const made = await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) });
+  assert.equal(made.status, 202);
+  const busy = await del(t.tester);
+  assert.equal(busy.status, 409);
+  assert.match((await busy.json()).error, /排隊或製作中/);
+  for (let k = 0; k < 50 && t.beta.db.jobs[0].status !== 'done'; k++) await new Promise((ok) => setTimeout(ok, 100));
+  const jobId = t.beta.db.jobs[0].id;
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 2.5);
+  const gone = await del(t.tester);
+  assert.equal(gone.status, 200);
+  assert.ok((await gone.json()).deletedAt);
+  // out of the lists and the routes, for the owner and the admin alike
+  assert.deepEqual(await (await t.tester('/beta/songs')).json(), []);
+  assert.deepEqual(await (await t.admin('/beta/songs')).json(), []);
+  assert.deepEqual(await (await t.tester('/beta/jobs')).json(), []);
+  assert.equal((await t.tester('/beta/songs/s1/timing')).status, 404);
+  assert.equal((await t.tester('/beta/songs/s1/refs')).status, 404);
+  assert.equal((await t.tester('/beta/songs/s1/make', { method: 'POST', body: JSON.stringify({ tier: 'img' }) })).status, 404);
+  assert.equal((await t.tester(`/beta/jobs/${jobId}/accept`, { method: 'POST', body: '{}' })).status, 404);
+  assert.equal((await t.tester(`/beta/jobs/${jobId}/stills/a.png`)).status, 404);
+  assert.equal((await del(t.tester)).status, 404);
+  assert.equal((await t.tester('/beta/songs/s1', { method: 'PATCH', body: JSON.stringify({ title: 'late' }) })).status, 404);
+  // the record and the charge stay; the files moved, none removed
+  assert.ok(t.beta.db.songs[0].deletedAt);
+  assert.equal((await (await t.tester('/beta/me')).json()).spentUsd, 2.5);
+  assert.ok(!existsSync(join(t.root, 'songs/s1')));
+  assert.ok(existsSync(join(t.root, 'deleted/s1/song.json')));
+  assert.ok(existsSync(join(t.root, 'deleted/s1/runs', jobId, 'video.mp4')));
+  assert.ok(readEvents(t.root, 's1').length === 0 || !readEvents(t.root, 's1').some((e) => e.type === 'song.deleted'));
+  assert.match(readFileSync(join(t.root, 'deleted/s1/events.jsonl'), 'utf8'), /song\.deleted/);
+  t.beta.server.close();
+});

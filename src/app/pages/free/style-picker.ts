@@ -12,5 +12,7 @@ export class StylePicker {
   readonly selected = input('');
   /** Each group a sideways rail on narrow screens, for a page that has more below the picker. */
   readonly rails = input(false);
+  /** Every group a sideways rail at any width, for a picker under the picture. */
+  readonly row = input(false);
   readonly picked = output<string>();
 }

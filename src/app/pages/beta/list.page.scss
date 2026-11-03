@@ -1,4 +1,4 @@
-// 我的歌曲 (artboards 1b-1 and 2e): header, add-song card, filter chips, song cards.
+// 我的歌曲 (artboards 1b-1 and 2e): header, the way to a new video, filter chips, song cards.
 
 :host {
   display: flex;
@@ -49,16 +49,31 @@ h1, h3, p {
   border-radius: 10px;
 }
 
-/* add-song card */
+/* the way in: one row on top of the list (the add-song card it replaces drew the same note icon) */
 
-.composer {
-  display: grid;
-  grid-template: 'drop names lyrics' auto 'drop lang lyrics' auto 'drop go lyrics' 1fr / 260px 1fr 1fr;
-  gap: 12px 20px;
-  padding: 22px 24px;
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  text-decoration: none;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
+  transition: border-color 0.15s, background-color 0.15s;
+
+  &:hover {
+    background: var(--surface-2);
+    border-color: var(--border-strong);
+  }
+
+  .go-arrow {
+    margin-left: auto;
+    font-size: 22px;
+  }
 }
 
 .note-icon {
@@ -73,162 +88,19 @@ h1, h3, p {
   border-radius: 50%;
 }
 
-.drop {
-  position: relative;
+.entry-text {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
-  padding: 18px;
-  text-align: center;
-  background: var(--inset);
-  border: 1px dashed var(--border-strong);
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background-color 0.15s, border-color 0.15s;
-
-  .note-icon {
-    margin-bottom: 6px;
-  }
 
   strong {
-    max-width: 100%;
-    font-size: 14px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font: 700 16px var(--font-display);
+    letter-spacing: -0.01em;
   }
 
   .muted {
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  &:hover,
-  &:focus-within {
-    background: var(--surface-2);
-  }
-
-  // the native input is invisible, so the zone carries its focus ring
-  &:focus-within {
-    outline: 2px solid var(--accent-text);
-    outline-offset: 2px;
-  }
-
-  &.has {
-    border-style: solid;
-    border-color: var(--accent-text);
-  }
-
-  // ponytail: the transparent native input takes clicks and dropped files; no drag-and-drop handler needed
-  input {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
-}
-
-.drop {
-  grid-area: drop;
-}
-
-.names {
-  grid-area: names;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-input:not([type='file']),
-textarea {
-  width: 100%;
-  min-width: 0;
-  padding: 11px 12px;
-  font: inherit;
-  font-size: 14px;
-  color: var(--text);
-  background: var(--inset);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  transition: border-color 0.15s;
-
-  &::placeholder {
-    color: var(--faint);
-  }
-
-  &:hover {
-    border-color: var(--border-strong);
-  }
-}
-
-.lyrics-box {
-  grid-area: lyrics;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-
-  .count {
-    align-self: flex-end;
-    font-variant-numeric: tabular-nums;
-  }
-}
-
-.lyrics {
-  flex: 1;
-  min-height: 154px;
-  padding: 12px;
-  font-size: 13px;
-  line-height: 1.6;
-  resize: vertical;
-}
-
-.segmented {
-  grid-area: lang;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 3px;
-  padding: 3px;
-  background: var(--inset);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-
-  button {
-    padding: 8px;
-    font: inherit;
     font-size: 13px;
-    color: var(--muted);
-    background: transparent;
-    border: 0;
-    border-radius: 7px;
-    cursor: pointer;
-    transition: background-color 0.15s;
-
-    &:hover:not(.on) {
-      background: var(--surface-2);
-    }
-
-    &.on {
-      font-weight: 700;
-      color: var(--text);
-      background: var(--border);
-    }
-  }
-}
-
-.go {
-  grid-area: go;
-  align-self: end;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-
-  .button {
-    min-height: 44px;
-    padding: 12px 20px;
   }
 }
 
@@ -236,10 +108,6 @@ textarea {
   font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
-
-  &.warn {
-    color: var(--warn);
-  }
 }
 
 /* filter chips */
@@ -483,13 +351,7 @@ h3 {
   }
 }
 
-@media (max-width: 1100px) and (min-width: 721px) {
-  .composer {
-    grid-template: 'drop names' auto 'drop lang' auto 'drop go' 1fr 'lyrics lyrics' auto / 240px 1fr;
-  }
-}
-
-/* phone (2e): 64 px rows; the add-song card becomes an entry row that opens it as a full page */
+/* phone (2e): 64 px rows */
 
 @media (max-width: 720px) {
   :host {
@@ -498,91 +360,22 @@ h3 {
   }
 
   .entry {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 16px;
-    font: inherit;
-    color: var(--text);
-    text-align: left;
-    background: var(--surface);
-    border: 1px dashed var(--border-strong);
+    padding: 14px 16px;
     border-radius: 14px;
-    cursor: pointer;
 
     .note-icon {
       width: 40px;
       height: 40px;
       font-size: 18px;
     }
-
-    > .muted {
-      margin-left: auto;
-    }
   }
 
-  .entry-text {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-
-    strong {
-      font-size: 14px;
-    }
-
-    .muted {
-      font-size: 12px;
-    }
-  }
-
-  .back {
-    align-self: flex-start;
-    padding: 4px 0;
-    font: inherit;
-    font-size: 13px;
-    color: var(--muted);
-    background: none;
-    border: 0;
-    cursor: pointer;
+  .entry-text strong {
+    font-size: 15px;
   }
 
   .list {
     gap: 12px;
-  }
-
-  :host(.composing) .list {
-    display: none;
-  }
-
-  .composer {
-    display: none;
-
-    &.open {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      padding: 16px;
-    }
-  }
-
-  .drop {
-    padding: 20px 16px;
-  }
-
-  .lyrics {
-    min-height: 220px;
-  }
-
-  .go {
-    align-self: stretch;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-
-    .button {
-      min-height: 48px;
-    }
   }
 
   .filters {

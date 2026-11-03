@@ -342,6 +342,7 @@ describe('minutesBetween', () => {
 describe('pageFor', () => {
   it('picks the page by path, the longer beta paths first', () => {
     expect(pageFor('/my/song')).toBe('beta-song');
+    expect(pageFor('/my/new')).toBe('beta-new');
     expect(pageFor('/my/admin/song')).toBe('beta-admin-song');
     expect(pageFor('/my/admin')).toBe('beta-admin');
     expect(pageFor('/my/styles')).toBe('beta-styles');
@@ -380,6 +381,8 @@ describe('timeline', () => {
   it('titles each event in Chinese with a tone and the job id', () => {
     const rows = timeline([
       ev('song.created'),
+      ev('song.renamed', { title: '新名' }),
+      ev('song.deleted'),
       ev('timing.saved', { confirmed: true }),
       ev('timing.saved'),
       ev('job.phase', { jobId: 'j', phase: '分離人聲' }),
@@ -394,6 +397,8 @@ describe('timeline', () => {
     ]);
     expect(rows.map((r) => [r.title, r.tone])).toEqual([
       ['建立歌曲', 'info'],
+      ['改歌名', 'info'],
+      ['刪除歌曲', 'warn'],
       ['確認時間', 'info'],
       ['儲存時間', 'info'],
       ['步驟：分離人聲', 'info'],
@@ -406,9 +411,10 @@ describe('timeline', () => {
       ['殘留程序未結束', 'bad'],
       ['weird.type', 'info'],
     ]);
-    expect(rows[3].jobId).toBe('j');
-    expect(rows[5].detail).toBe('boom');
-    expect(rows[8].detail).toBe('重試 j');
+    expect(rows[1].detail).toBe('新名');
+    expect(rows[5].jobId).toBe('j');
+    expect(rows[7].detail).toBe('boom');
+    expect(rows[10].detail).toBe('重試 j');
   });
 });
 
@@ -504,7 +510,7 @@ describe('flowSummary', () => {
   it('states the whole flow from the same prices and minutes the empty list shows', () => {
     const line = flowSummary(3);
     expect(line).toBe(
-      `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$1.5／$3.5／$13.5）；只上傳你有權使用的音樂；歌曲建立後不能刪除或改名。`,
+      `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$1.5／$3.5／$13.5）；只上傳你有權使用的音樂。`,
     );
     expect(stepsMin('concept')).toBe(16);
     expect(line).toContain(`$${TIER_INFO.hybrid.rest}`);

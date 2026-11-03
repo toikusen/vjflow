@@ -316,6 +316,9 @@ export function createBetaServer(o: BetaOptions) {
   };
   const ready = orphans.length ? waitGone(orphans, o.orphanWaitMs).catch(() => orphans.slice()).then(release) : (release([]), Promise.resolve());
 
+  /** Whether a song was deleted by its owner: its jobs, reports and files are out of reach from then on. */
+  const gone = (songId: string) => db.songs.some((s) => s.id === songId && !!s.deletedAt);
+
   /** The previous concept's run id when it is a run folder of a concept job of the same song, else undefined. */
   const conceptRunId = (songId: string, from: string | undefined) =>
     from && /^[\w-]+$/.test(from) && db.jobs.some((j) => j.kind === 'concept' && j.songId === songId && j.runDir === `runs/${from}`) ? from : undefined;
@@ -417,7 +420,7 @@ export function createBetaServer(o: BetaOptions) {
       const user = userByToken(db, cookie(req, 'vjb'));
       if (!user) return json(res, 401, { error: '請用邀請連結登入' });
       if (path === '/beta/me') return json(res, 200, publicUser(db, user));
-      if (path === '/beta/jobs') return json(res, 200, db.jobs.filter((j) => user.admin || j.userId === user.id).map((j) => publicJob(j, o.root, user.admin)));
+      if (path === '/beta/jobs') return json(res, 200, db.jobs.filter((j) => (user.admin || j.userId === user.id) && !gone(j.songId)).map((j) => publicJob(j, o.root, user.admin)));
       // the style menu: what a person may pick, never the tiers
       if (path === '/beta/styles' && req.method === 'GET')
         return json(res, 200, Object.entries(LANGUAGES).filter(([id]) => styleOffered(db, id)).map(([id, l]) => ({ id, name: l.name, suits: l.suits, image: styleImage(id) ? `/beta/styles/${id}/image` : null })));
@@ -426,7 +429,7 @@ export function createBetaServer(o: BetaOptions) {
         const file = Object.hasOwn(LANGUAGES, si[1]) && (user.admin || styleOffered(db, si[1])) ? styleImage(si[1]) : undefined;
         return file ? sendFile(req, res, file) : json(res, 404, { error: '找不到' });
       }
-      if (path === '/beta/songs' && req.method === 'GET') return json(res, 200, db.songs.filter((s) => user.admin || s.userId === user.id));
+      if (path === '/beta/songs' && req.method === 'GET') return json(res, 200, db.songs.filter((s) => (user.admin || s.userId === user.id) && !s.deletedAt));
       // a new song: its words first (the person's own lyrics are the authority), the audio next
       if (path === '/beta/songs' && req.method === 'POST') {
         const b = await readJson(req);
@@ -445,10 +448,36 @@ export function createBetaServer(o: BetaOptions) {
         logEvent(o.root, song.id, { type: 'song.created', by: user.id });
         return json(res, 201, song);
       }
+      // the owner renames a song (the same rules as at creation) or deletes it: a soft delete, so its charges and its
+      // record stay, and its folder moves aside rather than going; refused while a job of it is queued or running
+      const sp = /^\/beta\/songs\/([\w-]+)$/.exec(path);
+      if (sp && (req.method === 'PATCH' || req.method === 'DELETE')) {
+        const song = db.songs.find((s) => s.id === sp[1] && s.userId === user.id && !s.deletedAt);
+        if (!song) return json(res, 404, { error: '找不到這首歌' });
+        if (req.method === 'PATCH') {
+          const b = await readJson(req);
+          const title = String(b.title ?? '').trim().slice(0, 120);
+          if (!title) return json(res, 400, { error: '請填歌名' });
+          song.title = title;
+          q.persist();
+          logEvent(o.root, song.id, { type: 'song.renamed', by: user.id, title });
+          return json(res, 200, song);
+        }
+        if (db.jobs.some((j) => j.songId === song.id && (j.status === 'queued' || j.status === 'running'))) return json(res, 409, { error: '這首歌正在排隊或製作中，完成後才能刪除' });
+        logEvent(o.root, song.id, { type: 'song.deleted', by: user.id });
+        song.deletedAt = new Date().toISOString();
+        q.persist();
+        const dir = songDir(o.root, song.id);
+        if (existsSync(dir)) {
+          mkdirSync(join(o.root, 'deleted'), { recursive: true });
+          renameSync(dir, join(o.root, 'deleted', song.id));
+        }
+        return json(res, 200, { id: song.id, deletedAt: song.deletedAt });
+      }
       // one run's finished video; one held for the admin's look reaches the person once the admin approves it
       const vj = /^\/beta\/jobs\/([\w-]+)\/video$/.exec(path);
       if (vj && req.method === 'GET') {
-        const j = db.jobs.find((x) => x.id === vj[1] && madeVideo(x) && (x.userId === user.id || user.admin));
+        const j = db.jobs.find((x) => x.id === vj[1] && madeVideo(x) && (x.userId === user.id || user.admin) && !gone(x.songId));
         return j && isViewable(j, user) ? sendFile(req, res, videoFile(o.root, j)) : json(res, 404, { error: '影片還沒完成' });
       }
       // problem reports on a finished video: only its owner posts; the owner or the admin reads; every report is kept.
@@ -456,7 +485,7 @@ export function createBetaServer(o: BetaOptions) {
       // so the person can send the same report as 只回報
       const fb = /^\/beta\/jobs\/([\w-]+)\/feedback$/.exec(path);
       if (fb) {
-        const j = db.jobs.find((x) => x.id === fb[1] && madeVideo(x) && (x.userId === user.id || (user.admin && req.method === 'GET')));
+        const j = db.jobs.find((x) => x.id === fb[1] && madeVideo(x) && (x.userId === user.id || (user.admin && req.method === 'GET')) && !gone(x.songId));
         if (!j) return json(res, 404, { error: '找不到' });
         if (req.method === 'GET') return json(res, 200, db.feedback.filter((f) => f.jobId === j.id).reverse());
         if (req.method !== 'POST') return json(res, 404, { error: '找不到' });
@@ -478,7 +507,7 @@ export function createBetaServer(o: BetaOptions) {
       }
       const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|timing\/skip|cues|lyrics|audio\/upload|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
       if (sm) {
-        const song = db.songs.find((s) => s.id === sm[1] && (s.userId === user.id || user.admin));
+        const song = db.songs.find((s) => s.id === sm[1] && (s.userId === user.id || user.admin) && !s.deletedAt);
         if (!song) return json(res, 404, { error: '找不到這首歌' });
         const dir = songDir(o.root, song.id), songFile = join(dir, 'song.json');
         if (sm[2] === 'audio' && req.method === 'PUT') {
@@ -552,7 +581,7 @@ export function createBetaServer(o: BetaOptions) {
       const rf = /^\/beta\/songs\/([\w-]+)\/refs(?:\/([^/]+))?$/.exec(path);
       if (rf) {
         const reading = req.method === 'GET';
-        const song = db.songs.find((s) => s.id === rf[1] && (s.userId === user.id || (user.admin && reading)));
+        const song = db.songs.find((s) => s.id === rf[1] && (s.userId === user.id || (user.admin && reading)) && !s.deletedAt);
         if (!song) return json(res, 404, { error: '找不到這首歌' });
         const dir = songDir(o.root, song.id);
         if (!rf[2] && reading) return json(res, 200, songRefs(dir));
@@ -586,7 +615,7 @@ export function createBetaServer(o: BetaOptions) {
       // making a version starts with its concept: the person's wishes go to the director, the make waits for acceptance
       const mk = /^\/beta\/songs\/([\w-]+)\/make$/.exec(path);
       if (mk && req.method === 'POST') {
-        const song = db.songs.find((s) => s.id === mk[1] && s.userId === user.id);
+        const song = db.songs.find((s) => s.id === mk[1] && s.userId === user.id && !s.deletedAt);
         if (!song) return json(res, 404, { error: '找不到這首歌' });
         if (!song.confirmedAt) return json(res, 409, { error: '請先確認歌詞時間' });
         const b = await readJson(req);
@@ -611,7 +640,7 @@ export function createBetaServer(o: BetaOptions) {
       // The target tier's rest price, no concept fee. A different timing means a different song: the concept is stale
       const rm = /^\/beta\/jobs\/([\w-]+)\/remake$/.exec(path);
       if (rm && req.method === 'POST') {
-        const j = db.jobs.find((x) => x.id === rm[1] && (x.kind === 'make' || x.kind === 'fix') && x.userId === user.id);
+        const j = db.jobs.find((x) => x.id === rm[1] && (x.kind === 'make' || x.kind === 'fix') && x.userId === user.id && !gone(x.songId));
         if (!j) return json(res, 404, { error: '找不到這個成品' });
         const b = await readJson(req);
         const tier = (b.tier ?? j.tier) as Tier;
@@ -636,7 +665,7 @@ export function createBetaServer(o: BetaOptions) {
       // same checks as a fix asked for at submission; once per report
       const ff = /^\/beta\/feedback\/([\w-]+)\/fix$/.exec(path);
       if (ff && req.method === 'POST') {
-        const f = db.feedback.find((x) => x.id === ff[1] && x.userId === user.id);
+        const f = db.feedback.find((x) => x.id === ff[1] && x.userId === user.id && !gone(x.songId));
         if (!f) return json(res, 404, { error: '找不到這份回報' });
         if (f.fixJobId || db.jobs.some((x) => x.kind === 'fix' && x.inputs?.feedbackId === f.id)) return json(res, 409, { error: '這份回報已經修正過了' });
         const j = db.jobs.find((x) => x.id === f.jobId && madeVideo(x) && x.userId === user.id);
@@ -653,7 +682,7 @@ export function createBetaServer(o: BetaOptions) {
       // the person's decision on a finished concept: accept it (the make runs in its folder), adjust it with a note, or try again
       const dc = /^\/beta\/jobs\/([\w-]+)\/(accept|adjust|redo)$/.exec(path);
       if (dc && req.method === 'POST') {
-        const j = db.jobs.find((x) => x.id === dc[1] && x.kind === 'concept' && x.userId === user.id);
+        const j = db.jobs.find((x) => x.id === dc[1] && x.kind === 'concept' && x.userId === user.id && !gone(x.songId));
         if (!j) return json(res, 404, { error: '找不到這個概念' });
         if (j.decision) return json(res, 409, { error: '這個概念已經決定過了' });
         const summary = jobConcept(o.root, j);
@@ -692,7 +721,7 @@ export function createBetaServer(o: BetaOptions) {
       // a concept's stills, by the names its summary lists
       const st = /^\/beta\/jobs\/([\w-]+)\/stills\/([^/]+)$/.exec(path);
       if (st && req.method === 'GET') {
-        const j = db.jobs.find((x) => x.id === st[1] && x.kind === 'concept' && (x.userId === user.id || user.admin));
+        const j = db.jobs.find((x) => x.id === st[1] && x.kind === 'concept' && (x.userId === user.id || user.admin) && !gone(x.songId));
         const name = j && jobConcept(o.root, j)?.stills.includes(st[2]) && /^[\w.-]+\.(png|jpe?g)$/.test(st[2]) ? st[2] : undefined;
         return j && name ? sendFile(req, res, join(runPath(o.root, j), 'stills', name)) : json(res, 404, { error: '找不到' });
       }

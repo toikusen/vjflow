@@ -52,6 +52,8 @@ export class InstantStage implements OnInit, OnDestroy {
   readonly exportHold = input('');
   /** A person's page: the style cards beside the picture on a wide screen, no engine figures. */
   readonly plain = input(false);
+  /** The style cards as one sideways rail under the picture instead of a column beside it. */
+  readonly rail = input(false);
   /** The seed or style changed: a page that stores them does so now. */
   readonly changed = output<void>();
   /** A new song is wanted from the page: nothing was on screen when a style was picked, or a generate had to wait. */

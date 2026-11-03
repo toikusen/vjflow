@@ -104,7 +104,22 @@ const GENERIC_PART = /主歌|副歌|導歌|橋段|前奏|間奏|尾奏|サビ|A�
  * Why the director's note may not stand beside the line, or undefined when it may: never made-up detail (a number the
  * line does not have, a generic part name), an echo only of words sung before, a singer only of the song's own.
  */
-export function noteRefusal(kind: string, text: string, line: string, earlier: string[], singers: string[]): string | undefined {
+/** The script a song is sung in, read off its lyrics: what its small words must be written in. */
+export type SongScript = 'ja' | 'ko' | 'zh' | 'latin';
+export function songScript(lines: string[]): SongScript {
+  const all = lines.join('');
+  const n = (re: RegExp) => (all.match(re) ?? []).length;
+  const [kana, hangul, han, latin] = [n(/[\u3040-\u30ff]/g), n(/[\uac00-\ud7af]/g), n(/[\u4e00-\u9fff]/g), n(/[A-Za-z]/g)];
+  if (hangul >= Math.max(kana, han, latin / 3)) return 'ko';
+  if (kana > 0 && kana >= han * 0.15) return 'ja';
+  if (han >= latin / 3) return 'zh';
+  return 'latin';
+}
+/** Whether a note reads as the song's own language (a Japanese song's note in Chinese read as a translation nobody asked for). */
+const inScript = (t: string, s: SongScript) =>
+  s === 'ja' ? /[\u3040-\u30ff]/.test(t) : s === 'ko' ? /[\uac00-\ud7af]/.test(t) : s === 'zh' ? /[\u4e00-\u9fff]/.test(t) && !/[\u3040-\u30ff\uac00-\ud7af]/.test(t) : /[A-Za-z]/.test(t) && !/[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/.test(t);
+
+export function noteRefusal(kind: string, text: string, line: string, earlier: string[], singers: string[], script?: SongScript): string | undefined {
   const t = text.trim();
   if (!(NOTE_KINDS as readonly string[]).includes(kind)) return 'no such kind of note';
   if (!t || glyphs(t) > NOTE_MAX) return `a note is 1–${NOTE_MAX} characters`;
@@ -112,6 +127,8 @@ export function noteRefusal(kind: string, text: string, line: string, earlier: s
   if (/\d/.test(t) && !/\d/.test(line)) return 'numbers the song does not sing';
   if (kind === 'echo' && (!earlier.some((e) => spoken(e).includes(spoken(t))) || spoken(line).includes(spoken(t)))) return 'an echo is words sung before, not this line';
   if (kind === 'singer' && !singers.includes(t)) return 'not one of the song\'s singers';
+  // the song's own words, a singer's name, pass as they are; a scene or chapter is written in the song's language
+  if (script && (kind === 'scene' || kind === 'chapter') && !inScript(t, script)) return 'not in the song\'s language';
   // a scene or chapter that only says the line again tells nothing (「夜晚・橋邊」 beside 夜晚的橋邊在飄雪)
   const own = [...spoken(t).replace(/[\s・·、，。!！?？]/g, '')];
   if ((kind === 'scene' || kind === 'chapter') && own.every((ch) => line.includes(ch))) return 'only the line\'s own words again';
@@ -412,7 +429,7 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
       if (W && !W.devices && l.decor !== 'fine-note') return false;
       if (l.decor === 'fine-rule' || l.decor === 'fine-title' || l.decor === 'fine-key') return charsPerSec(cue) <= 9;
       if (l.decor === 'fine-note') {
-        const why = noteRefusal(l.noteKind, l.note ?? '', cue.text, cues.slice(0, i).map((x) => x.text), (c.song.singers ?? []).map((x) => x.name));
+        const why = noteRefusal(l.noteKind, l.note ?? '', cue.text, cues.slice(0, i).map((x) => x.text), (c.song.singers ?? []).map((x) => x.name), songScript(cues.map((x) => x.text)));
         if (why) {
           refuse(cue.id, 'note', `${l.noteKind}:${l.note}`, why);
           return false;
@@ -765,7 +782,7 @@ ${facts.world ? '' : `【退場 exit】
 【裝飾 decor，一句一個或 none】
 大部分 none。裝飾要有理由，放著沒有意義的東西不准出現。
 - fine-title 歌名小字、fine-key 這句重點詞小字、fine-rule 一條細線：撐出大字、小字、細線三層尺度，用在版面需要平衡的句子。
-- fine-note 你自己寫的小字（note 填字，${NOTE_MAX} 字內；noteKind 填種類）：scene 場景字卡（故事走到哪：時間、地點，例如「凌晨三點・月台」；要是這句歌詞沒說出來的，只把歌詞再說一遍不算），chapter 這首歌自己的章名（你分段時取的名字），echo 回聲（前面唱過的一句或幾個字，原樣照抄，呼應這句），singer 對唱時誰在唱。每則都要在 why.decor 說為什麼放；一段最多 ${NOTE_PER_PART} 則，唱得快的句子不放。不准寫：主歌、副歌這類段落名、歌詞沒有的數字或座標、和歌無關的英文標語。沒有要寫就 note 與 noteKind 留空。
+- fine-note 你自己寫的小字（note 填字，${NOTE_MAX} 字內；noteKind 填種類）：scene 場景字卡（故事走到哪：時間、地點，例如「凌晨三點・月台」；要是這句歌詞沒說出來的，只把歌詞再說一遍不算），chapter 這首歌自己的章名（你分段時取的名字），echo 回聲（前面唱過的一句或幾個字，原樣照抄，呼應這句），singer 對唱時誰在唱。小字用這首歌歌詞的語言寫（日文歌寫日文、中文歌寫中文），不是說明用的中文。每則都要在 why.decor 說為什麼放；一段最多 ${NOTE_PER_PART} 則，唱得快的句子不放。不准寫：主歌、副歌這類段落名、歌詞沒有的數字或座標、和歌無關的英文標語。沒有要寫就 note 與 noteKind 留空。
 - oval 手繪圈圈住整句（12 字內，一段最多一次，這段最要留住的那句）。
 - icon 歌的唯一圖示站在字旁（icon 欄要先選；整首最多 3 次，歌詞裡真的有這個東西）。
 - breath 最後一音拉長時，字下畫一條呼吸線（程式會檢查真的有長音）。

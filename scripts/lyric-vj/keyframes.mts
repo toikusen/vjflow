@@ -51,6 +51,18 @@ export function withUserStyle<B extends { style: string; userStyle?: string }>(b
   else delete board.userStyle;
   return board;
 }
+/**
+ * A frame's cue as the rest reads it: a line id, or `@seconds` for a window nobody sings in. A writer that answered
+ * the line's start time instead (「2.9」 for c002, 三年後的大雪 2026-11-03: 26 of 33 frames lost, nothing drawn) is
+ * read back to the line starting there, else to `@seconds`.
+ */
+export function frameCue(cue: string, cues: { id: string; start: number }[]): string {
+  if (!/^\d+(\.\d+)?$/.test(cue.trim())) return cue;
+  const t = Number(cue);
+  const line = cues.reduce<{ id: string; start: number } | undefined>((best, c) => (Math.abs(c.start - t) <= 0.5 && (!best || Math.abs(c.start - t) < Math.abs(best.start - t)) ? c : best), undefined);
+  return line ? line.id : `@${t}`;
+}
+
 export const frameCount = (seconds: number) => Math.max(5, Math.min(32, Math.round(seconds / 7.5)));
 
 /** A frame's description without the writer's own notes on blank areas (it drew a white haze where it asked for one). */
@@ -174,7 +186,7 @@ ${lines.map((c) => `${c.id} ${c.start.toFixed(1)} ${c.text}`).join('\n')}
 ${lessonsText() ? `過去作品的使用者回饋整理出的經驗（一定要遵守）：\n${lessonsText()}\n` : ''}規則：
 - 歌詞若有粗話、性暗示或成人內容，畫面一律保持輕鬆、不露骨、全年齡：用表情、反應、道具或旁人的吐槽帶過，不畫出來；照樣把整段每一格都寫完。
 - 先想清楚這段的故事：誰、在哪、想要什麼、發生什麼轉折、結果是什麼。要有人物（表情與動作），可以有道具撐起劇情。
-- 分成約 ${n} 格畫面（frames），每格對應一句歌詞開始的時間（cue），一格只說一件事；重要事件要有「之前／之後」兩格。先建立關係，再讓它改變；結果要留在畫面上。
+- 分成約 ${n} 格畫面（frames），每格從一句歌詞開始（cue 填那句的編號，例如 c006；沒人唱的段落填 @秒數，例如 @18.1），一格只說一件事；重要事件要有「之前／之後」兩格。先建立關係，再讓它改變；結果要留在畫面上。
 - ${unsungFrameRule(windows, base.interludes)}
 - 段落：${parts.map((x) => `${x.type} ${x.start.toFixed(0)}–${x.end.toFixed(0)}s`).join('、') || '（無）'}。${sectionArcRule(windows, base.interludes)}重複的副歌沿用同一個構圖或意象，但要讓表情、距離或道具狀態不同（看得出又往前一步）；只有回憶的呼應才可以原樣重用前面某一格（reuse 填那一格的序號，否則 0）。
 - places：故事發生的 2–4 個地方（英文寫給生圖模型：地點、建築、季節、時間與光線，不要人物），每格的 place 填其中一個 id。
@@ -205,6 +217,8 @@ ${keepPeople ? `- people：人物已經定好，照抄這些 id 和外觀，不�
     for (const f of board.frames) f.shows = withoutBlankNotes(f.shows) || f.change;
     writeFileSync(boardFile, JSON.stringify(board, null, 1));
   }
+  // (a kept board too: one written before this read its times as nothing)
+  for (const f of board.frames) f.cue = frameCue(f.cue, song.cues);
   {
     const q = persistQuiet(boardFile, board, song, base.interludes, to);
     board = q.board;

@@ -694,8 +694,9 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     const fixed = { ...s, look: spec.look, set: `set_${s.set}`, actors: s.actors.map((q) => (q.then ? { ...q, at: onBeat(q.at, f.start, f.end - f.start, song.downbeats ?? []) } : q)) };
     sec.layers = sec.layers.map((l) => (l.kind === 'photo' ? { kind: 'code', src: shotCode(fixed, f.end - f.start, aspects) } : l));
   }
-  // keyframes never drawn (--sheets-only) are not assets: a missing file stalls the renderer's preload
-  for (const id of Object.keys(assets)) if (id.startsWith('kf_') && !existsSync(assets[id].url)) delete assets[id];
+  // keyframes never drawn (--sheets-only) and cut-outs dropped after three tries are not assets: a missing file stalls
+  // the renderer's preload (世界のつづき's h_tender, 2026-11-03: the render timed out)
+  for (const id of Object.keys(assets)) if ((id.startsWith('kf_') || id.startsWith('spr:')) && !existsSync(assets[id].url)) delete assets[id];
   for (const sec of secs) sec.layers = sec.layers.filter((l) => !(l.kind === 'photo' && l.asset && !assets[l.asset]));
   for (const sec of secs) sec.layers = withAmbience(sec.layers as { kind: string; fx?: string; hush?: boolean }[], spec.look.ambience);
   writeFileSync(join(out, 'treatment.json'), JSON.stringify(tr));

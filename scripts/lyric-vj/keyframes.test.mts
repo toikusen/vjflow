@@ -1,7 +1,7 @@
 // npx tsx scripts/lyric-vj/keyframes.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Board, drawnBox, frameCount, frameTimes, badLook, imageMime, longHolds, withUserStyle, sidePaper, withoutBlankNotes } from './keyframes.mts';
+import { Board, drawnBox, frameCount, frameCue, frameTimes, badLook, imageMime, longHolds, withUserStyle, sidePaper, withoutBlankNotes } from './keyframes.mts';
 
 test('each frame holds from its line until the next frame; the first opens the passage; frames off it are dropped', () => {
   const cues = [{ id: 'c1', start: 36.1, end: 39, text: '' }, { id: 'c2', start: 44, end: 47, text: '' }, { id: 'c9', start: 90, end: 92, text: '' }];
@@ -57,4 +57,9 @@ test('withUserStyle: the text wins, a reference image alone keeps the writer\'s 
   assert.equal(withUserStyle(board(), '水彩', '/r/ref-1.jpg').userStyle, '水彩');
   assert.equal(withUserStyle(board(), undefined, '/r/ref-1.jpg').userStyle, 'soft watercolour, thin ink lines');
   assert.equal(withUserStyle(board()).userStyle, undefined);
+});
+
+test('a frame cue given as the line start time is read back to that line, or to an unsung window', () => {
+  const cues = [{ id: 'c001', start: 1.0 }, { id: 'c002', start: 2.9 }, { id: 'c006', start: 36.1 }];
+  assert.deepEqual(['c002', '2.9', '36.0', '18.1', '@18.1'].map((c) => frameCue(c, cues)), ['c002', 'c002', 'c006', '@18.1', '@18.1']);
 });

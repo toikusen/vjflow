@@ -107,14 +107,28 @@ export function overlapping(actors: Actor[], aspects: Record<string, number>) {
   }));
 }
 
+export type Side = 'left' | 'right';
+/** Transitions that keep the page before on screen under the next line (cutout's warp family, 0.7 s). */
+const LINGER = new Set(['warp', 'ripple', 'liquid']);
+/**
+ * The lyric sides a shot's figures keep clear of: its own line's, and the next line's when the page after comes in
+ * through a transition that keeps this page on screen under that line and the line sits on the other side (三年後
+ * の大雪: he_back_scarf hid 40 % of the line arriving through the warp, 2026-11-03). A page that cuts away is gone
+ * when the next line shows (the renderer holds a line to its page's cut, cover.ts pageCutBefore).
+ */
+export const clearSides = (side: Side, next?: { side: Side; transition: string }): Side[] => (next && LINGER.has(next.transition) && next.side !== side ? [side, next.side] : [side]);
+
 /**
  * Figures placed side by side in the room beside the lyric (their whole width out of the lyric third), apart from each
  * other, shrunk together when they do not fit. Standing into each other read as a fake embrace; two figures are moved
  * apart rather than turned into a painted frame (painting more people is where the image model breaks bodies).
+ * Clear of both thirds (clearSides), they stand in the middle band, shrunk to it.
  */
-export function arrange(actors: Actor[], aspects: Record<string, number>, side: 'left' | 'right') {
+export function arrange(actors: Actor[], aspects: Record<string, number>, side: Side | Side[]) {
   if (!actors.length) return actors;
-  const [lo, hi] = side === 'left' ? [2 * 0.36 - 1, 1 - 0.06] : [-1 + 0.06, 1 - 2 * 0.36];
+  const sides = Array.isArray(side) ? side : [side];
+  const lo = sides.includes('left') ? 2 * 0.36 - 1 : -1 + 0.06;
+  const hi = sides.includes('right') ? 1 - 2 * 0.36 : 1 - 0.06;
   const half = (q: Actor) => (q.h * Math.max(aspects[q.sprite] ?? 0.4, q.then ? aspects[q.then] ?? 0.4 : 0) * 1080) / 1920;
   const gap = 0.03, sorted = [...actors].sort((a, b) => a.x - b.x);
   const widths = sorted.reduce((t, q) => t + 2 * half(q), 0);
@@ -632,7 +646,10 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     if (!f) continue;
     const side = sideOf(f);
     s.layout = windowOff(s.mode === 'painted' ? paintedWindow(s.layout, spec.look.shapes) : s.layout, side);
-    s.actors = arrange(s.actors.map((q) => ({ ...q, h: Math.max(q.h, MIN_FIGURE) })), aspects, side).map(headIn);
+    // the figures also clear the next line's side when this page lingers under it through the next shot's transition
+    const nextF = shots.find((x) => x.n === f.n + 1);
+    const nextS = nextF && spec.shots.find((x) => x.frame === nextF.n);
+    s.actors = arrange(s.actors.map((q) => ({ ...q, h: Math.max(q.h, MIN_FIGURE) })), aspects, clearSides(side, nextF && nextS ? { side: sideOf(nextF), transition: nextS.transition } : undefined)).map(headIn);
     // a prop drawn huge and alone read as a sign, not a thing in the scene (an object shot is painted whole instead)
     // falling and fluttering things pass behind people (a falling shirt once crossed the rapper's face), and a slow
     // song's crowd does not slide across the frame (it read as shadows drifting past)

@@ -70,9 +70,9 @@ const KANA = /^[\p{Script=Hiragana}\p{Script=Katakana}ー]*$/u;
 const CONTENT = /[\p{Script=Han}\p{Script=Katakana}]/u;
 const NEGATED: Record<Script, RegExp> = { ja: /^(?:ない|ず|ぬ|ません|なかった|なく)/u, zh: /^[不沒没未別别]/u, en: /(?:\bnot|n't|\bnever|\bno)\s+(?:\w+\s+)?$/i };
 
-interface Seg { from: number; to: number; text: string; wordLike: boolean }
+export interface Seg { from: number; to: number; text: string; wordLike: boolean }
 /** The line's words by Intl.Segmenter, in code points. */
-function segmentsOf(text: string, script: Script): Seg[] {
+export function segmentsOf(text: string, script: Script): Seg[] {
   const out: Seg[] = [];
   let at = 0;
   for (const s of new Intl.Segmenter(LOCALE[script], { granularity: 'word' }).segment(text)) {

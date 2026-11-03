@@ -12,6 +12,7 @@ import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
 import { ARRIVAL_SEC } from './arrival';
 import { CARRIER_SEC } from './carrier-moves';
+import { pageCutBefore } from './cover';
 import { gateMotion, REST_FLOOR, setTogether } from './reading-window';
 import { isLineMotion } from './motion-transition';
 import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash, passKeeps, seamClear } from './lyric-handoff';
@@ -900,12 +901,16 @@ export class LyricVjEngine {
     // before is no longer being sung)
     // an outline's light needs the dark ground its own cut brings: it starts with that cut, not ahead of it
     const ENTER_LEAD: Record<string, number> = { slam: 0.3, pop: 0.3, wipe: 0.2, fade: 0.25, ink: 0.45, cut: 0, ...Object.fromEntries([...Object.entries(CARRIER_SEC), ...Object.entries(ARRIVAL_SEC)].map(([k, sec]) => [k, sec * 0.7])), 'soft-float': 0.4, 'cell-land': 0.3, 'reply-land': 0.25, 'edge-light': 0 };
+    // a line laid on a page (a cut-out page or a director's drawing, a painted frame) comes with its page's cut, not
+    // ahead of it: ahead, it stood on the page before, whose figures were placed clear of another line (cover.ts)
+    const pages = (treatment.graphics?.sections ?? []).filter((s) => s.layers.some((l) => l.kind === 'code' || (l.kind === 'photo' && l.own))).map((s) => s.start);
     const showAt = styled.map(({ cue, style }, i) => {
       // a message is sent on the line's first sung syllable, not ahead of it (the database's chat videos: the bubble
       // lands on the beat the voice comes in)
       if (threadShot(treatment.shots.find((s) => s.id === style.shot))) return cue.start;
       const pace = Math.min(1, Math.max(0.35, (cue.end - cue.start) / 2));
-      return Math.max(cue.start - Math.max(lead, (ENTER_LEAD[style.enter] ?? 0.25) * pace), Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3));
+      const show = Math.max(cue.start - Math.max(lead, (ENTER_LEAD[style.enter] ?? 0.25) * pace), Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3));
+      return pageCutBefore(pages, show, cue.start);
     });
     // a handoff only runs where it costs neither line any reading: gated here on the times the lines really got
     for (const [i, { cue, style }] of styled.entries()) {

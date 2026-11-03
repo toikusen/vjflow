@@ -73,3 +73,14 @@ export function watchCover(key: string, id: string, share: number, inside: numbe
 
 /** For tests: forget what was reported. */
 export const resetCover = () => worst.clear();
+
+/**
+ * When a line laid on a page shows: with the page's cut when that falls inside the line's lead, else as planned.
+ * `pages` are the starts of the sections that carry a picture (a cut-out page, a director's drawing, a painted
+ * frame). Ahead of its cut the line stood on the page before, whose figures were placed clear of another line (世界の
+ * つづき: h_stop hid 44 % of 「信じてみる」 for the 0.2 s before its page came, 2026-11-03).
+ */
+export function pageCutBefore(pages: number[], show: number, start: number): number {
+  const cut = pages.filter((p) => p > show && p <= start + 1e-3);
+  return cut.length ? Math.min(start, Math.max(...cut)) : show;
+}

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { coverOf, covers, resetCover, watchCover } from './cover';
+import { coverOf, covers, pageCutBefore, resetCover, watchCover } from './cover';
 
 describe('cover', () => {
   beforeEach(resetCover);
@@ -52,5 +52,18 @@ describe('watchCover in a probe', () => {
       g.__vjProbe = false;
     }
     expect(watchCover('a@1', 'a', 0.9, 0.9, 1, 'cut 1', () => undefined)).toMatch(/hides 90%/);
+  });
+});
+
+describe('pageCutBefore: a line laid on a page comes with the page\'s cut', () => {
+  it('holds a line whose lead runs ahead of its page to the cut, and leaves one with no page cut in its lead alone', () => {
+    // 世界のつづき c016 at 174.14 led by 0.2 s; its page cuts in at 174.14 (h_stop stood on its side on the page before)
+    expect(pageCutBefore([167.26, 174.14, 180.52], 173.94, 174.14)).toBe(174.14);
+    // a page that cut a hair before the voice: the line waits for it, not for the voice
+    expect(pageCutBefore([174.12], 173.94, 174.14)).toBe(174.12);
+    expect(pageCutBefore([167.26, 180.52], 173.94, 174.14)).toBe(173.94);
+    expect(pageCutBefore([], 173.94, 174.14)).toBe(173.94);
+    // a page cut after the voice is not the line's
+    expect(pageCutBefore([174.5], 173.94, 174.14)).toBe(173.94);
   });
 });

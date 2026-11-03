@@ -171,3 +171,17 @@ test('floor words stay rare: two a song at most, three frames apart', async () =
   assert.deepEqual(sparseFloors(shots).filter((s) => s.floor).map((s) => s.frame), [2, 8]);
   assert.deepEqual(sparseFloors([{ frame: 1, floor: '雪' }, { frame: 2, floor: '雨' }, { frame: 5, floor: '葉' }]).filter((s) => s.floor).map((s) => s.frame), [1, 5]);
 });
+
+test('figures clear both thirds when the next page warps in over them with its line on the other side; a cut keeps only their own', async () => {
+  const { clearSides } = await import('./cutout.mts');
+  assert.deepEqual(clearSides('left', { side: 'right', transition: 'warp' }), ['left', 'right']);
+  assert.deepEqual(clearSides('left', { side: 'left', transition: 'warp' }), ['left']);
+  assert.deepEqual(clearSides('left', { side: 'right', transition: 'cut' }), ['left']);
+  assert.deepEqual(clearSides('right'), ['right']);
+  const q = (x: number) => ({ sprite: 'p', then: '', at: 0.5, x, ground: 0.9, h: 0.8, flip: false, enter: 'none' as const, wind: false });
+  const out = arrange([q(-0.65), q(-0.12)], { p: 0.31 }, ['left', 'right']);
+  const half = (a: { h: number }) => (a.h * 0.31 * 1080) / 1920;
+  assert.ok(out[0].x - half(out[0]) >= 2 * 0.36 - 1 - 1e-9);
+  assert.ok(out[1].x + half(out[1]) <= 1 - 2 * 0.36 + 1e-9);
+  assert.ok(out[1].x - half(out[1]) >= out[0].x + half(out[0]));
+});

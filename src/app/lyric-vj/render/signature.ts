@@ -11,6 +11,8 @@ import { lastSung, mainOf, ownCues, SignatureMoment, thinHits } from '../signatu
 import { buildMore, isMore, Kit } from './signature-forms';
 import { isSungChar, mainIndexes, wordIndex } from '../sung-times';
 import { barsAt, barSplit, beatNear, clamp, crackPath, easeOut, fallAt, feelOf, flutterAt, hashOf, hitSide, Jolt, jolt, joltAt, mix, RAD, rng, strikeAngle, SWING, swingPoses, waveAt } from './signature-motion';
+import { Box, pageUnder, placedBox, Placement, placeOnPage, quietBands, rowPlaces, rowsOnPage } from './signature-place';
+import { pageCutBefore } from './cover';
 
 export type Ctx = CanvasRenderingContext2D;
 const [W, H] = [1920, 1080];
@@ -257,7 +259,7 @@ export interface SignatureLayer {
   metrics(): Record<string, unknown>[];
 }
 
-export interface Built { /** A freeze: the time the engine's frame is held at, while held. */ stageAt?: (t: number) => number | undefined; from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the text stands: the ground under it is read there for its inks. */ region: [number, number, number, number]; /** Draws the frame at t in the inks picked for the ground under the text (inkFor). */ draw: (t: number, on: Inks) => void; metrics: () => Record<string, unknown>[] }
+export interface Built { /** A freeze: the time the engine's frame is held at, while held. */ stageAt?: (t: number) => number | undefined; from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the text stands: the ground under it is read there for its inks. */ region: [number, number, number, number]; /** Everything the form draws, when wider than the text: what is fitted onto a story page's quiet paper (signature-place.ts); the region padded by default. */ extent?: Box; /** Draws the frame at t in the inks picked for the ground under the text (inkFor). */ draw: (t: number, on: Inks) => void; metrics: () => Record<string, unknown>[] }
 
 /** Loads the face at the sizes used and prepares every moment's paper. */
 export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
@@ -472,7 +474,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     const from = Math.min(enterB, enterA) - 0.05;
     const to = () => Math.max(exit().at + exit().dur, at + 1) + 0.05;
     return {
-      from, to, jolts, region: [120, 700, 1560, 960],
+      from, to, jolts, region: [120, 700, 1560, 960], extent: [60, 140, 1860, 1000], // the board at the top, the limb below, the shout at the right
       draw(t, on) {
         const hold = alive(actorId, t);
         if (objectId) {
@@ -604,7 +606,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     const from = passes[0].enter - 0.05;
     const to = () => passes[passes.length - 1].exit().at + passes[passes.length - 1].exit().dur + 0.05;
     return {
-      from, to, jolts, region: [300, 380, 1620, 700],
+      from, to, jolts, region: [300, 380, 1620, 700], extent: [160, 120, 1760, 960], // the bars' swing and the syllables printed where the tips land
       draw(t, on) {
         const p = passAt(t);
         if (t < p.enter) return;
@@ -641,18 +643,33 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   // ---- shape / wave and fall ----
   const buildRow = (m: SignatureMoment, kind: 'wave' | 'fall'): Built => {
     const ids = [m.cues[m.cues.length - 1], ...(m.repeat ? [m.repeat] : [])];
+    // a row is as tall as its swell and the water under it (a wave) or its drop (a fall) above the characters
+    const rowK = kind === 'wave' ? 3 : 1.35;
+    const frame: Box = [0, 0, W, H];
     const passes = ids.map((id) => {
       const cue = cueOf(id);
       const parts = partsOf(cue.text, m.sung[id], m.word);
       const main = parts.main;
       const n = main.length;
-      const size = Math.max(72, Math.min(150, 1560 / Math.max(1, n)));
-      const xs = main.map((_, i) => 960 + (i - (n - 1) / 2) * size * 1.04);
+      const size0 = Math.max(72, Math.min(150, 1560 / Math.max(1, n)));
+      // on a story page the row keeps to the quiet paper round the picture and its figures, wrapped into rows where
+      // that paper is a column (the lyric's own third); on the open frame it is one row across the middle, as before
+      const page = pageUnder(job.treatment as Parameters<typeof pageUnder>[0], id, cue.start);
+      const bands = page ? quietBands(page.pic, page.lyricSide) : [];
+      const lay = rowsOnPage(main.map((c) => c.ch), size0, rowK, bands.length ? bands : [frame]) ?? { band: frame, rows: 1, cols: n, size: size0 };
+      const places = rowPlaces(main.map((c) => c.ch), lay, rowK);
+      const xs = places.map((p) => p.x);
+      const ys = places.map((p) => p.y);
+      const rowYs = [...new Set(ys)];
       const exit = () => exitOf(id);
       const last = lastSung(cue.text, m.sung[id]);
       const feel = feelOf(m.word, main.filter((c) => isSungChar(c.ch)).map((c) => c.at));
-      return { id, cue, parts, main, size, xs, exit, last, feel, enter: (main[0]?.at ?? cue.start) - 0.3, isWord: (i: number) => parts.wordAt >= 0 && i >= parts.wordAt && i < parts.wordAt + parts.wordLen };
+      return { id, cue, parts, main, size: lay.size, xs, ys, rowYs, band: lay.band, cols: lay.cols, onPage: !!page, exit, last, feel, enter: (main[0]?.at ?? cue.start) - 0.3, isWord: (i: number) => parts.wordAt >= 0 && i >= parts.wordAt && i < parts.wordAt + parts.wordLen };
     });
+    const p0 = passes[0];
+    const region: [number, number, number, number] = p0.onPage && p0.xs.length
+      ? [Math.max(0, Math.min(...p0.xs) - p0.size), Math.max(0, Math.min(...p0.ys) - p0.size * 0.9), Math.min(W, Math.max(...p0.xs) + p0.size), Math.min(H, Math.max(...p0.ys) + p0.size * 1.2)]
+      : [200, 400, 1720, 680];
     // what the noun is sets how the row moves: breakers swell higher than ripples, a sea rolls long; rain drops
     // straight (quicker on a quick line), snow and petals flutter down
     const swell = /[浪潮]|tide|ocean/i.test(m.word) ? 0.85 : /海|sea/i.test(m.word) ? 0.5 : 0.6;
@@ -664,7 +681,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     const from = passes[0].enter - 0.05;
     const to = () => passes[passes.length - 1].exit().at + passes[passes.length - 1].exit().dur + 0.05;
     return {
-      from, to, jolts, region: [200, 400, 1720, 680],
+      from, to, jolts, region,
       draw(t, inks) {
         const p = passAt(t);
         if (t < p.enter) return;
@@ -673,25 +690,29 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         x.globalAlpha = hold;
         if (kind === 'wave') {
           const amp = Math.max(64, p.size * swell);
-          const length = Math.max(900, p.main.length * p.size * 0.95);
-          const along = (wx: number) => (flow > 0 ? wx : W - wx);
-          // the water under the words
+          const bandW = p.band[2] - p.band[0];
+          const length = Math.max(bandW * 0.47, p.cols * p.size * 0.95);
+          const along = (wx: number) => (flow > 0 ? wx : p.band[0] + p.band[2] - wx);
+          // the water under the words: one line under each row, across the band the row lies in
+          const pad = Math.min(120, bandW * 0.0625);
           x.strokeStyle = inks.ink;
           x.lineWidth = 5;
           x.globalAlpha = 0.55 * hold;
-          x.beginPath();
-          for (let wx = 120; wx <= W - 120; wx += 12) {
-            const w = waveAt(along(wx), t, amp, length, roll);
-            const wy = 540 + p.size * 0.78 + w.dy;
-            wx === 120 ? x.moveTo(wx, wy) : x.lineTo(wx, wy);
+          for (const rowY of p.rowYs) {
+            x.beginPath();
+            for (let wx = p.band[0] + pad; wx <= p.band[2] - pad; wx += 12) {
+              const w = waveAt(along(wx), t, amp, length, roll);
+              const wy = rowY + p.size * 0.78 + w.dy;
+              wx === p.band[0] + pad ? x.moveTo(wx, wy) : x.lineTo(wx, wy);
+            }
+            x.stroke();
           }
-          x.stroke();
           x.globalAlpha = hold;
           p.main.forEach((c, i) => {
             if (/\s/.test(c.ch)) return;
             const w = waveAt(along(p.xs[i]), t, amp, length, roll);
             x.save();
-            x.translate(p.xs[i], 540 + w.dy);
+            x.translate(p.xs[i], p.ys[i] + w.dy);
             x.rotate(w.tilt * flow);
             const s = p.isWord(i) ? p.size * 1.18 : p.size;
             stamp(c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.32, inks.halo);
@@ -706,12 +727,13 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
           p.main.forEach((c, i) => {
             if (/\s/.test(c.ch)) return;
             const s = p.isWord(i) ? p.size * 1.18 : p.size;
-            if (t < c.at) glyph(x, c.ch, p.xs[i], 540, s, inks.ghost, 0, '', inks.halo);
+            const y0 = p.ys[i];
+            if (t < c.at) glyph(x, c.ch, p.xs[i], y0, s, inks.ghost, 0, '', inks.halo);
             if (t < c.at - fallSec) return;
             x.save();
             if (flutter) {
               const f = flutterAt(t, c.at, drop, i * 1.7 + hashOf(c.ch));
-              x.translate(p.xs[i] + f.dx, 540 + f.dy + (t < c.at ? 0 : sink));
+              x.translate(p.xs[i] + f.dx, y0 + f.dy + (t < c.at ? 0 : sink));
               x.rotate(f.rot);
               x.globalAlpha = hold * clamp((t - (c.at - fallSec)) / 0.15);
               if (t < c.at) glyph(x, c.ch, 0, 0, s, inks.ink, 0, '', inks.halo);
@@ -721,7 +743,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
               return;
             }
             const f = fallAt(t, c.at, drop, fallSec);
-            x.translate(p.xs[i], 540 + f.dy + (t < c.at ? 0 : sink));
+            x.translate(p.xs[i], y0 + f.dy + (t < c.at ? 0 : sink));
             x.scale(1 / f.squash, f.squash);
             x.globalAlpha = hold * clamp((t - (c.at - fallSec)) / 0.08);
             if (t < c.at) glyph(x, c.ch, 0, 0, s, inks.ink, 0, '', inks.halo);
@@ -735,7 +757,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
               x.globalAlpha = hold * (1 - e / 0.4);
               for (const d of [-1, 0, 1]) {
                 x.beginPath();
-                x.arc(p.xs[i] + d * (s * 0.3 + e * 160), 540 + s * 0.55 + sink - e * 90 * (1 - Math.abs(d) * 0.5), 5 - e * 8, 0, 7);
+                x.arc(p.xs[i] + d * (s * 0.3 + e * 160), y0 + s * 0.55 + sink - e * 90 * (1 - Math.abs(d) * 0.5), 5 - e * 8, 0, 7);
                 x.fill();
               }
               x.globalAlpha = hold;
@@ -749,7 +771,26 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   };
 
   const kit: Kit = { x, job, family, grain, song, glyph, stampIn, shadowed, alive, metric, exitOf, cueOf, nextStart, drawAsides, partsOf, inksAt, boardPaper, mixHex, canvas };
+  const isRow = (m: SignatureMoment) => !isMore(m) && m.form === 'shape' && m.variant !== 'chain';
   const built = moments.map((m) => (isMore(m) ? buildMore(kit, m) : m.form === 'strike' ? buildStrike(m) : m.variant === 'chain' ? buildChain(m) : buildRow(m, m.variant as 'wave' | 'fall')));
+  // on a story page every other form is moved and scaled as one onto the quiet paper round the picture and its
+  // figures (the row forms lay their own rows there); on a frame without a picture nothing moves
+  const placement = new Map<Built, Placement>();
+  // a moment drawn ahead of its line's page would stand on the page before, placed for another picture: it comes with
+  // the page's cut, as the engine's lines do (cover.ts pageCutBefore)
+  const pageStarts = (job.treatment.graphics?.sections ?? []).filter((s) => s.layers.some((l) => l.kind === 'code' || (l.kind === 'photo' && l.own))).map((s) => s.start);
+  const startOf = new Map<Built, number>();
+  built.forEach((b, i) => {
+    const m = moments[i];
+    const id = m.cues[m.cues.length - 1];
+    startOf.set(b, pageCutBefore(pageStarts, b.from, cueOf(id).start));
+    if (isRow(m)) return;
+    const page = pageUnder(job.treatment as Parameters<typeof pageUnder>[0], id, cueOf(id).start);
+    if (!page) return;
+    const [x0, y0, x1, y1] = b.region;
+    const p = placeOnPage(b.extent ?? [Math.max(0, x0 - 60), Math.max(0, y0 - 100), Math.min(W, x1 + 60), Math.min(H, y1 + 100)], page.pic, page.lyricSide);
+    if (p) placement.set(b, p);
+  });
   const jolts = thinHits(built.flatMap((b) => b.jolts).map((j) => j.at)).map((at) => built.flatMap((b) => b.jolts).find((j) => j.at === at)!);
   // each moment's inks are picked on the ground under its text as it comes up and held, so the type does not change
   // colour frame to frame; picked again only where the ground moved from under them (a camera's slide)
@@ -773,7 +814,21 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       x.scale(j.zoom, j.zoom);
       x.translate(-W / 2, -H / 2);
       x.drawImage(stage, 0, 0, W, H);
-      for (const b of built) if (t >= b.from && t < b.to()) b.draw(t, inksOn(b, groundUnder(x, ...b.region)));
+      for (const b of built) {
+        if (t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
+        const p = placement.get(b);
+        const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
+        const on = inksOn(b, groundUnder(x, ...region));
+        if (!p) {
+          b.draw(t, on);
+          continue;
+        }
+        x.save();
+        x.translate(p.tx, p.ty);
+        x.scale(p.s, p.s);
+        b.draw(t, on);
+        x.restore();
+      }
       return out;
     },
     metrics: () => built.flatMap((b) => b.metrics()),

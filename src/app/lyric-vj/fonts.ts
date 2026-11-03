@@ -134,11 +134,21 @@ export function resolveFonts(choice?: FontChoice): Required<Fonts> {
 /** The Latin face for English lyric lines: the accent face when it reads easily, else a clean sans. */
 export const readingLatin = (accent: string) => (FONTS.find((f) => f.family === accent)?.legible === false ? 'Montserrat' : accent);
 
+/** The site's own interface faces (index.html), mirrored with the rest. */
+export const UI_FONTS = [
+  { family: 'Unbounded', weights: [500, 700] },
+  { family: 'Manrope', weights: [500, 600, 700, 800] },
+  { family: 'JetBrains Mono', weights: [500, 600] },
+];
+
+/** A family's folder and stylesheet name under /fonts/ (scripts/fonts-mirror.mts writes them). */
+export const fontSlug = (family: string) => family.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
 /**
- * One Google Fonts stylesheet URL: the given families only (a render loads what its song uses — the whole catalog's
- * stylesheet is megabytes with the Chinese faces and timed out on slow networks), or the whole catalog.
+ * The self-hosted stylesheets of these families (all of fonts.ts when none are named), one per family: a render loads
+ * only what its song uses (the whole catalog is megabytes with the Chinese faces).
  */
-export function googleFontsUrl(only?: string[]): string {
-  const fam = FONTS.filter((f) => !only || only.includes(f.family)).map((f) => `family=${f.family.replace(/ /g, '+')}${f.weights.length > 1 || f.weights[0] !== 400 ? `:wght@${f.weights.join(';')}` : ''}`);
-  return `https://fonts.googleapis.com/css2?${fam.join('&')}&display=block`;
+export function fontCssUrls(only?: string[]): string[] {
+  return FONTS.filter((f) => !only || only.includes(f.family)).map((f) => `/fonts/${fontSlug(f.family)}.css`);
 }
+

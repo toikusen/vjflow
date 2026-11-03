@@ -1,6 +1,6 @@
 // Which faces a render job needs and getting them onto the page, shared by the offline render page and the browser preview.
 import { SCENE_FONTS } from './scene-parts';
-import { contrastFace, DEFAULT_FAMILY, FONTS, googleFontsUrl, readingLatin } from '../fonts';
+import { contrastFace, DEFAULT_FAMILY, FONTS, fontCssUrls, readingLatin } from '../fonts';
 import { quietFace } from './quiet';
 import type { RenderJob } from './engine';
 
@@ -17,10 +17,17 @@ export function jobFamilies(job: RenderJob): string[] {
   return [...new Set([main, job.fonts?.display, job.fonts?.body, job.fonts?.script, accent, readingLatin(accent), 'Montserrat', quietFace(main), contrastFace(main), DEFAULT_FAMILY, 'Zen Old Mincho', ...named])].filter((f): f is string => !!f && FONTS.some((x) => x.family === f));
 }
 
-/** The stylesheet must be in place before document.fonts.load can find the faces; only this song's faces are asked for. */
+/**
+ * The stylesheets must be in place before document.fonts.load can find the faces; only this song's faces are asked
+ * for, from the site's own /fonts/ (scripts/fonts-mirror.mts), one stylesheet a family.
+ */
 export const loadJobFonts = (job: RenderJob) =>
-  new Promise<void>((resolve, reject) => {
-    const href = googleFontsUrl(jobFamilies(job));
-    if (document.querySelector(`link[href="${CSS.escape(href)}"]`)) return resolve();
-    document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href, onload: () => resolve(), onerror: reject }));
-  });
+  Promise.all(
+    fontCssUrls(jobFamilies(job)).map(
+      (href) =>
+        new Promise<void>((resolve, reject) => {
+          if (document.querySelector(`link[href="${CSS.escape(href)}"]`)) return resolve();
+          document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href, onload: () => resolve(), onerror: reject }));
+        }),
+    ),
+  ).then(() => undefined);

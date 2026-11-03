@@ -138,9 +138,11 @@ await esbuild.build({
 copyFileSync('scripts/lyric-vj/render.html', join(out, 'render', 'render.html'));
 
 // static server rooted at the worktree (render page, job, assets)
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg' };
+const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.css': 'text/css', '.woff2': 'font/woff2' };
 const server = createServer((req, res) => {
-  const path = join(ROOT, decodeURIComponent(new URL(req.url!, 'http://x').pathname));
+  // the self-hosted fonts live in out/fonts and are asked for at /fonts/, as on the site
+  const asked = decodeURIComponent(new URL(req.url!, 'http://x').pathname);
+  const path = join(ROOT, asked.startsWith('/fonts/') ? join('out', asked) : asked);
   if (!path.startsWith(ROOT) || !existsSync(path)) return void res.writeHead(404).end();
   res.writeHead(200, { 'content-type': TYPES[extname(path)] ?? 'application/octet-stream' });
   createReadStream(path).pipe(res);

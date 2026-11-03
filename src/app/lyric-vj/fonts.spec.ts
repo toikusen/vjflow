@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { googleFontsUrl, nearestWeight, readingLatin, resolveFonts } from './fonts';
+import { fontCssUrls, fontSlug, nearestWeight, readingLatin, resolveFonts } from './fonts';
 
 describe('fonts', () => {
   it('uses one family for the whole video', () => {
@@ -21,10 +21,10 @@ describe('fonts', () => {
     expect(nearestWeight('Unknown', 900)).toBe(900);
   });
 
-  it('builds one stylesheet URL with weights', () => {
-    expect(googleFontsUrl()).toContain('family=Zen+Kaku+Gothic+New:wght@700;900');
-    expect(googleFontsUrl()).toContain('family=Klee+One:wght@600');
-    expect(googleFontsUrl()).toContain('family=Yomogi&');
+  it('asks the site own /fonts/ for one stylesheet a family', () => {
+    expect(fontSlug('M PLUS Rounded 1c')).toBe('m-plus-rounded-1c');
+    expect(fontCssUrls(['Klee One', 'Zen Kaku Gothic New', 'Not A Font'])).toEqual(['/fonts/zen-kaku-gothic-new.css', '/fonts/klee-one.css']);
+    expect(fontCssUrls().every((u) => /^\/fonts\/[a-z0-9-]+\.css$/.test(u))).toBe(true);
   });
 });
 

@@ -143,6 +143,8 @@ export interface BetaOptions {
   root: string; command: Queue['command']; publicUrl: string; env?: Record<string, string>;
   /** The built pages (ng build); any other path gets index.html, whose own path check picks the page. */
   site?: string;
+  /** The self-hosted fonts (scripts/fonts-mirror.mts), served at /fonts/. */
+  fonts?: string;
   /** How long a restart waits for orphaned pipelines to exit before giving up on them (default 12 s; tests shorten it). */
   orphanWaitMs?: number;
 }
@@ -391,6 +393,13 @@ export function createBetaServer(o: BetaOptions) {
     const path = url.pathname;
     try {
       if (path === '/') return void res.writeHead(302, { location: '/my' }).end();
+      // a font is the same file for good: cached a year
+      if (path.startsWith('/fonts/') && o.fonts) {
+        const file = resolve(o.fonts, '.' + decodeURIComponent(path.slice('/fonts'.length)));
+        if (!file.startsWith(resolve(o.fonts) + '/') || !existsSync(file) || !statSync(file).isFile()) return void res.writeHead(404).end();
+        res.writeHead(200, { 'content-type': PAGE[extname(file)] ?? 'application/octet-stream', 'cache-control': 'public, max-age=31536000, immutable', 'access-control-allow-origin': '*' });
+        return void createReadStream(file).on('error', () => res.destroy()).pipe(res);
+      }
       if (!path.startsWith('/beta/') && o.site) {
         const file = resolve(o.site, '.' + decodeURIComponent(path));
         const page = file.startsWith(resolve(o.site) + '/') && existsSync(file) && statSync(file).isFile() ? file : join(o.site, 'index.html');
@@ -889,7 +898,7 @@ export const betaCommand = (root: string) => (job: Job, db: Db): string | { erro
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const root = resolve(process.env.VJ_BETA_ROOT ?? 'out/beta');
-  const beta = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command: betaCommand(root), site: resolve('dist/vjflow/browser') });
+  const beta = createBetaServer({ root, publicUrl: process.env.VJ_BETA_URL ?? 'http://127.0.0.1:4320', command: betaCommand(root), site: resolve('dist/vjflow/browser'), fonts: resolve('out/fonts') });
   // the pipeline runs in its own process group: stop it with the server, or it would keep spending and a restart would run it twice
   for (const sig of ['SIGINT', 'SIGTERM'] as const)
     process.on(sig, () => stopBeta(beta));

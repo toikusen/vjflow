@@ -5,7 +5,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { checkMoments, Dropped, MomentAsk, SignatureMoment } from '../../src/app/lyric-vj/signature-moments';
+import { checkMoments, Dropped, MomentAsk, ownCues, SignatureMoment } from '../../src/app/lyric-vj/signature-moments';
 import { SongForTimes, sungTimesOf } from './sung-times.mts';
 
 export interface MomentsSong extends SongForTimes { title: string }
@@ -26,7 +26,8 @@ export function buildMoments(song: MomentsSong, songFile: string, asks: MomentAs
  * planned for them come off (a hairline ran through the kicking line, a tiling repeated under the nunchaku).
  */
 export function withMoments<T extends { cues: { cueId: string; fine?: unknown; hit?: unknown }[] }>(tr: T, kept: SignatureMoment[]): T & { signature: SignatureMoment[] } {
-  const ids = new Set(kept.flatMap((k) => [...k.cues, ...(k.repeat ? [k.repeat] : [])]));
+  // an echo's earlier line keeps its own treatment: only the lines a moment draws come off
+  const ids = new Set(kept.flatMap(ownCues));
   return { ...tr, cues: tr.cues.map((c) => (ids.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: kept };
 }
 

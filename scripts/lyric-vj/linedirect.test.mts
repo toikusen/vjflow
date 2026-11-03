@@ -171,7 +171,11 @@ assert.ok(directionSchema(true).required.includes('moments'), 'asked, moments ar
 assert.ok(!directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '' }).includes('專屬時刻'), 'no offer unless asked');
 const offered = directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', moments: { overused: ['shape/chain'] } });
 assert.ok(offered.includes('strike/tear') && offered.includes('shape/wave') && offered.includes('這首避免：shape/chain'), 'the forms on offer and the overused ones');
-assert.ok(!offered.includes('strike/burn'), 'a variant not drawn is not offered');
+assert.ok(['strike/burn', 'strike/melt', 'strike/slice', 'strike/fly', 'shape/circle', 'freeze/stop', 'echo/ghost'].every((v) => offered.includes(v)), 'every drawn variant is offered');
+assert.ok(!offered.includes('strike/wipe') && !offered.includes('shape/rise'), 'the held-back variants are not offered');
+assert.ok(offered.includes('燃') && offered.includes('瞬間'), 'with the words it needs');
+assert.ok(!offered.includes('shape/spiral') && !offered.includes('shape/heart'), 'a variant not drawn is not offered');
+assert.deepEqual(directionSchema(true).properties.moments.items.properties.form.enum, ['strike', 'shape', 'freeze', 'echo'], 'the schema offers every form');
 
 // the director's own small words: never a part's name, a made-up number, an echo of nothing sung, a stranger singing
 assert.equal(noteRefusal('scene', '凌晨三點・月台', '我等你回來到天亮', [], []), undefined);
@@ -244,6 +248,18 @@ assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五
   const wshot = (id: string) => wshots.find((s) => s.lines.some((l) => l['cue'] === id))!;
   assert.equal((wshot('c0').lines[0]['world'] as { set: string }).set, 'silk/top-slab', 'the director\'s set reaches the line');
   assert.equal(wshot('c0').lyric.template, 'world-set');
+  // a director's ground the composer's cut just before already stands on: the composer's gives way, the director's stays
+  {
+    const flat = (b: typeof wb) => (b.plan.shots as unknown as { lines: { cue: string }[]; cuts: { fx: string }[] }[]).flatMap((s) => s.cuts.map((c, k) => ({ fx: c.fx, cue: k === 0 ? s.lines[0]?.cue : undefined })));
+    const cuts0 = flat(wb);
+    const hit = cuts0.findIndex((x, i) => i > 0 && x.cue && x.cue !== 'c0' && checkDirection(direction(wfull({ [x.cue]: { ground: cuts0[i - 1].fx } })), wctx).accepted.get(x.cue)?.ground);
+    assert.ok(hit > 0, 'the test finds a line whose cut before stands on a ground it may take');
+    const asked = cuts0[hit - 1].fx;
+    const again = flat(directedPlan(song, direction(wfull({ c2: { layout: 'stair', enter: 'fade', idle: 'still' }, [cuts0[hit].cue!]: { ground: asked } })), wctx, paid, paidShots, parts, song.beats, new Set(), pw));
+    const at = again.findIndex((x) => x.cue === cuts0[hit].cue);
+    assert.equal(again[at].fx, asked, 'the director\'s ground stands');
+    assert.notEqual(again[at - 1].fx, asked, 'the cut before gives way');
+  }
   assert.ok((wshot('c2').lines[0]['world'] as { set?: string } | undefined)?.set, 'a line the director lost keeps a set the composer chose in the world');
   assert.ok(wshots.every((s) => !s.backdrop), 'no backdrop of the old design');
   assert.ok(wshots.every((s) => s.cuts.every((c) => typeof c['scheme'] === 'number')), 'every cut carries the world\'s scheme');
@@ -263,4 +279,6 @@ assert.equal(songScript(['I wanna drift', 'Tokyo night']), 'latin');
 assert.match(noteRefusal('chapter', '海邊童年的疑問', 'あなたを誘うでしょう', [], [], 'ja') ?? '', /language/);
 assert.equal(noteRefusal('chapter', '一・海辺の問い', 'あなたを誘うでしょう', [], [], 'ja'), undefined);
 assert.match(noteRefusal('scene', '夜の橋', '夜晚的橋邊在飄雪', [], [], 'zh') ?? '', /language/);
+assert.equal(noteRefusal('scene', '深夜・石橋', '我再也不在你身邊', [], [], 'zh'), undefined, 'a middle dot is no kana: a Chinese scene note stands');
+assert.match(noteRefusal('scene', '深夜・石橋', 'あなたを誘うでしょう', [], [], 'ja') ?? '', /language/, 'nor does it make Chinese Japanese');
 assert.equal(noteRefusal('echo', 'またおんなじ歌を', 'あなたを誘うでしょう', ['またおんなじ歌を歌うたび'], [], 'ja'), undefined, 'an echo is the song\'s own words');

@@ -1,22 +1,25 @@
 // Signature moments (signature-moments.ts) drawn over the engine's frame: the composer's whole frame stays, the
 // moment's lines are taken off it and drawn here on the song's own paper and inks, keyed to the sung times the
-// moment carries. Two forms: a strike (the sung verb acts on the line's paper: tear) and a shape (the line laid
-// along the thing it names and moving like it: chain, wave, fall). Runs only when the treatment carries moments.
+// moment carries. Four forms: a strike (the sung verb acts on the line: tear here; burn, melt, slice, wipe, fly in
+// signature-forms.ts), a shape (the line laid along the thing it names and moving like it: chain, wave, fall here;
+// circle, rise there), a freeze (the frame stops, only the line moves) and an echo (an earlier line comes back under
+// the one answering it). Runs only when the treatment carries moments.
 import type * as THREE from 'three';
 import type { RenderJob } from './engine';
 import { readingSec } from './reading-window';
-import { lastSung, mainOf, SignatureMoment, thinHits } from '../signature-moments';
+import { lastSung, mainOf, ownCues, SignatureMoment, thinHits } from '../signature-moments';
+import { buildMore, isMore, Kit } from './signature-forms';
 import { isSungChar, mainIndexes, wordIndex } from '../sung-times';
-import { barsAt, barSplit, clamp, crackPath, easeOut, fallAt, hitSide, Jolt, jolt, joltAt, mix, RAD, rng, strikeAngle, SWING, swingPoses, waveAt } from './signature-motion';
+import { barsAt, barSplit, beatNear, clamp, crackPath, easeOut, fallAt, feelOf, flutterAt, hashOf, hitSide, Jolt, jolt, joltAt, mix, RAD, rng, strikeAngle, SWING, swingPoses, waveAt } from './signature-motion';
 
-type Ctx = CanvasRenderingContext2D;
+export type Ctx = CanvasRenderingContext2D;
 const [W, H] = [1920, 1080];
-const canvas = (w: number, h: number) => Object.assign(document.createElement('canvas'), { width: w, height: h });
+export const canvas = (w: number, h: number) => Object.assign(document.createElement('canvas'), { width: w, height: h });
 
 export const momentsOf = (job: RenderJob): SignatureMoment[] => (job.treatment as { signature?: SignatureMoment[] }).signature ?? [];
 export const isSignature = (job: RenderJob) => momentsOf(job).length > 0;
 /** The lines the moments draw themselves: the engine keeps them laid out, so grounds and the fine tier stay as planned. */
-export const signatureIds = (job: RenderJob) => new Set(momentsOf(job).flatMap((m) => [...m.cues, ...(m.repeat ? [m.repeat] : [])]));
+export const signatureIds = (job: RenderJob) => new Set(momentsOf(job).flatMap(ownCues));
 
 interface Line { rt: { cue: { id: string; text: string }; showFrom: number; exitAt: number; exitDur: number }; layer: { group: THREE.Object3D }; twin?: { layer: { group: THREE.Object3D } } }
 /** When the engine shows and takes off each line, read as it renders: the moment keeps the engine's exits. */
@@ -43,7 +46,7 @@ export function signatureWindows(cues: { id: string; goneAt: number; readableFro
 const hex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255);
 const lum = (c: string) => { const [r, g, b] = hex(c).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
-const mixHex = (a: string, b: string, k: number) => '#' + hex(a).map((v, i) => Math.round(mix(v, hex(b)[i], k) * 255).toString(16).padStart(2, '0')).join('');
+export const mixHex = (a: string, b: string, k: number) => '#' + hex(a).map((v, i) => Math.round(mix(v, hex(b)[i], k) * 255).toString(16).padStart(2, '0')).join('');
 
 export interface Inks { ink: string; paper: string; accent: string; board: string; boardInk: string; ghost: string; press: string; core: string }
 /** The same inks for a line over a dark ground: the paper's colour as the ink (the engine's twin build does the same). */
@@ -52,8 +55,8 @@ export function onDark(i: Inks): Inks {
   if (contrast(ghost, i.ink) < 2.5) ghost = mixHex(i.paper, i.ink, 0.28);
   return { ...i, ink: i.paper, ghost, press: contrast(i.accent, i.ink) >= 1.5 ? i.accent : mixHex(i.paper, i.ink, 0.4) };
 }
-/** Whether the frame is light under a region (x0,y0,x1,y1): the mean luminance of a sparse sample of its pixels. */
-export function groundLight(c: Ctx, x0: number, y0: number, x1: number, y1: number): boolean {
+/** The frame's mean luminance (0..255) under a region (x0,y0,x1,y1), from a sparse sample of its pixels. */
+export function groundLum(c: Ctx, x0: number, y0: number, x1: number, y1: number): number {
   const d = c.getImageData(x0, y0, x1 - x0, y1 - y0).data;
   let sum = 0;
   let n = 0;
@@ -61,7 +64,17 @@ export function groundLight(c: Ctx, x0: number, y0: number, x1: number, y1: numb
     sum += 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
     n++;
   }
-  return sum / Math.max(1, n) > 128;
+  return sum / Math.max(1, n);
+}
+/**
+ * Whether the song's own ink reads on a ground of this luminance better than its paper colour does: the moments draw
+ * in their inks when it does and in onDark's (the paper's colour as the ink) when not. A dark ink on a light ground,
+ * and a neon ink on a dark ground, both read as they are.
+ */
+export function inkReads(inks: Inks, groundLum: number): boolean {
+  const g = (groundLum / 255) ** 2.2;
+  const vs = (c: string) => (Math.max(lum(c), g) + 0.05) / (Math.min(lum(c), g) + 0.05);
+  return vs(inks.ink) >= vs(inks.paper);
 }
 /** The song's inks under t: the kinetic cut's paper and ink, the colour script's accent, else the style anchor's palette. */
 export function inksAt(job: RenderJob, t: number): Inks {
@@ -86,7 +99,7 @@ export function inksAt(job: RenderJob, t: number): Inks {
 
 // ---- paper ----
 /** A sheet with a torn edge, slow mottling, fibres and a thin keyline: the board a line is printed on. Grain follows the design. */
-function boardPaper(w: number, h: number, inks: Inks, grain: number, torn: boolean, seed: number): HTMLCanvasElement {
+export function boardPaper(w: number, h: number, inks: Inks, grain: number, torn: boolean, seed: number): HTMLCanvasElement {
   const c = canvas(w, h);
   const x = c.getContext('2d')!;
   const r = rng(seed);
@@ -141,7 +154,7 @@ function boardPaper(w: number, h: number, inks: Inks, grain: number, torn: boole
 interface Piece { pic: HTMLCanvasElement; cx: number; cy: number; vx: number; vy: number; spin: number }
 
 /** Cuts the printed board along the crack. Every shard carries the paper and ink it was torn from. */
-function splitBoard(full: HTMLCanvasElement, crack: [number, number][], core: string, seed: number): Piece[] {
+function splitBoard(full: HTMLCanvasElement, crack: [number, number][], core: string, seed: number, power = 1): Piece[] {
   const [w, h] = [full.width, full.height];
   const cut = (poly: [number, number][], edge: boolean) => {
     const xs = poly.map((p) => p[0]);
@@ -175,16 +188,17 @@ function splitBoard(full: HTMLCanvasElement, crack: [number, number][], core: st
     return [-1, 1].map((side) => {
       const s = 26 + r() * 34;
       const piece = cut([[a, b], [c, d], [c + side * s, d + (r() - 0.5) * 20], [a + side * s * 0.8, b + (r() - 0.5) * 20]], false);
-      return { ...piece, vx: side * (240 + r() * 620), vy: -700 - r() * 1100, spin: (r() - 0.5) * 16 };
+      return { ...piece, vx: side * (240 + r() * 620) * power, vy: (-700 - r() * 1100) * power, spin: (r() - 0.5) * 16 * power };
     });
   });
-  return [{ ...left, vx: -1380, vy: -760, spin: -1.2 }, { ...right, vx: 1950, vy: -1120, spin: 2.1 }, ...shards];
+  // a softer strike sheds fewer shards: every other one is kept below a kick's power
+  return [{ ...left, vx: -1380, vy: -760, spin: -1.2 }, { ...right, vx: 1950, vy: -1120, spin: 2.1 }, ...shards.filter((_, i) => power >= 0.95 || i % 2 === 0)];
 }
 
 // ---- text ----
-interface Aside { text: string; at: number }
+export interface Aside { text: string; at: number }
 /** A line's drawn parts: its sung characters (asides out), the bracketed asides with when they start, and a trailing shout. */
-function partsOf(text: string, times: number[], word: string): { main: { ch: string; at: number; src: number }[]; asides: Aside[]; shout: { ch: string; at: number }[]; wordAt: number; wordLen: number } {
+export function partsOf(text: string, times: number[], word: string): { main: { ch: string; at: number; src: number }[]; asides: Aside[]; shout: { ch: string; at: number }[]; wordAt: number; wordLen: number } {
   const chars = [...text];
   const mainIdx = mainIndexes(text);
   const asides: Aside[] = [];
@@ -218,12 +232,14 @@ function partsOf(text: string, times: number[], word: string): { main: { ch: str
 }
 
 export interface SignatureLayer {
+  /** The time the engine renders the frame at t from: t, or the held time while a freeze stops the frame. */
+  stageAt(t: number): number;
   /** Draws the frame at t into its own canvas: the engine's picture, then the moments. */
   compose(stage: HTMLCanvasElement, t: number): HTMLCanvasElement;
   metrics(): Record<string, unknown>[];
 }
 
-interface Built { from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the line stands, sampled for a dark ground. */ region: [number, number, number, number]; draw: (t: number, light: boolean) => void; metrics: () => Record<string, unknown>[] }
+export interface Built { /** A freeze: the time the engine's frame is held at, while held. */ stageAt?: (t: number) => number | undefined; from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the line stands, sampled for a dark ground. */ region: [number, number, number, number]; draw: (t: number, light: boolean) => void; metrics: () => Record<string, unknown>[] }
 
 /** Loads the face at the sizes used and prepares every moment's paper. */
 export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
@@ -253,18 +269,19 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     c.fillText(ch, a, b);
   };
   /** One sung character: ghost tone until its time, then full ink with a short stamp. */
-  const stamp = (ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press = 0, pressInk = '', kick = 0.32) => {
+  const stampIn = (c: Ctx, ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press = 0, pressInk = '', kick = 0.32) => {
     if (t < at) {
-      if (ghost) glyph(x, ch, a, b, size, ghost);
+      if (ghost) glyph(c, ch, a, b, size, ghost);
       return;
     }
     const s = 1 + kick * (1 - clamp((t - at) / 0.1)) ** 2;
-    x.save();
-    x.translate(a, b);
-    x.scale(s, s);
-    glyph(x, ch, 0, 0, size, ink, press, pressInk);
-    x.restore();
+    c.save();
+    c.translate(a, b);
+    c.scale(s, s);
+    glyph(c, ch, 0, 0, size, ink, press, pressInk);
+    c.restore();
   };
+  const stamp = (ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press = 0, pressInk = '', kick = 0.32) => stampIn(x, ch, a, b, size, at, t, ink, ghost, press, pressInk, kick);
   const shadowed = (draw: () => void, blur = 26, dy = 14) => {
     x.save();
     x.shadowColor = 'rgba(40,5,0,0.42)';
@@ -299,6 +316,11 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     const at = m.at;
     const seed = song + Math.round(at * 10);
     const exit = () => exitOf(actorId);
+    // how hard the verb lands sets the tear: a smash breaks rougher and sheds more, a rip runs long and leaning (a
+    // kick, force 0.75, is the approved spike: jag 1, no slant, 64 px apart, a full jolt)
+    const { force } = feelOf(m.word, parts.main.map((c) => c.at));
+    const jag = 0.55 + 0.6 * force;
+    const slant = Math.max(0, 0.75 - force) * 2 * (hashOf(actor.text) % 2 ? 1 : -1);
     // the struck sheet: the line before, or this line's own paper
     const boardText = objectId ? partsOf(cueOf(objectId).text, m.sung[objectId], '').main : parts.main;
     const n = boardText.length;
@@ -318,14 +340,14 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     const reach = parts.main.reduce((s, _, i) => s + (isVerb(i) ? foot : body) + 6, 0) + 12;
     const tipX = 132 + Math.cos(-25 * RAD) * reach;
     const crackX = objectId ? Math.min(BW * 0.72, Math.max(BW * 0.28, tipX - (BOARD.x - BW / 2))) : charX(parts.wordAt) - size * 0.55;
-    const crack = crackPath(crackX, BH, seed + 3);
-    const pieces = splitBoard(full, crack, inks.core, seed + 7);
+    const crack = crackPath(crackX, BH, seed + 3, jag, slant * BH);
+    const pieces = splitBoard(full, crack, inks.core, seed + 7, 0.25 + force);
     const firstBoard = boardText[0]?.at ?? at;
     const enterB = firstBoard - 0.25;
     const firstActor = parts.main[0]?.at ?? at;
     const enterA = objectId ? firstActor - 0.3 : enterB;
     const shoutAt = parts.shout[0]?.at;
-    const jolts = [jolt(at, 1), ...(shoutAt !== undefined ? [{ at: shoutAt, dx: 0, dy: 20, rot: 0.5, zoom: 0.07 }] : [])];
+    const jolts = [jolt(at, 0.4 + 0.8 * force), ...(shoutAt !== undefined ? [{ at: shoutAt, dx: 0, dy: 20, rot: 0.5, zoom: 0.07 }] : [])];
     const leave = () => exit().at; // one sheet: its halves fly off as the line goes
 
     const drawBoardWhole = (t: number) => {
@@ -362,7 +384,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     /** One sheet struck: its halves jolt apart and hold, the shards fly; the halves go with the line. */
     const drawRipped = (t: number) => {
       const e = t - at;
-      const apart = easeOut(e / 0.18) * 64;
+      const apart = easeOut(e / 0.18) * (34 + 40 * force);
       const gone = t >= leave();
       for (const [i, p] of pieces.entries()) {
         const main = i < 2;
@@ -515,7 +537,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       const on = (k: number) => [(1 - k) ** 2 * a[0] + 2 * k * (1 - k) * hx + k * k * b[0], (1 - k) ** 2 * a[1] + 2 * k * (1 - k) * (hy + 26) + k * k * b[1]];
       x.strokeStyle = inks.ink;
       x.lineWidth = 6;
-      for (const k of [0.16, 0.5, 0.84]) {
+      // a longer line hangs on a longer chain
+      for (const k of barChars.length > 9 ? [0.1, 0.3, 0.5, 0.7, 0.9] : [0.16, 0.5, 0.84]) {
         const [c, d] = on(k);
         const [c2, d2] = on(k + 0.05);
         x.beginPath();
@@ -606,10 +629,17 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       const xs = main.map((_, i) => 960 + (i - (n - 1) / 2) * size * 1.04);
       const exit = () => exitOf(id);
       const last = lastSung(cue.text, m.sung[id]);
-      return { id, cue, parts, main, size, xs, exit, last, enter: (main[0]?.at ?? cue.start) - 0.3, isWord: (i: number) => parts.wordAt >= 0 && i >= parts.wordAt && i < parts.wordAt + parts.wordLen };
+      const feel = feelOf(m.word, main.filter((c) => isSungChar(c.ch)).map((c) => c.at));
+      return { id, cue, parts, main, size, xs, exit, last, feel, enter: (main[0]?.at ?? cue.start) - 0.3, isWord: (i: number) => parts.wordAt >= 0 && i >= parts.wordAt && i < parts.wordAt + parts.wordLen };
     });
+    // what the noun is sets how the row moves: breakers swell higher than ripples, a sea rolls long; rain drops
+    // straight (quicker on a quick line), snow and petals flutter down
+    const swell = /[浪潮]|tide|ocean/i.test(m.word) ? 0.85 : /海|sea/i.test(m.word) ? 0.5 : 0.6;
+    const roll = Math.min(3.4, Math.max(1.6, beatNear(job.beats, m.at) * 4 * (/海|sea/i.test(m.word) ? 1.3 : 1)));
+    const flow = hashOf(cueOf(ids[0]).text) % 3 === 2 ? -1 : 1;
+    const flutter = /[雪葉]|花瓣|花びら|snow|lea[fv]|petal/i.test(m.word);
     const passAt = (t: number) => passes.filter((p) => t >= p.enter).at(-1) ?? passes[0];
-    const jolts = kind === 'fall' ? passes.flatMap((p) => (p.parts.wordAt >= 0 ? [jolt(p.main[p.parts.wordAt].at, 0.2)] : [])) : [];
+    const jolts = kind === 'fall' && !flutter ? passes.flatMap((p) => (p.parts.wordAt >= 0 ? [jolt(p.main[p.parts.wordAt].at, 0.2)] : [])) : [];
     const from = passes[0].enter - 0.05;
     const to = () => passes[passes.length - 1].exit().at + passes[passes.length - 1].exit().dur + 0.05;
     return {
@@ -622,15 +652,16 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         drawAsides(p.parts.asides, t, inks, p.exit().at);
         x.globalAlpha = hold;
         if (kind === 'wave') {
-          const amp = Math.max(64, p.size * 0.6);
+          const amp = Math.max(64, p.size * swell);
           const length = Math.max(900, p.main.length * p.size * 0.95);
+          const along = (wx: number) => (flow > 0 ? wx : W - wx);
           // the water under the words
           x.strokeStyle = inks.ink;
           x.lineWidth = 5;
           x.globalAlpha = 0.55 * hold;
           x.beginPath();
           for (let wx = 120; wx <= W - 120; wx += 12) {
-            const w = waveAt(wx, t, amp, length, 2.6);
+            const w = waveAt(along(wx), t, amp, length, roll);
             const wy = 540 + p.size * 0.78 + w.dy;
             wx === 120 ? x.moveTo(wx, wy) : x.lineTo(wx, wy);
           }
@@ -638,28 +669,45 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
           x.globalAlpha = hold;
           p.main.forEach((c, i) => {
             if (/\s/.test(c.ch)) return;
-            const w = waveAt(p.xs[i], t, amp, length, 2.6);
+            const w = waveAt(along(p.xs[i]), t, amp, length, roll);
             x.save();
             x.translate(p.xs[i], 540 + w.dy);
-            x.rotate(w.tilt);
+            x.rotate(w.tilt * flow);
             const s = p.isWord(i) ? p.size * 1.18 : p.size;
             stamp(c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press);
             x.restore();
           });
         } else {
-          // the unsung characters wait in a row above, ghosted, and drop into the line as they are sung
+          // the unsung characters wait ghosted in their places (one row, readable) and the sung one drops into its place
           const settled = p.last + 0.5;
           const sink = t > settled ? 14 * easeOut((t - settled) / 3) : 0;
+          const fallSec = flutter ? 0.9 - 0.3 * p.feel.pace : 0.42 - 0.14 * p.feel.pace;
+          const drop = flutter ? 260 : 300 - 140 * p.feel.pace;
           p.main.forEach((c, i) => {
             if (/\s/.test(c.ch)) return;
-            const f = fallAt(t, c.at, 300);
             const s = p.isWord(i) ? p.size * 1.18 : p.size;
+            if (t < c.at) glyph(x, c.ch, p.xs[i], 540, s, inks.ghost);
+            if (t < c.at - fallSec) return;
             x.save();
+            if (flutter) {
+              const f = flutterAt(t, c.at, drop, i * 1.7 + hashOf(c.ch));
+              x.translate(p.xs[i] + f.dx, 540 + f.dy + (t < c.at ? 0 : sink));
+              x.rotate(f.rot);
+              x.globalAlpha = hold * clamp((t - (c.at - fallSec)) / 0.15);
+              if (t < c.at) glyph(x, c.ch, 0, 0, s, inks.ink);
+              else stamp(c.ch, 0, 0, s, c.at, t, inks.ink, null, 6, inks.press, 0.06);
+              x.restore();
+              x.globalAlpha = hold;
+              return;
+            }
+            const f = fallAt(t, c.at, drop, fallSec);
             x.translate(p.xs[i], 540 + f.dy + (t < c.at ? 0 : sink));
             x.scale(1 / f.squash, f.squash);
-            if (t < c.at) glyph(x, c.ch, 0, 0, s, inks.ghost);
+            x.globalAlpha = hold * clamp((t - (c.at - fallSec)) / 0.08);
+            if (t < c.at) glyph(x, c.ch, 0, 0, s, inks.ink);
             else stamp(c.ch, 0, 0, s, c.at, t, inks.ink, null, 6, inks.press, 0.12);
             x.restore();
+            x.globalAlpha = hold;
             // the landing's spray, in the accent, gone in a breath
             const e = t - c.at;
             if (e >= 0 && e < 0.4) {
@@ -680,9 +728,11 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     };
   };
 
-  const built = moments.map((m) => (m.form === 'strike' ? buildStrike(m) : m.variant === 'chain' ? buildChain(m) : buildRow(m, m.variant as 'wave' | 'fall')));
+  const kit: Kit = { x, job, family, grain, song, glyph, stampIn, shadowed, alive, metric, exitOf, cueOf, nextStart, drawAsides, partsOf, inksAt, onDark, boardPaper, mixHex, canvas };
+  const built = moments.map((m) => (isMore(m) ? buildMore(kit, m) : m.form === 'strike' ? buildStrike(m) : m.variant === 'chain' ? buildChain(m) : buildRow(m, m.variant as 'wave' | 'fall')));
   const jolts = thinHits(built.flatMap((b) => b.jolts).map((j) => j.at)).map((at) => built.flatMap((b) => b.jolts).find((j) => j.at === at)!);
   return {
+    stageAt: (t) => built.map((b) => b.stageAt?.(t)).find((v) => v !== undefined) ?? t,
     compose(stage, t) {
       const j = joltAt(jolts, t);
       x.setTransform(1, 0, 0, 1, 0, 0);
@@ -693,7 +743,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       x.scale(j.zoom, j.zoom);
       x.translate(-W / 2, -H / 2);
       x.drawImage(stage, 0, 0, W, H);
-      for (const b of built) if (t >= b.from && t < b.to()) b.draw(t, groundLight(x, ...b.region));
+      for (const b of built) if (t >= b.from && t < b.to()) b.draw(t, inkReads(inksAt(job, b.from), groundLum(x, ...b.region)));
       return out;
     },
     metrics: () => built.flatMap((b) => b.metrics()),

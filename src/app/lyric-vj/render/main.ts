@@ -32,7 +32,8 @@ const stage = document.getElementById('stage') as HTMLCanvasElement;
 const signature = isSignature(job) ? await signatureLayer(job) : null;
 if (signature) engine.onCues = signatureCues as never;
 window.grabAt = async (t, quality) => {
-  await engine.renderAt(t);
+  // a freeze moment holds the engine's frame at its stopping word while only its line moves
+  await engine.renderAt(signature ? signature.stageAt(t) : t);
   return (signature ? signature.compose(stage, t) : stage).toDataURL('image/jpeg', quality);
 };
 window.vjLyrics = (on) => engine.showLyrics(on);

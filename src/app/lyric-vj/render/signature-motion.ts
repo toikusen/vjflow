@@ -96,12 +96,12 @@ export function waveAt(x: number, t: number, amp: number, length: number, period
   return { dy: amp * Math.sin(ph), tilt: Math.atan((amp * (2 * Math.PI / length) * Math.cos(ph)) / 1) * 0.5 };
 }
 
-/** A falling character: waiting `drop` px above its rest (a ghost, readable) until it drops, landing at `at` with a short bounce. */
-export function fallAt(t: number, at: number, drop: number): { dy: number; squash: number; falling: boolean } {
+/** A falling character: `drop` px above its rest until it drops (over `fallSec`), landing at `at` with a short bounce. */
+export function fallAt(t: number, at: number, drop: number, fallSec = 0.42): { dy: number; squash: number; falling: boolean } {
   const e = t - at;
-  if (e < -0.42) return { dy: -drop, squash: 1, falling: false };
+  if (e < -fallSec) return { dy: -drop, squash: 1, falling: false };
   if (e < 0) {
-    const k = (e + 0.42) / 0.42;
+    const k = (e + fallSec) / fallSec;
     return { dy: -drop * (1 - k * k), squash: 1, falling: true };
   }
   const bounce = Math.exp(-e * 9) * Math.sin(e * 28) * 18;
@@ -109,15 +109,157 @@ export function fallAt(t: number, at: number, drop: number): { dy: number; squas
   return { dy: -Math.max(0, bounce), squash, falling: false };
 }
 
-/** The jagged crack a tear follows from the bottom of a sheet to its top, about x = cx. */
-export function crackPath(cx: number, h: number, seed: number): [number, number][] {
+/**
+ * The jagged crack a tear follows from the bottom of a sheet to its top, about x = cx. `jag` scales the zigzag (1: the
+ * approved tear; a smash breaks rougher, a rip runs straighter), `slant` leans the crack (px its top moves right).
+ */
+export function crackPath(cx: number, h: number, seed: number, jag = 1, slant = 0): [number, number][] {
   const r = rng(seed);
-  const steps = 7;
-  const pts: [number, number][] = [[cx + (r() - 0.5) * 30, h]];
+  const steps = Math.round(5 + 2 * jag);
+  const pts: [number, number][] = [[cx - slant / 2 + (r() - 0.5) * 30 * jag, h]];
   for (let k = 1; k < steps; k++) {
     const y = h - (h * k) / steps;
-    pts.push([cx + (r() - 0.5) * 90 + (k % 2 ? 24 : -24), y]);
+    pts.push([cx + slant * (k / steps - 0.5) + ((r() - 0.5) * 90 + (k % 2 ? 24 : -24)) * jag, y]);
   }
-  pts.push([cx + (r() - 0.5) * 30, 0]);
+  pts.push([cx + slant / 2 + (r() - 0.5) * 30 * jag, 0]);
   return pts;
+}
+
+// ---- the line's feel: what varies a form from song to song ----
+
+/** How hard a verb lands, 0..1: a smash harder than a kick, a kick harder than a rip, a rip harder than a wipe. */
+const FORCE: [RegExp, number][] = [
+  [/[碎砕砸撞踹殴斬斩]|smash|crash|slash|吹き飛|飛ばす/iu, 1],
+  [/[踢打蹴破壊燃焼焚丟扔甩投拋抛]|kick|break|burn|throw/iu, 0.75],
+  [/[撕裂切割燒]|tear|rip|cut/iu, 0.55],
+  [/[融溶滴擦消抹拭飛飄]|放手|手放|melt|drip|wipe|erase|fly|let go/iu, 0.3],
+];
+export const forceOf = (word: string) => FORCE.find(([r]) => r.test(word))?.[1] ?? 0.5;
+
+export interface Feel {
+  /** How hard the word lands, 0..1. */
+  force: number;
+  /** Sung characters a second over the line: a rapped line moves quicker than a held one. */
+  density: number;
+  /** Sung characters on the line. */
+  length: number;
+  /** 0 (a held, slow line) .. 1 (a rapped one): density on a scale that the forms share. */
+  pace: number;
+}
+/** The line's feel from its word and its sung times (the times of the characters drawn, in order). */
+export function feelOf(word: string, times: number[]): Feel {
+  const n = times.length;
+  const span = n > 1 ? Math.max(0.2, times[n - 1] - times[0]) : 1;
+  const density = n > 1 ? (n - 1) / span : 1;
+  return { force: forceOf(word), density, length: n, pace: clamp((density - 2.5) / 5.5) };
+}
+
+/** A small stable hash of a string: the same line always turns the same way, two lines rarely alike. */
+export const hashOf = (s: string) => [...s].reduce((h, c) => (h * 31 + c.codePointAt(0)!) % 1000003, 7);
+
+// ---- fall: rain drops straight, snow and petals flutter ----
+
+/** A fluttering character (snow, a petal, a leaf): drifting down from `drop` px above, swaying as it comes, settling at `at`. */
+export function flutterAt(t: number, at: number, drop: number, phase: number, fallSec = 0.9): { dy: number; dx: number; rot: number } {
+  const e = t - at;
+  if (e >= 0) {
+    const settle = Math.exp(-e * 6);
+    return { dy: 0, dx: 6 * settle * Math.sin(e * 14 + phase), rot: 4 * settle * Math.sin(e * 11 + phase) * RAD };
+  }
+  const k = clamp((e + fallSec) / fallSec);
+  const sway = Math.sin(k * Math.PI * 2.2 + phase) * (1 - k * 0.7);
+  return { dy: -drop * (1 - easeOut(k)), dx: 34 * sway, rot: 16 * sway * RAD };
+}
+
+// ---- circle ----
+
+/**
+ * A line laid round a circle: the first `top` characters along its top (tops outward), the rest along its bottom
+ * (upright, reading left to right like a badge's lower rim). The radius, the size of a character and each character's
+ * angle (radians, -90° is the top), each rim at most `arc` degrees so every character still reads upright enough.
+ */
+export function circleLayout(top: number, bottom = 0, maxSize = 150, maxR = 430, arc = 150): { r: number; size: number; angles: number[]; under: boolean[] } {
+  const step = 1.08;
+  const most = Math.max(1, top, bottom);
+  let size = Math.min(maxSize, 1500 / most);
+  let r = Math.max(230, (most * size * step) / (arc * RAD * 0.85));
+  if (r > maxR) {
+    size = (maxR * arc * RAD) / (most * step);
+    r = maxR;
+  }
+  size = Math.max(56, Math.min(maxSize, size));
+  const rim = (n: number, mid: number, dir: 1 | -1) => {
+    const across = ((n - 1) * size * step) / r;
+    return Array.from({ length: n }, (_, i) => mid - dir * (across / 2) + dir * ((i * size * step) / r));
+  };
+  return { r, size, angles: [...rim(top, -Math.PI / 2, 1), ...rim(bottom, Math.PI / 2, -1)], under: [...Array(top).fill(false), ...Array(bottom).fill(true)] };
+}
+
+/** A clock's turn at t: a tick on each beat, snapping and settling (radians). */
+export function tickAt(t: number, from: number, beats: number[], perTick = 3 * RAD): number {
+  let a = 0;
+  for (const b of beats) {
+    if (b < from || b > t) continue;
+    const e = t - b;
+    a += perTick * (1 + 0.25 * Math.exp(-e * 16) * Math.sin(e * 40));
+  }
+  return a;
+}
+
+// ---- rise ----
+
+/** A risen character: popped at its sung time, then floating up with its own wobble (balloon, bubble, smoke). */
+export function riseAt(t: number, at: number, phase: number, speed: number, wobble: number): { dy: number; dx: number; scale: number } {
+  const e = t - at;
+  if (e < 0) return { dy: 0, dx: 0, scale: 1 };
+  const pop = 1 + 0.15 * Math.exp(-e * 10) * Math.cos(e * 26);
+  return { dy: -speed * e * (1 - Math.exp(-e * 2.2)) / (1 + e * 0.05), dx: wobble * Math.sin(e * 3.1 + phase) * clamp(e * 2), scale: pop };
+}
+
+// ---- strikes ----
+
+/** A melting column of a glyph: how far its bottom has run (px) e s after the melt began, for a column of seed `k` (0..1). */
+export function dripOf(e: number, k: number, size: number, force: number): number {
+  if (e <= 0) return 0;
+  const grow = 1 - Math.exp(-e * (0.9 + force));
+  // most columns sag a little, a few run long (the drips)
+  const run = k > 0.72 ? 0.6 + (k - 0.72) * 3.2 : 0.14 + k * 0.22;
+  return size * run * grow;
+}
+
+/** The slice's offset along its cut: the upper part slides off and settles a little back (px). */
+export function sliceShift(e: number, force: number): number {
+  if (e <= 0) return 0;
+  const far = 18 + 26 * force;
+  return far * easeOut(e / 0.12) - far * 0.25 * easeOut((e - 0.12) / 0.5) + 3 * Math.exp(-e * 10) * Math.sin(e * 40);
+}
+
+/** A released line's drift: gentle lifts and sways from the verb on; a throw lurches out of the frame's middle first. */
+export function flyDrift(e: number, throwIt: boolean, i: number, n: number): { dx: number; dy: number; rot: number } {
+  if (e <= 0) {
+    if (!throwIt || e < -0.14) return { dx: 0, dy: 0, rot: 0 };
+    const w = easeOut((e + 0.14) / 0.14); // the wind-up
+    return { dx: -26 * w, dy: 8 * w, rot: 2 * w * RAD };
+  }
+  const lag = (i / Math.max(1, n - 1)) * 0.18;
+  const u = Math.max(0, e - lag);
+  if (throwIt) {
+    const lurch = 120 * easeOut(u / 0.16);
+    return { dx: lurch + 14 * u, dy: -30 * easeOut(u / 0.16) - 10 * u + Math.sin(u * 5 + i) * 4, rot: -3 * RAD * easeOut(u / 0.16) };
+  }
+  return { dx: 10 * Math.sin(u * 1.7 + i * 0.8), dy: -22 * u - 6 * Math.sin(u * 2.3 + i * 1.3), rot: 4 * RAD * Math.sin(u * 1.9 + i) };
+}
+
+/** The frame held still from the stopping word: one beat at least, through the line's last sung character, 2.5 s at most. */
+export function freezeSpan(at: number, last: number, beats: number[]): [number, number] {
+  const beat = beats.find((b) => b > at + 0.15);
+  const oneBeat = beat !== undefined ? Math.min(beat - at, 1) : 0.5;
+  return [at, at + Math.min(2.5, Math.max(oneBeat, last + 0.3 - at))];
+}
+
+/** The song's beat length near t (s): the median gap of the beats around it, half a second without beats. */
+export function beatNear(beats: number[], t: number): number {
+  const near = beats.filter((b) => Math.abs(b - t) < 6);
+  const gaps = near.slice(1).map((b, i) => b - near[i]).filter((g) => g > 0.2 && g < 1.5).sort((a, b) => a - b);
+  return gaps.length ? gaps[Math.floor(gaps.length / 2)] : 0.5;
 }

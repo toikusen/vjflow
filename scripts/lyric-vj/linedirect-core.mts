@@ -12,11 +12,13 @@ import { HANDOFF_KINDS, HandoffKind } from '../../src/app/lyric-vj/render/lyric-
 import { isLineGround } from '../../src/app/lyric-vj/render/line-grounds';
 import { wordBreaks } from '../../src/app/lyric-vj/phrases';
 import { splitSongTitle } from '../../src/app/lyric-vj/structure';
-import { MomentAsk, MOMENT_FORMS, SHAPE_WORDS, STRIKE_WORDS } from '../../src/app/lyric-vj/signature-moments';
+import { MomentAsk, MomentForm, MOMENT_FORMS, WORD_LISTS } from '../../src/app/lyric-vj/signature-moments';
 import type { FineTier, SymbolName } from '../../src/app/lyric-vj/treatment';
 import { ARRIVAL_APART, ARRIVAL_SHARE, ARRIVALS_SHARE, BACKGROUNDS, BREATH_MIN, CARRIER_APART, CARRIER_SHARE, CARRIERS, charsPerSec, composePlan, Cue, DEVICE_SHARE, DISTINCT_SHARE, EXIT_LAYOUT, EXIT_PAPER, EXIT_SHARE, fallbackParts, fitsCalm, FIXED_LAYOUT, GROUND_HELP, HANDOFF_APART, KEEPS_EXIT, keyOf, LAYOUT_SHARE, levelOf, MARK_SHARE, Meaning, NOT_CALM_EXIT, OWN_EXIT, PAIR_APART, PAIR_SHARE, PairKind, PAPER_EXITS, QUIET_BACKGROUNDS, Recipe, RECIPES, RING_MAX, SHARED_SHARE, SongPart, SPATIAL, SPATIAL_SHARE, TRACKED, type WorldPool } from './lineplan-core.mts';
 import { type PlanWorld, worldKitPrompt } from './paid-world.mts';
 import type { StyleWorld } from '../../src/app/lyric-vj/style-world';
+import { worldById } from '../../src/app/lyric-vj/style-worlds';
+import { unrepeatGround } from '../../src/app/lyric-vj/free-plan';
 import { cutTimes } from './interludes.mts';
 import { ENTER_HELP, EXIT_HELP, IDLE_HELP } from './typehelp.mts';
 
@@ -106,10 +108,13 @@ const GENERIC_PART = /主歌|副歌|導歌|橋段|前奏|間奏|尾奏|サビ|A�
  */
 /** The script a song is sung in, read off its lyrics: what its small words must be written in. */
 export type SongScript = 'ja' | 'ko' | 'zh' | 'latin';
+/** Kana, not counting the katakana middle dot (・), which Chinese scene notes use too (「深夜・石橋」 was refused, 2026-11-03). */
+const KANA = /[\u3040-\u30fa\u30fc-\u30ff]/;
+const KANA_ALL = new RegExp(KANA.source, 'g');
 export function songScript(lines: string[]): SongScript {
   const all = lines.join('');
   const n = (re: RegExp) => (all.match(re) ?? []).length;
-  const [kana, hangul, han, latin] = [n(/[\u3040-\u30ff]/g), n(/[\uac00-\ud7af]/g), n(/[\u4e00-\u9fff]/g), n(/[A-Za-z]/g)];
+  const [kana, hangul, han, latin] = [n(KANA_ALL), n(/[\uac00-\ud7af]/g), n(/[\u4e00-\u9fff]/g), n(/[A-Za-z]/g)];
   if (hangul >= Math.max(kana, han, latin / 3)) return 'ko';
   if (kana > 0 && kana >= han * 0.15) return 'ja';
   if (han >= latin / 3) return 'zh';
@@ -117,7 +122,7 @@ export function songScript(lines: string[]): SongScript {
 }
 /** Whether a note reads as the song's own language (a Japanese song's note in Chinese read as a translation nobody asked for). */
 const inScript = (t: string, s: SongScript) =>
-  s === 'ja' ? /[\u3040-\u30ff]/.test(t) : s === 'ko' ? /[\uac00-\ud7af]/.test(t) : s === 'zh' ? /[\u4e00-\u9fff]/.test(t) && !/[\u3040-\u30ff\uac00-\ud7af]/.test(t) : /[A-Za-z]/.test(t) && !/[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/.test(t);
+  s === 'ja' ? KANA.test(t) : s === 'ko' ? /[\uac00-\ud7af]/.test(t) : s === 'zh' ? /[\u4e00-\u9fff]/.test(t) && !KANA.test(t) && !/[\uac00-\ud7af]/.test(t) : /[A-Za-z]/.test(t) && !/[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/.test(t);
 
 export function noteRefusal(kind: string, text: string, line: string, earlier: string[], singers: string[], script?: SongScript): string | undefined {
   const t = text.trim();
@@ -599,6 +604,7 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
   // every sung line's decision travels with the plan: the reasons are what is sold
   const decisions: Record<string, unknown>[] = [];
   const lastUsed = { ground: '' };
+  const directed = new Set<PlanCut>();
   for (const ps of planned) {
     const s = shots.find((x) => x.id === ps.shot)!;
     // a world has its own grounds: no backdrop of the old design, no paid cut in the unsung stretches
@@ -636,6 +642,7 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
         if (a.lineCam === 'lean') l['textCam'] = { kind: 'lean-settle', dir: 1, amount: leanAngle(glyphs(cue.text)) / 0.03 };
         if (a.ground && ps.cuts[0]) {
           ps.cuts[0].fx = a.ground;
+          directed.add(ps.cuts[0]);
           if (a.ground === 'fold-mark') ps.cuts[0]['mark'] = d!.icon;
           if (DEVICE_GROUNDS.includes(a.ground)) ps.cuts.splice(1);
         }
@@ -647,6 +654,19 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
       decisions.push({ cue: l.cue, text: cue.text, by: own ? 'director' : 'composer', cut: (!W && ps.cuts.length > 1) || SPLIT_LAYOUTS.has(ps.lyric.template) ? 'split' : 'hold', layout: ps.lyric.template, ...((l['world'] as { set?: string } | undefined)?.set ? { set: (l['world'] as { set: string }).set } : {}), enter: l['enter'], idle: l['idle'], exit: l['exit'], decor: a?.decor ?? '', ground: ps.cuts[0]?.fx, cuts: ps.cuts.length, ...(a?.rows ? { rows: a.rows } : {}), why: own ? said?.why : undefined, asked: own ? undefined : said && { layout: said.layout, enter: said.enter, idle: said.idle, why: said.why }, evidence: said?.evidence, fallback: lost.map((f) => `${f.field}: ${f.reason}`) });
       l['direct'] = { why: own ? said?.why : undefined, fallback: lost.length ? lost.map((f) => f.field) : undefined };
     }
+  }
+  // a director's ground the composer's cut just before already stands on: the composer's cut gives way (the treatment
+  // breaks any run left: free-plan unrepeatGround)
+  if (W && pw) {
+    const w = worldById(pw.id)!;
+    const cuts = planned.flatMap((ps) => ps.cuts);
+    cuts.forEach((x, i) => {
+      const prev = cuts[i - 1];
+      if (!prev || !directed.has(x) || directed.has(prev) || prev.fx !== x.fx) return;
+      const before = cuts[i - 2]?.fx ?? '';
+      const swap = [0, 1, 2, 3].map((k) => unrepeatGround(w, prev.fx, prev.fx, c.calm, i + k)).find((g) => g !== before && g !== x.fx);
+      if (swap) prev.fx = swap;
+    });
   }
   const tuned = (d?.tune ?? []).filter((t) => TUNABLE.includes(t.key) && Number.isFinite(t.value) && KNOBS[t.key]);
   for (const t of tuned) {
@@ -821,15 +841,24 @@ export function wordPieces(text: string): string[] {
   return stops.slice(1).map((e, i) => cs.slice(stops[i], e).join('').trim()).filter(Boolean);
 }
 
-const WORD_HELP = (words: Record<string, RegExp>, v: string) => words[v].source.replace(/[\[\]\\u]/g, '').replace(/\|/g, '、');
-/** The moments on offer, with the words each needs: only when a run asks for them. */
+const WORD_HELP = (form: MomentForm, v: string) => WORD_LISTS[form][v].join('、');
+/** The moments on offer, every drawn variant with the words it needs: only when a run asks for them. */
 export function momentsPrompt(overused: string[]) {
-  const strike = MOMENT_FORMS.strike.map((v) => `strike/${v}（動詞 ${WORD_HELP(STRIKE_WORDS, v)}）`).join('、');
-  const shape = MOMENT_FORMS.shape.map((v) => `shape/${v}（名詞 ${WORD_HELP(SHAPE_WORDS, v)}）`).join('、');
+  const list = (form: MomentForm, what: string, about: Record<string, string>) => MOMENT_FORMS[form].map((v) => `${form}/${v}（${about[v] ?? ''}；${what} ${WORD_HELP(form, v)}）`).join('、');
+  const strike = list('strike', '動詞', {
+    tear: '紙在動詞處撕開飛散', burn: '字印在紙上，從字下點燃，燒到字邊留焦邊與餘燼，句子走時整張燒掉', melt: '字從動詞起往下垂、滴落',
+    slice: '一刀斜斜劃過，上半截沿刀口錯開', wipe: '一隻手沿句子抹過，抹過的字拖出墨痕、變淡但讀得到', fly: '句子鬆開飄起（放手、飛ぶ）或被甩出去（丟、吹き飛ばす），句子走時飛出畫面',
+  });
+  const shape = list('shape', '名詞', {
+    chain: '句子分兩節、中間鏈條，隨後面的口令擺動', wave: '字騎在水面上', fall: '字一顆顆落下（雨直落、雪和花瓣飄落）',
+    circle: '句子沿圓排（20 字以內；月是淡圓盤、時鐘隨拍跳動、戒指有一道反光、まる是筆畫出一圈）', rise: '句子整排往上飄（泡、煙、氣球、花火各有樣子）',
+  });
   return `- moments（專屬時刻）：整首挑 0 到 3 個時刻，至少隔 30 秒，沒有真正合適的句子就空陣列。每個時刻：cues、form、variant、word、why。
-  - strike「動作打在字上」：這句唱到那個動詞時，動作作用在字下的紙上。${strike}。cues 填一句（這句自己的紙在動詞處撕開、兩半留著）或兩句（前一句是被打的東西，印在一張紙牌上；這句是打的那句，整句像一條腿踢上去，例如「東亞病夫的招牌」+「已被我一腳踢開」）；兩句時前一句要讀得完才會被打。
-  - shape「字變成那個東西」：句子沿著它說的東西的形狀排，跟著它動。${shape}。chain 是句子分成兩節、中間一段鏈條，隨後面的口令（哼哼哈兮）擺動；wave 是字騎在水面上；fall 是字一顆顆落下。cues 填那一句。
-  - word 必須原樣出現在那句歌詞裡（括號裡的應援不算），而且真的是那個意思：「割と」不是動詞，「心」不是形狀。程式會逐項檢查，不合的時刻會被拿掉，句子本身不受影響。
+  - strike「動作打在字上」：唱到那個動詞時，動作作用在字或字下的紙上。${strike}。cues 填一句；只有 tear 可以填兩句（前一句是被打的東西，印在一張紙牌上；這句是打的那句，整句像一條腿踢上去，例如「東亞病夫的招牌」+「已被我一腳踢開」），兩句時前一句要讀得完才會被打。
+  - shape「字變成那個東西」：句子沿著它說的東西的形狀排，跟著它動。${shape}。cues 填那一句。
+  - freeze「時間停住」：唱到停住的字，整個畫面凍結一拍、變灰，只有這句字繼續唱、慢慢推近，再一起恢復。freeze/stop（字 ${WORD_HELP('freeze', 'stop')}）。cues 填那一句；「停不下來」「止まらない」這種否定不算。
+  - echo「回聲」：這句在回應前面唱過的某一句（不是同一句重唱），那句以淡影浮回來，墊在這句下面，共同的詞對齊。echo/ghost：cues 填兩句，先填前面那句、再填這句；word 是兩句都有的詞（至少兩個字）。
+  - word 必須原樣出現在那句歌詞裡（括號裡的應援不算），而且真的是那個意思：「割と」不是切、「切記」不是切、「心」不是形狀。程式會逐項檢查，不合的時刻會被拿掉，句子本身不受影響。
   - 時刻會把那句整個接管（版面、進退場都由時刻畫），所以那句的 layout 等欄位照填但會被覆蓋。${overused.length ? `最近的歌用過太多次、這首避免：${overused.join('、')}。` : ''}why 一句、二十字內，講這句為什麼配這個形式。
 `;
 }

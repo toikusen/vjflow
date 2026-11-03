@@ -36,6 +36,9 @@ export interface LineChoice {
   idle: string;
   exit: string;
   decor: string;
+  /** With decor fine-note: the small words the director writes beside the line, and what they are. */
+  note: string;
+  noteKind: string;
   handoff: string;
   joinNext: string;
   lineCam: string;
@@ -86,7 +89,32 @@ const OWN_LAYOUT_EXIT: Record<string, string> = { 'box-turn': 'turn-box', 'frame
 const PLAIN_EXITS = ['fade', 'rise', 'cut', 'shrink', 'drop', 'dash', 'collapse', 'slash', 'shatter', 'domino', 'burst', 'melt', 'dust', 'zoom', 'split'];
 const QUIET_EXITS = new Set(['fade', 'rise', 'cut', 'shrink']);
 const METHODS = ['color', 'mark', 'weight', 'scale', 'box', 'shake'];
-const DECORS = ['none', 'fine-title', 'fine-key', 'fine-rule', 'oval', 'icon', 'breath', 'relay'];
+const DECORS = ['none', 'fine-title', 'fine-key', 'fine-rule', 'fine-note', 'oval', 'icon', 'breath', 'relay'];
+/** What the director's own small words may be: a story's scene card, the song's own chapter name, an echo of a line sung before, who sings. */
+export const NOTE_KINDS = ['scene', 'chapter', 'echo', 'singer'] as const;
+export const NOTE_MAX = 14;
+/** Notes a part may carry. */
+export const NOTE_PER_PART = 4;
+/** A part's name read as a label stuck on the video (2026-11-02 owner review): never a note. */
+const GENERIC_PART = /主歌|副歌|導歌|橋段|前奏|間奏|尾奏|サビ|Aメロ|Bメロ|verse|chorus|bridge|hook|intro|outro|interlude/i;
+
+/**
+ * Why the director's note may not stand beside the line, or undefined when it may: never made-up detail (a number the
+ * line does not have, a generic part name), an echo only of words sung before, a singer only of the song's own.
+ */
+export function noteRefusal(kind: string, text: string, line: string, earlier: string[], singers: string[]): string | undefined {
+  const t = text.trim();
+  if (!(NOTE_KINDS as readonly string[]).includes(kind)) return 'no such kind of note';
+  if (!t || glyphs(t) > NOTE_MAX) return `a note is 1–${NOTE_MAX} characters`;
+  if (GENERIC_PART.test(t)) return 'a generic part name is a label, not a note';
+  if (/\d/.test(t) && !/\d/.test(line)) return 'numbers the song does not sing';
+  if (kind === 'echo' && (!earlier.some((e) => spoken(e).includes(spoken(t))) || spoken(line).includes(spoken(t)))) return 'an echo is words sung before, not this line';
+  if (kind === 'singer' && !singers.includes(t)) return 'not one of the song\'s singers';
+  // a scene or chapter that only says the line again tells nothing (「夜晚・橋邊」 beside 夜晚的橋邊在飄雪)
+  const own = [...spoken(t).replace(/[\s・·、，。!！?？]/g, '')];
+  if ((kind === 'scene' || kind === 'chapter') && own.every((ch) => line.includes(ch))) return 'only the line\'s own words again';
+  return undefined;
+}
 const LINE_CAMS = ['', 'lean', 'phrase-track', 'arc', 'ground'];
 const SYMBOLS: SymbolName[] = ['flower', 'drop', 'flame', 'note', 'star', 'heart', 'sparkle'];
 
@@ -164,7 +192,7 @@ export function rowsOf(text: string, pieces: string[]): number[] | undefined {
   return cuts.every((b) => word.has(b)) ? cuts : undefined;
 }
 
-export interface SongIn { title: string; duration: number; tempo: number; beats: number[]; cues: Cue[]; sections?: { start: number; end: number; type: string; energy: number }[] }
+export interface SongIn { title: string; duration: number; tempo: number; beats: number[]; cues: Cue[]; sections?: { start: number; end: number; type: string; energy: number }[]; singers?: { name: string }[] }
 export interface Fallback { cue: string; field: string; said: string; reason: string }
 export interface Accepted {
   recipe?: Recipe;
@@ -173,6 +201,8 @@ export interface Accepted {
   join?: PairKind;
   exit?: string;
   decor?: string;
+  /** The director's own small words (decor fine-note). */
+  note?: string;
   hand?: HandoffKind;
   lineCam?: string;
   hit?: string;
@@ -335,6 +365,14 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
       if (!l.decor || l.decor === 'none') return true;
       if (!DECORS.includes(l.decor)) return false;
       if (l.decor === 'fine-rule' || l.decor === 'fine-title' || l.decor === 'fine-key') return charsPerSec(cue) <= 9;
+      if (l.decor === 'fine-note') {
+        const why = noteRefusal(l.noteKind, l.note ?? '', cue.text, cues.slice(0, i).map((x) => x.text), (c.song.singers ?? []).map((x) => x.name));
+        if (why) {
+          refuse(cue.id, 'note', `${l.noteKind}:${l.note}`, why);
+          return false;
+        }
+        return charsPerSec(cue) <= 9 && count(`note:${partKey}`) < NOTE_PER_PART;
+      }
       if (l.decor === 'oval') return glyphs(cue.text) <= RING_MAX && plain && count(`oval:${partKey}`) === 0;
       if (l.decor === 'icon') return SYMBOLS.includes(d.icon as SymbolName) && plain && count('icon') < 3;
       if (l.decor === 'breath') return tail >= BREATH_MIN && plain && count('mark') < caps.mark;
@@ -347,6 +385,10 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
       if (l.decor === 'icon') bump('icon');
       if (l.decor === 'breath') bump('mark');
       if (l.decor === 'relay') bump('relay');
+      if (l.decor === 'fine-note') {
+        bump(`note:${partKey}`);
+        a.note = l.note.trim();
+      }
     } else refuse(cue.id, 'decor', l.decor, 'its condition does not hold on this line');
     // the line's own camera
     if (l.lineCam) {
@@ -509,7 +551,7 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
         if (a.rows) l['rows'] = a.rows;
         if (a.hit) l['hit'] = a.hit;
         const key = keyFor(cue.text, a.emphasis);
-        const fine: FineTier | undefined = a.decor === 'fine-title' && fineTitle ? { kind: 'title', text: fineTitle } : a.decor === 'fine-key' ? { kind: 'key', text: key } : a.decor === 'fine-rule' ? { kind: 'rule', text: '' } : (l['fine'] as FineTier | undefined)?.kind === 'section' ? (l['fine'] as FineTier) : undefined;
+        const fine: FineTier | undefined = a.decor === 'fine-title' && fineTitle ? { kind: 'title', text: fineTitle } : a.decor === 'fine-key' ? { kind: 'key', text: key } : a.decor === 'fine-rule' ? { kind: 'rule', text: '' } : a.decor === 'fine-note' && a.note ? { kind: 'note', text: a.note } : (l['fine'] as FineTier | undefined)?.kind === 'section' ? (l['fine'] as FineTier) : undefined;
         if (fine) l['fine'] = fine;
         else delete l['fine'];
         if (a.decor === 'oval') Object.assign(l, { oval: true, method: 'color' });
@@ -663,6 +705,7 @@ ${c.calm ? '- 這是安靜的歌：不用任何衝擊性的進場或抖動，大
 【裝飾 decor，一句一個或 none】
 大部分 none。裝飾要有理由，放著沒有意義的東西不准出現。
 - fine-title 歌名小字、fine-key 這句重點詞小字、fine-rule 一條細線：撐出大字、小字、細線三層尺度，用在版面需要平衡的句子。
+- fine-note 你自己寫的小字（note 填字，${NOTE_MAX} 字內；noteKind 填種類）：scene 場景字卡（故事走到哪：時間、地點，例如「凌晨三點・月台」；要是這句歌詞沒說出來的，只把歌詞再說一遍不算），chapter 這首歌自己的章名（你分段時取的名字），echo 回聲（前面唱過的一句或幾個字，原樣照抄，呼應這句），singer 對唱時誰在唱。每則都要在 why.decor 說為什麼放；一段最多 ${NOTE_PER_PART} 則，唱得快的句子不放。不准寫：主歌、副歌這類段落名、歌詞沒有的數字或座標、和歌無關的英文標語。沒有要寫就 note 與 noteKind 留空。
 - oval 手繪圈圈住整句（12 字內，一段最多一次，這段最要留住的那句）。
 - icon 歌的唯一圖示站在字旁（icon 欄要先選；整首最多 3 次，歌詞裡真的有這個東西）。
 - breath 最後一音拉長時，字下畫一條呼吸線（程式會檢查真的有長音）。
@@ -725,9 +768,9 @@ export function directionSchema(moments = false) {
       techniques: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'where', 'why'], properties: { id: str(), where: str(), why: str() } } },
       parts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'tension', 'why'], properties: { from: str(), tension: { type: 'number' }, why: str() } } },
       tune: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['key', 'value', 'cue', 'why'], properties: { key: str(), value: { type: 'number' }, cue: str(), why: str() } } },
-      lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cue', 'sameAs', 'cut', 'pieces', 'layout', 'side', 'enter', 'idle', 'exit', 'decor', 'handoff', 'joinNext', 'lineCam', 'hit', 'emphasis', 'method', 'ground', 'evidence', 'why'], properties: {
+      lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cue', 'sameAs', 'cut', 'pieces', 'layout', 'side', 'enter', 'idle', 'exit', 'decor', 'note', 'noteKind', 'handoff', 'joinNext', 'lineCam', 'hit', 'emphasis', 'method', 'ground', 'evidence', 'why'], properties: {
         cue: str(), sameAs: str(), cut: { type: 'string', enum: ['hold', 'split'] }, pieces: { type: 'array', items: { type: 'string' } },
-        layout: str(), side: { type: 'string', enum: ['center', 'left', 'right'] }, enter: str(), idle: str(), exit: str(), decor: str(), handoff: str(), joinNext: str(), lineCam: str(), hit: str(), emphasis: str(), method: str(), ground: str(), evidence: str(),
+        layout: str(), side: { type: 'string', enum: ['center', 'left', 'right'] }, enter: str(), idle: str(), exit: str(), decor: str(), note: str(), noteKind: { type: 'string', enum: ['', ...NOTE_KINDS] }, handoff: str(), joinNext: str(), lineCam: str(), hit: str(), emphasis: str(), method: str(), ground: str(), evidence: str(),
         why: { type: 'object', additionalProperties: false, required: ['cut', 'layout', 'enter', 'idle', 'exit', 'decor'], properties: whyProps },
       } } },
     },

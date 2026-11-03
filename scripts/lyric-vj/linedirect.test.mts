@@ -6,10 +6,10 @@ import { kn, KNOBS } from '../../src/app/lyric-vj/render/knobs';
 import { ENTER_KINDS, EXIT_KINDS, IDLE_KINDS } from '../../src/app/lyric-vj/treatment';
 import { TEMPLATES } from './typehelp.mts';
 import { Cue, RECIPES } from './lineplan-core.mts';
-import { checkDirection, Ctx, directedPlan, Direction, directionSchema, directorBase, directorPrompt, EXCLUDED_FX, LineChoice, paidClock, PaidPlan, keyFor, resolveSame, rowsOf, setTogetherLines, SongIn, stackOf, TUNABLE, unsungCuts, usdOf, wordPieces } from './linedirect-core.mts';
+import { NOTE_PER_PART, noteRefusal, checkDirection, Ctx, directedPlan, Direction, directionSchema, directorBase, directorPrompt, EXCLUDED_FX, LineChoice, paidClock, PaidPlan, keyFor, resolveSame, rowsOf, setTogetherLines, SongIn, stackOf, TUNABLE, unsungCuts, usdOf, wordPieces } from './linedirect-core.mts';
 
 const why = { cut: '理由', layout: '理由', enter: '理由', idle: '理由', exit: '理由', decor: '' };
-const line = (cue: string, over: Partial<LineChoice> = {}): LineChoice => ({ cue, sameAs: '', cut: 'hold', pieces: [], layout: 'stair', side: 'left', enter: 'fade', idle: 'still', exit: 'fade', decor: 'none', handoff: '', joinNext: '', lineCam: '', hit: '', emphasis: '', method: 'color', ground: '', evidence: '', why, ...over });
+const line = (cue: string, over: Partial<LineChoice> = {}): LineChoice => ({ cue, sameAs: '', cut: 'hold', pieces: [], layout: 'stair', side: 'left', enter: 'fade', idle: 'still', exit: 'fade', decor: 'none', note: '', noteKind: '', handoff: '', joinNext: '', lineCam: '', hit: '', emphasis: '', method: 'color', ground: '', evidence: '', why, ...over });
 const texts = ['我等你回來到天亮', '整條街的燈都熄了', '你說過的話還留著', '我把信寫到最後一頁', '風吹過河面的時候', '我一個人走回家', '雨下到第二天早上', '你說過的話還留著'];
 const cue = (i: number, text: string): Cue => ({ id: `c${i}`, start: 10 + i * 5, end: 10 + i * 5 + 3, text });
 const cues = texts.map((t, i) => cue(i, t));
@@ -172,3 +172,23 @@ assert.ok(!directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept:
 const offered = directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', moments: { overused: ['shape/chain'] } });
 assert.ok(offered.includes('strike/tear') && offered.includes('shape/wave') && offered.includes('這首避免：shape/chain'), 'the forms on offer and the overused ones');
 assert.ok(!offered.includes('strike/burn'), 'a variant not drawn is not offered');
+
+// the director's own small words: never a part's name, a made-up number, an echo of nothing sung, a stranger singing
+assert.equal(noteRefusal('scene', '凌晨三點・月台', '我等你回來到天亮', [], []), undefined);
+assert.match(noteRefusal('chapter', '副歌', '我等你回來到天亮', [], []) ?? '', /generic/);
+assert.match(noteRefusal('scene', '03:00 月台', '我等你回來到天亮', [], []) ?? '', /numbers/);
+assert.equal(noteRefusal('scene', '第 2 天的車站', '第 2 次說再見', [], []), undefined, 'a number the line sings may stand');
+assert.equal(noteRefusal('echo', '整條街的燈', '你說過的話還留著', ['我等你回來到天亮', '整條街的燈都熄了'], []), undefined);
+assert.match(noteRefusal('echo', '從沒唱過', '你說過的話還留著', ['我等你回來到天亮'], []) ?? '', /sung before/);
+assert.match(noteRefusal('singer', '小明', 'x', [], ['阿花']) ?? '', /singers/);
+assert.match(noteRefusal('scene', '夜晚・橋邊', '夜晚的橋邊在飄雪', [], []) ?? '', /own words/, 'a scene that only repeats the line');
+assert.equal(noteRefusal('chapter', '又一個冬天', '數不盡想你的黑夜', [], []), undefined);
+assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五', 'x', [], []) ?? '', /characters/);
+{
+  const ok = checkDirection(direction(full({ c2: { decor: 'fine-note', noteKind: 'echo', note: '整條街的燈' } })), ctx);
+  assert.equal(ok.accepted.get('c2')?.note, '整條街的燈', 'an echo of c1 stands on c2');
+  const bad = checkDirection(direction(full({ c2: { decor: 'fine-note', noteKind: 'chapter', note: '副歌' } })), ctx);
+  assert.ok(!bad.accepted.get('c2')?.note && bad.fallbacks.some((f) => f.cue === 'c2' && f.field === 'note'), 'a part name is refused and logged');
+  const many = checkDirection(direction(full(Object.fromEntries(cues.map((c) => [c.id, { decor: 'fine-note', noteKind: 'scene', note: '雨夜' }])))), ctx);
+  assert.equal([...many.accepted.values()].filter((a) => a.note).length, NOTE_PER_PART, 'a part carries at most NOTE_PER_PART notes');
+}

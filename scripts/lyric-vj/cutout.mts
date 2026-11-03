@@ -140,9 +140,10 @@ props(false);
 if(S.floor){const w=[...S.floor],g=Math.min((S.actors.length?Math.min(...S.actors.map(q=>q.ground)):0.86)*H+H*0.05,H*0.83),size=Math.min(260,W*0.5/w.length);
  const span=w.length*size*0.95,x0=W/2-span/2+size*0.47,ink=(S.look&&S.look.accent)||'#e8402a';
  const bodies=S.actors.map(q=>{const ww=q.h*H*(S.aspects[q.sprite]||0.4);return [(q.x+1)/2*W,ww/2];});
- w.forEach((ch,i)=>{const fall=E((a-0.15-i*0.12)/0.5);if(fall<=0)return;let x=x0+i*size*0.95,dx=0,rot=0;
-  for(const [bx,bw] of bodies){const d=x-bx,reach=bw+size*0.4;if(Math.abs(d)<reach){const push=(reach-Math.abs(d))*Math.sign(d||1);dx+=push*0.9;rot+=push/reach*0.5;}}
-  ctx.save();ctx.translate(x+dx,g-(1-fall)*H*0.6);ctx.transform(1,0,-0.55,0.42,0,0);ctx.rotate(rot*0.4);
+ let shift=0;for(const [bx,bw] of bodies){const l=x0-size*0.5+shift,r=l+span,reach=bw+size*0.3;if(r>bx-reach&&l<bx+reach)shift+=bx<(l+r)/2?bx+reach-l:bx-reach-r;}
+ shift=Math.max(24-(x0-size*0.5),Math.min(W-24-(x0-size*0.5+span),shift));
+ w.forEach((ch,i)=>{const fall=E((a-0.15-i*0.12)/0.5);if(fall<=0)return;const x=x0+i*size*0.95+shift;
+  ctx.save();ctx.translate(x,g-(1-fall)*H*0.6);ctx.transform(1,0,-0.55,0.42,0,0);
   ctx.globalAlpha=0.85*fall;ctx.fillStyle=ink;ctx.font='900 '+size+'px "Noto Sans TC","Hiragino Sans",sans-serif';ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(ch,0,0);ctx.restore();});}
 S.actors.forEach((q,i)=>{const k=E(a/Math.min(0.9,S.dur*0.2)),sw=q.then?(a>=q.at*S.dur?1:0):0;
  [[q.sprite,1-sw],[q.then,sw]].forEach(([id,o],j)=>{if(!id||o<=0.001)return;const pic=f.img(id);if(!pic)return;const hh=q.h*H,ww=hh*(S.aspects[id]||0.4);
@@ -314,7 +315,7 @@ The picture must show exactly these people and nobody else: ${people.length ? pe
 checks (pass / fail / uncertain each):
 - cast: exactly the listed people, no extra people anywhere (background included), nobody missing.
 - identity: each person matches the character sheet (face, hair, clothes); no head on the wrong body, no two people's features swapped.
-- anatomy: every visible hand traces to a wrist and arm and that arm to a shoulder of the same person; no extra or floating limbs, merged bodies, wrong finger counts or broken joints.
+- anatomy: every visible hand traces to a wrist and arm and that arm to a shoulder of the same person; no extra or floating limbs, merged bodies, wrong finger counts or broken joints. A hand or arm coming in from a frame edge must fit a body that could reach from there: a torso standing at one side with an arm reaching in from below or from the other side is a fail (三年後的大雪, a glove on the scarf from the bottom edge beside an upright coat).
 - contact: who touches whom matches the intended contact (which hand, left or right, does not matter: a viewer does not notice); no body passing through another or through objects.
 - support: every person's weight rests on something plausible (feet on ground, seat on a seat); nobody sits on handlebars, floats or stands on nothing. When a person's feet and seat are outside the picture (a close or waist-up shot), support passes for them.
 - single: the same person does not appear twice; and pairs match: both shoes the same kind and colour, both earrings alike, gloves both on or both off (a flip-flop on one foot and a heel on the other is a fail).

@@ -113,7 +113,7 @@ test('the limiter never runs more jobs at once than it allows', async () => {
   assert.equal(most, 2);
 });
 
-test('a scene word falls onto the floor and the figure standing on it pushes its letters aside', () => {
+test('a scene word falls onto the floor beside the figure standing there, its letters evenly spaced', () => {
   const s = { frame: 1, mode: 'cutout', set: 'set_a', layout: { shape: 'full', x: 0, y: 0.5, size: 1, paper: '', tilt: 0 }, zoom: [1, 1], focus: [0, 0], wash: '', weather: 'none', transition: 'cut', pulse: false, floor: '台妹',
     actors: [{ sprite: 'he', then: '', at: 0.5, x: 0, ground: 0.88, h: 0.6, flip: false, enter: 'none', wind: false }], props: [] } as unknown as Shot;
   const xs: number[] = [];
@@ -121,7 +121,11 @@ test('a scene word falls onto the floor and the figure standing on it pushes its
   new Function('ctx', 'f', shotCode(s, 4, { he: 0.5 }))(ctx, { w: 1920, h: 1080, age: 2, scene: () => ({ width: 10, height: 10 }), img: () => ({ width: 10, height: 10 }), warp: () => {}, particles: () => {} });
   const letters = xs.filter((x) => Math.abs(x - 960) > 100 && Math.abs(x - 960) < 1000);
   assert.ok(letters.length >= 2, 'both letters are drawn');
-  assert.ok(letters.some((x) => x < 960 - 200) && letters.some((x) => x > 960 + 200), 'pushed out to both sides of the figure');
+  // the whole word moves clear of the figure (half its width plus some room each side of x 960): no letter split off
+  // and pushed into the next one (三年後的大雪's 「沒牽好」, 2026-11-03)
+  assert.ok(letters.every((x) => x < 960) || letters.every((x) => x > 960), 'one side of the figure');
+  const gaps = letters.slice(1).map((x, i) => x - letters[i]);
+  assert.ok(gaps.every((g) => Math.abs(g - gaps[0]) < 1e-6), 'even spacing');
 });
 
 test('isTransient retries network drops but not refused prompts', async () => {

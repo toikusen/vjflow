@@ -60,7 +60,7 @@
       @if (busy()) {
         <p class="fine warn">上傳中，請勿關閉或離開這個頁面，否則上傳會中斷。</p>
       } @else {
-        <p class="fine">上傳後自動分離人聲、對歌詞時間。<br />只上傳你有權使用的音樂。</p>
+        <p class="fine">上傳完就能預覽免費版，歌詞時間在背景自動對準。<br />只上傳你有權使用的音樂。</p>
       }
     </div>
   </form>
@@ -79,7 +79,7 @@
       <div class="empty start">
         <p>還沒有歌曲，從上面上傳第一首。</p>
         <ol class="steps">
-          <li><span aria-hidden="true">①</span>上傳音檔與歌詞，系統準備約 {{ prepMin }} 分鐘（免費）</li>
+          <li><span aria-hidden="true">①</span>上傳音檔與歌詞，馬上就能預覽；系統在背景對準歌詞時間，約 {{ prepMin }} 分鐘（免費）</li>
           <li><span aria-hidden="true">②</span>檢查每句歌詞的時間</li>
           <li><span aria-hidden="true">③</span>挑風格，馬上預覽，免費匯出 720p 影片</li>
           <li><span aria-hidden="true">④</span>想要更專屬的版本，再付費請導演提出概念與示意畫面（<app-price [amount]="conceptPrice" digits="short" [plain]="true" />，約 {{ conceptMin }} 分鐘，每個方案含第一次共 {{ maxConcepts }} 次）</li>

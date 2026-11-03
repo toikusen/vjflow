@@ -112,7 +112,7 @@ export class BetaPage {
     this.ask.set({
       eyebrow: this.form.title,
       title: '上傳並準備',
-      body: `會分離人聲、自動對歌詞時間，約 ${this.prepMin} 分鐘。上傳中請別離開這一頁，傳完就可以離開。`,
+      body: `音檔傳完就能馬上預覽、做免費影片。系統同時在背景分離人聲、對準歌詞時間（約 ${this.prepMin} 分鐘），好了會自動換成準確的時間。音檔上傳中請別離開這一頁。`,
       cost: 0,
       go: () => this.add(),
     });
@@ -181,7 +181,10 @@ export class BetaPage {
       this.uploadingId.set(song.id);
       await this.uploadAudio(song.id, file);
       this.clearComposer();
-      this.message.set(`已上傳，現在可以離開頁面。系統正在準備歌詞時間（約 ${this.prepMin} 分鐘），完成後請回來「確認時間」。`);
+      // the song's page has the draft video up at once: a person waiting here for the timing never saw it (the audio
+      // is on the server, so leaving is no longer cutting it off)
+      this.busy.set(false);
+      location.assign(`/my/song?id=${song.id}`);
     } catch (e) {
       if (e === SIGNED_OUT) return this.signOut();
       // the song exists once the audio failed: the form is cleared so a second try does not make a second song, and

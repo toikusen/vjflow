@@ -504,7 +504,7 @@ describe('flowSummary', () => {
   it('states the whole flow from the same prices and minutes the empty list shows', () => {
     const line = flowSummary(3);
     expect(line).toBe(
-      `準備約 ${stepsMin('prep')} 分鐘（免費）→ 檢查歌詞時間 → 免費做 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$1.5／$3.5／$13.5）；只上傳你有權使用的音樂；歌曲建立後不能刪除或改名。`,
+      `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$1.5／$3.5／$13.5）；只上傳你有權使用的音樂；歌曲建立後不能刪除或改名。`,
     );
     expect(stepsMin('concept')).toBe(16);
     expect(line).toContain(`$${TIER_INFO.hybrid.rest}`);

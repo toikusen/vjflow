@@ -1,9 +1,9 @@
-import { AfterViewInit, Component, computed, input, output, viewChild } from '@angular/core';
+import { AfterViewInit, Component, computed, input, OnDestroy, output, viewChild } from '@angular/core';
 import { audioReadingOf, decodeMono } from '../../lyric-vj/free-audio';
 import { InstantStage, StageSong } from '../free/instant-stage';
 import type { SongTimeline } from '../../lyric-vj/timeline';
 import { BetaSong } from './beta';
-import { DRAFT_HOLD, draftSong, loadPick, paidLine, readProblem, savePick, songAudioUrl, songLyricsUrl, songTimingUrl, songUploadUrl } from './song-flow';
+import { COVER_DELAY, coverTaken, coverWanted, DRAFT_HOLD, draftSong, FlowPick, loadPick, paidLine, readProblem, savePick, songAudioUrl, songCoverUrl, songLyricsUrl, songTimingUrl, songUploadUrl } from './song-flow';
 
 /**
  * 做影片 on a song's page, for its owner: the song's lyrics and audio from the server on the instant stage. While the
@@ -16,7 +16,7 @@ import { DRAFT_HOLD, draftSong, loadPick, paidLine, readProblem, savePick, songA
   templateUrl: './song-flow.component.html',
   styleUrl: './song-flow.component.scss',
 })
-export class SongFlowComponent implements AfterViewInit {
+export class SongFlowComponent implements AfterViewInit, OnDestroy {
   readonly song = input.required<BetaSong>();
   /** Paid concepts waiting for a decision further down the page. */
   readonly pending = input(0);
@@ -37,6 +37,7 @@ export class SongFlowComponent implements AfterViewInit {
   protected readonly exportHold = computed(() => (this.draft() ? DRAFT_HOLD : ''));
   /** The draft's reading of the upload, made once: 換一版 and a style change reuse it. */
   private drafted?: Promise<StageSong>;
+  private coverTimer = 0;
 
   ngAfterViewInit() {
     const pick = loadPick(this.song().id);
@@ -46,6 +47,30 @@ export class SongFlowComponent implements AfterViewInit {
     }
     // the free video is built on arrival (in the browser, a second or so) and waits for 播放; 立即生成 stays as the retry
     void this.stage().generate();
+  }
+
+  ngOnDestroy() {
+    clearTimeout(this.coverTimer);
+  }
+
+  /** A version went up: it becomes the song's cover once it has stayed a moment (the last of a run of 換一版). */
+  protected coverLater() {
+    clearTimeout(this.coverTimer);
+    this.coverTimer = window.setTimeout(() => void this.saveCover(), COVER_DELAY);
+  }
+
+  /** The version on screen as the song's cover (`PUT /beta/songs/:id/cover`); a failure only leaves the old cover. */
+  private async saveCover() {
+    const stage = this.stage();
+    // an export or another build is under way: the cover waits for it
+    if (stage.busy()) return this.coverLater();
+    const { id, coverAt } = this.song();
+    const pick: FlowPick = { styleId: stage.styleId(), seed: stage.seed() };
+    if (!coverWanted(id, !!coverAt, pick)) return;
+    const blob = await stage.still().catch(() => undefined);
+    if (!blob) return;
+    const r = await fetch(songCoverUrl(id), { method: 'PUT', headers: { 'content-type': 'image/jpeg' }, body: blob }).catch(() => undefined);
+    if (r?.ok) coverTaken(id, pick);
   }
 
   protected readonly source = async (): Promise<StageSong> => {

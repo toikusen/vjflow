@@ -32,7 +32,7 @@ a {
   --hero: color-mix(in srgb, var(--tint) 35%, var(--bg));
   // one row: back, small cover, title and subtitle, then the chip and the balance on the right
   display: grid;
-  grid-template-columns: auto 56px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: auto 96px minmax(0, 1fr) auto auto auto;
   grid-template-rows: auto auto;
   grid-template-areas:
     'back cover title chip more bal'
@@ -76,15 +76,13 @@ a {
   display: contents;
 }
 
+// a frame of the song's own video (or its title on its gradient), in the video's shape
 .cover {
-  display: grid;
   grid-area: cover;
   grid-row: 1 / -1;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  font: 700 26px var(--font-display);
-  background: repeating-linear-gradient(135deg, var(--tint) 0 16px, color-mix(in srgb, var(--tint) 55%, var(--bg)) 16px 32px);
+  align-self: center;
+  width: 96px;
+  aspect-ratio: 16 / 9;
   border-radius: 10px;
 }
 
@@ -985,7 +983,7 @@ a {
   }
 
   .hero {
-    grid-template-columns: 72px minmax(0, 1fr) auto;
+    grid-template-columns: 80px minmax(0, 1fr) auto;
     grid-template-rows: auto auto auto auto;
     grid-template-areas:
       'back back bal'
@@ -1020,10 +1018,8 @@ a {
 
     .cover {
       grid-area: cover;
-      width: 72px;
-      height: 72px;
+      width: 80px;
       margin: 14px 0 0;
-      font-size: 34px;
       border-radius: 12px;
     }
 

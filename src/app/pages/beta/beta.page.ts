@@ -1,5 +1,5 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { audioType, BetaJob, BetaMe, BetaSong, CONCEPT_PRICE, coverTint, errorOf, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollToast, songChip, SongFilter, SONG_FILTERS, songView, SongView, stepsMin, TIER_INFO } from './beta';
+import { audioType, BetaJob, BetaMe, BetaSong, CONCEPT_PRICE, errorOf, filterCounts, inFilter, jobProgress, jsonOrError, nextStep, pollToast, songChip, SongFilter, SONG_FILTERS, songView, SongView, stepsMin, TIER_INFO, OFFERED_TIERS } from './beta';
 import { MAX_CONCEPTS } from './make';
 import { balance } from './ui/balance';
 import { BalanceComponent } from './ui/balance.component';
@@ -7,6 +7,7 @@ import { Ask } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
 import { BetaSession, pollGate, signedOutBy } from './ui/session';
+import { SongCoverComponent } from './ui/song-cover.component';
 import { StatusChipComponent } from './ui/status-chip.component';
 
 const POLL_MS = 5000;
@@ -19,7 +20,7 @@ const SIGNED_OUT = new Error('signed out');
 /** A tester's songs (served by scripts/lyric-vj/beta/server.mts): 做一支新影片 on top; each card opens its song page. */
 @Component({
   selector: 'app-beta-page',
-  imports: [BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
+  imports: [BalanceComponent, ConfirmDialogComponent, PriceComponent, SongCoverComponent, StatusChipComponent],
   templateUrl: './beta.page.html',
   styleUrl: './list.page.scss',
 })
@@ -39,7 +40,7 @@ export class BetaPage {
   protected readonly progress = (j: BetaJob) => jobProgress(j);
   protected readonly filters = SONG_FILTERS;
   protected readonly filter = signal<SongFilter>('all');
-  /** Each song as its card shows it: state, chip, cover tint, subtitle, progress (while something runs) and next step. */
+  /** Each song as its card shows it: state, chip, subtitle, progress (while something runs) and next step. */
   protected readonly cards = computed(() =>
     this.songs().map((song) => {
       const view = songView(song, this.jobs());
@@ -50,7 +51,6 @@ export class BetaPage {
         song,
         view,
         chip: songChip(view),
-        tint: coverTint(song.id),
         meta: [song.artist, this.langName(song.language), made ? `${made} 個成品` : '尚無成品'].filter(Boolean).join(' · '),
         pct: progress?.pct,
         next: nextStep(view, progress),
@@ -63,7 +63,7 @@ export class BetaPage {
   protected readonly conceptPrice = CONCEPT_PRICE;
   protected readonly conceptMin = stepsMin('concept');
   protected readonly maxConcepts = MAX_CONCEPTS;
-  protected readonly tiers = [TIER_INFO.none, TIER_INFO.img, TIER_INFO.hybrid];
+  protected readonly tiers = OFFERED_TIERS.map((t) => TIER_INFO[t]);
   protected readonly langName = (l: string) => LANGS[l] ?? l;
   /** What the signed-in person has left, null until `/beta/me` answers. */
   protected readonly left = () => {

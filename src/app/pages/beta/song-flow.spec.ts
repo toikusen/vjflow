@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { draftSong, loadPick, paidLine, readProblem, savePick, songAudioUrl, songTimingUrl, timingCallout } from './song-flow';
+import { coverTaken, coverWanted, draftSong, loadPick, songCoverUrl, paidLine, readProblem, savePick, songAudioUrl, songTimingUrl, timingCallout } from './song-flow';
 
 const memory = () => {
   const m = new Map<string, string>();
@@ -10,6 +10,19 @@ describe('song flow', () => {
   it('reads the song only from what the server already serves', () => {
     expect(songAudioUrl('s1')).toBe('/beta/songs/s1/audio/mix');
     expect(songTimingUrl('s1')).toBe('/beta/songs/s1/timing');
+  });
+  it('takes a cover when the song has none or the version changed, not again for the same picture', () => {
+    const store = memory();
+    expect(songCoverUrl('s1')).toBe('/beta/songs/s1/cover');
+    expect(coverWanted('a', false, { styleId: 'silk', seed: 1 }, store)).toBe(true);
+    expect(coverWanted('a', true, { styleId: 'silk', seed: 1 }, store)).toBe(true);
+    coverTaken('a', { styleId: 'silk', seed: 1 }, store);
+    expect(coverWanted('a', true, { styleId: 'silk', seed: 1 }, store)).toBe(false);
+    expect(coverWanted('a', false, { styleId: 'silk', seed: 1 }, store), 'the server lost it').toBe(true);
+    expect(coverWanted('a', true, { styleId: 'silk', seed: 2 }, store)).toBe(true);
+    expect(coverWanted('a', true, { styleId: 'riso', seed: 1 }, store)).toBe(true);
+    expect(coverWanted('b', true, { styleId: 'silk', seed: 1 }, store)).toBe(true);
+    expect(coverWanted('a', true, { styleId: 'silk' }, { getItem: () => { throw new Error('off'); } })).toBe(true);
   });
   it('remembers the style and version per song', () => {
     const store = memory();

@@ -1,5 +1,5 @@
 import { Component, computed, effect, ElementRef, inject, input, model, output, signal } from '@angular/core';
-import { BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, stepsMin, TIER_INFO } from './beta';
+import { BetaJob, BetaSong, BetaTier, CONCEPT_PRICE, OFFERED_TIERS, stepsMin, TIER_INFO } from './beta';
 import { attemptLine, defaultTier, feelingLength, makeBlock, makeBody, MAX_FEELING, MAX_REFS, refProblem, REF_TYPES, StripGrid, stripGrid, stripTiles } from './make';
 import { Ask, bill } from './ui/confirm';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
@@ -9,7 +9,7 @@ import { PriceComponent } from './ui/price.component';
 /** A style on the menu (`GET /beta/styles`); `image` is its kit or sample strip, null when it has none. */
 export interface BetaStyle { id: string; name: string; suits: string; image: string | null }
 
-const TIERS = Object.keys(TIER_INFO) as BetaTier[];
+const TIERS = OFFERED_TIERS;
 /** Up to this many cards (交給導演 included) the grid shows them all; past it, a scroller and the range hint. */
 const GRID_CARDS = 6;
 const CONCEPT_MIN = stepsMin('concept');

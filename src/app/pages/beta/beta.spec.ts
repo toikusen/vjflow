@@ -1,4 +1,4 @@
-import { audioProblem, audioType, BetaEvent, errorOf, flowSummary, stepsMin, BetaFeedback, COVER_TINTS, coverTint, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE, NOT_FIXABLE_HYBRID, fixableReport } from './beta';
+import { audioProblem, audioType, BetaEvent, errorOf, flowSummary, stepsMin, BetaFeedback, COVER_TINTS, coverTint, songCover, filterCounts, inFilter, jsonOrError, nextStep, songKind, feedbackLine, retriedBy, BetaJob, BetaSong, jobProgress, JOB_STEPS, minutesBetween, pollOrder, pollToast, songChip, songView, SongView, timeline, TIER_INFO, FeedbackCategory, FIX_PRICE, fixAllowed, fixBlock, fixKindFor, NOT_FIXABLE, NOT_FIXABLE_HYBRID, fixableReport } from './beta';
 import { pageFor } from './route';
 
 const song: BetaSong = { id: 's', userId: 'u', title: 'T', artist: '', language: 'ja', createdAt: '2026-10-27T00:00:00Z' };
@@ -332,6 +332,25 @@ describe('coverTint', () => {
   });
 });
 
+describe('songCover', () => {
+  it('shows the saved frame, asked for by its save time so a new one is fetched', () => {
+    const c = songCover({ id: 's1', title: '夜すがら', coverAt: '2026-11-03T10:00:00.000Z' });
+    expect(c).toEqual({ image: '/beta/songs/s1/cover?v=2026-11-03T10%3A00%3A00.000Z' });
+    expect(songCover({ id: 's1', title: '夜すがら', coverAt: '2026-11-03T11:00:00.000Z' })).not.toEqual(c);
+  });
+  it('without a frame, sets the whole title (not one character) on the song\'s own fixed gradient', () => {
+    const c = songCover({ id: 's1', title: '夜をこえて 君と行く' });
+    expect('title' in c && c.title).toBe('夜をこえて 君と行く');
+    const bg = 'background' in c ? c.background : '';
+    expect(bg).toMatch(/^linear-gradient\(135deg, #[0-9a-f]{6}, #[0-9a-f]{6}\)$/);
+    expect(bg).toContain(coverTint('s1'));
+    expect(songCover({ id: 's1', title: 'x' })).toEqual({ ...songCover({ id: 's1', title: 'x' }) });
+    const colours = bg.match(/#[0-9a-f]{6}/g)!;
+    expect(colours[0]).not.toBe(colours[1]);
+    expect(COVER_TINTS).toContain(colours[1]);
+  });
+});
+
 describe('minutesBetween', () => {
   it('rounds up to whole minutes', () => {
     expect(minutesBetween('2026-10-27T00:00:00Z', '2026-10-27T00:20:10Z')).toBe(21);
@@ -510,7 +529,7 @@ describe('flowSummary', () => {
   it('states the whole flow from the same prices and minutes the empty list shows', () => {
     const line = flowSummary(3);
     expect(line).toBe(
-      `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$1.5／$3.5／$13.5）；只上傳你有權使用的音樂。`,
+      `上傳後馬上預覽免費版 → 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（$2.5，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 3 次）→ 接受後製作（$3.5／$13.5）；只上傳你有權使用的音樂。`,
     );
     expect(stepsMin('concept')).toBe(16);
     expect(line).toContain(`$${TIER_INFO.hybrid.rest}`);

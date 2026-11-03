@@ -7,8 +7,8 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { betaCommand, createBetaServer, MAX_LYRICS, releaseStale, songDir as songDir2, stopBeta } from './server.mts';
 import { killRunning, waitGone } from './queue.mts';
-import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { LANGUAGES } from '../../../src/app/lyric-vj/languages';
 import { readEvents } from './events.mts';
 import { invite, load, save, emptyDb, runPath, type Job } from './store.mts';
@@ -1625,5 +1625,72 @@ test('delete: a soft delete the owner alone can do, refused while a job runs; th
   assert.ok(existsSync(join(t.root, 'deleted/s1/runs', jobId, 'video.mp4')));
   assert.ok(readEvents(t.root, 's1').length === 0 || !readEvents(t.root, 's1').some((e) => e.type === 'song.deleted'));
   assert.match(readFileSync(join(t.root, 'deleted/s1/events.jsonl'), 'utf8'), /song\.deleted/);
+  t.beta.server.close();
+});
+
+test('cover: the owner saves a JPEG of the song\'s video (drafts too); owner and admin read it by its save time; others, bad files and deleted songs are refused', async () => {
+  const t = await gate();
+  const cover = (token: string, body: Buffer, type = 'image/jpeg', song = 's1') => fetch(`${t.base}/beta/songs/${song}/cover`, { method: 'PUT', body: new Uint8Array(body), headers: { cookie: `vjb=${token}`, 'content-type': type } });
+  const listed = async () => (await (await t.tester('/beta/songs')).json())[0].coverAt as string | undefined;
+  assert.equal(await listed(), undefined, 'no cover yet');
+  assert.equal((await t.tester('/beta/songs/s1/cover')).status, 404);
+  const ok = await cover(t.testerToken, JPG);
+  assert.equal(ok.status, 200);
+  const { coverAt } = await ok.json();
+  assert.ok(coverAt);
+  assert.equal(await listed(), coverAt, 'the list carries the save time');
+  assert.equal(t.beta.db.songs[0].coverFrom, 'page');
+  const got = await t.tester(`/beta/songs/s1/cover?v=${coverAt}`);
+  assert.deepEqual([got.status, got.headers.get('content-type'), Buffer.from(await got.arrayBuffer()).equals(JPG)], [200, 'image/jpeg', true]);
+  assert.match(got.headers.get('cache-control') ?? '', /immutable/);
+  assert.equal((await t.admin('/beta/songs/s1/cover')).status, 200, 'the admin\'s list shows it too');
+  assert.equal((await t.other('/beta/songs/s1/cover')).status, 404);
+  assert.equal((await t.anon('/beta/songs/s1/cover')).status, 401);
+  // a newer cover replaces it and gets a newer time
+  await new Promise((r) => setTimeout(r, 20));
+  const next = Buffer.concat([JPG, Buffer.from('next')]);
+  const again = await (await cover(t.testerToken, next)).json();
+  assert.ok(again.coverAt > coverAt);
+  assert.ok(readFileSync(join(t.root, 'songs/s1/cover.jpg')).equals(next));
+  // only the owner writes; only a JPEG, not empty, not over the cap, not some other song
+  assert.equal((await cover(t.otherToken, JPG)).status, 404);
+  assert.equal((await cover(t.adminToken, JPG)).status, 404, 'the admin reads but does not set');
+  assert.equal((await cover(t.testerToken, PNG, 'image/png')).status, 415);
+  assert.equal((await cover(t.testerToken, PNG, 'image/jpeg')).status, 415, 'bytes that are not a JPEG');
+  assert.equal((await cover(t.testerToken, Buffer.alloc(0))).status, 400);
+  assert.equal((await cover(t.testerToken, Buffer.concat([JPG, Buffer.alloc(300_001)]))).status, 413);
+  assert.equal((await cover(t.testerToken, JPG, 'image/jpeg', 'nope')).status, 404);
+  assert.ok(readFileSync(join(t.root, 'songs/s1/cover.jpg')).equals(next), 'a refused upload leaves the cover as it was');
+  assert.deepEqual(readdirSync(join(t.root, 'songs/s1')).filter((f) => f.startsWith('.cover-')), [], 'no partial file left');
+  // a song still being prepared (no song.json) takes a cover too
+  rmSync(join(t.root, 'songs/s1/song.json'));
+  assert.equal((await cover(t.testerToken, JPG)).status, 200);
+  // a deleted song's cover is out of reach like the rest of it
+  assert.equal((await t.tester('/beta/songs/s1', { method: 'DELETE' })).status, 200);
+  assert.equal((await t.tester('/beta/songs/s1/cover')).status, 404);
+  assert.equal((await t.admin('/beta/songs/s1/cover')).status, 404);
+  assert.equal((await cover(t.testerToken, JPG)).status, 404);
+  t.beta.server.close();
+});
+
+test('cover: a finished paid video gives the song a frame of its own, kept over the song page\'s', { skip: spawnSync('ffmpeg', ['-version']).status !== 0 && 'no ffmpeg' }, async () => {
+  // a real (tiny) video for the make: ffmpeg's test pattern, 3 s
+  const t = await gate({ make: (run) => `ffmpeg -v error -f lavfi -i testsrc=size=320x180:rate=10 -t 3 -pix_fmt yuv420p -y '${run}/video.mp4'${provenTreatment(run, 'img')}` });
+  const cover = (body: Buffer) => fetch(`${t.base}/beta/songs/s1/cover`, { method: 'PUT', body: new Uint8Array(body), headers: { cookie: `vjb=${t.testerToken}`, 'content-type': 'image/jpeg' } });
+  assert.equal((await cover(JPG)).status, 200);
+  const { id } = await (await t.tester('/beta/songs/s1/make', { json: { tier: 'img' } })).json();
+  await t.done(id);
+  await t.tester(`/beta/jobs/${id}/accept`, { json: {} });
+  const make = t.beta.db.jobs.find((j) => j.kind === 'make')!;
+  await t.done(make.id);
+  await waitFor(() => t.beta.db.songs[0].coverFrom === 'video');
+  assert.equal(t.beta.db.songs[0].coverFrom, 'video');
+  const file = readFileSync(join(t.root, 'songs/s1/cover.jpg'));
+  assert.ok(!file.equals(JPG) && file[0] === 0xff && file[1] === 0xd8, 'a JPEG frame from the video');
+  assert.ok(readEvents(t.root, 's1').some((e) => e.type === 'cover.saved' && e.from === 'video'));
+  // the song page's next cover is answered but does not replace it
+  const kept = await cover(Buffer.concat([JPG, Buffer.from('page')]));
+  assert.deepEqual([kept.status, (await kept.json()).kept], [200, 'video']);
+  assert.ok(readFileSync(join(t.root, 'songs/s1/cover.jpg')).equals(file));
   t.beta.server.close();
 });

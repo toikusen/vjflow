@@ -256,18 +256,15 @@ h1, h3, p {
   gap: 24px;
 }
 
+// the cover is a frame of the song's video (or its title on its gradient), so the tile keeps the video's shape
 .cover {
   position: relative;
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  background: repeating-linear-gradient(135deg, var(--tint) 0 12px, var(--surface) 12px 24px);
+  aspect-ratio: 16 / 9;
 }
 
-.initial {
-  font: 700 72px var(--font-display);
-  color: var(--text);
-  opacity: 0.9;
+.art {
+  position: absolute;
+  inset: 0;
 }
 
 .bar {
@@ -284,13 +281,6 @@ h1, h3, p {
   }
 }
 
-.on-cover {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  pointer-events: none;
-}
-
 .body {
   display: flex;
   flex-direction: column;
@@ -304,6 +294,13 @@ h1, h3, p {
   align-items: center;
   gap: 8px;
   min-width: 0;
+
+  // the state sits beside the title, never over the cover's own words
+  app-status-chip {
+    flex: none;
+    margin-left: auto;
+    font-size: 11px;
+  }
 }
 
 h3 {
@@ -395,7 +392,7 @@ h3 {
 
   .card {
     display: grid;
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 96px minmax(0, 1fr);
     gap: 12px;
     align-items: center;
     padding: 10px;
@@ -403,16 +400,9 @@ h3 {
   }
 
   .cover {
-    width: 64px;
-    height: 64px;
+    width: 96px;
     overflow: hidden;
     border-radius: 10px;
-    background: repeating-linear-gradient(135deg, var(--tint) 0 8px, var(--surface) 8px 16px);
-  }
-
-  .initial {
-    font-size: 26px;
-    opacity: 1;
   }
 
   .bar {

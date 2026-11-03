@@ -4,7 +4,11 @@ import { STATUS_CHIP, StatusChip, StatusKind } from './ui/status';
 
 export type BetaTier = 'none' | 'img' | 'hybrid';
 export interface BetaMe { id: string; name: string; admin: boolean; disabled?: boolean; limitUsd: number; spentUsd: number }
-export interface BetaSong { id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string; timingSkipped?: boolean }
+export interface BetaSong {
+  id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string; timingSkipped?: boolean;
+  /** When the song's cover (a frame of its own video) was last saved; none until the song page has shown a version. */
+  coverAt?: string;
+}
 export interface BetaJob { id: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: BetaTier; status: 'queued' | 'running' | 'done' | 'failed' | 'admin'; phase?: string; autoReleased?: string; autoReleaseAt?: string; createdAt: string; startedAt?: string; endedAt?: string; steps?: { phase: string; at: string }[]; priceUsd?: number; retryOf?: string; auto?: boolean; style?: string; decision?: 'accepted' | 'adjusted' | 'redone'; conceptOf?: string; nothingToRemove?: boolean; inputs?: BetaJobInputs; concept?: ConceptSummary }
 
 /** What a concept job was asked for (`job.inputs` on the server). */
@@ -101,8 +105,8 @@ export const stepsMin = (kind: keyof typeof JOB_STEPS): number => Math.round(JOB
  */
 export function flowSummary(maxConcepts: number): string {
   const short = (x: number) => `$${formatPrice(x, 'short')}`;
-  const makes = (['none', 'img', 'hybrid'] as const).map((t) => short(TIER_INFO[t].rest)).join('／');
-  return `上傳後馬上預覽免費版（背景對準歌詞時間約 ${stepsMin('prep')} 分鐘，免費）→ 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（${short(CONCEPT_PRICE)}，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 ${maxConcepts} 次）→ 接受後製作（${makes}）；只上傳你有權使用的音樂。`;
+  const makes = OFFERED_TIERS.map((t) => short(TIER_INFO[t].rest)).join('／');
+  return `上傳後馬上預覽免費版 → 檢查歌詞時間 → 匯出 720p 影片；要導演製作再付費：導演提概念（${short(CONCEPT_PRICE)}，約 ${stepsMin('concept')} 分鐘，每個方案含第一次共 ${maxConcepts} 次）→ 接受後製作（${makes}）；只上傳你有權使用的音樂。`;
 }
 
 const tierInfo = (tier: BetaTier, name: string, about: string, rest: number) =>
@@ -118,6 +122,8 @@ export const TIER_INFO: Record<BetaTier, { name: string; about: string; concept:
   img: tierInfo('img', '插圖版', '文字動態加上插圖道具。', 3.5),
   hybrid: tierInfo('hybrid', '故事版', '依歌詞編出故事，有角色與畫面。', 13.5),
 };
+/** The versions a new order can pick; 文字動態版 stays in TIER_INFO for the orders made before it was withdrawn (2026-11-03). */
+export const OFFERED_TIERS: readonly BetaTier[] = ['img', 'hybrid'];
 
 /** The step list for a job: by its kind, and for a make job by its tier; anything unknown reads as the text version. */
 const jobSteps = (job: BetaJob): JobStep[] =>
@@ -402,9 +408,27 @@ export const COVER_TINTS = ['#2a4a5a', '#5a3a8a', '#3a4a6a', '#6a3a4a', '#2a5a4a
 
 /** A song's cover tint, fixed by its id (FNV-1a hash), so it stays the same on every visit. */
 export function coverTint(id: string): string {
+  return COVER_TINTS[tintIndex(id)];
+}
+
+function tintIndex(id: string): number {
   let h = 0x811c9dc5;
   for (const c of id) h = Math.imul(h ^ c.charCodeAt(0), 0x01000193);
-  return COVER_TINTS[(h >>> 0) % COVER_TINTS.length];
+  return (h >>> 0) % COVER_TINTS.length;
+}
+
+/** What a song's tile shows: a frame of its own video, or until it has one, its title set on a gradient of its tints. */
+export type SongCover = { image: string } | { title: string; background: string };
+
+/**
+ * A song's cover. The image is asked for with its save time, so a new cover is fetched and an unchanged one comes from
+ * the cache. The fallback's two tints are the song's own (coverTint, and the one three along), fixed by its id.
+ */
+export function songCover(s: Pick<BetaSong, 'id' | 'title' | 'coverAt'>): SongCover {
+  if (s.coverAt) return { image: `/beta/songs/${s.id}/cover?v=${encodeURIComponent(s.coverAt)}` };
+  const i = tintIndex(s.id);
+  const [a, b] = [COVER_TINTS[i], COVER_TINTS[(i + 3) % COVER_TINTS.length]];
+  return { title: s.title, background: `linear-gradient(135deg, ${a}, ${b})` };
 }
 
 /** One line of a song's event log, as written by scripts/lyric-vj/beta/events.mts. */

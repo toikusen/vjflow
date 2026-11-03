@@ -2,10 +2,12 @@
 // within their limit; the admin invites people, sets limits and retries failed jobs.
 // npx tsx scripts/lyric-vj/beta/server.mts   (listens on 127.0.0.1:4320; the tunnel points at it)
 import { copyFileSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { createServer, IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LANGUAGES, LanguageId } from '../../../src/app/lyric-vj/languages';
+import { coverMoment } from '../../../src/app/lyric-vj/cover-moment';
 import type { SongTimeline } from '../../../src/app/lyric-vj/timeline';
 import { applyTimingEdit, TimingEdit } from '../../../src/app/lyric-vj/timing-qa';
 import { logEvent, readEvents } from './events.mts';
@@ -28,6 +30,9 @@ const SERVE: Record<string, string> = { '.mp3': 'audio/mpeg', '.wav': 'audio/wav
 const MAX_CONCEPT = 500;
 const MAX_REFS = 5;
 const MAX_REF_BYTES = 10_000_000;
+/** A song's cover: a small JPEG frame of its own video (the song page sends ~480×270). */
+export const MAX_COVER_BYTES = 300_000;
+const COVER = 'cover.jpg';
 /** The reference image types a person may upload, each checked by its first bytes (the declared type alone proves nothing). */
 const IMAGE: Record<string, { ext: string; magic: (b: Buffer) => boolean }> = {
   'image/jpeg': { ext: 'jpg', magic: (b) => b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
@@ -269,7 +274,10 @@ export function createBetaServer(o: BetaOptions) {
   const lessonsFile = join(o.root, 'lessons.json');
   const writeLessons = () => writeFileSync(lessonsFile, JSON.stringify({ lessons: db.lessons ?? [] }, null, 1));
   writeLessons();
-  const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => logEvent(o.root, job.songId, { ...e, jobId: job.id }),
+  const q: Queue = { db, persist: () => save(dbFile, db), command: o.command, logDir: join(o.root, 'logs'), env: o.env, onEvent: (job, e) => {
+      logEvent(o.root, job.songId, { ...e, jobId: job.id });
+      if (e.type === 'job.ended' && job.status === 'done') videoCover(job);
+    },
     // the candidates as they are when the concept starts (the admin may change tiers while it waits)
     // the director's allowed set is the admin's tiers as they stand when the job starts (never the code's constants)
     // every concept and make reads the admin's rules from the lessons file as it stands when the job starts
@@ -318,6 +326,41 @@ export function createBetaServer(o: BetaOptions) {
 
   /** Whether a song was deleted by its owner: its jobs, reports and files are out of reach from then on. */
   const gone = (songId: string) => db.songs.some((s) => s.id === songId && !!s.deletedAt);
+
+  /** When the song's cover was saved (its file's time), so a list can ask for a new one; undefined without one. */
+  const coverAt = (songId: string) => {
+    try {
+      return statSync(join(songDir(o.root, songId), COVER)).mtime.toISOString();
+    } catch {
+      return undefined;
+    }
+  };
+
+  /**
+   * A finished paid video becomes its song's cover: one frame at the cover moment (cover-moment.ts, the song page's
+   * rule) taken with ffmpeg, kept over the free video's from then on. The video starts at the song's 0 s (make.sh
+   * renders --start 0). A failure leaves the cover as it was.
+   */
+  function videoCover(job: Job) {
+    const song = db.songs.find((s) => s.id === job.songId && !s.deletedAt);
+    const video = videoFile(o.root, job);
+    if (!song || !madeVideo(job) || !existsSync(video)) return;
+    const timeline = [join(runPath(o.root, job), 'song.json'), join(songDir(o.root, song.id), 'song.json')].map((f) => { try { return JSON.parse(readFileSync(f, 'utf8')) as SongTimeline; } catch { return undefined; } }).find((t) => t?.cues?.length);
+    const t = timeline && coverMoment(timeline.cues, timeline.sections ?? []);
+    if (t === undefined) return;
+    const dir = songDir(o.root, song.id);
+    const tmp = join(dir, `.cover-${newId()}.jpg`);
+    const args = ['-v', 'error', '-ss', t.toFixed(2), '-i', video, '-frames:v', '1', '-vf', 'scale=480:270:force_original_aspect_ratio=increase,crop=480:270', '-q:v', '4', '-y', tmp];
+    execFile('ffmpeg', args, { timeout: 30_000 }, (err) => {
+      const made = !err && existsSync(tmp) && statSync(tmp).size > 0;
+      // the song may have been deleted (its folder moved) while ffmpeg ran
+      if (!made || gone(song.id) || !existsSync(dir)) return void rmSync(tmp, { force: true });
+      renameSync(tmp, join(dir, COVER));
+      song.coverFrom = 'video';
+      q.persist();
+      logEvent(o.root, song.id, { type: 'cover.saved', from: 'video', jobId: job.id });
+    });
+  }
 
   /** The previous concept's run id when it is a run folder of a concept job of the same song, else undefined. */
   const conceptRunId = (songId: string, from: string | undefined) =>
@@ -429,7 +472,8 @@ export function createBetaServer(o: BetaOptions) {
         const file = Object.hasOwn(LANGUAGES, si[1]) && (user.admin || styleOffered(db, si[1])) ? styleImage(si[1]) : undefined;
         return file ? sendFile(req, res, file) : json(res, 404, { error: '找不到' });
       }
-      if (path === '/beta/songs' && req.method === 'GET') return json(res, 200, db.songs.filter((s) => (user.admin || s.userId === user.id) && !s.deletedAt));
+      if (path === '/beta/songs' && req.method === 'GET')
+        return json(res, 200, db.songs.filter((s) => (user.admin || s.userId === user.id) && !s.deletedAt).map((s) => { const at = coverAt(s.id); return at ? { ...s, coverAt: at } : s; }));
       // a new song: its words first (the person's own lyrics are the authority), the audio next
       if (path === '/beta/songs' && req.method === 'POST') {
         const b = await readJson(req);
@@ -504,6 +548,33 @@ export function createBetaServer(o: BetaOptions) {
         q.persist();
         logEvent(o.root, j.songId, { type: 'feedback.submitted', jobId: j.id, by: user.id, feedbackId: f.id, ok: f.ok, action: f.action, marks: f.marks.length, ...(fixJobId ? { fixJobId } : {}) });
         return json(res, 201, f);
+      }
+      // a song's cover, a frame of its own video: the song page sends it once a version is on screen (drafts too); the
+      // owner and the admin see it. One from a finished paid video is kept over the page's (videoCover).
+      const cv = /^\/beta\/songs\/([\w-]+)\/cover$/.exec(path);
+      if (cv) {
+        const reading = req.method === 'GET';
+        const song = db.songs.find((s) => s.id === cv[1] && (s.userId === user.id || (user.admin && reading)) && !s.deletedAt);
+        if (!song) return json(res, 404, { error: '找不到這首歌' });
+        const file = join(songDir(o.root, song.id), COVER);
+        // asked for with its save time (?v=), so a new cover is a new address and an old one can be kept long
+        if (reading) return existsSync(file) ? sendFile(req, res, file, { 'cache-control': 'private, max-age=31536000, immutable' }) : json(res, 404, { error: '還沒有封面' });
+        if (req.method !== 'PUT') return void res.writeHead(405).end();
+        if ((req.headers['content-type'] ?? '').split(';')[0].trim() !== 'image/jpeg') return json(res, 415, { error: '封面必須是 JPEG' });
+        const body = await readBody(req, MAX_COVER_BYTES);
+        if (body === 'too-big') return void res.writeHead(413, { 'content-type': 'application/json', connection: 'close' }).end(JSON.stringify({ error: '封面太大（上限 300 KB）' }));
+        if (!body.length) return json(res, 400, { error: '沒有收到封面' });
+        if (!IMAGE['image/jpeg'].magic(body)) return json(res, 415, { error: '封面必須是 JPEG' });
+        if (song.coverFrom === 'video' && existsSync(file)) return json(res, 200, { coverAt: coverAt(song.id), kept: 'video' });
+        // written aside and moved in, so a reader never gets half a picture
+        const tmp = join(songDir(o.root, song.id), `.cover-${newId()}.jpg`);
+        writeFileSync(tmp, body);
+        renameSync(tmp, file);
+        if (song.coverFrom !== 'page') {
+          song.coverFrom = 'page';
+          q.persist();
+        }
+        return json(res, 200, { coverAt: coverAt(song.id) });
       }
       const sm = /^\/beta\/songs\/([\w-]+)\/(audio|timing|timing\/skip|cues|lyrics|audio\/upload|audio\/mix|audio\/vocals|video\/none|video\/img|video\/hybrid)$/.exec(path);
       if (sm) {
@@ -794,6 +865,7 @@ export function createBetaServer(o: BetaOptions) {
         j.status = 'done';
         q.persist();
         logEvent(o.root, j.songId, { type: 'admin.approve', jobId: j.id, by: user.id });
+        videoCover(j);
         return json(res, 200, publicJob(j, o.root));
       }
       // a song's history and its logs (admin only; every file stays inside that song's folder)

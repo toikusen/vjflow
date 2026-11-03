@@ -14,6 +14,7 @@ import { BalanceComponent } from './ui/balance.component';
 import { ConfirmDialogComponent } from './ui/confirm-dialog.component';
 import { PriceComponent } from './ui/price.component';
 import { StatusChip } from './ui/status';
+import { SongCoverComponent } from './ui/song-cover.component';
 import { StatusChipComponent } from './ui/status-chip.component';
 
 const RETRY_CHIP: StatusChip = { icon: '↻', label: '自動重試中 · 第一次製作遇到系統問題，不另外收費', tone: 'warn' };
@@ -21,7 +22,7 @@ const RETRY_CHIP: StatusChip = { icon: '↻', label: '自動重試中 · 第一�
 /** One song (`/my/song?id=`): hero, the job in progress (or the failure), 做影片 (free, in the tab), then the paid part: a concept awaiting a decision, every finished result, 製作新版本. */
 @Component({
   selector: 'app-beta-song-page',
-  imports: [NgTemplateOutlet, ConceptCardComponent, MakeFormComponent, SongFlowComponent, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, StatusChipComponent],
+  imports: [NgTemplateOutlet, ConceptCardComponent, MakeFormComponent, SongFlowComponent, ReportFormComponent, BalanceComponent, ConfirmDialogComponent, PriceComponent, SongCoverComponent, StatusChipComponent],
   templateUrl: './song.page.html',
   styleUrl: './song.page.scss',
 })

@@ -5,6 +5,7 @@ import type { SongTimeline } from '../../lyric-vj/timeline';
 import type { LivePlayer, LiveStats } from '../../lyric-vj/render/live';
 import { exportBlocker } from '../../lyric-vj/render/export-check';
 import { songLrc } from '../../lyric-vj/free-lyrics';
+import { coverMoment } from '../../lyric-vj/cover-moment';
 import { StylePicker } from './style-picker';
 
 /** Under this a wait is not worth showing, ms. */
@@ -58,6 +59,8 @@ export class InstantStage implements OnInit, OnDestroy {
   readonly changed = output<void>();
   /** A new song is wanted from the page: nothing was on screen when a style was picked, or a generate had to wait. */
   readonly again = output<void>();
+  /** A version is on screen (a first build, 換一版 or another style): a page that keeps a cover takes it now. */
+  readonly built = output<void>();
 
   protected readonly clock = clock;
   protected readonly styleGroups = styleGroups();
@@ -184,6 +187,20 @@ export class InstantStage implements OnInit, OnDestroy {
     this.duration.set(job.window.end);
     this.ready.set(true);
     this.note.set(`配色 ${palette}，第 ${this.seed() ?? 0} 版。編排 ${planMs.toFixed(0)} ms，到第一格 ${(startMs / 1000).toFixed(2)} 秒`);
+    this.built.emit();
+  }
+
+  /**
+   * The version on screen as a cover: one small JPEG of its cover moment (cover-moment.ts), drawn off screen. Undefined
+   * with nothing on screen, during an export, or when the version changed while the frame was drawn.
+   */
+  async still(): Promise<Blob | undefined> {
+    const [player, job, song] = [this.player, this.job, this.song];
+    if (!player || !job || !song || this.exporting()) return undefined;
+    const t = coverMoment(job.cues, song.sections ?? []);
+    if (t === undefined) return undefined;
+    const blob = await player.still(t);
+    return job === this.job ? blob : undefined;
   }
 
   private async guard(what: string, run: () => Promise<void>) {

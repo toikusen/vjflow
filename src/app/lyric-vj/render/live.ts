@@ -106,6 +106,34 @@ export class LivePlayer {
     return { engine, canvas };
   }
 
+  /**
+   * One frame of the job on screen at `t`, as a small JPEG, drawn by an engine of its own on a canvas never shown: the
+   * preview keeps playing undisturbed. Undefined when another job took the screen meanwhile (the frame would be stale).
+   */
+  async still(t: number, width = 480, height = 270, quality = 0.8): Promise<Blob | undefined> {
+    const job = this.job;
+    if (!job) return undefined;
+    await this.settled.catch(() => undefined);
+    const canvas = Object.assign(document.createElement('canvas'), { width: 1920, height: 1080 });
+    const engine = new LyricVjEngine(canvas, { ...job, live: true });
+    try {
+      await engine.init();
+      // the picture is shrunk to a thumbnail: half the pixels are plenty and cost the preview less
+      engine.setQuality(0.5);
+      // (a jump lands before the line there is built: the second frame has it)
+      await engine.renderAt(t);
+      await engine.renderAt(t);
+      if (job !== this.job) return undefined;
+      const small = new OffscreenCanvas(width, height);
+      const ctx = small.getContext('2d', { alpha: false })!;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(canvas, 0, 0, width, height);
+      return await small.convertToBlob({ type: 'image/jpeg', quality });
+    } finally {
+      engine.dispose(false);
+    }
+  }
+
   /** Back to the preview after an export. */
   resume() {
     this.engine!.setQuality(QUALITIES[this.quality]);

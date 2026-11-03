@@ -1,5 +1,5 @@
 // What the song page shows that is not the song's state itself: hero tone, result names and totals, step clocks, the failure card.
-import { BetaJob, BetaTier, CONCEPT_PRICE, FIX_PRICE, jobProgress, SongView, TIER_INFO } from './beta';
+import { BetaJob, BetaTier, CONCEPT_PRICE, FIX_PRICE, jobProgress, SongView, OFFERED_TIERS, TIER_INFO } from './beta';
 import { formatPrice } from './ui/price';
 import { StatusKind } from './ui/status';
 
@@ -82,18 +82,17 @@ export function resultConcept(j: BetaJob, jobs: readonly BetaJob[], depth = 0): 
 export interface NextStep { tier: BetaTier; title: string; desc: string; action: string; price: number; primary: boolean }
 
 /**
- * The 接著做 rows for a version of `own` tier: another take in the same tier first, then the other tiers on the same
- * concept — an upgrade (插圖版, 故事版) is the primary action, a step down to 文字動態版 is not.
+ * The 接著做 rows for a version of `own` tier: another take in the same tier first, then the other offered tiers on
+ * the same concept, an upgrade being the primary action. A withdrawn tier (文字動態版) gets no new take.
  */
 export function nextSteps(own: BetaTier): NextStep[] {
-  const rows: Record<BetaTier, Omit<NextStep, 'tier' | 'price'>> = {
-    none: { title: '做文字動態版', desc: '直接用這版的鏡頭和文字動態輸出，不放插圖', action: '做文字動態版', primary: false },
+  const rows: Partial<Record<BetaTier, Omit<NextStep, 'tier' | 'price'>>> = {
     img: { title: '升級成插圖版', desc: '沿用概念和這版的鏡頭，導演再畫插圖道具放進去', action: '做插圖版', primary: true },
     hybrid: { title: '升級成故事版', desc: '以這版的鏡頭為底寫故事、畫角色；完成前可能要管理者看一眼', action: '做故事版', primary: true },
   };
   const same: Omit<NextStep, 'tier' | 'price'> = { title: '同概念再做一版', desc: '風格、配色、字型和故事不變，文字動態重新編排', action: '再做一版', primary: false };
-  return (Object.keys(TIER_INFO) as BetaTier[]).sort((a, b) => (a === own ? -1 : b === own ? 1 : 0))
-    .map((tier) => ({ tier, price: TIER_INFO[tier].rest, ...(tier === own ? same : rows[tier]) }));
+  return [...OFFERED_TIERS].sort((a, b) => (a === own ? -1 : b === own ? 1 : 0))
+    .map((tier) => ({ tier, price: TIER_INFO[tier].rest, ...(tier === own ? same : rows[tier]!) }));
 }
 
 /** Seconds as `m:ss`. */

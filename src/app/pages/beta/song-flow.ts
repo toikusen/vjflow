@@ -12,6 +12,9 @@ export const songAudioUrl = (id: string) => `/beta/songs/${id}/audio/mix`;
 export const songTimingUrl = (id: string) => `/beta/songs/${id}/timing`;
 export const songLyricsUrl = (id: string) => `/beta/songs/${id}/lyrics`;
 export const songUploadUrl = (id: string) => `/beta/songs/${id}/audio/upload`;
+export const songCoverUrl = (id: string) => `/beta/songs/${id}/cover`;
+/** How long a version stays on screen before it becomes the cover, ms: a run of 換一版 saves only where it stopped. */
+export const COVER_DELAY = 1500;
 
 /** Shown over the draft: the times are guessed from the audio until the preparation has aligned them. */
 export const DRAFT_HOLD = '時間校準好之後才能匯出。';
@@ -55,3 +58,25 @@ export const timingCallout = (mine: boolean) => (mine ? '歌詞時間已自動�
 
 /** The line beside the way to the paid versions; a concept already paid for and waiting is what the person came back for. */
 export const paidLine = (pending: number) => (pending > 0 ? `有 ${pending} 個付費概念等你決定。` : '付費版由導演依歌詞設計，1080p，可加插圖或故事，完成後可回報修正。');
+
+const coverKey = (id: string) => `song-cover:${id}`;
+const coverOf = (pick: FlowPick) => `${pick.styleId}/${pick.seed ?? 0}`;
+
+/** Whether this version should become the song's cover: none yet, or not the version the last cover was taken of. */
+export function coverWanted(id: string, hasCover: boolean, pick: FlowPick, store: Pick<Storage, 'getItem'> = localStorage): boolean {
+  if (!hasCover) return true;
+  try {
+    return store.getItem(coverKey(id)) !== coverOf(pick);
+  } catch {
+    return true;
+  }
+}
+
+/** Notes the version a cover was taken of, so a return to the same picture does not send it again. */
+export function coverTaken(id: string, pick: FlowPick, store: Pick<Storage, 'setItem'> = localStorage) {
+  try {
+    store.setItem(coverKey(id), coverOf(pick));
+  } catch {
+    // only costs one more upload next time
+  }
+}

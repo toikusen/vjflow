@@ -10,7 +10,7 @@
       <app-balance class="bal desk" [me]="m" look="compact" />
       <app-balance class="bal phone" [me]="m" look="phone" />
     }
-    <div class="cover" aria-hidden="true">{{ s.title.slice(0, 1) }}</div>
+    <app-song-cover class="cover" aria-hidden="true" [song]="s" />
     <div class="hero-text">
       <app-status-chip class="hero-chip" [class.banner]="v.retrying" [chip]="heroChip(v)" />
       <!-- the owner's title is a button: a click opens it for a new name (Enter saves, Esc leaves it) -->

@@ -10,7 +10,7 @@
     }
   </div>
 
-  <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="song().title" [timingNote]="timingNote()" [exportHold]="exportHold()" [plain]="true" (changed)="remember()" (again)="stage().request('first')">
+  <app-instant-stage [source]="source" [audioFile]="audioFile" [title]="song().title" [timingNote]="timingNote()" [exportHold]="exportHold()" [plain]="true" (changed)="remember()" (built)="coverLater()" (again)="stage().request('first')">
     <button class="button primary" type="button" [disabled]="!!stage().busy()" (click)="stage().generate('first')">{{ stage().busy() ? '生成中…' : '立即生成' }}</button>
     <p class="use">{{ draft() ? '用你剛上傳的歌詞和音檔，不用等準備完成。' : '用這首歌的歌詞和音檔，不用等。' }}</p>
   </app-instant-stage>

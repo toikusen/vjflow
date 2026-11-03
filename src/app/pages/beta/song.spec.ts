@@ -77,13 +77,13 @@ describe('versionOf', () => {
 
 describe('nextSteps', () => {
   it('puts another take of the own tier first, upgrades as primary, a step down not, each at the rest price', () => {
+    // 文字動態版 is withdrawn: an old text version offers only the upgrades, no new take of itself
     const fromNone = nextSteps('none');
-    expect(fromNone.map((s) => [s.tier, s.price, s.primary])).toEqual([['none', 1.5, false], ['img', 3.5, true], ['hybrid', 13.5, true]]);
-    expect(fromNone[0].title).toBe('同概念再做一版');
+    expect(fromNone.map((s) => [s.tier, s.price, s.primary])).toEqual([['img', 3.5, true], ['hybrid', 13.5, true]]);
     const fromHybrid = nextSteps('hybrid');
-    expect(fromHybrid.map((s) => s.tier)).toEqual(['hybrid', 'none', 'img']);
+    expect(fromHybrid.map((s) => s.tier)).toEqual(['hybrid', 'img']);
     expect(fromHybrid[0].title).toBe('同概念再做一版');
-    expect(fromHybrid[1]).toMatchObject({ title: '做文字動態版', primary: false });
+    expect(fromHybrid[1]).toMatchObject({ title: '升級成插圖版', primary: true });
   });
 });
 

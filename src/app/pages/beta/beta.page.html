@@ -55,17 +55,16 @@
     <div class="cards">
       @for (c of shown(); track c.song.id) {
         <article class="card">
-          <div class="cover" [style.--tint]="c.tint" aria-hidden="true">
-            <span class="initial">{{ c.song.title.slice(0, 1) }}</span>
+          <div class="cover" aria-hidden="true">
+            <app-song-cover class="art" [song]="c.song" />
             @if (c.pct !== undefined) {
               <span class="bar"><i [style.width.%]="c.pct"></i></span>
             }
           </div>
-          <app-status-chip class="on-cover desk-only" [chip]="c.chip" look="overlay" />
           <div class="body">
             <div class="title-row">
               <h3><a class="title-link" [href]="'/my/song?id=' + c.song.id">{{ c.song.title }}</a></h3>
-              <app-status-chip class="phone-only" [chip]="c.chip" look="text" />
+              <app-status-chip [chip]="c.chip" look="text" />
             </div>
             <p class="meta">{{ c.meta }}</p>
             <a class="next" [href]="c.next.to === 'timing' ? '/timing?beta=' + c.song.id : '/my/song?id=' + c.song.id">{{ c.next.label }} →</a>

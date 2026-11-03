@@ -15,6 +15,8 @@ export interface Song {
   id: string; userId: string; title: string; artist: string; language: string; createdAt: string; confirmedAt?: string; timingSkipped?: boolean;
   /** Set when the owner deleted the song: it leaves every list and route, its folder moves to deleted/<id>, its charges stay. */
   deletedAt?: string;
+  /** Where cover.jpg in the song's folder came from: the song page's free video, or a frame of a finished paid video (kept over the page's). */
+  coverFrom?: 'page' | 'video';
 }
 export interface Job {
   id: string; userId: string; songId: string; kind: 'prep' | 'concept' | 'make' | 'fix'; tier?: Tier; status: JobStatus;

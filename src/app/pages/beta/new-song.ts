@@ -1,7 +1,6 @@
 // What the new-song screen decides by itself: which lines of the sheet are sung, the song's name and language, when
 // the song is saved, and what the status strip says. Nothing here touches the server.
 import { HEADING } from '../../lyric-vj/free-lyrics';
-import { stepsMin } from './beta';
 
 export type SongLanguage = 'ja' | 'zh' | 'en' | 'ko';
 
@@ -72,7 +71,6 @@ export interface StripInput {
   uploadError: string;
   uploaded: boolean;
   /** The preparation's remaining estimate, whole minutes; the prep estimate when unknown. */
-  prepLeftMin?: number;
   prepFailed: boolean;
   /** The server's timing is in: the picture runs on it and the export is open. */
   aligned: boolean;
@@ -91,7 +89,7 @@ export function stripSteps(x: StripInput): StripStep[] {
     ? { label: '對準歌詞時間', state: 'next' }
     : x.prepFailed ? { label: '對準失敗，到歌曲頁重新上傳', state: 'bad' }
       : x.aligned ? { label: '已存到我的歌曲', state: 'done' }
-        : { label: `已存到我的歌曲 · 對準歌詞時間中，約 ${x.prepLeftMin ?? stepsMin('prep')} 分鐘`, state: 'now' };
+        : { label: '已存到我的歌曲 · 對準歌詞時間中', state: 'now' };
   const out: StripStep = x.aligned ? { label: '時間已對準，可以匯出', state: 'done' } : { label: '可以匯出', state: 'next' };
   return [upload, align, out];
 }

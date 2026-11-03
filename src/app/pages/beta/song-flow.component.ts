@@ -3,7 +3,7 @@ import { audioReadingOf, decodeMono } from '../../lyric-vj/free-audio';
 import { InstantStage, StageSong } from '../free/instant-stage';
 import type { SongTimeline } from '../../lyric-vj/timeline';
 import { BetaSong } from './beta';
-import { DRAFT_HOLD, DRAFT_NOTE, draftSong, loadPick, paidLine, readProblem, savePick, songAudioUrl, songLyricsUrl, songTimingUrl, songUploadUrl } from './song-flow';
+import { DRAFT_HOLD, draftSong, loadPick, paidLine, readProblem, savePick, songAudioUrl, songLyricsUrl, songTimingUrl, songUploadUrl } from './song-flow';
 
 /**
  * 做影片 on a song's page, for its owner: the song's lyrics and audio from the server on the instant stage. While the
@@ -32,7 +32,7 @@ export class SongFlowComponent implements AfterViewInit {
   protected readonly paidLine = computed(() => paidLine(this.pending()));
   protected readonly timingHref = computed(() => `/timing?beta=${this.song().id}`);
   protected readonly timingNote = computed(() =>
-    this.draft() ? DRAFT_NOTE : this.song().timingSkipped || !this.song().confirmedAt ? '這首歌的歌詞時間是自動對的，還沒檢查過，影片裡可能有對不上的地方。' : '',
+    this.draft() ? '' : this.song().timingSkipped || !this.song().confirmedAt ? '這首歌的歌詞時間是自動對的，還沒檢查過，影片裡可能有對不上的地方。' : '',
   );
   protected readonly exportHold = computed(() => (this.draft() ? DRAFT_HOLD : ''));
   /** The draft's reading of the upload, made once: 換一版 and a style change reuse it. */

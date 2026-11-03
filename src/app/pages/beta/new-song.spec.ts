@@ -1,4 +1,3 @@
-import { stepsMin } from './beta';
 import { canSave, fileTitle, guessLanguage, guessTitle, SAVE_REST, sheetRows, stripSteps } from './new-song';
 
 describe('sheetRows', () => {
@@ -60,8 +59,8 @@ describe('stripSteps', () => {
   it('lights the three cells in order: upload, saved and aligning, export', () => {
     expect(states(base)).toEqual(['next', 'next', 'next']);
     expect(stripSteps({ ...base, uploadPct: 62 })[0]).toEqual({ label: '上傳 62%', state: 'now' });
-    const aligning = stripSteps({ ...base, uploadPct: 100, uploaded: true, prepLeftMin: 17 });
-    expect(aligning.map((s) => s.label)).toEqual(['已上傳', '已存到我的歌曲 · 對準歌詞時間中，約 17 分鐘', '可以匯出']);
+    const aligning = stripSteps({ ...base, uploadPct: 100, uploaded: true});
+    expect(aligning.map((s) => s.label)).toEqual(['已上傳', '已存到我的歌曲 · 對準歌詞時間中', '可以匯出']);
     expect(aligning.map((s) => s.state)).toEqual(['done', 'now', 'next']);
     const done = stripSteps({ ...base, uploadPct: 100, uploaded: true, aligned: true });
     expect(done.map((s) => s.label)).toEqual(['已上傳', '已存到我的歌曲', '時間已對準，可以匯出']);
@@ -71,8 +70,7 @@ describe('stripSteps', () => {
     expect(stripSteps({ ...base, uploadPct: 40, uploadError: '連線中斷' })[0]).toEqual({ label: '上傳失敗：連線中斷', state: 'bad' });
     expect(stripSteps({ ...base, uploaded: true, prepFailed: true })[1].state).toBe('bad');
   });
-  it('falls back to the preparation estimate and never claims 100 % before the server answered', () => {
-    expect(stripSteps({ ...base, uploaded: true })[1].label).toContain(`約 ${stepsMin('prep')} 分鐘`);
+  it('never claims 100 % before the server answered', () => {
     expect(stripSteps({ ...base, uploadPct: 100 })[0].label).toBe('上傳 99%');
   });
 });

@@ -60,7 +60,6 @@ export class BetaPage {
   protected readonly counts = computed(() => filterCounts(this.cards().map((c) => c.view)));
   protected readonly shown = computed(() => this.cards().filter((c) => inFilter(this.filter(), c.view)));
   protected readonly ask = signal<Ask | null>(null);
-  protected readonly prepMin = stepsMin('prep');
   protected readonly conceptPrice = CONCEPT_PRICE;
   protected readonly conceptMin = stepsMin('concept');
   protected readonly maxConcepts = MAX_CONCEPTS;

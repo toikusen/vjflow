@@ -41,7 +41,7 @@
         <p>還沒有歌曲，從「做一支新影片」開始。</p>
         <ol class="steps">
           <li><span aria-hidden="true">①</span>放進音檔、貼上歌詞，馬上挑風格、看影片（免費）</li>
-          <li><span aria-hidden="true">②</span>系統在背景對準歌詞時間，約 {{ prepMin }} 分鐘；好了檢查一下每句的時間</li>
+          <li><span aria-hidden="true">②</span>系統在背景對準歌詞時間；好了檢查一下每句的時間</li>
           <li><span aria-hidden="true">③</span>免費匯出 720p 影片</li>
           <li><span aria-hidden="true">④</span>想要更專屬的版本，再付費請導演提出概念與示意畫面（<app-price [amount]="conceptPrice" digits="short" [plain]="true" />，約 {{ conceptMin }} 分鐘，每個方案含第一次共 {{ maxConcepts }} 次）</li>
           <li><span aria-hidden="true">⑤</span>接受後才製作完整影片（@for (t of tiers; track t.name) {<span>{{ t.name }} <app-price [amount]="t.rest" digits="short" [plain]="true" /></span>@if (!$last) {／}}）</li>

@@ -238,7 +238,7 @@ export class BetaSongPage extends BetaPage {
     this.message.set('上傳中，請勿關閉或離開這個頁面…');
     try {
       await this.uploadAudio(this.id, file);
-      this.message.set(`已上傳，下面可以先預覽免費版。系統正在背景對準歌詞時間（約 ${this.prepMin} 分鐘），好了會自動換成準確的時間。`);
+      this.message.set('已上傳，下面可以先預覽免費版。');
     } catch (err) {
       this.message.set(`上傳失敗：${(err as Error).message}`);
     } finally {

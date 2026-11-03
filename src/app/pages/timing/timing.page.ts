@@ -123,8 +123,8 @@ export class TimingPage implements OnInit {
   protected readonly readOnly = computed(() => !!this.lock() || !!this.saving());
   /** The 「怎麼檢查」 guide: open on the first visit, folded on later ones. */
   protected readonly guideOpen = signal(!readFlag(() => localStorage.getItem(GUIDE_SEEN_KEY)));
-  /** 「只看需要確認的」: the list shows only red/yellow lines and the selected one (a tester starts here; nothing is remembered). */
-  protected readonly onlyProblems = signal(!!this.beta);
+  /** 「只看需要確認的」: the list shows only red/yellow lines and the selected one; off at the start, every line listed (nothing is remembered). */
+  protected readonly onlyProblems = signal(false);
   /** The 演唱者 card: one line until opened; open from the start when the song already has singers. */
   protected readonly singersOpen = signal(false);
 
@@ -493,9 +493,9 @@ export class TimingPage implements OnInit {
     this.advance();
   }
 
-  /** With 「只看需要確認的」 on, a line just settled hands over to the next one to check (none left: the list says so). */
+  /** A line just settled hands over to the next one to check (none left: the list says so). */
   private advance() {
-    if (this.onlyProblems()) this.nextProblem(true);
+    this.nextProblem(true);
   }
 
   // ---- singers

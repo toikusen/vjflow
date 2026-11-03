@@ -164,3 +164,10 @@ test('lookText: a board with a userStyle is drawn in its style; without one the 
   const flat = lookText({ style: 'soft watercolour. Warm light.' }, look);
   assert.ok(flat.includes('Flat graphic poster design for this song (soft watercolour)') && flat.includes('no painterly texture'));
 });
+
+test('floor words stay rare: two a song at most, three frames apart', async () => {
+  const { sparseFloors } = await import('./cutout.mts');
+  const shots = [2, 8, 11, 13, 21, 24, 27].map((frame, i) => ({ frame, floor: ['身邊', '黑夜', '擁抱', '沒牽好', '街道', '身影', '大雪'][i] }));
+  assert.deepEqual(sparseFloors(shots).filter((s) => s.floor).map((s) => s.frame), [2, 8]);
+  assert.deepEqual(sparseFloors([{ frame: 1, floor: '雪' }, { frame: 2, floor: '雨' }, { frame: 5, floor: '葉' }]).filter((s) => s.floor).map((s) => s.frame), [1, 5]);
+});

@@ -62,6 +62,21 @@ export const windowOff = (l: Layout, side: 'left' | 'right'): Layout => {
 };
 
 /** A keyed cut-out shaped wrong for what it is (a smear or ground band picked instead of the thing): drawn again. */
+/** Floor words: at most FLOOR_MAX a song, FLOOR_APART frames apart, the first kept (2026-11-03 owner: used where it fits, not every song). */
+export const FLOOR_MAX = 2;
+const FLOOR_APART = 3;
+export function sparseFloors<T extends { frame: number; floor?: string }>(shots: T[]): T[] {
+  let kept = 0;
+  let last = -Infinity;
+  return shots.map((s) => {
+    if (!s.floor) return s;
+    if (kept >= FLOOR_MAX || s.frame - last < FLOOR_APART) return { ...s, floor: '' };
+    kept += 1;
+    last = s.frame;
+    return s;
+  });
+}
+
 export const oddCutout = (aspect: number, person: boolean) => (person ? aspect > 1.3 || aspect < 0.15 : aspect > 3.5 || aspect < 0.28);
 
 /** Windows wide enough for a painted frame with people in it; a narrow one (diamond, circle, keyhole…) cut them off. */
@@ -425,7 +440,7 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
 - 只有兩個人的身體真的碰在一起（擁抱、牽手、親吻、靠在對方身上）或特寫身體局部的格，mode 用 painted（整張畫）；說話、對看、指著對方、遞東西、一起站著都用 cutout，兩人分開站、姿勢互相回應。people 的 painted 格規則（生圖最容易畫錯人體，付費產品絕對不能出錯）：who 最多 2 人；畫面裡除了這 2 人不能有任何其他人（沒有路人、人群、背景人物）；不畫手碰臉或遮眼睛、三人以上互動、抱起人、多人疊在一起；共騎機車容易畫錯，改用 object 鏡頭（車燈亮起、車子遠去）表現。shows 用英文寫清楚構圖；contact 寫誰的哪隻手碰誰的哪裡（沒有就空字串）；support 寫每個人的重量靠什麼（站在地上、坐在椅子上）；fallback 用英文寫一個不畫人也能交代同一件事的鏡頭（物體或場景）。key：這格是不是故事少了就看不懂的關鍵事件（相遇、擁抱、分離、告別、和好、結局）；key 為 true 的格不能被換成無人鏡頭。simple 用英文寫同一個動作的簡化構圖，讓看得到的手越少越好，但動作仍看得懂（擁抱→側後方近景、臉靠在肩上、手藏在對方身後；戴帽→只見帽子落在頭上和兩人的笑臉；依偎→兩人肩靠肩的背影）。所有 people 的 painted 格都用「手越少越好」的構圖：接觸用身體、頭、肩膀表現，手藏在對方身後、口袋裡或畫面外。cutout 格的 who、contact、support、fallback 填空字串或空陣列，shows 簡短描述即可。整段 painted（含 object/place）不超過一半。
 - 每格：x 是人物或道具中心（-1 左到 1 右），ground 是人物腳底高度、道具的 y 是道具中心高度（都是 0 頂到 1 底；人物通常 0.85–0.95），h 是高度占畫面比例（遠景 0.4、中景 0.6、近景可 0.9 以上讓腳在畫面外）。人物和道具都放在歌詞那一側以外的三分之二（歌詞在 side 那側）。
 - 去背人物不會走路也不會滑動：用姿勢表達動作。每個人物一格內可以換一次姿勢（then 填第二個立繪 id、at 是換的時間點占這格的比例 0.3–0.7；不換就 then 填空字串），用來表現表情或動作的變化（笑→驚慌、抬頭→低頭）。同一個立繪只能在情緒相同的格重複用，情緒變了就畫新的姿勢和表情。走路的格改成站定的姿勢或 painted。換姿勢依樂句和動作需要（唱到指、擺手、喝、比讚就換成那個動作），不需要每格都換。enter 用 fade 淡入（第一次出現時），人物從不滑入。兩個人同框時，兩人的姿勢都要回應對方：視線看向對方、一個人動作時另一個人也有反應（笑著回看、伸手回應），不能一人直視觀眾；兩人各自的 then 姿勢要一起設計。換姿勢的兩張立繪要同樣的身體朝向、站位和比例（頭和腳的位置一樣），只改手、頭的角度和表情。wind（風吹衣襬、圍巾時 true）；道具要跟它所在的東西一起出現：綁在欄杆上、掛在樹上、放在桌上的道具不能單獨浮在畫面裡，那格用 painted（整張畫）。道具不是主角：高度不超過畫面 0.3，同一個道具不要在連續好幾格都當畫面中心。道具 motion：fall 只在落下的東西（落葉）、flutter 用在被風吹的布、hang 掛著擺動、其他 still；front=true 畫在人物前面（擋住人的人群、前景的樹枝或欄杆），walk 是整格水平移動量（人群穿過畫面用 ±0.2）。人群要把兩人隔開時，用 front 的人群從兩人之間穿過。
-- floor：大約四格裡挑一格（有地面、有人物站著的 cutout 格），把這句唱到的一個關鍵詞（1–4 個字，例如「一發」「台妹」「大雪」）寫進場景：字會一個個掉下來平貼在地面上，人物站的地方字會被推開。其他格填空字串；不要連續兩格都用。
+- floor：看情況用，不是每首都要。只有這句唱到的關鍵詞本身會落在地上、或就是這個場景的東西（雪、落葉、雨、花瓣、街道）時才用（有地面、有人物站著的 cutout 格），把那個詞（1–4 個字，例如「大雪」「落葉」）寫進場景：字會一個個掉下來平貼在地面上。整首 0–2 格，至少隔三格；沒有合適的詞就全部填空字串。
 - look 是這首歌自己的版面語言（每首都要不一樣，從這首的歌詞意思和畫風來）：paper 紙色、ink 墨色（線條、網點、地平線）、accent 強調色、texture 紙的紋理（dots 網點、grain 顆粒、lines 筆記本橫線、grid 方格、none 無）、ambience 窗框外紙面上的動態（none 靜止的紙、motes 微粒上浮、sines 細線起伏、contours 等高線漂移、halftone 網點波浪、ripple 點陣漣漪；預設 none，只有這首的世界需要時才選，例如雪、夜裡的灰塵、水面；不要和最近用過的一樣）、border 窗框線粗細 px（0 無框、4–12）、shadow 是否有錯位印刷的色塊影子、tape 膠帶色（空字串＝不用）、shapes 是這首反覆使用的 3–4 種窗形（母題），why 寫為什麼這些形狀和質感適合這首（對應到歌詞裡的什麼）。可用的窗形：circle 圓、ellipse 橢圓、rect 方框、rounded 圓角框、arch 拱門、diamond 菱形、hexagon 六角、flower 五瓣花、keyhole 鑰匙孔、cloud 雲邊、wavy 波浪邊、torn 撕紙邊、brush 毛筆邊、ticket 票根、polaroid 拍立得、filmstrip 膠捲、window 窗格、phone 手機、band 橫色帶、doubleband 雙色帶、split 斜切分割、panels 三格漫畫分格、full 整頁。不要選和下面「最近用過」一樣的組合。
 - layout 是這格的版面（大面積紙色留白、場景放在一個窗形裡、人物站在窗形前面壓過邊緣、一條地平線）：shape 從這首的 shapes 裡選（必要時偶爾用別的），同一意義用同一形狀當母題（例如回憶都用同一種窗），相鄰格換形狀、位置或大小；full 只留給情緒最高點的 1–2 格。形狀放在歌詞那側以外（x 中心 -1..1、y 中心 0 頂到 1 底、size 是形狀高度占畫面比例 0.45–0.85；band/doubleband/filmstrip 橫跨全寬、split 用 x 決定切線位置）；tilt 是傾斜角度（拍立得、票根、照片可 -6..6，其他 0）。cutout 格的人物站在窗形前面，腳在地平線上（ground 0.8–0.92），可以超出形狀；paper 可每格換（例如現在冷、回憶暖），空字串就用 look.paper。painted 格的整張畫也放進窗形裡，除非它就是高點的 full。
 - zoom [開始, 結束] 介於 1–1.25 慢推，focus [x, y] 推向的位置（-1..1，y 上正）。wash：記憶場景暖色 hex、現在場景冷色或空字串。weather：雪夜 snow、楓葉街 leaves。
@@ -457,6 +472,7 @@ ${keptLook ? `這首的 look 已經定好（使用者認可過），照抄不要
     }
     if (!made) throw new Error('spec: no usable answer after three tries');
     if (keptLook) made.look = keptLook;
+    made.shots = sparseFloors(made.shots);
     writeFileSync(specFile, JSON.stringify(made));
     writeFileSync(historyFile, JSON.stringify([...history, { song: song.title, shapes: made.look.shapes, texture: made.look.texture, ambience: made.look.ambience }], null, 1));
   }

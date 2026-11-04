@@ -4,7 +4,9 @@
 // The same moments are read against the shared reading rules (src/app/lyric-vj/reading-rules.ts): words cut by the frame,
 // a dark plate under them, small words on an empty frame, the picture's lines under the strokes, ink under 4.5:1, and a
 // soft glow laid behind them. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
-// npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] terminal ink-wash
+// --carriers: the frame without the words keeps what they stand on (a card, a banner, a tape), so a line on its own
+// carrier is read against the carrier, not against the ground the carrier hides (counts differ from the default's).
+// npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] [--carriers] terminal ink-wash
 // (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json (2026-11-04).
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -18,7 +20,7 @@ import { countMoment, emptyCounts, RuleCounts, RuleMoment, regressions } from '.
 import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/styles/gate/reading' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, baseline: { type: 'string' }, 'write-baseline': { type: 'string' } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/styles/gate/reading' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, baseline: { type: 'string' }, 'write-baseline': { type: 'string' }, carriers: { type: 'boolean', default: false } } });
 if (!positionals.length) positionals.push(...FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id)).map((s) => s.id));
 /** Share of a frame a line must change, and how hard, to count as there. */
 export const READ = { minShare: 0.002, minDelta: 40 };
@@ -57,6 +59,7 @@ for (const id of positionals) {
     writeFileSync(file, JSON.stringify({ ...job, live: true }));
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     await page.addInitScript({ path: join(work, 'gate-page.js') });
+    if (a.carriers) await page.addInitScript('window.__carriers = true');
     await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => {
       const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? '');
       return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort();

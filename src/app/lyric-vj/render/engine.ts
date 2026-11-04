@@ -618,7 +618,18 @@ export class LyricVjEngine {
   private flashes: { at: number; glyphs: Glyph[]; group: THREE.Group; cueId: string }[] = [];
   private textRoot = new THREE.Group();
   /** For the reading scan: the same frame with no lyrics, to see what they really add to it. */
-  showLyrics(on: boolean) { this.textRoot.visible = on; }
+  /**
+   * The lyrics on or off. `carriers`: off takes only the words away and leaves what they stand on (a card, a banner),
+   * so a check reads the words against what is really behind them, not against the ground under their carrier.
+   */
+  showLyrics(on: boolean, carriers = false) { this.textRoot.visible = on || carriers; this.carriersOnly = !on && carriers; }
+  private carriersOnly = false;
+  /** Hides every lyric mesh but the carriers (decor) for one render; returns what puts them back. */
+  private wordsAway(): () => void {
+    const hid: THREE.Object3D[] = [];
+    this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !o.userData['decor']) { o.visible = false; hid.push(o); } });
+    return () => hid.forEach((o) => (o.visible = true));
+  }
   private shotLayers = new Map<string, ShotLayer>();
   /** After each frame's lines are updated: the signature moments (render/signature.ts) take their lines off the frame; set only when a treatment has moments. */
   onCues?: (cues: unknown[], calls: unknown[], t: number) => void;
@@ -2454,7 +2465,9 @@ export class LyricVjEngine {
       return;
     }
     if (this.job.layer === 'back') this.textRoot.visible = this.echoRoot.visible = false;
+    const back = this.carriersOnly ? this.wordsAway() : undefined;
     this.composer.render();
+    back?.();
   }
 
   private textMask?: THREE.WebGLRenderTarget;
@@ -2559,7 +2572,8 @@ export class LyricVjEngine {
     const words = Math.max(0, ...[...spans.values()].map((r) => Math.min(clamp01((t - r.from + 0.15) / 0.3), clamp01((r.to - t) / 0.3))));
     const ls = all.map((l) => (l.kind === 'frame' && (l.type === 'brackets' || l.type === 'viewfinder') ? ({ ...l, opacity: (l.opacity ?? 1) * words } as Layer) : l));
     const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to);
-    const union = (rs: Rect[]) => (rs.length ? rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })) : undefined);
+    // (lines that all stand on their own carriers stay carried: the ground leaves them no room of paper, 2026-11-04)
+    const union = (rs: Rect[]) => (rs.length ? { ...rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })), carried: rs.every((r) => r.carried) } : undefined);
     // room for the lines as they move where the frame has it; an object with nowhere to go clear of that makes room
     // for the lines at rest instead (as it did before the motion room; the bigger box left it over the words)
     const placeAt = (layers0: Layer[], x: number) => {

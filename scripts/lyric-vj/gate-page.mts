@@ -4,7 +4,7 @@ import { readMoment } from '../../src/app/lyric-vj/reading-rules';
 
 /** A soft clearing behind the words: a gradient made by one of the clearing functions while a moment is grabbed. */
 export const SOFT = /clearWords|holdInkGround|wiped|plainRound/;
-const w = window as unknown as { __soft: number; __watch: boolean; vjLyrics(on: boolean): void; grabAt(t: number, q: number): Promise<string>; gatePage: unknown };
+const w = window as unknown as { __soft: number; __watch: boolean; vjLyrics(on: boolean, carriers?: boolean): void; __carriers?: boolean; grabAt(t: number, q: number): Promise<string>; gatePage: unknown };
 w.__soft = 0;
 for (const proto of [CanvasRenderingContext2D.prototype, OffscreenCanvasRenderingContext2D.prototype] as unknown as Record<string, (...a: unknown[]) => unknown>[])
   for (const name of ['createRadialGradient', 'createLinearGradient']) {
@@ -15,7 +15,8 @@ for (const proto of [CanvasRenderingContext2D.prototype, OffscreenCanvasRenderin
 /** One moment: the reading measure on grey w×h (as the gate always read it), the rules on 480×270, and the soft clearing. */
 async function moment(t: number, gw: number, gh: number) {
   const shot = async (on: boolean) => {
-    w.vjLyrics(on);
+    // --carriers: the frame without the words keeps what they stand on (a card, a banner): what is really behind them
+    w.vjLyrics(on, !!w.__carriers);
     const img = new Image();
     img.src = await w.grabAt(t, 0.7);
     await img.decode();

@@ -9,7 +9,7 @@ declare global {
     renderAt: (t: number) => Promise<void>;
     /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
     grabAt: (t: number, quality: number) => Promise<string>;
-    vjLyrics: (on: boolean) => void;
+    vjLyrics: (on: boolean, carriers?: boolean) => void;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
     vjRows: () => ReturnType<LyricVjEngine['rowBreaks']>;
     vjSceneQa: () => ReturnType<LyricVjEngine['sceneQa']>;
@@ -36,7 +36,7 @@ window.grabAt = async (t, quality) => {
   await engine.renderAt(signature ? signature.stageAt(t) : t);
   return (signature ? signature.compose(stage, t) : stage).toDataURL('image/jpeg', quality);
 };
-window.vjLyrics = (on) => engine.showLyrics(on);
+window.vjLyrics = (on, carriers) => engine.showLyrics(on, carriers);
 window.vjMetrics = () => {
   engine.buildAll();
   const m = engine.metrics();

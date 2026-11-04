@@ -7,7 +7,7 @@ import type * as Sig from './signature';
 import { lastSung, mainOf, ownCues, SignatureMoment } from '../signature-moments';
 import { readingSec } from './reading-window';
 import { isSungChar, wordIndex } from '../sung-times';
-import { circleLayout, clamp, dripOf, easeOut, Feel, feelOf, flyDrift, freezeSpan, hashOf, jolt, mix, RAD, rng, sliceShift, tickAt } from './signature-motion';
+import { circleLayout, clamp, dripOf, easeOut, Feel, feelOf, flyDrift, freezeSpan, hashOf, jolt, mix, RAD, riseAt, rng, sliceShift, tickAt } from './signature-motion';
 
 type Ctx = Sig.Ctx;
 type Inks = Sig.Inks;
@@ -680,14 +680,26 @@ function buildCircle(k: Kit, m: SignatureMoment): Built {
 }
 
 // ---- shape / rise ----
+export type RiseKind = 'smoke' | 'bubble' | 'balloon' | 'burst' | 'lift';
+/** What the rising line names, by its word: smoke, bubbles, a balloon, a firework; else the line itself rises (昇天, 升起, 浮かぶ). */
+export function riseKindOf(word: string): RiseKind {
+  if (/泡|シャボン|bubble/i.test(word)) return 'bubble';
+  if (/花火|煙火|firework/i.test(word)) return 'burst';
+  if (/煙|けむり|smoke/i.test(word)) return 'smoke';
+  if (/氣球|気球|風船|balloon/i.test(word)) return 'balloon';
+  return 'lift';
+}
 /**
- * The line stands and reads; from each character, once sung, the thing it names rises above the type: smoke in wisps
- * that curl, widen and thin as they climb, soft-edged, never over the words; bubbles as rings wobbling up; a balloon's
- * slow sway; a firework's burst; a plain lift's streak. As the line goes it lifts and thins into the same.
+ * The line stands and reads; what it says goes up. Smoke rises off the sung characters in wisps that curl, widen and
+ * thin as they climb, soft-edged, never over the words; bubbles wobble up as sheened rings and pop; a balloon's
+ * characters sway buoyant once sung; a firework's burst flares on each. The plain rise (昇天, 升起, 浮かぶ) is the type's
+ * own: each character, once sung, lifts off its row with a short after-image beneath it and motes of the accent
+ * climbing past, so the line reads as rising while it is read; once read, the whole line ascends out of the frame,
+ * trailing, and thins away. Nothing is drawn over a character before it is read.
  */
 function buildRise(k: Kit, m: SignatureMoment): Built {
   const passes = passesOf(k, m, 140, 1500);
-  const kind = /泡|bubble/i.test(m.word) ? 'bubble' : /花火|煙火/.test(m.word) ? 'burst' : /煙|smoke/i.test(m.word) ? 'smoke' : /氣球|風船|balloon/i.test(m.word) ? 'balloon' : 'lift';
+  const kind = riseKindOf(m.word);
   const Y = 640;
   // a soft puff, drawn once per colour: every wisp is puffs of it along its path
   const puffs = new Map<string, HTMLCanvasElement>();
@@ -722,8 +734,30 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
     return out;
   };
   const wisps = passes.map(wispsOf);
+  // the plain rise's motes: a few soft specks of the accent climb off each character as it is sung, more off the word
+  interface Mote { i: number; born: number; dx: number; speed: number; r: number; phase: number }
+  const motesOf = (p: Pass): Mote[] => {
+    const r = rng(k.song + 11 + Math.round(p.wordTime * 10));
+    const out: Mote[] = [];
+    p.main.forEach((c, i) => {
+      if (!isSungChar(c.ch)) return;
+      const n = p.isWord(i) ? 5 : 3;
+      for (let j = 0; j < n; j++) out.push({ i, born: c.at + 0.05 + j * 0.22 + r() * 0.12, dx: (r() - 0.5) * p.size * 0.7, speed: 170 + r() * 110, r: 7 + r() * 7, phase: r() * 6.3 });
+    });
+    return out;
+  };
+  const motes = kind === 'lift' ? passes.map(motesOf) : [];
+  // how a sung character floats: the plain rise lifts a little and keeps lifting; a balloon lifts more and sways
+  const buoyancy = kind === 'balloon' ? { speed: 20, wobble: 9 } : kind === 'lift' ? { speed: 26, wobble: 3 } : undefined;
+  // the line leaves inside the engine's exit window, as any line does: the next line may show the moment it closes
+  // (i REVOLUTION's 上がらせ was still climbing over 脳！波！Pump), so the ascent runs head first through the line and
+  // every character is gone by then, however long the line (第六感's 22-character tail stood on the next cut)
+  const leave = (p: Pass) => Math.max(0.25, p.exit().dur);
+  const stagger = (p: Pass) => Math.min(0.03, (0.3 * leave(p)) / Math.max(1, p.main.length));
+  // once read, the plain rise and the smoke shoot off; a balloon and bubbles drift off, still swaying
+  const slow = kind === 'balloon' || kind === 'bubble';
   return {
-    from: passes[0].enter - 0.05, to: () => lastExit(passes).at + 1.4, jolts: [], region: [200, 540, 1720, 740],
+    from: passes[0].enter - 0.05, to: () => lastExit(passes).at + Math.max(0.5, lastExit(passes).dur) + 0.05, jolts: [], region: [200, 540, 1720, 740],
     draw(t, inks) {
       const p = passAt(passes, t);
       if (t < p.enter) return;
@@ -732,9 +766,13 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
       const goFrom = p.exit().at - 0.05;
       const topOf = (i: number) => Y + p.ys[i] - p.size * 0.62;
       const lineTop = Math.min(...p.main.map((_, i) => topOf(i)));
+      // whatever rose off the line thins out within half a second of the line's going: the next line is never read
+      // through smoke, bubbles or motes left behind (雙截棍's 店裡面的媽媽桑 under the 煙味 wisps)
+      const gone = clamp(1 - (t - p.exit().at) / Math.min(0.5, leave(p)));
       // what rises off the type
-      if (kind === 'smoke' || kind === 'bubble') {
+      if ((kind === 'smoke' || kind === 'bubble') && gone > 0) {
         const puff = puffOf(rgba(inks.ghost, 0.9));
+        const sheen = puffOf(rgba(inks.paper === inks.ink ? '#ffffff' : inks.paper, 0.9));
         x.save();
         for (const w of wisps[passes.indexOf(p)]) {
           const age = t - w.born;
@@ -753,18 +791,24 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
             const spread = (w.big ? 18 : 13) + (w.big ? 64 : 46) * Math.pow(a, 0.8);
             const thin = Math.pow(1 - a / w.life, 1.5);
             if (kind === 'smoke') {
-              x.globalAlpha = 0.11 * thin * clamp(a * 3) * (1 - s * 0.03);
+              x.globalAlpha = 0.11 * thin * clamp(a * 3) * (1 - s * 0.03) * gone;
               x.drawImage(puff, px - spread, py - spread, spread * 2, spread * 2);
             } else {
-              // a bubble: one ring the width of its age, a glint on its shoulder
-              const rr = 6 + 14 * Math.min(1, a / 1.2);
-              x.globalAlpha = 0.6 * thin;
+              // a bubble: a sheened round the width of its age, a rim in the ink, a glint on its shoulder; in its last
+              // quarter second it pops, the rim swelling and thinning to nothing
+              const left = w.life - a;
+              const pop = left < 0.25 ? 1 - left / 0.25 : 0;
+              const rr = (6 + 14 * Math.min(1, a / 1.2) + (w.big ? 6 : 0)) * (1 + 0.5 * pop);
+              x.globalAlpha = 0.55 * thin * (1 - pop) * gone;
+              x.drawImage(sheen, px - rr * 1.3, py - rr * 1.3, rr * 2.6, rr * 2.6);
+              x.globalAlpha = 0.72 * (1 - pop) * clamp(a * 4) * gone;
               x.strokeStyle = inks.ink;
               x.lineWidth = 2;
               x.beginPath();
               x.arc(px, py, rr, 0, 7);
               x.stroke();
-              x.strokeStyle = '#ffffff';
+              x.strokeStyle = inks.paper === inks.ink ? '#ffffff' : inks.paper;
+              x.lineWidth = 3;
               x.beginPath();
               x.arc(px, py, rr * 0.7, -2.4, -1.6);
               x.stroke();
@@ -773,32 +817,50 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
         }
         x.restore();
       }
-      // the line itself: at rest while it reads, each character popping as sung; going, it lifts and thins away
+      // the plain rise's motes, under the type: each climbs off its character, swaying a little, and thins out
+      if (kind === 'lift' && gone > 0) {
+        const speck = puffOf(rgba(inks.accent, 0.95));
+        x.save();
+        for (const mo of motes[passes.indexOf(p)]) {
+          const a = t - mo.born;
+          if (a < 0 || a > 1.6) continue;
+          const px = p.xs[mo.i] + mo.dx + 10 * Math.sin(a * 2.4 + mo.phase);
+          const py = Y + p.ys[mo.i] + p.size * 0.45 - mo.speed * a;
+          const rr = mo.r * (1 + a * 0.5);
+          x.globalAlpha = 0.9 * clamp(a * 6) * Math.pow(1 - a / 1.6, 1.4) * gone;
+          x.drawImage(speck, px - rr, py - rr, rr * 2, rr * 2);
+        }
+        x.restore();
+      }
+      // the line itself: at rest until sung, each character popping as sung and then afloat; going, it lifts and thins away
       p.main.forEach((c, i) => {
         if (/\s/.test(c.ch)) return;
         const s = p.isWord(i) ? p.size * 1.12 : p.size;
-        const u = Math.max(0, t - goFrom - i * 0.03);
-        const away = -(120 * u + 420 * u * u);
-        const fade = clamp(1 - u / 0.32);
+        // the character's way out: its share of the exit window, from 0 (standing) to 1 (gone)
+        const u = clamp((t - goFrom - i * stagger(p)) / leave(p));
+        const away = slow ? -(150 * u + 90 * u * u) : -(260 * u + 200 * u * u);
+        const fade = 1 - u;
         if (fade <= 0) return;
         const e = t - c.at;
         const sung = t >= c.at;
-        const sway = kind === 'balloon' && sung ? { dx: 8 * Math.sin(e * 1.6 + i), dy: -10 * Math.min(1, e / 1.5), rot: 3 * RAD * Math.sin(e * 1.3 + i) } : { dx: 0, dy: 0, rot: 0 };
-        const [px, py] = [p.xs[i] + sway.dx, Y + p.ys[i] + sway.dy + away];
+        const lift = buoyancy && sung ? riseAt(t, c.at, i * 1.3, buoyancy.speed, buoyancy.wobble) : { dx: 0, dy: 0, scale: 1 };
+        const rot = kind === 'balloon' && sung ? 3 * RAD * Math.sin(e * 1.3 + i) : 0;
+        const [px, py] = [p.xs[i] + lift.dx, Y + p.ys[i] + lift.dy + away];
         x.save();
         x.globalAlpha = fade;
-        if (sung && kind === 'lift') {
-          x.strokeStyle = inks.accent;
-          x.globalAlpha = 0.35 * clamp(1 - e / 2.5) * fade;
-          x.lineWidth = 4;
-          x.beginPath();
-          x.moveTo(px, py + s * 0.55);
-          x.lineTo(px, py + s * 0.55 + 70 * clamp(e * 2));
-          x.stroke();
+        // the plain rise's after-image: for a moment after it is sung, and as it leaves, the character's own trail hangs
+        // below it in the line's ink, each copy lower and fainter, so the lift reads as motion (the character itself is
+        // drawn over it, whole)
+        if (kind === 'lift' && sung) {
+          const trail = u > 0 ? 1 : clamp(1 - e / 1.1);
+          if (trail > 0) for (const [dy, k2] of [[0.14, 0.3], [0.28, 0.17], [0.42, 0.08]] as const) {
+            x.globalAlpha = fade * k2 * trail;
+            k.glyph(x, c.ch, px, py + s * dy * (u > 0 ? 1.6 : 1), s, inks.ink, 0, '', inks.halo);
+          }
           x.globalAlpha = fade;
         }
         x.translate(px, py);
-        x.rotate(sway.rot);
+        x.rotate(rot);
         k.stampIn(x, c.ch, 0, 0, s, c.at, t, inks.ink, inks.ghost, 6, inks.press, 0.15, inks.halo);
         if (sung && kind === 'burst' && e < 0.5) {
           x.strokeStyle = inks.accent;

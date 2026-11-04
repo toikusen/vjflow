@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from '../contrast';
 import { groundUnder, inkFor, Inks, READS } from './signature';
-import { isMore, rowBreak } from './signature-forms';
+import { isMore, riseKindOf, rowBreak } from './signature-forms';
 import type { SignatureMoment } from '../signature-moments';
 
 const inks = (ink: string, paper: string, accent = '#ff0000'): Inks => ({ ink, paper, accent, board: '#ffffff', boardInk: '#000000', ghost: '#888888', press: '#ff0000', core: '#ffffff' });
@@ -64,5 +64,18 @@ describe('isMore', () => {
     expect(isMore(m('shape', 'circle'))).toBe(true);
     expect(isMore(m('freeze', 'stop'))).toBe(true);
     expect(isMore(m('echo', 'ghost'))).toBe(true);
+  });
+});
+
+describe('riseKindOf: what a rising line names', () => {
+  it('tells smoke, bubbles, a balloon and a firework apart, and lets the line itself rise otherwise', () => {
+    expect(riseKindOf('煙味')).toBe('smoke');
+    expect(riseKindOf('けむり')).toBe('smoke');
+    expect(riseKindOf('シャボン玉')).toBe('bubble');
+    expect(riseKindOf('風船')).toBe('balloon');
+    expect(riseKindOf('花火')).toBe('burst');
+    expect(riseKindOf('昇天')).toBe('lift');
+    expect(riseKindOf('空へ')).toBe('lift');
+    expect(riseKindOf('rising')).toBe('lift');
   });
 });

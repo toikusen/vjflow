@@ -178,6 +178,15 @@ assert.ok(offered.includes('燃') && offered.includes('瞬間'), 'with the sense
 assert.ok(offered.includes('空陣列是正常的') && offered.includes('整個詞') && offered.includes('振り切って') && offered.includes('輪郭'), 'moments by meaning: the whole word, the refused examples, zero as the norm');
 assert.ok(!offered.includes('shape/spiral') && !offered.includes('shape/heart'), 'a variant not drawn is not offered');
 assert.deepEqual(directionSchema(true).properties.moments.items.properties.form.enum, ['strike', 'shape', 'freeze', 'echo'], 'the schema offers every form');
+assert.ok(offered.includes('昇天') && offered.includes('空へ') && offered.includes('往上升'), 'the rise is offered for lines that mean going up, not only smoke');
+
+// word sync: only a run that asks gets the field and the offer; the director is told it is a choice, with the guards
+assert.ok(!('wordSync' in directionSchema().properties) && !('wordSync' in directionSchema(true).properties), 'the schema has no word sync unless asked');
+assert.ok(directionSchema(false, true).required.includes('wordSync'), 'asked, word sync is required');
+assert.deepEqual(directionSchema(false, true).properties.wordSync.items.required, ['cue', 'why'], 'each ask is a line and its reason');
+assert.ok(!directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '' }).includes('逐字同步'), 'no word sync offer unless asked');
+const synced = directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', wordSync: true });
+assert.ok(synced.includes('wordSync（逐字同步）') && synced.includes('不是每句都要') && synced.includes('零句是正常的') && synced.includes(`整首最多 ${Math.ceil(cues.length * 0.4)} 句`), 'word sync is offered as a choice, with its share');
 
 // the director's own small words: never a part's name, a made-up number, an echo of nothing sung, a stranger singing
 assert.equal(noteRefusal('scene', '凌晨三點・月台', '我等你回來到天亮', [], []), undefined);

@@ -166,3 +166,37 @@ describe('the new forms and variants', () => {
     for (const [form, vs] of Object.entries(MOMENT_FORMS)) for (const v of vs) expect(WORD_LISTS[form as keyof typeof WORD_LISTS][v]).toBeDefined();
   });
 });
+
+describe('rise: the line means going up', () => {
+  const lines = [
+    { id: 'r1', start: 300, end: 303, text: '昇天間際！（わ！）' },
+    { id: 'r2', start: 310, end: 316, text: '工事中の駅前 空へ背伸びしていくビルディング' },
+    { id: 'r3', start: 320, end: 323, text: 'ワンランク上がらせ' },
+    { id: 'r4', start: 330, end: 334, text: '言うて割と上流階級のはずなのに' },
+    { id: 'r5', start: 340, end: 343, text: '我要升學了' },
+    { id: 'r6', start: 350, end: 354, text: '岩燒店的煙味瀰漫 隔壁是國術館' },
+    { id: 'r7', start: 360, end: 364, text: '深刻なときめき不足 上手くいかないな' },
+    { id: 'r8', start: 370, end: 373, text: 'もっと上に行きたいけれど' },
+    { id: 'r9', start: 380, end: 384, text: '氣球升起來了' },
+  ];
+  const sung = (id: string) => {
+    const c = lines.find((x) => x.id === id);
+    return c && { times: [...c.text].map((_, i) => +(c.start + 0.1 * i).toFixed(3)), source: 'vote' };
+  };
+  const rise = (cue: string, word: string) => checkMoments([ask({ cues: [cue], form: 'shape', variant: 'rise', word })], lines, sung);
+  it('keeps a line that ascends, floats up or goes skyward, and one that names smoke or a balloon', () => {
+    expect(rise('r1', '昇天').kept).toHaveLength(1);
+    expect(rise('r2', '空へ').kept).toHaveLength(1);
+    expect(rise('r3', '上がらせ').kept).toHaveLength(1);
+    expect(rise('r6', '煙味').kept).toHaveLength(1);
+    expect(rise('r9', '氣球').kept).toHaveLength(1);
+    expect(rise('r9', '升起').kept).toHaveLength(1);
+  });
+  it('refuses 上 or 升 inside a word of another sense, and a direction that is not up', () => {
+    expect(rise('r4', '上流').dropped[0].reason).toMatch(/not a shape\/rise word/);
+    expect(rise('r5', '升學').dropped[0].reason).toMatch(/not a shape\/rise word/);
+    expect(rise('r7', '上手').dropped[0].reason).toMatch(/not a shape\/rise word/);
+    expect(rise('r8', '上に').dropped[0].reason).toMatch(/not a shape\/rise word/);
+    expect(rise('r7', '上手く').dropped[0].reason).toMatch(/not a shape\/rise word/);
+  });
+});

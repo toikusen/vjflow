@@ -44,13 +44,21 @@ export const WORD_LISTS: Record<MomentForm, Record<string, string[]>> = {
     wave: ['波', '浪', '海', '潮', 'wave', 'sea', 'ocean', 'tide'],
     fall: ['雨', '淚', '涙', '雪', '葉', '花瓣', '花びら', 'rain', 'tear', 'snow', 'leaf', 'leaves', 'petal'],
     circle: ['月', '輪', '環', '戒指', '圓', '円', '丸', '鐘', '時計', 'まる', 'moon', 'ring', 'circle', 'clock'],
-    // smoke only: the bubble, balloon, firework and plain lift are drawn but wait for a line that means them, seen on a song
-    rise: ['煙', '煙霧', 'けむり', 'smoke'],
+    // the line means going up: rising, ascending, floating up (昇天, 升起, 空へ), or names what rises (smoke, bubbles,
+    // a balloon, a firework). 上 alone is no sense (上手, 上に置く): the word must carry the going up
+    rise: ['升', '昇', '上升', '升起', '飄上', '浮上', '浮起', '飛升', '氣球', '泡泡', '煙', '煙霧', '花火', '煙火', '昇天', '上が', '上っ', '上る', '浮か', '浮い', '浮く', '舞い上', '飛び上', '空へ', '天へ', '風船', '気球', '泡', 'シャボン', 'けむり', 'rise', 'rising', 'ascend', 'float', 'soar', 'lift', 'balloon', 'bubble', 'smoke', 'firework'],
   },
   // the word that stops time: the frame holds while only this line moves
   freeze: { stop: ['停', '止', '立ち止', '凍', '瞬間', '一瞬', 'ストップ', 'stop', 'freeze', 'frozen'] },
   // an echo's word is the one both lines sing (checked against the earlier line, not a list)
   echo: { ghost: [] },
+};
+/**
+ * Words that hold a sense's character but mean something else (升學 is schooling, not rising; 上手 is skill): refused
+ * for the variant whatever the director says, as a Chinese word is otherwise open at the character.
+ */
+export const NOT_SENSE: Record<string, RegExp> = {
+  'shape/rise': /升[學学級级遷迁職职]|公升|上[手司下流達达空位]|浮[気氣]/u,
 };
 const escape = (w: string) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const latin = (w: string) => /^[a-z ]+$/i.test(w);
@@ -124,6 +132,7 @@ export function notWholeWord(text: string, word: string, at: number, verb = true
 export function senseOf(form: MomentForm, variant: string, word: string, script: Script): { ok: boolean; at: number } {
   const senses = WORD_LISTS[form]?.[variant] ?? [];
   if (!senses.length) return { ok: true, at: 0 };
+  if (NOT_SENSE[`${form}/${variant}`]?.test(word)) return { ok: false, at: -1 };
   const chars = [...word];
   for (const s of senses) {
     if (latin(s)) {

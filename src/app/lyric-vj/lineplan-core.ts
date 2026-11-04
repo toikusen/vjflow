@@ -627,8 +627,16 @@ export const SHARED_SHARE = 0.4;
 /** A line changes its set on a beat only if it has this long up, and each set stays this long. */
 export const REPOSE_MIN_LINE = 1.5;
 export const REPOSE_MIN_HOLD = 0.5;
-/** A song felt rather than shouted changes set only on a long breath. */
-export const REPOSE_CALM_LINE = 4.5;
+/**
+ * A song felt rather than shouted changes set once a line runs past this, at its word break (2026-11-04: calm songs cut
+ * once a line, 3.4 cuts in 10 s against JIZURA's 10.8; Motion Prompt #190 cross-cutting, rebuilt from its description).
+ */
+export const REPOSE_CALM_LINE = 2;
+/** Each calm set stays at least this long; a calm line this long takes two changes. */
+export const REPOSE_CALM_HOLD = 0.9;
+export const REPOSE_CALM_TWICE = 3.5;
+/** A change of set looks for a song beat this near its word break, else lands on the break itself. */
+const REPOSE_SNAP = 0.3;
 /** Calm stays calm by moving slowly and far: how far a held block travels, px, by level. */
 export const LINE_TRAVEL: Record<Level, number> = { 0: 150, 1: 200, 2: 260 };
 
@@ -662,18 +670,24 @@ export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: {
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */
 function reposeOf(c: Cue, set: string, W: WorldPool, beat: LineBeat | undefined, beats: number[], level: Level, calm: boolean, roll: (salt: string, n: number) => number) {
   const len0 = c.end - c.start;
-  if (!W.pace.repose || (!calm && level === 0 && len0 < REPOSE_MIN_LINE * 2) || len0 < (calm ? REPOSE_CALM_LINE : REPOSE_MIN_LINE) || (beat?.spare ?? 0) < 0.2) return [];
+  if (!W.pace.repose || (!calm && level === 0 && len0 < REPOSE_MIN_LINE * 1.4) || len0 < (calm ? REPOSE_CALM_LINE : REPOSE_MIN_LINE) || (beat?.spare ?? 0) < 0.2) return [];
   const others = [...new Set(W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && !r.wline.ground && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : [])))];
   if (!others.length) return [];
-  const hold = calm ? 2 : REPOSE_MIN_HOLD;
-  const count = calm ? 1 : len0 >= hold * 4.4 ? 2 : 1;
+  const hold = calm ? REPOSE_CALM_HOLD : REPOSE_MIN_HOLD;
+  const count = calm ? (len0 >= REPOSE_CALM_TWICE ? 2 : 1) : len0 >= hold * 4.4 ? 2 : 1;
   const n = [...spoken(c.text)].length;
   const spans = phraseSpans(spoken(c.text), count + 1);
   const out: { at: number; set: string }[] = [];
+  // a calm line changes where a word ends, at the time that character is sung
+  const all = [...c.text];
+  const breakTimes = [...wordBreaks(c.text)].filter((k) => k > 0 && k < all.length && /\S/.test(all[k])).map((k) => c.charStarts?.[k] ?? c.start + (len0 * k) / all.length);
   for (let i = 0; i < count; i++) {
-    const aim = c.start + len0 * (spans.length > i + 1 ? spans[i][1] / Math.max(1, n) : (i + 1) / (count + 1));
     const after = out.at(-1)?.at ?? c.start;
-    const fits = beats.filter((b) => b >= after + hold && b <= c.end - hold);
+    const even = c.start + (len0 * (i + 1)) / (count + 1);
+    const atBreak = calm ? breakTimes.filter((b) => b >= after + hold && b <= c.end - hold).sort((a, b) => Math.abs(a - even) - Math.abs(b - even))[0] : undefined;
+    if (calm && atBreak === undefined) break;
+    const aim = atBreak ?? c.start + len0 * (spans.length > i + 1 ? spans[i][1] / Math.max(1, n) : (i + 1) / (count + 1));
+    const fits = beats.filter((b) => b >= after + hold && b <= c.end - hold && (!calm || Math.abs(b - aim) <= REPOSE_SNAP));
     const at = [...fits].sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0] ?? (aim >= after + hold && aim <= c.end - hold ? aim : undefined);
     if (at === undefined) break;
     out.push({ at: +at.toFixed(3), set: others[(roll('repose', others.length) + i) % others.length] });
@@ -1080,7 +1094,9 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const piece = pieceHere(s.start, newPart || keyLines.has(c.id), `${c.text} ${part.what}`);
     if (piece) { cuts[0]['piece'] = piece; cuts.splice(1); }
     const repose = recipe.wline && W && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : [];
-    for (const r of repose) cuts.push({ ...cuts[0], at: r.at, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: W!.grounds[level][(W!.grounds[level].indexOf(cuts.at(-1)!.fx) + 1) % W!.grounds[level].length] } as (typeof cuts)[number]);
+    // (a calm song's change of set stays on its quiet grounds)
+    const reposeGrounds = calm && W?.quiet.length ? W.quiet : W?.grounds[level] ?? [];
+    for (const r of repose) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
     // cuts in time order, each a set's first frame when one lands there (a beat cut closer than a blink to a repose gives way)
     if (repose.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !repose.some((r) => r.at === cuts[i - 1]['at'])) cuts.splice(i - 1, 1); }
     const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7)) : undefined;

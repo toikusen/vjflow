@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { beatOfLine, BEAT_MIN_LINE } from './lineplan-core';
+import { beatOfLine, BEAT_MIN_LINE, REPOSE_CALM_LINE } from './lineplan-core';
+import { freeJob } from './free-plan';
+import { FREE_STYLES } from './free-styles';
+import { wordBreaks } from './phrases';
+import type { SongTimeline } from './timeline';
 import { STYLE_WORLDS } from './style-worlds';
 import { sharedOf, WORLD_SHARED } from './world-shared';
 import { beatProgress, WORLD_BEATS } from './render/world-beats';
@@ -47,5 +51,26 @@ describe('shared world moves', () => {
   });
   it('never dims a character below half', () => {
     for (let q = 0; q <= 1; q += 0.05) for (let i = 0; i < 8; i++) expect(WORLD_BEATS.flicker.glyph!({ q, i, n: 8, u: i / 7, v: 0, seed: 3, age: 2, sung: 1 }).tone!).toBeGreaterThanOrEqual(0.55);
+  });
+  it('splits a long calm line at a word break into a second set', () => {
+    const text = '無盡的思念總是破碎在冬天';
+    const n = [...text].length;
+    const cues = Array.from({ length: 12 }, (_, i) => ({ id: `c${i + 1}`, start: 4 + i * 5, end: 4 + i * 5 + 4.6, text, charStarts: Array.from({ length: n }, (_, k) => 4 + i * 5 + (4.2 * k) / n) }));
+    const end = 4 + 12 * 5 + 2;
+    const song = { title: 'calm', duration: end, tempo: 70, beats: Array.from({ length: Math.ceil(end / 0.857) }, (_, i) => i * 0.857), downbeats: [], sections: [{ start: 0, end, type: 'verse', energy: 0.3 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+    const { treatment, calm } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === 'silk-cold')!, seed: 0 });
+    expect(calm).toBe(true);
+    const breaks = [...wordBreaks(text)];
+    const split = treatment.cues.filter((c) => (c as { world?: { repose?: { at: number }[] } }).world?.repose?.length);
+    expect(split.length).toBeGreaterThan(6);
+    for (const c of split) {
+      const cue = cues.find((x) => x.id === c.cueId)!;
+      expect(cue.end - cue.start).toBeGreaterThanOrEqual(REPOSE_CALM_LINE);
+      for (const r of (c as unknown as { world: { repose: { at: number }[] } }).world.repose) {
+        // on the break, or on the song beat nearest it (within 0.3 s)
+        const near = breaks.filter((k) => k > 0 && k < n).map((k) => Math.abs(cue.charStarts[k] - r.at));
+        expect(Math.min(...near), `${r.at} lands at a word break`).toBeLessThanOrEqual(0.3 + 1e-6);
+      }
+    }
   });
 });

@@ -37,6 +37,8 @@ const cutTimes = (beats: number[], s: { start: number; end: number }, sorted: { 
   return sorted.map((x, k) => (k === 0 ? s.start : (bs[x.beat] ?? s.end)));
 };
 const landedEnd = (times: number[], i: number, gap: number, shotEnd: number) => times.slice(i + 1).find((x) => x >= times[i] + gap && x < shotEnd - 0.05) ?? shotEnd;
+/** The least time between a line's cut and its own change of set, s. */
+const REPOSE_GAP = 0.9;
 const holdGap = (pace: string | undefined, chorus: boolean, beatSec: number) => (pace === 'held' || (pace === 'mixed' && !chorus) ? Math.max(1.2, 4 * beatSec) : 0.45);
 const lyricSide = (template: string, side: string) => (template === 'stair' && side === 'center' ? 'right' : ['quiet', 'typewriter', 'handwrite'].includes(template) && side === 'right' ? 'left' : side);
 
@@ -139,7 +141,8 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
     for (const [i, c] of sorted.entries()) {
       const when = times[i];
       if (when >= s.end - 0.05) continue;
-      if (i > 0 && sections.length && when - sections[sections.length - 1].start < gap) continue;
+      // a line's change of set (lineplan-core reposeOf) is the line's own cut at a word break: it keeps the light's own floor
+      if (i > 0 && sections.length && when - sections[sections.length - 1].start < ((c as { repose?: boolean }).repose ? Math.min(gap, Math.max(world ? 0.55 : 0, REPOSE_GAP)) : gap)) continue;
       let fx = (KINETIC_FX as readonly string[]).includes(c.fx) || isLineGround(c.fx) || (!!world && isWorldGround(c.fx)) ? c.fx : 'wall';
       if (!c.yields) throw new Error(`a composer cut always yields (${c.fx})`);
       const runsTo = landedEnd(times, i, gap, s.end);

@@ -37,7 +37,7 @@ import { drawGlassCrack, drawGlassShards, glassOf } from './kit';
 import { input, notify } from './phone';
 import { array, couplet, orbit, quote, ribbon, stack, tunnel } from './layouts';
 import { clearTextCaches, templateStyle, withTextFx } from './text-fx';
-import { Call, callPhrases, callTimes, lineUp, mapRange, splitCalls } from '../calls';
+import { Call, CallBox, CallUnit, callPhrases, callTimes, mapRange, placeCalls, splitCalls } from '../calls';
 import { enterSec, momentCamera, Scene, SceneSong, ShownText, shownTexts } from '../scene';
 import type { TransitionKind } from './transition';
 import { checkScene, drawScene, echoCarry, SCENE_FONTS, SceneTextQa, setScenePictures } from './scene-parts';
@@ -109,6 +109,19 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
     out.push({ ...box, img, at: [(tr[0] - tl[0]) / img.width, (tr[1] - tl[1]) / img.width, (bl[0] - tl[0]) / img.height, (bl[1] - tl[1]) / img.height, tl[0], tl[1]] });
   });
   return out;
+}
+
+/** A line's calls: their glyph units, where each sits, and the line's own box they are placed against. */
+interface CallLayer {
+  rt: CueRuntime;
+  group: THREE.Group;
+  units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[];
+  /** Each unit's footprint (frame px, tilt and keyline included). */
+  sizes: CallUnit[];
+  /** The call's own line where it is read (empty for a shout with no host on screen). */
+  line: THREE.Box3;
+  /** No spot clear of every lyric: the call is not shown at all rather than over the words. */
+  dropped?: boolean;
 }
 
 /** The layer's settled bounds in frame px (origin at the centre), with the layer laid out at its readable moment. */
@@ -636,7 +649,7 @@ export class LyricVjEngine {
   private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
   private relays: { h: Handoff; path: RelayPath; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; width: number }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
-  private callLayers: { rt: CueRuntime; group: THREE.Group; units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[] }[] = [];
+  private callLayers: CallLayer[] = [];
   private images = new Map<string, THREE.Texture>();
   /** Each shot's lines as they show (chat attachments are pushed up by the messages after them). */
   private shotLines = new Map<string, { text: string; at: number }[]>();
@@ -1222,10 +1235,7 @@ export class LyricVjEngine {
       // a call is sung words too: whatever is cut off at the line is cut off at it
       if (design.composer && this.job.treatment.graphics && split.calls.length && !onBoard) {
         const call = this.callLayers.at(-1)!;
-        const box = new THREE.Box3();
-        call.units.forEach((u) => u.glyphs.forEach((g) => box.expandByPoint(new THREE.Vector3(u.x + g.x, u.y + g.y, 0))));
-        const pad = 56;
-        if (!box.isEmpty()) { const r = { x0: box.min.x + W / 2 - pad * 2, y0: H / 2 - box.max.y - pad, x1: box.max.x + W / 2 + pad * 2, y1: H / 2 - box.min.y + pad }; this.lyricRects.push({ id: `${rt.cue.id}:call`, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: r, rest: r }); }
+        if (!call.dropped && call.units.length) this.lyricRects.push({ id: `${rt.cue.id}:call`, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: this.callRect(call), rest: this.callRect(call) });
       }
       if (shot.params['echo'] && !this.ownDrawing(cue.start)) {
         const echo = this.makeEcho(rt);
@@ -1249,6 +1259,8 @@ export class LyricVjEngine {
       const box = host.rt.showFrom <= cue.start ? settledBox(host.layer, host.fit) : new THREE.Box3();
       this.callLayers.push(this.makeCalls(rt, cue, [{ text: cue.text, from: 0, to: 1 }], box, 1.9));
     }
+    // every line is built now: each call is kept clear of the lines that landed after it was made
+    this.callLayers.forEach((c) => this.placeCall(c));
     // each line's colour was read where it first sits, with room made for it alone; as played it may be pushed up by
     // the next lines, and an object with no room for all of them stays behind (チョロイン c003: blue type pushed up over
     // the blue stage photo). Every place a line takes is read again as played; a line whose type falls short over a
@@ -1751,11 +1763,9 @@ export class LyricVjEngine {
     const group = new THREE.Group();
     group.renderOrder = 3;
     const dur = full.end - full.start;
-    const cx = box.isEmpty() ? 0 : (box.min.x + box.max.x) / 2;
-    // the calls sit right over their own line (under it when the frame has no room above): set beside it they ran off
-    // the frame's edge and lay over the next line of a couplet (Tokyo Drift's asides over あなたも東京好き)
-    const top = box.isEmpty() ? H * 0.2 : box.max.y;
-    const bottom = box.isEmpty() ? -H * 0.2 : box.min.y;
+    // the calls sit right over their own line (under it when the frame has no room above), beside it only when neither
+    // is clear (placeCall): set beside it freely they ran off the frame's edge and lay over the next line of a couplet
+    // (Tokyo Drift's asides over あなたも東京好き)
     const units: { glyphs: Glyph[]; at: number; x: number; y: number; tilt: number }[] = [];
     const widths: number[] = [];
     for (const c of calls) {
@@ -1784,21 +1794,56 @@ export class LyricVjEngine {
         widths.push(rowWidth(fill) * (scale > 1 ? 1.1 : 1));
       });
     }
-    // in rows as wide as the line (at least half the frame), each call beside the last (lineUp), inside the frame
-    const room = Math.min(W * 0.9, Math.max(W * 0.5, box.isEmpty() ? 0 : box.max.x - box.min.x));
-    const at = lineUp(widths, room, 56);
-    const rows = Math.max(1, ...at.map((a) => a.row + 1));
-    // (a row's centre a whole call's height inside the frame: its centre at 50 px left the top of 幹什麼 on the edge, crayon 2026-11-04)
-    const above = top + 70 + (rows - 1) * 96 <= H / 2 - 96;
-    at.forEach(({ x, row }, j) => {
-      const half = widths[j] / 2 + 30;
-      units[j].x = Math.min(W / 2 - half, Math.max(-W / 2 + half, cx + x));
-      // the first row read first: on top above the line, nearest the line below it
-      units[j].y = above ? top + 70 + (rows - 1 - row) * 96 : Math.max(-H / 2 + 96, bottom - 70 - row * 96);
-    });
     group.visible = false;
     this.textRoot.add(group);
-    return { rt, group, units };
+    const sizes = units.map((u, j) => {
+      const h = Math.round(78 * scale) * (scale > 1 ? 1.5 : 1.2);
+      return { w: widths[j] * Math.cos(u.tilt) + h * Math.sin(Math.abs(u.tilt)), h: h * Math.cos(u.tilt) + widths[j] * Math.sin(Math.abs(u.tilt)) };
+    });
+    const call: CallLayer = { rt, group, units, sizes, line: box };
+    this.placeCall(call);
+    return call;
+  }
+
+  /**
+   * Sets a line's calls where no lyric glyph is: over the line, under it, else beside it, each a clear gap from every
+   * line on screen while the call is (its own line at each place it rests, and its neighbours); with no such spot the
+   * call is dropped. Run again once later lines are built, so a line that lands beside the call later is kept clear.
+   */
+  private placeCall(call: CallLayer) {
+    const { rt } = call;
+    // from when the first call pops in (it is invisible before): the line going out by then is no obstacle
+    const from = Math.max(rt.showFrom, Math.min(...call.units.map((u) => u.at)));
+    const to = rt.exitAt + rt.exitDur;
+    const toBox = (b: THREE.Box3): CallBox => ({ x0: b.min.x, y0: b.min.y, x1: b.max.x, y1: b.max.y });
+    const avoid = this.cueLayers
+      .filter((c) => c.fit && c.rt.showFrom < to && c.rt.exitAt + c.rt.exitDur > from)
+      .map((c) => this.restBox(c))
+      .filter((b) => !b.isEmpty())
+      .map(toBox);
+    if (!call.line.isEmpty()) avoid.push(toBox(call.line));
+    const at = placeCalls(call.sizes, { line: call.line.isEmpty() ? undefined : toBox(call.line), avoid, W, H });
+    call.dropped = !at;
+    at?.forEach((p, j) => Object.assign(call.units[j], p));
+    const r = this.lyricRects.find((x) => x.id === `${rt.cue.id}:call`);
+    if (r && at) Object.assign(r.rect, this.callRect(call)), Object.assign(r.rest, this.callRect(call));
+  }
+
+  /** Every place a line rests while it is read (frame px), measured as built even once it has been playing (live). */
+  private restBox(c: (typeof this.cueLayers)[number]): THREE.Box3 {
+    let box = new THREE.Box3();
+    const measure = () => (box = settledBox(c.layer, c.fit, true));
+    if (this.lazy) this.layFromRest(c, measure);
+    else measure();
+    return box;
+  }
+
+  /** The room a call's units take, padded, in top-left frame px (what props make room for). */
+  private callRect(call: CallLayer): Rect {
+    const box = new THREE.Box3();
+    call.units.forEach((u) => u.glyphs.forEach((g) => box.expandByPoint(new THREE.Vector3(u.x + g.x, u.y + g.y, 0))));
+    const pad = 56;
+    return { x0: box.min.x + W / 2 - pad * 2, y0: H / 2 - box.max.y - pad, x1: box.max.x + W / 2 + pad * 2, y1: H / 2 - box.min.y + pad };
   }
 
   /**
@@ -2000,9 +2045,9 @@ export class LyricVjEngine {
       if (twin) twin.layer.group.visible = on && !light;
       if (on) layer.update(this.koma(t), fx);
     }
-    for (const { rt, group, units } of this.callLayers) {
+    for (const { rt, group, units, dropped } of this.callLayers) {
       const k = this.koma(t);
-      group.visible = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
+      group.visible = !dropped && t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
       if (!group.visible) continue;
       const out = clamp01((k - rt.exitAt) / Math.max(0.08, rt.exitDur));
       units.forEach((u, i) => {
@@ -2097,6 +2142,7 @@ export class LyricVjEngine {
     const next = this.cueLayers[at + 1];
     if (next?.index === i + 1) this.layFromRest(next, () => this.layHandoff(next, c));
     this.layFine(c);
+    for (const call of this.callLayers) if (call.rt.showFrom < c.rt.exitAt + c.rt.exitDur && call.rt.exitAt + call.rt.exitDur > c.rt.showFrom) this.placeCall(call);
     this.layRooms([c.rt.showFrom, c.rt.exitAt + c.rt.exitDur]);
     this.textRoot.position.set(held.x, held.y, 0);
     this.textRoot.scale.setScalar(held.s);

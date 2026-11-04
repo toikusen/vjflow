@@ -408,16 +408,20 @@ const keepOut = (e: WorldEnv, m: number): Box => { const r = e.rect ?? { x0: W *
 const clear = (b: Box, x: number, y: number, rad: number) => x + rad < b.x0 || x - rad > b.x1 || y + rad < b.y0 || y - rad > b.y1;
 
 const INS: Record<string, HandIn> = {
-  // the next page loads in squares of ultramarine, a diagonal at a time in six hard steps, never over the line landing with it
+  // a band of squares of the page's own sheet runs across the frame on a diagonal in hard steps, hiding the graphics under
+  // it as it passes, never over the line landing with it (the sheet itself, so no seam shows round the words)
   'pixel-wipe': { sec: 0.36, draw: (e, q) => frame(e, (c) => {
     const r = e.rect;
-    if (r) { c.beginPath(); c.rect(0, 0, W, H); c.rect(r.x0 - 24, r.y0 - 24, r.x1 - r.x0 + 48, r.y1 - r.y0 + 48); c.clip('evenodd'); }
-    const k = Math.floor(clamp01(q) * 6) + 1;
     const s = 120;
-    c.fillStyle = e.paper;
+    const band = 6;
+    const head = Math.floor(clamp01(q) * (Math.ceil(W / s) + Math.ceil(H / s) + band)) - band;
+    c.save();
     c.beginPath();
-    for (let x = 0; x < W; x += s) for (let y = 0; y < H; y += s) if (((x + y) / s) % 26 < (k * 26) / 6) c.rect(x, y, s, s);
-    c.fill();
+    if (r) { c.rect(0, 0, W, H); c.rect(r.x0 - 24, r.y0 - 24, r.x1 - r.x0 + 48, r.y1 - r.y0 + 48); c.clip('evenodd'); c.beginPath(); }
+    for (let x = 0; x < W; x += s) for (let y = 0; y < H; y += s) { const d = (x + y) / s; if (d >= head && d < head + band) c.rect(x, y, s, s); }
+    c.clip();
+    c.drawImage(sheet(e, false), 0, 0);
+    c.restore();
   }) },
 };
 
@@ -447,14 +451,25 @@ const PIECES: Record<string, Piece> = {
     }
     cursor(c, cx, cy, 7);
   }) },
-  // a small foil seal is stuck down in a free corner and one glint crosses it
-  'foil-seal': { sec: 1.6, clear: 0, draw: (e, q) => frame(e, (c) => {
-    const b = keepOut(e, 60);
-    const spots: [number, number][] = [[W - 260, 250], [260, H - 250], [W - 260, H - 250], [260, 250]];
-    const [x, y] = spots.find(([sx, sy]) => clear(b, sx, sy, 150)) ?? spots[0];
-    const s = q < 0.12 ? 1.25 : 1;
-    if (q > 0.92) return;
-    seal(c, x, y, 120 * s, '', -1 + 2 * clamp01((q - 0.2) / 0.6));
+  // one hard white glint crosses the whole page on a slant, as across a foil sticker, never over the words
+  'glint-pass': { sec: 0.9, clear: 0, draw: (e, q) => frame(e, (c) => {
+    const b = keepOut(e, 30);
+    const x = -500 + clamp01(q) * (W + 1000);
+    c.save();
+    c.beginPath();
+    c.rect(0, 0, W, H);
+    c.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    c.clip('evenodd');
+    c.globalAlpha = 0.28;
+    c.fillStyle = WHITE;
+    c.beginPath();
+    c.moveTo(x, 0);
+    c.lineTo(x + 90, 0);
+    c.lineTo(x - 260, H);
+    c.lineTo(x - 350, H);
+    c.closePath();
+    c.fill();
+    c.restore();
   }) },
 };
 

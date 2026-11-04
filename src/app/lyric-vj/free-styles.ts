@@ -28,6 +28,12 @@ export interface FreeStyle {
 
 export const FREE_STYLES: FreeStyle[] = STYLE_WORLDS.map((w) => ({ id: w.id, name: w.name, from: w.language, what: w.what, palettes: w.palette.map((s) => s.id), fonts: { ja: w.type.ja.family, tc: w.type.tc.family, calm: w.type.tc.family }, world: w }));
 
+/** Worlds held back from the picker, rerolls and defaults until redrawn (2026-11-04 owner: batch 3 reads as code-drawn). A saved pick still renders. */
+export const HELD_WORLDS = new Set(['popart', 'gameshow', 'idol-live', 'y2k', 'psychedelic', 'graffiti', 'brutalist', 'citypop']);
+
+/** The styles offered to a buyer. */
+export const OFFERED_STYLES = FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id));
+
 const KANA = /[ぁ-ゖァ-ヺ]/;
 
 /** A style's face for these lyrics: Japanese faces draw some Han in Japanese forms, so Han-only lyrics take the other. */
@@ -59,7 +65,7 @@ export interface StyleCard { id: string; name: string; line: string; image: stri
 const cardOf = (s: FreeStyle): StyleCard => ({ id: s.id, name: s.name, line: SHORT[s.id] ?? s.what.split(/[：，]/)[0], image: `free-styles/${s.id}.webp` });
 
 /** Every style, once, in the picker's order. */
-export function styleGroups(styles: readonly FreeStyle[] = FREE_STYLES) {
+export function styleGroups(styles: readonly FreeStyle[] = OFFERED_STYLES) {
   const named = new Set(GROUPS.flatMap((g) => g.families));
   return GROUPS.map((g, i) => ({ name: g.name, cards: styles.filter((s) => g.families.includes(s.world.family) || (i === GROUPS.length - 1 && !named.has(s.world.family))).map(cardOf) }));
 }
@@ -76,7 +82,7 @@ const CALM_PRINT = new Set(['silk-cold', 'riso']);
  * busy one to light, bold print, hand strokes and paper. Within those, the title chooses, so a song always opens the
  * same and songs spread across the styles. (2026-11-03 owner: the plain look made the free tier's first impression.)
  */
-export function recommendStyle(song: { title: string; cues: readonly { start: number; end: number; text: string }[] }, styles: readonly FreeStyle[] = FREE_STYLES): string {
+export function recommendStyle(song: { title: string; cues: readonly { start: number; end: number; text: string }[] }, styles: readonly FreeStyle[] = OFFERED_STYLES): string {
   const sung = song.cues.reduce((s, c) => s + Math.max(0, c.end - c.start), 0);
   const chars = song.cues.reduce((s, c) => s + [...c.text.replace(/\s/g, '')].length, 0);
   const calm = chars / Math.max(1, sung) < 3;

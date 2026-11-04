@@ -3,7 +3,7 @@
 // language; else the director picks one, with a reason, avoiding the worlds the last songs took. The plan carries its
 // world (PlanWorld), so typeplan --plan / --bind build its treatment the way the free tier does (composerTreatment), and
 // the old paid design is kept only for what the world does not cover: the concept and the parts' meaning.
-import { FREE_STYLES, STYLE_PALETTES, styleFont } from '../../src/app/lyric-vj/free-styles';
+import { FREE_STYLES, HELD_WORLDS, STYLE_PALETTES, styleFont } from '../../src/app/lyric-vj/free-styles';
 import { composerTreatment } from '../../src/app/lyric-vj/free-plan';
 import { poolOf, schemeFor, type StyleWorld } from '../../src/app/lyric-vj/style-world';
 import { STYLE_WORLDS, worldById } from '../../src/app/lyric-vj/style-worlds';
@@ -17,9 +17,10 @@ export interface WorldRecord { song: string; world?: string }
 
 /** The worlds a buyer's style allows: its own world(s) by id or language; none named, or none for that style, every world. */
 export function worldCandidates(style?: string): StyleWorld[] {
-  if (!style || style === 'auto') return STYLE_WORLDS;
-  const own = STYLE_WORLDS.filter((w) => w.id === style || w.language === style);
-  return own.length ? own : STYLE_WORLDS;
+  const offered = STYLE_WORLDS.filter((w) => !HELD_WORLDS.has(w.id));
+  if (!style || style === 'auto') return offered;
+  const own = offered.filter((w) => w.id === style || w.language === style);
+  return own.length ? own : offered;
 }
 
 /** Worlds the last `recent` other songs took twice or more: the director is told to look elsewhere. */

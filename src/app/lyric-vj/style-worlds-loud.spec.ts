@@ -12,11 +12,11 @@ import { isLoudSurface } from './render/world-glyph-loud';
 import { handObjects } from './render/world-packs';
 
 describe('style batch 3, the loud worlds', () => {
-  it('are eight, registered and offered', () => {
+  it('are eight and registered, held back from the picker while redrawn', () => {
     expect(LOUD_WORLDS.map((w) => w.id)).toEqual(['popart', 'gameshow', 'idol-live', 'y2k', 'psychedelic', 'graffiti', 'brutalist', 'citypop']);
     for (const w of LOUD_WORLDS) expect(STYLE_WORLDS.find((x) => x.id === w.id)).toBe(w);
     const offered = styleGroups().flatMap((g) => g.cards.map((c) => c.id));
-    for (const w of LOUD_WORLDS) expect(offered, w.id).toContain(w.id);
+    for (const w of LOUD_WORLDS) expect(offered, w.id).not.toContain(w.id);
     expect(FREE_STYLES.filter((s) => LOUD_WORLDS.some((w) => w.id === s.id)).length).toBe(8);
   });
   it('have every part they name', () => {

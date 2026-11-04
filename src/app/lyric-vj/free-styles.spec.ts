@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from './contrast';
-import { FREE_STYLES, STYLE_PALETTES, styleFont, styleGroups } from './free-styles';
+import { FREE_STYLES, HELD_WORLDS, recommendStyle, STYLE_PALETTES, styleFont, styleGroups } from './free-styles';
 import { FONTS } from './fonts';
 import { LANGUAGES } from './languages';
 import { freeJob } from './free-plan';
@@ -38,7 +38,7 @@ describe('free styles', () => {
   });
   it('lists every style once in the picker, the worlds ahead of the print styles', () => {
     const groups = styleGroups();
-    expect(groups.flatMap((g) => g.cards.map((c) => c.id)).sort()).toEqual(FREE_STYLES.map((s) => s.id).sort());
+    expect(groups.flatMap((g) => g.cards.map((c) => c.id)).sort()).toEqual(FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id)).map((s) => s.id).sort());
     expect(groups[0].cards.map((c) => c.id)).toContain('neon-stage');
     expect(groups.at(-1)!.cards.map((c) => c.id)).toContain('silk');
   });
@@ -63,5 +63,12 @@ describe('recommendStyle', () => {
     expect(picks.some((p) => ['dark-glitch', 'terminal', 'file', 'gothic-lolita'].includes(p))).toBe(false);
     expect(new Set(picks).size).toBeGreaterThan(3);
     expect(recommendStyle({ title: 'song 1', cues: lines(8, '一二三四五六七八九十', 2) })).toBe(picks[1]);
+  });
+
+  it('hold back worlds being redrawn from the picker and defaults', () => {
+    const listed = styleGroups().flatMap((g) => g.cards.map((c) => c.id));
+    for (const id of HELD_WORLDS) expect(listed, id).not.toContain(id);
+    for (let i = 0; i < 40; i++) expect(HELD_WORLDS.has(recommendStyle({ title: `song ${i}`, cues: lines(8, '一二三四五六七八九十', i % 2 ? 2 : 6) }))).toBe(false);
+    expect(FREE_STYLES.some((s) => HELD_WORLDS.has(s.id))).toBe(true);
   });
 });

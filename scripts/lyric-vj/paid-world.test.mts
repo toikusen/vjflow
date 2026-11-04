@@ -5,6 +5,7 @@ import { composePlan, RECIPES, type Cue } from './lineplan-core.mts';
 import { poolOf } from '../../src/app/lyric-vj/style-world';
 import { STYLE_WORLDS, worldById } from '../../src/app/lyric-vj/style-worlds';
 import { FREE_BASE } from '../../src/app/lyric-vj/free-plan';
+import { HELD_WORLDS } from '../../src/app/lyric-vj/free-styles';
 import { overusedWorlds, planWorldOf, recordWorld, worldBase, worldCandidates, worldKitPrompt, worldPickPrompt, worldPoolOf, worldTreatment, worldDrawStyle, worldPageLook } from './paid-world.mts';
 
 const texts = ['我等你回來到天亮', '整條街的燈都熄了', '你說過的話還留著', '我把信寫到最後一頁', '風吹過河面的時候', '我一個人走回家'];
@@ -14,9 +15,11 @@ const song = { title: 'T - 歌', duration: 60, tempo: 120, beats: Array.from({ l
 test('worldCandidates: a language names its worlds, an id its one, anything else every world', () => {
   assert.deepEqual(worldCandidates('silkscreen').map((w) => w.id), ['silk', 'silk-cold']);
   assert.deepEqual(worldCandidates('riso').map((w) => w.id), ['riso']);
-  assert.equal(worldCandidates('phone').length, STYLE_WORLDS.length, 'a style with no world yet: the director picks');
-  assert.equal(worldCandidates('auto').length, STYLE_WORLDS.length);
-  assert.equal(worldCandidates(undefined).length, STYLE_WORLDS.length);
+  const OFFERED = STYLE_WORLDS.length - HELD_WORLDS.size;
+  assert.equal(worldCandidates('auto').some((w) => HELD_WORLDS.has(w.id)), false, 'worlds being redrawn are not offered');
+  assert.equal(worldCandidates('phone').length, OFFERED, 'a style with no world yet: the director picks');
+  assert.equal(worldCandidates('auto').length, OFFERED);
+  assert.equal(worldCandidates(undefined).length, OFFERED);
 });
 
 test('the design history: worlds used twice in the last songs are to be avoided; a song\'s world is written in once', () => {

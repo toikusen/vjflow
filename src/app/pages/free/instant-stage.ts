@@ -1,5 +1,5 @@
 import { Component, computed, ElementRef, inject, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
-import { FREE_STYLES, styleGroups } from '../../lyric-vj/free-styles';
+import { FREE_STYLES, OFFERED_STYLES, styleGroups } from '../../lyric-vj/free-styles';
 import type { Meaning } from '../../lyric-vj/lineplan-core';
 import type { SongTimeline } from '../../lyric-vj/timeline';
 import type { LivePlayer, LiveStats } from '../../lyric-vj/render/live';
@@ -254,7 +254,7 @@ export class InstantStage implements OnInit, OnDestroy {
   reroll() {
     return this.guard('換版中', async () => {
       this.dropExport();
-      const others = this.styles.filter((s) => s.id !== this.styleId());
+      const others = OFFERED_STYLES.filter((s) => s.id !== this.styleId());
       this.styleId.set(others[Math.floor(Math.random() * others.length)].id);
       this.seed.update((s) => (s ?? 0) + 1);
       this.changed.emit();

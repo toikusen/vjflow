@@ -68,10 +68,24 @@ function distanceTo(inside: (i: number) => boolean, w: number, h: number) {
  * The letter grown by `grow` px after a closing of radius `close` (fills counters and the notches between strokes), as
  * a tone. Exact distances, so a ring is the same width all round; the edge keeps one pixel of anti-aliasing.
  */
-function grown(mask: OffscreenCanvas, grow: number, close: number, tone: string) {
+function grown(mask: OffscreenCanvas, grow: number, close: number, tone: string, counters = true) {
   const [w, h] = [mask.width, mask.height];
   const src = mask.getContext('2d')!.getImageData(0, 0, w, h).data;
-  const toLetter = distanceTo((i) => src[i * 4 + 3] >= 128, w, h);
+  // the letter's counters filled: whatever paper the strokes close round is the letter's own (a ring never runs inside a
+  // counter, and no wide closing is needed that would bridge two strokes into a blob)
+  const solid = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) solid[i] = src[i * 4 + 3] >= 128 ? 1 : 0;
+  const outside = new Uint8Array(w * h);
+  if (!counters) outside.fill(1);
+  const stack: number[] = [];
+  if (counters) for (let x = 0; x < w; x++) for (const y of [0, h - 1]) { const i = y * w + x; if (!solid[i] && !outside[i]) { outside[i] = 1; stack.push(i); } }
+  if (counters) for (let y = 0; y < h; y++) for (const x of [0, w - 1]) { const i = y * w + x; if (!solid[i] && !outside[i]) { outside[i] = 1; stack.push(i); } }
+  while (stack.length) {
+    const i = stack.pop()!;
+    const [x, y] = [i % w, (i / w) | 0];
+    for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1]) if (j >= 0 && !solid[j] && !outside[j]) { outside[j] = 1; stack.push(j); }
+  }
+  const toLetter = distanceTo((i) => (counters ? !outside[i] : solid[i] === 1), w, h);
   const reach = grow + close;
   const toOutside = distanceTo((i) => toLetter[i] > reach, w, h);
   const t = new OffscreenCanvas(w, h);
@@ -114,39 +128,41 @@ export function loudSurface(ctx: CanvasRenderingContext2D, kind: LoudSurface, h:
     }
     // popart's sound effect (board c): the colour plate printed under it off register, then the key line round it
     case 'pop-sfx-plate': {
-      ctx.drawImage(grown(mask, px * 0.032, 0, tint), px * 0.05, px * 0.05);
+      ctx.drawImage(grown(mask, px * 0.032, 0, tint, false), px * 0.05, px * 0.05);
       break;
     }
     case 'pop-sfx-key': {
-      ctx.drawImage(grown(mask, px * 0.032, 0, tint), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.032, 0, tint, false), 0, 0);
       break;
     }
-    // psychedelic's poster lettering (board a): a dark keyline closed round the word, a colour band grown out of it
+    // psychedelic's poster lettering (board a): a dark keyline round the word, a colour band grown out of it. The closing
+    // only fills a letter's own counters and hairline notches (0.07 of the size): a wider one bridged strokes into blobs,
+    // and band plus closing past the glyph picture's 0.3 margin was cut flat at its edge (owner 2026-11-04: odd outlines)
     case 'poster-key': {
-      ctx.drawImage(grown(mask, px * 0.15, px * 0.16, tint), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.13, px * 0.07, tint), 0, 0);
       break;
     }
     case 'poster-key-thin': {
       // a quiet line's poster lettering (board b): the keyline alone, thinner, no band
-      ctx.drawImage(grown(mask, px * 0.11, px * 0.14, tint), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.1, px * 0.07, tint), 0, 0);
       break;
     }
     case 'poster-band': {
-      ctx.drawImage(grown(mask, px * 0.22, px * 0.16, tint), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.2, px * 0.07, tint), 0, 0);
       break;
     }
     // idol-live's fan lettering (board a): the member colour, a white cut, a thin plum keyline, each grown from the last
     case 'fan-member': {
       const k = [...MEMBER.keys()][Math.floor(hash(seed, 7) * MEMBER.length)];
-      ctx.drawImage(grown(mask, px * 0.085, px * 0.1, MEMBER[k]), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.085, px * 0.06, MEMBER[k]), 0, 0);
       break;
     }
     case 'fan-white': {
-      ctx.drawImage(grown(mask, px * 0.135, px * 0.1, tint), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.135, px * 0.06, tint), 0, 0);
       break;
     }
     case 'fan-key': {
-      ctx.drawImage(grown(mask, px * 0.157, px * 0.1, tint), 0, 0);
+      ctx.drawImage(grown(mask, px * 0.157, px * 0.06, tint), 0, 0);
       break;
     }
     case 'stencil': {

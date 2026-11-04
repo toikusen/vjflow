@@ -4,7 +4,7 @@
 // blobs: the vectors are the material. A ground follows its scheme's band, so a night scheme prints the same sleeve dark.
 import type { Piece } from './world-pieces';
 import { clamp01, ease, easeIn, fract, H, HandGround, HandIn, isLight, kept, mixHex, W, WorldEnv } from './world-craft';
-import { artistOf, C, label, sparklePath, titleOnly } from './world-b3-shared';
+import { artistBy, C, label, sparklePath, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
 
 const AQUA = B3.x5FE0D3;
@@ -119,8 +119,8 @@ const hook: HandGround = (e) => page(e, (c) => {
   orbit(c, 1500, 560, 420, 120, -0.489, lineTone(e), 1.6);
   orbit(c, 1500, 560, 300, 70, -0.489, lineTone(e), 1.2, [2, 9], e.now * 30);
   [[1590, 300, 92], [1260, 840, 46], [1760, 700, 30]].forEach(([x, y, r], i) => { const [s, rot] = beatSpark(e, i); spark(c, e, x, y, r * s, rot); });
-  micro(c, e, titleOnly(e.title), 150, 135);
-  const who = artistOf(e.title);
+  micro(c, e, titleOf(e), 150, 135);
+  const who = artistBy(e);
   if (who) {
     c.font = MICRO(15);
     const w = c.measureText(who).width + who.length * 4.8 + 44;
@@ -148,7 +148,7 @@ const ring: HandGround = (e) => page(e, (c) => {
   orbit(c, cx, cy, 700, 150, -0.244, lineTone(e), 1.5);
   [[1500, 540, 64], [1760, 190, 26], [1080, 170, 18], [1230, 880, 22], [880, 760, 12], [1820, 900, 14]].forEach(([x, y, r], i) => { const [s, rot] = beatSpark(e, i); spark(c, e, x, y, r * s, rot); });
   const r = e.rect;
-  if (r) micro(c, e, titleOnly(e.title), r.x0 + 6, r.y0 - 44);
+  if (r) micro(c, e, titleOf(e), r.x0 + 6, r.y0 - 44);
 });
 
 /** c: the fan. Gradient blades open from the lower right corner, one a beat; sparkles and an orbit up top. */
@@ -171,7 +171,7 @@ const fan: HandGround = (e) => page(e, (c) => {
   [[1180, 180, 46], [760, 150, 22], [1500, 120, 18]].forEach(([x, y, r], i) => { const [s, rot] = beatSpark(e, i); spark(c, e, x, y, r * s, rot); });
   orbit(c, 1180, 180, 160, 36, -0.21, lineTone(e), 1.5);
   const r = e.rect;
-  if (r) micro(c, e, titleOnly(e.title), r.x0 + 8, Math.min(H - 80, r.y1 + 90));
+  if (r) micro(c, e, titleOf(e), r.x0 + 8, Math.min(H - 80, r.y1 + 90));
 });
 
 /** d: a tall blade down the left, sparkles, the lines as columns on the right with a turned Michroma label beside them. */
@@ -194,7 +194,7 @@ const column: HandGround = (e) => page(e, (c) => {
     c.save();
     c.translate(Math.min(W - 60, r.x1 + 70), r.y0 + 4);
     c.rotate(Math.PI / 2);
-    micro(c, e, titleOnly(e.title), 0, 0, 15);
+    micro(c, e, titleOf(e), 0, 0, 15);
     c.restore();
   }
 });

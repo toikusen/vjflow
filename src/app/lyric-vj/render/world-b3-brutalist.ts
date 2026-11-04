@@ -4,7 +4,7 @@
 // Real data only on the heads (the song's title and artist). The dark sheet (board c) is the same page reversed.
 import type { Piece } from './world-pieces';
 import { clamp01, fract, H, HandGround, HandIn, isLight, kept, W, WorldEnv } from './world-craft';
-import { artistOf, C, label, rng, titleOnly } from './world-b3-shared';
+import { artistBy, C, label, rng, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
 
 const RED = B3.xBC180E;
@@ -15,7 +15,21 @@ const HEAD = (px: number) => `900 ${px}px "Chiron Hei HK", "Noto Sans TC", sans-
 const dark = (e: WorldEnv) => !isLight(e.paper);
 /** The copier's own jolt: the whole sheet moves 1 px every other frame (board motion). */
 const feed = (e: WorldEnv) => (Math.floor(e.now * 15) % 2 ? 1 : 0);
-const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); c.translate(0, feed(e)); f(c); c.restore(); };
+const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); c.translate(0, feed(e)); keep = e.rect; f(c); keep = undefined; c.restore(); };
+/** The lyric box of the page being drawn: the sheet's own type keeps a clear margin from it. */
+let keep: { x0: number; y0: number; x1: number; y1: number } | undefined;
+/** Clear space round the words that the poster's small print and heads never enter, px. */
+const CLEAR = 56;
+/** A label of the sheet, left off where it would touch or crowd the words (owner 2026-11-04: small print sat on the lyric). */
+function lab(c: C, text: string, x: number, y: number, font: string, fill: string, track = 0, align: 'left' | 'right' | 'center' = 'left') {
+  if (!text) return 0;
+  c.font = font;
+  const w = c.measureText(text).width + track * [...text].length;
+  const px = parseFloat(font.replace(/^\D*?(\d+(\.\d+)?)px.*$/, '$1')) || 20;
+  const x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  if (keep && x0 < keep.x1 + CLEAR && x0 + w > keep.x0 - CLEAR && y - px < keep.y1 + CLEAR && y + px * 0.25 > keep.y0 - CLEAR) return 0;
+  return label(c, text, x, y, font, fill, track, align);
+}
 
 /** Toner specks, made once: a few thousand dots and dashes the copier dropped (generated, as the board's were). */
 const toner = (tone: string) => kept(`brut-toner|${tone}`, W, H, (c) => {
@@ -53,9 +67,9 @@ function sheet(c: C, e: WorldEnv, heads = true) {
   c.fillStyle = e.ink;
   c.fillRect(M, M, W - 2 * M, 4);
   if (!heads) return;
-  const t = titleOnly(e.title);
-  label(c, artistOf(e.title), M, M + 34, MONO(19), e.ink, 1.1);
-  label(c, t, W / 2 - 100, M + 34, MONO(19), e.ink, 1.1);
+  const t = titleOf(e);
+  lab(c, artistBy(e), M, M + 34, MONO(19), e.ink, 1.1);
+  lab(c, t, W / 2 - 100, M + 34, MONO(19), e.ink, 1.1);
 }
 
 /** a: the headline as big as the page allows, a rule and a mono column at its right, the red band below with the title. */
@@ -65,8 +79,8 @@ const headline: HandGround = (e) => page(e, (c) => {
   const rx = Math.min(W - 520, Math.max(r.x1 + 60, 1100));
   c.fillStyle = e.ink;
   c.fillRect(rx, r.y0, 4, Math.min(620, r.y1 - r.y0));
-  const lines = [titleOnly(e.title), artistOf(e.title)].filter(Boolean);
-  lines.forEach((t, i) => label(c, t, rx + 32, r.y0 + 26 + i * 30, MONO(17), e.ink, 1));
+  const lines = [titleOf(e), artistBy(e)].filter(Boolean);
+  lines.forEach((t, i) => lab(c, t, rx + 32, r.y0 + 26 + i * 30, MONO(17), e.ink, 1));
   // the band is pulled out from the left margin at the cut
   const top = Math.min(H - M - 150, r.y1 + 36);
   const k = clamp01(e.age / 0.25);
@@ -74,15 +88,15 @@ const headline: HandGround = (e) => page(e, (c) => {
   c.fillStyle = RED;
   c.fillRect(M, top, w, 150);
   // the band carries the title, or the line's last phrase when the line is split into it (world-split.ts)
-  if (k >= 1 && r.y1 <= top + 20) label(c, titleOnly(e.title), M + 34, top + 112, HEAD(110), B3.xFFFFFF, 34);
+  if (k >= 1 && r.y1 <= top + 20) lab(c, titleOf(e), M + 34, top + 112, HEAD(110), B3.xFFFFFF, 34);
   finish(c, e);
 });
 
 /** b: a quiet sheet: a red rule over the line low on the left, a thin rule and the small heads at the right. */
 const footer: HandGround = (e) => page(e, (c) => {
   sheet(c, e, false);
-  label(c, titleOnly(e.title), M, M + 34, MONO(19), e.ink, 1.1);
-  label(c, artistOf(e.title), W - M, M + 34, MONO(19), e.ink, 1.1, 'right');
+  lab(c, titleOf(e), M, M + 34, MONO(19), e.ink, 1.1);
+  lab(c, artistBy(e), W - M, M + 34, MONO(19), e.ink, 1.1, 'right');
   const r = e.rect ?? { x0: M, y0: 700, x1: 1000, y1: 980 };
   const k = clamp01(e.age / 0.25);
   c.fillStyle = RED;
@@ -90,8 +104,8 @@ const footer: HandGround = (e) => page(e, (c) => {
   const rx = Math.max(r.x1 + 120, 1380);
   c.fillStyle = e.ink;
   c.fillRect(rx, r.y0 - 60, 2, H - M - (r.y0 - 60));
-  label(c, titleOnly(e.title), rx + 30, r.y0 - 24, MONO(17), e.ink, 1);
-  label(c, artistOf(e.title), rx + 30, r.y0 + 6, MONO(17), e.ink, 1);
+  lab(c, titleOf(e), rx + 30, r.y0 - 24, MONO(17), e.ink, 1);
+  lab(c, artistBy(e), rx + 30, r.y0 + 6, MONO(17), e.ink, 1);
   finish(c, e);
 });
 
@@ -108,21 +122,21 @@ const cells: HandGround = (e) => page(e, (c) => {
     c.strokeStyle = RED;
     c.lineWidth = 2;
     c.strokeRect(x + 1, 171, step - 2, 812);
-    label(c, `0${i + 1}`, x + 16, 210, MONO(19), RED, 1.1);
+    lab(c, `0${i + 1}`, x + 16, 210, MONO(19), RED, 1.1);
   }
-  label(c, titleOnly(e.title), W - M, M + 20, MONO(19), e.ink, 1.1, 'right');
-  label(c, artistOf(e.title), M, M + 20, MONO(19), e.ink, 1.1);
+  lab(c, titleOf(e), W - M, M + 20, MONO(19), e.ink, 1.1, 'right');
+  lab(c, artistBy(e), M, M + 20, MONO(19), e.ink, 1.1);
   finish(c, e);
 });
 
 /** d: two columns at the right behind a rule, the title set big with red strokes between its characters on the left. */
 const columns: HandGround = (e) => page(e, (c) => {
   sheet(c, e, false);
-  label(c, titleOnly(e.title), M, M + 34, MONO(19), e.ink, 1.1);
+  lab(c, titleOf(e), M, M + 34, MONO(19), e.ink, 1.1);
   const r = e.rect ?? { x0: 1420, y0: 128, x1: 1700, y1: 984 };
   c.fillStyle = e.ink;
   c.fillRect(r.x0 - 60, 128, 4, H - M - 128);
-  const t = [...titleOnly(e.title)].slice(0, 5);
+  const t = [...titleOf(e)].slice(0, 5);
   // (on the mirrored page x runs right to left on screen: the characters are laid in reverse so they still read in order)
   const flipped = c.getTransform().a < 0;
   const toks = t.flatMap((ch, i) => (i ? ['／', ch] : [ch]));
@@ -130,12 +144,12 @@ const columns: HandGround = (e) => page(e, (c) => {
   c.font = HEAD(150);
   let x = M - 6;
   for (const tk of toks) {
-    label(c, tk, x, 790, HEAD(150), tk === '／' ? RED : e.ink);
+    lab(c, tk, x, 790, HEAD(150), tk === '／' ? RED : e.ink);
     x += c.measureText(tk).width;
   }
   c.fillStyle = e.ink;
   c.fillRect(M, 820, Math.min(1200, r.x0 - 160 - M), 4);
-  label(c, artistOf(e.title), M, 866, MONO(17), e.ink, 1);
+  lab(c, artistBy(e), M, 866, MONO(17), e.ink, 1);
   finish(c, e);
 });
 

@@ -4,7 +4,7 @@
 // is painted by day or by night as its scheme says (the board's a and d are day, b and c night).
 import type { Piece } from './world-pieces';
 import { clamp01, ease, fract, H, HandGround, HandIn, isLight, kept, ObjectPaint, W, WorldEnv } from './world-craft';
-import { artistOf, C, label, rng, titleOnly } from './world-b3-shared';
+import { artistBy, C, label, rng, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
 
 /** The board's flat inks, by day and by night: one cover, two lights. */
@@ -77,8 +77,8 @@ const facade: HandGround = (e) => page(e, (c) => {
   c.setTransform(e.base ?? c.getTransform());
   const r = e.rect;
   if (!r) return;
-  label(c, titleOnly(e.title), r.x0 + 6, r.y0 - 40, SCRIPT(64), P.script, 0);
-  const who = artistOf(e.title);
+  label(c, titleOf(e), r.x0 + 6, r.y0 - 40, SCRIPT(64), P.script, 0);
+  const who = artistBy(e);
   if (who) label(c, who, r.x0 + 10, Math.min(850, r.y1 + 60), SMALL(18), e.ink, 6);
 });
 
@@ -113,7 +113,7 @@ const moon: HandGround = (e) => page(e, (c) => {
     }
   }
   const r = e.rect;
-  if (r) label(c, titleOnly(e.title), r.x0 + 6, r.y0 - 36, SCRIPT(52), night(e) ? B3.xF2A1B8 : B3.xB53A2A, 0);
+  if (r) label(c, titleOf(e), r.x0 + 6, r.y0 - 36, SCRIPT(52), night(e) ? B3.xF2A1B8 : B3.xB53A2A, 0);
   void P;
 });
 
@@ -151,7 +151,7 @@ const skyline: HandGround = (e) => page(e, (c) => {
     }
   });
   const r = e.rect;
-  if (r) label(c, titleOnly(e.title), (r.x0 + r.x1) / 2, Math.max(60, r.y0 - 30), SMALL(30), night(e) ? B3.xF2A1B8 : B3.xB53A2A, 18, 'center');
+  if (r) label(c, titleOf(e), (r.x0 + r.x1) / 2, Math.max(60, r.y0 - 30), SMALL(30), night(e) ? B3.xF2A1B8 : B3.xB53A2A, 18, 'center');
 });
 
 /** d: a white column (the set's object) throws a long shadow across the wall under a flat sky; its shadow turns slowly. */
@@ -167,7 +167,7 @@ const colonnade: HandGround = (e) => page(e, (c) => {
   c.beginPath(); c.moveTo(x1, 420); c.lineTo(x1 + lean, 420); c.lineTo(x0 + lean - 580, H); c.lineTo(x0 - 200, H); c.closePath(); c.fill();
   tiles(c, P, 0, 1010, x0, 70, 35);
   tiles(c, P, x1, 1010, W - x1, 70, 35);
-  label(c, titleOnly(e.title), Math.min(W - 120, x1 + 50), 930, SCRIPT(54), P.script, 0);
+  label(c, titleOf(e), Math.min(W - 120, x1 + 50), 930, SCRIPT(54), P.script, 0);
 });
 
 const Gs: Record<string, HandGround> = { 'citypop/facade': facade, 'citypop/moon': moon, 'citypop/skyline': skyline, 'citypop/colonnade': colonnade };

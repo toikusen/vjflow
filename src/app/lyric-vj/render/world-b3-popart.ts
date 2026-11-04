@@ -4,7 +4,7 @@
 // hair (5, 3) off the key. Each set brings its own page (a set's `ground`), laid out round where the words stand.
 import type { Piece } from './world-pieces';
 import { clamp01, ease, easeIn, H, HandGround, HandIn, ObjectPaint, W, WorldEnv } from './world-craft';
-import { burstPath, focusOf, halftone, label, onPage, rng, sparklePath, speedLines, still, titleOnly } from './world-b3-shared';
+import { burstPath, focusOf, halftone, label, onPage, rng, sparklePath, speedLines, still, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
 
 const K = (e: { slots: { ink: string } }) => e.slots.ink;
@@ -84,7 +84,7 @@ const strip = (mirror: boolean): HandGround => (e) => onPage(e, still(e, mirror 
     g.fillStyle = s.plate;
     g.fill();
   });
-  tag(c, titleOnly(e.title), wide[0] + 38, 98, 30, s.faint, K(e));
+  tag(c, titleOf(e), wide[0] + 38, 98, 30, s.faint, K(e));
 }));
 
 /** b: one wide panel, a dot sky fading down to a printed sea, sparkles; the caption box (the set's object) sits up left. */
@@ -134,7 +134,7 @@ const sea: HandGround = (e) => onPage(e, still(e, 'pop-sea', (c) => {
   });
   const r = e.rect;
   if (r) {
-    const t = titleOnly(e.title);
+    const t = titleOf(e);
     c.font = LABEL_FACE(26);
     const w = c.measureText(t).width + 24 + t.length * 5;
     c.fillStyle = STOCK;
@@ -157,7 +157,7 @@ const blast: HandGround = (e) => onPage(e, still(e, 'pop-blast', (c) => {
   c.lineJoin = 'miter';
   c.strokeStyle = K(e);
   c.stroke();
-  tag(c, titleOnly(e.title), 1810, 940, 34, s.faint, K(e), true);
+  tag(c, titleOf(e), 1810, 940, 34, s.faint, K(e), true);
 }));
 
 /** d: a manga page read right to left: a tall pale panel, a thin speed-line panel, a tall coloured one. */

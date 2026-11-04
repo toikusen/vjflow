@@ -4,7 +4,7 @@
 // op-art tunnel or flowing vertical bands, all flat inks, hard edges. Paper005 (CC0) multiplied, grain, a plum vignette.
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, mixHex, W, WorldEnv } from './world-craft';
-import { artistOf, label, titleOnly } from './world-b3-shared';
+import { artistBy, label, titleOf } from './world-b3-shared';
 import { paperOver } from './world-b3-tex';
 import { B3 } from './b3-inks';
 
@@ -46,7 +46,7 @@ const arches: HandGround = (e) => page(e, (c) => {
     c.fill();
   }
   finish(c);
-  label(c, [artistOf(e.title), titleOnly(e.title)].filter(Boolean).join(' · '), 120, 104, SHR(30), CR, 1.2);
+  label(c, [artistBy(e), titleOf(e)].filter(Boolean).join(' · '), 120, 104, SHR(30), CR, 1.2);
 });
 
 /** b: a calm target sun low right, its rings breathing; the line on the left, the title small below. */
@@ -57,7 +57,7 @@ const sun: HandGround = (e) => page(e, (c) => {
   const rings: [number, string][] = [[560, mixHex(e.paper, B3.xFFFFFF, 0.07)], [470, TE], [400, e.paper], [330, PK], [270, e.paper], [210, MU], [150, OR], [90, CR]];
   for (const [r, tone] of rings) { c.beginPath(); c.arc(1480, 760, r * k, 0, Math.PI * 2); c.fillStyle = tone; c.fill(); }
   finish(c);
-  label(c, titleOnly(e.title), 150, H - 110, SHR(28), MU, 1.1);
+  label(c, titleOf(e), 150, H - 110, SHR(28), MU, 1.1);
 });
 
 /** c: the op-art tunnel, rounded rectangles stepping in to the vanishing point where the line sits. */

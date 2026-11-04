@@ -4,7 +4,7 @@
 // goods with a soft contact shadow, Fredoka labels. No lightsticks, no stage light (the first version's are gone).
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, isLight, kept, mixHex, ObjectPaint, W, WorldEnv } from './world-craft';
-import { artistOf, C, label, titleOnly } from './world-b3-shared';
+import { artistBy, C, label, titleOf } from './world-b3-shared';
 import { MEMBER } from './world-glyph-loud';
 import { B3 } from './b3-inks';
 
@@ -43,8 +43,8 @@ function goods(c: C, draw: () => void) {
 const fan: HandGround = (e) => page(e, (c) => {
   c.drawImage(gingham(e), 0, 0);
   const ink = isLight(e.paper) ? e.ink : B3.xFFF8FB;
-  label(c, artistOf(e.title), 110, 116, FRED(26), ink, 3);
-  label(c, titleOnly(e.title), W - 110, 116, FRED(26), ink, 3, 'right');
+  label(c, artistBy(e), 110, 116, FRED(26), ink, 3);
+  label(c, titleOf(e), W - 110, 116, FRED(26), ink, 3, 'right');
 });
 
 /** b: a concert ticket on lavender: member stripe, header and rule, the line, its info, a dotted tear, the stub. */
@@ -64,12 +64,12 @@ const ticket: HandGround = (e) => page(e, (c) => {
   MEMBER.forEach((m, i) => { c.fillStyle = m; c.fillRect(tx, ty + (th * i) / 5, 28, th / 5 + 1); });
   c.restore();
   const tear = tx + tw - 290;
-  label(c, titleOnly(e.title), tx + 90, ty + 88, FRED(24), GREY, 4);
+  label(c, titleOf(e), tx + 90, ty + 88, FRED(24), GREY, 4);
   c.fillStyle = B3.x2B2140;
   c.fillRect(tx + 90, ty + 112, tear - tx - 170, 3);
   label(c, 'SONG', tx + 90, ty + th - 76, FRED(16), GREY, 2);
-  label(c, titleOnly(e.title), tx + 90, ty + th - 40, ZM(30), B3.x2B2140);
-  const who = artistOf(e.title);
+  label(c, titleOf(e), tx + 90, ty + th - 40, ZM(30), B3.x2B2140);
+  const who = artistBy(e);
   if (who) { label(c, 'ARTIST', tx + 380, ty + th - 76, FRED(16), GREY, 2); label(c, who, tx + 380, ty + th - 40, ZM(30), B3.x2B2140); }
   c.strokeStyle = B3.xCFC6E2;
   c.lineWidth = 5;
@@ -81,7 +81,7 @@ const ticket: HandGround = (e) => page(e, (c) => {
   c.beginPath(); c.roundRect(tear + 30, ty + 60, 230, th - 120, 16); c.fill();
   c.save();
   c.translate(tear + 145, ty + 100);
-  [...titleOnly(e.title)].slice(0, 6).forEach((ch, i) => label(c, ch, 0, i * 62, ZM(54, 900), B3.x2B2140, 0, 'center'));
+  [...titleOf(e)].slice(0, 6).forEach((ch, i) => label(c, ch, 0, i * 62, ZM(54, 900), B3.x2B2140, 0, 'center'));
   c.restore();
   // the notches where the tear line meets the edges
   c.fillStyle = isLight(e.paper) ? mixHex(e.paper, B3.xB79CFF, 0.16) : e.paper;
@@ -146,8 +146,8 @@ const setlist: HandGround = (e) => page(e, (c) => {
   c.fillStyle = B3.xFFDE5C;
   c.beginPath(); c.roundRect(32, 128, 356 * sweep, 50, 6); c.fill();
   label(c, '01', 44, 162, FRED(20), B3.x2B2140, 2);
-  label(c, titleOnly(e.title), 90, 164, ZM(30), B3.x2B2140);
-  label(c, artistOf(e.title), 40, 520, FRED(18, 500), GREY, 3);
+  label(c, titleOf(e), 90, 164, ZM(30), B3.x2B2140);
+  label(c, artistBy(e), 40, 520, FRED(18, 500), GREY, 3);
   c.restore();
 });
 

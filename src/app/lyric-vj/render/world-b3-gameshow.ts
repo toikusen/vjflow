@@ -4,7 +4,7 @@
 // underlines, Bungee letters and numbers; TV scanlines and a vignette as the finish. Square corners, primary colours.
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, ObjectPaint, W, WorldEnv } from './world-craft';
-import { C, label, rng, titleOnly } from './world-b3-shared';
+import { C, label, rng, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
 
 const B = B3.x1636B8;
@@ -57,7 +57,7 @@ function banner(c: C, x: number, y: number, w: number, h: number, fill: string, 
 /** a: the question round. The banner and the answer cells are the sets' objects; the set gives the title head. */
 const round: HandGround = (e) => page(e, (c) => {
   studio(c, e);
-  label(c, titleOnly(e.title), 150, 126, BUNGEE(30), G, 1.2);
+  label(c, titleOf(e), 150, 126, BUNGEE(30), G, 1.2);
   finish(c);
 });
 
@@ -71,7 +71,7 @@ const hint: HandGround = (e) => page(e, (c) => {
   // the card itself, where world-layout puts the set's object: the object draws it over this one in a line's own shot; a
   // shared shot (two lines, objects off) gets it from here, round both lines
   const { x: x1, y, w, h, flipped } = objectPlace(c, r, HINT_PAD, HINT_FILL);
-  unmirrored(c, flipped, () => { hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x1, y); label(c, titleOnly(e.title), x1 + w - 50, y + 64, BUNGEE(30), WH, 1, 'right'); });
+  unmirrored(c, flipped, () => { hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x1, y); label(c, titleOf(e), x1 + w - 50, y + 64, BUNGEE(30), WH, 1, 'right'); });
   const x = flipped ? W - x1 - w : x1;
   const n = 12;
   const cw = (w + 14) / n - 14;
@@ -165,6 +165,11 @@ const Gs: Record<string, HandGround> = { 'gameshow/round': round, 'gameshow/hint
 
 /** The hint card (board b) round the words: white, its red head with HINT, the navy shadow. The set's object, so a line that
  *  outlasts its page (read on into the next cut) keeps its card under it. */
+/**
+ * The hint set's object: the card's white face only, inset, under the words. The page draws the whole card round it (head,
+ * shadow, timer) at the same place, so the object never shows a seam over it; a line read on past its cut keeps the face.
+ */
+const hintPlate: ObjectPaint = (c, w, h) => { c.fillStyle = WH; c.fillRect(10, 106, w - 20, h - 116); };
 function hintCard(c: OffscreenCanvasRenderingContext2D, w: number, h: number, x = 0, y = 0) {
   c.fillStyle = BD; c.fillRect(x + 16, y + 16, w, h);
   c.fillStyle = WH; c.fillRect(x, y, w, h);
@@ -172,7 +177,8 @@ function hintCard(c: OffscreenCanvasRenderingContext2D, w: number, h: number, x 
   label(c, 'HINT', x + 50, y + 70, BUNGEE(52), WH, 2);
 }
 /** The question banner the line stands in (board a): white chevron, navy shadow, gold underline, red Q tab at its left. */
-const qBanner: ObjectPaint = (c, w, h) => banner(c, 60, 30, w - 130, h - 60, WH, 'Q', R, WH);
+// (the white the words are read on runs from the tab's edge to as far from the right: the words sit centred in it)
+const qBanner: ObjectPaint = (c, w, h) => { const tabEnd = 20 + Math.min((h - 60) * 0.9, 200); banner(c, 60, 30, w - tabEnd - 60, h - 60, WH, 'Q', R, WH); };
 /** The answer cells (board a): one white cell a letter, its gold A–D tag, navy shadow. The row's height gives the letter size. */
 const answerCells: ObjectPaint = (c, w, h) => {
   const size = h - 220;
@@ -202,7 +208,7 @@ const rowTiles: ObjectPaint = (c, w, h) => {
 };
 
 /** The Q/A set's margin round its words, px: the tab and the chevron at the sides, the banner's depth above and below. */
-export const QA_PAD: [number, number] = [260, 60];
+export const QA_PAD: [number, number] = [300, 60];
 /**
  * The question and answer banners (board d) round the set's words: a line set in two rows is a question (white banner, gold
  * Q tab) and its answer (gold banner, red A tab); a line in one row is the question alone. Only the line's rows decide it,
@@ -218,8 +224,10 @@ const qaBanners = (mirror: boolean): ObjectPaint => (c, w, h) => {
   const rows = two ? [py + inner / 4, py + (inner * 3) / 4] : [h / 2];
   c.save();
   if (mirror) { c.translate(w, 0); c.scale(-1, 1); }
-  const [bx, k] = [100, bh * 0.32];
-  rows.forEach((y, i) => banner(c, bx, y - bh / 2, w - bx - 40 - k, bh, i ? G : WH, i ? 'A' : 'Q', i ? R : G, i ? WH : K));
+  // the white of each banner runs from its tab's edge to as far from the right, so a row centred in the set is centred in it
+  const bx = 100;
+  const tabEnd = bx - 40 + Math.min(bh * 0.9, 200);
+  rows.forEach((y, i) => banner(c, bx, y - bh / 2, w - tabEnd - bx, bh, i ? G : WH, i ? 'A' : 'Q', i ? R : G, i ? WH : K));
   c.restore();
 };
 
@@ -263,4 +271,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true), 'gs-hint': ((c, w, h) => hintCard(c as OffscreenCanvasRenderingContext2D, w, h)) as ObjectPaint } as Record<string, ObjectPaint> };
+export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true), 'gs-hint': hintPlate } as Record<string, ObjectPaint> };

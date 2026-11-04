@@ -4,8 +4,8 @@
 // halftone fade, masking tape on their corners, stickers. Only real data is printed on them (the song's title and its
 // artist). Hard edges throughout; overspray is single dots, never a blur. The wall is ambientCG PaintedPlaster016 (CC0).
 import type { Piece } from './world-pieces';
-import { clamp01, ease, H, HandGround, HandIn, isLight, mixHex, ObjectPaint, W, WorldEnv } from './world-craft';
-import { artistOf, C, halftone, label, rng, still, titleOnly } from './world-b3-shared';
+import { clamp01, ease, H, HandGround, HandIn, isLight, mixHex, ObjectPaint, Slots, W, WorldEnv } from './world-craft';
+import { artistBy, C, halftone, label, rng, still, titleOf } from './world-b3-shared';
 import { stencilled } from './world-glyph-loud';
 import { graffitiWall } from './world-b3-tex';
 import { B3 } from './b3-inks';
@@ -183,7 +183,7 @@ function page(e: WorldEnv, id: string, paint: (c: OffscreenCanvasRenderingContex
   c.drawImage(cv, 0, 0);
   c.restore();
 }
-const poster = (e: WorldEnv) => [titleOnly(e.title), artistOf(e.title)] as const;
+const poster = (e: WorldEnv) => [titleOf(e), artistBy(e)] as const;
 
 /** a: the buff patch the line is sprayed on, two prints wheatpasted beside it, stickers round it. */
 const pasteUp: HandGround = (e) => page(e, 'gf-paste-up', (c) => {
@@ -218,7 +218,7 @@ const navy: HandGround = (e) => page(e, 'gf-navy', (c) => {
   // the patch round the words (and round both lines of a shared shot); a line's own shot gets the set's object over it, the
   // same patch with the sprayed rule, which also stays under a line read on past its cut
   const o = objectPlace(c, r, NAVY_PAD);
-  unmirrored(c, o.flipped, () => { c.save(); c.translate(o.x, o.y); buffPatch(c, o.w, o.h, s, 0, 0); c.restore(); });
+  unmirrored(c, o.flipped, () => { c.save(); c.translate(o.x, o.y); buffPatch(c, o.w, o.h, s); c.restore(); });
   const b = { x0: r.x0 + 14 - NAVY_PAD[0], y0: r.y0 + 14 - NAVY_PAD[1], x1: r.x1 - 14 + NAVY_PAD[0], y1: r.y1 - 14 + NAVY_PAD[1] };
   const [title, artist] = poster(e);
   const px = Math.max(1470, b.x1 + 110);
@@ -301,7 +301,7 @@ const strips: HandGround = (e) => page(e, 'gf-strips', (c) => {
 const Gs: Record<string, HandGround> = { 'graffiti/paste-up': pasteUp, 'graffiti/navy-buff': navy, 'graffiti/poster-wall': posterWall, 'graffiti/strips': strips };
 
 /** The calm line's rolled patch (board b), a shade under the buff: the set's object, so a shared shot keeps it. */
-const buffPatch: ObjectPaint = (c, w, h, s) => {
+const buffPatch = (c: C, w: number, h: number, s: Slots) => {
   edged(c, 6, 6, w - 12, h - 12, 4, 26, 31);
   c.fillStyle = mixHex(s.plate, K, 0.06);
   c.fill();
@@ -311,6 +311,8 @@ const buffPatch: ObjectPaint = (c, w, h, s) => {
   c.fillStyle = mixHex(s.accent, s.ink2, 0.3);
   c.fill();
 };
+/** The calm set's object: the patch's face only, inset, under the words; the page draws the whole patch and its rule round it. */
+const buffFace: ObjectPaint = (c, w, h, s) => { c.fillStyle = mixHex(s.plate, K, 0.06); c.fillRect(14, 14, w - 28, h - 28); };
 /** The calm patch's margin round its words (world-b3-sets graffiti/navy pad): room under them for the sprayed rule. */
 export const NAVY_PAD: [number, number] = [80, 120];
 
@@ -338,7 +340,7 @@ const PIECES: Record<string, Piece> = {
   'sticker-slap': { sec: 2, clear: 0, draw: (e, q) => framed(e, (c) => {
     const b = keepOut(e, 30);
     const R = rng(e.seed + 5);
-    const [title, artist] = [titleOnly(e.title), artistOf(e.title)];
+    const [title, artist] = [titleOf(e), artistBy(e)];
     const n = Math.min(5, Math.floor(q * 6));
     for (let i = 0; i < n; i++) {
       const [w, h] = [150 + R() * 60, 70 + R() * 30];
@@ -355,7 +357,7 @@ const PIECES: Record<string, Piece> = {
     if (w < 160) return;
     const x = left ? 20 : W - 20 - w;
     const k = ease(clamp01(q * 1.6), 3);
-    paste(c, x, 120, w, 760 * (1 - 0.45 * k), e.slots.accent, e.seed + 17, left ? -2 : 2, { tone: mixHex(e.slots.accent, K, 0.32), from: 200, to: 600, step: 16 }, { t: titleOnly(e.title), px: 90, ink: PAPER }, 16);
+    paste(c, x, 120, w, 760 * (1 - 0.45 * k), e.slots.accent, e.seed + 17, left ? -2 : 2, { tone: mixHex(e.slots.accent, K, 0.32), from: 200, to: 600, step: 16 }, { t: titleOf(e), px: 90, ink: PAPER }, 16);
   }) },
   // the roller pushes a fresh band of buff along the free foot (or head) of the wall in hard steps
   'buff-roll': { sec: 1.2, clear: 0, draw: (e, q) => framed(e, (c) => {
@@ -369,4 +371,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GRAFFITI = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gf-buff': buffPatch } as Record<string, ObjectPaint> };
+export const GRAFFITI = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gf-buff': buffFace } as Record<string, ObjectPaint> };

@@ -30,11 +30,12 @@ describe('free styles', () => {
   });
   // the 2026-11-04 font table: a Traditional Chinese face serves at most two worlds, and no two offered worlds share both faces
   it('give each offered world its own faces', () => {
-    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family;
-    for (const s of OFFERED_STYLES) expect(FREE_STYLES.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(2);
+    // (Noto Serif HK draws the same as Noto Serif TC: one face)
+    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family.replace('Noto Serif HK', 'Noto Serif TC');
+    for (const s of OFFERED_STYLES) expect(OFFERED_STYLES.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(2);
     const pairs = OFFERED_STYLES.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
     expect(new Set(pairs).size).toBe(pairs.length);
-    for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === tc(s)), tc(s)).toBe(true);
+    for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === s.world!.type.tc.family), s.id).toBe(true);
   });
   it('turn the song plan into their own version', () => {
     const cues = ['我走過那條路', '風吹過你的臉', '天亮了我還在等'].map((text, i) => ({ id: `c${i + 1}`, start: 5 + i * 5, end: 9 + i * 5, text }));

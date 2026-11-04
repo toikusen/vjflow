@@ -37,7 +37,7 @@ test('planWorldOf: the free tier\'s scheme rule, the world\'s colours and face',
   assert.equal(pw.id, 'silk');
   assert.ok(pw.scheme >= 0 && pw.scheme < 3);
   assert.match(pw.palette.ink, /^#/);
-  assert.equal(pw.font, 'Chiron Hei HK', 'Han-only lyrics take the world\'s tc face');
+  assert.equal(pw.font, 'Chocolate Classical Sans', 'Han-only lyrics take the world\'s tc face');
   assert.equal(planWorldOf(worldById('silk')!, { ...song, cues: [{ ...cues[0], text: 'ひかり' }] }, false, '', 'buyer').font, 'Zen Kaku Gothic New');
   assert.equal(worldPoolOf(pw).id, 'silk');
 });

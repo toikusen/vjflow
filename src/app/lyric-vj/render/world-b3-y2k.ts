@@ -3,7 +3,7 @@
 // the labels of glossy windows. Bright, shiny, round; no black ground, no grid, no nostalgia.
 import type { Piece } from './world-pieces';
 import { atBase, clamp01, ease, easeIn, flood, H, hash, HandGround, HandIn, kept, mixHex, ObjectPaint, span, TAU, W, WorldEnv } from './world-craft';
-import { roomBehind, starPath } from './world-b3-shared';
+import { roomBehind, starPath } from './world-b3-legacy';
 
 type C = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 const CW = W + 240;

@@ -3,7 +3,7 @@
 // member colour on their rim, the stage kept dark round them so the light never swallows them.
 import type { Piece } from './world-pieces';
 import { atBase, clamp01, ease, easeIn, flood, H, hash, HandGround, HandIn, isLight, mixHex, ObjectPaint, span, TAU, W, WorldEnv } from './world-craft';
-import { roomBehind } from './world-b3-shared';
+import { roomBehind } from './world-b3-legacy';
 import { lightOf } from './world-craft';
 
 type C = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;

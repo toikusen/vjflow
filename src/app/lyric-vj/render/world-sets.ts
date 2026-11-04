@@ -46,6 +46,10 @@ export interface SetSpec {
   surface?: SurfaceKind;
   ink?: keyof Slots;
   core?: keyof Slots;
+  /** Surfaces laid under the letters, outermost first, each in a slot's tone: rings that must never cross a letter. */
+  under?: { kind: SurfaceKind; tone: keyof Slots }[];
+  /** Laid into its ground's composition: no travel or swell while it is up. */
+  fixed?: boolean;
 }
 
 export interface Block {

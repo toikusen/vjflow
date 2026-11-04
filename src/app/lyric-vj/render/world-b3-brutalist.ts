@@ -3,7 +3,7 @@
 // Nothing glows, nothing is soft; the only shadow is the one a pasted sheet throws.
 import type { Piece } from './world-pieces';
 import { atBase, boxOf, ease, easeIn, flood, H, hash, HandGround, HandIn, isLight, lifted, mixHex, ObjectPaint, Pt, trace, W, WorldEnv } from './world-craft';
-import { sheetBehind, tileGround, tonerTile } from './world-b3-shared';
+import { sheetBehind, tileGround, tonerTile } from './world-b3-legacy';
 
 type C = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 /** Toner over the sheet: dark specks on a light sheet, pale ones on a dark one. */

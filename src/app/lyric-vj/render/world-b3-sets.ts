@@ -5,14 +5,13 @@ import type { SetSpec } from './world-sets';
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };
 
 export const LOUD_SETS: Record<string, SetSpec> = {
-  // popart: a panel's words, in its upper-left or lower-right corner, in a balloon, in the burst, in the caption box
-  'popart/panel-left': { ...base, at: [0.06, 0.1], ax: -1, ay: -1, share: 0.56, tall: 0.5, hi: 250, rows: [1, 3], lead: 1.06, track: 0, flush: -1 },
-  'popart/panel-right-low': { ...base, at: [0.94, 0.9], ax: 1, ay: 1, share: 0.58, tall: 0.46, hi: 240, rows: [1, 3], lead: 1.06, track: 0, flush: 1 },
-  'popart/speech': { ...base, at: [0.52, 0.36], ax: 0, ay: 0, share: 0.62, tall: 0.4, hi: 230, rows: [1, 3], lead: 1.08, track: 0, object: 'speech-balloon', pad: [90, 70], fill: [0.5, 0.46] },
-  'popart/burst': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.56, tall: 0.44, hi: 320, rows: [1, 2], lead: 1.02, track: -0.01, tilt: -0.08, object: 'pow-plate', pad: [170, 150], fill: [0.6, 0.6] },
-  'popart/caption': { ...base, at: [0.08, 0.08], ax: -1, ay: -1, share: 0.82, tall: 0.3, hi: 190, rows: [1, 2], lead: 1.08, track: 0.01, flush: -1, object: 'caption-box', pad: [44, 30], fill: [0.6, 0.2] },
-  'popart/column': { ...base, at: [0.9, 0.5], ax: 0, ay: 0, share: 0.24, tall: 0.82, hi: 230, rows: [1, 2], vertical: true, lead: 1.08, track: 0.02 },
-  'popart/gutter': { ...base, at: [0.08, 0.5], ax: -1, ay: 0, share: 0.9, tall: 0.8, hi: 240, rows: [2, 2], lead: 1.5, track: 0, flush: -1, stair: 1.4 },
+  // popart (board a–d): a balloon in the wide panel (either side), the narrator's caption up left, the sound effect over
+  // the burst, a phrase a column in two tall balloons read right to left
+  'popart/balloon': { ...base, at: [0.3125, 0.463], ax: 0, ay: 0, share: 0.4, tall: 0.6, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon', pad: [190, 160], fill: [0.56, 0.8], fixed: true },
+  'popart/balloon-r': { ...base, at: [0.6875, 0.463], ax: 0, ay: 0, share: 0.4, tall: 0.6, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon-r', pad: [190, 160], fill: [0.56, 0.8], fixed: true },
+  'popart/narration': { ...base, at: [0.102, 0.176], ax: -1, ay: -1, share: 0.4, tall: 0.3, hi: 110, rows: [1, 2], lead: 1.32, track: 0.06, flush: -1, object: 'pop-caption', pad: [60, 50], fill: [0.458, 0.35], fixed: true },
+  'popart/sfx': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.7, tall: 0.72, hi: 350, rows: [1, 2], lead: 1, track: 0, tilt: -0.087, ink: 'faint', surface: 'comic-key', under: [{ kind: 'pop-sfx-plate', tone: 'accent' }, { kind: 'pop-sfx-key', tone: 'ink' }], fixed: true },
+  'popart/twin': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.06, tall: 0.76, hi: 108, rows: [2, 2], vertical: true, lead: 9.4, track: 0, object: 'pop-twin-balloons', pad: [70, 88], fixed: true },
   // gameshow: the question card low in the set, the buzzers at the sides, the strip across the top, the judgement huge
   'gameshow/question-card': { ...base, at: [0.5, 0.68], ax: 0, ay: 0, share: 0.72, tall: 0.38, hi: 240, rows: [1, 3], lead: 1.12, track: 0.01, object: 'quiz-card', pad: [84, 60], fill: [0.78, 0.46] },
   'gameshow/buzzer-left': { ...base, at: [0.06, 0.5], ax: -1, ay: 0, share: 0.46, tall: 0.72, hi: 230, rows: [1, 3], lead: 1.1, track: 0.01, flush: -1 },

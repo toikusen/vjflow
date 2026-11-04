@@ -3,7 +3,7 @@
 // card; when the line is sung the judgement lands. Nothing glows, nothing blurs: a studio is lit flat.
 import type { Piece } from './world-pieces';
 import { atBase, clamp01, ease, easeIn, flood, H, hash, HandGround, HandIn, isLight, mixHex, ObjectPaint, span, TAU, W, WorldEnv } from './world-craft';
-import { checkerTile, dotTile, hardShadow, starPath, stripeTile, tileGround } from './world-b3-shared';
+import { checkerTile, dotTile, hardShadow, starPath, stripeTile, tileGround } from './world-b3-legacy';
 
 const LINE = 9;
 const key = (e: WorldEnv) => (isLight(e.paper) ? e.ink : e.slots.plateInk);

@@ -609,7 +609,7 @@ export interface WorldPool {
   id: string;
   recipes: Recipe[];
   pairSet: string;
-  pairLine: { enters: string[]; exits: string[]; hold: string };
+  pairLine: { enters: string[]; exits: string[]; hold: string; ground?: string };
   grounds: Record<Level, string[]>;
   quiet: string[];
   peak: { loud: string; calm: string };
@@ -1043,7 +1043,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
         if (worldPair) return { cue: id, budget: true, enter: 'cut', exit: 'fade', idle: 'still', trail: false, emphasis: keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase), method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '', world: { set: W.pairSet, enter: W.pairLine.enters[0], exit: W.pairLine.exits[0], hold: W.pairLine.hold } };
         return { cue: id, budget: true, enter: k ? (pair.kind === 'chat' ? 'cut' : 'reply-land') : r.enter, exit: out ?? r.exit, idle: 'still', trail: false, emphasis: keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase), method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' };
       });
-      return { shot: s.id, level: level / 2, chapter: '', lyric: { template: r.template, side: 'center', params: r.params ?? {} }, lines, cuts: cutsOf(true) };
+      // (a world's pair set that is laid into a page of its own brings that page with it, as its single lines do)
+      const pairCuts = cutsOf(true);
+      if (worldPair && W.pairLine.ground) { pairCuts[0].fx = W.pairLine.ground; pairCuts.splice(1); }
+      return { shot: s.id, level: level / 2, chapter: '', lyric: { template: r.template, side: 'center', params: r.params ?? {} }, lines, cuts: pairCuts };
     }
     // a chorus comes back with its recipe, as long as that does not push a device past its share of the song
     // (a stack the director made for one line is that line's: a repeat it lost does not inherit it)

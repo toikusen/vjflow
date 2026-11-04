@@ -9,10 +9,12 @@ const stepsOf = (q: number, n: number) => Math.floor(clamp01(q) * n) / n;
 const over = (q: number, k = 0.18) => { const x = clamp01(q); return 1 + k * Math.sin(x * Math.PI) * (1 - x); };
 
 export const LOUD_ENTERS: Record<string, WorldMove> = {
-  // popart: the panel slams in; the ink stamps a word at a time on the beat; the frame slides in from the gutter
-  'pow-in': { sec: 0.2, block: (q) => ({ sx: q >= 1 ? 1 : 1.5 - 0.5 * over(q, 0.3) * easeOut(q, 4), sy: q >= 1 ? 1 : 1.5 - 0.5 * over(q, 0.3) * easeOut(q, 4), a: clamp01(q * 6) }) },
-  'ink-stamp': { sec: 0.36, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 1) - i); return { a: k > 0 ? 1 : 0, s: k > 0 && k < 1 ? 1.2 - 0.2 * k : 1 }; } },
-  'gutter-slide': { sec: 0.26, block: (q, seed) => ({ dx: (seed % 2 ? 1 : -1) * 320 * (1 - stepsOf(easeOut(q, 3), 5)), a: q > 0.05 ? 1 : 0 }) },
+  // popart (board motion): a balloon pops out of its tail's corner; the colour plate prints first and the key lands two
+  // frames later; the narrator's caption only slides; a sound effect is stamped down
+  'balloon-pop': { sec: 0.26, block: (q) => { const k = easeOut(q, 3); const s = q >= 1 ? 1 : 0.55 + 0.45 * over(q, 0.22) * k; return { sx: s, sy: s, dx: -60 * (1 - k), dy: 50 * (1 - k), a: clamp01(q * 8) }; } },
+  'plate-then-key': { sec: 0.2, glyph: ({ q }) => (q < 0.4 ? { a: q > 0.05 ? 1 : 0, dx: 5, dy: -3, tone: 0.55 } : { a: 1 }) },
+  'caption-slide': { sec: 0.34, block: (q) => ({ dx: -90 * (1 - easeOut(q, 3)), a: clamp01(q * 5) }) },
+  'sfx-stamp': { sec: 0.18, block: (q) => { const s = q >= 1 ? 1 : 1.35 - 0.35 * easeOut(q, 4); return { sx: s, sy: s, a: q > 0.02 ? 1 : 0 }; } },
   // gameshow: the card drops on the buzzer with a bounce; the tiles flip to show the answer; the words buzz in one by one
   'slam-in': { sec: 0.24, block: (q) => ({ sx: 1.45 - 0.45 * easeOut(q, 4), sy: 1.45 - 0.45 * easeOut(q, 4), dy: -40 * (1 - easeOut(q, 3)), a: clamp01(q * 6) }) },
   'tile-flip': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0 ? 1 : 0, sx: k > 0 ? Math.max(0.05, Math.abs(Math.cos((1 - easeOut(k, 2)) * Math.PI * 0.5))) : 1 }; } },
@@ -45,7 +47,8 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
 
 export const LOUD_EXITS: Record<string, WorldMove> = {
   'panel-wipe': { sec: 0.24, clip: (q) => ({ axis: 'x', at: 1 - stepsOf(easeIn(q, 2), 6) }) },
-  'burst-out': { sec: 0.22, block: (q) => ({ sx: 1 + 0.6 * easeIn(q, 2), sy: 1 + 0.6 * easeIn(q, 2), a: 1 - easeIn(q, 1.5) }) },
+  'balloon-shrink': { sec: 0.22, block: (q) => { const s = 1 - 0.6 * easeIn(q, 2); return { sx: s, sy: s, dx: -50 * easeIn(q, 2), dy: 40 * easeIn(q, 2), a: q < 0.85 ? 1 : 0 }; } },
+  'caption-slide-out': { sec: 0.3, block: (q) => ({ dx: 120 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
   'card-drop': { sec: 0.3, block: (q) => ({ dy: 700 * easeIn(q, 2), r: 0.08 * easeIn(q, 2), a: q < 0.9 ? 1 : 0 }) },
   'flip-away': { sec: 0.28, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - (n - i)); return { sx: Math.max(0.05, 1 - easeIn(k, 2)), a: k >= 1 ? 0 : 1 }; } },
   'blackout-off': { sec: 0.26, glyph: ({ q }) => ({ tone: 1 - 0.9 * easeOut(q, 2), a: q < 0.8 ? 1 : 1 - (q - 0.8) * 5 }) },
@@ -63,7 +66,9 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
 };
 
 export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
-  'dot-still': () => ({}),
+  'page-still': () => ({}),
+  // the burst flexes on each beat: the sound effect breathes with it, a hair
+  'burst-flex': ({ age }) => ({ s: 1 + 0.025 * Math.exp(-fract(age * 2) * 6) }),
   'studio-bounce': ({ age }) => ({ s: 1 + 0.02 * Math.exp(-fract(age * 2) * 7) }),
   'stage-pulse': ({ age, i }) => ({ tone: 0.92 + 0.08 * Math.sin(age * 2.2 + i * 0.4) }),
   'float-drift': ({ age, u, i }) => ({ dy: 5 * Math.sin(age * 1.5 + u * 2 + i * 0.3), r: 0.006 * Math.sin(age * 1.1 + i) }),

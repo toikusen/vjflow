@@ -204,6 +204,10 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // an emphasised character is its own picture on a world with a material, and each pose its own ink
   const mapsOf = (eaten: boolean) => sets.map((_, p) => gs.map((g) => (baked ? glyphTexture(g.char, { ...style, surface: surfaceOf(tintOf(g, p), eaten, p) }).texture : g.mesh.material.map!)));
   const whole = mapsOf(false);
+  // a set's rings under its letters (world-glyph-loud.ts): a layer is one picture a glyph, each layer laid under the next and
+  // all of them under every letter, so a ring never crosses a letter, its own or its neighbour's
+  const unders = sets.map((st, p) => (st.under ?? []).map((u) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceKey({ kind: u.kind, tint: slots[u.tone], core: tintOf(g, p), eaten: false }) }).texture)));
+  const underLayers = Array.from({ length: Math.max(0, ...unders.map((u) => u.length)) }, (_, L) => makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, 'white').map((u) => { const o = -4.8 + L * 0.2; u.mesh.renderOrder = o; u.mesh.traverse((x) => (x.renderOrder = o)); u.mesh.visible = false; u.mesh.userData['noVeil'] = true; return u; }));
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
@@ -213,6 +217,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const body = new THREE.Group();
   gs.forEach((g, i) => { g.index = i; body.add(g.mesh); });
   poses.forEach((p) => { if (p.object) body.add(p.object); });
+  underLayers.forEach((layer) => layer.forEach((u) => body.add(u.mesh)));
   const stressCopies: { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; i: number; d: { dx: number; dy: number; s: number; a: number } }[] = [];
   if (blown) {
     const groundInk = wl.fixedInk ? slots.ink : rt.palette.text;
@@ -318,10 +323,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const along = clamp01(age / span) - 0.5;
       // (never further than the frame leaves it)
       const fit = (d: number, c: number, half: number, frame: number) => Math.sign(d) * Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half));
-      const [gx, gy] = wl.drift ?? [0, 0];
+      // (a set laid into its page's composition holds its place: the page is printed round it)
+      const [gx, gy] = p.spec.fixed ? [0, 0] : wl.drift ?? [0, 0];
       body.position.x += fit(gx, p.block.cx, p.block.w / 2, 960) * along;
       body.position.y += fit(gy, p.block.cy, p.block.h / 2, 540) * along;
-      const swell = 1 + (wl.swell ?? 0) * (along + 0.5);
+      const swell = 1 + (p.spec.fixed ? 0 : wl.swell ?? 0) * (along + 0.5);
       body.scale.multiplyScalar(swell);
       const inkLit = inksBy[k];
       gs.forEach((g, i) => {
@@ -369,6 +375,18 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
           else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }
       });
+      underLayers.forEach((layer, L) => layer.forEach((u, i) => {
+        const m = gs[i].mesh;
+        const map = unders[k][L]?.[i];
+        u.mesh.visible = !!map && m.visible && m.material.opacity > 0.01;
+        if (!u.mesh.visible) return;
+        if (u.mesh.material.map !== map) { u.mesh.material.map = map!; u.mesh.material.needsUpdate = true; }
+        u.mesh.position.copy(m.position);
+        u.mesh.scale.copy(m.scale);
+        u.mesh.rotation.z = m.rotation.z;
+        u.mesh.material.opacity = m.material.opacity;
+        u.mesh.material.color.copy(m.material.color);
+      }));
       for (const c of stressCopies) {
         const m = gs[c.i].mesh;
         c.mesh.visible = k === 0 && m.visible && m.material.opacity > 0.01;

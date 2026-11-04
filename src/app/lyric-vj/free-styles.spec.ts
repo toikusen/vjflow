@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from './contrast';
-import { FREE_STYLES, HELD_WORLDS, recommendStyle, STYLE_PALETTES, styleFont, styleGroups } from './free-styles';
+import { FREE_STYLES, HELD_WORLDS, OFFERED_STYLES, recommendStyle, STYLE_PALETTES, styleFont, styleGroups } from './free-styles';
 import { FONTS } from './fonts';
 import { LANGUAGES } from './languages';
 import { freeJob } from './free-plan';
@@ -24,9 +24,17 @@ describe('free styles', () => {
     }
   });
   it('take a Han face for lyrics without kana', () => {
-    expect(styleFont(FREE_STYLES[0], '我走過那條路', false)).toBe('Chiron Hei HK');
+    expect(styleFont(FREE_STYLES[0], '我走過那條路', false)).toBe('Chocolate Classical Sans');
     expect(styleFont(FREE_STYLES[0], 'さよならの歌', false)).toBe('Zen Kaku Gothic New');
     expect(new Set(FREE_STYLES.map((s) => s.fonts.tc)).size).toBeGreaterThanOrEqual(8);
+  });
+  // the 2026-11-04 font table: a Traditional Chinese face serves at most two worlds, and no two offered worlds share both faces
+  it('give each offered world its own faces', () => {
+    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family;
+    for (const s of OFFERED_STYLES) expect(FREE_STYLES.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(2);
+    const pairs = OFFERED_STYLES.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
+    expect(new Set(pairs).size).toBe(pairs.length);
+    for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === tc(s)), tc(s)).toBe(true);
   });
   it('turn the song plan into their own version', () => {
     const cues = ['我走過那條路', '風吹過你的臉', '天亮了我還在等'].map((text, i) => ({ id: `c${i + 1}`, start: 5 + i * 5, end: 9 + i * 5, text }));

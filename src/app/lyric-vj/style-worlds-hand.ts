@@ -100,7 +100,7 @@ const lantern: StyleWorld = {
   lyricRole: '歌詞是最靠近燈的那層紙上的剪影，燈亮才看得見',
   family: 'layered',
   refuses: ['單顆燈籠', '暖簾字框', '冷光', '人物', '粒子', '平面單層', '硬切換色'],
-  type: { ja: { family: 'Kaisei Decol', weight: 700 }, tc: { family: 'Noto Serif TC', weight: 900 }, latin: 'Cormorant Garamond', setting: '柔和明朝的深色剪影，四周有光', category: 'silhouette-serif' },
+  type: { ja: { family: 'Kaisei Decol', weight: 700 }, tc: { family: 'LXGW WenKai TC', weight: 700 }, latin: 'Cormorant Garamond', setting: '柔和明朝的深色剪影，四周有光', category: 'silhouette-serif' },
   palette: [
     scheme('ember-night', 'warm', 'dark', '#FFC070', '#2A1410', '#160B1C', '#FF7A2F', '#FFE3B0', '#2A1410', '#A8481F', '炭火般的橙'),
     scheme('moon-indigo', 'cold', 'dark', '#FAD9A0', '#0E1530', '#0B1431', '#FF9E4A', '#FFF0CE', '#0E1530', '#4F6BB0', '藍夜裡的窗光'),
@@ -182,7 +182,7 @@ const woodcut: StyleWorld = {
   lyricRole: '歌詞是刻穿墨版留下的白，留在沒下過刀的那塊版上',
   family: 'stroke',
   refuses: ['灰階', '漸層', '細線稿', '發光', '第二個以上的色版', '放射光當預設', '幾何圓環'],
-  type: { ja: { family: 'Yuji Syuku', weight: 400 }, tc: { family: 'Chiron Hei HK', weight: 900 }, latin: 'Space Mono', setting: '粗字，刀口帶缺角，靠邊或滿版', category: 'carved' },
+  type: { ja: { family: 'Yuji Syuku', weight: 400 }, tc: { family: 'LXGW Marker Gothic', weight: 400 }, latin: 'Space Mono', setting: '粗字，刀口帶缺角，靠邊或滿版', category: 'carved' },
   palette: [
     scheme('sumi-block', 'cold', 'dark', '#0D0C0B', '#EEE6D4', '#C6652F', '#C6652F', '#C6652F', '#0D0C0B', '#3A332B', '墨黑版'),
     scheme('oxblood-plate', 'warm', 'dark', '#5E1414', '#F6E6D0', '#111010', '#E0A36B', '#F6E6D0', '#5E1414', '#3A0E0E', '牛血紅版，飽和'),

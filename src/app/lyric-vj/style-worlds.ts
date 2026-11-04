@@ -61,7 +61,7 @@ const neon: StyleWorld = {
   lyricRole: '歌詞是掛在牆上的霓虹招牌，一支支燈管通電才亮',
   family: 'emissive',
   refuses: ['透視格線', '合成波夕陽', '粒子閃光', '彩虹色', '照片', '字後方貼色塊', '時間延遲彩色殘影'],
-  type: { ja: { family: 'M PLUS Rounded 1c', weight: 700 }, tc: { family: 'Huninn', weight: 400 }, latin: 'Pacifico', setting: '圓體，筆畫同粗，像一支管彎出來', category: 'round' },
+  type: { ja: { family: 'M PLUS Rounded 1c', weight: 700 }, tc: { family: 'Chiron GoRound TC', weight: 500 }, latin: 'Pacifico', setting: '圓體，筆畫同粗，像一支管彎出來', category: 'round' },
   palette: [
     scheme('sign-pink', 'dark', '#0F0B12', '#FF5C96', '#38D6E8', '#FF9A3D', '#1B171F', '#FFEAF1', '#3A2C38', '粉管配青管'),
     scheme('sign-cyan', 'dark', '#0A1014', '#4BE6F2', '#FF5577', '#8CF06A', '#141C20', '#E8FCFF', '#24363C', '青管配紅管'),
@@ -101,7 +101,7 @@ const terminal: StyleWorld = {
   lyricRole: '歌詞是這台電腦正在發生的事，歌的字句就是視窗裡的內容：傳送、連線、當機都是劇情',
   family: 'emissive',
   refuses: ['HUD 儀表', '假數據與座標', '檔案大小與百分比數字', '綠色字元雨', '條碼計數', '時間延遲彩色殘影', '和歌曲無關的視窗內容'],
-  type: { ja: { family: 'DotGothic16', weight: 400 }, tc: { family: 'Noto Sans TC', weight: 500 }, latin: 'Space Mono', setting: '原字形不重新點陣化，等寬格加字距，行距 1.36，桌面上的視窗讓開歌詞', category: 'mono-cell' },
+  type: { ja: { family: 'DotGothic16', weight: 400 }, tc: { family: 'LXGW WenKai Mono TC', weight: 400 }, latin: 'Space Mono', setting: '原字形不重新點陣化，等寬格加字距，行距 1.36，桌面上的視窗讓開歌詞', category: 'mono-cell' },
   palette: [
     scheme('p1-green', 'dark', '#06100B', '#6CFF9E', '#2C8A5A', '#E8FFD0', '#0A1711', '#6CFF9E', '#1A3A2A', 'P1 綠磷光'),
     scheme('mac-desk', 'dark', '#0A0C10', '#F2F4F8', '#8FA3BF', '#FF5F57', '#1C1E24', '#F2F4F8', '#2A2E38', 'Mac 桌面'),
@@ -260,7 +260,7 @@ const gothic: StyleWorld = {
   lyricRole: '歌詞是一本精裝暗黑童話書的內文，一句一頁',
   family: 'layered',
   refuses: ['血與恐怖', '骷髏', '手電筒', '霓虹', '硬邊幾何', '彩虹', '假拉丁文'],
-  type: { ja: { family: 'Zen Old Mincho', weight: 900 }, tc: { family: 'Chiron Sung HK', weight: 700 }, latin: 'Cormorant Garamond', setting: '高對比明體，置中或書頁齊行', category: 'high-contrast' },
+  type: { ja: { family: 'Zen Old Mincho', weight: 900 }, tc: { family: 'UoqMunThenKhung', weight: 400 }, latin: 'Cormorant Garamond', setting: '高對比明體，置中或書頁齊行', category: 'high-contrast' },
   palette: [
     scheme('oxblood', 'dark', '#160A0E', '#E9D9BF', '#D9A441', '#C9A24A', '#EBDCC2', '#24100F', '#4A1C26', '酒紅天鵝絨與羊皮'),
     scheme('nightshade', 'dark', '#0E0C16', '#E4DCEC', '#C8A96A', '#B9A05A', '#E6DEE6', '#1A1424', '#2E2544', '夜紫'),
@@ -324,12 +324,12 @@ const print = (o: { id: string; name: string; language: StyleWorld['language']; 
 const face = (family: string, weight = 900) => ({ family, weight });
 const paperScheme = (id: string, ink: string, paper: string, accent: string, heart: string, what: string, band: Scheme['band'] = 'light'): Scheme => ({ id, band, what, ground: paper, ink, ink2: heart, accent, plate: paper, plateInk: ink, faint: heart });
 
-const silk = print({ pace: [4, 4, 2], id: 'silk', name: '絲網海報', language: 'silkscreen', what: '平塗油墨，色少，版與版微微錯開', role: '歌詞是最後一道墨，刮刀刷過才有字', refuses: ['照片', '漸層', '發光', '細線裝飾過多', '手寫字'], ja: face('Zen Kaku Gothic New'), tc: face('Chiron Hei HK'), category: 'gothic-heavy',
+const silk = print({ pace: [4, 4, 2], id: 'silk', name: '絲網海報', language: 'silkscreen', what: '平塗油墨，色少，版與版微微錯開', role: '歌詞是最後一道墨，刮刀刷過才有字', refuses: ['照片', '漸層', '發光', '細線裝飾過多', '手寫字'], ja: face('Zen Kaku Gothic New'), tc: face('Chocolate Classical Sans', 400), category: 'gothic-heavy',
   palette: [paperScheme('silk-dawn', '#1B3439', '#F3E4CE', '#C4472F', '#3B6B76', '絲網海報：初夏清晨'), paperScheme('silk-ochre', '#2B2A3A', '#EFDDBD', '#B8452A', '#8F7AA6', '絲網海報：暖紙'), paperScheme('silk-pine', '#16333A', '#DFE9E2', '#B5502F', '#3B6B76', '絲網海報：冷綠')],
   frame: { grain: 0.1, paper: 0.26 }, own: 'squeegee-pass', curve: 'squeegee-pass', peak: 'peel', sets: ['silk/edge-bleed', 'silk/top-slab', 'silk/poster-column'], enters: ['squeegee', 'screen-lift'], exits: ['plate-lift', 'squeegee-back'], hold: 'press-set',
   shared: ['punch-zoom', 'punch-slam', 'band-hit'],
   grounds: [['paper-edge', 'herringbone'], ['silk/pulled-slab', ...['block', 'herringbone', 'paper-edge'], 'silk/second-pull'], ['silk/pulled-slab', ...['block', 'peel'], 'silk/second-pull']], quiet: ['silk/second-pull', ...['paper-edge', 'herringbone'], 'silk/pulled-slab'], every: [8, 4, 2], line: ['push', 'barndoor'], part: ['diagonal', 'barndoor'], banned: ['ripple'], family: 'press', process: '油墨被刮刀壓過網版', nearest: '紙質風格', differs: '大字出血與刮刀進場', fast: 'nun', calm: 'snow' });
-const silkCold = print({ pace: [4, 4, 2], id: 'silk-cold', name: '冬夜網版', language: 'silkscreen', what: '同一種印法的冷色版，適合安靜的歌', role: '歌詞是冬夜遠處的一行字，留白比字多', refuses: ['暖色', '大字吼叫', '快速切換', '放射光', '手寫字'], ja: face('Zen Old Mincho', 700), tc: face('Noto Serif TC', 700), category: 'serif',
+const silkCold = print({ pace: [4, 4, 2], id: 'silk-cold', name: '冬夜網版', language: 'silkscreen', what: '同一種印法的冷色版，適合安靜的歌', role: '歌詞是冬夜遠處的一行字，留白比字多', refuses: ['暖色', '大字吼叫', '快速切換', '放射光', '手寫字'], ja: face('Zen Old Mincho', 700), tc: face('Cactus Classical Serif', 400), category: 'serif',
   palette: [paperScheme('silk-harbour', '#142F44', '#E6EEF1', '#C94A32', '#2D6A8A', '絲網海報：冬夜港口'), paperScheme('silk-pine', '#16333A', '#DFE9E2', '#B5502F', '#3B6B76', '絲網海報：冷綠'), paperScheme('silk-fog', '#1E2F3A', '#E2E7EA', '#58708A', '#46677E', '冬霧')],
   frame: { grain: 0.1, paper: 0.3 }, own: 'fog-rise', curve: 'slow-breath', peak: 'washi', sets: ['silk-cold/low-far', 'silk-cold/right-column', 'silk-cold/upper-left'], enters: ['bleach-up', 'thin-coat'], exits: ['fade-thin', 'breath-off'], hold: 'cold-still',
   shared: ['vert-ink', 'vert-focus', 'couplet-rise'],
@@ -339,7 +339,7 @@ const riso = print({ pace: [4, 4, 2], id: 'riso', name: '孔版印刷', language
   frame: { grain: 0.14, paper: 0.2 }, own: 'drum-roll', curve: 'drum-step', peak: 'disc', sets: ['riso/offset-stair', 'riso/drop-right', 'riso/tilted'], enters: ['drum-feed', 'misregister'], exits: ['drum-out', 'ink-slip'], hold: 'drum-tremor',
   shared: ['stair-slice', 'scatter-gather', 'stair-rip'],
   grounds: [['overprint', 'dotscreen'], ['riso/two-drum', ...['dotscreen', 'overprint', 'disc'], 'riso/grain-block'], ['riso/two-drum', ...['disc', 'dotscreen', 'overprint'], 'riso/grain-block']], quiet: ['riso/grain-block', ...['overprint', 'dotscreen'], 'riso/two-drum'], every: [8, 4, 2], line: ['push', 'whip'], part: ['diagonal', 'circle'], banned: ['dipwhite'], family: 'drum', process: '透明大豆墨經滾筒印上', nearest: '新聞紙風格', differs: '階梯錯位與第三色', fast: 'choroin', calm: 'tsuzuki' });
-const spy = print({ id: 'spy', name: '諜報片頭', language: 'spy-titles', what: '剪紙片頭，大塊斜切，節奏俐落', role: '歌詞是片頭字幕，字構成布景', refuses: ['手寫', '圓體', '水彩', '照片', '慢動作'], ja: face('Zen Old Mincho'), tc: face('Noto Sans TC'), category: 'slash',
+const spy = print({ id: 'spy', name: '諜報片頭', language: 'spy-titles', what: '剪紙片頭，大塊斜切，節奏俐落', role: '歌詞是片頭字幕，字構成布景', refuses: ['手寫', '圓體', '水彩', '照片', '慢動作'], ja: face('Zen Old Mincho'), tc: face('WDXL Lubrifont TC', 400), category: 'slash',
   palette: [paperScheme('spy-hot', '#110E0C', '#E4553A', '#FFF6E0', '#F2C14E', '諜報片頭：熱紅', 'mid'), paperScheme('spy-bone', '#171B23', '#EBE5D5', '#176E6E', '#C8531C', '諜報片頭：骨白深青'), paperScheme('spy-mustard', '#1D1A14', '#E3B74A', '#7A1F1F', '#F4EEDD', '諜報片頭：芥末', 'mid')],
   frame: { grain: 0.08, paper: 0.16 }, own: 'slash-cut', curve: 'blade-snap', peak: 'offcut', sets: ['spy/diagonal', 'spy/low-slash', 'spy/high-slash'], enters: ['razor', 'slit-reveal'], exits: ['razor-off', 'slash-drop'], hold: 'blade-lean',
   shared: ['build-mid', 'build-hit', 'split-pair'],

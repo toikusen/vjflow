@@ -8,6 +8,7 @@ export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten:
 export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}`;
 export const parseSurface = (k: string): Surface => { const [kind, tint, core, eaten] = k.split('|'); return { kind: kind as SurfaceKind, tint, core, eaten: eaten === '1' }; };
 
+import { lampCells } from './lamp-cells';
 import { handSurface, HandSurface, isHandSurface } from './world-glyph-hand';
 import { isLoudSurface, loudSurface, LoudSurface } from './world-glyph-loud';
 
@@ -119,12 +120,21 @@ export function applySurface(canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
       ctx.fillStyle = s.tint;
       ctx.shadowColor = s.tint;
       ctx.shadowBlur = pitch * 0.9;
-      for (let y = pitch / 2; y < ch; y += pitch)
-        for (let x = pitch / 2; x < cw; x += pitch) {
+      // each lamp's coverage, then the lamps lit (lamp-cells.ts: a thin slanting stroke keeps its gaps closed)
+      const [cols, rows] = [Math.ceil((cw - pitch / 2) / pitch), Math.ceil((ch - pitch / 2) / pitch)];
+      const cover = new Float32Array(cols * rows);
+      for (let j = 0; j < rows; j++)
+        for (let i = 0; i < cols; i++) {
+          const [x, y] = [pitch / 2 + i * pitch, pitch / 2 + j * pitch];
           let sum = 0;
           for (let v = -1; v <= 1; v++) for (let u = -1; u <= 1; u++) sum += a[(Math.floor(y + (v * pitch) / 3) * cw + Math.floor(x + (u * pitch) / 3)) * 4 + 3] ?? 0;
-          const k = sum / (9 * 255);
-          if (k < 0.3) continue;
+          cover[j * cols + i] = sum / (9 * 255);
+        }
+      const lit = lampCells(cover, cols, rows);
+      for (let j = 0; j < rows; j++)
+        for (let i = 0; i < cols; i++) {
+          if (!lit[j * cols + i]) continue;
+          const [x, y, k] = [pitch / 2 + i * pitch, pitch / 2 + j * pitch, Math.max(0.3, cover[j * cols + i])];
           ctx.globalAlpha = 0.72 + 0.28 * k;
           ctx.beginPath();
           ctx.arc(x, y, pitch * 0.46, 0, Math.PI * 2);

@@ -13,6 +13,7 @@ import type { SymbolName } from '../treatment';
 import { drawFlood, drawLineGround, isLineGround } from './line-grounds';
 import { clearWordsAfter, drawWorldGround, isWorldGround, WorldEnv, worldInAt } from './world-grounds';
 import { reservePaper } from './world-ink';
+import { holdInkGround } from './behind-ink';
 import { pieceAt } from './world-pieces';
 import type { Slots } from './world-objects';
 import { hushOf, isFlood, maskedByLine, ovalOf, rayStart } from './material';
@@ -600,6 +601,13 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
           if (env.base) ctx.setTransform(env.base);
           if (piece.p.reserve && env.rect) reservePaper(ctx, seed, env.rect, env.paper, (piece.p.clear ?? 0.55) * env.weight);
           else clearWordsAfter({ ...env, base: undefined }, piece.p.clear ?? 0.55);
+          ctx.restore();
+        }
+        // whatever a change or a set piece laid under the words, the ink must read on all of it (behind-ink.ts)
+        if ((coming || piece) && env.rect) {
+          ctx.save();
+          if (env.base) ctx.setTransform(env.base);
+          holdInkGround(ctx, env.rect, ink, paper, env.weight);
           ctx.restore();
         }
         break;

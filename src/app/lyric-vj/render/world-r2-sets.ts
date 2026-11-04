@@ -37,7 +37,7 @@ export const R2_SETS: Record<string, SetSpec> = {
   'stained-glass/lancet': { ...base, at: [0.7396, 0.33], ax: 0, ay: -1, share: 0.16, tall: 0.56, hi: 120, rows: [1, 2], vertical: true, lead: 1.37, track: 0.02, ink: 'ink', on: ['plate'], keepRows: true, fixed: true },
   // (the same board mirrored: the lancet on the left, the rose on the right)
   'stained-glass/lancet-l': { ...base, at: [0.2604, 0.33], ax: 0, ay: -1, share: 0.16, tall: 0.56, hi: 120, rows: [1, 2], vertical: true, lead: 1.37, track: 0.02, ink: 'ink', on: ['plate'], keepRows: true, fixed: true },
-  'stained-glass/roundel': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.2, tall: 0.36, hi: 150, rows: [1, 2], lead: 1.08, track: 0.02, ink: 'ink', on: ['plate'], keepRows: true, fixed: true },
+  'stained-glass/roundel': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, square: true, share: 0.2, tall: 0.36, hi: 150, rows: [1, 2], lead: 1.08, track: 0.02, ink: 'ink', on: ['plate'], keepRows: true, fixed: true },
   // (four short lancets over a predella: the inscription in the low band window, the boards' lancet and jewelled border together)
   'stained-glass/predella': { ...base, at: [0.5, 0.759], ax: 0, ay: 0, share: 0.66, tall: 0.22, hi: 150, rows: [1, 2], lead: 1.1, track: 0.04, ink: 'ink', on: ['plate'], keepRows: true, fixed: true },
   'stained-glass/lancets': { ...base, at: [0.5, 0.2], ax: 0, ay: -1, share: 0.48, tall: 0.7, hi: 120, rows: [2, 2], vertical: true, lead: 4.4, track: 0, ink: 'ink', on: ['plate'], keepRows: true, fixed: true },

@@ -1,7 +1,7 @@
 // A style world's own layouts, as numbers: where a line stands, how wide it may run, how big it may go, what object carries
 // it. One renderer sets them all (world-layout.ts). A set belongs to one world: its id starts with that world's id, and the
 // composer's closed pool is the only way to reach it.
-import { balancedRows } from '../phrases';
+import { balancedRows, phraseBoundaries } from '../phrases';
 import { LOUD_SETS } from './world-b3-sets';
 import { R2_SETS } from './world-r2-sets';
 import type { Slots, WorldObject } from './world-objects';
@@ -50,6 +50,8 @@ export interface SetSpec {
   core?: keyof Slots;
   /** Surfaces laid under the letters, outermost first, each in a slot's tone: rings that must never cross a letter. */
   under?: { kind: SurfaceKind; tone: keyof Slots }[];
+  /** A round or square carrier (a rose's roundel): a short run of Han or kana with no break is still split into even rows. */
+  square?: boolean;
   /** Each row's ink, a slot a row (the last repeats): a second row the board sets apart (a file's entry in stamp red). */
   rowInk?: (keyof Slots)[];
   /** Each row stands on a carrier of its own (a pair of cards, a window's inscription panes): the rows are kept, no key word is blown up out of them. */
@@ -228,7 +230,7 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   if (split) return split;
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {
-    const rows = balancedRows(text, n).filter(Boolean);
+    const rows = rowsFor(text, n, !!spec.square);
     // a row of one mark or one character is a break no reader asked for
     if (n > 1 && rows.some((r) => [...r.replace(/[\s\p{P}\p{S}]/gu, '')].length < 2)) continue;
     const size = spec.vertical ? sizeUp(rows, spec, measure) : sizeAcross(rows, spec, measure);
@@ -254,6 +256,19 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const cy = H / 2 - spec.at[1] * H + (spec.ay * h) / 2;
   const reach = (half: number, edge: number, pad: number) => Math.max(0, edge - half - pad);
   return { rows: pick.rows, size, w, h, cx: clampTo(cx, reach(w / 2, W / 2 - SAFE_X, px)), cy: clampTo(cy, reach(h / 2, H / 2 - SAFE_Y, py)) };
+}
+
+/**
+ * A line in n rows: at its phrases (phrases.ts). A square set fills its carrier, so a short Han or kana run that took no
+ * break (a four-character idiom, 風生水起) is cut at its middle, or at the phrase boundary nearest it when longer.
+ */
+function rowsFor(text: string, n: number, square: boolean): string[] {
+  const rows = balancedRows(text, n).filter(Boolean);
+  if (!square || n !== 2 || rows.length >= n || !/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(text.trim())) return rows;
+  const cs = [...text.trim()];
+  const mid = cs.length / 2;
+  const cut = cs.length <= 8 ? Math.ceil(mid) : [...phraseBoundaries(text.trim())].filter((b) => b > 0 && b < cs.length).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0] ?? Math.ceil(mid);
+  return [cs.slice(0, cut).join(''), cs.slice(cut).join('')];
 }
 
 const clampTo = (x: number, r: number) => Math.min(r, Math.max(-r, x));

@@ -67,6 +67,8 @@ export const FONTS: FontSpec[] = [
   { family: 'BIZ UDPMincho', roles: ['display', 'body'], weights: [400, 700], feel: '公文用的比例明朝，端正、事務感' },
   { family: 'Chiron GoRound TC', roles: ['display', 'body'], weights: [500, 800], feel: '真的粗圓體，閃卡、親切、有力', han: 'tc' },
   { family: 'Courier Prime', roles: ['accent'], weights: [400, 700], feel: '打字機等寬字，案件欄位' },
+  // stained-glass's inscription: a heavy Ming with real bold weights (Noto Serif TC already serves four worlds)
+  { family: 'Noto Serif HK', roles: ['display', 'body'], weights: [700, 900], feel: '粗明體，香港字形，銘文、端正', han: 'tc' },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */

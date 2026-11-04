@@ -289,7 +289,7 @@ function lampPicture(e: WorldEnv, f: (x: number, y: number) => number, tone: str
 }
 let lampCanvas: OffscreenCanvas | undefined;
 /** How much of its light an unlit lamp in a line's area still shows (glass and reflector, the lamp off). */
-const UNLIT = 0.16;
+const UNLIT = 0.06;
 const unlitLamps = (e: WorldEnv, a: number) => { const c = e.ctx; const dots = kept(`unlit|${e.slots.faint}`, LAMP * 4, LAMP * 4, (g) => { g.fillStyle = e.slots.faint; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { g.beginPath(); g.arc((i + 0.5) * LAMP, (j + 0.5) * LAMP, LAMP * 0.3, 0, TAU); g.fill(); } }); c.save(); c.globalAlpha = a; c.fillStyle = c.createPattern(dots, 'repeat')!; c.fillRect(-LAMP, -LAMP, W + LAMP * 2, H + LAMP * 2); c.restore(); };
 
 // ---- wet: rice paper, and water carrying ink through it --------------------------------------------------------------

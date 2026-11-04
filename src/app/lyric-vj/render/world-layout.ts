@@ -177,8 +177,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const specOf = (id: string): SetSpec => { const s = SET_SPECS[id] ?? Object.values(SET_SPECS)[0]; return slot.of > 1 ? { ...s, tall: s.tall / slot.of, rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined } : s; };
   const sets = [wl.set, ...(wl.repose ?? []).map((r) => r.set)].map(specOf);
   // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
-  const blowing = !!wl.blow && slot.of === 1 && !sets[0].vertical;
-  if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0 };
+  // (a column line's blown-up word is set across: the big word reads in a row, and so does the small rest)
+  const blowing = !!wl.blow && slot.of === 1;
+  if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0, vertical: false, stair: 0 };
   const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
   const blocks = sets.map((s) => blockOf(text, s, measureOf(s)));
   // (a blown-up key word is drawn from a picture its own size: never a small one stretched)

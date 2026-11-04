@@ -660,6 +660,8 @@ export const LINE_TRAVEL: Record<Level, number> = { 0: 150, 1: 200, 2: 260 };
 /** A blown-up key word: this many characters at most, and no more than this share of its line (else it is the line). */
 export const BLOW_MAX = 4;
 const BLOW_SHARE = 0.6;
+/** A blown-up word does not open on a particle (的楓葉 is 楓葉). */
+const LEAD_PARTICLE = /^[的之了在把被和與跟也就都還又]/;
 /** A line needs this long up for its key word to be blown up: the small rest has to be read too. */
 const BLOW_MIN_LINE = 1.4;
 /**
@@ -669,7 +671,7 @@ const BLOW_MIN_LINE = 1.4;
 export function blowOf(c: Cue, named?: string): { from: number; to: number } | undefined {
   if (c.end - c.start < BLOW_MIN_LINE || splitCalls(c.text).calls.length) return undefined;
   const cs = [...c.text];
-  const fits = (from: number, to: number) => { const w = cs.slice(from, to).join(''); const n = glyphs(w); return n >= 2 && n <= BLOW_MAX && n <= BLOW_SHARE * glyphs(c.text) && !/[A-Za-z0-9\s]/.test(w) && /^[\p{L}]+$/u.test(w); };
+  const fits = (from: number, to: number) => { const w = cs.slice(from, to).join(''); const n = glyphs(w); return n >= 2 && n <= BLOW_MAX && n <= BLOW_SHARE * glyphs(c.text) && !/[A-Za-z0-9\s]/.test(w) && /^[\p{L}]+$/u.test(w) && !LEAD_PARTICLE.test(w); };
   const key = keyOf(c.text, named);
   const at = c.text.indexOf(key);
   if (named && key === named && at >= 0) { const from = [...c.text.slice(0, at)].length; if (fits(from, from + [...key].length)) return { from, to: from + [...key].length }; }
@@ -1141,7 +1143,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const piece = pieceHere(s.start, newPart || keyLines.has(c.id), `${c.text} ${part.what}`);
     if (piece) { cuts[0]['piece'] = piece; cuts.splice(1); }
     const cueAt = cues.indexOf(c);
-    const blowable = recipe.wline && W?.stress?.length && !piece && !W.columns[recipe.wline.set] && !blownParts.has(part) ? blowOf(c, namedKey(c.id)) : undefined;
+    const blowable = recipe.wline && W?.stress?.length && !piece && !blownParts.has(part) ? blowOf(c, namedKey(c.id)) : undefined;
     const blow = blowable && (namedKey(c.id) || !namedLater(part, cueAt)) ? { ...blowable, stress: W!.stress![meaning.parts.indexOf(part) % W!.stress!.length] } : undefined;
     if (blow) blownParts.add(part);
     // a blown-up key word holds its picture until the line is read: no change of set before

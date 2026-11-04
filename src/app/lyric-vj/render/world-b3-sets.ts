@@ -34,14 +34,12 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'psychedelic/sun': { ...base, at: [0.078, 0.3], ax: -1, ay: -1, share: 0.46, tall: 0.36, hi: 108, rows: [1, 3], lead: 1.39, track: 0.074, flush: -1, ink: 'plate', under: [{ kind: 'poster-key-thin', tone: 'plateInk' }], fixed: true },
   'psychedelic/tunnel': { ...base, split: { small: 'lead', scale: 0.45, track: 0.12 }, at: [0.5, 0.52], ax: 0, ay: 0, share: 0.62, tall: 0.5, hi: 250, rows: [1, 2], lead: 1.12, track: 0.04, ink: 'plate', under: [{ kind: 'poster-band', tone: 'accent' }, { kind: 'poster-key', tone: 'plateInk' }], fixed: true },
   'psychedelic/flow': { ...base, at: [0.79, 0.139], ax: 0, ay: -1, share: 0.3, tall: 0.78, hi: 104, rows: [1, 2], vertical: true, lead: 2.02, track: 0.077, ink: 'plate', under: [{ kind: 'poster-band', tone: 'ink2' }, { kind: 'poster-key', tone: 'plateInk' }], fixed: true },
-  // graffiti: low on the wall, leaning; a stencil dead centre; a tag high right; on a sprayed patch; a throw-up
-  'graffiti/wall-low': { ...base, at: [0.06, 0.72], ax: -1, ay: 0, share: 0.84, tall: 0.44, hi: 300, rows: [1, 2], lead: 1.04, track: 0.01, flush: -1, tilt: -0.05 },
-  'graffiti/stencil-centre': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.86, tall: 0.54, hi: 340, rows: [1, 2], lead: 1.04, track: 0.02 },
-  'graffiti/tag-high': { ...base, at: [0.94, 0.16], ax: 1, ay: -1, share: 0.6, tall: 0.4, hi: 230, rows: [1, 2], lead: 1.08, track: 0.02, flush: 1, tilt: 0.06 },
-  'graffiti/drip-plate': { ...base, at: [0.5, 0.58], ax: 0, ay: 0, share: 0.7, tall: 0.46, hi: 260, rows: [1, 3], lead: 1.08, track: 0.02, object: 'spray-patch', pad: [130, 100], fill: [0.62, 0.5] },
-  'graffiti/throwup': { ...base, at: [0.42, 0.5], ax: 0, ay: 0, share: 0.9, tall: 0.66, hi: 400, rows: [1, 2], lead: 1.02, track: 0, tilt: -0.08, object: 'throw-up', pad: [120, 80], fill: [0.7, 0.5] },
-  'graffiti/column': { ...base, at: [0.16, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.84, hi: 230, rows: [1, 2], vertical: true, lead: 1.06, track: 0.02, tilt: -0.04 },
-  'graffiti/stack': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.84, tall: 0.8, hi: 240, rows: [2, 3], lead: 1.1, track: 0.01, flush: -1, stair: 0.9 },
+  // graffiti (round-2 board a–d): the line sprayed on a rolled buff patch (its last phrase in red), sprayed in navy on a
+  // calm patch, huge across the patch rolled over a wall of prints, its two phrases down two pasted strips
+  'graffiti/buff': { ...base, at: [0.099, 0.48], ax: -1, ay: 0, share: 0.6, tall: 0.62, hi: 232, rows: [1, 3], lead: 1.26, track: 0, flush: -1, split: { small: 'tail', scale: 1, ink: 'ink2' }, fixed: true },
+  'graffiti/navy': { ...base, at: [0.099, 0.45], ax: -1, ay: 0, share: 0.52, tall: 0.5, hi: 156, rows: [1, 3], lead: 1.45, track: 0.02, flush: -1, ink: 'plateInk', fixed: true },
+  'graffiti/wall': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.8, tall: 0.48, hi: 400, rows: [1, 2], lead: 1.04, track: 0, fixed: true },
+  'graffiti/strips': { ...base, at: [0.672, 0.12], ax: 0, ay: -1, share: 0.16, tall: 0.8, hi: 150, rows: [1, 1], vertical: true, lead: 1.15, track: 0.08, object: 'gf-strip', pad: [90, 56], split: { small: 'tail', scale: 0.93, ink: 'plate', at: [0.474, 0.12], tall: 0.8 }, fixed: true },
   // brutalist (board a–d): the headline top left inside the 96 px margin, two lines low under a red rule, the shout across four
   // cells, two columns at the right; nothing ever crosses the margin
   'brutalist/headline': { ...base, split: { small: 'tail', scale: 0.5, track: 0.3, ink: 'plate', at: [0.068, 0.842], ax: -1, share: 0.8, tall: 0.5 }, at: [0.047, 0.185], ax: -1, ay: -1, share: 0.56, tall: 0.6, hi: 318, rows: [1, 3], lead: 1, track: -0.01, flush: -1, fixed: true },
@@ -64,6 +62,7 @@ export const B3_MIRRORS: Record<string, string> = {
   'brutalist/footer': 'brutalist/footer', 'brutalist/columns': 'brutalist/columns',
   'idol-live/ticket': 'idol-live/ticket', 'idol-live/card-col': 'idol-live/setlist',
   'gameshow/hint': 'gameshow/hint', 'gameshow/qa': 'gameshow/qa',
+  'graffiti/buff': 'graffiti/paste-up', 'graffiti/navy': 'graffiti/navy-buff',
 };
 const flip = (x: -1 | 0 | 1) => (-x as -1 | 0 | 1);
 /** Objects drawn one way round, and their mirrored make (the Q/A banners' tabs and chevrons). */

@@ -21,7 +21,9 @@ describe('split lines (one line in two sizes or two containers)', () => {
         if (!b.lines) continue;
         const small = b.small!.map((r) => b.lines![r].size);
         const big = b.lines!.filter((_, r) => !b.small!.includes(r)).map((l) => l.size);
-        expect(Math.max(...small), `${id} ${text}`).toBeLessThan(Math.min(...big));
+        // (a set that splits only to ink the part apart keeps one size: scale ≥ 0.9)
+        if (s.split!.scale < 0.9) expect(Math.max(...small), `${id} ${text}`).toBeLessThan(Math.min(...big));
+        else expect(Math.max(...small), `${id} ${text}`).toBeLessThanOrEqual(Math.min(...big));
         expect(Math.min(...small), `${id} ${text}`).toBeGreaterThanOrEqual(TYPE_FLOOR.lo * 0.7);
         expect(inFrame(b), `${id} ${text}`).toBe(true);
       }
@@ -32,6 +34,14 @@ describe('split lines (one line in two sizes or two containers)', () => {
   });
   it('keep a line with no break laid out whole', () => {
     expect(blockOf('快使用雙截棍', SET_SPECS['popart/balloon'], measure).lines).toBeUndefined();
+  });
+  it("set a column line's second phrase down its own strip, tops level, read right to left", () => {
+    const b = blockOf('什麼刀槍跟棍棒 我都耍的有模有樣', SET_SPECS['graffiti/strips'], measure);
+    const [first, second] = b.lines!;
+    expect(first.v && second.v).toBe(true);
+    expect(first.x0).toBeGreaterThan(second.x0 + second.bw);
+    expect(Math.abs(first.y - second.y)).toBeLessThan(1);
+    expect(inFrame(b)).toBe(true);
   });
   it('put a part set apart at its own place, clear of the hero', () => {
     const b = blockOf('快使用雙截棍 哼哼哈兮', SET_SPECS['popart/balloon'], measure);

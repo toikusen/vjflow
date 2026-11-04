@@ -58,6 +58,10 @@ export const FONTS: FontSpec[] = [
   // (Apache-2.0, not OFL: its licence file is LICENSE.txt under google/fonts apache/yellowtail)
   { family: 'Yellowtail', roles: ['accent'], weights: [400], feel: '八〇草寫（只用在標籤）', legible: false },
   { family: 'Bangers', roles: ['accent'], weights: [400], feel: '美式漫畫擬聲字（只用在標籤）', legible: false },
+  // graffiti's round-2 board (2026-11-04): a narrow industrial face that takes stencil bridges cleanly, its kana cut, and the poster stencil caps
+  { family: 'WDXL Lubrifont TC', roles: ['display'], weights: [400], feel: '窄身工業黑體，模板噴字', han: 'tc' },
+  { family: 'WDXL Lubrifont JP N', roles: ['display'], weights: [400], feel: '窄身工業黑體（日文），模板噴字' },
+  { family: 'Big Shoulders Stencil Display', roles: ['accent'], weights: [700, 900], feel: '模板窄體大寫，海報與貼紙', legible: false },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */
@@ -90,6 +94,7 @@ export const TC_FOR: Record<string, string> = {
   DotGothic16: 'Chiron Hei HK',
   'Yuji Syuku': 'LXGW WenKai TC',
   'Shippori Antique B1': 'Chocolate Classical Sans',
+  'WDXL Lubrifont JP N': 'WDXL Lubrifont TC',
 };
 
 /** A design language's faces for a song's script: Chinese lyrics get the Traditional Chinese counterparts. */

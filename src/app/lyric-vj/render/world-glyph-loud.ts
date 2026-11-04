@@ -14,8 +14,8 @@ export type LoudSurface =
   | 'xerox-type'
   | 'fan-letter' | 'fan-member' | 'fan-white' | 'fan-key'
   | 'card-type'
-  | 'spray';
-const KINDS = new Set<string>(['comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'spray']);
+  | 'stencil';
+const KINDS = new Set<string>(['comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'stencil']);
 export const isLoudSurface = (k: string): k is LoudSurface => KINDS.has(k);
 
 /** The member colours an idol fan's letters are cut round, one a character (the board's pink, blue, mint, lemon, lilac). */
@@ -149,24 +149,97 @@ export function loudSurface(ctx: CanvasRenderingContext2D, kind: LoudSurface, h:
       ctx.drawImage(grown(mask, px * 0.157, px * 0.1, tint), 0, 0);
       break;
     }
-    case 'spray': {
-      // graffiti (held, being re-boarded): a can through a stencil, overspray past the edge, fine mist beyond it
-      ctx.filter = `blur(${px * 0.05}px)`;
-      ctx.globalAlpha = 0.55;
-      ctx.drawImage(tone, 0, 0);
-      ctx.filter = 'none';
-      ctx.globalAlpha = 1;
-      const t = copy(tone);
-      const g = t.getContext('2d')!;
-      g.globalCompositeOperation = 'destination-out';
-      g.globalAlpha = 0.6;
-      for (let i = 0; i < 140; i++) { g.beginPath(); g.arc(hash(i, seed) * t.width, hash(i, seed + 1) * t.height, px * (0.002 + 0.004 * hash(i, seed + 2)), 0, 6.3); g.fill(); }
-      ctx.drawImage(t, 0, 0);
-      ctx.fillStyle = h.tint;
-      for (let i = 0; i < 70; i++) { ctx.globalAlpha = 0.25 + 0.4 * hash(i, seed + 9); const r = px * (0.002 + 0.004 * hash(i, seed + 10)); ctx.beginPath(); ctx.arc(hash(i, seed + 11) * cw, hash(i, seed + 12) * ch, r, 0, 6.3); ctx.fill(); }
-      ctx.globalAlpha = 1;
+    case 'stencil': {
+      // graffiti (round-2 board): a cut stencil sprayed through, its bridges and its overspray (stencilled below)
+      ctx.drawImage(stencilled(mask, h.tint, px, seed), 0, 0);
       break;
     }
   }
   void core;
 }
+
+/**
+ * A letter cut as a real stencil and sprayed through it (graffiti's round-2 board, its stencil.js). A counter of the
+ * letter, the paper island the strokes close round, would fall out of a cut plate: a bridge is cut across the thinnest
+ * stroke between it and the outside (or the next island), so the gaps are where a cutter must leave them, not random
+ * nicks. The paint is solid with a little spray density; overspray is hard single dots just past the edge (6 % within
+ * 2 px, 1 % within 6 px at a 232 px letter), never a blur.
+ */
+export function stencilled(mask: OffscreenCanvas, tint: string, px: number, seed: number): OffscreenCanvas {
+  const [w, h] = [mask.width, mask.height];
+  const src = mask.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const A = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) A[i] = src[i * 4 + 3] > 110 ? 1 : 0;
+  const cut = new Uint8Array(w * h);
+  const gap = Math.max(3, Math.round(px * 0.05));
+  const lab = new Int32Array(w * h);
+  for (let it = 0; it < 14; it++) {
+    lab.fill(-1);
+    const holes: { id: number; px: number[] }[] = [];
+    let n = 0;
+    for (let s0 = 0; s0 < w * h; s0++) {
+      if (A[s0] || lab[s0] >= 0) continue;
+      const st = [s0];
+      lab[s0] = n;
+      let edge = false;
+      const pts: number[] = [];
+      while (st.length) {
+        const q = st.pop()!;
+        pts.push(q);
+        const [x, y] = [q % w, (q / w) | 0];
+        if (x === 0 || y === 0 || x === w - 1 || y === h - 1) edge = true;
+        for (const d of [x > 0 ? q - 1 : -1, x < w - 1 ? q + 1 : -1, q - w, q + w]) if (d >= 0 && d < w * h && !A[d] && lab[d] < 0) { lab[d] = n; st.push(d); }
+      }
+      if (!edge && pts.length > 6) holes.push({ id: n, px: pts });
+      else if (!edge) for (const q of pts) A[q] = 1;
+      n++;
+    }
+    if (!holes.length) break;
+    for (const hl of holes) {
+      let best: { run: number; x0: number; y0: number; dx: number; dy: number } | undefined;
+      for (let k = 0; k < hl.px.length; k += 2) {
+        const q = hl.px[k];
+        const [x0, y0] = [q % w, (q / w) | 0];
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          let [x, y, run] = [x0 + dx, y0 + dy, 0];
+          if (!A[y * w + x]) continue;
+          while (x > 0 && y > 0 && x < w - 1 && y < h - 1 && A[y * w + x]) { x += dx; y += dy; run++; }
+          const end = y * w + x;
+          if (A[end] || lab[end] === hl.id) continue;
+          if (!best || run < best.run) best = { run, x0, y0, dx, dy };
+        }
+      }
+      if (!best) continue;
+      const { x0, y0, dx, dy, run } = best;
+      for (let s1 = 0; s1 <= run + 1; s1++) for (let t = -gap / 2; t <= gap / 2; t++) {
+        const [x, y] = [Math.round(x0 + dx * s1 + (dy ? t : 0)), Math.round(y0 + dy * s1 + (dx ? t : 0))];
+        if (x >= 0 && y >= 0 && x < w && y < h) { A[y * w + x] = 0; cut[y * w + x] = 1; }
+      }
+    }
+  }
+  // the paint: the letter's own edge where it was not cut, a little density in the core, hard dots past the edge
+  const k = Math.max(1, px / 232);
+  const [r1, r2] = [Math.max(1, Math.round(2 * k)), Math.max(2, Math.round(6 * k))];
+  const R = rngOf(seed);
+  const [cr, cg, cb] = [1, 3, 5].map((i) => parseInt(tint.slice(i, i + 2), 16));
+  const near = (x: number, y: number, r: number) => { for (let yy = -r; yy <= r; yy += r) for (let xx = -r; xx <= r; xx += r) { const [X, Y] = [x + xx, y + yy]; if (X >= 0 && Y >= 0 && X < w && Y < h && A[Y * w + X]) return true; } return false; };
+  const out = new OffscreenCanvas(w, h);
+  const g = out.getContext('2d')!;
+  const img = g.createImageData(w, h);
+  const D = img.data;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    let a = 0;
+    if (cut[i]) a = 0;
+    else if (A[i]) a = 248 + R() * 7;
+    else if (src[i * 4 + 3] > 0 && near(x, y, 1)) a = src[i * 4 + 3];
+    else if (near(x, y, r1) && R() < 0.06) a = 255;
+    else if (near(x, y, r2) && R() < 0.01) a = 255;
+    if (!a) continue;
+    D[i * 4] = cr; D[i * 4 + 1] = cg; D[i * 4 + 2] = cb; D[i * 4 + 3] = a;
+  }
+  g.putImageData(img, 0, 0);
+  return out;
+}
+/** The board's own seeded stream (stencil.js rng). */
+function rngOf(seed: number) { let s = seed >>> 0 || 1; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }

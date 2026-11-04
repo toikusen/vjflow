@@ -30,17 +30,19 @@ export interface SplitSpec {
 }
 
 /** A row's place in a split block, relative to the block's centre, y up: its box's left edge and width, its centre line. */
-export interface RowBox { x0: number; bw: number; y: number; size: number; track: number; flush: -1 | 0 | 1 }
+export interface RowBox { x0: number; bw: number; y: number; size: number; track: number; flush: -1 | 0 | 1; /** A column read down: `y` is its top. */ v?: boolean }
 
 const [W, H, SAFE_X, SAFE_Y] = [1920, 1080, 64, 48];
 const clampTo = (x: number, r: number) => Math.min(r, Math.max(-r, x));
 const bare = (s: string) => [...s.replace(/[\s\p{P}\p{S}]/gu, '')].length;
 
 /** The two parts of a line at its own spaces: [hero, small, small comes first]. Undefined when it has no such break. */
-export function splitParts(text: string, small: SplitSpec['small']): [string, string, boolean] | undefined {
+export function splitParts(text: string, small: SplitSpec['small'], even = false): [string, string, boolean] | undefined {
   const segs = text.split(' ').filter(Boolean);
   if (segs.length < 2) return undefined;
-  const [lead, tail] = small === 'tail' ? [segs.slice(0, -1).join(' '), segs.at(-1)!] : [segs[0], segs.slice(1).join(' ')];
+  // two containers of one size take the space nearest the middle; a small part is the last (or first) phrase
+  const mid = even ? segs.map((_, i) => i).slice(1).sort((a, b) => Math.abs(bare(segs.slice(0, a).join('')) - bare(text) / 2) - Math.abs(bare(segs.slice(0, b).join('')) - bare(text) / 2))[0] : small === 'tail' ? segs.length - 1 : 1;
+  const [lead, tail] = [segs.slice(0, mid).join(' '), segs.slice(mid).join(' ')];
   if (bare(lead) < 2 || bare(tail) < 2) return undefined;
   return small === 'tail' ? [lead, tail, false] : [tail, lead, true];
 }
@@ -48,10 +50,11 @@ export function splitParts(text: string, small: SplitSpec['small']): [string, st
 /** The block of a split set's line, or undefined to lay it out whole. `floor` is the least type a part may take. */
 export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor: number): Block | undefined {
   const sp = spec.split;
-  if (!sp || spec.vertical) return undefined;
-  const parts = splitParts(text, sp.small);
+  if (!sp || (spec.vertical && !sp.at)) return undefined;
+  const parts = splitParts(text, sp.small, sp.scale >= 0.9 && !!sp.at);
   if (!parts) return undefined;
   const [hero, small, smallFirst] = parts;
+  if (spec.vertical) return columnsApart(hero, small, smallFirst, spec, sp, floor);
   const em = (rows: string[], track: number) => Math.max(...rows.map((r) => measure(r) / 100 + ([...r].length - 1) * track));
   const sTrack = sp.track ?? spec.track;
   const smallRows = (sp.rows ?? 1) > 1 && bare(small) >= 4 ? balancedRows(small, sp.rows!).filter(Boolean) : [small];
@@ -74,7 +77,7 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
   let size = Math.max(spec.lo, Math.round(Math.min(spec.hi, pick.size)));
   let ss = Math.max(floor, Math.round(Math.min(size * k, sp.at ? ((sp.share ?? 0.3) * W) / sEm : Infinity)));
   // two sizes that are not clearly two (a long hero already at the floor) read as a mistake: the line is laid out whole
-  if (ss > size * 0.85) return undefined;
+  if (ss > size * 0.85 && k < 0.9) return undefined;
   const hEm = em(pick.rows, spec.track);
   // the frame wins over the floor: a split line too big for the frame is set smaller, both parts together
   const fit = (f: number) => {
@@ -125,4 +128,33 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
     else { lines.push({ x0: hcx - g.hw / 2 - cx, bw: g.hw, y: hTop - (size * spec.lead) / 2, size, track: spec.track, flush }); hTop -= size * spec.lead; }
   });
   return { rows: rowsOrdered, size, w, h, cx, cy, lines, small: smallIdx, hero: { cx: hcx - cx, cy: hcy - cy, w: g.hw, h: g.hh } };
+}
+
+/** A column line split in two columns, each on its own strip: the hero where the set stands, the other at `at`, tops level. */
+function columnsApart(hero: string, small: string, smallFirst: boolean, spec: SetSpec, sp: SplitSpec, floor: number): Block | undefined {
+  const len = (t: string) => [...t.replace(/\s/g, '')].length;
+  const step = 1 + spec.track;
+  let size = Math.max(spec.lo, Math.round(Math.min(spec.hi, ((sp.tall ?? spec.tall) * H) / (len(hero) * step), (spec.share * W) / spec.lead)));
+  let ss = Math.max(floor, Math.round(Math.min(size * sp.scale, ((sp.tall ?? spec.tall) * H) / (len(small) * step))));
+  // the frame wins over the floor: a column too long for the frame is set smaller
+  const top = clampTo(H / 2 - spec.at[1] * H, H / 2 - SAFE_Y);
+  const over = Math.max(1, (Math.max(len(hero) * size, len(small) * ss) * step) / (top + H / 2 - SAFE_Y));
+  [size, ss] = [Math.floor(size / over), Math.floor(ss / over)];
+  // a column that would go under the floor is not split: the line is laid out whole
+  if (ss < floor) return undefined;
+  const [hh, sh] = [len(hero) * size * step, len(small) * ss * step];
+  // (a column runs down from the set's top; one too long for that is raised until its foot is in the frame)
+  const hTop = Math.min(H / 2 - SAFE_Y, Math.max(top, -H / 2 + SAFE_Y + hh));
+  const sTop = Math.min(H / 2 - SAFE_Y, Math.max(top, -H / 2 + SAFE_Y + sh));
+  const [hcx, scx] = [spec.at[0] * W - W / 2, sp.at![0] * W - W / 2];
+  const x0 = Math.min(hcx - (size * spec.lead) / 2, scx - (ss * spec.lead) / 2), x1 = Math.max(hcx + (size * spec.lead) / 2, scx + (ss * spec.lead) / 2);
+  const y1 = Math.max(hTop, sTop), y0 = Math.min(hTop - hh, sTop - sh);
+  const [cx, cy, w, h] = [(x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0];
+  const heroBox: RowBox = { x0: hcx - size / 2 - cx, bw: size, y: hTop - cy, size, track: spec.track, flush: 0, v: true };
+  const smallBox: RowBox = { x0: scx - ss / 2 - cx, bw: ss, y: sTop - cy, size: ss, track: spec.track, flush: 0, v: true };
+  return {
+    rows: smallFirst ? [small, hero] : [hero, small], size, w, h, cx, cy,
+    lines: smallFirst ? [smallBox, heroBox] : [heroBox, smallBox], small: [smallFirst ? 0 : 1],
+    hero: { cx: hcx - cx, cy: hTop - hh / 2 - cy, w: size * spec.lead, h: hh },
+  };
 }

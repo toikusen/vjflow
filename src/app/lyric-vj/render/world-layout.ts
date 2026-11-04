@@ -86,6 +86,19 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   block.rows.forEach((row, r) => {
     const ids = take(row);
     const box = block.lines?.[r];
+    if (box && sizes && box.v) {
+      // a split line's column, read down from its top
+      const rk = box.size / tex;
+      const step = box.size * (1 + box.track);
+      ids.forEach((id, i) => {
+        x[id] = box.x0 + box.bw / 2;
+        y[id] = box.y - (i + 0.5) * step;
+        shown[id] = !HIDDEN_UPRIGHT.test(gs[id].char) && gs[id].char.trim() !== '';
+        turn[id] = ROTATED.test(gs[id].char);
+        sizes[id] = rk;
+      });
+      return;
+    }
     if (box && sizes) {
       // a split line's row: its own size, its own box (world-split.ts)
       const rk = box.size / tex;
@@ -308,6 +321,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const backdropOf = (ink: string) => [rt.palette.background, slots.plate, slots.ground].filter((c) => /^#[0-9a-f]{6}$/i.test(c ?? '')).sort((x, y) => contrast(ink, y) - contrast(ink, x))[0];
   const keyReads = (p: number) => { const base = inkOn(sets[p]); const back = backdropOf(base); return !back || !/^#[0-9a-f]{6}$/i.test(base) || contrast(keyOf(sets[p]), back) >= 3; };
   const keyOkBy = sets.map((_, p) => keyReads(p));
+  const apartBy = sets.map((_, p) => gs.map((g) => !!splitInkOf(g, p)));
   const usesKey = !!wl.beat && ['ink-run', 'light-sweep', 'roll', 'beat-punch'].includes(wl.beat.kind);
   const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(keyOf(s), false, p) }).texture)) : undefined;
   const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
@@ -409,7 +423,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
             gh.material.opacity = pose.ghost!.a * whole_a * left;
           }
         }
-        const keyed = (pose.key ?? 0) > 0 && keyOkBy[k];
+        // (a split line's part on a carrier of its own keeps its own ink: the key was read for the set's carrier)
+        const keyed = (pose.key ?? 0) > 0 && keyOkBy[k] && !apartBy[k][i];
         const ink = keyed ? mixed.copy(inkLit[i]).lerp(keyCols[k], pose.key!) : inkLit[i];
         const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }

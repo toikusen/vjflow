@@ -143,7 +143,18 @@ const Gs: Record<string, HandGround> = { 'brutalist/headline': headline, 'brutal
 
 const INS: Record<string, HandIn> = {
   // a black bar is pulled across the sheet in four hard steps: the next copy lands under it
-  'black-bar-sweep': { sec: 0.24, draw: (e, q) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); const k = Math.ceil(q * 4) / 4; c.fillStyle = B3.x121212; c.fillRect(0, 0, W * k, H); c.restore(); } },
+  // (a quarter of the sheet a step, never over the line that lands with it: a full black sheet hid a short line, tenmon c035)
+  'black-bar-sweep': { sec: 0.24, draw: (e, q) => {
+    const c = e.ctx;
+    c.save();
+    if (e.base) c.setTransform(e.base);
+    const k = Math.min(3, Math.floor(q * 4));
+    const r = e.rect;
+    if (r) { c.beginPath(); c.rect(0, 0, W, H); c.rect(r.x0 - 24, r.y0 - 24, r.x1 - r.x0 + 48, r.y1 - r.y0 + 48); c.clip('evenodd'); }
+    c.fillStyle = B3.x121212;
+    c.fillRect((W * k) / 4, 0, W / 4, H);
+    c.restore();
+  } },
 };
 
 /** The lyric box with a margin: a piece keeps out of it. */

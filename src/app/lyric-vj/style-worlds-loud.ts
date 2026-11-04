@@ -1,6 +1,6 @@
 // Style batch 3 (2026-11-04), the loud worlds: popart, gameshow, idol-live, y2k, psychedelic, graffiti, brutalist, citypop.
 // Each answers docs/research/2026-11-01-style-standard.md: a closed pool, its own material, moves and set pieces. Two new
-// engines arrive with them: the wall (render/world-wall.ts) and the air (render/world-air.ts). Near neighbours were kept
+// engines arrive with them: the air (render/world-air.ts); graffiti was rebuilt from its round-2 board as stencil and paste-up. Near neighbours were kept
 // apart on purpose: gameshow is a flat candy studio, idol-live a dark room of light; popart is three flat plates and dots,
 // y2k is gloss, chrome and gradient.
 import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
@@ -212,44 +212,43 @@ const psychedelic: StyleWorld = {
 };
 
 const graffiti: StyleWorld = {
-  id: 'graffiti', name: '街頭噴漆', language: 'graffiti', what: '夜裡的一面水泥牆和一罐噴漆：霧狀的邊、往下流的漆滴、模板噴出來的字；每一段又多噴一層',
-  lyricRole: '歌詞是用模板噴在水泥牆上的字：先噴一塊深色底，字噴在上面，邊緣有飛沫，漆太厚就往下流',
+  id: 'graffiti', name: '街頭模板噴印', language: 'graffiti', what: '一面漆過的灰泥牆：先滾一塊補漆，再用割好的模板噴字；旁邊是貼上去的絹印海報、膠帶和貼紙',
+  lyricRole: '歌詞是割好的模板噴在補漆塊上的字：字腔要留橋，所以斷口在割模板的人一定得留的地方',
   family: 'wall',
-  refuses: ['乾淨向量', '蠟筆手繪', '霓虹發光', '照片', '字後方亮色塊', '印章', '漸層天空'],
-  type: { ja: { family: 'Yusei Magic', weight: 400 }, tc: { family: 'Chiron Hei HK', weight: 900 }, latin: 'Unbounded', setting: '粗黑體模板字，噴霧邊與飛沫', category: 'stencil-black' },
+  refuses: ['漸層', '模糊', '發光', '霧狀噴漆暈開', '漆滴', '手寫塗鴉 tag', '字型外框', '字後光暈', '編出來的文字'],
+  type: { ja: { family: 'WDXL Lubrifont JP N', weight: 400 }, tc: { family: 'WDXL Lubrifont TC', weight: 400 }, latin: 'Big Shoulders Stencil Display', setting: '窄身工業黑體做成真的模板：字腔通往外面最細的那段筆畫切一道橋；海報與貼紙是模板窄體大寫', category: 'stencil-cut' },
   palette: [
-    scheme('concrete-night', 'cold', 'dark', '#4A4744', '#F6F4EE', '#FF3E9A', '#3DDC84', '#1C1A19', '#FFE23D', '#5E5A56', '夜裡的水泥牆'),
-    scheme('brick-red', 'warm', 'dark', '#7A3F32', '#FFF1DC', '#2EC4F1', '#FFE23D', '#2A1A16', '#F6F4EE', '#935346', '磚牆'),
-    scheme('black-wall', 'cold', 'dark', '#1D1C1C', '#FFE23D', '#FF3E9A', '#2EC4F1', '#3A3838', '#FFE23D', '#2F2E2E', '黑牆上的黃'),
-    scheme('whitewash', 'earth', 'light', '#D9D4C8', '#17161A', '#FF3E9A', '#1E8FE0', '#EFEAD8', '#17161A', '#C4BEB0', '刷白的牆'),
-    scheme('pink-bomb', 'warm', 'mid', '#B8306F', '#FFFFFF', '#FFE23D', '#3DDC84', '#2A0E1E', '#FFFFFF', '#D05A8E', '整面噴成粉紅'),
+    // (board: wall #8E8B84 under PaintedPlaster016, stencil black #151515, spray red #B3221A, navy #1C2A5C, poster orange
+    // #E4572E, poster blue #2D72B8, sticker yellow #F0C02C, paper #F1EEE6, buff #E9E4D7)
+    scheme('paste-up', 'earth', 'mid', '#8E8B84', '#151515', '#B3221A', '#E4572E', '#E9E4D7', '#1C2A5C', '#2D72B8', '灰泥牆上的補漆與海報'),
+    scheme('night-wall', 'cold', 'dark', '#3A3835', '#151515', '#B3221A', '#E4572E', '#E9E4D7', '#1C2A5C', '#2D72B8', '夜裡的同一面牆'),
+    scheme('yellow-paste', 'warm', 'mid', '#7C7A74', '#151515', '#B3221A', '#F0C02C', '#E9E4D7', '#1C2A5C', '#2D72B8', '黃色海報貼滿的牆'),
+    scheme('blue-paste', 'cold', 'dark', '#5E5B56', '#151515', '#B3221A', '#2D72B8', '#E9E4D7', '#1C2A5C', '#E4572E', '藍色海報的暗牆'),
+    scheme('white-wall', 'earth', 'light', '#C9C4BA', '#151515', '#B3221A', '#E4572E', '#E9E4D7', '#1C2A5C', '#2D72B8', '刷過的淺色牆'),
   ],
-  groundBand: { band: 'dark', flip: 'none', why: '牆是暗的；刷白的牆由 whitewash 配色輪替帶入，不反相' },
-  material: { surface: 'spray', core: 'ink2', engine: 'wall/spray', how: '噴罐的霧：液滴在中心最密、往外變成單顆飛沫；漆太厚沿牆往下流，尾端一顆漆珠；模板擋住的地方是硬邊，外面是柔的過噴；牆是水泥顆粒、裂縫與舊的塗層' },
-  frameStack: stack({ grain: 0.25, paper: 0.3, vignette: 0.2 }),
-  timeBase: { fps: 0, unit: 'line', curve: 'spray-then-drip' },
-  ownInk: true,
-  layouts: { pair: 'graffiti/stack', shared: [], carriers: ['graffiti/drip-plate', 'graffiti/throwup'], lines: [
-    line('graffiti/wall-low', [0, 1, 2], ['spray-on', 'stencil-lift'], ['buff-out', 'peel-off'], 'drip-hang', { max: 24 }),
-    line('graffiti/stencil-centre', [0, 1, 2], ['stencil-lift', 'spray-on'], ['buff-out'], 'drip-hang', { max: 24 }),
-    line('graffiti/tag-high', [0, 1], ['marker-write'], ['peel-off'], 'drip-hang', { max: 20 }),
-    line('graffiti/drip-plate', [0, 1, 2], ['spray-on'], ['buff-out', 'peel-off'], 'drip-hang', { min: 3, max: 24 }),
-    line('graffiti/throwup', [1, 2], ['stencil-lift'], ['peel-off'], 'drip-hang', { max: 10, loud: true }),
-    line('graffiti/column', [0, 1, 2], ['marker-write'], ['buff-out'], 'drip-hang', { column: true, max: 16 }),
-    line('graffiti/stack', [1, 2], ['spray-on', 'marker-write'], ['buff-out'], 'drip-hang', { min: 6, max: 26 }),
+  groundBand: { band: 'mid', flip: 'none', why: '牆是中灰的灰泥；字永遠噴在淺色補漆或海報紙上，夜牆與淺牆由配色輪替帶入' },
+  material: { surface: 'stencil', core: 'ink2', engine: 'wall/stencil-paste', how: '字是真的模板：字腔通往外面最細的筆畫切一道橋；漆是實的，邊外 2–6 px 有硬邊的單顆飛沫（6 %／1 %）；牆是 PaintedPlaster016 照片；海報是撕邊平塗加網點漸層，膠帶與貼紙都是硬邊' },
+  frameStack: stack({ grain: 0.06, paper: 0, vignette: 0 }),
+  timeBase: { fps: 0, unit: 'line', curve: 'slap-and-spray' },
+  ownInk: true, standsOnPlate: true, sheet: true,
+  layouts: { pair: 'graffiti/navy', shared: [], carriers: ['graffiti/buff', 'graffiti/navy', 'graffiti/strips'], lines: [
+    line('graffiti/buff', [0, 1, 2], ['stencil-sweep', 'stencil-lift'], ['buff-out', 'peel-off'], 'paste-still', { max: 16, ground: 'graffiti/paste-up' }),
+    line('graffiti/navy', [0, 1], ['stencil-lift', 'stencil-sweep'], ['buff-out'], 'paste-still', { max: 24, ground: 'graffiti/navy-buff' }),
+    line('graffiti/wall', [2], ['stencil-sweep'], ['peel-off'], 'paste-still', { max: 8, loud: true, ground: 'graffiti/poster-wall' }),
+    line('graffiti/strips', [0, 1, 2], ['stencil-lift'], ['peel-off'], 'paste-still', { min: 5, max: 18, column: true, ground: 'graffiti/strips' }),
   ] },
-  motion: { enters: ['spray-on', 'stencil-lift', 'marker-write'], exits: ['buff-out', 'peel-off'], holds: ['drip-hang'], curve: '霧先到、字再實，然後慢慢往下流' },
-  grounds: { levels: lv(['graffiti/bare-wall', 'graffiti/one-patch'], ['graffiti/layered-wall', 'graffiti/brick-wall', 'graffiti/tag-wall', 'graffiti/bare-wall'], ['graffiti/drip-field', 'graffiti/layered-wall', 'graffiti/tag-wall']), quiet: ['graffiti/bare-wall', 'graffiti/one-patch'] },
-  decor: [{ id: 'graffiti/drips', why: '漆滴說明漆是濕的、是剛噴的', budget: '每塊色塊下緣幾條' }, { id: 'graffiti/old-coats', why: '舊的塗層是之前的段落留下的', budget: '每段多一層' }],
-  transitions: { line: lv([''], ['roller-buff', ''], ['roller-buff']), part: lv(['roller-buff'], ['roller-buff'], ['roller-buff']), own: ['roller-buff'], banned: ['blurdissolve', 'dipwhite', 'ripple', 'wave'], family: 'buff' },
-  peak: { loud: 'graffiti/bomb-wall', calm: 'graffiti/one-patch', how: '快歌一大團新噴的色塊、漆全在流；慢歌牆上只有一塊深底' },
-  pieces: ['spray-bomb', 'drip-run', 'overspray-cloud', 'roll-over'],
-  pieceWords: { 'spray-bomb': /炸|噴|衝|吼|打|破|爆|叫|壊|ぶち/, 'drip-run': /流|淚|雨|滴|落|涙|流れ|落ち|垂/, 'overspray-cloud': /煙|霧|霞|消|散|けむり|霧|消え|散/, 'roll-over': /忘|消|重來|蓋|抹|塗|忘れ|消し|やり直|上書/ },
-  camera: { cams: lv([''], ['', 'dolly'], ['snap', 'dolly']), text: noText, note: '站在牆前，偶爾推近' },
-  levels: { '0': '水泥牆與一塊深底', '1': '舊塗層、磚牆、塗鴉', '2': '整排新漆在流', calm: '一塊牆，漆滴慢慢流' },
-  pace: { every: [2, 2, 1], calmEvery: 8, repose: true, hits: [] },
-  provenance: { source: 'own', process: '噴罐霧滴、漆滴、模板硬邊、水泥牆', nearest: '無', differs: '字由先噴的深底承載，整首是同一面牆一層層噴上去，舊層留著' },
-  acceptance: { fast: 'nun', calm: 'tenmon', hardest: '滿牆漆滴時模板字的邊仍清楚' },
+  motion: { enters: ['stencil-sweep', 'stencil-lift'], exits: ['buff-out', 'peel-off'], holds: ['paste-still'], curve: '模板啪一下貼上，噴罐沿著字掃過，字一段一段出現；換句時新海報從一角刷平，舊的撕掉；字本身不變形' },
+  grounds: { levels: lv(['graffiti/navy-buff', 'graffiti/strips'], ['graffiti/paste-up', 'graffiti/strips', 'graffiti/navy-buff'], ['graffiti/poster-wall', 'graffiti/paste-up']), quiet: ['graffiti/navy-buff'] },
+  decor: [{ id: 'graffiti/paste-ups', why: '貼上去的絹印海報、膠帶與貼紙是街頭牆面的語言；上面只印歌名與歌手', budget: '每頁一組，不碰字' }, { id: 'graffiti/buff', why: '補漆塊是寫手噴字前先滾的底，字一定在上面', budget: '每句一塊' }],
+  transitions: { line: lv([''], ['paste-sweep', ''], ['paste-sweep']), part: lv(['paste-sweep'], ['paste-sweep'], ['paste-sweep']), own: ['paste-sweep'], banned: ['blurdissolve', 'dipwhite', 'ripple', 'wave'], family: 'paste' },
+  peak: { loud: 'graffiti/poster-wall', calm: 'graffiti/navy-buff', how: '快歌整面牆貼滿撕過的海報，中間滾一大塊補漆噴大字；慢歌一塊補漆、深藍模板字與一道噴線' },
+  pieces: ['sticker-slap', 'poster-tear', 'buff-roll'],
+  pieceWords: { 'sticker-slap': /貼|拍|打|跳|衝|叫|吼|貼る|叩|跳ね/, 'poster-tear': /撕|破|裂|忘|離|走|捨|破れ|裂け|離れ/, 'buff-roll': /重來|蓋|塗|抹|消|新|やり直|塗り|消し|新し/ },
+  camera: { cams: lv([''], [''], ['', 'snap']), text: noText, note: '站在牆前不動；爆點只跳一下' },
+  levels: { '0': '一塊補漆、深藍模板字，或兩條直排海報', '1': '補漆塊與旁邊的海報、貼紙', '2': '整面海報牆上的大字', calm: '一塊補漆與一道噴線' },
+  pace: { every: [2, 2, 1], calmEvery: 8, repose: false, hits: [] },
+  provenance: { source: 'own', process: '真的模板切橋（字腔推出斷點）、補漆、絹印海報網點、膠帶與貼紙', nearest: 'brutalist', differs: 'brutalist 是影印紙上的網格版面；這裡是牆、補漆、撕邊海報與貼紙，字是割好的模板噴出來的' },
+  acceptance: { fast: 'nun', calm: 'tsuzuki', hardest: '滿牆海報時補漆塊上的模板字仍完整清楚，貼紙與海報不碰字' },
 };
 
 const brutalist: StyleWorld = {
@@ -331,7 +330,7 @@ const citypop: StyleWorld = {
 };
 
 /** Each mirrored set (world-b3-sets.ts) joins its world as a line of its own, on its mirrored page. */
-for (const w of [popart, gameshow, idol, y2k, psychedelic, brutalist, citypop]) {
+for (const w of [popart, gameshow, idol, y2k, psychedelic, graffiti, brutalist, citypop]) {
   const extra = w.layouts.lines.filter((l) => B3_MIRRORS[l.set]).map((l) => ({ ...l, set: `${l.set}-r`, ground: `${B3_MIRRORS[l.set]}-r` }));
   w.layouts.lines.push(...extra);
   for (const lvl of [0, 1, 2] as Level[]) w.grounds.levels[lvl] = [...new Set([...w.grounds.levels[lvl], ...extra.filter((l) => l.levels.includes(lvl)).map((l) => l.ground)])];

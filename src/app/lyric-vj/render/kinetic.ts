@@ -30,7 +30,7 @@ export type KineticFx = string;
 export interface KineticLayer {
   kind: 'kinetic';
   /** A style world's ground: its slots, how loud the part is, the world's way in. */
-  world?: { slots: Slots; level: number; enter?: string; sheet?: boolean; piece?: string; words?: string; /** The lines around a set piece: it shows only the one being sung. */ lines?: { a: number; b: number; t: string }[]; title?: string };
+  world?: { slots: Slots; level: number; enter?: string; sheet?: boolean; /** The ground is a page laid out with its set: the words stand on what the set carries, never on ground held back. */ bound?: boolean; piece?: string; words?: string; /** The lines around a set piece: it shows only the one being sung. */ lines?: { a: number; b: number; t: string }[]; title?: string };
   /** A print world's scheme, for what reads the slots beyond ink and paper. */
   sheetInks?: Slots;
   fx: KineticFx;
@@ -608,7 +608,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
           ctx.restore();
         }
         // whatever a change or a set piece laid under the words, the ink must read on all of it (behind-ink.ts)
-        if ((coming || piece) && env.rect) {
+        if ((coming || piece) && env.rect && !l.world.bound) {
           ctx.save();
           if (env.base) ctx.setTransform(env.base);
           holdInkGround(ctx, env.rect, ink, paper, env.weight);

@@ -26,10 +26,9 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
   // y2k (board motion): the title is never bent; each character rises or slides in and fades up, one after the other
   'glyph-rise': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: easeOut(k, 2), dy: -26 * (1 - easeOut(k, 3)) }; } },
   'glyph-slide': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: easeOut(k, 2), dx: -34 * (1 - easeOut(k, 3)) }; } },
-  // psychedelic: the wave carries the word in; the colour melts up from the ground; the sun comes up slowly
-  'wave-in': { sec: 0.6, glyph: ({ q, u, i }) => { const k = clamp01(q * 1.4 - u * 0.4); return { a: easeOut(k, 2), dy: 60 * Math.sin((1 - k) * Math.PI * 1.5 + i) * (1 - k), r: 0.1 * (1 - k) * Math.sin(i) }; } },
-  'melt-up': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * 1.5 - (0.5 * i) / Math.max(1, n)); return { a: easeOut(k, 2), dy: 70 * (1 - easeOut(k, 2)), sx: 0.8 + 0.2 * easeOut(k, 2) }; } },
-  'sun-rise': { sec: 0.7, block: (q) => ({ dy: 160 * (1 - easeOut(q, 2)), a: easeOut(q * 1.5, 2) }) },
+  // psychedelic (board motion): the sign itself never bends; it rises into place, or its bands are printed up from the bottom
+  'sign-rise': { sec: 0.5, block: (q) => ({ dy: -60 * (1 - easeOut(q, 3)), a: clamp01(q * 3) }) },
+  'band-reveal': { sec: 0.42, clip: (q) => ({ axis: 'y', at: stepsOf(easeOut(q, 2), 6) }) },
   // graffiti: the can sprays, the mist settling into a stroke; the stencil lifts off; the marker writes
   'spray-on': { sec: 0.42, glyph: ({ q, i, seed }) => { const k = clamp01((q - 0.5 * hash(i, seed + 3)) / 0.5); return { a: k > 0 ? 0.35 + 0.65 * easeOut(k, 2) : 0, s: k > 0 ? 1.08 - 0.08 * easeOut(k, 2) : 1.08, tone: 0.5 + 0.5 * k }; } },
   'stencil-lift': { sec: 0.3, clip: (q) => ({ axis: 'y', at: stepsOf(q, 7) }), block: (q) => ({ dy: 6 * (1 - stepsOf(q, 7)) }) },
@@ -54,8 +53,8 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'beam-off': { sec: 0.4, glyph: ({ q, u }) => { const k = clamp01((q * 1.5 - (1 - u)) / 0.5); return { tone: 1 - 0.7 * k, a: 1 - easeIn(k, 2) }; } },
   'glyph-lift-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dy: 22 * easeIn(k, 2) }; } },
   'glyph-slide-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dx: 30 * easeIn(k, 2) }; } },
-  'wave-out': { sec: 0.56, glyph: ({ q, u, i }) => { const k = clamp01(q * 1.4 - (1 - u) * 0.4); return { a: 1 - easeIn(k, 2), dy: -50 * Math.sin(k * Math.PI * 1.5 + i) * k, r: 0.08 * k * Math.sin(i) }; } },
-  'melt-down': { sec: 0.46, glyph: ({ q, i, n }) => { const k = clamp01(q * 1.5 - (0.5 * (n - i)) / Math.max(1, n)); return { a: 1 - easeIn(k, 2), dy: 80 * easeIn(k, 2), sx: 1 - 0.2 * easeIn(k, 2) }; } },
+  'sign-sink': { sec: 0.42, block: (q) => ({ dy: 50 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
+  'band-cover': { sec: 0.36, clip: (q) => ({ axis: 'y', at: 1 - stepsOf(easeIn(q, 2), 6) }) },
   'buff-out': { sec: 0.36, clip: (q) => ({ axis: 'x', at: 1 - easeIn(q, 1.6) }) },
   'peel-off': { sec: 0.3, block: (q, seed) => ({ dy: 90 * easeIn(q, 2), r: (seed % 2 ? 0.05 : -0.05) * easeIn(q, 2), a: 1 - easeIn(q, 1.4) }) },
   'rip-off': { sec: 0.2, block: (q, seed) => ({ dx: (seed % 2 ? 1 : -1) * 500 * stepsOf(easeIn(q, 2), 4), a: q < 0.85 ? 1 : 0 }) },
@@ -71,7 +70,7 @@ export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'studio-bounce': ({ age }) => ({ s: 1 + 0.02 * Math.exp(-fract(age * 2) * 7) }),
   'stage-pulse': ({ age, i }) => ({ tone: 0.92 + 0.08 * Math.sin(age * 2.2 + i * 0.4) }),
   'sleeve-still': () => ({}),
-  'lava-sway': ({ age, u }) => ({ dy: 4 * Math.sin(age * 1.2 + u * 4), r: 0.008 * Math.sin(age * 0.9 + u * 3) }),
+  'poster-still': () => ({}),
   'drip-hang': ({ age, i, seed }) => ({ dy: Math.min(4, age * 0.5) * hash(i, seed + 7) }),
   'copier-jitter': ({ age, i, seed }) => { const t = Math.floor(age * 12); return { dx: (hash(t, i + seed) - 0.5) * 2, dy: (hash(t, seed) - 0.5) * 1.5 }; },
   'heat-shimmer': ({ age, v, i }) => ({ dx: 1.2 * Math.sin(age * 2 + v * 6 + i * 0.5) }),

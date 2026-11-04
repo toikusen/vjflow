@@ -33,14 +33,11 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'y2k/ring': { ...base, at: [0.0885, 0.333], ax: -1, ay: -1, share: 0.42, tall: 0.4, hi: 96, rows: [1, 2], lead: 1.45, track: 0.14, flush: -1, weight: 700, fixed: true },
   'y2k/fan': { ...base, at: [0.073, 0.278], ax: -1, ay: -1, share: 0.5, tall: 0.56, hi: 250, rows: [1, 3], lead: 1, track: 0.02, flush: -1, fixed: true },
   'y2k/column': { ...base, at: [0.629, 0.139], ax: 0, ay: -1, share: 0.3, tall: 0.7, hi: 104, rows: [1, 2], vertical: true, lead: 1.83, track: 0.08, fixed: true },
-  // psychedelic: the words ride the ribbon, sit in the sun, arc high or low, stack down the left, lean big
-  'psychedelic/wave-ribbon': { ...base, at: [0.5, 0.42], ax: 0, ay: 0, share: 0.86, tall: 0.36, hi: 250, rows: [1, 2], lead: 1.08, track: 0.02, tilt: 0.06, object: 'ribbon-wave', pad: [110, 60], fill: [1.0, 0.36] },
-  'psychedelic/sun-face': { ...base, at: [0.5, 0.56], ax: 0, ay: 0, share: 0.46, tall: 0.42, hi: 230, rows: [1, 3], lead: 1.06, track: 0.01, object: 'sun-disc', pad: [150, 150], fill: [0.5, 0.88] },
-  'psychedelic/arc-top': { ...base, at: [0.5, 0.2], ax: 0, ay: 0, share: 0.8, tall: 0.32, hi: 230, rows: [1, 2], lead: 1.08, track: 0.02, tilt: -0.05 },
-  'psychedelic/arc-low': { ...base, at: [0.5, 0.8], ax: 0, ay: 0, share: 0.8, tall: 0.32, hi: 230, rows: [1, 2], lead: 1.08, track: 0.02, tilt: 0.05 },
-  'psychedelic/stack-left': { ...base, at: [0.06, 0.5], ax: -1, ay: 0, share: 0.7, tall: 0.76, hi: 240, rows: [2, 3], lead: 1.12, track: 0.01, flush: -1, stair: 0.6, tilt: -0.06 },
-  'psychedelic/big': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.9, tall: 0.7, hi: 380, rows: [1, 2], lead: 1.04, track: 0, tilt: 0.08 },
-  'psychedelic/column': { ...base, at: [0.14, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.82, hi: 230, rows: [1, 2], vertical: true, lead: 1.08, track: 0.02, tilt: -0.08 },
+  // psychedelic (board a–d): the sign over the arches, the line left of the sun, the sign in the tunnel, columns by the bands
+  'psychedelic/arch': { ...base, at: [0.5, 0.33], ax: 0, ay: 0, share: 0.72, tall: 0.44, hi: 190, rows: [1, 3], lead: 1.2, track: 0.03, ink: 'plate', under: [{ kind: 'poster-band', tone: 'ink2' }, { kind: 'poster-key', tone: 'plateInk' }], fixed: true },
+  'psychedelic/sun': { ...base, at: [0.078, 0.3], ax: -1, ay: -1, share: 0.46, tall: 0.36, hi: 108, rows: [1, 2], lead: 1.39, track: 0.074, flush: -1, ink: 'plate', under: [{ kind: 'poster-key-thin', tone: 'plateInk' }], fixed: true },
+  'psychedelic/tunnel': { ...base, at: [0.5, 0.52], ax: 0, ay: 0, share: 0.62, tall: 0.5, hi: 250, rows: [1, 2], lead: 1.12, track: 0.04, ink: 'plate', under: [{ kind: 'poster-band', tone: 'accent' }, { kind: 'poster-key', tone: 'plateInk' }], fixed: true },
+  'psychedelic/flow': { ...base, at: [0.79, 0.139], ax: 0, ay: -1, share: 0.3, tall: 0.78, hi: 104, rows: [1, 2], vertical: true, lead: 2.02, track: 0.077, ink: 'plate', under: [{ kind: 'poster-band', tone: 'ink2' }, { kind: 'poster-key', tone: 'plateInk' }], fixed: true },
   // graffiti: low on the wall, leaning; a stencil dead centre; a tag high right; on a sprayed patch; a throw-up
   'graffiti/wall-low': { ...base, at: [0.06, 0.72], ax: -1, ay: 0, share: 0.84, tall: 0.44, hi: 300, rows: [1, 2], lead: 1.04, track: 0.01, flush: -1, tilt: -0.05 },
   'graffiti/stencil-centre': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.86, tall: 0.54, hi: 340, rows: [1, 2], lead: 1.04, track: 0.02 },

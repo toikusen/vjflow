@@ -1,146 +1,154 @@
-// psychedelic: a seventies poster, warm and a little faded. Thick wavy stripes flowing, a sun with soft rays, colour that
-// melts; the type round, with a second ink that rounds its corners and a thick offset below. The words ride the wave.
-// Nothing glows, nothing is cold; the paper shows through everything.
+// psychedelic, redrawn from its board (2026-11-04, 風格第3批設計稿/psychedelic a–d): the title of a seventies screen-printed
+// concert poster. The words are a sign: cream letters closed in a plum keyline with a colour band grown out of it
+// (world-glyph-loud's poster rings, laid under the letters). Under them nested rainbow arches, a target sun, a rounded
+// op-art tunnel or flowing vertical bands, all flat inks, hard edges. Paper005 (CC0) multiplied, grain, a plum vignette.
 import type { Piece } from './world-pieces';
-import { atBase, boxOf, clamp01, ease, easeIn, fibred, H, hash, HandGround, HandIn, mixHex, ObjectPaint, span, TAU, W, WorldEnv } from './world-craft';
+import { clamp01, ease, H, HandGround, HandIn, mixHex, W, WorldEnv } from './world-craft';
+import { artistOf, label, titleOnly } from './world-b3-shared';
+import { paperOver } from './world-b3-tex';
 
-type C = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
-const CW = W + 240;
-const CH = H + 240;
-const paper = (e: WorldEnv) => e.ctx.drawImage(fibred('psy', e.paper, mixHex(e.paper, e.ink, 0.6), 1600, CW, CH), -120, -120);
-const tones = (e: WorldEnv) => [e.slots.ink2, e.slots.accent, e.slots.plate, mixHex(e.paper, e.slots.faint, 0.8)];
-/** Wavy stripes: each a thick sine band, the colours in turn, phase running with time; `amp` sets how far they wave. */
-function waves(c: C, ts: string[], pitch: number, amp: number, phase: number, angle: number, wl = 1.6, y0 = -CH, y1 = CH * 2) {
-  c.save();
-  c.translate(W / 2, H / 2);
-  c.rotate(angle);
-  c.translate(-W / 2, -H / 2);
-  c.lineWidth = pitch * 0.52;
-  c.lineCap = 'butt';
-  let j = 0;
-  for (let y = y0; y < y1; y += pitch, j++) {
-    c.strokeStyle = ts[j % ts.length];
+// (the board's inks: plum, orange, pink, mustard, cream, teal)
+const PL = '#3A1B55';
+const OR = '#F2672E';
+const PK = '#F59AC0';
+const MU = '#F3BC3E';
+const CR = '#F7E8C9';
+const TE = '#1E8C86';
+const SHR = (px: number) => `400 ${px}px Shrikhand, "Shippori Antique B1", sans-serif`;
+
+const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
+/** The beat count the bands step on: colours move outward one band a beat, the shapes stay. */
+const step = (e: WorldEnv) => Math.floor(e.now * 2);
+/** The poster's finish: Paper005 multiplied at half, and the board's plum vignette (transparent to 58 %, 32 % at the edge). */
+function finish(c: CanvasRenderingContext2D) {
+  paperOver(c, 0.5);
+  const g = c.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.hypot(W, H) / 2);
+  g.addColorStop(0.58, 'rgba(20,6,30,0)');
+  g.addColorStop(1, 'rgba(20,6,30,0.32)');
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, H);
+}
+/** A colour from a cycle, stepped by the beat so the colour travels outward. */
+const cyc = (cols: string[], i: number, s: number) => cols[(((i - s) % cols.length) + cols.length) % cols.length];
+
+/** a: rainbow arches rising from below the frame, the title floating above them. */
+const arches: HandGround = (e) => page(e, (c) => {
+  c.fillStyle = e.paper;
+  c.fillRect(0, 0, W, H);
+  const cols = [MU, OR, PK, CR, TE, e.paper];
+  const s = step(e);
+  const rise = ease(clamp01(e.age / 0.8), 3);
+  for (let i = 13; i >= 0; i--) {
     c.beginPath();
-    for (let x = -CW; x <= CW * 2; x += 24) { const yy = y + amp * Math.sin((x / (pitch * wl)) + phase + j * 0.4); x === -CW ? c.moveTo(x, yy) : c.lineTo(x, yy); }
-    c.stroke();
+    c.arc(960, 1240 + (1 - rise) * 500, 120 + i * 58, 0, Math.PI * 2);
+    c.fillStyle = cyc(cols, i, s);
+    c.fill();
   }
-  c.restore();
-}
-/** A sun: a disc and soft rays round it, two tones in turn, turning slowly. */
-function sun(c: C, x: number, y: number, r: number, disc: string, a: string, b: string, spin: number, reach = 2.2, n = 24) {
-  c.save();
-  for (let i = 0; i < n; i++) { const t0 = spin + (i / n) * TAU; const t1 = spin + ((i + 0.72) / n) * TAU; c.fillStyle = i % 2 ? a : b; c.beginPath(); c.moveTo(x + Math.cos(t0) * r, y + Math.sin(t0) * r); c.arc(x, y, r * reach, t0, t1); c.lineTo(x + Math.cos(t1) * r, y + Math.sin(t1) * r); c.closePath(); c.fill(); }
-  c.fillStyle = disc;
-  c.beginPath();
-  c.arc(x, y, r, 0, TAU);
-  c.fill();
-  c.restore();
-}
-/** Lava: soft blobs that drift and merge, drawn blurred over each other. */
-function lava(e: WorldEnv, n: number, a = 1, drop = 0) {
-  const c = e.ctx;
-  c.save();
-  c.globalAlpha = a;
-  c.lineWidth = 9;
-  c.strokeStyle = mixHex(e.paper, e.ink, 0.75);
-  for (let i = 0; i < n; i++) {
-    const t = e.now * (0.08 + 0.1 * hash(i, 1));
-    const [x, y] = [hash(i, e.seed) * W + 120 * Math.sin(t + i), hash(i, e.seed + 1) * H + 90 * Math.cos(t * 1.3 + i) + drop * (200 + 400 * hash(i, 4))];
-    const [rx, ry] = [140 + 180 * hash(i, 2), 120 + 160 * hash(i, 3)];
-    c.fillStyle = tones(e)[i % 3];
+  finish(c);
+  label(c, [artistOf(e.title), titleOnly(e.title)].filter(Boolean).join(' · '), 120, 104, SHR(30), CR, 1.2);
+});
+
+/** b: a calm target sun low right, its rings breathing; the line on the left, the title small below. */
+const sun: HandGround = (e) => page(e, (c) => {
+  c.fillStyle = e.paper;
+  c.fillRect(0, 0, W, H);
+  const k = 1 + 0.02 * Math.sin(e.now * 1.3);
+  const rings: [number, string][] = [[560, mixHex(e.paper, '#FFFFFF', 0.07)], [470, TE], [400, e.paper], [330, PK], [270, e.paper], [210, MU], [150, OR], [90, CR]];
+  for (const [r, tone] of rings) { c.beginPath(); c.arc(1480, 760, r * k, 0, Math.PI * 2); c.fillStyle = tone; c.fill(); }
+  finish(c);
+  label(c, titleOnly(e.title), 150, H - 110, SHR(28), MU, 1.1);
+});
+
+/** c: the op-art tunnel, rounded rectangles stepping in to the vanishing point where the line sits. */
+const tunnel: HandGround = (e) => page(e, (c) => {
+  const cols = [OR, PL, PK, PL, MU, PL, TE, PL].map((x) => (x === PL ? e.paper : x));
+  const s = step(e);
+  for (let i = 26; i >= 0; i--) {
+    const k = 1.17 ** i;
+    const [w, h] = [150 * k, 84 * k];
     c.beginPath();
-    // a blob: an ellipse pushed out of round by three slow bulges
-    for (let k = 0; k <= 40; k++) { const th = (k / 40) * TAU; const bulge = 1 + 0.16 * Math.sin(th * 3 + t * 2 + i) + 0.08 * Math.sin(th * 5 - t); const px = x + Math.cos(th) * rx * bulge; const py = y + Math.sin(th) * ry * bulge; k ? c.lineTo(px, py) : c.moveTo(px, py); }
+    c.roundRect(960 - w / 2, 540 - h / 2, w, h, h * 0.42);
+    c.fillStyle = cyc(cols, i, s * 2);
+    c.fill();
+  }
+  finish(c);
+});
+
+/** d: vertical bands flowing down the left two thirds; the columns stand on the plum to their right. */
+const flow: HandGround = (e) => page(e, (c) => {
+  c.fillStyle = e.paper;
+  c.fillRect(0, 0, W, H);
+  const cols = [OR, PK, MU, TE, CR, e.paper, OR, PK, MU, TE, e.paper];
+  const t = e.now * 0.6;
+  for (let i = cols.length - 1; i >= 0; i--) {
+    const x0 = -60 + i * 112;
+    c.beginPath();
+    c.moveTo(-200, -20);
+    for (let y = -20; y <= 1100; y += 10) c.lineTo(x0 + Math.sin(y / 160 + i * 0.5 - t) * 70, y);
+    c.lineTo(-200, 1100);
     c.closePath();
+    c.fillStyle = cols[i];
     c.fill();
-    c.stroke();
   }
-  c.restore();
-}
-/** The paper laid back round the words so the stripes never run through a line being read. */
-function clearing(e: WorldEnv) {
-  if (!e.rect || e.weight <= 0) return;
-  const b = boxOf(e, 50, 36);
-  atBase(e, (c) => {
-    c.globalAlpha = 0.85 * e.weight;
-    c.fillStyle = e.paper;
-    c.beginPath();
-    c.roundRect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0, Math.min(90, (b.y1 - b.y0) / 2));
-    c.fill();
-    c.globalAlpha = 1;
-  });
-}
+  finish(c);
+});
 
-const Gs: Record<string, HandGround> = {
-  'psychedelic/band-sunset': (e) => { paper(e); waves(e.ctx, tones(e), 150, 22, e.now * 0.5, 0, 2.2, H * 0.3, CH); clearing(e); },
-  'psychedelic/one-wave': (e) => { paper(e); waves(e.ctx, tones(e), 180, 40, e.now * 0.4, 0.04, 2.4, H * 0.5, H * 0.5 + 180 * 4); clearing(e); },
-  'psychedelic/wave-stripes': (e) => { paper(e); waves(e.ctx, tones(e), 120 + 20 * (e.seed % 3), 60, e.now * 0.8, -0.2 + 0.4 * hash(e.seed, 2)); clearing(e); },
-  'psychedelic/liquid': (e) => { paper(e); lava(e, 9); clearing(e); },
-  'psychedelic/sun-rays': (e) => { paper(e); const t = tones(e); sun(e.ctx, W * (0.3 + 0.4 * hash(e.seed, 3)), H * 0.72, 220, t[1], t[0], t[2], e.now * 0.15, 4); clearing(e); },
-  // the peak: the sun fills the frame, its rays turning faster
-  'psychedelic/full-sun': (e) => { paper(e); const t = tones(e); sun(e.ctx, W * 0.5, H * 0.5, 300, t[1], t[0], t[2], e.now * 0.5, 6, 28); clearing(e); },
-};
+const Gs: Record<string, HandGround> = { 'psychedelic/arches': arches, 'psychedelic/sun': sun, 'psychedelic/tunnel': tunnel, 'psychedelic/flow': flow };
 
 const INS: Record<string, HandIn> = {
-  // the new picture comes in under a wavy edge sweeping down
-  'wave-wash': { sec: 0.46, draw: (e, q) => atBase(e, (c) => { const y = -200 + ease(q, 2) * (H + 500); c.fillStyle = e.slots.plate; c.beginPath(); c.moveTo(-20, -20); c.lineTo(W + 20, -20); c.lineTo(W + 20, y); for (let x = W + 20; x >= -20; x -= 30) c.lineTo(x, y + 60 * Math.sin(x * 0.012 + q * 6)); c.closePath(); c.fill(); }) },
+  // the next poster is pulled up from below in colour bands, plum last, like the arches rising
+  'band-rise': { sec: 0.5, draw: (e, q) => page(e, (c) => {
+    const cols = [MU, OR, PK, TE, e.paper];
+    cols.forEach((tone, i) => {
+      const k = ease(clamp01(q * 1.6 - i * 0.12), 3);
+      c.fillStyle = tone;
+      c.fillRect(0, H * (1 - k), W, H * k);
+    });
+  }) },
 };
+
+/** The lyric box with a margin: a piece keeps out of it. */
+const keepOut = (e: WorldEnv, m: number) => { const r = e.rect ?? { x0: W * 0.3, y0: H * 0.35, x1: W * 0.7, y1: H * 0.65 }; return { x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m }; };
 
 const PIECES: Record<string, Piece> = {
-  // the colours melt: blobs drop down the page and pool at the bottom
-  'lava-melt': { sec: 2.4, clear: 0.8, draw: (e, q) => { lava(e, 8, span(q, 0.25, 0.75), easeIn(q, 1.5)); } },
-  // the stripes swell to their full wave and settle again
-  'wave-swell': { sec: 2.0, clear: 0.85, draw: (e, q) => { const k = Math.sin(q * Math.PI); waves(e.ctx, tones(e), 130, 30 + 160 * k, e.now * 0.8 + q * 4, -0.1 + 0.2 * hash(e.seed, 5)); } },
-  // the sun comes up from below and its rays grow
-  'sun-bloom': { sec: 2.2, clear: 0.75, draw: (e, q) => { const t = tones(e); const k = span(q, 0.4, 0.75); const y = H * 1.2 - ease(Math.min(1, q / 0.5), 2) * H * 0.55; sun(e.ctx, W * 0.5, y, 240 * k, t[1], t[0], t[2], q * 2, 1 + 3.5 * k); } },
-  // ribbons fly across, each a short wave in one tone
-  'ribbon-fly': { sec: 2.0, clear: 0.7, draw: (e, q) => {
-    const c = e.ctx;
-    const t = tones(e);
+  // the colour pushes outward through the bands faster for a moment: rings round the frame's edge, kept off the words
+  'colour-push': { sec: 1.6, clear: 0, draw: (e, q) => page(e, (c) => {
+    const b = keepOut(e, 70);
+    const cols = [OR, PK, MU, TE, CR];
+    const n = Math.floor(q * 12);
     c.save();
-    c.lineCap = 'round';
-    for (let i = 0; i < 4; i++) {
-      const k = clamp01((q - i * 0.1) / 0.6);
-      const fade = 1 - easeIn((q - 0.7) / 0.3, 2);
-      const y = H * (0.15 + 0.22 * i);
-      const x0 = -500 + ease(k, 2) * (W + 1000);
-      c.strokeStyle = t[i % 3];
-      c.globalAlpha = fade;
-      c.lineWidth = 70;
-      c.beginPath();
-      for (let s = 0; s <= 30; s++) { const x = x0 - s * 24; c.lineTo(x, y + 50 * Math.sin(x * 0.014 + q * 8 + i)); }
-      c.stroke();
+    c.beginPath();
+    c.rect(0, 0, W, H);
+    c.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0);
+    c.clip('evenodd');
+    for (let i = 0; i < 5; i++) {
+      c.lineWidth = 34;
+      c.strokeStyle = cols[(i + n) % cols.length];
+      c.strokeRect(17 + i * 34, 17 + i * 34, W - 34 - i * 68, H - 34 - i * 68);
     }
     c.restore();
-  } },
+  }) },
+  // a sun of rings rises behind a free corner and sets again
+  'sun-bloom': { sec: 2.2, clear: 0, draw: (e, q) => page(e, (c) => {
+    const b = keepOut(e, 60);
+    const x = b.x1 < W * 0.55 ? W - 260 : 260;
+    const k = Math.sin(clamp01(q) * Math.PI);
+    [[260, TE], [200, PK], [150, MU], [100, OR], [55, CR]].forEach(([r, tone]) => { c.beginPath(); c.arc(x, H + 40 - k * 300, (r as number) * k, 0, Math.PI * 2); c.fillStyle = tone as string; c.fill(); });
+  }) },
+  // the bands ripple: a wave of colour runs along the bottom of the poster
+  'wave-swell': { sec: 1.8, clear: 0, draw: (e, q) => page(e, (c) => {
+    const cols = [OR, PK, MU, TE];
+    const k = Math.sin(clamp01(q) * Math.PI);
+    cols.forEach((tone, i) => {
+      c.beginPath();
+      c.moveTo(0, H);
+      for (let x = 0; x <= W; x += 20) c.lineTo(x, H - (4 - i) * 34 * k - Math.sin(x / 140 + q * 8 + i) * 18 * k);
+      c.lineTo(W, H);
+      c.closePath();
+      c.fillStyle = tone;
+      c.fill();
+    });
+  }) },
 };
 
-/** The ribbon the words ride: a wavy band with round ends, the second ink round it. */
-const ribbonWave: ObjectPaint = (c, w, h, s, seed, look) => {
-  const path = () => { c.beginPath(); const amp = h * 0.12; for (let x = -30; x <= w + 30; x += 12) { const y = amp * Math.sin((x / w) * TAU * 0.8 + look); x === -30 ? c.moveTo(x, y) : c.lineTo(x, y); } for (let x = w + 30; x >= -30; x -= 12) { const y = h + amp * Math.sin((x / w) * TAU * 0.8 + look); c.lineTo(x, y); } c.closePath(); };
-  c.lineJoin = 'round';
-  c.save();
-  c.translate(10, 14);
-  c.fillStyle = s.plateInk;
-  path();
-  c.fill();
-  c.restore();
-  c.fillStyle = s.plate;
-  path();
-  c.fill();
-  c.lineWidth = 7;
-  c.strokeStyle = s.plateInk;
-  c.stroke();
-  void seed;
-};
-/** The sun face the words sit on: a disc with a rim of short soft rays in two tones. */
-const sunDisc: ObjectPaint = (c, w, h, s, seed, look) => {
-  const [cx, cy, r] = [w / 2, h / 2, Math.max(w, h) / 2 + 30];
-  sun(c, cx, cy, r, s.plate, s.accent, s.ink2, look * 0.3, 1.5, 20 + 4 * (seed % 2));
-  c.lineWidth = 7;
-  c.strokeStyle = s.plateInk;
-  c.beginPath();
-  c.arc(cx, cy, r, 0, TAU);
-  c.stroke();
-};
-export const PSYCHEDELIC = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'ribbon-wave': ribbonWave, 'sun-disc': sunDisc } as Record<string, ObjectPaint> };
+export const PSYCHEDELIC = { grounds: Gs, ins: INS, pieces: PIECES, objects: {} };

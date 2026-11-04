@@ -8,7 +8,7 @@ import type { HandCtx } from './world-glyph-hand';
 export type LoudSurface =
   | 'comic-key' | 'pop-sfx-plate' | 'pop-sfx-key'
   | 'cd-type'
-  | 'poster-fill' | 'poster-band' | 'poster-key'
+  | 'poster-fill' | 'poster-band' | 'poster-key' | 'poster-key-thin'
   | 'sleeve-type'
   | 'xerox-type'
   | 'fan-letter' | 'fan-member' | 'fan-white' | 'fan-key'
@@ -16,7 +16,7 @@ export type LoudSurface =
   | 'spray'
   // (the first batch-3 surfaces, kept flat only until their worlds are redrawn)
   | 'hard-shadow' | 'stage-lit' | 'chrome' | 'bubble' | 'toner' | 'airbrush';
-const KINDS = new Set<string>(['hard-shadow', 'stage-lit', 'chrome', 'bubble', 'toner', 'airbrush', 'comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'spray']);
+const KINDS = new Set<string>(['hard-shadow', 'stage-lit', 'chrome', 'bubble', 'toner', 'airbrush', 'comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'spray']);
 export const isLoudSurface = (k: string): k is LoudSurface => KINDS.has(k);
 
 /** The member colours an idol fan's letters are cut round, one a character (the board's pink, blue, mint, lemon, lilac). */
@@ -131,6 +131,11 @@ export function loudSurface(ctx: CanvasRenderingContext2D, kind: LoudSurface, h:
     // psychedelic's poster lettering (board a): a dark keyline closed round the word, a colour band grown out of it
     case 'poster-key': {
       ctx.drawImage(grown(mask, px * 0.15, px * 0.16, tint), 0, 0);
+      break;
+    }
+    case 'poster-key-thin': {
+      // a quiet line's poster lettering (board b): the keyline alone, thinner, no band
+      ctx.drawImage(grown(mask, px * 0.11, px * 0.14, tint), 0, 0);
       break;
     }
     case 'poster-band': {

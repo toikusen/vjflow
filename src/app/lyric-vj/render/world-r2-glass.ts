@@ -100,18 +100,21 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     b.w.inscriptions.push(rectP(cx - hw, cy - hh, hw * 2, hh * 2));
     return b.w;
   }
-  if (kind === 'rose-lancet') {
+  if (kind === 'rose-lancet' || kind === 'lancet-rose') {
+    // (board b, and the same board mirrored: the rose and the lancet change sides)
+    const left = kind === 'lancet-rose';
+    const [rx, lx] = left ? [1360, 240] : [560, 1160];
     const b = new Build([0.8, -0.6], 7);
-    b.rose(560, 540, 450, 170, 12, j);
-    b.pane(circleP(560, 540, 170), j.pale[1], 560, 540, 170, 8);
-    b.quatrefoil(560, 540, 156, j.b, j.a, j.c);
-    b.w.reveals.push(archP(1146, 36, 548, 1008));
-    const arch = archP(1160, 50, 520, 980);
+    b.rose(rx, 540, 450, 170, 12, j);
+    b.pane(circleP(rx, 540, 170), j.pale[1], rx, 540, 170, 8);
+    b.quatrefoil(rx, 540, 156, j.b, j.a, j.c);
+    b.w.reveals.push(archP(lx - 14, 36, 548, 1008));
+    const arch = archP(lx, 50, 520, 980);
     b.w.openings.push(arch);
-    b.quarries(1160, 50, 520, 980, 104, j.pale, arch);
-    b.quatrefoil(1420, 240, 150, j.a, j.b, j.c);
+    b.quarries(lx, 50, 520, 980, 104, j.pale, arch);
+    b.quatrefoil(lx + 260, 240, 150, j.a, j.b, j.c);
     b.lead(arch, 12);
-    const t = r ?? { x0: 1350, y0: 380, x1: 1490, y1: 900 };
+    const t = r ?? { x0: lx + 190, y0: 380, x1: lx + 330, y1: 900 };
     const cx = (t.x0 + t.x1) / 2;
     const hw = Math.min(230, Math.max(150, (t.x1 - t.x0) / 2 + 60));
     b.w.inscriptions.push(rectP(cx - hw, Math.min(350, t.y0 - 40), hw * 2, Math.max(640, t.y1 + 40 - Math.min(350, t.y0 - 40))));
@@ -128,23 +131,55 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     b.w.inscriptions.push(circleP((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2, rad));
     return b.w;
   }
+  if (kind === 'predella') {
+    // four short lancets over a predella: the lancets' quarries and quatrefoils above, the band window's jewelled border below
+    const b = new Build([0.6, 0.8], 23);
+    const [w0, gap, top, h0] = [330, 86, 40, 520];
+    const x0 = (W - (4 * w0 + 3 * gap)) / 2;
+    for (let k = 0; k < 4; k++) {
+      const x = x0 + k * (w0 + gap);
+      const arch = archP(x, top, w0, h0);
+      b.w.reveals.push(archP(x - 14, top - 14, w0 + 28, h0 + 28));
+      b.w.openings.push(arch);
+      b.quarries(x, top, w0, h0, 96, j.pale, arch);
+      b.quatrefoil(x + w0 / 2, top + 320, 120, k % 2 ? j.b : j.a, k % 2 ? j.a : j.b, j.c);
+      b.lead(arch, 12);
+    }
+    const [px, py, pw, ph] = [x0, 590, 4 * w0 + 3 * gap, 460];
+    const band = rectP(px, py, pw, ph);
+    b.w.reveals.push(rectP(px - 14, py - 14, pw + 28, ph + 28));
+    b.w.openings.push(band);
+    b.quarries(px, py, pw, ph, 100, j.pale, band);
+    b.border(px, py, pw, ph, 50, 140, [j.a, j.b, j.a, j.c]);
+    b.lead(band, 12);
+    const t = r ?? { x0: 560, y0: 780, x1: 1360, y1: 930 };
+    const [cx, cy] = [(t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2];
+    const hw = Math.min(pw / 2 - 70, Math.max(420, (t.x1 - t.x0) / 2 + 90));
+    const hh = Math.min(ph / 2 - 40, Math.max(110, (t.y1 - t.y0) / 2 + 40));
+    b.w.inscriptions.push(rectP(cx - hw, cy - hh, hw * 2, hh * 2));
+    return b.w;
+  }
   // four lancets: the inner two carry the inscription's two columns, the outer two a pair of quatrefoils each
   const b = new Build([0.5, 0.87], 20);
   const t = r ?? { x0: 650, y0: 216, x1: 1270, y1: 990 };
   const cx = (t.x0 + t.x1) / 2;
+  // (a line that took no break stands in one column, 4.4 sizes wide against two columns' 8.8, a size being 84–150 px:
+  // under 700 px it is one, and gets three lancets with the inscription in the middle one)
+  const single = t.x1 - t.x0 - 28 < 700;
   const pitch = Math.max(300, (t.x1 - t.x0 - 28) / 2);
-  const size = pitch / 4.4;
+  const size = (t.x1 - t.x0 - 28) / (single ? 4.4 : 8.8);
   const w0 = Math.min(330, pitch - 60);
   const [Y, Hh] = [50, 990];
-  const centres = [cx - pitch / 2 - 416, cx - pitch / 2, cx + pitch / 2, cx + pitch / 2 + 416];
+  const centres = single ? [cx - 416, cx, cx + 416] : [cx - pitch / 2 - 416, cx - pitch / 2, cx + pitch / 2, cx + pitch / 2 + 416];
   centres.forEach((mid, k) => {
     const x = mid - w0 / 2;
     b.w.reveals.push(archP(x - 14, Y - 14, w0 + 28, Hh + 28));
     b.w.openings.push(archP(x, Y, w0, Hh));
     b.quarries(x, Y, w0, Hh, 96, j.pale, archP(x, Y, w0, Hh));
-    if (k === 0 || k === 3) { b.quatrefoil(mid, Y + 400, 140, j.a, j.b, j.c); b.quatrefoil(mid, Y + 740, 140, j.d, j.a, j.c); }
+    const carries = single ? k === 1 : k === 1 || k === 2;
+    if (!carries) { b.quatrefoil(mid, Y + 400, 140, j.a, j.b, j.c); b.quatrefoil(mid, Y + 740, 140, j.d, j.a, j.c); }
     b.lead(archP(x, Y, w0, Hh), 12);
-    if (k === 1 || k === 2) {
+    if (carries) {
       const hw = Math.min(w0 / 2 - 24, Math.max(92, size / 2 + 46));
       const top = Math.min(250, t.y0 - 34);
       b.w.inscriptions.push(rectP(mid - hw, top, hw * 2, Math.min(Y + Hh - 30, Math.max(t.y1 + 34, 970)) - top));
@@ -265,8 +300,10 @@ const glassGround = (kind: string): HandGround => (e) => atBase(e, (c) => {
 const Gs: Record<string, HandGround> = {
   'stained-glass/transom': glassGround('transom'),
   'stained-glass/rose-lancet': glassGround('rose-lancet'),
+  'stained-glass/lancet-rose': glassGround('lancet-rose'),
   'stained-glass/rose': glassGround('rose'),
   'stained-glass/lancets': glassGround('lancets'),
+  'stained-glass/predella': glassGround('predella'),
   // (between lines the rose alone; a line that lands on it gets its inscription, never letters on coloured glass)
   'stained-glass/window': (e) => glassGround(e.rect ? 'rose' : 'window')(e),
 };

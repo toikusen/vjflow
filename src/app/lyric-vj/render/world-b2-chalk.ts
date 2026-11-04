@@ -119,7 +119,9 @@ function marks(e: WorldEnv) {
       }
       dust(e, c, r.x0, r.x1, r.y1 + 90);
     } else if (r.y0 >= 260) {
-      const y = Math.min(H - 150, r.y1 + 36);
+      const y = r.y1 + 36;
+      // (no room above the tray for a rule clear of the words: none)
+      if (y > H - 150) return void c.restore();
       chalkLine(c, [[r.x0 + 10, y], [r.x0 + 400, y + 3], [r.x0 + 800, y - 1], [Math.max(r.x1, 1740), y + 2]], e.ink, 6, 9, k);
       dust(e, c, r.x0, Math.min(r.x1, 1600), y + 14);
     } else {
@@ -134,8 +136,8 @@ function marks(e: WorldEnv) {
     c.restore();
   });
 }
-/** The light of an empty classroom: pale window shapes moving slowly across the board. */
-const lightOn = (e: WorldEnv) => atBase(e, (c) => { c.save(); c.globalCompositeOperation = 'lighter'; for (let i = 0; i < 3; i++) { const x = ((e.now * 16 + i * 620) % (W + 900)) - 500; c.fillStyle = mixHex(e.paper, e.ink, 0.06); c.beginPath(); c.moveTo(x, -20); c.lineTo(x + 340, -20); c.lineTo(x + 380, H - 130); c.lineTo(x + 40, H - 130); c.closePath(); c.fill(); } c.restore(); });
+/** The light of an empty classroom: faint window shapes moving slowly across the board (a few percent of chalk-white light). */
+const lightOn = (e: WorldEnv) => atBase(e, (c) => { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.045; for (let i = 0; i < 3; i++) { const x = ((e.now * 16 + i * 620) % (W + 900)) - 500; c.fillStyle = e.ink; c.beginPath(); c.moveTo(x, -20); c.lineTo(x + 340, -20); c.lineTo(x + 380, H - 130); c.lineTo(x + 40, H - 130); c.closePath(); c.fill(); } c.restore(); });
 
 const Gs: Record<string, HandGround> = {
   'chalkboard/slate': (e) => { board(e); marks(e); },

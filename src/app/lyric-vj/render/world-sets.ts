@@ -52,7 +52,7 @@ export interface SetSpec {
   under?: { kind: SurfaceKind; tone: keyof Slots }[];
   /** Each row's ink, a slot a row (the last repeats): a second row the board sets apart (a file's entry in stamp red). */
   rowInk?: (keyof Slots)[];
-  /** Each row stands on a carrier of its own (a pair of cards): the rows are kept, no key word is blown up out of them. */
+  /** Each row stands on a carrier of its own (a pair of cards, a window's inscription panes): the rows are kept, no key word is blown up out of them. */
   keepRows?: boolean;
   /** Laid into its ground's composition: no travel or swell while it is up. */
   fixed?: boolean;

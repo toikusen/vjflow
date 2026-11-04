@@ -28,6 +28,8 @@ export interface LinePart {
   column?: boolean;
   /** Shot-size calm lines may not use it. */
   loud?: boolean;
+  /** Sets of two carriers, a row each: only lines with a break to take (two phrases). */
+  breaks?: boolean;
 }
 export interface DecorPart { id: string; why: string; budget: string }
 
@@ -94,13 +96,15 @@ export function worldRecipes(w: StyleWorld): Recipe[] {
     mark: 'color',
     min: l.min,
     max: l.max,
-    fit: l.column ? COLUMN : undefined,
+    fit: l.column ? COLUMN : l.breaks ? BREAKS : undefined,
     wline: { set: l.set, enter, exit, hold: l.hold, ground: l.ground, loud: l.loud },
   } as Recipe)))));
 }
 
 /** Columns are for Han and kana. */
 const COLUMN = { test: (s: string) => !/[A-Za-z0-9]/.test(s) };
+/** Two phrases a line: a break between them to set one on each carrier. */
+const BREAKS = { test: (s: string) => /\S[\s　]+\S/.test(s.trim()) };
 
 /** What the composer reads of a world. */
 /** Which reading of a song each composer palette is. */

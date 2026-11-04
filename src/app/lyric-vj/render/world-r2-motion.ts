@@ -20,6 +20,8 @@ export const R2_ENTERS: Record<string, WorldMove> = {
   // chalkboard (board motion): written in the hand's order a character at a time, each one stroke by stroke from its top
   'chalk-hand': { sec: 0.7, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 1) - i); return { a: k > 0 ? Math.min(1, 0.25 + k * 1.5) : 0, sy: k > 0 && k < 1 ? 0.97 + 0.03 * k : 1 }; } },
   'chalk-press': { sec: 0.3, glyph: ({ q, i, seed }) => { const k = clamp01(q * 1.5 - 0.5 * hash(i, seed)); return { a: k > 0 ? 1 : 0, s: k > 0 ? 1.04 - 0.04 * easeOut(k * 2, 2) : 1 }; } },
+  // or set down in one stroke a row at a time, left to right, the way a fast hand runs along the board
+  'chalk-run': { sec: 0.5, glyph: ({ q, u, v }) => { const k = clamp01(q * 1.8 - u * 0.6 - v * 0.2); return { a: k > 0 ? 1 : 0, dx: k > 0 && k < 1 ? -3 : 0 }; } },
   // stained-glass (board motion): the light comes round to the inscription, the letters going from unlit to lit; or the pane
   // is set into its lead, settling a hair
   'light-come': { sec: 0.9, glyph: ({ q, u, v }) => { const k = clamp01(q * 1.6 - (u * 0.4 + v * 0.2)); return { a: k > 0 ? 1 : 0, tone: 0.3 + 0.7 * easeOut(k, 2) }; } },
@@ -35,6 +37,8 @@ export const R2_EXITS: Record<string, WorldMove> = {
   // the eraser comes from the right: each character goes as it passes, the board shows through
   'eraser-pass': { sec: 0.42, glyph: ({ q, u }) => ({ a: u < 1 - q * 1.15 ? 1 : 0 }) },
   'chalk-fade': { sec: 0.5, glyph: ({ q, v }) => ({ a: 1 - easeIn(clamp01(q * 1.3 - v * 0.3), 2), dy: 6 * easeIn(q, 2) }) },
+  // the flat of a hand drawn down over it: the words smear a little downward as they go
+  'palm-smear': { sec: 0.4, glyph: ({ q, u }) => { const k = clamp01(q * 1.4 - (1 - u) * 0.4); return { a: 1 - easeIn(k, 1.5), dy: 10 * easeIn(k, 2), sx: 1 + 0.06 * k }; } },
   'light-go': { sec: 0.8, glyph: ({ q, u }) => { const k = clamp01(q * 1.5 - (1 - u) * 0.5); return { tone: 1 - 0.7 * easeIn(k, 2), a: k < 1 ? 1 : 0 }; } },
   'pane-out': { sec: 0.4, block: (q) => ({ dy: -12 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
 };

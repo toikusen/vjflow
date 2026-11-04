@@ -603,13 +603,15 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
           ctx.restore();
           ctx.save();
           if (env.base) ctx.setTransform(env.base);
-          if (piece.p.reserve && env.rect) reservePaper(ctx, seed, env.rect, env.paper, (piece.p.clear ?? 0.55) * env.weight);
+          // (words on their own opaque carrier read on it, whatever the piece laid under it: no paper is laid round them)
+          if (env.rect?.carried) { /* the carrier is the room */ }
+          else if (piece.p.reserve && env.rect) reservePaper(ctx, seed, env.rect, env.paper, (piece.p.clear ?? 0.55) * env.weight);
           // (a page laid out with its line carries the words on its own balloon or card: no block of paper is laid over it)
           else if (!l.world.bound) clearWordsAfter({ ...env, base: undefined }, piece.p.clear ?? 0.55);
           ctx.restore();
         }
         // whatever a change or a set piece laid under the words, the ink must read on all of it (behind-ink.ts)
-        if ((coming || piece) && env.rect && !l.world.bound) {
+        if ((coming || piece) && env.rect && !env.rect.carried && !l.world.bound) {
           ctx.save();
           if (env.base) ctx.setTransform(env.base);
           holdInkGround(ctx, env.rect, ink, paper, env.weight);

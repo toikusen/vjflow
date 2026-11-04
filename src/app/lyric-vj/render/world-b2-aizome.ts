@@ -127,7 +127,8 @@ function hang(e: WorldEnv, cv: OffscreenCanvas, amp: number, speed = 1) {
 }
 /** Plain dyed cloth round the words, where nothing was bound: the pattern stops at a crisp, slightly wandering dye line (no glow). */
 export function plainRound(e: WorldEnv) {
-  if (!e.rect || e.weight <= 0) return;
+  // (words on their own carrier read on it: no room of plain paper is cut round them)
+  if (!e.rect || e.weight <= 0 || e.rect.carried) return;
   // (as wide as the old feathered clearing reached: the ties' pattern stays a hand off the strokes)
   const b = boxOf(e, 150, 110);
   atBase(e, (c) => {

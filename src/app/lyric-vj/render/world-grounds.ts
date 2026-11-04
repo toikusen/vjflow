@@ -26,7 +26,8 @@ export interface WorldEnv {
   paper: string;
   ink: string;
   slots: Slots;
-  rect?: Box;
+  /** The line's box; carried: it stands whole on an opaque carrier of its own (graphics.ts Rect). */
+  rect?: Box & { carried?: boolean };
   weight: number;
   pulse: number;
   /** How loud this part is, 0..1. */
@@ -73,7 +74,9 @@ function pool(c: CanvasRenderingContext2D, x: number, y: number, r: number, tone
  * as they go (so it is never a box standing on its own). `rows`: the whole width of the frame across the words' rows.
  */
 function wordsRoom(e: WorldEnv, rows = false): Box | undefined {
-  if (!e.rect || e.weight <= 0) return undefined;
+  // (words on their own opaque carrier read on it: a room cut round them stood beside the carrier as a bare block or a
+  // full-width dark seam, 2026-11-04 audit)
+  if (!e.rect || e.weight <= 0 || e.rect.carried) return undefined;
   const r = e.rect;
   // (a margin a good part of a row: a tight room let lamps, leads and slit edges touch the strokes, 2026-11-04 gate)
   const p = Math.max(48, Math.min(110, 0.36 * (r.y1 - r.y0)));
@@ -116,7 +119,7 @@ function clearWords(e: WorldEnv, strength: number) {
   c.restore();
 }
 /** The wet worlds' room for a line: paper the brush never touched, its edge torn the way a reserve is (world-ink.ts). */
-const reserveWords = (e: WorldEnv) => { if (!e.rect || e.weight <= 0) return; const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); reservePaper(c, e.seed, e.rect, e.paper, Math.min(1, e.weight * 3)); c.restore(); };
+const reserveWords = (e: WorldEnv) => { if (!e.rect || e.weight <= 0 || e.rect.carried) return; const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); reservePaper(c, e.seed, e.rect, e.paper, Math.min(1, e.weight * 3)); c.restore(); };
 const vignette = (e: WorldEnv, a: number) => {
   const g = e.ctx.createRadialGradient(W / 2, H / 2, H * 0.34, W / 2, H / 2, H * 1.02);
   g.addColorStop(0, 'rgba(0,0,0,0)');
@@ -264,14 +267,15 @@ const lampMask = (e: WorldEnv) => kept('lampmask', LAMP * 8, LAMP * 8, (g) => {
 function lampPicture(e: WorldEnv, f: (x: number, y: number) => number, tone: string, a: number, room?: Box) {
   const c = e.ctx;
   const [cols, rows] = [Math.ceil(W / LAMP) + 2, Math.ceil(H / LAMP) + 2];
-  // the lamps behind a line being read stay dark, whole lamps: the board's message area
+  // the lamps behind a line being read stay unlit, whole lamps: the board's message area. Unlit, not gone: a lamp
+  // that is off still shows on a real board, so the area reads as the board and not as a flat dark plate (2026-11-04 audit)
   const m = (e.base ? e.base.inverse() : new DOMMatrix()).multiply(c.getTransform());
   const dark = (x: number, y: number) => { if (!room) return false; const p = m.transformPoint({ x: (x + 0.5) * LAMP, y: (y + 0.5) * LAMP }); return p.x > room.x0 && p.x < room.x1 && p.y > room.y0 && p.y < room.y1; };
   const cv = (lampCanvas ??= new OffscreenCanvas(cols, rows));
   const g = cv.getContext('2d')!;
   const img = g.createImageData(cols, rows);
   const [r, gg, b] = [1, 3, 5].map((i) => parseInt(tone.slice(i, i + 2), 16));
-  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) img.data.set([r, gg, b, dark(x, y) ? 0 : 255 * clamp01(f(x / cols, y / rows))], (y * cols + x) * 4);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) img.data.set([r, gg, b, dark(x, y) ? 255 * UNLIT : 255 * clamp01(f(x / cols, y / rows))], (y * cols + x) * 4);
   g.putImageData(img, 0, 0);
   c.save();
   c.imageSmoothingEnabled = false;
@@ -284,6 +288,8 @@ function lampPicture(e: WorldEnv, f: (x: number, y: number) => number, tone: str
   c.restore();
 }
 let lampCanvas: OffscreenCanvas | undefined;
+/** How much of its light an unlit lamp in a line's area still shows (glass and reflector, the lamp off). */
+const UNLIT = 0.16;
 const unlitLamps = (e: WorldEnv, a: number) => { const c = e.ctx; const dots = kept(`unlit|${e.slots.faint}`, LAMP * 4, LAMP * 4, (g) => { g.fillStyle = e.slots.faint; for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { g.beginPath(); g.arc((i + 0.5) * LAMP, (j + 0.5) * LAMP, LAMP * 0.3, 0, TAU); g.fill(); } }); c.save(); c.globalAlpha = a; c.fillStyle = c.createPattern(dots, 'repeat')!; c.fillRect(-LAMP, -LAMP, W + LAMP * 2, H + LAMP * 2); c.restore(); };
 
 // ---- wet: rice paper, and water carrying ink through it --------------------------------------------------------------
@@ -328,13 +334,17 @@ function gate(e: WorldEnv, strength = 1) {
   c.save();
   c.strokeStyle = e.ink;
   c.lineCap = 'round';
+  // a scratch or a speck of dust never runs through the words being read (2026-11-04 audit: silent-film ②)
+  const room = wordsRoom(e);
+  const inRoom = (x: number, y0: number, y1: number) => !!room && x > room.x0 - 12 && x < room.x1 + 12 && y1 > room.y0 && y0 < room.y1;
   for (let i = 0; i < 4; i++) {
     const held = Math.floor(tick / (3 + i));
     if (hash(held, i) < 0.55) continue;
     const x = hash(held, i + 9) * W;
+    const [y0, y1] = [hash(held, 6) * H * 0.6, H * (0.5 + 0.5 * hash(held, 7))];
+    if (inRoom(x, y0, y1)) continue;
     c.globalAlpha = (0.1 + 0.3 * hash(held, 3)) * strength;
     c.lineWidth = 0.8 + 1.6 * hash(held, 5);
-    const [y0, y1] = [hash(held, 6) * H * 0.6, H * (0.5 + 0.5 * hash(held, 7))];
     c.beginPath();
     c.moveTo(x, y0);
     c.quadraticCurveTo(x + 6 * (hash(held, 8) - 0.5), (y0 + y1) / 2, x + 3 * (hash(held, 4) - 0.5), y1);
@@ -342,6 +352,7 @@ function gate(e: WorldEnv, strength = 1) {
   }
   c.fillStyle = e.ink;
   for (let i = 0; i < 16; i++) {
+    if (inRoom(hash(tick, i) * W, hash(tick, i + 20) * H, hash(tick, i + 20) * H)) continue;
     c.globalAlpha = 0.5 * hash(tick, i + 40) * strength;
     c.beginPath();
     c.ellipse(hash(tick, i) * W, hash(tick, i + 20) * H, 1 + 3 * hash(tick, i + 60), 1 + 1.6 * hash(tick, i + 80), hash(i, tick), 0, TAU);
@@ -949,9 +960,22 @@ Object.assign(WORLD_GROUNDS, {
     c.strokeRect(46, 46, W - 92, H - 92);
     c.lineWidth = 1.4;
     c.strokeRect(62, 62, W - 124, H - 124);
-    // a slit cut through the leaf across the line, inside its gilt rule: the dark behind shows, cleanly
-    const gap = wordsRoom(e, true);
-    if (gap) { c.save(); if (e.base) c.setTransform(e.base); c.fillStyle = e.paper; c.fillRect(70, gap.y0, W - 140, gap.y1 - gap.y0); c.restore(); }
+    // a window cut in the leaf round the line, its edge gilt like the leaf's own rule: the dark behind shows through it
+    // (a slit across the whole leaf read as a full-frame dark seam under the words, 2026-11-04 audit)
+    const gap = wordsRoom(e);
+    if (gap) {
+      c.save();
+      if (e.base) c.setTransform(e.base);
+      const [x0, x1] = [Math.max(70, gap.x0), Math.min(W - 70, gap.x1)];
+      c.fillStyle = e.paper;
+      c.fillRect(x0, gap.y0, x1 - x0, gap.y1 - gap.y0);
+      c.strokeStyle = e.slots.accent;
+      c.lineWidth = 4;
+      c.strokeRect(x0 - 10, gap.y0 - 10, x1 - x0 + 20, gap.y1 - gap.y0 + 20);
+      c.lineWidth = 1.4;
+      c.strokeRect(x0 - 22, gap.y0 - 22, x1 - x0 + 44, gap.y1 - gap.y0 + 44);
+      c.restore();
+    }
     vignette(e, 0.5);
   },
 } as Record<string, Ground>);

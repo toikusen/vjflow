@@ -2742,6 +2742,8 @@ export interface Rect {
   y0: number;
   x1: number;
   y1: number;
+  /** The words stand whole on an opaque carrier of their own (a card, banner, tape): what lies under the carrier is never under the strokes. */
+  carried?: boolean;
 }
 
 const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;

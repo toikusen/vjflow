@@ -64,10 +64,11 @@ function backing(e: WorldEnv, far = 1) {
 }
 /** Uncut sheet kept round the words, its edge a row of teeth: the words are holes in it. */
 export function uncut(e: WorldEnv, f = 1) {
-  if (!e.rect || e.weight <= 0) return;
+  // (words on their own carrier read on it: no room of plain paper is cut round them)
+  if (!e.rect || e.weight <= 0 || e.rect.carried) return;
   const b = boxOf(e, 44, 30);
-  // (a tall narrow line hangs on its own banner)
-  if (b.x1 - b.x0 < W * 0.3) return;
+  // (a tall narrow line on its own banner is carried and gets none, above; one set free still needs its sheet: on the
+  // hanging strips it lay across red and gold strips at once, and its ink read on neither, 2026-11-04 audit)
   atBase(e, (c0) => {
     const c = c0 as unknown as G;
     const [w, h] = [b.x1 - b.x0, b.y1 - b.y0];

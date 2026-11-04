@@ -8,7 +8,7 @@ import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readable, r
 import { stair } from './stair';
 import { Block, blockOf, SET_SPECS, SetSpec } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
-import { objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
+import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, WORLD_BEATS } from './world-beats';
 import { worldCam } from './world-cam';
@@ -208,7 +208,10 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   // the object takes at least its share of the frame, and stays in the frame
   // a split line's object holds its hero part only: the small part is set apart from it, or under it on the page
   const hero = block.hero ?? { cx: 0, cy: 0, w: block.w, h: block.h };
-  const [ow, oh] = [Math.max(hero.w + px * 2, (spec.fill?.[0] ?? 0) * 1920), Math.max(hero.h + py * 2, (spec.fill?.[1] ?? 0) * 1080)];
+  // a carrier grows to its share only as far as it can stay centred on the words: pushed back into the frame, a big card
+  // left its line at its top edge and the rest of it empty (silent-film's corner card, 2026-11-04 audit ①)
+  const centred = (c: number, frame: number) => (CARRIERS.has(spec.object!) ? Math.max(0, 2 * (frame - Math.abs(c))) : Infinity);
+  const [ow, oh] = [Math.max(hero.w + px * 2, Math.min(centred(block.cx + hero.cx, 960), (spec.fill?.[0] ?? 0) * 1920)), Math.max(hero.h + py * 2, Math.min(centred(block.cy + hero.cy, 540), (spec.fill?.[1] ?? 0) * 1080))];
   const cv = paintObject(spec.object, ow, oh, slots, seed, variant);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -495,7 +498,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: () => poses.map((p, i) => {
       const [cx, cy, pad] = [960 + p.block.cx, 540 - (p.block.cy + firstAt), 14];
-      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - p.block.w / 2 - pad, y0: cy - p.block.h / 2 - pad, x1: cx + p.block.w / 2 + pad, y1: cy + p.block.h / 2 + pad } };
+      // carried: the whole line on an opaque carrier (a split line's small part stands off it, so it is not)
+      const carried = !!p.object && !p.block.small?.length && CARRIERS.has(sets[i].object!);
+      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - p.block.w / 2 - pad, y0: cy - p.block.h / 2 - pad, x1: cx + p.block.w / 2 + pad, y1: cy + p.block.h / 2 + pad, carried } };
     }),
   };
 }

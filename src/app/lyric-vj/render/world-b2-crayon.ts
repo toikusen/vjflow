@@ -41,7 +41,8 @@ const washOf = (e: WorldEnv, tone: string, y0: number, y1: number, a = 0.5) => (
 const margin = (d: D, e: WorldEnv, st: number) => { const m = 34 + st * 2; strokePts(d, shaken([[m, m], [W / 2, m + 3], [W - m, m], [W - m + 4, H / 2], [W - m, H - m], [W / 2, H - m - 3], [m, H - m], [m - 2, H / 2], [m, m]], 5, st), 12, e.slots.ink2); };
 /** A bubble of clean paper round the words, its edge one pressed wobbling line. */
 export function bubble(e: WorldEnv) {
-  if (!e.rect || e.weight <= 0) return;
+  // (words on their own carrier read on it: no room of plain paper is cut round them)
+  if (!e.rect || e.weight <= 0 || e.rect.carried) return;
   const b = boxOf(e, 50, 34);
   atBase(e, (c) => {
     const [cx, cy, rx, ry] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.x1 - b.x0) / 2 + 26, (b.y1 - b.y0) / 2 + 26];
@@ -50,7 +51,8 @@ export function bubble(e: WorldEnv) {
     c.globalAlpha = Math.min(1, e.weight * 4);
     c.fillStyle = e.paper;
     c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.closePath(); c.fill();
-    dryMark(c, (d) => { strokePts(d, [...pts, pts[0]], 14, e.slots.ink2); }, 3, 0.9);
+    // its edge in the page's pale crayon, not the dark one: a dark ring round every line read as a frame (2026-11-04 audit)
+    dryMark(c, (d) => { strokePts(d, [...pts, pts[0]], 10, e.slots.faint); }, 3, 0.9);
     c.globalAlpha = 1;
   });
 }

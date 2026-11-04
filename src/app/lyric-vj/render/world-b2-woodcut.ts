@@ -66,7 +66,8 @@ const strata: (seed: number) => Flow = (seed) => (x, y) => { const h = y + 180 *
 
 /** The part of the block never cut, round the words: its edge the last row of gouges, so it is not a box. */
 export function uncutRound(e: WorldEnv, tone = e.paper) {
-  if (!e.rect || e.weight <= 0) return;
+  // (words on their own carrier read on it: no room of plain paper is cut round them)
+  if (!e.rect || e.weight <= 0 || e.rect.carried) return;
   const b = boxOf(e, 34, 22);
   atBase(e, (c) => {
     const edge: Pt[] = [];

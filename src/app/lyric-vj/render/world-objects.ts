@@ -359,6 +359,12 @@ const PAINT: Record<WorldObject, (c: Ctx, w: number, h: number, s: Slots, seed: 
   ...(Object.fromEntries(Object.entries(handObjects).map(([k, f]) => [k, (c: Ctx, w: number, h: number, s: Slots, seed: number) => f(c, w, h, s, seed, look)])) as Record<HandObject, (c: Ctx, w: number, h: number, s: Slots, seed: number) => void>),
 };
 
+/**
+ * Objects that are opaque and hold the whole line: words on one read on the object alone, so the ground and a set piece
+ * draw under it as they are, with no room of plain paper cut round the words (a paper block wider than the banner or
+ * the note stood beside it as a bare shape, 2026-11-04 audit: papercut, crayon, led-board, gothic-lolita).
+ */
+export const CARRIERS = new Set<string>(['pad-sheet', 'cut-banner', 'cut-panel', 'book-leaf', 'book-page', 'transcript-tape', 'mend-patch', 'tenugui', 'led-module', 'led-pillar', 'led-strip', 'sign-box', 'sign-blade', 'lit-paper', 'caption-band', 'card-corner', 'title-card', 'tty-pane', 'colour-plate']);
 /** The colour the words take on this object. */
 export const objectInk = (o: WorldObject, s: Slots) => (['sign-box', 'sign-blade', 'tty-pane', 'tty-split', 'led-strip', 'led-module', 'led-pillar', ...handInked].includes(o) ? s.ink : s.plateInk);
 

@@ -28,6 +28,11 @@ interface Item {
 const DRAWN_ENTER = new Set<string>(['ink', 'flap', 'slot', 'focus', 'rise', 'decode', 'slice', 'rip', 'flip', 'stretch', 'shuffle', 'squash', 'windup', 'karaoke', 'band-in', 'matrix-light', ...Object.keys(ARRIVAL_SEC)]);
 /** Exits drawn here over a plain fade. */
 const DRAWN_EXIT = new Set(['glitch', 'slash', 'scramble', 'split', 'pixel', 'shatter', 'collapse', 'band-out', 'slat-close', 'line-fold', 'echo-travel', 'radial-leave', 'glyph-shed', 'wave-dissolve', 'pore-out', 'focus-out', 'node-fold']);
+/**
+ * A glyph really on screen: it and the row holding it. A template that keeps a phrase's row hidden until it is sung
+ * (build-cut) leaves its glyphs' own flag on, and a box drawn for them stood as an empty dark bar (spy チョロイン c029).
+ */
+const shownMesh = (m: THREE.Object3D) => m.visible && m.parent?.visible !== false;
 const NEEDS_FX = (s: CueStyle) => !!s.relay || !!s.oval || s.idle === 'reflection-rest' || !!s.breath || !!s.icon || DRAWN_ENTER.has(s.enter) || DRAWN_EXIT.has(s.exit) || s.exit === 'rail-leave' || s.exit === 'gravity-pass' || !!s.trail || !!s.inkState || !!s.emphasis?.some((e) => ['hollow', 'face', 'mark', 'symbol', 'liquid', 'strike', 'box', 'hold', 'revise', 'echo', 'weight', 'shine', 'faces'].includes(e.method));
 /** What a decoding line flickers through before each character settles. */
 const SCRAMBLE = [...'#%&@$?!*+=<>/01ア゙ヲｦﾘ※◆▲■□'];
@@ -1700,7 +1705,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       }
 
       for (const { e, m, tex, its } of holds) {
-        const on = lead(its).filter((x) => x.mesh.visible && x.mesh.material.opacity > 0.05);
+        const on = lead(its).filter((x) => shownMesh(x.mesh) && x.mesh.material.opacity > 0.05);
         m.visible = on.length > 0;
         if (!on.length) continue;
         const last = on[on.length - 1];
@@ -1733,7 +1738,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       }
 
       for (const { e, m, its } of marks) {
-        const seen = lead(its).filter((x) => x.mesh.visible && x.mesh.material.opacity > 0.05).map((x) => ({ ...x, at: local(x.mesh) }));
+        const seen = lead(its).filter((x) => shownMesh(x.mesh) && x.mesh.material.opacity > 0.05).map((x) => ({ ...x, at: local(x.mesh) }));
         m.visible = seen.length > 0;
         if (!seen.length) continue;
         // a range a layout broke over two rows takes the row with most of it: one band spanning both sat between them
@@ -1776,7 +1781,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       }
 
       for (const { m, its } of carets) {
-        const on = lead(its).filter((x) => x.mesh.visible && x.mesh.material.opacity > 0.05);
+        const on = lead(its).filter((x) => shownMesh(x.mesh) && x.mesh.material.opacity > 0.05);
         m.visible = on.length > 0;
         if (!on.length) continue;
         const last = on[on.length - 1];
@@ -1791,7 +1796,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       }
 
       for (const { e, m, its } of signs) {
-        const on = lead(its).filter((x) => x.mesh.visible && x.mesh.material.opacity > 0.05);
+        const on = lead(its).filter((x) => shownMesh(x.mesh) && x.mesh.material.opacity > 0.05);
         m.visible = on.length > 0;
         if (!on.length) continue;
         const last = on[on.length - 1];

@@ -5,7 +5,7 @@
 // a dark plate under them, small words on an empty frame, the picture's lines under the strokes, ink under 4.5:1, and a
 // soft glow laid behind them. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
 // npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] terminal ink-wash
-// (no worlds named: every world not held)
+// (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json (2026-11-04).
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, relative, resolve } from 'node:path';

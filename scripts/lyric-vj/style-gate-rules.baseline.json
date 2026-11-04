@@ -1,0 +1,200 @@
+{
+ "silk": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 1
+ },
+ "silk-cold": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 5
+ },
+ "riso": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 3,
+  "cross": 0,
+  "low": 4
+ },
+ "file": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 3,
+  "cross": 0,
+  "low": 1
+ },
+ "spy": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 1,
+  "low": 4
+ },
+ "card": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 2,
+  "small": 0,
+  "cross": 0,
+  "low": 7
+ },
+ "dark-glitch": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 10,
+  "small": 1,
+  "cross": 2,
+  "low": 1
+ },
+ "neon-stage": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 1,
+  "small": 0,
+  "cross": 5,
+  "low": 14
+ },
+ "terminal": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 1,
+  "small": 0,
+  "cross": 19,
+  "low": 0
+ },
+ "led-board": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 3,
+  "small": 1,
+  "cross": 52,
+  "low": 21
+ },
+ "ink-wash": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 1,
+  "low": 4
+ },
+ "silent-film": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 2,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 0
+ },
+ "stained-glass": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 1,
+  "plate": 0,
+  "small": 0,
+  "cross": 67,
+  "low": 104
+ },
+ "gothic-lolita": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 19,
+  "small": 0,
+  "cross": 4,
+  "low": 3
+ },
+ "ukiyoe": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 17,
+  "low": 81
+ },
+ "papercut": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 2,
+  "plate": 9,
+  "small": 0,
+  "cross": 29,
+  "low": 33
+ },
+ "paper-lantern": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 24
+ },
+ "chiyogami": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 1,
+  "plate": 0,
+  "small": 0,
+  "cross": 146,
+  "low": 51
+ },
+ "woodcut": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 25,
+  "small": 0,
+  "cross": 21,
+  "low": 1
+ },
+ "chalkboard": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 11,
+  "small": 0,
+  "cross": 1,
+  "low": 15
+ },
+ "aizome": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 1,
+  "plate": 1,
+  "small": 0,
+  "cross": 5,
+  "low": 4
+ },
+ "crayon": {
+  "moments": 473,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 38,
+  "low": 21
+ }
+}

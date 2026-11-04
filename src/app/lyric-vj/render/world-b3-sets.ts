@@ -7,11 +7,11 @@ const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70
 export const LOUD_SETS: Record<string, SetSpec> = {
   // popart (board a–d): a balloon in the wide panel (either side), the narrator's caption up left, the sound effect over
   // the burst, a phrase a column in two tall balloons read right to left
-  'popart/balloon': { ...base, at: [0.3125, 0.463], ax: 0, ay: 0, share: 0.4, tall: 0.6, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon', pad: [190, 160], fill: [0.56, 0.8], fixed: true },
-  'popart/balloon-r': { ...base, at: [0.6875, 0.463], ax: 0, ay: 0, share: 0.4, tall: 0.6, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon-r', pad: [190, 160], fill: [0.56, 0.8], fixed: true },
+  'popart/balloon': { ...base, at: [0.3125, 0.463], ax: 0, ay: 0, share: 0.37, tall: 0.5, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon', pad: [190, 150], fill: [0.56, 0.8], fixed: true },
+  'popart/balloon-r': { ...base, at: [0.6875, 0.463], ax: 0, ay: 0, share: 0.37, tall: 0.5, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon-r', pad: [190, 150], fill: [0.56, 0.8], fixed: true },
   'popart/narration': { ...base, at: [0.102, 0.176], ax: -1, ay: -1, share: 0.4, tall: 0.3, hi: 110, rows: [1, 2], lead: 1.32, track: 0.06, flush: -1, object: 'pop-caption', pad: [60, 50], fill: [0.458, 0.35], fixed: true },
   'popart/sfx': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.7, tall: 0.72, hi: 350, rows: [1, 2], lead: 1, track: 0, tilt: -0.087, ink: 'faint', surface: 'comic-key', under: [{ kind: 'pop-sfx-plate', tone: 'accent' }, { kind: 'pop-sfx-key', tone: 'ink' }], fixed: true },
-  'popart/twin': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.06, tall: 0.76, hi: 108, rows: [2, 2], vertical: true, lead: 9.4, track: 0, object: 'pop-twin-balloons', pad: [70, 88], fixed: true },
+  'popart/twin': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.06, tall: 0.7, hi: 108, rows: [2, 2], vertical: true, lead: 9.4, track: 0, object: 'pop-twin-balloons', pad: [70, 88], fixed: true },
   // gameshow (board a–d): the question on its banner, the answer a letter a cell, the hint card's line, a letter a tile on the
   // number board, question and answer on two banners
   'gameshow/question': { ...base, at: [0.52, 0.3], ax: 0, ay: 0, share: 0.62, tall: 0.3, hi: 172, rows: [1, 2], lead: 1.1, track: 0.03, object: 'gs-q-banner', pad: [270, 70], fill: [0.78, 0.28], fixed: true },

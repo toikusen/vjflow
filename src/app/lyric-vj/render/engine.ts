@@ -71,6 +71,7 @@ import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, r
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
+import { foldRepeats } from './repeats';
 import { lanes } from './lanes';
 import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, enterSec as lineEnterSec, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 
@@ -889,20 +890,9 @@ export class LyricVjEngine {
       const extra = '特典券No.0046CHEKI×1¥2,000TIME UP0123456789:';
       await Promise.all([...faces].flatMap((f) => [400, 700, 900].map((wt) => document.fonts.load(`${wt} 100px "${f}"`, text + extra))));
     }
-    // a line sung again straight away (いつまでも ×3) stays up as one line that pulses on each repeat: three cuts in
-    // three seconds could not be read
-    const norm = (x: string) => x.replace(/[\s、。,.!?！？「」]/g, '');
-    const repeats = new Map<string, number[]>();
-    const styled: typeof sorted = [];
-    for (const x of sorted) {
-      const prev = styled[styled.length - 1];
-      // a chat keeps every message: the earlier ones stay up in the thread, and sending it three times is the point
-      const chat = threadShot(treatment.shots.find((s) => s.id === x.style.shot));
-      if (prev && !chat && norm(prev.cue.text) === norm(x.cue.text) && x.cue.start - prev.cue.end < 0.6) {
-        prev.cue = { ...prev.cue, end: x.cue.end };
-        repeats.set(prev.cue.id, [...(repeats.get(prev.cue.id) ?? []), x.cue.start]);
-      } else styled.push({ ...x });
-    }
+    // a line sung again straight away stays up as one line that pulses on each repeat (repeats.ts); a chat keeps every
+    // message: the earlier ones stay up in the thread, and sending it three times is the point
+    const { lines: styled, repeats } = foldRepeats(sorted, (x) => !!threadShot(treatment.shots.find((s) => s.id === x.style.shot)));
     // two lines sung back to back faster than either can be read are set together as one two-row line: the first
     // stays up while the second is sung (word reveal follows the voice across both)
     for (let i = 0; i + 1 < styled.length; i++) {

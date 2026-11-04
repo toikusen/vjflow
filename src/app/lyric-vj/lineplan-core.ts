@@ -645,6 +645,12 @@ export interface WorldPool {
 }
 /** Each shared recipe's most a world's song may use of its lines (style standard §2.1). */
 export const SHARED_SHARE = 0.4;
+/**
+ * The earliest a planned cut that moves a line (a change of set, or the next shot while the line is still up) may land:
+ * once the line has been up its reading time, the same budget the composer and the reading gate use.
+ */
+export const readFrom = (c: { text: string; start: number; end: number }) => c.start + readingSec(c.text, c.start, c.end);
+
 /** A line changes its set on a beat only if it has this long up, and each set stays this long. */
 export const REPOSE_MIN_LINE = 1.5;
 export const REPOSE_MIN_HOLD = 0.5;
@@ -726,13 +732,14 @@ function reposeOf(c: Cue, set: string, W: WorldPool, beat: LineBeat | undefined,
   const all = [...c.text];
   const breakTimes = [...wordBreaks(c.text)].filter((k) => k > 0 && k < all.length && /\S/.test(all[k])).map((k) => c.charStarts?.[k] ?? c.start + (len0 * k) / all.length);
   for (let i = 0; i < count; i++) {
-    const after = out.at(-1)?.at ?? c.start;
-    const even = c.start + (len0 * (i + 1)) / (count + 1);
-    const atBreak = calm ? breakTimes.filter((b) => b >= after + hold && b <= c.end - hold).sort((a, b) => Math.abs(a - even) - Math.abs(b - even))[0] : undefined;
+    // the first change waits for the line to be read where it first stands (a break or beat after that still counts)
+    const soonest = Math.max((out.at(-1)?.at ?? c.start) + hold, i === 0 ? readFrom(c) : -Infinity);
+    const even = Math.max(soonest, c.start + (len0 * (i + 1)) / (count + 1));
+    const atBreak = calm ? breakTimes.filter((b) => b >= soonest && b <= c.end - hold).sort((a, b) => Math.abs(a - even) - Math.abs(b - even))[0] : undefined;
     if (calm && atBreak === undefined) break;
-    const aim = atBreak ?? c.start + len0 * (spans.length > i + 1 ? spans[i][1] / Math.max(1, n) : (i + 1) / (count + 1));
-    const fits = beats.filter((b) => b >= after + hold && b <= c.end - hold && (!calm || Math.abs(b - aim) <= REPOSE_SNAP));
-    const at = [...fits].sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0] ?? (aim >= after + hold && aim <= c.end - hold ? aim : undefined);
+    const aim = atBreak ?? Math.max(soonest, c.start + len0 * (spans.length > i + 1 ? spans[i][1] / Math.max(1, n) : (i + 1) / (count + 1)));
+    const fits = beats.filter((b) => b >= soonest && b <= c.end - hold && (!calm || Math.abs(b - aim) <= REPOSE_SNAP));
+    const at = [...fits].sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0] ?? (aim >= soonest && aim <= c.end - hold ? aim : undefined);
     if (at === undefined) break;
     out.push({ at: +at.toFixed(3), set: others[(roll('repose', others.length) + i) % others.length] });
   }
@@ -1153,8 +1160,9 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const blowable = recipe.wline && W?.stress?.length && !piece && !blownParts.has(part) ? blowOf(c, namedKey(c.id)) : undefined;
     const blow = blowable && (namedKey(c.id) || !namedLater(part, cueAt)) ? { ...blowable, stress: W!.stress![meaning.parts.indexOf(part) % W!.stress!.length] } : undefined;
     if (blow) blownParts.add(part);
-    // a blown-up key word holds its picture until the line is read: no change of set before
-    const repose = (recipe.wline && W && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
+    // a line is re-laid in another set only once it has been up its reading time (the budget the composer reads by):
+    // moved sooner it is read twice from the start, or not at all
+    const repose = (recipe.wline && W && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => r.at >= readFrom(c));
     // (a calm song's change of set stays on its quiet grounds)
     const reposeGrounds = calm && W?.quiet.length ? W.quiet : W?.grounds[level] ?? [];
     for (const r of repose) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);

@@ -53,13 +53,14 @@ describe('style batch 3, the loud worlds', () => {
     // the words on a sprayed patch keep the scheme's ink: the patch must read against it
     for (const s of LOUD_WORLDS.find((w) => w.id === 'graffiti')!.palette) expect(contrast(s.ink, s.plate), s.id).toBeGreaterThanOrEqual(4.5);
   });
-  it('keep the near neighbours apart: gameshow is flat and light, idol-live is dark light; popart is plates, y2k is gloss', () => {
+  it('keep the near neighbours apart (boards 2026-11-04): gameshow is studio-blue TV cards, idol-live pastel paper merch; popart is a comic page, y2k a CD sleeve', () => {
     const by = (id: string) => LOUD_WORLDS.find((w) => w.id === id)!;
     expect(by('gameshow').family).not.toBe(by('idol-live').family);
     expect(by('gameshow').groundBand.band).not.toBe(by('idol-live').groundBand.band);
     expect(by('gameshow').material.surface).not.toBe(by('idol-live').material.surface);
     expect(by('popart').material.surface).not.toBe(by('y2k').material.surface);
     expect(by('popart').family).not.toBe(by('y2k').family);
-    expect(by('popart').type.tc.family).not.toBe(by('y2k').type.tc.family);
+    // (both boards set Chinese in Noto Sans TC 900: the type is told apart by its setting, not its face)
+    expect(by('popart').type.category).not.toBe(by('y2k').type.category);
   });
 });

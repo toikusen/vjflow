@@ -13,10 +13,8 @@ export type LoudSurface =
   | 'xerox-type'
   | 'fan-letter' | 'fan-member' | 'fan-white' | 'fan-key'
   | 'card-type'
-  | 'spray'
-  // (the first batch-3 surfaces, kept flat only until their worlds are redrawn)
-  | 'hard-shadow' | 'stage-lit' | 'chrome' | 'bubble' | 'toner' | 'airbrush';
-const KINDS = new Set<string>(['hard-shadow', 'stage-lit', 'chrome', 'bubble', 'toner', 'airbrush', 'comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'spray']);
+  | 'spray';
+const KINDS = new Set<string>(['comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'spray']);
 export const isLoudSurface = (k: string): k is LoudSurface => KINDS.has(k);
 
 /** The member colours an idol fan's letters are cut round, one a character (the board's pink, blue, mint, lemon, lilac). */
@@ -100,13 +98,7 @@ export function loudSurface(ctx: CanvasRenderingContext2D, kind: LoudSurface, h:
     case 'poster-fill':
     case 'sleeve-type':
     case 'fan-letter':
-    case 'card-type':
-    case 'hard-shadow':
-    case 'stage-lit':
-    case 'chrome':
-    case 'bubble':
-    case 'toner':
-    case 'airbrush': {
+    case 'card-type': {
       ctx.drawImage(tone, 0, 0);
       break;
     }

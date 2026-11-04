@@ -15,10 +15,9 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
   'plate-then-key': { sec: 0.2, glyph: ({ q }) => (q < 0.4 ? { a: q > 0.05 ? 1 : 0, dx: 5, dy: -3, tone: 0.55 } : { a: 1 }) },
   'caption-slide': { sec: 0.34, block: (q) => ({ dx: -90 * (1 - easeOut(q, 3)), a: clamp01(q * 5) }) },
   'sfx-stamp': { sec: 0.18, block: (q) => { const s = q >= 1 ? 1 : 1.35 - 0.35 * easeOut(q, 4); return { sx: s, sy: s, a: q > 0.02 ? 1 : 0 }; } },
-  // gameshow: the card drops on the buzzer with a bounce; the tiles flip to show the answer; the words buzz in one by one
-  'slam-in': { sec: 0.24, block: (q) => ({ sx: 1.45 - 0.45 * easeOut(q, 4), sy: 1.45 - 0.45 * easeOut(q, 4), dy: -40 * (1 - easeOut(q, 3)), a: clamp01(q * 6) }) },
-  'tile-flip': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0 ? 1 : 0, sx: k > 0 ? Math.max(0.05, Math.abs(Math.cos((1 - easeOut(k, 2)) * Math.PI * 0.5))) : 1 }; } },
-  'buzz-in': { sec: 0.34, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 1.5) - i); return { a: k > 0 ? 1 : 0, s: k > 0 ? 1 + 0.3 * (1 - easeOut(k, 2)) : 1, dy: k > 0 ? 24 * (1 - easeOut(k, 2)) : 0 }; } },
+  // gameshow (board motion): the card is pushed in from the left, its tab first; the cells flip open letter by letter
+  'push-in-left': { sec: 0.26, block: (q) => ({ dx: -900 * (1 - easeOut(q, 3)), a: q > 0.02 ? 1 : 0 }) },
+  'tile-reveal': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0.5 ? 1 : 0, sy: Math.max(0.03, Math.abs(Math.cos(Math.PI * (1 - k)))) }; } },
   // idol-live (board motion): fan letters are stuck on one by one, a bounce and settle; a card turns over to show its letter
   'sticker-pop': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0 ? 1 : 0, s: k > 0 ? 1 + 0.25 * Math.sin(k * Math.PI) * (1 - k * 0.5) : 1 }; } },
   'card-flip-in': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0.5 ? 1 : 0, sx: Math.max(0.03, Math.abs(Math.cos(Math.PI * (1 - k)))) }; } },
@@ -44,8 +43,6 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'panel-wipe': { sec: 0.24, clip: (q) => ({ axis: 'x', at: 1 - stepsOf(easeIn(q, 2), 6) }) },
   'balloon-shrink': { sec: 0.22, block: (q) => { const s = 1 - 0.6 * easeIn(q, 2); return { sx: s, sy: s, dx: -50 * easeIn(q, 2), dy: 40 * easeIn(q, 2), a: q < 0.85 ? 1 : 0 }; } },
   'caption-slide-out': { sec: 0.3, block: (q) => ({ dx: 120 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
-  'card-drop': { sec: 0.3, block: (q) => ({ dy: 700 * easeIn(q, 2), r: 0.08 * easeIn(q, 2), a: q < 0.9 ? 1 : 0 }) },
-  'flip-away': { sec: 0.28, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - (n - i)); return { sx: Math.max(0.05, 1 - easeIn(k, 2)), a: k >= 1 ? 0 : 1 }; } },
   'glyph-lift-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dy: 22 * easeIn(k, 2) }; } },
   'glyph-slide-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dx: 30 * easeIn(k, 2) }; } },
   'sign-sink': { sec: 0.42, block: (q) => ({ dy: 50 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
@@ -56,6 +53,8 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'pull-off': { sec: 0.16, block: (q) => ({ dx: -96 * Math.ceil(q * 3), a: q < 0.9 ? 1 : 0 }) },
   'sticker-off': { sec: 0.36, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - (n - 1 - i)); return { a: 1 - easeIn(k, 2), s: 1 - 0.3 * easeIn(k, 2) }; } },
   'slide-away': { sec: 0.4, block: (q) => ({ dx: 1400 * easeIn(q, 3), a: q < 0.95 ? 1 : 0 }) },
+  'push-out-right': { sec: 0.24, block: (q) => ({ dx: 1100 * easeIn(q, 3), a: q < 0.95 ? 1 : 0 }) },
+  'tile-hide': { sec: 0.36, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k < 0.5 ? 1 : 0, sy: Math.max(0.03, Math.abs(Math.cos(Math.PI * k))) }; } },
   'slow-fade': { sec: 0.9, glyph: ({ q }) => ({ a: 1 - easeIn(q, 1.6) }) },
   'wide-out': { sec: 0.8, glyph: ({ q, u }) => ({ a: 1 - easeIn(q, 1.6), dx: (u - 0.5) * 50 * easeIn(q, 2) }) },
 };
@@ -64,7 +63,7 @@ export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'page-still': () => ({}),
   // the burst flexes on each beat: the sound effect breathes with it, a hair
   'burst-flex': ({ age }) => ({ s: 1 + 0.025 * Math.exp(-fract(age * 2) * 6) }),
-  'studio-bounce': ({ age }) => ({ s: 1 + 0.02 * Math.exp(-fract(age * 2) * 7) }),
+  'studio-still': () => ({}),
   'merch-still': () => ({}),
   'sleeve-still': () => ({}),
   'poster-still': () => ({}),

@@ -12,14 +12,13 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'popart/narration': { ...base, at: [0.102, 0.176], ax: -1, ay: -1, share: 0.4, tall: 0.3, hi: 110, rows: [1, 2], lead: 1.32, track: 0.06, flush: -1, object: 'pop-caption', pad: [60, 50], fill: [0.458, 0.35], fixed: true },
   'popart/sfx': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.7, tall: 0.72, hi: 350, rows: [1, 2], lead: 1, track: 0, tilt: -0.087, ink: 'faint', surface: 'comic-key', under: [{ kind: 'pop-sfx-plate', tone: 'accent' }, { kind: 'pop-sfx-key', tone: 'ink' }], fixed: true },
   'popart/twin': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.06, tall: 0.76, hi: 108, rows: [2, 2], vertical: true, lead: 9.4, track: 0, object: 'pop-twin-balloons', pad: [70, 88], fixed: true },
-  // gameshow: the question card low in the set, the buzzers at the sides, the strip across the top, the judgement huge
-  'gameshow/question-card': { ...base, at: [0.5, 0.68], ax: 0, ay: 0, share: 0.72, tall: 0.38, hi: 240, rows: [1, 3], lead: 1.12, track: 0.01, object: 'quiz-card', pad: [84, 60], fill: [0.78, 0.46] },
-  'gameshow/buzzer-left': { ...base, at: [0.06, 0.5], ax: -1, ay: 0, share: 0.46, tall: 0.72, hi: 230, rows: [1, 3], lead: 1.1, track: 0.01, flush: -1 },
-  'gameshow/buzzer-right': { ...base, at: [0.94, 0.5], ax: 1, ay: 0, share: 0.46, tall: 0.72, hi: 230, rows: [1, 3], lead: 1.1, track: 0.01, flush: 1 },
-  'gameshow/marquee': { ...base, at: [0.5, 0.14], ax: 0, ay: 0, share: 0.94, tall: 0.26, hi: 200, rows: [1, 1], track: 0.02, object: 'marquee-strip', pad: [50, 28], fill: [1.06, 0.3] },
-  'gameshow/score-corner': { ...base, at: [0.96, 0.1], ax: 1, ay: -1, share: 0.5, tall: 0.42, hi: 190, rows: [1, 2], lead: 1.1, track: 0.01, flush: 1, object: 'score-plate', pad: [50, 34], fill: [0.5, 0.4] },
-  'gameshow/judge': { ...base, at: [0.5, 0.48], ax: 0, ay: 0, share: 0.9, tall: 0.7, hi: 420, rows: [1, 2], lead: 1.02, track: -0.01, tilt: -0.06 },
-  'gameshow/column': { ...base, at: [0.88, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.8, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
+  // gameshow (board a–d): the question on its banner, the answer a letter a cell, the hint card's line, a letter a tile on the
+  // number board, question and answer on two banners
+  'gameshow/question': { ...base, at: [0.52, 0.3], ax: 0, ay: 0, share: 0.62, tall: 0.3, hi: 172, rows: [1, 2], lead: 1.1, track: 0.03, object: 'gs-q-banner', pad: [270, 70], fill: [0.78, 0.28], fixed: true },
+  'gameshow/answers': { ...base, at: [0.5, 0.72], ax: 0, ay: 0, share: 0.86, tall: 0.22, hi: 210, rows: [1, 1], lead: 1, track: 0.714, even: true, object: 'gs-answer-cells', pad: [70, 110], fixed: true },
+  'gameshow/hint': { ...base, at: [0.208, 0.39], ax: -1, ay: -1, share: 0.56, tall: 0.32, hi: 104, rows: [1, 2], lead: 1.5, track: 0.06, flush: -1, ink: 'plateInk', fixed: true },
+  'gameshow/board': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.95, tall: 0.17, hi: 176, lo: 176, rows: [1, 1], lead: 1, track: 0.288, even: true, object: 'gs-row-tiles', pad: [0, 0], fixed: true },
+  'gameshow/qa': { ...base, at: [0.295, 0.5], ax: -1, ay: 0, share: 0.54, tall: 0.78, hi: 140, rows: [2, 2], lead: 2.9, track: 0.02, flush: -1, ink: 'plateInk', fixed: true },
   // idol-live (board a–d): fan letters across the gingham, the line on a ticket, a letter a member card, two columns on a big card
   'idol-live/fan': { ...base, at: [0.5, 0.55], ax: 0, ay: 0, share: 0.9, tall: 0.62, hi: 250, rows: [1, 2], lead: 1.36, track: 0.13, ink: 'plateInk', under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
   'idol-live/ticket': { ...base, at: [0.175, 0.38], ax: -1, ay: -1, share: 0.5, tall: 0.3, hi: 104, rows: [1, 2], lead: 1.3, track: 0.04, flush: -1, ink: 'plateInk', fixed: true },

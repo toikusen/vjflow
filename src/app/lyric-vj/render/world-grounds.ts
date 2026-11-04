@@ -72,7 +72,8 @@ function pool(c: CanvasRenderingContext2D, x: number, y: number, r: number, tone
 function wordsRoom(e: WorldEnv, rows = false): Box | undefined {
   if (!e.rect || e.weight <= 0) return undefined;
   const r = e.rect;
-  const p = Math.max(28, Math.min(64, 0.2 * (r.y1 - r.y0)));
+  // (a margin a good part of a row: a tight room let lamps, leads and slit edges touch the strokes, 2026-11-04 gate)
+  const p = Math.max(48, Math.min(110, 0.36 * (r.y1 - r.y0)));
   const k = ease(e.weight / 0.6, 2);
   const [cx, cy, hw, hh] = [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, ((r.x1 - r.x0) / 2 + p) * k, ((r.y1 - r.y0) / 2 + p * 0.8) * k];
   return rows ? { x0: -W, y0: cy - hh, x1: W * 2, y1: cy + hh } : { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };

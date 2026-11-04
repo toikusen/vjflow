@@ -60,7 +60,7 @@ function doodles(e: WorldEnv, k: number, a = 0.9) {
 /** The patch wiped clean for the words: the eraser's strokes side by side, each a crisp band ending raggedly (no glow). */
 export function wiped(e: WorldEnv) {
   if (!e.rect || e.weight <= 0) return;
-  const b = boxOf(e, 60, 40);
+  const b = boxOf(e, 110, 80);
   atBase(e, (c) => {
     c.save();
     c.globalAlpha = Math.min(1, e.weight * 3);

@@ -188,8 +188,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const slots = wl.slots;
   const carried = sets[0].object;
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
-  // (on its object the ink reads at 4.5:1 against the object's face, whatever the world's slots: papercut's red words on its red banner, 2026-11-04)
-  const inkOn = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? readable(objectInk(s.object, slots), slots.plate) : wl.fixedInk ? slots.ink : rt.palette.text);
+  const inkOn = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
   const words = inkOn(sets[0]);
   const baked = !!(wl.surface || sets.some((s) => s.surface));
   const keyOf = (s: SetSpec) => readable(rt.palette.accent, s.object ? slots.plate : rt.palette.background, s.object ? 6 : 4.5);

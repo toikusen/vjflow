@@ -206,6 +206,27 @@ export const WORLD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'sun-crawl': ({ u, age }) => { const d = fract(u * 0.4 - age * 0.16); return { tone: 0.84 + 0.16 * Math.exp(-(((d - 0.5) / 0.14) ** 2)) }; },
   'candle-sway': ({ u, v, age }) => ({ tone: 0.9 + 0.1 * Math.sin(age * 2.3 + u * 2.5) * Math.sin(age * 1.31 + v * 2) }),
 };
+/**
+ * Moves every world has besides its own (2026-11-04, gap 4: two entrances a world and every exit a fade), rebuilt from
+ * Motion Prompt's descriptions only: #147 a card rising onto the stack, #156 characters rolling into place; and two ways
+ * out that move: the line pressed flat into a rule, or sliced and pulled apart. A line pressed into a rule hands it to
+ * the next, which opens out of it (line-open).
+ */
+export const SHARED_ENTERS: Record<string, WorldMove> = {
+  'stack-rise': { sec: 0.34, block: (q) => ({ dy: -130 * (1 - easeOut(q, 4)), sx: 0.94 + 0.06 * easeOut(q, 3), sy: 0.94 + 0.06 * easeOut(q, 3), a: clamp01(q * 5) }) },
+  'roll-in': { sec: 0.42, glyph: ({ q, u }) => { const k = clamp01(q * 1.6 - u * 0.6); return { a: k > 0 ? 1 : 0, sy: Math.max(0.04, easeOut(k, 3)), dy: -16 * (1 - easeOut(k, 3)) }; } },
+  'line-open': { sec: 0.3, block: (q) => ({ sy: Math.max(0.02, easeOut(q, 3)), sx: 1.25 - 0.25 * easeOut(q, 3) }) },
+};
+export const SHARED_EXITS: Record<string, WorldMove> = {
+  'squash-line': { sec: 0.32, block: (q) => ({ sy: Math.max(0.02, 1 - easeIn(q / 0.7, 2)), sx: 1 + 0.25 * easeIn(q, 2), a: q < 0.9 ? 1 : 1 - (q - 0.9) / 0.1 }) },
+  // the rows are cut apart and pulled opposite ways; a row moves as one, so no character ever crosses another
+  'slice-out': { sec: 0.34, glyph: ({ q, v }) => ({ dx: (Math.round(v * 6) % 2 ? 1 : -1) * 320 * easeIn(q, 2), a: 1 - easeIn((q - 0.35) / 0.65, 2) }) },
+};
+/** The shared entrances a planner may give any world's line (line-open only follows a line pressed into a rule). */
+export const SHARED_ENTER_POOL = ['stack-rise', 'roll-in'];
+export const SHARED_EXIT_POOL = ['squash-line', 'slice-out'];
+Object.assign(WORLD_ENTERS, SHARED_ENTERS);
+Object.assign(WORLD_EXITS, SHARED_EXITS);
 // style batch 3's loud worlds keep their moves in world-b3-motion.ts
 Object.assign(WORLD_ENTERS, LOUD_ENTERS);
 Object.assign(WORLD_EXITS, LOUD_EXITS);

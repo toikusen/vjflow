@@ -106,4 +106,17 @@ describe('shared world moves', () => {
       if (kind !== 'outline') expect(contrast(slots.ink, c)).toBeGreaterThanOrEqual(3);
     }
   });
+  it('takes each world line through four or more ways in and moving ways out, a rule handed on', () => {
+    const texts = ['我走過那條路', '風吹過你的臉不再回頭', '天亮了我還在等', '那些話留給了潮汐'];
+    const cues = Array.from({ length: 24 }, (_, i) => ({ id: `c${i + 1}`, start: 4 + i * 2.6, end: 4 + i * 2.6 + 2.5, text: texts[i % 4] }));
+    const end = 4 + 24 * 2.6 + 2;
+    const song = { title: 'pool', duration: end, tempo: 120, beats: Array.from({ length: Math.ceil(end * 2) }, (_, i) => i * 0.5), downbeats: [], sections: [{ start: 0, end, type: 'verse', energy: 0.7 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+    for (const id of ['spy', 'terminal', 'ukiyoe', 'silk-cold']) {
+      const { treatment } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0 });
+      const lines = treatment.cues.map((c) => (c as { world?: { enter: string; exit: string } }).world).filter((w): w is { enter: string; exit: string } => !!w);
+      expect(new Set(lines.map((w) => w.enter)).size, id).toBeGreaterThanOrEqual(4);
+      expect(lines.some((w) => w.exit === 'squash-line') && lines.some((w) => w.exit === 'slice-out'), id).toBe(true);
+      lines.forEach((w, i) => { if (w.enter === 'line-open') expect(lines[i - 1].exit).toBe('squash-line'); });
+    }
+  });
 });

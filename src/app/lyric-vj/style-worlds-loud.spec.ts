@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from './contrast';
-import { FREE_STYLES, styleGroups } from './free-styles';
+import { FREE_STYLES, HELD_WORLDS, styleGroups } from './free-styles';
 import { LOUD_WORLDS } from './style-worlds-loud';
 import { STYLE_WORLDS } from './style-worlds';
 import { partsOf, worldHoles } from './style-world';
@@ -12,11 +12,11 @@ import { isLoudSurface } from './render/world-glyph-loud';
 import { handObjects } from './render/world-packs';
 
 describe('style batch 3, the loud worlds', () => {
-  it('are eight and registered, held back from the picker while redrawn', () => {
+  it('are eight and registered, offered unless held', () => {
     expect(LOUD_WORLDS.map((w) => w.id)).toEqual(['popart', 'gameshow', 'idol-live', 'y2k', 'psychedelic', 'graffiti', 'brutalist', 'citypop']);
     for (const w of LOUD_WORLDS) expect(STYLE_WORLDS.find((x) => x.id === w.id)).toBe(w);
     const offered = styleGroups().flatMap((g) => g.cards.map((c) => c.id));
-    for (const w of LOUD_WORLDS) expect(offered, w.id).not.toContain(w.id);
+    for (const w of LOUD_WORLDS) expect(offered.includes(w.id), w.id).toBe(!HELD_WORLDS.has(w.id));
     expect(FREE_STYLES.filter((s) => LOUD_WORLDS.some((w) => w.id === s.id)).length).toBe(8);
   });
   it('have every part they name', () => {

@@ -6,6 +6,7 @@ import type { Level, Recipe, WorldPool } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
 import type { SurfaceKind } from './render/world-glyph';
 import type { Slots } from './render/world-objects';
+import { sharedOf, steppedWorld } from './world-shared';
 
 export type Family = 'print' | 'emissive' | 'wet' | 'stroke' | 'layered' | 'film' | 'ui' | 'wall' | 'air';
 export type Band = 'dark' | 'mid' | 'light';
@@ -134,6 +135,8 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     devices: !!w.paperDevices,
     handoffs: !!w.handoffs,
     columns: Object.fromEntries(w.layouts.lines.map((l) => [l.set, !!l.column])),
+    beats: sharedOf(w).beats,
+    stepped: steppedWorld(w),
   };
 }
 
@@ -159,6 +162,7 @@ export function worldHoles(w: StyleWorld): string[] {
   need(w.provenance.source && w.provenance.process, 'provenance');
   need(w.acceptance.fast && w.acceptance.calm && w.acceptance.hardest, 'acceptance');
   for (const l of [0, 1, 2] as Level[]) need(w.layouts.lines.some((x) => x.levels.includes(l)) || w.layouts.shared.length, `a line at level ${l}`);
+  need(sharedOf(w).beats.length >= 2 && sharedOf(w).stress.length >= 2, 'shared beats >= 2 and stress >= 2 (world-shared.ts)');
   need(partsOf(w).length >= 12, `world parts >= 12 (has ${partsOf(w).length})`);
   return out;
 }

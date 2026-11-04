@@ -10,6 +10,8 @@ import { Block, blockOf, SET_SPECS, SetSpec } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
 import { objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
+import { beatProgress, WORLD_BEATS } from './world-beats';
+import type { BeatKind } from '../world-shared';
 
 export interface WorldLine {
   set: string;
@@ -37,6 +39,8 @@ export interface WorldLine {
   /** How far the block travels while it is up, px, and how much it grows, a share. */
   drift?: [number, number];
   swell?: number;
+  /** The one thing that happens while the line is held (world-beats.ts): which, when, and in steps or smooth. */
+  beat?: { kind: BeatKind; at: number; stepped?: boolean };
 }
 
 const ROTATED = /[ー〜～…―‐]/;
@@ -177,6 +181,14 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   if (useClip) gs.forEach((g) => (g.mesh.material.clippingPlanes = [plane]));
   const caret = wl.hold === 'cursor-wait' ? new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: color(words), transparent: true, depthTest: false, depthWrite: false })) : undefined;
   if (caret) { caret.userData['noVeil'] = true; caret.userData['decor'] = true; body.add(caret); }
+  // the held line's one event (world-beats.ts): its key ink per pose, a baked surface's key pictures, the copies behind
+  const beatMove = wl.beat ? WORLD_BEATS[wl.beat.kind] : undefined;
+  const keyCols = sets.map((s) => new THREE.Color(keyOf(s)));
+  const usesKey = !!wl.beat && ['ink-run', 'light-sweep', 'roll', 'beat-punch'].includes(wl.beat.kind);
+  const keyMaps = usesKey && baked ? sets.map((s) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(keyOf(s)) }).texture)) : undefined;
+  const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
+  if (ghosts) ghosts.forEach((g) => { g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
+  const mixed = new THREE.Color();
   const poseAt = (t: number) => { let k = 0; (wl.repose ?? []).forEach((r, i) => { if (t >= r.at) k = i + 1; }); return k; };
   const sec = (x: number, d: number) => (d > 0 ? clamp01(x / d) : 1);
 
@@ -208,7 +220,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const [sx, sy] = [blockPose.sx ?? 1, blockPose.sy ?? 1];
       const shift = blockPose.pivot ? (blockPose.pivot * (p.block.w / 2) * (sx - 1)) : 0;
       body.position.set(p.block.cx + (blockPose.dx ?? 0) - shift, p.block.cy + firstAt + (blockPose.dy ?? 0), 0);
-      body.scale.set(sx, sy, 1);
+      const bq = beatMove && !out && wl.beat ? beatProgress(wl.beat.at, beatMove.sec, t, !!wl.beat.stepped) : undefined;
+      const bb = bq !== undefined ? beatMove!.block?.(bq) : undefined;
+      body.scale.set(sx * (bb?.sx ?? 1), sy * (bb?.sy ?? 1), 1);
       body.rotation.z = (p.spec.tilt ?? 0) + (blockPose.r ?? 0);
       const whole_a = blockPose.a ?? 1;
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
@@ -232,6 +246,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         const m = g.mesh;
         // a roll call: the name before gives way as the next lands (word-sync.ts until)
         const left = synced ? givenWay(rt, g, t) : 1;
+        if (ghosts) ghosts[i].mesh.visible = false;
         if (!p.shown[i] || (synced && !out && t < landAt[i]) || left <= 0) { m.visible = false; return; }
         m.visible = true;
         const qi = synced && !out ? sec(t - landAt[i], glyphIn) : qIn;
@@ -240,20 +255,36 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         // a line that locks word by word keeps at it after its entrance has run
         if (!out && wl.enter === 'signal-lock' && enterDur > 0) pose = entering!.glyph!(env);
         if (!out && qi >= 1 && holding) pose = { ...holding(env), ...(wl.enter === 'signal-lock' && enterDur > 0 ? pose : {}) };
+        const ev = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq }) : undefined;
+        if (ev) pose = { ...pose, dx: (pose.dx ?? 0) + (ev.dx ?? 0), dy: (pose.dy ?? 0) + (ev.dy ?? 0), s: (pose.s ?? 1) * (ev.s ?? 1), sy: (pose.sy ?? 1) * (ev.sy ?? 1), r: (pose.r ?? 0) + (ev.r ?? 0), tone: Math.min(pose.tone ?? 1, ev.tone ?? 1), key: ev.key, ghost: ev.ghost };
         m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0), 0);
         const s = p.scale * (pose.s ?? 1);
-        m.scale.set(s * (pose.sx ?? 1), s, 1);
+        m.scale.set(s * (pose.sx ?? 1), s * (pose.sy ?? 1), 1);
         m.rotation.z = (p.turn[i] ? -Math.PI / 2 : 0) + (pose.r ?? 0);
-        const map = (pose.eaten && damaged ? damaged : whole)[k][i];
+        const gh = ghosts?.[i].mesh;
+        if (gh) {
+          gh.visible = !!pose.ghost && pose.ghost.a > 0.01;
+          if (gh.visible) {
+            const gs_ = s * (pose.ghost!.s ?? 1);
+            gh.position.set(m.position.x + (pose.ghost!.dx ?? 0), m.position.y + (pose.ghost!.dy ?? 0), 0);
+            gh.scale.set(gs_, gs_, 1);
+            gh.rotation.z = m.rotation.z;
+            gh.material.transparent = true;
+            gh.material.opacity = pose.ghost!.a * whole_a * left;
+          }
+        }
+        const keyed = (pose.key ?? 0) > 0;
+        const ink = keyed ? mixed.copy(inkLit[i]).lerp(keyCols[k], pose.key!) : inkLit[i];
+        const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }
         const tone = Math.min(1, (pose.tone ?? 1) * rank);
-        if (!baked && wl.sheet) m.material.color.copy(inkLit[i]);
+        if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {
           m.material.opacity = (pose.a ?? 1) * whole_a * tone * left;
         } else {
           m.material.opacity = (pose.a ?? 1) * whole_a * left;
           if (baked) m.material.color.copy(dimBaked).lerp(lit, tone);
-          else m.material.color.copy(inkLit[i]).multiplyScalar(0.14).lerp(inkLit[i], tone);
+          else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }
       });
       if (caret) {

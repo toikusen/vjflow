@@ -31,6 +31,12 @@ export interface GlyphPose {
   tone?: number;
   /** Swap to the damaged picture of the character. */
   eaten?: boolean;
+  /** Height alone. */
+  sy?: number;
+  /** 0..1 toward the line's key ink (read against the ground already). */
+  key?: number;
+  /** A copy of the character in the key ink behind it: its opacity, size and offset (px). */
+  ghost?: { a: number; s?: number; dx?: number; dy?: number };
 }
 
 export interface BlockPose { dx?: number; dy?: number; sx?: number; sy?: number; r?: number; a?: number; pivot?: -1 | 0 | 1 }

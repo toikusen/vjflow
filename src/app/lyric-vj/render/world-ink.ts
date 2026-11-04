@@ -273,7 +273,7 @@ export function reservePaper(c: CanvasRenderingContext2D, seed: number, rect: { 
       const d = (Math.abs((x - cx) / rx) ** 4 + Math.abs((y - cy) / ry) ** 4) ** 0.25;
       const torn = 1 + 0.3 * (smoothNoise(x / 110, y / 110, seed) - 0.5) + 0.2 * (smoothNoise(x / 26, y / 26, seed + 1) - 0.5) + 0.07 * (hash(px, py + seed) - 0.5);
       const k = (py * cw + px) * 4;
-      img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255 * clamp01((torn - d) * 16);
+      img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255 * clamp01((torn - d) * 48);
     }
     g.putImageData(img, 0, 0);
     if (reserves.size > 8) reserves.delete(reserves.keys().next().value!);

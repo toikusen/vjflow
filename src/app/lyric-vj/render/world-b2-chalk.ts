@@ -57,20 +57,19 @@ const doodlePaths = (seed: number): Pt[][] => {
 function doodles(e: WorldEnv, k: number, a = 0.9) {
   atBase(e, (c) => dryMark(c, (d) => { doodlePaths(e.seed).forEach((p, i) => strokePts(d, shaken(partOf(p, clamp01(k * 1.4 - i * 0.14)), 3, i), 13, [e.ink, e.slots.ink2, e.slots.accent, e.ink][i])); }, 2, 0.9, a));
 }
-/** The patch wiped clean for the words: a shade darker than the old smears, soft at the edge. */
+/** The patch wiped clean for the words: the eraser's strokes side by side, each a crisp band ending raggedly (no glow). */
 export function wiped(e: WorldEnv) {
   if (!e.rect || e.weight <= 0) return;
-  const b = boxOf(e, 50, 34);
+  const b = boxOf(e, 60, 40);
   atBase(e, (c) => {
     c.save();
-    c.translate((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-    c.scale((b.x1 - b.x0) / 2 + 110, (b.y1 - b.y0) / 2 + 100);
-    const g = c.createRadialGradient(0, 0, 0.6, 0, 0, 1.2);
-    g.addColorStop(0, e.paper);
-    g.addColorStop(1, `${e.paper}00`);
-    c.globalAlpha = 0.95 * Math.min(1, e.weight * 3);
-    c.fillStyle = g;
-    c.fillRect(-1.3, -1.3, 2.6, 2.6);
+    c.globalAlpha = Math.min(1, e.weight * 3);
+    c.fillStyle = e.paper;
+    const band = 46;
+    for (let y = b.y0, i = 0; y < b.y1; y += band - 4, i++) {
+      const [l, r] = [b.x0 - 20 - 40 * hash(i, e.seed), b.x1 + 20 + 40 * hash(i, e.seed + 1)];
+      c.fillRect(l, y, r - l, Math.min(band, b.y1 - y));
+    }
     c.restore();
   });
 }

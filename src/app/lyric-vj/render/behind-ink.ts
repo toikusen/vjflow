@@ -41,7 +41,7 @@ function patches(ctx: CanvasRenderingContext2D, x: number, y: number, w: number,
 
 /**
  * Reads the ground under the words' block (in the context's current space) and, where the ink would not read on part
- * of it, lays the paper back over the block with a soft edge, so no block, edge or band of the wrong colour stands
+ * of it, lays the paper back over the block with a crisp edge, so no block, edge or band of the wrong colour stands
  * under a stroke. Returns the share that missed (for logs and tests).
  */
 export function holdInkGround(ctx: CanvasRenderingContext2D, rect: { x0: number; y0: number; x1: number; y1: number }, ink: string, paper: string, weight: number, pad = 26): number {
@@ -60,15 +60,11 @@ export function holdInkGround(ctx: CanvasRenderingContext2D, rect: { x0: number;
   if (!data) return 0;
   const share = unreadShare(data, ink);
   if (!mustHold(share)) return share;
-  // the paper back over the block, solid under the words and feathered out over `pad`, so the hold is not a box
+  // the paper back over the block and `pad` round it, crisp: a feathered hold read as a glow behind the words (2026-11-04)
   ctx.save();
   ctx.fillStyle = paper;
-  const rings = 6;
-  for (let k = rings; k >= 0; k--) {
-    const grow = (pad * k) / rings;
-    ctx.globalAlpha = weight * (k === 0 ? 1 : 0.22);
-    ctx.fillRect(rect.x0 - grow, rect.y0 - grow, rect.x1 - rect.x0 + 2 * grow, rect.y1 - rect.y0 + 2 * grow);
-  }
+  ctx.globalAlpha = Math.min(1, weight * 3);
+  ctx.fillRect(rect.x0 - pad, rect.y0 - pad, rect.x1 - rect.x0 + 2 * pad, rect.y1 - rect.y0 + 2 * pad);
   ctx.restore();
   return share;
 }

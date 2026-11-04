@@ -125,20 +125,23 @@ function hang(e: WorldEnv, cv: OffscreenCanvas, amp: number, speed = 1) {
     }
   });
 }
-/** Plain dyed cloth kept round the words, feathered as a resist would bleed. */
+/** Plain dyed cloth round the words, where nothing was bound: the pattern stops at a crisp, slightly wandering dye line (no glow). */
 export function plainRound(e: WorldEnv) {
   if (!e.rect || e.weight <= 0) return;
-  const b = boxOf(e, 60, 40);
+  const b = boxOf(e, 70, 46);
   atBase(e, (c) => {
     c.save();
-    c.translate((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
-    c.scale((b.x1 - b.x0) / 2 + 130, (b.y1 - b.y0) / 2 + 110);
-    const g = c.createRadialGradient(0, 0, 0.62, 0, 0, 1.22);
-    g.addColorStop(0, e.paper);
-    g.addColorStop(1, `${e.paper}00`);
-    c.globalAlpha = 0.97 * Math.min(1, e.weight * 3);
-    c.fillStyle = g;
-    c.fillRect(-1.3, -1.3, 2.6, 2.6);
+    c.globalAlpha = Math.min(1, e.weight * 3);
+    c.fillStyle = e.paper;
+    c.beginPath();
+    const wob = (i: number) => 9 * Math.sin(i * 1.7 + e.seed) + 5 * Math.sin(i * 4.3);
+    const n = 24;
+    for (let i = 0; i <= n; i++) c.lineTo(b.x0 + ((b.x1 - b.x0) * i) / n, b.y0 + wob(i));
+    for (let i = 0; i <= n / 4; i++) c.lineTo(b.x1 + wob(i + 40), b.y0 + ((b.y1 - b.y0) * i * 4) / n);
+    for (let i = n; i >= 0; i--) c.lineTo(b.x0 + ((b.x1 - b.x0) * i) / n, b.y1 + wob(i + 80));
+    for (let i = n / 4; i >= 0; i--) c.lineTo(b.x0 + wob(i + 120), b.y0 + ((b.y1 - b.y0) * i * 4) / n);
+    c.closePath();
+    c.fill();
     c.restore();
   });
 }

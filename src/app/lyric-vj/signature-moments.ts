@@ -4,6 +4,7 @@
 // (render/signature.ts); this is what both sides agree on: the forms on offer, the senses each can show, and the
 // guards a director's ask must pass (a character inside a longer word of another sense is no evidence). A failed
 // guard drops the moment and never the line; a song with no fitting line gets none, which is the usual case.
+import { splitCalls } from './calls';
 import { readingSec } from './render/reading-window';
 import { isSungChar, wordIndex } from './sung-times';
 
@@ -179,6 +180,8 @@ export interface Dropped { ask: MomentAsk; reason: string }
 export interface MomentCue { id: string; start: number; end: number; text: string }
 export interface SungOf { (id: string): { times: number[]; source: string } | undefined }
 
+/** Whether a line has a call (a bracketed shout) beside its sung words. */
+export const hasCall = (text: string) => splitCalls(text).calls.length > 0;
 /** The line without its bracketed calls: what a moment prints as the line (the calls are printed apart, small). */
 export const mainOf = (text: string) => text.replace(/[（(][^）)]*[）)]/g, ' ').replace(/\s+/g, ' ').trim();
 const spokenOf = (text: string) => [...mainOf(text)].filter(isSungChar).join('');
@@ -257,6 +260,9 @@ export function checkMoments(asks: MomentAsk[], cues: MomentCue[], sungOf: SungO
     const until = Math.min(next ? next.start : Infinity, (repeat ? repeat.start : last) + 3);
     const readFrom = UNSUNG_HIDDEN.has(`${ask.form}/${ask.variant}`) ? last : actor.start - 0.2;
     if (until - readFrom < readingSec(mainOf(actor.text), actor.start, actor.end) - 0.05) { drop(`「${actor.text}」 has no time to be read whole`); continue; }
+    // a line with a call beside it is left alone, on every tier: the moment drew the call over its own sung words (雙截棍 c019, 2026-11-04)
+    const called = [...(echo ? hits.slice(-1) : hits).map((h) => h.c), ...(repeat ? [repeat] : [])].find((c) => hasCall(c.text));
+    if (called) { drop(`「${called.text}」 has a call beside it`); continue; }
     if (kept.some((k) => Math.abs(k.at - at) < apart)) { drop(`within ${apart} s of another moment`); continue; }
     if (kept.length >= MOMENTS_MAX) { drop(`more than ${MOMENTS_MAX} moments`); continue; }
     kept.push({ ...ask, form: ask.form as MomentForm, word, at, sung, sungSource, ...(repeat ? { repeat: repeat.id } : {}) });

@@ -16,7 +16,6 @@ import type { RenderJob } from './render/engine';
 import type { UiLayer } from './render/graphics';
 import { isLineGround } from './render/line-grounds';
 import { splitSongTitle } from './structure';
-import { splitCalls } from './calls';
 import { TEMPLATES } from './templates';
 import { feltTempo, SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from './treatment';
@@ -261,9 +260,8 @@ export function freeMoments(song: SongTimeline, meaning: Meaning | undefined): S
   // (on the downbeat: the word sung within half a beat of the bar's first beat)
   const near = 30 / Math.max(40, song.tempo || 120);
   const onDownbeat = (t: number) => (song.downbeats ?? []).some((d) => Math.abs(d - t) <= near);
-  // (a line with a call beside it is left alone: the moment drew the call over its own sung words, 雙截棍 c019 2026-11-04)
-  const hasCall = (id: string) => splitCalls(song.cues.find((x) => x.id === id)?.text ?? '').calls.length > 0;
-  return kept.filter((m) => chorusAt(m.at) && onDownbeat(m.at) && !ownCues(m).some(hasCall)).slice(0, FREE_MOMENTS_MAX);
+  // (a line with a call beside it is dropped by checkMoments itself, on every tier)
+  return kept.filter((m) => chorusAt(m.at) && onDownbeat(m.at)).slice(0, FREE_MOMENTS_MAX);
 }
 
 export interface FreeOptions {

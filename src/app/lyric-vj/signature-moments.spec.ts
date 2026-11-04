@@ -17,10 +17,19 @@ const ask = (over: Partial<MomentAsk>): MomentAsk => ({ cues: ['c019'], form: 's
 
 describe('checkMoments', () => {
   it('keeps the spike: the signboard line struck by the kicking line on 踢', () => {
-    const { kept, dropped } = checkMoments([ask({ cues: ['c018', 'c019'] })], cues, sungOf);
+    // the same two lines without their calls (with them, see the next case)
+    const plain = cues.map((c) => ({ ...c, text: c.text.replace('(幹什麼? 幹什麼?) ', '') }));
+    const times = (id: string) => { const c = plain.find((x) => x.id === id); return c && { times: [...c.text].map((_, i) => +(c.start + 0.1 * i).toFixed(3)), source: 'vote' }; };
+    const { kept, dropped } = checkMoments([ask({ cues: ['c018', 'c019'] })], plain, times);
     expect(dropped).toEqual([]);
-    expect(kept[0].at).toBeCloseTo(73.32 + 1.7, 3);
+    expect(kept[0].at).toBeCloseTo(73.32 + 0.5, 3);
     expect(Object.keys(kept[0].sung)).toEqual(['c018', 'c019']);
+  });
+  it('leaves a line with a call beside it alone, on every tier (the tear drew 哈! over 雙截棍 c019)', () => {
+    const { kept, dropped } = checkMoments([ask({ cues: ['c018', 'c019'] })], cues, sungOf);
+    expect(kept).toEqual([]);
+    expect(dropped[0].reason).toMatch(/has a call beside it/);
+    expect(checkMoments([ask({ cues: ['c020'], form: 'shape', variant: 'chain', word: '雙截棍' })], cues, sungOf).dropped.map((d) => d.reason).join()).not.toMatch(/call/);
   });
   it('needs the word in the striking line, outside its calls, and of the variant\'s kind', () => {
     expect(checkMoments([ask({ word: '幹什麼' })], cues, sungOf).dropped[0].reason).toMatch(/not in the line/);
@@ -184,8 +193,8 @@ describe('rise: the line means going up', () => {
     return c && { times: [...c.text].map((_, i) => +(c.start + 0.1 * i).toFixed(3)), source: 'vote' };
   };
   const rise = (cue: string, word: string) => checkMoments([ask({ cues: [cue], form: 'shape', variant: 'rise', word })], lines, sung);
-  it('keeps a line that ascends, floats up or goes skyward, and one that names smoke or a balloon', () => {
-    expect(rise('r1', '昇天').kept).toHaveLength(1);
+  it('keeps a line that ascends, floats up or goes skyward, and one that names smoke or a balloon (not one with a call)', () => {
+    expect(rise('r1', '昇天').dropped[0].reason).toMatch(/has a call beside it/);
     expect(rise('r2', '空へ').kept).toHaveLength(1);
     expect(rise('r3', '上がらせ').kept).toHaveLength(1);
     expect(rise('r6', '煙味').kept).toHaveLength(1);

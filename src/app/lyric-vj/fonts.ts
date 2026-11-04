@@ -1,4 +1,4 @@
-// Font catalog: every family the renderer may use, its roles and weights. All are SIL OFL from Google Fonts
+// Font catalog: every family the renderer may use, its roles and weights. All are from Google Fonts, SIL OFL (Yellowtail Apache-2.0)
 // (commercial use allowed). A video uses ONE family from start to end (switching faces between lines reads as
 // inconsistent); the platform's font picker chooses it, per-role fonts remain for explicit overrides.
 
@@ -49,6 +49,15 @@ export const FONTS: FontSpec[] = [
   { family: 'Montserrat', roles: ['accent'], weights: [300, 500, 700], feel: '幾何無襯線，都會、俐落、電子' },
   { family: 'Space Mono', roles: ['accent'], weights: [400, 700], feel: '等寬字，科技、數位、UI 感' },
   { family: 'Pacifico', roles: ['accent'], weights: [400], feel: '圓潤手寫，可愛、POP（只用在標籤，英文歌詞改用易讀字）', legible: false },
+  // style batch 3's boards (2026-11-04): a seventies poster face that has the Traditional forms, and the worlds' small Latin labels
+  { family: 'Shippori Antique B1', roles: ['display', 'body'], weights: [400], feel: '復古圓潤黑體，七〇海報，繁中字形齊全' },
+  { family: 'Michroma', roles: ['accent'], weights: [400], feel: '寬扁幾何無襯線，千禧年科技標籤' },
+  { family: 'Bungee', roles: ['accent'], weights: [400], feel: '招牌方體，題號與字母' },
+  { family: 'Fredoka', roles: ['accent'], weights: [500, 700], feel: '圓頭無襯線，周邊小字' },
+  { family: 'Shrikhand', roles: ['accent'], weights: [400], feel: '七〇粗斜草寫（只用在標籤）', legible: false },
+  // (Apache-2.0, not OFL: its licence file is LICENSE.txt under google/fonts apache/yellowtail)
+  { family: 'Yellowtail', roles: ['accent'], weights: [400], feel: '八〇草寫（只用在標籤）', legible: false },
+  { family: 'Bangers', roles: ['accent'], weights: [400], feel: '美式漫畫擬聲字（只用在標籤）', legible: false },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */

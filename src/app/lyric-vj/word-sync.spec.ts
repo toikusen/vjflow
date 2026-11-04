@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkWordSync, SYNC_SHARE, syncCap, WordSyncAsk } from './word-sync';
+import { checkWordSync, meaningUnits, SYNC_SHARE, syncCap, unitTimes, WordSyncAsk } from './word-sync';
 
 const cues = [
   { id: 'c020', start: 76.32, end: 79.3, text: '快使用雙截棍 哼哼哈兮' },
@@ -49,5 +49,61 @@ describe('checkWordSync', () => {
     const { kept, dropped } = checkWordSync([ask('c025'), ask('c024'), ask('c021'), ask('c020'), ask('c020')], cues, sungOf());
     expect(kept.map((k) => k.cue)).toEqual(['c020', 'c021', 'c024']);
     expect(dropped.map((d) => d.reason)).toEqual([expect.stringMatching(/asked twice/), expect.stringMatching(/more than 3 lines/)]);
+  });
+});
+
+describe('meaningUnits', () => {
+  const pieces = (text: string, u: { ranges: [number, number][] }) => u.ranges.map(([a, b]) => [...text].slice(a, b).join(''));
+  it('keeps each name of a roll call whole and calls it a roll call', () => {
+    const text = 'はるか！ぴあの！りほ！なみ！とうか！';
+    const u = meaningUnits(text);
+    expect(pieces(text, u)).toEqual(['はるか！', 'ぴあの！', 'りほ！', 'なみ！', 'とうか！']);
+    expect(u.call).toBe(true);
+  });
+  it('counts a ・ list as a call, but not a sentence parted by commas or spaces', () => {
+    expect(meaningUnits('い・く・ぞ').call).toBe(true);
+    expect(meaningUnits('君は、僕に、言った').call).toBe(false);
+    expect(meaningUnits('快使用雙截棍 哼哼哈兮').call).toBe(false);
+  });
+  it('splits a long stretch at its words, never inside one', () => {
+    const text = '為人耿直不屈一身正氣';
+    const got = pieces(text, meaningUnits(text));
+    expect(got.join('')).toBe(text);
+    expect(got.length).toBeGreaterThan(1);
+    expect(got.every((p) => [...p].length >= 2)).toBe(true);
+  });
+  it("takes the director's units, marks riding with the unit before, and falls back when one is not in the line", () => {
+    const text = 'はるか！ぴあの！りほ！なみ！とうか！';
+    expect(pieces(text, meaningUnits(text, ['はるか', 'ぴあの', 'りほ', 'なみ', 'とうか']))).toEqual(['はるか！', 'ぴあの！', 'りほ！', 'なみ！', 'とうか！']);
+    expect(pieces(text, meaningUnits(text, ['はるか', 'ゆき']))).toEqual(['はるか！', 'ぴあの！', 'りほ！', 'なみ！', 'とうか！']);
+    expect(meaningUnits('快使用雙截棍 哼哼哈兮', ['快使用', '雙截棍', '哼哼哈兮'], true).call).toBe(true);
+  });
+});
+
+describe('unitTimes and the roll call through checkWordSync', () => {
+  const text = 'はるか！ぴあの！りほ！なみ！とうか！';
+  // チョロイン c006's own character times
+  const times = [10.34, 10.34, 10.4, 10.65, 10.9, 11.14, 11.38, 11.5, 11.62, 11.8, 12.01, 12.22, 12.44, 12.89, 13.34, 13.4, 13.46, 13.46];
+  it("lands every character of a name on the name's first sung time, and gives each way when the next lands", () => {
+    const r = unitTimes(text, times, meaningUnits(text));
+    expect(r.lands).toEqual([10.34, 10.9, 11.62, 12.22, 13.34]);
+    expect(r.times.slice(4, 8)).toEqual([10.9, 10.9, 10.9, 10.9]);
+    expect(r.until!.slice(0, 4)).toEqual([10.9, 10.9, 10.9, 10.9]);
+    expect(r.until!.slice(14)).toEqual([0, 0, 0, 0]);
+  });
+  it('a plain line builds word by word and nothing gives way', () => {
+    const r = unitTimes('快使用雙截棍 哼哼哈兮', [...'快使用雙截棍 哼哼哈兮'].map((_, i) => i * 0.2), meaningUnits('快使用雙截棍 哼哼哈兮'));
+    expect(r.until).toBeUndefined();
+  });
+  it('keeps the roll call with turns, and builds instead when the names come too close to read alone', () => {
+    const roll = [{ id: 'c006', start: 10.23, end: 14.44, text }, { id: 'c007', start: 15.5, end: 16, text: 'きみの愛するあたしは' }];
+    const kept = checkWordSync([{ cue: 'c006', why: '點名' }], roll, () => ({ times, source: 'song' })).kept[0];
+    expect(kept.turns).toBe(true);
+    expect(kept.times[5]).toBe(10.9);
+    expect(kept.until![0]).toBe(10.9);
+    const close = times.map((t, i) => +(10.3 + i * 0.07).toFixed(2));
+    const built = checkWordSync([{ cue: 'c006', why: '點名' }], roll, () => ({ times: close, source: 'song' })).kept[0];
+    expect(built.turns).toBeUndefined();
+    expect(built.until).toBeUndefined();
   });
 });

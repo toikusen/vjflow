@@ -183,10 +183,11 @@ assert.ok(offered.includes('昇天') && offered.includes('空へ') && offered.in
 // word sync: only a run that asks gets the field and the offer; the director is told it is a choice, with the guards
 assert.ok(!('wordSync' in directionSchema().properties) && !('wordSync' in directionSchema(true).properties), 'the schema has no word sync unless asked');
 assert.ok(directionSchema(false, true).required.includes('wordSync'), 'asked, word sync is required');
-assert.deepEqual(directionSchema(false, true).properties.wordSync.items.required, ['cue', 'why'], 'each ask is a line and its reason');
+assert.deepEqual(directionSchema(false, true).properties.wordSync.items.required, ['cue', 'why', 'units', 'turns'], 'each ask is a line, its reason, its meaning units and whether it is a roll call');
 assert.ok(!directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '' }).includes('逐字同步'), 'no word sync offer unless asked');
 const synced = directorPrompt(song, ctx, { language: 'x', languageWhat: '', concept: '', backbone: '', change: '', palette: '', parts: [], lessons: '', wordSync: true });
 assert.ok(synced.includes('wordSync（逐字同步）') && synced.includes('不是每句都要') && synced.includes('零句是正常的') && synced.includes(`整首最多 ${Math.ceil(cues.length * 0.4)} 句`), 'word sync is offered as a choice, with its share');
+assert.ok(synced.includes('絕不把名字或詞拆成單字') && synced.includes('前一個讓位'), 'word sync lands meaning units, and a roll call takes turns');
 
 // the director's own small words: never a part's name, a made-up number, an echo of nothing sung, a stranger singing
 assert.equal(noteRefusal('scene', '凌晨三點・月台', '我等你回來到天亮', [], []), undefined);

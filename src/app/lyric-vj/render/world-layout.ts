@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from './glyphs';
 import { nearestWeight } from '../fonts';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, readable, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readable, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, SET_SPECS, SetSpec } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
@@ -230,7 +230,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const inkLit = inksBy[k];
       gs.forEach((g, i) => {
         const m = g.mesh;
-        if (!p.shown[i] || (synced && !out && t < landAt[i])) { m.visible = false; return; }
+        // a roll call: the name before gives way as the next lands (word-sync.ts until)
+        const left = synced ? givenWay(rt, g, t) : 1;
+        if (!p.shown[i] || (synced && !out && t < landAt[i]) || left <= 0) { m.visible = false; return; }
         m.visible = true;
         const qi = synced && !out ? sec(t - landAt[i], glyphIn) : qIn;
         const env: GlyphEnv = { q: out ? qOut : qi, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0 };
@@ -247,9 +249,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         const tone = Math.min(1, (pose.tone ?? 1) * rank);
         if (!baked && wl.sheet) m.material.color.copy(inkLit[i]);
         if (wl.sheet) {
-          m.material.opacity = (pose.a ?? 1) * whole_a * tone;
+          m.material.opacity = (pose.a ?? 1) * whole_a * tone * left;
         } else {
-          m.material.opacity = (pose.a ?? 1) * whole_a;
+          m.material.opacity = (pose.a ?? 1) * whole_a * left;
           if (baked) m.material.color.copy(dimBaked).lerp(lit, tone);
           else m.material.color.copy(inkLit[i]).multiplyScalar(0.14).lerp(inkLit[i], tone);
         }

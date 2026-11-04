@@ -152,6 +152,8 @@ export interface CueStyle {
   reveal?: 'line' | 'word' | 'sung';
   /** Word sync (word-sync.ts): the sung time of every code point of the line, from the server's alignments; the renderer takes these over the song's own. Paid line director only. */
   sung?: number[];
+  /** Word sync on a roll call: when each code point gives way to the next name (0: it stays). Paid line director only. */
+  sungUntil?: number[];
   /** Who says the line on an interface (a chat): the singer ('me', a sent message) or the other person ('them', a
    * message received). Unset: the shot's side decides. */
   voice?: 'me' | 'them';

@@ -34,3 +34,18 @@ test('writes the kept lines onto the plan and leaves the rest as they were', () 
   assert.equal(p.shots[1].lines[0].reveal, undefined);
   assert.equal(p.shots[2].lines[0].sung, undefined);
 });
+
+test('a roll call carries when each name gives way; a plain line does not', () => {
+  const text = 'はるか！ぴあの！りほ！なみ！とうか！';
+  const roll = [{ id: 'c006', start: 10.23, end: 14.44, text }];
+  const t = [10.34, 10.34, 10.4, 10.65, 10.9, 11.14, 11.38, 11.5, 11.62, 11.8, 12.01, 12.22, 12.44, 12.89, 13.34, 13.4, 13.46, 13.46];
+  const p = { shots: [{ lyric: { template: 'world-set' }, lines: [{ cue: 'c006' } as { cue: string; sung?: number[]; sungUntil?: number[]; reveal?: string }] }] };
+  planWordSync(p, roll, [{ cue: 'c006', why: '點名' }], new Map([['c006', { times: t, source: 'song' as const, votes: 0 }]]));
+  const l = p.shots[0].lines[0];
+  assert.deepEqual(l.sung?.slice(0, 8), [10.34, 10.34, 10.34, 10.34, 10.9, 10.9, 10.9, 10.9]);
+  assert.equal(l.sungUntil?.[0], 10.9);
+  assert.equal(l.sungUntil?.[17], 0);
+  const q = plan();
+  planWordSync(q, cues, [{ cue: 'c020', why: '口令' }], times);
+  assert.equal(q.shots[0].lines[0].sungUntil, undefined);
+});

@@ -175,6 +175,16 @@ export function sungAt(rt: CueRuntime, g: Glyph): number {
   const at = rt.cue.charTimed ? rt.cue.charStarts?.[g.src ?? g.index] : undefined;
   return at === undefined ? revealAt(rt, fracOf(rt, g)) : Math.max(rt.showFrom, at - SUNG_LEAD);
 }
+/** On a roll call, the seconds a name takes to give way to the next. */
+export const GIVE_SEC = 0.14;
+/**
+ * Word sync on a roll call (word-sync.ts `until`): how much of glyph g is still shown, 1 until the next name lands, then
+ * gone within GIVE_SEC, so the sung name stands alone. 1 on every other line.
+ */
+export function givenWay(rt: { style: { reveal?: string; sungUntil?: number[] } }, g: Glyph, t: number): number {
+  const at = rt.style.reveal === 'sung' ? rt.style.sungUntil?.[g.src ?? g.index] : undefined;
+  return at ? 1 - clamp01((t - (at - SUNG_LEAD)) / GIVE_SEC) : 1;
+}
 /** When the reveal is over: the last sung character's time, or the end of the steady reveal. */
 export const revealEnd = (rt: CueRuntime) => (rt.style.reveal === 'sung' && rt.cue.charTimed && rt.cue.charStarts?.length ? Math.max(rt.showFrom, rt.cue.charStarts[rt.cue.charStarts.length - 1] - SUNG_LEAD) : revealAt(rt, 1));
 
@@ -509,6 +519,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
     // a domino keeps each character up until it has fallen
     if (rt.style.exit !== 'domino' && !SOLID_EXITS.has(rt.style.exit)) opacity *= 1 - clamp01(q);
   } else if (t > rt.exitAt + rt.exitDur || (rt.style.exit === 'cut' && t > rt.exitAt)) opacity = 0;
+  opacity *= givenWay(rt, g, t);
   return { scale, opacity, dx, dy, rot };
 }
 

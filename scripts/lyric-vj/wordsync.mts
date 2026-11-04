@@ -1,5 +1,6 @@
 // Word sync from the line director's asks (word-sync.ts): each ask through the guards with the song's sung times and
-// what the plan made of the line, the kept ones written onto the plan's lines (sung times and reveal 'sung'), which
+// what the plan made of the line, the kept ones written onto the plan's lines (sung times by meaning unit, reveal 'sung',
+// and on a roll call when each name gives way), which
 // typeplan --plan and free-plan's composerTreatment carry onto the treatment's cues for the renderer.
 import { checkWordSync, SyncDropped, SyncLine, WordSync, WordSyncAsk } from '../../src/app/lyric-vj/word-sync';
 import { SungTimes } from '../../src/app/lyric-vj/sung-times';
@@ -7,7 +8,7 @@ import { SungTimes } from '../../src/app/lyric-vj/sung-times';
 /** Layouts that cut a line into pieces as it is sung: they land their own pieces (linedirect-core SPLIT_LAYOUTS). */
 export const SPLIT_LAYOUTS = new Set(['build-cut', 'beat-cut', 'panel-route']);
 
-export interface SyncPlanLine { cue: string; handoff?: unknown; sung?: number[]; reveal?: string; [k: string]: unknown }
+export interface SyncPlanLine { cue: string; handoff?: unknown; sung?: number[]; sungUntil?: number[]; reveal?: string; [k: string]: unknown }
 export interface SyncPlan { shots: { lyric: { template: string }; lines: SyncPlanLine[] }[] }
 
 /** What the plan made of each line, for the guards: its layout's kind, whether it shares its shot, a handoff on it. */
@@ -24,7 +25,7 @@ export function planWordSync(plan: SyncPlan, cues: { id: string; start: number; 
   const byCue = new Map(kept.map((k) => [k.cue, k]));
   for (const ps of plan.shots) for (const l of ps.lines ?? []) {
     const k = byCue.get(l.cue);
-    if (k) Object.assign(l, { sung: k.times, reveal: 'sung' });
+    if (k) Object.assign(l, { sung: k.times, reveal: 'sung', ...(k.until ? { sungUntil: k.until } : {}) });
   }
   return { kept, dropped };
 }

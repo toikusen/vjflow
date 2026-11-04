@@ -868,7 +868,7 @@ export function momentsPrompt(overused: string[]) {
 
 /** The word sync on offer: only the paid line director is told of it (the free tier has no sung times to land on). */
 export function wordSyncPrompt(n: number) {
-  return `- wordSync（逐字同步）：付費版可以讓某幾句的字「唱到哪個字，那個字才落下」，用伺服器對齊的逐字時間。不是每句都要：只選字本身就是重點的句子，例如一連串打點的 rap 句、口令、一個一個數的列舉、拉長的關鍵字。平鋪直敘的句子整句出現就好；慢歌多半零句或一兩句，零句是正常的。每項：cue、why（一句、二十字內，說這句的字為什麼要跟著唱）。程式會檢查：對齊可信、${SYNC_MIN_CHARS} 字以上、沒唱太快（每秒 ${SYNC_MAX_CPS} 字內、字落完還讀得完）、不是拆句、併句或換手句；不合的句子退回整句出現，句子不受影響。整首最多 ${Math.max(1, Math.ceil(n * SYNC_SHARE))} 句。
+  return `- wordSync（逐字同步）：付費版可以讓某幾句的字「唱到哪個詞，那個詞才落下」（以意義單位落下，不是逐個字元），用伺服器對齊的逐字時間。不是每句都要：只選字本身就是重點的句子，例如一連串打點的 rap 句、口令、一個一個數的列舉、拉長的關鍵字。平鋪直敘的句子整句出現就好；慢歌多半零句或一兩句，零句是正常的。每項：cue、why（一句、二十字內，說這句的字為什麼要跟著唱）、units（這句落下的意義單位，依序、原樣取自歌詞：一個名字、一個喊的詞、一個詞，絕不把名字或詞拆成單字；空陣列交給程式依標點與詞界切）、turns（點名或一個一個喊的句子填 true：唱到的那個名字出現、前一個讓位；其他 false）。程式會檢查：對齊可信、${SYNC_MIN_CHARS} 字以上、沒唱太快（每秒 ${SYNC_MAX_CPS} 字內、字落完還讀得完）、不是拆句、併句或換手句；不合的句子退回整句出現，句子不受影響。整首最多 ${Math.max(1, Math.ceil(n * SYNC_SHARE))} 句。
 `;
 }
 
@@ -880,7 +880,7 @@ export function directionSchema(moments = false, wordSync = false) {
     properties: {
       reading: str(), icon: str(),
       ...(moments ? { moments: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cues', 'form', 'variant', 'word', 'why'], properties: { cues: { type: 'array', items: str() }, form: { type: 'string', enum: Object.keys(MOMENT_FORMS) }, variant: str(), word: str(), why: str() } } } } : {}),
-      ...(wordSync ? { wordSync: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cue', 'why'], properties: { cue: str(), why: str() } } } } : {}),
+      ...(wordSync ? { wordSync: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cue', 'why', 'units', 'turns'], properties: { cue: str(), why: str(), units: { type: 'array', items: str() }, turns: { type: 'boolean' } } } } } : {}),
       techniques: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'where', 'why'], properties: { id: str(), where: str(), why: str() } } },
       parts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'tension', 'why'], properties: { from: str(), tension: { type: 'number' }, why: str() } } },
       tune: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['key', 'value', 'cue', 'why'], properties: { key: str(), value: { type: 'number' }, cue: str(), why: str() } } },

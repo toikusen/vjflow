@@ -21,9 +21,11 @@ await esbuild.build({ entryPoints: ['src/app/lyric-vj/render/main.ts'], bundle: 
 copyFileSync('scripts/lyric-vj/render.html', join(work, 'render.html'));
 const ROOT = process.cwd();
 const server = createServer((req, res) => {
-  const path = join(ROOT, decodeURIComponent(new URL(req.url!, 'http://x').pathname));
+  const asked = decodeURIComponent(new URL(req.url!, 'http://x').pathname);
+  // the self-hosted fonts live in out/fonts and are asked for at /fonts/ (as in render.mts)
+  const path = join(ROOT, asked.startsWith('/fonts/') ? join('out', asked) : asked);
   if (!existsSync(path)) return void res.writeHead(404).end();
-  res.writeHead(200, { 'content-type': { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json' }[extname(path)] ?? 'application/octet-stream' });
+  res.writeHead(200, { 'content-type': { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.json': 'application/json' }[extname(path)] ?? 'application/octet-stream' });
   createReadStream(path).pipe(res);
 }).listen(0, '127.0.0.1');
 await new Promise((r) => server.once('listening', r));

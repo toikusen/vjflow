@@ -59,7 +59,8 @@ function repeat(c: G, m: Motif, a: string, b: string, d: string, gold: string) {
     flower(w / 2, h / 2, 92, d);
   }
 }
-const patternTile = (m: Motif, s: Slots, turn = 0) => kept(`cg-t|${m}|${s.plate}|${s.accent}|${s.ink2}|${s.faint}|${turn}`, STEP[m][0], STEP[m][1], (c) => { const [a, b, d] = turn === 0 ? [s.plate, s.accent, s.ink2] : turn === 1 ? [s.accent, s.ink2, s.plate] : [s.ink2, s.plate, s.accent]; repeat(c, m, a, b, d, s.faint); });
+/** One repeat in one of four colourings: turns 0-2 rotate the three print colours through the ground; turn 3 prints them on the plain washi (白地). */
+const patternTile = (m: Motif, s: Slots, turn = 0) => kept(`cg-t|${m}|${s.ground}|${s.plate}|${s.accent}|${s.ink2}|${s.faint}|${turn}`, STEP[m][0], STEP[m][1], (c) => { const [a, b, d] = turn === 0 ? [s.plate, s.accent, s.ink2] : turn === 1 ? [s.accent, s.ink2, s.plate] : turn === 2 ? [s.ink2, s.plate, s.accent] : [s.ground, s.accent, s.plate]; repeat(c, m, a, b, d, s.faint); });
 /** A whole printed sheet, with its fibres and the unevenness of hand printing; a little larger than the frame. */
 const printed = (e: WorldEnv, m: Motif, turn = 0) => kept(`cg-s|${m}|${e.slots.plate}|${e.slots.accent}|${e.slots.ink2}|${turn}`, W + 260, H + 260, (c) => {
   c.fillStyle = c.createPattern(patternTile(m, e.slots, turn), 'repeat')!;
@@ -69,23 +70,12 @@ const printed = (e: WorldEnv, m: Motif, turn = 0) => kept(`cg-s|${m}|${e.slots.p
   c.globalCompositeOperation = 'source-over';
 });
 const sheetAt = (e: WorldEnv, m: Motif, turn = 0) => e.ctx.drawImage(printed(e, m, turn), -130 - 24 * Math.sin(e.now * 0.18), -130 - 16 * Math.cos(e.now * 0.15));
-/** A big fold lying across the frame: the far side a shade lit, the near side in shadow, a soft line along the crease. */
-const foldShade = (e: WorldEnv, a: number) => {
-  const c = e.ctx;
-  c.save();
-  const g = c.createLinearGradient(W * 0.2, 0, W * 0.8, H);
-  g.addColorStop(0, 'rgba(255,255,255,0.1)');
-  g.addColorStop(0.49, 'rgba(255,255,255,0)');
-  g.addColorStop(0.5, `rgba(0,0,0,${0.22 * a})`);
-  g.addColorStop(1, 'rgba(0,0,0,0.02)');
-  c.fillStyle = g;
-  c.fillRect(-W * 0.2, -H * 0.2, W * 1.4, H * 1.4);
-  c.restore();
-};
 /** The plain band a free line stands on: wrapped right across the sheet, folded at its edges, a gold line inside each. */
 export function obi(e: WorldEnv) {
   if (!e.rect || e.weight <= 0) return;
-  const b = boxOf(e, 0, 26);
+  // the band grows with the line's width: a tilted row climbs past its box toward one end, and no stroke may leave the band for the pattern
+  const r = boxOf(e, 0, 0);
+  const b = boxOf(e, 0, 26 + 0.05 * (r.x1 - r.x0));
   if (b.y1 - b.y0 > H * 0.7) return;
   atBase(e, (c) => {
     c.globalAlpha = Math.min(1, e.weight * 4);
@@ -98,20 +88,77 @@ export function obi(e: WorldEnv) {
   });
 }
 const G: Record<string, HandGround> = {};
-/** One printed sheet laid askew on the plain washi, high and off to one side: the paper's own corner of the frame, never full-bleed. */
-const cardAt = (e: WorldEnv, m: Motif, turn = 0) => {
+/**
+ * One printed sheet laid askew, centred at (x, y) in the frame, `w` by `h`: its fibres printed over, a soft contact shadow, and
+ * one corner folded back to show the plain reverse, which is what says paper rather than wallpaper.
+ */
+function sheet(c: CanvasRenderingContext2D, e: WorldEnv, m: Motif, turn: number, x: number, y: number, w: number, h: number, tilt: number, dogEar: number, crease = false) {
+  c.save();
+  c.translate(x, y);
+  c.rotate(tilt);
+  const [x0, y0] = [-w / 2, -h / 2];
+  const ear = Math.min(w, h) * dogEar;
+  // the outline less the folded corner (bottom right in the sheet's own frame)
+  const outline: Pt[] = ear > 0 ? [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h - ear], [x0 + w - ear, y0 + h], [x0, y0 + h]] : [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]];
+  lifted(c, 28, 6, 12, 0.34, () => { trace(c, outline); c.fillStyle = c.createPattern(patternTile(m, e.slots, turn), 'repeat')!; c.fill(); });
+  c.save();
+  trace(c, outline);
+  c.clip();
+  c.globalCompositeOperation = 'multiply';
+  c.globalAlpha = 0.5;
+  c.drawImage(fibred('cg-fibre-card', e.paper, e.slots.ink2, 900), x0, y0, w, h);
+  if (crease) {
+    // the sheet was folded once: the far half a shade lit, the near half in shadow, a soft line along the crease
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 1;
+    const g = c.createLinearGradient(x0 + w * 0.2, y0, x0 + w * 0.8, y0 + h);
+    g.addColorStop(0, 'rgba(255,255,255,0.12)');
+    g.addColorStop(0.49, 'rgba(255,255,255,0)');
+    g.addColorStop(0.5, 'rgba(0,0,0,0.16)');
+    g.addColorStop(1, 'rgba(0,0,0,0.02)');
+    c.fillStyle = g;
+    c.fillRect(x0, y0, w, h);
+  }
+  c.restore();
+  if (ear > 0) {
+    // the corner turned over: plain washi, shaded toward the crease
+    const flap: Pt[] = [[x0 + w, y0 + h - ear], [x0 + w - ear, y0 + h], [x0 + w - ear, y0 + h - ear]];
+    lifted(c, 14, -4, -4, 0.3, () => { trace(c, flap); c.fillStyle = e.paper; c.fill(); });
+    const g = c.createLinearGradient(x0 + w - ear * 0.5, y0 + h - ear * 0.5, x0 + w - ear, y0 + h - ear);
+    g.addColorStop(0, 'rgba(0,0,0,0.16)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    trace(c, flap);
+    c.fillStyle = g;
+    c.fill();
+    c.strokeStyle = e.slots.faint;
+    c.lineWidth = 2;
+    c.stroke();
+  }
+  c.restore();
+}
+/**
+ * The stack: a wide sheet printed on white washi laid askew over most of the frame (its foot about four fifths down, one corner
+ * turned back), a smaller coloured sheet crossing its top corner. A band set high or low still leaves a wide field of pattern
+ * on the other side of it. The white ground keeps the motif's colour as the only weight, which holds this world off the frame
+ * positions of woodcut and the other paper worlds (similarity gate level 3). The side, the angles and the second motif turn
+ * with the seed.
+ */
+const stackAt = (e: WorldEnv, m: Motif) => {
   const c = e.ctx;
   c.drawImage(fibred('cg-obi', e.paper, e.slots.ink2, 700), 0, 0);
   const side = e.seed % 2 ? 1 : -1;
+  const m2 = MOTIFS[(MOTIFS.indexOf(m) + 2 + (e.seed % 3)) % MOTIFS.length];
+  const [sx, sy] = [10 * Math.sin(e.now * 0.18), 8 * Math.cos(e.now * 0.15)];
   atBase(e, () => {
-    c.save();
-    c.translate(W * (0.5 + 0.24 * side) + 10 * Math.sin(e.now * 0.18), H * 0.38 + 8 * Math.cos(e.now * 0.15));
-    c.rotate(-0.13 * side);
-    lifted(c, 30, 8 * side, 12, 0.35, () => { c.fillStyle = c.createPattern(patternTile(m, e.slots, turn), 'repeat')!; c.fillRect(-W * 0.23, -H * 0.38, W * 0.46, H * 0.76); });
-    c.restore();
+    // laid out for the turned corner on the right, mirrored for the other side
+    if (side > 0) { c.translate(W, 0); c.scale(-1, 1); }
+    // the big sheet is printed on white washi (turn 3): the motif carries the colour, so a frame of pattern is not a frame of ink;
+    // the small one crossing its corner is a coloured ground
+    sheet(c, e, m, 3, W * 0.45 + sx, H * 0.36 + sy, W * 1.04, H * 0.86, 0.05 - 0.02 * hash(e.seed, 3), 0.2, true);
+    sheet(c, e, m2, e.seed % 3, W * 0.86 - sx * 0.6, H * (0.08 + 0.05 * hash(e.seed, 4)) - sy * 0.6, W * 0.36, H * 0.48, -0.16, 0);
   });
 };
-for (const m of MOTIFS) G[`chiyogami/${m}`] = (e) => { cardAt(e, m, e.seed % 3); foldShade(e, 1); obi(e); };
+for (const m of MOTIFS) G[`chiyogami/${m}`] = (e) => { stackAt(e, m); obi(e); };
 G['chiyogami/patchwork'] = (e) => {
   const c = e.ctx;
   // squares of different papers, each a little askew on the stack
@@ -131,7 +178,17 @@ G['chiyogami/patchwork'] = (e) => {
   });
   obi(e);
 };
-G['chiyogami/plain-washi'] = (e) => { const c = e.ctx; c.drawImage(fibred('cg-obi', e.paper, e.slots.ink2, 700), 0, 0); atBase(e, () => { const m = MOTIFS[e.seed % MOTIFS.length]; c.save(); c.translate(W * 0.84, -80); c.rotate(0.5); lifted(c, 30, 8, 12, 0.3, () => { c.fillStyle = c.createPattern(patternTile(m, e.slots, 0), 'repeat')!; c.fillRect(-600, -400, 1400, 820); }); c.restore(); c.save(); c.translate(-20, H + 60); c.rotate(-0.5); lifted(c, 30, 8, 12, 0.3, () => { c.fillStyle = c.createPattern(patternTile(MOTIFS[(e.seed + 2) % MOTIFS.length], e.slots, 1), 'repeat')!; c.fillRect(-500, -320, 1200, 640); }); c.restore(); }); };
+// the quiet ground: two large sheets in opposite corners and a plain lane of washi between them
+G['chiyogami/plain-washi'] = (e) => {
+  const c = e.ctx;
+  c.drawImage(fibred('cg-obi', e.paper, e.slots.ink2, 700), 0, 0);
+  const sway = 6 * Math.sin(e.now * 0.16);
+  atBase(e, () => {
+    sheet(c, e, MOTIFS[e.seed % MOTIFS.length], 1, W * 0.9 + sway, H * 0.06, W * 0.9, H * 0.9, 0.5, 0.16);
+    sheet(c, e, MOTIFS[(e.seed + 2) % MOTIFS.length], 0, W * 0.08 - sway, H * 0.98, W * 0.86, H * 0.86, -0.5, 0);
+  });
+  obi(e);
+};
 G['chiyogami/gold-all'] = (e) => { sheetAt(e, 'kikuhana', 1); flood(e, e.slots.faint, 0.1 + 0.12 * e.pulse); obi(e); };
 G['chiyogami/one-fold'] = (e) => { G['chiyogami/plain-washi'](e); };
 

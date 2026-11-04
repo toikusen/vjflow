@@ -172,7 +172,7 @@ const dropFor = (e: WorldEnv, top: number) => {
   if (!r || e.weight <= 0 || r.x1 - r.x0 < W * 0.4) return 0;
   return Math.min(H * 0.3, Math.max(0, r.y1 + H * 0.12 - top)) * Math.min(1, e.weight * 4);
 };
-/** The foreground lost in mist, as in a Hiroshige print: the land is a band across the middle, the bottom of the sheet bare paper. */
+/** The middle distance lost in mist, as in a Hiroshige print: the land is a band across the middle, its foot in mist; the near shore (`foreshore`) comes after. */
 const lowMist = (e: WorldEnv, drop = 0) => {
   const c = e.ctx;
   // the mist rises with the land only half as far: a dropped band keeps its foot in the mist, the bottom of the sheet stays paper
@@ -183,6 +183,111 @@ const lowMist = (e: WorldEnv, drop = 0) => {
   c.fillStyle = g;
   c.fillRect(-20, y, W + 40, H - y + 20);
 };
+const SHORE_TOP = 0.74;
+/** Near water printed in one plate: a light wipe that deepens to a bokashi along the bottom edge, the key block's ripple lines across it. */
+const water = (e: WorldEnv, tone: string) => kept(`uk-water|${e.paper}|${tone}|${e.slots.ink}`, W, Math.ceil(H * (1 - SHORE_TOP)) + 40, (c) => {
+  const h = c.canvas.height;
+  const g = c.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, `${mixHex(e.paper, tone, 0.12)}00`);
+  g.addColorStop(0.22, mixHex(e.paper, tone, 0.12));
+  g.addColorStop(0.7, mixHex(e.paper, tone, 0.2));
+  g.addColorStop(1, mixHex(e.paper, tone, 0.34));
+  c.fillStyle = g;
+  c.fillRect(0, 0, W, h);
+  // the baren's streaks through the plate
+  c.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 160; i++) { c.globalAlpha = 0.04 + 0.05 * hash(i, 18); c.fillRect(0, hash(i, 19) * h, W, 1 + 2 * hash(i, 20)); }
+  c.globalCompositeOperation = 'source-over';
+  c.globalAlpha = 1;
+});
+/** Ripple lines of the key block: short, closer and heavier toward the viewer, a slow sideways drift. */
+const ripples = (e: WorldEnv, top: number, tone: string, seed: number) => {
+  const c = e.ctx;
+  c.save();
+  c.strokeStyle = tone;
+  c.lineCap = 'round';
+  const rows = 14;
+  for (let r = 0; r < rows; r++) {
+    const k = r / (rows - 1);
+    const y = top + (H - top) * (0.14 + 0.86 * k ** 1.35);
+    c.lineWidth = 1 + 1.4 * k;
+    c.globalAlpha = 0.3 + 0.32 * k;
+    const len = 40 + 120 * k;
+    const gap = len * (1.6 + 0.8 * hash(r, seed));
+    const off = ((e.now * (6 + 10 * k) * (r % 2 ? 1 : -1) + hash(r, seed + 1) * gap) % gap + gap) % gap - gap;
+    c.beginPath();
+    for (let x = off; x < W + gap; x += gap) {
+      const l = len * (0.6 + 0.4 * hash(Math.round(x / gap), r + seed));
+      c.moveTo(x, y);
+      c.quadraticCurveTo(x + l / 2, y - 3 - 4 * k, x + l, y);
+    }
+    c.stroke();
+  }
+  c.restore();
+};
+/** A low near headland on one side, a pale earth plate with only its rim wiped darker, keyed like the ranges, reeds on the crest. */
+const [BANK_W, BANK_H] = [1400, 400];
+const bank = (e: WorldEnv, tone: string, seed: number) => kept(`uk-bank|${tone}|${seed}|${e.paper}|${e.slots.ink}`, BANK_W, BANK_H, (c) => {
+  const pts: Pt[] = [];
+  for (let x = 0; x <= BANK_W; x += 8) {
+    const f = x / BANK_W;
+    // high at the frame's edge, running out into the water
+    const lift = (1 - f) ** 1.5 * 280 + 30 * Math.sin(f * 9 + seed) * (1 - f) + 16 * ridge(x, BANK_W * 2, seed) * (1 - f);
+    pts.push([x, BANK_H - 20 - lift]);
+  }
+  trace(c, [...pts, [BANK_W, BANK_H + 10], [0, BANK_H + 10]]);
+  c.fillStyle = tone;
+  c.fill();
+  c.save();
+  c.clip();
+  c.globalCompositeOperation = 'source-atop';
+  // only a narrow rim under the crest is wiped darker: the near shore stays pale, as the foreground of a print usually is
+  for (let k = 0; k < 12; k++) { c.globalAlpha = 0.05; c.strokeStyle = mixHex(tone, e.slots.ink, 0.5); c.lineWidth = 8 + k * 3.5; trace(c, pts, false); c.stroke(); }
+  c.restore();
+  // clumps of reed on the crest, cut by the key block: tapering blades leaning one way with the wind
+  c.fillStyle = key(e);
+  for (let i = 0; i < 11; i++) {
+    const at = Math.floor((0.04 + 0.6 * hash(i, seed + 3) ** 1.3) * pts.length);
+    const [x, y] = pts[at];
+    const blades = 4 + Math.floor(4 * hash(i, seed + 6));
+    for (let b = 0; b < blades; b++) {
+      const l = 22 + 46 * hash(i * 7 + b, seed + 4);
+      const lean = 0.25 + 0.5 * hash(i * 7 + b, seed + 5) + (b - blades / 2) * 0.08;
+      const bx = x + (b - blades / 2) * 3;
+      const [tx, ty] = [bx + Math.sin(lean) * l, y + 4 - Math.cos(lean) * l];
+      c.beginPath();
+      c.moveTo(bx - 2.2, y + 6);
+      c.quadraticCurveTo(bx - 1 + Math.sin(lean) * l * 0.3, y - l * 0.55, tx, ty);
+      c.quadraticCurveTo(bx + 1 + Math.sin(lean) * l * 0.4, y - l * 0.45, bx + 2.2, y + 6);
+      c.fill();
+    }
+  }
+  c.lineWidth = 3;
+  c.lineJoin = 'round';
+  trace(c, pts, false);
+  c.stroke();
+});
+/**
+ * The near foreground of the print, under the mist that holds the distance: water from the bottom fifth down, deepening to a
+ * bokashi at the edge, keyed ripple lines, and on most prints a low headland from one side. It stays below every row of words
+ * (the layouts end above it) and the mist under a free line is drawn after it, so it never crosses a line being read.
+ */
+const foreshore = (e: WorldEnv, headland = true, tone = e.slots.ink2) => {
+  const c = e.ctx;
+  const top = H * SHORE_TOP;
+  c.drawImage(water(e, tone), 0, top - 40);
+  ripples(e, top, isLight(e.paper) ? mixHex(tone, e.slots.ink, 0.2) : mixHex(e.slots.faint, e.paper, 0.3), e.seed);
+  if (!headland) return;
+  const left = e.seed % 2 === 0;
+  // the shore is earth, not water: the key block's own ink let down, so it parts from the tinted water by hue, not by weight
+  const near = isLight(e.paper) ? mixHex(e.paper, e.slots.ink, 0.16) : mixHex(e.paper, e.slots.faint, 0.3);
+  const slide = 12 * Math.sin(e.now * 0.12);
+  c.save();
+  c.translate(left ? slide - 40 : W - slide + 40, H - BANK_H + 20);
+  if (!left) c.scale(-1, 1);
+  c.drawImage(bank(e, near, e.seed % 3), 0, 0);
+  c.restore();
+};
 const hills = (e: WorldEnv) => {
   const c = e.ctx;
   const pan = -e.now * (10 + 16 * e.level);
@@ -191,18 +296,20 @@ const hills = (e: WorldEnv) => {
   drift(e, e.paper, H * 0.52 + d, 58, 5, e.seed, 0.92);
   tiled(c, range(e, 0.68, 260, mixHex(e.slots.ink2, e.paper, 0.1), (e.seed % 3) + 5), pan * 0.9, d);
   lowMist(e, d);
-  drift(e, mixHex(e.paper, e.slots.faint, 0.3), H * 0.74 + d, 44, 9, e.seed + 2, 0.9);
+  foreshore(e);
+  drift(e, mixHex(e.paper, e.slots.faint, 0.3), H * 0.74 + d * 0.3, 44, 9, e.seed + 2, 0.9);
 };
 const GROUNDS: Record<string, HandGround> = {
   'ukiyoe/far-range': (e) => { e.ctx.drawImage(sheet(e, 0.5, e.slots.faint), 0, 0); hills(e); drift(e, e.paper, H * 0.2, 46, -7, e.seed + 5, 0.9); mistUnderWords(e); },
   'ukiyoe/dawn': (e) => { e.ctx.drawImage(sheet(e, 0.36, e.slots.accent), 0, 0); hills(e); mistUnderWords(e); },
-  'ukiyoe/open-sky': (e) => { e.ctx.drawImage(sheet(e, 0.62, e.slots.faint), 0, 0); drift(e, e.paper, H * 0.32, 54, 6, e.seed, 0.9); drift(e, e.paper, H * 0.72, 66, -5, e.seed + 1, 0.92); mistUnderWords(e); },
+  'ukiyoe/open-sky': (e) => { e.ctx.drawImage(sheet(e, 0.62, e.slots.faint), 0, 0); drift(e, e.paper, H * 0.32, 54, 6, e.seed, 0.9); foreshore(e); drift(e, e.paper, H * 0.72, 66, -5, e.seed + 1, 0.92); mistUnderWords(e); },
   'ukiyoe/sea-swell': (e) => {
     const c = e.ctx;
     c.drawImage(sheet(e, 0.42, e.slots.faint), 0, 0);
     const d = dropFor(e, H * 0.3 + 70);
     [0, 1, 2, 3].forEach((row) => tiled(c, swellRow(e, row), e.now * (row % 2 ? -1 : 1) * (22 + row * 18) * (0.6 + e.level) + 30 * Math.sin(e.now * 0.7 + row), H * 0.3 + d + row * 104 + 12 * Math.sin(e.now * 0.9 + row * 1.4)));
     lowMist(e, d);
+    foreshore(e);
     mistUnderWords(e);
   },
   'ukiyoe/rain': (e) => {
@@ -211,6 +318,7 @@ const GROUNDS: Record<string, HandGround> = {
     const d = dropFor(e, H * 0.66 - 420);
     tiled(c, range(e, 0.66, 380, mixHex(e.slots.ink2, e.paper, 0.34), e.seed % 3), -e.now * 3, d);
     lowMist(e, d);
+    foreshore(e);
     flood(e, mixHex(e.slots.ink2, e.paper, 0.4), 0.16);
     const [tile, tone] = [rainTile(e, key(e)), 0];
     const y = (e.now * 620) % 900;
@@ -225,13 +333,14 @@ const GROUNDS: Record<string, HandGround> = {
     const d = dropFor(e, H * 0.64 - 350);
     tiled(c, range(e, 0.64, 320, mixHex(e.paper, e.slots.faint, 0.28), e.seed % 3), -e.now * 2, d);
     lowMist(e, d);
+    foreshore(e, true, mixHex(e.slots.ink2, e.paper, 0.2));
     c.fillStyle = e.paper;
     for (let i = 0; i < 300; i++) { const k = fractOf(hash(i, 5) + e.now * (0.03 + 0.05 * hash(i, 6))); c.globalAlpha = 0.5 + 0.5 * hash(i, 7); c.beginPath(); c.arc(hash(i, 8) * W + 26 * Math.sin(e.now * 0.6 + i), k * H, 1.6 + 3.4 * hash(i, 9), 0, TAU); c.fill(); }
     c.globalAlpha = 1;
     mistUnderWords(e);
   },
   'ukiyoe/full-storm': (e) => { GROUNDS['ukiyoe/rain'](e); },
-  'ukiyoe/one-boat-mist': (e) => { e.ctx.drawImage(sheet(e, 0.3, e.slots.faint), 0, 0); drift(e, mixHex(e.paper, e.slots.faint, 0.5), H * 0.5, 80, 3, e.seed, 0.9); mistUnderWords(e); },
+  'ukiyoe/one-boat-mist': (e) => { e.ctx.drawImage(sheet(e, 0.3, e.slots.faint), 0, 0); drift(e, mixHex(e.paper, e.slots.faint, 0.5), H * 0.5, 80, 3, e.seed, 0.9); foreshore(e, false, e.slots.faint); mistUnderWords(e); },
 };
 const fractOf = (x: number) => x - Math.floor(x);
 

@@ -14,7 +14,7 @@ const noText: Record<Level, TextCamKind[]> = lv([], [], []);
 const scheme = (id: string, mood: Scheme['mood'], band: Scheme['band'], ground: string, ink: string, ink2: string, accent: string, plate: string, plateInk: string, faint: string, what: string): Scheme => ({ id, band, ground, ink, ink2, accent, plate, plateInk, faint, what, mood });
 
 export const FILE_WORLD: StyleWorld = {
-  id: 'file', name: '網點檔案', language: 'dossier', what: '攤在牛皮紙夾上的案件檔案：打字的案件表、圖書館索引卡、分段的紙疊、紅格八行箋',
+  id: 'file', name: '案件檔案', language: 'dossier', what: '攤在牛皮紙夾上的案件檔案：打字的案件表、圖書館索引卡、分段的紙疊、紅格八行箋',
   lyricRole: '歌詞是案件編號下的條目：打在案件表上、寫在索引卡的藍線之間、或一句一格寫進八行箋',
   family: 'print',
   refuses: ['霓虹', '發光', '手寫塗鴉', '大色塊', '黑塗當主手法', '模糊漸層', '編出來的案號與數字'],

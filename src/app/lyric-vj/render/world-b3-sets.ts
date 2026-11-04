@@ -54,3 +54,19 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'citypop/skyline-title': { ...base, at: [0.5, 0.21], ax: 0, ay: 0, share: 0.9, tall: 0.3, hi: 176, rows: [1, 2], lead: 1.12, track: 0.18, fixed: true },
   'citypop/column': { ...base, at: [0.534, 0.139], ax: 0, ay: -1, share: 0.22, tall: 0.78, hi: 96, rows: [2, 2], vertical: true, lead: 1.56, track: 0.16, stair: 1.56, object: 'cp-column', pad: [120, 40], fixed: true },
 };
+
+/** Sets laid out again mirrored left to right, with their page mirrored too (`<ground>-r`): a song gets the same board both ways. */
+export const B3_MIRRORS: Record<string, string> = {
+  'popart/narration': 'popart/sea',
+  'y2k/hook': 'y2k/hook', 'y2k/ring': 'y2k/ring', 'y2k/fan': 'y2k/fan', 'y2k/column': 'y2k/column',
+  'psychedelic/sun': 'psychedelic/sun', 'psychedelic/flow': 'psychedelic/flow',
+  'citypop/facade-title': 'citypop/facade', 'citypop/sea-title': 'citypop/moon', 'citypop/column': 'citypop/colonnade',
+  'brutalist/footer': 'brutalist/footer', 'brutalist/columns': 'brutalist/columns',
+  'idol-live/ticket': 'idol-live/ticket', 'idol-live/card-col': 'idol-live/setlist',
+  'gameshow/hint': 'gameshow/hint', 'gameshow/qa': 'gameshow/qa',
+};
+const flip = (x: -1 | 0 | 1) => (-x as -1 | 0 | 1);
+for (const id of Object.keys(B3_MIRRORS)) {
+  const s = LOUD_SETS[id];
+  LOUD_SETS[`${id}-r`] = { ...s, at: [1 - s.at[0], s.at[1]], ax: flip(s.ax), ...(s.flush !== undefined ? { flush: flip(s.flush) } : {}), ...(s.tilt ? { tilt: -s.tilt } : {}) };
+}

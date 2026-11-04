@@ -6,6 +6,7 @@
 import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
 import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
+import { B3_MIRRORS } from './render/world-b3-sets';
 
 const stack = (o: Partial<FrameStack>): FrameStack => ({ grain: 0.1, paper: 0, tooth: 0, lift: 0, scan: 0, vignette: 0.1, flicker: 0, weave: 0, boil: 0, boilRate: 12, step: 0, koma: 0, ...o });
 const lv = <T,>(a: T[], b: T[], c: T[]): Record<Level, T[]> => ({ 0: a, 1: b, 2: c });
@@ -24,6 +25,8 @@ const popart: StyleWorld = {
     scheme('cmyk-news', 'warm', 'light', '#F3EBD7', '#151515', '#E0337A', '#1E9FD6', '#FFFDF6', '#151515', '#F6CF3F', '新聞紙上的洋紅、青、黃、黑'),
     scheme('cyan-first', 'cold', 'light', '#F3EBD7', '#151515', '#1E9FD6', '#E0337A', '#FFFDF6', '#151515', '#F6CF3F', '青版打頭的一頁'),
     scheme('yellow-stock', 'earth', 'mid', '#F6CF3F', '#151515', '#E0337A', '#1E9FD6', '#FFFDF6', '#151515', '#F6CF3F', '黃色印紙上的一頁'),
+    scheme('cyan-page', 'cold', 'mid', '#1E9FD6', '#151515', '#E0337A', '#F6CF3F', '#FFFDF6', '#151515', '#F6CF3F', '青色印紙上的一頁'),
+    scheme('pink-news', 'warm', 'light', '#F4DCD2', '#151515', '#1E9FD6', '#E0337A', '#FFFDF6', '#151515', '#F6CF3F', '粉色新聞紙'),
   ],
   groundBand: { band: 'light', flip: 'none', why: '一頁漫畫是奶油紙；黃色印紙那頁由配色輪替帶入' },
   material: { surface: 'comic-key', core: 'accent', engine: 'print/comic-page', how: '分格各有黑框，色版先印、黑版後壓並偏 (5, 3) px；陰影是轉角度的網點，大小表示深淺；擬聲字是黃字、黑框、青版錯位' },
@@ -62,6 +65,8 @@ const gameshow: StyleWorld = {
     scheme('studio-blue', 'cold', 'dark', '#1636B8', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#2B4FD6', '棚藍布景'),
     scheme('final-navy', 'cold', 'dark', '#0B1A5C', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '決賽的深藍棚'),
     scheme('red-round', 'warm', 'mid', '#A80D26', '#FFFFFF', '#FFB400', '#FFB400', '#FFFFFF', '#111428', '#C8102E', '紅色的搶答回合'),
+    scheme('teal-round', 'earth', 'dark', '#0E5A6E', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '青綠的加分回合'),
+    scheme('purple-round', 'warm', 'dark', '#4A1E9E', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '紫色的敗部復活'),
   ],
   groundBand: { band: 'dark', flip: 'none', why: '攝影棚是飽和的藍，決賽深藍、搶答紅輪替；字永遠在白卡或金卡上' },
   material: { surface: 'card-type', core: 'accent', engine: 'ui/quiz-graphics', how: '電視字卡：平塗色板、直角、深藍硬投影往右下 14 px、金色底線；最上面是掃描線與暗角' },
@@ -100,6 +105,8 @@ const idol: StyleWorld = {
     scheme('pink-merch', 'warm', 'light', '#FFF8FB', '#2B2140', '#FF7EB6', '#B79CFF', '#FFFFFF', '#2B2140', '#7CC0FF', '粉色格紋上的周邊'),
     scheme('lilac-merch', 'cold', 'light', '#F6F2FF', '#2B2140', '#B79CFF', '#FF7EB6', '#FFFFFF', '#2B2140', '#5FDCC0', '丁香色格紋'),
     scheme('mint-merch', 'earth', 'mid', '#E6FAF4', '#2B2140', '#5FDCC0', '#FF7EB6', '#FFFFFF', '#2B2140', '#FFDE5C', '薄荷色格紋'),
+    scheme('lemon-merch', 'warm', 'light', '#FFFBE6', '#2B2140', '#FFDE5C', '#B79CFF', '#FFFFFF', '#2B2140', '#FF7EB6', '檸檬色格紋'),
+    scheme('sky-merch', 'cold', 'light', '#EEF6FF', '#2B2140', '#7CC0FF', '#FF7EB6', '#FFFFFF', '#2B2140', '#5FDCC0', '天藍色格紋'),
   ],
   groundBand: { band: 'light', flip: 'none', why: '周邊是印在亮色紙上的，粉、丁香、薄荷格紋輪替；字永遠是深紫' },
   material: { surface: 'fan-letter', core: 'accent', engine: 'paper/merch', how: '團扇剪字：字先閉合再往外長出成員色、白、深紫三圈，每圈套得住；門票與卡片是白紙加接觸陰影；格紋是兩層 40 px 色條交叉' },
@@ -137,6 +144,8 @@ const y2k: StyleWorld = {
     scheme('ice-hook', 'cold', 'light', '#EDF1F7', '#141A4D', '#7C8CFF', '#3F4FD9', '#FFFFFF', '#141A4D', '#C4A8FF', '冰白封套，深靛字'),
     scheme('night-orbit', 'cold', 'dark', '#1F2A8C', '#F4F6FF', '#7C8CFF', '#D6FF4F', '#F4F6FF', '#141A4D', '#C4A8FF', '深靛夜色封套，白字'),
     scheme('lilac-sleeve', 'warm', 'light', '#F1EDFB', '#141A4D', '#C4A8FF', '#5B3FD0', '#FFFFFF', '#141A4D', '#5FE0D3', '丁香白封套'),
+    scheme('aqua-night', 'earth', 'dark', '#123A6B', '#F4F6FF', '#5FE0D3', '#D6FF4F', '#F4F6FF', '#141A4D', '#7C8CFF', '深海藍夜色封套'),
+    scheme('violet-night', 'warm', 'dark', '#2E1F7A', '#F4F6FF', '#C4A8FF', '#D6FF4F', '#F4F6FF', '#141A4D', '#5FE0D3', '深紫夜色封套'),
   ],
   groundBand: { band: 'light', flip: 'none', why: '冰白封套為主，深靛夜色由配色輪替帶入，同一套構圖印成暗版' },
   material: { surface: 'cd-type', core: 'ink2', engine: 'vector/cd-sleeve', how: '向量印刷：刀形是兩道弧夾出的硬邊色塊，內填長春藍、丁香、水綠的漸層；軌道是 1.5 px 細線，一條虛線；星芒四角內凹，白到萊姆到水綠' },
@@ -174,6 +183,8 @@ const psychedelic: StyleWorld = {
     scheme('plum-poster', 'warm', 'dark', '#3A1B55', '#F7E8C9', '#F2672E', '#F59AC0', '#F7E8C9', '#3A1B55', '#F3BC3E', '茄紫底的海報'),
     scheme('teal-poster', 'cold', 'dark', '#173F45', '#F7E8C9', '#F2672E', '#F59AC0', '#F7E8C9', '#3A1B55', '#F3BC3E', '深青綠底的海報'),
     scheme('wine-poster', 'earth', 'mid', '#6B2440', '#F7E8C9', '#F3BC3E', '#F59AC0', '#F7E8C9', '#3A1B55', '#F2672E', '酒紅底的海報'),
+    scheme('rust-poster', 'warm', 'mid', '#8A3A1C', '#F7E8C9', '#F59AC0', '#1E8C86', '#F7E8C9', '#3A1B55', '#F3BC3E', '鐵鏽紅底的海報'),
+    scheme('night-poster', 'cold', 'dark', '#1C1440', '#F7E8C9', '#1E8C86', '#F59AC0', '#F7E8C9', '#3A1B55', '#F3BC3E', '深夜藍紫的海報'),
   ],
   groundBand: { band: 'dark', flip: 'none', why: '絹印海報印在深色紙上，茄紫、深青綠、酒紅輪替；字永遠是奶油色加暗紫外框' },
   material: { surface: 'poster-fill', core: 'ink2', engine: 'print/screen-poster', how: '絹印：每色一版平塗、硬邊；字的外框先閉合（補滿字腔與字間）再往外長，一圈暗紫、一圈色帶，每圈都套得住；紙紋與暗角在最上面' },
@@ -252,6 +263,8 @@ const brutalist: StyleWorld = {
     scheme('copy-white', 'cold', 'light', '#ECEAE3', '#121212', '#BC180E', '#BC180E', '#F2F0EA', '#121212', '#CFCCC3', '影印紙黑字'),
     scheme('copy-grey', 'earth', 'mid', '#D9D6CD', '#121212', '#BC180E', '#9E140C', '#F2F0EA', '#121212', '#BDB9AF', '影印第十次的灰紙'),
     scheme('copy-black', 'warm', 'dark', '#121212', '#F2F0EA', '#BC180E', '#E8584C', '#F2F0EA', '#121212', '#2A2A28', '反白的黑紙'),
+    scheme('copy-cream', 'warm', 'light', '#EFE8D6', '#121212', '#BC180E', '#9E140C', '#F2F0EA', '#121212', '#D6CDB6', '泛黃的影印紙'),
+    scheme('copy-blue', 'cold', 'light', '#E3E7EC', '#121212', '#BC180E', '#9E140C', '#F2F0EA', '#121212', '#C6CDD6', '藍灰的影印紙'),
   ],
   groundBand: { band: 'light', flip: 'none', why: '影印紙為主，反白黑紙由配色輪替帶入；場面 c 永遠是黑紙紅格' },
   material: { surface: 'xerox-type', core: 'ink2', engine: 'print/photocopy', how: '影印：字是實黑，幾顆沒燒牢的碳粉點；碳粉點散在整張紙上，邊緣有影印機的暗邊；版面由粗細線與紅色帶分割' },
@@ -289,6 +302,8 @@ const citypop: StyleWorld = {
     scheme('noon-facade', 'cold', 'light', '#F7EFDF', '#1B2A5C', '#F2A1B8', '#B53A2A', '#FFFFFF', '#1B2A5C', '#45B4E2', '白天的封套，深藍字'),
     scheme('afternoon-wall', 'warm', 'light', '#F4EEE2', '#1B2A5C', '#F2A1B8', '#B53A2A', '#FFFFFF', '#1B2A5C', '#8DD5F0', '午後的粉牆'),
     scheme('night-drive', 'warm', 'dark', '#1B2350', '#F7EFDF', '#B65A86', '#F2A1B8', '#F7EFDF', '#1B2A5C', '#45B4E2', '夜裡的封套，奶油字'),
+    scheme('mint-noon', 'earth', 'light', '#EEF6EF', '#1B2A5C', '#F2A1B8', '#B53A2A', '#FFFFFF', '#1B2A5C', '#45B4E2', '薄荷色的正午'),
+    scheme('midnight-sea', 'cold', 'dark', '#141C44', '#F7EFDF', '#6A3A7E', '#F2A1B8', '#F7EFDF', '#1B2A5C', '#45B4E2', '深夜的海'),
   ],
   groundBand: { band: 'light', flip: 'none', why: '同一張封套有白天與夜晚兩種光，由配色輪替帶入' },
   material: { surface: 'sleeve-type', core: 'ink2', engine: 'flat/sleeve-paint', how: '平塗：每塊顏色硬邊，陰影是切出來的一塊深色，水面是一列列硬邊的波光，夜海是分層色帶；沒有漸層、沒有模糊' },
@@ -314,5 +329,12 @@ const citypop: StyleWorld = {
   provenance: { source: 'own', process: '八〇年代平塗插畫封套：建築、硬邊陰影、泳池、分層夜海', nearest: '夕陽漸層風格', differs: '沒有寫實夕陽與噴槍漸層；全部平塗硬邊，字是寬字距明體標題' },
   acceptance: { fast: 'nun', calm: 'tsuzuki', hardest: '快歌時仍不快切，寬字距長句放得下' },
 };
+
+/** Each mirrored set (world-b3-sets.ts) joins its world as a line of its own, on its mirrored page. */
+for (const w of [popart, gameshow, idol, y2k, psychedelic, brutalist, citypop]) {
+  const extra = w.layouts.lines.filter((l) => B3_MIRRORS[l.set]).map((l) => ({ ...l, set: `${l.set}-r`, ground: `${B3_MIRRORS[l.set]}-r` }));
+  w.layouts.lines.push(...extra);
+  for (const lvl of [0, 1, 2] as Level[]) w.grounds.levels[lvl] = [...new Set([...w.grounds.levels[lvl], ...extra.filter((l) => l.levels.includes(lvl)).map((l) => l.ground)])];
+}
 
 export const LOUD_WORLDS: StyleWorld[] = [popart, gameshow, idol, y2k, psychedelic, graffiti, brutalist, citypop];

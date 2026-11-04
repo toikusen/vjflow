@@ -110,9 +110,27 @@ export function label(c: C, text: string, x: number, y: number, font: string, fi
   (c as CanvasRenderingContext2D).letterSpacing = `${track}px`;
   const w = c.measureText(text).width;
   const at = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
-  c.fillText(text, at, y);
+  // on a mirrored page the label still reads left to right, over the same span
+  if (c.getTransform().a < 0) { c.translate(at + w, y); c.scale(-1, 1); c.fillText(text, 0, 0); }
+  else c.fillText(text, at, y);
   c.restore();
   return w;
+}
+
+/** A page drawn mirrored left to right: its composition flips, its lyric box is read in the flipped page, its labels still read. */
+export function mirrorGround(g: (e: WorldEnv) => void): (e: WorldEnv) => void {
+  return (e) => {
+    const r = e.rect;
+    const flipped = r ? { x0: W - r.x1, y0: r.y0, x1: W - r.x0, y1: r.y1 } : undefined;
+    const c = e.ctx;
+    c.save();
+    if (e.base) c.setTransform(e.base);
+    c.translate(W, 0);
+    c.scale(-1, 1);
+    const base = c.getTransform();
+    g({ ...e, rect: flipped, base });
+    c.restore();
+  };
 }
 
 /** The song's title alone, from "artist - title". */

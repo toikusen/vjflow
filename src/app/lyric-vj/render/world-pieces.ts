@@ -145,16 +145,21 @@ export const WORLD_PIECES: Record<string, Piece> = {
     for (let i = 0; i < 7; i++) { const seed = tick + i * 11; arcBolt(c, [hash(seed, 1) * W, hash(seed, 2) * H * 0.4], [hash(seed, 3) * W, H * (0.6 + 0.4 * hash(seed, 4))], seed, i % 2 ? e.slots.accent : e.ink, 2.4); }
     c.save(); c.fillStyle = e.slots.plateInk; for (let i = 0; i < 80; i++) { const t = fract(age * 1.4 + hash(i, 5)); const [x, y] = [hash(i, 6) * W + (hash(i, 7) - 0.5) * 300 * t, H * 0.3 + t ** 2 * H]; c.globalAlpha = a * (1 - t); c.fillRect(x, y, 3, 10); } c.restore();
   } },
-  rewire: { sec: 2.2, draw: (e, q) => {
+  // the wiring is run the way an electrician runs it: along the wall's edges, square corners, never across the sign,
+  // so the frame is wired round the words (no zigzag over the middle, no dark room cut for them)
+  rewire: { sec: 2.2, clear: 0, draw: (e, q) => {
     const c = e.ctx;
-    fill(e, e.paper, 0.6 * Math.sin(q * Math.PI));
-    const m = 56;
+    const m = 64;
+    const r = e.rect && e.weight > 0 ? e.rect : undefined;
+    const away = r && (r.x0 + r.x1) / 2 < W / 2 ? W * 0.86 : W * 0.14;
     const routes: Pt[][] = [
-      [[-20, H * 0.14], [W * 0.3, H * 0.14], [W * 0.3, H - m], [W * 0.72, H - m], [W * 0.72, m], [W + 20, m]],
-      [[-20, H - m], [W * 0.14, H - m], [W * 0.14, m], [W * 0.52, m], [W * 0.52, H * 0.5], [W - m, H * 0.5], [W - m, H + 20]],
-      [[W + 20, H * 0.82], [W * 0.84, H * 0.82], [W * 0.84, H * 0.2], [W * 0.42, H * 0.2], [W * 0.42, -20]],
+      [[m, m], [W - m, m], [W - m, H * 0.42]],
+      [[W - m, H - m], [m, H - m], [m, H * 0.58]],
+      [[away, m + 48], [away, H - m - 48]],
     ];
-    routes.forEach((r, i) => tubeRun(c, r, ease(q * 1.5 - i * 0.16, 2), [e.ink, e.slots.ink2, e.slots.accent][i], e.slots.plateInk));
+    const pad = 44;
+    const clearOf = (pts: Pt[]) => !r || pts.slice(1).every(([x1, y1], i) => { const [x0, y0] = pts[i]; return Math.max(x0, x1) < r.x0 - pad || Math.min(x0, x1) > r.x1 + pad || Math.max(y0, y1) < r.y0 - pad || Math.min(y0, y1) > r.y1 + pad; });
+    routes.forEach((p, i) => clearOf(p) && tubeRun(c, p, ease(q * 1.5 - i * 0.16, 2), [e.ink, e.slots.ink2, e.slots.accent][i], e.slots.plateInk));
   } },
   surge: { sec: 1.7, draw: (e, q) => {
     const c = e.ctx;

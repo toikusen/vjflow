@@ -230,7 +230,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const text = rt.cue.text.replace(/[\s　]+/g, ' ').trim();
   const seed = Math.abs(Math.floor(hashOf(rt.cue.start, 43) * 1000) + (rt.song ?? 0));
   const family = rt.fonts.display;
-  const specOf = (id: string): SetSpec => { const s = SET_SPECS[id] ?? Object.values(SET_SPECS)[0]; return slot.of > 1 ? { ...s, tall: s.tall / slot.of, rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined } : s; };
+  // (lines sharing a shot split the set: rows stack in its height, but columns stand side by side in its width, read
+  // right to left; halving a column's height set a shared vertical sign at a third of its size)
+  const specOf = (id: string): SetSpec => { const s = SET_SPECS[id] ?? Object.values(SET_SPECS)[0]; return slot.of > 1 ? { ...s, ...(s.vertical ? { share: s.share / slot.of } : { tall: s.tall / slot.of }), rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined } : s; };
   const sets = [wl.set, ...(wl.repose ?? []).map((r) => r.set)].map(specOf);
   // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
   // (a column line's blown-up word is set across: the big word reads in a row, and so does the small rest)
@@ -314,7 +316,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const group = new THREE.Group();
   group.add(body);
   // each line of a shared shot has its own band of the set's height, so a taller neighbour can never run into it
-  const firstAt = slot.of > 1 ? ((slot.of - 1) / 2 - slot.k) * Math.max(blocks[0].h + blocks[0].size * 0.4, sets[0].tall * 1080) : 0;
+  const sideBySide = slot.of > 1 && !!sets[0].vertical;
+  const firstAt = slot.of > 1 && !sideBySide ? ((slot.of - 1) / 2 - slot.k) * Math.max(blocks[0].h + blocks[0].size * 0.4, sets[0].tall * 1080) : 0;
+  const firstX = sideBySide ? ((slot.of - 1) / 2 - slot.k) * Math.max(blocks[0].w + blocks[0].size * 0.6, sets[0].share * 1920) : 0;
   // the block of glyphs is lit from where it stands, and a move's clip plane is laid in frame space from it
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const scratch = new THREE.Vector3();
@@ -384,7 +388,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const blockPose = move?.block?.(out ? qOut : qIn, seed) ?? {};
       const [sx, sy] = [blockPose.sx ?? 1, blockPose.sy ?? 1];
       const shift = blockPose.pivot ? (blockPose.pivot * (p.block.w / 2) * (sx - 1)) : 0;
-      body.position.set(p.block.cx + (blockPose.dx ?? 0) - shift, p.block.cy + firstAt + (blockPose.dy ?? 0), 0);
+      body.position.set(p.block.cx + firstX + (blockPose.dx ?? 0) - shift, p.block.cy + firstAt + (blockPose.dy ?? 0), 0);
       const bq = beatMove && !out && wl.beat ? beatProgress(wl.beat.at, beatMove.sec, t, !!wl.beat.stepped) : undefined;
       const bb = bq !== undefined ? beatMove!.block?.(bq) : undefined;
       body.scale.set(sx * (bb?.sx ?? 1), sy * (bb?.sy ?? 1), 1);
@@ -497,7 +501,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     },
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: () => poses.map((p, i) => {
-      const [cx, cy, pad] = [960 + p.block.cx, 540 - (p.block.cy + firstAt), 14];
+      const [cx, cy, pad] = [960 + p.block.cx + firstX, 540 - (p.block.cy + firstAt), 14];
       // carried: the whole line on an opaque carrier (a split line's small part stands off it, so it is not)
       const carried = !!p.object && !p.block.small?.length && CARRIERS.has(sets[i].object!);
       return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - p.block.w / 2 - pad, y0: cy - p.block.h / 2 - pad, x1: cx + p.block.w / 2 + pad, y1: cy + p.block.h / 2 + pad, carried } };

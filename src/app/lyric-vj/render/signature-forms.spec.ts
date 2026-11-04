@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from '../contrast';
 import { groundUnder, inkFor, Inks, READS } from './signature';
-import { isMore, riseKindOf, rowBreak } from './signature-forms';
+import { isMore, riseKindOf, rowBreak, SMOKE_READS, smokeTone } from './signature-forms';
 import type { SignatureMoment } from '../signature-moments';
 
 const inks = (ink: string, paper: string, accent = '#ff0000'): Inks => ({ ink, paper, accent, board: '#ffffff', boardInk: '#000000', ghost: '#888888', press: '#ff0000', core: '#ffffff' });
@@ -77,5 +77,26 @@ describe('riseKindOf: what a rising line names', () => {
     expect(riseKindOf('昇天')).toBe('lift');
     expect(riseKindOf('空へ')).toBe('lift');
     expect(riseKindOf('rising')).toBe('lift');
+  });
+});
+
+describe('smokeTone: smoke reads as smoke on what is really behind it', () => {
+  const lum = (h: string) => parseInt(h.slice(1, 3), 16) * 0.3 + parseInt(h.slice(3, 5), 16) * 0.59 + parseInt(h.slice(5, 7), 16) * 0.11;
+  it('雙截棍: pale smoke over the red paper, not a darker red stain', () => {
+    const tone = smokeTone('#e04a3a');
+    expect(lum(tone)).toBeGreaterThan(lum('#e04a3a'));
+    expect(contrast(tone, '#e04a3a')).toBeGreaterThanOrEqual(SMOKE_READS);
+  });
+  it('LOVE YOU KILL YOU: a grey haze over the pale mist; a dark ground gets pale smoke', () => {
+    const tone = smokeTone('#d9e2dc');
+    expect(lum(tone)).toBeLessThan(lum('#d9e2dc'));
+    expect(contrast(tone, '#d9e2dc')).toBeGreaterThanOrEqual(SMOKE_READS);
+    expect(lum(smokeTone('#101216'))).toBeGreaterThan(lum('#101216'));
+    expect(contrast(smokeTone('#101216'), '#101216')).toBeGreaterThanOrEqual(SMOKE_READS);
+  });
+  it('turns, never flips, as a ground slides from dark to pale behind it (read every frame)', () => {
+    const grey = (v: number) => `#${[v, v, v].map((x) => Math.round(x).toString(16).padStart(2, '0')).join('')}`;
+    const tones = Array.from({ length: 64 }, (_, i) => lum(smokeTone(grey(60 + i * 3))));
+    expect(Math.max(...tones.slice(1).map((v, i) => Math.abs(v - tones[i])))).toBeLessThan(40);
   });
 });

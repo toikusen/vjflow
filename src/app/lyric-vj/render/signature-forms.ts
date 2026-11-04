@@ -7,6 +7,7 @@ import type * as Sig from './signature';
 import { lastSung, mainOf, ownCues, SignatureMoment } from '../signature-moments';
 import { readingSec } from './reading-window';
 import { isSungChar, wordIndex } from '../sung-times';
+import { contrast } from '../contrast';
 import { circleLayout, clamp, dripOf, easeOut, Feel, feelOf, flyDrift, freezeSpan, hashOf, jolt, mix, RAD, riseAt, rng, sliceShift, tickAt } from './signature-motion';
 
 type Ctx = Sig.Ctx;
@@ -680,6 +681,33 @@ function buildCircle(k: Kit, m: SignatureMoment): Built {
 }
 
 // ---- shape / rise ----
+const mixTo = (a: string, b: string, k: number) => '#' + [1, 3, 5].map((i) => Math.round(mix(parseInt(a.slice(i, i + 2), 16), parseInt(b.slice(i, i + 2), 16), k)).toString(16).padStart(2, '0')).join('');
+/** Smoke against the ground it climbs over must read at this contrast at its thickest. */
+export const SMOKE_READS = 2.6;
+/** The ground mixed toward a pole until it reads on the ground at SMOKE_READS (the pole when nothing nearer does). */
+const smokeToward = (ground: string, pole: string) => {
+  for (let k = 0.45; k <= 1.0001; k += 0.05) {
+    const c = mixTo(ground, pole, k);
+    if (contrast(c, ground) >= SMOKE_READS) return c;
+  }
+  return pole;
+};
+/**
+ * The colour of smoke over a ground (its mean colour, read off the frame where the smoke is): pale smoke over a dark
+ * or saturated ground (雙截棍's red), a grey haze over a pale one (LOVE YOU KILL YOU's mist), each moved until it reads
+ * at SMOKE_READS, so it is seen as smoke and not as a stain of the ground's own colour. Read every frame, so it is a
+ * function of the ground alone: between the two it blends over a narrow band (a band of ground sliding in behind the
+ * smoke turns it, it does not flip).
+ */
+export function smokeTone(ground: string): string {
+  const lean = Math.log(contrast(ground, '#000000') / contrast(ground, '#ffffff')) - Math.log(1.6);
+  const w = clamp((lean + 0.25) / 0.5);
+  return mixTo(smokeToward(ground, '#f6f3ee'), smokeToward(ground, '#23262d'), w * w * (3 - 2 * w));
+}
+/** Where smoke may be drawn: from the top of the frame down to this far above the line's type, fading out before it. */
+export const SMOKE_CLEAR = 14;
+export const SMOKE_FEATHER = 40;
+
 export type RiseKind = 'smoke' | 'bubble' | 'balloon' | 'burst' | 'lift';
 /** What the rising line names, by its word: smoke, bubbles, a balloon, a firework; else the line itself rises (昇天, 升起, 浮かぶ). */
 export function riseKindOf(word: string): RiseKind {
@@ -691,7 +719,8 @@ export function riseKindOf(word: string): RiseKind {
 }
 /**
  * The line stands and reads; what it says goes up. Smoke rises off the sung characters in wisps that curl, widen and
- * thin as they climb, soft-edged, never over the words; bubbles wobble up as sheened rings and pop; a balloon's
+ * thin as they climb, noise-eroded into streams, in a tone that reads on the frame actually behind it (smokeTone), cut
+ * off above the type so it is never over the words, and gone by the end of the line's exit window; bubbles wobble up as sheened rings and pop; a balloon's
  * characters sway buoyant once sung; a firework's burst flares on each. The plain rise (昇天, 升起, 浮かぶ) is the type's
  * own: each character, once sung, lifts off its row with a short after-image beneath it and motes of the accent
  * climbing past, so the line reads as rising while it is read; once read, the whole line ascends out of the frame,
@@ -719,6 +748,29 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
     return c;
   };
   const rgba = (hex: string, a: number) => { const n = parseInt(hex.slice(1), 16); return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; };
+  // the smoke's own layer, cut off above the type before it reaches the frame; its tone read each frame off the
+  // ground the smoke climbs over, as the frame really is there (LOVE YOU KILL YOU's bands slide in behind it)
+  const smokeLayer = kind === 'smoke' ? k.canvas(W, H) : undefined;
+  // the ground the plume climbs over, read where it climbs: one tone over a plain ground; over a ground that is both dark
+  // and light (a band slid in behind), a pale body for the dark part and a dark core for the light, so it reads on both
+  const toneOver = (cx: number, base: number, top: number): { body: string; core: string } => {
+    const m = k.x.getTransform();
+    const a = m.transformPoint({ x: Math.max(0, cx - 160), y: Math.max(0, base - top) });
+    const b = m.transformPoint({ x: Math.min(W, cx + 160), y: Math.max(1, base) });
+    const [x0, y0] = [Math.max(0, Math.round(Math.min(a.x, b.x))), Math.max(0, Math.round(Math.min(a.y, b.y)))];
+    const [w, h] = [Math.max(1, Math.round(Math.abs(b.x - a.x))), Math.max(1, Math.round(Math.abs(b.y - a.y)))];
+    const d = k.x.getImageData(x0, y0, w, h).data;
+    const sums = { all: [0, 0, 0, 0], dark: [0, 0, 0, 0], light: [0, 0, 0, 0] };
+    for (let i = 0; i < d.length; i += 4 * 13) {
+      const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
+      for (const key of ['all', ...(l < 0.5 ? ['dark'] : l > 0.62 ? ['light'] : [])] as ('all' | 'dark' | 'light')[]) { const v = sums[key]; v[0] += d[i]; v[1] += d[i + 1]; v[2] += d[i + 2]; v[3]++; }
+    }
+    const mean = (v: number[]) => `#${v.slice(0, 3).map((c) => Math.round(c / Math.max(1, v[3])).toString(16).padStart(2, '0')).join('')}`;
+    const n = Math.max(1, sums.all[3]);
+    if (sums.dark[3] / n > 0.15 && sums.light[3] / n > 0.15) return { body: smokeTone(mean(sums.dark)), core: smokeTone(mean(sums.light)) };
+    const one = smokeTone(mean(sums.all));
+    return { body: one, core: one };
+  };
   interface Wisp { i: number; born: number; phase: number; drift: number; life: number; big: boolean; turn: number }
   // a wisp now and then off a sung character, more off the named word; the line's going sends up the rest
   const wispsOf = (p: Pass): Wisp[] => {
@@ -734,6 +786,17 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
     return out;
   };
   const wisps = passes.map(wispsOf);
+  // smoke's plumes: one off each character of the named word (or of the line's first sung one), a few strands each
+  interface Strand { dx: number; lean: number; amp: number; freq: number; speed: number; phase: number; weight: number }
+  const plumes = passes.map((p) => {
+    const r = rng(k.song + 23 + Math.round(p.wordTime * 10));
+    const at = p.main.map((c, i) => (isSungChar(c.ch) && p.isWord(i) ? i : -1)).filter((i) => i >= 0);
+    const from = at.length ? at : [p.main.findIndex((c) => isSungChar(c.ch))];
+    return from.slice(0, 3).map((i) => ({
+      x: p.xs[i], from: p.main[i].at,
+      strands: Array.from({ length: 3 }, (_, j): Strand => ({ dx: (r() - 0.5) * p.size * 0.4, lean: (r() - 0.5) * 0.14, amp: 0.7 + r() * 0.6, freq: 0.8 + r() * 0.5 + j * 0.15, speed: 0.8 + r() * 0.5, phase: r() * 6.3, weight: j ? 0.7 : 1 })),
+    }));
+  });
   // the plain rise's motes: a few soft specks of the accent climb off each character as it is sung, more off the word
   interface Mote { i: number; born: number; dx: number; speed: number; r: number; phase: number }
   const motesOf = (p: Pass): Mote[] => {
@@ -754,6 +817,9 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
   // every character is gone by then, however long the line (第六感's 22-character tail stood on the next cut)
   const leave = (p: Pass) => Math.max(0.25, p.exit().dur);
   const stagger = (p: Pass) => Math.min(0.03, (0.3 * leave(p)) / Math.max(1, p.main.length));
+  // the last character out by the end of the exit window, however long the line (雙截棍's 煙味 line still climbed
+  // through 店裡面的媽媽桑); the approved plain lift keeps its own timing
+  const ascent = (p: Pass) => (kind === 'lift' ? leave(p) : Math.max(0.12, p.exit().dur + 0.05 - (p.main.length - 1) * stagger(p)));
   // once read, the plain rise and the smoke shoot off; a balloon and bubbles drift off, still swaying
   const slow = kind === 'balloon' || kind === 'bubble';
   return {
@@ -769,51 +835,97 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
       // whatever rose off the line thins out within half a second of the line's going: the next line is never read
       // through smoke, bubbles or motes left behind (雙截棍's 店裡面的媽媽桑 under the 煙味 wisps)
       const gone = clamp(1 - (t - p.exit().at) / Math.min(0.5, leave(p)));
+      // smoke is gone by the end of the engine's own exit window, however short: the next line may show then
+      const smokeGone = clamp(1 - (t - p.exit().at) / Math.max(0.05, Math.min(0.5, p.exit().dur)));
+      if (kind === 'smoke' && smokeGone > 0 && smokeLayer) {
+        const s = smokeLayer.getContext('2d')!;
+        s.setTransform(1, 0, 0, 1, 0, 0);
+        s.globalCompositeOperation = 'source-over';
+        s.clearRect(0, 0, W, H);
+        // a plume off each character of the named word, from when it is sung: strands of smoke that sway in waves
+        // travelling up, widen and thin with height, and break off at the plume's top; a soft body under each strand
+        // gives it volume. Drawn as strokes, so it reads as smoke and not as a blur or a flat shape
+        const base = lineTop - SMOKE_CLEAR - 4;
+        plumes[passes.indexOf(p)].forEach((pl) => {
+          const up = t - pl.from;
+          if (up <= 0) return;
+          const top = Math.min(base - 40, 140 + 420 * up);
+          const appear = clamp(up * 2.5);
+          const tone = toneOver(pl.x, base, top);
+          // each layer one stroke along the whole strand (joints between short strokes bead), faded up its height
+          const fadeUp = (peak: number, ink: string) => {
+            const g = s.createLinearGradient(0, base, 0, base - top);
+            for (const [k, a] of [[0, 0], [0.06, 1], [0.35, 0.62], [0.7, 0.24], [1, 0]] as const) g.addColorStop(k, rgba(ink, peak * a * appear));
+            return g;
+          };
+          for (const st of pl.strands) {
+            const steps = 48;
+            s.beginPath();
+            for (let j = 0; j <= steps; j++) {
+              const h = (j / steps) * top;
+              const amp = 4 + 0.17 * h * st.amp;
+              const xh = pl.x + st.dx + st.lean * h + amp * Math.sin(h * 0.016 * st.freq - t * 1.7 * st.speed + st.phase) + 0.4 * amp * Math.sin(h * 0.043 - t * 2.6 + st.phase * 1.7);
+              if (j) s.lineTo(xh, base - h);
+              else s.moveTo(xh, base - h);
+            }
+            s.lineJoin = 'round';
+            s.lineCap = 'butt';
+            s.globalAlpha = 1;
+            for (const [width, peak] of [[96, 0.11], [40, 0.15], [13, 0.22], [3.2, 0.9 * st.weight]] as const) {
+              s.strokeStyle = fadeUp(peak, width < 5 ? tone.core : tone.body);
+              s.lineWidth = width;
+              s.stroke();
+            }
+          }
+        });
+        // the type is never under smoke: the layer is cut off above the line, feathered so the cut is not seen
+        s.globalAlpha = 1;
+        s.globalCompositeOperation = 'destination-in';
+        const edge = lineTop - SMOKE_CLEAR;
+        const g = s.createLinearGradient(0, edge - SMOKE_FEATHER, 0, edge);
+        g.addColorStop(0, 'rgba(0,0,0,1)');
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        s.fillStyle = g;
+        s.fillRect(0, 0, W, H);
+        s.globalCompositeOperation = 'source-over';
+        x.save();
+        x.globalAlpha = smokeGone;
+        x.drawImage(smokeLayer, 0, 0);
+        x.restore();
+      }
       // what rises off the type
-      if ((kind === 'smoke' || kind === 'bubble') && gone > 0) {
-        const puff = puffOf(rgba(inks.ghost, 0.9));
+      if (kind === 'bubble' && gone > 0) {
         const sheen = puffOf(rgba(inks.paper === inks.ink ? '#ffffff' : inks.paper, 0.9));
         x.save();
         for (const w of wisps[passes.indexOf(p)]) {
           const age = t - w.born;
           if (age < 0 || age > w.life) continue;
           const x0 = p.xs[w.i];
-          // the wisp's head rises and curls, the curl widening as it goes; its trail is its earlier heads, each puff
-          // wider and thinner with its own age, so the whole bends like a ribbon of smoke and thins out at the top
-          const steps = kind === 'smoke' ? 16 : 1;
-          for (let s = 0; s < steps; s++) {
-            const a = age - s * 0.11;
-            if (a < 0) break;
-            const climb = (130 + (w.big ? 50 : 0)) * a + 18 * a * a;
-            const curl = w.turn * (w.big ? 70 : 50) * Math.sin(a * 1.7 + w.phase) * Math.min(1, a * 0.8) + w.drift * a;
-            const px = x0 + curl;
-            const py = lineTop - 10 - climb;
-            const spread = (w.big ? 18 : 13) + (w.big ? 64 : 46) * Math.pow(a, 0.8);
-            const thin = Math.pow(1 - a / w.life, 1.5);
-            if (kind === 'smoke') {
-              x.globalAlpha = 0.11 * thin * clamp(a * 3) * (1 - s * 0.03) * gone;
-              x.drawImage(puff, px - spread, py - spread, spread * 2, spread * 2);
-            } else {
-              // a bubble: a sheened round the width of its age, a rim in the ink, a glint on its shoulder; in its last
-              // quarter second it pops, the rim swelling and thinning to nothing
-              const left = w.life - a;
-              const pop = left < 0.25 ? 1 - left / 0.25 : 0;
-              const rr = (6 + 14 * Math.min(1, a / 1.2) + (w.big ? 6 : 0)) * (1 + 0.5 * pop);
-              x.globalAlpha = 0.55 * thin * (1 - pop) * gone;
-              x.drawImage(sheen, px - rr * 1.3, py - rr * 1.3, rr * 2.6, rr * 2.6);
-              x.globalAlpha = 0.72 * (1 - pop) * clamp(a * 4) * gone;
-              x.strokeStyle = inks.ink;
-              x.lineWidth = 2;
-              x.beginPath();
-              x.arc(px, py, rr, 0, 7);
-              x.stroke();
-              x.strokeStyle = inks.paper === inks.ink ? '#ffffff' : inks.paper;
-              x.lineWidth = 3;
-              x.beginPath();
-              x.arc(px, py, rr * 0.7, -2.4, -1.6);
-              x.stroke();
-            }
-          }
+          const a = age;
+          const climb = (130 + (w.big ? 50 : 0)) * a + 18 * a * a;
+          const curl = w.turn * (w.big ? 70 : 50) * Math.sin(a * 1.7 + w.phase) * Math.min(1, a * 0.8) + w.drift * a;
+          const px = x0 + curl;
+          const py = lineTop - 10 - climb;
+          const spread = (w.big ? 18 : 13) + (w.big ? 64 : 46) * Math.pow(a, 0.8);
+          const thin = Math.pow(1 - a / w.life, 1.5);
+          // a bubble: a sheened round the width of its age, a rim in the ink, a glint on its shoulder; in its last
+          // quarter second it pops, the rim swelling and thinning to nothing
+          const left = w.life - a;
+          const pop = left < 0.25 ? 1 - left / 0.25 : 0;
+          const rr = (6 + 14 * Math.min(1, a / 1.2) + (w.big ? 6 : 0)) * (1 + 0.5 * pop);
+          x.globalAlpha = 0.55 * thin * (1 - pop) * gone;
+          x.drawImage(sheen, px - rr * 1.3, py - rr * 1.3, rr * 2.6, rr * 2.6);
+          x.globalAlpha = 0.72 * (1 - pop) * clamp(a * 4) * gone;
+          x.strokeStyle = inks.ink;
+          x.lineWidth = 2;
+          x.beginPath();
+          x.arc(px, py, rr, 0, 7);
+          x.stroke();
+          x.strokeStyle = inks.paper === inks.ink ? '#ffffff' : inks.paper;
+          x.lineWidth = 3;
+          x.beginPath();
+          x.arc(px, py, rr * 0.7, -2.4, -1.6);
+          x.stroke();
         }
         x.restore();
       }
@@ -837,7 +949,7 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
         if (/\s/.test(c.ch)) return;
         const s = p.isWord(i) ? p.size * 1.12 : p.size;
         // the character's way out: its share of the exit window, from 0 (standing) to 1 (gone)
-        const u = clamp((t - goFrom - i * stagger(p)) / leave(p));
+        const u = clamp((t - goFrom - i * stagger(p)) / ascent(p));
         const away = slow ? -(150 * u + 90 * u * u) : -(260 * u + 200 * u * u);
         const fade = 1 - u;
         if (fade <= 0) return;

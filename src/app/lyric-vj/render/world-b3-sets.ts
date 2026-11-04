@@ -39,7 +39,7 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'graffiti/buff': { ...base, at: [0.099, 0.48], ax: -1, ay: 0, share: 0.6, tall: 0.62, hi: 232, rows: [1, 3], lead: 1.26, track: 0, flush: -1, split: { small: 'tail', scale: 1, ink: 'ink2' }, fixed: true },
   'graffiti/navy': { ...base, at: [0.099, 0.45], ax: -1, ay: 0, share: 0.52, tall: 0.5, hi: 156, rows: [1, 3], lead: 1.45, track: 0.02, flush: -1, ink: 'plateInk', object: 'gf-buff', pad: [80, 120], fixed: true },
   'graffiti/wall': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.8, tall: 0.48, hi: 400, rows: [1, 2], lead: 1.04, track: 0, fixed: true },
-  'graffiti/strips': { ...base, at: [0.672, 0.1], ax: 0, ay: -1, share: 0.16, tall: 0.8, hi: 150, rows: [1, 1], vertical: true, lead: 1.15, track: 0.08, object: 'gf-strip', pad: [90, 36], split: { small: 'tail', scale: 0.93, ink: 'plate', at: [0.474, 0.1], tall: 0.8 }, fixed: true },
+  'graffiti/strips': { ...base, at: [0.672, 0.1], ax: 0, ay: -1, share: 0.16, tall: 0.8, hi: 150, rows: [1, 1], vertical: true, lead: 1.15, track: 0.08, ink: 'ink', split: { small: 'tail', scale: 0.93, ink: 'plate', at: [0.474, 0.1], tall: 0.8 }, fixed: true },
   // brutalist (board a–d): the headline top left inside the 96 px margin, two lines low under a red rule, the shout across four
   // cells, two columns at the right; nothing ever crosses the margin
   'brutalist/headline': { ...base, split: { small: 'tail', scale: 0.5, track: 0.3, ink: 'plate', at: [0.068, 0.842], ax: -1, share: 0.8, tall: 0.5 }, at: [0.047, 0.185], ax: -1, ay: -1, share: 0.56, tall: 0.6, hi: 318, rows: [1, 3], lead: 1, track: -0.01, flush: -1, fixed: true },

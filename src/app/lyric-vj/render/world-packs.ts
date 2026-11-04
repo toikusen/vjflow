@@ -26,7 +26,7 @@ import { mirrorGround } from './world-b3-shared';
 interface Pack { grounds: Record<string, HandGround>; ins: Record<string, HandIn>; pieces: Record<string, Piece>; objects: Record<string, ObjectPaint> }
 const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP, FILE, CARD, GLASS];
 export type HandObject = 'cartouche' | 'shikishi' | 'cut-panel' | 'cut-banner' | 'lit-paper' | 'noshi' | 'fold-kite' | 'colour-plate' | 'mend-patch' | 'tenugui' | 'pad-sheet'
-  | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'gs-q-banner' | 'gs-answer-cells' | 'gs-row-tiles' | 'gs-qa' | 'gs-qa-r' | 'gs-hint' | 'idol-card' | 'gf-strip' | 'gf-buff' | 'cp-column';
+  | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'gs-q-banner' | 'gs-answer-cells' | 'gs-row-tiles' | 'gs-qa' | 'gs-qa-r' | 'gs-hint' | 'idol-card' | 'gf-buff' | 'cp-column';
 export const handGrounds = Object.assign({}, ...PACKS.map((p) => p.grounds)) as Record<string, HandGround>;
 // batch 3's mirrored pages (world-b3-sets.ts B3_MIRRORS)
 for (const g of new Set(Object.values(B3_MIRRORS))) handGrounds[`${g}-r`] = mirrorGround(handGrounds[g]);
@@ -34,4 +34,4 @@ export const handIns = Object.assign({}, ...PACKS.map((p) => p.ins)) as Record<s
 export const handPieces = Object.assign({}, ...PACKS.map((p) => p.pieces)) as Record<string, Piece>;
 export const handObjects = Object.assign({}, ...PACKS.map((p) => p.objects)) as Record<HandObject, ObjectPaint>;
 /** Objects that take the scheme's ink rather than the plate's. */
-export const handInked: string[] = ['shikishi', 'noshi', 'fold-kite', 'gf-strip'];
+export const handInked: string[] = ['shikishi', 'noshi', 'fold-kite'];

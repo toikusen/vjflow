@@ -117,7 +117,7 @@ const idol: StyleWorld = {
     line('idol-live/fan', [0, 1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off', 'slide-away'], 'merch-still', { max: 20, ground: 'idol-live/fan' }),
     line('idol-live/ticket', [0, 1, 2], ['card-flip-in', 'sticker-pop'], ['slide-away', 'sticker-off'], 'merch-still', { max: 34, ground: 'idol-live/ticket' }),
     line('idol-live/cards', [1, 2], ['card-flip-in'], ['sticker-off'], 'merch-still', { min: 3, max: 6, loud: true, ground: 'idol-live/cards' }),
-    line('idol-live/card-col', [0, 1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off'], 'merch-still', { min: 5, max: 14, column: true, ground: 'idol-live/setlist' }),
+    line('idol-live/card-col', [0, 1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off'], 'merch-still', { min: 5, max: 10, column: true, ground: 'idol-live/setlist' }),
   ] },
   motion: { enters: ['sticker-pop', 'card-flip-in'], exits: ['sticker-off', 'slide-away'], holds: ['merch-still'], curve: '團扇字一個一個貼上去：先彈一下再落定；門票從畫面外滑入，色卡依拍翻面' },
   grounds: { levels: lv(['idol-live/ticket', 'idol-live/setlist'], ['idol-live/fan', 'idol-live/setlist', 'idol-live/ticket'], ['idol-live/cards', 'idol-live/fan']), quiet: ['idol-live/ticket'] },

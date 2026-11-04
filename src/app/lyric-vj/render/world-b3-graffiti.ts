@@ -280,8 +280,16 @@ const strips: HandGround = (e) => page(e, 'gf-strips', (c) => {
   sticker(c, 380, 360, 180, 180, YEL, K, title, -6, 'disc', 38);
   sticker(c, 120, 600, 230, 90, K, PAPER, artist, 4, 'card', 46);
   sticker(c, 60, 900, 260, 100, PAPER, s.ink2, title, -3, 'card', 62);
-  // only a line with a second phrase gets its strip: a strip without words would be a bare shape
+  // the first phrase's strip round its column (the set stands it at 0.672 of the frame), and the second phrase's strip
+  // only when the line has one: a strip without words would be a bare shape
   const r = e.rect;
+  if (r) {
+    const hx = 0.672 * W;
+    const half = Math.max(60, r.x1 - 14 - hx) + 90;
+    const [y0, y1] = [r.y0 + 14 - 36, r.y1 - 14 + 36];
+    paste(c, hx - half, y0, half * 2, y1 - y0, PAPER, 61, 0, undefined, undefined, 6);
+    tape(c, hx - half + 10, y0 - 18, 120, -8, 64);
+  }
   const sx = STRIP_X * W;
   if (r && r.x0 < sx + 60) {
     paste(c, sx - 150, 70, 300, 940, s.ink2, 62, -0.5, undefined, undefined, 6);
@@ -291,14 +299,6 @@ const strips: HandGround = (e) => page(e, 'gf-strips', (c) => {
 });
 
 const Gs: Record<string, HandGround> = { 'graffiti/paste-up': pasteUp, 'graffiti/navy-buff': navy, 'graffiti/poster-wall': posterWall, 'graffiti/strips': strips };
-
-/** The first phrase's strip (board d): a tall cream print, torn at its edges, taped at its head. */
-const strip: ObjectPaint = (c, w, h) => {
-  edged(c, 0, 0, w, h, 6, 18, 61);
-  c.fillStyle = PAPER;
-  c.fill();
-  tape(c, 10, 2, 120, -8, 64);
-};
 
 /** The calm line's rolled patch (board b), a shade under the buff: the set's object, so a shared shot keeps it. */
 const buffPatch: ObjectPaint = (c, w, h, s) => {
@@ -369,4 +369,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GRAFFITI = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gf-strip': strip, 'gf-buff': buffPatch } as Record<string, ObjectPaint> };
+export const GRAFFITI = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gf-buff': buffPatch } as Record<string, ObjectPaint> };

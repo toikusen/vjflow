@@ -182,7 +182,7 @@ const woodcut: StyleWorld = {
   lyricRole: '歌詞是刻穿墨版留下的白，留在沒下過刀的那塊版上',
   family: 'stroke',
   refuses: ['灰階', '漸層', '細線稿', '發光', '第二個以上的色版', '放射光當預設', '幾何圓環'],
-  type: { ja: { family: 'Yuji Syuku', weight: 400 }, tc: { family: 'LXGW Marker Gothic', weight: 400 }, latin: 'Space Mono', setting: '粗字，刀口帶缺角，靠邊或滿版', category: 'carved' },
+  type: { ja: { family: 'Yuji Syuku', weight: 400 }, tc: { family: 'WDXL Lubrifont TC', weight: 400 }, latin: 'Space Mono', setting: '粗字，刀口帶缺角，靠邊或滿版', category: 'carved' },
   palette: [
     scheme('sumi-block', 'cold', 'dark', '#0D0C0B', '#EEE6D4', '#C6652F', '#C6652F', '#C6652F', '#0D0C0B', '#3A332B', '墨黑版'),
     scheme('oxblood-plate', 'warm', 'dark', '#5E1414', '#F6E6D0', '#111010', '#E0A36B', '#F6E6D0', '#5E1414', '#3A0E0E', '牛血紅版，飽和'),

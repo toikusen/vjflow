@@ -70,9 +70,9 @@ export const FONTS: FontSpec[] = [
   // stained-glass's inscription: a heavy Ming with real bold weights (Noto Serif TC already serves four worlds)
   { family: 'Noto Serif HK', roles: ['display', 'body'], weights: [700, 900], feel: '粗明體，香港字形，銘文、端正', han: 'tc' },
   // per-world faces (2026-11-04 font table): no Traditional Chinese face serves more than two worlds; the console's
-  // monospaced kai with real weights, and a marker gothic whose ragged edges read as cut wood
+  // monospaced kai with real weights, and a marker gothic whose ragged edges read as hand-cut title letters
   { family: 'LXGW WenKai Mono TC', roles: ['display', 'body'], weights: [300, 400, 700], feel: '等寬楷體，終端機、逐字輸出', han: 'tc' },
-  { family: 'LXGW Marker Gothic', roles: ['display', 'body'], weights: [400], feel: '麥克筆黑體，邊緣不齊，刻痕、手作', han: 'tc' },
+  { family: 'LXGW Marker Gothic', roles: ['display', 'body'], weights: [400], feel: '麥克筆黑體，邊緣不齊，像手剪的片頭字', han: 'tc' },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */

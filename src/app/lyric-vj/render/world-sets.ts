@@ -3,7 +3,8 @@
 // composer's closed pool is the only way to reach it.
 import { balancedRows } from '../phrases';
 import { LOUD_SETS } from './world-b3-sets';
-import type { WorldObject } from './world-objects';
+import type { Slots, WorldObject } from './world-objects';
+import type { SurfaceKind } from './world-glyph';
 
 const W = 1920;
 const H = 1080;
@@ -41,6 +42,10 @@ export interface SetSpec {
   pad?: [number, number];
   /** The least the object spans, shares of the frame: small lines still get the whole object. */
   fill?: [number, number];
+  /** This set's own surface and inks, slot names, where a world sets one kind of line unlike the rest (a comic's sound effect). */
+  surface?: SurfaceKind;
+  ink?: keyof Slots;
+  core?: keyof Slots;
 }
 
 export interface Block {

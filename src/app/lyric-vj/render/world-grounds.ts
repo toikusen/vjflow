@@ -32,6 +32,8 @@ export interface WorldEnv {
   level: number;
   /** The frame's own coordinates, what stays with the words while the ground slides. */
   base?: DOMMatrix;
+  /** The song's own title, for a world's small printed labels (only real data goes on them). */
+  title?: string;
 }
 
 type Ground = (e: WorldEnv) => void;

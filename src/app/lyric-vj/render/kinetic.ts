@@ -589,7 +589,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     }
     default: {
       if (l.world && isWorldGround(l.fx)) {
-        const env: WorldEnv = { ctx, age, now, seed, paper, ink, slots: l.world.slots, rect: l.lyric, weight: l.lyric ? (l.lyricWeight ?? 1) : 0, pulse: beat.pulse, level: l.world.level };
+        const env: WorldEnv = { ctx, age, now, seed, paper, ink, slots: l.world.slots, rect: l.lyric, weight: l.lyric ? (l.lyricWeight ?? 1) : 0, pulse: beat.pulse, level: l.world.level, title: l.world.title };
         drawWorldGround(env, l.fx);
         const coming = worldInAt(l.world.enter, age);
         if (coming) coming.w.draw(env, coming.q);

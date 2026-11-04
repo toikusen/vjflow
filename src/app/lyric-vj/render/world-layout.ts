@@ -187,14 +187,14 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const slots = wl.slots;
   const carried = sets[0].object;
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
-  const inkOn = (s: SetSpec) => (s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
+  const inkOn = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
   const words = inkOn(sets[0]);
-  const baked = !!wl.surface;
+  const baked = !!(wl.surface || sets.some((s) => s.surface));
   const keyOf = (s: SetSpec) => readable(rt.palette.accent, s.object ? slots.plate : rt.palette.background, s.object ? 6 : 4.5);
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;
-  const surfaceOf = (tint: string, eaten = false) => (wl.surface ? surfaceKey({ kind: wl.surface, tint, core: wl.core ?? slots.ink2, eaten }) : undefined);
+  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten }) : undefined; };
   const weight = nearestWeight(family, sets[0].weight ?? wl.weight ?? 700);
   const style: GlyphStyle = { family, weight, size: tex, even: sets[0].even, surface: surfaceOf(words) };
   const gs = makeGlyphs(text, style, baked ? 'white' : color(words));
@@ -202,7 +202,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const tintOf = (g: Glyph, p: number) => (marks && g.src !== undefined && emphasisOf(rt, g.src) === 'color' ? keyOf(sets[p]) : inkOn(sets[p]));
   const eats = ['signal-lock', 'detune', 'carrier-lost'].includes(wl.enter) || wl.exit === 'carrier-lost';
   // an emphasised character is its own picture on a world with a material, and each pose its own ink
-  const mapsOf = (eaten: boolean) => sets.map((_, p) => gs.map((g) => (baked ? glyphTexture(g.char, { ...style, surface: surfaceOf(tintOf(g, p), eaten) }).texture : g.mesh.material.map!)));
+  const mapsOf = (eaten: boolean) => sets.map((_, p) => gs.map((g) => (baked ? glyphTexture(g.char, { ...style, surface: surfaceOf(tintOf(g, p), eaten, p) }).texture : g.mesh.material.map!)));
   const whole = mapsOf(false);
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
@@ -258,7 +258,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const beatMove = wl.beat ? WORLD_BEATS[wl.beat.kind] : undefined;
   const keyCols = sets.map((s) => new THREE.Color(keyOf(s)));
   const usesKey = !!wl.beat && ['ink-run', 'light-sweep', 'roll', 'beat-punch'].includes(wl.beat.kind);
-  const keyMaps = usesKey && baked ? sets.map((s) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(keyOf(s)) }).texture)) : undefined;
+  const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(keyOf(s), false, p) }).texture)) : undefined;
   const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
   if (ghosts) ghosts.forEach((g) => { g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
   const mixed = new THREE.Color();

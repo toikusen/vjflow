@@ -4,6 +4,7 @@
 // counters and notches, so each ring nests and never leaks into a counter, and none ever crosses a letter. Hard edges,
 // one pixel of anti-aliasing, no blur.
 import type { HandCtx } from './world-glyph-hand';
+import { B3 } from './b3-inks';
 
 export type LoudSurface =
   | 'comic-key' | 'pop-sfx-plate' | 'pop-sfx-key'
@@ -18,7 +19,7 @@ const KINDS = new Set<string>(['comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-
 export const isLoudSurface = (k: string): k is LoudSurface => KINDS.has(k);
 
 /** The member colours an idol fan's letters are cut round, one a character (the board's pink, blue, mint, lemon, lilac). */
-export const MEMBER = ['#FF7EB6', '#7CC0FF', '#5FDCC0', '#FFDE5C', '#B79CFF'];
+export const MEMBER = [B3.xFF7EB6, B3.x7CC0FF, B3.x5FDCC0, B3.xFFDE5C, B3.xB79CFF];
 
 const fract = (x: number) => x - Math.floor(x);
 const hash = (a: number, b = 0) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);

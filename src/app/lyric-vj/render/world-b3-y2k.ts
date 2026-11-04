@@ -5,13 +5,14 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, easeIn, fract, H, HandGround, HandIn, isLight, kept, mixHex, W, WorldEnv } from './world-craft';
 import { artistOf, C, label, sparklePath, titleOnly } from './world-b3-shared';
+import { B3 } from './b3-inks';
 
-const AQUA = '#5FE0D3';
-const PERI = '#7C8CFF';
-const LILAC = '#C4A8FF';
-const LIME = '#D6FF4F';
-const SILVER = '#B9C3DA';
-const ORBIT_NIGHT = '#BFC8FF';
+const AQUA = B3.x5FE0D3;
+const PERI = B3.x7C8CFF;
+const LILAC = B3.xC4A8FF;
+const LIME = B3.xD6FF4F;
+const SILVER = B3.xB9C3DA;
+const ORBIT_NIGHT = B3.xBFC8FF;
 const MICRO = (px: number) => `400 ${px}px Michroma, "Noto Sans TC", "Zen Kaku Gothic New", sans-serif`;
 
 const night = (e: WorldEnv) => !isLight(e.paper);
@@ -48,7 +49,7 @@ function spark(c: C, e: WorldEnv, x: number, y: number, r: number, rot = 0) {
   if (r < 1) return;
   sparklePath(c, x, y, r, rot);
   const g = c.createLinearGradient(x - r, y - r, x + r, y + r);
-  g.addColorStop(0, '#FFFFFF');
+  g.addColorStop(0, B3.xFFFFFF);
   if (night(e)) g.addColorStop(1, ORBIT_NIGHT);
   else { g.addColorStop(0.5, LIME); g.addColorStop(1, AQUA); }
   c.fillStyle = g;
@@ -63,7 +64,7 @@ const sheet = (e: WorldEnv, angle: number) => kept(`y2k-sheet|${e.paper}|${e.ink
   if (night(e)) {
     const a = (angle * Math.PI) / 180;
     const g = c.createLinearGradient(W / 2 - Math.sin(a) * 700, H / 2 + Math.cos(a) * 700, W / 2 + Math.sin(a) * 700, H / 2 - Math.cos(a) * 700);
-    g.addColorStop(0, mixHex(e.paper, '#000000', 0.42));
+    g.addColorStop(0, mixHex(e.paper, B3.x000000, 0.42));
     g.addColorStop(0.7, e.paper);
     g.addColorStop(1, mixHex(e.paper, PERI, 0.32));
     c.fillStyle = g;
@@ -113,7 +114,7 @@ const hook: HandGround = (e) => page(e, (c) => {
   c.stroke();
   const [bx, by] = tip(2080, 240, 1140, 1180);
   blade(c, 1140, 1180, bx, by, -360 * k, -250 * k);
-  c.fillStyle = sheen(c, 1140, 1180, 2080, 240, ['#FFFFFF', SILVER]);
+  c.fillStyle = sheen(c, 1140, 1180, 2080, 240, [B3.xFFFFFF, SILVER]);
   c.fill();
   orbit(c, 1500, 560, 420, 120, -0.489, lineTone(e), 1.6);
   orbit(c, 1500, 560, 300, 70, -0.489, lineTone(e), 1.2, [2, 9], e.now * 30);
@@ -140,7 +141,7 @@ const ring: HandGround = (e) => page(e, (c) => {
   c.beginPath();
   c.arc(cx, cy, 430, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * grow);
   c.lineWidth = 64;
-  c.strokeStyle = sheen(c, cx - 430, cy - 430, cx + 430, cy + 430, [AQUA, PERI, LILAC, '#FFFFFF'], fract(e.now * 0.04));
+  c.strokeStyle = sheen(c, cx - 430, cy - 430, cx + 430, cy + 430, [AQUA, PERI, LILAC, B3.xFFFFFF], fract(e.now * 0.04));
   c.stroke();
   orbit(c, cx, cy, 340, 340, 0, lineTone(e), 1.5);
   orbit(c, cx, cy, 520, 520, 0, lineTone(e), 1.5, [2, 10], e.now * 24);
@@ -153,7 +154,7 @@ const ring: HandGround = (e) => page(e, (c) => {
 /** c: the fan. Gradient blades open from the lower right corner, one a beat; sparkles and an orbit up top. */
 const fan: HandGround = (e) => page(e, (c) => {
   c.drawImage(sheet(e, 180), 0, 0);
-  const stops = [[AQUA, PERI], [LILAC, '#FFFFFF'], [PERI, LILAC], ['#FFFFFF', AQUA]];
+  const stops = [[AQUA, PERI], [LILAC, B3.xFFFFFF], [PERI, LILAC], [B3.xFFFFFF, AQUA]];
   const [cx, cy, n] = [1980, 1160, 11];
   const open = Math.min(n, Math.floor(e.age * 4) + 1);
   for (let i = 0; i < open; i++) {
@@ -164,7 +165,7 @@ const fan: HandGround = (e) => page(e, (c) => {
     c.fillStyle = sheen(c, cx, cy, x2, y2, stops[i % 4]);
     c.fill();
     c.lineWidth = 2;
-    c.strokeStyle = night(e) ? mixHex(e.paper, '#000000', 0.45) : e.ink;
+    c.strokeStyle = night(e) ? mixHex(e.paper, B3.x000000, 0.45) : e.ink;
     c.stroke();
   }
   [[1180, 180, 46], [760, 150, 22], [1500, 120, 18]].forEach(([x, y, r], i) => { const [s, rot] = beatSpark(e, i); spark(c, e, x, y, r * s, rot); });
@@ -184,7 +185,7 @@ const column: HandGround = (e) => page(e, (c) => {
   c.strokeStyle = lineTone(e);
   c.stroke();
   blade(c, 700, -80, 700, -80 + 1240 * k, -250 * k, -110 * k);
-  c.fillStyle = sheen(c, 500, -80, 700, 1160, ['#FFFFFF', SILVER]);
+  c.fillStyle = sheen(c, 500, -80, 700, 1160, [B3.xFFFFFF, SILVER]);
   c.fill();
   [[1600, 820, 70], [1720, 640, 28], [300, 240, 34]].forEach(([x, y, r], i) => { const [s, rot] = beatSpark(e, i); spark(c, e, x, y, r * s, rot); });
   orbit(c, 1600, 820, 190, 44, -0.349, lineTone(e), 1.5);

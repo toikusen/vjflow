@@ -5,10 +5,11 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, fract, H, HandGround, HandIn, isLight, kept, ObjectPaint, W, WorldEnv } from './world-craft';
 import { artistOf, C, label, rng, titleOnly } from './world-b3-shared';
+import { B3 } from './b3-inks';
 
 /** The board's flat inks, by day and by night: one cover, two lights. */
-const DAY = { sky: '#45B4E2', sky2: '#8DD5F0', skyTop: '#3AA6D8', facade: '#F7EFDF', facadeShade: '#E7DBC4', wall: '#F2A1B8', wallShade: '#D9809B', white: '#FFFFFF', columnShade: '#E6EEF5', capShade: '#BCCADB', pool: '#1F84C6', glint: '#FFFFFF', tile: '#FFFFFF', grout: '#9FB6C9', coral: '#EC6650', script: '#EC6650' };
-const NIGHT = { sky: '#1B2350', sky2: '#2A2865', skyTop: '#141A40', facade: '#2B3466', facadeShade: '#232A57', wall: '#6A3A7E', wallShade: '#4B2E63', white: '#C9CFE6', columnShade: '#AEB6D3', capShade: '#8E97BC', pool: '#15306E', glint: '#F7EFDF', tile: '#3A4478', grout: '#2A3263', coral: '#F2A1B8', script: '#F2A1B8' };
+const DAY = { sky: B3.x45B4E2, sky2: B3.x8DD5F0, skyTop: B3.x3AA6D8, facade: B3.xF7EFDF, facadeShade: B3.xE7DBC4, wall: B3.xF2A1B8, wallShade: B3.xD9809B, white: B3.xFFFFFF, columnShade: B3.xE6EEF5, capShade: B3.xBCCADB, pool: B3.x1F84C6, glint: B3.xFFFFFF, tile: B3.xFFFFFF, grout: B3.x9FB6C9, coral: B3.xEC6650, script: B3.xEC6650 };
+const NIGHT = { sky: B3.x1B2350, sky2: B3.x2A2865, skyTop: B3.x141A40, facade: B3.x2B3466, facadeShade: B3.x232A57, wall: B3.x6A3A7E, wallShade: B3.x4B2E63, white: B3.xC9CFE6, columnShade: B3.xAEB6D3, capShade: B3.x8E97BC, pool: B3.x15306E, glint: B3.xF7EFDF, tile: B3.x3A4478, grout: B3.x2A3263, coral: B3.xF2A1B8, script: B3.xF2A1B8 };
 type Inks = typeof DAY;
 const inks = (e: WorldEnv): Inks => (isLight(e.paper) ? DAY : NIGHT);
 const night = (e: WorldEnv) => !isLight(e.paper);
@@ -84,12 +85,12 @@ const facade: HandGround = (e) => page(e, (c) => {
 /** b: the night sea in posterised bands, a flat moon and its broken reflection swaying; stars kept off the title. */
 const moon: HandGround = (e) => page(e, (c) => {
   const P = inks(e);
-  const bands: [string, number][] = night(e) ? [['#16204A', 0], ['#24275E', 300], ['#3B2C6E', 470], ['#6A3A7E', 570], ['#B65A86', 635]] : [['#3AA6D8', 0], ['#5BBCE6', 300], ['#8DD5F0', 470], ['#F2C9A0', 570], ['#F2A1B8', 635]];
+  const bands: [string, number][] = night(e) ? [[B3.x16204A, 0], [B3.x24275E, 300], [B3.x3B2C6E, 470], [B3.x6A3A7E, 570], [B3.xB65A86, 635]] : [[B3.x3AA6D8, 0], [B3.x5BBCE6, 300], [B3.x8DD5F0, 470], [B3.xF2C9A0, 570], [B3.xF2A1B8, 635]];
   for (const [tone, y] of bands) { c.fillStyle = tone; c.fillRect(0, y, W, H - y); }
-  const disc = night(e) ? '#F7EFDF' : '#FFF4DC';
+  const disc = night(e) ? B3.xF7EFDF : B3.xFFF4DC;
   c.fillStyle = disc;
   c.beginPath(); c.arc(1440, 470, 150, 0, Math.PI * 2); c.fill();
-  c.fillStyle = night(e) ? '#141C44' : '#1F84C6';
+  c.fillStyle = night(e) ? B3.x141C44 : B3.x1F84C6;
   c.fillRect(0, 700, W, 380);
   const R = rng(8);
   const sway = Math.sin(e.now * 0.8) * 14;
@@ -104,7 +105,7 @@ const moon: HandGround = (e) => page(e, (c) => {
   c.setLineDash([]);
   if (night(e)) {
     const r = e.rect;
-    c.fillStyle = '#F7EFDF';
+    c.fillStyle = B3.xF7EFDF;
     for (let i = 0; i < 60; i++) {
       const [x, y] = [R() * W, R() * 560];
       if (r && x > r.x0 - 60 && x < r.x1 + 60 && y > r.y0 - 120 && y < r.y1 + 60) continue;
@@ -112,17 +113,17 @@ const moon: HandGround = (e) => page(e, (c) => {
     }
   }
   const r = e.rect;
-  if (r) label(c, titleOnly(e.title), r.x0 + 6, r.y0 - 36, SCRIPT(52), night(e) ? '#F2A1B8' : '#B53A2A', 0);
+  if (r) label(c, titleOnly(e.title), r.x0 + 6, r.y0 - 36, SCRIPT(52), night(e) ? B3.xF2A1B8 : B3.xB53A2A, 0);
   void P;
 });
 
 /** c: the skyline. Three layers of blocks; at night the windows light floor by floor on the beat, by day they are dark glass. */
 const skyline: HandGround = (e) => page(e, (c) => {
-  const bands: [string, number][] = night(e) ? [['#16204A', 0], ['#2A2865', 360], ['#4B2E73', 520], ['#8C4479', 620]] : [['#3AA6D8', 0], ['#5BBCE6', 360], ['#8DD5F0', 520], ['#CFE9F5', 620]];
+  const bands: [string, number][] = night(e) ? [[B3.x16204A, 0], [B3.x2A2865, 360], [B3.x4B2E73, 520], [B3.x8C4479, 620]] : [[B3.x3AA6D8, 0], [B3.x5BBCE6, 360], [B3.x8DD5F0, 520], [B3.xCFE9F5, 620]];
   for (const [tone, y] of bands) { c.fillStyle = tone; c.fillRect(0, y, W, H - y); }
   const layers: [string, number, number, number, number, number, number][] = night(e)
-    ? [['#2E2F6E', 0, 380, 640, 120, 220, 3], ['#232456', 0.22, 300, 520, 140, 260, 5], ['#151A3E', 0.32, 160, 360, 160, 300, 9]]
-    : [['#BFD3E6', 0, 380, 640, 120, 220, 3], ['#9CB8D6', 0.22, 300, 520, 140, 260, 5], ['#7A9CC6', 0.32, 160, 360, 160, 300, 9]];
+    ? [[B3.x2E2F6E, 0, 380, 640, 120, 220, 3], [B3.x232456, 0.22, 300, 520, 140, 260, 5], [B3.x151A3E, 0.32, 160, 360, 160, 300, 9]]
+    : [[B3.xBFD3E6, 0, 380, 640, 120, 220, 3], [B3.x9CB8D6, 0.22, 300, 520, 140, 260, 5], [B3.x7A9CC6, 0.32, 160, 360, 160, 300, 9]];
   const lit = Math.floor(e.age * 2);
   layers.forEach(([tone, win, hmin, hmax, wmin, wmax, seed], li) => {
     const R = rng(seed);
@@ -135,7 +136,7 @@ const skyline: HandGround = (e) => page(e, (c) => {
       c.fillRect(x, top, w, h);
       if (R() < 0.35) c.fillRect(x + w * 0.3, top - 34, w * 0.4, 34);
       if (win) {
-        c.fillStyle = night(e) ? (R() < 0.6 ? '#F6D9A0' : '#F2A1B8') : '#1B2A5C';
+        c.fillStyle = night(e) ? (R() < 0.6 ? B3.xF6D9A0 : B3.xF2A1B8) : B3.x1B2A5C;
         let floor = 0;
         for (let yy = top + 28; yy < H - 20; yy += 40, floor++) {
           const on = R() < win;
@@ -150,7 +151,7 @@ const skyline: HandGround = (e) => page(e, (c) => {
     }
   });
   const r = e.rect;
-  if (r) label(c, titleOnly(e.title), (r.x0 + r.x1) / 2, Math.max(60, r.y0 - 30), SMALL(30), night(e) ? '#F2A1B8' : '#B53A2A', 18, 'center');
+  if (r) label(c, titleOnly(e.title), (r.x0 + r.x1) / 2, Math.max(60, r.y0 - 30), SMALL(30), night(e) ? B3.xF2A1B8 : B3.xB53A2A, 18, 'center');
 });
 
 /** d: a white column (the set's object) throws a long shadow across the wall under a flat sky; its shadow turns slowly. */
@@ -176,17 +177,17 @@ const column: ObjectPaint = (c, w, h, s) => {
   const cap = 52;
   c.fillStyle = s.plate;
   c.fillRect(30, cap, w - 60, h - cap + 60);
-  c.fillStyle = isLight(s.plate) ? '#E6EEF5' : '#AEB6D3';
+  c.fillStyle = isLight(s.plate) ? B3.xE6EEF5 : B3.xAEB6D3;
   c.fillRect(w - 30 - 35, cap, 35, h - cap + 60);
   c.fillStyle = s.plate;
   c.fillRect(0, 10, w, 42);
-  c.fillStyle = isLight(s.plate) ? '#BCCADB' : '#8E97BC';
+  c.fillStyle = isLight(s.plate) ? B3.xBCCADB : B3.x8E97BC;
   c.fillRect(0, 52, w, 10);
 };
 
 const INS: Record<string, HandIn> = {
   // the next sleeve slides in from the right over the last, flat, no fade
-  'sleeve-pull': { sec: 0.6, draw: (e, q) => page(e, (c) => { const x = W * (1 - ease(q, 3)); c.fillStyle = e.paper; c.fillRect(x, 0, W, H); c.fillStyle = isLight(e.paper) ? '#FFFFFF' : '#C9CFE6'; c.fillRect(x - 10, 0, 10, H); }) },
+  'sleeve-pull': { sec: 0.6, draw: (e, q) => page(e, (c) => { const x = W * (1 - ease(q, 3)); c.fillStyle = e.paper; c.fillRect(x, 0, W, H); c.fillStyle = isLight(e.paper) ? B3.xFFFFFF : B3.xC9CFE6; c.fillRect(x - 10, 0, 10, H); }) },
 };
 
 /** The lyric box with a margin: a piece keeps out of it. */
@@ -199,14 +200,14 @@ const PIECES: Record<string, Piece> = {
     if (b.y1 > H - 120) return;
     c.save();
     c.beginPath(); c.rect(W * clamp01(q * 1.4 - 0.4), H - 110, W * 0.5, 110); c.clip();
-    waves(c, 0, H - 110, W, 110, 11, night(e) ? '#F7EFDF' : '#FFFFFF', Math.floor(q * 9));
+    waves(c, 0, H - 110, W, 110, 11, night(e) ? B3.xF7EFDF : B3.xFFFFFF, Math.floor(q * 9));
     c.restore();
   }) },
   // stars come out across the top of the night, a few at a time; by day white gulls of light dots
   'star-rise': { sec: 2.2, clear: 0, draw: (e, q) => page(e, (c) => {
     const b = keepOut(e, 60);
     const R = rng(21 + (e.seed % 5));
-    c.fillStyle = night(e) ? '#F7EFDF' : '#FFFFFF';
+    c.fillStyle = night(e) ? B3.xF7EFDF : B3.xFFFFFF;
     for (let i = 0; i < 40; i++) {
       const [x, y, at] = [R() * W, R() * H * 0.45, R()];
       if (q < at * 0.7 || (x > b.x0 && x < b.x1 && y > b.y0 && y < b.y1)) continue;

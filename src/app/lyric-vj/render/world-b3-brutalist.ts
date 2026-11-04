@@ -5,8 +5,9 @@
 import type { Piece } from './world-pieces';
 import { clamp01, fract, H, HandGround, HandIn, isLight, kept, W, WorldEnv } from './world-craft';
 import { artistOf, C, label, rng, titleOnly } from './world-b3-shared';
+import { B3 } from './b3-inks';
 
-const RED = '#BC180E';
+const RED = B3.xBC180E;
 const M = 96;
 const MONO = (px: number, w = 400) => `${w} ${px}px "Space Mono", "Chiron Hei HK", monospace`;
 const HEAD = (px: number) => `900 ${px}px "Chiron Hei HK", "Noto Sans TC", sans-serif`;
@@ -32,7 +33,7 @@ function finish(c: CanvasRenderingContext2D, e: WorldEnv) {
   c.save();
   c.globalCompositeOperation = dark(e) ? 'screen' : 'multiply';
   c.globalAlpha = dark(e) ? 0.35 : 0.9;
-  c.drawImage(toner(dark(e) ? '#6A6A66' : '#121212'), 0, 0);
+  c.drawImage(toner(dark(e) ? B3.x6A6A66 : B3.x121212), 0, 0);
   c.restore();
   // the board's inset edge: a 10 px band at 6 % and a 90 px falloff at 22 %
   c.fillStyle = 'rgba(0,0,0,0.06)';
@@ -72,7 +73,7 @@ const headline: HandGround = (e) => page(e, (c) => {
   const w = Math.round(((W - 2 * M) * Math.ceil(k * 4)) / 4);
   c.fillStyle = RED;
   c.fillRect(M, top, w, 150);
-  if (k >= 1) label(c, titleOnly(e.title), M + 34, top + 112, HEAD(110), '#FFFFFF', 34);
+  if (k >= 1) label(c, titleOnly(e.title), M + 34, top + 112, HEAD(110), B3.xFFFFFF, 34);
   finish(c, e);
 });
 
@@ -95,21 +96,21 @@ const footer: HandGround = (e) => page(e, (c) => {
 
 /** c: the reversed sheet: four red-ruled cells across the page, numbered, the shout across all of them; they invert in turn. */
 const cells: HandGround = (e) => page(e, (c) => {
-  c.fillStyle = '#121212';
+  c.fillStyle = B3.x121212;
   c.fillRect(0, -2, W, H + 4);
   const step = (W - 2 * M) / 4;
   const on = Math.floor(e.now * 2) % 6;
   for (let i = 0; i < 4; i++) {
     const x = M + i * step;
-    if (i === on) { c.fillStyle = '#2A1210'; c.fillRect(x, 170, step, 814); }
+    if (i === on) { c.fillStyle = B3.x2A1210; c.fillRect(x, 170, step, 814); }
     c.strokeStyle = RED;
     c.lineWidth = 2;
     c.strokeRect(x + 1, 171, step - 2, 812);
     label(c, `0${i + 1}`, x + 16, 210, MONO(19), RED, 1.1);
   }
-  label(c, titleOnly(e.title), W - M, M + 20, MONO(19), '#F2F0EA', 1.1, 'right');
-  label(c, artistOf(e.title), M, M + 20, MONO(19), '#F2F0EA', 1.1);
-  finish(c, { ...e, paper: '#121212' });
+  label(c, titleOnly(e.title), W - M, M + 20, MONO(19), B3.xF2F0EA, 1.1, 'right');
+  label(c, artistOf(e.title), M, M + 20, MONO(19), B3.xF2F0EA, 1.1);
+  finish(c, { ...e, paper: B3.x121212 });
 });
 
 /** d: two columns at the right behind a rule, the title set big with red strokes between its characters on the left. */
@@ -137,7 +138,7 @@ const Gs: Record<string, HandGround> = { 'brutalist/headline': headline, 'brutal
 
 const INS: Record<string, HandIn> = {
   // a black bar is pulled across the sheet in four hard steps: the next copy lands under it
-  'black-bar-sweep': { sec: 0.24, draw: (e, q) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); const k = Math.ceil(q * 4) / 4; c.fillStyle = '#121212'; c.fillRect(0, 0, W * k, H); c.restore(); } },
+  'black-bar-sweep': { sec: 0.24, draw: (e, q) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); const k = Math.ceil(q * 4) / 4; c.fillStyle = B3.x121212; c.fillRect(0, 0, W * k, H); c.restore(); } },
 };
 
 /** The lyric box with a margin: a piece keeps out of it. */
@@ -159,7 +160,7 @@ const PIECES: Record<string, Piece> = {
   // the headline's size jumps a grid step and back: rules flash at the margins in time
   'rule-slam': { sec: 0.9, clear: 0, draw: (e, q) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base);
     const n = Math.min(4, Math.floor(q * 8));
-    c.fillStyle = isLight(e.paper) ? '#121212' : '#F2F0EA';
+    c.fillStyle = isLight(e.paper) ? B3.x121212 : B3.xF2F0EA;
     const b = keepOut(e, 20);
     for (let i = 0; i < n; i++) { const y = H - M - 4 - i * 16; if (y + 4 > b.y0 && y < b.y1) continue; c.fillRect(M, y, W - 2 * M, 4); }
     c.restore(); } },

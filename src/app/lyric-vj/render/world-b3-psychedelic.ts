@@ -6,14 +6,15 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, mixHex, W, WorldEnv } from './world-craft';
 import { artistOf, label, titleOnly } from './world-b3-shared';
 import { paperOver } from './world-b3-tex';
+import { B3 } from './b3-inks';
 
 // (the board's inks: plum, orange, pink, mustard, cream, teal)
-const PL = '#3A1B55';
-const OR = '#F2672E';
-const PK = '#F59AC0';
-const MU = '#F3BC3E';
-const CR = '#F7E8C9';
-const TE = '#1E8C86';
+const PL = B3.x3A1B55;
+const OR = B3.xF2672E;
+const PK = B3.xF59AC0;
+const MU = B3.xF3BC3E;
+const CR = B3.xF7E8C9;
+const TE = B3.x1E8C86;
 const SHR = (px: number) => `400 ${px}px Shrikhand, "Shippori Antique B1", sans-serif`;
 
 const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
@@ -53,7 +54,7 @@ const sun: HandGround = (e) => page(e, (c) => {
   c.fillStyle = e.paper;
   c.fillRect(0, 0, W, H);
   const k = 1 + 0.02 * Math.sin(e.now * 1.3);
-  const rings: [number, string][] = [[560, mixHex(e.paper, '#FFFFFF', 0.07)], [470, TE], [400, e.paper], [330, PK], [270, e.paper], [210, MU], [150, OR], [90, CR]];
+  const rings: [number, string][] = [[560, mixHex(e.paper, B3.xFFFFFF, 0.07)], [470, TE], [400, e.paper], [330, PK], [270, e.paper], [210, MU], [150, OR], [90, CR]];
   for (const [r, tone] of rings) { c.beginPath(); c.arc(1480, 760, r * k, 0, Math.PI * 2); c.fillStyle = tone; c.fill(); }
   finish(c);
   label(c, titleOnly(e.title), 150, H - 110, SHR(28), MU, 1.1);

@@ -5,15 +5,16 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, ObjectPaint, W, WorldEnv } from './world-craft';
 import { C, label, rng, titleOnly } from './world-b3-shared';
+import { B3 } from './b3-inks';
 
-const B = '#1636B8';
-const BD = '#0B1A5C';
-const BL = '#2B4FD6';
-const EDGE = '#3D62E8';
-const R = '#C8102E';
-const G = '#FFB400';
-const WH = '#FFFFFF';
-const K = '#111428';
+const B = B3.x1636B8;
+const BD = B3.x0B1A5C;
+const BL = B3.x2B4FD6;
+const EDGE = B3.x3D62E8;
+const R = B3.xC8102E;
+const G = B3.xFFB400;
+const WH = B3.xFFFFFF;
+const K = B3.x111428;
 const BUNGEE = (px: number) => `400 ${px}px Bungee, "Noto Sans TC", "Zen Kaku Gothic New", sans-serif`;
 
 const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };

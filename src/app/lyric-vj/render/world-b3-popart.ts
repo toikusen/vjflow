@@ -5,15 +5,16 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, easeIn, H, HandGround, HandIn, ObjectPaint, W, WorldEnv } from './world-craft';
 import { burstPath, focusOf, halftone, label, onPage, rng, sparklePath, speedLines, still, titleOnly } from './world-b3-shared';
+import { B3 } from './b3-inks';
 
 const K = (e: { slots: { ink: string } }) => e.slots.ink;
 /** The board's register slip: colour plates sit this far off the key. */
 const SLIP: [number, number] = [5, 3];
 const BORDER = 8;
 /** The process plates and the newsprint the panels are printed on (the board's own values): a page's arrangement comes from the scheme. */
-const STOCK = '#F3EBD7';
-const CYAN = '#1E9FD6';
-const DEEP = '#16307A';
+const STOCK = B3.xF3EBD7;
+const CYAN = B3.x1E9FD6;
+const DEEP = B3.x16307A;
 const LABEL_FACE = (px: number, w = 700) => `${w} ${px}px "Noto Sans TC", "Noto Serif JP", sans-serif`;
 
 type G = OffscreenCanvasRenderingContext2D;

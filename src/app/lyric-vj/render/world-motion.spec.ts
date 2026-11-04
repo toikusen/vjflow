@@ -30,12 +30,19 @@ describe('world moves', () => {
     }
   });
   it('keep held lines within a few pixels', () => {
+    // (dark-glitch's carrier tears a band of the line sideways on purpose: at most 30 px, under a sixth of the time)
+    const TEARS = new Set(['carrier-hum']);
     for (const [id, h] of Object.entries(WORLD_HOLDS)) for (let age = 0; age < 8; age += 0.13) {
       const p = h({ ...env(1), age });
-      expect(Math.abs(p.dx ?? 0), id).toBeLessThanOrEqual(5);
+      expect(Math.abs(p.dx ?? 0), id).toBeLessThanOrEqual(TEARS.has(id) ? 30 : 5);
       expect(p.a ?? 1, id).toBe(1);
       expect(p.tone ?? 1, id).toBeGreaterThanOrEqual(0.6);
     }
+  });
+  it('tear a held line only now and then', () => {
+    const ages = Array.from({ length: 800 }, (_, k) => k * 0.01);
+    const torn = ages.filter((age) => Math.abs(WORLD_HOLDS['carrier-hum']({ ...env(1), age }).dx ?? 0) > 5).length;
+    expect(torn / ages.length).toBeLessThan(1 / 6);
   });
   it('give a move only the room reading leaves', () => {
     expect(moveSec(0.6, 2)).toBeCloseTo(0.6);

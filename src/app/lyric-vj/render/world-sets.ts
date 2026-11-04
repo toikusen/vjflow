@@ -133,10 +133,12 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'silent-film/shout': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.92, tall: 0.84, hi: 400, rows: [1, 2], lead: 1.06, track: 0.01 },
   'silent-film/aside': { ...base, at: [0.06, 0.1], ax: -1, ay: -1, share: 0.66, tall: 0.52, hi: 180, rows: [1, 2], lead: 1.2, track: 0.05, flush: -1, object: 'card-corner', pad: [40, 34], fill: [0.74, 0.6] },
   // gothic-lolita: a bound book, a page at a time.
-  'gothic-lolita/page': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.6, tall: 0.72, hi: 220, rows: [1, 4], lead: 1.24, track: 0.03, object: 'book-page', pad: [100, 84], fill: [0.5, 0.84] },
-  'gothic-lolita/spread-left': { ...base, at: [0.265, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.72, hi: 180, rows: [2, 4], lead: 1.26, track: 0.03, flush: -1, object: 'book-leaf', pad: [80, 90], fill: [0.46, 0.9] },
-  'gothic-lolita/spread-right': { ...base, at: [0.735, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.72, hi: 180, rows: [2, 4], lead: 1.26, track: 0.03, flush: -1, object: 'book-leaf', pad: [80, 90], fill: [0.46, 0.9] },
-  'gothic-lolita/cameo': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.52, tall: 0.56, hi: 190, rows: [1, 3], lead: 1.2, track: 0.03, object: 'cameo', pad: [150, 130], fill: [0.74, 0.94] },
+  // (the page, the leaves and the cameo are filled: a short line with no phrase break is cut at its middle into two
+  // rows, so 三年後的大雪 stands at 180 px on its leaf, not at 100 px in one row with the leaf empty round it)
+  'gothic-lolita/page': { ...base, square: true, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.6, tall: 0.72, hi: 220, rows: [1, 4], lead: 1.24, track: 0.03, object: 'book-page', pad: [100, 84], fill: [0.5, 0.84] },
+  'gothic-lolita/spread-left': { ...base, square: true, at: [0.265, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.72, hi: 180, rows: [2, 4], lead: 1.26, track: 0.03, flush: -1, object: 'book-leaf', pad: [80, 90], fill: [0.46, 0.9] },
+  'gothic-lolita/spread-right': { ...base, square: true, at: [0.735, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.72, hi: 180, rows: [2, 4], lead: 1.26, track: 0.03, flush: -1, object: 'book-leaf', pad: [80, 90], fill: [0.46, 0.9] },
+  'gothic-lolita/cameo': { ...base, square: true, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.52, tall: 0.56, hi: 190, rows: [1, 3], lead: 1.2, track: 0.03, object: 'cameo', pad: [150, 130], fill: [0.74, 0.94] },
   'gothic-lolita/title-leaf': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.9, tall: 0.8, hi: 340, rows: [1, 2], lead: 1.1, track: 0.02 },
   // ukiyoe: the words stand on a title slip, a poem card, or the mist band the print parts for them.
   'ukiyoe/tanzaku': { ...base, at: [0.88, 0.4], ax: 0, ay: 0, share: 0.22, tall: 0.68, hi: 230, rows: [1, 2], vertical: true, lead: 1.14, track: 0.04, object: 'cartouche', pad: [50, 56], fill: [0.2, 0.92] },
@@ -232,11 +234,14 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {
     const rows = rowsFor(text, n, !!spec.square);
-    // a row of one mark or one character is a break no reader asked for
-    if (n > 1 && rows.some((r) => [...r.replace(/[\s\p{P}\p{S}]/gu, '')].length < 2)) continue;
+    // a row of one mark or one character is a break no reader asked for (unless the singer set that word apart: 哼)
+    const words = new Set(text.split(/\s+/).filter(Boolean));
+    if (n > 1 && rows.some((r) => [...r.replace(/[\s\p{P}\p{S}]/gu, '')].length < 2 && !words.has(r.trim()))) continue;
     const size = spec.vertical ? sizeUp(rows, spec, measure) : sizeAcross(rows, spec, measure);
     options.push({ rows, size });
   }
+  // (a set that allows no single row still sets a line it cannot break at its one-row size, not at its floor)
+  if (!options.length) { const rows = [text]; options.push({ rows, size: spec.vertical ? sizeUp(rows, spec, measure) : sizeAcross(rows, spec, measure) }); }
   const best = Math.max(...options.map((o) => o.size), 0);
   // bigger type is the default: a row more is worth it for anything past a twentieth of size
   const pick = options.find((o) => o.size >= best * 0.95) ?? options[options.length - 1] ?? { rows: [text], size: spec.lo };

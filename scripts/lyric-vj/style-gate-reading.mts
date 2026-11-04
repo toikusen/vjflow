@@ -4,10 +4,15 @@
 // The same moments are read against the shared reading rules (src/app/lyric-vj/reading-rules.ts): words cut by the frame,
 // a dark plate under them, small words on an empty frame, the picture's lines under the strokes, ink under 4.5:1, and a
 // soft glow laid behind them. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
-// --carriers: the frame without the words keeps what they stand on (a card, a banner, a tape), so a line on its own
-// carrier is read against the carrier, not against the ground the carrier hides (counts differ from the default's).
-// npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] [--carriers] terminal ink-wash
-// (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json (2026-11-04).
+// The frame without the words keeps what they stand on (a card, a banner, a tape): only the glyphs are taken away, so a
+// line on its own carrier is read against the carrier, not against the ground the carrier hides. This is the default
+// since 2026-11-04: taking the carrier away with the words (the old way) read a dark word against the dark ground under
+// its white card and reported false failures on carrier worlds (gameshow, idol-live, popart's balloons counted low).
+// --strip-carriers: the old way, carrier and glyphs both removed; its counts are not comparable with the baseline.
+// npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] [--strip-carriers] terminal ink-wash
+// (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json, every
+// world including the held ones, 5 songs, seed 0, measured the default way (re-recorded 2026-11-04 after the carrier
+// default, the call placer and the repeat-per-shot fix; a world's moments count rose where repeats now keep their shot).
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, relative, resolve } from 'node:path';
@@ -20,7 +25,7 @@ import { countMoment, emptyCounts, RuleCounts, RuleMoment, regressions } from '.
 import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/styles/gate/reading' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, baseline: { type: 'string' }, 'write-baseline': { type: 'string' }, carriers: { type: 'boolean', default: false } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/styles/gate/reading' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, baseline: { type: 'string' }, 'write-baseline': { type: 'string' }, 'strip-carriers': { type: 'boolean', default: false } } });
 if (!positionals.length) positionals.push(...FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id)).map((s) => s.id));
 /** Share of a frame a line must change, and how hard, to count as there. */
 export const READ = { minShare: 0.002, minDelta: 40 };
@@ -59,7 +64,7 @@ for (const id of positionals) {
     writeFileSync(file, JSON.stringify({ ...job, live: true }));
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     await page.addInitScript({ path: join(work, 'gate-page.js') });
-    if (a.carriers) await page.addInitScript('window.__carriers = true');
+    if (!a['strip-carriers']) await page.addInitScript('window.__carriers = true');
     await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => {
       const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? '');
       return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort();

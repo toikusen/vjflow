@@ -15,7 +15,8 @@ for (const proto of [CanvasRenderingContext2D.prototype, OffscreenCanvasRenderin
 /** One moment: the reading measure on grey w×h (as the gate always read it), the rules on 480×270, and the soft clearing. */
 async function moment(t: number, gw: number, gh: number) {
   const shot = async (on: boolean) => {
-    // --carriers: the frame without the words keeps what they stand on (a card, a banner): what is really behind them
+    // the frame without the words keeps what they stand on (a card, a banner): what is really behind them (the gate's
+    // default; under --strip-carriers __carriers is unset and they go with the words)
     w.vjLyrics(on, !!w.__carriers);
     const img = new Image();
     img.src = await w.grabAt(t, 0.7);

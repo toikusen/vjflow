@@ -312,7 +312,8 @@ const buffPatch = (c: C, w: number, h: number, s: Slots) => {
   c.fill();
 };
 /** The calm set's object: the patch's face only, inset, under the words; the page draws the whole patch and its rule round it. */
-const buffFace: ObjectPaint = (c, w, h, s) => { c.fillStyle = mixHex(s.plate, K, 0.06); c.fillRect(14, 14, w - 28, h - 28); };
+// (it stops short of the sprayed rule, 60 px under the words, which the page draws)
+const buffFace: ObjectPaint = (c, w, h, s) => { c.fillStyle = mixHex(s.plate, K, 0.06); c.fillRect(14, 14, w - 28, h - NAVY_PAD[1] + 40 - 14); };
 /** The calm patch's margin round its words (world-b3-sets graffiti/navy pad): room under them for the sprayed rule. */
 export const NAVY_PAD: [number, number] = [80, 120];
 

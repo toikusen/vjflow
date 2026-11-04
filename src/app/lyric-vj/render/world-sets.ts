@@ -2,6 +2,7 @@
 // it. One renderer sets them all (world-layout.ts). A set belongs to one world: its id starts with that world's id, and the
 // composer's closed pool is the only way to reach it.
 import { balancedRows } from '../phrases';
+import { LOUD_SETS } from './world-b3-sets';
 import type { WorldObject } from './world-objects';
 
 const W = 1920;
@@ -200,6 +201,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'card/center-tile': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.66, tall: 0.62, hi: 240, rows: [1, 3], lead: 1.08, track: 0 },
   'card/left-tile': { ...base, at: [0.26, 0.5], ax: 0, ay: 0, share: 0.42, tall: 0.7, hi: 200, rows: [1, 4], lead: 1.08, track: 0 },
   'card/right-tile': { ...base, at: [0.74, 0.5], ax: 0, ay: 0, share: 0.42, tall: 0.7, hi: 200, rows: [1, 4], lead: 1.08, track: 0 },
+  // style batch 3's loud worlds keep their numbers in world-b3-sets.ts
+  ...LOUD_SETS,
 };
 
 /** Width of a string at size 100, in px. */

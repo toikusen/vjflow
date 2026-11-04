@@ -100,7 +100,7 @@ describe('style worlds', () => {
         }
       }
     }
-  });
+  }, 30000);
   it('hold shared layouts to their share of a song', () => {
     for (const s of FREE_STYLES) {
       const { plan } = freeJob(songOf(2.4), { style: s, seed: 1 });

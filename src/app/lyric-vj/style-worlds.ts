@@ -4,6 +4,7 @@ import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
 import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
 import { HAND_WORLDS } from './style-worlds-hand';
+import { LOUD_WORLDS } from './style-worlds-loud';
 
 const stack = (o: Partial<FrameStack>): FrameStack => ({ grain: 0.1, paper: 0, tooth: 0, lift: 0, scan: 0, vignette: 0.2, flicker: 0, weave: 0, boil: 0, boilRate: 12, step: 0, koma: 0, ...o });
 const lv = <T,>(a: T[], b: T[], c: T[]): Record<Level, T[]> => ({ 0: a, 1: b, 2: c });
@@ -390,5 +391,5 @@ const card = print({ id: 'card', name: '圖形卡', language: 'pictogram', what:
   shared: ['orbit-spread', 'panels-plain', 'panels-hit'],
   grounds: [['soft-rings', 'stitch'], ['card/flip-grid', ...['dots', 'stitch', 'soft-rings'], 'card/big-tile'], ['card/flip-grid', ...['dots', 'soft-rings'], 'card/big-tile']], quiet: ['card/big-tile', ...['soft-rings', 'stitch'], 'card/flip-grid'], every: [8, 4, 2], line: ['push', 'whip'], part: ['circle', 'stripes'], banned: ['brush', 'ripple'], family: 'flip', process: '印刷閃卡', nearest: '幾何拼貼風格', differs: '節拍翻面', fast: 'choroin', calm: 'snow' });
 
-export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, file, spy, card, dark, neon, terminal, led, ink, film, glass, gothic, ...HAND_WORLDS];
+export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, file, spy, card, dark, neon, terminal, led, ink, film, glass, gothic, ...HAND_WORLDS, ...LOUD_WORLDS];
 export const worldById = (id: string) => STYLE_WORLDS.find((w) => w.id === id);

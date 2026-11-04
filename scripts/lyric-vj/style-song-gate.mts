@@ -7,7 +7,8 @@ import { parseArgs } from 'node:util';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
 import { FREE_STYLES } from '../../src/app/lyric-vj/free-styles';
 
-const { values: a } = parseArgs({ options: { out: { type: 'string', default: 'out/research/styles/gate/songs.json' } } });
+// --styles a,b,c: only these (a way to measure a print world that has its own pool, which the default leaves out).
+const { values: a } = parseArgs({ options: { out: { type: 'string', default: 'out/research/styles/gate/songs.json' }, styles: { type: 'string' } } });
 const SONGS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
 /** Calibrated on batch 1: see the progress file. */
 export const SONG_GATE = { maxLayoutShare: 0.75, maxSameOpening: 0.34, maxGroundSim: 0.6, minPalettes: 3 };
@@ -30,7 +31,7 @@ function view(style: (typeof FREE_STYLES)[number], n: string, seed: number) {
 }
 const rows: Record<string, unknown>[] = [];
 const fails: string[] = [];
-for (const s of FREE_STYLES.filter((x) => x.world.family !== 'print')) {
+for (const s of FREE_STYLES.filter((x) => (a.styles ? a.styles.split(',').includes(x.id) : x.world.family !== 'print'))) {
   const v = names.map((n) => view(s, n, 0));
   const r = names.map((n) => view(s, n, 1));
   const across: { l: number; g: number; o: number }[] = [];

@@ -39,6 +39,8 @@ const SHORT: Record<string, string> = {
   'silent-film': '插卡字幕，單色染片', 'ink-wash': '濕紙上的書法留白', ukiyoe: '分版平塗的木版畫', aizome: '留白成花紋的藍染布',
   papercut: '紅紙與光的鏤空', 'paper-lantern': '暖光穿過紙層', chiyogami: '花紋和紙摺疊拼貼', 'gothic-lolita': '暗黑童話精裝書',
   woodcut: '黑版上的刀痕', chalkboard: '放學後的粉筆字', crayon: '孩子塗的繪本頁',
+  popart: '三原色漫畫格與網點', gameshow: '糖果色攝影棚題目卡', 'idol-live': '追光裡的主唱與螢光棒', y2k: '鍍鉻、泡泡、珠光漸層',
+  psychedelic: '暖色波浪與泡泡字', graffiti: '水泥牆上的模板噴漆', brutalist: '影印海報的滿版吼字', citypop: '噴槍天空與泳池的光',
   silk: '平塗油墨，版微微錯開', 'silk-cold': '冷色網版，適合安靜的歌', riso: '透明墨疊印，留白多', file: '泛黃的案件檔案', spy: '剪紙片頭，大塊斜切', card: '幾何圖形與粗字',
 };
 
@@ -48,6 +50,7 @@ const GROUPS: { name: string; families: StyleWorld['family'][] }[] = [
   { name: '水與膠片', families: ['wet', 'film'] },
   { name: '紙與層次', families: ['layered'] },
   { name: '手繪筆觸', families: ['stroke'] },
+  { name: '棚、牆與空氣', families: ['ui', 'wall', 'air'] },
   { name: '印刷平面', families: ['print'] },
 ];
 
@@ -64,7 +67,7 @@ export function styleGroups(styles: readonly FreeStyle[] = FREE_STYLES) {
 /** Worlds too particular in mood to be offered unasked (horror, a terminal, a case file, gothic): a person picks them. */
 const NOT_DEFAULT = new Set(['dark-glitch', 'terminal', 'file', 'gothic-lolita']);
 const CALM_FAMILIES: StyleWorld['family'][] = ['wet', 'film', 'layered', 'print'];
-const LIVELY_FAMILIES: StyleWorld['family'][] = ['emissive', 'print', 'stroke', 'layered'];
+const LIVELY_FAMILIES: StyleWorld['family'][] = ['emissive', 'print', 'stroke', 'layered', 'ui', 'wall'];
 const CALM_PRINT = new Set(['silk-cold', 'riso']);
 
 /**

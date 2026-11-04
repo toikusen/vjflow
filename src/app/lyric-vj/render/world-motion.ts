@@ -1,6 +1,7 @@
 // How the words of a style world arrive, stay and leave, in numbers only. Each kind comes from what the world is made of: a
 // tube strikes in stutters, a printer's head steps along, ink creeps out of a wet stroke, a card jumps in the gate. Time here
 // is what the renderer passes in: a world on eighteen frames a second is simply handed time held to that.
+import { LOUD_ENTERS, LOUD_EXITS, LOUD_HOLDS } from './world-b3-motion';
 
 export interface GlyphEnv {
   /** Progress through the entrance or the exit, 0..1. */
@@ -199,6 +200,10 @@ export const WORLD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'sun-crawl': ({ u, age }) => { const d = fract(u * 0.4 - age * 0.16); return { tone: 0.84 + 0.16 * Math.exp(-(((d - 0.5) / 0.14) ** 2)) }; },
   'candle-sway': ({ u, v, age }) => ({ tone: 0.9 + 0.1 * Math.sin(age * 2.3 + u * 2.5) * Math.sin(age * 1.31 + v * 2) }),
 };
+// style batch 3's loud worlds keep their moves in world-b3-motion.ts
+Object.assign(WORLD_ENTERS, LOUD_ENTERS);
+Object.assign(WORLD_EXITS, LOUD_EXITS);
+Object.assign(WORLD_HOLDS, LOUD_HOLDS);
 
 /** Seconds a move gets when a line has `room` past its reading: shortened, or given up for a plain cut, never paid for by reading. */
 export function moveSec(want: number, room: number, pace = 1) {

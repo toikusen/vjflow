@@ -156,6 +156,23 @@
 
 第二輪（使用者：woodcut 快、papercut／aizome 慢都不改；四個紙類世界都留）：閘門 3 的 9 項修到 0，做法是讓每個世界有自己的版面位置，不靠改色。ukiyoe 的字放在天空與兩側直排，山與海收成中段一條帶子，前景用 `lowMist` 遮成白紙；paper-lantern 的字放在中間的窗，紙層退到下三分之一；chiyogami 的花紋改成一張斜放的卡（`cardAt`），不再滿版，紙帶全部斜放，出場慢拉到摺線再壓平；woodcut 的字放在版的下半部；crayon 每一級都用 `colour-over`（0.56 秒）換畫面。chalkboard 擦痕上的對角線原因是噪點 x、y 共用同一個亂數，已修。注意：閘門 3 的「墨」是指偏離畫面最常見色調的像素，主要受背景大面積影響，只移動字的位置效果有限；`ukiyoe/sky-title` 往上移會讓三句疊放時最上面那句出畫（snow c042–c044 讀不到），所以維持在 0.26。結果在 `out/research/styles2/run4/`。
 
+## 第 3 批風格（2026-11-04，喧鬧）
+
+目標：popart、gameshow、idol-live、y2k、psychedelic、graffiti、brutalist、citypop，新引擎牆面與空氣。程式：`src/app/lyric-vj/style-worlds-loud.ts`（資料）、`render/world-b3-*.ts`（每世界一檔）、`render/world-b3-sets.ts`（版型數字）、`render/world-b3-motion.ts`（進退場）、`render/world-glyph-loud.ts`（8 種字面：offset-plate、hard-shadow、stage-lit、chrome、bubble、spray、toner、airbrush）、`render/world-b3-shared.ts`（花紋磚、硬投影、星形、字後留空）、`render/world-wall.ts`（牆面引擎：噴霧、漆滴、模板、水泥、磚）、`render/world-air.ts`（空氣引擎：噴槍天空、霞、雲、焦散、條紋落日、棕櫚、硬影）。共用檔只各加幾行：`world-packs.ts`（登記）、`world-sets.ts`、`world-motion.ts`（展開第 3 批的表）、`world-glyph.ts`（分派到新字面）、`style-worlds.ts`、`free-styles.ts`（選單短句、新群組「棚、牆與空氣」、推薦池加 ui 與 wall）。測試：`style-worlds-loud.spec.ts`。`style-song-gate.mts` 加 `--styles`，讓自有池的 print 世界也能量。工作檔在 `out/research/styles3/`，樣片在 `~/Desktop/vj/output/風格第3批_2026-11-04/`。
+
+- 近鄰拉開：gameshow（ui、亮底、硬投影、Huninn）對 idol-live（emissive、暗底、加法光邊、Chiron Hei）；popart（print、平塗色版＋網點、offset-plate）對 y2k（emissive、珠光漸層、chrome）。測試裡有一條直接檢查。
+- JIZURA 區隔：沒開 `out/research/jizura-source/`；避開了警戒斜紋膠帶、燈泡追逐框、愛心計數器、同心漩渦、透視格線、HUD；popart 的斜紋因為像警戒膠帶改成細線。字面與零件由材質推導（四色套印、棚內平光、燈架光錐、鍍鉻反射帶、絹印多色版、噴罐霧滴、影印碳粉、噴槍）。
+- 我的決定：三個 print 家族的新世界（popart、psychedelic、brutalist）各有自己的背景與轉場池，不共用紙質印刷的；`free-styles` 推薦池加入 ui、wall 家族（會改變既有歌曲的預設風格抽法，可逆）；citypop 的 air 家族不進快歌推薦。
+- 看圖後改掉的：gameshow 空面板→斜切分割畫面（講台版太粗糙，丟掉）；graffiti 字後深底由一排圓點改成連續噴帶；brutalist 色條改版色避免與染色對句撞色；psychedelic 熔岩由模糊改平塗有邊；y2k 鍍鉻暗帶減淡；idol-live 亮底段不用加法光；buzz-in 進場公式錯（最後幾字不出現）由 `world-motion.spec` 抓到。
+
+結果（2026-11-04）：
+
+- 閘門 1：0；閘門 2：0／435（含第 3 批 204 對，風格／種子比最低 4.95）；歌曲閘門：8 種 0（print 家族三種用 `--styles` 量）；閘門 3：第一輪 3 對（paper-lantern/gameshow 0.258、chiyogami/gameshow 0.269、chiyogami/woodcut 0.264），gameshow 布景花紋降對比、題目卡下移後與 8 個近鄰重跑 0 項，最近 0.244。
+- 可讀性（5 首、種子 0）：popart、gameshow（布景降對比後重量 473 點仍 0）、idol-live、y2k、psychedelic、graffiti、brutalist 各 0；citypop 3 個時間點沒過（雪 c019、チョロイン c044），都是白色封套卡放在淺色天空上、關掉歌詞層時卡一起消失，平均差 33–38（門檻 40），字清楚可讀；封套改小加色帶後仍 3 點，是量法把淺色承載物算進歌詞層。idol-live 第一輪 71 句沒過是引擎段落反相（flip 'part'）把白字放到白底，8 種 flip 全關後 0。
+- 測試：tsc 通過，`ng test` 1240 通過。`style-world.spec` 的「只從自己的池抽」隨世界數成長超過 5 秒，給了 30 秒。
+- 樣片：每種 2 首（雙截棍 76–101 s、世界のつづき 190–215 s）各 25 秒、句子與場面總覽、48 張全尺寸靜幀、選單縮圖（經 `/free` 真頁面產生，`public/free-styles/*.webp`），見 `~/Desktop/vj/output/風格第3批_2026-11-04/說明.md`。
+- NOT DONE：場面單支短片；可讀性只有種子 0；origins 未跑；盲測待業主。API 費用 0。
+
 ## 第 1 批第三輪判斷（2026-11-02）
 
 使用者：除了終端機文字擠在一起看不清楚，其他可以。方向通過，第 2 批沿用同一做法；終端機在第 2 批內修。

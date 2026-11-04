@@ -46,14 +46,12 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'graffiti/throwup': { ...base, at: [0.42, 0.5], ax: 0, ay: 0, share: 0.9, tall: 0.66, hi: 400, rows: [1, 2], lead: 1.02, track: 0, tilt: -0.08, object: 'throw-up', pad: [120, 80], fill: [0.7, 0.5] },
   'graffiti/column': { ...base, at: [0.16, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.84, hi: 230, rows: [1, 2], vertical: true, lead: 1.06, track: 0.02, tilt: -0.04 },
   'graffiti/stack': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.84, tall: 0.8, hi: 240, rows: [2, 3], lead: 1.1, track: 0.01, flush: -1, stair: 0.9 },
-  // brutalist: full bleed from the top left, a slab along the bottom, a tape band across, tight stacks, the shout
-  'brutalist/full-bleed': { ...base, at: [0.02, 0.04], ax: -1, ay: -1, share: 1.0, tall: 0.9, hi: 480, rows: [1, 3], lead: 1, track: -0.01, flush: -1 },
-  'brutalist/bottom-slab': { ...base, at: [0.98, 0.96], ax: 1, ay: 1, share: 0.96, tall: 0.5, hi: 360, rows: [1, 2], lead: 1, track: -0.01, flush: 1 },
-  'brutalist/tape-band': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.9, tall: 0.3, hi: 240, rows: [1, 1], lead: 1, track: -0.01, tilt: -0.14, object: 'tape-slogan', pad: [70, 34], fill: [1.2, 0.3] },
-  'brutalist/stack-tight': { ...base, at: [0.02, 0.5], ax: -1, ay: 0, share: 0.9, tall: 0.9, hi: 320, rows: [2, 3], lead: 1, track: -0.01, flush: -1 },
-  'brutalist/corner-cut': { ...base, at: [0.98, 0.04], ax: 1, ay: -1, share: 0.62, tall: 0.5, hi: 300, rows: [1, 2], lead: 1, track: -0.01, flush: 1 },
-  'brutalist/column': { ...base, at: [0.08, 0.5], ax: 0, ay: 0, share: 0.3, tall: 0.92, hi: 280, rows: [1, 2], vertical: true, lead: 1, track: -0.01 },
-  'brutalist/shout': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.0, tall: 0.9, hi: 520, rows: [1, 2], lead: 1, track: -0.01 },
+  // brutalist (board a–d): the headline top left inside the 96 px margin, two lines low under a red rule, the shout across four
+  // cells, two columns at the right; nothing ever crosses the margin
+  'brutalist/headline': { ...base, at: [0.047, 0.185], ax: -1, ay: -1, share: 0.56, tall: 0.6, hi: 318, rows: [1, 3], lead: 1, track: -0.01, flush: -1, fixed: true },
+  'brutalist/footer': { ...base, at: [0.048, 0.648], ax: -1, ay: -1, share: 0.6, tall: 0.26, hi: 112, rows: [1, 2], lead: 1.18, track: 0.02, flush: -1, fixed: true },
+  'brutalist/cells': { ...base, at: [0.5, 0.54], ax: 0, ay: 0, share: 0.86, tall: 0.42, hi: 388, rows: [1, 1], lead: 1, track: 0.11, ink: 'plate', fixed: true },
+  'brutalist/columns': { ...base, at: [0.808, 0.118], ax: 0, ay: -1, share: 0.2, tall: 0.79, hi: 104, rows: [1, 2], vertical: true, lead: 1.54, track: 0.02, fixed: true },
   // citypop (board a–d): the title on the facade, the line over the night sea, centred over the skyline, columns on the white column
   'citypop/facade-title': { ...base, at: [0.073, 0.213], ax: -1, ay: -1, share: 0.4, tall: 0.5, hi: 142, rows: [1, 3], lead: 1.12, track: 0.04, flush: -1, fixed: true },
   'citypop/sea-title': { ...base, at: [0.0885, 0.219], ax: -1, ay: -1, share: 0.5, tall: 0.42, hi: 92, rows: [1, 2], lead: 1.5, track: 0.16, flush: -1, fixed: true },

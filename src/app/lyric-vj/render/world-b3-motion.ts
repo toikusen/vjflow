@@ -33,10 +33,9 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
   'spray-on': { sec: 0.42, glyph: ({ q, i, seed }) => { const k = clamp01((q - 0.5 * hash(i, seed + 3)) / 0.5); return { a: k > 0 ? 0.35 + 0.65 * easeOut(k, 2) : 0, s: k > 0 ? 1.08 - 0.08 * easeOut(k, 2) : 1.08, tone: 0.5 + 0.5 * k }; } },
   'stencil-lift': { sec: 0.3, clip: (q) => ({ axis: 'y', at: stepsOf(q, 7) }), block: (q) => ({ dy: 6 * (1 - stepsOf(q, 7)) }) },
   'marker-write': { sec: 0.48, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 1) - i); return { a: k > 0 ? 1 : 0, dx: k > 0 && k < 1 ? 3 : 0 }; } },
-  // brutalist: a copy lands, no fade; the sheet slams down in two steps; the strip is torn back to show it
-  'xerox-cut': { sec: 0.08, glyph: ({ q }) => ({ a: q > 0 ? 1 : 0 }) },
-  'slam-down': { sec: 0.18, block: (q) => ({ dy: -70 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }) },
-  'strip-reveal': { sec: 0.26, clip: (q) => ({ axis: 'y', at: stepsOf(q, 4) }) },
+  // brutalist (board motion): cuts, never fades: the block lands whole, or jumps a grid step into place
+  'hard-cut': { sec: 0.04, glyph: ({ q }) => ({ a: q > 0 ? 1 : 0 }) },
+  'grid-jump': { sec: 0.16, block: (q) => ({ dy: q < 0.5 ? -48 : 0, a: q > 0 ? 1 : 0 }) },
   // citypop (board motion): the title fades in from wide tracking to its own, or line by line; it then stays a long time
   'wide-fade': { sec: 0.9, glyph: ({ q, u }) => ({ a: easeOut(q, 2), dx: (u - 0.5) * 60 * (1 - easeOut(q, 3)) }) },
   'line-fade': { sec: 0.9, glyph: ({ q, v }) => { const k = clamp01(q * 1.6 - v * 0.6); return { a: easeOut(k, 2) }; } },
@@ -56,8 +55,8 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'band-cover': { sec: 0.36, clip: (q) => ({ axis: 'y', at: 1 - stepsOf(easeIn(q, 2), 6) }) },
   'buff-out': { sec: 0.36, clip: (q) => ({ axis: 'x', at: 1 - easeIn(q, 1.6) }) },
   'peel-off': { sec: 0.3, block: (q, seed) => ({ dy: 90 * easeIn(q, 2), r: (seed % 2 ? 0.05 : -0.05) * easeIn(q, 2), a: 1 - easeIn(q, 1.4) }) },
-  'rip-off': { sec: 0.2, block: (q, seed) => ({ dx: (seed % 2 ? 1 : -1) * 500 * stepsOf(easeIn(q, 2), 4), a: q < 0.85 ? 1 : 0 }) },
-  'invert-off': { sec: 0.16, glyph: ({ q }) => ({ tone: q < 0.5 ? 0.2 : 1, a: q < 0.5 ? 1 : 0 }) },
+  'hard-off': { sec: 0.04, glyph: ({ q }) => ({ a: q < 0.5 ? 1 : 0 }) },
+  'pull-off': { sec: 0.16, block: (q) => ({ dx: -96 * Math.ceil(q * 3), a: q < 0.9 ? 1 : 0 }) },
   'slow-fade': { sec: 0.9, glyph: ({ q }) => ({ a: 1 - easeIn(q, 1.6) }) },
   'wide-out': { sec: 0.8, glyph: ({ q, u }) => ({ a: 1 - easeIn(q, 1.6), dx: (u - 0.5) * 50 * easeIn(q, 2) }) },
 };
@@ -71,6 +70,7 @@ export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'sleeve-still': () => ({}),
   'poster-still': () => ({}),
   'drip-hang': ({ age, i, seed }) => ({ dy: Math.min(4, age * 0.5) * hash(i, seed + 7) }),
-  'copier-jitter': ({ age, i, seed }) => { const t = Math.floor(age * 12); return { dx: (hash(t, i + seed) - 0.5) * 2, dy: (hash(t, seed) - 0.5) * 1.5 }; },
+  // the copier's feed: the sheet moves 1 px every other frame, the words with it
+  'copier-feed': ({ age }) => ({ dy: Math.floor(age * 15) % 2 ? -1 : 0 }),
   'cover-still': () => ({}),
 };

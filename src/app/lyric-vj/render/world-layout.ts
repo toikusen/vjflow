@@ -283,6 +283,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
 
   return {
     group,
+    // (a set laid into its page's composition is placed inside the safe area by its numbers: it is neither refitted nor drifted)
+    framed: slot.of === 1 && sets.every((s) => s.fixed),
     update(t: number, _fx: FrameFx) {
       const k = poseAt(t);
       const p = poses[k];

@@ -47,7 +47,7 @@ test('the prompts: the pick lists every candidate with its reason to avoid; the 
   assert.ok(pick.includes('- silk｜') && pick.includes('- silk-cold｜') && pick.includes('這首避免：silk') && pick.includes('安靜的歌'));
   const chalk = worldById('chalkboard')!;
   const kit = worldKitPrompt(chalk, poolOf(chalk, RECIPES, 0), false, 30);
-  assert.ok(kit.includes('chalkboard/lesson') && kit.includes('chalk-write') && kit.includes('共用版面：這個世界沒有') && kit.includes('decor 只能 none 或 fine-note') && kit.includes('handoff 一律空字串'));
+  assert.ok(kit.includes('chalkboard/lesson') && kit.includes('chalk-hand') && kit.includes('共用版面：這個世界沒有') && kit.includes('decor 只能 none 或 fine-note') && kit.includes('handoff 一律空字串'));
   const silk = worldById('silk')!;
   const skit = worldKitPrompt(silk, poolOf(silk, RECIPES, 0), false, 30);
   assert.ok(skit.includes('punch + zoom + thump') && skit.includes('整首最多 12 句') && !skit.includes('decor 只能'));

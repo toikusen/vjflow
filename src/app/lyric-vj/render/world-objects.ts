@@ -5,7 +5,7 @@ import { mixHex, roughEdge, tornLine, Pt } from './material';
 import { brushStroke } from './world-ink';
 import { handInked, HandObject, handObjects } from './world-packs';
 
-export type WorldObject = 'transcript-tape' | 'sign-box' | 'sign-blade' | 'tty-pane' | 'tty-split' | 'led-strip' | 'led-module' | 'led-pillar' | 'ink-stroke' | 'title-card' | 'caption-band' | 'card-corner' | 'lancet' | 'twin-lancet' | 'transom' | 'book-page' | 'book-leaf' | 'cameo' | HandObject;
+export type WorldObject = 'transcript-tape' | 'sign-box' | 'sign-blade' | 'tty-pane' | 'tty-split' | 'led-strip' | 'led-module' | 'led-pillar' | 'ink-stroke' | 'title-card' | 'caption-band' | 'card-corner' | 'book-page' | 'book-leaf' | 'cameo' | HandObject;
 
 /** The colours a part may use: a world's scheme by meaning, never a value of the part's own. */
 export interface Slots { ground: string; ink: string; ink2: string; accent: string; plate: string; plateInk: string; faint: string }
@@ -70,70 +70,6 @@ function filigree(c: Ctx, x: number, y: number, dx: number, dy: number, size: nu
   c.restore();
 }
 
-/** Lead cames across an area: each pane its own glass, the came dark and a little fat at the joins. */
-function leadedPanes(c: Ctx, x: number, y: number, w: number, h: number, seed: number, cell: number, glass: string[], came: string) {
-  const cols = Math.ceil(w / cell) + 1, rows = Math.ceil(h / cell) + 1;
-  const pt = (i: number, j: number): Pt => [x + (i + (hash(i * 3 + 1, j + seed) - 0.5) * 0.55) * (w / (cols - 1)), y + (j + (hash(i + 5, j * 3 + seed) - 0.5) * 0.55) * (h / (rows - 1))];
-  c.lineJoin = 'round';
-  for (let i = 0; i < cols - 1; i++)
-    for (let j = 0; j < rows - 1; j++) {
-      const [a, b, d, e] = [pt(i, j), pt(i + 1, j), pt(i + 1, j + 1), pt(i, j + 1)];
-      const split = hash(i, j + seed + 3) > 0.5;
-      (split ? [[a, b, d], [a, d, e]] : [[a, b, e], [b, d, e]]).forEach((tri, k) => {
-        const tone = glass[Math.floor(hash(i * 7 + k, j * 5 + seed) * glass.length)];
-        const g = c.createLinearGradient(tri[0][0], tri[0][1], tri[2][0], tri[2][1]);
-        const lift = hash(i + k * 3, j + seed + 8);
-        g.addColorStop(0, mixHex(tone, came, 0.1 * lift));
-        g.addColorStop(1, mixHex(tone, came, 0.42 * (1 - lift)));
-        c.fillStyle = g;
-        trace(c, tri as Pt[]);
-        c.fill();
-        c.strokeStyle = came;
-        c.lineWidth = 4.6;
-        c.stroke();
-      });
-    }
-}
-
-/** A lancet's outline: straight jambs, two arcs meeting in a point. */
-function archPath(c: Ctx, x: number, y: number, w: number, h: number) {
-  const spring = y + Math.min(h * [0.26, 0.34, 0.2][look], w * [0.86, 1.1, 0.6][look]);
-  c.beginPath();
-  c.moveTo(x, y + h);
-  c.lineTo(x, spring);
-  c.quadraticCurveTo(x + w * 0.08, y + (spring - y) * 0.3, x + w / 2, y);
-  c.quadraticCurveTo(x + w * 0.92, y + (spring - y) * 0.3, x + w, spring);
-  c.lineTo(x + w, y + h);
-  c.closePath();
-}
-
-function lightsOf(c: Ctx, s: Slots, boxes: [number, number, number, number][], seed: number, arched: boolean) {
-  // quarries of pale glass with a border of colour: by day the window is the brightest thing in the room
-  const glass = [s.plate, mixHex(s.plate, s.accent, 0.3), mixHex(s.plate, s.ink2, 0.3), mixHex(s.plate, s.ground, 0.5)];
-  for (const [x, y, w, h] of boxes) {
-    c.save();
-    shadow(c, 40, 10, 0.6);
-    c.fillStyle = s.plate;
-    if (arched) archPath(c, x, y, w, h); else rounded(c, x, y, w, h, 10);
-    c.fill();
-    noShadow(c);
-    c.clip();
-    leadedPanes(c, x - 8, y - 8, w + 16, h + 16, seed + x, Math.max(90, Math.min(w, h) / 2.4), glass, mixHex(s.ink, s.plate, 0.45));
-    // the stone rebate round the light, and the border of smaller glass inside it
-    c.restore();
-    c.save();
-    c.strokeStyle = s.ink;
-    c.lineWidth = 14;
-    if (arched) archPath(c, x, y, w, h); else rounded(c, x, y, w, h, 10);
-    c.stroke();
-    c.strokeStyle = mixHex(s.accent, s.ink, 0.35);
-    c.globalAlpha = 0.55;
-    c.lineWidth = 2;
-    if (arched) archPath(c, x + 13, y + 26, w - 26, h - 39); else rounded(c, x + 13, y + 13, w - 26, h - 26, 6);
-    c.stroke();
-    c.restore();
-  }
-}
 
 /** Tape torn off a thermal printer: thin paper curling at its ends, lit only by whatever is near. */
 function tape(c: Ctx, w: number, h: number, s: Slots, seed: number) {
@@ -417,9 +353,6 @@ const PAINT: Record<WorldObject, (c: Ctx, w: number, h: number, s: Slots, seed: 
   // a printed title strip, opaque: a see-through band read as a grey bar under the words (2026-11-04 audit)
   'caption-band': (c, w, h, s) => { c.fillStyle = s.plate; c.globalAlpha = 1; c.fillRect(0, 0, w, h); c.globalAlpha = 0.8; c.fillStyle = s.plateInk; c.fillRect(0, 7, w, 1.4); c.fillRect(0, h - 8, w, 1.4); c.globalAlpha = 1; },
   'card-corner': (c, w, h, s) => { shadow(c, 16, 0, 0.7); c.fillStyle = s.plate; c.fillRect(0, 0, w, h); noShadow(c); c.strokeStyle = s.plateInk; c.lineWidth = 1.6; c.strokeRect(12, 12, w - 24, h - 24); },
-  lancet: (c, w, h, s, seed) => lightsOf(c, s, [[8, 8, w - 16, h - 16]], seed, true),
-  'twin-lancet': (c, w, h, s, seed) => lightsOf(c, s, [[8, 8, w / 2 - 22, h - 16], [w / 2 + 14, 8, w / 2 - 22, h - 16]], seed, true),
-  transom: (c, w, h, s, seed) => lightsOf(c, s, [[8, 8, w - 16, h - 16]], seed, false),
   'book-page': (c, w, h, s, seed) => bookPage(c, w, h, s, seed, 0),
   'book-leaf': (c, w, h, s, seed) => bookPage(c, w, h, s, seed, seed % 2 ? -1 : 1),
   cameo,
@@ -427,7 +360,7 @@ const PAINT: Record<WorldObject, (c: Ctx, w: number, h: number, s: Slots, seed: 
 };
 
 /** The colour the words take on this object. */
-export const objectInk = (o: WorldObject, s: Slots) => (['sign-box', 'sign-blade', 'tty-pane', 'tty-split', 'led-strip', 'led-module', 'led-pillar', 'lancet', 'twin-lancet', 'transom', ...handInked].includes(o) ? s.ink : s.plateInk);
+export const objectInk = (o: WorldObject, s: Slots) => (['sign-box', 'sign-blade', 'tty-pane', 'tty-split', 'led-strip', 'led-module', 'led-pillar', ...handInked].includes(o) ? s.ink : s.plateInk);
 
 const painted = new Map<string, OffscreenCanvas>();
 /** The object for a block `w` × `h`, shadow margin included in the canvas. Kept: chorus lines come back with the same one. */

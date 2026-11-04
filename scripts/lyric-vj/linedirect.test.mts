@@ -248,7 +248,7 @@ assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五
   const chalk = worldById('chalkboard')!;
   const C = poolOf(chalk, RECIPES, 0);
   assert.ok(!C.devices && !C.handoffs);
-  const cline = (cue: string, over: Partial<LineChoice> = {}) => line(cue, { layout: 'chalkboard/lesson', enter: 'chalk-write', idle: 'hand-shake', exit: 'wipe-off', side: 'center', ...over });
+  const cline = (cue: string, over: Partial<LineChoice> = {}) => line(cue, { layout: 'chalkboard/lesson', enter: 'chalk-hand', idle: 'chalk-still', exit: 'eraser-pass', side: 'center', ...over });
   const cd = checkDirection(direction(cues.map((c) => cline(c.id, c.id === 'c1' ? { decor: 'oval' } : c.id === 'c2' ? { decor: 'fine-note', noteKind: 'echo', note: '整條街的燈' } : c.id === 'c3' ? { handoff: 'relay' } : {}))), { ...ctx, world: C });
   assert.ok(cd.fallbacks.some((f) => f.cue === 'c1' && f.field === 'decor'), 'no ring in a world without paper devices');
   assert.equal(cd.accepted.get('c2')?.note, '整條街的燈', 'the director\'s own words still stand');

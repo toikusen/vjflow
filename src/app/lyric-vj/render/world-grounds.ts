@@ -117,20 +117,6 @@ function clearWords(e: WorldEnv, strength: number) {
 }
 /** The wet worlds' room for a line: paper the brush never touched, its edge torn the way a reserve is (world-ink.ts). */
 const reserveWords = (e: WorldEnv) => { if (!e.rect || e.weight <= 0) return; const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); reservePaper(c, e.seed, e.rect, e.paper, Math.min(1, e.weight * 3)); c.restore(); };
-/** A plain inscription quarry left in the window for the line: clear glass in its own lead, nothing crossing it. */
-function inscription(e: WorldEnv) {
-  const room = wordsRoom(e);
-  if (!room) return;
-  const c = e.ctx;
-  c.save();
-  if (e.base) c.setTransform(e.base);
-  c.fillStyle = e.paper;
-  c.fillRect(room.x0, room.y0, room.x1 - room.x0, room.y1 - room.y0);
-  c.strokeStyle = e.slots.ink;
-  c.lineWidth = 7;
-  c.strokeRect(room.x0, room.y0, room.x1 - room.x0, room.y1 - room.y0);
-  c.restore();
-}
 const vignette = (e: WorldEnv, a: number) => {
   const g = e.ctx.createRadialGradient(W / 2, H / 2, H * 0.34, W / 2, H / 2, H * 1.02);
   g.addColorStop(0, 'rgba(0,0,0,0)');
@@ -363,81 +349,6 @@ function gate(e: WorldEnv, strength = 1) {
   }
   c.restore();
 }
-
-// ---- leaded light -----------------------------------------------------------------------------------------------------
-
-const lights = (e: WorldEnv, cell: number) => kept(`lights|${e.slots.plate}|${e.slots.accent}|${e.slots.ink2}|${e.seed % 4}|${cell}`, W + 200, H + 200, (c) => {
-  const s = e.slots;
-  // by day the glass is the light in the room: pale quarries with colour coming through them, the lead dark
-  const glass = [s.plate, mixHex(s.plate, s.accent, 0.42), mixHex(s.plate, s.ink2, 0.42), mixHex(s.plate, s.faint, 0.5), mixHex(s.accent, s.plate, 0.25), mixHex(s.ink2, s.plate, 0.25)];
-  c.fillStyle = s.ink;
-  c.fillRect(0, 0, W + 200, H + 200);
-  const [cols, rows] = [Math.ceil((W + 200) / cell) + 1, Math.ceil((H + 200) / cell) + 1];
-  const sd = e.seed % 4;
-  const pt = (i: number, j: number): Pt => [(i + (hash(i * 3 + 1, j + sd) - 0.5) * 0.6) * cell, (j + (hash(i + 5, j * 3 + sd) - 0.5) * 0.6) * cell];
-  c.lineJoin = 'round';
-  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
-    const [a, b, d, f] = [pt(i, j), pt(i + 1, j), pt(i + 1, j + 1), pt(i, j + 1)];
-    (hash(i, j + sd + 2) > 0.5 ? [[a, b, d], [a, d, f]] : [[a, b, f], [b, d, f]]).forEach((tri, k) => {
-      c.fillStyle = glass[Math.floor(hash(i * 3 + k, j * 7 + sd) * glass.length)];
-      c.beginPath();
-      tri.forEach(([x, y], n) => (n ? c.lineTo(x, y) : c.moveTo(x, y)));
-      c.closePath();
-      c.fill();
-      c.strokeStyle = s.ink;
-      c.lineWidth = 5;
-      c.stroke();
-    });
-  }
-});
-/** Sun through the window: everything held in the panes, a soft band of it brighter, sliding across with the song. */
-function sunOn(e: WorldEnv, cell: number, base: number) {
-  const c = e.ctx;
-  c.globalAlpha = base;
-  c.drawImage(lights(e, cell), -100, -100);
-  c.globalAlpha = 1;
-  const x = fract(e.now * (0.05 + 0.16 * e.level) + hash(e.seed, 2)) * (W + 900) - 450;
-  const g = c.createLinearGradient(x - 420, 0, x + 420, H * 0.4);
-  g.addColorStop(0, 'rgba(255,255,255,0)');
-  g.addColorStop(0.5, 'rgba(255,255,255,0.9)');
-  g.addColorStop(1, 'rgba(255,255,255,0)');
-  const lit = kept2(c, g, lights(e, cell), 1 - base);
-  c.drawImage(lit, -100, -100);
-}
-let sunCanvas: OffscreenCanvas | undefined;
-function kept2(_c: CanvasRenderingContext2D, g: CanvasGradient, img: OffscreenCanvas, a: number) {
-  const cv = (sunCanvas ??= new OffscreenCanvas(W + 200, H + 200));
-  const s = cv.getContext('2d')!;
-  s.clearRect(0, 0, cv.width, cv.height);
-  s.globalCompositeOperation = 'source-over';
-  s.globalAlpha = 1;
-  s.drawImage(img, 0, 0);
-  s.globalCompositeOperation = 'destination-in';
-  s.globalAlpha = Math.max(0.2, a);
-  s.translate(100, 100);
-  s.fillStyle = g;
-  s.fillRect(-100, -100, cv.width, cv.height);
-  s.translate(-100, -100);
-  return cv;
-}
-const shaft = (e: WorldEnv, x: number, slant: number, w: number, tone: string, a: number) => {
-  const c = e.ctx;
-  c.save();
-  c.globalCompositeOperation = 'multiply';
-  const g = c.createLinearGradient(0, -40, 0, H);
-  g.addColorStop(0, tone);
-  g.addColorStop(1, `${tone}00`);
-  c.fillStyle = g;
-  c.globalAlpha = a;
-  c.beginPath();
-  c.moveTo(x, -40);
-  c.lineTo(x + w, -40);
-  c.lineTo(x + w * 1.6 + slant, H + 40);
-  c.lineTo(x - w * 0.3 + slant, H + 40);
-  c.closePath();
-  c.fill();
-  c.restore();
-};
 
 // ---- tooled and upholstered -------------------------------------------------------------------------------------------
 
@@ -823,67 +734,6 @@ export const WORLD_GROUNDS: Record<string, Ground> = {
     gate(e, 1.6);
   },
   'silent-film/long-fade': (e) => { full(e, e.paper); pool(e.ctx, W / 2, H / 2, 640, e.slots.faint, 0.16 + 0.14 * Math.sin(e.now * 0.6)); gate(e, 0.7); },
-  'stained-glass/window': (e) => { full(e, e.paper); sunOn(e, 170, 0.8); inscription(e); vignette(e, 0.2); },
-  'stained-glass/quarry': (e) => { full(e, e.paper); sunOn(e, 96, 0.62); inscription(e); vignette(e, 0.2); },
-  'stained-glass/shafts': (e) => {
-    full(e, e.paper);
-    e.ctx.globalAlpha = 0.34;
-    e.ctx.drawImage(lights(e, 220), -100, -100);
-    e.ctx.globalAlpha = 1;
-    [e.slots.accent, e.slots.ink2, e.slots.faint, e.slots.accent].forEach((tone, i) => shaft(e, W * (0.08 + 0.26 * i) + 150 * Math.sin(e.now * (0.2 + 0.5 * e.level) + i), 260, 150 + 110 * hash(i, e.seed), tone, 0.46 + 0.12 * Math.sin(e.now * 0.9 + i)));
-    inscription(e);
-    vignette(e, 0.2);
-  },
-  'stained-glass/stone': (e) => {
-    const c = e.ctx;
-    full(e, e.paper);
-    c.strokeStyle = e.slots.faint;
-    c.globalAlpha = 0.24;
-    c.lineWidth = 3;
-    for (let i = 0; i < 9; i++) {
-      const x = (i + 0.5) * (W / 9);
-      c.beginPath();
-      c.moveTo(x - 80, H);
-      c.lineTo(x - 80, H * 0.34);
-      c.quadraticCurveTo(x - 70, H * 0.14, x, H * 0.04);
-      c.quadraticCurveTo(x + 70, H * 0.14, x + 80, H * 0.34);
-      c.lineTo(x + 80, H);
-      c.stroke();
-    }
-    c.globalAlpha = 1;
-    pool(c, fract(e.now * 0.03) * W, H * 0.2, 700, e.slots.ink2, 0.18);
-    vignette(e, 0.2);
-  },
-  'stained-glass/rose': (e) => {
-    const c = e.ctx;
-    full(e, e.paper);
-    const [cx, cy, R] = [W / 2, H / 2, H * 0.62 * (0.92 + 0.08 * ease(e.age / 0.5))];
-    c.save();
-    c.translate(cx, cy);
-    c.rotate(e.now * 0.05);
-    const n = 16;
-    for (let ring = 2; ring >= 0; ring--) {
-      const [r0, r1] = [R * (ring / 3), R * ((ring + 1) / 3)];
-      for (let i = 0; i < n; i++) {
-        const [a0, a1] = [(i / n) * TAU, ((i + 1) / n) * TAU];
-        c.fillStyle = [mixHex(e.slots.accent, e.slots.plate, 0.3), mixHex(e.slots.ink2, e.slots.plate, 0.3), e.slots.plate][(i + ring) % 3];
-        c.globalAlpha = 0.5 + 0.5 * Math.max(0, Math.sin(e.now * 1.6 + i * 0.9 + ring)) * (0.5 + 0.5 * e.pulse);
-        c.beginPath();
-        c.arc(0, 0, r1, a0, a1);
-        c.arc(0, 0, r0, a1, a0, true);
-        c.closePath();
-        c.fill();
-        c.globalAlpha = 1;
-        c.strokeStyle = e.ink;
-        c.lineWidth = 7;
-        c.stroke();
-      }
-    }
-    c.restore();
-    inscription(e);
-    vignette(e, 0.2);
-  },
-  'stained-glass/dawn': (e) => { full(e, e.paper); sunOn(e, 240, 0.34); inscription(e); vignette(e, 0.3); },
   'gothic-lolita/damask': (e) => {
     const c = e.ctx;
     c.save();
@@ -1029,13 +879,6 @@ Object.assign(WORLD_GROUNDS, {
     full(e, mixHex(e.paper, e.slots.plateInk, 0.5 + 0.08 * hash(Math.floor(e.now * 6), 3)));
     gate(e, 1.3);
   },
-  'stained-glass/full-sun': (e: WorldEnv) => {
-    full(e, e.paper);
-    e.ctx.drawImage(lights(e, 200), -100, -100);
-    pool(e.ctx, W * (0.2 + 0.6 * fract(e.now * 0.1)), H * 0.4, 1200, e.slots.plate, 0.5);
-    inscription(e);
-    vignette(e, 0.1);
-  },
   'gothic-lolita/gold-leaf': (e: WorldEnv) => {
     const c = e.ctx;
     full(e, mixHex(e.paper, e.slots.accent, 0.92));
@@ -1067,9 +910,6 @@ const slab = (e: WorldEnv, pts: Pt[], tone: string, a = 1) => {
   const off = (hash(parseInt(tone.slice(1, 7), 16) % 997, 3) - 0.5) * 14;
   inkRound(e, mixHex(e.paper, mulHex(e.paper, tone), a), fill, room && { x0: room.x0 + off, y0: room.y0 - off / 2, x1: room.x1 + off, y1: room.y1 - off / 2 });
 };
-/** Where a point of the ground being drawn lies in the frame's own coordinates. */
-const inFrame = (e: WorldEnv, x: number, y: number) => (e.base ? e.base.inverse() : new DOMMatrix()).multiply(e.ctx.getTransform()).transformPoint({ x, y });
-const meets = (r: Box, q: Box) => r.x0 < q.x1 && q.x0 < r.x1 && r.y0 < q.y1 && q.y0 < r.y1;
 const slide = (e: WorldEnv) => ease(e.age / 0.4) * (1 + 0.01 * Math.sin(e.now));
 const tint = (e: WorldEnv, k: number) => mixHex(e.paper, e.slots.accent, k);
 const shade = (e: WorldEnv, k: number) => mixHex(e.paper, e.slots.ink2, k);
@@ -1080,13 +920,8 @@ Object.assign(WORLD_GROUNDS, {
   'silk-cold/night-sheet': (e: WorldEnv) => { full(e, mixHex(e.paper, e.slots.ink2, 0.2)); slab(e, [[-80, -60], [W + 80, -60], [W + 80, H * 0.34], [-80, H * 0.42]], shade(e, 0.4)); },
   'riso/two-drum': (e: WorldEnv) => { full(e, e.paper); const o = 18 * Math.sin(e.now * 2); for (let i = -1; i < 6; i++) { const x = i * 420 + fract(e.now * 0.05) * 420; slab(e, [[x, -60], [x + 190, -60], [x - 110, H + 60], [x - 300, H + 60]], tint(e, 0.5)); slab(e, [[x + o + 120, -60], [x + o + 260, -60], [x + o - 40, H + 60], [x + o - 180, H + 60]], shade(e, 0.5)); } },
   'riso/grain-block': (e: WorldEnv) => { full(e, e.paper); const s = slide(e); slab(e, [[-80, -60], [W * 0.56 * s, -60], [W * 0.44 * s, H + 60], [-80, H + 60]], shade(e, 0.55)); slab(e, [[W * 0.3, H * 0.3], [W + 80, H * 0.24], [W + 80, H + 60], [W * 0.36, H + 60]], tint(e, 0.5)); },
-  'file/manila': (e: WorldEnv) => { const c = e.ctx; full(e, mixHex(e.paper, e.slots.accent, 0.1)); slab(e, [[W * 0.06, H * 0.08], [W * 0.3, H * 0.08], [W * 0.34, H * 0.16], [W * 0.96, H * 0.16], [W * 0.96, H + 60], [W * 0.06, H + 60]], mixHex(e.paper, e.slots.ink2, 0.28)); roundWords(e, () => { c.strokeStyle = e.ink; c.globalAlpha = 0.2; for (let y = 0; y < H; y += 66) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); } c.globalAlpha = 1; }); },
-  'file/carbon': (e: WorldEnv) => { full(e, e.paper); slab(e, [[-80, H * 0.5], [W + 80, H * 0.42], [W + 80, H + 60], [-80, H + 60]], mixHex(e.paper, e.ink, 0.22)); slab(e, [[W * 0.7, -60], [W + 80, -60], [W + 80, H * 0.38], [W * 0.74, H * 0.42]], tint(e, 0.6)); },
   'spy/wedge': (e: WorldEnv) => { full(e, e.paper); const s = slide(e); slab(e, [[-80, H + 60], [W * 1.2 * s, H + 60], [-80, H * (1.3 - s)]], mixHex(e.paper, e.ink, 0.86)); },
   'spy/sliced': (e: WorldEnv) => { full(e, e.paper); const s = slide(e); for (let i = 0; i < 3; i++) { const y = H * (0.1 + i * 0.32); slab(e, [[W * (1.3 - s) - 300 * i, y], [W + 200, y - 170], [W + 200, y + 70], [W * (1.3 - s) - 300 * i, y + 240]], i === 1 ? tint(e, 0.8) : mixHex(e.paper, e.ink, 0.7)); } },
-  // a card under the words stays turned away while they are up
-  'card/flip-grid': (e: WorldEnv) => { const c = e.ctx; full(e, e.paper); const n = 6; const m = 4; const t = Math.floor(e.now * 0.8); const room = wordsRoom(e); for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { if (hash(i + t, j + e.seed) < 0.45) continue; const tone = hash(i, j + t) > 0.5 ? tint(e, 0.8) : shade(e, 0.7); const [x, y, w, h] = [(i * W) / n + 6, (j * H) / m + 6, W / n - 12, H / m - 12]; const [p, q] = [inFrame(e, x, y), inFrame(e, x + w, y + h)]; if (room && meets(room, { x0: p.x, y0: p.y, x1: q.x, y1: q.y })) continue; c.fillStyle = tone; c.fillRect(x, y, w, h); } },
-  'card/big-tile': (e: WorldEnv) => { const c = e.ctx; full(e, tint(e, 0.3)); const s = slide(e); inkRound(e, shade(e, 0.7), () => { c.fillStyle = shade(e, 0.7); c.fillRect(W * 0.5 * (1 - s), 0, W * 0.5, H); }); clearWords(e, 1); },
 } as Record<string, Ground>);
 
 Object.assign(WORLD_GROUNDS, {
@@ -1149,8 +984,6 @@ export const WORLD_INS: Record<string, { sec: number; draw: (e: WorldEnv, q: num
   'wash-over': { sec: 0.5, draw: (e, q) => (lightGround(e) ? inkWash(e.ctx, e.seed % 5, [[0.5, 0.5]], (1 - q) * 1.2, 1.2 * (1 - q), e.ink, 'multiply') : full(e, e.paper, 1 - q)) },
   // the frame line of the next shot rolling through: it goes behind the words' box, never across them
   'frame-slip': { sec: 0.22, draw: (e, q) => { const c = e.ctx; const y = (1 - q) * H; if (e.rect && y > e.rect.y0 - 70 && y < e.rect.y1 + 70 && e.weight > 0) return; c.fillStyle = e.slots.plate; c.fillRect(-W * 0.1, y - 56, W * 1.2, 56); } },
-  // the shadow comes off the window from one side, the way cloud leaves it
-  'panes-out': { sec: 0.42, draw: (e, q) => { const c = e.ctx; const x = q * (W + 800) - 400; const g = c.createLinearGradient(x - 300, 0, x + 300, H * 0.3); g.addColorStop(0, `${e.paper}00`); g.addColorStop(1, e.paper); c.fillStyle = g; c.fillRect(-W * 0.1, -H * 0.1, W * 1.2, H * 1.2); } },
   'leaf-sweep': { sec: 0.36, draw: (e, q) => { const c = e.ctx; const x = (1 - q) * (W + 300) - 150; c.save(); c.shadowColor = 'rgba(0,0,0,0.7)'; c.shadowBlur = 60; c.fillStyle = mixHex(e.paper, e.slots.faint, 0.6); c.beginPath(); c.moveTo(-W * 0.1, -H * 0.1); c.lineTo(x + 120, -H * 0.1); c.lineTo(x - 120, H * 1.1); c.lineTo(-W * 0.1, H * 1.1); c.closePath(); c.fill(); c.restore(); } },
 };
 /** The print worlds' changes of plate: a press lifting, a squeegee pass, a folder shut. */
@@ -1158,9 +991,7 @@ Object.assign(WORLD_INS, {
   'squeegee-pass': { sec: 0.3, draw: (e: WorldEnv, q: number) => { const c = e.ctx; c.fillStyle = mixHex(e.paper, e.slots.accent, 0.4); c.fillRect(-W * 0.1 + q * W * 1.2, -H * 0.1, W * (1 - q) * 1.2, H * 1.2); } },
   'fog-rise': { sec: 0.6, draw: (e: WorldEnv, q: number) => full(e, e.paper, 1 - q) },
   'drum-roll': { sec: 0.28, draw: (e: WorldEnv, q: number) => { const c = e.ctx; c.fillStyle = mixHex(e.paper, e.ink, 0.4); c.fillRect(-W * 0.1, -H * 0.1 + q * H * 1.2, W * 1.2, H * (1 - q)); } },
-  'folder-shut': { sec: 0.26, draw: (e: WorldEnv, q: number) => { const c = e.ctx; const h = (1 - q) * H * 0.5; c.fillStyle = e.slots.ink2; c.fillRect(-W * 0.1, -H * 0.1, W * 1.2, H * 0.1 + h); c.fillRect(-W * 0.1, H - h, W * 1.2, H * 0.1 + h); } },
   'slash-cut': { sec: 0.22, draw: (e: WorldEnv, q: number) => { const c = e.ctx; const x = q * (W + 800) - 400; c.fillStyle = e.ink; c.beginPath(); c.moveTo(x, -H * 0.1); c.lineTo(W * 1.3, -H * 0.1); c.lineTo(W * 1.3, H * 1.1); c.lineTo(x - 500, H * 1.1); c.closePath(); c.fill(); } },
-  'tile-sweep': { sec: 0.26, draw: (e: WorldEnv, q: number) => { const c = e.ctx; c.fillStyle = mixHex(e.paper, e.slots.accent, 0.4); for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) if ((i + j) / 8 >= q) c.fillRect((i * W) / 6, (j * H) / 4, W / 6 + 1, H / 4 + 1); } },
 } as Record<string, { sec: number; draw: (e: WorldEnv, q: number) => void }>);
 Object.assign(WORLD_INS, handIns);
 export const worldInAt = (id: string | undefined, age: number) => { const w = id ? WORLD_INS[id] : undefined; return w && age < w.sec ? { w, q: age / w.sec } : undefined; };

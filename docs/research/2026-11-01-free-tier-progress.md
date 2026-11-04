@@ -229,3 +229,5 @@
 已知未解：第 2 批可讀性每輪 2 句日文未過（上一輪就有）；ukiyoe/paper-lantern 墨位 0.242 貼近門檻 0.25。
 
 使用者授權（2026-11-02）：接續照順序做，不用再問。
+
+舊風格重做（2026-11-04，file／card／chalkboard／stained-glass 照第二輪設計稿）：閘門 3 的墨位重疊**業主接受，照稿不改**。設計稿是滿版的紙、卡、窗，去色後墨都在畫面中間，要過關只能縮小或移開載體，就偏離設計稿了。2026-11-04 去色比對（nun、snow）接受的 26 對：file/card 0.283、file/stained-glass 0.358（同時到達曲線 0.975）、file/paper-lantern 0.345、file/graffiti 0.378、card/stained-glass 0.295、card/paper-lantern 0.273、card/woodcut 0.265、card/gameshow 0.266、card/graffiti 0.345、stained-glass/paper-lantern 0.369、stained-glass/chiyogami 0.274、stained-glass/woodcut 0.289、stained-glass/popart 0.333、stained-glass/gameshow 0.32、stained-glass/graffiti 0.439、換色 stained-glass/graffiti 0.454；另外有 10 對是 graffiti 和第 3 批彼此之間的，與這四個世界無關。同一組世界在重做前（b2c4780）只有 3 對：paper-lantern/popart、woodcut/popart、woodcut/gameshow。數字在 `out/research/r2-rebuild/gate3/level3.json`。

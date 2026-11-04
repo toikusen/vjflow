@@ -114,7 +114,7 @@ const idol: StyleWorld = {
   timeBase: { fps: 0, unit: 'beat', curve: 'sticker-pop' },
   ownInk: true, standsOnPlate: true, sheet: true,
   layouts: { pair: 'idol-live/ticket', shared: [], carriers: ['idol-live/fan', 'idol-live/ticket', 'idol-live/card-col'], lines: [
-    line('idol-live/fan', [1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off', 'slide-away'], 'merch-still', { max: 12, ground: 'idol-live/fan' }),
+    line('idol-live/fan', [0, 1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off', 'slide-away'], 'merch-still', { max: 20, ground: 'idol-live/fan' }),
     line('idol-live/ticket', [0, 1, 2], ['card-flip-in', 'sticker-pop'], ['slide-away', 'sticker-off'], 'merch-still', { max: 34, ground: 'idol-live/ticket' }),
     line('idol-live/cards', [1, 2], ['card-flip-in'], ['sticker-off'], 'merch-still', { min: 3, max: 6, loud: true, ground: 'idol-live/cards' }),
     line('idol-live/card-col', [0, 1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off'], 'merch-still', { min: 5, max: 14, column: true, ground: 'idol-live/setlist' }),

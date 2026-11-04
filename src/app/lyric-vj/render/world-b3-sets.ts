@@ -20,7 +20,7 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'gameshow/board': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.95, tall: 0.17, hi: 176, lo: 176, rows: [1, 1], lead: 1, track: 0.288, even: true, object: 'gs-row-tiles', pad: [0, 0], fixed: true },
   'gameshow/qa': { ...base, at: [0.295, 0.5], ax: -1, ay: 0, share: 0.54, tall: 0.78, hi: 140, rows: [2, 2], lead: 2.9, track: 0.02, flush: -1, ink: 'plateInk', fixed: true },
   // idol-live (board a–d): fan letters across the gingham, the line on a ticket, a letter a member card, two columns on a big card
-  'idol-live/fan': { ...base, at: [0.5, 0.55], ax: 0, ay: 0, share: 0.9, tall: 0.62, hi: 250, rows: [1, 2], lead: 1.36, track: 0.13, ink: 'plateInk', under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
+  'idol-live/fan': { ...base, at: [0.5, 0.55], ax: 0, ay: 0, share: 0.9, tall: 0.7, hi: 250, rows: [1, 3], lead: 1.36, track: 0.13, ink: 'plateInk', under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
   'idol-live/ticket': { ...base, at: [0.175, 0.38], ax: -1, ay: -1, share: 0.5, tall: 0.3, hi: 104, rows: [1, 3], lead: 1.3, track: 0.04, flush: -1, ink: 'plateInk', fixed: true },
   'idol-live/cards': { ...base, at: [0.5, 0.575], ax: 0, ay: 0, share: 0.98, tall: 0.3, hi: 184, rows: [1, 1], lead: 1, track: 0.74, even: true, ink: 'plateInk', under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
   'idol-live/card-col': { ...base, at: [0.5, 0.15], ax: 0, ay: -1, share: 0.2, tall: 0.78, hi: 150, rows: [1, 2], vertical: true, lead: 1.6, track: 0.27, ink: 'plateInk', object: 'idol-card', pad: [110, 70], under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
@@ -57,7 +57,7 @@ export const LOUD_SETS: Record<string, SetSpec> = {
 
 /** Sets laid out again mirrored left to right, with their page mirrored too (`<ground>-r`): a song gets the same board both ways. */
 export const B3_MIRRORS: Record<string, string> = {
-  'popart/narration': 'popart/sea',
+  'popart/narration': 'popart/sea', 'idol-live/fan': 'idol-live/fan',
   'y2k/hook': 'y2k/hook', 'y2k/ring': 'y2k/ring', 'y2k/fan': 'y2k/fan', 'y2k/column': 'y2k/column',
   'psychedelic/sun': 'psychedelic/sun', 'psychedelic/flow': 'psychedelic/flow',
   'citypop/facade-title': 'citypop/facade', 'citypop/sea-title': 'citypop/moon', 'citypop/column': 'citypop/colonnade',

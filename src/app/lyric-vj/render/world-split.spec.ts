@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blockOf, SET_SPECS, SetSpec, TYPE_FLOOR } from './world-sets';
-import { splitParts } from './world-split';
+import { splitParts, wrapRows } from './world-split';
 
 const measure = (s: string) => [...s].length * 100;
 const inFrame = (b: { cx: number; cy: number; w: number; h: number }) => Math.abs(b.cx) + b.w / 2 <= 960 && Math.abs(b.cy) + b.h / 2 <= 540;
@@ -42,6 +42,20 @@ describe('split lines (one line in two sizes or two containers)', () => {
     expect(first.x0).toBeGreaterThan(second.x0 + second.bw);
     expect(Math.abs(first.y - second.y)).toBeLessThan(1);
     expect(inFrame(b)).toBe(true);
+  });
+  it('wrap a part with no phrase break evenly, never starting a row on a small kana', () => {
+    expect(wrapRows('信じてみるんだ', 2)).toEqual(['信じてみ', 'るんだ']);
+    expect(wrapRows('ちょっと', 2).every((r) => !/^[ょっ]/.test(r))).toBe(true);
+    expect(wrapRows('哼哼哈兮', 1)).toEqual(['哼哼哈兮']);
+  });
+  it("hold a part set apart to its container's width (the burst), wrapping it first", () => {
+    for (const id of ['popart/balloon', 'popart/balloon-r']) {
+      const s = SET_SPECS[id];
+      const b = blockOf('信じてみる 信じてみるんだ', s, measure);
+      const rows = b.small!.map((r) => b.lines![r]);
+      expect(rows.length, id).toBe(2);
+      for (const r of rows) expect(r.bw, id).toBeLessThanOrEqual(s.split!.share! * 1920 + 1);
+    }
   });
   it('put a part set apart at its own place, clear of the hero', () => {
     const b = blockOf('快使用雙截棍 哼哼哈兮', SET_SPECS['popart/balloon'], measure);

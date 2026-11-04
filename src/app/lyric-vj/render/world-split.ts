@@ -35,6 +35,29 @@ export interface RowBox { x0: number; bw: number; y: number; size: number; track
 const [W, H, SAFE_X, SAFE_Y] = [1920, 1080, 64, 48];
 const clampTo = (x: number, r: number) => Math.min(r, Math.max(-r, x));
 const bare = (s: string) => [...s.replace(/[\s\p{P}\p{S}]/gu, '')].length;
+/** Characters a row may not start with (small kana, the long mark, closing punctuation). */
+const NO_START = /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮヵヶんンー、。，．！？!?）」』〉》】…・ゝゞヽヾ]/;
+
+/**
+ * `text` in `rows` rows: at its phrases when they balance, else cut by characters as evenly as can be with no row starting
+ * on a character that may not start one. A part with no phrase break (信じてみるんだ) stayed one row past its container.
+ */
+export function wrapRows(text: string, rows: number): string[] {
+  const phrased = balancedRows(text, rows).filter(Boolean);
+  if (phrased.length >= rows) return phrased;
+  const cs = [...text.replace(/\s+/g, '')];
+  const out: string[] = [];
+  let from = 0;
+  for (let r = rows; r > 1; r--) {
+    let cut = from + Math.ceil((cs.length - from) / r);
+    while (cut < cs.length - 1 && NO_START.test(cs[cut])) cut++;
+    if (cut >= cs.length) break;
+    out.push(cs.slice(from, cut).join(''));
+    from = cut;
+  }
+  out.push(cs.slice(from).join(''));
+  return out.filter(Boolean);
+}
 
 /** The two parts of a line at its own spaces: [hero, small, small comes first]. Undefined when it has no such break. */
 export function splitParts(text: string, small: SplitSpec['small'], even = false): [string, string, boolean] | undefined {
@@ -57,8 +80,8 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
   if (spec.vertical) return columnsApart(hero, small, smallFirst, spec, sp, floor);
   const em = (rows: string[], track: number) => Math.max(...rows.map((r) => measure(r) / 100 + ([...r].length - 1) * track));
   const sTrack = sp.track ?? spec.track;
-  const smallRows = (sp.rows ?? 1) > 1 && bare(small) >= 4 ? balancedRows(small, sp.rows!).filter(Boolean) : [small];
-  const sEm = em(smallRows, sTrack);
+  let smallRows = (sp.rows ?? 1) > 1 && bare(small) >= 4 ? balancedRows(small, sp.rows!).filter(Boolean) : [small];
+  let sEm = em(smallRows, sTrack);
   const k = sp.scale;
   const options: { rows: string[]; size: number }[] = [];
   // (stacked, the small part takes one of the set's rows; apart, the hero has them all)
@@ -76,6 +99,17 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
   const pick = options.find((o) => o.size >= best * 0.95)!;
   let size = Math.max(spec.lo, Math.round(Math.min(spec.hi, pick.size)));
   let ss = Math.max(floor, Math.round(Math.min(size * k, sp.at ? ((sp.share ?? 0.3) * W) / sEm : Infinity)));
+  // a part in its own container is held to the container's width: wrapped when it may take more rows, then set smaller.
+  // The floor let 信じてみるんだ run one row across popart's burst and over its spikes (2026-11-04)
+  if (sp.at) {
+    const room = (sp.share ?? 0.3) * W;
+    if (ss * sEm > room && (sp.rows ?? 1) > smallRows.length && bare(small) >= 4) {
+      smallRows = wrapRows(small, sp.rows!);
+      sEm = em(smallRows, sTrack);
+      ss = Math.max(floor, Math.round(Math.min(size * k, room / sEm)));
+    }
+    ss = Math.min(ss, Math.floor(room / sEm));
+  }
   // two sizes that are not clearly two (a long hero already at the floor) read as a mistake: the line is laid out whole
   if (ss > size * 0.85 && k < 0.9) return undefined;
   const hEm = em(pick.rows, spec.track);

@@ -258,10 +258,21 @@ const twinBalloons: ObjectPaint = (c, w, h, s) => {
   // (a line that would not break in two stands as one column in one balloon)
   // (one column is 9.4 sizes wide at 84–150 px, two are 18.8: 1500 px of words lies between them, so the balloons follow the columns)
   const cols: [number, 'left' | 'right'][] = w - pad * 2 < 1500 ? [[w / 2, 'left']] : [[pad + step * 0.5, 'right'], [w - pad - step * 0.5, 'left']];
+  // the balloons stay inside board d's panels (the frame's middle 952 px less their keyline), widening to hold the column:
+  // set as tall as the object, they stood past the panels' black frame above and below (owner 2026-11-04)
+  const PANEL_RY = (H - 2 * 60 - BORDER) / 2 - 12;
+  const colHalf = Math.min(w - pad * 2, 120) / 2 + 18;
+  const reach = (cols.length > 1 ? step * 0.5 + pad : w / 2) + 44;
   for (const [cx, corner] of cols) {
-    const [rx, ry] = [Math.min(220, step * 0.24 + 120), h / 2 - 6];
+    const base = Math.min(220, step * 0.24 + 120);
+    // the column's half length with a margin, against the panel's half height: the ellipse must hold its corners
+    const k = (h / 2 - 88 + 12) / PANEL_RY;
+    const need = k < 0.97 ? colHalf / Math.sqrt(1 - k * k) : Infinity;
+    const inPanel = h / 2 - 6 > PANEL_RY && need <= reach / 1.3;
+    const ry = inPanel ? PANEL_RY : h / 2 - 6;
+    const rx = inPanel ? Math.min(reach / 1.3, Math.max(base, need)) : base;
     c.save();
-    c.translate(cx - rx, 0);
+    c.translate(cx - rx, h / 2 - ry - 4);
     balloon(corner, true)(c, rx * 2, ry * 2 + 8, s, 0, 0);
     c.restore();
   }

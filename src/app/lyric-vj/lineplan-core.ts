@@ -14,7 +14,7 @@ import { Handoff, HANDOFF_TRANSITION, HandoffKind, handoffTimes } from './render
 import { setWordSafe, wordBreaks } from './phrases';
 import { LineBeat, lineBeats, readingSec, setTogether } from './render/reading-window';
 import { WORLD_BEATS } from './render/world-beats';
-import type { BeatKind } from './world-shared';
+import type { BeatKind, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 
 export type Level = 0 | 1 | 2;
@@ -621,6 +621,8 @@ export interface WorldPool {
   /** What happens while a line is held, the world's own two or three (world-shared.ts), and whether in steps. */
   beats?: BeatKind[];
   stepped?: boolean;
+  /** How the world stresses a blown-up key word, two ways (world-shared.ts). */
+  stress?: StressKind[];
 }
 /** Each shared recipe's most a world's song may use of its lines (style standard §2.1). */
 export const SHARED_SHARE = 0.4;
@@ -639,6 +641,27 @@ export const REPOSE_CALM_TWICE = 3.5;
 const REPOSE_SNAP = 0.3;
 /** Calm stays calm by moving slowly and far: how far a held block travels, px, by level. */
 export const LINE_TRAVEL: Record<Level, number> = { 0: 150, 1: 200, 2: 260 };
+
+/** A blown-up key word: this many characters at most, and no more than this share of its line (else it is the line). */
+export const BLOW_MAX = 4;
+const BLOW_SHARE = 0.6;
+/** A line needs this long up for its key word to be blown up: the small rest has to be read too. */
+const BLOW_MIN_LINE = 1.4;
+/**
+ * The key word a line could blow up, as code-point indices of its text, or undefined: the phrase the reading named when
+ * it is short enough, else the line's last whole word of two to four characters (where a line usually lands).
+ */
+export function blowOf(c: Cue, named?: string): { from: number; to: number } | undefined {
+  if (c.end - c.start < BLOW_MIN_LINE || splitCalls(c.text).calls.length) return undefined;
+  const cs = [...c.text];
+  const fits = (from: number, to: number) => { const w = cs.slice(from, to).join(''); const n = glyphs(w); return n >= 2 && n <= BLOW_MAX && n <= BLOW_SHARE * glyphs(c.text) && !/[A-Za-z0-9\s]/.test(w) && /^[\p{L}]+$/u.test(w); };
+  const key = keyOf(c.text, named);
+  const at = c.text.indexOf(key);
+  if (named && key === named && at >= 0) { const from = [...c.text.slice(0, at)].length; if (fits(from, from + [...key].length)) return { from, to: from + [...key].length }; }
+  const stops = [...wordBreaks(c.text)].sort((a, b) => a - b);
+  for (let k = stops.length - 1; k > 0; k--) for (let j = 0; j < k; j++) if (fits(stops[j], stops[k])) return { from: stops[j], to: stops[k] };
+  return undefined;
+}
 
 /** A held line's event needs this much line, s. */
 export const BEAT_MIN_LINE = 1.5;
@@ -920,6 +943,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   let tiles = 0;
   let lineNo = 0;
   let lastBeat = '';
+  // each part blows up one line's key word, a line the reading named first (2026-11-04 gap 3: one type size everywhere)
+  const blownParts = new Set<SongPart>();
+  const namedKey = (id: string) => meaning.keys.find((k) => k.cue === id)?.phrase;
+  const namedLater = (p: SongPart, after: number) => cues.some((x, i) => i > after && partAt(x.id) === p && !!namedKey(x.id) && !!blowOf(x, namedKey(x.id)));
   const planned = shots.map((s) => {
     const c = cues.find((x) => x.id === s.cue);
     const part = c ? partAt(c.id) : lastPart ?? meaning.parts[0];
@@ -1093,7 +1120,12 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     // a world's line changes set on a beat in the room its reading leaves: one more picture, the same words
     const piece = pieceHere(s.start, newPart || keyLines.has(c.id), `${c.text} ${part.what}`);
     if (piece) { cuts[0]['piece'] = piece; cuts.splice(1); }
-    const repose = recipe.wline && W && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : [];
+    const cueAt = cues.indexOf(c);
+    const blowable = recipe.wline && W?.stress?.length && !piece && !W.columns[recipe.wline.set] && !blownParts.has(part) ? blowOf(c, namedKey(c.id)) : undefined;
+    const blow = blowable && (namedKey(c.id) || !namedLater(part, cueAt)) ? { ...blowable, stress: W!.stress![meaning.parts.indexOf(part) % W!.stress!.length] } : undefined;
+    if (blow) blownParts.add(part);
+    // a blown-up key word holds its picture until the line is read: no change of set before
+    const repose = (recipe.wline && W && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
     // (a calm song's change of set stays on its quiet grounds)
     const reposeGrounds = calm && W?.quiet.length ? W.quiet : W?.grounds[level] ?? [];
     for (const r of repose) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
@@ -1102,7 +1134,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7)) : undefined;
     if (held) lastBeat = held.kind;
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: recipe.wline.enter, exit: recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}) } : undefined;
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: recipe.wline.enter, exit: recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

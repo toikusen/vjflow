@@ -11,7 +11,8 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, WORLD_BEATS } from './world-beats';
-import type { BeatKind } from '../world-shared';
+import type { BeatKind, StressKind } from '../world-shared';
+import { contrast } from '../contrast';
 
 export interface WorldLine {
   set: string;
@@ -39,15 +40,19 @@ export interface WorldLine {
   /** How far the block travels while it is up, px, and how much it grows, a share. */
   drift?: [number, number];
   swell?: number;
+  /** The key word blown up and the rest of the line set small round it (gap 3): its characters, and how it is stressed. */
+  blow?: { from: number; to: number; stress: StressKind };
   /** The one thing that happens while the line is held (world-beats.ts): which, when, and in steps or smooth. */
   beat?: { kind: BeatKind; at: number; stepped?: boolean };
 }
 
+/** The glyph picture size a line with a blown-up key word is drawn from, px. */
+const BLOW_TEX = 360;
 const ROTATED = /[ー〜～…―‐]/;
 const HIDDEN_UPRIGHT = /[、。，．,.]/;
 const LAYER = -5;
 
-interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
+interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
 
 /** Where each glyph stands in a block, relative to the block's centre. Spaces a row break swallowed stay hidden. */
 function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
@@ -100,6 +105,49 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   return { block, spec, x, y, turn, shown, scale: k, u, v };
 }
 
+/** The key word as big as the frame lets it be, read in its place: the words before it small above its left edge, the words after it small below its right edge. Undefined when the key would not stand clearly bigger. */
+export function blowPose(gs: Glyph[], from: number, to: number, normal: number, tex: number, spec: SetSpec): Pose | undefined {
+  const isKey = (g: Glyph) => g.src !== undefined && g.src >= from && g.src < to;
+  const shown = gs.map((g) => g.char.trim() !== '');
+  const key = gs.map((g, i) => (isKey(g) ? i : -1)).filter((i) => i >= 0);
+  if (!key.length) return undefined;
+  const pre = gs.map((_, i) => i).filter((i) => i < key[0] && shown[i]);
+  const post = gs.map((_, i) => i).filter((i) => i > key.at(-1)! && shown[i]);
+  const adv = (ids: number[]) => ids.reduce((w, i) => w + gs[i].advance, 0) / tex;
+  const big = Math.min((0.86 * 1920) / Math.max(0.01, adv(key)), 0.44 * 1080, normal * 4.2);
+  if (big < normal * 1.6) return undefined;
+  const small = Math.max(40, Math.min(big * 0.3, normal * 0.75, (0.86 * 1920) / Math.max(0.01, adv(pre), adv(post))));
+  const [preH, postH] = [pre.length ? small * 1.3 : 0, post.length ? small * 1.3 : 0];
+  const h = preH + big + postH;
+  const wk = adv(key) * big;
+  const x = gs.map(() => 0), y = gs.map(() => 0), sizes = gs.map(() => small / tex);
+  const row = (ids: number[], size: number, left: number, cy: number) => { let at = left; for (const i of ids) { const a = (gs[i].advance / tex) * size; x[i] = at + a / 2; y[i] = cy; sizes[i] = size / tex; at += a; } return at - left; };
+  row(key, big, -wk / 2, h / 2 - preH - big / 2);
+  row(pre, small, -wk / 2, h / 2 - small * 0.65);
+  const wp = adv(post) * small;
+  row(post, small, wk / 2 - wp, -h / 2 + small * 0.65);
+  const w = Math.max(wk, adv(pre) * small, wp);
+  // a space inside the key run (a Latin phrase) is placed but not drawn
+  const block: Block = { rows: [], size: big, w, h, cx: 0, cy: 0 };
+  return { block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
+}
+
+/** The copies behind a blown-up key word, by stress: offsets and sizes in shares of its size, and their opacity. */
+const STRESS: Record<StressKind, { dx: number; dy: number; s: number; a: number }[]> = {
+  // a press's extrusion: the block's side, stacked down and to the right
+  extrude: Array.from({ length: 7 }, (_, k) => ({ dx: 0.012 * (k + 1), dy: -0.012 * (k + 1), s: 1, a: 1 })),
+  // the second plate printed off register
+  plate: [{ dx: 0.045, dy: -0.035, s: 1, a: 1 }],
+  // light round the letters, twice, fainter outward
+  outline: [{ dx: 0, dy: 0, s: 1.07, a: 0.34 }, { dx: 0, dy: 0, s: 1.15, a: 0.16 }],
+};
+/** The colour a stress is drawn in, of the scheme's slots: it must be seen on the ground and the words must read on it, else the next stress. */
+export function stressInk(kind: StressKind, ink: string, ground: string, slots: Slots, key: string): string | undefined {
+  const pool = kind === 'outline' ? [key, slots.ink2, slots.accent] : kind === 'plate' ? [key, slots.accent, slots.ink2] : [slots.ink2, slots.faint, slots.plateInk, slots.accent];
+  // outline sits round the letters, never under a stroke: it only has to be seen; the others lie under the edges
+  return pool.find((c) => c && /^#[0-9a-f]{6}$/i.test(c) && contrast(c, ground) >= 1.4 && (kind === 'outline' || contrast(ink, c) >= 3));
+}
+
 function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, variant: number) {
   if (!spec.object) return undefined;
   const [px, py] = spec.pad ?? [0, 0];
@@ -125,9 +173,13 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const family = rt.fonts.display;
   const specOf = (id: string): SetSpec => { const s = SET_SPECS[id] ?? Object.values(SET_SPECS)[0]; return slot.of > 1 ? { ...s, tall: s.tall / slot.of, rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined } : s; };
   const sets = [wl.set, ...(wl.repose ?? []).map((r) => r.set)].map(specOf);
+  // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
+  const blowing = !!wl.blow && slot.of === 1 && !sets[0].vertical;
+  if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0 };
   const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
   const blocks = sets.map((s) => blockOf(text, s, measureOf(s)));
-  const tex = Math.max(...blocks.map((b) => b.size));
+  // (a blown-up key word is drawn from a picture its own size: never a small one stretched)
+  const tex = Math.max(...blocks.map((b) => b.size), wl.blow && slot.of === 1 ? BLOW_TEX : 0);
   const slots = wl.slots;
   const carried = sets[0].object;
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
@@ -150,10 +202,27 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const whole = mapsOf(false);
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
-  const poses = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
+  const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
+  // the key word blown up: the line's first pose, on the ground (its object, if any, stays off), stressed in the world's way
+  const blown = blowing ? blowPose(gs, wl.blow!.from, wl.blow!.to, blocks[0].size, tex, sets[0]) : undefined;
+  if (blown) poses[0] = blown;
   const body = new THREE.Group();
   gs.forEach((g, i) => { g.index = i; body.add(g.mesh); });
   poses.forEach((p) => { if (p.object) body.add(p.object); });
+  const stressCopies: { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; i: number; d: { dx: number; dy: number; s: number; a: number } }[] = [];
+  if (blown) {
+    const groundInk = wl.fixedInk ? slots.ink : rt.palette.text;
+    const kinds = [wl.blow!.stress, ...(['extrude', 'plate', 'outline'] as StressKind[]).filter((k) => k !== wl.blow!.stress)];
+    const kind = kinds.find((k) => stressInk(k, groundInk, rt.palette.background, slots, keyOf(sets[0])));
+    if (kind) {
+      const c = stressInk(kind, groundInk, rt.palette.background, slots, keyOf(sets[0]))!;
+      const keyIds = gs.map((g, i) => (g.src !== undefined && g.src >= wl.blow!.from && g.src < wl.blow!.to && g.char.trim() ? i : -1)).filter((i) => i >= 0);
+      for (const d of STRESS[kind]) {
+        const copies = makeGlyphs(keyIds.map((i) => gs[i].char).join(''), { family, weight, size: tex, even: sets[0].even }, c);
+        copies.forEach((g, k) => { g.mesh.renderOrder = -4; g.mesh.traverse((o) => (o.renderOrder = -4)); g.mesh.visible = false; g.mesh.material.transparent = true; body.add(g.mesh); stressCopies.push({ mesh: g.mesh, i: keyIds[k], d }); });
+      }
+    }
+  }
   const group = new THREE.Group();
   group.add(body);
   // each line of a shared shot has its own band of the set's height, so a taller neighbour can never run into it
@@ -258,7 +327,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         const ev = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq }) : undefined;
         if (ev) pose = { ...pose, dx: (pose.dx ?? 0) + (ev.dx ?? 0), dy: (pose.dy ?? 0) + (ev.dy ?? 0), s: (pose.s ?? 1) * (ev.s ?? 1), sy: (pose.sy ?? 1) * (ev.sy ?? 1), r: (pose.r ?? 0) + (ev.r ?? 0), tone: Math.min(pose.tone ?? 1, ev.tone ?? 1), key: ev.key, ghost: ev.ghost };
         m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0), 0);
-        const s = p.scale * (pose.s ?? 1);
+        const s = (p.sizes?.[i] ?? p.scale) * (pose.s ?? 1);
         m.scale.set(s * (pose.sx ?? 1), s * (pose.sy ?? 1), 1);
         m.rotation.z = (p.turn[i] ? -Math.PI / 2 : 0) + (pose.r ?? 0);
         const gh = ghosts?.[i].mesh;
@@ -287,10 +356,20 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
           else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }
       });
+      for (const c of stressCopies) {
+        const m = gs[c.i].mesh;
+        c.mesh.visible = k === 0 && m.visible && m.material.opacity > 0.01;
+        if (!c.mesh.visible) continue;
+        const size = (p.sizes?.[c.i] ?? p.scale) * tex;
+        c.mesh.position.set(m.position.x + c.d.dx * size, m.position.y + c.d.dy * size, 0);
+        c.mesh.scale.set(m.scale.x * c.d.s, m.scale.y * c.d.s, 1);
+        c.mesh.rotation.z = m.rotation.z;
+        c.mesh.material.opacity = c.d.a * m.material.opacity;
+      }
       if (caret) {
         const last = [...gs.keys()].reverse().find((i) => p.shown[i]) ?? 0;
         caret.visible = qIn >= 1 && !out && Math.floor(age * 2.2) % 2 === 0;
-        const size = p.block.size;
+        const size = (p.sizes?.[last] ?? p.scale) * tex;
         caret.position.set(p.x[last] + size * 0.86, p.y[last] - size * 0.02, 0);
         caret.scale.set(size * 0.56, size * 0.96, 1);
       }

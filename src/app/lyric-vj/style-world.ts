@@ -136,6 +136,7 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     handoffs: !!w.handoffs,
     columns: Object.fromEntries(w.layouts.lines.map((l) => [l.set, !!l.column])),
     beats: sharedOf(w).beats,
+    stress: sharedOf(w).stress,
     stepped: steppedWorld(w),
   };
 }

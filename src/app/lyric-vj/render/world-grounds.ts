@@ -101,9 +101,10 @@ const mulHex = (a: string, b: string) => `#${[1, 3, 5].map((i) => Math.round((pa
  * The paper back over the words' room, crisp and whole (no feather, no glow): what a set piece or a change laid over the
  * ground leaves round a line being read, so none of its marks crosses it.
  */
-function clearWords(e: WorldEnv, _strength: number) {
+function clearWords(e: WorldEnv, strength: number) {
   const room = wordsRoom(e);
-  if (!room) return;
+  // (a piece that asks for no clearing gets none: papercut's and woodcut's are drawn round the words already)
+  if (!room || strength <= 0) return;
   const c = e.ctx;
   c.save();
   if (e.base) c.setTransform(e.base);

@@ -68,15 +68,11 @@ export const HINT_FILL: [number, number] = [0.66, 0.56];
 const hint: HandGround = (e) => page(e, (c) => {
   studio(c, e);
   const r = e.rect ?? { x0: 400, y0: 420, x1: 1200, y1: 700 };
-  // the card's box as world-layout places the object: round the block (the lyric box less its 14 px), kept in the frame
-  const [bw, bh] = [r.x1 - r.x0 - 28, r.y1 - r.y0 - 28];
-  const [w, h] = [Math.max(bw + HINT_PAD[0] * 2, HINT_FILL[0] * W), Math.max(bh + HINT_PAD[1] * 2, HINT_FILL[1] * H)];
-  const x = Math.min(W - w, Math.max(0, (r.x0 + r.x1) / 2 - w / 2));
-  const y = Math.min(H - h, Math.max(0, (r.y0 + r.y1) / 2 - h / 2));
-  // the card itself: the set's object draws it over this one in a line's own shot; a shared shot (two lines, no objects)
-  // and nothing else gets it from here, round both lines
-  hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x, y);
-  label(c, titleOnly(e.title), x + w - 50, y + 64, BUNGEE(30), WH, 1, 'right');
+  // the card itself, where world-layout puts the set's object: the object draws it over this one in a line's own shot; a
+  // shared shot (two lines, objects off) gets it from here, round both lines
+  const { x: x1, y, w, h, flipped } = objectPlace(c, r, HINT_PAD, HINT_FILL);
+  unmirrored(c, flipped, () => { hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x1, y); label(c, titleOnly(e.title), x1 + w - 50, y + 64, BUNGEE(30), WH, 1, 'right'); });
+  const x = flipped ? W - x1 - w : x1;
   const n = 12;
   const cw = (w + 14) / n - 14;
   const out = Math.min(n, Math.floor(e.age / 0.45));
@@ -91,6 +87,29 @@ const hint: HandGround = (e) => page(e, (c) => {
   }
   finish(c);
 });
+
+/**
+ * Where world-layout puts a set's object for the lyric box `r` (the block with 14 px round it), in the frame's own
+ * coordinates: margin `pad`, at least `fill` of the frame, kept in the frame, its canvas rounded up to 12 px
+ * (paintObject). A page that draws the same object under it (for a shared shot, where objects are off) draws it exactly
+ * there, so the two never show as a seam. On a mirrored page the box is turned back to the frame's.
+ */
+function objectPlace(c: { getTransform(): DOMMatrix }, r: { x0: number; y0: number; x1: number; y1: number }, pad: [number, number], fill: [number, number] = [0, 0]) {
+  const flipped = c.getTransform().a < 0;
+  const [x0, x1] = flipped ? [W - r.x1, W - r.x0] : [r.x0, r.x1];
+  const [ow, oh] = [Math.max(x1 - x0 - 28 + pad[0] * 2, fill[0] * W), Math.max(r.y1 - r.y0 - 28 + pad[1] * 2, fill[1] * H)];
+  const keep = (v: number, half: number, frame: number) => (half >= frame / 2 ? frame / 2 : Math.min(frame - half, Math.max(half, v)));
+  const [cx, cy] = [keep((x0 + x1) / 2, ow / 2, W), keep((r.y0 + r.y1) / 2, oh / 2, H)];
+  const [w, h] = [Math.ceil(ow / 12) * 12, Math.ceil(oh / 12) * 12];
+  return { x: cx - w / 2, y: cy - h / 2, w, h, flipped };
+}
+/** Draws in the frame's own coordinates, a mirrored page's mirror undone. */
+function unmirrored(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, flipped: boolean, f: () => void) {
+  c.save();
+  if (flipped) { c.translate(W, 0); c.scale(-1, 1); }
+  f();
+  c.restore();
+}
 
 /** The number board's column step for letters `size` px: its eight columns at full size, a letter's own cell (size × 1.288) below it. */
 const boardStep = (size: number) => Math.min((W - 120 - 7 * 14) / 8 + 14, size * 1.288);

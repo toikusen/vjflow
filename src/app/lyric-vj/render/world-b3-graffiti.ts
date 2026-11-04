@@ -147,6 +147,28 @@ function stencilLabel(c: C, text: string, x: number, y: number, px: number, tone
 
 const lyricBox = (e: WorldEnv, fallback: Box): Box => e.rect ?? fallback;
 /**
+ * Where world-layout puts a set's object for the lyric box `r` (the block with 14 px round it), in the frame's own
+ * coordinates: margin `pad`, at least `fill` of the frame, kept in the frame, its canvas rounded up to 12 px
+ * (paintObject). A page that draws the same object under it (for a shared shot, where objects are off) draws it exactly
+ * there, so the two never show as a seam. On a mirrored page the box is turned back to the frame's.
+ */
+function objectPlace(c: { getTransform(): DOMMatrix }, r: { x0: number; y0: number; x1: number; y1: number }, pad: [number, number], fill: [number, number] = [0, 0]) {
+  const flipped = c.getTransform().a < 0;
+  const [x0, x1] = flipped ? [W - r.x1, W - r.x0] : [r.x0, r.x1];
+  const [ow, oh] = [Math.max(x1 - x0 - 28 + pad[0] * 2, fill[0] * W), Math.max(r.y1 - r.y0 - 28 + pad[1] * 2, fill[1] * H)];
+  const keep = (v: number, half: number, frame: number) => (half >= frame / 2 ? frame / 2 : Math.min(frame - half, Math.max(half, v)));
+  const [cx, cy] = [keep((x0 + x1) / 2, ow / 2, W), keep((r.y0 + r.y1) / 2, oh / 2, H)];
+  const [w, h] = [Math.ceil(ow / 12) * 12, Math.ceil(oh / 12) * 12];
+  return { x: cx - w / 2, y: cy - h / 2, w, h, flipped };
+}
+/** Draws in the frame's own coordinates, a mirrored page's mirror undone. */
+function unmirrored(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, flipped: boolean, f: () => void) {
+  c.save();
+  if (flipped) { c.translate(W, 0); c.scale(-1, 1); }
+  f();
+  c.restore();
+}
+/**
  * A page painted once and kept (b3-shared still), the mirrored page (mirrorGround) included: the kept picture is painted
  * through the mirror itself, so its printed labels are laid the right way round (label() reads the mirror), and drawn
  * without it. Kept as a flipped picture, a mirrored page's prints read backwards.
@@ -195,9 +217,9 @@ const navy: HandGround = (e) => page(e, 'gf-navy', (c) => {
   const r = lyricBox(e, { x0: 190, y0: 300, x1: 1000, y1: 680 });
   // the patch round the words (and round both lines of a shared shot); a line's own shot gets the set's object over it, the
   // same patch with the sprayed rule, which also stays under a line read on past its cut
-  const [nx, ny] = NAVY_PAD;
-  const b = { x0: r.x0 + 14 - nx, y0: r.y0 + 14 - ny, x1: r.x1 - 14 + nx, y1: r.y1 - 14 + ny };
-  buff(c, { x0: b.x0 + 6, y0: b.y0 + 6, x1: b.x1 - 6, y1: b.y1 - 6 }, mixHex(s.plate, K, 0.06), 31, 0);
+  const o = objectPlace(c, r, NAVY_PAD);
+  unmirrored(c, o.flipped, () => { c.save(); c.translate(o.x, o.y); buffPatch(c, o.w, o.h, s, 0, 0); c.restore(); });
+  const b = { x0: r.x0 + 14 - NAVY_PAD[0], y0: r.y0 + 14 - NAVY_PAD[1], x1: r.x1 - 14 + NAVY_PAD[0], y1: r.y1 - 14 + NAVY_PAD[1] };
   const [title, artist] = poster(e);
   const px = Math.max(1470, b.x1 + 110);
   if (W - 100 - px >= 260) {

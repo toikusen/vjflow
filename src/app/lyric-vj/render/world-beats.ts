@@ -21,6 +21,8 @@ export interface BeatMove {
   block?(q: number): BlockPose;
 }
 
+/** How far a rolling character turns: its height never goes under this share. */
+export const ROLL_LEAST = 0.6;
 /** Half a turn and back: 0 at both ends, 1 in the middle. */
 const arch = (q: number) => Math.sin(Math.PI * clamp01(q));
 
@@ -39,7 +41,8 @@ export const WORLD_BEATS: Record<BeatKind, BeatMove> = {
   roll: { sec: 1, hides: true, glyph: ({ q, u }) => {
     const half = q < 0.5;
     const k = clamp01(((half ? q : q - 0.5) * 2) * 1.6 - u * 0.6);
-    const turn = Math.max(0.08, Math.abs(Math.cos(Math.PI * k)));
+    // (a half turn, never edge-on: the characters stay readable through it; the reading gate caught edge-on rolls on 3 lines)
+    const turn = Math.max(ROLL_LEAST, Math.abs(Math.cos(Math.PI * k)));
     return { sy: k > 0 && k < 1 ? turn : 1, key: half ? (k >= 0.5 ? 1 : 0) : k >= 0.5 ? 0 : 1 };
   } },
   // the line kicks on the beat, the block as one, and flashes the key ink as it lands

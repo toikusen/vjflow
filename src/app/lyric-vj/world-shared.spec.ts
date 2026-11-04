@@ -11,7 +11,7 @@ import { wordBreaks } from './phrases';
 import type { SongTimeline } from './timeline';
 import { STYLE_WORLDS } from './style-worlds';
 import { sharedOf, WORLD_SHARED } from './world-shared';
-import { beatProgress, WORLD_BEATS } from './render/world-beats';
+import { beatProgress, ROLL_LEAST, WORLD_BEATS } from './render/world-beats';
 import { readingSec } from './render/reading-window';
 
 const cue = (start: number, end: number, text = '我再也不在你身邊') => ({ id: 'c1', start, end, text });
@@ -142,5 +142,8 @@ describe('shared world moves', () => {
     const d = worldCam('diagonal', 0, 1)!;
     expect(((d.s - 1) * 1920) / 2).toBeGreaterThanOrEqual(Math.abs(d.dx));
     expect(((d.s - 1) * 1080) / 2).toBeGreaterThanOrEqual(Math.abs(d.dy));
+  });
+  it('never turns a rolling character edge-on', () => {
+    for (let q = 0; q <= 1; q += 0.02) for (let u = 0; u <= 1; u += 0.25) expect(WORLD_BEATS.roll.glyph!({ q, i: 0, n: 5, u, v: 0, seed: 1, age: 2, sung: 1 }).sy ?? 1).toBeGreaterThanOrEqual(ROLL_LEAST);
   });
 });

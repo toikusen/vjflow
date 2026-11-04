@@ -262,6 +262,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // the held line's one event (world-beats.ts): its key ink per pose, a baked surface's key pictures, the copies behind
   const beatMove = wl.beat ? WORLD_BEATS[wl.beat.kind] : undefined;
   const keyCols = sets.map((s) => new THREE.Color(keyOf(s)));
+  // a beat's key ink only where it reads as well as the line's own ink on what that ink was set to read on (a cut-hole
+  // world's key was its sheet's colour: three lines vanished mid-roll at the reading gate, 2026-11-04)
+  const backdropOf = (ink: string) => [rt.palette.background, slots.plate, slots.ground].filter((c) => /^#[0-9a-f]{6}$/i.test(c ?? '')).sort((x, y) => contrast(ink, y) - contrast(ink, x))[0];
+  const keyReads = (p: number) => { const base = inkOn(sets[p]); const back = backdropOf(base); return !back || !/^#[0-9a-f]{6}$/i.test(base) || contrast(keyOf(sets[p]), back) >= 3; };
+  const keyOkBy = sets.map((_, p) => keyReads(p));
   const usesKey = !!wl.beat && ['ink-run', 'light-sweep', 'roll', 'beat-punch'].includes(wl.beat.kind);
   const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(keyOf(s), false, p) }).texture)) : undefined;
   const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
@@ -363,7 +368,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
             gh.material.opacity = pose.ghost!.a * whole_a * left;
           }
         }
-        const keyed = (pose.key ?? 0) > 0;
+        const keyed = (pose.key ?? 0) > 0 && keyOkBy[k];
         const ink = keyed ? mixed.copy(inkLit[i]).lerp(keyCols[k], pose.key!) : inkLit[i];
         const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }

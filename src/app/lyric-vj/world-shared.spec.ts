@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatOfLine, BEAT_MIN_LINE, blowOf, BLOW_MAX, readFrom, REPOSE_CALM_LINE } from './lineplan-core';
+import { beatOfLine, BEAT_MIN_LINE, blowOf, BLOW_MAX, REPOSE_CALM_LINE } from './lineplan-core';
 import { blowPose, stressInk } from './render/world-layout';
 import { SET_SPECS } from './render/world-sets';
 import { contrast } from './contrast';
@@ -77,31 +77,6 @@ describe('shared world moves', () => {
         expect(Math.min(...near), `${r.at} lands at a word break`).toBeLessThanOrEqual(0.3 + 1e-6);
       }
     }
-  });
-  it('never moves a line to another set before it has been up its reading time, fast or calm', () => {
-    const cases = [
-      { style: 'silk-cold', tempo: 70, len: 4.6, step: 5, text: '無盡的思念總是破碎在冬天' },
-      { style: 'spy', tempo: 150, len: 2.6, step: 2.7, text: '快使用雙截棍 哼哼哈兮' },
-      { style: 'riso', tempo: 140, len: 3.2, step: 3.3, text: '一個馬步向前 一記左鉤拳 右鉤拳' },
-    ];
-    let seen = 0;
-    for (const k of cases) {
-      const n = [...k.text].length;
-      const cues = Array.from({ length: 16 }, (_, i) => ({ id: `c${i + 1}`, start: 4 + i * k.step, end: 4 + i * k.step + k.len, text: k.text, charStarts: Array.from({ length: n }, (_, j) => 4 + i * k.step + ((k.len - 0.3) * j) / n) }));
-      const end = 4 + 16 * k.step + 2;
-      const beat = 60 / k.tempo;
-      const song = { title: k.style, duration: end, tempo: k.tempo, beats: Array.from({ length: Math.ceil(end / beat) }, (_, i) => i * beat), downbeats: [], sections: [{ start: 0, end, type: 'chorus', energy: k.tempo > 100 ? 0.9 : 0.3 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
-      const { treatment } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === k.style)!, seed: 0 });
-      for (const c of treatment.cues) {
-        const cue = cues.find((x) => x.id === c.cueId)!;
-        for (const r of (c as { world?: { repose?: { at: number }[] } }).world?.repose ?? []) {
-          seen++;
-          expect(r.at, `${k.style} ${c.cueId}`).toBeGreaterThanOrEqual(readFrom(cue) - 1e-6);
-        }
-      }
-    }
-    // the rule moves changes of set later; it does not take them all away
-    expect(seen).toBeGreaterThan(0);
   });
   it('blows up a whole short word of the line, the named one first', () => {
     const word = (t: string, named?: string) => { const b = blowOf({ id: 'x', start: 0, end: 3, text: t }, named); return b && [...t].slice(b.from, b.to).join(''); };

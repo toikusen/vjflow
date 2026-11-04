@@ -375,7 +375,11 @@ export function pickRecipe(c: Cue, level: Level, recent: Recipe[], seed: number,
   const n = glyphs(c.text);
   const fits = (r: Recipe) => r.level === level && n >= (r.min ?? 0) && n <= (r.max ?? Infinity) && allow(r) && spare >= (r.spare ?? 0) && (!r.fit || r.fit.test(c.text) || (!!r.world && r.fit.test(world)));
   const pool = from.filter(fits);
-  const own = from.filter((r) => r.level === level && r.wline && !r.fit);
+  // with nothing fitting at this level, a world's own sets that can still hold the line come first: a line past a set's
+  // length (a letter a tile, a letter a card) ran off the frame
+  const own0 = from.filter((r) => r.level === level && r.wline && !r.fit);
+  const roomy = own0.filter((r) => n <= (r.max ?? Infinity));
+  const own = roomy.length ? roomy : own0;
   const use = pool.length ? pool : from !== RECIPES ? (own.length ? own : from.filter((r) => !r.fit)) : RECIPES.filter((r) => r.level === level && r.template === 'stair');
   const score = (r: Recipe) => {
     const age = (f: (x: Recipe) => boolean) => { const i = recent.map(f).lastIndexOf(true); return i < 0 ? 99 : recent.length - i; };

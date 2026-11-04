@@ -89,18 +89,24 @@ const hint: HandGround = (e) => page(e, (c) => {
   finish(c);
 });
 
+/** The number board's column step for letters `size` px: its eight columns at full size, a letter's own cell (size × 1.288) below it. */
+const boardStep = (size: number) => Math.min((W - 120 - 7 * 14) / 8 + 14, size * 1.288);
+
 /** c: the number board, eight by five; the line's row is the set's object, ringed in gold; the tiles flip colour on the beat. */
 const board: HandGround = (e) => page(e, (c) => {
   c.fillStyle = BD;
   c.fillRect(0, 0, W, H);
   const r = e.rect ?? { x0: 600, y0: 450, x1: 1320, y1: 630 };
   const [gap, rows] = [14, 5];
-  const tw = (W - 120 - 7 * gap) / 8;
   const th = (H - 120 - (rows - 1) * gap) / rows;
-  const step = tw + gap;
+  // a tile a letter: the board's eight columns at full size, more and narrower ones when a long line is set smaller (rowTiles)
+  // (the lyric box is the block with 14 px round it: world-layout poses)
+  const size = Math.max(60, Math.min(176, r.y1 - r.y0 - 28));
+  const step = boardStep(size);
+  const tw = step - gap;
   const cx = (r.x0 + r.x1) / 2;
   // columns are laid from the line's centre, so its letters sit on tiles whatever its length
-  const n = Math.max(1, Math.round((r.x1 - r.x0 + 0.288 * 176) / step));
+  const n = Math.max(1, Math.round((r.x1 - r.x0 - 28 + 0.288 * size) / step));
   const first = cx - (n / 2) * step + gap / 2;
   const col0 = Math.floor((first - 40) / step);
   const flip = Math.floor(e.now * 2);
@@ -118,7 +124,7 @@ const board: HandGround = (e) => page(e, (c) => {
       c.fillStyle = f; c.fillRect(x, y, tw, th);
       c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(x, y + th - 10, tw, 10);
       const num = row * 8 + (((k + col0 + 8) % 8) + 8) % 8 + 1;
-      label(c, String(num), x + tw / 2, y + th / 2 + 26, BUNGEE(64), f === WH || f === G ? K : WH, 0, 'center');
+      label(c, String(num), x + tw / 2, y + th / 2 + 26 * (tw / 213), BUNGEE(64 * Math.min(1, tw / 213)), f === WH || f === G ? K : WH, 0, 'center');
     }
   }
   c.strokeStyle = G;
@@ -127,21 +133,9 @@ const board: HandGround = (e) => page(e, (c) => {
   finish(c);
 });
 
-/** d: question and answer: two chevron banners, the question white with a gold Q tab, the answer gold with a red A tab. */
+/** d: question and answer: the studio; the banners are the set's object (qaBanners), drawn round the line's own rows. */
 const qa: HandGround = (e) => page(e, (c) => {
   studio(c, e);
-  const r = e.rect ?? { x0: 566, y0: 270, x1: 1500, y1: 820 };
-  // a row is 2.9 sizes tall and a size is 70–140 px: a block over 406 px holds two rows (question and answer), else one
-  const two = r.y1 - r.y0 > 406;
-  const size = Math.max(60, (r.y1 - r.y0) / (two ? 5.8 : 2.9));
-  const x = Math.max(120, r.x0 - 200);
-  const w = Math.max(1240, r.x1 - x + 80);
-  if (!two) banner(c, x, (r.y0 + r.y1) / 2 - 115, w, 230, WH, 'Q', G, K);
-  else {
-    const [y1, y2] = [(r.y0 + r.y1) / 2 - size * 1.45, (r.y0 + r.y1) / 2 + size * 1.45];
-    banner(c, x, y1 - 115, w, 230, WH, 'Q', G, K);
-    banner(c, x, y2 - 115, w, 230, G, 'A', R, WH);
-  }
   finish(c);
 });
 
@@ -165,15 +159,38 @@ const answerCells: ObjectPaint = (c, w, h) => {
 };
 /** The board row's tiles under the letters (board c): white, a shade along their foot. */
 const rowTiles: ObjectPaint = (c, w, h) => {
-  const size = 176;
-  const step = (W - 120 - 7 * 14) / 8 + 14;
+  const size = Math.max(60, Math.min(176, h));
+  const step = boardStep(size);
   const n = Math.max(1, Math.round((w + 0.288 * size) / step));
   const tw = step - 14;
+  const th = size + 4;
   const x0 = w / 2 - (n * step - 14) / 2;
   for (let i = 0; i < n; i++) {
-    c.fillStyle = WH; c.fillRect(x0 + i * step, h / 2 - 90, tw, 180);
-    c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(x0 + i * step, h / 2 + 80, tw, 10);
+    c.fillStyle = WH; c.fillRect(x0 + i * step, h / 2 - th / 2, tw, th);
+    c.fillStyle = 'rgba(0,0,0,0.18)'; c.fillRect(x0 + i * step, h / 2 + th / 2 - 10, tw, 10);
   }
+};
+
+/** The Q/A set's margin round its words, px: the tab and the chevron at the sides, the banner's depth above and below. */
+export const QA_PAD: [number, number] = [260, 60];
+/**
+ * The question and answer banners (board d) round the set's words: a line set in two rows is a question (white banner, gold
+ * Q tab) and its answer (gold banner, red A tab); a line in one row is the question alone. Only the line's rows decide it,
+ * never a call beside the line (a call counted as a row drew two banners with the one line between them).
+ */
+const qaBanners = (mirror: boolean): ObjectPaint => (c, w, h) => {
+  const [, py] = QA_PAD;
+  const inner = h - py * 2;
+  // a row is 2.9 sizes tall (the set's lead) and a size 84–140 px: past 446 px of words there are two rows
+  const two = inner > 446;
+  const size = inner / (two ? 5.8 : 2.9);
+  const bh = Math.min(230, size * 1.64);
+  const rows = two ? [py + inner / 4, py + (inner * 3) / 4] : [h / 2];
+  c.save();
+  if (mirror) { c.translate(w, 0); c.scale(-1, 1); }
+  const [bx, k] = [100, bh * 0.32];
+  rows.forEach((y, i) => banner(c, bx, y - bh / 2, w - bx - 40 - k, bh, i ? G : WH, i ? 'A' : 'Q', i ? R : G, i ? WH : K));
+  c.restore();
 };
 
 const INS: Record<string, HandIn> = {
@@ -216,4 +233,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles } as Record<string, ObjectPaint> };
+export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true) } as Record<string, ObjectPaint> };

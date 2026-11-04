@@ -57,6 +57,14 @@ const LAYER = -5;
 
 interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
 
+/** Each glyph's row in a block, or -1 (the same walk as poseOf). */
+function rowOfGlyphs(gs: Glyph[], rows: string[]): number[] {
+  const out = gs.map(() => -1);
+  let p = 0;
+  rows.forEach((row, r) => { for (const ch of row) { while (p < gs.length && gs[p].char !== ch) p++; if (p < gs.length) out[p++] = r; } });
+  return out;
+}
+
 /** Where each glyph stands in a block, relative to the block's centre. Spaces a row break swallowed stay hidden. */
 function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   const k = block.size / tex;
@@ -74,8 +82,28 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   };
   const n = block.rows.length;
   const track = spec.track * block.size;
+  const sizes = block.lines ? gs.map(() => k) : undefined;
   block.rows.forEach((row, r) => {
     const ids = take(row);
+    const box = block.lines?.[r];
+    if (box && sizes) {
+      // a split line's row: its own size, its own box (world-split.ts)
+      const rk = box.size / tex;
+      const adv = ids.map((id) => gs[id].advance * rk);
+      const gaps = ids.map((id, i) => (i ? (gs[id].gap ?? 0) * rk : 0));
+      const tr = box.track * box.size;
+      const w = adv.reduce((a, b) => a + b, 0) + gaps.reduce((a, b) => a + b, 0) + Math.max(0, ids.length - 1) * tr;
+      let at = box.flush < 0 ? box.x0 : box.flush > 0 ? box.x0 + box.bw - w : box.x0 + (box.bw - w) / 2;
+      ids.forEach((id, i) => {
+        at += gaps[i];
+        x[id] = at + adv[i] / 2;
+        y[id] = box.y + (gs[id].dy ?? 0) * rk;
+        shown[id] = gs[id].char.trim() !== '';
+        sizes[id] = rk;
+        at += adv[i] + tr;
+      });
+      return;
+    }
     if (spec.vertical) {
       const step = block.size * (1 + spec.track);
       const cx = ((n - 1) / 2 - r) * block.size * spec.lead;
@@ -105,7 +133,7 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   });
   const u = x.map((v) => clamp01((v + block.w / 2) / Math.max(1, block.w)));
   const v = y.map((w) => clamp01((block.h / 2 - w) / Math.max(1, block.h)));
-  return { block, spec, x, y, turn, shown, scale: k, u, v };
+  return { block, spec, x, y, turn, shown, scale: k, ...(sizes ? { sizes } : {}), u, v };
 }
 
 /** The key word as big as the frame lets it be, read in its place: the words before it small above its left edge, the words after it small below its right edge. Undefined when the key would not stand clearly bigger. */
@@ -155,7 +183,9 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   if (!spec.object) return undefined;
   const [px, py] = spec.pad ?? [0, 0];
   // the object takes at least its share of the frame, and stays in the frame
-  const [ow, oh] = [Math.max(block.w + px * 2, (spec.fill?.[0] ?? 0) * 1920), Math.max(block.h + py * 2, (spec.fill?.[1] ?? 0) * 1080)];
+  // a split line's object holds its hero part only: the small part is set apart from it, or under it on the page
+  const hero = block.hero ?? { cx: 0, cy: 0, w: block.w, h: block.h };
+  const [ow, oh] = [Math.max(hero.w + px * 2, (spec.fill?.[0] ?? 0) * 1920), Math.max(hero.h + py * 2, (spec.fill?.[1] ?? 0) * 1080)];
   const cv = paintObject(spec.object, ow, oh, slots, seed, variant);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -164,7 +194,7 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   m.userData['noVeil'] = true;
   m.userData['decor'] = true;
   const inside = (c: number, half: number, frame: number) => (half >= frame ? -c : Math.min(frame - half, Math.max(half - frame, c)) - c);
-  m.position.set(inside(block.cx, ow / 2, 960), inside(block.cy, oh / 2, 540), 0);
+  m.position.set(hero.cx + inside(block.cx + hero.cx, ow / 2, 960), hero.cy + inside(block.cy + hero.cy, oh / 2, 540), 0);
   return m;
 }
 
@@ -181,7 +211,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (a set laid into its page on an object of its own keeps it: a blown-up word would lose the balloon or card it is written on)
   const blowing = !!wl.blow && slot.of === 1 && !(sets[0].fixed && sets[0].object);
   if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0, vertical: false, stair: 0 };
-  const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
+  // an even set gives every character (a quote, a space) a whole cell, so it is measured that way (poseOf)
+  const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return s.even ? (x: string) => [...x].length * 100 : (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
   const blocks = sets.map((s) => blockOf(text, s, measureOf(s)));
   // (a blown-up key word is drawn from a picture its own size: never a small one stretched)
   const tex = Math.max(...blocks.map((b) => b.size), wl.blow && slot.of === 1 ? BLOW_TEX : 0);
@@ -191,7 +222,13 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const inkOn = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
   const words = inkOn(sets[0]);
   const baked = !!(wl.surface || sets.some((s) => s.surface));
-  const keyOf = (s: SetSpec) => readable(rt.palette.accent, s.object ? slots.plate : rt.palette.background, s.object ? 6 : 4.5);
+  // the key reads against what is really under the words: the object's plate, the card or banners a set's page draws
+  // (a set inked for the plate stands on one), else the ground (pink key letters sat on a white hint card at 2:1)
+  const keyOf = (s: SetSpec) => {
+    const on = s.on ?? (s.object || (s.ink === 'plateInk' && !s.under) ? ['plate' as const] : undefined);
+    const base = s.key ? slots[s.key] : rt.palette.accent;
+    return on ? on.reduce((c, k) => readable(c, slots[k], s.object || s.on ? 6 : 4.5), base) : readable(base, rt.palette.background, 4.5);
+  };
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;
@@ -200,7 +237,10 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const style: GlyphStyle = { family, weight, size: tex, even: sets[0].even, surface: surfaceOf(words) };
   const gs = makeGlyphs(text, style, baked ? 'white' : color(words));
   tagSource(gs, rt.cue.text);
-  const tintOf = (g: Glyph, p: number) => (marks && g.src !== undefined && emphasisOf(rt, g.src) === 'color' ? keyOf(sets[p]) : inkOn(sets[p]));
+  // a split line's small part may take an ink of its own (world-split.ts)
+  const smallIds = blocks.map((b, p) => (b.small && sets[p].split?.ink ? rowOfGlyphs(gs, b.rows) : undefined));
+  const splitInkOf = (g: Glyph, p: number) => { const ids = smallIds[p]; return ids && blocks[p].small!.includes(ids[gs.indexOf(g)]) ? slots[sets[p].split!.ink!] : undefined; };
+  const tintOf = (g: Glyph, p: number) => splitInkOf(g, p) ?? (marks && g.src !== undefined && emphasisOf(rt, g.src) === 'color' ? keyOf(sets[p]) : inkOn(sets[p]));
   const eats = ['signal-lock', 'detune', 'carrier-lost'].includes(wl.enter) || wl.exit === 'carrier-lost';
   // an emphasised character is its own picture on a world with a material, and each pose its own ink
   const mapsOf = (eaten: boolean) => sets.map((_, p) => gs.map((g) => (baked ? glyphTexture(g.char, { ...style, surface: surfaceOf(tintOf(g, p), eaten, p) }).texture : g.mesh.material.map!)));

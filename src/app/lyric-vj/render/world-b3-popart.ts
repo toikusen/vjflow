@@ -55,9 +55,13 @@ const strip = (mirror: boolean): HandGround => (e) => onPage(e, still(e, mirror 
   const s = e.slots;
   c.fillStyle = e.paper;
   c.fillRect(0, 0, W, H);
-  const [fx, fy] = focusOf(e, mirror ? 1320 : 600, 500);
   const wide: [number, number] = mirror ? [720, 1140] : [60, 1140];
   const narrow: [number, number] = mirror ? [60, 632] : [1228, 632];
+  // a line split in two (world-split.ts) has its last phrase in the narrow panel: that panel gets the burst it is shouted in
+  const r = e.rect;
+  const shout = !!r && (mirror ? r.x0 < narrow[0] + narrow[1] - 40 : r.x1 > narrow[0] + 40);
+  const balloonBox = r && shout ? (mirror ? { ...r, x0: Math.max(r.x0, wide[0]) } : { ...r, x1: Math.min(r.x1, wide[0] + wide[1]) }) : r;
+  const [fx, fy] = balloonBox ? [(balloonBox.x0 + balloonBox.x1) / 2, (balloonBox.y0 + balloonBox.y1) / 2] : [mirror ? 1320 : 600, 500];
   panel(c, K(e), wide[0], 60, wide[1], 960, (g) => {
     g.fillStyle = STOCK;
     g.fillRect(wide[0] - 10, 50, wide[1] + 20, 980);
@@ -67,7 +71,19 @@ const strip = (mirror: boolean): HandGround => (e) => onPage(e, still(e, mirror 
     g.fillStyle = s.faint;
     g.fillRect(narrow[0] - 10, 50, narrow[1] + 20, 980);
     halftone(g, narrow[0], 60, narrow[1], 960, 15, (_x, y) => Math.max(0, ((y - 420) / 600) * 6.5), s.accent, 15);
-  }, (g) => speedLines(g, narrow[0] + narrow[1] / 2, 470, 120, 900, 46, 5, K(e), 11 + (e.seed % 3)));
+  }, (g) => {
+    const [bx, by] = [narrow[0] + narrow[1] / 2, 540];
+    speedLines(g, bx, shout ? by : 470, shout ? 300 : 120, 900, 46, 5, K(e), 11 + (e.seed % 3));
+    if (!shout) return;
+    // the burst round the shouted phrase: plate white, key line, points past the words
+    burstPath(g, bx, by, narrow[1] / 2 - 36, 330, 14, 0.2, 5 + (e.seed % 5));
+    g.lineJoin = 'miter';
+    g.lineWidth = 14;
+    g.strokeStyle = K(e);
+    g.stroke();
+    g.fillStyle = s.plate;
+    g.fill();
+  });
   tag(c, titleOnly(e.title), wide[0] + 38, 98, 30, s.faint, K(e));
 }));
 

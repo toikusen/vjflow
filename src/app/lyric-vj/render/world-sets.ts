@@ -5,6 +5,7 @@ import { balancedRows } from '../phrases';
 import { LOUD_SETS } from './world-b3-sets';
 import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
+import { RowBox, splitBlock, SplitSpec } from './world-split';
 
 const W = 1920;
 const H = 1080;
@@ -50,6 +51,12 @@ export interface SetSpec {
   under?: { kind: SurfaceKind; tone: keyof Slots }[];
   /** Laid into its ground's composition: no travel or swell while it is up. */
   fixed?: boolean;
+  /** What the words stand on when the set's own page draws it (a card, a banner, two banners): the key ink reads on each. */
+  on?: (keyof Slots)[];
+  /** The slot the key words start from, when not the accent (an accent banner under the words). */
+  key?: keyof Slots;
+  /** One line in two sizes or two containers, at a space the lyric has (world-split.ts). */
+  split?: SplitSpec;
 }
 
 export interface Block {
@@ -61,6 +68,10 @@ export interface Block {
   /** The block's centre, frame px, y up, origin at the frame's centre. */
   cx: number;
   cy: number;
+  /** A split line's rows, each its own size and place (world-split.ts); the rows that are its small part; the hero's box. */
+  lines?: RowBox[];
+  small?: number[];
+  hero?: { cx: number; cy: number; w: number; h: number };
 }
 
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };
@@ -226,6 +237,8 @@ export const TYPE_FLOOR = { hi: 150, lo: 84 };
 /** The rows and size a line takes in a set: the biggest type the set allows, in as few rows as keep it near that. */
 export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, TYPE_FLOOR.lo) };
+  const split = splitBlock(text, spec, measure, TYPE_FLOOR.lo);
+  if (split) return split;
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {
     const rows = balancedRows(text, n).filter(Boolean);
@@ -237,11 +250,17 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const best = Math.max(...options.map((o) => o.size), 0);
   // bigger type is the default: a row more is worth it for anything past a twentieth of size
   const pick = options.find((o) => o.size >= best * 0.95) ?? options[options.length - 1] ?? { rows: [text], size: spec.lo };
-  const size = Math.max(spec.lo, Math.round(Math.min(spec.hi, pick.size)));
+  const floored = Math.max(spec.lo, Math.round(Math.min(spec.hi, pick.size)));
   const n = pick.rows.length;
-  const longest = Math.max(...pick.rows.map((r) => (spec.vertical ? [...r].length * (1 + spec.track) * size : (measure(r) * size) / 100 + ([...r].length - 1) * spec.track * size)));
-  const stepped = (spec.stair ?? 0) * size * (n - 1);
-  const [w, h] = spec.vertical ? [n * size * spec.lead, longest + stepped] : [longest + stepped, n * size * spec.lead];
+  const extent = (size: number) => {
+    const longest = Math.max(...pick.rows.map((r) => (spec.vertical ? [...r].length * (1 + spec.track) * size : (measure(r) * size) / 100 + ([...r].length - 1) * spec.track * size)));
+    const stepped = (spec.stair ?? 0) * size * (n - 1);
+    return spec.vertical ? [n * size * spec.lead, longest + stepped] : [longest + stepped, n * size * spec.lead];
+  };
+  // the type floor never pushes a line out of the frame: a line too long for its set at the floor is set smaller (never clipped)
+  const [w0, h0] = extent(floored);
+  const size = Math.floor(floored * Math.min(1, (W - 2 * SAFE_X) / Math.max(1, w0), (H - 2 * SAFE_Y) / Math.max(1, h0)));
+  const [w, h] = extent(size);
   // the anchor names a side; the block never leaves the frame's safe area, its object's margin included
   const [px, py] = spec.pad ?? [0, 0];
   const cx = spec.at[0] * W - W / 2 - (spec.ax * w) / 2;

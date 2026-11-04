@@ -73,7 +73,8 @@ const headline: HandGround = (e) => page(e, (c) => {
   const w = Math.round(((W - 2 * M) * Math.ceil(k * 4)) / 4);
   c.fillStyle = RED;
   c.fillRect(M, top, w, 150);
-  if (k >= 1) label(c, titleOnly(e.title), M + 34, top + 112, HEAD(110), B3.xFFFFFF, 34);
+  // the band carries the title, or the line's last phrase when the line is split into it (world-split.ts)
+  if (k >= 1 && r.y1 <= top + 20) label(c, titleOnly(e.title), M + 34, top + 112, HEAD(110), B3.xFFFFFF, 34);
   finish(c, e);
 });
 

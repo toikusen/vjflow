@@ -92,9 +92,10 @@ const ticket: HandGround = (e) => page(e, (c) => {
 const cards: HandGround = (e) => page(e, (c) => {
   const r = e.rect ?? { x0: 0, y0: 400, x1: W, y1: 700 };
   // the cards follow the letters: one letter's cell is its size times 1.74 (the set's tracking), a row's height its size
-  const size = Math.max(60, Math.min(184, r.y1 - r.y0));
+  // (the lyric box is the block with 14 px round it: world-layout poses)
+  const size = Math.max(60, Math.min(184, r.y1 - r.y0 - 28));
   const step = size * 1.74;
-  const n = Math.max(1, Math.round((r.x1 - r.x0 + 0.74 * size) / step));
+  const n = Math.max(1, Math.round((r.x1 - r.x0 - 28 + 0.74 * size) / step));
   const x0 = (r.x0 + r.x1) / 2 - (n * step) / 2;
   c.fillStyle = e.paper;
   c.fillRect(0, 0, W, H);
@@ -106,9 +107,10 @@ const cards: HandGround = (e) => page(e, (c) => {
     c.fillStyle = 'rgba(255,255,255,0.28)';
     for (let y = 0; y < H; y += 36) c.fillRect(x, y - 6, step, 12);
     if (i < 0 || i >= n) continue;
-    // each card turns over on a beat in turn
-    const flip = Math.abs(Math.cos(Math.PI * (1 - clamp01(e.age * 2 - i * 0.5))));
-    const turned = e.age * 2 - i * 0.5 >= 0.5;
+    // each card turns over in turn, the whole row inside 0.6 s: a letter is never left on the stripes behind its card
+    const q = clamp01((e.age - i * Math.min(0.08, 0.35 / n)) / 0.25);
+    const flip = Math.abs(Math.cos(Math.PI * (1 - q)));
+    const turned = q >= 0.5;
     c.save();
     c.translate(x + step / 2, 0);
     c.scale(Math.max(0.02, flip), 1);
@@ -116,8 +118,10 @@ const cards: HandGround = (e) => page(e, (c) => {
     c.fillStyle = turned ? B3.xFFFFFF : m;
     c.fill();
     if (turned) {
-      label(c, NAMES[(((i + e.seed) % 5) + 5) % 5], 0, 240, FRED(30), B3.x2B2140, 4, 'center');
-      label(c, `0${i + 1}`, 0, 870, FRED(26, 500), GREY, 4, 'center');
+      // a narrow card (a long line's smaller letters) takes its name and number smaller, inside its edges
+      const k = Math.min(1, step / 320);
+      label(c, NAMES[(((i + e.seed) % 5) + 5) % 5], 0, 240, FRED(30 * k), B3.x2B2140, 4 * k, 'center');
+      label(c, String(i + 1).padStart(2, '0'), 0, 870, FRED(26 * k, 500), GREY, 4 * k, 'center');
     }
     c.restore();
   }

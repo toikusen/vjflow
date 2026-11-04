@@ -89,6 +89,7 @@ export const TC_FOR: Record<string, string> = {
   'Mochiy Pop One': 'Huninn',
   DotGothic16: 'Chiron Hei HK',
   'Yuji Syuku': 'LXGW WenKai TC',
+  'Shippori Antique B1': 'Chocolate Classical Sans',
 };
 
 /** A design language's faces for a song's script: Chinese lyrics get the Traditional Chinese counterparts. */

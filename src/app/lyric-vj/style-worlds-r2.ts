@@ -136,7 +136,7 @@ export const GLASS_WORLD: StyleWorld = {
   lyricRole: '歌詞是窗上的銘文帶：一整片淡色透明玻璃，用深色玻璃彩繪寫字',
   family: 'emissive',
   refuses: ['人物聖像', '十字架與宗教符號', '平塗色塊', '放射光線', '粒子', '隨機三角剖分', '碎裂線穿過字'],
-  type: { ja: { family: 'Shippori Mincho', weight: 800 }, tc: { family: 'Noto Serif HK', weight: 900 }, latin: 'Cormorant Garamond', setting: '粗明體，銘文帶置中或直排在尖拱窗裡；圓花窗裡的短句切成兩行填滿', category: 'serif-heavy' },
+  type: { ja: { family: 'Kaisei Tokumin', weight: 800 }, tc: { family: 'Noto Serif HK', weight: 900 }, latin: 'Cormorant Garamond', setting: '粗明體，銘文帶置中或直排在尖拱窗裡；圓花窗裡的短句切成兩行填滿', category: 'serif-heavy' },
   palette: [
     // (board: lead #17141B, inscription ink #2A1D1A, pale glass #EEE8CF, cobalt #2F5FB8, ruby #B3263C, amber #C98A1C, emerald #2A8A5C, violet #6C4A9C)
     scheme('cobalt-ruby', 'cold', 'mid', '#5E5A54', '#2A1D1A', '#2F5FB8', '#B3263C', '#F4EFDB', '#2A8A5C', '#C98A1C', '鈷藍與紅寶'),

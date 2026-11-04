@@ -15,7 +15,7 @@ const R = B3.xC8102E;
 const G = B3.xFFB400;
 const WH = B3.xFFFFFF;
 const K = B3.x111428;
-const BUNGEE = (px: number) => `400 ${px}px Bungee, "Noto Sans TC", "Zen Kaku Gothic New", sans-serif`;
+const BUNGEE = (px: number) => `400 ${px}px Bungee, "Mochiy Pop One", "Zen Kaku Gothic New", sans-serif`;
 
 const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
 /** The finish: TV scanlines (2 of every 4 px at 7 %) and the board's navy vignette. */

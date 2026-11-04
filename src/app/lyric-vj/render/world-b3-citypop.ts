@@ -13,8 +13,8 @@ const NIGHT = { sky: B3.x1B2350, sky2: B3.x2A2865, skyTop: B3.x141A40, facade: B
 type Inks = typeof DAY;
 const inks = (e: WorldEnv): Inks => (isLight(e.paper) ? DAY : NIGHT);
 const night = (e: WorldEnv) => !isLight(e.paper);
-const SCRIPT = (px: number) => `400 ${px}px Yellowtail, "Noto Serif TC", "Shippori Mincho", serif`;
-const SMALL = (px: number) => `600 ${px}px "Noto Serif TC", "Shippori Mincho", serif`;
+const SCRIPT = (px: number) => `400 ${px}px Yellowtail, "Shippori Mincho B1", "Shippori Mincho", serif`;
+const SMALL = (px: number) => `600 ${px}px "Shippori Mincho B1", "Shippori Mincho", serif`;
 
 /** The cover, in frame coordinates, panned very slowly over a cut: a poster being looked across. */
 const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };

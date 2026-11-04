@@ -73,6 +73,11 @@ export const FONTS: FontSpec[] = [
   // monospaced kai with real weights, and a marker gothic whose ragged edges read as hand-cut title letters
   { family: 'LXGW WenKai Mono TC', roles: ['display', 'body'], weights: [300, 400, 700], feel: '等寬楷體，終端機、逐字輸出', han: 'tc' },
   { family: 'LXGW Marker Gothic', roles: ['display', 'body'], weights: [400], feel: '麥克筆黑體，邊緣不齊，像手剪的片頭字', han: 'tc' },
+  // the font rule closed over all 30 worlds (2026-11-04): city pop's sleeve Ming leaves Noto Serif to chiyogami and
+  // stained-glass (its B1 cut draws every Han character of the test songs), and stained-glass's kana take a heavy
+  // display mincho of their own instead of chiyogami's
+  { family: 'Shippori Mincho B1', roles: ['display', 'body'], weights: [600, 800], feel: '粗明朝，唱片封套的寬字距標題，繁中字形齊全' },
+  { family: 'Kaisei Tokumin', roles: ['display', 'body'], weights: [700, 800], feel: '厚重的展示明朝，銘文、莊重' },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */
@@ -107,6 +112,8 @@ export const TC_FOR: Record<string, string> = {
   'Shippori Antique B1': 'Chocolate Classical Sans',
   'BIZ UDPMincho': 'UoqMunThenKhung',
   'WDXL Lubrifont JP N': 'WDXL Lubrifont TC',
+  'Shippori Mincho B1': 'Noto Serif TC',
+  'Kaisei Tokumin': 'Noto Serif TC',
 };
 
 /** A design language's faces for a song's script: Chinese lyrics get the Traditional Chinese counterparts. */

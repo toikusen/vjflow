@@ -59,7 +59,7 @@ const gameshow: StyleWorld = {
   lyricRole: '歌詞是這一題：題目卡上的題目、拆成答案格的字、提示卡、題號盤中間翻成歌詞的一列',
   family: 'ui',
   refuses: ['漸層', '模糊', '發光', '圓角', '警戒斜紋膠帶', '燈泡追逐框', '假的分數'],
-  type: { ja: { family: 'Zen Kaku Gothic New', weight: 900 }, tc: { family: 'Noto Sans TC', weight: 900 }, latin: 'Bungee', setting: '超粗黑體深色字在白卡上；題號、字母與標籤是 Bungee', category: 'card-type' },
+  type: { ja: { family: 'Zen Kaku Gothic New', weight: 900 }, tc: { family: 'Mochiy Pop One', weight: 400 }, latin: 'Bungee', setting: '超粗黑體深色字在白卡上；題號、字母與標籤是 Bungee', category: 'card-type' },
   palette: [
     // (board: studio blue #1636B8, deep navy #0B1A5C, red #C8102E darkened for 4.5:1 under white, gold #FFB400, white, ink #111428)
     scheme('studio-blue', 'cold', 'dark', '#1636B8', '#111428', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#2B4FD6', '棚藍布景'),
@@ -295,7 +295,7 @@ const citypop: StyleWorld = {
   lyricRole: '歌詞是封套上的標題：明體寬字距，旁邊一行草寫英文',
   family: 'air',
   refuses: ['寫實夕陽', '噴槍漸層', '霓虹發光', '故障', '紫粉網格', '模糊', '快速切換'],
-  type: { ja: { family: 'Shippori Mincho', weight: 800 }, tc: { family: 'Noto Serif TC', weight: 900 }, latin: 'Yellowtail', setting: '粗明體寬字距，停很久；草寫英文只做小標', category: 'sleeve-serif' },
+  type: { ja: { family: 'Shippori Mincho', weight: 800 }, tc: { family: 'Shippori Mincho B1', weight: 800 }, latin: 'Yellowtail', setting: '粗明體寬字距，停很久；草寫英文只做小標', category: 'sleeve-serif' },
   palette: [
     // (board: sky #45B4E2, cream #F7EFDF, pink #F2A1B8, coral #EC6650, navy #1B2A5C, pool #1F84C6)
     scheme('noon-facade', 'cold', 'light', '#F7EFDF', '#1B2A5C', '#F2A1B8', '#B53A2A', '#FFFFFF', '#1B2A5C', '#45B4E2', '白天的封套，深藍字'),

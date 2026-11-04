@@ -15,6 +15,8 @@ import { Ctx, directedPlan, Direction, directionSchema, directorBase, directorPr
 import { lessonsBlock, readLessons } from './lesson-rules.mts';
 import { overusedForms, recordMoments } from '../../src/app/lyric-vj/signature-moments';
 import { buildMoments } from './moments.mts';
+import { sungTimesOf } from './sung-times.mts';
+import { planWordSync } from './wordsync.mts';
 import { overusedWorlds, PlanWorld, planWorldOf, recordWorld, WORLD_PICK_SCHEMA, worldBase, worldCandidates, worldPickPrompt, worldPoolOf } from './paid-world.mts';
 import { worldById } from '../../src/app/lyric-vj/style-worlds';
 
@@ -112,12 +114,12 @@ const ctxFor = (d?: Direction): Ctx => {
   return { song, calm, partWhat: (id) => partOf(id)?.what ?? '', levelOf: (c) => levelOf(tension(c), charsPerSec(c), calm), screenGrounds: screenGroundsOf(paid), world: pool };
 };
 const palette = pw ? `墨 ${pw.palette.ink}、底 ${pw.palette.paper}、強調 ${pw.palette.accent}` : `墨 ${script.shadow}、紙 ${script.highlight}、強調 ${script.accent}`;
-const prompt = directorPrompt(song, ctxFor(), { language: String(lang ?? ''), languageWhat: String((LANGUAGES[lang] as { name?: string } | undefined)?.name ?? ''), concept: base.concept ?? '', backbone: paid.backbone ?? '', change: paid.vision?.change ?? '', palette, parts: partsIn, lessons: lessonsBlock(readLessons(a.lessons), 'typeplan'), props: a.props, moments: a.moments ? { overused: overusedForms(history, song.title) } : undefined, world: world && pool ? { w: world, pool } : undefined });
+const prompt = directorPrompt(song, ctxFor(), { language: String(lang ?? ''), languageWhat: String((LANGUAGES[lang] as { name?: string } | undefined)?.name ?? ''), concept: base.concept ?? '', backbone: paid.backbone ?? '', change: paid.vision?.change ?? '', palette, parts: partsIn, lessons: lessonsBlock(readLessons(a.lessons), 'typeplan'), props: a.props, moments: a.moments ? { overused: overusedForms(history, song.title) } : undefined, wordSync: true, world: world && pool ? { w: world, pool } : undefined });
 writeFileSync(join(out, 'prompt.txt'), prompt);
 
 const kept = join(out, 'direction.json');
 const ask = async (): Promise<Direction> => {
-  const schema = directionSchema(a.moments);
+  const schema = directionSchema(a.moments, true);
   const budget = Number(a.budget);
   const client = new Anthropic({ maxRetries: 4 });
   const counted = (await client.messages.countTokens({ model: a.model!, messages: [{ role: 'user', content: prompt }], output_config: { format: { type: 'json_schema', schema } } } as Anthropic.Messages.MessageCountTokensParams)).input_tokens;
@@ -164,6 +166,13 @@ if (a.moments) {
   writeFileSync(a.history!, JSON.stringify(recordMoments(history, song.title, kept), null, 1));
   console.log(`moments: ${kept.length} kept (${kept.map((k) => `${k.form}/${k.variant} ${k.cues.join('+')} 「${k.word}」`).join('; ')}), ${dropped.length} dropped${direction && !direction.moments ? ' (the kept reply has none: rerun with --fresh to ask)' : ''}`);
 }
+// word sync: the lines the director chose land their characters as sung, on the server's times, where the guards let
+// them (word-sync.ts); a refused line stays on line timing and is a fallback like any other. Every paid run asks
+const syncAsks = direction?.wordSync ?? [];
+const sync = planWordSync(plan as never, song.cues, syncAsks, sungTimesOf(song as never, a.song!));
+for (const d of sync.dropped) fallbacks.push({ cue: d.ask.cue, field: 'wordSync', said: d.ask.why, reason: d.reason });
+for (const k of sync.kept) Object.assign(decisions.find((x) => x['cue'] === k.cue) ?? {}, { wordSync: { why: k.why, source: k.source } });
+console.log(`word sync: ${sync.kept.length} lines (${sync.kept.map((k) => `${k.cue} ${k.source} 「${k.why}」`).join('; ')}), ${sync.dropped.length} refused${direction && !direction.wordSync ? ' (the kept reply has none: rerun with --fresh to ask)' : ''}`);
 // the song's world goes into the design history: the next songs' directors are told which worlds the last ones took
 if (pw) {
   const now = (existsSync(a.history!) ? JSON.parse(readFileSync(a.history!, 'utf8')) : []) as { song: string; world?: string }[];
@@ -171,7 +180,7 @@ if (pw) {
 }
 writeFileSync(join(out, 'plan.json'), JSON.stringify(plan, null, 1));
 writeFileSync(join(out, 'base.json'), JSON.stringify(pw ? worldBase(base, plan as never, shots, pw) : directorBase(base, plan as never, shots)));
-writeFileSync(join(out, 'decisions.json'), JSON.stringify({ reading: direction?.reading, world: pw, techniques: direction?.techniques, tune: direction?.tune, decisions, fallbacks }, null, 1));
+writeFileSync(join(out, 'decisions.json'), JSON.stringify({ reading: direction?.reading, world: pw, techniques: direction?.techniques, tune: direction?.tune, wordSync: { kept: sync.kept.map(({ times: _t, ...k }) => k), dropped: sync.dropped }, decisions, fallbacks }, null, 1));
 writeFileSync(join(out, 'fallbacks.log'), fallbacks.map((f) => `${f.cue} ${f.field} ${f.said}: ${f.reason}`).join('\n') + '\n');
 const held = decisions.filter((x) => x['cut'] === 'hold').length;
 console.log(`linedirect: ${shots.length} shots, ${decisions.length} lines (${held} held, ${decisions.length - held} split), ${fallbacks.length} fallbacks, ${clock.length} paid cuts on the clock; spent so far $${spent().toFixed(3)}`);

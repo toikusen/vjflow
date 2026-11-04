@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from './glyphs';
 import { nearestWeight } from '../fonts';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, readable, readingSec, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, readable, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, SET_SPECS, SetSpec } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
@@ -166,6 +166,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const enterDur = rt.style.enter === 'cut' && entering ? moveSec(entering.sec, room(), Math.max(0.6, rt.pace)) : 0;
   const n = gs.length;
   const sungTimes = gs.map((g, i) => sungAt(g.src ?? i, [...rt.cue.text].length, rt.cue.start, rt.cue.end, rt.cue.charStarts));
+  // word sync (the paid director's, on the server's sung times): the set's block comes in as one, but each character
+  // is held back until its own voice and then runs the set's entrance from there
+  const synced = rt.style.reveal === 'sung';
+  const landAt = sungTimes.map((s) => Math.max(rt.showFrom, s - SUNG_LEAD));
+  const glyphIn = Math.max(0.18, enterDur);
   const dimBaked = new THREE.Color(0.1, 0.1, 0.1);
   const lit = new THREE.Color(1, 1, 1);
   const useClip = entering?.clip || leaving?.clip;
@@ -225,13 +230,14 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const inkLit = inksBy[k];
       gs.forEach((g, i) => {
         const m = g.mesh;
-        if (!p.shown[i]) { m.visible = false; return; }
+        if (!p.shown[i] || (synced && !out && t < landAt[i])) { m.visible = false; return; }
         m.visible = true;
-        const env: GlyphEnv = { q: out ? qOut : qIn, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0 };
-        let pose: GlyphPose = (out ? leaving?.glyph?.(env) : qIn < 1 ? entering?.glyph?.(env) : undefined) ?? {};
+        const qi = synced && !out ? sec(t - landAt[i], glyphIn) : qIn;
+        const env: GlyphEnv = { q: out ? qOut : qi, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0 };
+        let pose: GlyphPose = (out ? leaving?.glyph?.(env) : qi < 1 ? entering?.glyph?.(env) : undefined) ?? {};
         // a line that locks word by word keeps at it after its entrance has run
         if (!out && wl.enter === 'signal-lock' && enterDur > 0) pose = entering!.glyph!(env);
-        if (!out && qIn >= 1 && holding) pose = { ...holding(env), ...(wl.enter === 'signal-lock' && enterDur > 0 ? pose : {}) };
+        if (!out && qi >= 1 && holding) pose = { ...holding(env), ...(wl.enter === 'signal-lock' && enterDur > 0 ? pose : {}) };
         m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0), 0);
         const s = p.scale * (pose.s ?? 1);
         m.scale.set(s * (pose.sx ?? 1), s, 1);

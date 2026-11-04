@@ -145,8 +145,13 @@ export interface CueStyle {
   /** Faint copies follow each character where it was a moment ago (an echo trail behind a fast entrance or exit). */
   trail?: boolean;
   variant?: string;
-  /** 'word': characters appear as they are sung (needs charStarts); 'line' (default): the line enters at once. */
-  reveal?: 'line' | 'word';
+  /**
+   * 'word': characters appear at one steady rate over the start of the line; 'sung': each character lands exactly when
+   * it is sung (the paid director's word sync, on `sung`); 'line' (default): the line enters at once.
+   */
+  reveal?: 'line' | 'word' | 'sung';
+  /** Word sync (word-sync.ts): the sung time of every code point of the line, from the server's alignments; the renderer takes these over the song's own. Paid line director only. */
+  sung?: number[];
   /** Who says the line on an interface (a chat): the singer ('me', a sent message) or the other person ('them', a
    * message received). Unset: the shot's side decides. */
   voice?: 'me' | 'them';

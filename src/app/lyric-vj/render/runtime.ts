@@ -163,8 +163,24 @@ export function revealAt(rt: CueRuntime, frac: number): number {
 
 const fracOf = (rt: CueRuntime, g: Glyph) => (g.src ?? g.index) / Math.max(1, [...rt.cue.text].length - 1);
 
-/** When glyph g starts entering: its place in the steady word reveal, else the line's stagger. */
+/** A reveal that brings the characters in one by one: the steady word reveal, or the paid word sync on sung times. */
+export const isCharReveal = (style: { reveal?: string }) => style.reveal === 'word' || style.reveal === 'sung';
+/** The character lands this much before its voice, so it is up as the syllable is heard. */
+export const SUNG_LEAD = 0.06;
+/**
+ * Word sync: when glyph g lands, its own sung time (the director's server-aligned times stand on the cue as
+ * charStarts), never before the line shows; a character without a time of its own falls back to the steady reveal.
+ */
+export function sungAt(rt: CueRuntime, g: Glyph): number {
+  const at = rt.cue.charTimed ? rt.cue.charStarts?.[g.src ?? g.index] : undefined;
+  return at === undefined ? revealAt(rt, fracOf(rt, g)) : Math.max(rt.showFrom, at - SUNG_LEAD);
+}
+/** When the reveal is over: the last sung character's time, or the end of the steady reveal. */
+export const revealEnd = (rt: CueRuntime) => (rt.style.reveal === 'sung' && rt.cue.charTimed && rt.cue.charStarts?.length ? Math.max(rt.showFrom, rt.cue.charStarts[rt.cue.charStarts.length - 1] - SUNG_LEAD) : revealAt(rt, 1));
+
+/** When glyph g starts entering: its place in the steady word reveal, its sung time under word sync, else the line's stagger. */
 export function enterAt(rt: CueRuntime, g: Glyph, stagger: number): number {
+  if (rt.style.reveal === 'sung') return sungAt(rt, g);
   if (rt.style.reveal === 'word') return revealAt(rt, fracOf(rt, g));
   if (rt.together) return rt.showFrom;
   return rt.showFrom + g.index * stagger;
@@ -367,7 +383,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       break;
     }
     case 'fade':
-      opacity = easeOutCubic((t - (rt.style.reveal === 'word' ? start : rt.showFrom)) / FADE_SEC);
+      opacity = easeOutCubic((t - (isCharReveal(rt.style) ? start : rt.showFrom)) / FADE_SEC);
       break;
     case 'cut':
       opacity = t >= rt.showFrom ? 1 : 0;
@@ -500,7 +516,7 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
 export function settledAt(rt: CueRuntime, n: number, stagger: number) {
   // a cut and a whole-line fade bring every character in at once (glyphMotion ignores the stagger for them)
   const together = rt.together || rt.style.enter === 'cut' || rt.style.enter === 'fade';
-  const last = rt.style.reveal === 'word' ? revealAt(rt, 1) : together ? rt.showFrom : rt.showFrom + (n - 1) * stagger * rt.pace;
+  const last = isCharReveal(rt.style) ? revealEnd(rt) : together ? rt.showFrom : rt.showFrom + (n - 1) * stagger * rt.pace;
   return last + enterSec(rt.style.enter, rt.pace);
 }
 
@@ -566,7 +582,7 @@ export function paceStyle(style: CueStyle, cue: { start: number; end: number; te
   const tight = len < chars / 12 + 1.6;
   const adjust: PaceAdjust[] = [];
   let out = style;
-  if (style.reveal === 'word' && (rushed || tight)) {
+  if (isCharReveal(style) && (rushed || tight)) {
     out = { ...out, reveal: 'line' };
     adjust.push(rushed ? 'fast-line' : 'tight-line');
   }

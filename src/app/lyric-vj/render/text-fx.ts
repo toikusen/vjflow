@@ -15,7 +15,7 @@ import { phraseSpans } from './line-space';
 import { outlineMesh, rectMesh, shadowMesh } from './lyric-carrier';
 import { breathLine, crumbPose, nodePhase, nodeSize, ovalStroke, relayAt, ECHO_WAYS, echoPose, focusShare, foldPhase, gravityPose, poreField, pushFocus, radialShift, railAhead, railPose, slatClose, stripShare, strokeLeft, waveShift, waveThin } from './line-exit';
 import { mixHex, mottle, ovalFit, roughEdge, tornLine } from './material';
-import { CueLayer, CueRuntime, DRAWN, enterSec, FrameFx, readable, revealAt, songVary } from './runtime';
+import { CueLayer, CueRuntime, DRAWN, enterSec, FrameFx, readable, revealAt, songVary, sungAt } from './runtime';
 
 type GlyphMesh = THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
 interface Item {
@@ -39,7 +39,7 @@ export function templateStyle(s: CueStyle): CueStyle {
 
 /** When glyph g (in cue-text order) starts its entrance: as sung for a word reveal, else a short stagger. */
 const startOf = (rt: CueRuntime, g: Glyph, n: number) =>
-  rt.style.enter === 'band-in' || rt.style.enter === 'matrix-light' || isArrival(rt.style.enter) ? rt.showFrom : rt.style.reveal === 'word' ? revealAt(rt, (g.src ?? g.index) / Math.max(1, n - 1)) : rt.showFrom + (g.src ?? g.index) * 0.035 * rt.pace;
+  rt.style.enter === 'band-in' || rt.style.enter === 'matrix-light' || isArrival(rt.style.enter) ? rt.showFrom : rt.style.reveal === 'sung' ? sungAt(rt, g) : rt.style.reveal === 'word' ? revealAt(rt, (g.src ?? g.index) / Math.max(1, n - 1)) : rt.showFrom + (g.src ?? g.index) * 0.035 * rt.pace;
 
 /** A glyph's picture as a screen of round dots of this pitch, each as big as the ink it stands for (cached per picture and pitch). */
 const grains = new Map<string, THREE.Texture>();

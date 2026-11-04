@@ -944,7 +944,10 @@ export class LyricVjEngine {
     setFinish(design.finish);
     setSizeCap(design.language ? (LANGUAGES[design.language].text?.cap ?? 1) : 1);
     const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
-    const buildLine = ({ style: style1, cue: cue1 }: (typeof styled)[number], i: number) => {
+    const buildLine = ({ style: style1, cue: cue0 }: (typeof styled)[number], i: number) => {
+      // the paid director's word sync: the server's sung times stand in for the song's own on this line (word-sync.ts
+      // let them through), so each character lands on its voice
+      const cue1 = style1.reveal === 'sung' && style1.sung?.length === [...cue0.text].length ? { ...cue0, charStarts: style1.sung, charTimed: true } : cue0;
       // bracketed calls leave the line for a track of their own; emphasis and breaks follow the remaining text (a chat
       // message keeps its aside: 「もう殺しちゃいたいんだ (キルユー)」 is one message)
       const inChat = threadShot(treatment.shots.find((s) => s.id === style1.shot));

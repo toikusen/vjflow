@@ -21,9 +21,10 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
   // idol-live (board motion): fan letters are stuck on one by one, a bounce and settle; a card turns over to show its letter
   'sticker-pop': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0 ? 1 : 0, s: k > 0 ? 1 + 0.25 * Math.sin(k * Math.PI) * (1 - k * 0.5) : 1 }; } },
   'card-flip-in': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0.5 ? 1 : 0, sx: Math.max(0.03, Math.abs(Math.cos(Math.PI * (1 - k)))) }; } },
-  // y2k (board motion): the title is never bent; each character rises or slides in and fades up, one after the other
-  'glyph-rise': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: easeOut(k, 2), dy: -26 * (1 - easeOut(k, 3)) }; } },
-  'glyph-slide': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: easeOut(k, 2), dx: -34 * (1 - easeOut(k, 3)) }; } },
+  // y2k (direction-B boards): a page of the early web. Characters drop in one after another in whole pixel steps, or the
+  // block pops like a pressed gel button; a character is never bent, and its pink misprint moves with it (never a trail)
+  'pixel-drop': { sec: 0.45, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k > 0 ? 1 : 0, dy: 12 * Math.ceil(3 * (1 - k)) }; } },
+  'gel-pop': { sec: 0.24, block: (q) => { const s = q >= 1 ? 1 : stepsOf(q, 4) < 0.5 ? 0.9 : stepsOf(q, 4) < 0.75 ? 1.04 : 1; return { sx: s, sy: s, a: q > 0.02 ? 1 : 0 }; } },
   // psychedelic (board motion): the sign itself never bends; it rises into place, or its bands are printed up from the bottom
   'sign-rise': { sec: 0.5, block: (q) => ({ dy: -60 * (1 - easeOut(q, 3)), a: clamp01(q * 3) }) },
   'band-reveal': { sec: 0.42, clip: (q) => ({ axis: 'y', at: stepsOf(easeOut(q, 2), 6) }) },
@@ -43,8 +44,8 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'panel-wipe': { sec: 0.24, clip: (q) => ({ axis: 'x', at: 1 - stepsOf(easeIn(q, 2), 6) }) },
   'balloon-shrink': { sec: 0.22, block: (q) => { const s = 1 - 0.6 * easeIn(q, 2); return { sx: s, sy: s, dx: -50 * easeIn(q, 2), dy: 40 * easeIn(q, 2), a: q < 0.85 ? 1 : 0 }; } },
   'caption-slide-out': { sec: 0.3, block: (q) => ({ dx: 120 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
-  'glyph-lift-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dy: 22 * easeIn(k, 2) }; } },
-  'glyph-slide-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dx: 30 * easeIn(k, 2) }; } },
+  'pixel-lift': { sec: 0.36, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - i); return { a: k < 1 ? 1 : 0, dy: 12 * Math.floor(3 * k) }; } },
+  'gel-shrink': { sec: 0.2, block: (q) => { const s = 1 - 0.1 * stepsOf(q, 3); return { sx: s, sy: s, a: q < 0.9 ? 1 : 0 }; } },
   'sign-sink': { sec: 0.42, block: (q) => ({ dy: 50 * easeIn(q, 2), a: 1 - easeIn(q, 2) }) },
   'band-cover': { sec: 0.36, clip: (q) => ({ axis: 'y', at: 1 - stepsOf(easeIn(q, 2), 6) }) },
   'buff-out': { sec: 0.36, clip: (q) => ({ axis: 'x', at: 1 - easeIn(q, 1.6) }) },
@@ -66,7 +67,7 @@ export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'burst-flex': ({ age }) => ({ s: 1 + 0.025 * Math.exp(-fract(age * 2) * 6) }),
   'studio-still': () => ({}),
   'merch-still': () => ({}),
-  'sleeve-still': () => ({}),
+  'web-still': () => ({}),
   'poster-still': () => ({}),
   // the copier's feed: the sheet moves 1 px every other frame, the words with it
   'copier-feed': ({ age }) => ({ dy: Math.floor(age * 15) % 2 ? -1 : 0 }),

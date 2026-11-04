@@ -45,7 +45,7 @@ const SHORT: Record<string, string> = {
   'silent-film': '插卡字幕，單色染片', 'ink-wash': '濕紙上的書法留白', ukiyoe: '分版平塗的木版畫', aizome: '留白成花紋的藍染布',
   papercut: '紅紙與光的鏤空', 'paper-lantern': '暖光穿過紙層', chiyogami: '花紋和紙摺疊拼貼', 'gothic-lolita': '暗黑童話精裝書',
   woodcut: '黑版上的刀痕', chalkboard: '放學後的粉筆字', crayon: '孩子塗的繪本頁',
-  popart: '漫畫分格、對白框與網點', gameshow: '益智節目的題目卡與答案格', 'idol-live': '團扇剪字、門票與成員色卡', y2k: 'CD 封套的刀形漸層與軌道',
+  popart: '漫畫分格、對白框與網點', gameshow: '益智節目的題目卡與答案格', 'idol-live': '團扇剪字、門票與成員色卡', y2k: '早期網頁的凝膠按鈕、雷射膜與 CD',
   psychedelic: '七〇海報的招牌字與彩虹拱', graffiti: '水泥牆上的模板噴漆', brutalist: '影印海報的網格與紅色帶', citypop: '平塗封套的建築、泳池與夜景',
   silk: '平塗油墨，版微微錯開', 'silk-cold': '冷色網版，適合安靜的歌', riso: '透明墨疊印，留白多', file: '攤開的案件檔案', spy: '剪紙片頭，大塊斜切', card: '節拍上翻面的閃卡',
 };

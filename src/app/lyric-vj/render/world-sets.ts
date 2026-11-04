@@ -64,7 +64,16 @@ export interface SetSpec {
   key?: keyof Slots;
   /** One line in two sizes or two containers, at a space the lyric has (world-split.ts). */
   split?: SplitSpec;
+  /**
+   * Where the set's page draws its large graphics, boxes in frame fractions [x0, y0, x1, y1], y down: a call (the bracketed
+   * part of a line, engine placeCall) stands clear of them as it does of the words.
+   */
+  clear?: [number, number, number, number][];
 }
+
+/** A set's call-free boxes in the text root's own space (origin at the frame's centre, y up), px. */
+export const clearOf = (id: string | undefined, W = 1920, H = 1080) =>
+  (SET_SPECS[id ?? '']?.clear ?? []).map(([x0, y0, x1, y1]) => ({ x0: x0 * W - W / 2, y0: H / 2 - y1 * H, x1: x1 * W - W / 2, y1: H / 2 - y0 * H }));
 
 export interface Block {
   rows: string[];

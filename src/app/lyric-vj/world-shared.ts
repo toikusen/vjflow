@@ -45,7 +45,7 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   popart: s(['plate-slip', 'beat-punch'], ['plate', 'extrude'], 'diagonal'),
   gameshow: s(['beat-punch', 'roll', 'light-sweep'], ['extrude', 'plate'], 'diagonal'),
   'idol-live': s(['beat-punch', 'roll'], ['plate', 'extrude'], 'diagonal'),
-  y2k: s(['light-sweep', 'roll'], ['plate', 'extrude'], 'push-through'),
+  y2k: s(['beat-punch', 'roll'], ['plate', 'outline'], 'push-through'),
   psychedelic: s(['ink-run', 'roll'], ['plate', 'extrude'], 'push-through'),
   graffiti: s(['crack', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
   brutalist: s(['crack', 'beat-punch'], ['extrude', 'plate'], 'diagonal'),

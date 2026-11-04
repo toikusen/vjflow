@@ -2,7 +2,7 @@
 // Each answers docs/research/2026-11-01-style-standard.md: a closed pool, its own material, moves and set pieces. Two new
 // engines arrive with them: the air (render/world-air.ts); graffiti was rebuilt from its round-2 board as stencil and paste-up. Near neighbours were kept
 // apart on purpose: gameshow is a flat candy studio, idol-live a dark room of light; popart is three flat plates and dots,
-// y2k is gloss, chrome and gradient.
+// y2k is the early web: gel buttons, foil and pixels on ultramarine.
 import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
 import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
@@ -134,42 +134,43 @@ const idol: StyleWorld = {
 };
 
 const y2k: StyleWorld = {
-  id: 'y2k', name: 'Y2K', language: 'y2k', what: '2000 年前後的 CD 單曲封套：冰白或深靛底、漸層硬邊刀形、細線軌道、星芒，48 px 點格',
-  lyricRole: '歌詞是封套上的標題：粗黑體壓在左上，旁邊是向量刀形與軌道細線',
-  family: 'emissive',
-  refuses: ['發光暈染', '掃描線', '鍍鉻泡泡', '紫粉夕陽與透視格線', '故障雜訊', '模糊', '圓角膠囊底'],
-  type: { ja: { family: 'Zen Kaku Gothic New', weight: 900 }, tc: { family: 'Noto Sans TC', weight: 900 }, latin: 'Michroma', setting: '超粗黑體靠左，字距收緊；小字是寬扁的 Michroma 大字距', category: 'cd-title' },
+  id: 'y2k', name: 'Y2K', language: 'y2k', what: '2000 年前後的個人網頁與播放器：群青底上的凝膠按鈕、像素游標、雷射膜貼紙、CD-ROM、EQ 跳動柱、蝴蝶髮夾，3 px 像素格；螢光色只做點綴',
+  lyricRole: '歌詞是網頁的標題：白字下壓一層靜態的粉紅錯位印；放在凝膠按鈕或雷射膜膠帶上時是深墨字',
+  family: 'ui',
+  refuses: ['發光暈染', '霓虹空心字', '字的時間殘影', '擠出倒角', '框住歌詞的視窗', 'HUD 數字', '網點', '黑底', '模糊', '霓虹色的字'],
+  type: { ja: { family: 'Kosugi Maru', weight: 400 }, tc: { family: 'LXGW Marker Gothic', weight: 400 }, latin: 'Silkscreen', setting: '繁中麥克筆黑體白字，硬邊粉紅錯位在右下；日文細圓體寬字距；標籤是像素字', category: 'web-title' },
   palette: [
-    // (board: ice #EDF1F7, navy #141A4D, periwinkle #7C8CFF, lilac #C4A8FF, aqua #5FE0D3, lime #D6FF4F only on the sparkles)
-    scheme('ice-hook', 'cold', 'light', '#EDF1F7', '#141A4D', '#7C8CFF', '#3F4FD9', '#FFFFFF', '#141A4D', '#C4A8FF', '冰白封套，深靛字'),
-    scheme('night-orbit', 'cold', 'dark', '#1F2A8C', '#F4F6FF', '#7C8CFF', '#D6FF4F', '#F4F6FF', '#141A4D', '#C4A8FF', '深靛夜色封套，白字'),
-    scheme('lilac-sleeve', 'warm', 'light', '#F1EDFB', '#141A4D', '#C4A8FF', '#5B3FD0', '#FFFFFF', '#141A4D', '#5FE0D3', '丁香白封套'),
-    scheme('aqua-night', 'earth', 'dark', '#123A6B', '#F4F6FF', '#5FE0D3', '#D6FF4F', '#F4F6FF', '#141A4D', '#7C8CFF', '深海藍夜色封套'),
-    scheme('violet-night', 'warm', 'dark', '#2E1F7A', '#F4F6FF', '#C4A8FF', '#D6FF4F', '#F4F6FF', '#141A4D', '#5FE0D3', '深紫夜色封套'),
+    // (board B: ultramarine #2C18C8 → #1C0E8E, calm #140A62 → #2414A8; white words, deep ink #0D0A3A on gel and foil; neon
+    // lime #C8FF1F, cyan #3CF0FF, pink #FF3FA4 as accents only; the pink misprint under white words; gel cyan, pink, lime)
+    scheme('ultramarine-web', 'cold', 'dark', '#2C18C8', '#FFFFFF', '#FF3FA4', '#FFFFFF', '#5FE6F6', '#0D0A3A', '#3CF0FF', '群青的個人網頁，白字粉紅錯位，青色凝膠'),
+    scheme('player-night', 'cold', 'dark', '#2414A8', '#FFFFFF', '#FF3FA4', '#FFFFFF', '#5FE6F6', '#0D0A3A', '#3CF0FF', '深群青的播放器'),
+    scheme('grape-web', 'warm', 'dark', '#3A14B8', '#FFFFFF', '#FF3FA4', '#FFFFFF', '#FF7CC2', '#0D0A3A', '#3CF0FF', '偏紫的群青，粉色凝膠'),
+    scheme('cobalt-web', 'earth', 'dark', '#1B2AC0', '#FFFFFF', '#FF3FA4', '#FFFFFF', '#C8FF1F', '#0D0A3A', '#3CF0FF', '鈷藍的網頁，萊姆凝膠'),
+    scheme('bright-web', 'warm', 'mid', '#3D26E0', '#FFFFFF', '#FF3FA4', '#FFFFFF', '#FF7CC2', '#0D0A3A', '#3CF0FF', '亮群青，粉色凝膠'),
   ],
-  groundBand: { band: 'light', flip: 'none', why: '冰白封套為主，深靛夜色由配色輪替帶入，同一套構圖印成暗版' },
-  material: { surface: 'cd-type', core: 'ink2', engine: 'vector/cd-sleeve', how: '向量印刷：刀形是兩道弧夾出的硬邊色塊，內填長春藍、丁香、水綠的漸層；軌道是 1.5 px 細線，一條虛線；星芒四角內凹，白到萊姆到水綠' },
-  frameStack: stack({ grain: 0.05, paper: 0, vignette: 0 }),
-  timeBase: { fps: 0, unit: 'beat', curve: 'sweep-hold' },
+  groundBand: { band: 'dark', flip: 'none', why: '早期網頁的群青底，不用黑；慢歌的頁面由深往亮，配色只在群青、紫、鈷藍之間輪替' },
+  material: { surface: 'web-type', core: 'ink2', engine: 'ui/early-web', how: '凝膠按鈕：深墨外框 4 px、上半白色硬邊高光、下緣反光線、硬投影 (10, 12)；雷射膜是粉彩色帶加硬邊白斜光；CD 是錐形虹彩加白圈；EQ 是一格格硬邊方塊；白字下的粉紅錯位印固定在右下，從不跟著動' },
+  frameStack: stack({ grain: 0.03, paper: 0, vignette: 0 }),
+  timeBase: { fps: 0, unit: 'beat', curve: 'click-snap' },
   ownInk: true, sheet: true,
-  layouts: { pair: 'y2k/ring', shared: [], carriers: ['y2k/hook', 'y2k/fan'], lines: [
-    line('y2k/hook', [1, 2], ['glyph-rise', 'glyph-slide'], ['glyph-lift-out', 'glyph-slide-out'], 'sleeve-still', { max: 14, ground: 'y2k/hook' }),
-    line('y2k/ring', [0, 1, 2], ['glyph-slide', 'glyph-rise'], ['glyph-lift-out', 'glyph-slide-out'], 'sleeve-still', { max: 34, ground: 'y2k/ring' }),
-    line('y2k/fan', [1, 2], ['glyph-rise'], ['glyph-slide-out', 'glyph-lift-out'], 'sleeve-still', { max: 12, ground: 'y2k/fan' }),
-    line('y2k/column', [0, 1, 2], ['glyph-rise', 'glyph-slide'], ['glyph-lift-out'], 'sleeve-still', { min: 5, max: 18, column: true, ground: 'y2k/column' }),
+  layouts: { pair: 'y2k/cd', shared: [], carriers: ['y2k/hook', 'y2k/strips'], lines: [
+    line('y2k/hook', [1, 2], ['pixel-drop', 'gel-pop'], ['pixel-lift', 'gel-shrink'], 'web-still', { max: 16, ground: 'y2k/hook' }),
+    line('y2k/cd', [0, 1, 2], ['pixel-drop', 'gel-pop'], ['pixel-lift', 'gel-shrink'], 'web-still', { max: 34, ground: 'y2k/cd' }),
+    line('y2k/eq', [2], ['gel-pop'], ['gel-shrink', 'pixel-lift'], 'web-still', { max: 12, loud: true, ground: 'y2k/eq' }),
+    line('y2k/strips', [0, 1, 2], ['pixel-drop'], ['pixel-lift'], 'web-still', { min: 5, max: 18, column: true, ground: 'y2k/strips' }),
   ] },
-  motion: { enters: ['glyph-rise', 'glyph-slide'], exits: ['glyph-lift-out', 'glyph-slide-out'], holds: ['sleeve-still'], curve: '標題不變形，只做逐字的位移淡入；刀形沿弧線掃入，星芒在拍點縮放並轉 45°' },
-  grounds: { levels: lv(['y2k/ring', 'y2k/column'], ['y2k/hook', 'y2k/column', 'y2k/ring'], ['y2k/fan', 'y2k/hook']), quiet: ['y2k/ring'] },
-  decor: [{ id: 'y2k/orbit', why: '軌道細線把刀形與星芒連成一個封套構圖，虛線那條在流動', budget: '每張兩到三條' }, { id: 'y2k/dot-grid', why: '淺底的 48 px 點格是封套印刷的底紋', budget: '淺底全張' }],
-  transitions: { line: lv([''], ['blade-wipe', ''], ['blade-wipe']), part: lv(['blade-wipe'], ['blade-wipe'], ['blade-wipe']), own: ['blade-wipe'], banned: ['shatter', 'burst', 'blurdissolve', 'ripple'], family: 'blade' },
-  peak: { loud: 'y2k/fan', calm: 'y2k/ring', how: '快歌扇形刀片依拍展開；慢歌一圈虹彩環與軌道' },
-  pieces: ['spark-burst', 'blade-sweep', 'orbit-flow'],
-  pieceWords: { 'spark-burst': /星|閃|光|亮|夢|キラ|輝|スター|あかり/, 'blade-sweep': /飛|快|衝|風|走|速|飛ん|走れ|風/, 'orbit-flow': /轉|繞|圈|世界|地球|回|まわ|巡|世界|空/ },
-  camera: { cams: lv([''], [''], ['', 'snap']), text: noText, note: '封套不動；副歌只在進段時跳一下' },
-  levels: { '0': '夜色虹彩環或直排封套', '1': '刀形與軌道封套', '2': '扇形刀片', calm: '虹彩環與軌道' },
+  motion: { enters: ['pixel-drop', 'gel-pop'], exits: ['pixel-lift', 'gel-shrink'], holds: ['web-still'], curve: '字一個一個以整格像素落下，或整塊像按鈕一樣彈一下；按鈕在拍點被游標按下 6 px，CD 每句轉 12°，EQ 跟拍子跳、峰值蓋慢慢落；粉紅錯位印永遠固定' },
+  grounds: { levels: lv(['y2k/cd', 'y2k/strips'], ['y2k/hook', 'y2k/strips', 'y2k/cd'], ['y2k/eq', 'y2k/hook']), quiet: ['y2k/cd'] },
+  decor: [{ id: 'y2k/pixel-grid', why: '3 px 白色方點、40 px 間距，是早期網頁的底紋', budget: '全張，不透明度 0.1–0.14' }, { id: 'y2k/pixel-stars', why: '螢光色只出現在像素星與 EQ 上，是點綴不是字色', budget: '每頁四到五顆，不碰字' }],
+  transitions: { line: lv([''], ['pixel-wipe', ''], ['pixel-wipe']), part: lv(['pixel-wipe'], ['pixel-wipe'], ['pixel-wipe']), own: ['pixel-wipe'], banned: ['blurdissolve', 'ripple', 'wave', 'dipwhite', 'burst'], family: 'pixel' },
+  peak: { loud: 'y2k/eq', calm: 'y2k/cd', how: '快歌整排 EQ 跟拍子跳，大字在柱頂上方；慢歌一張 CD-ROM 每句轉一點' },
+  pieces: ['pixel-stars', 'cursor-click', 'foil-seal'],
+  pieceWords: { 'pixel-stars': /星|閃|光|亮|夢|キラ|輝|スター|あかり/, 'cursor-click': /按|點|選|找|誰|押|選ん|探|クリック/, 'foil-seal': /新|第一|最|贏|勝|初め|新しい|一番/ },
+  camera: { cams: lv([''], [''], ['', 'snap']), text: noText, note: '網頁不動；副歌進段只跳一下' },
+  levels: { '0': 'CD-ROM 旁的兩三行或兩條雷射膜膠帶', '1': '大字與凝膠按鈕、雷射膜封章', '2': 'EQ 跳動柱上的大字', calm: 'CD-ROM 慢慢轉' },
   pace: { every: [2, 2, 1], calmEvery: 8, repose: false, hits: [] },
-  provenance: { source: 'own', process: '千禧年 CD 單曲封套的向量刀形、漸層與軌道細線', nearest: '蒸氣波、糖果風格', differs: '不用紫粉夕陽、格線、泡泡與發光；冷色漸層只在硬邊刀形裡，字是粗黑體標題' },
-  acceptance: { fast: 'nun', calm: 'tsuzuki', hardest: '刀形與軌道不碰標題字' },
+  provenance: { source: 'own', process: '千禧年個人網頁與播放器：凝膠按鈕、像素游標、雷射膜貼紙、CD-ROM、EQ', nearest: 'JIZURA 的霓虹空心字、發光、視窗框歌詞', differs: '字是實心白字或深墨字，沒有空心、發光與視窗框；粉紅錯位是靜態印刷錯位；螢光只在像素星與 EQ' },
+  acceptance: { fast: 'nun', calm: 'tsuzuki', hardest: 'EQ 柱子不長進字區、按鈕上的深墨字不出按鈕' },
 };
 
 const psychedelic: StyleWorld = {

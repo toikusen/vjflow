@@ -8,14 +8,14 @@ import { B3 } from './b3-inks';
 
 export type LoudSurface =
   | 'comic-key' | 'pop-sfx-plate' | 'pop-sfx-key'
-  | 'cd-type'
+  | 'web-type' | 'web-shift'
   | 'poster-fill' | 'poster-band' | 'poster-key' | 'poster-key-thin'
   | 'sleeve-type'
   | 'xerox-type'
   | 'fan-letter' | 'fan-member' | 'fan-white' | 'fan-key'
   | 'card-type'
   | 'stencil';
-const KINDS = new Set<string>(['comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'cd-type', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'stencil']);
+const KINDS = new Set<string>(['comic-key', 'pop-sfx-plate', 'pop-sfx-key', 'web-type', 'web-shift', 'poster-fill', 'poster-band', 'poster-key', 'poster-key-thin', 'sleeve-type', 'xerox-type', 'fan-letter', 'fan-member', 'fan-white', 'fan-key', 'card-type', 'stencil']);
 export const isLoudSurface = (k: string): k is LoudSurface => KINDS.has(k);
 
 /** The member colours an idol fan's letters are cut round, one a character (the board's pink, blue, mint, lemon, lilac). */
@@ -23,6 +23,8 @@ export const MEMBER = [B3.xFF7EB6, B3.x7CC0FF, B3.x5FDCC0, B3.xFFDE5C, B3.xB79CF
 
 const fract = (x: number) => x - Math.floor(x);
 const hash = (a: number, b = 0) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
+/** A light tone (the letter's own ink): its luma over half. */
+const isLightHex = (hex: string) => /^#[0-9a-f]{6}$/i.test(hex) && [1, 3, 5].reduce((s, i, k) => s + parseInt(hex.slice(i, i + 2), 16) * [0.3, 0.59, 0.11][k], 0) / 255 > 0.5;
 const copy = (m: OffscreenCanvas) => { const t = new OffscreenCanvas(m.width, m.height); t.getContext('2d')!.drawImage(m, 0, 0); return t; };
 
 /** Squared distance transform along one line (Felzenszwalb & Huttenlocher). */
@@ -109,7 +111,7 @@ export function loudSurface(ctx: CanvasRenderingContext2D, kind: LoudSurface, h:
   switch (kind) {
     // the letters themselves: flat ink, printed or cut
     case 'comic-key':
-    case 'cd-type':
+    case 'web-type':
     case 'poster-fill':
     case 'sleeve-type':
     case 'fan-letter':
@@ -163,6 +165,19 @@ export function loudSurface(ctx: CanvasRenderingContext2D, kind: LoudSurface, h:
     }
     case 'fan-key': {
       ctx.drawImage(grown(mask, px * 0.157, px * 0.06, tint), 0, 0);
+      break;
+    }
+    // y2k (direction-B board a, c): a hard pink print laid off register under light letters, down and right, never moving
+    // apart from them (a static misprint, not a trail). Dark letters on a gel or foil carry none, so nothing is drawn.
+    case 'web-shift': {
+      if (!isLightHex(core)) break;
+      const d = Math.round(px * 0.042);
+      const t = copy(mask);
+      const g = t.getContext('2d')!;
+      g.globalCompositeOperation = 'source-in';
+      g.fillStyle = tint;
+      g.fillRect(0, 0, t.width, t.height);
+      ctx.drawImage(t, d, d);
       break;
     }
     case 'stencil': {

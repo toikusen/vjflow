@@ -4,7 +4,7 @@ import { FREE_STYLES, HELD_WORLDS, styleGroups } from './free-styles';
 import { LOUD_WORLDS } from './style-worlds-loud';
 import { STYLE_WORLDS } from './style-worlds';
 import { partsOf, worldHoles } from './style-world';
-import { SET_SPECS } from './render/world-sets';
+import { clearOf, SET_SPECS } from './render/world-sets';
 import { WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './render/world-motion';
 import { WORLD_GROUNDS, WORLD_INS } from './render/world-grounds';
 import { WORLD_PIECES } from './render/world-pieces';
@@ -54,7 +54,7 @@ describe('style batch 3, the loud worlds', () => {
     // the words on a sprayed patch keep the scheme's ink: the patch must read against it
     for (const s of LOUD_WORLDS.find((w) => w.id === 'graffiti')!.palette) expect(contrast(s.ink, s.plate), s.id).toBeGreaterThanOrEqual(4.5);
   });
-  it('keep the near neighbours apart (boards 2026-11-04): gameshow is studio-blue TV cards, idol-live pastel paper merch; popart is a comic page, y2k a CD sleeve', () => {
+  it('keep the near neighbours apart (boards 2026-11-04): gameshow is studio-blue TV cards, idol-live pastel paper merch; popart is a comic page, y2k the early web', () => {
     const by = (id: string) => LOUD_WORLDS.find((w) => w.id === id)!;
     expect(by('gameshow').family).not.toBe(by('idol-live').family);
     expect(by('gameshow').groundBand.band).not.toBe(by('idol-live').groundBand.band);
@@ -63,5 +63,16 @@ describe('style batch 3, the loud worlds', () => {
     expect(by('popart').family).not.toBe(by('y2k').family);
     // (both boards set Chinese in Noto Sans TC 900: the type is told apart by its setting, not its face)
     expect(by('popart').type.category).not.toBe(by('y2k').type.category);
+  });
+  it("keep calls off y2k's large graphics, on its mirrored pages too (direction-B boards 2026-11-04)", () => {
+    // the gel button of board a, centre (540, 665) in the frame: in the text root, (-420, -125)
+    const inside = (bs: { x0: number; y0: number; x1: number; y1: number }[], x: number, y: number) => bs.some((b) => b.x0 <= x && x <= b.x1 && b.y0 <= y && y <= b.y1);
+    expect(inside(clearOf('y2k/hook'), -420, -125)).toBe(true);
+    expect(inside(clearOf('y2k/hook-r'), 420, -125)).toBe(true);
+    expect(inside(clearOf('y2k/hook-r'), -420, -125)).toBe(false);
+    expect(SET_SPECS['y2k/hook-r'].split!.at![0]).toBeCloseTo(1 - SET_SPECS['y2k/hook'].split!.at![0]);
+    // the CD, the EQ wall and the strips are declared; a set with no graphics declares none
+    for (const id of ['y2k/cd', 'y2k/eq', 'y2k/strips']) expect(clearOf(id).length, id).toBeGreaterThan(0);
+    expect(clearOf('popart/sfx')).toEqual([]);
   });
 });

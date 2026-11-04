@@ -30,18 +30,20 @@ describe('split lines (one line in two sizes or two containers)', () => {
     }
   });
   it("split the boards' own lines", () => {
-    for (const id of ['popart/balloon', 'brutalist/headline', 'citypop/facade-title', 'y2k/fan', 'psychedelic/tunnel']) expect(blockOf(id.includes('fan') ? '如果我有輕功 飛簷走壁' : '快使用雙截棍 哼哼哈兮', SET_SPECS[id], measure).lines, id).toBeDefined();
+    for (const id of ['popart/balloon', 'brutalist/headline', 'citypop/facade-title', 'y2k/hook', 'y2k/eq', 'psychedelic/tunnel']) expect(blockOf(id.includes('eq') ? '如果我有輕功 飛簷走壁' : '快使用雙截棍 哼哼哈兮', SET_SPECS[id], measure).lines, id).toBeDefined();
   });
   it('keep a line with no break laid out whole', () => {
     expect(blockOf('快使用雙截棍', SET_SPECS['popart/balloon'], measure).lines).toBeUndefined();
   });
   it("set a column line's second phrase down its own strip, tops level, read right to left", () => {
-    const b = blockOf('什麼刀槍跟棍棒 我都耍的有模有樣', SET_SPECS['graffiti/strips'], measure);
-    const [first, second] = b.lines!;
-    expect(first.v && second.v).toBe(true);
-    expect(first.x0).toBeGreaterThan(second.x0 + second.bw);
-    expect(Math.abs(first.y - second.y)).toBeLessThan(1);
-    expect(inFrame(b)).toBe(true);
+    for (const id of ['graffiti/strips', 'y2k/strips']) {
+      const b = blockOf('什麼刀槍跟棍棒 我都耍的有模有樣', SET_SPECS[id], measure);
+      const [first, second] = b.lines!;
+      expect(first.v && second.v, id).toBe(true);
+      expect(first.x0, id).toBeGreaterThan(second.x0 + second.bw);
+      expect(Math.abs(first.y - second.y), id).toBeLessThan(1);
+      expect(inFrame(b), id).toBe(true);
+    }
   });
   it('wrap a part with no phrase break evenly, never starting a row on a small kana', () => {
     expect(wrapRows('信じてみるんだ', 2)).toEqual(['信じてみ', 'るんだ']);

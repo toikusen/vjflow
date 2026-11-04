@@ -7,6 +7,7 @@ import { CameraRig, isTrack, layPerspective, layScaleY, rigAt } from './camera-r
 import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
+import { clearOf } from './world-sets';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
@@ -67,7 +68,7 @@ import { freeZone } from './board';
 import { DIAGRAM_FX } from './kinetic-more';
 import { storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
-import { contrastFace, DEFAULT_FONTS, FontChoice, nearestWeight, readingLatin, resolveFonts } from '../fonts';
+import { contrastFace, DEFAULT_FONTS, FontChoice, FONTS, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
@@ -742,7 +743,8 @@ export class LyricVjEngine {
   async loadFaces() {
     const design = this.job.treatment.design ?? DEFAULT_DESIGN;
     const fonts = resolveFonts({ ...this.job.fonts, family: this.job.fonts?.family ?? design.font });
-    await document.fonts.load(`400 100px "${design.accentFont}"`, 'Aa');
+    // (every weight the accent face has: a world's labels may set it bold, y2k's pixel menu)
+    await Promise.all((FONTS.find((f) => f.family === design.accentFont)?.weights ?? [400]).map((w) => document.fonts.load(`${w} 100px "${design.accentFont}"`, 'Aa!')));
     const latin = readingLatin(design.accentFont);
     await Promise.all([700, 900].map((w) => document.fonts.load(`${nearestWeight(latin, w)} 100px "${latin}"`, 'Aa')));
     const text = this.job.cues.map((c) => c.text).join('');
@@ -1812,6 +1814,8 @@ export class LyricVjEngine {
       .filter((b) => !b.isEmpty())
       .map(toBox);
     if (!call.line.isEmpty()) avoid.push(toBox(call.line));
+    // (and the large graphics its world's page draws there: a gel button, a disc, an EQ wall, world-sets `clear`)
+    avoid.push(...clearOf(rt.style.world?.set, W, H));
     const at = placeCalls(call.sizes, { line: call.line.isEmpty() ? undefined : toBox(call.line), avoid, W, H });
     call.dropped = !at;
     at?.forEach((p, j) => Object.assign(call.units[j], p));

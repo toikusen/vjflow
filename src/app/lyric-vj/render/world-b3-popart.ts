@@ -249,7 +249,8 @@ const twinBalloons: ObjectPaint = (c, w, h, s) => {
   const pad = 70;
   const step = (w - pad * 2) / 2;
   // (a line that would not break in two stands as one column in one balloon)
-  const cols: [number, 'left' | 'right'][] = w < 1300 ? [[w / 2, 'left']] : [[pad + step * 0.5, 'right'], [w - pad - step * 0.5, 'left']];
+  // (one column is 9.4 sizes wide at 84–150 px, two are 18.8: 1500 px of words lies between them, so the balloons follow the columns)
+  const cols: [number, 'left' | 'right'][] = w - pad * 2 < 1500 ? [[w / 2, 'left']] : [[pad + step * 0.5, 'right'], [w - pad - step * 0.5, 'left']];
   for (const [cx, corner] of cols) {
     const [rx, ry] = [Math.min(220, step * 0.24 + 120), h / 2 - 6];
     c.save();

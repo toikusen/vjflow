@@ -61,31 +61,30 @@ const round: HandGround = (e) => page(e, (c) => {
   finish(c);
 });
 
-/** b: the hint card round the words, its red head, and a timer of twelve cells going out one by one. */
+/** The hint card's margin round its words, px, and the least of the frame it spans: its head above, the timer below it. */
+export const HINT_PAD: [number, number] = [100, 170];
+export const HINT_FILL: [number, number] = [0.66, 0.56];
+/** b: the studio and the timer of twelve cells under the hint card, going out one by one; the card is the set's object (hintCard). */
 const hint: HandGround = (e) => page(e, (c) => {
   studio(c, e);
   const r = e.rect ?? { x0: 400, y0: 420, x1: 1200, y1: 700 };
-  const [x, y] = [Math.max(80, r.x0 - 70), Math.max(70, r.y0 - 170)];
-  const w = Math.max(1260, r.x1 - x + 120);
-  const h = Math.max(600, r.y1 - y + 90);
-  // the card is pushed in from the left at the cut, its head first
-  const push = (1 - ease(clamp01(e.age / 0.3), 3)) * -(x + w);
-  c.translate(push, 0);
-  c.fillStyle = BD; c.fillRect(x + 16, y + 16, w, h);
-  c.fillStyle = WH; c.fillRect(x, y, w, h);
-  c.fillStyle = R; c.fillRect(x, y, w, 96);
-  label(c, 'HINT', x + 50, y + 70, BUNGEE(52), WH, 2);
-  label(c, titleOnly(e.title), x + w - 50, y + 64, BUNGEE(30), WH, 1, 'right');
+  // the card's box as world-layout places the object: round the block (the lyric box less its 14 px), kept in the frame
+  const [bw, bh] = [r.x1 - r.x0 - 28, r.y1 - r.y0 - 28];
+  const [w, h] = [Math.max(bw + HINT_PAD[0] * 2, HINT_FILL[0] * W), Math.max(bh + HINT_PAD[1] * 2, HINT_FILL[1] * H)];
+  const x = Math.min(W - w, Math.max(0, (r.x0 + r.x1) / 2 - w / 2));
+  const y = Math.min(H - h, Math.max(0, (r.y0 + r.y1) / 2 - h / 2));
   const n = 12;
   const cw = (w + 14) / n - 14;
   const out = Math.min(n, Math.floor(e.age / 0.45));
-  for (let i = 0; i < n; i++) {
-    const cx = x + i * (cw + 14);
-    c.fillStyle = BD; c.fillRect(cx + 8, y + h + 58, cw, 46);
-    c.fillStyle = i < n - out ? G : BL; c.fillRect(cx, y + h + 50, cw, 46);
+  const ty = Math.min(y + h + 50, H - 60);
+  if (ty > y + h + 20) {
+    for (let i = 0; i < n; i++) {
+      const cx = x + i * (cw + 14);
+      c.fillStyle = BD; c.fillRect(cx + 8, ty + 8, cw, 46);
+      c.fillStyle = i < n - out ? G : BL; c.fillRect(cx, ty, cw, 46);
+    }
+    if (ty + 100 < H) label(c, 'TIME', x, ty + 100, BUNGEE(30), WH, 2);
   }
-  label(c, 'TIME', x, Math.min(H - 30, y + h + 150), BUNGEE(30), WH, 2);
-  c.translate(-push, 0);
   finish(c);
 });
 
@@ -141,6 +140,14 @@ const qa: HandGround = (e) => page(e, (c) => {
 
 const Gs: Record<string, HandGround> = { 'gameshow/round': round, 'gameshow/hint': hint, 'gameshow/board': board, 'gameshow/qa': qa };
 
+/** The hint card (board b) round the words: white, its red head with HINT, the navy shadow. The set's object, so a line that
+ *  outlasts its page (read on into the next cut) keeps its card under it. */
+const hintCard: ObjectPaint = (c, w, h) => {
+  c.fillStyle = BD; c.fillRect(16, 16, w, h);
+  c.fillStyle = WH; c.fillRect(0, 0, w, h);
+  c.fillStyle = R; c.fillRect(0, 0, w, 96);
+  label(c, 'HINT', 50, 70, BUNGEE(52), WH, 2);
+};
 /** The question banner the line stands in (board a): white chevron, navy shadow, gold underline, red Q tab at its left. */
 const qBanner: ObjectPaint = (c, w, h) => banner(c, 60, 30, w - 130, h - 60, WH, 'Q', R, WH);
 /** The answer cells (board a): one white cell a letter, its gold A–D tag, navy shadow. The row's height gives the letter size. */
@@ -233,4 +240,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true) } as Record<string, ObjectPaint> };
+export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true), 'gs-hint': hintCard } as Record<string, ObjectPaint> };

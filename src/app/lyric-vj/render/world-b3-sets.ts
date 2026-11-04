@@ -7,8 +7,8 @@ const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70
 export const LOUD_SETS: Record<string, SetSpec> = {
   // popart (board a–d): a balloon in the wide panel (either side), the narrator's caption up left, the sound effect over
   // the burst, a phrase a column in two tall balloons read right to left
-  'popart/balloon': { ...base, split: { small: 'tail', scale: 0.82, rows: 2, at: [0.804, 0.5], share: 0.2, wide: 0.5 }, at: [0.3125, 0.463], ax: 0, ay: 0, share: 0.37, tall: 0.5, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon', pad: [190, 150], fill: [0.56, 0.8], fixed: true },
-  'popart/balloon-r': { ...base, split: { small: 'tail', scale: 0.82, rows: 2, at: [0.196, 0.5], share: 0.2, wide: 0.5 }, at: [0.6875, 0.463], ax: 0, ay: 0, share: 0.37, tall: 0.5, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon-r', pad: [190, 150], fill: [0.56, 0.8], fixed: true },
+  'popart/balloon': { ...base, split: { small: 'tail', scale: 0.82, rows: 2, at: [0.804, 0.5], share: 0.2, wide: 0.4 }, at: [0.3125, 0.463], ax: 0, ay: 0, share: 0.37, tall: 0.5, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon', pad: [190, 150], fill: [0.56, 0.8], fixed: true },
+  'popart/balloon-r': { ...base, split: { small: 'tail', scale: 0.82, rows: 2, at: [0.196, 0.5], share: 0.2, wide: 0.4 }, at: [0.6875, 0.463], ax: 0, ay: 0, share: 0.37, tall: 0.5, hi: 226, rows: [1, 3], lead: 1.08, track: 0.02, object: 'pop-balloon-r', pad: [190, 150], fill: [0.56, 0.8], fixed: true },
   'popart/narration': { ...base, at: [0.102, 0.176], ax: -1, ay: -1, share: 0.4, tall: 0.3, hi: 110, rows: [1, 3], lead: 1.32, track: 0.06, flush: -1, object: 'pop-caption', pad: [60, 50], fill: [0.458, 0.35], fixed: true },
   'popart/sfx': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.7, tall: 0.72, hi: 350, rows: [1, 2], lead: 1, track: 0, tilt: -0.087, ink: 'faint', surface: 'comic-key', under: [{ kind: 'pop-sfx-plate', tone: 'accent' }, { kind: 'pop-sfx-key', tone: 'ink' }], fixed: true },
   'popart/twin': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.06, tall: 0.7, hi: 108, rows: [2, 2], vertical: true, lead: 9.4, track: 0, object: 'pop-twin-balloons', pad: [70, 88], fixed: true },
@@ -16,7 +16,7 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   // number board, question and answer on two banners
   'gameshow/question': { ...base, at: [0.52, 0.3], ax: 0, ay: 0, share: 0.62, tall: 0.3, hi: 172, rows: [1, 2], lead: 1.1, track: 0.03, object: 'gs-q-banner', pad: [270, 70], fill: [0.78, 0.28], fixed: true },
   'gameshow/answers': { ...base, at: [0.5, 0.72], ax: 0, ay: 0, share: 0.86, tall: 0.22, hi: 210, rows: [1, 1], lead: 1, track: 0.714, even: true, object: 'gs-answer-cells', pad: [70, 110], fixed: true },
-  'gameshow/hint': { ...base, at: [0.208, 0.39], ax: -1, ay: -1, share: 0.56, tall: 0.32, hi: 104, rows: [1, 3], lead: 1.5, track: 0.06, flush: -1, ink: 'plateInk', fixed: true },
+  'gameshow/hint': { ...base, at: [0.208, 0.39], ax: -1, ay: -1, share: 0.56, tall: 0.32, hi: 104, rows: [1, 3], lead: 1.5, track: 0.06, flush: -1, object: 'gs-hint', pad: [100, 170], fill: [0.66, 0.56], fixed: true },
   'gameshow/board': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.95, tall: 0.17, hi: 176, lo: 176, rows: [1, 1], lead: 1, track: 0.288, even: true, object: 'gs-row-tiles', pad: [0, 0], fixed: true },
   'gameshow/qa': { ...base, at: [0.295, 0.5], ax: -1, ay: 0, share: 0.54, tall: 0.78, hi: 140, rows: [2, 2], lead: 2.9, track: 0.02, flush: -1, object: 'gs-qa', pad: [260, 60], on: ['plate', 'accent'], key: 'ink2', fixed: true },
   // idol-live (board a–d): fan letters across the gingham, the line on a ticket, a letter a member card, two columns on a big card
@@ -37,9 +37,9 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   // graffiti (round-2 board a–d): the line sprayed on a rolled buff patch (its last phrase in red), sprayed in navy on a
   // calm patch, huge across the patch rolled over a wall of prints, its two phrases down two pasted strips
   'graffiti/buff': { ...base, at: [0.099, 0.48], ax: -1, ay: 0, share: 0.6, tall: 0.62, hi: 232, rows: [1, 3], lead: 1.26, track: 0, flush: -1, split: { small: 'tail', scale: 1, ink: 'ink2' }, fixed: true },
-  'graffiti/navy': { ...base, at: [0.099, 0.45], ax: -1, ay: 0, share: 0.52, tall: 0.5, hi: 156, rows: [1, 3], lead: 1.45, track: 0.02, flush: -1, ink: 'plateInk', fixed: true },
+  'graffiti/navy': { ...base, at: [0.099, 0.45], ax: -1, ay: 0, share: 0.52, tall: 0.5, hi: 156, rows: [1, 3], lead: 1.45, track: 0.02, flush: -1, ink: 'plateInk', object: 'gf-buff', pad: [80, 120], fixed: true },
   'graffiti/wall': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.8, tall: 0.48, hi: 400, rows: [1, 2], lead: 1.04, track: 0, fixed: true },
-  'graffiti/strips': { ...base, at: [0.672, 0.12], ax: 0, ay: -1, share: 0.16, tall: 0.8, hi: 150, rows: [1, 1], vertical: true, lead: 1.15, track: 0.08, object: 'gf-strip', pad: [90, 56], split: { small: 'tail', scale: 0.93, ink: 'plate', at: [0.474, 0.12], tall: 0.8 }, fixed: true },
+  'graffiti/strips': { ...base, at: [0.672, 0.1], ax: 0, ay: -1, share: 0.16, tall: 0.8, hi: 150, rows: [1, 1], vertical: true, lead: 1.15, track: 0.08, object: 'gf-strip', pad: [90, 36], split: { small: 'tail', scale: 0.93, ink: 'plate', at: [0.474, 0.1], tall: 0.8 }, fixed: true },
   // brutalist (board a–d): the headline top left inside the 96 px margin, two lines low under a red rule, the shout across four
   // cells, two columns at the right; nothing ever crosses the margin
   'brutalist/headline': { ...base, split: { small: 'tail', scale: 0.5, track: 0.3, ink: 'plate', at: [0.068, 0.842], ax: -1, share: 0.8, tall: 0.5 }, at: [0.047, 0.185], ax: -1, ay: -1, share: 0.56, tall: 0.6, hi: 318, rows: [1, 3], lead: 1, track: -0.01, flush: -1, fixed: true },

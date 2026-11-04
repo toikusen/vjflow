@@ -399,7 +399,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const clip = move?.clip?.(out ? qOut : qIn);
       const hasClip = !!useClip;
       if (hasClip) { if (clip) setClip(clip, p); else plane.set(unit.set(0, 1, 0), 1e6); }
-      const rank = slot.of > 1 && (rt.later ?? []).length === 0 ? 1 : slot.of > 1 && (rt.later ?? []).some((a) => t >= a + 0.2) ? 0.6 : 1;
+      // (the earlier line of a shared shot steps back for the later one only once its own reading time is over: dimmed
+      // while still read, it fell under the reading gate, citypop tsuzuki c001)
+      const rank = slot.of > 1 && (rt.later ?? []).length === 0 ? 1 : slot.of > 1 && t >= rt.exitAt && (rt.later ?? []).some((a) => t >= a + 0.2) ? 0.6 : 1;
       const age = t - rt.showFrom;
       // a slow travel while the line is up: the block never sits dead, and the reader's eye goes with it
       const span = Math.max(0.5, rt.exitAt - rt.showFrom);

@@ -178,12 +178,8 @@ const navy: HandGround = (e) => onPage(e, still(e, 'gf-navy', (c) => {
   const s = e.slots;
   wall(c, e);
   const r = lyricBox(e, { x0: 190, y0: 300, x1: 1000, y1: 680 });
+  // (the patch itself is the set's object, gf-buff: it stays under the words in a shared shot too)
   const b = { x0: r.x0 - 50, y0: r.y0 - 60, x1: Math.max(r.x0 + 1170, r.x1 + 120), y1: Math.max(r.y0 + 540, r.y1 + 160) };
-  buff(c, b, mixHex(s.plate, K, 0.06), 31, -0.3);
-  // the sprayed rule under the line: one pass of the second can, the width of the words
-  edged(c, r.x0 + 46, r.y1 + 60, Math.max(300, r.x1 - r.x0 - 40), 12, 1.5, 30, 5);
-  c.fillStyle = mixHex(s.accent, s.ink2, 0.3);
-  c.fill();
   const [title, artist] = poster(e);
   const px = Math.max(1470, b.x1 + 110);
   if (W - 100 - px >= 260) {
@@ -264,6 +260,20 @@ const strip: ObjectPaint = (c, w, h) => {
   tape(c, 10, 2, 120, -8, 64);
 };
 
+/** The calm line's rolled patch (board b), a shade under the buff: the set's object, so a shared shot keeps it. */
+const buffPatch: ObjectPaint = (c, w, h, s) => {
+  edged(c, 6, 6, w - 12, h - 12, 4, 26, 31);
+  c.fillStyle = mixHex(s.plate, K, 0.06);
+  c.fill();
+  // the sprayed rule under the line (board b's 海の広さ): one pass of the second can, the width of the words, 60 px under them
+  const [px, py] = NAVY_PAD;
+  edged(c, px + 46, h - py + 60, Math.max(200, w - 2 * px - 40), 12, 1.5, 30, 5);
+  c.fillStyle = mixHex(s.accent, s.ink2, 0.3);
+  c.fill();
+};
+/** The calm patch's margin round its words (world-b3-sets graffiti/navy pad): room under them for the sprayed rule. */
+export const NAVY_PAD: [number, number] = [80, 120];
+
 const INS: Record<string, HandIn> = {
   // a fresh sheet of buff is brushed across the wall in four hard strokes, never over the line that lands with it
   'paste-sweep': { sec: 0.32, draw: (e, q) => {
@@ -319,4 +329,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GRAFFITI = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gf-strip': strip } as Record<string, ObjectPaint> };
+export const GRAFFITI = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gf-strip': strip, 'gf-buff': buffPatch } as Record<string, ObjectPaint> };

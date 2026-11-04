@@ -235,7 +235,7 @@ const graffiti: StyleWorld = {
     line('graffiti/buff', [0, 1, 2], ['stencil-sweep', 'stencil-lift'], ['buff-out', 'peel-off'], 'paste-still', { max: 16, ground: 'graffiti/paste-up' }),
     line('graffiti/navy', [0, 1], ['stencil-lift', 'stencil-sweep'], ['buff-out'], 'paste-still', { max: 24, ground: 'graffiti/navy-buff' }),
     line('graffiti/wall', [2], ['stencil-sweep'], ['peel-off'], 'paste-still', { max: 8, loud: true, ground: 'graffiti/poster-wall' }),
-    line('graffiti/strips', [0, 1, 2], ['stencil-lift'], ['peel-off'], 'paste-still', { min: 5, max: 18, column: true, ground: 'graffiti/strips' }),
+    line('graffiti/strips', [0, 1, 2], ['stencil-lift'], ['peel-off'], 'paste-still', { min: 5, max: 10, column: true, ground: 'graffiti/strips' }),
   ] },
   motion: { enters: ['stencil-sweep', 'stencil-lift'], exits: ['buff-out', 'peel-off'], holds: ['paste-still'], curve: '模板啪一下貼上，噴罐沿著字掃過，字一段一段出現；換句時新海報從一角刷平，舊的撕掉；字本身不變形' },
   grounds: { levels: lv(['graffiti/navy-buff', 'graffiti/strips'], ['graffiti/paste-up', 'graffiti/strips', 'graffiti/navy-buff'], ['graffiti/poster-wall', 'graffiti/paste-up']), quiet: ['graffiti/navy-buff'] },

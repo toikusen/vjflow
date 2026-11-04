@@ -20,14 +20,11 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'gameshow/score-corner': { ...base, at: [0.96, 0.1], ax: 1, ay: -1, share: 0.5, tall: 0.42, hi: 190, rows: [1, 2], lead: 1.1, track: 0.01, flush: 1, object: 'score-plate', pad: [50, 34], fill: [0.5, 0.4] },
   'gameshow/judge': { ...base, at: [0.5, 0.48], ax: 0, ay: 0, share: 0.9, tall: 0.7, hi: 420, rows: [1, 2], lead: 1.02, track: -0.01, tilt: -0.06 },
   'gameshow/column': { ...base, at: [0.88, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.8, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
-  // idol-live: the singer centre high under the rig, at either wing, in the spot's pool, on the fan, shouted
-  'idol-live/centre-stage': { ...base, at: [0.5, 0.34], ax: 0, ay: 0, share: 0.8, tall: 0.42, hi: 300, rows: [1, 2], lead: 1.08, track: 0.02 },
-  'idol-live/stage-right': { ...base, at: [0.94, 0.4], ax: 1, ay: 0, share: 0.6, tall: 0.5, hi: 250, rows: [1, 3], lead: 1.1, track: 0.02, flush: 1 },
-  'idol-live/stage-left': { ...base, at: [0.06, 0.4], ax: -1, ay: 0, share: 0.6, tall: 0.5, hi: 250, rows: [1, 3], lead: 1.1, track: 0.02, flush: -1 },
-  'idol-live/spot-pool': { ...base, at: [0.5, 0.44], ax: 0, ay: 0, share: 0.6, tall: 0.44, hi: 260, rows: [1, 2], lead: 1.1, track: 0.02, object: 'spot-pool', pad: [160, 110], fill: [0.7, 0.6] },
-  'idol-live/uchiwa': { ...base, at: [0.72, 0.5], ax: 0, ay: 0, share: 0.34, tall: 0.42, hi: 210, rows: [1, 3], lead: 1.08, track: 0.01, object: 'uchiwa', pad: [90, 90], fill: [0.34, 0.6], tilt: 0.1 },
-  'idol-live/shout': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.92, tall: 0.7, hi: 400, rows: [1, 2], lead: 1.04, track: 0, tilt: -0.04 },
-  'idol-live/column': { ...base, at: [0.1, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.84, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
+  // idol-live (board a–d): fan letters across the gingham, the line on a ticket, a letter a member card, two columns on a big card
+  'idol-live/fan': { ...base, at: [0.5, 0.55], ax: 0, ay: 0, share: 0.9, tall: 0.62, hi: 250, rows: [1, 2], lead: 1.36, track: 0.13, ink: 'plateInk', under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
+  'idol-live/ticket': { ...base, at: [0.175, 0.38], ax: -1, ay: -1, share: 0.5, tall: 0.3, hi: 104, rows: [1, 2], lead: 1.3, track: 0.04, flush: -1, ink: 'plateInk', fixed: true },
+  'idol-live/cards': { ...base, at: [0.5, 0.575], ax: 0, ay: 0, share: 0.98, tall: 0.3, hi: 184, rows: [1, 1], lead: 1, track: 0.74, even: true, ink: 'plateInk', under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
+  'idol-live/card-col': { ...base, at: [0.5, 0.15], ax: 0, ay: -1, share: 0.2, tall: 0.78, hi: 150, rows: [1, 2], vertical: true, lead: 1.6, track: 0.27, ink: 'plateInk', object: 'idol-card', pad: [110, 70], under: [{ kind: 'fan-key', tone: 'plateInk' }, { kind: 'fan-white', tone: 'plate' }, { kind: 'fan-member', tone: 'accent' }], fixed: true },
   // y2k (board a–d): the title up left on the hook sleeve, the line left of the night ring, a big title by the fan, columns right
   'y2k/hook': { ...base, at: [0.074, 0.218], ax: -1, ay: -1, share: 0.5, tall: 0.64, hi: 236, rows: [1, 3], lead: 1.02, track: -0.01, flush: -1, fixed: true },
   'y2k/ring': { ...base, at: [0.0885, 0.333], ax: -1, ay: -1, share: 0.42, tall: 0.4, hi: 96, rows: [1, 2], lead: 1.45, track: 0.14, flush: -1, weight: 700, fixed: true },

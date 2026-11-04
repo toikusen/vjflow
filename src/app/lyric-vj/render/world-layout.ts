@@ -11,6 +11,7 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, WORLD_BEATS } from './world-beats';
+import { worldCam } from './world-cam';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
 
@@ -42,6 +43,8 @@ export interface WorldLine {
   swell?: number;
   /** The key word blown up and the rest of the line set small round it (gap 3): its characters, and how it is stressed. */
   blow?: { from: number; to: number; stress: StressKind };
+  /** The world's camera into a new part, which the line's words take with the ground (world-cam.ts): its kind and start. */
+  cam?: { kind: string; at: number; dir: number };
   /** The one thing that happens while the line is held (world-beats.ts): which, when, and in steps or smooth. */
   beat?: { kind: BeatKind; at: number; stepped?: boolean };
 }
@@ -293,6 +296,15 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const bb = bq !== undefined ? beatMove!.block?.(bq) : undefined;
       body.scale.set(sx * (bb?.sx ?? 1), sy * (bb?.sy ?? 1), 1);
       body.rotation.z = (p.spec.tilt ?? 0) + (blockPose.r ?? 0);
+      // the camera into a new part moves the words with the frame, about the frame's centre
+      const cam = wl.cam ? worldCam(wl.cam.kind, t - wl.cam.at, wl.cam.dir) : undefined;
+      if (cam) {
+        const [x, y] = [body.position.x, body.position.y];
+        const [c, sn] = [Math.cos(cam.r), Math.sin(cam.r)];
+        body.position.set((x * c - y * sn) * cam.s + cam.dx, (x * sn + y * c) * cam.s + cam.dy, 0);
+        body.scale.multiplyScalar(cam.s);
+        body.rotation.z += cam.r;
+      }
       const whole_a = blockPose.a ?? 1;
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
       const clip = move?.clip?.(out ? qOut : qIn);

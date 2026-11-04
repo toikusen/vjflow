@@ -288,3 +288,14 @@ export function overusedForms(history: MomentRecord[], song: string, recent = 6)
   for (const f of used) count.set(f, (count.get(f) ?? 0) + 1);
   return [...count].filter(([, n]) => n >= 2).map(([f]) => f);
 }
+
+/**
+ * What a cheap reading of the lyrics is told about the moments, for the free tier (free-plan.ts freeMoments): the forms,
+ * a few senses each, and that a line qualifies only by what it means. The reading answers with MOMENTS_SCHEMA.
+ */
+export function momentsHelp(forms: Record<MomentForm, string[]> = MOMENT_FORMS): string {
+  const lines = (Object.entries(forms) as [MomentForm, string[]][]).flatMap(([f, vs]) => vs.map((v) => `${f}/${v}：${(WORD_LISTS[f]?.[v] ?? []).slice(0, 6).join('、') || '前後兩句唱同一個詞'}`));
+  return `專屬時刻（moments）：整首最多 2 句、大多數歌是 0 句。只有某句歌詞「本身的意思」就是下面某一種時才列，不能因為字面出現某個字就列（比喻、否定、反諷照真正意思判斷）；最好在副歌。word 是這句裡原樣出現、帶著這個意思的完整詞。\n${lines.join('\n')}`;
+}
+export const MOMENTS_SCHEMA = { type: 'array', description: '專屬時刻，通常是空的', items: { type: 'object', additionalProperties: false, required: ['cues', 'form', 'variant', 'word', 'why'], properties: { cues: { type: 'array', items: { type: 'string' }, description: '一句的 id（echo 為先唱的那句與回應那句）' }, form: { type: 'string', enum: Object.keys(MOMENT_FORMS) }, variant: { type: 'string' }, word: { type: 'string' }, why: { type: 'string', description: '這句為什麼是這個意思（一句）' } } } } as const;
+

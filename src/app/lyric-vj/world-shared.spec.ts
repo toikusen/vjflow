@@ -4,7 +4,8 @@ import { blowPose, stressInk } from './render/world-layout';
 import { SET_SPECS } from './render/world-sets';
 import { contrast } from './contrast';
 import type { Glyph } from './render/glyphs';
-import { freeJob } from './free-plan';
+import { freeJob, freeMoments, FREE_MOMENTS_MAX } from './free-plan';
+import { worldCam } from './render/world-cam';
 import { FREE_STYLES } from './free-styles';
 import { wordBreaks } from './phrases';
 import type { SongTimeline } from './timeline';
@@ -118,5 +119,28 @@ describe('shared world moves', () => {
       expect(lines.some((w) => w.exit === 'squash-line') && lines.some((w) => w.exit === 'slice-out'), id).toBe(true);
       lines.forEach((w, i) => { if (w.enter === 'line-open') expect(lines[i - 1].exit).toBe('squash-line'); });
     }
+  });
+  it('opens a moment to the free tier only where the reading judged it, on a chorus downbeat, two at most', () => {
+    const cue = (id: string, start: number, text: string) => ({ id, start, end: start + 2, text, charStarts: [...text].map((_, k) => start + k * 0.25) });
+    const cues = [cue('c1', 10, '把招牌踢開'), cue('c2', 50, '把門踢開了'), cue('c3', 90, '一腳踢開它'), cue('c4', 130, '我們踢開吧')];
+    const at = (c: (typeof cues)[number]) => c.charStarts[[...c.text].indexOf('踢')];
+    const song = { title: 't', duration: 160, tempo: 120, beats: [], downbeats: cues.map(at), sections: [{ start: 0, end: 40, type: 'verse' }, { start: 40, end: 160, type: 'chorus' }], cues } as unknown as SongTimeline;
+    const asks = cues.map((c) => ({ cues: [c.id], form: 'strike', variant: 'tear', word: c.text.includes('踢開') ? '踢開' : '踢', why: '' }));
+    const meaning = { palette: 'tea', ground: 'grain', reading: '', parts: [], keys: [], moments: asks };
+    const got = freeMoments(song, meaning);
+    expect(got.length).toBeLessThanOrEqual(FREE_MOMENTS_MAX);
+    expect(got.every((m) => m.cues[0] !== 'c1')).toBe(true);
+    expect(freeMoments(song, { ...meaning, moments: [] })).toEqual([]);
+    expect(freeMoments({ ...song, downbeats: cues.map((c) => at(c) + 1) } as never, meaning)).toEqual([]);
+  });
+  it('moves the frame on a world camera into a part, then lands', () => {
+    for (const kind of ['push-through', 'diagonal']) {
+      expect(worldCam(kind, 0, 1)!.s).toBeGreaterThan(1.2);
+      expect(worldCam(kind, 5, 1)).toBeUndefined();
+    }
+    // the diagonal never shows the frame's edge: its scale covers its offset
+    const d = worldCam('diagonal', 0, 1)!;
+    expect(((d.s - 1) * 1920) / 2).toBeGreaterThanOrEqual(Math.abs(d.dx));
+    expect(((d.s - 1) * 1080) / 2).toBeGreaterThanOrEqual(Math.abs(d.dy));
   });
 });

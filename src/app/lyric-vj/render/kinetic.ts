@@ -11,6 +11,7 @@ import { halftone, lineArt, lineStage } from './print';
 import { CameraRig, rigBack } from './camera-rig';
 import type { SymbolName } from '../treatment';
 import { drawFlood, drawLineGround, isLineGround } from './line-grounds';
+import { worldCam } from './world-cam';
 import { clearWordsAfter, drawWorldGround, isWorldGround, WorldEnv, worldInAt } from './world-grounds';
 import { reservePaper } from './world-ink';
 import { holdInkGround } from './behind-ink';
@@ -161,7 +162,7 @@ export type Ground = 'flat' | 'grain' | 'gradient';
 export const GROUNDS: Ground[] = ['flat', 'grain', 'gradient'];
 export type DocKind = 'blueprint' | 'slate' | 'casefile' | 'notebook' | 'ticket';
 export const DOC_KINDS: DocKind[] = ['blueprint', 'slate', 'casefile', 'notebook', 'ticket'];
-export const KINETIC_CAMS = ['snap', 'roll', 'flip', 'shake', 'tilt', 'pan', 'dolly', 'crane', 'orbit', 'vertigo', 'rack', 'ramp', 'freeze', 'tiltshift', 'pullback'] as const;
+export const KINETIC_CAMS = ['snap', 'roll', 'flip', 'shake', 'tilt', 'pan', 'dolly', 'crane', 'orbit', 'vertigo', 'rack', 'ramp', 'freeze', 'tiltshift', 'pullback', 'push-through', 'diagonal'] as const;
 export type KineticCam = (typeof KINETIC_CAMS)[number];
 /** The cut's own time as its camera plays it: a speed ramp rushes, then slows; a freeze stops the move once it has landed. */
 export const camTime = (cam: KineticCam | undefined, t: number) =>
@@ -404,6 +405,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     if (l.cam === 'crane') (ctx.scale(1.1, 1.1), ctx.translate(0, Math.min(90, -40 + clock * 26)));
     if (l.cam === 'orbit') (ctx.scale(1.12, 1.12), ctx.rotate(0.035 * Math.sin(clock * 0.7) * dir), ctx.translate(70 * Math.sin(clock * 0.7) * dir, 0));
     if (l.cam === 'vertigo') ctx.scale(zoom, zoom);
+    // a world's move into a new part (world-shared.ts camera): out of a push through the frame before, or in on a diagonal
+    const into = worldCam(l.cam, clock, dir);
+    if (into) (ctx.translate(into.dx, -into.dy), ctx.rotate(-into.r), ctx.scale(into.s, into.s));
     if (l.cam === 'pullback') {
       // from a close-up of the character (or the middle) back to the whole frame over the cut's first 1.6 s
       const q = 1 + 1.3 * (1 - ease(clock / 1.6));

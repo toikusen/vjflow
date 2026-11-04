@@ -6,6 +6,7 @@ import { FreeStyle, STYLE_PALETTES, styleFont } from './free-styles';
 import { composePlan, composerBase, Cue, fallbackParts, Meaning, PALETTES, RECIPES, rerollPalette } from './lineplan-core';
 import { poolOf, schemeFor, type StyleWorld } from './style-world';
 import { isWorldGround, WORLD_INS } from './render/world-grounds';
+import { WORLD_CAM_SEC } from './render/world-cam';
 import type { WorldLine } from './render/world-layout';
 import { overCreator, useCap } from './origin-rules';
 import { songKeyOf } from './render/knobs';
@@ -15,9 +16,11 @@ import type { RenderJob } from './render/engine';
 import type { UiLayer } from './render/graphics';
 import { isLineGround } from './render/line-grounds';
 import { splitSongTitle } from './structure';
+import { splitCalls } from './calls';
 import { TEMPLATES } from './templates';
 import { feltTempo, SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from './treatment';
+import { checkMoments, ownCues, type SignatureMoment } from './signature-moments';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
 export const SIDED = new Set(['vertical', 'stair', 'quiet', 'typewriter', 'handwrite']);
@@ -129,6 +132,8 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   let hold: Hold | undefined;
   // the prop of the cut before and where it stood: the same one across the frame on the next cut reads as a jump
   let shown = { sprite: '', side: '' };
+  // the way a world's camera swings into a part, by shot: the ground's (kinetic.ts) and the first line's words agree
+  const camDir = new Map<string, number>();
   for (const s of shots) {
     const ps = plan.shots.find((x) => x.shot === s.id);
     if (!ps?.cuts.length) continue;
@@ -173,6 +178,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
         if (EMPHATIC.has(fx)) layer.fx = 'motes' as KineticLayer['fx'];
       }
       if (c.cam) layer.cam = c.cam as KineticLayer['cam'];
+      if (i === 0 && WORLD_CAM_SEC[c.cam ?? '']) camDir.set(s.id, (layer.seed ?? 1) % 2 ? 1 : -1);
       if (c.rig) layer.rig = c.rig as KineticLayer['rig'];
       if (c.flash) layer.flash = c.flash as KineticLayer['flash'];
       const tk = c.transition && !WORLD_INS[c.transition] && sections.length && (!held2 || c.transitionSec) ? c.transition : '';
@@ -190,6 +196,8 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       const cue = tr.cues.find((c) => c.cueId === l.cue);
       if (!cue) continue;
       if (world && l['world']) l['world'] = worldLineOf(world, l['world'] as WorldLine, ps, /[ぁ-ゖァ-ヺ]/.test(song.cues.map((c) => c.text).join('')));
+      const wcam = (l['world'] as WorldLine | undefined)?.cam;
+      if (wcam) wcam.dir = camDir.get(ps.shot) ?? 1;
       const { cue: _c, enter, exit, idle, trail, emphasis, method, emphasis2: _e2, method2: _m2, symbol: _s, zh: _z, ...rest } = l;
       Object.assign(cue, { enter, exit, idle, trail: trail || undefined, ...Object.fromEntries(Object.entries(rest).filter(([, v]) => v)) });
       const where = emphasis ? cueText(l.cue).indexOf(emphasis) : -1;
@@ -232,7 +240,28 @@ export function validMeaning(m: Meaning | undefined, cues: Cue[]): Meaning | und
   const parts = m.parts.filter((p) => at(p.from) >= 0).sort((x, y) => at(x.from) - at(y.from)).map((p) => ({ ...p, tension: Math.min(1, Math.max(0, p.tension)) }));
   if (!parts.length) return undefined;
   parts[0].from = cues[0].id;
-  return { ...m, parts, keys: m.keys.filter((k) => cues.find((c) => c.id === k.cue)?.text.includes(k.phrase)) };
+  return { ...m, parts, keys: m.keys.filter((k) => cues.find((c) => c.id === k.cue)?.text.includes(k.phrase)), moments: (m.moments ?? []).filter((x) => x && Array.isArray(x.cues) && x.cues.every((id) => at(id) >= 0)) };
+}
+
+/** A free video's signature moments at most (the paid director's are three). */
+export const FREE_MOMENTS_MAX = 2;
+/**
+ * The free tier's signature moments: only the ones the song's reading judged a line to mean (meaning.moments; no word
+ * list triggers one), through the same guards as the paid director's, and only where the word lands on a chorus
+ * downbeat. At most two; none is the usual case.
+ */
+export function freeMoments(song: SongTimeline, meaning: Meaning | undefined): SignatureMoment[] {
+  const asks = meaning?.moments ?? [];
+  if (!asks.length) return [];
+  const sungOf = (id: string) => { const c = song.cues.find((x) => x.id === id); return c?.charStarts?.length ? { times: c.charStarts, source: 'line' } : undefined; };
+  const { kept } = checkMoments(asks, song.cues, sungOf);
+  const chorusAt = (t: number) => song.sections.some((x) => x.type === 'chorus' && t >= x.start && t < x.end);
+  // (on the downbeat: the word sung within half a beat of the bar's first beat)
+  const near = 30 / Math.max(40, song.tempo || 120);
+  const onDownbeat = (t: number) => (song.downbeats ?? []).some((d) => Math.abs(d - t) <= near);
+  // (a line with a call beside it is left alone: the moment drew the call over its own sung words, 雙截棍 c019 2026-11-04)
+  const hasCall = (id: string) => splitCalls(song.cues.find((x) => x.id === id)?.text ?? '').calls.length > 0;
+  return kept.filter((m) => chorusAt(m.at) && onDownbeat(m.at) && !ownCues(m).some(hasCall)).slice(0, FREE_MOMENTS_MAX);
 }
 
 export interface FreeOptions {
@@ -275,7 +304,11 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
   const base = composerBase(o.base ?? FREE_BASE(), plan, shots, palette, seed) as unknown as TreatmentV3;
-  const treatment = composerTreatment(song, plan as never, base, palette, world);
+  const drawn = composerTreatment(song, plan as never, base, palette, world);
+  // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
+  const moments = freeMoments(song, meaning);
+  const own = new Set(moments.flatMap(ownCues));
+  const treatment: TreatmentV3 = moments.length ? { ...drawn, cues: drawn.cues.map((c) => (own.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: moments } : drawn;
   const win = { start: 0, end: song.duration };
   const checked = validateTreatment(treatment, song, win, TEMPLATES);
   if (checked.errors.length) throw new Error(`plan refused: ${checked.errors.slice(0, 3).join(' / ')}`);

@@ -139,6 +139,7 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     exits: [...new Set(w.layouts.lines.flatMap((l) => l.exits))],
     beats: sharedOf(w).beats,
     stress: sharedOf(w).stress,
+    camera: sharedOf(w).camera,
     stepped: steppedWorld(w),
   };
 }

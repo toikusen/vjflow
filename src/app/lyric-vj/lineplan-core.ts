@@ -17,6 +17,7 @@ import { WORLD_BEATS } from './render/world-beats';
 import { SHARED_ENTER_POOL, SHARED_EXIT_POOL } from './render/world-motion';
 import type { BeatKind, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
+import type { MomentAsk } from './signature-moments';
 
 export type Level = 0 | 1 | 2;
 export interface Recipe {
@@ -37,7 +38,15 @@ export interface Recipe {
 export interface Fit { test(text: string): boolean }
 export interface Cue { id: string; start: number; end: number; text: string; singer?: string; charStarts?: number[]; charTimed?: boolean }
 export interface SongPart { from: string; tension: number; fx: string[]; what: string }
-export interface Meaning { palette: string; ground: string; reading: string; parts: SongPart[]; keys: { cue: string; phrase: string }[] }
+export interface Meaning {
+  palette: string;
+  ground: string;
+  reading: string;
+  parts: SongPart[];
+  keys: { cue: string; phrase: string }[];
+  /** Lines the reading judged to mean one of the signature moments' senses (signature-moments.ts), usually none. */
+  moments?: MomentAsk[];
+}
 
 // When a device fits: the words that give it a reason. Short, plain lists on purpose; a line that does not say this keeps
 // the ordinary recipes.
@@ -625,6 +634,8 @@ export interface WorldPool {
   /** Every entrance and exit the world's own lines use (the shared ones are added by the composer). */
   enters?: string[];
   exits?: string[];
+  /** The world's one camera move into a new part (render/world-cam.ts). */
+  camera?: string;
   /** How the world stresses a blown-up key word, two ways (world-shared.ts). */
   stress?: StressKind[];
 }
@@ -989,7 +1000,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
       if (W) {
         const going = first ? (newPart ? W.partIn[level] : W.lineIn[level]) : [];
         const at = first ? s.start : shotBeats[i * step];
-        return { yields: true, beat: i * step, at, fx: pick, flow: '', label: '', words: [], sprite: '', size: 0, heart: false, dark: part === nightPart || (W.flip === 'peak' && first && newPart && part === peakPart && !calm), cam: W.cams[level][k % W.cams[level].length], flash: '', transition: handed ?? (going.length ? going[k % going.length] : ''), scheme: schemeOf(part), level: part.tension, ...(handed ? { transitionSec: +(hand.to - hand.from).toFixed(3), transitionDir: hand.dir } : {}) } as Record<string, unknown> & { beat: number; fx: string; cam: string; flash: string; transition: string; dark: boolean };
+        return { yields: true, beat: i * step, at, fx: pick, flow: '', label: '', words: [], sprite: '', size: 0, heart: false, dark: part === nightPart || (W.flip === 'peak' && first && newPart && part === peakPart && !calm), cam: first && newPart && W.camera ? W.camera : W.cams[level][k % W.cams[level].length], flash: '', transition: handed ?? (going.length ? going[k % going.length] : ''), scheme: schemeOf(part), level: part.tension, ...(handed ? { transitionSec: +(hand.to - hand.from).toFixed(3), transitionDir: hand.dir } : {}) } as Record<string, unknown> & { beat: number; fx: string; cam: string; flash: string; transition: string; dark: boolean };
       }
       return { yields: true, ...(handed ? { transitionSec: +(hand.to - hand.from).toFixed(3), transitionDir: hand.dir } : {}), beat: i * step, fx: pick, flow: '', label: '', words: [], sprite: '', size: 0, heart: false, dark: level === 2 && first && (quietLines + offBeat) % 4 === 2, cam: CAMS[level][k % CAMS[level].length], flash: level === 2 && first && (quietLines + offBeat) % 4 === 0 && part !== nightPart ? 'white' : '', transition: handed ?? (hand ? '' : list.length ? list[k % list.length] : '') } as Record<string, unknown> & { beat: number; fx: string; cam: string; flash: string; transition: string; dark: boolean };
     });
@@ -1149,7 +1160,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const wExit = recipe.wline && W ? leastUsed([recipe.wline.exit, ...(W.exits ?? []), ...SHARED_EXIT_POOL], worldExitsUsed) : undefined;
     if (wEnter) entersUsed.set(wEnter, (entersUsed.get(wEnter) ?? 0) + 1);
     if (wExit) { worldExitsUsed.set(wExit, (worldExitsUsed.get(wExit) ?? 0) + 1); lastWorldExit = { kind: wExit, end: c.end }; }
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}), ...(blow ? { blow } : {}) } : undefined;
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

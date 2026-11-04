@@ -95,8 +95,6 @@ function roundWords(e: WorldEnv, draw: () => void, room = wordsRoom(e)) {
   draw();
   c.restore();
 }
-/** Whether ink reads on a tone at the owner's floor (4.5:1, against what is really behind). */
-const reads = (ink: string, tone: string) => contrast(ink, tone) >= 4.5;
 const mulHex = (a: string, b: string) => `#${[1, 3, 5].map((i) => Math.round((parseInt(a.slice(i, i + 2), 16) * parseInt(b.slice(i, i + 2), 16)) / 255).toString(16).padStart(2, '0')).join('')}`;
 /**
  * The paper back over the words' room, crisp and whole (no feather, no glow): what a set piece or a change laid over the
@@ -1046,12 +1044,16 @@ Object.assign(WORLD_GROUNDS, {
   },
 } as Record<string, Ground>);
 
-/** Draws `draw`, an ink of `tone`, over the words when they read on it, and round them (a crisp knockout) when they would not. */
-const inkRound = (e: WorldEnv, tone: string, draw: () => void, room = wordsRoom(e)) => (reads(e.ink, tone) ? draw() : roundWords(e, draw, room));
 /**
- * The print worlds' own: a flat ink on a sheet, cut or pulled the way that press would, big enough to carry the frame. An
- * ink the words read on is printed under them; one they would not read on is knocked out round them, each plate's
- * knockout a hair off register (no second screen sits quite true), never a glow laid over it.
+ * Draws `draw`, an ink of `tone`, round the words (a crisp knockout) unless the tone is all but the paper. The ground's
+ * own ink is not the line's (a line may be set in its accent or its own object's ink), so a tone is never assumed to
+ * carry the words: card's light-purple line sat on its purple tiles at 1.3:1 when it was (2026-11-04).
+ */
+const inkRound = (e: WorldEnv, tone: string, draw: () => void, room = wordsRoom(e)) => (contrast(tone, e.paper) < 1.25 ? draw() : roundWords(e, draw, room));
+/**
+ * The print worlds' own: a flat ink on a sheet, cut or pulled the way that press would, big enough to carry the frame. It
+ * is knocked out round the words, each plate's knockout a hair off register (no second screen sits quite true), never a
+ * glow laid over it.
  */
 const slab = (e: WorldEnv, pts: Pt[], tone: string, a = 1) => {
   const c = e.ctx;
@@ -1077,9 +1079,9 @@ Object.assign(WORLD_GROUNDS, {
   'file/carbon': (e: WorldEnv) => { full(e, e.paper); slab(e, [[-80, H * 0.5], [W + 80, H * 0.42], [W + 80, H + 60], [-80, H + 60]], mixHex(e.paper, e.ink, 0.22)); slab(e, [[W * 0.7, -60], [W + 80, -60], [W + 80, H * 0.38], [W * 0.74, H * 0.42]], tint(e, 0.6)); },
   'spy/wedge': (e: WorldEnv) => { full(e, e.paper); const s = slide(e); slab(e, [[-80, H + 60], [W * 1.2 * s, H + 60], [-80, H * (1.3 - s)]], mixHex(e.paper, e.ink, 0.86)); },
   'spy/sliced': (e: WorldEnv) => { full(e, e.paper); const s = slide(e); for (let i = 0; i < 3; i++) { const y = H * (0.1 + i * 0.32); slab(e, [[W * (1.3 - s) - 300 * i, y], [W + 200, y - 170], [W + 200, y + 70], [W * (1.3 - s) - 300 * i, y + 240]], i === 1 ? tint(e, 0.8) : mixHex(e.paper, e.ink, 0.7)); } },
-  // a card the words would not read on stays turned away while they are up
-  'card/flip-grid': (e: WorldEnv) => { const c = e.ctx; full(e, e.paper); const n = 6; const m = 4; const t = Math.floor(e.now * 0.8); const room = wordsRoom(e); for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { if (hash(i + t, j + e.seed) < 0.45) continue; const tone = hash(i, j + t) > 0.5 ? tint(e, 0.8) : shade(e, 0.7); const [x, y, w, h] = [(i * W) / n + 6, (j * H) / m + 6, W / n - 12, H / m - 12]; const [p, q] = [inFrame(e, x, y), inFrame(e, x + w, y + h)]; if (room && !reads(e.ink, tone) && meets(room, { x0: p.x, y0: p.y, x1: q.x, y1: q.y })) continue; c.fillStyle = tone; c.fillRect(x, y, w, h); } },
-  'card/big-tile': (e: WorldEnv) => { const c = e.ctx; full(e, tint(e, 0.3)); const s = slide(e); inkRound(e, shade(e, 0.7), () => { c.fillStyle = shade(e, 0.7); c.fillRect(W * 0.5 * (1 - s), 0, W * 0.5, H); }); },
+  // a card under the words stays turned away while they are up
+  'card/flip-grid': (e: WorldEnv) => { const c = e.ctx; full(e, e.paper); const n = 6; const m = 4; const t = Math.floor(e.now * 0.8); const room = wordsRoom(e); for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { if (hash(i + t, j + e.seed) < 0.45) continue; const tone = hash(i, j + t) > 0.5 ? tint(e, 0.8) : shade(e, 0.7); const [x, y, w, h] = [(i * W) / n + 6, (j * H) / m + 6, W / n - 12, H / m - 12]; const [p, q] = [inFrame(e, x, y), inFrame(e, x + w, y + h)]; if (room && meets(room, { x0: p.x, y0: p.y, x1: q.x, y1: q.y })) continue; c.fillStyle = tone; c.fillRect(x, y, w, h); } },
+  'card/big-tile': (e: WorldEnv) => { const c = e.ctx; full(e, tint(e, 0.3)); const s = slide(e); inkRound(e, shade(e, 0.7), () => { c.fillStyle = shade(e, 0.7); c.fillRect(W * 0.5 * (1 - s), 0, W * 0.5, H); }); clearWords(e, 1); },
 } as Record<string, Ground>);
 
 Object.assign(WORLD_GROUNDS, {

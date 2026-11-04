@@ -131,13 +131,17 @@ const board: HandGround = (e) => page(e, (c) => {
 const qa: HandGround = (e) => page(e, (c) => {
   studio(c, e);
   const r = e.rect ?? { x0: 566, y0: 270, x1: 1500, y1: 820 };
-  // (the block is two rows of 2.9 sizes each: its height is 5.8 sizes)
-  const size = Math.max(60, (r.y1 - r.y0) / 5.8);
-  const [y1, y2] = [(r.y0 + r.y1) / 2 - size * 1.45, (r.y0 + r.y1) / 2 + size * 1.45];
+  // a row is 2.9 sizes tall and a size is 70–140 px: a block over 406 px holds two rows (question and answer), else one
+  const two = r.y1 - r.y0 > 406;
+  const size = Math.max(60, (r.y1 - r.y0) / (two ? 5.8 : 2.9));
   const x = Math.max(120, r.x0 - 200);
   const w = Math.max(1240, r.x1 - x + 80);
-  banner(c, x, y1 - 115, w, 230, WH, 'Q', G, K);
-  banner(c, x, y2 - 115, w, 230, G, 'A', R, WH);
+  if (!two) banner(c, x, (r.y0 + r.y1) / 2 - 115, w, 230, WH, 'Q', G, K);
+  else {
+    const [y1, y2] = [(r.y0 + r.y1) / 2 - size * 1.45, (r.y0 + r.y1) / 2 + size * 1.45];
+    banner(c, x, y1 - 115, w, 230, WH, 'Q', G, K);
+    banner(c, x, y2 - 115, w, 230, G, 'A', R, WH);
+  }
   finish(c);
 });
 

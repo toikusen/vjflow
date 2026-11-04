@@ -47,7 +47,8 @@ describe('style batch 3, the loud worlds', () => {
   });
   it('read in every scheme, on the ground and on the plate', () => {
     for (const w of LOUD_WORLDS) for (const s of w.palette) {
-      expect(contrast(s.ink, s.ground), `${w.id} ${s.id}`).toBeGreaterThanOrEqual(4.5);
+      // (a world that stands its words on its plate reads them there, not on the ground)
+      expect(contrast(s.ink, w.standsOnPlate ? s.plate : s.ground), `${w.id} ${s.id}`).toBeGreaterThanOrEqual(4.5);
       expect(contrast(s.plateInk, s.plate) >= 4.5 || contrast(s.ink, s.plate) >= 4.5, `${w.id} ${s.id} plate`).toBe(true);
     }
     // the words on a sprayed patch keep the scheme's ink: the patch must read against it

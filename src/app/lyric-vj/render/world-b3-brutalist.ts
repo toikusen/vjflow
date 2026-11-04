@@ -121,13 +121,16 @@ const columns: HandGround = (e) => page(e, (c) => {
   c.fillStyle = e.ink;
   c.fillRect(r.x0 - 60, 128, 4, H - M - 128);
   const t = [...titleOnly(e.title)].slice(0, 5);
+  // (on the mirrored page x runs right to left on screen: the characters are laid in reverse so they still read in order)
+  const flipped = c.getTransform().a < 0;
+  const toks = t.flatMap((ch, i) => (i ? ['／', ch] : [ch]));
+  if (flipped) toks.reverse();
   c.font = HEAD(150);
   let x = M - 6;
-  t.forEach((ch, i) => {
-    if (i) { label(c, '／', x, 790, HEAD(150), RED); x += c.measureText('／').width; }
-    label(c, ch, x, 790, HEAD(150), e.ink);
-    x += c.measureText(ch).width;
-  });
+  for (const tk of toks) {
+    label(c, tk, x, 790, HEAD(150), tk === '／' ? RED : e.ink);
+    x += c.measureText(tk).width;
+  }
   c.fillStyle = e.ink;
   c.fillRect(M, 820, Math.min(1200, r.x0 - 160 - M), 4);
   label(c, artistOf(e.title), M, 866, MONO(17), e.ink, 1);

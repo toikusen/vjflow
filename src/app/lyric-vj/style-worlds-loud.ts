@@ -32,7 +32,7 @@ const popart: StyleWorld = {
   material: { surface: 'comic-key', core: 'accent', engine: 'print/comic-page', how: '分格各有黑框，色版先印、黑版後壓並偏 (5, 3) px；陰影是轉角度的網點，大小表示深淺；擬聲字是黃字、黑框、青版錯位' },
   frameStack: stack({ grain: 0.1, paper: 0, vignette: 0 }),
   timeBase: { fps: 0, unit: 'beat', curve: 'pow-snap' },
-  ownInk: true, sheet: true,
+  ownInk: true, standsOnPlate: true, sheet: true,
   layouts: { pair: 'popart/narration', shared: [], carriers: ['popart/balloon', 'popart/narration', 'popart/twin'], lines: [
     line('popart/balloon', [0, 1, 2], ['balloon-pop', 'plate-then-key'], ['balloon-shrink', 'panel-wipe'], 'page-still', { max: 16, ground: 'popart/strip' }),
     line('popart/balloon-r', [1, 2], ['balloon-pop', 'plate-then-key'], ['panel-wipe', 'balloon-shrink'], 'page-still', { max: 16, ground: 'popart/strip-r' }),
@@ -62,17 +62,17 @@ const gameshow: StyleWorld = {
   type: { ja: { family: 'Zen Kaku Gothic New', weight: 900 }, tc: { family: 'Noto Sans TC', weight: 900 }, latin: 'Bungee', setting: '超粗黑體深色字在白卡上；題號、字母與標籤是 Bungee', category: 'card-type' },
   palette: [
     // (board: studio blue #1636B8, deep navy #0B1A5C, red #C8102E darkened for 4.5:1 under white, gold #FFB400, white, ink #111428)
-    scheme('studio-blue', 'cold', 'dark', '#1636B8', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#2B4FD6', '棚藍布景'),
-    scheme('final-navy', 'cold', 'dark', '#0B1A5C', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '決賽的深藍棚'),
-    scheme('red-round', 'warm', 'mid', '#A80D26', '#FFFFFF', '#FFB400', '#FFB400', '#FFFFFF', '#111428', '#C8102E', '紅色的搶答回合'),
-    scheme('teal-round', 'earth', 'dark', '#0E5A6E', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '青綠的加分回合'),
-    scheme('purple-round', 'warm', 'dark', '#4A1E9E', '#FFFFFF', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '紫色的敗部復活'),
+    scheme('studio-blue', 'cold', 'dark', '#1636B8', '#111428', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#2B4FD6', '棚藍布景'),
+    scheme('final-navy', 'cold', 'dark', '#0B1A5C', '#111428', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '決賽的深藍棚'),
+    scheme('red-round', 'warm', 'mid', '#A80D26', '#111428', '#FFB400', '#FFB400', '#FFFFFF', '#111428', '#C8102E', '紅色的搶答回合'),
+    scheme('teal-round', 'earth', 'dark', '#0E5A6E', '#111428', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '青綠的加分回合'),
+    scheme('purple-round', 'warm', 'dark', '#4A1E9E', '#111428', '#C8102E', '#FFB400', '#FFFFFF', '#111428', '#1636B8', '紫色的敗部復活'),
   ],
   groundBand: { band: 'dark', flip: 'none', why: '攝影棚是飽和的藍，決賽深藍、搶答紅輪替；字永遠在白卡或金卡上' },
   material: { surface: 'card-type', core: 'accent', engine: 'ui/quiz-graphics', how: '電視字卡：平塗色板、直角、深藍硬投影往右下 14 px、金色底線；最上面是掃描線與暗角' },
   frameStack: stack({ grain: 0.04, paper: 0, vignette: 0 }),
   timeBase: { fps: 0, unit: 'beat', curve: 'push-snap' },
-  ownInk: true, sheet: false,
+  ownInk: true, standsOnPlate: true, sheet: false,
   layouts: { pair: 'gameshow/hint', shared: [], carriers: ['gameshow/question', 'gameshow/answers', 'gameshow/board'], lines: [
     line('gameshow/question', [0, 1, 2], ['push-in-left', 'tile-reveal'], ['push-out-right', 'tile-hide'], 'studio-still', { max: 14, ground: 'gameshow/round' }),
     line('gameshow/answers', [1, 2], ['tile-reveal'], ['tile-hide'], 'studio-still', { min: 2, max: 5, loud: true, ground: 'gameshow/round' }),
@@ -112,7 +112,7 @@ const idol: StyleWorld = {
   material: { surface: 'fan-letter', core: 'accent', engine: 'paper/merch', how: '團扇剪字：字先閉合再往外長出成員色、白、深紫三圈，每圈套得住；門票與卡片是白紙加接觸陰影；格紋是兩層 40 px 色條交叉' },
   frameStack: stack({ grain: 0.04, paper: 0, vignette: 0 }),
   timeBase: { fps: 0, unit: 'beat', curve: 'sticker-pop' },
-  ownInk: true, sheet: true,
+  ownInk: true, standsOnPlate: true, sheet: true,
   layouts: { pair: 'idol-live/ticket', shared: [], carriers: ['idol-live/fan', 'idol-live/ticket', 'idol-live/card-col'], lines: [
     line('idol-live/fan', [1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off', 'slide-away'], 'merch-still', { max: 12, ground: 'idol-live/fan' }),
     line('idol-live/ticket', [0, 1], ['card-flip-in', 'sticker-pop'], ['slide-away', 'sticker-off'], 'merch-still', { max: 20, ground: 'idol-live/ticket' }),

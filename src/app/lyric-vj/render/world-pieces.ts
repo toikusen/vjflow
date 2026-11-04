@@ -75,11 +75,13 @@ const ui = (e: PieceEnv, l: Partial<UiLayer> & { type: UiLayer['type'] }, age: n
   drawUiWindow(e.ctx, { kind: 'ui', color: e.ink, alert: e.slots.accent, plain: true, skin: e.ink.startsWith('#F') ? 'mac' : 'term', ...l } as UiLayer, age, { index: Math.floor(e.now * 2), pulse: e.pulse, since: 1 } as never);
   e.ctx.restore();
 };
+/** At most two windows of a storm stand at once: the newest two, each up for 0.36 s before the next takes the older's place. */
+const twoAtOnce = (i: number, age: number) => { const k = Math.floor(age / 0.36); return i <= k && i >= k - 1; };
 /** A window only where it leaves the words alone: a share of a frame that is full of windows is worth less than one clear line. */
 const openFor = (e: PieceEnv, l: { x: number; y: number; w: number; h: number }) => {
   if (!e.rect || e.weight <= 0) return true;
   const [hw, hh] = [(l.w * W) / 2, (l.h * H) / 2];
-  const [cx, cy] = [Math.min(W - hw - 24, Math.max(hw + 24, W / 2 + (l.x * W) / 2)), Math.min(H - hh - 24, Math.max(hh + 24, H / 2 - (l.y * H) / 2))];
+  const [cx, cy] = [Math.min(W - hw - 40, Math.max(hw + 40, W / 2 + (l.x * W) / 2)), Math.min(H - hh - 40, Math.max(hh + 40, H / 2 - (l.y * H) / 2))];
   const m = 60;
   return cx + hw < e.rect.x0 - m || cx - hw > e.rect.x1 + m || cy + hh < e.rect.y0 - m || cy - hh > e.rect.y1 + m;
 };
@@ -177,8 +179,8 @@ export const WORLD_PIECES: Record<string, Piece> = {
     const name = titleNow(e) || 'error';
     // dialogs up one after another, each with air round it
     for (let i = 0; i < 12; i++) {
-      const l = { x: -0.72 + 0.48 * (i % 4), y: 0.68 - 0.68 * Math.floor(i / 4) - 0.04 * (i % 4), w: 0.22, h: 0.22 };
-      if (openFor(e, l)) ui(e, { type: 'error', ...l, title: name.slice(0, 24), lines: [list[i % list.length] ?? name], delay: i * 0.1 }, age);
+      const l = { x: -0.62 + 0.62 * ((i * 2) % 3), y: 0.62 - 0.62 * (i % 3), w: 0.3, h: 0.24 };
+      if (twoAtOnce(i, age) && openFor(e, l)) ui(e, { type: 'error', ...l, title: name.slice(0, 24), lines: [list[i % list.length] ?? name] }, age);
     }
     fill(e, e.slots.accent, 0.1 * Math.sin(q * Math.PI));
   } },
@@ -206,8 +208,8 @@ export const WORLD_PIECES: Record<string, Piece> = {
     const list = wordsOf(e);
     // a grid the storm fills in, gaps kept between the windows
     for (let i = 0; i < 12; i++) {
-      const l = { x: -0.72 + 0.48 * (i % 4), y: 0.66 - 0.66 * Math.floor(i / 4), w: 0.22, h: 0.28 };
-      if (openFor(e, l)) ui(e, { type: (['terminal', 'files', 'log', 'code'] as const)[i % 4], ...l, title: list[i % list.length] ?? 'tty', lines: list.length ? list : ['…'], delay: i * 0.1 }, age);
+      const l = { x: -0.62 + 0.62 * ((i * 2) % 3), y: 0.62 - 0.62 * (i % 3), w: 0.32, h: 0.32 };
+      if (twoAtOnce(i, age) && openFor(e, l)) ui(e, { type: (['terminal', 'files', 'log', 'code'] as const)[i % 4], ...l, title: list[i % list.length] ?? 'tty', lines: list.length ? list : ['…'], delay: i * 0.1 }, age);
     }
   } },
   // led-board: what the whole wall can do at once

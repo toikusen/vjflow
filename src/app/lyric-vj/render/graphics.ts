@@ -1674,7 +1674,8 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
   ctx.rect(0, bar, w, h - bar);
   ctx.clip();
   const text = l.lines?.length ? l.lines : UI_TEXT[l.type];
-  const fs = 26;
+  // (a world's own desktop, plain: its windows print the song's words, so they are set to read at 1080p, 32 px)
+  const fs = l.plain ? 32 : 26;
   const lh = fs * 1.4;
   const mono = l.type === 'terminal' || l.type === 'log' || l.type === 'code';
   ctx.font = `400 ${fs}px ${mono ? sk.mono : sk.font}`;
@@ -1704,8 +1705,9 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
     case 'code': {
       // a steady upward scroll, a line every 0.5 s (code scrolls slower, with line numbers)
       const speed = l.type === 'log' ? 2 : 0.8;
-      const off = local * speed;
-      for (let i = -1; i <= rows; i++) {
+      // (the song's words on a world's desktop step up a whole line at a time, so no row is ever cut in half by the frame)
+      const off = l.plain ? Math.floor(local * speed) : local * speed;
+      for (let i = l.plain ? 0 : -1; i <= (l.plain ? rows - 1 : rows); i++) {
         const k = Math.floor(off) + i;
         const y = bar + 12 + lh * (i + 0.5 - (off % 1));
         const line = text[((k % text.length) + text.length) % text.length];
@@ -1771,8 +1773,8 @@ function ui(ctx: CanvasRenderingContext2D, l: UiLayer, age: number, beat: Beat) 
       const face = os ? sk.font : sk.mono;
       let mf = fs + 4;
       ctx.font = `700 ${mf}px ${face}`;
-      while (mf > 14 && ctx.measureText(text[0]).width > w - 124) ctx.font = `700 ${--mf}px ${face}`;
-      ctx.fillText(text[0], 104, cy);
+      while (mf > (l.plain ? 28 : 14) && ctx.measureText(text[0]).width > w - 124) ctx.font = `700 ${--mf}px ${face}`;
+      ctx.fillText(text[0], 104, cy, w - 124);
       const bw = 110;
       if (os) {
         // the default button in the system accent

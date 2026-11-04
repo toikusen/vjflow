@@ -3,6 +3,7 @@
 // hard offset shadow, a small printed label. Every shape is hard-edged; nothing here is blurred. Tones arrive from a
 // world's slots.
 import { kept, W, H, WorldEnv } from './world-craft';
+import { titleNow } from './world-title';
 
 export type C = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -133,16 +134,10 @@ export function mirrorGround(g: (e: WorldEnv) => void): (e: WorldEnv) => void {
   };
 }
 
-/**
- * The song's title and artist are printed only in the opening (owner 2026-11-04): a title on every frame of every set read
- * as a permanent header. Past these seconds a page's labels carry nothing (titleOf / artistBy give '').
- */
-export const TITLE_SEC = 12;
-const opening = (e: { now: number }) => e.now < TITLE_SEC;
-/** The title for a printed label, in the opening only. */
-export const titleOf = (e: { now: number; title?: string }) => (opening(e) ? titleOnly(e.title) : '');
-/** The artist for a printed label, in the opening only. */
-export const artistBy = (e: { now: number; title?: string }) => (opening(e) ? artistOf(e.title) : '');
+/** The title for a printed label, only on a cut that opens in the song's opening (world-title.ts, one rule for every world). */
+export const titleOf = (e: { now: number; age: number; title?: string }) => titleOnly(titleNow(e));
+/** The artist for a printed label, under the same rule. */
+export const artistBy = (e: { now: number; age: number; title?: string }) => artistOf(titleNow(e));
 /** The song's title alone, from "artist - title". */
 export const titleOnly = (t?: string) => (t ?? '').split(/\s+[-–—]\s+/).pop()!.trim();
 /** The artist, from "artist - title", or nothing. */
@@ -153,7 +148,7 @@ export function still(e: WorldEnv, id: string, paint: (c: OffscreenCanvasRenderi
   const r = e.rect;
   const box = r ? [r.x0, r.y0, r.x1, r.y1].map((v) => Math.round(v / 24)).join(',') : '-';
   const s = e.slots;
-  return kept(`b3|${id}|${s.ground}|${s.ink2}|${s.accent}|${s.faint}|${s.plate}|${e.seed % 8}|${box}|${extra}|${opening(e) ? 'title' : ''}`, W, H, paint);
+  return kept(`b3|${id}|${s.ground}|${s.ink2}|${s.accent}|${s.faint}|${s.plate}|${e.seed % 8}|${box}|${extra}|${titleNow(e) ? 'title' : ''}`, W, H, paint);
 }
 
 /** Draws a kept full-frame picture in the frame's own coordinates (the boards are pages: they do not slide). */

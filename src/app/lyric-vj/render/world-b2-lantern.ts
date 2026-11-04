@@ -46,9 +46,10 @@ const sheet = (e: WorldEnv, d: number) => { const seed = e.seed % 3; return kept
   trace(c, body);
   c.fill();
   c.globalCompositeOperation = 'source-over';
-  o.shadowColor = 'rgba(0,0,0,0.5)';
-  o.shadowBlur = 44 - d * 3;
-  o.shadowOffsetY = -14;
+  // a sheet a finger's width in front of the next throws a tight contact shadow, not a haze
+  o.shadowColor = 'rgba(0,0,0,0.55)';
+  o.shadowBlur = 10;
+  o.shadowOffsetY = -7;
   o.drawImage(cv, 0, 0);
   o.shadowColor = 'transparent';
   // the lamp catches the cut edge only along the broad shapes: on fine cuts a rim would be a scribble
@@ -56,9 +57,9 @@ const sheet = (e: WorldEnv, d: number) => { const seed = e.seed % 3; return kept
 }); };
 const hanging = (e: WorldEnv, d: number) => kept(`pl-top|${e.slots.ink2}|${e.slots.faint}|${e.paper}|${d}`, LW, 300, (o) => {
   const tone = toneAt(e, d);
-  o.shadowColor = 'rgba(0,0,0,0.5)';
-  o.shadowBlur = 36;
-  o.shadowOffsetY = 12;
+  o.shadowColor = 'rgba(0,0,0,0.55)';
+  o.shadowBlur = 10;
+  o.shadowOffsetY = 7;
   o.fillStyle = tone;
   o.beginPath();
   o.moveTo(0, 0);
@@ -69,17 +70,46 @@ const hanging = (e: WorldEnv, d: number) => kept(`pl-top|${e.slots.ink2}|${e.slo
   o.closePath();
   o.fill();
 });
+/**
+ * The back sheet, the lamp right behind it: one even sheet of lit paper whose fibres show, breathing with the lamp, and
+ * a cut moon in it where the light comes straight through. No soft blob of light: the light is told by the paper.
+ */
 const glow = (e: WorldEnv, x: number, y: number, breath: number) => {
   const c = e.ctx;
-  c.fillStyle = e.paper;
+  const lit = mixHex(e.paper, e.slots.plate, 0.35);
+  c.drawImage(fibred('pl-back', lit, mixHex(lit, e.slots.accent, 0.25), 2400), -W * 0.2, -H * 0.2, W * 1.4, H * 1.4);
+  c.save();
+  c.globalAlpha = 0.05 + 0.05 * breath;
+  c.fillStyle = e.slots.accent;
   c.fillRect(-W * 0.2, -H * 0.2, W * 1.4, H * 1.4);
-  const r = 760 + 90 * breath;
-  const g = c.createRadialGradient(x, y, 10, x, y, r);
-  g.addColorStop(0, mixHex(e.paper, e.slots.plate, 0.7));
-  g.addColorStop(0.5, e.paper);
-  g.addColorStop(1, mixHex(e.paper, e.slots.accent, 0.55));
-  c.fillStyle = g;
-  c.fillRect(-W * 0.2, -H * 0.2, W * 1.4, H * 1.4);
+  c.restore();
+  // the cut moon: the opening the lamp shows through, its rim the paper's cut edge
+  const r = 120;
+  const mx = x + (x > W / 2 ? -1 : 1) * W * 0.3;
+  const my = Math.max(r + 60, y - H * 0.22);
+  c.fillStyle = mixHex(e.paper, e.slots.plate, 0.85);
+  c.beginPath();
+  c.arc(mx, my, r, 0, TAU);
+  c.fill();
+  c.strokeStyle = mixHex(lit, e.slots.accent, 0.5);
+  c.lineWidth = 3;
+  c.stroke();
+};
+/** The box's own side flaps: dark sheets with a scalloped cut edge, where the gradient bars were. */
+const wing = (e: WorldEnv, c: CanvasRenderingContext2D, reach: number) => {
+  c.fillStyle = e.slots.ink2;
+  c.beginPath();
+  c.moveTo(-20, -20);
+  const r = 46;
+  for (let y = -20; y < H + 20; y += r * 2) { c.lineTo(reach, y); c.arc(reach, y + r, r, -Math.PI / 2, Math.PI / 2); }
+  c.lineTo(-20, H + 20);
+  c.closePath();
+  c.save();
+  c.shadowColor = 'rgba(0,0,0,0.5)';
+  c.shadowBlur = 10;
+  c.shadowOffsetX = 6;
+  c.fill();
+  c.restore();
 };
 const breathOf = (e: WorldEnv) => 0.5 + 0.5 * Math.sin(e.now * 1.3) * (0.6 + 0.4 * e.level) + 0.3 * e.pulse;
 /** Where the lit opening has to stay: sheets stop under the words and over them. */
@@ -103,12 +133,8 @@ function tunnel(e: WorldEnv, opt: { x?: number; rise?: number; count?: number } 
       if (d < 4) { const ty = Math.min(high, H * (0.14 - 0.03 * (3 - d))) - 300 - (opt.rise ?? 0); c.drawImage(hanging(e, d), -230 - px * 0.7, ty + 16 * Math.sin(e.now * 0.5 + d)); }
     }
     const sides = (Math.sin(e.now * 0.2) + 1) * 8;
-    const g = c.createLinearGradient(0, 0, 150, 0);
-    g.addColorStop(0, e.slots.ink2);
-    g.addColorStop(1, `${e.slots.ink2}00`);
-    c.fillStyle = g;
-    c.fillRect(0, 0, 150 + sides, H);
-    c.save(); c.translate(W, 0); c.scale(-1, 1); c.fillRect(0, 0, 150 + sides, H); c.restore();
+    wing(e, c as unknown as CanvasRenderingContext2D, 34 + sides);
+    c.save(); c.translate(W, 0); c.scale(-1, 1); wing(e, c as unknown as CanvasRenderingContext2D, 34 + sides); c.restore();
   });
 }
 const GROUNDS: Record<string, HandGround> = {
@@ -117,7 +143,8 @@ const GROUNDS: Record<string, HandGround> = {
   'paper-lantern/full-layers': (e) => { tunnel(e, { rise: -30 }); },
   'paper-lantern/warm-pulse': (e) => { tunnel(e); flood(e, e.slots.accent, 0.1 * e.pulse); },
   'paper-lantern/one-layer': (e) => { tunnel(e, { count: 2 }); },
-  'paper-lantern/all-lamps': (e) => { tunnel(e, { rise: -50 }); atBase(e, (c) => { c.save(); c.globalCompositeOperation = 'lighter'; const g = c.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, 900); g.addColorStop(0, e.slots.accent); g.addColorStop(1, `${e.slots.accent}00`); c.globalAlpha = 0.34 + 0.2 * e.pulse; c.fillStyle = g; c.fillRect(0, 0, W, H); c.restore(); }); },
+  // every lamp up: the whole lit sheet warms evenly (a flat tint of the lamp's colour, no glow blob)
+  'paper-lantern/all-lamps': (e) => { tunnel(e, { rise: -50 }); flood(e, e.slots.accent, 0.12 + 0.08 * e.pulse); },
   'paper-lantern/ember': (e) => { tunnel(e, { count: 3 }); },
 };
 const INS: Record<string, HandIn> = {
@@ -127,22 +154,11 @@ const PIECES: Record<string, Piece> = {
   // the room is dark; the lamp comes up behind the last sheet and the light works forward through them
   'lamp-bloom': { sec: 2.4, clear: 0.9, draw: (e, q) => {
     const c = e.ctx;
+    // (the dark lifts sheet by sheet, back to front: each layer's tone comes up in turn, then the lamp's tint)
     const k = q < 0.16 ? 1 : 1 - ease((q - 0.16) / 0.7, 2);
-    const r = 60 + (1 - k) * 1500;
-    const g = c.createRadialGradient(W / 2, H * 0.5, r * 0.2, W / 2, H * 0.5, r);
-    g.addColorStop(0, `${e.slots.ink2}00`);
-    g.addColorStop(1, e.slots.ink2);
-    c.fillStyle = g;
-    c.fillRect(0, 0, W, H);
-    c.save();
-    c.globalCompositeOperation = 'lighter';
-    const h = c.createRadialGradient(W / 2, H * 0.5, 10, W / 2, H * 0.5, r * 0.8);
-    h.addColorStop(0, e.slots.accent);
-    h.addColorStop(1, `${e.slots.accent}00`);
-    c.globalAlpha = 0.7 * Math.sin(q * Math.PI);
-    c.fillStyle = h;
-    c.fillRect(0, 0, W, H);
-    c.restore();
+    for (let d = 0; d < N; d++) flood(e, toneAt(e, d), clamp01(k * 1.4 - d * 0.12) * 0.22);
+    flood(e, e.slots.accent, 0.16 * Math.sin(q * Math.PI));
+    void c;
   } },
   // the camera goes in: each sheet swells and slides past, the lamp ahead getting nearer
   'depth-rush': { sec: 2.2, clear: 0.95, draw: (e, q) => {
@@ -188,21 +204,13 @@ const PIECES: Record<string, Piece> = {
   } },
 };
 const panel: ObjectPaint = (c, w, h, s, seed, look) => {
-  // lit paper in a cut frame: hottest in the middle, the frame's scallops throwing their shadow in
+  // lit paper in a cut frame, the frame's scallops throwing their shadow in
   lifted(c, 30, 0, 10, 0.5, () => { c.fillStyle = s.plate; c.fillRect(0, 0, w, h); });
-  const g = c.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, Math.max(w, h) * 0.7);
-  g.addColorStop(0, s.plate);
-  g.addColorStop(1, mixHex(s.plate, s.accent, 0.55));
-  c.fillStyle = g;
-  c.fillRect(0, 0, w, h);
-  c.drawImage(fibred('pl-p', s.plate, s.accent, 900, Math.ceil(w), Math.ceil(h)), 0, 0, w, h);
-  c.fillStyle = g;
-  c.globalAlpha = 0.6;
-  c.fillRect(0, 0, w, h);
-  c.globalAlpha = 1;
+  // (evenly lit paper with its fibres: the light is told by the paper, not by a soft hot spot)
+  c.drawImage(fibred('pl-p', s.plate, mixHex(s.plate, s.accent, 0.35), 900, Math.ceil(w), Math.ceil(h)), 0, 0, w, h);
   c.save();
-  c.shadowColor = 'rgba(0,0,0,0.45)';
-  c.shadowBlur = 22;
+  c.shadowColor = 'rgba(0,0,0,0.5)';
+  c.shadowBlur = 8;
   c.shadowOffsetY = 8;
   c.fillStyle = s.ink2;
   const r = [26, 34, 20][look];

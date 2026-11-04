@@ -111,7 +111,7 @@ const INS: Record<string, HandIn> = {
  * A solid area printed off the block is never flat: the grain of the plank shows through the ink as long paler
  * streaks, and the paper bites through where the roller ran thin.
  */
-function printGrain(c: CanvasRenderingContext2D, x0: number, y0: number, w: number, h: number, tone: string, seed: number) {
+function printGrain(c: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, x0: number, y0: number, w: number, h: number, tone: string, seed: number) {
   if (w <= 4 || h <= 4) return;
   c.save();
   c.beginPath();

@@ -155,6 +155,11 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       if (0 < (WORDED[fx] ?? 0)) fx = 'motes';
       // the same ground twice running reads as a cut that did not happen
       if (world && sections.length) fx = unrepeatGround(world, fx, (sections[sections.length - 1].layers[0] as KineticLayer).fx, calm, sections.length);
+      // a page laid out with its line stays up through a stretch with no line of its own (an interlude): the line before
+      // still lingers on it, and a new ground under it would take away the balloon or card it is read on
+      const before = sections[sections.length - 1]?.layers[0] as KineticLayer | undefined;
+      const keepPage = !!world && !!before?.world?.bound && !(ps.lines ?? []).length;
+      if (keepPage) fx = before!.fx;
       const held2 = calm && hold?.part === partKey ? hold : undefined;
       // a diagram, or a prop, under a centred lyric would sit on it: it takes a side, alternating, a figure smaller
       const figure = !!c.sprite && !DIAGRAM_FX.has(fx);
@@ -166,6 +171,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       if (c.dark) layer.dark = true;
       layer.yields = true;
       if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', title: titleOf, ...(world!.layouts.lines.some((l) => l.ground === fx) ? { bound: true } : {}), ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })) } : {}) };
+      if (keepPage && before?.world) Object.assign(layer, { paper: before.paper, ink: before.ink, accent: before.accent, world: { ...layer.world!, slots: before.world.slots } });
       if (pal && !isWorldGround(fx)) layer.sheetInks = pal;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];
       if (c.tune) layer.tune = c.tune;

@@ -36,7 +36,7 @@ const popart: StyleWorld = {
   layouts: { pair: 'popart/narration', shared: [], carriers: ['popart/balloon', 'popart/narration', 'popart/twin'], lines: [
     line('popart/balloon', [0, 1, 2], ['balloon-pop', 'plate-then-key'], ['balloon-shrink', 'panel-wipe'], 'page-still', { max: 16, ground: 'popart/strip' }),
     line('popart/balloon-r', [1, 2], ['balloon-pop', 'plate-then-key'], ['panel-wipe', 'balloon-shrink'], 'page-still', { max: 16, ground: 'popart/strip-r' }),
-    line('popart/narration', [0, 1], ['caption-slide', 'plate-then-key'], ['caption-slide-out', 'panel-wipe'], 'page-still', { max: 24, ground: 'popart/sea' }),
+    line('popart/narration', [0, 1, 2], ['caption-slide', 'plate-then-key'], ['caption-slide-out', 'panel-wipe'], 'page-still', { max: 34, ground: 'popart/sea' }),
     line('popart/sfx', [2], ['sfx-stamp'], ['panel-wipe'], 'burst-flex', { max: 8, loud: true, ground: 'popart/blast' }),
     line('popart/twin', [0, 1, 2], ['balloon-pop', 'plate-then-key'], ['panel-wipe'], 'page-still', { min: 6, max: 18, column: true, ground: 'popart/triptych' }),
   ] },
@@ -76,7 +76,7 @@ const gameshow: StyleWorld = {
   layouts: { pair: 'gameshow/hint', shared: [], carriers: ['gameshow/question', 'gameshow/answers', 'gameshow/board'], lines: [
     line('gameshow/question', [0, 1, 2], ['push-in-left', 'tile-reveal'], ['push-out-right', 'tile-hide'], 'studio-still', { max: 14, ground: 'gameshow/round' }),
     line('gameshow/answers', [1, 2], ['tile-reveal'], ['tile-hide'], 'studio-still', { min: 2, max: 5, loud: true, ground: 'gameshow/round' }),
-    line('gameshow/hint', [0, 1], ['push-in-left', 'tile-reveal'], ['push-out-right', 'tile-hide'], 'studio-still', { max: 20, ground: 'gameshow/hint' }),
+    line('gameshow/hint', [0, 1, 2], ['push-in-left', 'tile-reveal'], ['push-out-right', 'tile-hide'], 'studio-still', { max: 34, ground: 'gameshow/hint' }),
     line('gameshow/board', [2], ['tile-reveal'], ['tile-hide'], 'studio-still', { min: 3, max: 8, loud: true, ground: 'gameshow/board' }),
     line('gameshow/qa', [1, 2], ['push-in-left', 'tile-reveal'], ['push-out-right'], 'studio-still', { min: 6, max: 18, ground: 'gameshow/qa' }),
   ] },
@@ -115,7 +115,7 @@ const idol: StyleWorld = {
   ownInk: true, standsOnPlate: true, sheet: true,
   layouts: { pair: 'idol-live/ticket', shared: [], carriers: ['idol-live/fan', 'idol-live/ticket', 'idol-live/card-col'], lines: [
     line('idol-live/fan', [1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off', 'slide-away'], 'merch-still', { max: 12, ground: 'idol-live/fan' }),
-    line('idol-live/ticket', [0, 1], ['card-flip-in', 'sticker-pop'], ['slide-away', 'sticker-off'], 'merch-still', { max: 20, ground: 'idol-live/ticket' }),
+    line('idol-live/ticket', [0, 1, 2], ['card-flip-in', 'sticker-pop'], ['slide-away', 'sticker-off'], 'merch-still', { max: 34, ground: 'idol-live/ticket' }),
     line('idol-live/cards', [1, 2], ['card-flip-in'], ['sticker-off'], 'merch-still', { min: 3, max: 6, loud: true, ground: 'idol-live/cards' }),
     line('idol-live/card-col', [0, 1, 2], ['sticker-pop', 'card-flip-in'], ['sticker-off'], 'merch-still', { min: 5, max: 14, column: true, ground: 'idol-live/setlist' }),
   ] },
@@ -154,7 +154,7 @@ const y2k: StyleWorld = {
   ownInk: true, sheet: true,
   layouts: { pair: 'y2k/ring', shared: [], carriers: ['y2k/hook', 'y2k/fan'], lines: [
     line('y2k/hook', [1, 2], ['glyph-rise', 'glyph-slide'], ['glyph-lift-out', 'glyph-slide-out'], 'sleeve-still', { max: 14, ground: 'y2k/hook' }),
-    line('y2k/ring', [0, 1], ['glyph-slide', 'glyph-rise'], ['glyph-lift-out', 'glyph-slide-out'], 'sleeve-still', { max: 22, ground: 'y2k/ring' }),
+    line('y2k/ring', [0, 1, 2], ['glyph-slide', 'glyph-rise'], ['glyph-lift-out', 'glyph-slide-out'], 'sleeve-still', { max: 34, ground: 'y2k/ring' }),
     line('y2k/fan', [1, 2], ['glyph-rise'], ['glyph-slide-out', 'glyph-lift-out'], 'sleeve-still', { max: 12, ground: 'y2k/fan' }),
     line('y2k/column', [0, 1, 2], ['glyph-rise', 'glyph-slide'], ['glyph-lift-out'], 'sleeve-still', { min: 5, max: 18, column: true, ground: 'y2k/column' }),
   ] },
@@ -193,7 +193,7 @@ const psychedelic: StyleWorld = {
   ownInk: true, sheet: true,
   layouts: { pair: 'psychedelic/sun', shared: [], carriers: ['psychedelic/arch', 'psychedelic/tunnel'], lines: [
     line('psychedelic/arch', [1, 2], ['sign-rise', 'band-reveal'], ['sign-sink', 'band-cover'], 'poster-still', { max: 14, ground: 'psychedelic/arches' }),
-    line('psychedelic/sun', [0, 1], ['band-reveal', 'sign-rise'], ['band-cover', 'sign-sink'], 'poster-still', { max: 22, ground: 'psychedelic/sun' }),
+    line('psychedelic/sun', [0, 1, 2], ['band-reveal', 'sign-rise'], ['band-cover', 'sign-sink'], 'poster-still', { max: 34, ground: 'psychedelic/sun' }),
     line('psychedelic/tunnel', [2], ['sign-rise'], ['sign-sink'], 'poster-still', { max: 8, loud: true, ground: 'psychedelic/tunnel' }),
     line('psychedelic/flow', [0, 1, 2], ['band-reveal', 'sign-rise'], ['band-cover'], 'poster-still', { min: 5, max: 18, column: true, ground: 'psychedelic/flow' }),
   ] },
@@ -273,7 +273,7 @@ const brutalist: StyleWorld = {
   ownInk: true, sheet: true,
   layouts: { pair: 'brutalist/footer', shared: [], carriers: ['brutalist/headline', 'brutalist/cells'], lines: [
     line('brutalist/headline', [1, 2], ['hard-cut', 'grid-jump'], ['hard-off', 'pull-off'], 'copier-feed', { max: 12, ground: 'brutalist/headline' }),
-    line('brutalist/footer', [0, 1], ['hard-cut', 'grid-jump'], ['hard-off', 'pull-off'], 'copier-feed', { max: 20, ground: 'brutalist/footer' }),
+    line('brutalist/footer', [0, 1, 2], ['hard-cut', 'grid-jump'], ['hard-off', 'pull-off'], 'copier-feed', { max: 34, ground: 'brutalist/footer' }),
     line('brutalist/cells', [2], ['hard-cut'], ['hard-off'], 'copier-feed', { max: 5, loud: true, ground: 'brutalist/cells' }),
     line('brutalist/columns', [0, 1, 2], ['hard-cut', 'grid-jump'], ['hard-off'], 'copier-feed', { min: 5, max: 18, column: true, ground: 'brutalist/columns' }),
   ] },
@@ -312,7 +312,7 @@ const citypop: StyleWorld = {
   ownInk: true, sheet: true,
   layouts: { pair: 'citypop/sea-title', shared: [], carriers: ['citypop/facade-title', 'citypop/column'], lines: [
     line('citypop/facade-title', [0, 1, 2], ['wide-fade', 'line-fade'], ['slow-fade', 'wide-out'], 'cover-still', { max: 15, ground: 'citypop/facade' }),
-    line('citypop/sea-title', [0, 1], ['line-fade', 'wide-fade'], ['slow-fade', 'wide-out'], 'cover-still', { max: 22, ground: 'citypop/moon' }),
+    line('citypop/sea-title', [0, 1, 2], ['line-fade', 'wide-fade'], ['slow-fade', 'wide-out'], 'cover-still', { max: 34, ground: 'citypop/moon' }),
     line('citypop/skyline-title', [1, 2], ['wide-fade'], ['wide-out', 'slow-fade'], 'cover-still', { max: 10, ground: 'citypop/skyline' }),
     line('citypop/column', [0, 1, 2], ['line-fade', 'wide-fade'], ['slow-fade'], 'cover-still', { min: 5, max: 16, column: true, ground: 'citypop/colonnade' }),
   ] },

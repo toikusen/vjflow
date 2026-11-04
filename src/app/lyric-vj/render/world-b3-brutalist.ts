@@ -96,21 +96,22 @@ const footer: HandGround = (e) => page(e, (c) => {
 
 /** c: the reversed sheet: four red-ruled cells across the page, numbered, the shout across all of them; they invert in turn. */
 const cells: HandGround = (e) => page(e, (c) => {
-  c.fillStyle = B3.x121212;
+  // (the board's reversed sheet on a dark scheme; on a light one the same cells on the copy paper)
+  c.fillStyle = e.paper;
   c.fillRect(0, -2, W, H + 4);
   const step = (W - 2 * M) / 4;
   const on = Math.floor(e.now * 2) % 6;
   for (let i = 0; i < 4; i++) {
     const x = M + i * step;
-    if (i === on) { c.fillStyle = B3.x2A1210; c.fillRect(x, 170, step, 814); }
+    if (i === on) { c.fillStyle = dark(e) ? B3.x2A1210 : 'rgba(188,24,14,0.10)'; c.fillRect(x, 170, step, 814); }
     c.strokeStyle = RED;
     c.lineWidth = 2;
     c.strokeRect(x + 1, 171, step - 2, 812);
     label(c, `0${i + 1}`, x + 16, 210, MONO(19), RED, 1.1);
   }
-  label(c, titleOnly(e.title), W - M, M + 20, MONO(19), B3.xF2F0EA, 1.1, 'right');
-  label(c, artistOf(e.title), M, M + 20, MONO(19), B3.xF2F0EA, 1.1);
-  finish(c, { ...e, paper: B3.x121212 });
+  label(c, titleOnly(e.title), W - M, M + 20, MONO(19), e.ink, 1.1, 'right');
+  label(c, artistOf(e.title), M, M + 20, MONO(19), e.ink, 1.1);
+  finish(c, e);
 });
 
 /** d: two columns at the right behind a rule, the title set big with red strokes between its characters on the left. */

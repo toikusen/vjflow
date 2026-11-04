@@ -179,7 +179,7 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'woodcut/left-stack': { ...base, at: [0.06, 0.68], ax: -1, ay: 0, share: 0.6, tall: 0.54, hi: 250, rows: [1, 3], lead: 1.1, track: 0.02, flush: -1 },
   'woodcut/right-stack': { ...base, at: [0.94, 0.68], ax: 1, ay: 0, share: 0.6, tall: 0.54, hi: 250, rows: [1, 3], lead: 1.1, track: 0.02, flush: 1 },
   'woodcut/foot': { ...base, at: [0.5, 0.84], ax: 0, ay: 0, share: 0.84, tall: 0.3, hi: 220, rows: [1, 2], lead: 1.08, track: 0.02 },
-  'woodcut/column': { ...base, at: [0.88, 0.58], ax: 0, ay: 0, share: 0.3, tall: 0.76, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
+  'woodcut/column': { ...base, at: [0.8, 0.58], ax: 0, ay: 0, share: 0.3, tall: 0.76, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
   'woodcut/plate': { ...base, at: [0.5, 0.7], ax: 0, ay: 0, share: 0.72, tall: 0.46, hi: 280, rows: [1, 2], lead: 1.1, track: 0.02, object: 'colour-plate', pad: [90, 70] },
   'woodcut/shout': { ...base, at: [0.5, 0.64], ax: 0, ay: 0, share: 0.94, tall: 0.7, hi: 400, rows: [1, 2], lead: 1.04, track: 0 },
   // aizome: resist on the cloth, or a mended patch and a towel laid on it.

@@ -504,7 +504,13 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const [cx, cy, pad] = [960 + p.block.cx + firstX, 540 - (p.block.cy + firstAt), 14];
       // carried: the whole line on an opaque carrier (a split line's small part stands off it, so it is not)
       const carried = !!p.object && !p.block.small?.length && CARRIERS.has(sets[i].object!);
-      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - p.block.w / 2 - pad, y0: cy - p.block.h / 2 - pad, x1: cx + p.block.w / 2 + pad, y1: cy + p.block.h / 2 + pad, carried } };
+      // the room the line is read in covers the whole of its slow travel and its swell, not only where it starts: a
+      // drifting column walked off the uncut wood round it onto the gouges (woodcut), the paper room left behind
+      const [gx, gy] = p.spec.fixed ? [0, 0] : wl.drift ?? [0, 0];
+      const reach = (d: number, c: number, half: number, frame: number) => Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half)) / 2;
+      const grow = 1 + (p.spec.fixed ? 0 : wl.swell ?? 0);
+      const [hw, hh] = [(p.block.w / 2) * grow + reach(gx, p.block.cx, p.block.w / 2, 960), (p.block.h / 2) * grow + reach(gy, p.block.cy, p.block.h / 2, 540)];
+      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried } };
     }),
   };
 }

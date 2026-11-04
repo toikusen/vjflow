@@ -107,6 +107,35 @@ const INS: Record<string, HandIn> = {
   'block-push': { sec: 0.32, draw: (e, q) => { const c = e.ctx; atBase(e, () => { const x = (1 - ease(q, 2)) * (W + 120); c.save(); c.drawImage(block(e), 120 - W - 120, -120); c.translate(x - W, 0); c.fillStyle = e.paper; c.fillRect(x - W * 2, -40, W * 2, H + 80); c.restore(); void x; }); } },
 };
 
+/**
+ * A solid area printed off the block is never flat: the grain of the plank shows through the ink as long paler
+ * streaks, and the paper bites through where the roller ran thin.
+ */
+function printGrain(c: CanvasRenderingContext2D, x0: number, y0: number, w: number, h: number, tone: string, seed: number) {
+  if (w <= 4 || h <= 4) return;
+  c.save();
+  c.beginPath();
+  c.rect(x0, y0, w, h);
+  c.clip();
+  c.strokeStyle = tone;
+  c.lineCap = 'round';
+  const n = Math.round(40 + 50 * Math.min(1, (w * h) / (W * H)));
+  for (let i = 0; i < n; i++) {
+    const y = y0 + hash(i, seed) * h;
+    const xs = x0 - 40 + hash(i, seed + 3) * w * 0.7;
+    const len = w * (0.3 + 0.7 * hash(i, seed + 4));
+    c.globalAlpha = 0.07 + 0.13 * hash(i, seed + 1);
+    c.lineWidth = 1.5 + 5 * hash(i, seed + 2) ** 2;
+    c.beginPath();
+    c.moveTo(xs, y);
+    c.bezierCurveTo(xs + len * 0.33, y + 14 * (hash(i, seed + 5) - 0.5), xs + len * 0.66, y - 14 * (hash(i, seed + 6) - 0.5), xs + len, y + 6 * (hash(i, seed + 7) - 0.5));
+    c.stroke();
+  }
+  c.fillStyle = tone;
+  for (let i = 0; i < n * 3; i++) { c.globalAlpha = 0.18 * hash(i, seed + 8); c.fillRect(x0 + hash(i, seed + 9) * w, y0 + hash(i, seed + 10) * h, 2 + 7 * hash(i, seed + 11), 1.5 + 2 * hash(i, seed + 12)); }
+  c.restore();
+}
+
 const PIECES: Record<string, Piece> = {
   // one long pull of the V-tool across the whole block, the chips thrown off ahead of it
   'great-gouge': { sec: 2.1, clear: 0, draw: (e, q) => {
@@ -141,7 +170,9 @@ const PIECES: Record<string, Piece> = {
     const off = q > 0.62 ? clamp01((q - 0.62) / 0.38) : 0;
     // it lays the other tone: the frame's polarity turns over behind the words, then the block comes back
     c.fillStyle = e.ink;
-    c.fillRect(off > 0 ? W * easeIn(off, 2) : 0, 0, Math.max(0, Math.min(x, W)) , H);
+    const [ix, iw] = [off > 0 ? W * easeIn(off, 2) : 0, Math.max(0, Math.min(x, W))];
+    c.fillRect(ix, 0, iw, H);
+    printGrain(c, ix, 0, iw - ix, H, e.paper, 5);
     if (x < W + 300) {
       lifted(c, 40, -20, 0, 0.6, () => { c.fillStyle = mixHex(e.paper, e.ink, 0.1); c.fillRect(x, -30, 240, H + 60); });
       const g = c.createLinearGradient(x, 0, x + 240, 0);
@@ -174,6 +205,7 @@ const PIECES: Record<string, Piece> = {
     c.fillStyle = tone;
     trace(c, [[-10, -10], [W + 10, -10], [W + 10, H + 10], [-10, H + 10]]);
     c.fill();
+    printGrain(c, 0, 0, W, H, mixHex(tone, e.paper, 0.6), 9);
     c.fillStyle = e.paper;
     trace(c, [[W + 10, H + 10], [W + 10 - line, H + 10], [W + 10, H + 10 - line]]);
     c.fill();
@@ -213,6 +245,7 @@ const plate: ObjectPaint = (c, w, h, s, seed, look) => {
   c.fill();
   c.save();
   c.clip();
+  printGrain(c, 0, 0, w, h, mixHex(s.plate, s.plateInk, 0.5), seed + 13);
   c.fillStyle = s.plateInk;
   c.globalAlpha = 0.5;
   // the plate's own uncleared ridges, left round the edge

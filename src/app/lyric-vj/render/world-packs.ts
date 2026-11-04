@@ -21,7 +21,7 @@ import type { Piece } from './world-pieces';
 interface Pack { grounds: Record<string, HandGround>; ins: Record<string, HandIn>; pieces: Record<string, Piece>; objects: Record<string, ObjectPaint> }
 const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP];
 export type HandObject = 'cartouche' | 'shikishi' | 'cut-panel' | 'cut-banner' | 'lit-paper' | 'noshi' | 'fold-kite' | 'colour-plate' | 'chalk-rub' | 'mend-patch' | 'tenugui' | 'pad-sheet'
-  | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'quiz-card' | 'marquee-strip' | 'score-plate' | 'spot-pool' | 'uchiwa' | 'glass-window' | 'chrome-sticker' | 'ribbon-wave' | 'sun-disc' | 'spray-patch' | 'throw-up' | 'tape-slogan' | 'sleeve-card';
+  | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'quiz-card' | 'marquee-strip' | 'score-plate' | 'spot-pool' | 'uchiwa' | 'ribbon-wave' | 'sun-disc' | 'spray-patch' | 'throw-up' | 'tape-slogan' | 'sleeve-card';
 export const handGrounds = Object.assign({}, ...PACKS.map((p) => p.grounds)) as Record<string, HandGround>;
 export const handIns = Object.assign({}, ...PACKS.map((p) => p.ins)) as Record<string, HandIn>;
 export const handPieces = Object.assign({}, ...PACKS.map((p) => p.pieces)) as Record<string, Piece>;

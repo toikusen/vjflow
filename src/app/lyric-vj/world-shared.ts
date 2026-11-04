@@ -42,14 +42,14 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   chalkboard: s(['ink-run', 'crack'], ['outline', 'extrude'], 'diagonal'),
   aizome: s(['echo', 'light-sweep'], ['outline', 'plate'], 'push-through'),
   crayon: s(['beat-punch', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
-  popart: s(['beat-punch', 'plate-slip', 'roll'], ['extrude', 'plate'], 'diagonal'),
-  gameshow: s(['beat-punch', 'roll', 'light-sweep'], ['extrude', 'outline'], 'diagonal'),
-  'idol-live': s(['light-sweep', 'beat-punch', 'echo'], ['outline', 'extrude'], 'push-through'),
-  y2k: s(['light-sweep', 'echo', 'roll'], ['outline', 'extrude'], 'push-through'),
-  psychedelic: s(['echo', 'ink-run', 'roll'], ['outline', 'plate'], 'push-through'),
+  popart: s(['plate-slip', 'beat-punch'], ['plate', 'extrude'], 'diagonal'),
+  gameshow: s(['beat-punch', 'roll', 'light-sweep'], ['extrude', 'plate'], 'diagonal'),
+  'idol-live': s(['beat-punch', 'roll'], ['plate', 'extrude'], 'diagonal'),
+  y2k: s(['light-sweep', 'roll'], ['plate', 'extrude'], 'push-through'),
+  psychedelic: s(['ink-run', 'roll'], ['plate', 'extrude'], 'push-through'),
   graffiti: s(['crack', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
   brutalist: s(['crack', 'beat-punch'], ['extrude', 'plate'], 'diagonal'),
-  citypop: s(['light-sweep', 'echo'], ['outline', 'plate'], 'push-through'),
+  citypop: s(['light-sweep', 'ink-run'], ['plate', 'extrude'], 'push-through'),
 };
 
 /** A world no row names (a new one) takes the moves its family is made of until it is given its own. */

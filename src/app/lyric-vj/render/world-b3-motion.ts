@@ -23,10 +23,9 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
   'spot-on': { sec: 0.3, glyph: ({ q }) => ({ tone: 0.1 + 0.9 * easeOut(q, 2), a: clamp01(q * 4), s: 1.04 - 0.04 * easeOut(q, 2) }) },
   'beam-sweep': { sec: 0.46, glyph: ({ q, u }) => { const k = clamp01((q * 1.5 - u) / 0.5); return { a: k > 0 ? 1 : 0, tone: 0.3 + 0.7 * easeOut(k, 2) + (k > 0 && k < 0.5 ? 0.3 : 0) }; } },
   'rig-drop': { sec: 0.34, block: (q) => ({ dy: -220 * (1 - easeOut(q, 4)) + 14 * Math.sin(q * 9) * (1 - q), a: clamp01(q * 5) }) },
-  // y2k: a bubble grows and overshoots; the glint runs along the chrome; the window opens from its bar
-  'bubble-up': { sec: 0.4, glyph: ({ q, i, seed }) => { const k = clamp01((q - 0.4 * hash(i, seed)) / 0.6); return { a: k > 0 ? 1 : 0, s: k > 0 ? 0.4 + 0.6 * over(k, 0.26) * easeOut(k, 3) : 0.4 }; } },
-  'glint-in': { sec: 0.42, glyph: ({ q, u }) => { const k = clamp01((q * 1.4 - u) / 0.4); return { a: k > 0 ? 1 : 0, tone: 0.6 + 0.4 * k + (k > 0 && k < 0.6 ? 0.5 : 0) }; } },
-  'window-open': { sec: 0.3, block: (q) => ({ sy: Math.max(0.06, over(q, 0.12) * easeOut(q, 3)), a: clamp01(q * 6) }) },
+  // y2k (board motion): the title is never bent; each character rises or slides in and fades up, one after the other
+  'glyph-rise': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: easeOut(k, 2), dy: -26 * (1 - easeOut(k, 3)) }; } },
+  'glyph-slide': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: easeOut(k, 2), dx: -34 * (1 - easeOut(k, 3)) }; } },
   // psychedelic: the wave carries the word in; the colour melts up from the ground; the sun comes up slowly
   'wave-in': { sec: 0.6, glyph: ({ q, u, i }) => { const k = clamp01(q * 1.4 - u * 0.4); return { a: easeOut(k, 2), dy: 60 * Math.sin((1 - k) * Math.PI * 1.5 + i) * (1 - k), r: 0.1 * (1 - k) * Math.sin(i) }; } },
   'melt-up': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01(q * 1.5 - (0.5 * i) / Math.max(1, n)); return { a: easeOut(k, 2), dy: 70 * (1 - easeOut(k, 2)), sx: 0.8 + 0.2 * easeOut(k, 2) }; } },
@@ -53,8 +52,8 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'flip-away': { sec: 0.28, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 2) - (n - i)); return { sx: Math.max(0.05, 1 - easeIn(k, 2)), a: k >= 1 ? 0 : 1 }; } },
   'blackout-off': { sec: 0.26, glyph: ({ q }) => ({ tone: 1 - 0.9 * easeOut(q, 2), a: q < 0.8 ? 1 : 1 - (q - 0.8) * 5 }) },
   'beam-off': { sec: 0.4, glyph: ({ q, u }) => { const k = clamp01((q * 1.5 - (1 - u)) / 0.5); return { tone: 1 - 0.7 * k, a: 1 - easeIn(k, 2) }; } },
-  'pop-bubble': { sec: 0.32, glyph: ({ q, i, seed }) => { const k = clamp01((q - 0.5 * hash(i, seed + 5)) / 0.5); return { s: 1 + 0.35 * easeOut(k, 2), a: k > 0 ? 1 - easeIn(k, 1.2) : 1 }; } },
-  'window-minimise': { sec: 0.3, block: (q) => ({ sx: 1 - 0.9 * easeIn(q, 2), sy: 1 - 0.9 * easeIn(q, 2), dy: 420 * easeIn(q, 2), a: q < 0.9 ? 1 : 0 }) },
+  'glyph-lift-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dy: 22 * easeIn(k, 2) }; } },
+  'glyph-slide-out': { sec: 0.4, glyph: ({ q, i, n }) => { const k = clamp01((q * (n + 3) - i) / 4); return { a: 1 - easeIn(k, 2), dx: 30 * easeIn(k, 2) }; } },
   'wave-out': { sec: 0.56, glyph: ({ q, u, i }) => { const k = clamp01(q * 1.4 - (1 - u) * 0.4); return { a: 1 - easeIn(k, 2), dy: -50 * Math.sin(k * Math.PI * 1.5 + i) * k, r: 0.08 * k * Math.sin(i) }; } },
   'melt-down': { sec: 0.46, glyph: ({ q, i, n }) => { const k = clamp01(q * 1.5 - (0.5 * (n - i)) / Math.max(1, n)); return { a: 1 - easeIn(k, 2), dy: 80 * easeIn(k, 2), sx: 1 - 0.2 * easeIn(k, 2) }; } },
   'buff-out': { sec: 0.36, clip: (q) => ({ axis: 'x', at: 1 - easeIn(q, 1.6) }) },
@@ -71,7 +70,7 @@ export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'burst-flex': ({ age }) => ({ s: 1 + 0.025 * Math.exp(-fract(age * 2) * 6) }),
   'studio-bounce': ({ age }) => ({ s: 1 + 0.02 * Math.exp(-fract(age * 2) * 7) }),
   'stage-pulse': ({ age, i }) => ({ tone: 0.92 + 0.08 * Math.sin(age * 2.2 + i * 0.4) }),
-  'float-drift': ({ age, u, i }) => ({ dy: 5 * Math.sin(age * 1.5 + u * 2 + i * 0.3), r: 0.006 * Math.sin(age * 1.1 + i) }),
+  'sleeve-still': () => ({}),
   'lava-sway': ({ age, u }) => ({ dy: 4 * Math.sin(age * 1.2 + u * 4), r: 0.008 * Math.sin(age * 0.9 + u * 3) }),
   'drip-hang': ({ age, i, seed }) => ({ dy: Math.min(4, age * 0.5) * hash(i, seed + 7) }),
   'copier-jitter': ({ age, i, seed }) => { const t = Math.floor(age * 12); return { dx: (hash(t, i + seed) - 0.5) * 2, dy: (hash(t, seed) - 0.5) * 1.5 }; },

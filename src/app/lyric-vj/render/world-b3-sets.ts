@@ -28,14 +28,11 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'idol-live/uchiwa': { ...base, at: [0.72, 0.5], ax: 0, ay: 0, share: 0.34, tall: 0.42, hi: 210, rows: [1, 3], lead: 1.08, track: 0.01, object: 'uchiwa', pad: [90, 90], fill: [0.34, 0.6], tilt: 0.1 },
   'idol-live/shout': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.92, tall: 0.7, hi: 400, rows: [1, 2], lead: 1.04, track: 0, tilt: -0.04 },
   'idol-live/column': { ...base, at: [0.1, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.84, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
-  // y2k: a glossy window a little off centre, a chrome sticker up right, floating lines, a tag in the corner
-  'y2k/window': { ...base, at: [0.42, 0.46], ax: 0, ay: 0, share: 0.6, tall: 0.46, hi: 240, rows: [1, 3], lead: 1.1, track: 0.02, tilt: -0.04, object: 'glass-window', pad: [70, 96], fill: [0.6, 0.5] },
-  'y2k/sticker': { ...base, at: [0.7, 0.3], ax: 0, ay: 0, share: 0.46, tall: 0.38, hi: 230, rows: [1, 2], lead: 1.08, track: 0.02, tilt: 0.1, object: 'chrome-sticker', pad: [84, 64], fill: [0.46, 0.4] },
-  'y2k/float-low': { ...base, at: [0.5, 0.74], ax: 0, ay: 0, share: 0.8, tall: 0.36, hi: 240, rows: [1, 2], lead: 1.1, track: 0.03 },
-  'y2k/float-high': { ...base, at: [0.5, 0.24], ax: 0, ay: 0, share: 0.8, tall: 0.36, hi: 240, rows: [1, 2], lead: 1.1, track: 0.03 },
-  'y2k/corner-tag': { ...base, at: [0.05, 0.9], ax: -1, ay: 1, share: 0.6, tall: 0.42, hi: 220, rows: [1, 2], lead: 1.08, track: 0.02, flush: -1, tilt: -0.06 },
-  'y2k/big': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.9, tall: 0.7, hi: 400, rows: [1, 2], lead: 1.04, track: 0.01 },
-  'y2k/column': { ...base, at: [0.86, 0.5], ax: 0, ay: 0, share: 0.26, tall: 0.82, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.03, tilt: 0.05 },
+  // y2k (board a–d): the title up left on the hook sleeve, the line left of the night ring, a big title by the fan, columns right
+  'y2k/hook': { ...base, at: [0.074, 0.218], ax: -1, ay: -1, share: 0.5, tall: 0.64, hi: 236, rows: [1, 3], lead: 1.02, track: -0.01, flush: -1, fixed: true },
+  'y2k/ring': { ...base, at: [0.0885, 0.333], ax: -1, ay: -1, share: 0.42, tall: 0.4, hi: 96, rows: [1, 2], lead: 1.45, track: 0.14, flush: -1, weight: 700, fixed: true },
+  'y2k/fan': { ...base, at: [0.073, 0.278], ax: -1, ay: -1, share: 0.5, tall: 0.56, hi: 250, rows: [1, 3], lead: 1, track: 0.02, flush: -1, fixed: true },
+  'y2k/column': { ...base, at: [0.629, 0.139], ax: 0, ay: -1, share: 0.3, tall: 0.7, hi: 104, rows: [1, 2], vertical: true, lead: 1.83, track: 0.08, fixed: true },
   // psychedelic: the words ride the ribbon, sit in the sun, arc high or low, stack down the left, lean big
   'psychedelic/wave-ribbon': { ...base, at: [0.5, 0.42], ax: 0, ay: 0, share: 0.86, tall: 0.36, hi: 250, rows: [1, 2], lead: 1.08, track: 0.02, tilt: 0.06, object: 'ribbon-wave', pad: [110, 60], fill: [1.0, 0.36] },
   'psychedelic/sun-face': { ...base, at: [0.5, 0.56], ax: 0, ay: 0, share: 0.46, tall: 0.42, hi: 230, rows: [1, 3], lead: 1.06, track: 0.01, object: 'sun-disc', pad: [150, 150], fill: [0.5, 0.88] },

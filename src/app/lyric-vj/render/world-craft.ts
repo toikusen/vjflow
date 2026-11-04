@@ -124,7 +124,8 @@ export function lifted(c: CanvasRenderingContext2D | OffscreenCanvasRenderingCon
   c.restore();
 }
 /** The words' box grown by a margin, frame px. */
-export const boxOf = (e: WorldEnv, mx: number, my: number) => { const r = e.rect ?? { x0: W * 0.3, y0: H * 0.4, x1: W * 0.7, y1: H * 0.6 }; return { x0: r.x0 - mx, y0: r.y0 - my, x1: r.x1 + mx, y1: r.y1 + my }; };
+/** The room round the words, `mx`/`my` beyond them; it stops 48 px short of the frame (a room is never a band cut off by the edge). */
+export const boxOf = (e: WorldEnv, mx: number, my: number) => { const r = e.rect ?? { x0: W * 0.3, y0: H * 0.4, x1: W * 0.7, y1: H * 0.6 }; const m = 48; return { x0: Math.max(m, r.x0 - mx), y0: Math.max(m, r.y0 - my), x1: Math.min(W - m, r.x1 + mx), y1: Math.min(H - m, r.y1 + my) }; };
 
 export type ObjectPaint = (c: OffscreenCanvasRenderingContext2D, w: number, h: number, s: Slots, seed: number, look: number) => void;
 export type HandGround = (e: WorldEnv) => void;

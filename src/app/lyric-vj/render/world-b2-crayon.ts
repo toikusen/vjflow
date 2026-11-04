@@ -15,15 +15,24 @@ function hatch(d: D, shape: (c: D) => void, x0: number, y0: number, x1: number, 
   d.lineWidth = width;
   d.lineCap = 'round';
   d.lineJoin = 'round';
-  d.beginPath();
+  // each pass is its own stroke at its own pressure: where two passes overlap the wax doubles up, between them the
+  // paper shows, so a coloured field reads as hatching, never as one flat block of colour
   const n = Math.ceil((y1 - y0 + (x1 - x0) * lean) / pitch);
+  const base = d.globalAlpha;
+  let prev: Pt | undefined;
   for (let i = 0; i < n; i++) {
     const y = y0 - (x1 - x0) * lean + i * pitch + (hash(i, seed) - 0.5) * pitch * 0.8;
     const [a, b]: Pt[] = i % 2 ? [[x0 - 20, y + (x1 - x0) * lean], [x1 + 20, y]] : [[x1 + 20, y], [x0 - 20, y + (x1 - x0) * lean]];
-    if (i) d.lineTo(a[0], a[1]); else d.moveTo(a[0], a[1]);
+    d.globalAlpha = base * (0.5 + 0.4 * hash(i, seed + 7));
+    d.lineWidth = width * (0.7 + 0.35 * hash(i, seed + 9));
+    d.beginPath();
+    d.moveTo((prev ?? a)[0], (prev ?? a)[1]);
+    d.lineTo(a[0], a[1]);
     d.lineTo(b[0], b[1]);
+    d.stroke();
+    prev = b;
   }
-  d.stroke();
+  d.globalAlpha = base;
   d.restore();
 }
 const wobbleArc = (cx: number, cy: number, r: number, a0: number, a1: number, seed: number): Pt[] => Array.from({ length: 80 }, (_, i) => { const a = a0 + ((a1 - a0) * i) / 79; const k = r + 12 * smoothNoise(i / 9, 2, seed); return [cx + Math.cos(a) * k, cy + Math.sin(a) * k * 0.92]; });
@@ -78,7 +87,7 @@ const GROUNDS: Record<string, HandGround> = {
   },
   'crayon/hatch-field': (e) => {
     e.ctx.drawImage(drawing('hatch', e, (d, st) => {
-      hatch(d, (c) => { c.beginPath(); c.rect(0, 0, W, H); }, 0, 0, W, H, e.slots.ink2, st, 42, 34, 0.34);
+      hatch(d, (c) => { c.beginPath(); c.rect(0, 0, W, H); }, 0, 0, W, H, e.slots.ink2, st, 34, 34, 0.34);
       hatch(d, (c) => { c.beginPath(); c.ellipse(W * 0.2, H * 0.3, 420, 300, 0.2, 0, TAU); c.ellipse(W * 0.82, H * 0.76, 500, 330, -0.2, 0, TAU); }, 0, 0, W, H, e.slots.accent, st + 2, 34, 30, -0.4);
     }), 0, 0);
     bubble(e);
@@ -121,16 +130,19 @@ const wax = (e: WorldEnv) => kept(`cr-wax|${e.slots.plate}|${e.slots.faint}`, W,
   dryMark(c as unknown as CanvasRenderingContext2D, (d) => { for (let i = 0; i < 34; i++) strokePts(d, star(hash(i, 14) * W, hash(i, 15) * H, 50 + 60 * hash(i, 16), hash(i, 17)), 14, e.slots.plate); for (let i = 0; i < 8; i++) strokePts(d, scribble(hash(i, 18) * W, hash(i, 19) * H, 70, 6, i), 12, e.slots.plate); }, 3, 0.8);
 });
 let shot: OffscreenCanvas | undefined;
+// (each piece keeps the words in the page's own bubble of clean paper, as the grounds do: the engine's generic
+// clearing laid a hard-edged flat rectangle of paper over the drawing)
 const PIECES: Record<string, Piece> = {
   // a whole page scribbled over, faster and faster, one crayon then the other
-  'scribble-flood': { sec: 2.4, clear: 0.94, draw: (e, q) => {
+  'scribble-flood': { sec: 2.4, clear: 0, draw: (e, q) => {
     const c = e.ctx;
     const out = 1 - easeIn((q - 0.8) / 0.2, 2);
     const path = (seed: number): Pt[] => Array.from({ length: 420 }, (_, i) => { const t = i / 420; return [W / 2 + Math.cos(t * 90 + seed) * (W * 0.56) * (0.25 + 0.75 * smoothNoise(t * 8, seed, 3)) , H * t + Math.sin(t * 130 + seed) * 150]; });
     dryMark(c, (d) => { strokePts(d, partOf(path(1), ease(q * 1.7, 1.3)), 72, e.slots.ink2); strokePts(d, partOf(path(4), ease((q - 0.2) * 1.8, 1.3)), 58, e.slots.accent); }, 3, 0.8, out);
+    bubble(e);
   } },
   // a brush of thin colour goes over the page and the wax that was there all along stands out white
-  'wash-resist': { sec: 2.6, clear: 0.9, draw: (e, q) => {
+  'wash-resist': { sec: 2.6, clear: 0, draw: (e, q) => {
     const c = e.ctx;
     const x = -160 + ease(q / 0.7, 1.7) * (W + 340);
     const out = 1 - easeIn((q - 0.82) / 0.18, 2);
@@ -147,9 +159,10 @@ const PIECES: Record<string, Piece> = {
     for (let i = 0; i < 5; i++) { const g = c.createRadialGradient(W * (0.1 + 0.2 * i), H * (0.3 + 0.1 * i), 40, W * (0.1 + 0.2 * i), H * (0.3 + 0.1 * i), 500); g.addColorStop(0, `${e.slots.faint}88`); g.addColorStop(1, `${e.slots.faint}00`); c.fillStyle = g; c.fillRect(0, 0, W, H); }
     c.drawImage(wax(e), 0, 0);
     c.restore();
+    bubble(e);
   } },
   // the page turns: the book's own weight, the next page under it
-  'page-turn': { sec: 2.3, clear: 0.88, draw: (e, q) => {
+  'page-turn': { sec: 2.3, clear: 0, draw: (e, q) => {
     const c = e.ctx;
     const cv = (shot ??= new OffscreenCanvas(W, H));
     const g = cv.getContext('2d')!;
@@ -164,19 +177,21 @@ const PIECES: Record<string, Piece> = {
     shade.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = shade;
     c.fillRect(0, 0, 200, H);
-    if (q >= 0.6) { c.globalAlpha = 1 - clamp01((q - 0.6) / 0.14); c.fillStyle = e.paper; c.fillRect(0, 0, W, H); c.globalAlpha = 1; c.drawImage(cv, 0, 0); return; }
+    if (q >= 0.6) { c.globalAlpha = 1 - clamp01((q - 0.6) / 0.14); c.fillStyle = e.paper; c.fillRect(0, 0, W, H); c.globalAlpha = 1; c.drawImage(cv, 0, 0); bubble(e); return; }
     c.save();
     c.transform(front, Math.sin(a) * 0.14, 0, 1, 0, 0);
     if (front > 0) c.drawImage(cv, 0, 0); else { c.fillStyle = mixHex(e.paper, e.slots.ink2, 0.3); c.fillRect(0, 0, W, H); }
     c.fillStyle = `rgba(0,0,0,${0.3 * Math.sin(a)})`;
     c.fillRect(0, 0, W, H);
     c.restore();
+    bubble(e);
   } },
   // the big arcs drawn one at a time, the hand pressing hard, from corner to corner
-  'rainbow-arc': { sec: 2.5, clear: 0.92, draw: (e, q) => {
+  'rainbow-arc': { sec: 2.5, clear: 0, draw: (e, q) => {
     const c = e.ctx;
     const out = 1 - easeIn((q - 0.8) / 0.2, 2);
     dryMark(c, (d) => { [e.slots.accent, e.slots.ink2, e.slots.faint, e.ink, e.slots.accent, e.slots.ink2].forEach((t, i) => strokePts(d, partOf(wobbleArc(W / 2, H * 1.2, H * (1.14 - i * 0.16), Math.PI * 1.0, Math.PI * 2, i), ease((q - i * 0.07) * 2.6, 1.6)), 92, t)); }, 3, 0.8, out);
+    bubble(e);
   } },
 };
 const speechPaper: ObjectPaint = (c, w, h, s, seed, look) => {

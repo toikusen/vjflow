@@ -73,6 +73,10 @@ const hint: HandGround = (e) => page(e, (c) => {
   const [w, h] = [Math.max(bw + HINT_PAD[0] * 2, HINT_FILL[0] * W), Math.max(bh + HINT_PAD[1] * 2, HINT_FILL[1] * H)];
   const x = Math.min(W - w, Math.max(0, (r.x0 + r.x1) / 2 - w / 2));
   const y = Math.min(H - h, Math.max(0, (r.y0 + r.y1) / 2 - h / 2));
+  // the card itself: the set's object draws it over this one in a line's own shot; a shared shot (two lines, no objects)
+  // and nothing else gets it from here, round both lines
+  hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x, y);
+  label(c, titleOnly(e.title), x + w - 50, y + 64, BUNGEE(30), WH, 1, 'right');
   const n = 12;
   const cw = (w + 14) / n - 14;
   const out = Math.min(n, Math.floor(e.age / 0.45));
@@ -142,12 +146,12 @@ const Gs: Record<string, HandGround> = { 'gameshow/round': round, 'gameshow/hint
 
 /** The hint card (board b) round the words: white, its red head with HINT, the navy shadow. The set's object, so a line that
  *  outlasts its page (read on into the next cut) keeps its card under it. */
-const hintCard: ObjectPaint = (c, w, h) => {
-  c.fillStyle = BD; c.fillRect(16, 16, w, h);
-  c.fillStyle = WH; c.fillRect(0, 0, w, h);
-  c.fillStyle = R; c.fillRect(0, 0, w, 96);
-  label(c, 'HINT', 50, 70, BUNGEE(52), WH, 2);
-};
+function hintCard(c: OffscreenCanvasRenderingContext2D, w: number, h: number, x = 0, y = 0) {
+  c.fillStyle = BD; c.fillRect(x + 16, y + 16, w, h);
+  c.fillStyle = WH; c.fillRect(x, y, w, h);
+  c.fillStyle = R; c.fillRect(x, y, w, 96);
+  label(c, 'HINT', x + 50, y + 70, BUNGEE(52), WH, 2);
+}
 /** The question banner the line stands in (board a): white chevron, navy shadow, gold underline, red Q tab at its left. */
 const qBanner: ObjectPaint = (c, w, h) => banner(c, 60, 30, w - 130, h - 60, WH, 'Q', R, WH);
 /** The answer cells (board a): one white cell a letter, its gold A–D tag, navy shadow. The row's height gives the letter size. */
@@ -240,4 +244,4 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true), 'gs-hint': hintCard } as Record<string, ObjectPaint> };
+export const GAMESHOW = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'gs-q-banner': qBanner, 'gs-answer-cells': answerCells, 'gs-row-tiles': rowTiles, 'gs-qa': qaBanners(false), 'gs-qa-r': qaBanners(true), 'gs-hint': ((c, w, h) => hintCard(c as OffscreenCanvasRenderingContext2D, w, h)) as ObjectPaint } as Record<string, ObjectPaint> };

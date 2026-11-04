@@ -5,7 +5,7 @@
 // artist). Hard edges throughout; overspray is single dots, never a blur. The wall is ambientCG PaintedPlaster016 (CC0).
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, isLight, mixHex, ObjectPaint, W, WorldEnv } from './world-craft';
-import { artistOf, C, halftone, label, onPage, rng, still, titleOnly } from './world-b3-shared';
+import { artistOf, C, halftone, label, rng, still, titleOnly } from './world-b3-shared';
 import { stencilled } from './world-glyph-loud';
 import { graffitiWall } from './world-b3-tex';
 import { B3 } from './b3-inks';
@@ -146,10 +146,25 @@ function stencilLabel(c: C, text: string, x: number, y: number, px: number, tone
 }
 
 const lyricBox = (e: WorldEnv, fallback: Box): Box => e.rect ?? fallback;
+/**
+ * A page painted once and kept (b3-shared still), the mirrored page (mirrorGround) included: the kept picture is painted
+ * through the mirror itself, so its printed labels are laid the right way round (label() reads the mirror), and drawn
+ * without it. Kept as a flipped picture, a mirrored page's prints read backwards.
+ */
+function page(e: WorldEnv, id: string, paint: (c: OffscreenCanvasRenderingContext2D) => void) {
+  const m = !!e.base && e.base.a < 0;
+  const cv = still(e, m ? `${id}-r` : id, (c) => { if (m) { c.translate(W, 0); c.scale(-1, 1); } paint(c); });
+  const c = e.ctx;
+  c.save();
+  if (e.base) c.setTransform(e.base);
+  if (m) { c.translate(W, 0); c.scale(-1, 1); }
+  c.drawImage(cv, 0, 0);
+  c.restore();
+}
 const poster = (e: WorldEnv) => [titleOnly(e.title), artistOf(e.title)] as const;
 
 /** a: the buff patch the line is sprayed on, two prints wheatpasted beside it, stickers round it. */
-const pasteUp: HandGround = (e) => onPage(e, still(e, 'gf-paste-up', (c) => {
+const pasteUp: HandGround = (e) => page(e, 'gf-paste-up', (c) => {
   const s = e.slots;
   wall(c, e);
   const r = lyricBox(e, { x0: 190, y0: 240, x1: 1250, y1: 780 });
@@ -171,15 +186,18 @@ const pasteUp: HandGround = (e) => onPage(e, still(e, 'gf-paste-up', (c) => {
   if (free(60, 950, 230, 80)) sticker(c, 60, 950, 230, 80, PAPER, s.ink2, artist, -4, 'card', 44);
   if (free(40, 70, 170, 90)) sticker(c, 40, 70, 170, 90, s.ink2, PAPER, artist, 5, 'card', 56);
   finish(c);
-}));
+});
 
 /** b: one rolled patch, the line sprayed in navy, a sprayed rule under it; a print with a navy fade at the right. */
-const navy: HandGround = (e) => onPage(e, still(e, 'gf-navy', (c) => {
+const navy: HandGround = (e) => page(e, 'gf-navy', (c) => {
   const s = e.slots;
   wall(c, e);
   const r = lyricBox(e, { x0: 190, y0: 300, x1: 1000, y1: 680 });
-  // (the patch itself is the set's object, gf-buff: it stays under the words in a shared shot too)
-  const b = { x0: r.x0 - 50, y0: r.y0 - 60, x1: Math.max(r.x0 + 1170, r.x1 + 120), y1: Math.max(r.y0 + 540, r.y1 + 160) };
+  // the patch round the words (and round both lines of a shared shot); a line's own shot gets the set's object over it, the
+  // same patch with the sprayed rule, which also stays under a line read on past its cut
+  const [nx, ny] = NAVY_PAD;
+  const b = { x0: r.x0 + 14 - nx, y0: r.y0 + 14 - ny, x1: r.x1 - 14 + nx, y1: r.y1 - 14 + ny };
+  buff(c, { x0: b.x0 + 6, y0: b.y0 + 6, x1: b.x1 - 6, y1: b.y1 - 6 }, mixHex(s.plate, K, 0.06), 31, 0);
   const [title, artist] = poster(e);
   const px = Math.max(1470, b.x1 + 110);
   if (W - 100 - px >= 260) {
@@ -188,10 +206,10 @@ const navy: HandGround = (e) => onPage(e, still(e, 'gf-navy', (c) => {
   }
   if (!hits({ x0: 160, y0: 930, x1: 310, y1: 994 }, r)) sticker(c, 160, 930, 150, 64, s.plateInk, PAPER, artist || title, -3, 'card', 34);
   finish(c);
-}));
+});
 
 /** c: the whole wall pasted over with torn prints, stickers along the top and the foot, one wide patch rolled across. */
-const posterWall: HandGround = (e) => onPage(e, still(e, 'gf-poster-wall', (c) => {
+const posterWall: HandGround = (e) => page(e, 'gf-poster-wall', (c) => {
   const s = e.slots;
   wall(c, e);
   const R = rng(77 + (e.seed % 5));
@@ -224,12 +242,12 @@ const posterWall: HandGround = (e) => onPage(e, still(e, 'gf-poster-wall', (c) =
   buff(c, b, s.plate, 301, -0.3);
   stencilLabel(c, t[0], b.x0 + 46, b.y0 + 8, 54, s.ink2, 22);
   finish(c);
-}));
+});
 
 /** The second phrase's strip sits here (world-split: board d's column set apart at 0.474 of the frame). */
 export const STRIP_X = 0.474;
 /** d: prints down the left and right, the line's two phrases on two tall strips (the first on the set's own strip). */
-const strips: HandGround = (e) => onPage(e, still(e, 'gf-strips', (c) => {
+const strips: HandGround = (e) => page(e, 'gf-strips', (c) => {
   const s = e.slots;
   wall(c, e);
   const [title, artist] = poster(e);
@@ -248,7 +266,7 @@ const strips: HandGround = (e) => onPage(e, still(e, 'gf-strips', (c) => {
     tape(c, sx - 140, 48, 120, 6, 65);
   }
   finish(c);
-}));
+});
 
 const Gs: Record<string, HandGround> = { 'graffiti/paste-up': pasteUp, 'graffiti/navy-buff': navy, 'graffiti/poster-wall': posterWall, 'graffiti/strips': strips };
 

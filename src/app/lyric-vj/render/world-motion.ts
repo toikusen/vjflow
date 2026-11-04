@@ -175,7 +175,16 @@ export const WORLD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'cold-still': ({ age }) => ({ s: 1 + 0.006 * Math.sin(age * 0.6) }),
   'drum-tremor': ({ age, seed }) => ({ dx: Math.floor(age * 6 + seed) % 7 === 0 ? 1.5 : 0 }),
   'blade-lean': ({ age }) => ({ dx: Math.min(4, age * 2) }),
-  'carrier-hum': ({ v, age, seed }) => { const tick = Math.floor(age * 8); return hashOf(tick, seed + Math.floor(v * 5)) > 0.93 ? { dx: 5, tone: 0.86 } : {}; },
+  // the signal on the words themselves: every 1.7 s a quarter-second tear slides a band of the line sideways in the
+  // key ink (a scan line losing sync), and now and then one character drops to its damaged picture for a frame
+  'carrier-hum': ({ i, v, age, seed }) => {
+    const burst = Math.floor(age / 1.7);
+    const band = Math.floor(v * 3.99);
+    if (age > 0.6 && age / 1.7 - burst < 0.15 && hashOf(burst, seed + band) > 0.4) return { dx: (hashOf(burst, band + 7) > 0.5 ? 1 : -1) * (16 + 14 * hashOf(burst, band + 3)), key: 0.7, tone: 0.9 };
+    const tick = Math.floor(age * 8);
+    if (hashOf(tick, seed + i * 7) > 0.988) return { eaten: true, tone: 0.86 };
+    return hashOf(tick, seed + Math.floor(v * 5)) > 0.93 ? { dx: 5, tone: 0.86 } : {};
+  },
   'tube-hum': ({ i, age, seed }) => { const tick = Math.floor(age * 15); return { tone: hashOf(tick, i + seed) > 0.985 ? 0.72 : 0.96 + 0.04 * Math.sin(age * 37 + i) }; },
   'cursor-wait': () => ({}),
   'refresh-band': ({ v, age }) => ({ tone: 0.82 + 0.18 * (fract(v * 0.5 + age * 0.42) < 0.82 ? 1 : 0.4) }),

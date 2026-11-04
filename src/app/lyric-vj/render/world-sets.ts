@@ -87,7 +87,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   // dark-glitch: a late-night transcript. Paper tape in the dark, words at the edge of hearing.
   'dark-glitch/tape': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.88, tall: 0.56, hi: 230, rows: [1, 2], track: 0.04, object: 'transcript-tape', pad: [70, 44], fill: [0.98, 0.42], tilt: -0.016, flush: -1 },
   'dark-glitch/tape-low': { ...base, at: [0.05, 0.74], ax: -1, ay: 0, share: 0.86, tall: 0.4, hi: 170, rows: [1, 2], track: 0.04, object: 'transcript-tape', pad: [60, 34], fill: [0.96, 0.3], tilt: 0.012, flush: -1 },
-  'dark-glitch/dead-air': { ...base, at: [0.5, 0.74], ax: 0, ay: 0, share: 0.5, tall: 0.24, hi: 96, lo: 70, rows: [1, 2], track: 0.16 },
+  // (dead air is quiet, not small: at 70–96 px the line sat as a caption in an empty frame; it keeps its wide tracking)
+  'dark-glitch/dead-air': { ...base, at: [0.5, 0.66], ax: 0, ay: 0, share: 0.78, tall: 0.42, hi: 150, lo: 110, rows: [1, 2], track: 0.12 },
   'dark-glitch/overheard': { ...base, at: [0.05, 0.1], ax: -1, ay: -1, share: 0.9, tall: 0.8, hi: 300, rows: [1, 3], track: 0, flush: -1 },
   'dark-glitch/margin': { ...base, at: [0.86, 0.06], ax: 0, ay: -1, share: 0.42, tall: 0.88, hi: 190, rows: [1, 3], vertical: true, lead: 1.26, track: 0.04 },
   'dark-glitch/far-apart': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.92, tall: 0.9, hi: 250, rows: [2, 2], lead: 3, track: 0.02, flush: -1, stair: 3 },

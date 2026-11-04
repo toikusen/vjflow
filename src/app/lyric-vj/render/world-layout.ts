@@ -188,7 +188,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const slots = wl.slots;
   const carried = sets[0].object;
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
-  const inkOn = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
+  // (on its object the ink reads at 4.5:1 against the object's face, whatever the world's slots: papercut's red words on its red banner, 2026-11-04)
+  const inkOn = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? readable(objectInk(s.object, slots), slots.plate) : wl.fixedInk ? slots.ink : rt.palette.text);
   const words = inkOn(sets[0]);
   const baked = !!(wl.surface || sets.some((s) => s.surface));
   const keyOf = (s: SetSpec) => readable(rt.palette.accent, s.object ? slots.plate : rt.palette.background, s.object ? 6 : 4.5);
@@ -259,7 +260,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const useClip = entering?.clip || leaving?.clip;
   if (useClip) gs.forEach((g) => (g.mesh.material.clippingPlanes = [plane]));
   const caret = wl.hold === 'cursor-wait' ? new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: color(words), transparent: true, depthTest: false, depthWrite: false })) : undefined;
-  if (caret) { caret.userData['noVeil'] = true; caret.userData['decor'] = true; body.add(caret); }
+  if (caret) { caret.userData['noVeil'] = true; caret.userData['decor'] = true; caret.userData['inFrame'] = true; body.add(caret); }
   // the held line's one event (world-beats.ts): its key ink per pose, a baked surface's key pictures, the copies behind
   const beatMove = wl.beat ? WORLD_BEATS[wl.beat.kind] : undefined;
   const keyCols = sets.map((s) => new THREE.Color(keyOf(s)));

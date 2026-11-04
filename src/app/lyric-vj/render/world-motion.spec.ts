@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GlyphEnv, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
-import { blockOf, SET_SPECS } from './world-sets';
+import { blockOf, SET_SPECS, TYPE_FLOOR } from './world-sets';
 
 const env = (q: number, i = 3): GlyphEnv => ({ q, i, n: 10, u: 0.4, v: 0.5, seed: 7, age: 1.2, sung: 1 });
 
@@ -55,6 +55,11 @@ describe('world sets', () => {
     for (const [id, s] of Object.entries(SET_SPECS)) for (const text of ['那些話留給了潮汐，你還在等我回來嗎', '一起走', '夜裡的光照亮了街道也照亮了你的臉']) {
       expect(blockOf(text, s, measure).size, `${id} ${text}`).toBeGreaterThanOrEqual(52);
     }
+  });
+  it('set a short line big, whatever small numbers a set asks for (no small words in a corner of an empty frame)', () => {
+    for (const [id, s] of Object.entries(SET_SPECS)) expect(blockOf('一起走', s, measure).size, id).toBeGreaterThanOrEqual(TYPE_FLOOR.lo);
+    expect(blockOf('一起走', SET_SPECS['ink-wash/corner'], measure).size).toBeGreaterThanOrEqual(TYPE_FLOOR.hi);
+    expect(blockOf('一起走', SET_SPECS['dark-glitch/dead-air'], measure).size).toBeGreaterThanOrEqual(TYPE_FLOOR.hi);
   });
   it('stay inside the frame with their object', () => {
     for (const [id, s] of Object.entries(SET_SPECS)) {

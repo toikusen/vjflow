@@ -414,7 +414,8 @@ const PAINT: Record<WorldObject, (c: Ctx, w: number, h: number, s: Slots, seed: 
   'led-pillar': (c, w, h, s, seed) => ledPanel(c, w, h, s, seed, 2000),
   'ink-stroke': inkStroke,
   'title-card': titleCard,
-  'caption-band': (c, w, h, s) => { c.fillStyle = s.plate; c.globalAlpha = 0.86; c.fillRect(0, 0, w, h); c.globalAlpha = 0.8; c.fillStyle = s.plateInk; c.fillRect(0, 7, w, 1.4); c.fillRect(0, h - 8, w, 1.4); c.globalAlpha = 1; },
+  // a printed title strip, opaque: a see-through band read as a grey bar under the words (2026-11-04 audit)
+  'caption-band': (c, w, h, s) => { c.fillStyle = s.plate; c.globalAlpha = 1; c.fillRect(0, 0, w, h); c.globalAlpha = 0.8; c.fillStyle = s.plateInk; c.fillRect(0, 7, w, 1.4); c.fillRect(0, h - 8, w, 1.4); c.globalAlpha = 1; },
   'card-corner': (c, w, h, s) => { shadow(c, 16, 0, 0.7); c.fillStyle = s.plate; c.fillRect(0, 0, w, h); noShadow(c); c.strokeStyle = s.plateInk; c.lineWidth = 1.6; c.strokeRect(12, 12, w - 24, h - 24); },
   lancet: (c, w, h, s, seed) => lightsOf(c, s, [[8, 8, w - 16, h - 16]], seed, true),
   'twin-lancet': (c, w, h, s, seed) => lightsOf(c, s, [[8, 8, w / 2 - 22, h - 16], [w / 2 + 14, 8, w / 2 - 22, h - 16]], seed, true),

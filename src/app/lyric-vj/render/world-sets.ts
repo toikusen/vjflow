@@ -217,8 +217,15 @@ export const SET_SPECS: Record<string, SetSpec> = {
 /** Width of a string at size 100, in px. */
 export type Measure = (s: string) => number;
 
+/**
+ * The type every set may reach and the least it sets, px at 1080p: a set's own numbers below these left a short line
+ * small in a corner of an empty frame (2026-11-04 audit: silk-cold, ink-wash, file, dark-glitch). A set may ask for more.
+ */
+export const TYPE_FLOOR = { hi: 150, lo: 84 };
+
 /** The rows and size a line takes in a set: the biggest type the set allows, in as few rows as keep it near that. */
-export function blockOf(text: string, spec: SetSpec, measure: Measure): Block {
+export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
+  const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, TYPE_FLOOR.lo) };
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {
     const rows = balancedRows(text, n).filter(Boolean);

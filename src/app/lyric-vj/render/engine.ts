@@ -166,6 +166,8 @@ function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
     // inkOnly (the motion check): what can be seen, not pieces waiting at zero opacity
     const faint = inkOnly && ((o as THREE.Mesh).material as THREE.Material | undefined)?.opacity !== undefined && ((o as THREE.Mesh).material as THREE.Material).opacity <= 0.01;
     if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible && !faint) box.expandByObject(o);
+    // a part of the line that blinks (a caret) is in the frame whether or not it is lit when measured: one cut off by the frame's edge (terminal 是誰在練太極, 2026-11-04)
+    else if (!inkOnly && (o as THREE.Mesh).isMesh && o.userData['inFrame'] && o.parent && shown(o.parent)) { const v = o.visible; o.visible = true; box.expandByObject(o); o.visible = v; }
   });
   return box;
 }
@@ -1775,12 +1777,13 @@ export class LyricVjEngine {
     const room = Math.min(W * 0.9, Math.max(W * 0.5, box.isEmpty() ? 0 : box.max.x - box.min.x));
     const at = lineUp(widths, room, 56);
     const rows = Math.max(1, ...at.map((a) => a.row + 1));
-    const above = top + 70 + (rows - 1) * 96 <= H / 2 - 50;
+    // (a row's centre a whole call's height inside the frame: its centre at 50 px left the top of 幹什麼 on the edge, crayon 2026-11-04)
+    const above = top + 70 + (rows - 1) * 96 <= H / 2 - 96;
     at.forEach(({ x, row }, j) => {
       const half = widths[j] / 2 + 30;
       units[j].x = Math.min(W / 2 - half, Math.max(-W / 2 + half, cx + x));
       // the first row read first: on top above the line, nearest the line below it
-      units[j].y = above ? top + 70 + (rows - 1 - row) * 96 : Math.max(-H / 2 + 60, bottom - 70 - row * 96);
+      units[j].y = above ? top + 70 + (rows - 1 - row) * 96 : Math.max(-H / 2 + 96, bottom - 70 - row * 96);
     });
     group.visible = false;
     this.textRoot.add(group);

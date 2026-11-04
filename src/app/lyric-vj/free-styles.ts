@@ -41,13 +41,13 @@ export const styleFont = (s: FreeStyle, lyrics: string, calm: boolean) => (KANA.
 
 /** One short line for the picker; `what` is the world's full idea. */
 const SHORT: Record<string, string> = {
-  'dark-glitch': '深夜電台，字被雜訊吃掉', 'neon-stage': '夜裡的燈管招牌', terminal: '磷光螢幕逐格打字', 'led-board': '燈點組成的公告看板', 'stained-glass': '光掃過鉛條玻璃',
+  'dark-glitch': '深夜電台，字被雜訊吃掉', 'neon-stage': '夜裡的燈管招牌', terminal: '磷光螢幕逐格打字', 'led-board': '燈點組成的公告看板', 'stained-glass': '日光穿過鉛條玻璃窗',
   'silent-film': '插卡字幕，單色染片', 'ink-wash': '濕紙上的書法留白', ukiyoe: '分版平塗的木版畫', aizome: '留白成花紋的藍染布',
   papercut: '紅紙與光的鏤空', 'paper-lantern': '暖光穿過紙層', chiyogami: '花紋和紙摺疊拼貼', 'gothic-lolita': '暗黑童話精裝書',
   woodcut: '黑版上的刀痕', chalkboard: '放學後的粉筆字', crayon: '孩子塗的繪本頁',
   popart: '漫畫分格、對白框與網點', gameshow: '益智節目的題目卡與答案格', 'idol-live': '團扇剪字、門票與成員色卡', y2k: 'CD 封套的刀形漸層與軌道',
   psychedelic: '七〇海報的招牌字與彩虹拱', graffiti: '水泥牆上的模板噴漆', brutalist: '影印海報的網格與紅色帶', citypop: '平塗封套的建築、泳池與夜景',
-  silk: '平塗油墨，版微微錯開', 'silk-cold': '冷色網版，適合安靜的歌', riso: '透明墨疊印，留白多', file: '泛黃的案件檔案', spy: '剪紙片頭，大塊斜切', card: '幾何圖形與粗字',
+  silk: '平塗油墨，版微微錯開', 'silk-cold': '冷色網版，適合安靜的歌', riso: '透明墨疊印，留白多', file: '攤開的案件檔案', spy: '剪紙片頭，大塊斜切', card: '節拍上翻面的閃卡',
 };
 
 /** The picker's groups, the worlds first: a family no group names lands in the last one. */

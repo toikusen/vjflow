@@ -3,6 +3,7 @@
 import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
 import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
+import { CHALK_WORLD as chalk } from './style-worlds-r2';
 
 const stack = (o: Partial<FrameStack>): FrameStack => ({ grain: 0.1, paper: 0, tooth: 0, lift: 0, scan: 0, vignette: 0.1, flicker: 0, weave: 0, boil: 0, boilRate: 12, step: 0, koma: 0, ...o });
 const lv = <T,>(a: T[], b: T[], c: T[]): Record<Level, T[]> => ({ 0: a, 1: b, 2: c });
@@ -217,46 +218,6 @@ const woodcut: StyleWorld = {
   acceptance: { fast: 'nun', calm: 'tenmon', hardest: '滿版刀痕時字的白要站得住' },
 };
 
-const chalk: StyleWorld = {
-  id: 'chalkboard', name: '粉筆黑板', language: 'chalkboard', what: '放學後的黑板：一筆一筆寫、整片擦掉重來，粉筆灰往下落',
-  lyricRole: '歌詞是老師寫在黑板上的一堂課，寫完就擦，也可以用手指從粉筆塊裡擦出來',
-  family: 'stroke',
-  refuses: ['日期與值日生假資料', '數學公式', '筆畫飛入組字', '硬邊幾何', '發光', '人物', '印章'],
-  type: { ja: { family: 'Yomogi', weight: 400 }, tc: { family: 'LXGW WenKai TC', weight: 700 }, latin: 'Cormorant Garamond', setting: '手寫粉筆，字距隨手，大字靠左或略斜', category: 'chalk-hand' },
-  palette: [
-    scheme('school-green', 'earth', 'dark', '#22423A', '#F2F0E8', '#F2D46A', '#F1A6B6', '#E6E4D6', '#22423A', '#3F5F56', '墨綠黑板'),
-    scheme('coal-board', 'warm', 'dark', '#23272A', '#F4F2EA', '#9FD0EA', '#F2D46A', '#E9E8DF', '#23272A', '#41474B', '炭黑黑板'),
-    scheme('after-glow', 'warm', 'mid', '#7A4A3A', '#FFF4E2', '#FFD27A', '#FFA9A0', '#FFEFD6', '#5A3226', '#946354', '夕陽照進教室，磚紅'),
-    scheme('sky-board', 'earth', 'mid', '#2F6F96', '#F4FAFC', '#FFE27A', '#FFB3C7', '#EAF5F8', '#245A7A', '#4E8BAE', '天藍白板色'),
-    scheme('pale-dust', 'earth', 'light', '#C9CFBB', '#26332C', '#A04A2C', '#2E6E8A', '#26332C', '#E4E6D8', '#B4BBA6', '擦過太多次的灰白板'),
-  ],
-  groundBand: { band: 'dark', flip: 'none', why: '板面是暗的；亮的畫面由 rubbed 粉筆塊與 pale-dust 配色提供' },
-  material: { surface: 'chalk', core: 'ink2', engine: 'stroke/chalk', how: '粉筆是粉末卡在板面凹處，壓力輕就跳過，側拿整片塗；板擦留下弧形灰痕' },
-  frameStack: stack({ grain: 0.08, vignette: 0.26, boil: 0.5, boilRate: 8, step: 8, koma: 8 }),
-  timeBase: { fps: 8, unit: 'glyph', curve: 'hand-pressure' },
-  ownInk: true, sheet: true,
-  layouts: { pair: 'chalkboard/title', shared: [], carriers: ['chalkboard/rubbed'], lines: [
-    line('chalkboard/lesson', [0, 1, 2], ['chalk-write', 'chalk-tap'], ['wipe-off', 'dust-fall'], 'hand-shake', { max: 24 }),
-    line('chalkboard/title', [0, 1, 2], ['chalk-write'], ['wipe-off'], 'hand-shake', { max: 24 }),
-    line('chalkboard/left-note', [0, 1, 2], ['chalk-write'], ['dust-fall'], 'hand-shake', { min: 5, max: 26 }),
-    line('chalkboard/side-col', [0, 1, 2], ['chalk-tap', 'chalk-write'], ['dust-fall'], 'hand-shake', { column: true, max: 18 }),
-    line('chalkboard/slant', [1, 2], ['chalk-tap'], ['wipe-off'], 'hand-shake', { max: 20 }),
-    line('chalkboard/rubbed', [0, 1, 2], ['chalk-tap', 'finger-write'], ['finger-rub'], 'hand-shake', { min: 3, max: 22 }),
-    line('chalkboard/shout', [1, 2], ['chalk-tap'], ['wipe-off'], 'hand-shake', { max: 12, loud: true }),
-  ] },
-  motion: { enters: ['chalk-write', 'chalk-tap', 'finger-write'], exits: ['wipe-off', 'dust-fall', 'finger-rub'], holds: ['hand-shake'], curve: '寫的快慢，八張一秒' },
-  grounds: { levels: lv(['chalkboard/slate', 'chalkboard/stave', 'chalkboard/sun-patches'], ['chalkboard/smeared', 'chalkboard/stave', 'chalkboard/doodled', 'chalkboard/colour-field'], ['chalkboard/colour-field', 'chalkboard/doodled', 'chalkboard/smeared']), quiet: ['chalkboard/slate', 'chalkboard/sun-patches', 'chalkboard/stave'] },
-  decor: [{ id: 'chalkboard/tray', why: '黑板下緣的粉筆溝，說明這是真的黑板', budget: '每鏡固定' }, { id: 'chalkboard/doodle', why: '邊角的塗鴉只在高張力段出現', budget: '每鏡 4 個內' }],
-  transitions: { line: lv([''], ['wipe-pass', ''], ['wipe-pass']), part: lv(['wipe-pass'], ['wipe-pass'], ['wipe-pass']), own: ['wipe-pass'], banned: ['shatter', 'burst', 'spinzoom', 'whip'], family: 'wipe' },
-  peak: { loud: 'chalkboard/all-chalk', calm: 'chalkboard/after-class', how: '快歌整面側拿塗滿；慢歌空教室的光慢慢移過板面' },
-  pieces: ['chalk-storm', 'eraser-arcs', 'dust-clap', 'ring-word', 'board-slide'],
-  pieceWords: { 'chalk-storm': /亂|瘋|衝|全|狂|嵐/, 'eraser-arcs': /忘|消|擦|回|やり直|重|再/, 'dust-clap': /煙|風|飛|散|灰|塵/, 'ring-word': /就是|一定|最|絕對|必|答|記|覚/, 'board-slide': /下一|明天|下|次|明日|未來|新/ },
-  camera: { cams: lv([''], ['', 'dolly'], ['snap', 'dolly']), text: noText, note: '站在教室中間看黑板' },
-  levels: { '0': '乾淨板面一行字', '1': '舊擦痕、譜線、塗鴉', '2': '側拿彩色，大字', calm: '一句一擦，光慢慢走' },
-  pace: { every: [2, 2, 1], calmEvery: 8, repose: true, hits: [] },
-  provenance: { source: 'own', process: '粉筆粉末、板面紋理、板擦弧痕', nearest: '無', differs: '字可由擦除寫成，且整個世界的動作只有寫與擦' },
-  acceptance: { fast: 'choroin', calm: 'tsuzuki', hardest: '粉筆質感下繁中細筆畫仍清楚' },
-};
 
 const aizome: StyleWorld = {
   id: 'aizome', name: '藍染', language: 'aizome', what: '剛出染缸的一匹布：花紋全是沒染到的地方，布隨風垂動',

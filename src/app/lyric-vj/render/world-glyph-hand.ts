@@ -81,18 +81,17 @@ export function handSurface(ctx: CanvasRenderingContext2D, kind: HandSurface, h:
       break;
     }
     case 'chalk': {
-      // powder held on the slate's tooth: a thin dust beyond the stroke, the stroke itself broken by what the stick skipped
-      ctx.filter = `blur(${px * 0.018}px)`;
-      ctx.globalAlpha = 0.34;
-      ctx.drawImage(tone, 0, 0);
-      ctx.filter = 'none';
-      ctx.globalAlpha = 1;
-      const t = copy(tone);
-      speck(t, 900, px * 0.002, px * 0.007, 0.85, seed);
+      // powder held on the slate's tooth (the round-2 board): the stroke a hair heavier than the face (well under the Han
+      // cap), then pitted where the stick skipped the board and broken by its grain: crisp holes, never a blur round it
+      const d = Math.max(1, px * 0.006);
+      const t = new OffscreenCanvas(tone.width, tone.height);
       const g = t.getContext('2d')!;
+      g.drawImage(tone, 0, 0);
+      for (const [dx, dy] of [[d, 0], [-d, 0], [0, d], [0, -d]]) g.drawImage(tone, dx, dy);
+      speck(t, 1400, px * 0.003, px * 0.008, 1, seed);
       g.globalCompositeOperation = 'destination-out';
       g.strokeStyle = 'rgba(0,0,0,1)';
-      for (let i = 0; i < 26; i++) { g.globalAlpha = 0.16; g.lineWidth = px * (0.004 + 0.01 * hash(i, seed + 7)); const y = hash(i, seed + 8) * ch; g.beginPath(); g.moveTo(0, y); g.lineTo(cw, y - cw * 0.3); g.stroke(); }
+      for (let i = 0; i < 26; i++) { g.globalAlpha = 0.24; g.lineWidth = px * (0.004 + 0.008 * hash(i, seed + 7)); const y = hash(i, seed + 8) * ch; g.beginPath(); g.moveTo(0, y); g.lineTo(cw, y - cw * 0.3); g.stroke(); }
       ctx.drawImage(t, 0, 0);
       break;
     }

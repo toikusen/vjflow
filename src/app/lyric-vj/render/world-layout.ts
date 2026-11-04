@@ -57,11 +57,16 @@ const LAYER = -5;
 
 interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
 
-/** Each glyph's row in a block, or -1 (the same walk as poseOf). */
-function rowOfGlyphs(gs: Glyph[], rows: string[]): number[] {
-  const out = gs.map(() => -1);
+/** The row (or column) of a block each glyph falls in, matched in order as poseOf matches them. */
+export function rowsOfGlyphs<T extends { char: string }>(gs: T[], block: Pick<Block, 'rows'>): Map<T, number> {
+  const out = new Map<T, number>();
   let p = 0;
-  rows.forEach((row, r) => { for (const ch of row) { while (p < gs.length && gs[p].char !== ch) p++; if (p < gs.length) out[p++] = r; } });
+  block.rows.forEach((row, r) => {
+    for (const ch of row) {
+      while (p < gs.length && gs[p].char !== ch) p++;
+      if (p < gs.length) out.set(gs[p++], r);
+    }
+  });
   return out;
 }
 
@@ -170,7 +175,12 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   row(pre, small, -wk / 2, h / 2 - small * 0.65);
   const wp = adv(post) * small;
   row(post, small, wk / 2 - wp, -h / 2 + small * 0.65);
-  const w = Math.max(wk, adv(pre) * small, wp);
+  // the words before run right from the key's left edge and the words after left from its right edge: a short key with a
+  // long lead-in ran off the frame (チョロイン c043 on a file sheet), so the pose is centred on everything it holds
+  const [lo, hi] = [Math.min(-wk / 2, wk / 2 - wp), Math.max(wk / 2, -wk / 2 + adv(pre) * small)];
+  const mid = (lo + hi) / 2;
+  if (mid) for (let i = 0; i < x.length; i++) x[i] -= mid;
+  const w = hi - lo;
   // a space inside the key run (a Latin phrase) is placed but not drawn
   const block: Block = { rows: [], size: big, w, h, cx: 0, cy: 0 };
   return { block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
@@ -222,7 +232,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
   // (a column line's blown-up word is set across: the big word reads in a row, and so does the small rest)
   // (a set laid into its page on an object of its own keeps it: a blown-up word would lose the balloon or card it is written on)
-  const blowing = !!wl.blow && slot.of === 1 && !(sets[0].fixed && sets[0].object);
+  // (nor a set whose rows each stand on a carrier of their own: a blown-up word would leave a card with nothing on it)
+  const blowing = !!wl.blow && slot.of === 1 && !(sets[0].fixed && sets[0].object) && !sets[0].keepRows;
   if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0, vertical: false, stair: 0 };
   // an even set gives every character (a quote, a space) a whole cell, so it is measured that way (poseOf)
   const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return s.even ? (x: string) => [...x].length * 100 : (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
@@ -250,10 +261,20 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const style: GlyphStyle = { family, weight, size: tex, even: sets[0].even, surface: surfaceOf(words) };
   const gs = makeGlyphs(text, style, baked ? 'white' : color(words));
   tagSource(gs, rt.cue.text);
+  // a set may ink each row apart (a file's second entry in stamp red, a pair's second card): only the rows in the set's
+  // own ink take the key, the others keep their row's ink (a blown-up key word stands on the ground in the set's ink)
+  const rowIds = sets.map((s, p) => (s.rowInk && !(p === 0 && blowing) ? rowsOfGlyphs(gs, blocks[p]) : undefined));
+  const rowInkOf = (g: Glyph, p: number) => { const r = sets[p].rowInk; const ids = rowIds[p]; if (!r || !ids) return undefined; return r[Math.min(r.length - 1, ids.get(g) ?? 0)]; };
   // a split line's small part may take an ink of its own (world-split.ts)
-  const smallIds = blocks.map((b, p) => (b.small && sets[p].split?.ink ? rowOfGlyphs(gs, b.rows) : undefined));
-  const splitInkOf = (g: Glyph, p: number) => { const ids = smallIds[p]; return ids && blocks[p].small!.includes(ids[gs.indexOf(g)]) ? slots[sets[p].split!.ink!] : undefined; };
-  const tintOf = (g: Glyph, p: number) => splitInkOf(g, p) ?? (marks && g.src !== undefined && emphasisOf(rt, g.src) === 'color' ? keyOf(sets[p]) : inkOn(sets[p]));
+  const smallIds = blocks.map((b, p) => (b.small && sets[p].split?.ink ? rowsOfGlyphs(gs, b) : undefined));
+  const splitInkOf = (g: Glyph, p: number) => { const ids = smallIds[p]; return ids && blocks[p].small!.includes(ids.get(g) ?? -1) ? slots[sets[p].split!.ink!] : undefined; };
+  const tintOf = (g: Glyph, p: number) => {
+    const apart = splitInkOf(g, p);
+    if (apart) return apart;
+    const row = rowInkOf(g, p);
+    const own = !row || row === (sets[p].ink ?? sets[p].rowInk![0]);
+    return own && marks && g.src !== undefined && emphasisOf(rt, g.src) === 'color' ? keyOf(sets[p]) : row ? slots[row] : inkOn(sets[p]);
+  };
   const eats = ['signal-lock', 'detune', 'carrier-lost'].includes(wl.enter) || wl.exit === 'carrier-lost';
   // an emphasised character is its own picture on a world with a material, and each pose its own ink
   const mapsOf = (eaten: boolean) => sets.map((_, p) => gs.map((g) => (baked ? glyphTexture(g.char, { ...style, surface: surfaceOf(tintOf(g, p), eaten, p) }).texture : g.mesh.material.map!)));

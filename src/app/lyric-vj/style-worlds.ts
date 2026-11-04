@@ -5,6 +5,7 @@ import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
 import { HAND_WORLDS } from './style-worlds-hand';
 import { LOUD_WORLDS } from './style-worlds-loud';
+import { CARD_WORLD, FILE_WORLD, GLASS_WORLD } from './style-worlds-r2';
 
 const stack = (o: Partial<FrameStack>): FrameStack => ({ grain: 0.1, paper: 0, tooth: 0, lift: 0, scan: 0, vignette: 0.2, flicker: 0, weave: 0, boil: 0, boilRate: 12, step: 0, koma: 0, ...o });
 const lv = <T,>(a: T[], b: T[], c: T[]): Record<Level, T[]> => ({ 0: a, 1: b, 2: c });
@@ -254,43 +255,6 @@ const film: StyleWorld = {
   acceptance: { fast: 'choroin', calm: 'tenmon', hardest: '快歌每句一張卡，換卡不閃爍過度' },
 };
 
-const glass: StyleWorld = {
-  id: 'stained-glass', name: '彩繪玻璃', language: 'stained-glass', what: '光隨時間掃過鉛條玻璃，字由透光顯現',
-  lyricRole: '歌詞是鑲在窗上的玻璃字，要等光轉過來才亮',
-  family: 'emissive',
-  refuses: ['人物聖像', '十字架與宗教符號', '平塗色塊', '放射光線', '粒子', '銳利數位邊'],
-  type: { ja: { family: 'Shippori Mincho', weight: 800 }, tc: { family: 'Noto Serif TC', weight: 900 }, latin: 'Cormorant Garamond', setting: '粗明體，字外包鉛條，直立窄窗', category: 'serif-heavy' },
-  palette: [
-    scheme('cobalt-ruby', 'light', '#E9E3CC', '#15131C', '#2F5FB8', '#B3263C', '#F4EFD8', '#F4EFD8', '#B9B29A', '白日的鈷藍與紅寶'),
-    scheme('emerald-gold', 'light', '#E6E8CF', '#101A14', '#2A8A5C', '#986006', '#F3F2DA', '#F3F2DA', '#AFB89A', '白日的翠綠與琥珀'),
-    scheme('rose-sun', 'light', '#F2E4DC', '#1C0F16', '#B0345E', '#A9560E', '#FAF0E8', '#FAF0E8', '#C7AFA6', '白日的玫瑰'),
-    scheme('amethyst', 'light', '#ECE3DC', '#171022', '#7A3FA8', '#B23A5C', '#F6EEE6', '#F6EEE6', '#BDAFB4', '白日的紫水晶'),
-  ],
-  groundBand: { band: 'light', flip: 'none', why: '白天從室內看，窗是全場最亮的東西；字是鉛條畫在淡玻璃上的深色銘文' },
-  material: { surface: 'lead', core: 'plate', engine: 'emissive/leaded', how: '日光從背後穿過有色玻璃，鉛條不透光，亮度隨太陽移動' },
-  frameStack: stack({ grain: 0.1, vignette: 0.12, paper: 0.15 }),
-  timeBase: { fps: 0, unit: 'line', curve: 'slow-sun' },
-  layouts: { pair: 'stained-glass/predella', shared: [], carriers: ['stained-glass/lancet', 'stained-glass/transom', 'stained-glass/twin-lights'], lines: [
-    line('stained-glass/lancet', [0, 1, 2], ['light-through', 'pane-set'], ['light-pass', 'cloud-over'], 'sun-crawl', { column: true, max: 12 }),
-    line('stained-glass/twin-lights', [0, 1, 2], ['pane-set', 'light-through'], ['cloud-over'], 'sun-crawl', { column: true, min: 6, max: 26 }),
-    line('stained-glass/transom', [0, 1, 2], ['light-through', 'pane-set'], ['light-pass'], 'sun-crawl'),
-    line('stained-glass/predella', [0, 1, 2], ['pane-set'], ['cloud-over'], 'sun-crawl'),
-    line('stained-glass/nave', [1, 2], ['light-through'], ['light-pass'], 'sun-crawl', { max: 16 }),
-  ] },
-  motion: { enters: ['light-through', 'pane-set'], exits: ['light-pass', 'cloud-over'], holds: ['sun-crawl'], curve: '太陽的速度，慢' },
-  grounds: { levels: lv(['stained-glass/stone', 'stained-glass/quarry'], ['stained-glass/stone', 'stained-glass/full-sun', 'stained-glass/shafts', 'stained-glass/window'], ['stained-glass/full-sun', 'stained-glass/stone', 'stained-glass/shafts', 'stained-glass/quarry']), quiet: ['stained-glass/stone', 'stained-glass/window', 'stained-glass/shafts', 'stained-glass/quarry'] },
-  decor: [{ id: 'stained-glass/came', why: '鉛條是玻璃的骨架，也是字的外框', budget: '全畫面一套' }],
-  transitions: { line: lv([''], ['panes-out', ''], ['panes-out']), part: lv(['panes-out'], ['panes-out'], ['panes-out']), own: ['panes-out'], banned: ['whip', 'shakecut', 'stripes', 'burst'], family: 'panes' },
-  peak: { loud: 'stained-glass/rose', calm: 'stained-glass/dawn', how: '快歌玫瑰窗全亮；慢歌天亮，光從一邊爬過來' },
-  pieces: ['shatter', 'rose-open', 'sun-sweep'],
-  pieceWords: { shatter: /碎|破|裂|斷|砕|壊/, 'rose-open': /花|開|愛|心|咲|愛/, 'sun-sweep': /光|天|星|日|太陽|空|朝|明/ },
-  camera: { cams: lv(['', 'dolly'], ['dolly'], ['dolly', 'snap']), text: noText, note: '教堂裡的人不會亂走' },
-  levels: { '0': '石牆與單窗', '1': '滿窗玻璃，光帶掃過', '2': '光束打在地上，大字', calm: '一扇窗一句，光慢慢爬' },
-  pace: { every: [2, 2, 1], calmEvery: 8, repose: true, hits: [] },
-  provenance: { source: 'own', process: '有色玻璃的透光與鉛條結構', nearest: '無', differs: '字本身是玻璃，不用宗教圖像' },
-  acceptance: { fast: 'nun', calm: 'tsuzuki', hardest: '直排窄窗放不下的長句' },
-};
-
 const gothic: StyleWorld = {
   id: 'gothic-lolita', name: '哥德蘿莉', language: 'gothic-lolita', what: '精裝暗黑童話書，字在雕花書頁上，不是恐怖',
   lyricRole: '歌詞是一本精裝暗黑童話書的內文，一句一頁',
@@ -375,21 +339,11 @@ const riso = print({ pace: [4, 4, 2], id: 'riso', name: '孔版印刷', language
   frame: { grain: 0.14, paper: 0.2 }, own: 'drum-roll', curve: 'drum-step', peak: 'disc', sets: ['riso/offset-stair', 'riso/drop-right', 'riso/tilted'], enters: ['drum-feed', 'misregister'], exits: ['drum-out', 'ink-slip'], hold: 'drum-tremor',
   shared: ['stair-slice', 'scatter-gather', 'stair-rip'],
   grounds: [['overprint', 'dotscreen'], ['riso/two-drum', ...['dotscreen', 'overprint', 'disc'], 'riso/grain-block'], ['riso/two-drum', ...['disc', 'dotscreen', 'overprint'], 'riso/grain-block']], quiet: ['riso/grain-block', ...['overprint', 'dotscreen'], 'riso/two-drum'], every: [8, 4, 2], line: ['push', 'whip'], part: ['diagonal', 'circle'], banned: ['dipwhite'], family: 'drum', process: '透明大豆墨經滾筒印上', nearest: '新聞紙風格', differs: '階梯錯位與第三色', fast: 'choroin', calm: 'tsuzuki' });
-const file = print({ id: 'file', name: '網點檔案', language: 'dossier', what: '泛黃檔案紙，像攤開的案件紀錄', role: '歌詞是案件編號下的條目', refuses: ['霓虹', '發光', '手寫塗鴉', '大色塊', '黑塗當主手法'], ja: face('Zen Kaku Gothic New', 700), tc: face('Chiron Sung HK', 700), category: 'typed',
-  palette: [paperScheme('file-red', '#1C1917', '#EDE3CC', '#CF3A2B', '#9A6B12', '檔案紙配警示紅'), paperScheme('file-blue', '#1C1917', '#EDE3CC', '#2C4E9E', '#CF3A2B', '檔案紙配卷宗藍'), paperScheme('file-green', '#1C1917', '#E6E2CC', '#2F6B4F', '#9A6B12', '綠卷宗')],
-  frame: { grain: 0.1, paper: 0.34 }, own: 'folder-shut', curve: 'typed-step', peak: 'hatch', sets: ['file/entry-left', 'file/footnote', 'file/heading'], enters: ['folder-slide', 'typed-out'], exits: ['file-away', 'strike-out'], hold: 'file-rest',
-  shared: ['quote-settle', 'note-plain', 'tag-plain'],
-  grounds: [['ledger', 'punched'], ['file/manila', ...['ledger', 'punched', 'washi'], 'file/carbon'], ['file/manila', ...['ledger', 'hatch', 'washi'], 'file/carbon']], quiet: ['file/carbon', ...['ledger', 'punched'], 'file/manila'], cams: lv(['', 'dolly'], ['dolly', 'pan'], ['pan', 'snap']), every: [8, 4, 2], line: ['push', 'blinds'], part: ['pagecurl', 'brush'], banned: ['burst', 'spinzoom'], family: 'file', process: '打字與裝訂的舊紙', nearest: '黑塗文件版型', differs: '條目靠左與頁腳，不靠黑塗', fast: 'nun', calm: 'tenmon' });
 const spy = print({ id: 'spy', name: '諜報片頭', language: 'spy-titles', what: '剪紙片頭，大塊斜切，節奏俐落', role: '歌詞是片頭字幕，字構成布景', refuses: ['手寫', '圓體', '水彩', '照片', '慢動作'], ja: face('Zen Old Mincho'), tc: face('Noto Sans TC'), category: 'slash',
   palette: [paperScheme('spy-hot', '#110E0C', '#E4553A', '#FFF6E0', '#F2C14E', '諜報片頭：熱紅', 'mid'), paperScheme('spy-bone', '#171B23', '#EBE5D5', '#176E6E', '#C8531C', '諜報片頭：骨白深青'), paperScheme('spy-mustard', '#1D1A14', '#E3B74A', '#7A1F1F', '#F4EEDD', '諜報片頭：芥末', 'mid')],
   frame: { grain: 0.08, paper: 0.16 }, own: 'slash-cut', curve: 'blade-snap', peak: 'offcut', sets: ['spy/diagonal', 'spy/low-slash', 'spy/high-slash'], enters: ['razor', 'slit-reveal'], exits: ['razor-off', 'slash-drop'], hold: 'blade-lean',
   shared: ['build-mid', 'build-hit', 'split-pair'],
   grounds: [['offcut', 'deckle'], ['spy/wedge', ...['offcut', 'deckle', 'hatch'], 'spy/sliced'], ['spy/wedge', ...['offcut', 'deckle'], 'spy/sliced']], quiet: ['spy/sliced', ...['deckle', 'offcut'], 'spy/wedge'], every: [8, 4, 2], line: ['whip', 'push'], part: ['diagonal', 'stripes', 'impact'], banned: ['ripple', 'blurdissolve'], family: 'slash', process: '剪紙拼貼與斜切', nearest: '無', differs: '斜置字塊', fast: 'nun', calm: 'tsuzuki' });
-const card = print({ id: 'card', name: '圖形卡', language: 'pictogram', what: '幾何圖形與粗字，節拍感明確', role: '歌詞是節拍上翻面的閃卡', refuses: ['手寫', '細明體', '照片', '發光', '留白過多'], ja: face('Zen Maru Gothic'), tc: face('Chocolate Classical Sans', 400), category: 'tile',
-  palette: [paperScheme('card-grape', '#1C1C23', '#F3EDDE', '#6A51A2', '#307A50', '圖形卡：葡萄紫'), paperScheme('card-pine', '#1C1C23', '#E3ECD9', '#25693F', '#C57B3B', '圖形卡：松綠'), paperScheme('card-tomato', '#1C1C23', '#F7E4DA', '#C4382A', '#6A51A2', '圖形卡：番茄紅')],
-  frame: { grain: 0.06, paper: 0.12 }, own: 'tile-sweep', curve: 'beat-flip', peak: 'dots', sets: ['card/center-tile', 'card/left-tile', 'card/right-tile'], enters: ['tile-turn', 'tile-pop'], exits: ['tile-back', 'tile-drop'], hold: 'beat-bump',
-  shared: ['orbit-spread', 'panels-plain', 'panels-hit'],
-  grounds: [['soft-rings', 'stitch'], ['card/flip-grid', ...['dots', 'stitch', 'soft-rings'], 'card/big-tile'], ['card/flip-grid', ...['dots', 'soft-rings'], 'card/big-tile']], quiet: ['card/big-tile', ...['soft-rings', 'stitch'], 'card/flip-grid'], every: [8, 4, 2], line: ['push', 'whip'], part: ['circle', 'stripes'], banned: ['brush', 'ripple'], family: 'flip', process: '印刷閃卡', nearest: '幾何拼貼風格', differs: '節拍翻面', fast: 'choroin', calm: 'snow' });
 
-export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, file, spy, card, dark, neon, terminal, led, ink, film, glass, gothic, ...HAND_WORLDS, ...LOUD_WORLDS];
+export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, FILE_WORLD, spy, CARD_WORLD, dark, neon, terminal, led, ink, film, GLASS_WORLD, gothic, ...HAND_WORLDS, ...LOUD_WORLDS];
 export const worldById = (id: string) => STYLE_WORLDS.find((w) => w.id === id);

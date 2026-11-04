@@ -62,6 +62,11 @@ export const FONTS: FontSpec[] = [
   { family: 'WDXL Lubrifont TC', roles: ['display'], weights: [400], feel: '窄身工業黑體，模板噴字', han: 'tc' },
   { family: 'WDXL Lubrifont JP N', roles: ['display'], weights: [400], feel: '窄身工業黑體（日文），模板噴字' },
   { family: 'Big Shoulders Stencil Display', roles: ['accent'], weights: [700, 900], feel: '模板窄體大寫，海報與貼紙', legible: false },
+  // the 2026-11-04 round-2 boards: the case file's old official type and its kana mincho, the flash card's real heavy rounded face, the file's typewriter labels
+  { family: 'UoqMunThenKhung', roles: ['display', 'body'], weights: [400], feel: '舊公文鉛字感的明體，檔案、老派', han: 'tc' },
+  { family: 'BIZ UDPMincho', roles: ['display', 'body'], weights: [400, 700], feel: '公文用的比例明朝，端正、事務感' },
+  { family: 'Chiron GoRound TC', roles: ['display', 'body'], weights: [500, 800], feel: '真的粗圓體，閃卡、親切、有力', han: 'tc' },
+  { family: 'Courier Prime', roles: ['accent'], weights: [400, 700], feel: '打字機等寬字，案件欄位' },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */
@@ -94,6 +99,7 @@ export const TC_FOR: Record<string, string> = {
   DotGothic16: 'Chiron Hei HK',
   'Yuji Syuku': 'LXGW WenKai TC',
   'Shippori Antique B1': 'Chocolate Classical Sans',
+  'BIZ UDPMincho': 'UoqMunThenKhung',
   'WDXL Lubrifont JP N': 'WDXL Lubrifont TC',
 };
 

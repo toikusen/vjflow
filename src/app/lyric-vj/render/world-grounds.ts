@@ -35,6 +35,9 @@ export interface WorldEnv {
   base?: DOMMatrix;
   /** The song's own title, for a world's small printed labels (only real data goes on them). */
   title?: string;
+  /** The song's tempo and the seconds since its last beat, for what keeps the beat (a flash card's beat pips). */
+  bpm?: number;
+  since?: number;
 }
 
 type Ground = (e: WorldEnv) => void;

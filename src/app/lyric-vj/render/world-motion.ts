@@ -2,6 +2,7 @@
 // tube strikes in stutters, a printer's head steps along, ink creeps out of a wet stroke, a card jumps in the gate. Time here
 // is what the renderer passes in: a world on eighteen frames a second is simply handed time held to that.
 import { LOUD_ENTERS, LOUD_EXITS, LOUD_HOLDS } from './world-b3-motion';
+import { R2_ENTERS, R2_EXITS, R2_HOLDS } from './world-r2-motion';
 
 export interface GlyphEnv {
   /** Progress through the entrance or the exit, 0..1. */
@@ -231,6 +232,10 @@ Object.assign(WORLD_EXITS, SHARED_EXITS);
 Object.assign(WORLD_ENTERS, LOUD_ENTERS);
 Object.assign(WORLD_EXITS, LOUD_EXITS);
 Object.assign(WORLD_HOLDS, LOUD_HOLDS);
+// the four worlds rebuilt from the round-2 boards keep theirs in world-r2-motion.ts
+Object.assign(WORLD_ENTERS, R2_ENTERS);
+Object.assign(WORLD_EXITS, R2_EXITS);
+Object.assign(WORLD_HOLDS, R2_HOLDS);
 
 /** Seconds a move gets when a line has `room` past its reading: shortened, or given up for a plain cut, never paid for by reading. */
 export function moveSec(want: number, room: number, pace = 1) {

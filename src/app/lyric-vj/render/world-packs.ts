@@ -9,6 +9,9 @@ import { POPART } from './world-b3-popart';
 import { PSYCHEDELIC } from './world-b3-psychedelic';
 import { Y2K } from './world-b3-y2k';
 import { CHALK } from './world-b2-chalk';
+import { CARD } from './world-r2-card';
+import { FILE } from './world-r2-file';
+import { GLASS } from './world-r2-glass';
 import { CHIYOGAMI } from './world-b2-chiyogami';
 import { CRAYON } from './world-b2-crayon';
 import { LANTERN } from './world-b2-lantern';
@@ -21,8 +24,8 @@ import { B3_MIRRORS } from './world-b3-sets';
 import { mirrorGround } from './world-b3-shared';
 
 interface Pack { grounds: Record<string, HandGround>; ins: Record<string, HandIn>; pieces: Record<string, Piece>; objects: Record<string, ObjectPaint> }
-const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP];
-export type HandObject = 'cartouche' | 'shikishi' | 'cut-panel' | 'cut-banner' | 'lit-paper' | 'noshi' | 'fold-kite' | 'colour-plate' | 'chalk-rub' | 'mend-patch' | 'tenugui' | 'pad-sheet'
+const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP, FILE, CARD, GLASS];
+export type HandObject = 'cartouche' | 'shikishi' | 'cut-panel' | 'cut-banner' | 'lit-paper' | 'noshi' | 'fold-kite' | 'colour-plate' | 'mend-patch' | 'tenugui' | 'pad-sheet'
   | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'gs-q-banner' | 'gs-answer-cells' | 'gs-row-tiles' | 'gs-qa' | 'gs-qa-r' | 'idol-card' | 'gf-strip' | 'cp-column';
 export const handGrounds = Object.assign({}, ...PACKS.map((p) => p.grounds)) as Record<string, HandGround>;
 // batch 3's mirrored pages (world-b3-sets.ts B3_MIRRORS)

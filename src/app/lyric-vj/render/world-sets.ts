@@ -3,6 +3,7 @@
 // composer's closed pool is the only way to reach it.
 import { balancedRows } from '../phrases';
 import { LOUD_SETS } from './world-b3-sets';
+import { R2_SETS } from './world-r2-sets';
 import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
@@ -49,6 +50,10 @@ export interface SetSpec {
   core?: keyof Slots;
   /** Surfaces laid under the letters, outermost first, each in a slot's tone: rings that must never cross a letter. */
   under?: { kind: SurfaceKind; tone: keyof Slots }[];
+  /** Each row's ink, a slot a row (the last repeats): a second row the board sets apart (a file's entry in stamp red). */
+  rowInk?: (keyof Slots)[];
+  /** Each row stands on a carrier of its own (a pair of cards): the rows are kept, no key word is blown up out of them. */
+  keepRows?: boolean;
   /** Laid into its ground's composition: no travel or swell while it is up. */
   fixed?: boolean;
   /** What the words stand on when the set's own page draws it (a card, a banner, two banners): the key ink reads on each. */
@@ -124,12 +129,6 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'silent-film/subtitle-band': { ...base, at: [0.5, 0.78], ax: 0, ay: 0, share: 0.86, tall: 0.34, hi: 180, rows: [1, 2], lead: 1.16, track: 0.06, object: 'caption-band', pad: [60, 26], fill: [1.1, 0.38] },
   'silent-film/shout': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.92, tall: 0.84, hi: 400, rows: [1, 2], lead: 1.06, track: 0.01 },
   'silent-film/aside': { ...base, at: [0.06, 0.1], ax: -1, ay: -1, share: 0.66, tall: 0.52, hi: 180, rows: [1, 2], lead: 1.2, track: 0.05, flush: -1, object: 'card-corner', pad: [40, 34], fill: [0.74, 0.6] },
-  // stained-glass: a window by day; the words are leaded into its lights.
-  'stained-glass/lancet': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.28, tall: 0.78, hi: 210, rows: [1, 2], vertical: true, lead: 1.2, track: 0.04, object: 'lancet', pad: [70, 96], fill: [0.34, 0.98] },
-  'stained-glass/twin-lights': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.7, tall: 0.78, hi: 190, rows: [2, 2], vertical: true, lead: 2.4, track: 0.04, object: 'twin-lancet', pad: [64, 90], fill: [0.74, 0.98] },
-  'stained-glass/transom': { ...base, at: [0.5, 0.3], ax: 0, ay: 0, share: 0.86, tall: 0.46, hi: 230, rows: [1, 2], track: 0.04, object: 'transom', pad: [70, 46], fill: [0.98, 0.56] },
-  'stained-glass/predella': { ...base, at: [0.5, 0.76], ax: 0, ay: 0, share: 0.82, tall: 0.38, hi: 190, rows: [1, 2], track: 0.05, object: 'transom', pad: [60, 36], fill: [0.94, 0.42] },
-  'stained-glass/nave': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.92, tall: 0.84, hi: 340, rows: [1, 2], lead: 1.1, track: 0.02 },
   // gothic-lolita: a bound book, a page at a time.
   'gothic-lolita/page': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.6, tall: 0.72, hi: 220, rows: [1, 4], lead: 1.24, track: 0.03, object: 'book-page', pad: [100, 84], fill: [0.5, 0.84] },
   'gothic-lolita/spread-left': { ...base, at: [0.265, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.72, hi: 180, rows: [2, 4], lead: 1.26, track: 0.03, flush: -1, object: 'book-leaf', pad: [80, 90], fill: [0.46, 0.9] },
@@ -178,14 +177,6 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'woodcut/column': { ...base, at: [0.88, 0.58], ax: 0, ay: 0, share: 0.3, tall: 0.76, hi: 230, rows: [1, 2], vertical: true, lead: 1.1, track: 0.02 },
   'woodcut/plate': { ...base, at: [0.5, 0.7], ax: 0, ay: 0, share: 0.72, tall: 0.46, hi: 280, rows: [1, 2], lead: 1.1, track: 0.02, object: 'colour-plate', pad: [90, 70] },
   'woodcut/shout': { ...base, at: [0.5, 0.64], ax: 0, ay: 0, share: 0.94, tall: 0.7, hi: 400, rows: [1, 2], lead: 1.04, track: 0 },
-  // chalkboard: a lesson. The title across the top, a note down the side, a block of chalk the words are wiped out of.
-  'chalkboard/lesson': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.86, tall: 0.6, hi: 280, rows: [1, 2], lead: 1.16, track: 0.02, tilt: -0.012 },
-  'chalkboard/title': { ...base, at: [0.5, 0.2], ax: 0, ay: 0, share: 0.88, tall: 0.34, hi: 240, rows: [1, 2], lead: 1.1, track: 0.02 },
-  'chalkboard/left-note': { ...base, at: [0.05, 0.46], ax: -1, ay: 0, share: 0.74, tall: 0.6, hi: 230, rows: [2, 3], lead: 1.16, track: 0.02, flush: -1, stair: 0.3 },
-  'chalkboard/side-col': { ...base, at: [0.86, 0.46], ax: 0, ay: 0, share: 0.3, tall: 0.8, hi: 220, rows: [1, 2], vertical: true, lead: 1.16, track: 0.02 },
-  'chalkboard/slant': { ...base, at: [0.5, 0.48], ax: 0, ay: 0, share: 0.84, tall: 0.5, hi: 270, rows: [1, 2], lead: 1.12, track: 0.02, tilt: -0.07 },
-  'chalkboard/rubbed': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.74, tall: 0.5, hi: 260, rows: [1, 2], lead: 1.12, track: 0.02, object: 'chalk-rub', pad: [80, 60] },
-  'chalkboard/shout': { ...base, at: [0.5, 0.46], ax: 0, ay: 0, share: 0.92, tall: 0.72, hi: 420, rows: [1, 2], lead: 1.06, track: 0 },
   // aizome: resist on the cloth, or a mended patch and a towel laid on it.
   'aizome/field': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.78, tall: 0.54, hi: 270, rows: [1, 2], lead: 1.16, track: 0.04 },
   'aizome/hem': { ...base, at: [0.5, 0.78], ax: 0, ay: 0, share: 0.86, tall: 0.32, hi: 210, rows: [1, 2], lead: 1.12, track: 0.04 },
@@ -212,17 +203,13 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'riso/offset-stair': { ...base, at: [0.08, 0.14], ax: -1, ay: -1, share: 0.76, tall: 0.72, hi: 190, rows: [2, 3], lead: 1.12, track: 0, flush: -1, stair: 1.1 },
   'riso/drop-right': { ...base, at: [0.94, 0.86], ax: 1, ay: 1, share: 0.7, tall: 0.5, hi: 170, rows: [1, 2], lead: 1.1, track: 0, flush: 1 },
   'riso/tilted': { ...base, at: [0.5, 0.48], ax: 0, ay: 0, share: 0.78, tall: 0.56, hi: 200, rows: [1, 2], lead: 1.1, track: 0, tilt: -0.07 },
-  'file/entry-left': { ...base, at: [0.07, 0.16], ax: -1, ay: -1, share: 0.8, tall: 0.62, hi: 180, rows: [1, 3], lead: 1.3, track: 0.02, flush: -1 },
-  'file/footnote': { ...base, at: [0.07, 0.88], ax: -1, ay: 1, share: 0.82, tall: 0.34, hi: 130, lo: 70, rows: [1, 2], lead: 1.26, track: 0.03, flush: -1 },
-  'file/heading': { ...base, at: [0.09, 0.12], ax: -1, ay: -1, share: 0.84, tall: 0.34, hi: 200, rows: [1, 2], lead: 1.1, track: 0, flush: -1 },
   'spy/diagonal': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.82, tall: 0.5, hi: 210, rows: [1, 2], lead: 1.08, track: 0.02, tilt: -0.14 },
   'spy/low-slash': { ...base, at: [0.06, 0.8], ax: -1, ay: 0, share: 0.74, tall: 0.34, hi: 170, rows: [1, 2], lead: 1.1, track: 0.02, tilt: -0.09, flush: -1 },
   'spy/high-slash': { ...base, at: [0.94, 0.22], ax: 1, ay: 0, share: 0.74, tall: 0.34, hi: 170, rows: [1, 2], lead: 1.1, track: 0.02, tilt: -0.09, flush: 1 },
-  'card/center-tile': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.66, tall: 0.62, hi: 240, rows: [1, 3], lead: 1.08, track: 0 },
-  'card/left-tile': { ...base, at: [0.26, 0.5], ax: 0, ay: 0, share: 0.42, tall: 0.7, hi: 200, rows: [1, 4], lead: 1.08, track: 0 },
-  'card/right-tile': { ...base, at: [0.74, 0.5], ax: 0, ay: 0, share: 0.42, tall: 0.7, hi: 200, rows: [1, 4], lead: 1.08, track: 0 },
   // style batch 3's loud worlds keep their numbers in world-b3-sets.ts
   ...LOUD_SETS,
+  // the four worlds rebuilt from the round-2 boards keep theirs in world-r2-sets.ts
+  ...R2_SETS,
 };
 
 /** Width of a string at size 100, in px. */

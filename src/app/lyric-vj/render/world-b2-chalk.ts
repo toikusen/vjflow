@@ -1,147 +1,185 @@
-// chalkboard: a real board. Chalk sits on the slate's tooth, the side of the stick fills a field, the eraser leaves arcs of pale
-// smear, the dust falls. Writing and wiping are the world's only two acts, and the words can be written by wiping too.
+// chalkboard, its board redrawn from the round-2 design board (2026-11-04, 風格設計稿_第二輪/chalkboard a–d): a deep green
+// board after class, years of faint eraser arcs on it, the aluminium tray at its foot with two sticks and a felt eraser. No
+// stray stars, swirls or colour fields: the only chalk lines are the ones a teacher draws for a reason, each kept clear of
+// the words — a key phrase underlined, a short line ringed with an arrow at it, a long rule under a calm line, a rule
+// between columns with the song's title written small beside them. Dust falls from a line once it is written.
 import type { Piece } from './world-pieces';
-import { atBase, boxOf, clamp01, dryMark, ease, easeIn, flood, H, hash, HandGround, HandIn, kept, lifted, mixHex, ObjectPaint, partOf, Pt, shaken, span, strokePts, TAU, W, WorldEnv } from './world-craft';
+import { atBase, clamp01, dryMark, ease, easeIn, flood, H, hash, HandGround, HandIn, kept, mixHex, partOf, Pt, shaken, strokePts, TAU, W, WorldEnv } from './world-craft';
 import { smoothNoise } from './world-ink';
+import { titleOnly } from './world-b3-shared';
+import { R2 } from './r2-inks';
 
-const board = (e: WorldEnv, smear: number) => kept(`cb|${e.paper}|${e.slots.faint}|${smear}|${e.seed % 3}`, W + 240, H + 240, (c) => {
+const HAND = (px: number) => `400 ${px}px Iansui, Yomogi, sans-serif`;
+/** The slate: its own green, a low cloud of lighter patches (the board's mottle), and four long faint eraser arcs; kept. */
+const slate = (e: WorldEnv) => kept(`cb2|${e.paper}|${e.seed % 3}`, W, H, (c) => {
   c.fillStyle = e.paper;
-  c.fillRect(0, 0, W + 240, H + 240);
-  // years of wiping: broad arcs of grey, one over the other
-  c.strokeStyle = e.slots.faint;
-  c.lineCap = 'round';
-  c.filter = 'blur(10px)';
-  for (let i = 0; i < 14 + smear * 10; i++) {
-    c.globalAlpha = 0.05 + 0.09 * hash(i, 2);
-    c.lineWidth = 70 + 110 * hash(i, 3);
-    const [x, y] = [hash(i, 4 + e.seed % 3) * (W + 240), hash(i, 5) * (H + 240)];
-    c.beginPath();
-    c.arc(x, y + 500, 520 + 300 * hash(i, 6), -2.3, -0.9);
-    c.stroke();
+  c.fillRect(0, 0, W, H);
+  const [w, h] = [240, 135];
+  const m = new OffscreenCanvas(w, h);
+  const g = m.getContext('2d')!;
+  const img = g.createImageData(w, h);
+  const lift = mixHex(e.paper, e.ink, 0.16);
+  const [lr, lg, lb] = [1, 3, 5].map((i) => parseInt(lift.slice(i, i + 2), 16));
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const n = 0.6 * smoothNoise(x / 31, y / 10, e.seed % 3) + 0.4 * smoothNoise(x / 9, y / 4, 7);
+    const i = (y * w + x) * 4;
+    img.data[i] = lr; img.data[i + 1] = lg; img.data[i + 2] = lb;
+    img.data[i + 3] = 255 * clamp01(n * 0.9 - 0.25);
   }
-  c.filter = 'none';
+  g.putImageData(img, 0, 0);
+  c.globalAlpha = 0.35;
+  c.drawImage(m, 0, 0, W, H);
+  // eraser passes: a wide faint band and a bundle of fine streaks along each of four long arcs
+  c.strokeStyle = e.ink;
+  c.lineCap = 'butt';
+  for (let k = 0; k < 4; k++) {
+    const [cx, cy, r, a0, sweep] = [hash(k, 11 + (e.seed % 3)) * W, hash(k, 12) * 900, 300 + 400 * hash(k, 13), hash(k, 14) * TAU, 0.9 + 0.8 * hash(k, 15)];
+    const a = 0.02 + 0.02 * hash(k, 16);
+    c.globalAlpha = a * 0.9;
+    c.lineWidth = 150;
+    c.beginPath(); c.arc(cx, cy, r + 70, a0, a0 + sweep); c.stroke();
+    for (let i = 0; i < 10; i++) { c.globalAlpha = a * (0.6 + 0.4 * hash(i, k)); c.lineWidth = 1 + 2 * hash(i, k + 1); c.beginPath(); c.arc(cx, cy, r + 140 * hash(i, k + 2), a0, a0 + sweep); c.stroke(); }
+  }
   c.globalAlpha = 1;
-  const img = c.getImageData(0, 0, W + 240, H + 240);
-  for (let i = 0; i < img.data.length; i += 4) { const k = (hash(i, 7) - 0.5) * 7; img.data[i] += k; img.data[i + 1] += k; img.data[i + 2] += k; }
-  c.putImageData(img, 0, 0);
 });
-const ledge = (e: WorldEnv) => atBase(e, (c) => {
-  // the tray at the foot, sticks lying in it, the shadow it throws up the slate
-  const y = H - 54;
-  lifted(c, 18, 0, -10, 0.5, () => { c.fillStyle = mixHex(e.paper, e.slots.ink2, 0.28); c.fillRect(-10, y, W + 20, 70); });
-  c.fillStyle = 'rgba(0,0,0,0.3)';
-  c.fillRect(-10, y, W + 20, 8);
-  [[260, e.ink, 150], [470, e.slots.ink2, 90], [1490, e.slots.accent, 120]].forEach(([x, tone, l]) => { c.save(); c.translate(x as number, y + 28); c.rotate(-0.04); lifted(c, 6, 0, 4, 0.5, () => { c.fillStyle = tone as string; c.beginPath(); c.roundRect(0, -9, l as number, 18, 7); c.fill(); }); c.restore(); });
-  c.fillStyle = mixHex(e.paper, e.slots.ink2, 0.5);
-  c.fillRect(1650, y - 26, 170, 44);
+/** The tray along the foot: aluminium with a lit lip and a shadowed underside, chalk dust in it, two sticks and a felt eraser. */
+const tray = (e: WorldEnv) => kept(`cb2-tray|${e.paper}|${e.seed % 3}`, W, 120, (c) => {
+  const y = 52;
+  c.fillStyle = e.slots.plate; c.fillRect(0, y, W, 68);
+  c.fillStyle = R2.lip; c.fillRect(0, y, W, 10);
+  c.fillStyle = R2.under; c.fillRect(0, y + 58, W, 10);
+  c.fillStyle = e.ink;
+  c.globalAlpha = 0.5;
+  for (let i = 0; i < 500; i++) c.fillRect(hash(i, 1) * W, y + 10 + hash(i, 2) * 12, 1 + 3 * hash(i, 3), 1 + 2 * hash(i, 4));
+  c.globalAlpha = 1;
+  const sx = 300 + 300 * hash(e.seed % 3, 5);
+  c.fillStyle = e.ink; c.beginPath(); c.roundRect(sx, y - 12, 120, 18, 8); c.fill();
+  c.fillStyle = e.slots.ink2; c.beginPath(); c.roundRect(760 + 200 * hash(e.seed % 3, 6), y - 10, 80, 16, 7); c.fill();
+  const ex = 1300 + 300 * hash(e.seed % 3, 7);
+  c.fillStyle = R2.felt; c.beginPath(); c.roundRect(ex, y - 40, 230, 46, 6); c.fill();
+  c.fillStyle = R2.pad; c.fillRect(ex, y - 8, 230, 14);
 });
-const stave = (e: WorldEnv) => kept(`cb-st|${e.ink}|${e.seed % 3}`, W, H, (c) => {
-  const g = c as unknown as CanvasRenderingContext2D;
-  dryMark(g, (d) => {
-    [0.16, 0.5, 0.84].forEach((y, s) => { for (let l = 0; l < 5; l++) { const pts: Pt[] = []; for (let x = -40; x <= W + 40; x += 30) pts.push([x, H * y + l * 40 - 80 + 12 * Math.sin(x * 0.002 + s) + 6 * smoothNoise(x / 90, l, s)]); strokePts(d, pts, 7, e.ink); } });
-  }, 2, 1, 0.7);
-});
-/** The side of a stick dragged over a field, with the hand's overlap showing. */
-const sideFill = (e: WorldEnv, tone: string, seed: number) => kept(`cb-sf|${tone}|${seed}|${e.seed % 3}`, W, H, (c) => {
-  dryMark(c as unknown as CanvasRenderingContext2D, (d) => {
-    for (let i = 0; i < 6; i++) { const y0 = 130 + i * 170; const pts: Pt[] = []; for (let x = -100; x <= W + 100; x += 40) pts.push([x, y0 + 70 * Math.sin(x * 0.003 + i + seed)]); strokePts(d, pts, 130, tone); }
-  }, 4, 1, 0.5);
-});
-const doodlePaths = (seed: number): Pt[][] => {
-  const star = (cx: number, cy: number, r: number): Pt[] => Array.from({ length: 6 }, (_, i) => [cx + Math.cos(-Math.PI / 2 + (i * 4 * Math.PI) / 5) * r, cy + Math.sin(-Math.PI / 2 + (i * 4 * Math.PI) / 5) * r]);
-  const spiral = (cx: number, cy: number, r: number): Pt[] => Array.from({ length: 70 }, (_, i) => { const t = i / 70; return [cx + Math.cos(t * 16) * r * t, cy + Math.sin(t * 16) * r * t]; });
-  const arrow = (x: number, y: number, l: number): Pt[] => [[x, y], [x + l, y - 10], [x + l - 34, y - 38], [x + l, y - 10], [x + l - 30, y + 22]];
-  const loops = (x: number, y: number, l: number): Pt[] => Array.from({ length: 90 }, (_, i) => { const t = i / 90; return [x + t * l + Math.cos(t * 28) * 36, y + Math.sin(t * 28) * 36]; });
-  return [[star(170, 170, 110), spiral(1760, 200, 100), arrow(90, 900, 260), loops(1300, 960, 480)], [spiral(150, 880, 110), star(1750, 860, 120), loops(120, 150, 480), arrow(1490, 130, 300)], [loops(1250, 120, 560), star(1770, 520, 90), star(150, 520, 90), spiral(960, 980, 70)]][seed % 3];
-};
-function doodles(e: WorldEnv, k: number, a = 0.9) {
-  atBase(e, (c) => dryMark(c, (d) => { doodlePaths(e.seed).forEach((p, i) => strokePts(d, shaken(partOf(p, clamp01(k * 1.4 - i * 0.14)), 3, i), 13, [e.ink, e.slots.ink2, e.slots.accent, e.ink][i])); }, 2, 0.9, a));
+const board = (e: WorldEnv) => atBase(e, (c) => { c.drawImage(slate(e), 0, 0); c.drawImage(tray(e), 0, H - 120); });
+
+/** A chalk line along points, a little off true, the board's tooth showing through it (crisp holes, never a blur). */
+function chalkLine(c: CanvasRenderingContext2D, pts: Pt[], tone: string, width: number, seed: number, k = 1) {
+  if (k <= 0) return;
+  dryMark(c, (d) => strokePts(d, shaken(partOf(pts, k), 3, seed), width, tone), 2, 0.75);
 }
-/** The patch wiped clean for the words: the eraser's strokes side by side, each a crisp band ending raggedly (no glow). */
-export function wiped(e: WorldEnv) {
-  if (!e.rect || e.weight <= 0) return;
-  const b = boxOf(e, 110, 80);
+const ellipse = (cx: number, cy: number, rx: number, ry: number): Pt[] => Array.from({ length: 45 }, (_, i) => { const a = -1.9 + (i / 44) * TAU * 1.1; const r = 1 + 0.04 * Math.sin(i * 0.7); return [cx + rx * r * Math.cos(a), cy + ry * r * Math.sin(a)]; });
+/** Dust off a line just written: hard specks falling a little below it, toward the tray. */
+function dust(e: WorldEnv, c: CanvasRenderingContext2D, x0: number, x1: number, y: number) {
+  c.fillStyle = e.ink;
+  const fall = Math.min(40, e.age * 10);
+  for (let i = 0; i < (x1 - x0) / 22; i++) { c.globalAlpha = 0.55 * hash(i, e.seed + 9); c.fillRect(x0 + hash(i, e.seed) * (x1 - x0), y + hash(i, e.seed + 1) * 60 + fall * hash(i, e.seed + 2), 1 + 2.5 * hash(i, 3), 1 + 2.5 * hash(i, 4)); }
+  c.globalAlpha = 1;
+}
+/** Text written in chalk on the board itself (the song's title beside the lesson): the hand's face, the tooth through it. */
+function written(c: CanvasRenderingContext2D, text: string, x: number, y: number, px: number, tone: string, vertical = false) {
+  dryMark(c, (d) => {
+    d.font = HAND(px);
+    d.fillStyle = tone;
+    d.textBaseline = 'alphabetic';
+    if (vertical) { d.textAlign = 'center'; [...text].forEach((ch, i) => d.fillText(ch, x, y + (i + 1) * px)); d.textAlign = 'left'; }
+    else d.fillText(text, x, y);
+  }, 2, 0.6);
+}
+
+/**
+ * The teacher's mark for the line on the board, from the shape the line takes (a set's own place, world-r2-sets.ts): a
+ * column gets a rule beside it and the title written small; a short loud line is ringed with an arrow at it and the title
+ * boxed over it; a calm line a long rule under it; any other its key phrase (the end of its first row) underlined.
+ */
+function marks(e: WorldEnv) {
+  const r = e.rect;
+  if (!r || e.weight <= 0.05) return;
+  const k = ease((e.age - 0.35) / 0.7, 2);
+  if (k <= 0) return;
+  const [w, h] = [r.x1 - r.x0, r.y1 - r.y0];
+  const title = titleOnly(e.title).slice(0, 8);
   atBase(e, (c) => {
     c.save();
-    c.globalAlpha = Math.min(1, e.weight * 3);
-    c.fillStyle = e.paper;
-    const band = 46;
-    for (let y = b.y0, i = 0; y < b.y1; y += band - 4, i++) {
-      const [l, r] = [b.x0 - 20 - 40 * hash(i, e.seed), b.x1 + 20 + 40 * hash(i, e.seed + 1)];
-      c.fillRect(l, y, r - l, Math.min(band, b.y1 - y));
+    c.globalAlpha = Math.min(1, e.weight * 2);
+    // (each of the chalk sets stands in a band of its own: the ring low and short, the calm line under the lesson's place)
+    const ringed = h <= w * 1.3 && h < 300 && r.y0 > 400 && w < 1150;
+    if (h > w * 1.3) {
+      const x = r.x0 - 70;
+      chalkLine(c, [[x, r.y0 + 10], [x - 3, (r.y0 + r.y1) / 2], [x + 2, r.y1 - 10]], e.ink, 5, 8, k);
+      if (title && x - 120 > 60) written(c, title, x - 110, r.y0 + 20, 72, e.ink, true);
+      dust(e, c, r.x0, r.x1, r.y1 + 10);
+    } else if (ringed) {
+      const [cx, cy] = [(r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2];
+      chalkLine(c, ellipse(cx, cy, w / 2 + 120, h / 2 + 80), e.slots.accent, 8, 4, k);
+      const ax = r.x0 - 40;
+      if (ax > 300) chalkLine(c, [[ax - 260, r.y0 - 200], [ax - 120, r.y0 - 150], [ax - 40, r.y0 - 80]], e.ink, 7, 6, ease((e.age - 0.9) / 0.4, 2));
+      if (title && r.y0 - 240 > 60) {
+        const [bx, by] = [Math.max(120, r.x0 - 340), r.y0 - 330];
+        written(c, title, bx + 32, by + 90, 84, e.ink);
+        chalkLine(c, [[bx, by], [bx + 60 + title.length * 88, by - 4], [bx + 63 + title.length * 88, by + 114], [bx + 3, by + 118], [bx, by]], e.ink, 5, 1, k);
+      }
+      dust(e, c, r.x0, r.x1, r.y1 + 90);
+    } else if (r.y0 >= 260) {
+      const y = Math.min(H - 150, r.y1 + 36);
+      chalkLine(c, [[r.x0 + 10, y], [r.x0 + 400, y + 3], [r.x0 + 800, y - 1], [Math.max(r.x1, 1740), y + 2]], e.ink, 6, 9, k);
+      dust(e, c, r.x0, Math.min(r.x1, 1600), y + 14);
+    } else {
+      const n = h - 28 > 1.7 * 196 * 1.12 ? 2 : 1;
+      const size = (h - 28) / (n * 1.7);
+      const w1 = w - 28 - 0.26 * size * (n - 1);
+      // (a row stands in the middle of its lead: the line runs just under the first row's strokes)
+      const y = r.y0 + 14 + size * 0.85 + size * 0.5 + 14;
+      chalkLine(c, [[r.x0 + 14 + w1 * 0.5, y + 4], [r.x0 + 14 + w1 * 0.75, y], [r.x0 + 14 + w1, y - 5]], e.slots.ink2, 9, 3, k);
+      dust(e, c, r.x0, r.x1, r.y1 + 10);
     }
     c.restore();
   });
 }
-const lightOn = (e: WorldEnv) => atBase(e, (c) => { c.save(); c.globalCompositeOperation = 'lighter'; for (let i = 0; i < 3; i++) { const x = (e.now * 16 + i * 620) % (W + 900) - 500; c.fillStyle = mixHex(e.paper, e.slots.plate, 0.1); c.globalAlpha = 0.4; c.beginPath(); c.moveTo(x, -20); c.lineTo(x + 340, -20); c.lineTo(x + 40 + 340, H + 20); c.lineTo(x + 40, H + 20); c.closePath(); c.fill(); } c.restore(); });
+/** The light of an empty classroom: pale window shapes moving slowly across the board. */
+const lightOn = (e: WorldEnv) => atBase(e, (c) => { c.save(); c.globalCompositeOperation = 'lighter'; for (let i = 0; i < 3; i++) { const x = ((e.now * 16 + i * 620) % (W + 900)) - 500; c.fillStyle = mixHex(e.paper, e.ink, 0.06); c.beginPath(); c.moveTo(x, -20); c.lineTo(x + 340, -20); c.lineTo(x + 380, H - 130); c.lineTo(x + 40, H - 130); c.closePath(); c.fill(); } c.restore(); });
+
 const Gs: Record<string, HandGround> = {
-  'chalkboard/slate': (e) => { e.ctx.drawImage(board(e, 0), -120, -120); wiped(e); ledge(e); },
-  'chalkboard/smeared': (e) => { e.ctx.drawImage(board(e, 1), -120, -120); atBase(e, (c) => c.drawImage(sideFill(e, e.slots.faint, 1), 0, 0)); wiped(e); ledge(e); },
-  'chalkboard/stave': (e) => { e.ctx.drawImage(board(e, 0), -120, -120); atBase(e, (c) => c.drawImage(stave(e), 0, 0)); wiped(e); ledge(e); },
-  'chalkboard/sun-patches': (e) => { e.ctx.drawImage(board(e, 1), -120, -120); lightOn(e); wiped(e); ledge(e); },
-  'chalkboard/colour-field': (e) => { e.ctx.drawImage(board(e, 1), -120, -120); atBase(e, (c) => { c.drawImage(sideFill(e, e.slots.ink2, 2), 0, 0); c.drawImage(sideFill(e, e.slots.accent, 3), 0, 180); }); wiped(e); ledge(e); },
-  'chalkboard/doodled': (e) => { e.ctx.drawImage(board(e, 0), -120, -120); doodles(e, ease(e.age / 1.2, 1.4)); wiped(e); ledge(e); },
-  'chalkboard/all-chalk': (e) => { e.ctx.drawImage(board(e, 1), -120, -120); atBase(e, (c) => { c.drawImage(sideFill(e, e.slots.ink2, 2), 0, -100); c.drawImage(sideFill(e, e.ink, 4), 0, 90); c.drawImage(sideFill(e, e.slots.accent, 3), 0, 280); }); wiped(e); ledge(e); },
-  'chalkboard/after-class': (e) => { e.ctx.drawImage(board(e, 1), -120, -120); lightOn(e); ledge(e); },
+  'chalkboard/slate': (e) => { board(e); marks(e); },
+  // the same board worn greyer by a day of lessons: a wider haze of old wiping low across it
+  'chalkboard/worn': (e) => { board(e); atBase(e, (c) => { c.save(); c.globalAlpha = 0.05; c.strokeStyle = e.ink; c.lineWidth = 220; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(W * (0.2 + 0.3 * i), H * 1.25, 640 + 90 * i, -2.5, -0.7); c.stroke(); } c.restore(); }); marks(e); },
+  'chalkboard/after-class': (e) => { board(e); lightOn(e); },
 };
 const INS: Record<string, HandIn> = {
-  // one pass of the eraser takes the last picture off
-  'wipe-pass': { sec: 0.36, draw: (e, q) => { const c = e.ctx; atBase(e, () => { c.fillStyle = e.paper; for (let i = 0; i < 4; i++) { const x = W * (1 - ease(q + i * 0.08, 2) * 1.4); c.fillRect(x - W * 0.2, (i * H) / 4, W, H / 4 + 2); } }); } },
+  // a change of part: the eraser goes right to left across the board, the last lesson gone behind it but for a grey trace
+  'wipe-pass': { sec: 0.5, draw: (e, q) => atBase(e, (c) => {
+    const x = W + 120 - ease(q, 2) * (W + 400);
+    c.save();
+    c.beginPath(); c.rect(x + 60, 0, W, H - 120); c.clip();
+    c.drawImage(slate(e), 0, 0);
+    c.globalAlpha = 0.05; c.strokeStyle = e.ink; c.lineWidth = 180; c.beginPath(); c.arc(x + 700, H * 1.1, 900, -2.6, -0.6); c.stroke();
+    c.restore();
+    c.fillStyle = R2.felt; c.fillRect(x, H * 0.18, 70, 230);
+    c.fillStyle = R2.pad; c.fillRect(x + 56, H * 0.18, 14, 230);
+  }) },
 };
-const puff = (e: WorldEnv) => kept(`cb-p|${e.ink}`, 400, 400, (c) => { const g = c.createRadialGradient(200, 200, 10, 200, 200, 200); g.addColorStop(0, e.ink); g.addColorStop(1, `${e.ink}00`); c.fillStyle = g; c.fillRect(0, 0, 400, 400); });
-const zig = (n: number, seed: number): Pt[] => { const pts: Pt[] = []; for (let i = 0; i <= n; i++) pts.push([i % 2 ? W + 80 : -80, (i / n) * (H + 80) - 40 + (hash(i, seed) - 0.5) * 30]); return pts; };
 const PIECES: Record<string, Piece> = {
-  // the side of the stick hauled back and forth till the board is colour, three sticks one after another
-  'chalk-storm': { sec: 2.5, clear: 0.94, draw: (e, q) => {
-    const c = e.ctx;
-    const out = 1 - easeIn((q - 0.8) / 0.2, 2);
-    dryMark(c, (d) => {
-      strokePts(d, partOf(zig(11, 1), ease(q * 1.8, 1.4)), 120, e.slots.ink2);
-      strokePts(d, partOf(zig(8, 2), ease((q - 0.16) * 2, 1.4)), 90, e.slots.accent);
-      strokePts(d, partOf(zig(7, 3), ease((q - 0.3) * 2.2, 1.4)), 70, e.ink);
-    }, 3, 0.7, out);
-  } },
   // the eraser goes round in big arcs through a board gone grey with dust
   'eraser-arcs': { sec: 2.4, clear: 0.92, draw: (e, q) => {
     const c = e.ctx;
-    const haze = span(q, 0.14, 0.86);
-    flood(e, e.ink, 0.46 * haze);
+    const haze = Math.min(ease(q / 0.14, 2), 1 - easeIn((q - 0.86) / 0.14, 2));
+    flood(e, e.ink, 0.3 * haze);
     dryMark(c, (d) => { const arcs: Pt[] = []; for (let i = 0; i <= 200; i++) { const t = i / 200; arcs.push([W * (0.04 + 0.92 * t), H * 0.5 + Math.sin(t * 24) * H * 0.52]); } strokePts(d, partOf(arcs, ease((q - 0.12) * 1.6, 1.2)), 200, e.paper, 'square'); }, 5, 0.3);
     const k = clamp01((q - 0.12) * 1.6);
     const [x, y] = [W * (0.04 + 0.92 * k), H * 0.5 + Math.sin(k * 24) * H * 0.52];
-    if (k < 1) { c.save(); c.translate(x, y); c.rotate(Math.cos(k * 24) * 0.7); lifted(c, 20, 6, 10, 0.5, () => { c.fillStyle = mixHex(e.slots.plate, e.paper, 0.7); c.beginPath(); c.roundRect(-60, -130, 120, 260, 12); c.fill(); }); c.restore(); }
+    if (k < 1) { c.save(); c.translate(x, y); c.rotate(Math.cos(k * 24) * 0.7); c.fillStyle = R2.felt; c.fillRect(-60, -130, 120, 260); c.fillStyle = R2.pad; c.fillRect(46, -130, 14, 260); c.restore(); }
   } },
-  // two erasers clapped: a cloud rolls out and settles
-  'dust-clap': { sec: 2.4, clear: 0.9, draw: (e, q) => {
-    const c = e.ctx;
-    const k = ease(q * 1.2, 2);
-    const fade = 1 - easeIn((q - 0.5) / 0.5, 1.6);
-    const sprite = puff(e);
-    for (let i = 0; i < 60; i++) {
-      const a = hash(i, 2) * TAU;
-      const d = k * (160 + 900 * hash(i, 3));
-      const r = 260 + 520 * hash(i, 4) * k;
-      c.globalAlpha = 0.22 * fade;
-      c.drawImage(sprite, W / 2 + Math.cos(a) * d * 1.3 - r / 2, H * 0.55 + Math.sin(a) * d * 0.7 - r / 2 + q * 120, r, r);
-    }
-    c.fillStyle = e.ink;
-    for (let i = 0; i < 700; i++) { const a = hash(i, 5) * TAU; const d = k * (120 + 1100 * hash(i, 6)); c.globalAlpha = 0.8 * fade * hash(i, 7); c.fillRect(W / 2 + Math.cos(a) * d * 1.3, H * 0.55 + Math.sin(a) * d * 0.7 + q * q * 500 * hash(i, 8), 2 + 4 * hash(i, 9), 2 + 4 * hash(i, 10)); }
-    c.globalAlpha = 1;
-  } },
-  // the teacher's hand: ring it, underline it twice, arrows at it from both sides
+  // the teacher's hand: ring it, underline it, arrows at it from both sides
   'ring-word': { sec: 2.5, clear: 0, draw: (e, q) => {
     const c = e.ctx;
-    const b = boxOf(e, 70, 60);
+    const r = e.rect ?? { x0: W * 0.3, y0: H * 0.4, x1: W * 0.7, y1: H * 0.6 };
+    const b = { x0: r.x0 - 70, y0: r.y0 - 60, x1: r.x1 + 70, y1: r.y1 + 60 };
     const [cx, cy, rx, ry] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.x1 - b.x0) / 2 + 40, (b.y1 - b.y0) / 2 + 40];
-    const ring: Pt[] = Array.from({ length: 150 }, (_, i) => { const t = (i / 150) * TAU * 2.1 - 1; const g = 1 + 0.05 * Math.sin(t * 1.3) + 0.02 * i / 150; return [cx + Math.cos(t) * rx * g, cy + Math.sin(t) * ry * g]; });
     const out = 1 - easeIn((q - 0.84) / 0.16, 2);
+    const low = Math.min(H - 150, b.y1 + 60);
     const line = (x0: number, x1: number, y: number): Pt[] => Array.from({ length: 30 }, (_, i) => [x0 + ((x1 - x0) * i) / 29, y + 6 * Math.sin(i * 0.5)]);
-    const low = Math.min(H - 70, b.y1 + 60);
     dryMark(c, (d) => {
-      strokePts(d, shaken(partOf(ring, ease(q * 2.2, 1.6)), 3, 1), 16, e.slots.ink2);
-      strokePts(d, partOf(line(b.x0, b.x1, low), ease((q - 0.42) * 5, 1.5)), 12, e.slots.accent);
-      strokePts(d, partOf(line(b.x1, b.x0 + 60, low + 26), ease((q - 0.54) * 5, 1.5)), 12, e.slots.accent);
-      for (const [x, s] of [[40, 1], [W - 40, -1]] as [number, number][]) { const k = ease((q - 0.6) * 5, 2); strokePts(d, [[x, cy - 140], [x + s * 180 * k, cy - 20], [x + s * 90 * k, cy - 34], [x + s * 180 * k, cy - 20], [x + s * 140 * k, cy - 110 * k]], 14, e.ink); }
+      strokePts(d, shaken(partOf(ellipse(cx, cy, rx, ry), ease(q * 2.2, 1.6)), 3, 1), 12, e.slots.accent);
+      strokePts(d, partOf(line(b.x0, b.x1, low), ease((q - 0.42) * 5, 1.5)), 10, e.slots.ink2);
+      for (const [x, s] of [[40, 1], [W - 40, -1]] as [number, number][]) { const k = ease((q - 0.6) * 5, 2); strokePts(d, [[x, cy - 140], [x + s * 180 * k, cy - 20], [x + s * 90 * k, cy - 34], [x + s * 180 * k, cy - 20], [x + s * 140 * k, cy - 110 * k]], 10, e.ink); }
     }, 2, 0.8, out);
   } },
   // the upper board slid up on its rails: the same wall, another slate under it
@@ -150,25 +188,12 @@ const PIECES: Record<string, Piece> = {
     const k = q < 0.5 ? ease(q / 0.5, 3) : 1 - easeIn((q - 0.56) / 0.44, 2);
     const y = H - k * H * 1.02;
     atBase(e, () => {
-      lifted(c, 40, 0, 16, 0.6, () => { c.fillStyle = e.paper; c.fillRect(0, y, W, H); });
-      c.drawImage(board(e, 1), 0, 120, W + 240, H, 0, y, W + 240, H);
-      c.drawImage(sideFill(e, e.slots.ink2, 2), 0, y);
-      c.fillStyle = mixHex(e.paper, e.slots.ink2, 0.28);
-      c.fillRect(0, y - 16, W, 30);
+      c.fillStyle = 'rgba(0,0,0,0.35)';
+      c.fillRect(0, y - 16, W, 16);
+      c.drawImage(slate(e), 0, 0, W, H, 0, y, W, H);
+      c.fillStyle = e.slots.plate;
+      c.fillRect(0, y - 12, W, 24);
     });
   } },
 };
-/** A block of chalk laid on with the side of the stick: the words are wiped out of it with a finger. */
-const rub: ObjectPaint = (c, w, h, s, seed, look) => {
-  const sc = new OffscreenCanvas(Math.ceil(w), Math.ceil(h));
-  const g = sc.getContext('2d')!;
-  g.strokeStyle = s.plate;
-  g.lineCap = 'round';
-  const n = 7;
-  g.lineWidth = (h / n) * 1.5;
-  for (let i = 0; i < n; i++) { const y = ((i + 0.5) / n) * h; const [a, b] = [g.lineWidth * 0.6 + 40 * hash(i, seed), w - g.lineWidth * 0.6 - 40 * hash(i, seed + 1)]; g.beginPath(); g.moveTo(a, y); g.bezierCurveTo(w * 0.3, y - 10, w * 0.7, y + 10, b, y); g.stroke(); }
-  g.globalCompositeOperation = 'destination-out';
-  for (let i = 0; i < w * h * 0.002; i++) { g.globalAlpha = 0.5; g.fillRect(hash(i, seed + 101 + look) * w, hash(i, seed + 2) * h, 1 + 4 * hash(i, 3), 1 + 2 * hash(i, 4)); }
-  c.drawImage(sc, 0, 0);
-};
-export const CHALK = { grounds: Gs, ins: INS, pieces: PIECES, objects: { 'chalk-rub': rub } as Record<string, ObjectPaint> };
+export const CHALK = { grounds: Gs, ins: INS, pieces: PIECES, objects: {} };

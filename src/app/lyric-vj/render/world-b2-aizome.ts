@@ -2,7 +2,7 @@
 // round a pole. It is cloth, so it hangs and moves as cloth, in folds that run across the frame; the words are resist, bare
 // cloth with the blue creeping in along the threads.
 import type { Piece } from './world-pieces';
-import { atBase, boxOf, clamp01, ease, easeIn, flood, H, hash, HandGround, HandIn, inOut, kept, lifted, mixHex, ObjectPaint, Pt, span, TAU, trace, W, WorldEnv } from './world-craft';
+import { atBase, boxOf, clamp01, ease, easeIn, fibred, flood, H, hash, HandGround, HandIn, inOut, kept, lifted, mixHex, ObjectPaint, Pt, span, TAU, trace, W, WorldEnv } from './world-craft';
 import { smoothNoise } from './world-ink';
 
 type G = OffscreenCanvasRenderingContext2D;
@@ -10,17 +10,6 @@ const CW = W + 320;
 const CH = H + 320;
 type Tie = 'arashi' | 'kumo' | 'itajime' | 'kanoko' | 'mokume' | 'dip';
 const weave = (e: WorldEnv) => kept(`az-w|${e.paper}|${e.slots.ink2}`, 8, 8, (c) => { c.fillStyle = e.slots.ink2; c.globalAlpha = 0.12; c.fillRect(0, 0, 8, 1); c.fillRect(0, 4, 8, 1); c.fillStyle = 'white'; c.globalAlpha = 0.05; c.fillRect(0, 0, 1, 8); c.fillRect(4, 0, 1, 8); });
-/** Vat mottling: the dye never takes evenly. */
-const mottle = (e: WorldEnv, seed: number) => kept(`az-m|${e.paper}|${e.slots.ink2}|${e.slots.faint}|${seed}`, 320, 200, (c) => {
-  const img = c.createImageData(320, 200);
-  const [a, b] = [e.slots.ink2, e.slots.faint].map((t) => [1, 3, 5].map((i) => parseInt(t.slice(i, i + 2), 16)));
-  for (let y = 0; y < 200; y++) for (let x = 0; x < 320; x++) {
-    const n = 0.6 * smoothNoise(x / 46, y / 34, seed) + 0.3 * smoothNoise(x / 14, y / 16, seed + 1) + 0.1 * hash(x, y);
-    const t = clamp01((n - 0.32) * 2.8);
-    img.data.set([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, 80 + 90 * Math.abs(t - 0.5)], (y * 320 + x) * 4);
-  }
-  c.putImageData(img, 0, 0);
-});
 function resist(c: G, kind: Tie, tone: string, seed: number) {
   c.strokeStyle = tone;
   c.fillStyle = tone;
@@ -92,19 +81,33 @@ const cloth = (e: WorldEnv, kind: Tie) => kept(`az|${kind}|${e.paper}|${e.ink}|$
   const seed = e.seed % 3;
   c.fillStyle = e.paper;
   c.fillRect(0, 0, CW, CH);
-  c.drawImage(mottle(e, seed), 0, 0, CW, CH);
+  // the vat's unevenness is in the threads (a fibre texture at full size), not in blown-up soft clouds
+  c.globalAlpha = 0.35;
+  c.drawImage(fibred(`az-f${seed}`, e.paper, mixHex(e.paper, e.slots.faint, 0.45), 3200, CW, CH), 0, 0);
+  c.globalAlpha = 1;
   if (kind === 'dip') {
-    // laid in the vat in steps: each dip leaves its tide line
-    for (let i = 0; i < 6; i++) { const y = (i / 6) * CH; const g = c.createLinearGradient(0, y, 0, y + CH / 6); g.addColorStop(0, `${e.slots.ink2}00`); g.addColorStop(1, `${e.slots.ink2}55`); c.fillStyle = g; c.beginPath(); c.moveTo(0, y); for (let x = 0; x <= CW; x += 30) c.lineTo(x, y + 30 * smoothNoise(x / 90, i, seed)); c.lineTo(CW, CH); c.lineTo(0, CH); c.closePath(); c.fill(); }
+    // laid in the vat in steps: each dip a flat deeper blue, and each leaves a crisp darker tide line at its edge
+    for (let i = 0; i < 6; i++) {
+      const y = (i / 6) * CH;
+      const edge = (x: number) => y + 30 * smoothNoise(x / 90, i, seed);
+      c.fillStyle = e.slots.ink2;
+      c.globalAlpha = 0.09;
+      c.beginPath(); c.moveTo(0, edge(0)); for (let x = 0; x <= CW; x += 30) c.lineTo(x, edge(x)); c.lineTo(CW, CH); c.lineTo(0, CH); c.closePath(); c.fill();
+      c.strokeStyle = e.slots.ink2;
+      c.globalAlpha = 0.4;
+      c.lineWidth = 3;
+      c.beginPath(); for (let x = 0; x <= CW; x += 30) (x ? c.lineTo(x, edge(x)) : c.moveTo(x, edge(x))); c.stroke();
+      c.globalAlpha = 1;
+    }
   } else {
     const r = new OffscreenCanvas(CW, CH);
     resist(r.getContext('2d')!, kind, e.ink, seed + 1);
     c.save();
-    c.filter = 'blur(5px)';
-    c.globalAlpha = 0.7;
-    c.drawImage(r, 0, 0);
-    c.filter = 'blur(1.2px)';
-    c.globalAlpha = 0.86;
+    // the dye creeps along the threads: the resist bleeds as two faint copies a thread's width off, not a blur
+    c.globalAlpha = 0.28;
+    c.drawImage(r, 3, 1);
+    c.drawImage(r, -1, 3);
+    c.globalAlpha = 0.9;
     c.drawImage(r, 0, 0);
     c.restore();
   }

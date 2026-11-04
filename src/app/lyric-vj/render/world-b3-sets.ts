@@ -54,12 +54,9 @@ export const LOUD_SETS: Record<string, SetSpec> = {
   'brutalist/corner-cut': { ...base, at: [0.98, 0.04], ax: 1, ay: -1, share: 0.62, tall: 0.5, hi: 300, rows: [1, 2], lead: 1, track: -0.01, flush: 1 },
   'brutalist/column': { ...base, at: [0.08, 0.5], ax: 0, ay: 0, share: 0.3, tall: 0.92, hi: 280, rows: [1, 2], vertical: true, lead: 1, track: -0.01 },
   'brutalist/shout': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 1.0, tall: 0.9, hi: 520, rows: [1, 2], lead: 1, track: -0.01 },
-  // citypop: a title high in the sky, a line along the horizon, on the sleeve, along the pool, a wide one, small credits
-  'citypop/sky-title': { ...base, at: [0.92, 0.18], ax: 1, ay: -1, share: 0.7, tall: 0.36, hi: 230, rows: [1, 2], lead: 1.3, track: 0.14, flush: 1 },
-  'citypop/horizon-low': { ...base, at: [0.08, 0.74], ax: -1, ay: 0, share: 0.76, tall: 0.34, hi: 220, rows: [1, 2], lead: 1.3, track: 0.12, flush: -1 },
-  'citypop/sleeve': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.44, tall: 0.4, hi: 200, rows: [1, 3], lead: 1.3, track: 0.08, object: 'sleeve-card', pad: [90, 110], fill: [0.36, 0.66] },
-  'citypop/pool-line': { ...base, at: [0.5, 0.62], ax: 0, ay: 0, share: 0.8, tall: 0.26, hi: 200, rows: [1, 2], lead: 1.3, track: 0.16 },
-  'citypop/column': { ...base, at: [0.1, 0.12], ax: 0, ay: -1, share: 0.24, tall: 0.8, hi: 200, rows: [1, 2], vertical: true, lead: 1.4, track: 0.1 },
-  'citypop/wide': { ...base, at: [0.5, 0.4], ax: 0, ay: 0, share: 0.92, tall: 0.5, hi: 300, rows: [1, 2], lead: 1.2, track: 0.1 },
-  'citypop/credits': { ...base, at: [0.92, 0.9], ax: 1, ay: 1, share: 0.6, tall: 0.3, hi: 120, lo: 70, rows: [1, 2], lead: 1.4, track: 0.2, flush: 1 },
+  // citypop (board a–d): the title on the facade, the line over the night sea, centred over the skyline, columns on the white column
+  'citypop/facade-title': { ...base, at: [0.073, 0.213], ax: -1, ay: -1, share: 0.4, tall: 0.5, hi: 142, rows: [1, 3], lead: 1.12, track: 0.04, flush: -1, fixed: true },
+  'citypop/sea-title': { ...base, at: [0.0885, 0.219], ax: -1, ay: -1, share: 0.5, tall: 0.42, hi: 92, rows: [1, 2], lead: 1.5, track: 0.16, flush: -1, fixed: true },
+  'citypop/skyline-title': { ...base, at: [0.5, 0.21], ax: 0, ay: 0, share: 0.9, tall: 0.3, hi: 176, rows: [1, 2], lead: 1.12, track: 0.18, fixed: true },
+  'citypop/column': { ...base, at: [0.534, 0.139], ax: 0, ay: -1, share: 0.22, tall: 0.78, hi: 96, rows: [2, 2], vertical: true, lead: 1.56, track: 0.16, stair: 1.56, object: 'cp-column', pad: [120, 40], fixed: true },
 };

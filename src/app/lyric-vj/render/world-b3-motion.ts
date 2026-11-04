@@ -37,10 +37,9 @@ export const LOUD_ENTERS: Record<string, WorldMove> = {
   'xerox-cut': { sec: 0.08, glyph: ({ q }) => ({ a: q > 0 ? 1 : 0 }) },
   'slam-down': { sec: 0.18, block: (q) => ({ dy: -70 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }) },
   'strip-reveal': { sec: 0.26, clip: (q) => ({ axis: 'y', at: stepsOf(q, 4) }) },
-  // citypop: the air brings the word up; it lifts like a sun; the haze clears off it left to right
-  'air-fade': { sec: 0.9, glyph: ({ q }) => ({ a: easeOut(q, 2), s: 1.02 - 0.02 * easeOut(q, 2) }) },
-  'sun-lift': { sec: 0.8, block: (q) => ({ dy: 34 * (1 - easeOut(q, 2)), a: easeOut(q, 2) }) },
-  'haze-clear': { sec: 0.8, glyph: ({ q, u }) => ({ a: 0.25 + 0.75 * clamp01((q * 1.6 - u) / 0.6), tone: 0.6 + 0.4 * clamp01((q * 1.6 - u) / 0.6) }) },
+  // citypop (board motion): the title fades in from wide tracking to its own, or line by line; it then stays a long time
+  'wide-fade': { sec: 0.9, glyph: ({ q, u }) => ({ a: easeOut(q, 2), dx: (u - 0.5) * 60 * (1 - easeOut(q, 3)) }) },
+  'line-fade': { sec: 0.9, glyph: ({ q, v }) => { const k = clamp01(q * 1.6 - v * 0.6); return { a: easeOut(k, 2) }; } },
 };
 
 export const LOUD_EXITS: Record<string, WorldMove> = {
@@ -59,8 +58,8 @@ export const LOUD_EXITS: Record<string, WorldMove> = {
   'peel-off': { sec: 0.3, block: (q, seed) => ({ dy: 90 * easeIn(q, 2), r: (seed % 2 ? 0.05 : -0.05) * easeIn(q, 2), a: 1 - easeIn(q, 1.4) }) },
   'rip-off': { sec: 0.2, block: (q, seed) => ({ dx: (seed % 2 ? 1 : -1) * 500 * stepsOf(easeIn(q, 2), 4), a: q < 0.85 ? 1 : 0 }) },
   'invert-off': { sec: 0.16, glyph: ({ q }) => ({ tone: q < 0.5 ? 0.2 : 1, a: q < 0.5 ? 1 : 0 }) },
-  'air-out': { sec: 0.9, glyph: ({ q }) => ({ a: 1 - easeIn(q, 1.6), s: 1 + 0.02 * easeIn(q, 2) }) },
-  'sink-off': { sec: 0.7, block: (q) => ({ dy: 40 * easeIn(q, 2), a: 1 - easeIn(q, 1.6) }) },
+  'slow-fade': { sec: 0.9, glyph: ({ q }) => ({ a: 1 - easeIn(q, 1.6) }) },
+  'wide-out': { sec: 0.8, glyph: ({ q, u }) => ({ a: 1 - easeIn(q, 1.6), dx: (u - 0.5) * 50 * easeIn(q, 2) }) },
 };
 
 export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
@@ -73,5 +72,5 @@ export const LOUD_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   'poster-still': () => ({}),
   'drip-hang': ({ age, i, seed }) => ({ dy: Math.min(4, age * 0.5) * hash(i, seed + 7) }),
   'copier-jitter': ({ age, i, seed }) => { const t = Math.floor(age * 12); return { dx: (hash(t, i + seed) - 0.5) * 2, dy: (hash(t, seed) - 0.5) * 1.5 }; },
-  'heat-shimmer': ({ age, v, i }) => ({ dx: 1.2 * Math.sin(age * 2 + v * 6 + i * 0.5) }),
+  'cover-still': () => ({}),
 };

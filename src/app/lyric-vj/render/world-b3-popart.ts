@@ -227,14 +227,21 @@ const PIECES: Record<string, Piece> = {
   }) },
 };
 
-/** The speech balloon round the words (board a): an ellipse filling the object, its tail out of the lower corner, key line round both. */
-const balloon = (corner: 'left' | 'right'): ObjectPaint => (c, w, h, s) => {
+/**
+ * The speech balloon round the words (board a): an ellipse filling the object, its tail out of the lower corner, key line round
+ * both. `side`: the tail leaves sideways and its tip stays above the balloon's foot (board d's tall balloons, which reach the
+ * frame's foot: a tail hung below them was cut off by the frame).
+ */
+const balloon = (corner: 'left' | 'right', side = false): ObjectPaint => (c, w, h, s) => {
   const [cx, cy, rx, ry] = [w / 2, h / 2, w / 2 - 4, h / 2 - 4];
-  // the tail's base is two points on the rim near the lower corner, its tip out past the object's edge
-  const at = (deg: number) => { const a = ((corner === 'left' ? 180 - deg : deg) * Math.PI) / 180; return [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry] as [number, number]; };
-  const [p0, p1] = [at(62), at(80)];
-  const tip: [number, number] = [cx + (corner === 'left' ? -1 : 1) * (rx * 0.62 + 40), cy + ry + 40];
-  const shape = () => { c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); c.moveTo(...p0); c.lineTo(...tip); c.lineTo(...p1); c.closePath(); };
+  const dir = corner === 'left' ? -1 : 1;
+  const angle = (deg: number) => ((corner === 'left' ? 180 - deg : deg) * Math.PI) / 180;
+  const [a0, a1] = side ? [angle(34), angle(46)] : [angle(62), angle(80)];
+  const tip: [number, number] = side ? [cx + dir * rx * 1.3, cy + ry * 0.96] : [cx + dir * (rx * 0.62 + 40), cy + ry + 40];
+  // one contour: the rim the long way round from one root of the tail to the other, out to the tip and back. Drawn as an
+  // ellipse plus a separate triangle, the rim between the roots was stroked across the tail's mouth (owner 2026-11-04)
+  const [from, to] = a0 > a1 ? [a0, a1] : [a1, a0];
+  const shape = () => { c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, from, to + Math.PI * 2); c.lineTo(...tip); c.closePath(); };
   shape();
   c.lineJoin = 'round';
   c.lineWidth = 16;
@@ -255,7 +262,7 @@ const twinBalloons: ObjectPaint = (c, w, h, s) => {
     const [rx, ry] = [Math.min(220, step * 0.24 + 120), h / 2 - 6];
     c.save();
     c.translate(cx - rx, 0);
-    balloon(corner)(c, rx * 2, ry * 2 + 8, s, 0, 0);
+    balloon(corner, true)(c, rx * 2, ry * 2 + 8, s, 0, 0);
     c.restore();
   }
 };

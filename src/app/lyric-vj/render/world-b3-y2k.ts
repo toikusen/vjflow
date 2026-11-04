@@ -178,15 +178,23 @@ const fan: HandGround = (e) => page(e, (c) => {
 const column: HandGround = (e) => page(e, (c) => {
   c.drawImage(sheet(e, 160), 0, 0);
   const k = swept(e);
-  blade(c, 620, -80, 620, -80 + 1240 * k, -560 * k, -260 * k);
+  const outer = () => blade(c, 620, -80, 620, -80 + 1240 * k, -560 * k, -260 * k);
+  outer();
   c.fillStyle = sheen(c, 0, -80, 0, 1160, [LILAC, PERI, AQUA], fract(e.now * 0.05));
   c.fill();
-  c.lineWidth = 2;
-  c.strokeStyle = lineTone(e);
-  c.stroke();
+  // the silver inner blade is printed on the crescent, never past it, and the keyline goes round last: laid over the
+  // crescent loose, its tips stuck out past the coloured one and cut the keyline off where it crossed (owner 2026-11-04)
+  c.save();
+  outer();
+  c.clip();
   blade(c, 700, -80, 700, -80 + 1240 * k, -250 * k, -110 * k);
   c.fillStyle = sheen(c, 500, -80, 700, 1160, [B3.xFFFFFF, SILVER]);
   c.fill();
+  c.restore();
+  outer();
+  c.lineWidth = 2;
+  c.strokeStyle = lineTone(e);
+  c.stroke();
   [[1600, 820, 70], [1720, 640, 28], [300, 240, 34]].forEach(([x, y, r], i) => { const [s, rot] = beatSpark(e, i); spark(c, e, x, y, r * s, rot); });
   orbit(c, 1600, 820, 190, 44, -0.349, lineTone(e), 1.5);
   const r = e.rect;
@@ -202,12 +210,18 @@ const column: HandGround = (e) => page(e, (c) => {
 const Gs: Record<string, HandGround> = { 'y2k/hook': hook, 'y2k/ring': ring, 'y2k/fan': fan, 'y2k/column': column };
 
 const INS: Record<string, HandIn> = {
-  // the next sleeve is cut in by one blade sweeping across from the lower right, its gradient leading
+  // the next sleeve is cut in by one crescent blade sweeping across from the right, keylined like the sleeve's own blades.
+  // Both arcs bulge the same way and the blade is ~110 px across, so it passes over any word within a frame or two: the old
+  // wipe bulged its arcs opposite ways into a 700 px lens with no keyline, a soft half-moon that sat on the words (owner
+  // 2026-11-04). It starts past the right edge and ends past the left.
   'blade-wipe': { sec: 0.42, draw: (e, q) => page(e, (c) => {
-    const x = W * 1.3 - ease(q, 3) * (W * 1.9);
-    blade(c, x + 600, H + 200, x + 1400, -200, -700, 700);
-    c.fillStyle = sheen(c, x, H, x + 1400, 0, [AQUA, PERI, LILAC]);
+    const x = W - ease(q, 2) * (W + 1450);
+    blade(c, x + 300, H + 120, x + 1300, -120, -520, -300);
+    c.fillStyle = sheen(c, x + 300, H, x + 1300, 0, [AQUA, PERI, LILAC]);
     c.fill();
+    c.lineWidth = 2;
+    c.strokeStyle = lineTone(e);
+    c.stroke();
   }) },
 };
 

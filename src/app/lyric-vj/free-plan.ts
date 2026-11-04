@@ -2,6 +2,7 @@
 // model call. It is the path `lineplan.mts` + `typeplan.mts --plan` + `render.mts` take offline, kept to what a composer
 // plan can hold (no sprites, backdrops, boards or documents); scripts/lyric-vj/free-plan.check.mts proves it gives the
 // same treatment as those scripts on the five test songs.
+import { TITLE_OPENING_SEC } from './render/world-title';
 import { FreeStyle, STYLE_PALETTES, styleFont } from './free-styles';
 import { composePlan, composerBase, Cue, fallbackParts, Meaning, PALETTES, RECIPES, rerollPalette } from './lineplan-core';
 import { poolOf, schemeFor, type StyleWorld } from './style-world';
@@ -117,14 +118,16 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
     const skin: UiLayer['skin'] = pal.id === 'mac-desk' ? 'mac' : 'term';
     const said = song.cues.filter((x) => x.end <= b).slice(-6).map((x) => x.text.split(/\s+/)[0]);
     const now = linesAt(a, b).split(/\s+/).filter(Boolean);
-    const line = (i: number) => said[i % Math.max(1, said.length)] ?? titleOf;
+    // (the song's name only on a desktop set up in its opening: world-title.ts; after that the windows are named by their job)
+    const named = a < TITLE_OPENING_SEC ? titleOf : '';
+    const line = (i: number) => said[i % Math.max(1, said.length)] ?? (named || '…');
     const base = { kind: 'ui' as const, color: pal.ink, alert: pal.accent, skin, plain: true, leaves: true };
     const sets: Omit<UiLayer, 'kind' | 'color' | 'alert' | 'skin' | 'plain'>[][] = [
-      [{ type: 'terminal', x: -0.62, y: 0.6, w: 0.34, h: 0.26, title: titleOf, lines: said.slice(-3) }, { type: 'log', x: 0.62, y: -0.6, w: 0.34, h: 0.28, title: 'log', lines: said, delay: 0.3 }],
-      [{ type: 'progress', x: 0.58, y: 0.66, w: 0.36, h: 0.14, title: titleOf, lines: [`${now[0] ?? titleOf}`] }, { type: 'files', x: -0.62, y: -0.56, w: 0.32, h: 0.32, title: `~/${titleOf.slice(0, 12)}`, lines: said.map((x) => `${x.slice(0, 10)}.txt`), delay: 0.25 }],
-      [{ type: 'loading', x: 0.66, y: -0.66, w: 0.3, h: 0.16, title: line(0) }, { type: 'code', x: -0.6, y: 0.56, w: 0.36, h: 0.3, title: `${titleOf.slice(0, 12)}.txt`, lines: said, delay: 0.2 }],
+      [{ type: 'terminal', x: -0.62, y: 0.6, w: 0.34, h: 0.26, title: named || '~ $ tty', lines: said.slice(-3) }, { type: 'log', x: 0.62, y: -0.6, w: 0.34, h: 0.28, title: 'log', lines: said, delay: 0.3 }],
+      [{ type: 'progress', x: 0.58, y: 0.66, w: 0.36, h: 0.14, title: named || 'sync', lines: [`${now[0] ?? (named || '…')}`] }, { type: 'files', x: -0.62, y: -0.56, w: 0.32, h: 0.32, title: `~/${(named || 'lyrics').slice(0, 12)}`, lines: said.map((x) => `${x.slice(0, 10)}.txt`), delay: 0.25 }],
+      [{ type: 'loading', x: 0.66, y: -0.66, w: 0.3, h: 0.16, title: line(0) }, { type: 'code', x: -0.6, y: 0.56, w: 0.36, h: 0.3, title: `${(named || 'lyrics').slice(0, 12)}.txt`, lines: said, delay: 0.2 }],
       [{ type: 'cursor', x: -0.5, y: -0.72, lines: [line(1)] }],
-      [{ type: 'error', x: 0.6, y: 0.62, w: 0.34, h: 0.2, title: titleOf.slice(0, 18), lines: [line(2)] }, { type: 'terminal', x: -0.6, y: -0.6, w: 0.36, h: 0.26, title: titleOf, lines: [line(3), line(4)], delay: 0.3 }],
+      [{ type: 'error', x: 0.6, y: 0.62, w: 0.34, h: 0.2, title: (named || 'error').slice(0, 18), lines: [line(2)] }, { type: 'terminal', x: -0.6, y: -0.6, w: 0.36, h: 0.26, title: named || '~ $ tty', lines: [line(3), line(4)], delay: 0.3 }],
     ];
     return sets[k % sets.length].map((l) => ({ ...base, ...l }) as UiLayer);
   };

@@ -7,6 +7,7 @@
 import { atBase, clamp01, ease, H, HandGround, HandIn, mixHex, W, WorldEnv } from './world-craft';
 import { C, label, titleOnly } from './world-b3-shared';
 import { R2 } from './r2-inks';
+import { titleNow } from './world-title';
 
 const LABEL = (px: number) => `800 ${px}px "Chiron GoRound TC", "Zen Maru Gothic", sans-serif`;
 const SHADOW = 'rgba(10,8,20,0.30)';
@@ -105,7 +106,7 @@ const onTable: HandGround = (e) => page(e, (c) => {
   }
   card(c, { x: x0 + 10, y: y0 + 14, w: x1 - x0, h: y1 - y0, rot: lean * 1.4, face: shade(e.slots.plate, 0.93) });
   const up = faceUp(e);
-  const foot = titleOnly(e.title);
+  const foot = titleOnly(titleNow(e));
   card(c, { x: x0, y: y0, w: x1 - x0, h: y1 - y0, rot: lean, face: e.slots.plate, sx: up.sx, inner: up.face ? furniture(e, beat, e.slots.accent, foot) : (g, w, h) => back(g, w, h, e.slots.accent, shade(e.slots.accent, 0.82)) });
 });
 

@@ -6,14 +6,15 @@
 import { atBase, ease, H, HandGround, HandIn, mixHex, W, WorldEnv } from './world-craft';
 import { artistOf, C, label, titleOnly } from './world-b3-shared';
 import { kraftOver } from './world-r2-tex';
+import { titleNow } from './world-title';
 import { R2 } from './r2-inks';
 
 const TYPED = (px: number, weight = 400) => `${weight} ${px}px "Courier Prime", "UoqMunThenKhung", "BIZ UDPMincho", serif`;
 const OLD = (px: number) => `400 ${px}px "UoqMunThenKhung", "BIZ UDPMincho", serif`;
 const SHADOW = 'rgba(60,40,10,0.22)';
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-/** The entry's own data: the song, its artist, the time the entry was made. */
-const facts = (e: WorldEnv) => ({ title: titleOnly(e.title) || '—', artist: artistOf(e.title), at: clock(Math.max(0, e.now - e.age)) });
+/** The entry's own data: the time it was made; the song and its artist only in the song's opening (world-title.ts). */
+const facts = (e: WorldEnv) => { const t = titleNow(e); return { title: titleOnly(t), artist: artistOf(t), at: clock(Math.max(0, e.now - e.age)) }; };
 const box = (e: WorldEnv, x0: number, y0: number, x1: number, y1: number) => e.rect ?? { x0, y0, x1, y1 };
 /** Rows in a block of a fixed set: a set's `max` keeps a two-row block well over one row's height, so its height tells. */
 const rowsIn = (h: number, lead: number, hi: number) => (h - 28 > lead * hi * 1.12 ? 2 : 1);
@@ -74,30 +75,35 @@ const caseSheet: HandGround = (e) => page(e, (c) => {
   c.beginPath();
   c.roundRect(1380, 40, 330, 90, [10, 10, 0, 0]);
   c.fill();
-  label(c, `FILE ─ ${f.title}`.slice(0, 22), 1410, 92, TYPED(30, 700), ink, 1);
+  label(c, (f.title ? `FILE ─ ${f.title}` : 'FILE').slice(0, 22), 1410, 92, TYPED(30, 700), ink, 1);
   c.translate(0, kick(e));
   sheet(c, e, 120, 96, 1680, 930, -0.0035);
   // the header: title, artist, time
   c.strokeStyle = ink;
   c.lineWidth = 2;
   c.strokeRect(340, 140, 1400, 96);
-  const cells: [string, string, number][] = [['TITLE 標題', f.title, 340], ['ARTIST 歌手', f.artist || '—', 900], ['TIME 時間', f.at, 1380]];
-  cells.forEach(([k, v, x], i) => {
+  const r = box(e, 346, 278, 1600, 586);
+  const n = rowsIn(r.y1 - r.y0, 1.33, 206);
+  // (only real data in the cells: the song's name only in its opening, the entry's time and how many lines it runs)
+  const cells = ([['TITLE 標題', f.title], ['ARTIST 歌手', f.artist], ['TIME 時間', f.at], ['LINES 行數', String(n)]] as [string, string][]).filter(([, v]) => v);
+  const cw = 1400 / cells.length;
+  cells.forEach(([k, v], i) => {
+    const x = 340 + i * cw;
     if (i) vrule(c, x, 142, 234, ink);
     label(c, k, x + 20, 168, TYPED(18), ink, 0.7);
     label(c, v.slice(0, 14), x + 20, 216, TYPED(36, 700), ink, 1);
   });
-  for (const y of [276, 542, 808]) hole(c, e, 182, y, 38, 38);
-  vrule(c, 316, 96, 1026, e.slots.accent, 3);
-  const r = box(e, 346, 278, 1600, 586);
-  const n = rowsIn(r.y1 - r.y0, 1.33, 206);
+  // (a key word blown up across the sheet runs over the margin: then the holes, the red rule and the numbers give way)
+  const margin = r.x0 >= 330;
+  if (margin) for (const y of [276, 542, 808]) hole(c, e, 182, y, 38, 38);
+  if (margin) vrule(c, 316, 96, 1026, e.slots.accent, 3);
   const size = (r.y1 - r.y0 - 28) / (n * 1.33);
   const top = r.y0 + 14;
   // (a row stands in the middle of its lead: its rule runs in the gap below it, its number beside its middle)
   for (let i = 0; i <= n; i++) {
     const mid = top + (i + 0.5) * size * 1.33;
     if (mid > 930) break;
-    label(c, String(i + 1).padStart(2, '0'), 240, mid + 14, TYPED(40, 700), i < n ? e.slots.accent : mixHex(e.slots.plate, ink, 0.25), 1);
+    if (margin) label(c, String(i + 1).padStart(2, '0'), 240, mid + 14, TYPED(40, 700), i < n ? e.slots.accent : mixHex(e.slots.plate, ink, 0.25), 1);
     if (i < n) rule(c, 340, 1740, mid + size * 0.665, e.slots.faint);
   }
   rule(c, 340, 1740, 956, e.slots.faint);
@@ -113,8 +119,8 @@ const catalogue: HandGround = (e) => page(e, (c) => {
   const blue = mixHex(e.slots.ink2, e.slots.plate, 0.55);
   sheet(c, e, 300, 150, 1320, 790, 0.004);
   rule(c, 300, 1620, 272, e.slots.accent, 4);
-  label(c, f.title.slice(0, 20), 370, 238, TYPED(30, 700), ink, 1);
-  label(c, [f.artist, f.at].filter(Boolean).join('  ').slice(0, 24), 1550, 238, TYPED(30), ink, 1, 'right');
+  label(c, (f.title || `ENTRY ${f.at}`).slice(0, 20), 370, 238, TYPED(30, 700), ink, 1);
+  label(c, [f.artist, f.title ? f.at : ''].filter(Boolean).join('  ').slice(0, 24), 1550, 238, TYPED(30), ink, 1, 'right');
   vrule(c, 450, 274, 940, e.slots.accent, 2);
   const r = box(e, 486, 332, 1500, 690);
   const n = rowsIn(r.y1 - r.y0, 1.69, 150);
@@ -123,7 +129,7 @@ const catalogue: HandGround = (e) => page(e, (c) => {
   let last = 0;
   for (let i = 0; i < n; i++) { last = top + (i + 0.5) * size * 1.69 + size * 0.5 + 16; rule(c, 300, 1620, last, blue); }
   if (last + 110 < 900) rule(c, 300, 1620, last + 110, blue);
-  label(c, `${f.title} ── ${n} LINE${n > 1 ? 'S' : ''}`.slice(0, 30), 500, Math.min(880, last + 52), TYPED(22), mixHex(ink, e.slots.plate, 0.3), 1);
+  label(c, [f.title, `${n} LINE${n > 1 ? 'S' : ''}`].filter(Boolean).join(' ── ').slice(0, 30), 500, Math.min(880, last + 52), TYPED(22), mixHex(ink, e.slots.plate, 0.3), 1);
   hole(c, e, 920, 850, 80, 46);
   edge(c);
 });
@@ -178,12 +184,12 @@ const letter: HandGround = (e) => page(e, (c) => {
   c.lineWidth = 1.5;
   c.strokeRect(left, top, right - left, bot - top);
   for (let i = 1; i < n; i++) vrule(c, right - i * pitch, top, bot, red, 2);
-  label(c, `${f.title} ── ${f.artist || f.at} ── ${f.at}`.slice(0, 40), left, top - 40, TYPED(22), red, 1);
+  label(c, [f.title, f.artist, f.at].filter(Boolean).join(' ── ').slice(0, 40), left, top - 40, TYPED(22), red, 1);
   // the file's data down the last column, an old official hand
   c.font = OLD(30);
   c.fillStyle = e.slots.plateInk;
   c.textAlign = 'center';
-  [...`${f.title}　${f.artist}`.slice(0, 22)].forEach((ch, i) => c.fillText(ch, left + pitch / 2, top + 60 + i * 34));
+  [...[f.title, f.artist].filter(Boolean).join('　').slice(0, 22)].forEach((ch, i) => c.fillText(ch, left + pitch / 2, top + 60 + i * 34));
   c.textAlign = 'left';
   edge(c);
 });
@@ -202,11 +208,13 @@ const closed: HandGround = (e) => (e.rect ? catalogue(e) : page(e, (c) => {
   c.beginPath();
   c.roundRect(1300, 120, 360, 76, [10, 10, 0, 0]);
   c.fill();
-  label(c, `FILE ─ ${facts(e).title}`.slice(0, 22), 1330, 170, TYPED(30, 700), e.slots.plateInk, 1);
+  label(c, (facts(e).title ? `FILE ─ ${facts(e).title}` : 'FILE').slice(0, 22), 1330, 170, TYPED(30, 700), e.slots.plateInk, 1);
   edge(c);
 }));
 
-const Gs: Record<string, HandGround> = { 'file/folder': closed, 'file/case': caseSheet, 'file/catalogue': catalogue, 'file/sections': sections, 'file/letter': letter };
+/** With no line up (an intro, an interlude) every sheet is the closed folder: no empty form, card or letter paper is ever shown. */
+const orClosed = (g: HandGround): HandGround => (e) => (e.rect ? g(e) : closed(e));
+const Gs: Record<string, HandGround> = { 'file/folder': closed, 'file/case': orClosed(caseSheet), 'file/catalogue': orClosed(catalogue), 'file/sections': orClosed(sections), 'file/letter': orClosed(letter) };
 
 const INS: Record<string, HandIn> = {
   // a change of part: the top sheet is pulled away up and left, the next one's tab pushed to the front

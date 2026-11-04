@@ -6,6 +6,7 @@ import { brushStroke, inkWash, smoothNoise, spatter } from './world-ink';
 import { mixHex, Pt } from './material';
 import type { WorldEnv } from './world-grounds';
 import { handPieces } from './world-packs';
+import { titleNow } from './world-title';
 
 const W = 1920;
 const H = 1080;
@@ -168,10 +169,11 @@ export const WORLD_PIECES: Record<string, Piece> = {
   // terminal: the machine losing control of itself; every word on screen is the song's
   'error-cascade': { sec: 2.2, clear: 0, draw: (e, q, age) => {
     const list = wordsOf(e);
+    const name = titleNow(e) || 'error';
     // dialogs up one after another, each with air round it
     for (let i = 0; i < 12; i++) {
       const l = { x: -0.72 + 0.48 * (i % 4), y: 0.68 - 0.68 * Math.floor(i / 4) - 0.04 * (i % 4), w: 0.22, h: 0.22 };
-      if (openFor(e, l)) ui(e, { type: 'error', ...l, title: e.title.slice(0, 24), lines: [list[i % list.length] ?? e.title], delay: i * 0.1 }, age);
+      if (openFor(e, l)) ui(e, { type: 'error', ...l, title: name.slice(0, 24), lines: [list[i % list.length] ?? name], delay: i * 0.1 }, age);
     }
     fill(e, e.slots.accent, 0.1 * Math.sin(q * Math.PI));
   } },
@@ -179,19 +181,20 @@ export const WORLD_PIECES: Record<string, Piece> = {
     const c = e.ctx; const rows = 19; const on = Math.floor(ease(q * 1.4, 1) * rows);
     fill(e, e.paper, 0.9);
     c.font = '32px "Space Mono", "Noto Sans TC", monospace'; c.fillStyle = e.ink; c.textBaseline = 'top';
-    const text = `${e.title}  ${e.words}  `.repeat(6);
+    const text = `${[titleNow(e), e.words].filter(Boolean).join('  ')}  `.repeat(6);
     // the dump keeps to the rows the words do not stand on
     for (let i = 0; i < on; i++) { const y = 30 + i * 56; if (e.rect && y + 40 > e.rect.y0 - 24 && y < e.rect.y1 + 24) continue; c.fillText([...text].slice(i * 3, i * 3 + 60).join(''), 48, y); }
     if (q > 0.66) { const k = (q - 0.66) / 0.34; c.fillStyle = e.paper; c.fillRect(0, 0, W * ease(k), H); c.fillStyle = e.ink; if (Math.floor(age * 3) % 2 === 0) c.fillRect(46, 40, 26, 44); }
   } },
   reboot: { sec: 2.1, clear: 0, draw: (e, _q, age) => {
     fill(e, e.paper, 0.86);
+    const name = titleNow(e) || 'reboot';
     const high = e.rect ? (e.rect.y0 + e.rect.y1) / 2 > H / 2 : false;
     const bar = { x: 0, y: high ? 0.62 : -0.62, w: 0.7, h: 0.22 };
-    if (openFor(e, bar)) ui(e, { type: 'progress', ...bar, title: e.title.slice(0, 30), lines: [wordsOf(e)[0] ?? e.title] }, age * 3.6);
+    if (openFor(e, bar)) ui(e, { type: 'progress', ...bar, title: name.slice(0, 30), lines: [wordsOf(e)[0] ?? name] }, age * 3.6);
     const a = { x: -0.5, y: high ? 0.1 : -0.1, w: 0.36, h: 0.22 };
     const b = { x: 0.5, y: high ? 0.1 : -0.1, w: 0.44, h: 0.3 };
-    if (openFor(e, a)) ui(e, { type: 'loading', ...a, title: e.title.slice(0, 20), delay: 0.5 }, age);
+    if (openFor(e, a)) ui(e, { type: 'loading', ...a, title: name.slice(0, 20), delay: 0.5 }, age);
     if (openFor(e, b)) ui(e, { type: 'terminal', ...b, lines: wordsOf(e).slice(0, 4), delay: 0.8 }, age);
   } },
   'window-storm': { sec: 2.1, clear: 0, draw: (e, _q, age) => {
@@ -199,7 +202,7 @@ export const WORLD_PIECES: Record<string, Piece> = {
     // a grid the storm fills in, gaps kept between the windows
     for (let i = 0; i < 12; i++) {
       const l = { x: -0.72 + 0.48 * (i % 4), y: 0.66 - 0.66 * Math.floor(i / 4), w: 0.22, h: 0.28 };
-      if (openFor(e, l)) ui(e, { type: (['terminal', 'files', 'log', 'code'] as const)[i % 4], ...l, title: list[i % list.length] ?? e.title, lines: list.length ? list : [e.title], delay: i * 0.1 }, age);
+      if (openFor(e, l)) ui(e, { type: (['terminal', 'files', 'log', 'code'] as const)[i % 4], ...l, title: list[i % list.length] ?? 'tty', lines: list.length ? list : ['…'], delay: i * 0.1 }, age);
     }
   } },
   // led-board: what the whole wall can do at once

@@ -84,7 +84,8 @@ class Build {
   }
 }
 
-/** The four windows of the board, built round the words' box (the inscription is sized to it, the glass round it fixed). */
+/** The four windows of the board, built round the words' box (the inscription is sized to it, the glass round it fixed);
+ * with no line up there is no inscription pane at all, never an empty one. */
 function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
   const j = jewels(e);
   if (kind === 'transom') {
@@ -97,7 +98,7 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     const t = r ?? { x0: 600, y0: 370, x1: 1320, y1: 720 };
     const [cx, cy] = [(t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2];
     const [hw, hh] = [Math.max(540, (t.x1 - t.x0) / 2 + 130), Math.max(240, (t.y1 - t.y0) / 2 + 80)];
-    b.w.inscriptions.push(rectP(cx - hw, cy - hh, hw * 2, hh * 2));
+    if (r) b.w.inscriptions.push(rectP(cx - hw, cy - hh, hw * 2, hh * 2));
     return b.w;
   }
   if (kind === 'rose-lancet' || kind === 'lancet-rose') {
@@ -117,7 +118,7 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     const t = r ?? { x0: lx + 190, y0: 380, x1: lx + 330, y1: 900 };
     const cx = (t.x0 + t.x1) / 2;
     const hw = Math.min(230, Math.max(150, (t.x1 - t.x0) / 2 + 60));
-    b.w.inscriptions.push(rectP(cx - hw, Math.min(350, t.y0 - 40), hw * 2, Math.max(640, t.y1 + 40 - Math.min(350, t.y0 - 40))));
+    if (r) b.w.inscriptions.push(rectP(cx - hw, Math.min(350, t.y0 - 40), hw * 2, Math.max(640, t.y1 + 40 - Math.min(350, t.y0 - 40))));
     return b.w;
   }
   if (kind === 'rose' || kind === 'window') {
@@ -128,7 +129,7 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     if (kind === 'window') { b.pane(circleP(960, 540, 262), j.pale[1], 960, 540, 262, 8); b.quatrefoil(960, 540, 240, j.b, j.a, j.c); return b.w; }
     const t = r ?? { x0: 810, y0: 400, x1: 1110, y1: 700 };
     const rad = Math.max(262, Math.hypot(t.x1 - t.x0, t.y1 - t.y0) / 2 + 40);
-    b.w.inscriptions.push(circleP((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2, rad));
+    if (r) b.w.inscriptions.push(circleP((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2, rad));
     return b.w;
   }
   if (kind === 'predella') {
@@ -156,7 +157,7 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     const [cx, cy] = [(t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2];
     const hw = Math.min(pw / 2 - 70, Math.max(420, (t.x1 - t.x0) / 2 + 90));
     const hh = Math.min(ph / 2 - 40, Math.max(110, (t.y1 - t.y0) / 2 + 40));
-    b.w.inscriptions.push(rectP(cx - hw, cy - hh, hw * 2, hh * 2));
+    if (r) b.w.inscriptions.push(rectP(cx - hw, cy - hh, hw * 2, hh * 2));
     return b.w;
   }
   // four lancets: the inner two carry the inscription's two columns, the outer two a pair of quatrefoils each
@@ -182,7 +183,7 @@ function windowOf(kind: string, e: WorldEnv, r: Box | undefined): Window {
     if (carries) {
       const hw = Math.min(w0 / 2 - 24, Math.max(92, size / 2 + 46));
       const top = Math.min(250, t.y0 - 34);
-      b.w.inscriptions.push(rectP(mid - hw, top, hw * 2, Math.min(Y + Hh - 30, Math.max(t.y1 + 34, 970)) - top));
+      if (r) b.w.inscriptions.push(rectP(mid - hw, top, hw * 2, Math.min(Y + Hh - 30, Math.max(t.y1 + 34, 970)) - top));
     }
   });
   return b.w;

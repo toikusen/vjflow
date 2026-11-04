@@ -8,6 +8,7 @@ import { atBase, clamp01, dryMark, ease, easeIn, flood, H, hash, HandGround, Han
 import { smoothNoise } from './world-ink';
 import { titleOnly } from './world-b3-shared';
 import { R2 } from './r2-inks';
+import { titleNow } from './world-title';
 
 const HAND = (px: number) => `400 ${px}px Iansui, Yomogi, sans-serif`;
 /** The slate: its own green, a low cloud of lighter patches (the board's mottle), and four long faint eraser arcs; kept. */
@@ -87,7 +88,7 @@ function written(c: CanvasRenderingContext2D, text: string, x: number, y: number
 
 /**
  * The teacher's mark for the line on the board, from the shape the line takes (a set's own place, world-r2-sets.ts): a
- * column gets a rule beside it and the title written small; a short loud line is ringed with an arrow at it and the title
+ * column gets a rule beside it (and, in the song's opening, its title written small); a short loud line is ringed with an arrow at it and the title
  * boxed over it; a calm line a long rule under it; any other its key phrase (the end of its first row) underlined.
  */
 function marks(e: WorldEnv) {
@@ -96,7 +97,8 @@ function marks(e: WorldEnv) {
   const k = ease((e.age - 0.35) / 0.7, 2);
   if (k <= 0) return;
   const [w, h] = [r.x1 - r.x0, r.y1 - r.y0];
-  const title = titleOnly(e.title).slice(0, 8);
+  // (the song's name only in its opening: world-title.ts)
+  const title = titleOnly(titleNow(e)).slice(0, 8);
   atBase(e, (c) => {
     c.save();
     c.globalAlpha = Math.min(1, e.weight * 2);

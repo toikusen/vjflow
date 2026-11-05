@@ -274,16 +274,17 @@ const search: HandGround = (e) => frame(e, (c) => {
   c.fillRect(0, 0, W, H);
   statusBar(c, e, INK);
   const r = e.rect;
+  // the field grows round a line it had to take in two rows
   // (a line split onto the suggestion reaches down past 330 px; one in the field alone, two rows included, never does)
   const split = !!r && r.y1 > 330;
-  // the field grows round a line it had to take in two rows
   const fieldH = r && !split ? Math.max(136, r.y1 + 26 - 104) : 136;
   const [fx0, fx1] = [Math.min(96, (r?.x0 ?? 96) - 40), Math.max(1824, (r?.x1 ?? 0) + 70)];
   rr(c, fx0, 104, fx1 - fx0, fieldH, 68);
   c.fillStyle = mixHex(s.plate, B4.x6E6890, 0.15);
   c.fill();
   const lens = (x: number, y: number, rad: number, w: number, tone: string) => { c.save(); c.strokeStyle = tone; c.lineWidth = w; c.lineCap = 'round'; c.beginPath(); c.arc(x, y, rad, 0, Math.PI * 2); c.stroke(); c.beginPath(); c.moveTo(x + rad * 0.72, y + rad * 0.72); c.lineTo(x + rad * 1.65, y + rad * 1.65); c.stroke(); c.restore(); };
-  if (!r || r.x0 > 236) lens(186, 166, 28, 9, INK);
+  // (the lens keeps its place unless a long line took the field's whole width)
+  if (!r || split || r.x0 > 236) lens(186, 166, 28, 9, INK);
   // the caret after a line typed whole into the field
   if (r && !split && (e.now * 1.6) % 1 < 0.6) { c.fillStyle = s.accent; c.fillRect(Math.min(1780, r.x1 + 22), 122, 8, 100); }
   if (split) {

@@ -295,5 +295,32 @@
   "small": 0,
   "cross": 0,
   "low": 0
+ },
+ "phone": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 1,
+  "plate": 1,
+  "small": 1,
+  "cross": 0,
+  "low": 0
+ },
+ "blueprint": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 0
+ },
+ "xerox": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 0
  }
 }

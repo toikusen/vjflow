@@ -57,7 +57,7 @@
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 0,
+  "plate": 2,
   "small": 1,
   "cross": 0,
   "low": 5
@@ -66,7 +66,7 @@
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 4,
+  "plate": 0,
   "small": 0,
   "cross": 0,
   "low": 1
@@ -113,14 +113,14 @@
   "clip": 0,
   "plate": 0,
   "small": 0,
-  "cross": 6,
+  "cross": 5,
   "low": 2
  },
  "gothic-lolita": {
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 0,
+  "plate": 1,
   "small": 0,
   "cross": 0,
   "low": 0
@@ -195,7 +195,7 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 11
+  "low": 0
  },
  "popart": {
   "moments": 489,

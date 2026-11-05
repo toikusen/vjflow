@@ -9,6 +9,8 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, kept, mixHex, W, WorldEnv } from './world-craft';
 import { artistBy, C, label, rng, titleOf } from './world-b3-shared';
 import { B4B } from './b4b-inks';
+import { mirrorGround } from './world-b3-shared';
+import { B4B_MIRRORED } from './world-b4b-sets';
 
 type Box = { x0: number; y0: number; x1: number; y1: number };
 /** Draws in the frame's own coordinates (the page does not slide). */
@@ -209,7 +211,14 @@ const stripsPage: HandGround = (e) => frame(e, (c) => {
   sheet(e, c, layer, [120, 1042, 'left']);
 });
 
-const Gs: Record<string, HandGround> = { 'cyanotype/fern': fernPage, 'cyanotype/stars': starsPage, 'cyanotype/doily': doilyPage, 'cyanotype/strips': stripsPage };
+/** d's quiet page on its own: one tall frond laid at the right of a wide print; the line stands left of it. */
+const frondPage: HandGround = (e) => frame(e, (c) => {
+  const layer = print(e, 'frond', [[110, 90, 1700, 880, 13]], (g) => fern(g, 1530, 1000, 78, -0.08, 1));
+  sheet(e, c, layer, [120, 1032, 'left']);
+});
+
+const Gs: Record<string, HandGround> = { 'cyanotype/frond': frondPage, 'cyanotype/fern': fernPage, 'cyanotype/stars': starsPage, 'cyanotype/doily': doilyPage, 'cyanotype/strips': stripsPage };
+for (const [id, page] of Object.entries(B4B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);
 
 const INS: Record<string, HandIn> = {
   // a change of line is a new exposure: the lamp flashes white over the print and the blue develops back, deepening.

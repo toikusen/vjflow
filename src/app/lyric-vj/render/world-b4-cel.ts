@@ -10,6 +10,8 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, fract, H, HandGround, HandIn, kept, W, WorldEnv } from './world-craft';
 import { artistBy, C, label, rng, titleOf } from './world-b3-shared';
 import { B4B } from './b4b-inks';
+import { mirrorGround } from './world-b3-shared';
+import { B4B_MIRRORED } from './world-b4b-sets';
 
 type Box = { x0: number; y0: number; x1: number; y1: number };
 const frame = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
@@ -230,6 +232,7 @@ const ending: HandGround = (e) => frame(e, (c) => {
 });
 
 const Gs: Record<string, HandGround> = { 'cel80s/title': title, 'cel80s/dusk': dusk, 'cel80s/eyecatch': eyecatch, 'cel80s/ending': ending };
+for (const [id, page] of Object.entries(B4B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);
 
 const INS: Record<string, HandIn> = {
   // the anime cut: a hard diagonal cel band, magenta then cyan, sweeps across the ground and is gone

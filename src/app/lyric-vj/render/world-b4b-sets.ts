@@ -20,6 +20,8 @@ export const B4B_SETS: Record<string, SetSpec> = {
   'cyanotype/fern': { ...base, split: { small: 'tail', scale: 0.85, track: 0.2 }, at: [0.5, 0.176], ax: 0, ay: -1, share: 0.62, tall: 0.4, hi: 176, rows: [1, 2], lead: 1.31, track: 0.04, keepRows: true, clear: [[0.08, 0.58, 0.33, 0.93], [0.67, 0.58, 0.92, 0.93]], fixed: true },
   'cyanotype/stars': { ...base, at: [0.5, 0.306], ax: 0, ay: -1, share: 0.5, tall: 0.34, hi: 112, rows: [1, 3], lead: 1.43, track: 0.14, weight: 500, clear: [[0.05, 0.66, 0.95, 0.8]], fixed: true },
   'cyanotype/doily': { ...base, at: [0.5, 0.49], ax: 0, ay: 0, share: 0.5, tall: 0.4, hi: 200, rows: [1, 2], lead: 1.15, track: 0.06, keepRows: true, clear: [[0.04, 0.03, 0.96, 0.17], [0.04, 0.83, 0.96, 0.97], [0.04, 0.17, 0.2, 0.83], [0.8, 0.17, 0.96, 0.83]], fixed: true },
+  // (board d's quiet page, its single frond, carrying a line of its own: the words flush left of the frond)
+  'cyanotype/frond': { ...base, at: [0.1, 0.2], ax: -1, ay: -1, share: 0.5, tall: 0.5, hi: 150, rows: [1, 3], lead: 1.36, track: 0.06, flush: -1, clear: [[0.66, 0.1, 0.95, 0.93]], fixed: true },
   'cyanotype/strips': { ...base, split: { small: 'tail', scale: 0.92, at: [0.583, 0.12], tall: 0.78 }, at: [0.784, 0.12], ax: 0, ay: -1, share: 0.06, tall: 0.78, hi: 106, rows: [1, 1], vertical: true, lead: 1.15, track: 0, key: 'ink', keepRows: true, clear: [[0.08, 0.14, 0.42, 0.86]], fixed: true },
   // isometric (board a–d): the line on the side wall of a staircase, rising right; on the front wall of a pale terrace by
   // the sea; a character a block down a row of blocks; on one wall of a corner room (either wall: white words on the deep
@@ -35,4 +37,12 @@ export const B4B_SETS: Record<string, SetSpec> = {
   'cel80s/dusk': { ...base, at: [0.5, 0.278], ax: 0, ay: -1, share: 0.46, tall: 0.3, hi: 104, rows: [1, 3], lead: 1.44, track: 0.1, clear: [[0.29, 0.06, 0.8, 0.2], [0, 0.62, 1, 1]], fixed: true },
   'cel80s/eyecatch': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.7, tall: 0.4, hi: 360, rows: [1, 1], lead: 1, track: 0.083, shear: ITALIC, surface: 'cel-sunset', core: 'accent', under: CEL_RINGS, keepRows: true, clear: [[0, 0, 1, 0.25], [0, 0.77, 1, 1]], fixed: true },
   'cel80s/ending': { ...base, split: { small: 'tail', scale: 1, ink: 'accent', at: [0.715, 0.157], tall: 0.75 }, at: [0.808, 0.102], ax: 0, ay: -1, share: 0.06, tall: 0.75, hi: 104, rows: [1, 1], vertical: true, lead: 1, track: 0, keepRows: true, clear: [[0, 0, 0.5, 1]], fixed: true },
+  // (the same boards turned left to right, their pages mirrored: two narrow prints at the left, the frond page at the right;
+  // the ending's panel at the left; the title card toward the right. Columns still read from the right)
+  'cyanotype/strips-l': { ...base, split: { small: 'tail', scale: 0.92, at: [0.216, 0.12], tall: 0.78 }, at: [0.417, 0.12], ax: 0, ay: -1, share: 0.06, tall: 0.78, hi: 106, rows: [1, 1], vertical: true, lead: 1.15, track: 0, key: 'ink', keepRows: true, clear: [[0.58, 0.14, 0.92, 0.86]], fixed: true },
+  'cel80s/ending-l': { ...base, split: { small: 'tail', scale: 1, ink: 'accent', at: [0.192, 0.157], tall: 0.75 }, at: [0.285, 0.102], ax: 0, ay: -1, share: 0.06, tall: 0.75, hi: 104, rows: [1, 1], vertical: true, lead: 1, track: 0, keepRows: true, clear: [[0.5, 0, 1, 1]], fixed: true },
+  'cel80s/title-r': { ...base, split: { small: 'tail', scale: 0.85, track: 0.14, ink: 'accent' }, at: [0.58, 0.43], ax: 0, ay: 0, share: 0.64, tall: 0.46, hi: 200, rows: [1, 2], lead: 1.2, track: 0.02, shear: ITALIC, under: CEL_RINGS, key: 'ink', clear: [[0.02, 0.12, 0.17, 0.28], [0.14, 0.76, 0.24, 0.88]], fixed: true },
 };
+
+/** The mirrored pages of the sets above: `<ground>` drawn turned left to right. */
+export const B4B_MIRRORED: Record<string, string> = { 'cyanotype/strips-l': 'cyanotype/strips', 'cel80s/ending-l': 'cel80s/ending', 'cel80s/title-r': 'cel80s/title' };

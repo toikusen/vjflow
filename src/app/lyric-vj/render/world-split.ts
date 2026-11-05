@@ -166,7 +166,8 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
 
 /** A column line split in two columns, each on its own strip: the hero where the set stands, the other at `at`, tops level. */
 function columnsApart(hero: string, small: string, smallFirst: boolean, spec: SetSpec, sp: SplitSpec, floor: number): Block | undefined {
-  const len = (t: string) => [...t.replace(/\s/g, '')].length;
+  // (a space inside a column takes a cell, as the layout gives it one: a part counted without it ran off the frame)
+  const len = (t: string) => [...t.trim()].length;
   const step = 1 + spec.track;
   let size = Math.max(spec.lo, Math.round(Math.min(spec.hi, ((sp.tall ?? spec.tall) * H) / (len(hero) * step), (spec.share * W) / spec.lead)));
   let ss = Math.max(floor, Math.round(Math.min(size * sp.scale, ((sp.tall ?? spec.tall) * H) / (len(small) * step))));

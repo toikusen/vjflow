@@ -47,6 +47,10 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   gameshow: s(['beat-punch', 'roll', 'light-sweep'], ['extrude', 'plate'], 'diagonal'),
   'idol-live': s(['beat-punch', 'roll'], ['plate', 'extrude'], 'diagonal'),
   y2k: s(['beat-punch', 'roll'], ['plate', 'outline'], 'push-through'),
+  // style batch 4 (2026-11-05): a phone punches and rolls its screen; a drafter's sheet takes the light; a copy slips its plate and the copier jolts
+  phone: s(['beat-punch', 'roll'], ['extrude', 'plate'], 'push-through'),
+  blueprint: s(['light-sweep', 'ink-run'], ['plate', 'extrude'], 'push-through'),
+  xerox: s(['plate-slip', 'beat-punch'], ['plate', 'extrude'], 'diagonal'),
   // style batch 4 (2026-11-05): a sun print's light passes and bleeds a second exposure; a block world's beat punches its
   // walls and its camera slides along the grid, never turning; an anime title card punches on the beat, its plate slips
   cyanotype: s(['light-sweep', 'echo'], ['plate', 'extrude'], 'push-through'),

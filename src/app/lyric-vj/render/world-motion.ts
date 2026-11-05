@@ -3,6 +3,7 @@
 // is what the renderer passes in: a world on eighteen frames a second is simply handed time held to that.
 import { LOUD_ENTERS, LOUD_EXITS, LOUD_HOLDS } from './world-b3-motion';
 import { R2_ENTERS, R2_EXITS, R2_HOLDS } from './world-r2-motion';
+import { B4_ENTERS, B4_EXITS, B4_HOLDS } from './world-b4-motion';
 import { DOC_ENTERS, DOC_EXITS, DOC_HOLDS } from './world-doc-motion';
 import { B4B_ENTERS, B4B_EXITS, B4B_HOLDS } from './world-b4b-motion';
 
@@ -223,6 +224,10 @@ Object.assign(WORLD_HOLDS, LOUD_HOLDS);
 Object.assign(WORLD_ENTERS, R2_ENTERS);
 Object.assign(WORLD_EXITS, R2_EXITS);
 Object.assign(WORLD_HOLDS, R2_HOLDS);
+// style batch 4 (phone, blueprint, xerox) keeps its moves in world-b4-motion.ts
+Object.assign(WORLD_ENTERS, B4_ENTERS);
+Object.assign(WORLD_EXITS, B4_EXITS);
+Object.assign(WORLD_HOLDS, B4_HOLDS);
 // the document world (感熱收據) keeps its moves in world-doc-motion.ts
 Object.assign(WORLD_ENTERS, DOC_ENTERS);
 Object.assign(WORLD_EXITS, DOC_EXITS);

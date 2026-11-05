@@ -4,6 +4,7 @@
 import { balancedRows, phraseBoundaries } from '../phrases';
 import { LOUD_SETS } from './world-b3-sets';
 import { R2_SETS } from './world-r2-sets';
+import { B4_SETS } from './world-b4-sets';
 import { DOC_SETS } from './world-doc-sets';
 import { B4B_SETS } from './world-b4b-sets';
 import type { Slots, WorldObject } from './world-objects';
@@ -244,6 +245,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   ...LOUD_SETS,
   // the four worlds rebuilt from the round-2 boards keep theirs in world-r2-sets.ts
   ...R2_SETS,
+  // style batch 4 (phone, blueprint, xerox) keeps its numbers in world-b4-sets.ts
+  ...B4_SETS,
   // the document world (感熱收據) keeps its numbers in world-doc-sets.ts
   ...DOC_SETS,
   // style batch 4's cyanotype, isometric and cel80s keep theirs in world-b4b-sets.ts

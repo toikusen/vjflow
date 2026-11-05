@@ -14,7 +14,7 @@ import { handObjects } from './render/world-packs';
 const by = (id: string) => STYLE_WORLDS.find((w) => w.id === id)!;
 
 describe('style batch 4: phone, blueprint, xerox', () => {
-  it('are registered and held until the owner passes them', () => {
+  it('are registered and offered once passed', () => {
     expect(B4_WORLDS.map((w) => w.id)).toEqual(['phone', 'blueprint', 'xerox']);
     for (const w of B4_WORLDS) expect(by(w.id)).toBe(w);
     const offered = styleGroups().flatMap((g) => g.cards.map((c) => c.id));

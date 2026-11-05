@@ -14,12 +14,12 @@ import { worldCam } from './render/world-cam';
 const measure = (s: string) => [...s].length * 100;
 
 describe('style batch 4: cyanotype, isometric, cel80s', () => {
-  it('are registered and held until the owner passes them', () => {
+  it('are registered and offered once passed', () => {
     expect(B4B_WORLDS.map((w) => w.id)).toEqual(['cyanotype', 'isometric', 'cel80s']);
     for (const w of B4B_WORLDS) {
       expect(STYLE_WORLDS.find((x) => x.id === w.id)).toBe(w);
       expect(FREE_STYLES.some((s) => s.id === w.id)).toBe(true);
-      expect(HELD_WORLDS.has(w.id), w.id).toBe(true);
+      expect(HELD_WORLDS.has(w.id), w.id).toBe(false);
     }
   });
   it('have every part they name', () => {

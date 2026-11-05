@@ -87,22 +87,22 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 19
+  "low": 0
  },
  "ink-wash": {
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 56,
+  "plate": 0,
   "small": 0,
   "cross": 1,
-  "low": 1
+  "low": 0
  },
  "silent-film": {
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 89,
+  "plate": 0,
   "small": 0,
   "cross": 0,
   "low": 0
@@ -129,19 +129,19 @@
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 75,
+  "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 2
+  "low": 3
  },
  "papercut": {
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 12,
+  "plate": 5,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 1
  },
  "paper-lantern": {
   "moments": 489,
@@ -158,17 +158,17 @@
   "clip": 0,
   "plate": 0,
   "small": 0,
-  "cross": 46,
-  "low": 2
+  "cross": 34,
+  "low": 0
  },
  "woodcut": {
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 21,
+  "plate": 8,
   "small": 0,
   "cross": 0,
-  "low": 1
+  "low": 0
  },
  "chalkboard": {
   "moments": 489,
@@ -183,7 +183,7 @@
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 11,
+  "plate": 0,
   "small": 0,
   "cross": 0,
   "low": 1
@@ -203,7 +203,7 @@
   "clip": 0,
   "plate": 0,
   "small": 0,
-  "cross": 70,
+  "cross": 0,
   "low": 0
  },
  "gameshow": {
@@ -240,7 +240,7 @@
   "plate": 0,
   "small": 0,
   "cross": 6,
-  "low": 23
+  "low": 5
  },
  "graffiti": {
   "moments": 489,
@@ -267,6 +267,6 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 12
+  "low": 2
  }
 }

@@ -81,6 +81,8 @@ export const FONTS: FontSpec[] = [
   // y2k's direction-B boards (2026-11-04): a soft rounded gothic for its Japanese lines (Apache-2.0) and the early web's pixel labels
   { family: 'Kosugi Maru', roles: ['display', 'body'], weights: [400], feel: '細圓體，早期網頁、清爽、乾淨' },
   { family: 'Silkscreen', roles: ['accent'], weights: [400, 700], feel: '像素點陣字，早期網頁按鈕與標籤（只用在標籤）', legible: false },
+  // cel80s's boards (2026-11-05): the anime credits' rounded display Latin (OFL), small labels only
+  { family: 'Righteous', roles: ['accent'], weights: [400], feel: '八〇動畫片頭的圓頭展示英文（只用在標籤）', legible: false },
 ];
 
 /** Han glyph forms a face draws (undefined: Latin only). */

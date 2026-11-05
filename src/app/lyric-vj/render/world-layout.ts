@@ -6,7 +6,7 @@ import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from 
 import { nearestWeight } from '../fonts';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readable, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
-import { Block, blockOf, SET_SPECS, SetSpec } from './world-sets';
+import { Block, blockOf, FaceLayout, SET_SPECS, SetSpec, shearedSize } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
@@ -140,11 +140,13 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
     const stepped = (spec.stair ?? 0) * block.size * r;
     const flush = spec.flush ?? 0;
     let at = (flush < 0 ? -block.w / 2 : flush > 0 ? block.w / 2 - w : -w / 2) + (flush > 0 ? -stepped : stepped);
-    const cy = ((n - 1) / 2 - r) * block.size * spec.lead;
+    // (a row whose characters step down is set from the block's top: the steps take the height under the rows)
+    const drop = (spec.drop ?? 0) * block.size;
+    const cy = drop ? block.h / 2 - (r + 0.5) * block.size * spec.lead : ((n - 1) / 2 - r) * block.size * spec.lead;
     ids.forEach((id, i) => {
       at += gaps[i];
       x[id] = at + adv[i] / 2;
-      y[id] = cy + (gs[id].dy ?? 0) * k;
+      y[id] = cy - i * drop + (gs[id].dy ?? 0) * k;
       shown[id] = gs[id].char.trim() !== '';
       at += adv[i] + track;
     });
@@ -362,6 +364,18 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const poseAt = (t: number) => { let k = 0; (wl.repose ?? []).forEach((r, i) => { if (t >= r.at) k = i + 1; }); return k; };
   const sec = (x: number, d: number) => (d > 0 ? clamp01(x / d) : 1);
 
+  // a set seen at an angle or leaning (world-sets `shear`): the block is drawn through the map about its own centre, after
+  // its move, its camera and its scale (the map is given y down; the scene is y up)
+  const sheared = new THREE.Matrix4();
+  const shearBody = (sh: SetSpec['shear']) => {
+    body.matrixAutoUpdate = !sh;
+    if (!sh) return;
+    const [a, b, c, d] = sh;
+    sheared.set(a, -c, 0, 0, -b, d, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    body.matrix.compose(new THREE.Vector3(), body.quaternion, body.scale).premultiply(sheared).setPosition(body.position);
+    body.matrixWorldNeedsUpdate = true;
+  };
+
   const setClip = (c: Clip, p: Pose) => {
     const b = p.block;
     body.updateWorldMatrix(true, false);
@@ -405,6 +419,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         body.scale.multiplyScalar(cam.s);
         body.rotation.z += cam.r;
       }
+      shearBody(p.spec.shear);
       const whole_a = blockPose.a ?? 1;
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
       const clip = move?.clip?.(out ? qOut : qIn);
@@ -425,6 +440,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       body.position.y += fit(gy, p.block.cy, p.block.h / 2, 540) * along;
       const swell = 1 + (p.spec.fixed ? 0 : wl.swell ?? 0) * (along + 0.5);
       body.scale.multiplyScalar(swell);
+      shearBody(p.spec.shear);
       const inkLit = inksBy[k];
       gs.forEach((g, i) => {
         const m = g.mesh;
@@ -514,8 +530,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const [gx, gy] = p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? [0, 0] : wl.drift ?? [0, 0];
       const reach = (d: number, c: number, half: number, frame: number) => Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half)) / 2;
       const grow = 1 + (p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? 0 : wl.swell ?? 0);
-      const [hw, hh] = [(p.block.w / 2) * grow + reach(gx, p.block.cx, p.block.w / 2, 960), (p.block.h / 2) * grow + reach(gy, p.block.cy, p.block.h / 2, 540)];
-      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried } };
+      // (a sheared block's room is what it covers as drawn; its page is handed the layout to build its planes round the words)
+      const sh = p.spec.shear;
+      const [bw, bh] = shearedSize(p.block.w, p.block.h, sh);
+      const [hw, hh] = [(bw / 2) * grow + reach(gx, p.block.cx, bw / 2, 960), (bh / 2) * grow + reach(gy, p.block.cy, bh / 2, 540)];
+      const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w, h: p.block.h, shear: sh, size: p.block.size, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j], -p.y[j], (p.sizes?.[j] ?? p.scale) * tex] as [number, number, number]] : [])) };
+      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}) } };
     }),
   };
 }

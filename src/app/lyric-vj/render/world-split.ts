@@ -179,7 +179,8 @@ function columnsApart(hero: string, small: string, smallFirst: boolean, spec: Se
   const [hh, sh] = [len(hero) * size * step, len(small) * ss * step];
   // (a column runs down from the set's top; one too long for that is raised until its foot is in the frame)
   const hTop = Math.min(H / 2 - SAFE_Y, Math.max(top, -H / 2 + SAFE_Y + hh));
-  const sTop = Math.min(H / 2 - SAFE_Y, Math.max(top, -H / 2 + SAFE_Y + sh));
+  // (the second column runs from its own top when its container stands lower or higher on the page: a staggered pair)
+  const sTop = Math.min(H / 2 - SAFE_Y, Math.max(clampTo(H / 2 - sp.at![1] * H, H / 2 - SAFE_Y), -H / 2 + SAFE_Y + sh));
   const [hcx, scx] = [spec.at[0] * W - W / 2, sp.at![0] * W - W / 2];
   const x0 = Math.min(hcx - (size * spec.lead) / 2, scx - (ss * spec.lead) / 2), x1 = Math.max(hcx + (size * spec.lead) / 2, scx + (ss * spec.lead) / 2);
   const y1 = Math.max(hTop, sTop), y0 = Math.min(hTop - hh, sTop - sh);

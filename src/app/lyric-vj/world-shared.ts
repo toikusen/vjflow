@@ -8,7 +8,7 @@ import type { StyleWorld } from './style-world';
 
 export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker';
 export type StressKind = 'extrude' | 'plate' | 'outline';
-export type WorldCamera = 'push-through' | 'diagonal';
+export type WorldCamera = 'push-through' | 'diagonal' | 'iso-slide';
 
 export interface WorldShared { beats: BeatKind[]; stress: StressKind[]; camera: WorldCamera }
 
@@ -46,6 +46,11 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   gameshow: s(['beat-punch', 'roll', 'light-sweep'], ['extrude', 'plate'], 'diagonal'),
   'idol-live': s(['beat-punch', 'roll'], ['plate', 'extrude'], 'diagonal'),
   y2k: s(['beat-punch', 'roll'], ['plate', 'outline'], 'push-through'),
+  // style batch 4 (2026-11-05): a sun print's light passes and bleeds a second exposure; a block world's beat punches its
+  // walls and its camera slides along the grid, never turning; an anime title card punches on the beat, its plate slips
+  cyanotype: s(['light-sweep', 'echo'], ['plate', 'extrude'], 'push-through'),
+  isometric: s(['beat-punch', 'light-sweep'], ['extrude', 'plate'], 'iso-slide'),
+  cel80s: s(['beat-punch', 'plate-slip'], ['extrude', 'plate'], 'diagonal'),
   psychedelic: s(['ink-run', 'roll'], ['plate', 'extrude'], 'push-through'),
   graffiti: s(['crack', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
   brutalist: s(['crack', 'beat-punch'], ['extrude', 'plate'], 'diagonal'),

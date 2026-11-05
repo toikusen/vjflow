@@ -162,7 +162,7 @@ export type Ground = 'flat' | 'grain' | 'gradient';
 export const GROUNDS: Ground[] = ['flat', 'grain', 'gradient'];
 export type DocKind = 'blueprint' | 'slate' | 'casefile' | 'notebook' | 'ticket';
 export const DOC_KINDS: DocKind[] = ['blueprint', 'slate', 'casefile', 'notebook', 'ticket'];
-export const KINETIC_CAMS = ['snap', 'roll', 'flip', 'shake', 'tilt', 'pan', 'dolly', 'crane', 'orbit', 'vertigo', 'rack', 'ramp', 'freeze', 'tiltshift', 'pullback', 'push-through', 'diagonal'] as const;
+export const KINETIC_CAMS = ['snap', 'roll', 'flip', 'shake', 'tilt', 'pan', 'dolly', 'crane', 'orbit', 'vertigo', 'rack', 'ramp', 'freeze', 'tiltshift', 'pullback', 'push-through', 'diagonal', 'iso-slide'] as const;
 export type KineticCam = (typeof KINETIC_CAMS)[number];
 /** The cut's own time as its camera plays it: a speed ramp rushes, then slows; a freeze stops the move once it has landed. */
 export const camTime = (cam: KineticCam | undefined, t: number) =>

@@ -4,6 +4,7 @@
 import { balancedRows, phraseBoundaries } from '../phrases';
 import { LOUD_SETS } from './world-b3-sets';
 import { R2_SETS } from './world-r2-sets';
+import { B4B_SETS } from './world-b4b-sets';
 import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
@@ -69,7 +70,25 @@ export interface SetSpec {
    * part of a line, engine placeCall) stands clear of them as it does of the words.
    */
   clear?: [number, number, number, number][];
+  /**
+   * The block drawn on a plane seen at an angle (an isometric wall) or leaning (an italic title card): a linear map about
+   * the block's centre, frame px with y down, as an SVG matrix [a, b, c, d] (x' = a x + c y, y' = b x + d y). The block is
+   * fitted and kept in the frame as drawn, its room read round what it covers.
+   */
+  shear?: [number, number, number, number];
+  /** Each character of a row stands this share of a size lower than the one before (a word a block, stepping down). */
+  drop?: number;
 }
+
+/** The size a block of `w` × `h` takes on screen once its set's shear has drawn it. */
+export const shearedSize = (w: number, h: number, shear?: SetSpec['shear']): [number, number] =>
+  shear ? [Math.abs(shear[0]) * w + Math.abs(shear[2]) * h, Math.abs(shear[1]) * w + Math.abs(shear[3]) * h] : [w, h];
+
+/**
+ * The layout a sheared set hands its page with the line's box: the block's centre (frame px, y down), its own size before
+ * the shear, the shear, the type size and rows, and each shown character's centre (block px, y down) and size.
+ */
+export interface FaceLayout { cx: number; cy: number; w: number; h: number; shear: [number, number, number, number]; size: number; rows: number; cells: [number, number, number][] }
 
 /** A set's call-free boxes in the text root's own space (origin at the frame's centre, y up), px. */
 export const clearOf = (id: string | undefined, W = 1920, H = 1080) =>
@@ -224,6 +243,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   ...LOUD_SETS,
   // the four worlds rebuilt from the round-2 boards keep theirs in world-r2-sets.ts
   ...R2_SETS,
+  // style batch 4's cyanotype, isometric and cel80s keep theirs in world-b4b-sets.ts
+  ...B4B_SETS,
 };
 
 /** Width of a string at size 100, in px. */
@@ -256,21 +277,25 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const pick = options.find((o) => o.size >= best * 0.95) ?? options[options.length - 1] ?? { rows: [text], size: spec.lo };
   const floored = Math.max(spec.lo, Math.round(Math.min(spec.hi, pick.size)));
   const n = pick.rows.length;
-  const extent = (size: number) => {
+  const most = Math.max(...pick.rows.map((r) => [...r].length));
+  const extent = (size: number): [number, number] => {
     const longest = Math.max(...pick.rows.map((r) => (spec.vertical ? [...r].length * (1 + spec.track) * size : (measure(r) * size) / 100 + ([...r].length - 1) * spec.track * size)));
     const stepped = (spec.stair ?? 0) * size * (n - 1);
-    return spec.vertical ? [n * size * spec.lead, longest + stepped] : [longest + stepped, n * size * spec.lead];
+    const dropped = spec.vertical ? 0 : (spec.drop ?? 0) * size * (most - 1);
+    return spec.vertical ? [n * size * spec.lead, longest + stepped] : [longest + stepped, n * size * spec.lead + dropped];
   };
-  // the type floor never pushes a line out of the frame: a line too long for its set at the floor is set smaller (never clipped)
-  const [w0, h0] = extent(floored);
+  // the type floor never pushes a line out of the frame: a line too long for its set at the floor is set smaller (never
+  // clipped), measured as drawn (a wall seen at an angle stands taller than its words are long)
+  const [w0, h0] = shearedSize(...extent(floored), spec.shear);
   const size = Math.floor(floored * Math.min(1, (W - 2 * SAFE_X) / Math.max(1, w0), (H - 2 * SAFE_Y) / Math.max(1, h0)));
   const [w, h] = extent(size);
+  const [ow, oh] = shearedSize(w, h, spec.shear);
   // the anchor names a side; the block never leaves the frame's safe area, its object's margin included
   const [px, py] = spec.pad ?? [0, 0];
-  const cx = spec.at[0] * W - W / 2 - (spec.ax * w) / 2;
-  const cy = H / 2 - spec.at[1] * H + (spec.ay * h) / 2;
+  const cx = spec.at[0] * W - W / 2 - (spec.ax * ow) / 2;
+  const cy = H / 2 - spec.at[1] * H + (spec.ay * oh) / 2;
   const reach = (half: number, edge: number, pad: number) => Math.max(0, edge - half - pad);
-  return { rows: pick.rows, size, w, h, cx: clampTo(cx, reach(w / 2, W / 2 - SAFE_X, px)), cy: clampTo(cy, reach(h / 2, H / 2 - SAFE_Y, py)) };
+  return { rows: pick.rows, size, w, h, cx: clampTo(cx, reach(ow / 2, W / 2 - SAFE_X, px)), cy: clampTo(cy, reach(oh / 2, H / 2 - SAFE_Y, py)) };
 }
 
 /**
@@ -290,7 +315,8 @@ const clampTo = (x: number, r: number) => Math.min(r, Math.max(-r, x));
 const sizeAcross = (rows: string[], s: SetSpec, m: Measure) => {
   const em = Math.max(...rows.map((r) => m(r) / 100 + ([...r].length - 1) * s.track));
   const stepped = (s.stair ?? 0) * (rows.length - 1);
-  return Math.min(s.hi, (s.share * W) / (em + stepped), (s.tall * H) / (rows.length * s.lead));
+  const dropped = (s.drop ?? 0) * (Math.max(...rows.map((r) => [...r].length)) - 1);
+  return Math.min(s.hi, (s.share * W) / (em + stepped), (s.tall * H) / (rows.length * s.lead + dropped));
 };
 const sizeUp = (cols: string[], s: SetSpec, _m: Measure) => {
   const em = Math.max(...cols.map((c) => [...c].length * (1 + s.track)));

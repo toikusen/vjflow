@@ -22,9 +22,12 @@ import type { HandGround, HandIn, ObjectPaint } from './world-craft';
 import type { Piece } from './world-pieces';
 import { B3_MIRRORS } from './world-b3-sets';
 import { mirrorGround } from './world-b3-shared';
+import { CEL } from './world-b4-cel';
+import { CYAN } from './world-b4-cyan';
+import { ISO } from './world-b4-iso';
 
 interface Pack { grounds: Record<string, HandGround>; ins: Record<string, HandIn>; pieces: Record<string, Piece>; objects: Record<string, ObjectPaint> }
-const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP, FILE, CARD, GLASS];
+const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP, FILE, CARD, GLASS, CYAN, ISO, CEL];
 export type HandObject = 'cartouche' | 'shikishi' | 'cut-panel' | 'cut-banner' | 'lit-paper' | 'noshi' | 'fold-kite' | 'colour-plate' | 'mend-patch' | 'tenugui' | 'pad-sheet'
   | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'gs-q-banner' | 'gs-answer-cells' | 'gs-row-tiles' | 'gs-qa' | 'gs-qa-r' | 'gs-hint' | 'idol-card' | 'gf-buff' | 'cp-column';
 export const handGrounds = Object.assign({}, ...PACKS.map((p) => p.grounds)) as Record<string, HandGround>;

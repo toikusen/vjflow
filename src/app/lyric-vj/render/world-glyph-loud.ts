@@ -70,7 +70,7 @@ function distanceTo(inside: (i: number) => boolean, w: number, h: number) {
  * The letter grown by `grow` px after a closing of radius `close` (fills counters and the notches between strokes), as
  * a tone. Exact distances, so a ring is the same width all round; the edge keeps one pixel of anti-aliasing.
  */
-function grown(mask: OffscreenCanvas, grow: number, close: number, tone: string, counters = true) {
+export function grown(mask: OffscreenCanvas, grow: number, close: number, tone: string, counters = true) {
   const [w, h] = [mask.width, mask.height];
   const src = mask.getContext('2d')!.getImageData(0, 0, w, h).data;
   // the letter's counters filled: whatever paper the strokes close round is the letter's own (a ring never runs inside a

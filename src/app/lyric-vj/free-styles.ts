@@ -28,8 +28,8 @@ export interface FreeStyle {
 
 export const FREE_STYLES: FreeStyle[] = STYLE_WORLDS.map((w) => ({ id: w.id, name: w.name, from: w.language, what: w.what, palettes: w.palette.map((s) => s.id), fonts: { ja: w.type.ja.family, tc: w.type.tc.family, calm: w.type.tc.family }, world: w }));
 
-/** Worlds held back from the picker, rerolls and defaults until the owner passes them (none held since 2026-11-05). A saved pick still renders. */
-export const HELD_WORLDS = new Set<string>();
+/** Worlds held back from the picker, rerolls and defaults until the owner passes them (batch 4's cyanotype, isometric and cel80s, 2026-11-05). A saved pick still renders. */
+export const HELD_WORLDS = new Set<string>(['cyanotype', 'isometric', 'cel80s']);
 
 /** The styles offered to a buyer. */
 export const OFFERED_STYLES = FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id));
@@ -47,6 +47,7 @@ const SHORT: Record<string, string> = {
   woodcut: '黑版上的刀痕', chalkboard: '放學後的粉筆字', crayon: '孩子塗的繪本頁',
   popart: '漫畫分格、對白框與網點', gameshow: '益智節目的題目卡與答案格', 'idol-live': '團扇剪字、門票與成員色卡', y2k: '凝膠按鈕、雷射膜與 CD',
   psychedelic: '七〇海報的招牌字與彩虹拱', graffiti: '水泥牆上的模板噴漆', brutalist: '影印海報的網格與紅色帶', citypop: '平塗封套的建築、泳池與夜景',
+  cyanotype: '藍曬紙上的蕨葉與蕾絲剪影', isometric: '等角方塊、階梯與牆上的字', cel80s: '八〇動畫片頭的標題與星芒',
   silk: '平塗油墨，版微微錯開', 'silk-cold': '冷色網版，適合安靜的歌', riso: '透明墨疊印，留白多', file: '攤開的案件檔案', spy: '剪紙片頭，大塊斜切', card: '節拍上翻面的閃卡',
 };
 

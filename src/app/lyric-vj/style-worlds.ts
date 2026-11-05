@@ -5,6 +5,7 @@ import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
 import { HAND_WORLDS } from './style-worlds-hand';
 import { LOUD_WORLDS } from './style-worlds-loud';
+import { B4B_WORLDS } from './style-worlds-b4b';
 import { CARD_WORLD, FILE_WORLD, GLASS_WORLD } from './style-worlds-r2';
 
 const stack = (o: Partial<FrameStack>): FrameStack => ({ grain: 0.1, paper: 0, tooth: 0, lift: 0, scan: 0, vignette: 0.2, flicker: 0, weave: 0, boil: 0, boilRate: 12, step: 0, koma: 0, ...o });
@@ -345,5 +346,5 @@ const spy = print({ id: 'spy', name: '諜報片頭', language: 'spy-titles', wha
   shared: ['build-mid', 'build-hit', 'split-pair'],
   grounds: [['offcut', 'deckle'], ['spy/wedge', ...['offcut', 'deckle', 'hatch'], 'spy/sliced'], ['spy/wedge', ...['offcut', 'deckle'], 'spy/sliced']], quiet: ['spy/sliced', ...['deckle', 'offcut'], 'spy/wedge'], every: [8, 4, 2], line: ['whip', 'push'], part: ['diagonal', 'stripes', 'impact'], banned: ['ripple', 'blurdissolve'], family: 'slash', process: '剪紙拼貼與斜切', nearest: '無', differs: '斜置字塊', fast: 'nun', calm: 'tsuzuki' });
 
-export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, FILE_WORLD, spy, CARD_WORLD, dark, neon, terminal, led, ink, film, GLASS_WORLD, gothic, ...HAND_WORLDS, ...LOUD_WORLDS];
+export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, FILE_WORLD, spy, CARD_WORLD, dark, neon, terminal, led, ink, film, GLASS_WORLD, gothic, ...HAND_WORLDS, ...LOUD_WORLDS, ...B4B_WORLDS];
 export const worldById = (id: string) => STYLE_WORLDS.find((w) => w.id === id);

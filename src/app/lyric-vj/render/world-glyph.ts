@@ -2,7 +2,7 @@
 // exactly where the face drew it: these only change what fills it and what lies round it, so a counter stays open and a thin
 // stroke stays whole. Colours arrive from the world's slots in the surface string.
 
-export type SurfaceKind = 'bitmap' | 'tube' | 'phosphor' | 'lamp' | 'brush' | 'silver' | 'lead' | 'gilt' | 'tape' | HandSurface | LoudSurface;
+export type SurfaceKind = 'bitmap' | 'tube' | 'phosphor' | 'lamp' | 'brush' | 'silver' | 'lead' | 'gilt' | 'tape' | HandSurface | LoudSurface | B4bSurface;
 
 export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten: boolean }
 export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}`;
@@ -11,6 +11,7 @@ export const parseSurface = (k: string): Surface => { const [kind, tint, core, e
 import { lampCells } from './lamp-cells';
 import { handSurface, HandSurface, isHandSurface } from './world-glyph-hand';
 import { isLoudSurface, loudSurface, LoudSurface } from './world-glyph-loud';
+import { b4bSurface, B4bSurface, isB4bSurface } from './world-glyph-b4b';
 
 const fract = (x: number) => x - Math.floor(x);
 const hash = (a: number, b = 0) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
@@ -70,6 +71,7 @@ export function applySurface(canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   const tone = tinted(m, s.tint);
   if (isHandSurface(s.kind)) { handSurface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); ctx.restore(); return; }
   if (isLoudSurface(s.kind)) { loudSurface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); if (s.eaten) eat(ctx, cw, ch, px, seed); ctx.restore(); return; }
+  if (isB4bSurface(s.kind)) { b4bSurface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); ctx.restore(); return; }
   switch (s.kind) {
     case 'tube': {
       // bent glass: light thrown on the wall, the coloured gas, the hot middle of the bore

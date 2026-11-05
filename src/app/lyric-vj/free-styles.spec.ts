@@ -29,11 +29,13 @@ describe('free styles', () => {
     expect(new Set(FREE_STYLES.map((s) => s.fonts.tc)).size).toBeGreaterThanOrEqual(8);
   });
   // the 2026-11-04 font table, over every world (held ones too): a Traditional Chinese face serves at most two worlds, and
-  // no two worlds share both faces
+  // no two worlds share both faces. The neutral text faces, Noto Sans TC and Noto Serif TC, may serve a third (owner,
+  // 2026-11-05: batch 4's isometric and cyanotype)
   it('give each world its own faces', () => {
     // (an HK cut draws the same as its TC twin: one face)
     const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family.replace(/^Noto (Sans|Serif) HK$/, 'Noto $1 TC');
-    for (const s of FREE_STYLES) expect(FREE_STYLES.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(2);
+    const most = (face: string) => (/^Noto (Sans|Serif) TC$/.test(face) ? 3 : 2);
+    for (const s of FREE_STYLES) expect(FREE_STYLES.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(most(tc(s)));
     const pairs = FREE_STYLES.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
     expect(new Set(pairs).size).toBe(pairs.length);
     for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === s.world!.type.tc.family), s.id).toBe(true);

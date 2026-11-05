@@ -346,7 +346,10 @@ function layUp(c: C, rows: { row: Row; age: number; edge?: Edge }[], bottom: num
 }
 
 /** The paper feeding: what is printed above the head starts a row lower and steps up into place as the line prints. */
-const fed = (e: WorldEnv) => ROW * (1 - stepsOf(e.age / 0.3, 3));
+const fed = (e: WorldEnv) => ROW * (1 - stepsOf(e.age / FEED_SEC, 3));
+const FEED_SEC = 0.3;
+/** Whether this cut is the line's own (its paper feeds), not a page kept up after it through an interlude (it is still). */
+const ownCut = (e: WorldEnv, it: WorldItem) => it.at === undefined || e.now - e.age < it.at + (it.dur ?? 0);
 
 /**
  * The slip of the part just ended, torn off as this part's first line prints (board d): its last rows, 小計, the 合計 if
@@ -356,7 +359,7 @@ const fed = (e: WorldEnv) => ROW * (1 - stepsOf(e.age / 0.3, 3));
 function tornSlip(c: C, e: WorldEnv, it: WorldItem, x0: number, x1: number, foot: number) {
   const b = it.before;
   // (a line too short to read past a slip going by keeps the frame to itself: the slip was torn off unseen)
-  if (!b || e.age > 0.25 || (it.dur ?? 0) < 1.5) return;
+  if (!b || e.age > 0.25 || (it.dur ?? 0) < 1.5 || !ownCut(e, it)) return;
   const k = stepsOf((e.age - 0.03) / 0.2, 4);
   if (k >= 1) return;
   const u = wordsOf(e);
@@ -417,7 +420,8 @@ const roll = (kind: 'feed' | 'sheet' | 'pair'): HandGround => (e) => page(e, (c)
   const r = box(e, x0, 560, x1, 896);
   const it = e.item;
   const ink = e.slots.plateInk;
-  const lift = it?.first ? 0 : fed(e);
+  const feeding = !!it && !it.first && ownCut(e, it);
+  const lift = feeding ? fed(e) : 0;
   // (lay out first, offscreen of nothing: the rows are drawn after the paper, so measure where the paper starts)
   const rows = it ? above(e, it) : [];
   const head = it ? pairRow(kind === 'pair' ? `${no2(it.no)}–${no2(it.no + 1)}` : no2(it.no), it.at === undefined ? '' : mmss(it.at), P.row) : undefined;
@@ -435,7 +439,8 @@ const roll = (kind: 'feed' | 'sheet' | 'pair'): HandGround => (e) => page(e, (c)
   c.translate(0, lift);
   layUp(c, rows, headY, 0, budget, x0, x1, e);
   c.restore();
-  if (it && head) head.draw(c, headY, x0, x1, ink);
+  // (the line's number and start print once the paper has fed the rows above up out of their way)
+  if (it && head && (!feeding || e.age >= FEED_SEC)) head.draw(c, headY, x0, x1, ink);
   if (qty) qty.draw(c, r.y1 + 14, x0, x1, ink);
   if (kind !== 'sheet') printer(c, X0, X1, MOUTH_Y);
   if (it) tornSlip(c, e, it, X0, X1, Math.min(560, r.y0 - 70));
@@ -463,7 +468,9 @@ const totalPage: HandGround = (e) => page(e, (c) => {
   // (the tail starts once the line has had most of its time: the line after it often comes in at once, and the 合計 is the
   // receipt's point; by then the line has been read)
   const from = (it?.dur ?? 0) * TAIL_AT;
-  const sung = !!it?.dur && e.age > from;
+  // (timed from the line's start, not the cut's: a page kept up through the outro keeps its printed tail)
+  const since = it?.at !== undefined ? e.now - it.at : e.age;
+  const sung = !!it?.dur && since > from;
   const tail: Row[] = it ? [
     rule('-'),
     pairRow(`${u.subtotal}  ${it.part} ${it.sub?.n ?? 1}${u.lines}`, `${(it.sub?.sec ?? 0).toFixed(1)}${u.sec}`, P.row),
@@ -472,7 +479,7 @@ const totalPage: HandGround = (e) => page(e, (c) => {
     centred(u.thanks, P.row, 700, 0),
   ] : [];
   // (the tail prints a row every tenth of a second once the line is sung, then the cutter cuts)
-  const shown = sung ? Math.min(tail.length, Math.floor((e.age - from) / 0.1) + 1) : 0;
+  const shown = sung ? Math.min(tail.length, Math.floor((since - from) / 0.1) + 1) : 0;
   let y = r.y1 + 14 + (qty?.h ?? 0) + 18;
   const ys = tail.slice(0, shown).map((row) => { const at = y; y += row.h; return at; });
   const cut = shown === tail.length && shown > 0 ? Math.min(H - 20, y + 30) : undefined;

@@ -200,7 +200,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       if (c.dark) layer.dark = true;
       layer.yields = true;
       if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', title: titleOf, lang, ...(world!.layouts.lines.some((l) => l.ground === fx) ? { bound: true } : {}), ...(prints && ps.lines?.length ? { item: itemOf(ps.lines[0].cue) } : {}), ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })) } : {}) };
-      if (keepPage && before?.world) Object.assign(layer, { paper: before.paper, ink: before.ink, accent: before.accent, world: { ...layer.world!, slots: before.world.slots } });
+      if (keepPage && before?.world) Object.assign(layer, { paper: before.paper, ink: before.ink, accent: before.accent, world: { ...layer.world!, slots: before.world.slots, ...(before.world.item ? { item: before.world.item } : {}) } });
       if (pal && !isWorldGround(fx)) layer.sheetInks = pal;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];
       if (c.tune) layer.tune = c.tune;

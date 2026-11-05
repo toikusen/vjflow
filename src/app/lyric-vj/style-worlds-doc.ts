@@ -44,9 +44,10 @@ export const DOCUMENT_WORLD: StyleWorld = {
     line('document/pair', [], ['head-print'], ['feed-out'], 'receipt-still', { ground: 'document/pair', closing: false }),
     // every line but the closing one is an item: printed at the head of the feed (a), or, in a quiet part, on the slip
     // lying still (b); one of the two a level, so the camera keeps to one receipt through a part
-    line('document/feed', [1, 2], ['head-print', 'feed-step'], ['feed-out', 'tear-off'], 'receipt-still', { max: 30, ground: 'document/feed', closing: false }),
+    line('document/feed', [1, 2], ['head-print', 'feed-step'], ['feed-out'], 'receipt-still', { max: 30, ground: 'document/feed', closing: false }),
     line('document/sheet', [0], ['head-print'], ['feed-out'], 'receipt-still', { max: 30, ground: 'document/sheet', closing: false }),
     // the closing line (the last of the last chorus) is the receipt's last item, in red, the 合計 under it (c)
+    // (tear-off, in motion's list, is the part's slip torn away: the page draws it, world-doc-receipt tornSlip)
     line('document/total', ALL, ['head-print'], ['feed-out'], 'receipt-still', { max: 40, ground: 'document/total', closing: true }),
   ] },
   motion: { enters: ['head-print', 'feed-step'], exits: ['feed-out', 'tear-off'], holds: ['receipt-still'], curve: '進紙一次走一格，先停再走：每句開始時紙把前面的品項往上送一列，這一句由上往下逐列印出；印完之後讀的時候什麼都不動；換段時舊的那張帶著硬影整片撕走，半秒內離開；不漂浮、不彈跳、紙不彎' },

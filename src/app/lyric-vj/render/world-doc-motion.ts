@@ -19,8 +19,9 @@ export const DOC_ENTERS: Record<string, WorldMove> = {
 export const DOC_EXITS: Record<string, WorldMove> = {
   // a pause of a few frames, then the piece is torn off: it goes whole, up and a little left, turning a hair, in steps
   'tear-off': { sec: 0.4, block: (q) => { const k = stepsOf((q - 0.3) / 0.7, 4); return { dy: 260 * k, dx: -50 * k, r: 0.05 * k, a: q < 0.96 ? 1 : 0 }; } },
-  // the paper feeds on: the line goes up a row at a time and out
-  'feed-out': { sec: 0.32, block: (q) => ({ dy: 84 * Math.ceil(clamp01(q) * 4), a: q < 0.9 ? 1 : 0 }) },
+  // the paper feeds on and the next line prints where this one was: it holds still, then is gone at once (moving up, it
+  // ran over the rows printed above it)
+  'feed-out': { sec: 0.2, block: (q) => ({ a: q < 0.9 ? 1 : 0 }) },
 };
 
 export const DOC_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {

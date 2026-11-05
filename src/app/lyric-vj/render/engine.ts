@@ -1143,6 +1143,10 @@ export class LyricVjEngine {
       let twin: CueLayer | undefined;
       const keyOn: [string, string] = ['', '']; // each build's type colour after the language's own ink
       if (inks) {
+        // a world's key ink reads on what its painted ground really puts under the line, not only on the paper the line
+        // is set on (citypop's coral run on the sky over the night sea: 2.5:1, 12 of 489 moments, 2026-11-05)
+        const under = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), settledBox(layer))?.mean;
+        if (under && under.toLowerCase() !== inks.paper.toLowerCase()) rt.under = under;
         const inked = (text: string, ground: string) => {
           backdrop = ground;
           rt.palette = { ...this.cuePalette(cue.start + 0.3, ground), text };

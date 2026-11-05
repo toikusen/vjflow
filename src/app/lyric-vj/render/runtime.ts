@@ -52,6 +52,9 @@ export interface CueRuntime {
   song?: number;
   /** The song's tempo (a held line's heartbeat thumps with it). */
   bpm?: number;
+  /** What the picture really puts under the line (measured), where it is not the palette's background: a world's
+   * hand-painted ground under a line set on the world's paper. The line's key ink reads on it as well. */
+  under?: string;
 }
 
 /** Per-frame effects templates can request from the post stack. */

@@ -259,7 +259,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const keyOf = (s: SetSpec) => {
     const on = s.on ?? (s.object || (s.ink === 'plateInk' && !s.under) ? ['plate' as const] : undefined);
     const base = s.key ? slots[s.key] : rt.palette.accent;
-    return on ? on.reduce((c, k) => readable(c, slots[k], s.object || s.on ? 6 : 4.5), base) : readable(base, rt.palette.background, 4.5);
+    // off an object, the key reads on the background and on what the picture really puts under the line (rt.under)
+    return on ? on.reduce((c, k) => readable(c, slots[k], s.object || s.on ? 6 : 4.5), base) : [rt.palette.background, rt.under].reduce<string>((c, b) => (b ? readable(c, b, 4.5) : c), base);
   };
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;

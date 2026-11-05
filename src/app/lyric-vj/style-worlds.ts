@@ -143,7 +143,7 @@ const led: StyleWorld = {
   type: { ja: { family: 'DotGothic16', weight: 400 }, tc: { family: 'Chocolate Classical Sans', weight: 400 }, latin: 'Space Mono', setting: '點陣與置中，公告一次一行', category: 'dot-matrix' },
   palette: [
     scheme('amber-lamp', 'dark', '#0A0806', '#FFB020', '#FF5A1F', '#FFE36A', '#12100C', '#FFB020', '#2C2418', '琥珀燈'),
-    scheme('red-lamp', 'dark', '#0A0505', '#FF3B2E', '#FF8A2A', '#FFD24A', '#140A09', '#FF3B2E', '#33181A', '紅燈'),
+    scheme('red-lamp', 'dark', '#0A0505', '#FF5E4A', '#FF8A2A', '#FFD24A', '#140A09', '#FF5E4A', '#33181A', '紅燈'),
     scheme('white-lamp', 'dark', '#07090C', '#E8EEF6', '#FFB020', '#FF4F6A', '#10141A', '#E8EEF6', '#232A34', '白燈'),
     scheme('green-lamp', 'dark', '#050B06', '#39FF88', '#FFE36A', '#FF7A3C', '#0B140D', '#39FF88', '#16301E', '綠燈車站'),
     scheme('tri-lamp', 'dark', '#05080E', '#4CFFB0', '#3A9BFF', '#FF4FA0', '#0B1018', '#4CFFB0', '#1C2634', '全彩燈'),

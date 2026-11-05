@@ -54,6 +54,11 @@ describe('style worlds', () => {
       expect(contrast(s.plateInk, s.plate) >= 4.5 || contrast(s.ink, s.plate) >= 4.5, `${s.id} plate`).toBe(true);
     }
   });
+  it('light type made of lamps brighter: the dark between the bulbs takes about a third of a stroke', () => {
+    // seen whole, a stroke of bulbs is about two thirds as bright as one bulb: led-board's red lamp read 4.2:1 at 5.7
+    // nominal (2026-11-05 reading-rule review); 6.5:1 for the bulb keeps the stroke at 4.5
+    for (const w of STYLE_WORLDS.filter((x) => x.material.surface === 'lamp')) for (const s of w.palette) expect(contrast(s.ink, s.ground), s.id).toBeGreaterThanOrEqual(6.5);
+  });
   it('have every part they name, in the worlds of batch 2', () => {
     for (const w of HAND_WORLDS) {
       expect(worldHoles(w), w.id).toEqual([]);

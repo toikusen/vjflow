@@ -21,7 +21,7 @@ import { TEMPLATES } from './templates';
 import { feltTempo, SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from './treatment';
 import { checkMoments, ownCues, type SignatureMoment } from './signature-moments';
-import { lineParts, type LinePart } from './song-parts';
+import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
@@ -116,15 +116,27 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   const titleOf = String(song.title ?? '').slice(0, 40);
   // each line as an item of the song (its number, its part, the lines before it), for a world that prints it (one whose
   // sets are bound to a part: the song's parts are read only then, a long song's structure is not free)
-  const prints = !!world?.layouts.lines.some((l) => l.chorus !== undefined);
+  const prints = !!world?.layouts.lines.some((l) => l.closing !== undefined);
   const parts = prints ? lineParts(song0) : new Map<string, LinePart>();
   // the world's small labels speak the lyric's language (labels.ts), the parts' names included
   const lang = labelLangOf(song.cues.map((x) => x.text));
   const partName = (id: string) => { const p = parts.get(id); return p ? partLabelOf(p.kind, lang) : ''; };
+  const closing = prints ? closingLine(song0) : undefined;
+  const runOf = (k: number) => parts.get(song.cues[k].id)?.run ?? 0;
+  const subOf = (k: number) => { const p = parts.get(song.cues[k].id); return { n: song.cues.filter((x) => parts.get(x.id)?.run === runOf(k)).length, sec: +((p?.to ?? 0) - (p?.from ?? 0)).toFixed(1) }; };
+  const receipt = { id: (songKeyOf(String(song0.title ?? '')) >>> 0).toString(16).toUpperCase().padStart(8, '0'), lines: song.cues.length, len: +(song0.duration ?? song.cues.at(-1)!.end).toFixed(1), bpm: Math.round(song0.tempo) };
   const itemOf = (id: string | undefined): WorldItem | undefined => {
     const i = prints ? song.cues.findIndex((x) => x.id === id) : -1;
-    const at = (k: number) => ({ no: k + 1, text: song.cues[k].text, part: partName(song.cues[k].id) });
-    return i < 0 ? undefined : { no: i + 1, part: partName(song.cues[i].id), text: song.cues[i].text, prev: Array.from({ length: Math.min(3, i) }, (_, k) => at(i - Math.min(3, i) + k)) };
+    if (i < 0) return undefined;
+    const c = song.cues[i];
+    const at = (k: number) => ({ no: k + 1, text: song.cues[k].text, part: partName(song.cues[k].id), at: song.cues[k].start, run: runOf(k) });
+    const first = i === 0 || runOf(i - 1) !== runOf(i);
+    const closed = i > 0 && first ? song.cues.findIndex((x) => parts.get(x.id)?.run === runOf(i - 1)) : -1;
+    return {
+      no: i + 1, part: partName(c.id), text: c.text, prev: Array.from({ length: Math.min(5, i) }, (_, k) => at(i - Math.min(5, i) + k)),
+      at: c.start, dur: c.end - c.start, run: runOf(i), first, closing: c.id === closing, sub: subOf(i), song: receipt,
+      ...(closed >= 0 ? { before: { part: partName(song.cues[i - 1].id), ...subOf(i - 1), closing: song.cues.slice(closed, i).some((x) => x.id === closing) } } : {}),
+    };
   };
   const linesAt = (a: number, b: number) => song.cues.filter((x) => x.start < b + 1 && x.end > a).map((x) => x.text).join(' ') || titleOf;
   /** The computer the terminal world is set on (graphics.ts ui): every word in its windows is the song's own. */

@@ -65,6 +65,11 @@ export interface SetSpec {
   on?: (keyof Slots)[];
   /** The slot the key words start from, when not the accent (an accent banner under the words). */
   key?: keyof Slots;
+  /** A run with no break of its own is cut into even rows at its characters, as a printer wraps at its paper's width; a line
+   * phrases would set under the floor is cut so too, and nothing is printed past the width. */
+  wrap?: boolean;
+  /** One ink for the whole line: no key word takes a colour of its own (a receipt prints a line in one ink, its red the TOTAL's). */
+  plain?: boolean;
   /** One line in two sizes or two containers, at a space the lyric has (world-split.ts). */
   split?: SplitSpec;
   /**
@@ -269,7 +274,9 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   if (split) return split;
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {
-    const rows = rowsFor(text, n, !!spec.square);
+    let rows = rowsFor(text, n, !!spec.square, !!spec.wrap);
+    // (a set that wraps at its width takes even rows cut at the characters where its phrases would set the line under its floor)
+    if (spec.wrap && n > 1 && !spec.vertical) { const even = wrapped(text.trim(), n); if (sizeAcross(rows, spec, measure) < spec.lo && even.length === n && sizeAcross(even, spec, measure) > sizeAcross(rows, spec, measure)) rows = even; }
     // a row of one mark or one character is a break no reader asked for (unless the singer set that word apart: 哼)
     const words = new Set(text.split(/\s+/).filter(Boolean));
     if (n > 1 && rows.some((r) => [...r.replace(/[\s\p{P}\p{S}]/gu, '')].length < 2 && !words.has(r.trim()))) continue;
@@ -293,7 +300,8 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   // the type floor never pushes a line out of the frame: a line too long for its set at the floor is set smaller (never
   // clipped), measured as drawn (a wall seen at an angle stands taller than its words are long)
   const [w0, h0] = shearedSize(...extent(floored), spec.shear);
-  const size = Math.floor(floored * Math.min(1, (W - 2 * SAFE_X) / Math.max(1, w0), (H - 2 * SAFE_Y) / Math.max(1, h0)));
+  // (a set that wraps at its width never prints past it: the paper ends there)
+  const size = Math.floor(floored * Math.min(1, (W - 2 * SAFE_X) / Math.max(1, w0), (H - 2 * SAFE_Y) / Math.max(1, h0), spec.wrap ? (spec.share * W) / Math.max(1, w0) : 1));
   const [w, h] = extent(size);
   const [ow, oh] = shearedSize(w, h, spec.shear);
   // the anchor names a side; the block never leaves the frame's safe area, its object's margin included
@@ -308,13 +316,28 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
  * A line in n rows: at its phrases (phrases.ts). A square set fills its carrier, so a short Han or kana run that took no
  * break (a four-character idiom, 風生水起) is cut at its middle, or at the phrase boundary nearest it when longer.
  */
-function rowsFor(text: string, n: number, square: boolean): string[] {
+function rowsFor(text: string, n: number, square: boolean, wrap = false): string[] {
   const rows = balancedRows(text, n).filter(Boolean);
+  if (wrap && rows.length < n) return wrapped(text.trim(), n);
   if (!square || n !== 2 || rows.length >= n || !/^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー]+$/u.test(text.trim())) return rows;
   const cs = [...text.trim()];
   const mid = cs.length / 2;
   const cut = cs.length <= 8 ? Math.ceil(mid) : [...phraseBoundaries(text.trim())].filter((b) => b > 0 && b < cs.length).sort((a, b) => Math.abs(a - mid) - Math.abs(b - mid))[0] ?? Math.ceil(mid);
   return [cs.slice(0, cut).join(''), cs.slice(cut).join('')];
+}
+
+/** A run cut into `n` even rows at its characters, a mark never opening a row (it stays with the character before it). */
+function wrapped(text: string, n: number): string[] {
+  const cs = [...text];
+  const out: string[] = [];
+  let at = 0;
+  for (let k = 1; k <= n; k++) {
+    let end = k === n ? cs.length : Math.round((cs.length * k) / n);
+    while (end < cs.length && /[\s\p{P}\p{S}ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ～〜]/u.test(cs[end])) end++;
+    if (end > at) out.push(cs.slice(at, end).join('').trim());
+    at = end;
+  }
+  return out.filter(Boolean);
 }
 
 const clampTo = (x: number, r: number) => Math.min(r, Math.max(-r, x));

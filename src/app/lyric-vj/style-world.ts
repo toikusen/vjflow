@@ -30,8 +30,8 @@ export interface LinePart {
   loud?: boolean;
   /** Sets of two carriers, a row each: only lines with a break to take (two phrases). */
   breaks?: boolean;
-  /** Bound to a part of the song (song-parts.ts): true takes only chorus lines, false only the rest (a receipt's TOTAL). */
-  chorus?: boolean;
+  /** Bound to the song's closing line (song-parts.ts closingLine): true takes only it, false only the rest (a receipt's TOTAL). */
+  closing?: boolean;
 }
 export interface DecorPart { id: string; why: string; budget: string }
 
@@ -103,7 +103,7 @@ export function worldRecipes(w: StyleWorld): Recipe[] {
     min: l.min,
     max: l.max,
     fit: l.column ? COLUMN : l.breaks ? BREAKS : undefined,
-    wline: { set: l.set, enter, exit, hold: l.hold, ground: l.ground, loud: l.loud, ...(l.chorus !== undefined ? { chorus: l.chorus } : {}) },
+    wline: { set: l.set, enter, exit, hold: l.hold, ground: l.ground, loud: l.loud, ...(l.closing !== undefined ? { closing: l.closing } : {}) },
   } as Recipe)))));
 }
 

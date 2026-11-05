@@ -71,6 +71,13 @@ export const LABELS = {
   item: f('品名', '品名', 'ITEM'),
   part: f('段落', 'パート', 'PART'),
   total: f('合計', '合計', 'TOTAL'),
+  subtotal: f('小計', '小計', 'SUBTOTAL'),
+  thanks: f('謝謝光臨', 'ありがとうございました', 'THANK YOU'),
+  // a receipt's units, printed right after a number (15字, 12字, 15 ch): an English one keeps its own space
+  unitChars: f('字', '字', ' ch'),
+  unitSec: f('秒', '秒', 's'),
+  unitLines: f('句', '行', ' lines'),
+  unitRows: f('行', '行', ' lines'),
 } as const satisfies Record<string, Forms>;
 export type LabelKey = keyof typeof LABELS;
 

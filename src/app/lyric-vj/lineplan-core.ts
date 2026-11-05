@@ -18,7 +18,7 @@ import { SHARED_ENTER_POOL, SHARED_EXIT_POOL } from './render/world-motion';
 import type { BeatKind, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import type { MomentAsk } from './signature-moments';
-import { chorusLines } from './song-parts';
+import { closingLine } from './song-parts';
 
 export type Level = 0 | 1 | 2;
 export interface Recipe {
@@ -34,7 +34,7 @@ export interface Recipe {
   /** The surface it holds through its reading. */
   state?: InkState;
   /** A style world's own line: its set and moves, in place of template, enter, exit and idle (render/world-layout.ts). */
-  wline?: { set: string; enter: string; exit: string; hold: string; ground?: string; loud?: boolean; chorus?: boolean };
+  wline?: { set: string; enter: string; exit: string; hold: string; ground?: string; loud?: boolean; closing?: boolean };
 }
 export interface Fit { test(text: string): boolean }
 export interface Cue { id: string; start: number; end: number; text: string; singer?: string; charStarts?: number[]; charTimed?: boolean }
@@ -849,10 +849,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   const mixed = rolled ? (s: string) => { const h = Math.imul(hash(s), 0x2c1b3c6d); return (h ^ (h >>> 15)) >>> 0; } : hash;
   const lean = rolled ? (r: Recipe) => (mixed(`${seed}:t:${r.wline?.set ?? r.template}`) % 100) * (r.wline ? 0.26 : 0.12) + (mixed(`${seed}:e:${r.wline?.enter ?? r.enter}`) % 100) * 0.05 : undefined;
   const W = force.world;
-  // a world that prints a line by its part (a receipt's TOTAL is the chorus, song-parts.ts): its part-bound sets take only
-  // lines of their part, and a pair never joins a chorus line to another (a pair has one set for both)
-  const choruses = W?.recipes.some((r) => r.wline?.chorus !== undefined) ? chorusLines(song as never) : undefined;
-  const partFits = (c: Cue) => (r: Recipe) => !choruses || r.wline?.chorus === undefined || r.wline.chorus === choruses.has(c.id);
+  // a world that closes the song on a line of its own (a receipt's TOTAL, the last line of the last chorus, song-parts.ts):
+  // its closing set takes only that line, its other bound sets every other, and a pair never takes it (one set for both)
+  const closing = W?.recipes.some((r) => r.wline?.closing !== undefined) ? closingLine(song as never) : undefined;
+  const partFits = (c: Cue) => (r: Recipe) => closing === undefined || r.wline?.closing === undefined || r.wline.closing === (c.id === closing);
   const rollFx = (list: string[], salt: string) => [...list].sort((a, b) => mixed(`${seed}:${salt}:${a}`) - mixed(`${seed}:${salt}:${b}`));
   const inChorus = (c: Cue) => song.sections?.find((x) => c.start >= x.start && c.start < x.end)?.type === 'chorus';
   const partOfCue = (id: string) => { const i = cues.findIndex((c) => c.id === id); return [...meaning.parts].filter((p) => cues.findIndex((c) => c.id === p.from) <= i).at(-1) ?? meaning.parts[0]; };
@@ -889,7 +889,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   // a call beside a line is laid out from where the line stands: a world keeps such a line alone and where it lands
   const hasCall = (id: string) => splitCalls(cues.find((c) => c.id === id)?.text ?? '').calls.length > 0;
   if (W) for (const [id, p] of pairs) if ([id, ...p.also].some(hasCall)) pairs.delete(id);
-  if (choruses) for (const [id, p] of pairs) if ([id, ...p.also].some((x) => choruses.has(x))) pairs.delete(id);
+  if (closing !== undefined) for (const [id, p] of pairs) if ([id, ...p.also].includes(closing)) pairs.delete(id);
   const leaderOf = new Map([...pairs].flatMap(([id, p]) => p.also.map((x) => [x, id] as const)));
   // a pair is one shot, running as far as its last line
   const leaders = cues.filter((c) => !leaderOf.has(c.id)).map((c) => ({ ...c, end: cues.find((x) => x.id === pairs.get(c.id)?.also.at(-1))?.end ?? c.end }));

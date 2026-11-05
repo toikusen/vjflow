@@ -1,4 +1,4 @@
-// How the document world's words (感熱收據, boards 2026-11-05) arrive, stay and leave, in numbers only, from the boards'
+// How the document world's words (感熱收據, boards 2026-11-05, kept for the second boards) arrive, stay and leave, in numbers only, from the boards'
 // motion notes: the paper feeds a step at a time, stopping between steps, never a smooth scroll; a line is printed by the
 // head from the top down, row after row; at a line's end the paper waits a few frames, then the torn piece goes whole with
 // its hard shadow, turned a little. No float, no bounce, no bend. Registered into world-motion.ts's tables by name.
@@ -12,11 +12,8 @@ export const PRINT_ROWS = 12;
 export const DOC_ENTERS: Record<string, WorldMove> = {
   // the head prints the line from its top row down, band by band
   'head-print': { sec: 0.42, clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : stepsOf(q, PRINT_ROWS) }) },
-  // a strip relayed across two pieces (its first phrase low on the torn one, its last high on the new one) is never printed
-  // top-down, which would print the last phrase first: the new strip steps down out of the printer with the line on it
-  'strip-drop': { sec: 0.3, block: (q) => ({ dy: 46 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }) },
-  // the paper feeds the printed line up out of the head in three held steps
-  'feed-step': { sec: 0.3, block: (q) => ({ dy: -42 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }), clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : 0.34 + 0.66 * stepsOf(q, 3) }) },
+  // the paper feeds the printed line up out of the head in three held steps, a row (world-doc-receipt ROW) with the rows above
+  'feed-step': { sec: 0.3, block: (q) => ({ dy: 42 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }), clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : 0.34 + 0.66 * stepsOf(q, 3) }) },
 };
 
 export const DOC_EXITS: Record<string, WorldMove> = {

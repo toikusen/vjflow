@@ -46,7 +46,27 @@ export interface WorldEnv {
   lang?: LabelLang;
 }
 /** A line's place in the song, for a world that prints it: 1-based number, its part's name, the lines before it. */
-export interface WorldItem { no: number; part: string; /** The line's own words. */ text?: string; prev: { no: number; text: string; part: string }[] }
+export interface WorldItem {
+  no: number;
+  part: string;
+  /** The line's own words. */
+  text?: string;
+  /** The lines before it, oldest first, each with its start (s) and its run of parts (song-parts.ts). */
+  prev: { no: number; text: string; part: string; at?: number; run?: number }[];
+  /** The line's start and length, s, and its run of parts. */
+  at?: number;
+  dur?: number;
+  run?: number;
+  /** The first line of its run of parts (a receipt starts a new slip), and the song's closing line (the TOTAL). */
+  first?: boolean;
+  closing?: boolean;
+  /** The line's part: its lines and its length, s (a receipt's 小計). */
+  sub?: { n: number; sec: number };
+  /** On a part's first line, the part just ended: its name, lines, length, and whether it held the closing line. */
+  before?: { part: string; n: number; sec: number; closing: boolean };
+  /** The song as a receipt prints it: its id (a hash of its title, hex), lines, length (s) and analysed tempo. */
+  song?: { id: string; lines: number; len: number; bpm: number };
+}
 
 type Ground = (e: WorldEnv) => void;
 const layers = new Map<string, OffscreenCanvas>();

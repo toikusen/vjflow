@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chorusLines, lineParts } from './song-parts';
+import { chorusLines, closingLine, lineParts } from './song-parts';
 
 const cue = (id: string, start: number, text: string) => ({ id, start, end: start + 3, text });
 // verse, chorus, verse, chorus: the chorus comes back with its words, 30 s apart
@@ -37,5 +37,15 @@ describe('lineParts', () => {
   it('gives every line a part, a song with nothing to go on all verse', () => {
     const lone = { title: 'x', duration: 30, cues: [cue('a', 1, '只有一句'), cue('b', 6, '再一句')] };
     expect([...lineParts(lone).values()].map((p) => p.label)).toEqual(['主歌', '主歌']);
+  });
+  it('closes the song on the last line of its last chorus, and counts each run of parts with its span', () => {
+    expect(closingLine(song())).toBe('c22');
+    const p = lineParts(song());
+    expect(p.get('c20')!.run).toBe(p.get('c22')!.run);
+    expect(p.get('c20')!.run).toBeGreaterThan(p.get('v20')!.run);
+    expect(p.get('c22')!.to).toBeGreaterThan(p.get('c22')!.from);
+  });
+  it('closes a song with no chorus on its last line', () => {
+    expect(closingLine({ title: 'x', duration: 30, cues: [cue('a', 1, '只有一句'), cue('b', 6, '再一句')] })).toBe('b');
   });
 });

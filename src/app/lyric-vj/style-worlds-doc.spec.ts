@@ -9,12 +9,14 @@ import { SET_SPECS } from './render/world-sets';
 import { WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './render/world-motion';
 import { WORLD_GROUNDS, WORLD_INS } from './render/world-grounds';
 import { DOT_R, HEAD_DOTS, headCells, isDocSurface } from './render/world-glyph-doc';
-import { lineParts } from './song-parts';
+import { closingLine, lineParts } from './song-parts';
+import { SMALL_MAX } from './render/world-doc-sets';
+import type { WorldItem } from './render/world-grounds';
 import type { SongTimeline } from './timeline';
 
 const w = DOCUMENT_WORLD;
 
-describe('document, the thermal receipt (boards 2026-11-05)', () => {
+describe('document, the thermal receipt (second boards 2026-11-05)', () => {
   it('is registered and held until the owner passes it', () => {
     expect(STYLE_WORLDS.find((x) => x.id === 'document')).toBe(w);
     expect(FREE_STYLES.some((s) => s.id === 'document')).toBe(true);
@@ -42,15 +44,20 @@ describe('document, the thermal receipt (boards 2026-11-05)', () => {
       expect(s.track, l.set).toBeGreaterThanOrEqual(0);
     }
   });
-  it('prints red only on a TOTAL, and a TOTAL only for a chorus line', () => {
+  it('prints red only on the closing line, one ink a line, never past its paper', () => {
     for (const l of w.layouts.lines) {
       const s = SET_SPECS[l.set];
       const red = s.ink === 'accent' || s.key === 'accent' || s.split?.ink === 'accent';
-      expect(red, l.set).toBe(l.chorus === true);
-      expect(l.chorus, l.set).toBeDefined();
+      expect(red, l.set).toBe(l.closing === true);
+      expect(l.closing, l.set).toBeDefined();
+      expect(s.plain, l.set).toBe(true);
+      expect(s.wrap, l.set).toBe(true);
     }
     // a call beside a line keeps to the black: the red is the TOTAL's
     expect(w.callSlot).toBe('plateInk');
+  });
+  it('sets the line at least 2.5 times the largest small print round it', () => {
+    for (const l of w.layouts.lines) expect(SET_SPECS[l.set].lo, l.set).toBeGreaterThanOrEqual(2.5 * SMALL_MAX);
   });
   it('reads in every scheme: black and red on the thermal paper', () => {
     for (const s of w.palette) {
@@ -66,22 +73,43 @@ describe('document, the thermal receipt (boards 2026-11-05)', () => {
     expect(headCells(full, 40, 40, 4).on.every((x) => x === 1)).toBe(true);
     expect(headCells(new Uint8ClampedArray(40 * 40 * 4), 40, 40, 4).on.some((x) => x === 1)).toBe(false);
   });
-  it('gives chorus lines the TOTAL and the rest items, on a song with no stored sections', () => {
-    const verse = ['走過那一條長長的街', '風吹著我們的頭髮', '你說今晚不要回家', '夜裡的城市很安靜', '我們走在雨裡面', '誰也沒有說話'];
-    const chorus = ['一起唱到天亮吧', '光就在前面等我們', '不要停下來'];
-    const texts = [...verse.slice(0, 3), ...chorus, ...verse.slice(3), ...chorus];
-    const cues = texts.map((text, i) => ({ id: `c${i + 1}`, start: 5 + i * 5, end: 9 + i * 5, text }));
-    const song = { title: 'x', duration: 70, tempo: 100, beats: Array.from({ length: 116 }, (_, i) => i * 0.6), downbeats: [], sections: [], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+  it('gives the closing line the TOTAL and every other line an item, on a song with no stored sections', () => {
+    const song = sample();
     const style = FREE_STYLES.find((s) => s.id === 'document')!;
-    const parts = lineParts(song);
+    const closing = closingLine(song);
+    expect(closing).toBe('c12');
     for (const seed of [0, 1, 2]) {
       const { job } = freeJob(song, { style, seed });
       const lines = (job.treatment.cues as { cueId: string; world?: { set: string } }[]).filter((c) => c.world);
       expect(lines.length).toBeGreaterThan(0);
-      for (const c of lines) {
-        const bound = w.layouts.lines.find((l) => l.set === c.world!.set)?.chorus;
-        expect(bound, `${seed} ${c.cueId} ${c.world!.set}`).toBe(parts.get(c.cueId)!.chorus);
-      }
+      for (const c of lines) expect(w.layouts.lines.find((l) => l.set === c.world!.set)?.closing, `${seed} ${c.cueId} ${c.world!.set}`).toBe(c.cueId === closing);
+    }
+  });
+  it("hands each line the receipt's real data: start, length, part, its 小計, the song's id, lines, length and tempo", () => {
+    const song = sample();
+    const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === 'document')!, seed: 0 });
+    const items = (job.treatment.graphics!.sections as { layers: { world?: { item?: WorldItem } }[] }[]).flatMap((s) => (s.layers[0].world?.item ? [s.layers[0].world.item] : []));
+    expect(items.length).toBeGreaterThan(0);
+    const parts = lineParts(song);
+    for (const it of items) {
+      const c = song.cues[it.no - 1];
+      expect(it.at).toBe(c.start);
+      expect(it.dur).toBeCloseTo(c.end - c.start, 6);
+      expect(it.song).toEqual({ id: expect.stringMatching(/^[0-9A-F]{8}$/), lines: song.cues.length, len: 70, bpm: 100 });
+      const p = parts.get(c.id)!;
+      expect(it.sub!.sec).toBeCloseTo(p.to - p.from, 1);
+      expect(it.first).toBe(it.no === 1 || parts.get(song.cues[it.no - 2].id)!.run !== p.run);
+      expect(it.closing).toBe(c.id === 'c12');
+      if (it.first && it.no > 1) expect(it.before?.part).toBeTruthy();
     }
   });
 });
+
+/** Verse, chorus, verse, chorus: the chorus comes back with its words; no stored sections. */
+function sample() {
+  const verse = ['走過那一條長長的街', '風吹著我們的頭髮', '你說今晚不要回家', '夜裡的城市很安靜', '我們走在雨裡面', '誰也沒有說話'];
+  const chorus = ['一起唱到天亮吧', '光就在前面等我們', '不要停下來'];
+  const texts = [...verse.slice(0, 3), ...chorus, ...verse.slice(3), ...chorus];
+  const cues = texts.map((text, i) => ({ id: `c${i + 1}`, start: 5 + i * 5, end: 9 + i * 5, text }));
+  return { title: 'x', duration: 70, tempo: 100, beats: Array.from({ length: 116 }, (_, i) => i * 0.6), downbeats: [], sections: [], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+}

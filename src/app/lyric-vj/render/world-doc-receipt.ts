@@ -1,26 +1,40 @@
-// document (感熱收據), its pages from the owner-approved boards (2026-11-05, ~/Desktop/vj/output/感熱收據設計稿_2026-11-05
-// a–d; out/research/boards-receipt/boards/receipt.html): the lyric is the transaction being printed. a: the continuous
-// feed, a strip wider than the frame stepping up out of the printer at the bottom, the earlier items above the line being
-// printed; b: the receipt relay, a new strip hanging from the printer at the top, the last one torn and set down at the
-// lower left; c: the TOTAL close-up, the paper filling the frame between a cutter's edge and a hand tear; d: the tear-off,
-// the piece just torn lifting away over the strip being fed out under it. Small print is functional only (品名／段落／合計,
-// the item's number, its part) and the song's real title and artist in the song's opening (world-title.ts): never a
-// price, a count, a time, a shop or a barcode. Everything prints across. Edges are hard (cutter teeth, hand tear, straight
-// roll edge); shadows are solid, never blurred. Labels are dot-printed like the words (render/world-glyph-doc.ts).
+// document (感熱收據), its pages from the owner-approved second boards (2026-11-05, ~/Desktop/vj/output/
+// 感熱收據設計稿_第二版_2026-11-05 a–d; out/research/boards-receipt-v2/boards/receipt.html): the lyric is the item being
+// printed on a narrow thermal roll. A receipt reads as one by its parts: the narrow roll, the centred shop block (artist,
+// title, render date, BPM, the song's id and line count), printed '=' and '-' rule rows, item rows with the time column on
+// the right and dot leaders, the quantity row (characters @ seconds a character = the line's length), the part's 小計,
+// the song's 合計 in red, a real Code 128 barcode of the song's id, the thank-you, cutter and torn ends, the printer's mouth.
+// Every number is the song's own (WorldItem, free-plan.ts): nothing is invented.
+//
+// The owner's worry for v2 was that so much small print would hide the lyric. So the camera never shows the whole
+// receipt, only the stretch round the line being printed, and four rules keep the line the one thing to read:
+// 1. Hierarchy: the line is printed 倍角 in full ink and is the only large text (its set's least size is 2.5 times the
+//    largest small print, SMALL_MAX); past rows are small and lighter, older ones lighter still; the shop block smaller.
+// 2. Budget: what is printed round the line is laid bottom-up from it (its rows, the part's mark, the shop block, the
+//    paper's top edge) only while its ink stays under INK_BUDGET of the line's; the rest of the roll is out of shot.
+// 3. Section ends only: the 小計, 合計, barcode and thank-you print at a part's end (the closing line's page, after the
+//    line is sung) or go by on the slip torn off as the next part starts, in a quarter second.
+// 4. Motion: the paper feeds the earlier rows up a row and the line prints in (world-doc-motion.ts); after that, while
+//    the line is read, nothing moves.
+// Everything prints across. Edges are hard; shadows solid. Small print is dot-printed like the words (world-glyph-doc.ts).
 import { atBase, fibred, H, HandGround, HandIn, kept, mixHex, W, WorldEnv } from './world-craft';
 import type { WorldItem } from './world-grounds';
 import type { Piece } from './world-pieces';
 import { artistOf, C, rng, titleOnly } from './world-b3-shared';
 import { titleNow } from './world-title';
-import { splitParts } from './world-split';
-import { splitCalls } from '../calls';
 import { DOT_R } from './world-glyph-doc';
 import { DOC_INKS } from './doc-inks';
+import { code128 } from './world-doc-barcode';
+import { splitCalls } from '../calls';
+import { MARGIN, PITCH, ROLL, SMALL_G } from './world-doc-sets';
 import { ALL_LABEL_TEXT, say } from '../labels';
 
 const FACE = '"Noto Sans TC", "Noto Sans JP", sans-serif';
-/** The receipt's own words, in every language a song's labels may speak (labels.ts). */
-const LABELS = `${ALL_LABEL_TEXT}0123456789/ `;
+
+/** The receipt's words, in the song's language (labels.ts): 品名, 時間, 小計, 合計, 謝謝光臨 and its units. */
+const wordsOf = (e: WorldEnv) => ({ subtotal: say(e, 'subtotal'), thanks: say(e, 'thanks'), chars: say(e, 'unitChars'), sec: say(e, 'unitSec'), lines: say(e, 'unitLines'), rows: say(e, 'unitRows') });
+/** The receipt's own words, in every language a song's labels may speak (labels.ts), with its digits and marks. */
+const LABELS = `${ALL_LABEL_TEXT}0123456789/:.@*=-No BPM`;
 
 /**
  * The faces a document job prints its small words in, loaded with the job (render/job-fonts.ts): its labels, and every
@@ -33,12 +47,13 @@ export function docFaces(job: { cues: { text: string }[]; meta?: { title: string
   return Promise.all([500, 700].map((w) => document.fonts.load(`${w} 24px ${FACE}`, text))).then(() => undefined, () => undefined);
 }
 
-type ItemData = WorldItem;
-
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
 const stepsOf = (q: number, n: number) => Math.floor(clamp01(q) * n) / n;
 const no2 = (n: number) => String(n).padStart(2, '0');
+const mmss = (t: number) => `${no2(Math.floor(Math.max(0, t) / 60))}:${no2(Math.floor(Math.max(0, t) % 60))}`;
 const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => atBase(e, f);
+
+// ---- the print head ----
 
 /** Whether the face can draw `text` now; if not, it is asked for and the label waits a frame (never cached in a fallback face). */
 function ready(font: string, text: string) {
@@ -48,13 +63,13 @@ function ready(font: string, text: string) {
   return false;
 }
 
-/** `text` on a head of `g` cells to the size, as cells (the board's rasterW): its width and the printed cells. */
+/** `text` on a head of `g` cells to the size, as cells (the board's rasterW): its width, the printed cells and their count. */
 function cellsOf(text: string, g: number, weight: number) {
   const font = `${weight} ${g}px ${FACE}`;
   if (!ready(font, text)) return undefined;
   return rasterOf(text, g, weight, font);
 }
-const rasters = new Map<string, { w: number; h: number; on: Uint8Array }>();
+const rasters = new Map<string, { w: number; h: number; on: Uint8Array; n: number }>();
 function rasterOf(text: string, g: number, weight: number, font: string) {
   const key = `${text}|${g}|${weight}`;
   const hit = rasters.get(key);
@@ -70,22 +85,33 @@ function rasterOf(text: string, g: number, weight: number, font: string) {
   c.fillText(text, 1, 1);
   const d = c.getImageData(0, 0, w, h).data;
   const on = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) on[i] = d[i * 4 + 3] > 120 ? 1 : 0;
-  const out = { w, h, on };
-  if (rasters.size > 400) rasters.delete(rasters.keys().next().value!);
+  let n = 0;
+  for (let i = 0; i < w * h; i++) if (d[i * 4 + 3] > 120) { on[i] = 1; n++; }
+  const out = { w, h, on, n };
+  if (rasters.size > 600) rasters.delete(rasters.keys().next().value!);
   rasters.set(key, out);
   return out;
 }
 
+/**
+ * What a frame's small print adds up to, for the ink budget and for measuring the focus (scripts/lyric-vj/doc-focus.mts
+ * reads `globalThis.vjDocPrint`): the printed area, px², and the largest small type, px a size.
+ */
+const tally = { ink: 0, largest: 0 };
+/** Measuring only: the small print laid out but left unprinted (`globalThis.vjDocBare`), to tell its ink from the line's. */
+const bare = () => (globalThis as { vjDocBare?: boolean }).vjDocBare === true;
+const publish = () => { (globalThis as { vjDocPrint?: typeof tally }).vjDocPrint = { ...tally }; };
+
 interface Dot { g?: number; weight?: number; ink: string; align?: 'left' | 'right' | 'center' }
+const G = SMALL_G;
 /** The printed width of `text` at pitch `p`. */
-export const dotWidth = (text: string, p: number, g = 24, weight = 500) => { const r = cellsOf(text, g, weight); return r ? r.w * p : [...text].length * g * p; };
-/** The pitch that sets `text` `w` px wide, never over `most`. */
-export const dotFit = (text: string, w: number, most: number, g = 24, weight = 500) => Math.min(most, w / Math.max(1, dotWidth(text, 1, g, weight)));
+export const dotWidth = (text: string, p: number, g = G, weight = 500) => { const r = cellsOf(text, g, weight); return r ? r.w * p : [...text].length * g * p; };
+/** The ink `text` prints at pitch `p`, px². */
+const dotInk = (text: string, p: number, g = G, weight = 500) => { const r = cellsOf(text, g, weight); return r ? r.n * p * p : [...text].length * g * g * p * p * 0.25; };
 
 /** Dot-prints `text` with its top at `y` (the board's dotText): cells of the head as fused round dots of the pitch `p`. */
 export function dotText(c: C, x: number, y: number, text: string, p: number, o: Dot) {
-  const g = o.g ?? 24;
+  const g = o.g ?? G;
   const weight = o.weight ?? 500;
   const r = text ? cellsOf(text, g, weight) : undefined;
   if (!r) return 0;
@@ -106,25 +132,47 @@ export function dotText(c: C, x: number, y: number, text: string, p: number, o: 
   });
   const w = r.w * pp;
   const at = o.align === 'right' ? x - w : o.align === 'center' ? x - w / 2 : x;
+  if (bare()) return w;
   c.drawImage(cv, Math.round(at - pad), Math.round(y - pad));
+  if (y > -g * pp && y < H) {
+    tally.ink += r.n * pp * pp;
+    tally.largest = Math.max(tally.largest, g * pp);
+  }
   return w;
 }
+
+// ---- sizes (frame px at 1080p) ----
+
+/** Pitches of the small print (world-doc-sets.ts): the line's set never prints under 2.5 times the largest. */
+const P = PITCH;
+/** Height of one printed row of small print and its gap. */
+const ROW = 42;
+/** The print round the line may hold at most this share of the line's own ink. */
+export const INK_BUDGET = 0.45;
+/** Past rows' ink: a fresh row at this share of black, each line older this much lighter, never under the floor. */
+const FADE = { fresh: 0.64, step: 0.08, floor: 0.34 };
+/** Share of the closing line's time after which its tail prints under it. */
+const TAIL_AT = 0.7;
+/** The printer's top (feed, pair). */
+const MOUTH_Y = 968;
+
+// ---- paper and printer ----
 
 type Edge = 'flat' | 'cut' | 'tear';
 /** One edge of a piece, x 0..w: the cutter's even teeth, or a hand tear along them (the board's edge()). */
 function edgePts(w: number, y: number, dir: 1 | -1, kind: Edge, seed: number): [number, number][] {
   if (kind === 'flat') return [[0, y], [w, y]];
   const R = rng(seed);
-  const T = 18;
+  const T = 16;
   const pts: [number, number][] = [];
-  for (let x = 0; x <= w; x += T) pts.push([x, y], [Math.min(w, x + T / 2), y + dir * (kind === 'tear' ? 6 + R() * 12 : 14)]);
+  for (let x = 0; x <= w; x += T) pts.push([x, y], [Math.min(w, x + T / 2), y + dir * (kind === 'tear' ? 5 + R() * 12 : 12)]);
   pts.push([w, y]);
   return pts;
 }
 interface PieceOpt { top?: Edge; bottom?: Edge; rot?: number; shadow?: [number, number]; seed?: number; dx?: number; dy?: number }
 /**
  * A piece of thermal paper, w × h at (x, y), its edges flat, cut or torn, turned `rot` radians about its middle, its solid
- * shadow pushed by `shadow`; `inside` prints on it in the piece's own coordinates.
+ * shadow pushed by `shadow`, the roll's bend a faint shade at its long edges; `inside` prints on it in its own coordinates.
  */
 function piece(c: C, e: WorldEnv, x: number, y: number, w: number, h: number, o: PieceOpt, inside?: (c: C) => void) {
   const top = edgePts(w, 0, 1, o.top ?? 'flat', o.seed ?? 5);
@@ -145,305 +193,341 @@ function piece(c: C, e: WorldEnv, x: number, y: number, w: number, h: number, o:
   path();
   c.fillStyle = c.createPattern(paperTile(e.slots.plate, e.slots.plateInk), 'repeat')!;
   c.fill();
+  c.save();
+  path();
+  c.clip();
+  // (the roll's bend: a tenth darker at both long edges, inside the paper, its edge still hard)
+  const g = c.createLinearGradient(0, 0, w, 0);
+  const shade = mixHex(e.slots.plate, DOC_INKS.black, 0.1);
+  g.addColorStop(0, shade);
+  g.addColorStop(0.07, `${e.slots.plate}00`);
+  g.addColorStop(0.9, `${e.slots.plate}00`);
+  g.addColorStop(1, shade);
+  c.fillStyle = g;
+  c.fillRect(0, 0, w, h + 20);
+  c.restore();
   if (inside) inside(c);
   c.restore();
 }
-/** The paper's tone with its faint fibre, a tile (multiplied at the boards' 30 % it is only ever a few per cent darker). */
+/** The paper's tone with its faint fibre, a tile. */
 const paperTile = (plate: string, ink: string) => fibred(`receipt|${plate}`, plate, mixHex(plate, ink, 0.35), 260, 512, 512);
 
-/** The printer's mouth (board): the dark body, the paper slot, the steel tear bar with its teeth on the paper's side. */
-function printer(c: C, y: number, h: number, side: 'top' | 'bottom') {
+/** The printer's mouth (boards a, d): the dark body under the roll, the paper slot, the steel tear bar with its teeth. */
+function printer(c: C, x0: number, x1: number, y: number) {
   c.fillStyle = DOC_INKS.body;
-  c.fillRect(0, y, W, h);
-  const lip = side === 'top' ? y : y + h;
+  c.fillRect(x0 - 150, y, x1 - x0 + 300, H - y);
   c.fillStyle = DOC_INKS.slot;
-  c.fillRect(0, side === 'top' ? y : lip - 14, W, 14);
-  const by = side === 'top' ? y + 14 : lip - 30;
+  c.fillRect(x0 - 14, y, x1 - x0 + 28, 14);
   c.fillStyle = DOC_INKS.steel;
-  c.fillRect(0, by, W, 16);
-  const ty = side === 'top' ? by : by + 16;
-  const dir = side === 'top' ? -1 : 1;
+  c.fillRect(x0 - 24, y + 14, x1 - x0 + 48, 14);
   c.beginPath();
-  for (let u = 0; u < W; u += 14) { c.moveTo(u, ty); c.lineTo(u + 7, ty + dir * 10); c.lineTo(u + 14, ty); c.closePath(); }
+  for (let u = x0 - 24; u < x1 + 24; u += 12) { c.moveTo(u, y + 14); c.lineTo(u + 6, y + 5); c.lineTo(u + 12, y + 14); c.closePath(); }
   c.fill();
   c.fillStyle = DOC_INKS.edge;
-  c.fillRect(0, side === 'top' ? y + h - 8 : y, W, 8);
+  c.fillRect(x0 - 150, y + 28, x1 - x0 + 300, 6);
 }
-const solid = (c: C, x: number, y: number, w: number, ink: string, t = 4) => { c.fillStyle = ink; c.fillRect(x, y, w, t); };
-const dashed = (c: C, x: number, y: number, w: number, ink: string, t = 4) => { c.fillStyle = ink; for (let u = 0; u < w; u += 14) c.fillRect(x + u, y, Math.min(7, w - u), t); };
 
-/** The song's title and artist, only in its opening (world-title.ts). */
-const facts = (e: WorldEnv) => { const t = titleNow(e); return { title: titleOnly(t), artist: artistOf(t) }; };
-const itemOf = (e: WorldEnv) => e.item;
+// ---- what a receipt prints ----
+
+/** A printed row of the roll: its height and how it prints with its top at y, between x0 and x1, in `ink`. */
+interface Row { h: number; ink: number; draw: (c: C, y: number, x0: number, x1: number, ink: string) => void }
+const rowInk = (age: number) => Math.max(FADE.floor, FADE.fresh - FADE.step * Math.max(0, age - 1));
+
+/** A rule row of printed characters, '=' or '-', as a real receipt does it (its ink reckoned on the feed's print width). */
+const rule = (ch: '=' | '-'): Row => {
+  // (one character's advance from a run of ten: a lone character's raster carries its own margin)
+  const across = (w: number) => ch.repeat(Math.max(4, Math.floor((w - dotWidth(ch, P.head)) / Math.max(1, dotWidth(ch.repeat(11), P.head) - dotWidth(ch.repeat(10), P.head))) + 1));
+  return { h: 30, ink: dotInk(across(ROLL.feed[1] - ROLL.feed[0] - 2 * MARGIN), P.head), draw: (c, y, x0, x1, ink) => { dotText(c, x0, y, across(x1 - x0), P.head, { ink }); } };
+};
+/** Left and right words on one row. */
+const pairRow = (l: string, r: string, p: number, o: { weight?: number } = {}): Row => ({ h: p * G + 12, ink: dotInk(l + r, p, G, o.weight), draw: (c, y, x0, x1, ink) => {
+  dotText(c, x0, y, l, p, { ink, weight: o.weight });
+  if (r) dotText(c, x1, y, r, p, { ink, weight: o.weight, align: 'right' });
+} });
+const centred = (t: string, p: number, weight = 500, gap = 10): Row => ({ h: p * G + gap, ink: dotInk(t, p, G, weight), draw: (c, y, x0, x1, ink) => { dotText(c, (x0 + x1) / 2, y, t, p, { ink, weight, align: 'center' }); } });
+/** An item row: number, the line's words (shrunk, then cut short with …, to fit), dot leaders, its start at the right. */
+const itemRow = (no: number, text: string, at: number | undefined): Row => ({ h: ROW, ink: dotInk(`${no2(no)}${text}${mmss(at ?? 0)}`, P.row), draw: (c, y, x0, x1, ink) => {
+  const time = at === undefined ? '' : mmss(at);
+  const nw = dotWidth('00 ', P.row);
+  const tw = dotWidth('00:00', P.row);
+  dotText(c, x0, y, no2(no), P.row, { ink });
+  const room = x1 - tw - 30 - (x0 + nw);
+  let t = text;
+  while ([...t].length > 2 && dotWidth(t, 0.95 * P.row) > room) t = `${[...t].slice(0, -2).join('')}…`;
+  const q = Math.min(P.row, room / Math.max(1, dotWidth(t, 1)));
+  const w = dotText(c, x0 + nw, y + (P.row - q) * 12, t, q, { ink });
+  const dw = dotWidth('.', P.row);
+  const lead = x1 - tw - 14 - (x0 + nw + w + 10);
+  if (lead > dw * 2) dotText(c, x0 + nw + w + 10, y, '.'.repeat(Math.floor(lead / dw)), P.row, { ink });
+  if (time) dotText(c, x1, y, time, P.row, { ink, align: 'right' });
+} });
+
+/** The quantity row under the line: its characters @ seconds a character, its length at the right (board a's 15字 @0.164秒 2.46秒). */
+function qtyRow(e: WorldEnv, it: WorldItem): Row | undefined {
+  const n = [...(it.text ?? '').replace(/\s+/g, '')].length;
+  if (!n || !it.dur) return undefined;
+  const u = wordsOf(e);
+  return pairRow(`  ${n}${u.chars} @${(it.dur / n).toFixed(3)}${u.sec}`, `${it.dur.toFixed(2)}${u.sec}`, P.row);
+}
+
+/** The song as the shop block prints it: the date the video is made, today. */
+const today = () => { const d = new Date(); return `${d.getFullYear()}/${no2(d.getMonth() + 1)}/${no2(d.getDate())}`; };
+
+/** The shop block, top-down (boards a, b, d): artist (or the title), title, date | BPM, No.id | lines, =, 品名 | 時間, -. */
+function shopRows(e: WorldEnv, it: WorldItem): Row[] {
+  const t = e.title ?? '';
+  const [artist, title] = [artistOf(t), titleOnly(t)];
+  const u = wordsOf(e);
+  const s = it.song;
+  return [
+    ...(artist || title ? [centred(artist || title, P.shop, 700, 6)] : []),
+    ...(artist && title ? [centred(title, P.head, 500, 14)] : []),
+    pairRow(today(), s ? `BPM ${s.bpm}` : '', P.head),
+    ...(s ? [pairRow(`No.${s.id}`, `${s.lines}${u.rows}`, P.head)] : []),
+    rule('='),
+    pairRow(say(e, 'item'), say(e, 'time'), P.head),
+    rule('-'),
+  ];
+}
+/** The part's mark over its first item: *** 主歌 ***. */
+const markRow = (part: string) => centred(`*** ${part} ***`, P.row, 500, 12);
+
 /**
- * Whether the line is laid out in two parts on this page (world-doc-sets `split`): its words, its calls taken out, break at
- * a space of their own. Read from the words, not the box: a call set beside the line widens the box without a split.
+ * What lies printed on the roll above the line, newest first, each with the age (in lines) its ink has faded by: this
+ * part's earlier rows, its mark, the shop block, the receipt's top edge (`edge`). The camera shows them only while they
+ * fit the room and the ink budget.
  */
-const splitsAt = (e: WorldEnv, even: boolean) => !!e.item?.text && !!splitParts(splitCalls(e.item.text).main.trim(), 'lead', even);
-/** The paper feeding: what is printed above the head starts a row lower and steps up into place as the cut opens. */
-const fed = (e: WorldEnv, row: number) => row * (1 - stepsOf(e.age / 0.3, 3));
+function above(e: WorldEnv, it: WorldItem): { row: Row; age: number; edge?: Edge }[] {
+  const mine = it.first ? [] : it.prev.filter((x) => x.run === undefined || x.run === it.run);
+  const out: { row: Row; age: number; edge?: Edge }[] = [...mine].reverse().map((x) => ({ row: itemRow(x.no, x.text, x.at), age: it.no - x.no }));
+  // (where the part opened: on this line, on the first of its rows on record, or past the record, out of shot anyway)
+  const opened = it.first || mine.length < it.prev.length || it.no - 1 === mine.length;
+  if (!opened) return out;
+  const firstNo = mine[0]?.no ?? it.no;
+  const age = it.no - firstNo;
+  out.push({ row: markRow(it.part), age }, ...shopRows(e, it).reverse().map((row) => ({ row, age })));
+  out.push({ row: { h: 34, ink: 0, draw: () => undefined }, age, edge: it.no === 1 ? 'cut' : 'tear' });
+  return out;
+}
 
-/** Item rows printed above the head, newest lowest, from `bottom` up while they fit under `ceil`: number, line, part. */
-function items(c: C, e: WorldEnv, prev: ItemData['prev'], bottom: number, ceil: number, x0: number, x1: number) {
-  const ink = e.slots.plateInk;
+/** The line's ink as the head prints it, px², from its box. */
+/**
+ * The line's ink as the head prints it, px²: its own characters' cells (kana in the Japanese face's 500, else 700) at the
+ * size its box gives them (rows × size × lead tall, rows × width ≈ its advance). A box's area would count a kana line's
+ * thin strokes as a bold Han line's (choroin's lines read a third under their box estimate, 2026-11-05).
+ */
+function lyricInk(e: WorldEnv) {
+  // (a call beside the line shares its box but is not the line: the line's own words)
+  const text = splitCalls(e.item?.text ?? '').main.replace(/\s+/g, '');
+  if (!e.rect || !text) return 0;
+  const weight = /[ぁ-ゖァ-ヺ]/u.test(text) ? 500 : 700;
+  const r = cellsOf(text, G, weight);
+  if (!r) return 0;
+  const [w, h] = [e.rect.x1 - e.rect.x0, e.rect.y1 - e.rect.y0];
+  const size = Math.min(h, Math.sqrt((h / 1.16) * w * G / r.w));
+  return r.n * (size / G) ** 2;
+}
+
+/**
+ * Lays `rows` bottom-up from `bottom`, newest first, while each fits under `ceil` and the ink so far stays in `budget`;
+ * returns the top of what was laid and the edge reached (where the receipt starts), if any.
+ */
+function layUp(c: C, rows: { row: Row; age: number; edge?: Edge }[], bottom: number, ceil: number, budget: number, x0: number, x1: number, e: WorldEnv) {
   let y = bottom;
-  for (const it of [...prev].reverse()) {
-    const top = y - 82;
-    if (top < ceil) break;
-    dotText(c, x0, top + 10, no2(it.no), 2.6, { weight: 700, ink });
-    const partW = dotText(c, x1, top + 10, it.part, 2.6, { ink, align: 'right' });
-    const room = x1 - partW - 40 - (x0 + 106);
-    dotText(c, x0 + 106, top, it.text, dotFit(it.text, room, 2.25, 32), { g: 32, ink });
-    y = top;
+  let spent = 0;
+  for (const { row, age, edge } of rows) {
+    if (edge) return { top: y - row.h, edge };
+    if (y - row.h < ceil || spent + row.ink > budget) break;
+    y -= row.h;
+    spent += row.ink;
+    row.draw(c, y, x0, x1, mixHex(e.slots.plate, e.slots.plateInk, rowInk(age)));
   }
-  return y;
+  return { top: y, edge: undefined as Edge | undefined };
 }
 
-/** The receipt's header right above its items, as room allows (board a): 品名 … 段落 under a rule, and over the rule the
- * song's title and artist (in its opening only). `ceil` is the paper's top. */
-function header(c: C, e: WorldEnv, x0: number, x1: number, ceil: number, itemsTop: number) {
+/** The paper feeding: what is printed above the head starts a row lower and steps up into place as the line prints. */
+const fed = (e: WorldEnv) => ROW * (1 - stepsOf(e.age / 0.3, 3));
+
+/**
+ * The slip of the part just ended, torn off as this part's first line prints (board d): its last rows, 小計, the 合計 if
+ * it closed the song, the barcode, the thank-you, its torn foot; it goes up and left, turning, in four held steps, gone
+ * in a quarter second, before the line is read.
+ */
+function tornSlip(c: C, e: WorldEnv, it: WorldItem, x0: number, x1: number, foot: number) {
+  const b = it.before;
+  // (a line too short to read past a slip going by keeps the frame to itself: the slip was torn off unseen)
+  if (!b || e.age > 0.25 || (it.dur ?? 0) < 1.5) return;
+  const k = stepsOf((e.age - 0.03) / 0.2, 4);
+  if (k >= 1) return;
+  const u = wordsOf(e);
+  const w = x1 - x0;
+  const rows: Row[] = [
+    ...it.prev.filter((x) => x.run !== it.run).slice(-2).map((x) => itemRow(x.no, x.text, x.at)),
+    rule('-'),
+    pairRow(`${u.subtotal}  ${b.part} ${b.n}${u.lines}`, `${b.sec.toFixed(1)}${u.sec}`, P.row),
+    rule('='),
+    ...(b.closing && it.song ? [totalRow(e, it.song.len), rule('=')] : []),
+    ...(it.song ? [barcodeRow(it.song.id)] : []),
+    centred(u.thanks, P.row, 700, 0),
+  ];
+  const h = rows.reduce((s, r) => s + r.h, 0) + 80;
   const ink = e.slots.plateInk;
-  const rule = itemsTop - 96;
-  if (rule < ceil) return;
-  solid(c, x0, rule, x1 - x0, ink);
-  dotText(c, x0, rule + 24, say(e, 'item'), 2.3, { ink });
-  dotText(c, x1, rule + 24, say(e, 'part'), 2.3, { ink, align: 'right' });
-  const f = facts(e);
-  if (!f.title || rule - 200 < ceil) return;
-  dotText(c, (x0 + x1) / 2, rule - 208, f.title, dotFit(f.title, x1 - x0, 3.4, 24, 700), { weight: 700, ink, align: 'center' });
-  if (f.artist) dotText(c, (x0 + x1) / 2, rule - 106, f.artist, 2.3, { ink, align: 'center' });
+  piece(c, e, x0 - 220, foot - h, w, h, { bottom: 'tear', rot: -0.1 - 0.12 * k, shadow: [0, 30], seed: 21 + it.no, dx: -260 * k, dy: -(foot + 200) * k }, (p) => {
+    let y = 20;
+    for (const r of rows) { r.draw(p, y, MARGIN, w - MARGIN, ink); y += r.h; }
+  });
 }
+
+/** The 合計 row: the song's length, in the paper's second colour, a little larger than the rest of the small print. */
+const totalRow = (e: WorldEnv, len: number): Row => ({ ...pairRow(say(e, 'total'), mmss(len), P.total, { weight: 700 }), draw: (c, y, x0, x1) => {
+  dotText(c, x0, y, say(e, 'total'), P.total, { ink: e.slots.accent, weight: 700 });
+  dotText(c, x1, y, mmss(len), P.total, { ink: e.slots.accent, weight: 700, align: 'right' });
+} });
+/** The song id's Code 128, whole modules (crisp bars), centred, its id printed under it. */
+function barcodeRow(id: string): Row {
+  const bars = code128(id) ?? [];
+  const mod = 4;
+  const bh = 80;
+  const total = bars.reduce((s, x) => s + x, 0) * mod;
+  return { h: bh + 8 + P.head * G + 14, ink: bars.filter((_, i) => i % 2 === 0).reduce((s, x) => s + x, 0) * mod * bh, draw: (c, y, x0, x1, ink) => {
+    let x = Math.round((x0 + x1 - total) / 2);
+    c.fillStyle = bare() ? 'rgba(0,0,0,0)' : ink;
+    bars.forEach((m, i) => { if (i % 2 === 0) c.fillRect(x, Math.round(y), m * mod, bh); x += m * mod; });
+    tally.ink += bars.filter((_, i) => i % 2 === 0).reduce((s, m) => s + m, 0) * mod * bh;
+    dotText(c, (x0 + x1) / 2, y + bh + 8, id, P.head, { ink, align: 'center' });
+  } };
+}
+
+// ---- pages ----
 
 const box = (e: WorldEnv, x0: number, y0: number, x1: number, y1: number) => e.rect ?? { x0, y0, x1, y1 };
-const L = 130;
-const R = 1790;
 
-/** a: the continuous feed with an item at its head: its number and part a label row above it, the earlier items above that. */
-const feed = (total: boolean): HandGround => (e) => page(e, (c) => {
+/**
+ * a / b: the roll round the line being printed. a (feed): the roll rises out of the printer at the frame's foot, the line
+ * printed 倍角 just over the tear bar. b (sheet): the slip lies still on the desk, the blank roll under the line. Above
+ * the line: its number and start, then what the roll holds (above()), as far as the room and the ink budget go.
+ */
+const roll = (kind: 'feed' | 'sheet' | 'pair'): HandGround => (e) => page(e, (c) => {
+  tally.ink = 0;
+  tally.largest = 0;
   c.fillStyle = e.slots.ground;
   c.fillRect(0, 0, W, H);
-  const r = box(e, L, 650, 1500, 860);
-  const it = itemOf(e);
+  const [X0, X1] = kind === 'sheet' ? ROLL.sheet : ROLL.feed;
+  const [x0, x1] = [X0 + MARGIN, X1 - MARGIN];
+  const r = box(e, x0, 560, x1, 896);
+  const it = e.item;
   const ink = e.slots.plateInk;
-  const red = e.slots.accent;
-  const opening = !!facts(e).title;
-  const lift = fed(e, 82);
-  piece(c, e, 46, opening ? 28 : -40, 1828, 1000, { top: opening ? 'cut' : 'flat', seed: 5 }, () => undefined);
+  const lift = it?.first ? 0 : fed(e);
+  // (lay out first, offscreen of nothing: the rows are drawn after the paper, so measure where the paper starts)
+  const rows = it ? above(e, it) : [];
+  const head = it ? pairRow(kind === 'pair' ? `${no2(it.no)}–${no2(it.no + 1)}` : no2(it.no), it.at === undefined ? '' : mmss(it.at), P.row) : undefined;
+  const qty = it && kind !== 'pair' ? qtyRow(e, it) : undefined;
+  const budget = lyricInk(e) * INK_BUDGET - (head?.ink ?? 0) - (qty?.ink ?? 0);
+  const headY = r.y0 - (head?.h ?? 0) - 4;
+  // dry run for the paper's top: lay the rows on a scratch context that draws nothing
+  const dry = layUp(scratch(), rows, headY, 0, budget, x0, x1, e);
+  const top = dry.edge ? dry.top + lift : -60;
+  const low = kind === 'feed' || kind === 'pair' ? MOUTH_Y + 10 : H + 60;
+  piece(c, e, X0, top, X1 - X0, low - top, { top: dry.edge ?? 'flat', shadow: kind === 'sheet' ? [18, 18] : [16, 0], seed: 5 + (it?.run ?? 0) });
+  tally.ink = 0;
+  tally.largest = 0;
   c.save();
   c.translate(0, lift);
-  // (the head's own label row: an item's number and part, or the TOTAL's double rule and 合計 in the second colour)
-  let ceil: number;
-  if (total) {
-    solid(c, L, r.y0 - 134, R - L, ink);
-    solid(c, L, r.y0 - 120, R - L, ink);
-    dotText(c, L, r.y0 - 94, say(e, 'total'), 2.8, { weight: 700, ink: red });
-    if (it?.part) dotText(c, R, r.y0 - 94, it.part, 2.8, { weight: 700, ink: red, align: 'right' });
-    ceil = r.y0 - 160;
-  } else {
-    if (it) dotText(c, L, r.y0 - 92, no2(it.no), 2.6, { weight: 700, ink });
-    if (it?.part) dotText(c, R, r.y0 - 92, it.part, 2.6, { ink, align: 'right' });
-    dashed(c, L, r.y0 - 118, R - L, ink);
-    ceil = r.y0 - 140;
-  }
-  const top = items(c, e, it?.prev ?? [], ceil, 120, L, R);
-  header(c, e, L, R, opening ? 50 : 0, top);
+  layUp(c, rows, headY, 0, budget, x0, x1, e);
   c.restore();
-  printer(c, 930, 150, 'top');
+  if (it && head) head.draw(c, headY, x0, x1, ink);
+  if (qty) qty.draw(c, r.y1 + 14, x0, x1, ink);
+  if (kind !== 'sheet') printer(c, X0, X1, MOUTH_Y);
+  if (it) tornSlip(c, e, it, X0, X1, Math.min(560, r.y0 - 70));
+  publish();
 });
 
-/** Two quick items on the feed, numbered at the left of each row (board a's 01 and 02). */
-const pair: HandGround = (e) => page(e, (c) => {
-  c.fillStyle = e.slots.ground;
-  c.fillRect(0, 0, W, H);
-  const r = box(e, 236, 420, 1500, 760);
-  const it = itemOf(e);
-  const ink = e.slots.plateInk;
-  const lift = fed(e, 82);
-  piece(c, e, 46, -40, 1828, 1000, {}, () => undefined);
-  c.save();
-  c.translate(0, lift);
-  const h = (r.y1 - r.y0) / 2;
-  [0, 1].forEach((k) => {
-    if (!it) return;
-    const mid = r.y0 + h * (k + 0.5);
-    dotText(c, L, mid - 34, no2(it.no + k), 2.6, { weight: 700, ink });
-    if (it.part) dotText(c, R, mid - 34, it.part, 2.6, { ink, align: 'right' });
-  });
-  dashed(c, L, r.y0 - 30, R - L, ink);
-  dashed(c, L, r.y1 + 26, R - L, ink);
-  const top = items(c, e, it?.prev ?? [], r.y0 - 50, 120, L, R);
-  header(c, e, L, R, 0, top);
-  c.restore();
-  printer(c, 930, 150, 'top');
-});
-
-/** b: the receipt relay: the new strip hangs from the top printer, the line's last phrase at its front; the strip before it
- * lies torn at the lower left with the line's first phrase (world-doc-sets split). A line laid out whole leaves the torn
- * strip the line before it, item-size (nothing large behind the words is a line not being sung). */
-const relay: HandGround = (e) => page(e, (c) => {
-  c.fillStyle = e.slots.ground;
-  c.fillRect(0, 0, W, H);
-  const r = box(e, 730, 236, 1700, 450);
-  const it = itemOf(e);
-  const ink = e.slots.plateInk;
-  // (split: the first phrase stands on the torn strip, left of where the new strip hangs)
-  const split = r.x0 < 600 && splitsAt(e, false);
-  const last = it?.prev.at(-1);
-  // (the torn strip carrying a phrase being read lies level, so its rules run with its words)
-  if (split || last) piece(c, e, 40, 548, 1060, 470, { top: 'cut', bottom: 'tear', rot: split ? 0 : -0.052, shadow: [-14, 18], seed: 11 }, (p) => {
-    // (number and part at the left: the new strip covers this one's right end)
-    const no = split ? it?.no : last?.no;
-    const part = split ? it?.part : last?.part;
-    if (no) dotText(p, 70, 56, no2(no), 2.3, { weight: 700, ink });
-    if (part) dotText(p, 170, 56, part, 2.3, { ink });
-    solid(p, 70, 126, 920, ink);
-    if (!split && last) dotText(p, 70, 190, last.text, dotFit(last.text, 880, 1.9, 48, 500), { g: 48, ink });
-    dashed(p, 70, 368, 920, ink);
-  });
-  // the new strip grows with its line, just clear of the printer; its leading edge is the cutter's
-  const heroLow = split ? 236 + Math.min(450, r.y1 - 236) : r.y1;
-  const bottom = split ? 696 : Math.max(696, Math.min(1000, heroLow + 170));
-  const step = fed(e, 46);
-  piece(c, e, 640, 96 - step, 1220, bottom - 96, { bottom: 'cut', shadow: [-14, 18], seed: 4 }, (p) => {
-    // (a split line's number is on the torn strip with its first phrase; this strip names the part)
-    const lead = split ? it?.part : it ? no2(it.no) : '';
-    if (lead) dotText(p, 90, 60, lead, 2.4, { weight: 700, ink });
-    if (it?.part && !split) dotText(p, 1130, 60, it.part, 2.4, { ink, align: 'right' });
-    const f = facts(e);
-    if (f.title) dotText(p, split ? 1130 : 200, 66, f.title, dotFit(f.title, 760, 2.1), { ink, align: split ? 'right' : 'left' });
-    dashed(p, 90, split ? 500 : Math.min(bottom - 96 - 60, heroLow - 96 + step + 70), 1040, ink);
-  });
-  printer(c, 0, 100, 'bottom');
-});
-
-/** c: the TOTAL close-up: an item row at the top (the line's first phrase when it is split, else the line before, small),
- * the double rule and 合計, the red line, the double rule under it, and the song's name in its opening. */
+/**
+ * c: the closing line (the last of the last chorus) is the receipt's last item, in the second colour, near the top of the
+ * frame; once it has had most of its time (TAIL_AT), the tail prints under it a row at a time: -, 小計 (this part), =, 合計 (the song's length) in red,
+ * =, the barcode, the thank-you, and the cutter's edge.
+ */
 const totalPage: HandGround = (e) => page(e, (c) => {
+  tally.ink = 0;
+  tally.largest = 0;
   c.fillStyle = e.slots.ground;
   c.fillRect(0, 0, W, H);
-  const r = box(e, 120, 330, 1800, 780);
-  const it = itemOf(e);
-  const ink = e.slots.plateInk;
+  const [X0, X1] = ROLL.total;
+  const [x0, x1] = [X0 + MARGIN, X1 - MARGIN];
+  const r = box(e, x0, 184, x1, 480);
+  const it = e.item;
   const red = e.slots.accent;
-  const [x0, x1] = [120, 1800];
-  piece(c, e, -40, 40, 2000, 940, { top: 'cut', bottom: 'tear', seed: 3 }, () => undefined);
-  const split = r.y0 < 250 && splitsAt(e, false);
-  const last = it?.prev.at(-1);
-  if (split && it) {
-    dotText(c, x0 + 40, 104, no2(it.no), 2.6, { weight: 700, ink });
-    if (it.part) dotText(c, x1 + 40, 104, it.part, 2.6, { ink, align: 'right' });
-  } else if (last) {
-    dotText(c, x0 + 40, 104, no2(last.no), 2.6, { weight: 700, ink });
-    const pw = last.part ? dotText(c, x1 + 40, 104, last.part, 2.6, { ink, align: 'right' }) : 0;
-    dotText(c, x0 + 140, 92, last.text, dotFit(last.text, x1 - pw - 60 - (x0 + 140), 2.3, 32), { g: 32, ink });
-  }
-  solid(c, x0, 190, x1 - x0, ink);
-  solid(c, x0, 204, x1 - x0, ink);
-  dotText(c, x0, 236, say(e, 'total'), 3.0, { weight: 700, ink: red });
-  const low = Math.min(900, Math.max(846, r.y1 + 40));
-  solid(c, x0, low, x1 - x0, ink);
-  solid(c, x0, low + 14, x1 - x0, ink);
-  const f = facts(e);
-  const foot = [f.title, f.artist].filter(Boolean).join(' / ');
-  if (foot && low + 110 < 960) dotText(c, x1, low + 42, foot, 2.3, { ink, align: 'right' });
+  const u = wordsOf(e);
+  const head = it ? pairRow(no2(it.no), it.at === undefined ? '' : mmss(it.at), P.row) : undefined;
+  const qty = it ? qtyRow(e, it) : undefined;
+  // (the tail starts once the line has had most of its time: the line after it often comes in at once, and the 合計 is the
+  // receipt's point; by then the line has been read)
+  const from = (it?.dur ?? 0) * TAIL_AT;
+  const sung = !!it?.dur && e.age > from;
+  const tail: Row[] = it ? [
+    rule('-'),
+    pairRow(`${u.subtotal}  ${it.part} ${it.sub?.n ?? 1}${u.lines}`, `${(it.sub?.sec ?? 0).toFixed(1)}${u.sec}`, P.row),
+    rule('='),
+    ...(it.song ? [totalRow(e, it.song.len), rule('='), barcodeRow(it.song.id)] : []),
+    centred(u.thanks, P.row, 700, 0),
+  ] : [];
+  // (the tail prints a row every tenth of a second once the line is sung, then the cutter cuts)
+  const shown = sung ? Math.min(tail.length, Math.floor((e.age - from) / 0.1) + 1) : 0;
+  let y = r.y1 + 14 + (qty?.h ?? 0) + 18;
+  const ys = tail.slice(0, shown).map((row) => { const at = y; y += row.h; return at; });
+  const cut = shown === tail.length && shown > 0 ? Math.min(H - 20, y + 30) : undefined;
+  piece(c, e, X0, -60, X1 - X0, (cut ?? H + 60) + 60, { bottom: cut ? 'cut' : 'flat', shadow: [18, 18], seed: 4 });
+  const rows = it ? above(e, { ...it, first: false }) : [];
+  const budget = lyricInk(e) * INK_BUDGET - (head?.ink ?? 0) - (qty?.ink ?? 0);
+  const headY = r.y0 - (head?.h ?? 0) - 4;
+  tally.ink = 0;
+  tally.largest = 0;
+  layUp(c, rows.filter((x) => !x.edge), headY, 0, budget, x0, x1, e);
+  if (head) head.draw(c, headY, x0, x1, red);
+  if (qty) qty.draw(c, r.y1 + 14, x0, x1, red);
+  tail.slice(0, shown).forEach((row, i) => row.draw(c, ys[i], x0, x1, e.slots.plateInk));
+  publish();
 });
 
-/** d: the tear-off: the line's first phrase on the piece just torn off, lifted with its hard shadow over the strip fed out
- * under it with the last phrase (world-doc-sets split). A line laid out whole sees the piece before it go: a pause of a few
- * frames on the tear, then it leaves whole in steps, before the line is read. */
-const tear: HandGround = (e) => page(e, (c) => {
-  c.fillStyle = e.slots.ground;
-  c.fillRect(0, 0, W, H);
-  const r = box(e, 120, 676, 1500, 880);
-  const it = itemOf(e);
-  const ink = e.slots.plateInk;
-  const split = r.y0 < H * 0.45 && splitsAt(e, true);
-  const last = it?.prev.at(-1);
-  const k = split ? 0 : stepsOf((e.age - 0.24) / 0.5, 4);
-  const upper = split ? it : last;
-  if (upper && k < 1) piece(c, e, 30, -40, 1860, 480, { bottom: 'tear', rot: split ? 0 : -0.059 - 0.05 * k, shadow: [0, 34], seed: 21, dx: -60 * k, dy: -560 * k }, (p) => {
-    dotText(p, 90, 110, no2(upper.no), 2.6, { weight: 700, ink });
-    if (upper.part) dotText(p, 1770, 110, upper.part, 2.6, { ink, align: 'right' });
-    if (!split && last) dotText(p, 90, 200, last.text, dotFit(last.text, 1500, 1.9, 48, 700), { g: 48, weight: 700, ink });
-  });
-  piece(c, e, 30, 560, 1860, 380, { top: 'cut', seed: 9 }, (p) => {
-    if (it && !split) dotText(p, 90, 44, no2(it.no), 2.6, { weight: 700, ink });
-    if (it?.part && !split) dotText(p, 1770, 44, it.part, 2.6, { ink, align: 'right' });
-  });
-  printer(c, 930, 150, 'top');
-});
+/** A context that draws nothing, for laying rows out before the paper under them is drawn. */
+let dryCtx: OffscreenCanvasRenderingContext2D | undefined;
+const scratch = () => (dryCtx ??= new OffscreenCanvas(1, 1).getContext('2d')!);
 
-/** No line up (an intro, an interlude): the printer with a short torn tongue of blank paper; the song's name in its opening. */
+/** No line up (an intro, an interlude): the printer with a short tongue of blank paper; the shop block in the song's opening. */
 const idle: HandGround = (e) => page(e, (c) => {
+  tally.ink = 0;
+  tally.largest = 0;
   c.fillStyle = e.slots.ground;
   c.fillRect(0, 0, W, H);
-  const f = facts(e);
-  const ink = e.slots.plateInk;
-  piece(c, e, 46, f.title ? 520 : 740, 1828, f.title ? 410 : 190, { top: 'tear', seed: 17 }, (p) => {
-    if (!f.title) return;
-    dotText(p, 914, 70, f.title, dotFit(f.title, 1500, 3.4, 24, 700), { weight: 700, ink, align: 'center' });
-    if (f.artist) dotText(p, 914, 176, f.artist, 2.3, { ink, align: 'center' });
-  });
-  printer(c, 930, 150, 'top');
+  const [X0, X1] = ROLL.feed;
+  const opening = !!titleNow(e);
+  const rows = opening ? shopRows(e, { no: 1, part: '', prev: [], song: e.item?.song }) : [];
+  const h = rows.reduce((s, r) => s + r.h, 0);
+  const top = MOUTH_Y - (opening ? h + 110 : 170);
+  piece(c, e, X0, top, X1 - X0, MOUTH_Y + 10 - top, { top: 'cut', shadow: [16, 0], seed: 17 });
+  let y = top + 50;
+  for (const r of rows) { r.draw(c, y, X0 + MARGIN, X1 - MARGIN, mixHex(e.slots.plate, e.slots.plateInk, FADE.fresh)); y += r.h; }
+  printer(c, X0, X1, MOUTH_Y);
+  publish();
 });
 
 /** With no line up every page is the idle printer: no empty receipt is ever shown. */
 const orIdle = (g: HandGround): HandGround => (e) => (e.rect ? g(e) : idle(e));
 const Gs: Record<string, HandGround> = {
   'document/idle': idle,
-  'document/feed': orIdle(feed(false)),
-  'document/feed-total': orIdle(feed(true)),
-  'document/pair': orIdle(pair),
-  'document/relay': orIdle(relay),
+  'document/feed': orIdle(roll('feed')),
+  'document/sheet': orIdle(roll('sheet')),
+  'document/pair': orIdle(roll('pair')),
   'document/total': orIdle(totalPage),
-  'document/tear': orIdle(tear),
 };
 
 const INS: Record<string, HandIn> = {
-  // a change of part: the receipt above the new line is torn off along a hand tear just over it and goes up and away whole,
-  // its hard shadow with it, in four held steps (never over the line landing with it)
-  'tear-swap': { sec: 0.4, draw: (e, q) => page(e, (c) => {
-    const k = stepsOf(q / 0.85, 4);
-    if (k >= 1) return;
-    const at = Math.max(160, (e.rect?.y0 ?? H * 0.5) - 40);
-    piece(c, e, -20, -60, W + 40, at + 60, { bottom: 'tear', rot: -0.03 * k, shadow: [0, 30], seed: 29, dy: -(at + 160) * k }, () => undefined);
-  }) },
+  // a change of part: the page itself tears the ended part's slip off as the part's first line prints (tornSlip), from
+  // the song's own parts; the plan's part change adds nothing over it
+  'tear-swap': { sec: 0.4, draw: () => undefined },
 };
 
-/** The words' box and a margin, frame px: a piece keeps out of it. */
-const around = (e: WorldEnv, m: number) => { const r = e.rect ?? { x0: 130, y0: 650, x1: 1790, y1: 860 }; return { x0: r.x0 - m, y0: r.y0 - m, x1: r.x1 + m, y1: r.y1 + m }; };
-
-// Small events of the machine, on a change of part, a key line or a long unsung stretch (world-pieces.ts): each prints on
-// the paper outside the words' box and never over it; nothing is invented (no price, no count, no barcode).
-const PIECES: Record<string, Piece> = {
-  // the head prints a dotted rule under the line, dot by dot from the left, and it stays printed
-  'rule-print': { sec: 2.2, clear: 0, draw: (e, q) => page(e, (c) => {
-    const b = around(e, 34);
-    if (!e.rect || b.y1 + 10 > 920) return;
-    const n = Math.floor((b.x1 - b.x0 - 68) / 18);
-    const shown = Math.ceil(n * stepsOf(q / 0.45, 12));
-    c.fillStyle = e.slots.plateInk;
-    c.beginPath();
-    for (let i = 0; i < shown; i++) { const x = b.x0 + 34 + i * 18; c.moveTo(x + 4, b.y1); c.arc(x, b.y1, 4, 0, Math.PI * 2); }
-    c.fill();
-  }) },
-  // the roll's black sensor mark comes up past the head at the paper's edge as it feeds, a step at a time
-  'black-mark': { sec: 1.6, clear: 0, draw: (e, q) => page(e, (c) => {
-    const b = around(e, 44);
-    const left = b.x0 - 26 > 40;
-    const x = left ? b.x0 - 26 : Math.min(W - 70, b.x1);
-    const y = 900 - stepsOf(q, 5) * 520;
-    c.fillStyle = e.slots.plateInk;
-    c.fillRect(x, y - 110, 26, 110);
-  }) },
-  // the cutter's partial cut: a row of slits across the paper under the line, the ground showing through, cut in six steps
-  'partial-cut': { sec: 1.4, clear: 0, draw: (e, q) => page(e, (c) => {
-    const b = around(e, 64);
-    if (!e.rect || b.y1 + 8 > 920) return;
-    const reach = 60 + (W - 120) * stepsOf(q / 0.5, 6);
-    c.fillStyle = e.slots.ground;
-    for (let x = 60; x + 22 < reach; x += 40) c.fillRect(x, b.y1, 22, 6);
-  }) },
-};
+// (no set pieces: while a line is read nothing else on the receipt moves)
+const PIECES: Record<string, Piece> = {};
 
 export const DOCUMENT = { grounds: Gs, ins: INS, pieces: PIECES, objects: {} };

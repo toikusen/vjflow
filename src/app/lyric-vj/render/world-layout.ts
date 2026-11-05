@@ -261,6 +261,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // the key reads against what is really under the words: the object's plate, the card or banners a set's page draws
   // (a set inked for the plate stands on one), else the ground (pink key letters sat on a white hint card at 2:1)
   const keyOf = (s: SetSpec) => {
+    if (s.plain) return inkOn(s);
     const on = s.on ?? (s.object || (s.ink === 'plateInk' && !s.under) ? ['plate' as const] : undefined);
     const base = s.key ? slots[s.key] : rt.palette.accent;
     // off an object, the key reads on the background and on what the picture really puts under the line (rt.under);

@@ -11,6 +11,10 @@ export interface LinePart {
   chorus: boolean;
   /** The part's name as a receipt prints it in its 段落 column. */
   label: string;
+  /** The stretch of the song this part runs, s (its 小計 on a receipt), and which run of parts it is, 0 up. */
+  from: number;
+  to: number;
+  run: number;
 }
 
 /** The 段落 column's words in Chinese, one a kind of part (every language's: labels.ts PART_LABELS). */
@@ -38,13 +42,35 @@ function partsOf(song: Song): Map<string, LinePart> {
   const stored = (song.sections ?? []).map((s) => ({ start: s.start, end: s.end, kind: (KINDS.has(s.type ?? '') ? s.type : 'verse') as SectionKind }));
   const repeats = found.some((s) => s.kind === 'chorus');
   const from = repeats || !stored.some((s) => s.kind === 'chorus') ? found : stored;
+  let run = -1;
+  let was: object | undefined;
   for (const c of cues) {
     const at = c.start + 0.05;
-    const kind = from.find((s) => at >= s.start && at < s.end)?.kind ?? 'verse';
-    out.set(c.id, { kind, chorus: kind === 'chorus' || kind === 'ochi', label: PART_LABEL[kind] });
+    const s = from.find((x) => at >= x.start && at < x.end);
+    const kind = s?.kind ?? 'verse';
+    if (run < 0 || s !== was) run++;
+    was = s;
+    out.set(c.id, { kind, chorus: kind === 'chorus' || kind === 'ochi', label: PART_LABEL[kind], from: s?.start ?? c.start, to: s?.end ?? c.end, run });
+  }
+  // (lines no part holds run together as one part, from the first's start to the last's end)
+  for (const c of cues) {
+    const p = out.get(c.id)!;
+    const mates = cues.filter((x) => out.get(x.id)!.run === p.run);
+    if (from.some((x) => c.start + 0.05 >= x.start && c.start + 0.05 < x.end)) continue;
+    Object.assign(p, { from: mates[0].start, to: mates.at(-1)!.end });
   }
   return out;
 }
 
 /** The ids of the lines sung in a chorus. */
 export const chorusLines = (song: Song) => new Set([...lineParts(song)].filter(([, p]) => p.chorus).map(([id]) => id));
+
+/**
+ * The song's closing line, where a receipt prints its TOTAL: the last line of the last chorus (a quiet last chorus,
+ * 落ちサビ, is not it; what comes after is left to the world); a song with no chorus closes on its last line.
+ */
+export function closingLine(song: Song): string | undefined {
+  const parts = lineParts(song);
+  const cues = [...song.cues].sort((a, b) => a.start - b.start);
+  return cues.filter((c) => parts.get(c.id)?.kind === 'chorus').at(-1)?.id ?? cues.at(-1)?.id;
+}

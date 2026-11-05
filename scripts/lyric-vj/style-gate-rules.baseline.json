@@ -322,5 +322,14 @@
   "small": 0,
   "cross": 0,
   "low": 0
+ },
+ "document": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 0
  }
 }

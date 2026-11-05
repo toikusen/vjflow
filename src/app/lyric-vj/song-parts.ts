@@ -18,8 +18,18 @@ const KINDS = new Set<string>(Object.keys(PART_LABEL));
 
 type Song = { cues: Pick<SongTimeline['cues'][number], 'id' | 'start' | 'end' | 'text'>[]; duration: number } & Partial<Pick<SongTimeline, 'sections' | 'energy' | 'energyFps' | 'title'>>;
 
-/** Each line's part, by cue id. */
+const known = new WeakMap<object, Map<string, LinePart>>();
+
+/** Each line's part, by cue id (read once a song: the plan and the treatment both ask). */
 export function lineParts(song: Song): Map<string, LinePart> {
+  const hit = known.get(song.cues);
+  if (hit) return hit;
+  const out = partsOf(song);
+  known.set(song.cues, out);
+  return out;
+}
+
+function partsOf(song: Song): Map<string, LinePart> {
   const cues = [...song.cues].sort((a, b) => a.start - b.start);
   const out = new Map<string, LinePart>();
   if (!cues.length) return out;

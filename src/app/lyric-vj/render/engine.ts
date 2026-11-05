@@ -1772,7 +1772,7 @@ export class LyricVjEngine {
       parts.forEach((part, k) => {
         // a shout is a sticker: the heaviest face, filled, on a thick dark keyline (the database's idol call words)
         const face = scale > 1 ? { family: rt.fonts.body, weight: 900, size: Math.round(78 * scale) } : { family: rt.fonts.display, weight: 900, size: 78, shadow: true };
-        const fill = makeGlyphs(part, face, new THREE.Color(rt.style.world ? readableOn(rt.style.world.slots.accent, rt.style.world.callOn ?? rt.style.world.slots.ground) : readableOn(rt.palette.accent, rt.palette.background)));
+        const fill = makeGlyphs(part, face, new THREE.Color(rt.style.world ? readableOn(rt.style.world.callInk ?? rt.style.world.slots.accent, rt.style.world.callOn ?? rt.style.world.slots.ground) : readableOn(rt.palette.accent, rt.palette.background)));
         const keyline = scale > 1 ? makeGlyphs(part, { ...face, outline: Math.round(face.size * 0.16) }, new THREE.Color('#14081A')) : [];
         const glyphs = [...keyline, ...fill];
         const n = units.length;

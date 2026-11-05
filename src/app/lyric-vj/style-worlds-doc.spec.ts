@@ -49,6 +49,8 @@ describe('document, the thermal receipt (boards 2026-11-05)', () => {
       expect(red, l.set).toBe(l.chorus === true);
       expect(l.chorus, l.set).toBeDefined();
     }
+    // a call beside a line keeps to the black: the red is the TOTAL's
+    expect(w.callSlot).toBe('plateInk');
   });
   it('reads in every scheme: black and red on the thermal paper', () => {
     for (const s of w.palette) {

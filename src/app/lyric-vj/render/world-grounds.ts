@@ -43,7 +43,7 @@ export interface WorldEnv {
   item?: WorldItem;
 }
 /** A line's place in the song, for a world that prints it: 1-based number, its part's name, the lines before it. */
-export interface WorldItem { no: number; part: string; prev: { no: number; text: string; part: string }[] }
+export interface WorldItem { no: number; part: string; /** The line's own words. */ text?: string; prev: { no: number; text: string; part: string }[] }
 
 type Ground = (e: WorldEnv) => void;
 const layers = new Map<string, OffscreenCanvas>();

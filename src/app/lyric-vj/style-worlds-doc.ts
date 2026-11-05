@@ -38,20 +38,20 @@ export const DOCUMENT_WORLD: StyleWorld = {
   material: { surface: 'thermal', core: 'accent', engine: 'print/thermal-head', how: '感熱紙由印字頭一列一列加熱變色：字先柵格化到 48 點的點格，每點印成半徑 0.66 倍點距的圓點，相鄰點連成實心筆畫，點只在筆畫邊緣看得到；紙邊是切刀齒、手撕齒或紙捲直邊；硬影不模糊；出紙口是深色機身、出紙槽、鋼製撕紙齒條' },
   frameStack: stack({ grain: 0.05, vignette: 0 }),
   timeBase: { fps: 0, unit: 'line', curve: 'step-feed' },
-  ownInk: true, standsOnPlate: true, sheet: true, ownMoves: true,
+  ownInk: true, standsOnPlate: true, sheet: true, ownMoves: true, callSlot: 'plateInk',
   layouts: { pair: 'document/pair', shared: [], carriers: ['document/feed', 'document/feed-total', 'document/relay', 'document/total', 'document/tear'], lines: [
     // (the pair's own set: two quick verse lines printed as two item rows of one receipt)
     line('document/pair', [], ['head-print'], ['tear-off'], 'receipt-still', { ground: 'document/pair', chorus: false }),
     // verse lines are items: printed at the head of the continuous feed, on a new strip from the top printer, or on the
     // strip under the one just torn off
     line('document/feed', ALL, ITEM.enters, ITEM.exits, 'receipt-still', { max: 24, ground: 'document/feed', chorus: false }),
-    line('document/relay', ALL, ['head-print', 'feed-step'], ['tear-off', 'feed-out'], 'receipt-still', { max: 18, breaks: true, ground: 'document/relay', chorus: false }),
+    line('document/relay', ALL, ['strip-drop'], ['tear-off', 'feed-out'], 'receipt-still', { max: 18, breaks: true, ground: 'document/relay', chorus: false }),
     line('document/tear', [1, 2], ['head-print'], ['tear-off'], 'receipt-still', { max: 22, breaks: true, ground: 'document/tear', chorus: false }),
     // chorus lines are the TOTAL: under the double rule at the feed's head, or the TOTAL close-up
     line('document/feed-total', ALL, ['head-print', 'feed-step'], ['tear-off', 'feed-out'], 'receipt-still', { max: 24, ground: 'document/feed-total', chorus: true }),
     line('document/total', ALL, ['head-print'], ['tear-off', 'feed-out'], 'receipt-still', { max: 16, ground: 'document/total', chorus: true }),
   ] },
-  motion: { enters: ['head-print', 'feed-step'], exits: ['tear-off', 'feed-out'], holds: ['receipt-still'], curve: '進紙一次走一格，先停再走；每句由上往下逐列印出，速度跟著句子長度；句末停兩三格，撕下的那張帶著硬影整片位移、轉一個小角度離開；不漂浮、不彈跳、紙不彎' },
+  motion: { enters: ['head-print', 'feed-step', 'strip-drop'], exits: ['tear-off', 'feed-out'], holds: ['receipt-still'], curve: '進紙一次走一格，先停再走；每句由上往下逐列印出，速度跟著句子長度；句末停兩三格，撕下的那張帶著硬影整片位移、轉一個小角度離開；不漂浮、不彈跳、紙不彎' },
   grounds: { levels: lv(['document/relay', 'document/feed'], ['document/feed', 'document/tear', 'document/relay'], ['document/feed', 'document/total']), quiet: ['document/idle'] },
   decor: [
     { id: 'document/printer', why: '出紙口（機身、出紙槽、撕紙齒條）說明紙是正在印出來的', budget: '每頁一個，在畫面上緣或下緣' },

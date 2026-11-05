@@ -113,12 +113,14 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   const partOf = (shot: string) => [...(plan.parts ?? [])].filter((x) => at(x.from) >= 0 && at(x.from) <= at(shot)).sort((x, y) => at(y.from) - at(x.from))[0];
   const beatSec = 60 / song.tempo;
   const titleOf = String(song.title ?? '').slice(0, 40);
-  // each line as an item of the song (its number, its part, the lines before it), for a world that prints it
-  const parts = lineParts(song0);
+  // each line as an item of the song (its number, its part, the lines before it), for a world that prints it (one whose
+  // sets are bound to a part: the song's parts are read only then, a long song's structure is not free)
+  const prints = !!world?.layouts.lines.some((l) => l.chorus !== undefined);
+  const parts = prints ? lineParts(song0) : new Map<string, { label: string }>();
   const itemOf = (id: string | undefined): WorldItem | undefined => {
-    const i = song.cues.findIndex((x) => x.id === id);
+    const i = prints ? song.cues.findIndex((x) => x.id === id) : -1;
     const at = (k: number) => ({ no: k + 1, text: song.cues[k].text, part: parts.get(song.cues[k].id)?.label ?? '' });
-    return i < 0 ? undefined : { no: i + 1, part: parts.get(song.cues[i].id)?.label ?? '', prev: Array.from({ length: Math.min(3, i) }, (_, k) => at(i - Math.min(3, i) + k)) };
+    return i < 0 ? undefined : { no: i + 1, part: parts.get(song.cues[i].id)?.label ?? '', text: song.cues[i].text, prev: Array.from({ length: Math.min(3, i) }, (_, k) => at(i - Math.min(3, i) + k)) };
   };
   const linesAt = (a: number, b: number) => song.cues.filter((x) => x.start < b + 1 && x.end > a).map((x) => x.text).join(' ') || titleOf;
   /** The computer the terminal world is set on (graphics.ts ui): every word in its windows is the song's own. */
@@ -181,7 +183,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;
       layer.yields = true;
-      if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', title: titleOf, ...(world!.layouts.lines.some((l) => l.ground === fx) ? { bound: true } : {}), ...(ps.lines?.length ? { item: itemOf(ps.lines[0].cue) } : {}), ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })) } : {}) };
+      if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', title: titleOf, ...(world!.layouts.lines.some((l) => l.ground === fx) ? { bound: true } : {}), ...(prints && ps.lines?.length ? { item: itemOf(ps.lines[0].cue) } : {}), ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })) } : {}) };
       if (keepPage && before?.world) Object.assign(layer, { paper: before.paper, ink: before.ink, accent: before.accent, world: { ...layer.world!, slots: before.world.slots } });
       if (pal && !isWorldGround(fx)) layer.sheetInks = pal;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];
@@ -239,7 +241,7 @@ function worldLineOf(w: StyleWorld, line: WorldLine, ps: PlanShot, kanaSong: boo
   const scheme = ps.cuts[0]?.scheme ?? 0;
   const slots = w.palette[scheme];
   const kana = kanaSong ? w.type.ja : w.type.tc;
-  return { ...line, slots, surface: w.material.surface, core: slots[w.material.core], sheet: w.sheet, fixedInk: w.family === 'wet' || !!w.ownInk, pair: undefined, weight: kana.weight, callOn: w.standsOnPlate ? slots.plate : undefined };
+  return { ...line, slots, surface: w.material.surface, core: slots[w.material.core], sheet: w.sheet, fixedInk: w.family === 'wet' || !!w.ownInk, pair: undefined, weight: kana.weight, callOn: w.standsOnPlate ? slots.plate : undefined, ...(w.callSlot ? { callInk: slots[w.callSlot] } : {}) };
 }
 
 /** The treatment a composer plan is laid on when no director has seen the song: type settings only. */

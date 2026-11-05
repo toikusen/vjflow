@@ -38,6 +38,8 @@ export interface WorldLine {
   weight?: number;
   /** What a call beside the line is read against, when it is not the ground. */
   callOn?: string;
+  /** The ink a call is set in, when it is not the accent (a receipt keeps its red for the TOTAL). */
+  callInk?: string;
   /** How far the block travels while it is up, px, and how much it grows, a share. */
   drift?: [number, number];
   swell?: number;

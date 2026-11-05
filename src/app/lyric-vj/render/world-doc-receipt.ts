@@ -12,6 +12,8 @@ import type { WorldItem } from './world-grounds';
 import type { Piece } from './world-pieces';
 import { artistOf, C, rng, titleOnly } from './world-b3-shared';
 import { titleNow } from './world-title';
+import { splitParts } from './world-split';
+import { splitCalls } from '../calls';
 import { DOT_R } from './world-glyph-doc';
 import { DOC_INKS } from './doc-inks';
 
@@ -172,6 +174,11 @@ const dashed = (c: C, x: number, y: number, w: number, ink: string, t = 4) => { 
 /** The song's title and artist, only in its opening (world-title.ts). */
 const facts = (e: WorldEnv) => { const t = titleNow(e); return { title: titleOnly(t), artist: artistOf(t) }; };
 const itemOf = (e: WorldEnv) => e.item;
+/**
+ * Whether the line is laid out in two parts on this page (world-doc-sets `split`): its words, its calls taken out, break at
+ * a space of their own. Read from the words, not the box: a call set beside the line widens the box without a split.
+ */
+const splitsAt = (e: WorldEnv, even: boolean) => !!e.item?.text && !!splitParts(splitCalls(e.item.text).main.trim(), 'lead', even);
 /** The paper feeding: what is printed above the head starts a row lower and steps up into place as the cut opens. */
 const fed = (e: WorldEnv, row: number) => row * (1 - stepsOf(e.age / 0.3, 3));
 
@@ -278,7 +285,8 @@ const relay: HandGround = (e) => page(e, (c) => {
   const r = box(e, 730, 236, 1700, 450);
   const it = itemOf(e);
   const ink = e.slots.plateInk;
-  const split = r.y1 > H * 0.6;
+  // (split: the first phrase stands on the torn strip, left of where the new strip hangs)
+  const split = r.x0 < 600 && splitsAt(e, false);
   const last = it?.prev.at(-1);
   // (the torn strip carrying a phrase being read lies level, so its rules run with its words)
   if (split || last) piece(c, e, 40, 548, 1060, 470, { top: 'cut', bottom: 'tear', rot: split ? 0 : -0.052, shadow: [-14, 18], seed: 11 }, (p) => {
@@ -318,7 +326,7 @@ const totalPage: HandGround = (e) => page(e, (c) => {
   const red = e.slots.accent;
   const [x0, x1] = [120, 1800];
   piece(c, e, -40, 40, 2000, 940, { top: 'cut', bottom: 'tear', seed: 3 }, () => undefined);
-  const split = r.y0 < 250;
+  const split = r.y0 < 250 && splitsAt(e, false);
   const last = it?.prev.at(-1);
   if (split && it) {
     dotText(c, x0 + 40, 104, no2(it.no), 2.6, { weight: 700, ink });
@@ -348,7 +356,7 @@ const tear: HandGround = (e) => page(e, (c) => {
   const r = box(e, 120, 676, 1500, 880);
   const it = itemOf(e);
   const ink = e.slots.plateInk;
-  const split = r.y0 < H * 0.45;
+  const split = r.y0 < H * 0.45 && splitsAt(e, true);
   const last = it?.prev.at(-1);
   const k = split ? 0 : stepsOf((e.age - 0.24) / 0.5, 4);
   const upper = split ? it : last;

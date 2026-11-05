@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from './glyphs';
 import { nearestWeight } from '../fonts';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readable, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, keyInk, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, FaceLayout, SET_SPECS, SetSpec, shearedSize } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
@@ -263,8 +263,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const keyOf = (s: SetSpec) => {
     const on = s.on ?? (s.object || (s.ink === 'plateInk' && !s.under) ? ['plate' as const] : undefined);
     const base = s.key ? slots[s.key] : rt.palette.accent;
-    // off an object, the key reads on the background and on what the picture really puts under the line (rt.under)
-    return on ? on.reduce((c, k) => readable(c, slots[k], s.object || s.on ? 6 : 4.5), base) : [rt.palette.background, rt.under].reduce<string>((c, b) => (b ? readable(c, b, 4.5) : c), base);
+    // off an object, the key reads on the background and on what the picture really puts under the line (rt.under);
+    // it stays apart from the body ink: a key pushed to read until it was the body's black marked nothing (brutalist's
+    // red on 世界のつづき, 2026-11-05), so another accent of the palette comes first
+    const grounds = on ? on.map((k) => slots[k]) : [rt.palette.background, ...(rt.under ?? [])];
+    return keyInk(base, [slots.accent, slots.ink2, rt.palette.accent], inkOn(s), grounds, on && (s.object || s.on) ? 6 : 4.5);
   };
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;

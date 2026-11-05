@@ -1145,8 +1145,11 @@ export class LyricVjEngine {
       if (inks) {
         // a world's key ink reads on what its painted ground really puts under the line, not only on the paper the line
         // is set on (citypop's coral run on the sky over the night sea: 2.5:1, 12 of 489 moments, 2026-11-05)
-        const under = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), settledBox(layer))?.mean;
-        if (under && under.toLowerCase() !== inks.paper.toLowerCase()) rt.under = under;
+        // (each colour that covers a fair share of the box, not its mean: a copier's dark edge or a corner pulled the mean
+        // of brutalist's grey paper down until its red key was pushed to the body's black, 2026-11-05)
+        const paper = inks.paper.toLowerCase();
+        const under = (this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), settledBox(layer))?.grounds ?? []).filter((g) => g.toLowerCase() !== paper);
+        if (under.length) rt.under = under;
         const inked = (text: string, ground: string) => {
           backdrop = ground;
           rt.palette = { ...this.cuePalette(cue.start + 0.3, ground), text };
@@ -2814,7 +2817,7 @@ export class LyricVjEngine {
    * places the objects as the frame does (room for every line up, eased), not with room for this box alone; `text`
    * also gives `poor`, the share of the box where that colour reads below 3:1.
    */
-  private backdropAt(t: number, box?: THREE.Box3, asPlayed = false, text?: string): { mean: string; mixed: boolean; poor: number } | undefined {
+  private backdropAt(t: number, box?: THREE.Box3, asPlayed = false, text?: string): { mean: string; grounds: string[]; mixed: boolean; poor: number } | undefined {
     if (!this.job.treatment.graphics) return undefined;
     this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
     const shot = this.shotAt(t).shot;
@@ -2839,8 +2842,13 @@ export class LyricVjEngine {
     const img = this.probe.getImageData(x0, y0, Math.max(1, x1 - x0), Math.max(1, y1 - y0));
     const d = img.data;
     let r = 0, g = 0, b = 0, n = 0, dark = 0, light = 0;
+    const bins = new Map<number, number[]>();
     for (let i = 0; i < d.length; i += 4 * 97) {
       r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
+      const k = ((d[i] >> 4) << 8) | ((d[i + 1] >> 4) << 4) | (d[i + 2] >> 4);
+      let bin = bins.get(k);
+      if (!bin) bins.set(k, (bin = [0, 0, 0, 0]));
+      bin[0] += d[i]; bin[1] += d[i + 1]; bin[2] += d[i + 2]; bin[3]++;
       const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
       if (l < 0.3) dark++;
       else if (l > 0.65) light++;
@@ -2853,7 +2861,11 @@ export class LyricVjEngine {
     );
     const poor = text ? poorShare(img, Math.floor(x0), Math.floor(y0), text, photos) : 0;
     // mixed: a sizeable share of both dark and light under the line — no single type colour reads everywhere
-    return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, mixed: dark / n > 0.06 && light / n > 0.06, poor };
+    // the grounds: each flat colour that covers a fifth of the box (a gradient such as a vignette spreads over many
+    // colours and none counts), else the commonest one
+    const byShare = [...bins.values()].sort((p, q) => q[3] - p[3]);
+    const grounds = (byShare.filter((v) => v[3] >= n * 0.2).length ? byShare.filter((v) => v[3] >= n * 0.2) : byShare.slice(0, 1)).map((v) => '#' + v.slice(0, 3).map((c) => Math.round(c / v[3]).toString(16).padStart(2, '0')).join(''));
+    return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, grounds, mixed: dark / n > 0.06 && light / n > 0.06, poor };
   }
 
   /** A sprite's mean colour over its opaque pixels, as #rrggbb. */

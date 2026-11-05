@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitReading, readFix, revealAt, settledAt, CueRuntime } from './runtime';
+import { contrast, fitReading, inkDistance, KEY_APART, keyInk, readableHue, readFix, revealAt, settledAt, CueRuntime } from './runtime';
 
 const rt = (showFrom: number, exitAt: number) =>
   ({ showFrom, exitAt, pace: 1, cue: { text: 'abcd', charStarts: [0, 9, 9.1, 9.2] }, style: { reveal: 'word', enter: 'cut' } }) as unknown as CueRuntime;
@@ -334,5 +334,41 @@ describe('guardLine', () => {
     expect(at(12 + 0.185)).toBeGreaterThan(1.01);
     expect(at(12 + 0.4)).toBeCloseTo(1, 2);
     expect(at(12.5 + 0.085)).toBeCloseTo(at(12 + 0.085));
+  });
+});
+
+describe('keyInk', () => {
+  it('keeps a key that reads as drawn, and passes over an accent that is the body ink already', () => {
+    // brutalist's grey copy paper: the palette accent came out black like the body, the red accent reads (2026-11-05)
+    expect(keyInk('#141414', ['#9E140C', '#BC180E'], '#121212', ['#D9D6CD'])).toBe('#9e140c');
+  });
+  it('never pushes the key into the body ink: another accent of the palette that reads comes first', () => {
+    const k = keyInk('#E8584C', ['#9E140C'], '#121212', ['#ECEAE3']);
+    expect(k).toBe('#9e140c');
+    expect(inkDistance(k, '#121212')).toBeGreaterThanOrEqual(KEY_APART);
+  });
+  it('reads on every ground the body ink is shown on, and ignores grounds the body does not read on', () => {
+    // citypop: navy body on the cream paper and the sky; the coral key went dark on the sky (was 2.5:1)
+    const k = keyInk('#B53A2A', ['#F2A1B8'], '#1B2A5C', ['#1B2A5C', '#3aa6d8', '#5bbce6']);
+    for (const g of ['#3aa6d8', '#5bbce6']) expect(contrast(k, g)).toBeGreaterThanOrEqual(4.5);
+    expect(inkDistance(k, '#1B2A5C')).toBeGreaterThanOrEqual(KEY_APART);
+  });
+  it('keeps the key hue when it has to move: a gold key on red paper stays gold, apart from the cream body', () => {
+    const k = keyInk('#F2C14E', ['#E3B24F', '#7E0E20'], '#FBEFD9', ['#c5112f']);
+    expect(contrast(k, '#c5112f')).toBeGreaterThanOrEqual(4.5);
+    expect(inkDistance(k, '#FBEFD9')).toBeGreaterThanOrEqual(KEY_APART);
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(k.slice(i, i + 2), 16));
+    expect(r >= g && g > b).toBe(true); // a warm yellow, not a grey or a pink
+  });
+});
+
+describe('readableHue', () => {
+  it('moves only the lightness of a colour, away from the ground, until it reads', () => {
+    const c = readableHue('#9E140C', '#121212')!;
+    expect(contrast(c, '#121212')).toBeGreaterThanOrEqual(4.5);
+    expect(parseInt(c.slice(1, 3), 16)).toBeGreaterThan(parseInt(c.slice(3, 5), 16)); // still a red
+  });
+  it('has no hue to give a grey at full chroma', () => {
+    expect(readableHue('#141414', '#121212', 4.5, true)).toBeUndefined();
   });
 });

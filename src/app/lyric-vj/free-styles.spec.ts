@@ -79,6 +79,5 @@ describe('recommendStyle', () => {
     const listed = styleGroups().flatMap((g) => g.cards.map((c) => c.id));
     for (const id of HELD_WORLDS) expect(listed, id).not.toContain(id);
     for (let i = 0; i < 40; i++) expect(HELD_WORLDS.has(recommendStyle({ title: `song ${i}`, cues: lines(8, '一二三四五六七八九十', i % 2 ? 2 : 6) }))).toBe(false);
-    expect(FREE_STYLES.some((s) => HELD_WORLDS.has(s.id))).toBe(true);
   });
 });

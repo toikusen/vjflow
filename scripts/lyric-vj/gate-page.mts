@@ -14,10 +14,10 @@ for (const proto of [CanvasRenderingContext2D.prototype, OffscreenCanvasRenderin
 
 /** One moment: the reading measure on grey w×h (as the gate always read it), the rules on 480×270, and the soft clearing. */
 async function moment(t: number, gw: number, gh: number) {
-  const shot = async (on: boolean) => {
+  const shot = async (on: boolean, carriers = !!w.__carriers) => {
     // the frame without the words keeps what they stand on (a card, a banner): what is really behind them (the gate's
     // default; under --strip-carriers __carriers is unset and they go with the words)
-    w.vjLyrics(on, !!w.__carriers);
+    w.vjLyrics(on, carriers);
     const img = new Image();
     img.src = await w.grabAt(t, 0.7);
     await img.decode();
@@ -33,9 +33,14 @@ async function moment(t: number, gw: number, gh: number) {
   const on = await shot(true);
   w.__watch = false;
   const off = await shot(false);
+  // a plate found under a carrier is read again on the ground the carrier stands on (the carrier is the world's object)
+  let rules = readMoment(on.big, off.big, 480, 270);
+  if (rules && rules.plate < 0 && w.__carriers) {
+    rules = readMoment(on.big, off.big, 480, 270, (await shot(false, false)).big);
+  }
   w.vjLyrics(true);
   let [n, sum, x0, x1, y0, y1] = [0, 0, gw, 0, gh, 0];
   on.grey.forEach((v, i) => { const d = Math.abs(v - off.grey[i]); if (d > 20) { n++; sum += d; const [x, y] = [i % gw, Math.floor(i / gw)]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } });
-  return { n, sum, x0, x1, y0, y1, rules: readMoment(on.big, off.big, 480, 270), soft: w.__soft > 0 };
+  return { n, sum, x0, x1, y0, y1, rules, soft: w.__soft > 0 };
 }
 w.gatePage = { moment };

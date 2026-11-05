@@ -9,9 +9,11 @@
 // since 2026-11-04: taking the carrier away with the words (the old way) read a dark word against the dark ground under
 // its white card and reported false failures on carrier worlds (gameshow, idol-live, popart's balloons counted low).
 // --strip-carriers: the old way, carrier and glyphs both removed; its counts are not comparable with the baseline.
-// npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] [--strip-carriers] terminal ink-wash
+// --shots <dir>: every flagged moment's full-size frame with and without its glyphs (<world>/<song>-<cue>-<t>.on|off|ground.jpg; ground: carriers taken away too) and
+// its rule values (index.json), to look at what a count is made of.
+// npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/styles/gate/reading [--songs nun,snow] [--baseline f.json] [--write-baseline f.json] [--strip-carriers] [--shots dir] terminal ink-wash
 // (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json, every
-// world including the held ones, 5 songs, seed 0, measured the default way (re-recorded 2026-11-04 after the carrier
+// world including the held ones, 5 songs, seed 0 (rules a world's design owns: style-gate-rules.accepted.json), measured the default way (re-recorded 2026-11-04 after the carrier
 // default, the call placer and the repeat-per-shot fix; a world's moments count rose where repeats now keep their shot).
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -25,7 +27,7 @@ import { countMoment, emptyCounts, RuleCounts, RuleMoment, regressions } from '.
 import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/styles/gate/reading' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, baseline: { type: 'string' }, 'write-baseline': { type: 'string' }, 'strip-carriers': { type: 'boolean', default: false } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/styles/gate/reading' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, baseline: { type: 'string' }, 'write-baseline': { type: 'string' }, 'strip-carriers': { type: 'boolean', default: false }, shots: { type: 'string' } } });
 if (!positionals.length) positionals.push(...FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id)).map((s) => s.id));
 /** Share of a frame a line must change, and how hard, to count as there. */
 export const READ = { minShare: 0.002, minDelta: 40 };
@@ -54,6 +56,7 @@ const fill: number[] = [];
 let checked = 0;
 const counts: Record<string, RuleCounts> = {};
 const moments: string[] = [];
+const shots: unknown[] = [];
 for (const id of positionals) {
   const style = FREE_STYLES.find((s) => s.id === id)!;
   for (const name of a.songs!.split(',')) {
@@ -86,6 +89,17 @@ for (const id of positionals) {
         counts[id] = countMoment(counts[id] ?? emptyCounts(), m, soft);
         const why = [soft && 'glow', m.clip && 'clip', m.plate < 0 && 'plate', m.small && 'small', m.cross > 0.08 && `cross ${m.cross.toFixed(2)}`, m.low > 0.5 && `low ${m.low.toFixed(2)}`].filter(Boolean);
         if (why.length) moments.push(`${id} ${name} ${c.id} ${t.toFixed(2)} ${why.join(' ')} ${c.text.slice(0, 10)}`);
+        if (why.length && a.shots) {
+          const stem = `${name}-${c.id}-${t.toFixed(2)}`;
+          mkdirSync(join(a.shots, id), { recursive: true });
+          // on, off (carriers kept as the rules read them) and ground (carriers gone too)
+          for (const [kind, on, carriers] of [['on', true, true], ['off', false, !a['strip-carriers']], ['ground', false, false]] as const) {
+            const url = (await page.evaluate(`(window.vjLyrics(${on}, ${carriers}), window.grabAt(${t}, 0.9))`)) as string;
+            writeFileSync(join(a.shots, id, `${stem}.${kind}.jpg`), Buffer.from(url.split(',')[1], 'base64'));
+          }
+          await page.evaluate('window.vjLyrics(true)');
+          shots.push({ world: id, song: name, cue: c.id, t, stem, why, text: c.text, rules: m });
+        }
       }
     }
     await page.close();
@@ -94,6 +108,7 @@ for (const id of positionals) {
 }
 await browser.close();
 server.close();
+if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
 const out = { checked, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
@@ -105,6 +120,11 @@ if (a.baseline && existsSync(a.baseline)) {
   for (const [id, c] of Object.entries(counts)) if (base[id]) for (const k of regressions(base[id], c)) worse.push(`${id}: ${k} ${c[k]}/${c.moments} (was ${base[id][k]}/${base[id].moments})`);
   console.log('rule regressions', worse.length, worse);
 }
+// a world's rule the owner accepted as its design (style-gate-rules.accepted.json, with the reason): still counted and
+// still held to its baseline, named here so a high count is not read as an open problem
+const accepted = JSON.parse(readFileSync('scripts/lyric-vj/style-gate-rules.accepted.json', 'utf8')) as Record<string, Record<string, string>>;
+const named = Object.keys(counts).flatMap((id) => Object.keys(accepted[id] ?? {}).map((k) => `${id}: ${k} ${counts[id][k as keyof RuleCounts]}/${counts[id].moments} (accepted)`));
+if (named.length) console.log('accepted', named);
 if (a['write-baseline']) {
   const file = a['write-baseline'];
   const base = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};

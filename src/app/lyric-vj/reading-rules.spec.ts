@@ -7,7 +7,8 @@ type Px = [number, number, number];
 function frame(ground: Px, rects: { x: number; y: number; w: number; h: number; c: Px }[] = []) {
   const d = new Uint8ClampedArray(W * H * 4);
   for (let i = 0; i < W * H; i++) d.set([...ground, 255], i * 4);
-  for (const r of rects) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) d.set([...r.c, 255], (y * W + x) * 4);
+  // whole pixels: a fractional x would write the colour across two pixels' channels
+  for (const r of rects) for (let y = Math.round(r.y); y < Math.round(r.y + r.h); y++) for (let x = Math.round(r.x); x < Math.round(r.x + r.w); x++) if (x >= 0 && y >= 0 && x < W && y < H) d.set([...r.c, 255], (y * W + x) * 4);
   return d;
 }
 /** "Strokes": a row of bars standing for a line of words. */
@@ -28,7 +29,7 @@ describe('readMoment', () => {
     expect(readMoment(frame(PAPER), frame(PAPER), W, H)).toBeUndefined();
   });
   it('finds words cut by the frame', () => {
-    const m = readMoment(frame(PAPER, strokes(120, 40, 6, INK, 12)), frame(PAPER), W, H)!;
+    const m = readMoment(frame(PAPER, strokes(124, 40, 6, INK, 12)), frame(PAPER), W, H)!;
     expect(m.clip).toBe(true);
   });
   it('finds a dark plate laid under the words and not one that is the whole ground', () => {
@@ -38,6 +39,17 @@ describe('readMoment', () => {
     expect(m.plate).toBe(-1);
     const dark = readMoment(frame([30, 30, 40], strokes(46, 36, 5, light, 14)), frame([30, 30, 40]), W, H)!;
     expect(dark.plate).toBe(0);
+  });
+  it('reads the plate on the ground under a carrier: a world object the words stand on is no plate', () => {
+    const card = { x: 40, y: 30, w: 80, h: 26, c: [20, 16, 14] as Px };
+    const light: Px = [235, 230, 215];
+    const on = frame(PAPER, [card, ...strokes(46, 36, 5, light, 14)]);
+    const m = readMoment(on, frame(PAPER, [card]), W, H, frame(PAPER))!;
+    expect(m.plate).toBe(0);
+    expect(m.low).toBe(0);
+    const ground = [{ x: 42, y: 32, w: 76, h: 22, c: [40, 40, 50] as Px }];
+    const under = readMoment(frame(PAPER, [...ground, card, ...strokes(46, 36, 5, light, 14)]), frame(PAPER, [...ground, card]), W, H, frame(PAPER, ground))!;
+    expect(under.plate).toBe(-1);
   });
   it('finds small words on an empty frame, not small words in a full picture', () => {
     const lonely = readMoment(frame(PAPER, strokes(6, 6, 3, INK, 6)), frame(PAPER), W, H)!;
@@ -51,15 +63,35 @@ describe('readMoment', () => {
     const m = readMoment(frame(PAPER, [...lines, ...strokes(40, 38, 6, INK, 14)]), frame(PAPER, lines), W, H)!;
     expect(m.cross).toBeGreaterThan(0.08);
   });
+  it('counts a dot screen under the strokes as texture, not lines', () => {
+    const dots = Array.from({ length: 30 * 18 }, (_, k) => ({ x: (k % 30) * 4 + 20 + (Math.floor(k / 30) % 2) * 2, y: Math.floor(k / 30) * 4 + 10, w: 2, h: 2, c: [40, 140, 200] as Px }));
+    const m = readMoment(frame(PAPER, [...dots, ...strokes(40, 38, 6, INK, 14)]), frame(PAPER, dots), W, H)!;
+    expect(m.cross).toBeLessThan(0.08);
+  });
   it('finds ink that misses 4.5:1 against what is behind it', () => {
     const m = readMoment(frame([120, 120, 120], strokes(40, 38, 6, [70, 70, 70], 14)), frame([120, 120, 120]), W, H)!;
     expect(m.low).toBeGreaterThan(0.5);
+  });
+  it('reads strokes on their own keyline, not only on what is behind them', () => {
+    const ground: Px = [230, 140, 190];
+    const cream: Px = [240, 230, 200];
+    // sticker type: a purple keyline round each cream stroke, an orange rim round that
+    const bars = Array.from({ length: 5 }, (_, i) => ({ x: 30 + i * 22, y: 30, w: 14, h: 30, c: [240, 110, 50] as Px }));
+    const sticker = bars.flatMap((r) => [
+      r,
+      { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4, c: [60, 30, 90] as Px },
+      { x: r.x + 4, y: r.y + 4, w: r.w - 8, h: r.h - 8, c: cream },
+    ]);
+    const keyed = readMoment(frame(ground, sticker), frame(ground), W, H)!;
+    expect(keyed.low).toBeLessThan(0.5);
+    const bare = readMoment(frame(ground, bars.map((r) => ({ ...r, c: cream }))), frame(ground), W, H)!;
+    expect(bare.low).toBeGreaterThan(0.5);
   });
 });
 
 describe('rule counts', () => {
   it('count failing moments and name the rules that got worse', () => {
-    const bad = readMoment(frame(PAPER, strokes(120, 40, 6, INK, 12)), frame(PAPER), W, H)!;
+    const bad = readMoment(frame(PAPER, strokes(124, 40, 6, INK, 12)), frame(PAPER), W, H)!;
     const good = readMoment(frame(PAPER, strokes(40, 40, 6, INK, 12)), frame(PAPER), W, H)!;
     const before = [good, good, good, good].reduce((c, m) => countMoment(c, m, false), emptyCounts());
     const after = [good, bad, good, good].reduce((c, m) => countMoment(c, m, true), emptyCounts());

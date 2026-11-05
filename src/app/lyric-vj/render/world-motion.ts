@@ -3,6 +3,7 @@
 // is what the renderer passes in: a world on eighteen frames a second is simply handed time held to that.
 import { LOUD_ENTERS, LOUD_EXITS, LOUD_HOLDS } from './world-b3-motion';
 import { R2_ENTERS, R2_EXITS, R2_HOLDS } from './world-r2-motion';
+import { DOC_ENTERS, DOC_EXITS, DOC_HOLDS } from './world-doc-motion';
 import { B4B_ENTERS, B4B_EXITS, B4B_HOLDS } from './world-b4b-motion';
 
 export interface GlyphEnv {
@@ -222,6 +223,10 @@ Object.assign(WORLD_HOLDS, LOUD_HOLDS);
 Object.assign(WORLD_ENTERS, R2_ENTERS);
 Object.assign(WORLD_EXITS, R2_EXITS);
 Object.assign(WORLD_HOLDS, R2_HOLDS);
+// the document world (感熱收據) keeps its moves in world-doc-motion.ts
+Object.assign(WORLD_ENTERS, DOC_ENTERS);
+Object.assign(WORLD_EXITS, DOC_EXITS);
+Object.assign(WORLD_HOLDS, DOC_HOLDS);
 // style batch 4's cyanotype, isometric and cel80s keep theirs in world-b4b-motion.ts
 Object.assign(WORLD_ENTERS, B4B_ENTERS);
 Object.assign(WORLD_EXITS, B4B_EXITS);

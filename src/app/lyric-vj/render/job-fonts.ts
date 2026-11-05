@@ -5,6 +5,7 @@ import { quietFace } from './quiet';
 import type { RenderJob } from './engine';
 import { loudTextures } from './world-b3-tex';
 import { r2Textures } from './world-r2-tex';
+import { docFaces } from './world-doc-receipt';
 
 /** Every family a job can draw with: its faces, their quiet and contrast partners, and any font named in its look. */
 export function jobFamilies(job: RenderJob): string[] {
@@ -32,4 +33,4 @@ export const loadJobFonts = (job: RenderJob) =>
           document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href, onload: () => resolve(), onerror: reject }));
         }),
     ),
-  ).then(() => Promise.all([loudTextures, r2Textures])).then(() => undefined);
+  ).then(() => Promise.all([loudTextures, r2Textures, docFaces(job)])).then(() => undefined);

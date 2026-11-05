@@ -6,7 +6,7 @@ import { TITLE_OPENING_SEC } from './render/world-title';
 import { FreeStyle, STYLE_PALETTES, styleFont } from './free-styles';
 import { composePlan, composerBase, Cue, fallbackParts, Meaning, PALETTES, RECIPES, rerollPalette } from './lineplan-core';
 import { poolOf, schemeFor, type StyleWorld } from './style-world';
-import { isWorldGround, WORLD_INS } from './render/world-grounds';
+import { isWorldGround, WORLD_INS, type WorldItem } from './render/world-grounds';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { WorldLine } from './render/world-layout';
 import { overCreator, useCap } from './origin-rules';
@@ -21,6 +21,7 @@ import { TEMPLATES } from './templates';
 import { feltTempo, SongTimeline } from './timeline';
 import { cuesIn, TreatmentV3, validateTreatment } from './treatment';
 import { checkMoments, ownCues, type SignatureMoment } from './signature-moments';
+import { lineParts } from './song-parts';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
 export const SIDED = new Set(['vertical', 'stair', 'quiet', 'typewriter', 'handwrite']);
@@ -112,6 +113,13 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   const partOf = (shot: string) => [...(plan.parts ?? [])].filter((x) => at(x.from) >= 0 && at(x.from) <= at(shot)).sort((x, y) => at(y.from) - at(x.from))[0];
   const beatSec = 60 / song.tempo;
   const titleOf = String(song.title ?? '').slice(0, 40);
+  // each line as an item of the song (its number, its part, the lines before it), for a world that prints it
+  const parts = lineParts(song0);
+  const itemOf = (id: string | undefined): WorldItem | undefined => {
+    const i = song.cues.findIndex((x) => x.id === id);
+    const at = (k: number) => ({ no: k + 1, text: song.cues[k].text, part: parts.get(song.cues[k].id)?.label ?? '' });
+    return i < 0 ? undefined : { no: i + 1, part: parts.get(song.cues[i].id)?.label ?? '', prev: Array.from({ length: Math.min(3, i) }, (_, k) => at(i - Math.min(3, i) + k)) };
+  };
   const linesAt = (a: number, b: number) => song.cues.filter((x) => x.start < b + 1 && x.end > a).map((x) => x.text).join(' ') || titleOf;
   /** The computer the terminal world is set on (graphics.ts ui): every word in its windows is the song's own. */
   const desktopOf = (pal: StyleWorld['palette'][number], k: number, a: number, b: number): UiLayer[] => {
@@ -173,7 +181,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       shown = { sprite: layer.sprite ?? '', side };
       if (c.dark) layer.dark = true;
       layer.yields = true;
-      if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', title: titleOf, ...(world!.layouts.lines.some((l) => l.ground === fx) ? { bound: true } : {}), ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })) } : {}) };
+      if (pal && isWorldGround(fx)) layer.world = { slots: pal, level: c.level ?? 0.5, enter: WORLD_INS[c.transition ?? ''] ? c.transition : undefined, sheet: world!.family === 'print', title: titleOf, ...(world!.layouts.lines.some((l) => l.ground === fx) ? { bound: true } : {}), ...(ps.lines?.length ? { item: itemOf(ps.lines[0].cue) } : {}), ...(c.piece ? { piece: c.piece, words: linesAt(when, runsTo), lines: song.cues.filter((x) => x.start < runsTo + 3 && x.end > when).map((x) => ({ a: x.start, b: x.end, t: x.text })) } : {}) };
       if (keepPage && before?.world) Object.assign(layer, { paper: before.paper, ink: before.ink, accent: before.accent, world: { ...layer.world!, slots: before.world.slots } });
       if (pal && !isWorldGround(fx)) layer.sheetInks = pal;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];

@@ -30,6 +30,8 @@ export interface LinePart {
   loud?: boolean;
   /** Sets of two carriers, a row each: only lines with a break to take (two phrases). */
   breaks?: boolean;
+  /** Bound to a part of the song (song-parts.ts): true takes only chorus lines, false only the rest (a receipt's TOTAL). */
+  chorus?: boolean;
 }
 export interface DecorPart { id: string; why: string; budget: string }
 
@@ -77,6 +79,8 @@ export interface StyleWorld {
   standsOnPlate?: boolean;
   /** Lines may hand over to the next with a shared move. */
   handoffs?: boolean;
+  /** Its lines keep to its own entrances and exits: a machine's motion takes none of the shared squash, roll or slice. */
+  ownMoves?: boolean;
 }
 
 /** Every part a world owns, for the similarity gate and the provenance table. */
@@ -97,7 +101,7 @@ export function worldRecipes(w: StyleWorld): Recipe[] {
     min: l.min,
     max: l.max,
     fit: l.column ? COLUMN : l.breaks ? BREAKS : undefined,
-    wline: { set: l.set, enter, exit, hold: l.hold, ground: l.ground, loud: l.loud },
+    wline: { set: l.set, enter, exit, hold: l.hold, ground: l.ground, loud: l.loud, ...(l.chorus !== undefined ? { chorus: l.chorus } : {}) },
   } as Recipe)))));
 }
 
@@ -138,12 +142,13 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     schemes: w.palette.length,
     devices: !!w.paperDevices,
     handoffs: !!w.handoffs,
+    ownMoves: !!w.ownMoves,
     columns: Object.fromEntries(w.layouts.lines.map((l) => [l.set, !!l.column])),
     enters: [...new Set(w.layouts.lines.flatMap((l) => l.enters))],
     exits: [...new Set(w.layouts.lines.flatMap((l) => l.exits))],
     beats: sharedOf(w).beats,
     stress: sharedOf(w).stress,
-    camera: sharedOf(w).camera,
+    camera: sharedOf(w).camera === 'still' ? undefined : sharedOf(w).camera,
     stepped: steppedWorld(w),
   };
 }

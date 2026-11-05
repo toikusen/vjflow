@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { contrast } from './contrast';
 import { FREE_STYLES, HELD_WORLDS, OFFERED_STYLES, recommendStyle, STYLE_PALETTES, styleFont, styleGroups } from './free-styles';
 import { FONTS } from './fonts';
+import { FACELESS_SURFACES } from './render/world-glyph-doc';
 import { LANGUAGES } from './languages';
 import { freeJob } from './free-plan';
 import type { SongTimeline } from './timeline';
@@ -35,8 +36,10 @@ describe('free styles', () => {
     // (an HK cut draws the same as its TC twin: one face)
     const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family.replace(/^Noto (Sans|Serif) HK$/, 'Noto $1 TC');
     const most = (face: string) => (/^Noto (Sans|Serif) TC$/.test(face) ? 3 : 2);
-    for (const s of FREE_STYLES) expect(FREE_STYLES.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(most(tc(s)));
-    const pairs = FREE_STYLES.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
+    // (a world drawn on a print head's dots shows the dots, not its face: document's thermal receipt, 2026-11-05)
+    const faced = FREE_STYLES.filter((s) => !FACELESS_SURFACES.has(s.world!.material.surface ?? ''));
+    for (const s of faced) expect(faced.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(most(tc(s)));
+    const pairs = faced.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
     expect(new Set(pairs).size).toBe(pairs.length);
     for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === s.world!.type.tc.family), s.id).toBe(true);
   });

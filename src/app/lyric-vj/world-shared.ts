@@ -8,7 +8,8 @@ import type { StyleWorld } from './style-world';
 
 export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker';
 export type StressKind = 'extrude' | 'plate' | 'outline';
-export type WorldCamera = 'push-through' | 'diagonal' | 'iso-slide';
+/** A world's one camera move into a new part; `still` is none (a receipt lying on the counter is never flown at). */
+export type WorldCamera = 'push-through' | 'diagonal' | 'iso-slide' | 'still';
 
 export interface WorldShared { beats: BeatKind[]; stress: StressKind[]; camera: WorldCamera }
 
@@ -51,6 +52,9 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   cyanotype: s(['light-sweep', 'echo'], ['plate', 'extrude'], 'push-through'),
   isometric: s(['beat-punch', 'light-sweep'], ['extrude', 'plate'], 'iso-slide'),
   cel80s: s(['beat-punch', 'plate-slip'], ['extrude', 'plate'], 'diagonal'),
+  // the thermal receipt (2026-11-05): its key ink is its own black or red, so a run or a sweep only marks the beat a hair (no
+  // ghost copy: a receipt is never printed twice)
+  document: s(['ink-run', 'light-sweep'], ['plate', 'extrude'], 'still'),
   psychedelic: s(['ink-run', 'roll'], ['plate', 'extrude'], 'push-through'),
   graffiti: s(['crack', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
   brutalist: s(['crack', 'beat-punch'], ['extrude', 'plate'], 'diagonal'),

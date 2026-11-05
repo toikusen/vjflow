@@ -80,6 +80,8 @@ export const FONTS: FontSpec[] = [
   { family: 'Kaisei Tokumin', roles: ['display', 'body'], weights: [700, 800], feel: '厚重的展示明朝，銘文、莊重' },
   // y2k's direction-B boards (2026-11-04): a soft rounded gothic for its Japanese lines (Apache-2.0) and the early web's pixel labels
   { family: 'Kosugi Maru', roles: ['display', 'body'], weights: [400], feel: '細圓體，早期網頁、清爽、乾淨' },
+  // phone's boards (2026-11-05): the screen's Japanese face beside Noto Sans TC
+  { family: 'Noto Sans JP', roles: ['display', 'body'], weights: [400, 500, 700], feel: '手機介面的日文黑體，乾淨中性' },
   { family: 'Silkscreen', roles: ['accent'], weights: [400, 700], feel: '像素點陣字，早期網頁按鈕與標籤（只用在標籤）', legible: false },
   // cel80s's boards (2026-11-05): the anime credits' rounded display Latin (OFL), small labels only
   { family: 'Righteous', roles: ['accent'], weights: [400], feel: '八〇動畫片頭的圓頭展示英文（只用在標籤）', legible: false },
@@ -120,6 +122,7 @@ export const TC_FOR: Record<string, string> = {
   'Shippori Mincho B1': 'Noto Serif TC',
   'Kaisei Tokumin': 'Noto Serif TC',
   'Kosugi Maru': 'Huninn',
+  'Noto Sans JP': 'Noto Sans TC',
 };
 
 /** A design language's faces for a song's script: Chinese lyrics get the Traditional Chinese counterparts. */

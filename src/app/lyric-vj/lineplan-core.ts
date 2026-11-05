@@ -18,6 +18,7 @@ import { SHARED_ENTER_POOL, SHARED_EXIT_POOL } from './render/world-motion';
 import type { BeatKind, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import type { MomentAsk } from './signature-moments';
+import { chorusLines } from './song-parts';
 
 export type Level = 0 | 1 | 2;
 export interface Recipe {
@@ -33,7 +34,7 @@ export interface Recipe {
   /** The surface it holds through its reading. */
   state?: InkState;
   /** A style world's own line: its set and moves, in place of template, enter, exit and idle (render/world-layout.ts). */
-  wline?: { set: string; enter: string; exit: string; hold: string; ground?: string; loud?: boolean };
+  wline?: { set: string; enter: string; exit: string; hold: string; ground?: string; loud?: boolean; chorus?: boolean };
 }
 export interface Fit { test(text: string): boolean }
 export interface Cue { id: string; start: number; end: number; text: string; singer?: string; charStarts?: number[]; charTimed?: boolean }
@@ -631,6 +632,8 @@ export interface WorldPool {
   schemes: number;
   devices: boolean;
   handoffs: boolean;
+  /** Only the world's own entrances and exits, none of the shared pool. */
+  ownMoves?: boolean;
   columns: Record<string, boolean>;
   /** What happens while a line is held, the world's own two or three (world-shared.ts), and whether in steps. */
   beats?: BeatKind[];
@@ -846,6 +849,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   const mixed = rolled ? (s: string) => { const h = Math.imul(hash(s), 0x2c1b3c6d); return (h ^ (h >>> 15)) >>> 0; } : hash;
   const lean = rolled ? (r: Recipe) => (mixed(`${seed}:t:${r.wline?.set ?? r.template}`) % 100) * (r.wline ? 0.26 : 0.12) + (mixed(`${seed}:e:${r.wline?.enter ?? r.enter}`) % 100) * 0.05 : undefined;
   const W = force.world;
+  // a world that prints a line by its part (a receipt's TOTAL is the chorus, song-parts.ts): its part-bound sets take only
+  // lines of their part, and a pair never joins a chorus line to another (a pair has one set for both)
+  const choruses = W?.recipes.some((r) => r.wline?.chorus !== undefined) ? chorusLines(song as never) : undefined;
+  const partFits = (c: Cue) => (r: Recipe) => !choruses || r.wline?.chorus === undefined || r.wline.chorus === choruses.has(c.id);
   const rollFx = (list: string[], salt: string) => [...list].sort((a, b) => mixed(`${seed}:${salt}:${a}`) - mixed(`${seed}:${salt}:${b}`));
   const inChorus = (c: Cue) => song.sections?.find((x) => c.start >= x.start && c.start < x.end)?.type === 'chorus';
   const partOfCue = (id: string) => { const i = cues.findIndex((c) => c.id === id); return [...meaning.parts].filter((p) => cues.findIndex((c) => c.id === p.from) <= i).at(-1) ?? meaning.parts[0]; };
@@ -882,6 +889,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   // a call beside a line is laid out from where the line stands: a world keeps such a line alone and where it lands
   const hasCall = (id: string) => splitCalls(cues.find((c) => c.id === id)?.text ?? '').calls.length > 0;
   if (W) for (const [id, p] of pairs) if ([id, ...p.also].some(hasCall)) pairs.delete(id);
+  if (choruses) for (const [id, p] of pairs) if ([id, ...p.also].some((x) => choruses.has(x))) pairs.delete(id);
   const leaderOf = new Map([...pairs].flatMap(([id, p]) => p.also.map((x) => [x, id] as const)));
   // a pair is one shot, running as far as its last line
   const leaders = cues.filter((c) => !leaderOf.has(c.id)).map((c) => ({ ...c, end: cues.find((x) => x.id === pairs.get(c.id)?.also.at(-1))?.end ?? c.end }));
@@ -1024,7 +1032,8 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     // how far a line leans comes from its block's shape: glyph count stands in for it here
     const textCam: TextCam = uneasy ? { kind: 'lean-settle', dir: roll('dir', 2) ? 1 : -1, amount: leanAngle(glyphs(c.text)) / 0.03 } : { kind: cams[roll('cam', cams.length)], dir: roll('dir', 2) ? 1 : -1, amount: beat?.payoff ? 0.5 : [0.7, 1, 1.5][level] * (0.75 + (seed % 37) / 100) };
     const sharedRoom = (r: Recipe) => !W || !!r.wline || sharedLines < Math.floor(lineNo * SHARED_SHARE + 1);
-    const allowed = (r: Recipe) => (calm ? fitsCalm(r) && !r.wline?.loud : r.id !== 'build-calm') && sharedRoom(r) && hasRoom(r) && !(handNear(c.id) && FIXED_LAYOUT.has(r.template)) && !(isArrival(r.enter) && (hands.has(c.id) || lineNo - lastArrival < ARRIVAL_APART)) && !(force.rigs?.has(c.id) && CLIPPED_ENTER.has(r.enter)) && (!beat?.payoff || ['still', 'drift', 'float', 'tether-settle', 'balance-rest', 'side-light', 'ink-state', 'reflection-rest', 'frame-lights'].includes(r.idle)) && (!CARRIERS.has(r.template) || lineNo - lastCarrier >= CARRIER_APART) && (!SPATIAL.has(r.template) || lineNo - lastSpatial >= CARRIER_APART);
+    const ofPart = partFits(c);
+    const allowed = (r: Recipe) => ofPart(r) && (calm ? fitsCalm(r) && !r.wline?.loud : r.id !== 'build-calm') && sharedRoom(r) && hasRoom(r) && !(handNear(c.id) && FIXED_LAYOUT.has(r.template)) && !(isArrival(r.enter) && (hands.has(c.id) || lineNo - lastArrival < ARRIVAL_APART)) && !(force.rigs?.has(c.id) && CLIPPED_ENTER.has(r.enter)) && (!beat?.payoff || ['still', 'drift', 'float', 'tether-settle', 'balance-rest', 'side-light', 'ink-state', 'reflection-rest', 'frame-lights'].includes(r.idle)) && (!CARRIERS.has(r.template) || lineNo - lastCarrier >= CARRIER_APART) && (!SPATIAL.has(r.template) || lineNo - lastSpatial >= CARRIER_APART);
     const named = force.custom?.get(c.id) ?? RECIPES.find((r) => r.id === force.recipes?.get(c.id));
     // a chorus's first line goes up in lights on a paper, as its own moment, whatever it says
     const leads = leadIds.has(c.id) && !hands.has(c.id) && leadsUsed < LEAD_CAP;
@@ -1054,10 +1063,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     }
     // a chorus comes back with its recipe, as long as that does not push a device past its share of the song
     // (a stack the director made for one line is that line's: a repeat it lost does not inherit it)
-    const repeat = again && !isDirected(again.recipe) && hasRoom(again.recipe) && !(isArrival(again.recipe.enter) && hands.has(c.id)) && sharedRoom(again.recipe) ? again.recipe : undefined;
+    const repeat = again && ofPart(again.recipe) && !isDirected(again.recipe) && hasRoom(again.recipe) && !(isArrival(again.recipe.enter) && hands.has(c.id)) && sharedRoom(again.recipe) ? again.recipe : undefined;
     const canLead = !!lead && !named && (beat?.spare ?? 0) >= (lead.spare ?? 0) && glyphs(c.text) <= (lead.max ?? 99);
     if (canLead) leadsUsed += 1;
-    const recipe = named ?? (canLead ? lead! : repeat ?? pickRecipe(c, level, recent, seed, allowed, beat?.spare ?? Infinity, part.what, lean, W?.recipes));
+    const recipe = named ?? (canLead ? lead! : repeat ?? pickRecipe(c, level, recent, seed, allowed, beat?.spare ?? Infinity, part.what, lean, W?.recipes.filter(ofPart)));
     if (W && !recipe.wline) sharedLines += 1;
     if (recipe.fit && !canLead) {
       devices.set(recipe.id, (devices.get(recipe.id) ?? 0) + 1);
@@ -1164,9 +1173,9 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     if (held) lastBeat = held.kind;
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
     // (a line right after one pressed into a rule opens out of it: the rule is handed on)
-    const handedRule = lastWorldExit.kind === 'squash-line' && c.start - lastWorldExit.end < 0.8;
-    const wEnter = recipe.wline && W ? (handedRule ? 'line-open' : leastUsed([recipe.wline.enter, ...(W.enters ?? []), ...SHARED_ENTER_POOL], entersUsed)) : undefined;
-    const wExit = recipe.wline && W ? leastUsed([recipe.wline.exit, ...(W.exits ?? []), ...SHARED_EXIT_POOL], worldExitsUsed) : undefined;
+    const handedRule = !W?.ownMoves && lastWorldExit.kind === 'squash-line' && c.start - lastWorldExit.end < 0.8;
+    const wEnter = recipe.wline && W ? (handedRule ? 'line-open' : leastUsed([recipe.wline.enter, ...(W.enters ?? []), ...(W.ownMoves ? [] : SHARED_ENTER_POOL)], entersUsed)) : undefined;
+    const wExit = recipe.wline && W ? leastUsed([recipe.wline.exit, ...(W.exits ?? []), ...(W.ownMoves ? [] : SHARED_EXIT_POOL)], worldExitsUsed) : undefined;
     if (wEnter) entersUsed.set(wEnter, (entersUsed.get(wEnter) ?? 0) + 1);
     if (wExit) { worldExitsUsed.set(wExit, (worldExitsUsed.get(wExit) ?? 0) + 1); lastWorldExit = { kind: wExit, end: c.end }; }
     const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}), ...(blow ? { blow } : {}) } : undefined;

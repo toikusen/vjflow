@@ -1,0 +1,39 @@
+// Which part of the song each line is sung in, for a world that prints it (the thermal receipt's 段落 column, and its
+// TOTAL, which is the chorus). One rule for every song: the choruses its lyric repeats show (structure.ts, which needs no
+// stored sections and so works for a free song from timed lyrics alone); where the repeats find no chorus, the song's own
+// stored sections. Never a per-song list.
+import { analyzeStructure, SectionKind } from './structure';
+import type { SongTimeline } from './timeline';
+
+export interface LinePart {
+  kind: SectionKind;
+  chorus: boolean;
+  /** The part's name as a receipt prints it in its 段落 column. */
+  label: string;
+}
+
+/** The 段落 column's words, one a kind of part (a quiet last chorus is still the chorus). */
+export const PART_LABEL: Record<SectionKind, string> = { intro: '前奏', verse: '主歌', pre: '導歌', chorus: '副歌', ochi: '副歌', bridge: '橋段', interlude: '間奏', outro: '尾奏' };
+const KINDS = new Set<string>(Object.keys(PART_LABEL));
+
+type Song = { cues: Pick<SongTimeline['cues'][number], 'id' | 'start' | 'end' | 'text'>[]; duration: number } & Partial<Pick<SongTimeline, 'sections' | 'energy' | 'energyFps' | 'title'>>;
+
+/** Each line's part, by cue id. */
+export function lineParts(song: Song): Map<string, LinePart> {
+  const cues = [...song.cues].sort((a, b) => a.start - b.start);
+  const out = new Map<string, LinePart>();
+  if (!cues.length) return out;
+  const found = analyzeStructure({ ...song, sections: song.sections ?? [], energy: song.energy ?? [], energyFps: song.energyFps ?? 1 } as SongTimeline).sections;
+  const stored = (song.sections ?? []).map((s) => ({ start: s.start, end: s.end, kind: (KINDS.has(s.type ?? '') ? s.type : 'verse') as SectionKind }));
+  const repeats = found.some((s) => s.kind === 'chorus');
+  const from = repeats || !stored.some((s) => s.kind === 'chorus') ? found : stored;
+  for (const c of cues) {
+    const at = c.start + 0.05;
+    const kind = from.find((s) => at >= s.start && at < s.end)?.kind ?? 'verse';
+    out.set(c.id, { kind, chorus: kind === 'chorus' || kind === 'ochi', label: PART_LABEL[kind] });
+  }
+  return out;
+}
+
+/** The ids of the lines sung in a chorus. */
+export const chorusLines = (song: Song) => new Set([...lineParts(song)].filter(([, p]) => p.chorus).map(([id]) => id));

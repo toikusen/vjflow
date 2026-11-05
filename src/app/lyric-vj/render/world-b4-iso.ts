@@ -194,7 +194,10 @@ const blocks: HandGround = (e) => frame(e, (c) => {
   const cells = f.cells.length ? f.cells : [[0, 0, s] as [number, number, number]];
   const half = cells.length > 1 ? Math.min(0.68 * s, Math.abs(cells[1][0] - cells[0][0]) / 2 - 0.06 * s) : f.w / 2 + 0.2 * s;
   const floor = Math.max(...cells.map(([, v, sz]) => v + sz / 2)) * -1 - 0.2 * s;
-  const own: Box3[] = cells.map(([u, v, sz], i) => ({ X: u - half, Y: -2 * half, Z: floor, w: 2 * half, d: 2 * half, h: -v + 0.66 * sz - floor, m: i % 2 ? M['step2'] : M['step'] }));
+  // (a line in two rows stands its second row on the same blocks: one block a column, as tall as its highest character)
+  const cols: { u: number; top: number }[] = [];
+  for (const [u, v, sz] of cells) { const col = cols.find((k) => Math.abs(k.u - u) < 0.4 * s); const top = -v + 0.66 * sz; if (col) col.top = Math.max(col.top, top); else cols.push({ u, top }); }
+  const own: Box3[] = cols.map(({ u, top }, i) => ({ X: u - half, Y: -2 * half, Z: floor, w: 2 * half, d: 2 * half, h: top - floor, m: i % 2 ? M['step2'] : M['step'] }));
   // the board's city in its own units (a block 340 wide for a 250 px character), scaled to this line's type
   const k = s / 250;
   const at = (bx: number, by: number) => [own[0].X + (bx + 300) * k, (by - 280) * k] as const;

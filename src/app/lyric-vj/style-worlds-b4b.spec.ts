@@ -65,7 +65,7 @@ describe('style batch 4: cyanotype, isometric, cel80s', () => {
   });
   it('steps a row of blocks down a character at a time', () => {
     const one = blockOf('仁者無敵', SET_SPECS['isometric/blocks'], measure);
-    expect(one.h).toBeCloseTo(one.size * (1 + 3 * 0.48), 0);
+    expect(one.h).toBeCloseTo(one.size * (1.2 + 3 * 0.48), 0);
   });
   it('slides the isometric camera along the grid, never turning, its edge never shown', () => {
     const d = worldCam('iso-slide', 0, 1)!;

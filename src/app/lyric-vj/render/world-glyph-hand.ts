@@ -18,6 +18,16 @@ function speck(t: OffscreenCanvas, n: number, r0: number, r1: number, a: number,
   g.globalCompositeOperation = 'source-over';
 }
 
+/** The wax's own deeper colour for an ink: dark inks pressed toward black, light ones toward white (by a third). */
+export function waxTint(tint: string): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(tint);
+  if (!m) return tint;
+  const c = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16));
+  const lum = (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255;
+  const to = lum < 0.5 ? 0 : 255;
+  return '#' + c.map((v) => Math.round(v + (to - v) / 3).toString(16).padStart(2, '0')).join('');
+}
+
 export function handSurface(ctx: CanvasRenderingContext2D, kind: HandSurface, h: HandCtx) {
   const { mask, tone, tinted, core, px, seed, cw, ch } = h;
   switch (kind) {
@@ -112,16 +122,20 @@ export function handSurface(ctx: CanvasRenderingContext2D, kind: HandSurface, h:
       break;
     }
     case 'wax': {
-      // a wax stick pressed hard: heavy, hatched by the hand's back-and-forth, the paper's tooth in it
-      const t = copy(tone);
+      // a wax stick pressed hard: heavy, hatched by the hand's back-and-forth, the paper's tooth in it. The tooth only
+      // thins the wax (hatch 10 %, specks 30 %): taken out deeper, the paper behind showed through enough to drop the
+      // line under 4.5:1 against what it stands on (2026-11-05 rule review, 11 crayon moments)
+      // (pressed hard, the wax lays its colour deeper than the line's ink: a dark ink a third toward black, a light one a
+      // third toward white, so the tooth's thinning and the stroke's soft edge still leave 4.5:1 on the page)
+      const t = copy(waxTint(h.tint) === h.tint ? tone : tinted(mask, waxTint(h.tint)));
       const g = t.getContext('2d')!;
       g.globalCompositeOperation = 'destination-out';
       g.strokeStyle = 'rgba(0,0,0,1)';
       const pitch = Math.max(3, px * 0.026);
-      for (let x = -ch; x < cw; x += pitch) { g.globalAlpha = 0.28; g.lineWidth = pitch * 0.34; g.beginPath(); g.moveTo(x + hash(x, seed) * pitch, 0); g.lineTo(x + ch * 0.46 + hash(x, seed + 1) * pitch, ch); g.stroke(); }
+      for (let x = -ch; x < cw; x += pitch) { g.globalAlpha = 0.1; g.lineWidth = pitch * 0.34; g.beginPath(); g.moveTo(x + hash(x, seed) * pitch, 0); g.lineTo(x + ch * 0.46 + hash(x, seed + 1) * pitch, ch); g.stroke(); }
       g.globalAlpha = 1;
       g.globalCompositeOperation = 'source-over';
-      speck(t, 600, px * 0.002, px * 0.007, 0.8, seed);
+      speck(t, 600, px * 0.002, px * 0.007, 0.3, seed);
       ctx.drawImage(t, 0, 0);
       break;
     }

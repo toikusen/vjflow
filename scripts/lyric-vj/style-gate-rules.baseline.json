@@ -268,5 +268,32 @@
   "small": 0,
   "cross": 0,
   "low": 2
+ },
+ "cyanotype": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 59,
+  "small": 0,
+  "cross": 6,
+  "low": 2
+ },
+ "isometric": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 4,
+  "small": 0,
+  "cross": 0,
+  "low": 0
+ },
+ "cel80s": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 18,
+  "small": 0,
+  "cross": 0,
+  "low": 0
  }
 }

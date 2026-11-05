@@ -17,7 +17,7 @@ test('worldCandidates: a language names its worlds, an id its one, anything else
   assert.deepEqual(worldCandidates('riso').map((w) => w.id), ['riso']);
   const OFFERED = STYLE_WORLDS.length - HELD_WORLDS.size;
   assert.equal(worldCandidates('auto').some((w) => HELD_WORLDS.has(w.id)), false, 'worlds being redrawn are not offered');
-  assert.equal(worldCandidates('phone').length, OFFERED, 'a style with no world yet: the director picks');
+  assert.equal(worldCandidates('notebook').length, OFFERED, 'a style with no world yet: the director picks');
   assert.equal(worldCandidates('auto').length, OFFERED);
   assert.equal(worldCandidates(undefined).length, OFFERED);
 });

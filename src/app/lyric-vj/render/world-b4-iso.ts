@@ -76,12 +76,24 @@ function hits(b: Box, p: Poly) {
  */
 function faceOf(e: WorldEnv, shear: [number, number, number, number]): FaceLayout {
   const r = e.rect ?? { x0: W * 0.3, y0: H * 0.35, x1: W * 0.7, y1: H * 0.65 };
-  const f = (r as { face?: FaceLayout }).face;
-  if (f && f.shear[1] === shear[1]) return f;
+  const all = ((r as { faces?: FaceLayout[] }).faces ?? [(r as { face?: FaceLayout }).face]).filter((f): f is FaceLayout => !!f && f.shear[1] === shear[1]);
+  if (all.length === 1) return all[0];
+  if (all.length > 1) return merged(all);
   const [bw, bh] = [Math.max(40, r.x1 - r.x0 - 28), Math.max(40, r.y1 - r.y0 - 28)];
   const w = bw / C30;
   const h = Math.max(60, bh - S30 * w);
   return { cx: (r.x0 + r.x1) / 2, cy: (r.y0 + r.y1) / 2, w, h, shear, size: Math.min(150, h), rows: 1, cells: [] };
+}
+/** Several lines on one wall (a call beside the line, two lines sharing the shot): one wall round all of them, in the first one's frame. */
+function merged(fs: FaceLayout[]): FaceLayout {
+  const [a, b, c, d] = fs[0].shear;
+  const det = a * d - b * c;
+  const toBase = (x: number, y: number): [number, number] => { const [dx, dy] = [x - fs[0].cx, y - fs[0].cy]; return [(d * dx - c * dy) / det, (a * dy - b * dx) / det]; };
+  const pts = fs.flatMap((f) => ([[-1, -1], [1, -1], [1, 1], [-1, 1]] as const).map(([sx, sy]) => { const [u, v] = [(sx * f.w) / 2, (sy * f.h) / 2]; return toBase(f.cx + a * u + c * v, f.cy + b * u + d * v); }));
+  const [u0, u1, v0, v1] = [Math.min(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[1]))];
+  const [mu, mv] = [(u0 + u1) / 2, (v0 + v1) / 2];
+  const cells = fs.flatMap((f) => f.cells.map(([u, v, sz]) => { const [bu, bv] = toBase(f.cx + a * u + c * v, f.cy + b * u + d * v); return [bu - mu, bv - mv, sz] as [number, number, number]; }));
+  return { cx: fs[0].cx + a * mu + c * mv, cy: fs[0].cy + b * mu + d * mv, w: u1 - u0, h: v1 - v0, shear: fs[0].shear, size: Math.max(...fs.map((f) => f.size)), rows: fs.reduce((n, f) => n + f.rows, 0), cells };
 }
 const LABEL = (px: number) => `500 ${px}px "Noto Sans TC", "Noto Sans JP", sans-serif`;
 /** The small label, the song's title and its artist, only in its opening. */

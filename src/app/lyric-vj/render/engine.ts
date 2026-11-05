@@ -2617,7 +2617,13 @@ export class LyricVjEngine {
     const ls = all.map((l) => (l.kind === 'frame' && (l.type === 'brackets' || l.type === 'viewfinder') ? ({ ...l, opacity: (l.opacity ?? 1) * words } as Layer) : l));
     const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to);
     // (lines that all stand on their own carriers stay carried: the ground leaves them no room of paper, 2026-11-04)
-    const union = (rs: Rect[]) => (rs.length ? { ...rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })), carried: rs.every((r) => r.carried) } : undefined);
+    // (a page built round its words' wall keeps every wall's layout through the union: a call beside the line, or a line
+    // sharing the shot, would otherwise leave it the bare box, world-sets FaceLayout)
+    const union = (rs: Rect[]) => {
+      if (!rs.length) return undefined;
+      const faces = rs.flatMap((r) => (r as { face?: unknown }).face ?? []);
+      return { ...rs.reduce((a, b) => ({ x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) })), carried: rs.every((r) => r.carried), ...(faces.length ? { faces } : {}) };
+    };
     // room for the lines as they move where the frame has it; an object with nowhere to go clear of that makes room
     // for the lines at rest instead (as it did before the motion room; the bigger box left it over the words)
     const placeAt = (layers0: Layer[], x: number) => {

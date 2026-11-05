@@ -212,9 +212,10 @@ const stripsPage: HandGround = (e) => frame(e, (c) => {
 const Gs: Record<string, HandGround> = { 'cyanotype/fern': fernPage, 'cyanotype/stars': starsPage, 'cyanotype/doily': doilyPage, 'cyanotype/strips': stripsPage };
 
 const INS: Record<string, HandIn> = {
-  // a change of line is a new exposure: the lamp flashes white over the print and the blue develops back, deepening
-  'exposure-flash': { sec: 0.7, draw: (e, q) => frame(e, (c) => {
-    const a = q < 0.15 ? (q / 0.15) * 0.7 : 0.7 * (1 - ease((q - 0.15) / 0.65, 2));
+  // a change of line is a new exposure: the lamp flashes white over the print and the blue develops back, deepening.
+  // The flash is over in a quarter second: a line sung for half a second was washed pale for all of its reading
+  'exposure-flash': { sec: 0.5, draw: (e, q) => frame(e, (c) => {
+    const a = q < 0.1 ? (q / 0.1) * 0.7 : 0.7 * (1 - ease((q - 0.1) / 0.36, 2));
     if (a <= 0.005) return;
     c.save();
     c.globalAlpha = a;

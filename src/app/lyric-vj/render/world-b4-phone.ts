@@ -8,7 +8,7 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, kept, mixHex, W, WorldEnv } from './world-craft';
 import { artistBy, C, label, titleOf } from './world-b3-shared';
-import { scriptOf } from '../fonts';
+import { byLang, langOfEnv, say } from '../labels';
 import { B4 } from './b4-inks';
 
 const INK = B4.x16141C;
@@ -24,9 +24,6 @@ const UIJ = (px: number, w = 500) => `${w} ${px}px "Noto Sans JP", "Noto Sans TC
 const rr = (c: C, x: number, y: number, w: number, h: number, r: number) => { c.beginPath(); c.roundRect(x, y, w, h, Math.min(r, h / 2, w / 2)); };
 const frame = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
 const beatOf = (now: number, bpm = 120) => { const b = (now * Math.max(60, bpm)) / 60; return { idx: Math.floor(b), since: ((b - Math.floor(b)) * 60) / Math.max(60, bpm) }; };
-/** The script the phone's interface speaks: the song title's (kana Japanese, Han Chinese, else Latin). */
-const scriptFor = (e: WorldEnv) => scriptOf(e.title ?? '');
-const pick = <T,>(e: WorldEnv, ja: T, zh: T, latin: T) => ({ ja, zh, latin })[scriptFor(e)];
 /** The song's position, as a phone shows a time: m:ss. */
 const clock = (t: number) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
@@ -219,17 +216,18 @@ const composeOf = (day: boolean): HandGround => (e) => frame(e, (c) => {
   }
   c.fillStyle = panel;
   c.fillRect(0, 612, W, H - 612);
-  const chips = pick(e, ['変換', '確定', 'かな', '英数'], ['選字', '確定', '注音', '英文'], ['Convert', 'Done', 'abc', '123']);
+  const chips = byLang(langOfEnv(e), { ja: ['変換', '確定', 'かな', '英数'], zh: ['選字', '確定', '注音', '英文'], en: ['Convert', 'Done', 'abc', '123'] });
   rr(c, 96, 628, 362, 64, 14);
   c.fillStyle = day ? B4.xFFFFFF : mixHex(panel, s.ink2, 0.2);
   c.fill();
   chips.forEach((w, i) => label(c, w, i ? 520 + (i - 1) * 330 : 130, 676, UI(42, i ? 400 : 500), i ? mixHex(text, panel, 0.38) : text, 0));
   const face = day ? B4.xFFFFFF : mixHex(panel, PAPER, 0.14);
   const tone = day ? INK : mixHex(s.ink, panel, 0.06);
-  const sc = scriptFor(e);
+  // the interface, its keyboard included, speaks the song's language (labels.ts)
+  const sc = langOfEnv(e);
   if (sc === 'ja') kana12(c, 708, face, day ? mixHex(panel, INK, 0.12) : mixHex(panel, PAPER, 0.08), mark, tone);
-  else if (sc === 'zh') zhuyin(c, 704, face, tone, mark, day ? B4.xFFFFFF : INK, '換行', '空白', 66, 56);
-  else qwerty(c, 720, face, tone, mark, day ? B4.xFFFFFF : INK, 'return');
+  else if (sc === 'zh') zhuyin(c, 704, face, tone, mark, day ? B4.xFFFFFF : INK, say(e, 'newline'), say(e, 'space'), 66, 56);
+  else qwerty(c, 720, face, tone, mark, day ? B4.xFFFFFF : INK, say(e, 'newline'));
   glass(c, mixHex(text, bg, 0.05));
 });
 
@@ -245,13 +243,13 @@ const callOf = (dark: boolean): HandGround => (e) => frame(e, (c) => {
   c.fillRect(0, 0, W, H);
   statusBar(c, e, text);
   const r = e.rect;
-  const who = [artistBy(e), pick(e, '携帯', '行動電話', 'mobile')].filter(Boolean).join('　·　');
+  const who = [artistBy(e), say(e, 'mobile')].filter(Boolean).join('　·　');
   if (!r || r.y0 > 190) label(c, who, W / 2, 158, UI(40, 500), mixHex(text, top, 0.15), 3, 'center');
   c.fillStyle = dark ? CREAM : e.paper;
   c.fillRect(0, 760, W, H - 760);
   const { since } = beatOf(e.now, e.bpm);
   const k = 1 + 0.04 * Math.exp(-since * 5);
-  const [no, yes] = pick(e, ['拒否', '応答'], ['拒絕', '接聽'], ['Decline', 'Accept']);
+  const [no, yes] = [say(e, 'decline'), say(e, 'accept')];
   ([[605, DECLINE, no, 135], [1315, ACCEPT, yes, 0]] as [number, string, string, number][]).forEach(([x, tone, word, turn]) => {
     c.save();
     c.translate(x, 897);
@@ -299,15 +297,15 @@ const search: HandGround = (e) => frame(e, (c) => {
     }
   }
   // the opening's two further suggestions: the song and its singer
-  const more = [titleOf(e) && `${titleOf(e)} ${pick(e, '歌詞', '歌詞', 'lyrics')}`, artistBy(e)].filter(Boolean) as string[];
+  const more = [titleOf(e) && `${titleOf(e)} ${say(e, 'lyrics')}`, artistBy(e)].filter(Boolean) as string[];
   more.forEach((t, i) => { lens(176, 502 + i * 76, 18, 7, B4.x7A748A); label(c, t, 250, 516 + i * 76, UI(38, 400), B4.x3A3446, 0); });
   if (more.length) { c.fillStyle = mixHex(s.plate, INK, 0.1); c.fillRect(96, 532, 1728, 2); }
   c.fillStyle = mixHex(s.plate, B4.x6E6890, 0.22);
   c.fillRect(0, 640, W, H - 640);
-  const sc = scriptFor(e);
-  const go = pick(e, '検索', '搜尋', 'search');
+  const sc = langOfEnv(e);
+  const go = say(e, 'search');
   if (sc === 'ja') kana12(c, 640, B4.xFFFFFF, mixHex(s.plate, B4.x6E6890, 0.3), s.accent, INK);
-  else if (sc === 'zh') zhuyin(c, 640, B4.xFFFFFF, INK, s.accent, B4.xFFFFFF, go, '空白');
+  else if (sc === 'zh') zhuyin(c, 640, B4.xFFFFFF, INK, s.accent, B4.xFFFFFF, go, say(e, 'space'));
   else qwerty(c, 640, B4.xFFFFFF, INK, s.accent, B4.xFFFFFF, go);
   glass(c, INK);
 });
@@ -362,8 +360,8 @@ const PIECES: Record<string, Piece> = {
     rr(c, x + 37, y + 38, 38, 28, 5); c.stroke();
     c.beginPath(); c.moveTo(x + 37, y + 40); c.lineTo(x + 56, y + 54); c.lineTo(x + 75, y + 40); c.stroke();
     c.restore();
-    label(c, pick(e, '新着メッセージ', '新訊息', 'New message'), x + 112, y + 50, UI(34, 700), INK, 0);
-    label(c, pick(e, 'たった今', '現在', 'now'), x + w - 30, y + 50, UI(26, 400), GREY, 0, 'right');
+    label(c, say(e, 'newMessage'), x + 112, y + 50, UI(34, 700), INK, 0);
+    label(c, say(e, 'justNow'), x + w - 30, y + 50, UI(26, 400), GREY, 0, 'right');
     label(c, clock(e.now), x + 112, y + 88, UI(26, 400), GREY, 0);
   }) },
   // the battery grows out of the status bar in a toast, drains a cell at a time, and its last cell blinks red
@@ -394,7 +392,7 @@ const PIECES: Record<string, Piece> = {
     c.save();
     [0, 1, 2, 3].forEach((i) => { rr(c, x + 34 + i * 26, y + 58 - (i + 1) * 10, 18, (i + 1) * 10, 4); c.fillStyle = PAPER; c.globalAlpha = i < on ? 1 : 0.25; c.fill(); });
     c.restore();
-    label(c, on === 0 ? pick(e, '圏外', '無服務', 'No service') : pick(e, '検索中…', '搜尋訊號…', 'Searching…'), x + 160, y + 50, UI(32, 700), PAPER, 0);
+    label(c, say(e, on === 0 ? 'noService' : 'searchingSignal'), x + 160, y + 50, UI(32, 700), PAPER, 0);
   }) },
 };
 

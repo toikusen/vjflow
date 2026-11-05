@@ -75,6 +75,7 @@ import { vertical } from './vertical';
 import { foldRepeats } from './repeats';
 import { lanes } from './lanes';
 import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, enterSec as lineEnterSec, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
 const H = 1080;
@@ -747,7 +748,8 @@ export class LyricVjEngine {
     await Promise.all((FONTS.find((f) => f.family === design.accentFont)?.weights ?? [400]).map((w) => document.fonts.load(`${w} 100px "${design.accentFont}"`, 'Aa!')));
     const latin = readingLatin(design.accentFont);
     await Promise.all([700, 900].map((w) => document.fonts.load(`${nearestWeight(latin, w)} 100px "${latin}"`, 'Aa')));
-    const text = this.job.cues.map((c) => c.text).join('');
+    // (with every world label's characters: a label in the song's language never waits a frame for its glyphs, labels.ts)
+    const text = this.job.cues.map((c) => c.text).join('') + ALL_LABEL_TEXT;
     const faces = [[fonts.display, 400], [fonts.body, 900], [fonts.body, 700], [fonts.script, 400], [quietFace(fonts.display), 500], [contrastFace(fonts.display), 900]] as const;
     await Promise.all(faces.map(([f, w]) => document.fonts.load(`${nearestWeight(f, w)} 100px "${f}"`, text)));
   }

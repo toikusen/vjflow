@@ -7,6 +7,7 @@ import { clamp01, ease, H, HandGround, HandIn, isLight, kept, mixHex, ObjectPain
 import { artistBy, C, label, titleOf } from './world-b3-shared';
 import { MEMBER } from './world-glyph-loud';
 import { B3 } from './b3-inks';
+import { say } from '../labels';
 
 const GREY = B3.x7A6F92;
 const FRED = (px: number, w = 700) => `${w} ${px}px Fredoka, "Zen Maru Gothic", "Mochiy Pop One", sans-serif`;
@@ -67,10 +68,10 @@ const ticket: HandGround = (e) => page(e, (c) => {
   label(c, titleOf(e), tx + 90, ty + 88, FRED(24), GREY, 4);
   c.fillStyle = B3.x2B2140;
   c.fillRect(tx + 90, ty + 112, tear - tx - 170, 3);
-  label(c, 'SONG', tx + 90, ty + th - 76, FRED(16), GREY, 2);
+  label(c, say(e, 'song'), tx + 90, ty + th - 76, FRED(16), GREY, 2);
   label(c, titleOf(e), tx + 90, ty + th - 40, ZM(30), B3.x2B2140);
   const who = artistBy(e);
-  if (who) { label(c, 'ARTIST', tx + 380, ty + th - 76, FRED(16), GREY, 2); label(c, who, tx + 380, ty + th - 40, ZM(30), B3.x2B2140); }
+  if (who) { label(c, say(e, 'artist'), tx + 380, ty + th - 76, FRED(16), GREY, 2); label(c, who, tx + 380, ty + th - 40, ZM(30), B3.x2B2140); }
   c.strokeStyle = B3.xCFC6E2;
   c.lineWidth = 5;
   c.setLineDash([2, 10]);

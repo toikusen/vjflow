@@ -16,10 +16,11 @@ import { splitParts } from './world-split';
 import { splitCalls } from '../calls';
 import { DOT_R } from './world-glyph-doc';
 import { DOC_INKS } from './doc-inks';
+import { ALL_LABEL_TEXT, say } from '../labels';
 
 const FACE = '"Noto Sans TC", "Noto Sans JP", sans-serif';
-/** The receipt's own words. */
-const LABELS = '品名段落合計主歌副歌前奏導歌橋段間奏尾奏0123456789/ ';
+/** The receipt's own words, in every language a song's labels may speak (labels.ts). */
+const LABELS = `${ALL_LABEL_TEXT}0123456789/ `;
 
 /**
  * The faces a document job prints its small words in, loaded with the job (render/job-fonts.ts): its labels, and every
@@ -205,8 +206,8 @@ function header(c: C, e: WorldEnv, x0: number, x1: number, ceil: number, itemsTo
   const rule = itemsTop - 96;
   if (rule < ceil) return;
   solid(c, x0, rule, x1 - x0, ink);
-  dotText(c, x0, rule + 24, '品名', 2.3, { ink });
-  dotText(c, x1, rule + 24, '段落', 2.3, { ink, align: 'right' });
+  dotText(c, x0, rule + 24, say(e, 'item'), 2.3, { ink });
+  dotText(c, x1, rule + 24, say(e, 'part'), 2.3, { ink, align: 'right' });
   const f = facts(e);
   if (!f.title || rule - 200 < ceil) return;
   dotText(c, (x0 + x1) / 2, rule - 208, f.title, dotFit(f.title, x1 - x0, 3.4, 24, 700), { weight: 700, ink, align: 'center' });
@@ -235,7 +236,7 @@ const feed = (total: boolean): HandGround => (e) => page(e, (c) => {
   if (total) {
     solid(c, L, r.y0 - 134, R - L, ink);
     solid(c, L, r.y0 - 120, R - L, ink);
-    dotText(c, L, r.y0 - 94, '合計', 2.8, { weight: 700, ink: red });
+    dotText(c, L, r.y0 - 94, say(e, 'total'), 2.8, { weight: 700, ink: red });
     if (it?.part) dotText(c, R, r.y0 - 94, it.part, 2.8, { weight: 700, ink: red, align: 'right' });
     ceil = r.y0 - 160;
   } else {
@@ -338,7 +339,7 @@ const totalPage: HandGround = (e) => page(e, (c) => {
   }
   solid(c, x0, 190, x1 - x0, ink);
   solid(c, x0, 204, x1 - x0, ink);
-  dotText(c, x0, 236, '合計', 3.0, { weight: 700, ink: red });
+  dotText(c, x0, 236, say(e, 'total'), 3.0, { weight: 700, ink: red });
   const low = Math.min(900, Math.max(846, r.y1 + 40));
   solid(c, x0, low, x1 - x0, ink);
   solid(c, x0, low + 14, x1 - x0, ink);

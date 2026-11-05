@@ -5,6 +5,7 @@ import { contrast } from '../contrast';
 import { mixHex, Box, Pt } from './material';
 import { brushStroke, inkWash, reservePaper, spatter } from './world-ink';
 import type { Slots } from './world-objects';
+import type { LabelLang } from '../labels';
 import { handGrounds, handIns } from './world-packs';
 
 const W = 1920;
@@ -41,6 +42,8 @@ export interface WorldEnv {
   since?: number;
   /** The line as an item of the song (a receipt's number and 段落): its number, its part, the lines sung before it. */
   item?: WorldItem;
+  /** The language the world's small labels are printed in: the lyric's (labels.ts). */
+  lang?: LabelLang;
 }
 /** A line's place in the song, for a world that prints it: 1-based number, its part's name, the lines before it. */
 export interface WorldItem { no: number; part: string; /** The line's own words. */ text?: string; prev: { no: number; text: string; part: string }[] }

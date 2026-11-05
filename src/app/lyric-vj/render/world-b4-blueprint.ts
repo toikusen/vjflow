@@ -10,12 +10,11 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, hash, kept, W, WorldEnv } from './world-craft';
 import { artistBy, C, label, titleOf } from './world-b3-shared';
-import { scriptOf } from '../fonts';
+import { say } from '../labels';
 
 const LETTER = (px: number, w = 400) => `${w} ${px}px "LXGW WenKai Mono TC", "Klee One", monospace`;
 type Box = { x0: number; y0: number; x1: number; y1: number };
 const frame = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
-const pick = <T,>(e: WorldEnv, ja: T, zh: T, latin: T) => ({ ja, zh, latin })[scriptOf(e.title ?? '')];
 const clock = (t: number) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 /** How far the drafting of a cut has got for a stage that runs from `a` to `b` seconds in, 0..1. */
 const stage = (e: WorldEnv, a: number, b: number) => clamp01((e.age - a) / (b - a));
@@ -82,9 +81,9 @@ function border(c: C, e: WorldEnv) {
   'ABCD'.split('').forEach((k, i) => { label(c, k, 52, 64 + i * 238 + 125, LETTER(18), t, 0, 'center'); label(c, k, 1868, 64 + i * 238 + 125, LETTER(18), t, 0, 'center'); });
   const rows: [string, string][] = [];
   const [ti, ar] = [titleOf(e), artistBy(e)];
-  if (ti) rows.push([pick(e, '図名', '圖名', 'TITLE'), ti]);
-  if (ar) rows.push([pick(e, '作者', '作者', 'BY'), ar]);
-  rows.push([pick(e, '時刻', '時間', 'TIME'), clock(e.now - e.age)], [pick(e, '尺度', '比例', 'SCALE'), '1:1']);
+  if (ti) rows.push([say(e, 'drawingTitle'), ti]);
+  if (ar) rows.push([say(e, 'by'), ar]);
+  rows.push([say(e, 'time'), clock(e.now - e.age)], [say(e, 'scale'), '1:1']);
   const [x0, y0] = [1376, 1016 - rows.length * 44];
   line(c, t, 3, (g) => g.rect(x0, y0, 480, rows.length * 44));
   rows.forEach(([k, v], i) => {
@@ -169,7 +168,7 @@ const part: HandGround = (e) => frame(e, (c) => {
   const r = e.rect;
   if (!r || r.x1 < 1440 || r.y0 > 560) {
     section(c, t, 1600, 330, 120, [stage(e, 0.1, 0.3), stage(e, 0.25, 0.55)]);
-    drawn(c, stage(e, 0.5, 0.7), 1500, 1700, () => label(c, pick(e, '断面 A–A', '剖面 A–A', 'SECTION A–A'), 1600, 514, LETTER(26), t, 0, 'center'));
+    drawn(c, stage(e, 0.5, 0.7), 1500, 1700, () => label(c, `${say(e, 'section')} A–A`, 1600, 514, LETTER(26), t, 0, 'center'));
   }
 });
 
@@ -206,9 +205,9 @@ const lettering: HandGround = (e) => frame(e, (c) => {
   const y = r ? Math.max(r.y1 + 70, 640) : 640;
   if (y > 900) return;
   drawn(c, stage(e, 0.2, 0.5), x0, 1760, () => {
-    label(c, pick(e, '字高 h', '字高 h', 'HEIGHT h'), x0, y + 10, LETTER(26), t, 0);
+    label(c, `${say(e, 'letterHeight')} h`, x0, y + 10, LETTER(26), t, 0);
     line(c, t, 1.5, (g) => { g.moveTo(x0 + 120, y); g.lineTo(Math.min(1760, (r?.x1 ?? 1700)), y); }, [4, 10]);
-    label(c, pick(e, '線の太さ', '筆畫粗', 'STROKE'), x0, y + 95, LETTER(26), t, 0);
+    label(c, say(e, 'strokeWeight'), x0, y + 95, LETTER(26), t, 0);
     for (let i = 0; i < 8; i++) line(c, t, 2 + i * 1.5, (g) => { const x = x0 + 160 + i * 90; g.moveTo(x, y + 50); g.lineTo(x, y + 120); });
   });
 });
@@ -218,7 +217,7 @@ const notes: HandGround = (e) => frame(e, (c) => {
   base(c, e);
   const t = e.slots.ink;
   const r = e.rect;
-  label(c, pick(e, '注記', '說明', 'NOTES'), 170, 250, LETTER(44, 700), t, 0);
+  label(c, say(e, 'notes'), 170, 250, LETTER(44, 700), t, 0);
   line(c, t, 3, (g) => { g.moveTo(170, 266); g.lineTo(330, 266); });
   label(c, '1.', 180, 382, LETTER(64, 700), t, 0);
   if (r && r.y1 > 520) label(c, '2.', 180, 617, LETTER(64, 700), t, 0);
@@ -237,7 +236,7 @@ const notes: HandGround = (e) => frame(e, (c) => {
     c.fillStyle = t;
     c.beginPath(); c.moveTo(x, yy); c.lineTo(x - 22, yy - 6); c.lineTo(x - 22, yy + 6); c.closePath(); c.moveTo(x + Wd, yy); c.lineTo(x + Wd + 22, yy - 6); c.lineTo(x + Wd + 22, yy + 6); c.closePath(); c.fill();
     label(c, '⌀30', x + Wd + 76, yy + 9, LETTER(26), t, 0);
-    label(c, pick(e, '立面図', '立面', 'ELEVATION'), x + Wd / 2, yy + 70, LETTER(26), t, 0, 'center');
+    label(c, say(e, 'elevation'), x + Wd / 2, yy + 70, LETTER(26), t, 0, 'center');
   });
 });
 

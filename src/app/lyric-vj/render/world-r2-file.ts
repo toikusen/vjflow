@@ -8,6 +8,7 @@ import { artistOf, C, label, titleOnly } from './world-b3-shared';
 import { kraftOver } from './world-r2-tex';
 import { titleNow } from './world-title';
 import { R2 } from './r2-inks';
+import { headOf, langOfEnv } from '../labels';
 
 const TYPED = (px: number, weight = 400) => `${weight} ${px}px "Courier Prime", "UoqMunThenKhung", "BIZ UDPMincho", serif`;
 const OLD = (px: number) => `400 ${px}px "UoqMunThenKhung", "BIZ UDPMincho", serif`;
@@ -85,7 +86,9 @@ const caseSheet: HandGround = (e) => page(e, (c) => {
   const r = box(e, 346, 278, 1600, 586);
   const n = rowsIn(r.y1 - r.y0, 1.33, 206);
   // (only real data in the cells: the song's name only in its opening, the entry's time and how many lines it runs)
-  const cells = ([['TITLE 標題', f.title], ['ARTIST 歌手', f.artist], ['TIME 時間', f.at], ['LINES 行數', String(n)]] as [string, string][]).filter(([, v]) => v);
+  // (the heads are typed in English with the song's own word after it: labels.ts headOf)
+  const lang = langOfEnv(e);
+  const cells = ([[headOf('title', lang), f.title], [headOf('artist', lang), f.artist], [headOf('time', lang), f.at], [headOf('lines', lang), String(n)]] as [string, string][]).filter(([, v]) => v);
   const cw = 1400 / cells.length;
   cells.forEach(([k, v], i) => {
     const x = 340 + i * cw;

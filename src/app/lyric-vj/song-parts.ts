@@ -4,6 +4,7 @@
 // stored sections. Never a per-song list.
 import { analyzeStructure, SectionKind } from './structure';
 import type { SongTimeline } from './timeline';
+import { PART_LABELS } from './labels';
 
 export interface LinePart {
   kind: SectionKind;
@@ -12,8 +13,8 @@ export interface LinePart {
   label: string;
 }
 
-/** The 段落 column's words, one a kind of part (a quiet last chorus is still the chorus). */
-export const PART_LABEL: Record<SectionKind, string> = { intro: '前奏', verse: '主歌', pre: '導歌', chorus: '副歌', ochi: '副歌', bridge: '橋段', interlude: '間奏', outro: '尾奏' };
+/** The 段落 column's words in Chinese, one a kind of part (every language's: labels.ts PART_LABELS). */
+export const PART_LABEL = Object.fromEntries(Object.entries(PART_LABELS).map(([k, v]) => [k, v.zh])) as Record<SectionKind, string>;
 const KINDS = new Set<string>(Object.keys(PART_LABEL));
 
 type Song = { cues: Pick<SongTimeline['cues'][number], 'id' | 'start' | 'end' | 'text'>[]; duration: number } & Partial<Pick<SongTimeline, 'sections' | 'energy' | 'energyFps' | 'title'>>;

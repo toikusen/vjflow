@@ -6,6 +6,7 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, ObjectPaint, W, WorldEnv } from './world-craft';
 import { C, label, rng, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
+import { say } from '../labels';
 
 const B = B3.x1636B8;
 const BD = B3.x0B1A5C;
@@ -71,7 +72,7 @@ const hint: HandGround = (e) => page(e, (c) => {
   // the card itself, where world-layout puts the set's object: the object draws it over this one in a line's own shot; a
   // shared shot (two lines, objects off) gets it from here, round both lines
   const { x: x1, y, w, h, flipped } = objectPlace(c, r, HINT_PAD, HINT_FILL);
-  unmirrored(c, flipped, () => { hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x1, y); label(c, titleOf(e), x1 + w - 50, y + 64, BUNGEE(30), WH, 1, 'right'); });
+  unmirrored(c, flipped, () => { hintCard(c as unknown as OffscreenCanvasRenderingContext2D, w, h, x1, y, say(e, 'hint')); label(c, titleOf(e), x1 + w - 50, y + 64, BUNGEE(30), WH, 1, 'right'); });
   const x = flipped ? W - x1 - w : x1;
   const n = 12;
   const cw = (w + 14) / n - 14;
@@ -83,7 +84,7 @@ const hint: HandGround = (e) => page(e, (c) => {
       c.fillStyle = BD; c.fillRect(cx + 8, ty + 8, cw, 46);
       c.fillStyle = i < n - out ? G : BL; c.fillRect(cx, ty, cw, 46);
     }
-    if (ty + 100 < H) label(c, 'TIME', x, ty + 100, BUNGEE(30), WH, 2);
+    if (ty + 100 < H) label(c, say(e, 'timeLeft'), x, ty + 100, BUNGEE(30), WH, 2);
   }
   finish(c);
 });
@@ -170,11 +171,11 @@ const Gs: Record<string, HandGround> = { 'gameshow/round': round, 'gameshow/hint
  * shadow, timer) at the same place, so the object never shows a seam over it; a line read on past its cut keeps the face.
  */
 const hintPlate: ObjectPaint = (c, w, h) => { c.fillStyle = WH; c.fillRect(10, 106, w - 20, h - 116); };
-function hintCard(c: OffscreenCanvasRenderingContext2D, w: number, h: number, x = 0, y = 0) {
+function hintCard(c: OffscreenCanvasRenderingContext2D, w: number, h: number, x: number, y: number, head: string) {
   c.fillStyle = BD; c.fillRect(x + 16, y + 16, w, h);
   c.fillStyle = WH; c.fillRect(x, y, w, h);
   c.fillStyle = R; c.fillRect(x, y, w, 96);
-  label(c, 'HINT', x + 50, y + 70, BUNGEE(52), WH, 2);
+  label(c, head, x + 50, y + 70, BUNGEE(52), WH, 2);
 }
 /** The question banner the line stands in (board a): white chevron, navy shadow, gold underline, red Q tab at its left. */
 // (the white the words are read on runs from the tab's edge to as far from the right: the words sit centred in it)

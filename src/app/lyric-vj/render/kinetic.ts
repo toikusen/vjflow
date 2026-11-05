@@ -13,6 +13,7 @@ import type { SymbolName } from '../treatment';
 import { drawFlood, drawLineGround, isLineGround } from './line-grounds';
 import { worldCam } from './world-cam';
 import { clearWordsAfter, drawWorldGround, isWorldGround, WorldEnv, WorldItem, worldInAt } from './world-grounds';
+import type { LabelLang } from '../labels';
 import { reservePaper } from './world-ink';
 import { holdInkGround } from './behind-ink';
 import { pieceAt } from './world-pieces';
@@ -30,7 +31,7 @@ export type KineticFx = string;
 export interface KineticLayer {
   kind: 'kinetic';
   /** A style world's ground: its slots, how loud the part is, the world's way in. */
-  world?: { slots: Slots; level: number; enter?: string; sheet?: boolean; /** The ground is a page laid out with its set: the words stand on what the set carries, never on ground held back. */ bound?: boolean; piece?: string; words?: string; /** The lines around a set piece: it shows only the one being sung. */ lines?: { a: number; b: number; t: string }[]; title?: string; /** The line as an item of the song (world-grounds WorldItem). */ item?: WorldItem };
+  world?: { slots: Slots; level: number; enter?: string; sheet?: boolean; /** The ground is a page laid out with its set: the words stand on what the set carries, never on ground held back. */ bound?: boolean; piece?: string; words?: string; /** The lines around a set piece: it shows only the one being sung. */ lines?: { a: number; b: number; t: string }[]; title?: string; /** The line as an item of the song (world-grounds WorldItem). */ item?: WorldItem; /** The labels' language (labels.ts). */ lang?: LabelLang };
   /** A print world's scheme, for what reads the slots beyond ink and paper. */
   sheetInks?: Slots;
   fx: KineticFx;
@@ -589,7 +590,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     }
     default: {
       if (l.world && isWorldGround(l.fx)) {
-        const env: WorldEnv = { ctx, age, now, seed, paper, ink, slots: l.world.slots, rect: l.lyric, weight: l.lyric ? (l.lyricWeight ?? 1) : 0, pulse: beat.pulse, level: l.world.level, title: l.world.title, bpm: l.bpm, since: beat.since, item: l.world.item };
+        const env: WorldEnv = { ctx, age, now, seed, paper, ink, slots: l.world.slots, rect: l.lyric, weight: l.lyric ? (l.lyricWeight ?? 1) : 0, pulse: beat.pulse, level: l.world.level, title: l.world.title, bpm: l.bpm, since: beat.since, item: l.world.item, lang: l.world.lang };
         drawWorldGround(env, l.fx);
         const coming = worldInAt(l.world.enter, age);
         if (coming) coming.w.draw(env, coming.q);

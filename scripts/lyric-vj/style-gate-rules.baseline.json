@@ -367,5 +367,41 @@
   "small": 0,
   "cross": 0,
   "low": 0
+ },
+ "scrapbook": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 140,
+  "low": 0
+ },
+ "watercolor": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 40,
+  "small": 0,
+  "cross": 0,
+  "low": 0
+ },
+ "midcentury": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 155,
+  "small": 0,
+  "cross": 0,
+  "low": 0
+ },
+ "claymation": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 0
  }
 }

@@ -20,6 +20,24 @@ export function cellsOf(e: WorldEnv): Cell[] {
   const fs = r.faces ?? (r.face ? [r.face] : []);
   return fs.flatMap((f) => { const [a, b, c, d] = f.shear; return f.cells.map(([u, v, s]) => ({ x: f.cx + a * u + c * v, y: f.cy + b * u + d * v, s: s * Math.max(Math.abs(a), Math.abs(d)) })); });
 }
+/**
+ * A page drawn turned left to right (world-b3-shared mirrorGround), its words' cells turned with it so what it builds
+ * round them still meets them; its small print still reads.
+ */
+export function mirrored(g: (e: WorldEnv) => void): (e: WorldEnv) => void {
+  const flipFace = (f: FaceLayout): FaceLayout => { const [a, b, c, d] = f.shear; return { ...f, cx: W - f.cx, shear: [a, -b, -c, d], cells: f.cells.map(([u, v, s]) => [-u, v, s] as [number, number, number]) }; };
+  return (e) => {
+    const r = e.rect as (WorldEnv['rect'] & { face?: FaceLayout; faces?: FaceLayout[] }) | undefined;
+    const rect = r ? { ...r, x0: W - r.x1, x1: W - r.x0, ...(r.face ? { face: flipFace(r.face) } : {}), ...(r.faces ? { faces: r.faces.map(flipFace) } : {}) } : undefined;
+    const c = e.ctx;
+    c.save();
+    if (e.base) c.setTransform(e.base);
+    c.translate(W, 0);
+    c.scale(-1, 1);
+    g({ ...e, rect, base: c.getTransform() });
+    c.restore();
+  };
+}
 /** The box round some cells, each taken as its size square (a narrowed face's cells as narrowed). */
 export function boxOf(cs: Cell[], sx = 1): Box | undefined {
   if (!cs.length) return undefined;

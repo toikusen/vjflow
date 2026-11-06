@@ -8,7 +8,8 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, kept, W, WorldEnv } from './world-craft';
 import { C, halftone, rng, sparklePath } from './world-b3-shared';
-import { beyondCells, Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
+import { beyondCells, Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox, mirrored } from './world-b5-shared';
+import { B5_MIRRORS } from './world-b5-sets';
 
 type Pt = [number, number];
 const SERIF = (px: number) => `400 ${px}px "Cactus Classical Serif", "Zen Antique", serif`;
@@ -380,5 +381,8 @@ const PIECES: Record<string, Piece> = {
     c.restore();
   }) },
 };
+
+// the turned pages (world-b5-sets B5_MIRRORS)
+for (const id of B5_MIRRORS) if (Gs[id]) Gs[`${id}-r`] = mirrored(Gs[id]);
 
 export const SCREENTONE = { grounds: Gs, ins: INS, pieces: PIECES, objects: {} };

@@ -45,6 +45,8 @@ export const B5_SETS: Record<string, SetSpec> = {
   // two stepped pillars
   'art-deco/marquee': { ...base, split: { small: 'tail', scale: 1, ink: 'ink2', track: 0.3, at: [0.5, 0.588], share: 0.72, tall: 0.2 }, at: [0.5, 0.25], ax: 0, ay: -1, share: 0.72, tall: 0.42, hi: 200, rows: [1, 2], lead: 1.25, track: 0.18, ink: 'ink', plain: true, keepRows: true, shear: DECO_NARROW, clear: [[0, 0, 1, 0.09], [0, 0.9, 1, 1], [0, 0, 0.05, 1], [0.95, 0, 1, 1]], fixed: true },
   'art-deco/arch': { ...base, at: [0.5, 0.306], ax: 0, ay: -1, share: 0.62, tall: 0.32, hi: 140, rows: [1, 3], lead: 1.28, track: 0.14, ink: 'ink', plain: true, keepRows: true, shear: DECO_NARROW, clear: [[0.22, 0.64, 0.78, 0.93]], fixed: true },
+  // (board a's marquee turned over the axis: the sunburst from above, the plaque in the lower half)
+  'art-deco/marquee-low': { ...base, split: { small: 'tail', scale: 1, ink: 'ink2', track: 0.3, at: [0.5, 0.75], share: 0.72, tall: 0.2 }, at: [0.5, 0.42], ax: 0, ay: -1, share: 0.72, tall: 0.42, hi: 200, rows: [1, 2], lead: 1.25, track: 0.18, ink: 'ink', plain: true, keepRows: true, shear: DECO_NARROW, clear: [[0, 0, 1, 0.09], [0, 0.9, 1, 1], [0, 0, 0.05, 1], [0.95, 0, 1, 1]], fixed: true },
   'art-deco/plaque': { ...base, at: [0.5, 0.51], ax: 0, ay: 0, share: 0.8, tall: 0.3, hi: 190, rows: [1, 2], lead: 1.15, track: 0.16, ink: 'plateInk', on: ['plate'], plain: true, keepRows: true, shear: DECO_NARROW, clear: [[0, 0, 1, 0.27], [0, 0.75, 1, 1]], fixed: true },
   'art-deco/pillars': { ...base, split: { small: 'tail', scale: 1, ink: 'ink2', at: [0.414, 0.157], tall: 0.76 }, at: [0.586, 0.176], ax: 0, ay: -1, share: 0.05, tall: 0.72, hi: 100, rows: [1, 1], vertical: true, lead: 1, track: 0.06, ink: 'ink', plain: true, keepRows: true, shear: DECO_COLUMN, fixed: true },
   // notebook (boards a–d): two marker lines on a side-spiral page, a key word highlighted and the last phrase looped in
@@ -55,3 +57,14 @@ export const B5_SETS: Record<string, SetSpec> = {
   'notebook/reporter': { ...base, split: { small: 'lead', scale: 0.33, ink: 'accent', at: [0.136, 0.257], ax: -1, share: 0.45 }, at: [0.5, 0.63], ax: 0, ay: 0, share: 0.7, tall: 0.36, hi: 318, rows: [1, 2], lead: 1.1, track: 0.02, ink: 'ink', plain: true, under: PAGE_UNDER, keepRows: true, shear: FLAT, clear: [[0, 0, 1, 0.15]], fixed: true },
   'notebook/vertical': { ...base, split: { small: 'tail', scale: 1, at: [0.517, 0.178], tall: 0.8 }, at: [0.657, 0.178], ax: 0, ay: -1, share: 0.05, tall: 0.74, hi: 96, rows: [1, 1], vertical: true, lead: 1, track: 0.02, ink: 'ink', plain: true, under: PAGE_UNDER, keepRows: true, shear: FLAT, clear: [[0, 0, 1, 0.12]], fixed: true },
 };
+
+/**
+ * Sets laid out again turned left to right, on their page turned too (`<set>-r`, world-b5-shared mirrored). Only sets
+ * read across: a pair of columns turned would read its phrases out of order.
+ */
+export const B5_MIRRORS = ['embroidery/hoop', 'screentone/burst', 'screentone/caption', 'notebook/spiral', 'notebook/dotted'];
+const flip = (x: -1 | 0 | 1) => (-x as -1 | 0 | 1);
+for (const id of B5_MIRRORS) {
+  const s = B5_SETS[id];
+  B5_SETS[`${id}-r`] = { ...s, at: [1 - s.at[0], s.at[1]], ax: flip(s.ax), ...(s.flush !== undefined ? { flush: flip(s.flush) } : {}), ...(s.split?.at ? { split: { ...s.split, at: [1 - s.split.at[0], s.split.at[1]] as [number, number] } } : {}), ...(s.clear ? { clear: s.clear.map(([x0, y0, x1, y1]) => [1 - x1, y0, 1 - x0, y1] as [number, number, number, number]) } : {}) };
+}

@@ -49,7 +49,7 @@ function caption(c: C, e: WorldEnv, y: number, tone: string, px = 26, extra = ''
 const raysUp = (e: WorldEnv, n: number) => Math.floor(clamp01(e.age / 0.6) * n);
 
 /** a: a stepped double frame; a sunburst from below the axis; a black plaque round the words with triple rules top and bottom, a diamond on the axis at each; chevrons under it. */
-const marquee: HandGround = (e) => frame(e, (c) => {
+const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
   smallStart();
   const [g0, g1] = golds(e);
   c.fillStyle = e.slots.ground;
@@ -62,7 +62,9 @@ const marquee: HandGround = (e) => frame(e, (c) => {
   c.beginPath();
   c.rect(110, 100, 1700, 880);
   c.clip();
-  sun(c, AX, 1060, 260, 1500, 48, 180, 360, [g0, g1], raysUp(e, 48));
+  // (held low, the sunburst comes from above the axis and the chevrons point up from over the plaque)
+  if (low) sun(c, AX, 20, 260, 1500, 48, 0, 180, [g0, g1], raysUp(e, 48));
+  else sun(c, AX, 1060, 260, 1500, 48, 180, 360, [g0, g1], raysUp(e, 48));
   c.restore();
   c.fillStyle = e.slots.ground;
   c.fillRect(p.x0, p.y0, p.x1 - p.x0, p.y1 - p.y0);
@@ -71,11 +73,17 @@ const marquee: HandGround = (e) => frame(e, (c) => {
   line(c, p.x1, p.y0, p.x1, p.y1, 2.4, g0);
   diamond(c, AX, p.y0, 20, g1);
   diamond(c, AX, p.y1, 20, g1);
-  if (p.y1 + 150 < 990) {
+  if (low) {
+    if (p.y0 - 150 > 90) {
+      c.fillStyle = e.slots.ground;
+      c.fillRect(600, p.y0 - 120, 720, 50);
+      caption(c, e, p.y0 - 86, g0);
+      [0, 1, 2].forEach((i) => { c.strokeStyle = g0; c.lineWidth = 2; c.beginPath(); c.moveTo(AX - 60, p.y0 - 140 - i * 22); c.lineTo(AX, p.y0 - 166 - i * 22); c.lineTo(AX + 60, p.y0 - 140 - i * 22); c.stroke(); });
+    }
+  } else if (p.y1 + 150 < 990) {
     c.fillStyle = e.slots.ground;
     c.fillRect(600, p.y1 + 70, 720, 50);
     caption(c, e, p.y1 + 102, g0);
-    c.fillStyle = 'rgba(0,0,0,0)';
     [0, 1, 2].forEach((i) => { c.strokeStyle = g0; c.lineWidth = 2; c.beginPath(); c.moveTo(AX - 60, p.y1 + 140 + i * 22); c.lineTo(AX, p.y1 + 166 + i * 22); c.lineTo(AX + 60, p.y1 + 140 + i * 22); c.stroke(); });
   }
   smallEnd();
@@ -233,7 +241,7 @@ const pillars: HandGround = (e) => frame(e, (c) => {
   smallEnd();
 });
 
-const Gs: Record<string, HandGround> = { 'art-deco/marquee': marquee, 'art-deco/arch': arch, 'art-deco/plaque': plaque, 'art-deco/pillars': pillars };
+const Gs: Record<string, HandGround> = { 'art-deco/marquee': marqueeOf(false), 'art-deco/marquee-low': marqueeOf(true), 'art-deco/arch': arch, 'art-deco/plaque': plaque, 'art-deco/pillars': pillars };
 
 const INS: Record<string, HandIn> = {
   // two doors close toward the axis and open again: ground-coloured leaves with gold edge rules, never over the words

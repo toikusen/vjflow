@@ -13,6 +13,7 @@
 import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
 import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
+import { B5_MIRRORS } from './render/world-b5-sets';
 
 const stack = (o: Partial<FrameStack>): FrameStack => ({ grain: 0.1, paper: 0, tooth: 0, lift: 0, scan: 0, vignette: 0, flicker: 0, weave: 0, boil: 0, boilRate: 12, step: 0, koma: 0, ...o });
 const lv = <T,>(a: T[], b: T[], c: T[]): Record<Level, T[]> => ({ 0: a, 1: b, 2: c });
@@ -129,11 +130,12 @@ export const ART_DECO_WORLD: StyleWorld = {
   layouts: { pair: 'art-deco/arch', shared: [], carriers: ['art-deco/marquee', 'art-deco/plaque', 'art-deco/pillars'], lines: [
     line('art-deco/marquee', [0, 1, 2], ['axis-open', 'deco-rise'], ['axis-close', 'deco-fall'], 'marquee-still', { max: 30, ground: 'art-deco/marquee' }),
     line('art-deco/arch', [0, 1], ['deco-rise', 'axis-open'], ['deco-fall', 'axis-close'], 'marquee-still', { max: 30, ground: 'art-deco/arch' }),
+    line('art-deco/marquee-low', [0, 1, 2], ['deco-rise', 'axis-open'], ['deco-fall', 'axis-close'], 'marquee-still', { max: 30, ground: 'art-deco/marquee-low' }),
     line('art-deco/plaque', [1, 2], ['axis-open'], ['axis-close'], 'marquee-still', { min: 2, max: 10, loud: true, ground: 'art-deco/plaque' }),
     line('art-deco/pillars', [0, 1, 2], ['deco-rise', 'axis-open'], ['deco-fall'], 'marquee-still', { min: 4, max: 18, column: true, breaks: true, ground: 'art-deco/pillars' }),
   ] },
   motion: { enters: ['axis-open', 'deco-rise'], exits: ['axis-close', 'deco-fall'], holds: ['marquee-still'], curve: '從中軸往兩側對稱打開，日芒的線一條一條畫出來，字最後整行亮起；換段時兩扇門往中間關上再打開' },
-  grounds: { levels: lv(['art-deco/arch', 'art-deco/pillars', 'art-deco/marquee'], ['art-deco/marquee', 'art-deco/pillars', 'art-deco/arch', 'art-deco/plaque'], ['art-deco/plaque', 'art-deco/marquee']), quiet: ['art-deco/arch'] },
+  grounds: { levels: lv(['art-deco/arch', 'art-deco/pillars', 'art-deco/marquee', 'art-deco/marquee-low'], ['art-deco/marquee', 'art-deco/marquee-low', 'art-deco/pillars', 'art-deco/arch', 'art-deco/plaque'], ['art-deco/plaque', 'art-deco/marquee', 'art-deco/marquee-low']), quiet: ['art-deco/arch'] },
   decor: [{ id: 'art-deco/sunburst', why: '從中軸下方放射的日芒是裝飾藝術最認得出的線，永遠在字牌後面', budget: '每頁一組' }, { id: 'art-deco/stepped-frame', why: '階梯狀的框角與雙線把字牌框住，嚴格中軸對稱', budget: '每頁一個框' }],
   transitions: { line: lv([''], ['deco-doors', ''], ['deco-doors']), part: lv(['deco-doors'], ['deco-doors'], ['deco-doors']), own: ['deco-doors'], banned: ['blurdissolve', 'ripple', 'glitch', 'whip', 'shakecut'], family: 'doors' },
   peak: { loud: 'art-deco/plaque', calm: 'art-deco/arch', how: '快歌滿版扇形紋中間一塊米色階梯匾額；慢歌祖母綠的階梯拱窗，下方山形紋的海' },
@@ -186,5 +188,12 @@ export const NOTEBOOK_WORLD: StyleWorld = {
   provenance: { source: 'own', process: '大人的筆記用品：線圈筆記本、記者簿、直排格本，麥克筆、原子筆、鉛筆、螢光筆', nearest: 'JIZURA 的記事本 UI 視窗與稿紙格落字', differs: '沒有視窗框；直排頁是格線不是稿紙格；只有紙和筆，沒有貼的東西（那是 scrapbook）' },
   acceptance: { fast: 'nun', calm: 'tsuzuki', hardest: '橫線在字旁斷開不穿過字、螢光筆與圈線不碰到筆畫' },
 };
+
+/** Each turned set (world-b5-sets B5_MIRRORS) joins its world as a line of its own, on its turned page. */
+for (const w of [EMBROIDERY_WORLD, SCREENTONE_WORLD, NOTEBOOK_WORLD]) {
+  const extra = w.layouts.lines.filter((l) => B5_MIRRORS.includes(l.set)).map((l) => ({ ...l, set: `${l.set}-r`, ground: `${l.ground}-r` }));
+  w.layouts.lines.push(...extra);
+  for (const lvl of [0, 1, 2] as Level[]) w.grounds.levels[lvl] = [...new Set([...w.grounds.levels[lvl], ...extra.filter((l) => l.levels.includes(lvl)).map((l) => l.ground)])];
+}
 
 export const B5_WORLDS: StyleWorld[] = [EMBROIDERY_WORLD, SCREENTONE_WORLD, ART_DECO_WORLD, NOTEBOOK_WORLD];

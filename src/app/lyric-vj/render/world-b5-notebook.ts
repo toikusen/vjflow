@@ -11,7 +11,8 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, kept, mixHex, W, WorldEnv } from './world-craft';
 import { C, rng } from './world-b3-shared';
 import { B5 } from './b5-inks';
-import { Box, boxOf, Cell, cellsOf, cutTime, frame, grow, linesOf, meets, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
+import { Box, boxOf, Cell, cellsOf, cutTime, frame, grow, linesOf, meets, openingData, outside, small, smallEnd, smallStart, wordsBox, mirrored } from './world-b5-shared';
+import { B5_MIRRORS } from './world-b5-sets';
 import { say } from '../labels';
 
 type Pt = [number, number];
@@ -264,5 +265,8 @@ const PIECES: Record<string, Piece> = {
     }
   }) },
 };
+
+// the turned pages (world-b5-sets B5_MIRRORS)
+for (const id of B5_MIRRORS) if (Gs[id]) Gs[`${id}-r`] = mirrored(Gs[id]);
 
 export const NOTEBOOK = { grounds: Gs, ins: INS, pieces: PIECES, objects: {} };

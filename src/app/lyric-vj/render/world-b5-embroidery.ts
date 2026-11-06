@@ -9,7 +9,8 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, kept, mixHex, W, WorldEnv } from './world-craft';
 import { C, rng } from './world-b3-shared';
 import { B5 } from './b5-inks';
-import { Box, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
+import { Box, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox, mirrored } from './world-b5-shared';
+import { B5_MIRRORS } from './world-b5-sets';
 
 const SANS = (px: number) => `500 ${px}px "Noto Sans HK", "Noto Sans JP", sans-serif`;
 const [rgb, hexRgb] = [(c: number[]) => `rgb(${c.map((v) => Math.round(Math.max(0, Math.min(255, v)))).join(',')})`, (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16))];
@@ -371,5 +372,8 @@ const PIECES: Record<string, Piece> = {
     c.restore();
   }) },
 };
+
+// the turned pages (world-b5-sets B5_MIRRORS)
+for (const id of B5_MIRRORS) if (Gs[id]) Gs[`${id}-r`] = mirrored(Gs[id]);
 
 export const EMBROIDERY = { grounds: Gs, ins: INS, pieces: PIECES, objects: {} };

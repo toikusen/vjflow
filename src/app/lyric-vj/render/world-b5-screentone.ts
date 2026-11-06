@@ -137,7 +137,8 @@ const round = (w: number, h: number, ry: number) => (w + 24) / Math.sqrt(Math.ma
 function callBoxes(c: C, e: WorldEnv) {
   const r = e.rect as { face?: { shear: number[] }; faces?: { shear: number[] }[] } | undefined;
   if ([...(r?.faces ?? []), ...(r?.face ? [r.face] : [])].some((f) => f.shear[1] !== 0)) return;
-  for (const b of beyondCells(e, 60)) {
+  // (over or under the line only: a band beside it was the room a line keeps for its travel, and drew an empty box)
+  for (const b of beyondCells(e, 60).filter((x) => x.x1 - x.x0 > x.y1 - x.y0)) {
     const r = { x0: Math.max(40, b.x0 + 8), y0: Math.max(40, b.y0 + 8), x1: Math.min(W - 40, b.x1 - 8), y1: Math.min(H - 40, b.y1 - 8) };
     if (r.x1 - r.x0 < 30 || r.y1 - r.y0 < 30) continue;
     c.fillStyle = e.slots.ground;

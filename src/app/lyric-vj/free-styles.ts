@@ -28,8 +28,8 @@ export interface FreeStyle {
 
 export const FREE_STYLES: FreeStyle[] = STYLE_WORLDS.map((w) => ({ id: w.id, name: w.name, from: w.language, what: w.what, palettes: w.palette.map((s) => s.id), fonts: { ja: w.type.ja.family, tc: w.type.tc.family, calm: w.type.tc.family }, world: w }));
 
-/** Worlds held back from the picker, rerolls and defaults until the owner passes them (document: receipt being redrawn, 2026-11-05). A saved pick still renders. */
-export const HELD_WORLDS = new Set<string>(['document']);
+/** Worlds held back from the picker, rerolls and defaults until the owner passes them (none held since 2026-11-06). A saved pick still renders. */
+export const HELD_WORLDS = new Set<string>();
 
 /** The styles offered to a buyer. */
 export const OFFERED_STYLES = FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id));

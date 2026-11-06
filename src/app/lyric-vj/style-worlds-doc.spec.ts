@@ -17,11 +17,11 @@ import type { SongTimeline } from './timeline';
 const w = DOCUMENT_WORLD;
 
 describe('document, the thermal receipt (second boards 2026-11-05)', () => {
-  it('is registered and held until the owner passes it', () => {
+  it('is registered and offered', () => {
     expect(STYLE_WORLDS.find((x) => x.id === 'document')).toBe(w);
     expect(FREE_STYLES.some((s) => s.id === 'document')).toBe(true);
-    expect(HELD_WORLDS.has('document')).toBe(true);
-    expect(styleGroups().flatMap((g) => g.cards.map((c) => c.id))).not.toContain('document');
+    expect(HELD_WORLDS.has('document')).toBe(false);
+    expect(styleGroups().flatMap((g) => g.cards.map((c) => c.id))).toContain('document');
   });
   it('has every part it names', () => {
     expect(worldHoles(w)).toEqual([]);

@@ -173,7 +173,7 @@ function parts(e: WorldEnv, heroX: number): { hero?: Box; rest?: Box } {
 const A_LEFT: Pt[] = [[60, 60], [1180, 60], [1060, 1000], [60, 1000]];
 const A_RIGHT: Pt[] = [[1220, 60], [1860, 60], [1860, 1000], [1100, 1000]];
 const shout: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [ink, paper] = [e.slots.ink, e.slots.ground];
   c.drawImage(kept(`b5-st-a|${ink}|${paper}`, W, H, (g) => {
     g.fillStyle = paper;
@@ -200,7 +200,7 @@ const shout: HandGround = (e) => frame(e, (c) => {
 const B_PANEL: Pt[] = [[60, 60], [1860, 60], [1860, 1000], [60, 1000]];
 const STARS: [number, number, number][] = [[300, 140, 9], [420, 260, 5], [1500, 120, 8], [1650, 230, 5], [1380, 300, 4], [200, 380, 4], [1760, 400, 5]];
 const narration: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [ink, paper] = [e.slots.ink, e.slots.ground];
   c.drawImage(kept(`b5-st-b|${ink}|${paper}`, W, H, (g) => {
     g.fillStyle = paper;
@@ -231,7 +231,7 @@ const narration: HandGround = (e) => frame(e, (c) => {
 /** c: a page of four panels (speed lines, tone, light tone, focus lines); the sound effect breaks through all of them. */
 const C_PANELS: Pt[][] = [[[60, 60], [900, 60], [820, 470], [60, 470]], [[940, 60], [1860, 60], [1860, 400], [860, 470]], [[60, 510], [700, 510], [640, 1000], [60, 1000]], [[740, 510], [1860, 440], [1860, 1000], [680, 1000]]];
 const sfx: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [ink, paper] = [e.slots.ink, e.slots.ground];
   c.drawImage(kept(`b5-st-c|${ink}|${paper}`, W, H, (g) => {
     g.fillStyle = paper;
@@ -250,7 +250,7 @@ const sfx: HandGround = (e) => frame(e, (c) => {
 /** d: a tall panel in light tone with speed lines between two side panels; an ellipse balloon round each column, tails out. */
 const D_MAIN: Pt[] = [[340, 60], [1580, 60], [1580, 1000], [340, 1000]];
 const balloons: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [ink, paper] = [e.slots.ink, e.slots.ground];
   c.drawImage(kept(`b5-st-d|${ink}|${paper}`, W, H, (g) => {
     g.fillStyle = paper;
@@ -277,7 +277,7 @@ const balloons: HandGround = (e) => frame(e, (c) => {
 
 /** The narration box set across: one big panel, tone deepening downward in steps and speed lines at the right; the box round the words. */
 const caption: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [ink, paper] = [e.slots.ink, e.slots.ground];
   c.drawImage(kept(`b5-st-e|${ink}|${paper}`, W, H, (g) => {
     g.fillStyle = paper;
@@ -301,7 +301,7 @@ const caption: HandGround = (e) => frame(e, (c) => {
 const E_LEFT: Pt[] = [[60, 60], [1400, 60], [1300, 1000], [60, 1000]];
 const E_RIGHT: Pt[] = [[1440, 60], [1860, 60], [1860, 1000], [1340, 1000]];
 const burst: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [ink, paper] = [e.slots.ink, e.slots.ground];
   c.drawImage(kept(`b5-st-f|${ink}|${paper}`, W, H, (g) => {
     g.fillStyle = paper;

@@ -181,7 +181,7 @@ function caption(c: C, e: WorldEnv, x: number, y: number, tone: string, px = 34)
 
 /** a: a big hoop cropping the frame top and bottom, its clamp up at the left; two threads; the label under the words. */
 const bigHoop: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const w = wordsBox(e);
   const [cx, cy] = [960, 560];
   const r = hoopFor(w, cx, cy, 760);
@@ -191,7 +191,7 @@ const bigHoop: HandGround = (e) => frame(e, (c) => {
 });
 /** a, held lower: a whole hoop on the wall, its clamp at the top, one thread. */
 const lowHoop: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const w = wordsBox(e);
   const [cx, cy] = [960, 540];
   const r = Math.min(500, hoopFor(w, cx, cy, 420, 60));
@@ -203,7 +203,7 @@ const lowHoop: HandGround = (e) => frame(e, (c) => {
 /** b: night linen in a small hoop; gold knots for stars above the words (one at a time as the page opens), the running-stitch sea below. */
 const KNOTS: [number, number, number][] = [[-200, -0.62, 9], [50, -0.82, 7], [220, -0.5, 10], [-80, -0.42, 6], [150, -0.3, 5], [-320, -0.3, 6]];
 const night: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const w = wordsBox(e);
   const [cx, cy] = [960, 540];
   const r = Math.min(520, hoopFor(w, cx, cy, 486, 60));
@@ -252,7 +252,7 @@ function cross(c: C, x: number, y: number, P: number, col: string) {
 }
 /** c: a cross-stitch sampler on aida: two green rows for a border three cells in, a red diamond chain inside it. */
 const sampler: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const P = 14;
   const [GX, GY] = [Math.floor(W / P), Math.floor(H / P)];
   c.drawImage(kept(`b5-aida|${e.slots.plate}`, W, H, (g) => {
@@ -285,7 +285,7 @@ const sampler: HandGround = (e) => frame(e, (c) => {
 
 /** d: a hoop on the wall, its clamp at the top; two columns of thread; the cut's time small beside them. */
 const columns: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const w = wordsBox(e);
   const [cx, cy] = [960, 540];
   const r = hoopFor(w, cx, cy, 470, 56);

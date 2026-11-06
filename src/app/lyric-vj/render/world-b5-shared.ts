@@ -79,14 +79,22 @@ export const meets = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.
 export const outside = (c: C, b: Box) => { c.beginPath(); c.rect(-W, -H, W * 3, H * 3); c.rect(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0); c.clip('evenodd'); };
 
 const tally = { largest: 0 };
+/** The largest small print a frame may take: its line's smallest character over 3.1 (the focus rule's 2.5, measured on a character's ink, which stands about a sixth inside its size). */
+let cap = Infinity;
+export const SMALL_UNDER = 3.1;
 const bare = () => (globalThis as { vjSmallBare?: boolean }).vjSmallBare === true;
-/** A frame's small print starts from nothing. */
-export const smallStart = () => { tally.largest = 0; };
+/** A frame's small print starts from nothing, and is held under the line's own size (focus rule: one large lyric). */
+export const smallStart = (e?: WorldEnv) => {
+  tally.largest = 0;
+  const cs = e ? cellsOf(e) : [];
+  cap = cs.length ? Math.max(14, Math.min(...cs.map((c) => c.s)) / SMALL_UNDER) : Infinity;
+};
 /** What the frame's small print came to, for the focus measure. */
 export const smallEnd = () => { (globalThis as { vjSmallPrint?: typeof tally }).vjSmallPrint = { ...tally }; };
 /** Small print (world-b3-shared label), tallied by its size; left unprinted while the focus measure asks for the frame bare. */
 export function small(c: C, text: string, x: number, y: number, px: number, font: (px: number) => string, fill: string, track = 0, align: 'left' | 'right' | 'center' = 'left') {
   if (!text) return 0;
+  px = Math.min(px, cap);
   tally.largest = Math.max(tally.largest, px);
   if (bare()) { c.save(); c.font = font(px); (c as CanvasRenderingContext2D).letterSpacing = `${track}px`; const w = c.measureText(text).width; c.restore(); return w; }
   return label(c, text, x, y, font(px), fill, track, align);

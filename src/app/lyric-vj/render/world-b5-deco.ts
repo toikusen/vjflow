@@ -50,7 +50,7 @@ const raysUp = (e: WorldEnv, n: number) => Math.floor(clamp01(e.age / 0.6) * n);
 
 /** a: a stepped double frame; a sunburst from below the axis; a black plaque round the words with triple rules top and bottom, a diamond on the axis at each; chevrons under it. */
 const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [g0, g1] = golds(e);
   c.fillStyle = e.slots.ground;
   c.fillRect(0, 0, W, H);
@@ -108,7 +108,7 @@ function archPath(c: C, half: number, top: number, bottom: number) {
   c.closePath();
 }
 const arch: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [g0, g1] = golds(e);
   c.fillStyle = e.slots.ground;
   c.fillRect(0, 0, W, H);
@@ -176,7 +176,7 @@ const fans = (ground: string, g0: string, g1: string) => kept(`b5-deco-fans|${gr
     }
 });
 const plaque: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [g0, g1] = golds(e);
   c.drawImage(fans(e.slots.ground, g0, g1), 0, 0);
   const w = narrowBox(e);
@@ -201,7 +201,7 @@ const plaque: HandGround = (e) => frame(e, (c) => {
 
 /** d: a sunburst from below; two stepped pillars mirrored on the axis, one round each column, inner gold lines; a diamond on the axis at their feet. */
 const pillars: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const [g0, g1] = golds(e);
   c.fillStyle = e.slots.ground;
   c.fillRect(0, 0, W, H);

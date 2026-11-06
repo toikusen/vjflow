@@ -89,7 +89,7 @@ const rowsOf = (e: WorldEnv) => linesOf(cellsOf(e), false).map((r) => boxOf(r)!)
 /** a: a side-spiral ruled page, the margin's time in ballpoint; a loop round the last phrase (or two rules under a one-row line). */
 const SIDE_HOLES: Pt[] = Array.from({ length: 14 }, (_, i) => [84, 40 + i * 76]);
 const spiral: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   c.drawImage(kept(`b5-nb-a|${e.slots.plate}|${e.slots.ground}`, W, H, (g) => {
     g.fillStyle = e.slots.ground;
     g.fillRect(0, 0, W, H);
@@ -121,7 +121,7 @@ const spiral: HandGround = (e) => frame(e, (c) => {
 
 /** b: a dotted page in pencil, its ribbon bookmark lying across; a wavy pencil line under the last phrase; the time at the head. */
 const dotted: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   const paper = mixHex(e.slots.plate, B5.x3E4048, 0.03);
   c.drawImage(kept(`b5-nb-b|${paper}`, W, H, (g) => {
     g.fillStyle = paper;
@@ -155,7 +155,7 @@ const dotted: HandGround = (e) => frame(e, (c) => {
 /** c: a top-spiral reporter's pad: a marker box drawn twice round the main line, two ballpoint rules under its head line, the time at the right. */
 const TOP_HOLES: Pt[] = Array.from({ length: 23 }, (_, i) => [140 + i * 74, 132]);
 const reporter: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   c.drawImage(kept(`b5-nb-c|${e.slots.plate}|${e.slots.ground}`, W, H, (g) => {
     g.fillStyle = e.slots.ground;
     g.fillRect(0, 0, W, H);
@@ -188,7 +188,7 @@ const reporter: HandGround = (e) => frame(e, (c) => {
 /** d: a top-bound page ruled for columns; red emphasis dots beside the end of the last column; the time and the opening's data at the foot. */
 const V_HOLES: Pt[] = Array.from({ length: 22 }, (_, i) => [196 + i * 72, 108]);
 const vertical: HandGround = (e) => frame(e, (c) => {
-  smallStart();
+  smallStart(e);
   c.drawImage(kept(`b5-nb-d|${e.slots.plate}|${e.slots.ground}`, W, H, (g) => {
     g.fillStyle = e.slots.ground;
     g.fillRect(0, 0, W, H);

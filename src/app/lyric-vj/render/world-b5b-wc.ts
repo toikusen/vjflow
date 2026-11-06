@@ -116,10 +116,13 @@ function stroke(x0: number, y0: number, x1: number, y1: number, w: number, seed:
     // dry-brush: the bristles run out over the tooth, leaving paper between hard streaks
     c.globalCompositeOperation = 'destination-out';
     for (let k = 0; k < 14; k++) {
-      const off = (k / 13 - 0.5) * w * 0.95;
+      const off = (k / 13 - 0.5 + (hash(k, seed + 4) - 0.5) * 0.05) * w * 0.95;
       const s = dry + hash(k, seed) * 0.2;
-      c.lineWidth = 2 + hash(k, seed + 2) * 6;
-      c.beginPath(); c.moveTo(x0 + ux * L * s + px * off, y0 + uy * L * s + py * off); c.lineTo(x1 + ux * 80 + px * off, y1 + uy * 80 + py * off); c.stroke();
+      const wd = 2 + hash(k, seed + 2) * 6;
+      // (a gap opens from a point and widens toward the end the brush ran dry)
+      const [ax, ay] = [x0 + ux * L * s + px * off, y0 + uy * L * s + py * off];
+      const [bx, by] = [x1 + ux * 80 + px * off, y1 + uy * 80 + py * off];
+      c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx + px * wd, by + py * wd); c.lineTo(bx - px * wd, by - py * wd); c.closePath(); c.fill();
     }
   });
 }
@@ -164,11 +167,12 @@ const boxKey = (e: WorldEnv) => (e.rect ? [e.rect.x0, e.rect.x1].map((v) => Math
 const washPage: HandGround = (e) => { sheetOf(e, 'wash', (b) => {
   const s = e.slots;
   // (the flat wash's right end runs dry: the bristles left paper between hard streaks)
-  const dry = maskOf((c) => { for (let y = 440; y < 820; y += 7) { const k = hash(y, 3); if (k < 0.45) continue; const x = 1380 + k * 300; c.fillRect(x, y, W - x, 2 + hash(y, 5) * 4); } });
+  // (each bristle's gap opens from a point and widens as the brush ran out, at its own place and length)
+  const dry = maskOf((c) => { for (let y = 440; y < 820; y += 5 + hash(y, 9) * 9) { const k = hash(y, 3); if (k < 0.4) continue; const [x, w] = [1420 + k * 260, 1.5 + hash(y, 5) * 5]; c.beginPath(); c.moveTo(x, y); c.lineTo(W, y - w / 2 + (hash(y, 7) - 0.5) * 6); c.lineTo(W, y + w / 2 + (hash(y, 7) - 0.5) * 6); c.closePath(); c.fill(); } });
   wash(b, sub(poly([[140, 520], [1500, 470], [1690, 500], [1700, 770], [150, 790]], 22, 1), dry), B5B.xEDB54E, { a0: 0.42, rim: 0.5, col2: B5B.xE88E58, seed: 1, blooms: [[520, 600, 70]] });
   // a tide line: the wash dried in two stages, the second edge hard inside the first
   wash(b, poly([[700, 560], [1240, 540], [1260, 740], [690, 760]], 30, 14), B5B.xEDB54E, { a0: 0.12, rim: 0.35, seed: 15 });
-  wash(b, stroke(1180, 650, 1860, 610, 300, 7, 0.55), B5B.xD96A7A, { a0: 0.36, rim: 0.5, seed: 3 });
+  wash(b, stroke(1180, 650, 1860, 610, 300, 7, 0.82), B5B.xD96A7A, { a0: 0.36, rim: 0.5, seed: 3 });
   wash(b, poly(blobPts(1520, 300, 300, 190), 40, 6), B5B.x7FB3C2, { a0: 0.38, rim: 0.5, col2: B5B.xA9B6E0, seed: 2, blooms: [[1560, 300, 90]] });
   wash(b, poly(blobPts(1470, 330, 170, 110), 30, 16), B5B.x7FB3C2, { a0: 0.16, rim: 0.4, seed: 4 });
   splat(b, 1620, 230, 220, 60, s.ink, 5, e.rect);

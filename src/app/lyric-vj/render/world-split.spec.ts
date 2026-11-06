@@ -79,3 +79,17 @@ describe('the type floor against the frame', () => {
     expect(blockOf('快使用雙截棍', s, measure).size).toBe(176);
   });
 });
+
+describe('a vertical neon sign', () => {
+  it('stands as a proportioned sign: a run with no break of its own takes two even columns of larger tubes', () => {
+    for (const id of ['neon-stage/doorway', 'neon-stage/blade']) {
+      const s = SET_SPECS[id];
+      const b = blockOf('數不盡想你的黑夜', s, measure);
+      expect(b.rows, id).toEqual(['數不盡想', '你的黑夜']);
+      // about half as wide as it is tall, not a strip down the wall
+      expect(b.w / b.h, id).toBeGreaterThan(0.4);
+      expect(b.size, id).toBeGreaterThan(150);
+      expect(inFrame(b), id).toBe(true);
+    }
+  });
+});

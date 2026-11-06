@@ -131,10 +131,13 @@ export const SET_SPECS: Record<string, SetSpec> = {
   'dark-glitch/tape-column': { ...base, at: [0.1, 0.5], ax: 0, ay: 0, share: 0.2, tall: 0.9, hi: 180, rows: [1, 1], vertical: true, lead: 1.2, track: 0.03, object: 'transcript-tape', pad: [34, 30], fill: [0.2, 1.05] },
   // neon-stage: bent glass on a wall, a box with a transformer behind it.
   'neon-stage/sign-box': { ...base, at: [0.5, 0.48], ax: 0, ay: 0, share: 0.8, tall: 0.62, hi: 300, rows: [1, 2], track: 0.06, object: 'sign-box', pad: [80, 60], fill: [0.92, 0.74] },
-  'neon-stage/blade': { ...base, at: [0.82, 0.5], ax: 0, ay: 0, share: 0.3, tall: 0.86, hi: 220, rows: [1, 2], vertical: true, lead: 1.2, track: 0.04, object: 'sign-blade', pad: [44, 44], fill: [0.28, 0.96] },
+  // (a vertical sign is a proportioned sign, not a strip: a run with no break of its own is cut into two even columns, so
+  // 數不盡想你的黑夜 stands as two columns of large tubes about half as wide as tall, not one 118 px column down 85% of the
+  // wall, 2026-11-06)
+  'neon-stage/blade': { ...base, at: [0.82, 0.5], ax: 0, ay: 0, share: 0.3, tall: 0.86, hi: 220, rows: [1, 2], vertical: true, lead: 1.2, track: 0.04, object: 'sign-blade', pad: [44, 44], fill: [0.28, 0.96], square: true },
   'neon-stage/roofline': { ...base, at: [0.5, 0.26], ax: 0, ay: 0, share: 0.92, tall: 0.5, hi: 340, rows: [1, 2], track: 0.04 },
   'neon-stage/script-low': { ...base, at: [0.05, 0.7], ax: -1, ay: 0, share: 0.86, tall: 0.5, hi: 230, rows: [1, 2], track: 0.04, flush: -1, tilt: -0.05 },
-  'neon-stage/doorway': { ...base, at: [0.2, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.9, hi: 210, rows: [1, 3], vertical: true, lead: 1.22, track: 0.03 },
+  'neon-stage/doorway': { ...base, at: [0.2, 0.5], ax: 0, ay: 0, share: 0.38, tall: 0.9, hi: 210, rows: [1, 3], vertical: true, lead: 1.22, track: 0.03, square: true },
   'neon-stage/corner-sign': { ...base, at: [0.97, 0.94], ax: 1, ay: 1, share: 0.6, tall: 0.5, hi: 200, rows: [1, 3], lead: 1.1, track: 0.04, object: 'sign-box', pad: [60, 44], fill: [0.66, 0.56], flush: 1 },
   'neon-stage/low-marquee': { ...base, at: [0.5, 0.8], ax: 0, ay: 0, share: 0.94, tall: 0.3, hi: 210, rows: [1, 1], track: 0.03, object: 'sign-box', pad: [50, 34], fill: [0.98, 0.34] },
   // terminal: a session. Everything starts at a margin, one cell wide, flush left, and the pane is the screen.

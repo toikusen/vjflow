@@ -227,14 +227,16 @@ const strokesPage: HandGround = (e) => { sheetOf(e, 'strokes', (b) => {
 const Gs: Record<string, HandGround> = { 'watercolor/wash': washPage, 'watercolor/night': nightPage, 'watercolor/bloom': bloomPage, 'watercolor/strokes': strokesPage };
 for (const [id, page] of Object.entries(B5B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);
 
-/** A glaze band as a picture, kept: a pale wash with its rim, the leading edge hard. */
+/** A glaze band as a picture, kept: a pale wash multiplied onto the sheet, its leading edge hard and pooled darker, its
+ * trailing side broken where the brush lifted. */
 const glazeBand = (tone: string) => kept(`wc-glaze|${tone}`, 520, H, (c) => {
   const g = c.createImageData(520, H);
-  const C = rgb(tone);
+  const C = rgb(mixHex(tone, B5B.xFBF8F1, 0.62));
   for (let y = 0; y < H; y++) for (let x = 0; x < 520; x++) {
     const d = 520 - 40 * fbm(y * 0.01, 0, 3) - x;
-    if (d < 0) continue;
-    const a = clamp01(0.3 + 0.4 * Math.exp(-d / 4) + (vnoise(x * 0.5, y * 0.5, 7) - 0.5) * 0.06);
+    const back = x - 120 * fbm(y * 0.013, 5, 4);
+    if (d < 0 || back < 0) continue;
+    const a = clamp01(0.32 + 0.45 * Math.exp(-d / 4) + (vnoise(x * 0.5, y * 0.5, 7) - 0.5) * 0.08);
     const i = (y * 520 + x) * 4;
     for (let k = 0; k < 3; k++) g.data[i + k] = 255 * C[k];
     g.data[i + 3] = a * 255;
@@ -243,9 +245,12 @@ const glazeBand = (tone: string) => kept(`wc-glaze|${tone}`, 520, H, (c) => {
 });
 const INS: Record<string, HandIn> = {
   // a change of part: a pale glaze is brushed across the sheet left to right and lifts off, its leading edge hard
-  'glaze-sweep': { sec: 0.55, draw: (e, q) => frame(e, (c) => {
+  'glaze-sweep': { sec: 0.45, draw: (e, q) => frame(e, (c) => {
     const x = -520 + (W + 520) * ease(q, 2);
+    c.save();
+    c.globalCompositeOperation = 'multiply';
     c.drawImage(glazeBand(e.slots.plateInk), x, 0);
+    c.restore();
   }) },
 };
 

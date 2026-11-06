@@ -588,7 +588,8 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
   },
   screentone: {
     own: [],
-    text: { ghost: [0.05, 0.05] },
+    // (no offset copy under the words: the screentone world inks its own letters and sound-effect rings, and a copy
+    // behind them merged the strokes, 2026-11-06)
     name: '漫畫網點',
     essence: '一頁少女漫畫在動：白紙黑線、網點紙貼出的灰階與漸層、分格框切開畫面，心情用背景的花、光點和集中線來說；最強烈的一刻整頁只剩一個大格。',
     not: '不是美漫普普（沒有粗彩色網點），也不是全彩動畫：除了一個淡淡的特色色，全部是黑白灰。',
@@ -704,7 +705,8 @@ export const LANGUAGES: Record<LanguageId, DesignLanguage> = {
   embroidery: {
     own: ['heart'],
     koma: 12,
-    text: { ghost: [0.03, 0.03] },
+    // (no offset copy under the words: the embroidery world stitches its own letters with their thread shadow, and a
+    // copy behind a cross-stitched word filled its counters, 2026-11-06)
     name: '刺繡',
     essence: '一塊繃在繡框裡的布：棉麻的織紋、彩色繡線一針一針繡出的圖案（平針、十字繡、鎖鏈繡），線有光澤和厚度；圖案是一針一針「繡」出來的。',
     not: '不是向量插畫（線不是平的），也不是蠟筆（沒有塗色）：所有圖形都由一段段有方向的針腳構成。',

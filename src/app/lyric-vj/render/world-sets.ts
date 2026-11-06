@@ -7,6 +7,7 @@ import { R2_SETS } from './world-r2-sets';
 import { B4_SETS } from './world-b4-sets';
 import { DOC_SETS } from './world-doc-sets';
 import { B4B_SETS } from './world-b4b-sets';
+import { B5_SETS } from './world-b5-sets';
 import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
@@ -259,6 +260,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   ...DOC_SETS,
   // style batch 4's cyanotype, isometric and cel80s keep theirs in world-b4b-sets.ts
   ...B4B_SETS,
+  // style batch 5's embroidery, screentone, art-deco and notebook keep theirs in world-b5-sets.ts
+  ...B5_SETS,
 };
 
 /** Width of a string at size 100, in px. */

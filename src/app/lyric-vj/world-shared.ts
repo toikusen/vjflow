@@ -59,6 +59,12 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   // the thermal receipt (2026-11-05): its key ink is its own black or red, so a run or a sweep only marks the beat a hair (no
   // ghost copy: a receipt is never printed twice)
   document: s(['ink-run', 'light-sweep'], ['plate', 'extrude'], 'still'),
+  // style batch 5 (2026-11-06): thread runs along its stitches and the hoop rolls; a manga panel punches on the beat and
+  // cracks; a deco poster takes a sweep of light and runs its gilt; a notebook's pen runs and punches its marks
+  embroidery: s(['ink-run', 'roll'], ['plate', 'extrude'], 'diagonal'),
+  screentone: s(['beat-punch', 'crack'], ['extrude', 'plate'], 'diagonal'),
+  'art-deco': s(['light-sweep', 'ink-run'], ['plate', 'extrude'], 'push-through'),
+  notebook: s(['ink-run', 'beat-punch'], ['extrude', 'plate'], 'still'),
   psychedelic: s(['ink-run', 'roll'], ['plate', 'extrude'], 'push-through'),
   graffiti: s(['crack', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
   brutalist: s(['crack', 'beat-punch'], ['extrude', 'plate'], 'diagonal'),

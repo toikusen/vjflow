@@ -6,6 +6,7 @@ import { R2_ENTERS, R2_EXITS, R2_HOLDS } from './world-r2-motion';
 import { B4_ENTERS, B4_EXITS, B4_HOLDS } from './world-b4-motion';
 import { DOC_ENTERS, DOC_EXITS, DOC_HOLDS } from './world-doc-motion';
 import { B4B_ENTERS, B4B_EXITS, B4B_HOLDS } from './world-b4b-motion';
+import { B5_ENTERS, B5_EXITS, B5_HOLDS } from './world-b5-motion';
 
 export interface GlyphEnv {
   /** Progress through the entrance or the exit, 0..1. */
@@ -236,6 +237,10 @@ Object.assign(WORLD_HOLDS, DOC_HOLDS);
 Object.assign(WORLD_ENTERS, B4B_ENTERS);
 Object.assign(WORLD_EXITS, B4B_EXITS);
 Object.assign(WORLD_HOLDS, B4B_HOLDS);
+// style batch 5's embroidery, screentone, art-deco and notebook keep theirs in world-b5-motion.ts
+Object.assign(WORLD_ENTERS, B5_ENTERS);
+Object.assign(WORLD_EXITS, B5_EXITS);
+Object.assign(WORLD_HOLDS, B5_HOLDS);
 
 /** Seconds a move gets when a line has `room` past its reading: shortened, or given up for a plain cut, never paid for by reading. */
 export function moveSec(want: number, room: number, pace = 1) {

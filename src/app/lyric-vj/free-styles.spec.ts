@@ -3,6 +3,7 @@ import { contrast } from './contrast';
 import { FREE_STYLES, HELD_WORLDS, OFFERED_STYLES, recommendStyle, STYLE_PALETTES, styleFont, styleGroups } from './free-styles';
 import { FONTS } from './fonts';
 import { FACELESS_SURFACES } from './render/world-glyph-doc';
+import { THREAD_SURFACES } from './render/world-glyph-b5';
 import { LANGUAGES } from './languages';
 import { freeJob } from './free-plan';
 import type { SongTimeline } from './timeline';
@@ -29,16 +30,17 @@ describe('free styles', () => {
     expect(styleFont(FREE_STYLES[0], 'さよならの歌', false)).toBe('Zen Kaku Gothic New');
     expect(new Set(FREE_STYLES.map((s) => s.fonts.tc)).size).toBeGreaterThanOrEqual(8);
   });
-  // the 2026-11-04 font table, over every world (held ones too): a Traditional Chinese face serves at most two worlds, and
-  // no two worlds share both faces. The neutral text faces, Noto Sans TC and Noto Serif TC, may serve a third (owner,
-  // 2026-11-05: batch 4's isometric and cyanotype)
+  // the font table, over every world (held ones too): a Traditional Chinese face serves at most three worlds (owner,
+  // 2026-11-06, relaxed from two so batch 5's boards keep their faces; a family counted by its own name, as the batch-5
+  // quota table counts it), and no two worlds share both faces
   it('give each world its own faces', () => {
-    // (an HK cut draws the same as its TC twin: one face)
-    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family.replace(/^Noto (Sans|Serif) HK$/, 'Noto $1 TC');
-    const most = (face: string) => (/^Noto (Sans|Serif) TC$/.test(face) ? 3 : 2);
-    // (a world drawn on a print head's dots shows the dots, not its face: document's thermal receipt, 2026-11-05)
-    const faced = FREE_STYLES.filter((s) => !FACELESS_SURFACES.has(s.world!.material.surface ?? ''));
-    for (const s of faced) expect(faced.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(most(tc(s)));
+    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family;
+    const MOST = 3;
+    // (a world drawn on a print head's dots shows the dots, not its face: document's thermal receipt, 2026-11-05; nor does
+    // one stitched in thread: embroidery's satin and cross-stitch, 2026-11-06)
+    const faceless = new Set([...FACELESS_SURFACES, ...THREAD_SURFACES]);
+    const faced = FREE_STYLES.filter((s) => !faceless.has(s.world!.material.surface ?? ''));
+    for (const s of faced) expect(faced.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(MOST);
     const pairs = faced.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
     expect(new Set(pairs).size).toBe(pairs.length);
     for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === s.world!.type.tc.family), s.id).toBe(true);

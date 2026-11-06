@@ -67,6 +67,9 @@ export const LABELS = {
   // gameshow
   hint: f('提示', 'ヒント', 'HINT'),
   timeLeft: f('時間', '残り時間', 'TIME'),
+  // notebook's head fields (left blank: no invented entry)
+  number: f('編號', 'No.', 'No.'),
+  date: f('日期', '日付', 'Date'),
   // receipt
   item: f('品名', '品名', 'ITEM'),
   part: f('段落', 'パート', 'PART'),

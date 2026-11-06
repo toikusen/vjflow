@@ -127,9 +127,16 @@ function star(c: C, x: number, y: number, r: number, paper: string) {
   c.lineTo(x, y + r * 3);
   c.stroke();
 }
-/** A call beside the line (engine placeCall) is set in a narration box of its own: never over tone or speed lines. */
+/** The least half-height of an oval round words `h` half-high: room for its width to close round their corners. */
+const oval = (h: number) => (h + 24) * 1.15;
+/** The half-width an oval of half-height `ry` needs to hold a box `w` × `h` (halves) with 24 px to spare at its corners. */
+const round = (w: number, h: number, ry: number) => (w + 24) / Math.sqrt(Math.max(0.05, 1 - ((h + 24) / ry) ** 2));
+/** A call beside the line (engine placeCall) is set in a narration box of its own: never over tone or speed lines. (A
+ * turned sound effect's box is wider than its cells and its rings: no call is read off it.) */
 function callBoxes(c: C, e: WorldEnv) {
-  for (const b of beyondCells(e)) {
+  const r = e.rect as { face?: { shear: number[] }; faces?: { shear: number[] }[] } | undefined;
+  if ([...(r?.faces ?? []), ...(r?.face ? [r.face] : [])].some((f) => f.shear[1] !== 0)) return;
+  for (const b of beyondCells(e, 60)) {
     const r = { x0: Math.max(40, b.x0 + 8), y0: Math.max(40, b.y0 + 8), x1: Math.min(W - 40, b.x1 - 8), y1: Math.min(H - 40, b.y1 - 8) };
     if (r.x1 - r.x0 < 30 || r.y1 - r.y0 < 30) continue;
     c.fillStyle = e.slots.ground;
@@ -178,7 +185,8 @@ const shout: HandGround = (e) => frame(e, (c) => {
   const b = hero ?? wordsBox(e);
   const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
   // (its spikes reach past the panel, as the board's do, but never out of the frame: it stays round the words, no taller)
-  const [rx, ry] = [Math.max(230, (b.x1 - b.x0) / 2 + 130), Math.max((b.y1 - b.y0) / 2 + 40, Math.min(Math.max(300, (b.y1 - b.y0) / 2 + 80), (Math.min(cy, H - cy) - 12) / 1.28))];
+  const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min(Math.max(300, (b.y1 - b.y0) / 2 + 80), (Math.min(cy, H - cy) - 12) / 1.28));
+  const rx = Math.max(230, (b.x1 - b.x0) / 2 + 130, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry));
   focus(c, A_LEFT, cx, cy, Math.max(rx, ry) * 0.8, 220, ink, 71);
   rim(c, A_LEFT, ink);
   unlit(c, e, [A_LEFT, A_RIGHT]);
@@ -259,7 +267,7 @@ const balloons: HandGround = (e) => frame(e, (c) => {
   }), 0, 0);
   const { hero, rest } = parts(e, 0.608 * W);
   // (a balloon stays inside its panel where the words leave it room, and always round them)
-  const one = (b: Box, tail: Pt) => { const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; balloon(c, cx, cy, Math.max(150, (b.x1 - b.x0) / 2 + 92), Math.max((b.y1 - b.y0) / 2 + 36, Math.min((b.y1 - b.y0) / 2 + 92, cy - 72, 992 - cy)), tail, ink, paper); };
+  const one = (b: Box, tail: Pt) => { const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2]; const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min((b.y1 - b.y0) / 2 + 92, cy - 72, 992 - cy)); balloon(c, cx, cy, Math.max(150, (b.x1 - b.x0) / 2 + 92, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry)), ry, tail, ink, paper); };
   if (hero) one(hero, [Math.min(1560, hero.x1 + 200), Math.min(980, hero.y1 + 110)]);
   if (rest) one(rest, [Math.max(360, rest.x0 - 180), Math.max(80, rest.y0 - 110)]);
   foot(c, e);
@@ -303,8 +311,8 @@ const burst: HandGround = (e) => frame(e, (c) => {
   }), 0, 0);
   const b = wordsBox(e);
   const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
-  const rx = Math.max(300, (b.x1 - b.x0) / 2 + 150);
-  const ry = Math.max((b.y1 - b.y0) / 2 + 50, Math.min((b.y1 - b.y0) / 2 + 150, (Math.min(cy, H - cy) - 12) / 1.28));
+  const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min((b.y1 - b.y0) / 2 + 150, (Math.min(cy, H - cy) - 12) / 1.28));
+  const rx = Math.max(300, (b.x1 - b.x0) / 2 + 150, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry));
   focus(c, E_LEFT, cx, cy, Math.max(rx, ry) * 0.8, 220, ink, 73);
   rim(c, E_LEFT, ink);
   spiky(c, cx, cy, rx, ry, 24, ink, paper, 11);

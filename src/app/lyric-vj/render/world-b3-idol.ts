@@ -13,6 +13,8 @@ const GREY = B3.x7A6F92;
 const FRED = (px: number, w = 700) => `${w} ${px}px Fredoka, "Zen Maru Gothic", "Mochiy Pop One", sans-serif`;
 const ZM = (px: number, w = 700) => `${w} ${px}px "Zen Maru Gothic", "Mochiy Pop One", sans-serif`;
 const NAMES = ['PINK', 'BLUE', 'MINT', 'LEMON', 'LILAC'];
+/** A time in the song as a ticket prints its show time, m:ss. */
+const clockOf = (t: number) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 
 const page = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
 /** Pink gingham: two crossing sets of 40 px bands at 22 % (dark schemes: the same weave in plum). */
@@ -65,13 +67,22 @@ const ticket: HandGround = (e) => page(e, (c) => {
   MEMBER.forEach((m, i) => { c.fillStyle = m; c.fillRect(tx, ty + (th * i) / 5, 28, th / 5 + 1); });
   c.restore();
   const tear = tx + tw - 290;
-  label(c, titleOf(e), tx + 90, ty + 88, FRED(24), GREY, 4);
-  c.fillStyle = B3.x2B2140;
-  c.fillRect(tx + 90, ty + 112, tear - tx - 170, 3);
-  label(c, say(e, 'song'), tx + 90, ty + th - 76, FRED(16), GREY, 2);
-  label(c, titleOf(e), tx + 90, ty + th - 40, ZM(30), B3.x2B2140);
+  // the ticket prints only what is real: the song's title and artist on a cut in the song's opening (world-title.ts),
+  // after it the time the cut opens at, as a ticket's show time. A field is printed with its value or not at all: an
+  // empty 曲名 slot stood on every ticket past the first 15 s (部署前比對 2026-11-06)
+  const title = titleOf(e);
+  // (the header and its rule only over a title: a rule under nothing was a bare line)
+  if (title) {
+    label(c, title, tx + 90, ty + 88, FRED(24), GREY, 4);
+    c.fillStyle = B3.x2B2140;
+    c.fillRect(tx + 90, ty + 112, tear - tx - 170, 3);
+  }
+  // (the field heads at a size and weight that read on the white, in the world's face: 16 px CJK came out small and faint)
+  const field = (key: 'song' | 'artist' | 'time', value: string, x: number) => { label(c, say(e, key), x, ty + th - 80, FRED(23, 700), GREY, 2); label(c, value, x, ty + th - 40, ZM(30), B3.x2B2140); };
+  if (title) field('song', title, tx + 90);
+  else field('time', clockOf(e.now - Math.max(0, e.age)), tx + 90);
   const who = artistBy(e);
-  if (who) { label(c, say(e, 'artist'), tx + 380, ty + th - 76, FRED(16), GREY, 2); label(c, who, tx + 380, ty + th - 40, ZM(30), B3.x2B2140); }
+  if (who) field('artist', who, tx + 380);
   c.strokeStyle = B3.xCFC6E2;
   c.lineWidth = 5;
   c.setLineDash([2, 10]);

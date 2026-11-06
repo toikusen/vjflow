@@ -8,6 +8,7 @@ import { B4_SETS } from './world-b4-sets';
 import { DOC_SETS } from './world-doc-sets';
 import { B4B_SETS } from './world-b4b-sets';
 import { B5_SETS } from './world-b5-sets';
+import { B5B_SETS } from './world-b5b-sets';
 import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
@@ -53,7 +54,7 @@ export interface SetSpec {
   ink?: keyof Slots;
   core?: keyof Slots;
   /** Surfaces laid under the letters, outermost first, each in a slot's tone: rings that must never cross a letter. */
-  under?: { kind: SurfaceKind; tone: keyof Slots }[];
+  under?: { kind: SurfaceKind; tone: keyof Slots; /** What the letter stands on (a sticker's backing): kept when the words are taken away to be read. */ carrier?: boolean }[];
   /** A round or square carrier (a rose's roundel): a short run of Han or kana with no break is still split into even rows. */
   square?: boolean;
   /** Each row's ink, a slot a row (the last repeats): a second row the board sets apart (a file's entry in stamp red). */
@@ -262,6 +263,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   ...B4B_SETS,
   // style batch 5's embroidery, screentone, art-deco and notebook keep theirs in world-b5-sets.ts
   ...B5_SETS,
+  // style batch 5's scrapbook, watercolor, midcentury and claymation keep theirs in world-b5b-sets.ts
+  ...B5B_SETS,
 };
 
 /** Width of a string at size 100, in px. */
@@ -300,7 +303,7 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const extent = (size: number): [number, number] => {
     const longest = Math.max(...pick.rows.map((r) => (spec.vertical ? [...r].length * (1 + spec.track) * size : (measure(r) * size) / 100 + ([...r].length - 1) * spec.track * size)));
     const stepped = (spec.stair ?? 0) * size * (n - 1);
-    const dropped = spec.vertical ? 0 : (spec.drop ?? 0) * size * (most - 1);
+    const dropped = spec.vertical ? 0 : Math.abs(spec.drop ?? 0) * size * (most - 1);
     return spec.vertical ? [n * size * spec.lead, longest + stepped] : [longest + stepped, n * size * spec.lead + dropped];
   };
   // the type floor never pushes a line out of the frame: a line too long for its set at the floor is set smaller (never
@@ -350,7 +353,7 @@ const clampTo = (x: number, r: number) => Math.min(r, Math.max(-r, x));
 const sizeAcross = (rows: string[], s: SetSpec, m: Measure) => {
   const em = Math.max(...rows.map((r) => m(r) / 100 + ([...r].length - 1) * s.track));
   const stepped = (s.stair ?? 0) * (rows.length - 1);
-  const dropped = (s.drop ?? 0) * (Math.max(...rows.map((r) => [...r].length)) - 1);
+  const dropped = Math.abs(s.drop ?? 0) * (Math.max(...rows.map((r) => [...r].length)) - 1);
   return Math.min(s.hi, (s.share * W) / (em + stepped), (s.tall * H) / (rows.length * s.lead + dropped));
 };
 const sizeUp = (cols: string[], s: SetSpec, _m: Measure) => {

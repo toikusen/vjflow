@@ -2,7 +2,7 @@
 // exactly where the face drew it: these only change what fills it and what lies round it, so a counter stays open and a thin
 // stroke stays whole. Colours arrive from the world's slots in the surface string.
 
-export type SurfaceKind = 'bitmap' | 'tube' | 'phosphor' | 'lamp' | 'brush' | 'silver' | 'lead' | 'gilt' | 'tape' | HandSurface | LoudSurface | B4Surface | DocSurface | B4bSurface | B5Surface;
+export type SurfaceKind = 'bitmap' | 'tube' | 'phosphor' | 'lamp' | 'brush' | 'silver' | 'lead' | 'gilt' | 'tape' | HandSurface | LoudSurface | B4Surface | DocSurface | B4bSurface | B5Surface | B5bSurface;
 
 export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten: boolean }
 export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}`;
@@ -15,6 +15,7 @@ import { b4Surface, B4Surface, isB4Surface } from './world-glyph-b4';
 import { docSurface, DocSurface, isDocSurface } from './world-glyph-doc';
 import { b4bSurface, B4bSurface, isB4bSurface } from './world-glyph-b4b';
 import { b5Surface, B5Surface, isB5Surface } from './world-glyph-b5';
+import { b5bSurface, B5bSurface, isB5bSurface } from './world-glyph-b5b';
 
 const fract = (x: number) => x - Math.floor(x);
 const hash = (a: number, b = 0) => fract(Math.sin(a * 127.1 + b * 311.7) * 43758.5453);
@@ -78,6 +79,7 @@ export function applySurface(canvas: HTMLCanvasElement, ctx: CanvasRenderingCont
   if (isB4Surface(s.kind)) { b4Surface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); ctx.restore(); return; }
   if (isB4bSurface(s.kind)) { b4bSurface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); ctx.restore(); return; }
   if (isB5Surface(s.kind)) { b5Surface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); ctx.restore(); return; }
+  if (isB5bSurface(s.kind)) { b5bSurface(ctx, s.kind, { mask: m, tone, tinted, tint: s.tint, core: s.core, px, seed, cw, ch }); ctx.restore(); return; }
   switch (s.kind) {
     case 'tube': {
       // bent glass: light thrown on the wall, the coloured gas, the hot middle of the bore

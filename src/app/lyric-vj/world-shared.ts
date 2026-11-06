@@ -65,6 +65,12 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
   screentone: s(['beat-punch', 'crack'], ['extrude', 'plate'], 'diagonal'),
   'art-deco': s(['light-sweep', 'ink-run'], ['plate', 'extrude'], 'push-through'),
   notebook: s(['ink-run', 'beat-punch'], ['extrude', 'plate'], 'still'),
+  // style batch 5 (2026-11-06): stickers punch and roll on the beat; a wash runs and the light passes over the sheet; a
+  // screen print slips its plate and the cut paper punches; clay punches and rolls (all without ghost copies)
+  scrapbook: s(['beat-punch', 'roll'], ['plate', 'extrude'], 'diagonal'),
+  watercolor: s(['ink-run', 'light-sweep'], ['plate', 'outline'], 'push-through'),
+  midcentury: s(['plate-slip', 'beat-punch'], ['plate', 'extrude'], 'diagonal'),
+  claymation: s(['beat-punch', 'roll'], ['extrude', 'plate'], 'diagonal'),
   psychedelic: s(['ink-run', 'roll'], ['plate', 'extrude'], 'push-through'),
   graffiti: s(['crack', 'ink-run'], ['extrude', 'outline'], 'diagonal'),
   brutalist: s(['crack', 'beat-punch'], ['extrude', 'plate'], 'diagonal'),

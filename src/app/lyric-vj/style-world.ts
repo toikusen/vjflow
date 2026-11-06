@@ -81,6 +81,8 @@ export interface StyleWorld {
   handoffs?: boolean;
   /** Its lines keep to its own entrances and exits: a machine's motion takes none of the shared squash, roll or slice. */
   ownMoves?: boolean;
+  /** Its pages print each line's part and start time (a ticket stub, a sleeve's credit line): the song's parts are read for it. */
+  printsParts?: boolean;
   /** The slot a call beside a line is set in, when not the accent (a receipt's red is for its TOTAL only). */
   callSlot?: keyof Slots;
 }

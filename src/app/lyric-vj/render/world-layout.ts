@@ -144,7 +144,8 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
     let at = (flush < 0 ? -block.w / 2 : flush > 0 ? block.w / 2 - w : -w / 2) + (flush > 0 ? -stepped : stepped);
     // (a row whose characters step down is set from the block's top: the steps take the height under the rows)
     const drop = (spec.drop ?? 0) * block.size;
-    const cy = drop ? block.h / 2 - (r + 0.5) * block.size * spec.lead : ((n - 1) / 2 - r) * block.size * spec.lead;
+    // (one that steps up is set from the block's bottom)
+    const cy = drop > 0 ? block.h / 2 - (r + 0.5) * block.size * spec.lead : drop < 0 ? -block.h / 2 + (n - r - 0.5) * block.size * spec.lead : ((n - 1) / 2 - r) * block.size * spec.lead;
     ids.forEach((id, i) => {
       at += gaps[i];
       x[id] = at + adv[i] / 2;
@@ -300,6 +301,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // all of them under every letter, so a ring never crosses a letter, its own or its neighbour's
   const unders = sets.map((st, p) => (st.under ?? []).map((u) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceKey({ kind: u.kind, tint: slots[u.tone], core: tintOf(g, p), eaten: false }) }).texture)));
   const underLayers = Array.from({ length: Math.max(0, ...unders.map((u) => u.length)) }, (_, L) => makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, 'white').map((u) => { const o = -4.8 + L * 0.2; u.mesh.renderOrder = o; u.mesh.traverse((x) => (x.renderOrder = o)); u.mesh.visible = false; u.mesh.userData['noVeil'] = true; return u; }));
+  // (a layer a set names as the letters' carrier, a sticker's backing, is what the words stand on: kept when they are taken away to be read)
+  underLayers.forEach((layer, L) => { if (sets.some((st) => st.under?.[L]?.carrier)) layer.forEach((u) => (u.mesh.userData['decor'] = true)); });
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));

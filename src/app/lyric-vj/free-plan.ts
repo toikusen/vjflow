@@ -116,7 +116,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   const titleOf = String(song.title ?? '').slice(0, 40);
   // each line as an item of the song (its number, its part, the lines before it), for a world that prints it (one whose
   // sets are bound to a part: the song's parts are read only then, a long song's structure is not free)
-  const prints = !!world?.layouts.lines.some((l) => l.closing !== undefined);
+  const prints = !!world?.printsParts || !!world?.layouts.lines.some((l) => l.closing !== undefined);
   const parts = prints ? lineParts(song0) : new Map<string, LinePart>();
   // the world's small labels speak the lyric's language (labels.ts), the parts' names included
   const lang = labelLangOf(song.cues.map((x) => x.text));

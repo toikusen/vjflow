@@ -48,7 +48,7 @@ function line1d(f: Float32Array, n: number, d: Float32Array, v: Int32Array, z: F
   }
 }
 /** Distance, px, from every pixel to the nearest pixel where `inside` holds. */
-function distanceTo(inside: (i: number) => boolean, w: number, h: number) {
+export function distanceTo(inside: (i: number) => boolean, w: number, h: number) {
   const out = new Float32Array(w * h);
   const n = Math.max(w, h);
   const [f, d, z, v] = [new Float32Array(n), new Float32Array(n), new Float32Array(n + 1), new Int32Array(n)];

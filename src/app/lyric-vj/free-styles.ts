@@ -29,7 +29,7 @@ export interface FreeStyle {
 export const FREE_STYLES: FreeStyle[] = STYLE_WORLDS.map((w) => ({ id: w.id, name: w.name, from: w.language, what: w.what, palettes: w.palette.map((s) => s.id), fonts: { ja: w.type.ja.family, tc: w.type.tc.family, calm: w.type.tc.family }, world: w }));
 
 /** Worlds held back from the picker, rerolls and defaults until the owner passes them (style batch 5, 2026-11-06). A saved pick still renders. */
-export const HELD_WORLDS = new Set<string>(['embroidery', 'screentone', 'art-deco', 'notebook']);
+export const HELD_WORLDS = new Set<string>(['embroidery', 'screentone', 'art-deco', 'notebook', 'scrapbook', 'watercolor', 'midcentury', 'claymation']);
 
 /** The styles offered to a buyer. */
 export const OFFERED_STYLES = FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id));
@@ -50,6 +50,7 @@ const SHORT: Record<string, string> = {
   phone: '手機螢幕上的時鐘、輸入與來電', blueprint: '藍圖上的尺寸線與工程字', xerox: '影印傳單的剪貼字條與碳粉',
   cyanotype: '藍曬紙上的蕨葉與蕾絲剪影', isometric: '等角方塊、階梯與牆上的字', cel80s: '八〇動畫片頭的標題與星芒',
   embroidery: '繡框裡一針一針繡的字', screentone: '黑白漫畫的網點與對話框', 'art-deco': '金線日芒與階梯框的海報', notebook: '筆記本上的手寫與圈線',
+  scrapbook: '花紋紙上的字母貼紙', watercolor: '透明水彩的乾邊與疊色', midcentury: '五〇年代剪紙與原子星', claymation: '黏土板上的黏土字',
   silk: '平塗油墨，版微微錯開', 'silk-cold': '冷色網版，適合安靜的歌', riso: '透明墨疊印，留白多', file: '攤開的案件檔案', document: '感熱收據逐行印出，副歌是合計', spy: '剪紙片頭，大塊斜切', card: '節拍上翻面的閃卡',
 };
 

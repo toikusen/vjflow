@@ -30,13 +30,17 @@ import { XEROX } from './world-b4-xerox';
 import { CEL } from './world-b4-cel';
 import { CYAN } from './world-b4-cyan';
 import { ISO } from './world-b4-iso';
+import { SCRAP } from './world-b5b-scrap';
+import { WC } from './world-b5b-wc';
+import { MC } from './world-b5b-mc';
+import { CLAY } from './world-b5b-clay';
 import { EMBROIDERY } from './world-b5-embroidery';
 import { SCREENTONE } from './world-b5-screentone';
 import { DECO } from './world-b5-deco';
 import { NOTEBOOK } from './world-b5-notebook';
 
 interface Pack { grounds: Record<string, HandGround>; ins: Record<string, HandIn>; pieces: Record<string, Piece>; objects: Record<string, ObjectPaint> }
-const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP, FILE, CARD, GLASS, PHONE, BLUEPRINT, XEROX, CYAN, ISO, CEL, DOCUMENT, EMBROIDERY, SCREENTONE, DECO, NOTEBOOK];
+const PACKS: Pack[] = [UKIYOE, PAPERCUT, LANTERN, CHIYOGAMI, WOODCUT, CHALK, AIZOME, CRAYON, POPART, GAMESHOW, IDOL, Y2K, PSYCHEDELIC, GRAFFITI, BRUTALIST, CITYPOP, FILE, CARD, GLASS, PHONE, BLUEPRINT, XEROX, CYAN, ISO, CEL, DOCUMENT, EMBROIDERY, SCREENTONE, DECO, NOTEBOOK, SCRAP, WC, MC, CLAY];
 export type HandObject = 'cartouche' | 'shikishi' | 'cut-panel' | 'cut-banner' | 'lit-paper' | 'noshi' | 'fold-kite' | 'colour-plate' | 'mend-patch' | 'tenugui' | 'pad-sheet'
   | 'pop-balloon' | 'pop-balloon-r' | 'pop-twin-balloons' | 'pop-caption' | 'gs-q-banner' | 'gs-answer-cells' | 'gs-row-tiles' | 'gs-qa' | 'gs-qa-r' | 'gs-hint' | 'idol-card' | 'gf-buff' | 'cp-column' | 'xx-strip';
 export const handGrounds = Object.assign({}, ...PACKS.map((p) => p.grounds)) as Record<string, HandGround>;

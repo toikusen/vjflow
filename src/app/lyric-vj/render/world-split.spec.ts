@@ -21,9 +21,10 @@ describe('split lines (one line in two sizes or two containers)', () => {
         if (!b.lines) continue;
         const small = b.small!.map((r) => b.lines![r].size);
         const big = b.lines!.filter((_, r) => !b.small!.includes(r)).map((l) => l.size);
-        // (a set that splits only to ink the part apart keeps one size: scale ≥ 0.9)
+        // (a set that splits only to ink the part apart keeps one size: scale ≥ 0.9; a part set apart bigger, scale over
+        // 1, is a sound effect beside its balloon, screentone's shout, and is only held to the floor and the frame)
         if (s.split!.scale < 0.9) expect(Math.max(...small), `${id} ${text}`).toBeLessThan(Math.min(...big));
-        else expect(Math.max(...small), `${id} ${text}`).toBeLessThanOrEqual(Math.min(...big));
+        else if (s.split!.scale <= 1) expect(Math.max(...small), `${id} ${text}`).toBeLessThanOrEqual(Math.min(...big));
         expect(Math.min(...small), `${id} ${text}`).toBeGreaterThanOrEqual(TYPE_FLOOR.lo * 0.7);
         expect(inFrame(b), `${id} ${text}`).toBe(true);
       }

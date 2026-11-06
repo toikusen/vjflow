@@ -331,5 +331,41 @@
   "small": 0,
   "cross": 0,
   "low": 0
+ },
+ "embroidery": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 2,
+  "small": 2,
+  "cross": 0,
+  "low": 1
+ },
+ "screentone": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 4,
+  "low": 0
+ },
+ "art-deco": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 2,
+  "cross": 0,
+  "low": 0
+ },
+ "notebook": {
+  "moments": 489,
+  "glow": 0,
+  "clip": 0,
+  "plate": 0,
+  "small": 0,
+  "cross": 0,
+  "low": 0
  }
 }

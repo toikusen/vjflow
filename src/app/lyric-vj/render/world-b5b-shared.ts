@@ -5,6 +5,7 @@ import { H, W, WorldEnv } from './world-craft';
 import { artistBy, C, label, onPage, still, titleOf } from './world-b3-shared';
 import { langOfEnv } from '../labels';
 import { splitCalls } from '../calls';
+import { splitParts } from './world-split';
 
 export type Box = { x0: number; y0: number; x1: number; y1: number };
 export const frame = (e: WorldEnv, f: (c: CanvasRenderingContext2D) => void) => { const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); f(c); c.restore(); };
@@ -58,5 +59,7 @@ export function dataRows(e: WorldEnv): { title: string; artist: string; part: st
 export const dataLine = (e: WorldEnv, sep = '　') => { const d = dataRows(e); return [d.artist, d.title, d.part].filter(Boolean).join(sep); };
 export const isJa = (e: WorldEnv) => langOfEnv(e) === 'ja';
 export { W, H };
-/** Whether the line has two phrases to lay on two carriers (its calls aside); with no line known, whether its box reaches below `y`. */
-export const twoPhrases = (e: WorldEnv, y = 0.55 * H) => (e.item?.text ? /\S\s+\S/.test(splitCalls(e.item.text).main.trim()) : !e.rect || e.rect.y1 > y);
+/** Whether the line is split onto two carriers (its calls aside); with no line known, whether its box reaches below `y`. */
+export const twoPhrases = (e: WorldEnv, y = 0.55 * H) =>
+  // (as the set splits it, world-split splitParts: two containers of one size, at the space nearest the middle)
+  e.item?.text ? !!splitParts(splitCalls(e.item.text).main.trim(), 'tail', true) : !e.rect || e.rect.y1 > y;

@@ -115,7 +115,7 @@ export const MIDCENTURY_WORLD: StyleWorld = {
   palette: [
     // (board: cream #F1E6CC, mustard #D9A426, teal #1F5F5B, orange #D2582A, olive #4E5226, ink #1E1B18)
     scheme('cream-sleeve', 'warm', 'light', '#F1E6CC', '#1E1B18', '#1F5F5B', '#B8461F', '#D9A426', '#1E1B18', '#F1E6CC', '米色封套，芥黃與青的色條'),
-    scheme('mustard-sleeve', 'earth', 'mid', '#D9A426', '#1E1B18', '#1F5F5B', '#1F5F5B', '#E0A82E', '#1E1B18', '#F1E6CC', '芥黃封套，黑與米色的色條'),
+    scheme('mustard-sleeve', 'earth', 'mid', '#D9A426', '#1E1B18', '#1F5F5B', '#1F5F5B', '#F1E6CC', '#1E1B18', '#F1E6CC', '芥黃封套，黑與米色的色條'),
     scheme('teal-print', 'cold', 'light', '#E9E0C8', '#1E1B18', '#245E6E', '#B8461F', '#E0A82E', '#1E1B18', '#F1E6CC', '偏冷的灰米，藍青色條'),
     scheme('olive-print', 'earth', 'light', '#EFE4C6', '#1E1B18', '#4E5226', '#B8461F', '#D9A426', '#1E1B18', '#F1E6CC', '橄欖與芥黃'),
     scheme('orange-sleeve', 'warm', 'light', '#F1E6CC', '#1E1B18', '#1F5F5B', '#1F5F5B', '#E07B39', '#1E1B18', '#F1E6CC', '橘紅色條的封套'),

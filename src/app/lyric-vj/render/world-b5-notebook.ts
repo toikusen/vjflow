@@ -218,7 +218,7 @@ const Gs: Record<string, HandGround> = { 'notebook/spiral': spiral, 'notebook/do
 
 const INS: Record<string, HandIn> = {
   // the page is turned: the next sheet sweeps up from the bottom with a thin shadow at its edge, never over the words
-  'leaf-turn': { sec: 0.4, draw: (e, q) => frame(e, (c) => {
+  'notebook-turn': { sec: 0.4, draw: (e, q) => frame(e, (c) => {
     if (q >= 1) return;
     const y = H * (1 - ease(q, 3));
     c.save();

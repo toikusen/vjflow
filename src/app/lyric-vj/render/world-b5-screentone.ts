@@ -8,7 +8,7 @@
 import type { Piece } from './world-pieces';
 import { clamp01, ease, H, HandGround, HandIn, kept, W, WorldEnv } from './world-craft';
 import { C, halftone, rng, sparklePath } from './world-b3-shared';
-import { Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
+import { beyondCells, Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
 
 type Pt = [number, number];
 const SERIF = (px: number) => `400 ${px}px "Cactus Classical Serif", "Zen Antique", serif`;
@@ -127,12 +127,29 @@ function star(c: C, x: number, y: number, r: number, paper: string) {
   c.lineTo(x, y + r * 3);
   c.stroke();
 }
-/** The page's foot: title and artist in the opening, the cut's time. */
+/** A call beside the line (engine placeCall) is set in a narration box of its own: never over tone or speed lines. */
+function callBoxes(c: C, e: WorldEnv) {
+  for (const b of beyondCells(e)) {
+    const r = { x0: Math.max(40, b.x0 + 8), y0: Math.max(40, b.y0 + 8), x1: Math.min(W - 40, b.x1 - 8), y1: Math.min(H - 40, b.y1 - 8) };
+    if (r.x1 - r.x0 < 30 || r.y1 - r.y0 < 30) continue;
+    c.fillStyle = e.slots.ground;
+    c.fillRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    c.lineWidth = 4;
+    c.strokeStyle = e.slots.ink;
+    c.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+  }
+}
+/** The page's foot: title and artist in the opening, the cut's time; and the boxes of any call beside the line. */
 function foot(c: C, e: WorldEnv) {
+  callBoxes(c, e);
   const d = openingData(e, ' ');
   small(c, [d, cutTime(e)].filter(Boolean).join(' '), 70, 1040, 24, SERIF, e.slots.ink);
 }
-const page = (e: WorldEnv, c: C) => { c.fillStyle = e.slots.ground; c.fillRect(0, 0, W, H); };
+/** The page lights up a panel at a time as the cut opens (board motion): a panel not yet lit is bare paper inside its frame. */
+const LIGHT_EVERY = 0.1;
+function unlit(c: C, e: WorldEnv, panels: Pt[][]) {
+  panels.forEach((p, i) => { if (e.age >= i * LIGHT_EVERY) return; c.save(); path(c, p); c.fillStyle = e.slots.ground; c.fill(); c.restore(); rim(c, p, e.slots.ink); });
+}
 /** The line's columns as set: the hero's (the column nearest `heroX`) and the rest. */
 function parts(e: WorldEnv, heroX: number): { hero?: Box; rest?: Box } {
   const cs = cellsOf(e);
@@ -164,6 +181,7 @@ const shout: HandGround = (e) => frame(e, (c) => {
   const [rx, ry] = [Math.max(230, (b.x1 - b.x0) / 2 + 130), Math.max((b.y1 - b.y0) / 2 + 40, Math.min(Math.max(300, (b.y1 - b.y0) / 2 + 80), (Math.min(cy, H - cy) - 12) / 1.28))];
   focus(c, A_LEFT, cx, cy, Math.max(rx, ry) * 0.8, 220, ink, 71);
   rim(c, A_LEFT, ink);
+  unlit(c, e, [A_LEFT, A_RIGHT]);
   spiky(c, cx, cy, rx, ry, 22, ink, paper, 7);
   foot(c, e);
   smallEnd();
@@ -215,6 +233,7 @@ const sfx: HandGround = (e) => frame(e, (c) => {
     focus(g, C_PANELS[3], 1300, 720, 240, 200, ink, 5);
     C_PANELS.forEach((p) => rim(g, p, ink));
   }), 0, 0);
+  unlit(c, e, C_PANELS);
   foot(c, e);
   smallEnd();
 });
@@ -269,7 +288,31 @@ const caption: HandGround = (e) => frame(e, (c) => {
   smallEnd();
 });
 
-const Gs: Record<string, HandGround> = { 'screentone/shout': shout, 'screentone/narration': narration, 'screentone/sfx': sfx, 'screentone/balloons': balloons, 'screentone/caption': caption };
+/** a, set across: a wide panel of focus lines toward a spiky balloon round the words, a narrow panel of tone and speed lines. */
+const E_LEFT: Pt[] = [[60, 60], [1400, 60], [1300, 1000], [60, 1000]];
+const E_RIGHT: Pt[] = [[1440, 60], [1860, 60], [1860, 1000], [1340, 1000]];
+const burst: HandGround = (e) => frame(e, (c) => {
+  smallStart();
+  const [ink, paper] = [e.slots.ink, e.slots.ground];
+  c.drawImage(kept(`b5-st-f|${ink}|${paper}`, W, H, (g) => {
+    g.fillStyle = paper;
+    g.fillRect(0, 0, W, H);
+    tone(g, E_RIGHT, 2, ink, paper);
+    speed(g, E_RIGHT, 50, ink, 17);
+    rim(g, E_RIGHT, ink);
+  }), 0, 0);
+  const b = wordsBox(e);
+  const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+  const rx = Math.max(300, (b.x1 - b.x0) / 2 + 150);
+  const ry = Math.max((b.y1 - b.y0) / 2 + 50, Math.min((b.y1 - b.y0) / 2 + 150, (Math.min(cy, H - cy) - 12) / 1.28));
+  focus(c, E_LEFT, cx, cy, Math.max(rx, ry) * 0.8, 220, ink, 73);
+  rim(c, E_LEFT, ink);
+  spiky(c, cx, cy, rx, ry, 24, ink, paper, 11);
+  foot(c, e);
+  smallEnd();
+});
+
+const Gs: Record<string, HandGround> = { 'screentone/burst': burst, 'screentone/shout': shout, 'screentone/narration': narration, 'screentone/sfx': sfx, 'screentone/balloons': balloons, 'screentone/caption': caption };
 
 const INS: Record<string, HandIn> = {
   // the page is turned: the next page's edge sweeps in from the right with its black rule and a hard shadow, never over the words

@@ -25,7 +25,7 @@ export const B5_ENTERS: Record<string, WorldMove> = {
   // art-deco: the line opens from the axis outward, a character pair at a time
   'axis-open': { sec: 0.6, glyph: ({ q, u }) => { const k = clamp01(q * 1.6 - Math.abs(u - 0.5) * 1.2); return { a: stepsOf(k, 3) > 0 ? 1 : 0, tone: 0.55 + 0.45 * stepsOf(clamp01((q - 0.75) / 0.25), 2) }; } },
   // the gilt letters rise into place in three held steps
-  'gilt-rise': { sec: 0.36, block: (q) => ({ dy: -30 * (1 - stepsOf(easeOut(q, 2), 3)), a: q > 0.02 ? 1 : 0 }) },
+  'deco-rise': { sec: 0.36, block: (q) => ({ dy: -30 * (1 - stepsOf(easeOut(q, 2), 3)), a: q > 0.02 ? 1 : 0 }) },
   // notebook: the pen writes a character after the other, each settling as it is finished
   'pen-write': { sec: 0.55, glyph: ({ q, i, n }) => { const k = turnOf(q, i, n); return { a: k > 0 ? 1 : 0, dy: k > 0 && k < 1 ? 3 * (1 - k) : 0 }; } },
   // a pencil is slower and lighter: each character comes up in two passes of graphite
@@ -43,7 +43,7 @@ export const B5_EXITS: Record<string, WorldMove> = {
   'page-flip-out': { sec: 0.26, block: (q) => ({ dx: -140 * easeIn(q, 3), sx: 1 - 0.3 * easeIn(q, 2), a: q < 0.85 ? 1 : 0 }) },
   // art-deco: closed back to the axis, from the ends inward, or let down in steps
   'axis-close': { sec: 0.42, glyph: ({ q, u }) => ({ a: clamp01((1 - q) * 1.6 - (0.5 - Math.abs(u - 0.5)) * 1.2) > 0 ? 1 : 0 }) },
-  'gilt-fall': { sec: 0.3, block: (q) => ({ dy: -24 * stepsOf(q, 3), a: q < 0.8 ? 1 : 0 }) },
+  'deco-fall': { sec: 0.3, block: (q) => ({ dy: -24 * stepsOf(q, 3), a: q < 0.8 ? 1 : 0 }) },
   // notebook: rubbed out from the last character back, a few at a time, or the page is turned away upward
   'erase-out': { sec: 0.42, glyph: ({ q, i, n }) => { const k = clamp01(q * (n + 1) - (n - 1 - i)); return { a: k <= 0 ? 1 : k < 0.5 ? 0.45 : 0 }; } },
   'leaf-off': { sec: 0.26, block: (q) => ({ dy: 90 * easeIn(q, 3), a: q < 0.85 ? 1 : 0 }) },
@@ -57,5 +57,5 @@ export const B5_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
   // a poster on a wall does not move
   'marquee-still': () => ({}),
   // what is written stays written
-  'page-still': () => ({}),
+  'notebook-still': () => ({}),
 };

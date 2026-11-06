@@ -37,6 +37,22 @@ export function linesOf(cs: Cell[], vertical: boolean): Cell[][] {
 }
 /** Whether the line's cells stand in columns (a column's neighbours are one above the other). */
 export const isColumn = (cs: Cell[]) => cs.length > 1 && linesOf(cs, true).some((l) => l.length > 1) && linesOf(cs, false).every((l) => l.length <= 2);
+/**
+ * What the box handed with the line holds beyond the line's own cells: a call set beside it (engine placeCall) is in the
+ * box but has no cells. The bands of the box past the cells on each side, those deeper than `least` px.
+ */
+export function beyondCells(e: WorldEnv, least = 40): Box[] {
+  const r = e.rect;
+  const w = boxOf(cellsOf(e));
+  if (!r || !w) return [];
+  const bands: Box[] = [
+    { x0: r.x0, y0: r.y0, x1: r.x1, y1: w.y0 - 12 },
+    { x0: r.x0, y0: w.y1 + 12, x1: r.x1, y1: r.y1 },
+    { x0: r.x0, y0: w.y0, x1: w.x0 - 12, y1: w.y1 },
+    { x0: w.x1 + 12, y0: w.y0, x1: r.x1, y1: w.y1 },
+  ];
+  return bands.filter((b) => b.x1 - b.x0 > least && b.y1 - b.y0 > least);
+}
 /** A box grown by a margin. */
 export const grow = (b: Box, mx: number, my = mx): Box => ({ x0: b.x0 - mx, y0: b.y0 - my, x1: b.x1 + mx, y1: b.y1 + my });
 /** Whether two boxes overlap. */

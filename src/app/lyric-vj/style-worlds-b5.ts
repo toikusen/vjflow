@@ -111,7 +111,7 @@ export const ART_DECO_WORLD: StyleWorld = {
   lyricRole: '歌詞是戲院招牌和海報上的標題字：日芒前的黑色字牌、祖母綠的階梯拱窗、扇形紋中間的米色匾額、兩根階梯柱上的直排',
   family: 'print',
   refuses: ['金屬漸層', '粒子閃光', '雕花與暗黑童話', '鉛條與透光', '青海波與日本紋樣', '發光', '斜放的字'],
-  type: { ja: { family: 'Kaisei Tokumin', weight: 800 }, tc: { family: 'Noto Serif TC', weight: 900 }, latin: 'Noto Serif TC', setting: '特粗明體橫向壓成 75%、加大字距，置中；第二句金色；小字是寬字距的細明體', category: 'deco-condensed' },
+  type: { ja: { family: 'Kaisei Decol', weight: 700 }, tc: { family: 'Noto Serif TC', weight: 900 }, latin: 'Noto Serif TC', setting: '特粗明體橫向壓成 75%、加大字距，置中；第二句金色；小字是寬字距的細明體', category: 'deco-condensed' },
   palette: [
     // (board: black #101014, gold #C9A45C / #E3C987, cream #EFE3C8, emerald #0D4A3C; gold only on 1.2–2.6 px lines and the
     // second phrase, never a metal gradient). ink cream, ink2 the pale gold phrase, faint the gold rule, plate the cream plaque

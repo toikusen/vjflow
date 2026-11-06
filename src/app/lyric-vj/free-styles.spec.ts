@@ -31,16 +31,19 @@ describe('free styles', () => {
     expect(new Set(FREE_STYLES.map((s) => s.fonts.tc)).size).toBeGreaterThanOrEqual(8);
   });
   // the font table, over every world (held ones too): a Traditional Chinese face serves at most three worlds (owner,
-  // 2026-11-06, relaxed from two so batch 5's boards keep their faces; a family counted by its own name, as the batch-5
-  // quota table counts it), and no two worlds share both faces
+  // 2026-11-06, relaxed from two so batch 5's boards keep their faces; HK and TC cuts of a family count as one; the
+  // neutral Noto text faces are not capped), and no two worlds share both faces
   it('give each world its own faces', () => {
-    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family;
+    // a Hong Kong cut of a family is the same face as its Taiwan cut (Noto Serif HK = Noto Serif TC)
+    const tc = (s: (typeof FREE_STYLES)[number]) => s.world!.type.tc.family.replace(/ (HK|TC)$/, '');
     const MOST = 3;
+    // the neutral Noto text faces may serve any number of worlds (owner, 2026-11-06); the cap is for faces with character
+    const capped = (s: (typeof FREE_STYLES)[number]) => !/^Noto (Sans|Serif)$/.test(tc(s));
     // (a world drawn on a print head's dots shows the dots, not its face: document's thermal receipt, 2026-11-05; nor does
     // one stitched in thread: embroidery's satin and cross-stitch, 2026-11-06)
     const faceless = new Set([...FACELESS_SURFACES, ...THREAD_SURFACES]);
     const faced = FREE_STYLES.filter((s) => !faceless.has(s.world!.material.surface ?? ''));
-    for (const s of faced) expect(faced.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(MOST);
+    for (const s of faced.filter(capped)) expect(faced.filter((x) => tc(x) === tc(s)).map((x) => x.id).length, `${s.id} ${tc(s)}`).toBeLessThanOrEqual(MOST);
     const pairs = faced.map((s) => `${tc(s)}+${s.world!.type.ja.family}`);
     expect(new Set(pairs).size).toBe(pairs.length);
     for (const s of FREE_STYLES) expect(FONTS.some((f) => f.family === s.world!.type.tc.family), s.id).toBe(true);

@@ -130,21 +130,6 @@ function roundWords(e: WorldEnv, draw: () => void, room = wordsRoom(e)) {
   c.restore();
 }
 const mulHex = (a: string, b: string) => `#${[1, 3, 5].map((i) => Math.round((parseInt(a.slice(i, i + 2), 16) * parseInt(b.slice(i, i + 2), 16)) / 255).toString(16).padStart(2, '0')).join('')}`;
-/**
- * The paper back over the words' room, crisp and whole (no feather, no glow): what a set piece or a change laid over the
- * ground leaves round a line being read, so none of its marks crosses it.
- */
-function clearWords(e: WorldEnv, strength: number) {
-  const room = wordsRoom(e);
-  // (a piece that asks for no clearing gets none: papercut's and woodcut's are drawn round the words already)
-  if (!room || strength <= 0) return;
-  const c = e.ctx;
-  c.save();
-  if (e.base) c.setTransform(e.base);
-  c.fillStyle = e.paper;
-  c.fillRect(room.x0, room.y0, room.x1 - room.x0, room.y1 - room.y0);
-  c.restore();
-}
 /** The wet worlds' room for a line: paper the brush never touched, its edge torn the way a reserve is (world-ink.ts). */
 const reserveWords = (e: WorldEnv) => { if (!e.rect || e.weight <= 0 || e.rect.carried) return; const c = e.ctx; c.save(); if (e.base) c.setTransform(e.base); reservePaper(c, e.seed, e.rect, e.paper, Math.min(1, e.weight * 3)); c.restore(); };
 const vignette = (e: WorldEnv, a: number) => {
@@ -1008,8 +993,13 @@ Object.assign(WORLD_GROUNDS, {
 } as Record<string, Ground>);
 Object.assign(WORLD_GROUNDS, handGrounds);
 
-/** The clearing a set piece leaves round the words. */
-export const clearWordsAfter = (e: WorldEnv, strength: number) => clearWords(e, strength);
+/**
+ * Draws a set piece everywhere but the words' room: the piece is cut round the line the way a printer leaves room for
+ * it, and the world's own ground shows there. A piece that asks for no clearing (`strength` 0: papercut's, woodcut's,
+ * drawn round the words already) is drawn whole. (It used to lay the paper's flat colour over the room after the piece:
+ * a bare plate behind the words for the length of every set change, paper-lantern 2026-11-04 audit.)
+ */
+export const aroundWords = (e: WorldEnv, strength: number, draw: () => void) => (strength > 0 ? roundWords(e, draw) : draw());
 export const isWorldGround = (fx: string) => fx in WORLD_GROUNDS;
 /** A world's ground lies a little larger than the frame and slides under it, slowly on a calm part: a large slow move, never a cut. */
 export function drawWorldGround(e: WorldEnv, fx: string) {

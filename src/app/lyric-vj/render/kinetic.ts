@@ -12,7 +12,7 @@ import { CameraRig, rigBack } from './camera-rig';
 import type { SymbolName } from '../treatment';
 import { drawFlood, drawLineGround, isLineGround } from './line-grounds';
 import { worldCam } from './world-cam';
-import { clearWordsAfter, drawWorldGround, isWorldGround, WorldEnv, WorldItem, worldInAt } from './world-grounds';
+import { aroundWords, drawWorldGround, isWorldGround, WorldEnv, WorldItem, worldInAt } from './world-grounds';
 import type { LabelLang } from '../labels';
 import { reservePaper } from './world-ink';
 import { holdInkGround } from './behind-ink';
@@ -601,15 +601,18 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
           if (env.base) ctx.setTransform(env.base);
           // (a set piece only ever has the line being sung right now: nothing large behind the words may be a line not yet or no longer sung)
           const sung = l.world.lines?.find((x) => now >= x.a - 0.1 && now < x.b + 0.05);
-          piece.p.draw({ ...env, base: undefined, words: l.world.lines ? (sung?.t ?? '') : (l.world.words ?? ''), sung: sung ? Math.min(1, Math.max(0, (now - sung.a) / Math.max(0.2, sung.b - sung.a))) : undefined, title: l.world.title ?? '' }, piece.q, age);
+          const w = l.world;
+          const drawPiece = () => piece.p.draw({ ...env, base: undefined, words: w.lines ? (sung?.t ?? '') : (w.words ?? ''), sung: sung ? Math.min(1, Math.max(0, (now - sung.a) / Math.max(0.2, sung.b - sung.a))) : undefined, title: w.title ?? '' }, piece.q, age);
+          // the piece is cut round the words being read, never papered over afterwards (no flat plate behind them while a
+          // set changes): words on their own opaque carrier read on it, a wet world's piece leaves its torn reserve, and a
+          // page laid out with its line carries the words on its own balloon or card
+          const cut = !env.rect?.carried && !piece.p.reserve && !l.world.bound;
+          if (cut) aroundWords({ ...env, base: undefined }, piece.p.clear ?? 0.55, drawPiece);
+          else drawPiece();
           ctx.restore();
           ctx.save();
           if (env.base) ctx.setTransform(env.base);
-          // (words on their own opaque carrier read on it, whatever the piece laid under it: no paper is laid round them)
-          if (env.rect?.carried) { /* the carrier is the room */ }
-          else if (piece.p.reserve && env.rect) reservePaper(ctx, seed, env.rect, env.paper, (piece.p.clear ?? 0.55) * env.weight);
-          // (a page laid out with its line carries the words on its own balloon or card: no block of paper is laid over it)
-          else if (!l.world.bound) clearWordsAfter({ ...env, base: undefined }, piece.p.clear ?? 0.55);
+          if (!env.rect?.carried && piece.p.reserve && env.rect) reservePaper(ctx, seed, env.rect, env.paper, (piece.p.clear ?? 0.55) * env.weight);
           ctx.restore();
         }
         // whatever a change or a set piece laid under the words, the ink must read on all of it (behind-ink.ts)

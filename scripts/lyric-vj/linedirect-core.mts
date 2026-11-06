@@ -667,7 +667,12 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
       const prev = cuts[i - 1];
       if (!prev || !directed.has(x) || directed.has(prev) || prev.fx !== x.fx) return;
       const before = cuts[i - 2]?.fx ?? '';
-      const swap = [0, 1, 2, 3].map((k) => unrepeatGround(w, prev.fx, prev.fx, c.calm, i + k)).find((g) => g !== before && g !== x.fx);
+      // (a level of two grounds may offer only the ground two cuts back: silk's quiet level is paper-edge and herringbone,
+      // so the rest of the world's grounds the song may take come next, never a peak's nor a set's own page)
+      if (w.layouts.lines.some((l) => l.ground === prev.fx)) return;
+      const wide = [...new Set(c.calm ? w.grounds.quiet : [...Object.values(w.grounds.levels).flat(), ...w.grounds.quiet])].filter((g) => g !== w.peak.loud && g !== w.peak.calm);
+      const near = [0, 1, 2, 3].map((k) => unrepeatGround(w, prev.fx, prev.fx, c.calm, i + k));
+      const swap = [...near, ...wide.map((_, k) => wide[(i + k) % wide.length])].find((g) => g !== before && g !== x.fx);
       if (swap) prev.fx = swap;
     });
   }

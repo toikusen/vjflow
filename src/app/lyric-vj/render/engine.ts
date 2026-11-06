@@ -73,6 +73,7 @@ import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { foldRepeats } from './repeats';
+import { pullPictures } from './picture-lead';
 import { lanes } from './lanes';
 import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, enterSec as lineEnterSec, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
@@ -948,6 +949,10 @@ export class LyricVjEngine {
         if (sec) delete sec.transition;
       } else showAt[i] = h.kind === 'relay' ? h.from + 0.4 * (h.to - h.from) : h.from;
     }
+    // a line never comes in on the picture before its own: its shot and the shot's first cut come forward to its entrance
+    // (picture-lead.ts); where they cannot, the line waits for its picture
+    const late = pullPictures(treatment.shots, treatment.graphics?.sections ?? [], styled.map(({ style }, i) => ({ shot: style.shot, show: showAt[i] })));
+    for (const [i, { style }] of styled.entries()) if (late.has(style.shot) && styled.findIndex((x) => x.style.shot === style.shot) === i) showAt[i] = Math.max(showAt[i], late.get(style.shot)!);
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)

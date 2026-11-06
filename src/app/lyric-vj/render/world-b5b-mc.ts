@@ -175,11 +175,13 @@ const planesPage: HandGround = (e) => { page(e, 'mc-planes', (c) => {
   const s = e.slots;
   c.fillStyle = s.ground; c.fillRect(0, 0, W, H);
   const r = e.rect ?? { x0: 200, y0: 160, x1: 1720, y1: 920 };
-  const n = Math.max(1, [...(e.item?.text ?? '').replace(/[\s\p{P}\p{S}]/gu, '')].length || 4);
+  const n = [...(e.item?.text ?? '').replace(/[\s\p{P}\p{S}]/gu, '')].length;
+  // (planes only under a short line climbing them: a longer line on this page, a later one in its shot, stands on the stock)
+  const climbs = n >= 2 && n <= 6 && !!e.rect && (e.rect.y1 - e.rect.y0) > (e.rect.x1 - e.rect.x0) * 0.2;
   // (the set's own numbers: each character a size wide, 0.62 of a size apart, each 0.56 of a size above the one before)
   const size = (r.x1 - r.x0) / (n + 0.62 * (n - 1));
   const inks = planeInks(e);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; climbs && i < n; i++) {
     const cx = r.x0 + size / 2 + i * size * 1.62;
     const cy = r.y1 - size * 0.55 - i * size * 0.56;
     const [x0, x1, top] = [cx - size * 0.8, cx + size * 0.62, cy - size * 0.78];
@@ -212,12 +214,13 @@ for (const [id, page] of Object.entries(B5B_MIRRORED)) if (Gs[page]) Gs[id] = mi
 
 const INS: Record<string, HandIn> = {
   // a change of part: a mustard cut panel, its edge angled, wipes across in four hard steps, its key plate off register
-  'cut-wipe': { sec: 0.4, draw: (e, q) => frame(e, (c) => {
+  'cut-wipe': { sec: 0.32, draw: (e, q) => frame(e, (c) => {
+    // (a narrow cut band, not a sheet: it is over in a third of a second and never stands under a line being read)
     const k = stepsOf(q, 4);
     if (k >= 1) return;
-    const x = -200 + (W + 600) * k;
-    shape(c, [[x - 900, -20], [x + 200, -20], [x - 60, H + 20], [x - 1160, H + 20]], e.slots.plate, 7, 2);
-    path(c, cut([[x + 200 + 14, -20], [x - 60 + 14, H + 20]], 1.5, 8));
+    const x = -300 + (W + 600) * k;
+    shape(c, [[x, -20], [x + 220, -20], [x - 40, H + 20], [x - 260, H + 20]], e.slots.plate, 7, 2);
+    path(c, cut([[x + 234, -20], [x - 26, H + 20]], 1.5, 8));
     c.strokeStyle = e.slots.ink; c.lineWidth = 4; c.stroke();
   }) },
 };

@@ -19,8 +19,9 @@ export type B5bSurface = 'scrap-type' | 'scrap-back' | 'scrap-cut' | 'scrap-drop
 const KINDS = new Set<string>(['scrap-type', 'scrap-back', 'scrap-cut', 'scrap-drop', 'wc-paint', 'wc-reserve', 'wc-pool', 'mc-type', 'mc-reg', 'clay-type', 'clay-multi', 'clay-drop']);
 export const isB5bSurface = (k: string): k is B5bSurface => KINDS.has(k);
 
-/** The sticker's parts, shares of the type size (board: 15 px backing and a 2 px cut line at 168 px; shadow (3, 4)). */
-export const STICKER = { back: 0.085, cut: 0.1, close: 0.02, drop: [0.018, 0.024] as [number, number], shadow: 0.32 };
+/** The sticker's parts, shares of the type size (board: 15 px backing and a 2 px cut line at 168 px; shadow (3, 4)); the
+ * backing is closed over the notches between a character's parts, as a die cuts one piece round it. */
+export const STICKER = { back: 0.085, cut: 0.1, close: 0.07, drop: [0.018, 0.024] as [number, number], shadow: 0.32 };
 /** The watercolour letter (board: rim 0.42 over 3.5 px at 192 px; granulation 6 %), and the least density a letter keeps. */
 export const WASH = { base: 0.9, flow: 0.24, rim: 0.42, rr: 0.018, gran: 0.06, least: 0.8, pool: 0.07 };
 /** The screen print's second plate, shares of the size, down and right. */

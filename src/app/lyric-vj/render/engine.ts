@@ -951,7 +951,7 @@ export class LyricVjEngine {
     }
     // a line never comes in on the picture before its own: its shot and the shot's first cut come forward to its entrance
     // (picture-lead.ts); where they cannot, the line waits for its picture
-    const late = pullPictures(treatment.shots, treatment.graphics?.sections ?? [], styled.map(({ style }, i) => ({ shot: style.shot, show: showAt[i] })));
+    const { late } = pullPictures(treatment.shots, treatment.graphics?.sections ?? [], styled.map(({ style }, i) => ({ shot: style.shot, show: showAt[i] })));
     for (const [i, { style }] of styled.entries()) if (late.has(style.shot) && styled.findIndex((x) => x.style.shot === style.shot) === i) showAt[i] = Math.max(showAt[i], late.get(style.shot)!);
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype

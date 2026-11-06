@@ -33,7 +33,7 @@ await new Promise((r) => server.once('listening', r));
 const browser = await chromium.launch({ channel: 'chromium', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
 const getFont = fontCache(resolve('out/font-cache'));
 type Row = { id: string; text: string; start: number; show: number; picture: number; lead: number; afterGap: boolean };
-const report: Record<string, Record<string, { dropped: number; all: { n: number; early: number; worst: number }; afterGap: { n: number; early: number; worst: number; leads: number[] }; rows: Row[] }>> = {};
+const report: Record<string, Record<string, { cuts: number; short: number; dropped: number; all: { n: number; early: number; worst: number }; afterGap: { n: number; early: number; worst: number; leads: number[] }; rows: Row[] }>> = {};
 for (const world of positionals) {
   for (const key of a.songs!.split(',')) {
     const song = JSON.parse(readFileSync(`out/db/${IDS[key]}/song.json`, 'utf8'));
@@ -70,12 +70,15 @@ for (const world of positionals) {
       const afterGap = i > 0 && l.start - lines[i - 1].end > 3;
       return { id: l.id, text: l.text, start: +l.start.toFixed(3), show: +l.show.toFixed(3), picture: +picture.toFixed(3), lead: first ? +(l.show - picture).toFixed(3) : 0, afterGap };
     });
-    // cuts the engine dropped to bring a picture forward (picture-lead.ts): a planned cut the move left up too short
+    // the picture's cuts as played: how many, how many the engine dropped to bring a picture forward (picture-lead.ts: a cut
+    // with no room left), and how many are up under 0.3 s (the planner's own short ones included)
     const dropped = (job.treatment.graphics?.sections.length ?? 0) - got.secs.length;
+    const cuts = got.secs.length;
+    const short = got.secs.filter((x, i) => (got.secs[i + 1] ?? Infinity) - x < 0.3 - 1e-3).length;
     const sum = (xs: Row[]) => ({ n: xs.length, early: xs.filter((r) => r.lead < -0.005).length, worst: +Math.min(0, ...xs.map((r) => r.lead)).toFixed(3) });
     const gaps = rows.filter((r) => r.afterGap);
-    (report[world] ??= {})[key] = { dropped, all: sum(rows), afterGap: { ...sum(gaps), leads: gaps.map((r) => r.lead) }, rows };
-    console.log(world, key, 'dropped', dropped, 'all', JSON.stringify(sum(rows)), 'afterGap', JSON.stringify(gaps.map((r) => `${r.id}@${r.start}:${r.lead}`)));
+    (report[world] ??= {})[key] = { cuts, short, dropped, all: sum(rows), afterGap: { ...sum(gaps), leads: gaps.map((r) => r.lead) }, rows };
+    console.log(world, key, 'cuts', cuts, 'short', short, 'dropped', dropped, 'all', JSON.stringify(sum(rows)), 'afterGap', JSON.stringify(gaps.map((r) => `${r.id}@${r.start}:${r.lead}`)));
     if (a.strip) {
       const r = rows.find((x) => x.id === a.strip);
       if (r) {

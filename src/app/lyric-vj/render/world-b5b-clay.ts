@@ -17,7 +17,7 @@ import { B5B_MIRRORED } from './world-b5b-sets';
 import { dataLine, frame, H, isJa, meets, page, small, twoPhrases, W } from './world-b5b-shared';
 
 type Pt = [number, number];
-const SM = (px: number, ja: boolean) => `400 ${px}px ${ja ? '"Zen Maru Gothic"' : 'Huninn'}, "Noto Sans TC", sans-serif`;
+const SM = (px: number, ja: boolean) => `400 ${px}px ${ja ? '"M PLUS Rounded 1c"' : 'Huninn'}, "Noto Sans TC", sans-serif`;
 const lightOf = (hex: string) => [1, 3, 5].reduce((s, i, k) => s + parseInt(hex.slice(i, i + 2), 16) * [0.3, 0.59, 0.11][k], 0) / 255;
 const lit = (t: string) => mixHex(t, B5B.xFFFFFF, lightOf(t) > 0.5 ? 0.5 : 0.24);
 const shade = (t: string) => mixHex(t, B5B.x000000, lightOf(t) > 0.5 ? 0.22 : 0.3);

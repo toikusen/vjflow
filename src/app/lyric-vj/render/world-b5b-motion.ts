@@ -8,16 +8,15 @@ import { clamp01, ease as easeOut, easeIn } from './world-craft';
 
 const hashOf = (a: number, b = 0) => { const x = Math.sin(a * 91.17 + b * 47.53) * 43758.5453; return x - Math.floor(x); };
 const stepsOf = (q: number, n: number) => Math.floor(clamp01(q) * n) / n;
-/** A sticker's own lean and lift on the page (board: ±3.5°, ±7 px), kept through its whole life. */
-export const stickerTilt = (i: number, seed: number) => ({ r: (hashOf(i, seed) - 0.5) * 0.12, dy: (hashOf(i, seed + 3) - 0.5) * 12 });
 /** Clay held on twos: a new pose every second frame at 24 (board: the letters boil a hair, never drift). */
 const twos = (age: number) => Math.floor(age * 12);
 
 export const B5B_ENTERS: Record<string, WorldMove> = {
   // scrapbook: each sticker is pressed down from a corner in turn, larger as it comes off the sheet, then flat
-  'sticker-press': { sec: 0.6, glyph: ({ q, i, n, seed }) => { const k = clamp01(q * (n * 0.35 + 1) - i * 0.35); const t = stickerTilt(i, seed); return { a: k > 0 ? 1 : 0, s: 1 + 0.22 * (1 - easeOut(k, 3)), r: t.r + 0.25 * (1 - easeOut(k, 3)), dy: t.dy - 18 * (1 - easeOut(k, 3)) }; } },
+  // (a sticker's own lean is cut into it, world-glyph-b5b stickerTilt: the move ends where the sticker rests)
+  'sticker-press': { sec: 0.6, glyph: ({ q, i, n }) => { const k = clamp01(q * (n * 0.35 + 1) - i * 0.35); return { a: k > 0 ? 1 : 0, s: 1 + 0.22 * (1 - easeOut(k, 3)), r: 0.25 * (1 - easeOut(k, 3)), dy: -18 * (1 - easeOut(k, 3)) }; } },
   // the whole sheet of stickers slid on from below, the way a page is laid into the album
-  'sheet-slide': { sec: 0.42, block: (q) => ({ dy: -120 * (1 - easeOut(q, 3)), a: clamp01(q * 4) }), glyph: ({ i, seed }) => stickerTilt(i, seed) },
+  'sheet-slide': { sec: 0.42, block: (q) => ({ dy: -120 * (1 - easeOut(q, 3)), a: clamp01(q * 4) }) },
   // watercolor: the paint is brushed in left to right, a band at a time, each band coming up as the wash darkens
   'brush-in': { sec: 0.8, glyph: ({ q, u }) => ({ a: stepsOf(clamp01(q * 1.5 - u * 0.5), 5) }) },
   // the reserve shows as the wash closes round it: the whole line comes up out of the wet sheet
@@ -34,8 +33,8 @@ export const B5B_ENTERS: Record<string, WorldMove> = {
 
 export const B5B_EXITS: Record<string, WorldMove> = {
   // a sticker peeled off from its corner, lifting and turning, the last first (the words stay whole through the first third)
-  'sticker-peel': { sec: 0.5, glyph: ({ q, i, n, seed }) => { const k = clamp01((q - 0.3) / 0.7 * (n * 0.3 + 1) - (n - 1 - i) * 0.3); const t = stickerTilt(i, seed); return { a: 1 - easeIn(k, 2), r: t.r - 0.4 * easeIn(k, 2), dy: t.dy - 40 * easeIn(k, 2) }; } },
-  'page-out': { sec: 0.4, block: (q) => ({ dx: 220 * easeIn(clamp01((q - 0.3) / 0.7), 2), a: 1 - easeIn(clamp01((q - 0.3) / 0.7), 3) }), glyph: ({ i, seed }) => stickerTilt(i, seed) },
+  'sticker-peel': { sec: 0.5, glyph: ({ q, i, n }) => { const k = clamp01((q - 0.3) / 0.7 * (n * 0.3 + 1) - (n - 1 - i) * 0.3); return { a: 1 - easeIn(k, 2), r: -0.4 * easeIn(k, 2), dy: -40 * easeIn(k, 2) }; } },
+  'page-out': { sec: 0.4, block: (q) => ({ dx: 220 * easeIn(clamp01((q - 0.3) / 0.7), 2), a: 1 - easeIn(clamp01((q - 0.3) / 0.7), 3) }) },
   'wash-dry': { sec: 0.8, glyph: ({ q }) => ({ a: 1 - easeIn(clamp01((q - 0.35) / 0.65), 1.6) }) },
   'lift-out': { sec: 0.45, block: (q) => ({ dy: 10 * easeIn(q, 2), a: 1 - easeIn(clamp01((q - 0.3) / 0.7), 1.5) }) },
   'pull-out': { sec: 0.3, clip: (q) => ({ axis: 'x', at: 1 - stepsOf(easeIn(clamp01((q - 0.25) / 0.75), 2), 4) }) },
@@ -45,8 +44,8 @@ export const B5B_EXITS: Record<string, WorldMove> = {
 };
 
 export const B5B_HOLDS: Record<string, (e: GlyphEnv) => GlyphPose> = {
-  // stickers stay where they were pressed, each at its own small lean
-  'sticker-still': ({ i, seed }) => stickerTilt(i, seed),
+  // stickers stay where they were pressed
+  'sticker-still': () => ({}),
   // paint on paper does not move
   'paper-still': () => ({}),
   // a print is a print

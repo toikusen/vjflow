@@ -150,7 +150,7 @@ export const CLAYMATION_WORLD: StyleWorld = {
   lyricRole: '歌詞是捏好壓在黏土板上的字（字形是字體本身的筆畫，不加粗，筆畫不相黏），或壓在兩條擀平的黏土條上',
   family: 'layered',
   refuses: ['斜角浮雕', '連續明暗的立體光', '模糊陰影', '加粗到筆畫相黏', '漸層', '照片', '發光', '同心圓靶心紋'],
-  type: { ja: { family: 'Zen Maru Gothic', weight: 900 }, tc: { family: 'Huninn', weight: 400 }, latin: 'Fredoka', setting: '圓體，字距略寬，不加粗；亮邊、暗邊和接觸陰影都是硬邊形狀', category: 'clay' },
+  type: { ja: { family: 'M PLUS Rounded 1c', weight: 800 }, tc: { family: 'Huninn', weight: 400 }, latin: 'Fredoka', setting: '圓體，字距略寬，不加粗；亮邊、暗邊和接觸陰影都是硬邊形狀', category: 'clay' },
   palette: [
     // (board: teal slab #2E8C8A, night #1F2C5C, yellow #F2C04B, blue #3A63B8, cream clay #FFF1D6, pink #F59AB0, orange #F2683C)
     scheme('teal-slab', 'cold', 'dark', '#1A5E5C', '#FFF1D6', '#5E1620', '#F7D35C', '#F2C04B', '#2A2440', '#F59AB0', '深青黏土板，奶油色字'),

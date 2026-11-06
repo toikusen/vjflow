@@ -8,8 +8,7 @@ import { blockOf, clearOf, SET_SPECS } from './render/world-sets';
 import { WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './render/world-motion';
 import { WORLD_GROUNDS, WORLD_INS } from './render/world-grounds';
 import { WORLD_PIECES } from './render/world-pieces';
-import { CLAY_DARK, isB5bSurface } from './render/world-glyph-b5b';
-import { stickerTilt } from './render/world-b5b-motion';
+import { CLAY_DARK, isB5bSurface, stickerTilt } from './render/world-glyph-b5b';
 
 const measure = (s: string) => [...s].length * 100;
 const [scrap, wc, mc, clay] = B5B_WORLDS;
@@ -69,8 +68,8 @@ describe('style batch 5: scrapbook, watercolor, midcentury, claymation', () => {
     const b = blockOf('飛簷走壁', SET_SPECS['midcentury/planes'], measure);
     expect(b.h).toBeCloseTo(b.size * (1.1 + 3 * 0.56), 0);
   });
-  it('keeps a sticker\'s lean small and its own through the line', () => {
-    for (let i = 0; i < 20; i++) { const t = stickerTilt(i, 3); expect(Math.abs(t.r)).toBeLessThanOrEqual(0.061); expect(Math.abs(t.dy)).toBeLessThanOrEqual(6); expect(stickerTilt(i, 3)).toEqual(t); }
+  it('cuts a sticker\'s small lean into it, the same every time', () => {
+    for (let i = 0; i < 40; i++) { const t = stickerTilt(i * 37); expect(Math.abs(t.r)).toBeLessThanOrEqual(0.061); expect(Math.abs(t.dy)).toBeLessThanOrEqual(0.04); expect(stickerTilt(i * 37)).toEqual(t); }
   });
   it('lays the sticker backing as the carrier the words are read on', () => {
     for (const id of ['scrapbook/card', 'scrapbook/dots', 'scrapbook/spread', 'scrapbook/index']) {

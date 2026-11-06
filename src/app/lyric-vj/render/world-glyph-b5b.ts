@@ -58,6 +58,18 @@ function eroded(mask: OffscreenCanvas, r: number) {
   for (let k = 0; k < 8; k++) g.drawImage(mask, Math.cos((k * Math.PI) / 4) * r, Math.sin((k * Math.PI) / 4) * r);
   return t;
 }
+/** A sticker's own lean and lift (board: ±3.5°, ±7 px at 168), from its character: cut into the sticker, letter and backing alike. */
+export const stickerTilt = (seed: number) => ({ r: (hash(seed, 3) - 0.5) * 0.12, dy: (hash(seed, 5) - 0.5) * 0.08 });
+/** The letter turned and lifted as its sticker lies, about the picture's centre. */
+function tilted(mask: OffscreenCanvas, seed: number, px: number) {
+  const { r, dy } = stickerTilt(seed);
+  const t = new OffscreenCanvas(mask.width, mask.height);
+  const g = t.getContext('2d')!;
+  g.translate(mask.width / 2, mask.height / 2 + dy * px);
+  g.rotate(r);
+  g.drawImage(mask, -mask.width / 2, -mask.height / 2);
+  return t;
+}
 const fill = (m: OffscreenCanvas, tone: string, a = 1) => { const t = copy(m); const g = t.getContext('2d')!; g.globalCompositeOperation = 'source-in'; g.globalAlpha = a; g.fillStyle = tone; g.fillRect(0, 0, t.width, t.height); return t; };
 
 /**
@@ -157,7 +169,10 @@ function clay(ctx: CanvasRenderingContext2D, mask: OffscreenCanvas, tone: string
 }
 const lightOf = (hex: string) => { const [r, g, b] = rgb(hex); return (0.3 * r + 0.59 * g + 0.11 * b) / 255; };
 
-export function b5bSurface(ctx: CanvasRenderingContext2D, kind: B5bSurface, h: HandCtx) {
+export function b5bSurface(ctx: CanvasRenderingContext2D, kind: B5bSurface, h0: HandCtx) {
+  // (a sticker's parts all lie at the sticker's lean)
+  const scrap = kind.startsWith('scrap-');
+  const h = scrap ? { ...h0, mask: tilted(h0.mask, h0.seed, h0.px), tone: h0.tinted(tilted(h0.mask, h0.seed, h0.px), h0.tint) } : h0;
   const { mask, tone, tint, px, seed, cw, ch } = h;
   switch (kind) {
     case 'scrap-type':

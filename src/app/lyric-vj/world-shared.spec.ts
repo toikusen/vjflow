@@ -5,7 +5,7 @@ import { SET_SPECS } from './render/world-sets';
 import { contrast } from './contrast';
 import type { Glyph } from './render/glyphs';
 import { freeJob, freeMoments, FREE_MOMENTS_MAX } from './free-plan';
-import { worldCam } from './render/world-cam';
+import { CAM_EDGE, camReach, worldCam } from './render/world-cam';
 import { FREE_STYLES } from './free-styles';
 import { wordBreaks } from './phrases';
 import type { SongTimeline } from './timeline';
@@ -142,6 +142,33 @@ describe('shared world moves', () => {
     const d = worldCam('diagonal', 0, 1)!;
     expect(((d.s - 1) * 1920) / 2).toBeGreaterThanOrEqual(Math.abs(d.dx));
     expect(((d.s - 1) * 1080) / 2).toBeGreaterThanOrEqual(Math.abs(d.dy));
+  });
+  it('never carries the line out of the frame nor sets it smaller than it rests', () => {
+    // gothic-lolita nun 65.2 s: a two-row line on a card right of centre, cut off at the right edge at 1.9×
+    const wide = { x0: 1010, y0: 330, x1: 1700, y1: 740 };
+    const small = { x0: 860, y0: 480, x1: 1060, y1: 600 };
+    for (const kind of ['push-through', 'diagonal', 'iso-slide'])
+      for (const dir of [1, -1])
+        for (const room of [wide, small])
+          for (let age = 0; age < 0.6; age += 0.02) {
+            const m = worldCam(kind, age, dir, room);
+            if (!m) continue;
+            expect(m.s).toBeGreaterThanOrEqual(1);
+            const [c, sn] = [Math.cos(-m.r), Math.sin(-m.r)];
+            for (const [x, y] of [[room.x0, room.y0], [room.x1, room.y1], [room.x0, room.y1], [room.x1, room.y0]]) {
+              const [px, py] = [(x - 960) * m.s, (y - 540) * m.s];
+              const [qx, qy] = [960 + m.dx + px * c - py * sn, 540 - m.dy + px * sn + py * c];
+              expect(qx).toBeGreaterThanOrEqual(CAM_EDGE - 0.5);
+              expect(qx).toBeLessThanOrEqual(1920 - CAM_EDGE + 0.5);
+              expect(qy).toBeGreaterThanOrEqual(CAM_EDGE - 0.5);
+              expect(qy).toBeLessThanOrEqual(1080 - CAM_EDGE + 0.5);
+            }
+          }
+    // a small line in the middle keeps the whole move; a wide one keeps part of it, still a move
+    expect(camReach('push-through', 1, small)).toBe(1);
+    expect(camReach('push-through', 1, wide)).toBeGreaterThan(0.05);
+    expect(camReach('push-through', 1, wide)).toBeLessThan(1);
+    expect(camReach('push-through', 1)).toBe(1);
   });
   it('never turns a rolling character edge-on', () => {
     for (let q = 0; q <= 1; q += 0.02) for (let u = 0; u <= 1; u += 0.25) expect(WORLD_BEATS.roll.glyph!({ q, i: 0, n: 5, u, v: 0, seed: 1, age: 2, sung: 1 }).sy ?? 1).toBeGreaterThanOrEqual(ROLL_LEAST);

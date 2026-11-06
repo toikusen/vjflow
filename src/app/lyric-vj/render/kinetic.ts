@@ -407,7 +407,8 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     if (l.cam === 'orbit') (ctx.scale(1.12, 1.12), ctx.rotate(0.035 * Math.sin(clock * 0.7) * dir), ctx.translate(70 * Math.sin(clock * 0.7) * dir, 0));
     if (l.cam === 'vertigo') ctx.scale(zoom, zoom);
     // a world's move into a new part (world-shared.ts camera): out of a push through the frame before, or in on a diagonal
-    const into = worldCam(l.cam, clock, dir);
+    // (never carrying the line's box past the frame's edge: the words take the same reach, world-layout.ts)
+    const into = worldCam(l.cam, clock, dir, l.lyric);
     if (into) (ctx.translate(into.dx, -into.dy), ctx.rotate(-into.r), ctx.scale(into.s, into.s));
     if (l.cam === 'pullback') {
       // from a close-up of the character (or the middle) back to the whole frame over the cut's first 1.6 s

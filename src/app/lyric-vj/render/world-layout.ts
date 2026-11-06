@@ -11,7 +11,7 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, WORLD_BEATS } from './world-beats';
-import { worldCam } from './world-cam';
+import { CamRoom, worldCam } from './world-cam';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
 
@@ -393,6 +393,27 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     plane.setFromNormalAndCoplanarPoint(unit, at);
   };
 
+  const restRects = () => poses.map((p, i) => {
+    const [cx, cy, pad] = [960 + p.block.cx + firstX, 540 - (p.block.cy + firstAt), 14];
+    // carried: the whole line on an opaque carrier (a split line's small part stands off it, so it is not)
+    const carried = !!p.object && !p.block.small?.length && CARRIERS.has(sets[i].object!);
+    // the room the line is read in covers the whole of its slow travel and its swell, not only where it starts: a
+    // drifting column walked off the uncut wood round it onto the gouges (woodcut), the paper room left behind
+    // (only the hand worlds that cut a room of their own material round the words: elsewhere the box stays where the
+    // line stands, so ukiyoe's approved kasumi and cards keep their measure)
+    const [gx, gy] = p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? [0, 0] : wl.drift ?? [0, 0];
+    const reach = (d: number, c: number, half: number, frame: number) => Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half)) / 2;
+    const grow = 1 + (p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? 0 : wl.swell ?? 0);
+    // (a sheared block's room is what it covers as drawn; its page is handed the layout to build its planes round the words)
+    const sh = p.spec.shear;
+    const [bw, bh] = shearedSize(p.block.w, p.block.h, sh);
+    const [hw, hh] = [(bw / 2) * grow + reach(gx, p.block.cx, bw / 2, 960), (bh / 2) * grow + reach(gy, p.block.cy, bh / 2, 540)];
+    const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w, h: p.block.h, shear: sh, size: p.block.size, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j], -p.y[j], (p.sizes?.[j] ?? p.scale) * tex] as [number, number, number]] : [])) };
+    return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}) } };
+  });
+  // the camera into a new part never carries the first line's box out of the frame (world-cam.ts camReach)
+  let camRoom: CamRoom | undefined;
+
   return {
     group,
     // (a set laid into its page's composition is placed inside the safe area by its numbers: it is neither refitted nor drifted)
@@ -417,7 +438,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       body.scale.set(sx * (bb?.sx ?? 1), sy * (bb?.sy ?? 1), 1);
       body.rotation.z = (p.spec.tilt ?? 0) + (blockPose.r ?? 0);
       // the camera into a new part moves the words with the frame, about the frame's centre
-      const cam = wl.cam ? worldCam(wl.cam.kind, t - wl.cam.at, wl.cam.dir) : undefined;
+      const cam = wl.cam ? worldCam(wl.cam.kind, t - wl.cam.at, wl.cam.dir, (camRoom ??= restRects()[0]?.rect)) : undefined;
       if (cam) {
         const [x, y] = [body.position.x, body.position.y];
         const [c, sn] = [Math.cos(cam.r), Math.sin(cam.r)];
@@ -525,24 +546,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       }
     },
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
-    poses: () => poses.map((p, i) => {
-      const [cx, cy, pad] = [960 + p.block.cx + firstX, 540 - (p.block.cy + firstAt), 14];
-      // carried: the whole line on an opaque carrier (a split line's small part stands off it, so it is not)
-      const carried = !!p.object && !p.block.small?.length && CARRIERS.has(sets[i].object!);
-      // the room the line is read in covers the whole of its slow travel and its swell, not only where it starts: a
-      // drifting column walked off the uncut wood round it onto the gouges (woodcut), the paper room left behind
-      // (only the hand worlds that cut a room of their own material round the words: elsewhere the box stays where the
-      // line stands, so ukiyoe's approved kasumi and cards keep their measure)
-      const [gx, gy] = p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? [0, 0] : wl.drift ?? [0, 0];
-      const reach = (d: number, c: number, half: number, frame: number) => Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half)) / 2;
-      const grow = 1 + (p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? 0 : wl.swell ?? 0);
-      // (a sheared block's room is what it covers as drawn; its page is handed the layout to build its planes round the words)
-      const sh = p.spec.shear;
-      const [bw, bh] = shearedSize(p.block.w, p.block.h, sh);
-      const [hw, hh] = [(bw / 2) * grow + reach(gx, p.block.cx, bw / 2, 960), (bh / 2) * grow + reach(gy, p.block.cy, bh / 2, 540)];
-      const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w, h: p.block.h, shear: sh, size: p.block.size, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j], -p.y[j], (p.sizes?.[j] ?? p.scale) * tex] as [number, number, number]] : [])) };
-      return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}) } };
-    }),
+    poses: restRects,
   };
 }
 

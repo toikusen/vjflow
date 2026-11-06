@@ -152,14 +152,31 @@ function tapes(c: OffscreenCanvasRenderingContext2D) {
   T(-20, 30, 1960, 64, 3); T(-20, 986, 1960, 64, 4); T(30, -20, 64, 1120, 5); T(1826, -20, 64, 1120, 6);
 }
 /** A page: the paper, its washes, the tapes and the small print (the data in the opening, then part and time). */
-function sheetOf(e: WorldEnv, id: string, paint: (b: Buf) => void, at: [number, number, 'left' | 'right']) {
+function sheetOf(e: WorldEnv, id: string, paint: (b: Buf) => void, at: [number, number, 'left' | 'right'], brushed = false) {
   const s = e.slots;
   const layer = kept(`wc|${id}|${s.ground}|${s.ink}|${s.ink2}|${s.accent}|${s.plateInk}|${boxKey(e)}`, W, H, (c) => { const b = paperOf(s.ground); paint(b); c.drawImage(picture(b), 0, 0); tapes(c); });
-  page(e, `wc-${id}`, (c) => {
+  const draw = () => page(e, `wc-${id}`, (c) => {
     c.drawImage(layer, 0, 0);
     small(c, dataLine(e), at[0], at[1], SM(24, isJa(e)), 24, s.faint, 1, at[2]);
   }, `${e.item?.part}|${e.item?.at}|${boxKey(e)}`);
+  // (a page of painted words is brushed in as the cut opens: its washes laid left to right in six passes over the bare
+  // taped sheet, the board's "layers brushed in"; a page of reserved words is never bare, its words would be paper on paper)
+  const k = brushed ? Math.floor(clamp01(e.age / BRUSH_SEC) * 6) / 6 : 1;
+  if (k >= 1) return draw();
+  onPage(e, kept(`wc-bare|${s.ground}`, W, H, (c) => { c.drawImage(picture(paperOf(s.ground)), 0, 0); tapes(c); }));
+  const c = e.ctx;
+  c.save();
+  const m = c.getTransform();
+  if (e.base) c.setTransform(e.base);
+  c.beginPath();
+  c.rect(-W * 0.1, -H * 0.1, W * 0.1 + W * k, H * 1.2);
+  c.clip();
+  c.setTransform(m);
+  draw();
+  c.restore();
 }
+/** How long a painted page takes to be brushed in as its cut opens, s. */
+const BRUSH_SEC = 0.6;
 const boxKey = (e: WorldEnv) => (e.rect ? [e.rect.x0, e.rect.x1].map((v) => Math.round(v / 160)).join(',') : '-');
 
 /** a: an ochre flat wash crossing the sheet, its right end run dry; a rose glaze over part of it (the overlap a third
@@ -176,7 +193,7 @@ const washPage: HandGround = (e) => { sheetOf(e, 'wash', (b) => {
   wash(b, poly(blobPts(1520, 300, 300, 190), 40, 6), B5B.x7FB3C2, { a0: 0.38, rim: 0.5, col2: B5B.xA9B6E0, seed: 2, blooms: [[1560, 300, 90]] });
   wash(b, poly(blobPts(1470, 330, 170, 110), 30, 16), B5B.x7FB3C2, { a0: 0.16, rim: 0.4, seed: 4 });
   splat(b, 1620, 230, 220, 60, s.ink, 5, e.rect);
-}, [236, 1028, 'left']); };
+}, [236, 1028, 'left'], true); };
 
 /** b: night glazes over the sky, wet into wet, a darker glaze laid over its top; a bloom where water crept back; the sea a
  * separate wash under a hard horizon, five dry strokes across it; stars reserved white. The line reserved white in the sky. */
@@ -195,7 +212,7 @@ const bloomPage: HandGround = (e) => { sheetOf(e, 'bloom', (b) => {
   wash(b, poly(blobPts(600, 560, 470, 360), 40, 11), B5B.xB7D6D0, { a0: 0.38, col2: B5B.xD6E3C2, seed: 8, blooms: [[480, 420, 110]] });
   wash(b, poly(blobPts(1330, 560, 480, 360), 40, 12), B5B.xEFD49C, { a0: 0.36, col2: B5B.xF2C6B0, seed: 9, blooms: [[1460, 700, 90]] });
   splat(b, 960, 500, 900, 140, s.ink, 9, e.rect, 7);
-}, [1680, 1028, 'right']); };
+}, [1680, 1028, 'right'], true); };
 
 /** d: two vertical strokes, one a phrase, their lower ends run dry over the tooth; a bloom in each; splatter beside. The
  * phrases reserved white in them. A line with one phrase gets one stroke. */

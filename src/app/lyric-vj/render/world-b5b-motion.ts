@@ -18,9 +18,10 @@ export const B5B_ENTERS: Record<string, WorldMove> = {
   // the whole sheet of stickers slid on from below, the way a page is laid into the album
   'sheet-slide': { sec: 0.42, block: (q) => ({ dy: -120 * (1 - easeOut(q, 3)), a: clamp01(q * 4) }) },
   // watercolor: the paint is brushed in left to right, a band at a time, each band coming up as the wash darkens
-  'brush-in': { sec: 0.8, glyph: ({ q, u }) => ({ a: stepsOf(clamp01(q * 1.5 - u * 0.5), 5) }) },
+  'brush-in': { sec: 0.8, glyph: ({ q, u }) => ({ a: clamp01(q * 1.5 - u * 0.5) > 0 ? (clamp01(q * 1.5 - u * 0.5) < 0.6 ? 0.45 : 1) : 0 }) },
   // the reserve shows as the wash closes round it: the whole line comes up out of the wet sheet
-  'wash-in': { sec: 0.9, block: (q) => ({ a: easeOut(q, 2) }) },
+  // (two glazes: the first lays the whole line pale at once, the second deepens it once the first has soaked in)
+  'wash-in': { sec: 0.9, block: (q) => ({ a: q <= 0 ? 0 : q < 0.55 ? 0.42 : 1 }) },
   // midcentury: the print is pulled across in four hard steps, a plate at a time
   'pull-in': { sec: 0.36, clip: (q) => ({ axis: 'x', at: stepsOf(easeOut(q, 2), 4) }) },
   // the cut sheet slid in from the left on threes (8 a second), stopping dead

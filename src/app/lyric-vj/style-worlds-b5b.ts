@@ -82,7 +82,8 @@ export const WATERCOLOR_WORLD: StyleWorld = {
   material: { surface: 'wc-paint', core: 'ink2', engine: 'wet/watercolour-glaze', how: '每層水彩逐像素算：基本濃度 × 緩慢流動 + 0.42 × e^(−距邊 / 3.5 px) 的乾邊積色、12% 顆粒、第二種顏料在色層裡漂、回水花邊與潮線、筆尾飛白、潑點；色層用 multiply 疊出第三色；沒有任何模糊' },
   frameStack: stack({ grain: 0.04 }),
   timeBase: { fps: 0, unit: 'phrase', curve: 'brush-hold' },
-  ownInk: true, sheet: true, printsParts: true,
+  // (paint arrives as paint: none of the shared squash, roll or slice, which made its arrival ink-wash's)
+  ownInk: true, sheet: true, printsParts: true, ownMoves: true,
   layouts: { pair: 'watercolor/night', shared: [], carriers: ['watercolor/strokes', 'watercolor/strokes-l'], lines: [
     line('watercolor/wash', [1, 2], ['brush-in', 'wash-in'], ['wash-dry', 'lift-out'], 'paper-still', { max: 18, ground: 'watercolor/wash' }),
     line('watercolor/wash-r', [1, 2], ['brush-in', 'wash-in'], ['wash-dry', 'lift-out'], 'paper-still', { max: 18, ground: 'watercolor/wash-r' }),

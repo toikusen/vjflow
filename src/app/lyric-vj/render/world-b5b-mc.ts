@@ -229,7 +229,7 @@ const freeSpot = (e: WorldEnv, spots: Pt[], r: number) => spots.find(([x, y]) =>
 const PIECES: Record<string, Piece> = {
   // a sputnik in a free corner, its rods turning a notch at a time (limited animation), the second plate off register
   'sputnik': { sec: 2.4, clear: 0, draw: (e, q) => frame(e, (c) => {
-    const at = freeSpot(e, [[1660, 220], [260, 220], [1660, 860], [260, 860]], 150);
+    const at = freeSpot(e, [[300, 880], [1400, 900], [300, 210], [1400, 190]], 150);
     if (!at) return;
     c.save();
     c.globalAlpha = Math.min(ease(q / 0.15, 2), 1 - clamp01((q - 0.88) / 0.12));

@@ -5,6 +5,7 @@
 // - camera: the one move the world's camera makes into a new part (render/kinetic.ts, world-layout.ts).
 // Moves in and out shared by all worlds are in render/world-motion.ts (SHARED_ENTERS, SHARED_EXITS).
 import type { StyleWorld } from './style-world';
+import type { CompositionFamily } from './world-events';
 
 export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker' | HoldKind | 'line-ink-settle';
 /**
@@ -205,3 +206,63 @@ export const WORLD_LINKS: Record<string, LinkTaste> = {
 
 /** A world's taste by its id; one no row names hands its page on by the edge, along x. */
 export const linksOf = (id: string): LinkTaste => WORLD_LINKS[id] ?? t(['edge-relay']);
+
+/**
+ * How a world may change its composition (Q1, docs/research/2026-11-09-q1-codex.md §C): which of the six families the
+ * song's one scheduler (world-events.ts planWorldEvents) may lay on it, where, how long the move takes and on what curve,
+ * what the words are read on, and the regions no seat may enter. A new capability, declared world by world from the
+ * world's own approved board; a world without one has it off (the scheduler only keeps what the composer laid). `moves`
+ * names the world's own move for each family; `pending` lists moves the world is bounded to but the renderer cannot draw
+ * yet, so they are never scheduled (2026-11-09 phase 2: docs/research/2026-11-09-q1-phase2.md).
+ */
+export interface WorldCompositions {
+  kinds: CompositionFamily[];
+  /** The world's approved seats (sets); every set of the world when absent. */
+  seats?: string[];
+  carrierRole: 'page' | 'plate' | 'object' | 'ground';
+  /** Where each family may fall: a part's first line, a line boundary, inside a line at a sung word. */
+  allowedAt: Partial<Record<CompositionFamily, ('section' | 'line' | 'in-line')[]>>;
+  /** Each family's action time, s (a reseat is a cut: 0). */
+  duration: Partial<Record<CompositionFamily, number>>;
+  /** How the move runs: a cut, or the world's own curve (world-cam.ts for a camera). */
+  curve: Partial<Record<CompositionFamily, 'cut' | 'world-camera' | 'page-link'>>;
+  /** Regions no seat may enter, frame fractions y down. */
+  protectedRegion?: { x0: number; y0: number; x1: number; y1: number }[];
+  moves: Partial<Record<CompositionFamily, string>>;
+  pending?: Record<string, string>;
+  /**
+   * Whether the free path lets the scheduler take the world over by default. Off for all five (2026-11-09 phase-2 review:
+   * fast 3.6 → 3.2 on the five, Q1 not accepted): only an explicit opt-in (freeJob worldEvents: true, or
+   * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
+   */
+  enabled?: boolean;
+}
+
+/**
+ * The five single-page worlds (Codex C). Their sets are each laid into a page of their own (blueprint, document,
+ * notebook, art-deco): a seat change there is a page change, so it falls only on a line boundary, never inside a line
+ * under words being read. A camera reframe is the world's own move into a part (world-cam.ts), never a beat of its own
+ * (Codex cap ruling: no independent camera beats this stage). A page handoff is a Q4 linked move (world-handoff.ts) the
+ * scheduler protects; it lays none of its own.
+ */
+export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
+  // sheet-change: the next drawing sheet's own layout; detail-viewport: the push into a part, cut from the same sheet
+  // (no invented engineering detail)
+  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' } },
+  // board-region: left / right / centre regions of the deep green board, also at a word inside a line (the same board
+  // under the words, so nothing is pulled from under them); chalk changing colour is no cut
+  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' }, pending: { 'erase-reseat': 'needs an eraser pass drawn over a region already sung; never the line being sung' } },
+  // a thermal receipt: camera still, no shared page handoff, its stamp only a hold; its feed and tear are its own page
+  // moves, not drawn as a composition switch yet
+  document: { kinds: [], carrierRole: 'page', allowedAt: {}, duration: {}, curve: {}, moves: {}, pending: { 'feed-advance': 'the receipt feeding on to its next segment as a switch of its own', 'tear-next': 'tearing off along the paper edge once the line is sung' } },
+  // page-turn: the Q4 fold to the top binding; margin-seat: the main column and the margin reading areas, each a page
+  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' } },
+  // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; no marquee turned stage sign
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' } },
+};
+
+/** The page a world lays one of its sets into (its own page under the words), or undefined. */
+export const pageOf = (w: Pick<StyleWorld, 'layouts'>, set: string): string | undefined => w.layouts.lines.find((l) => l.set === set)?.ground;
+
+/** A world's composition capability, or undefined: off (the scheduler only keeps what the composer laid). */
+export const compositionsOf = (id: string): WorldCompositions | undefined => WORLD_COMPOSITIONS[id];

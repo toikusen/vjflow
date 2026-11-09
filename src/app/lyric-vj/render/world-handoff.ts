@@ -104,13 +104,15 @@ export function groundLink(prev: GroundLine | undefined, line: GroundLine) {
  * Lays the linked page moves on the world's sections (render/engine.ts, once a song): the section a line's shot opens
  * starts LINK_PREPARE before the line shows, so its page can come on beside the last line's words, and runs LINK_CLEAR
  * on; `seam` is the time in it the words switch. A boundary with no such time (the last line shown too briefly, or a
- * section too close before) keeps its plain cut. Returns the boundaries laid, by the next line's id.
+ * section too close before) keeps its plain cut. Returns the boundaries laid, by the next line's id. Given `approved`
+ * (the Q1 scheduler's table, world-events.ts), it only realises the handoffs that table holds: a boundary it did not
+ * approve keeps its plain cut, so no page move runs that the song's one event plan does not count.
  */
-export function linkGrounds(sections: LinkSection[], lines: GroundLine[]) {
+export function linkGrounds(sections: LinkSection[], lines: GroundLine[], approved?: Set<string>) {
   const laid: { id: string; kind: string; dir: number }[] = [];
   lines.forEach((line, i) => {
     const link = groundLink(lines[i - 1], line);
-    if (!link) return;
+    if (!link || (approved && !approved.has(line.id))) return;
     const j = sections.findIndex((s, k) => k > 0 && s.start >= line.show - 0.06 && s.start <= line.start + 0.06);
     if (j < 0) return;
     const start = sections[j].start - LINK_PREPARE;

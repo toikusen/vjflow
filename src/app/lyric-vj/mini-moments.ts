@@ -6,6 +6,9 @@ import type { MomentFamily } from './world-shared';
 import type { FrameBox, PolicyDecision } from './world-events';
 import { checkMoments, type MomentAsk, type SignatureMoment } from './signature-moments';
 import type { MomentPlan } from './moment-policy';
+import { carrierBox } from './render/hold-room';
+import { OBJECT_MARGIN } from './render/world-objects';
+import { SET_SPECS } from './render/world-sets';
 import type { SongTimeline } from './timeline';
 
 /** A mini moment as drawn: its action at the sung word, in its region, off every line's box. */
@@ -35,8 +38,21 @@ export interface MiniMoment {
 /** Each line's boxes on the frame (every set it may stand in while up: its own, a change of set inside it) and when it is up. */
 export interface ShownBox { id: string; show: number; end: number; boxes: FrameBox[] }
 
-/** The scheduler's lines as the boxes a mini keeps off: every seat's laid box. */
-export const shownBoxes = (lines: { id: string; show: number; end: number; seats: { box?: FrameBox }[] }[]): ShownBox[] => lines.map((l) => ({ id: l.id, show: l.show, end: l.end, boxes: l.seats.flatMap((x) => (x.box ? [x.box] : [])) }));
+/** A set's carrier round words laid in `box` (a card, a sign: render/hold-room.ts carrierBox, its shadow margin added), or undefined. */
+function carrierOf(set: string, box: FrameBox): FrameBox | undefined {
+  const spec = SET_SPECS[set];
+  if (!spec?.object) return undefined;
+  const [w, h] = [(box.x1 - box.x0) * 1920, (box.y1 - box.y0) * 1080];
+  const [cx, cy] = [((box.x0 + box.x1) / 2) * 1920 - 960, 540 - ((box.y0 + box.y1) / 2) * 1080];
+  const c = carrierBox(spec, { cx, cy, w, h });
+  if (!c) return undefined;
+  const [x, y, hw, hh] = [960 + cx + c.x, 540 - (cy + c.y), c.ow / 2 + OBJECT_MARGIN, c.oh / 2 + OBJECT_MARGIN];
+  return { x0: (x - hw) / 1920, y0: (y - hh) / 1080, x1: (x + hw) / 1920, y1: (y + hh) / 1080 };
+}
+
+/** The scheduler's lines as the boxes a mini keeps off: every seat's laid box and the carrier the words stand on. */
+export const shownBoxes = (lines: { id: string; show: number; end: number; seats: { id: string; box?: FrameBox }[] }[]): ShownBox[] =>
+  lines.map((l) => ({ id: l.id, show: l.show, end: l.end, boxes: l.seats.flatMap((x) => (x.box ? [x.box, ...(carrierOf(x.id, x.box) ? [carrierOf(x.id, x.box)!] : [])] : [])) }));
 
 /** Room kept round a line's planned box (a share of the frame): the plan's box is an estimate of the drawn one. */
 export const AVOID_PAD = 0.03;

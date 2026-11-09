@@ -62,7 +62,9 @@ export function momentCandidates(free: Free, song: SongTimeline, world: StyleWor
   });
   // a mini's own region beside the words up in its window (mini-moments.ts miniRegion): none, no mini (Codex §5)
   // (every seat a line may stand in: a world the scheduler does not take over lists its composer's changes of set there)
-  const shown = shownBoxes(fromFreeJob(free as never, song, world, { seed: 0 }).lines);
+  // (a line whose key word is blown up is drawn in a pose of its own, not in its set's box: the whole frame is its)
+  const blown = new Set((free.job.treatment.cues as { cueId: string; world?: { blow?: unknown } }[]).filter((c) => c.world?.blow).map((c) => c.cueId));
+  const shown = shownBoxes(fromFreeJob(free as never, song, world, { seed: 0 }).lines).map((l) => (blown.has(l.id) ? { ...l, boxes: [{ x0: 0, y0: 0, x1: 1, y1: 1 }] } : l));
   const noRoom: { meaningRef: string; why: string }[] = [];
   const candidates = order.flatMap((c, rank) => {
     if (c.variant !== 'mini') return [momentCandidate(c, rank, free)];

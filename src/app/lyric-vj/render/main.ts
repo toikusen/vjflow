@@ -1,6 +1,7 @@
 // Render page entry (bundled by scripts/lyric-vj/render.mts): exposes ready / renderAt / metrics to the driver.
 import { LyricVjEngine, RenderJob } from './engine';
 import { loadJobFonts } from './job-fonts';
+import { ensureAdvances } from './layout-measure';
 import { isSignature, signatureCues, signatureIds, signatureLayer, signatureWindows } from './signature';
 import { miniMomentLayer, miniMomentsOf } from './mini-moment';
 
@@ -22,6 +23,8 @@ const job: RenderJob = await (await fetch(new URLSearchParams(location.search).g
 // QA renders log sprite boxes per frame (graphics.ts)
 (globalThis as { __vjTrack?: boolean }).__vjTrack = !!job.track;
 await loadJobFonts(job);
+// (the plan's advance table, loaded once so anything measuring a seat in the page measures as the plan did)
+await ensureAdvances();
 // a transparent page for the lyric layer
 if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);

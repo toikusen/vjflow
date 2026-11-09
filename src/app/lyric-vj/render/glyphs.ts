@@ -75,19 +75,24 @@ export const clearGlyphCache = () => {
   cache.forEach((e) => e.texture.dispose());
   cache.clear();
 };
-const measureCtx = document.createElement('canvas').getContext('2d')!;
+// taken on first measure, not at import: a module loaded before any canvas can be made (a spec worker that
+// imported it under another spec) would otherwise keep a null context for good; null is not cached, so it retries
+let measureCtx: CanvasRenderingContext2D | null = null;
+const measurer = () => (measureCtx ??= document.createElement('canvas').getContext('2d'))!;
 
 const fontOf = (s: GlyphStyle, scale = 1) => `${nearestWeight(s.family, s.weight)} ${s.size * scale}px "${s.family}"`;
 
 export function advanceOf(char: string, s: GlyphStyle): number {
-  measureCtx.font = fontOf(s);
-  return measureCtx.measureText(char).width;
+  const m = measurer();
+  m.font = fontOf(s);
+  return m.measureText(char).width;
 }
 
 /** Width of a glyph's ink (its painted strokes), which can fill the whole em in pixel and monospace faces. */
 export function inkOf(char: string, s: GlyphStyle): number {
-  measureCtx.font = fontOf(s);
-  const m = measureCtx.measureText(char);
+  const c = measurer();
+  c.font = fontOf(s);
+  const m = c.measureText(char);
   return Math.max(0, m.actualBoundingBoxLeft + m.actualBoundingBoxRight);
 }
 

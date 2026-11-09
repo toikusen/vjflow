@@ -1,17 +1,14 @@
 import * as THREE from 'three';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { stubCanvas2d } from '../testdata/canvas-stub';
 import type { CueStyle } from '../treatment';
 import type { CueLayer, CueRuntime } from './runtime';
+import { withTextFx } from './text-fx';
 
 // no canvas here: every 2D call is a no-op; the template's own pictures are named after their characters
-beforeAll(() => {
-  const metrics = { width: 30, actualBoundingBoxAscent: 30, actualBoundingBoxDescent: 6, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 30 };
-  const stub = new Proxy({} as CanvasRenderingContext2D, {
-    get: (_, k) => (k === 'measureText' ? () => metrics : k === 'getImageData' ? (_x: number, _y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }) : () => ({ addColorStop: () => undefined })),
-    set: () => true,
-  });
-  HTMLCanvasElement.prototype.getContext = (() => stub) as never;
-});
+let restore: () => void;
+beforeAll(() => void (restore = stubCanvas2d()));
+afterAll(() => restore());
 
 const TEXT = 'abc';
 const fx = { flash: 0, hit: 0, shake: 0 };
@@ -42,7 +39,6 @@ const runtime = (style: Partial<CueStyle>) =>
   ({ cue: { text: TEXT, start: 1 }, style: { enter: 'cut', exit: 'fade', reveal: 'line', ...style }, showFrom: 1, exitAt: 3, exitDur: 0.5, pace: 1, palette: { accent: '#ff0000' } }) as unknown as CueRuntime;
 
 async function wrapped(style: Partial<CueStyle>, move = 0) {
-  const { withTextFx } = await import('./text-fx');
   const l = withTextFx(layer(move), runtime(style));
   const glyphs = l.group.children.filter((o) => o.userData['glyph']) as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
   return { l, glyphs };
@@ -192,7 +188,6 @@ describe('drawn text effects', () => {
   });
 
   it('karaoke: the ball arcs from one row to the next, never jumping', async () => {
-    const { withTextFx } = await import('./text-fx');
     // the third character sits on a second row 200 px lower
     const l0 = layer();
     const gs = l0.group.children as THREE.Mesh[];
@@ -211,7 +206,6 @@ describe('drawn text effects', () => {
   });
 
   it('karaoke: down a column the ball runs beside the characters, never over them', async () => {
-    const { withTextFx } = await import('./text-fx');
     const l0 = layer();
     const gs = l0.group.children as THREE.Mesh[];
     const update = l0.update;
@@ -239,7 +233,6 @@ describe('drawn text effects', () => {
   });
 
   it('shatter: each song breaks its own glass (shard count from the song)', async () => {
-    const { withTextFx } = await import('./text-fx');
     const counts = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((song) => {
       const l = withTextFx(layer(), { ...runtime({ exit: 'shatter' }), song } as CueRuntime);
       return (l.group.children[0] as THREE.Mesh).children.length;
@@ -248,7 +241,6 @@ describe('drawn text effects', () => {
   });
 
   it('slice and slash take each song\'s own reach and angle', async () => {
-    const { withTextFx } = await import('./text-fx');
     const sliceAt = (song: number) => {
       const l = withTextFx(layer(), { ...runtime({ enter: 'slice' }), song } as CueRuntime);
       l.update(1.02, fx);
@@ -265,7 +257,6 @@ describe('drawn text effects', () => {
   });
 
   it('shine sweeps a band of light over the word; faces flicks through other typefaces, then lands in its own', async () => {
-    const { withTextFx } = await import('./text-fx');
     const l = withTextFx(layer(), { ...runtime({ emphasis: [{ from: 0, to: 2, method: 'shine' }] }), fonts: { display: 'a', body: 'b', script: 'c' } } as unknown as CueRuntime);
     const glow = (l.group.children[0] as THREE.Mesh).children[0] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
     l.update(1.3, fx);
@@ -299,7 +290,6 @@ describe('drawn text effects', () => {
   });
 
   it('does not compound over frames when the template leaves scale alone (a focus line grew to fill the frame)', async () => {
-    const { withTextFx } = await import('./text-fx');
     const l0 = layer();
     // a template that sets position and opacity but never scale
     const glyphs = l0.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];

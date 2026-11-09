@@ -160,7 +160,8 @@ export class InstantStage implements OnInit, OnDestroy {
 
   /** Song and form to picture: the rules take milliseconds, the rest is the engine's first frame. */
   private async build() {
-    const [{ freeJob }, { LivePlayer }] = await Promise.all([import('../../lyric-vj/free-plan'), import('../../lyric-vj/render/live')]);
+    const [{ freeJob, freeJobReady }, { LivePlayer }] = await Promise.all([import('../../lyric-vj/free-plan'), import('../../lyric-vj/render/live')]);
+    await freeJobReady();
     this.player ??= new LivePlayer(this.stage().nativeElement, this.audio);
     this.player.setSilent(this.silent());
     this.player.onFrame = (t) => {

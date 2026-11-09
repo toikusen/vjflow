@@ -1,12 +1,12 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { stubCanvas2d } from '../testdata/canvas-stub';
 
-// world-objects pulls in glyphs.ts, which keeps a 2D context from load: stub the canvas first (as vertical.spec does),
-// or a later spec in the same worker inherits a null one
 let sets: typeof import('./world-sets');
 let objects: typeof import('./world-objects');
+let restore: () => void;
+afterAll(() => restore());
 beforeAll(async () => {
-  const stub = new Proxy({} as CanvasRenderingContext2D, { get: (_, k) => (k === 'measureText' ? () => ({ width: 30 }) : () => ({ addColorStop: () => undefined })), set: () => true });
-  HTMLCanvasElement.prototype.getContext = (() => stub) as never;
+  restore = stubCanvas2d();
   [sets, objects] = await Promise.all([import('./world-sets'), import('./world-objects')]);
 });
 

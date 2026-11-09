@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { FREE_STYLES } from '../free-styles';
 import { WORLD_COMPOSITIONS, pageSeatsOf } from '../world-shared';
 import { boxesMeet, evenMeasure, laidSeat, panelSplit, shapedMeasure, slotSpec, type FracBox } from './seat-geometry';
-import { layoutMeasure } from './layout-measure';
+import { ensureAdvances, layoutMeasure, measuredFamily } from './layout-measure';
 import { REAL_ADVANCES } from './seat-agree.fixture';
 import { SEAT_TEXTS } from './seat-agree.texts';
 import { pageSeatsFor } from '../lineplan-core';
@@ -124,5 +124,18 @@ describe('phase 3c: plan and picture agree on the real faces', () => {
     const row = b.lines![0];
     // (wider than its row box: Latin sets at 1.08)
     expect((p.main.x1 - p.main.x0) / 0.75).toBeGreaterThan(row.bw);
+  });
+
+  it('the advance table read in place (node) is the one the browser loads as its own chunk (ensureAdvances)', async () => {
+    const { default: chunk } = await import('./advance-table.json');
+    await ensureAdvances();
+    for (const [family, [chars, values]] of Object.entries(chunk as Record<string, string[]>)) {
+      expect(measuredFamily(family)).toBe(true);
+      const m = layoutMeasure(family);
+      const vs = values.split(',').map(Number);
+      [...chars].forEach((c, k) => k % 97 === 0 && expect(m(c), `${family} ${c}`).toBe(vs[k]));
+    }
+    // (a family the table was not read for falls to the rule)
+    expect(measuredFamily('No Such Face')).toBe(false);
   });
 });

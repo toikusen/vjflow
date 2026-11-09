@@ -590,7 +590,8 @@ export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldE
   if (!table.outcomes) return [];
   const { rows } = shownOf(job);
   // (the switches as the final job draws them, read off the drawing with real shows: the winner is what is drawn)
-  const drawnCuts = currentEvents({ job }, undefined, world).filter((e) => e.kind !== 'keep');
+  // (on the job's own faces, as the scheduler laid the seats: the table is not attached yet when the final check runs)
+  const drawnCuts = currentEvents({ job }, undefined, world, jobFaces(job)).filter((e) => e.kind !== 'keep');
   const out: InputWarning[] = [];
   const miss = (line: string, why: string) => out.push({ inputs: [jointName(line)], reason: `final check: joint: ${why}` });
   const near = (a: number, b: number) => Math.abs(a - b) < LANDED;

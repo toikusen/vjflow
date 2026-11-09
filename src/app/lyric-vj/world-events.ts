@@ -376,7 +376,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
   // graphics, by the box they are really laid in)
   const seatOk = (s: SeatCandidate) => (!caps.seats.length || caps.seats.includes(s.id)) && !(s.box && [...(caps.protectedRegion ?? []), ...(s.protect ?? [])].some((p) => boxesMeet(s.box!, p)));
   // (the world's material moves, by what they do to the seat; each laid only as an event of its own family)
-  const materials = Object.entries(caps.materials ?? {}).filter(([, m]) => allows.has(m.family));
+  // (a withheld move is declared but never a candidate: world-shared MaterialMove.withheld)
+  const materials = Object.entries(caps.materials ?? {}).filter(([, m]) => allows.has(m.family) && !m.withheld);
   const materialFor = (mode: MaterialMove['seat'], scope: EventScope) => materials.filter(([, m]) => m.seat === mode && m.at.includes(scope));
   const offLimits = (box: FrameBox | undefined, m: MaterialMove) => !!box && (m.protectedRegion ?? []).some((p) => boxesMeet(box, p));
   const isSectionStart = (i: number) => i > 0 && sections.some((s) => s.start > lines[i - 1].start + 1e-3 && lines[i].start >= s.start - 0.25);

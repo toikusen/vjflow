@@ -297,11 +297,13 @@ export function landedEvents(job: Job, world: StyleWorld, table: { events: World
       return { id: e.id, plan, drawn: d, same: !why, ...(why ? { why } : {}) };
     }
     const d = mine.find((x) => !claimed.has(x) && near(x.at, e.at) && kindOk(e.kind, x.kind)) ?? mine.find((x) => !claimed.has(x) && near(x.at, e.at));
-    if (!d) return { id: e.id, plan, same: false, why: `no ${e.kind} drawn on ${line} at ${e.at}` };
+    if (!d) return { id: e.id, plan, same: false, why: e.material ? `approved material move ${e.material} not drawn on ${line} at ${e.at}` : `no ${e.kind} drawn on ${line} at ${e.at}` };
     claimed.add(d);
     const seat = e.kind === 'camera-reframe' ? e.seatAfter : d.seatAfter;
     const got = { kind: d.kind, seat, page: pageOf(world, seat), at: d.at, from: d.from, to: d.to };
     const why = [
+      // (an approved material move must be drawn as that move, never as the plain switch beside it)
+      (e.material ?? '') !== (d.material ?? '') && `approved material move ${e.material ?? 'none'} not drawn (drawn: ${d.material ?? 'a plain ' + d.kind})`,
       !kindOk(e.kind, d.kind) && `kind ${e.kind} drawn as ${d.kind}`,
       e.kind !== 'camera-reframe' && SET_SPECS[e.seatAfter] && seat !== e.seatAfter && `seat ${e.seatAfter} drawn as ${seat}`,
       plan.page !== got.page && `page ${plan.page} drawn as ${got.page}`,
@@ -393,6 +395,8 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
       if (x.at - Math.max(r.cue.start, settled) < READ_STABLE - 1e-6 || r.cue.end - (x.at + (x.sec ?? 0)) < READ_STABLE - 1e-6) miss(`${x.move}@${r.id}`, `${x.move} at ${x.at} without ${READ_STABLE}s of still reading either side`);
       if (!sungAt(sungWords(r.cue), x.at)) miss(`${x.move}@${r.id}`, `${x.move} at ${x.at} is at no sung word`);
       if (!near(x.sec ?? 0, m.sec)) miss(`${x.move}@${r.id}`, `${x.move} drawn over ${x.sec}s, declared ${m.sec}s`);
+      const box = laidSeat(r.cue.text, x.set)?.box;
+      if (box && (m.protectedRegion ?? []).some((p) => boxesMeet(box, p))) miss(`${x.move}@${r.id}`, `${x.move} sets the words in its protected region`);
     }
   // a world camera's move drawn over another switch of the song: a scheduled world drops it (camDrops), never keeps both
   for (const r of rows) {

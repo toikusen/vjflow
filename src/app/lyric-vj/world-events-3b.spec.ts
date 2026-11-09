@@ -77,6 +77,14 @@ describe('phase 3b: material moves in the scheduler', () => {
     expect(fenced.rejected.some((r) => /protected region/.test(r.reason))).toBe(true);
   });
 
+  it('a withheld material yields no candidates; the same declaration not withheld does', () => {
+    const deco = (m: MaterialMove) => caps(['layout-seat', 'carrier-swap'], { allowedAt: { 'carrier-swap': ['in-line'] }, materials: { 'poster-panel': m } });
+    const l = line('a', 1, 5, [MARQUEE, PANELS], { words: words(1, 5, 4), settled: 1.4 });
+    expect(planWorldEvents(input([l], { caps: deco(PANEL) })).events.some((e) => e.kind === 'carrier-swap')).toBe(false);
+    const { withheld: _w, ...open } = PANEL;
+    expect(planWorldEvents(input([l], { caps: deco(open) })).events.some((e) => e.kind === 'carrier-swap')).toBe(true);
+  });
+
   it('chalkboard erase-reseat: a backing line still sung, or another line up during the wipe, means no wipe', () => {
     // a is still sung (to 4.6) after the backing line x before b (to 3): the wipe of x waits for a, and here has no room
     const backing = planWorldEvents(input([line('a', 1, 4.6, [RIGHT]), line('x', 2, 3, [LEFT]), line('b', 5.3, 7, [CENTRE, LEFT])], { caps: chalk }));
@@ -115,7 +123,8 @@ describe('phase 3b: material moves in the scheduler', () => {
   });
 
   it('art-deco poster-panel: inside a line at a sung word, on the same page, another carrier, the declared time, read still either side; never off the page or into a protected region', () => {
-    const deco = caps(['layout-seat', 'carrier-swap'], { allowedAt: { 'carrier-swap': ['in-line'] }, materials: { 'poster-panel': PANEL } });
+    const { withheld: _w, ...open } = PANEL;
+    const deco = caps(['layout-seat', 'carrier-swap'], { allowedAt: { 'carrier-swap': ['in-line'] }, materials: { 'poster-panel': open } });
     const l = line('a', 1, 5, [MARQUEE, PANELS], { words: words(1, 5, 4), settled: 1.4 });
     const plan = planWorldEvents(input([l], { caps: deco }));
     const e = plan.events.find((x) => x.kind === 'carrier-swap')!;
@@ -130,7 +139,7 @@ describe('phase 3b: material moves in the scheduler', () => {
     // another page is never a carrier swap inside a line; a panel seat in a protected region is never taken
     const other = planWorldEvents(input([line('a', 1, 5, [MARQUEE, { ...PANELS, page: 'w/arch' }], { words: words(1, 5, 4) })], { caps: deco }));
     expect(other.events.some((x) => x.kind === 'carrier-swap')).toBe(false);
-    const fenced = planWorldEvents(input([l], { caps: { ...deco, materials: { 'poster-panel': { ...PANEL, protectedRegion: [{ x0: 0, y0: 0.5, x1: 1, y1: 1 }] } } } }));
+    const fenced = planWorldEvents(input([l], { caps: { ...deco, materials: { 'poster-panel': { ...open, protectedRegion: [{ x0: 0, y0: 0.5, x1: 1, y1: 1 }] } } } }));
     expect(fenced.events.some((x) => x.kind === 'carrier-swap')).toBe(false);
     // no sung word: no swap (none faked by time)
     expect(planWorldEvents(input([{ ...l, words: undefined }], { caps: deco })).events.some((x) => x.kind === 'carrier-swap')).toBe(false);
@@ -291,7 +300,7 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
   const run = (id: string, k: string, worldEvents?: boolean) => { const { song, meaning } = load(k); return freeJob(song, { style: style(id), seed: 0, meaning, ...(worldEvents === undefined ? {} : { worldEvents }) }); };
 
   it('each new kind is planned, drawn as planned (verifyWorldEvents), the same seed the same table', () => {
-    const cases: [string, string, string][] = [['chalkboard', 'nun', 'erase-reseat'], ['document', 'nun', 'feed-advance'], ['document', 'nun', 'tear-next'], ['art-deco', 'utsusemi', 'poster-panel']];
+    const cases: [string, string, string][] = [['chalkboard', 'nun', 'erase-reseat'], ['document', 'nun', 'feed-advance'], ['document', 'nun', 'tear-next']];
     for (const [id, k, m] of cases) {
       const f = run(id, k, true);
       const table = f.treatment.worldEvents!;
@@ -357,14 +366,47 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
     expect(compositionsOf('document')!.kinds).not.toContain('camera-reframe');
   });
 
-  it('art-deco: the poster-panel is the line’s repose onto its marquee’s panels, at a sung word, the words on the same page', () => {
+  it('art-deco: the poster-panel is withheld (declared, never a candidate): Utsusemi 75.86 is no longer planned', () => {
+    expect(PANEL.withheld).toMatch(/shared real-width split/);
     const f = run('art-deco', 'utsusemi', true);
-    const e = f.treatment.worldEvents!.events.find((x) => x.material === 'poster-panel')!;
-    const cue = (f.treatment.cues as { cueId: string; world?: { set: string; repose?: { at: number; set: string; sec?: number; move?: string }[] } }[]).find((c) => c.cueId === e.lineIds[0])!;
-    expect(cue.world!.repose).toContainEqual({ at: e.at, set: e.seatAfter, sec: PANEL.sec, move: 'poster-panel' });
-    expect(e.seatAfter).toBe(`${cue.world!.set}+panels`);
-    const inp = fromJob(f.job, load('utsusemi').song, style('art-deco').world);
-    expect(sungAt(inp.lines.find((l) => l.id === e.lineIds[0])!.words, e.at)).toBe(true);
+    expect(f.treatment.worldEvents!.events.some((e) => e.material === 'poster-panel' || e.kind === 'carrier-swap')).toBe(false);
+  });
+
+  it('tear-next and feed-advance tampered (−1 s, +0.3 s, the wrong length) are reported by the final check', () => {
+    const f = run('document', 'nun', true);
+    for (const m of ['tear-next', 'feed-advance']) {
+      const e = f.treatment.worldEvents!.events.find((x) => x.material === m)!;
+      const id = e.lineIds.at(-1)!;
+      for (const [k, edit] of [['-1', (p: { at: number; sec: number }) => (p.at -= 1)], ['+0.3', (p: { at: number; sec: number }) => (p.at += 0.3)], ['sec', (p: { at: number; sec: number }) => (p.sec *= 2)]] as const) {
+        const job = structuredClone(f.job);
+        edit((job.treatment.cues as { cueId: string; world?: { page?: { at: number; sec: number } } }[]).find((c) => c.cueId === id)!.world!.page!);
+        const out = verifyWorldEvents(job, style('document').world, f.treatment.worldEvents!);
+        expect(out.length, `${m} ${k} ${JSON.stringify(out)}`).toBeGreaterThan(0);
+        expect(out.some((w) => w.inputs[0] === e.id || w.inputs[0] === `${m}@${id}`), `${m} ${k} ${JSON.stringify(out)}`).toBe(true);
+      }
+    }
+  });
+
+  it('a poster-panel tampered (−1 s, +0.3 s, the wrong length) is reported; an approved material move not drawn is a contract failure', () => {
+    const f = run('art-deco', 'utsusemi', true);
+    const cues = f.job.treatment.cues as { cueId: string; world?: { set: string; repose?: { at: number; set: string; sec?: number; move?: string }[] } }[];
+    const cue = cues.find((c) => c.cueId === 'c009')!;
+    const ev = { id: 'carrier-swap:c009:test', lineIds: ['c009'], kind: 'carrier-swap' as const, at: 75.86, from: 75.86, to: 76.26, seatBefore: cue.world!.set, seatAfter: `${cue.world!.set}+panels`, scope: 'in-line' as const, changesLight: false, reason: 'test', material: 'poster-panel', curve: 'panel-slide' };
+    const table = { ...f.treatment.worldEvents!, events: [...f.treatment.worldEvents!.events, ev] };
+    const drawn = (edit: (r: { at: number; sec?: number }) => void) => { const job = structuredClone(f.job); const c = (job.treatment.cues as typeof cues).find((x) => x.cueId === 'c009')!; const r = { at: 75.86, set: ev.seatAfter, sec: 0.4, move: 'poster-panel' }; edit(r); c.world!.repose = [...(c.world!.repose ?? []).filter((x) => x.at < 75), r]; return job; };
+    const base = verifyWorldEvents(drawn(() => undefined), style('art-deco').world, table).map((w) => w.reason);
+    for (const [k, edit] of [['-1', (r: { at: number }) => (r.at -= 1)], ['+0.3', (r: { at: number }) => (r.at += 0.3)], ['sec', (r: { sec?: number }) => (r.sec = 0.8)]] as const) {
+      const out = verifyWorldEvents(drawn(edit as (r: { at: number; sec?: number }) => void), style('art-deco').world, table).map((w) => w.reason);
+      expect(out.filter((x) => !base.includes(x)).length, k).toBeGreaterThan(0);
+    }
+    // approved and not drawn at all
+    expect(verifyWorldEvents(f.job, style('art-deco').world, table).some((w) => /approved material move poster-panel not drawn|not in the drawn repose/.test(w.reason))).toBe(true);
+    // the same for an erase whose wipe the final draw lost
+    const c = run('chalkboard', 'nun', true);
+    const er = c.treatment.worldEvents!.events.find((x) => x.material === 'erase-reseat')!;
+    const job = structuredClone(c.job);
+    delete (job.treatment.cues as { cueId: string; world?: { wipe?: unknown } }[]).find((x) => x.cueId === er.lineIds[0])!.world!.wipe;
+    expect(verifyWorldEvents(job, style('chalkboard').world, c.treatment.worldEvents!).some((w) => /approved material move erase-reseat not drawn/.test(w.reason))).toBe(true);
   });
 
   it('blueprint choroin c060: the camera that ran into c061’s composed seat is dropped, the gate sees no overlap', () => {

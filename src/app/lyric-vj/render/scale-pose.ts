@@ -25,14 +25,18 @@ export interface LineScale {
   rows: string[];
   carrierRole: ScaleCarrierRole;
   carrierId: string;
+  /** A Q2 line-grow this composition folded (its change of size): drawn again if the composition is not (beatUnderScale). */
+  folded?: { kind: string; at: number; sec?: number; stays?: boolean; span?: { from: number; to: number }; stepped?: boolean };
 }
 
 /**
  * Q2 holds that may run on a scale composition (render/world-beats.ts): the ones that act on each glyph's ink, tone,
- * ghost or small offset. Not the ones that scale the block (line-grow, beat-punch: a ratio on a ratio, the flush edge
+ * or small offset (a crack's 9 px stays inside the box's stress pad). Not the copies (COPY_HOLDS), nor the ones that scale the block (line-grow, beat-punch: a ratio on a ratio, the flush edge
  * pushed off the safe area) or move a carrier or stress copies the composition does not have.
  */
-export const SCALE_HOLDS = ['ink-run', 'light-sweep', 'echo', 'plate-slip', 'crack', 'roll', 'ink-swap', 'line-ink-settle', 'flicker'];
+export const SCALE_HOLDS = ['ink-run', 'light-sweep', 'crack', 'roll', 'ink-swap', 'line-ink-settle', 'flicker'];
+/** Holds that throw glyph copies past the words (echo grows a ghost 1.5×, plate-slip offsets one 9 / 7 px): on an ink box flush with the safe edge they bleed past it (Codex Q3 §1), so a scale composition refuses them. */
+export const COPY_HOLDS = ['echo', 'plate-slip'];
 
 export interface ScaleGlyph { /** Code point of the drawn text. */ i: number; x: number; y: number; size: number; role: 'big' | 'before' | 'after' }
 
@@ -50,8 +54,13 @@ export interface ScaleDraw {
   /** Frame fractions, past 0–1 on the edge's side. */
   carrierBox?: FracBox;
   glyphs: ScaleGlyph[];
+  /** Every glyph's em box together, px y down, and whether it lies inside the declared safe area (scale-policy FRAME). */
+  glyphBox?: FracBox;
+  inSafe?: boolean;
   why?: string;
 }
+/** The declared safe area, px y down (render/world-sets SAFE_X / SAFE_Y; scale-policy FRAME). */
+export const SAFE_PX: FracBox = { x0: FRAME.safeX, y0: FRAME.safeY, x1: FRAME.w - FRAME.safeX, y1: FRAME.h - FRAME.safeY };
 
 const isSpace = (c: string) => /\s/.test(c);
 
@@ -74,7 +83,8 @@ export function scaleLayout(text: string, plan: LineScale, readingSize: number, 
   if ('why' in fit) return miss(fit.why.join('; '));
   const S = fit.size;
   const seat = fit.seat;
-  const px = (b: FracBox): FracBox => ({ x0: b.x0 * FRAME.w, y0: b.y0 * FRAME.h, x1: b.x1 * FRAME.w, y1: b.y1 * FRAME.h });
+  // (the seat's boxes are frame fractions to three decimals: taken back to px inside the declared safe area, never past it)
+  const px = (b: FracBox): FracBox => ({ x0: Math.max(SAFE_PX.x0, b.x0 * FRAME.w), y0: Math.max(SAFE_PX.y0, b.y0 * FRAME.h), x1: Math.min(SAFE_PX.x1, b.x1 * FRAME.w), y1: Math.min(SAFE_PX.y1, b.y1 * FRAME.h) });
   const ink = px(seat.inkBox);
   const pad = STRESS_PAD * S;
   const inner = { x0: ink.x0 + pad, y0: ink.y0 + pad, x1: ink.x1 - pad, y1: ink.y1 - pad };
@@ -115,5 +125,34 @@ export function scaleLayout(text: string, plan: LineScale, readingSize: number, 
   }
   const ratio = +(S / R).toFixed(3);
   const kind = plan.source === 'meaning' && ratio >= EDGE_FIT_MIN - 1e-6 ? 'edgeFit' : 'scale';
-  return { size: S, ratio, planned: plan.ratio, unrealized: ratio < plan.ratio - 0.01, kind, edge: seat.edge, inkBox: ink, carrierBox: seat.carrierExtends.box, glyphs };
+  const glyphBox = glyphs.reduce((u, g) => ({ x0: Math.min(u.x0, g.x - g.size / 2), y0: Math.min(u.y0, g.y - g.size / 2), x1: Math.max(u.x1, g.x + g.size / 2), y1: Math.max(u.y1, g.y + g.size / 2) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+  const r1 = (b: FracBox): FracBox => ({ x0: +b.x0.toFixed(1), y0: +b.y0.toFixed(1), x1: +b.x1.toFixed(1), y1: +b.y1.toFixed(1) });
+  const inSafe = glyphBox.x0 >= SAFE_PX.x0 - 1e-6 && glyphBox.y0 >= SAFE_PX.y0 - 1e-6 && glyphBox.x1 <= SAFE_PX.x1 + 1e-6 && glyphBox.y1 <= SAFE_PX.y1 + 1e-6;
+  return { size: S, ratio, planned: plan.ratio, unrealized: ratio < plan.ratio - 0.01, kind, edge: seat.edge, inkBox: r1(ink), carrierBox: seat.carrierExtends.box, glyphs, glyphBox: r1(glyphBox), inSafe };
 }
+
+/**
+ * Who carries a scale composition (critic 2026-11-10, rule 8): a set laid into a page of its own (`ground:` carrier, the
+ * screentone pages) has its page lay its own balloon, box or panel round the words as drawn, so the one carrier is
+ * re-laid whole with the composition and nothing is painted over it; any other set gets the world's sheet, run off the
+ * frame on the composition's edge; a set whose words ride an object of their own (a card, a sign) keeps that object, laid
+ * again round the composition. Never two: no band over a page's carrier, no carrier left without its words.
+ */
+export const carrierPlan = (s: Pick<LineScale, 'carrierId'>, object?: string): 'page' | 'object' | 'sheet' => (s.carrierId.startsWith('ground:') ? 'page' : object ? 'object' : 'sheet');
+
+/**
+ * The hold a scale composition draws (Codex Q3 §2: the composition is the line's change of size): none of a folded
+ * line-grow while the composition is drawn; the folded line-grow back when the renderer finds the composition does not
+ * reach 1.6× on the real glyphs (`miss`), so the line never ends with neither.
+ */
+export function beatUnderScale<B>(scale: { folded?: B } | undefined, drawn: 'edgeFit' | 'scale' | 'miss' | undefined, beat: B | undefined): B | undefined {
+  if (!scale || drawn === undefined) return beat;
+  return drawn === 'miss' ? beat ?? scale.folded : beat;
+}
+
+/**
+ * A sheet carrier's edge strokes, px: a panel's frame line is the screentone world's own (world-b5-screentone TONES.frame,
+ * 7 px); a paper sheet's second-plate edge is a hairline (3 px) printed 6 px off register, outside the words' guard (the
+ * stress pad, ≥ 0.09 em, is never under 13 px at the 1.6× floor of the smallest reading size).
+ */
+export const CARRIER_STROKE = { panel: 7, plate: 3, plateOffset: 6 } as const;

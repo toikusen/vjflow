@@ -8,6 +8,7 @@
 import { splitCalls } from './calls';
 import { balancedRows } from './phrases';
 import { readingSec } from './render/reading-window';
+import { SAFE_X, SAFE_Y } from './render/world-sets';
 import type { ScaleCarrierRole, ScaleEdge, WorldScaleCaps } from './scale-caps-draft';
 import { SHORT_LINE, type FrameBox, type SeatCandidate, type WorldEventInput } from './world-events';
 
@@ -15,7 +16,7 @@ import { SHORT_LINE, type FrameBox, type SeatCandidate, type WorldEventInput } f
 export type Measure = (s: string) => number;
 
 /** The frame, px at 1080p, and its safe margins (render/world-sets.ts SAFE_X / SAFE_Y). */
-export const FRAME = { w: 1920, h: 1080, safeX: 64, safeY: 48 };
+export const FRAME = { w: 1920, h: 1080, safeX: SAFE_X, safeY: SAFE_Y };
 /** The law's multiplier over reading size, and the bars a big word and an ordinary scale contrast must reach. */
 export const SCALE_TARGET = 2.4;
 export const EDGE_FIT_MIN = 1.8;
@@ -27,6 +28,11 @@ export const CAP_W = 0.86;
 export const STRESS_PAD = 0.09;
 /** Candidates within this much of the best score are near-equal: the world's seeded hash chooses among them. */
 export const NEAR = 0.12;
+/**
+ * How far a scale carrier runs past the frame on its edge's side, a share of the frame: past any entrance's or exit's
+ * travel (world-motion moves stay within 3 % of the frame), so its own edge is never seen inside the frame.
+ */
+export const CARRIER_OVER = 0.04;
 /** Each size tried when a placement collides is this much smaller than the last, down to the world's least ratio. */
 const SHRINK = 0.96;
 const LEAD = 1.16;
@@ -254,7 +260,7 @@ export function fitOf(rows: string[], before: string, after: string, line: Pick<
       // the carrier: the band of the whole line (the big text and the rest it reads with) widened by a pad and carried past
       // the frame on the edge's side; a comic panel is a whole tier of the page, edge to edge (phase 2: the rest read on it too)
       const m = 0.25 * S;
-      const over = 0.04;
+      const over = CARRIER_OVER;
       const all = boxes.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }));
       const band0 = frac({ x0: all.x0 - m, y0: all.y0 - m, x1: all.x1 + m, y1: all.y1 + m });
       const band = caps.carrierRole === 'panel' && (edge === 'top' || edge === 'bottom') ? { ...band0, x0: -over, x1: 1 + over } : band0;

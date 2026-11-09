@@ -6,10 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { MINI_MAIN } from './moment-policy';
-import { miniRegion } from './mini-moments';
+import { miniRegion, shownBoxes, type MiniMoment } from './mini-moments';
+import type { RenderJob } from './render/engine';
+import type { SongTimeline } from './timeline';
+import { beatUnderScale, COPY_HOLDS } from './render/scale-pose';
 import { boxesMeet } from './render/seat-geometry';
 import { momentCandidates, scaleCandidates } from './policy-candidates';
-import { SCALE_HOLDS, scaleLayout, type LineScale } from './render/scale-pose';
+import { carrierPlan, SAFE_PX, SCALE_HOLDS, scaleLayout, type LineScale } from './render/scale-pose';
+import { LIFT, lineMomentLift } from './render/line-moment';
+import { burstOval, shoutOval } from './render/world-b5-screentone';
+import { miniMomentsOf } from './render/mini-moment';
 import { estimateMeasure, FRAME, pickScaleContrasts, type ScaleLine } from './scale-policy';
 import { DECLARED_SCALE_CAPS } from './scale-caps-draft';
 import { planWorldEvents, type PolicyCandidate, type WorldEventInput, type WorldEventLine } from './world-events';
@@ -144,6 +150,74 @@ describe('scaleLayout (the scale composition as drawn)', () => {
   });
 });
 
+describe('scale composition carriers (critic 2026-11-10, rule 8)', () => {
+  const plan = (o: Partial<LineScale> = {}): LineScale => ({ eventId: 'scale:c1', sectionId: 'S0', kind: 'edgeFit', source: 'meaning', ratio: 2.4, targetSize: 240, readingSize: 100, span: { from: 0, to: 9 }, edge: 'top', rows: ['這次我們', '的手沒牽好'], carrierRole: 'panel', carrierId: 'ground:screentone/shout', ...o });
+  const inside = (o: { cx: number; cy: number; rx: number; ry: number }, x: number, y: number) => ((x - o.cx) / o.rx) ** 2 + ((y - o.cy) / o.ry) ** 2 <= 1 + 1e-9;
+
+  it('lets a page that lays its own carrier re-lay it whole round the composition: no band, no empty balloon', () => {
+    expect(carrierPlan(plan())).toBe('page');
+    expect(carrierPlan(plan({ carrierId: 'paper:riso' }))).toBe('sheet');
+    const d = scaleLayout('這次我們的手沒牽好', plan(), 84, { track: 0.05 }, estimateMeasure);
+    const b = d.glyphBox!;
+    // (the one balloon holds every glyph of the line: no carrier left without its words, none cut by a painted edge)
+    for (const oval of [shoutOval(b), burstOval(b)]) for (const [x, y] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) expect(inside(oval, x, y)).toBe(true);
+  });
+
+  it('keeps the drawn glyphs inside the declared safe area and reports both for a reviewer', () => {
+    for (const edge of ['top', 'bottom'] as const) {
+      const d = scaleLayout('這次我們的手沒牽好', plan({ edge }), 84, { track: 0.05 }, estimateMeasure);
+      expect(d.inSafe).toBe(true);
+      expect(d.glyphBox!.y0).toBeGreaterThanOrEqual(SAFE_PX.y0 - 1);
+      expect(d.glyphBox!.y1).toBeLessThanOrEqual(SAFE_PX.y1 + 1);
+    }
+  });
+});
+
+describe('round-2 review rules', () => {
+  it('refuses a scale composition on a line whose hold throws copies past the words (echo, plate-slip)', () => {
+    for (const k of COPY_HOLDS) expect(SCALE_HOLDS).not.toContain(k);
+    const lines = [wline('a', 1, 4), wline('b', 5, 8)];
+    const plan = planWorldEvents(input(lines, { holds: [{ lineId: 'b', at: 6, from: 6, to: 6.6, kind: 'echo' }], candidates: [q3('b', 4.8, 'B', 0)] }));
+    expect(plan.policy![0].approved).toBe(false);
+    expect(plan.policy![0].reason).toMatch(/^collisionQ2hold: its echo/);
+  });
+
+  it('gives a folded line-grow back when the composition is not drawn, never neither', () => {
+    const grow = { kind: 'line-grow', at: 3 };
+    expect(beatUnderScale({ folded: grow }, 'miss', undefined)).toBe(grow);
+    expect(beatUnderScale({ folded: grow }, 'edgeFit', undefined)).toBeUndefined();
+    expect(beatUnderScale({ folded: grow }, 'scale', undefined)).toBeUndefined();
+    expect(beatUnderScale(undefined, undefined, grow)).toBe(grow);
+  });
+
+  it('keeps a mini off a line until it really leaves: the next line\'s show, never before its own end', () => {
+    const b = { x0: 0.1, y0: 0.1, x1: 0.2, y1: 0.2 };
+    const s = shownBoxes([{ id: 'a', show: 0.8, end: 3, seats: [{ id: 'x', box: b }] }, { id: 'b', show: 6, end: 8, seats: [{ id: 'x', box: b }] }]);
+    expect(s.map((x) => x.until)).toEqual([6, 9]);
+  });
+});
+
+describe('lineMomentLift (a type-only mini moves the line\'s own words)', () => {
+  const m = { form: 'shape', variant: 'wave', span: { from: 7, to: 8 }, at: 10, mainSec: 0.5, to: 10.8 };
+  it('moves nothing before the word, outside its window, or past LIFT', () => {
+    expect(lineMomentLift(m, 9.9, 9, 17)).toBe(0);
+    expect(lineMomentLift(m, 10.9, 9, 17)).toBe(0);
+    expect(lineMomentLift(m, 10.2, 3, 17)).toBe(0);
+    for (let t = 10; t < 10.8; t += 0.02) for (let k = 0; k < 17; k++) expect(Math.abs(lineMomentLift(m, t, k, 17))).toBeLessThanOrEqual(LIFT + 1e-9);
+  });
+  it('runs a crest from the word on through the words after it', () => {
+    const peak = (t: number) => [...Array(17).keys()].sort((a, b) => lineMomentLift(m, t, b, 17) - lineMomentLift(m, t, a, 17))[0];
+    expect(peak(10.05)).toBeLessThan(peak(10.4));
+    expect(lineMomentLift({ ...m, variant: 'fall' }, 10.3, 7, 17)).toBeLessThan(0);
+    expect(lineMomentLift({ ...m, variant: 'fall' }, 10.3, 9, 17)).toBe(0);
+  });
+  it('is never drawn by the overlay: the overlay keeps page minis only', () => {
+    const mini = (family: MiniMoment['family']): MiniMoment => ({ id: family, meaningRef: 'r', evidenceCueId: 'c', cueIds: ['c'], form: 'shape', variant: 'wave', word: '波', why: '', family, at: 1, prepareAt: 0.8, mainSec: 0.4, from: 0.8, to: 1.7, region: { x0: 0, y0: 0, x1: 0.5, y1: 0.5 }, avoid: [] });
+    const job: Pick<RenderJob, 'treatment'> = { treatment: { miniMoments: [mini('type-only'), mini('page')] } as unknown as RenderJob['treatment'] };
+    expect(miniMomentsOf(job as RenderJob).map((x) => x.family)).toEqual(['page']);
+  });
+});
+
 describe('miniRegion (a mini moment\'s own area)', () => {
   it('takes 15–30 % of the frame beside the words, never meeting a line\'s box', () => {
     const avoid = [{ x0: 0.1, y0: 0.55, x1: 0.9, y1: 0.85 }];
@@ -174,9 +248,10 @@ describe('world capabilities', () => {
 
   it('gives an undeclared world no Q3 / Q5 candidate', () => {
     const world = { ...FREE_STYLES.find((s) => s.id === 'riso')!.world, id: 'no-such-world' };
-    const free = { job: { cues: [] }, plan: { shots: [] } } as never;
-    expect(scaleCandidates(free, { cues: [], sections: [] } as never, world, { seed: 0, songId: 'x' })).toBeUndefined();
-    expect(momentCandidates(free, { cues: [], sections: [] } as never, world, undefined, 'x')).toBeUndefined();
+    const free = { job: { cues: [], treatment: { cues: [] } } as unknown as RenderJob, plan: { shots: [] } };
+    const song: SongTimeline = { title: 'x', duration: 10, cues: [], sections: [], beats: [] } as unknown as SongTimeline;
+    expect(scaleCandidates(free, song, world, { seed: 0, songId: 'x' })).toBeUndefined();
+    expect(momentCandidates(free, song, world, undefined, 'x')).toBeUndefined();
   });
 });
 
@@ -244,8 +319,12 @@ describe.skipIf(!haveOut)('freeJob with the Q3 / Q5 wiring (三年後的大雪, 
         const f = freeJob(song, { style: style(id), seed: 0, meaning, worldEvents: true, meaningMoments: true, meaningRef: s.meaning });
         const t = f.treatment as { signature?: unknown[]; miniMoments?: { meaningRef: string; evidenceCueId: string; word: string; region: { x0: number; y0: number; x1: number; y1: number }; mainSec: number; at: number }[] };
         const n = (t.signature?.length ?? 0) + (t.miniMoments?.length ?? 0);
+        for (const big of (t.signature ?? []) as { meaningRef?: string; evidenceCueId?: string }[]) { expect(big.meaningRef?.startsWith(`${s.meaning}#moments[`)).toBe(true); expect(big.evidenceCueId).toBeDefined(); }
         expect(n).toBeLessThanOrEqual(2);
-        for (const m of (t.miniMoments ?? []) as ((typeof t.miniMoments & object)[number] & { avoid: { x0: number; y0: number; x1: number; y1: number }[] })[]) {
+        type Drawn = (typeof t.miniMoments & object)[number] & { avoid: { x0: number; y0: number; x1: number; y1: number }[]; family: string };
+        const lineMoment = (id: string) => (f.treatment.cues as { cueId: string; world?: { moment?: { id: string } } }[]).find((c) => c.world?.moment?.id === id);
+        for (const m of (t.miniMoments ?? []) as Drawn[]) if (m.family === 'type-only') expect(lineMoment((m as unknown as { id: string }).id)).toBeDefined();
+        for (const m of ((t.miniMoments ?? []) as Drawn[]).filter((x) => x.family !== 'type-only')) {
           const share = (m.region.x1 - m.region.x0) * (m.region.y1 - m.region.y0);
           expect(m.avoid.some((a) => boxesMeet(a, m.region))).toBe(false);
           expect(share).toBeGreaterThanOrEqual(MINI_SHARE[0] - 0.01);

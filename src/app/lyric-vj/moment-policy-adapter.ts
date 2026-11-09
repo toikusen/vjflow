@@ -1,7 +1,8 @@
 // From today's free plan to the moment policy's input (moment-policy.ts), and today's free moment gate (free-plan.ts
 // freeMoments) taken apart stage by stage, so the two can be counted side by side. Plan-level only: nothing is rendered,
 // and nothing here reaches the network (the reading is whatever meaning.json the caller read from disk).
-import { FREE_MOMENTS_MAX, validMeaning, withoutEchoes, type freeJob } from './free-plan';
+import { FREE_MOMENTS_MAX, validMeaning, withoutEchoes } from './free-plan';
+import type { RenderJob } from './render/engine';
 import type { Cue, Meaning } from './lineplan-core';
 import { momentCapsOf, type WorldMomentCaps } from './moment-caps-draft';
 import type { MomentInput, ProtectedEvent } from './moment-policy';
@@ -12,7 +13,8 @@ import type { SongTimeline } from './timeline';
 import { LINK_PREPARE } from './render/world-handoff';
 import { fromFreeJob } from './world-events-adapter';
 
-type Free = ReturnType<typeof freeJob>;
+/** A free plan's draw, structurally (no cycle through freeJob's return type). */
+type Free = { job: RenderJob; plan: unknown };
 
 /**
  * A free plan as the policy's input: the plan's cues, the song's sections (the ochi stretch marked from analyzeStructure),

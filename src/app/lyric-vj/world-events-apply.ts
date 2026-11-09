@@ -25,7 +25,8 @@ export function applyWorldEvents<P extends { shots: PlanShot[] }>(p: P, plan: Wo
     const sc = o.scale.get(l.cue);
     if (!sc || !l.world) continue;
     l.world.scale = sc;
-    if (l.world.beat && folded.has(`hold:${(l.world.beat as { kind?: string }).kind}@${l.cue}`)) { delete l.world.beat; (l.world as { beatSkip?: string }).beatSkip = `folded into the Q3 scale composition ${sc.eventId}`; }
+    // (kept on the composition: the renderer draws it again if the composition does not reach 1.6× on the real glyphs)
+    if (l.world.beat && folded.has(`hold:${(l.world.beat as { kind?: string }).kind}@${l.cue}`)) { l.world.scale = { ...sc, folded: l.world.beat as LineScale['folded'] }; delete l.world.beat; (l.world as { beatSkip?: string }).beatSkip = `folded into the Q3 scale composition ${sc.eventId}`; }
   }
   if (o && !o.seats) return out;
   const page = (set: string) => pageOf(world, set);

@@ -174,7 +174,7 @@ export const HITS_PER_SEC = 3;
  */
 export interface MomentAsk { cues: string[]; form: string; variant: string; word: string; why: string; /** The line `word` is sung in (readings from 2026-11-09 on; older caches lack it). */ evidenceCueId?: string }
 /** An ask that passed, with what the renderer needs: when the word is sung and every involved line's character times. */
-export interface SignatureMoment extends MomentAsk { form: MomentForm; at: number; sung: Record<string, number[]>; sungSource: Record<string, string>; /** The line sung again straight after: the moment's second pass. */ repeat?: string }
+export interface SignatureMoment extends MomentAsk { form: MomentForm; at: number; sung: Record<string, number[]>; sungSource: Record<string, string>; /** The line sung again straight after: the moment's second pass. */ repeat?: string; /** The reading's candidate it is (free tier, Q5): `<meaning.json>#moments[i]`. */ meaningRef?: string }
 export interface Dropped { ask: MomentAsk; reason: string }
 
 export interface MomentCue { id: string; start: number; end: number; text: string }

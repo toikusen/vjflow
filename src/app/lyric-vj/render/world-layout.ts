@@ -17,7 +17,9 @@ export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
-import { scaleLayout, type LineScale, type ScaleDraw } from './scale-pose';
+import { beatUnderScale, CARRIER_STROKE, carrierPlan, SAFE_PX, scaleLayout, type LineScale, type ScaleDraw } from './scale-pose';
+import { lineMomentLift } from './line-moment';
+import type { LineMoment } from '../mini-moments';
 
 export interface WorldLine {
   set: string;
@@ -56,6 +58,8 @@ export interface WorldLine {
    * safe-area edge, the rest at reading size, its carrier running off the frame; never with a blown-up word.
    */
   scale?: LineScale;
+  /** Q5's type-only mini moment on this line (render/line-moment.ts): its own words move, nothing is added. */
+  moment?: LineMoment;
   /** The world's camera into a new part, which the line's words take with the ground (world-cam.ts): its kind and start. */
   cam?: { kind: string; at: number; dir: number };
   /**
@@ -243,27 +247,30 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
 const ROOM_FOLLOWS = new Set(['woodcut', 'crayon', 'aizome', 'paper-lantern']);
 /** Builds a line in a world. `slot` stacks it among the lines of a shared shot. */
 function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
-  const wl = rt.style.world!;
+  const wl0 = rt.style.world!;
   const text = rt.cue.text.replace(/[\s　]+/g, ' ').trim();
   const seed = Math.abs(Math.floor(hashOf(rt.cue.start, 43) * 1000) + (rt.song ?? 0));
   const family = rt.fonts.display;
   // (lines sharing a shot split the set: rows stack in its height, but columns stand side by side in its width, read
   // right to left; halving a column's height set a shared vertical sign at a third of its size)
   const specOf = (id: string): SetSpec => slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot);
-  const sets = [wl.set, ...(wl.repose ?? []).map((r) => r.set)].map(specOf);
+  const sets = [wl0.set, ...(wl0.repose ?? []).map((r) => r.set)].map(specOf);
   // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
   // (a column line's blown-up word is set across: the big word reads in a row, and so does the small rest)
   // (a set laid into its page on an object of its own keeps it: a blown-up word would lose the balloon or card it is written on)
   // (nor a set whose rows each stand on a carrier of their own: a blown-up word would leave a card with nothing on it)
   // (nor one inked for a card its page draws round it: a blown-up word broke out of idol-live's ticket and gameshow's hint card)
-  const blowing = !wl.scale && !!wl.blow && slot.of === 1 && !(sets[0].fixed && (sets[0].object || sets[0].ink === 'plateInk')) && !sets[0].keepRows;
+  const blowing = !wl0.scale && !!wl0.blow && slot.of === 1 && !(sets[0].fixed && (sets[0].object || sets[0].ink === 'plateInk')) && !sets[0].keepRows;
   if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0, vertical: false, stair: 0 };
   // an even set gives every character (a quote, a space) a whole cell, so it is measured that way (poseOf)
   const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return s.even ? (x: string) => [...x].length * 100 : (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
   // Q3's scale composition, laid again on the real glyphs from the set's own reading size (one pose, the line's whole
   // reading: never with a change of set inside it); under 1.6× it is not drawn and the line stands as composed
-  const scaled: ScaleDraw | undefined = wl.scale && slot.of === 1 && !wl.repose?.length ? scaleLayout(rt.cue.text, wl.scale, blockOf(text, sets[0], measureOf(sets[0])).size, sets[0], measureOf({ ...sets[0], even: false })) : undefined;
+  const scaled: ScaleDraw | undefined = wl0.scale && slot.of === 1 && !wl0.repose?.length ? scaleLayout(rt.cue.text, wl0.scale, blockOf(text, sets[0], measureOf(sets[0])).size, sets[0], measureOf({ ...sets[0], even: false })) : undefined;
   const scaling = !!scaled && scaled.kind !== 'miss';
+  // (a composition not drawn on the real glyphs gives the line back the line-grow it folded: never neither, beatUnderScale)
+  const restored = beatUnderScale(wl0.scale, scaled?.kind, wl0.beat as LineScale['folded']) as WorldLine['beat'];
+  const wl: WorldLine = restored === wl0.beat ? wl0 : { ...wl0, beat: restored };
   // (the composition is upright, unsplit and unmoved on its edge: the set's own lean, column and drift would carry it off)
   if (scaling) sets[0] = { ...sets[0], tilt: 0, vertical: false, stair: 0, drop: 0, shear: undefined, split: undefined, rowInk: undefined, fixed: true, even: false };
   const blocks = sets.map((s) => blockOf(text, s, measureOf(s)));
@@ -320,7 +327,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // the key word blown up: the line's first pose, on the ground (its object, if any, stays off), stressed in the world's way
   const blown = blowing ? blowPose(gs, wl.blow!.from, wl.blow!.to, blocks[0].size, tex, sets[0]) : undefined;
   if (blown) poses[0] = blown;
-  if (scaling) poses[0] = scalePose(gs, scaled!, tex, sets[0]);
+  // (a set whose words ride an object keeps it, laid again round the composition: its carrierId stays, no card left empty)
+  if (scaling) { const sp = scalePose(gs, scaled!, tex, sets[0]); poses[0] = { ...sp, object: objectMesh(sets[0], sp.block, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }; }
   const carrier = scaling ? scaleCarrier(scaled!, wl, slots, [...new Set(gs.map((g, i) => (poses[0].shown[i] ? tintOf(g, 0) : '')).filter(Boolean))]) : undefined;
   if (carrier) carrier.mesh.position.x -= poses[0].block.cx, carrier.mesh.position.y -= poses[0].block.cy;
   const body = new THREE.Group();
@@ -578,7 +586,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         if (!out && qi >= 1 && holding) pose = { ...holding(env), ...(wl.enter === 'signal-lock' && enterDur > 0 ? pose : {}) };
         const ev = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq, span: inSpan[i] }) : undefined;
         if (ev) pose = { ...pose, dx: (pose.dx ?? 0) + (ev.dx ?? 0), dy: (pose.dy ?? 0) + (ev.dy ?? 0), s: (pose.s ?? 1) * (ev.s ?? 1), sy: (pose.sy ?? 1) * (ev.sy ?? 1), r: (pose.r ?? 0) + (ev.r ?? 0), tone: Math.min(pose.tone ?? 1, ev.tone ?? 1), key: ev.key, ghost: ev.ghost };
-        m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0), 0);
+        // (a type-only mini moment: the line's own words move, in ems of their own size)
+        const lift = wl.moment && g.src !== undefined ? lineMomentLift(wl.moment, t, g.src, [...rt.cue.text].length) * (p.sizes?.[i] ?? p.scale) * tex : 0;
+        m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0) + lift, 0);
         const s = (p.sizes?.[i] ?? p.scale) * (pose.s ?? 1);
         m.scale.set(s * (pose.sx ?? 1), s * (pose.sy ?? 1), 1);
         m.rotation.z = (p.turn[i] ? -Math.PI / 2 : 0) + (pose.r ?? 0);
@@ -643,7 +653,24 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     },
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: restRects,
-    ...(scaled ? { scale: { eventId: wl.scale!.eventId, planned: scaled.planned, drawn: scaled.kind === 'miss' ? 0 : scaled.ratio, kind: scaled.kind, unrealized: scaled.unrealized, carrier: carrier?.why ?? 'none', ...(scaled.why ? { why: scaled.why } : {}) } } : {}),
+    // (a scale composition's glyphs as inked, em boxes in frame px: its glyph pictures carry a wide transparent pad, which
+    // a measure of the meshes reads as 50–160 px out of the frame on a composition flush with the safe edge)
+    ...(scaling ? { inkRect: () => {
+      const v = new THREE.Vector3();
+      const ws = new THREE.Vector3();
+      let box: { x0: number; y0: number; x1: number; y1: number } | undefined;
+      gs.forEach((g) => {
+        if (!g.mesh.visible || g.mesh.material.opacity <= 0.01) return;
+        g.mesh.updateWorldMatrix(true, false);
+        g.mesh.getWorldPosition(v);
+        g.mesh.getWorldScale(ws);
+        const half = (Math.abs(ws.y) * tex) / 2;
+        const [x, y] = [v.x + 960, 540 - v.y];
+        box = box ? { x0: Math.min(box.x0, x - half), y0: Math.min(box.y0, y - half), x1: Math.max(box.x1, x + half), y1: Math.max(box.y1, y + half) } : { x0: x - half, y0: y - half, x1: x + half, y1: y + half };
+      });
+      return box;
+    } } : {}),
+    ...(scaled ? { scale: { eventId: wl.scale!.eventId, planned: scaled.planned, drawn: scaled.kind === 'miss' ? 0 : scaled.ratio, kind: scaled.kind, unrealized: scaled.unrealized, carrier: carrier?.why ?? ({ page: 'page: re-laid round the words', object: 'object: re-laid round the words', sheet: 'none' } as const)[carrierPlan(wl.scale!, SET_SPECS[wl.set]?.object)], inkBox: scaled.inkBox, safe: SAFE_PX, glyphBox: scaled.glyphBox, inSafe: scaled.inSafe, ...(scaled.why ? { why: scaled.why } : {}) } } : {}),
   };
 }
 
@@ -669,6 +696,8 @@ function scalePose(gs: Glyph[], d: ScaleDraw, tex: number, spec: SetSpec): Pose 
  * words stand on the ground as composed. Decor: the reading checks keep it when they take the words away.
  */
 function scaleCarrier(d: ScaleDraw, wl: WorldLine, slots: Slots, inks: string[]): { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; why: string } | undefined {
+  // (a page that lays its own carrier round the words re-lays it round the composition: nothing is painted over it)
+  if (carrierPlan(wl.scale!, wl.set ? SET_SPECS[wl.set]?.object : undefined) !== 'sheet') return undefined;
   const role = wl.scale!.carrierRole;
   const b = d.carrierBox!;
   const fills = [...new Set(role === 'panel' || role === 'plate' ? [slots.plate, slots.ground] : [slots.ground, slots.plate])];
@@ -686,22 +715,24 @@ function scaleCarrier(d: ScaleDraw, wl: WorldLine, slots: Slots, inks: string[])
   if (role === 'panel') {
     // a panel's frame line, 7 px as the world's own panels (style-worlds-b5 screentone), with the page's white gutter outside
     c.strokeStyle = slots.ink;
-    c.lineWidth = 7;
+    c.lineWidth = CARRIER_STROKE.panel;
+    const k = CARRIER_STROKE.panel / 2;
     c.beginPath();
-    if (inner.top) { c.moveTo(0, 3.5); c.lineTo(w, 3.5); }
-    if (inner.bottom) { c.moveTo(0, h - 3.5); c.lineTo(w, h - 3.5); }
-    if (inner.left) { c.moveTo(3.5, 0); c.lineTo(3.5, h); }
-    if (inner.right) { c.moveTo(w - 3.5, 0); c.lineTo(w - 3.5, h); }
+    if (inner.top) { c.moveTo(0, k); c.lineTo(w, k); }
+    if (inner.bottom) { c.moveTo(0, h - k); c.lineTo(w, h - k); }
+    if (inner.left) { c.moveTo(k, 0); c.lineTo(k, h); }
+    if (inner.right) { c.moveTo(w - k, 0); c.lineTo(w - k, h); }
     c.stroke();
   } else {
     // the sheet's edge printed again in the second plate, a few px off register, outside the words' guard
     c.strokeStyle = slots.accent;
-    c.lineWidth = 3;
+    c.lineWidth = CARRIER_STROKE.plate;
+    const q = CARRIER_STROKE.plateOffset;
     c.beginPath();
-    if (inner.top) { c.moveTo(0, 6); c.lineTo(w, 6); }
-    if (inner.bottom) { c.moveTo(0, h - 6); c.lineTo(w, h - 6); }
-    if (inner.left) { c.moveTo(6, 0); c.lineTo(6, h); }
-    if (inner.right) { c.moveTo(w - 6, 0); c.lineTo(w - 6, h); }
+    if (inner.top) { c.moveTo(0, q); c.lineTo(w, q); }
+    if (inner.bottom) { c.moveTo(0, h - q); c.lineTo(w, h - q); }
+    if (inner.left) { c.moveTo(q, 0); c.lineTo(q, h); }
+    if (inner.right) { c.moveTo(w - q, 0); c.lineTo(w - q, h); }
     c.stroke();
   }
   const tex = new THREE.CanvasTexture(cv);

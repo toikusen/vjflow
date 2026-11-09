@@ -73,6 +73,7 @@ function phase2() {
             policyChoice: c ? { lineId: c.lineId, source: c.source, text: c.text, ratio: c.ratio } : null,
             tried: tried.map((d) => ({ id: d.id, rank: d.rank, approved: d.approved, reason: d.reason })),
             chosen: ok ? { id: ok.id, lineId: ok.lineId, eventId: ok.eventId, shared: !!ok.shared, source: sc?.source, text: sc ? [...main].slice(sc.span.from, sc.span.to).join('') : undefined, edge: sc?.edge, plannedRatio: sc?.ratio, drawnRatio: drawn && drawn.kind !== 'miss' ? drawn.ratio : 0, drawnKind: drawn?.kind ?? 'miss', unrealized: !drawn || drawn.unrealized, ...(drawn?.why ? { why: drawn.why } : {}) } : null,
+            unrealizable: f.policy!.unrealizable.filter((u) => s.candidates.some((x) => u.id.startsWith(`scale:${x.lineId}`))).map((u) => `${u.id}: ${u.why}`),
             rejection: ok ? null : tried.length ? tried.map((d) => d.reason).join(' | ') : s.reasons.join(' | '),
           };
         });

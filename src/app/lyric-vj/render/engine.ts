@@ -2714,7 +2714,8 @@ export class LyricVjEngine {
         this.textRoot.updateMatrixWorld(true);
         const b = shownBox(layer, true);
         if (b.isEmpty()) continue;
-        const r = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y };
+        // (a layer that knows its inked box (a scale composition) is measured by it, not by its glyph pictures' pad)
+        const r = layer.inkRect?.() ?? { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y };
         for (const p of this.placedProps) {
           const px = depth(r, p.r);
           if (!px) continue;

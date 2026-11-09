@@ -27,8 +27,8 @@ import { compositionsOf, momentsCapOf, scaleOf } from './world-shared';
 import { planWorldEvents, type WorldEventTable } from './world-events';
 import { fromJob, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
-import { momentCandidates, scaleCandidates } from './policy-candidates';
-import { approvedMoments, shownBoxes, type MiniMoment } from './mini-moments';
+import { lineScaleOf, momentCandidates, scaleCandidates } from './policy-candidates';
+import { approvedMoments, shownBoxes, type LineMoment, type MiniMoment } from './mini-moments';
 import { splitCalls } from './calls';
 import type { LineScale } from './render/scale-pose';
 import type { ScalePlan } from './scale-policy';
@@ -425,19 +425,41 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const scale = q3 ? scalesOf(events.policy ?? [], q3.plan, first.job.cues as { id: string; text: string }[]) : new Map<string, LineScale>();
   const regions = new Map((q5?.candidates ?? []).flatMap((c) => (c.id && c.protectedRegion ? [[c.id, c.protectedRegion] as const] : [])));
   const drawnMoments = q5 ? approvedMoments(events.policy ?? [], q5.plan, song, shownBoxes(input.lines), regions) : undefined;
-  const plan = scheduled ? applyWorldEvents(composed as never, events, world, scale.size ? { seats: true, scale } : undefined) : scale.size ? applyWorldEvents(composed as never, events, world, { seats: false, scale }) : composed;
+  const plan = scheduled || scale.size ? applyWorldEvents(composed as never, events, world, scale.size ? { seats: scheduled, scale } : undefined) : composed;
   const redraw = scheduled || scale.size > 0 || momentsOn;
-  const { job, treatment } = redraw ? jobOf(plan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
+  // (a type-only mini moves the line's own words: it goes onto the line, the overlay draws only page minis)
+  const inLine = lineMoments(drawnMoments?.mini ?? [], first.job.cues as { id: string; text: string }[]);
+  const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
+  const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
   // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
   const checked = scheduled ? [...verifyWorldEvents(job, world, events), ...lightGapWarnings(job, events)] : [];
   const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.policy ? { policy: events.policy } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
-  return { job, plan, palette: paletteId, calm, treatment, ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))] } as FreePolicy } : {}) };
+  return { job, plan, palette: paletteId, calm, treatment, ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))], unrealizable: q3?.unrealizable ?? [] } as FreePolicy } : {}) };
 }
 
+/** Each type-only mini as its line's own moment: the evidence word's span on the drawn text (calls on their own track). */
+function lineMoments(minis: MiniMoment[], cues: { id: string; text: string }[]): Map<string, LineMoment> {
+  const out = new Map<string, LineMoment>();
+  for (const m of minis.filter((x) => x.family === 'type-only')) {
+    const cue = cues.find((c) => c.id === m.evidenceCueId);
+    const at = cue ? cue.text.indexOf(m.word) : -1;
+    if (!cue || at < 0) continue;
+    const from = [...cue.text.slice(0, at)].length;
+    const kept = splitCalls(cue.text).map.slice(from, from + [...m.word].length).filter((x) => x >= 0);
+    if (kept.length) out.set(cue.id, { id: m.id, form: m.form, variant: m.variant, span: { from: kept[0], to: kept.at(-1)! + 1 }, at: m.at, mainSec: m.mainSec, to: m.to });
+  }
+  return out;
+}
+const withLineMoments = <P,>(plan: P, moments: Map<string, LineMoment>): P => {
+  const out = structuredClone(plan) as { shots: { lines: { cue: string; world?: Record<string, unknown> }[] }[] };
+  for (const s of out.shots) for (const l of s.lines) { const m = moments.get(l.cue); if (m && l.world) l.world['moment'] = m; }
+  return out as P;
+};
+
 /** What Q3 / Q5 planned and the scheduler made of it (measurement only; the treatment carries the decisions). */
-export interface FreePolicy { scale?: ScalePlan; moments?: MomentPlan; decisions: NonNullable<WorldEventTable['policy']>; refused: { id: string; why: string }[] }
+export interface FreePolicy { scale?: ScalePlan; moments?: MomentPlan; decisions: NonNullable<WorldEventTable['policy']>; refused: { id: string; why: string }[]; /** Q3 seats not offered: their composition misses 1.6× on the shaped measure. */ unrealizable: { id: string; why: string }[] }
 
 /**
  * Each approved Q3 seat as the line's scale composition (render/scale-pose.ts LineScale): its span moved onto the line as
@@ -449,11 +471,8 @@ function scalesOf(decisions: NonNullable<WorldEventTable['policy']>, plan: Scale
   for (const d of decisions.filter((x) => x.source === 'Q3' && x.approved)) {
     const c = seats.find((x) => x.eventId === d.id);
     const cue = cues.find((x) => x.id === d.lineId);
-    if (!c || !cue) continue;
-    const { map } = splitCalls(cue.text);
-    const kept = c.scale.span.from < map.length ? map.slice(c.scale.span.from, c.scale.span.to).filter((m) => m >= 0) : [];
-    if (!kept.length) continue;
-    out.set(d.lineId, { eventId: d.eventId ?? d.id, sectionId: c.sectionId, kind: c.scale.kind, source: c.scale.source, ratio: c.scale.ratio, targetSize: c.scale.targetSize, readingSize: c.scale.readingSize, span: { from: kept[0], to: kept.at(-1)! + 1 }, edge: c.scale.edge, rows: c.scale.rows, carrierRole: c.scale.carrierExtends.role, carrierId: c.scale.carrierExtends.carrierId });
+    const ls = c && cue ? lineScaleOf(c, cue.text, d.eventId ?? d.id) : undefined;
+    if (ls) out.set(d.lineId, ls);
   }
   return out;
 }

@@ -13,7 +13,11 @@ import { fromFreeJob } from './world-events-adapter';
 import { momentsCapOf } from './world-shared';
 import { MOMENTS_APART } from './signature-moments';
 import { DECLARED_SCALE_CAPS } from './scale-caps-draft';
-import { pickScaleContrasts, type Measure, type ScalePlan } from './scale-policy';
+import { pickScaleContrasts, type LayoutSeatCandidate, type Measure, type ScalePlan } from './scale-policy';
+import { splitCalls } from './calls';
+import { scaleLayout, type LineScale } from './render/scale-pose';
+import { shapedMeasure } from './render/seat-geometry';
+import { blockOf, SET_SPECS } from './render/world-sets';
 import { scaleInputOf } from './scale-policy-adapter';
 import type { StyleWorld } from './style-world';
 import type { SongTimeline } from './timeline';
@@ -29,18 +33,46 @@ type Free = { job: RenderJob; plan: unknown };
  * section). A line with no world pose (its recipe has no world set) is refused by the policy, not left out, so the section
  * still counts. Undefined for a world without `scale` (no candidate, no record).
  */
-export function scaleCandidates(free: Free, song: SongTimeline, world: StyleWorld, o: { seed: number; songId: string; meaning?: Meaning; measure?: Measure }): { plan: ScalePlan; candidates: PolicyCandidate[] } | undefined {
+export function scaleCandidates(free: Free, song: SongTimeline, world: StyleWorld, o: { seed: number; songId: string; meaning?: Meaning; measure?: Measure }): { plan: ScalePlan; candidates: PolicyCandidate[]; unrealizable: { id: string; why: string }[] } | undefined {
   const caps = DECLARED_SCALE_CAPS[world.id];
   if (!caps) return undefined;
-  const input = scaleInputOf(free as never, song, world, { seed: o.seed, songId: o.songId, meaning: o.meaning, measure: o.measure });
+  const input = scaleInputOf(free, song, world, { seed: o.seed, songId: o.songId, meaning: o.meaning, measure: o.measure });
   const estimated = new Set(input.estimated);
   const plan = pickScaleContrasts({ ...input, caps, lines: input.lines.map((l) => (estimated.has(l.id) ? { ...l, refuse: 'not a world line (its recipe has no world set): no scale pose to draw' } : l)) });
-  const candidates = plan.ranked.flatMap((seats) => seats.map((c, rank): PolicyCandidate => ({
+  // (a seat whose composition does not reach 1.6× on the shaped measure is not offered: a line-grow is folded only into a
+  // composition that will be drawn; the renderer still gives it back on a miss, render/scale-pose beatUnderScale)
+  const texts = new Map(free.job.cues.map((c) => [c.id, c.text]));
+  const unrealizable: { id: string; why: string }[] = [];
+  const realizable = (c: LayoutSeatCandidate) => {
+    const why = scaleMissOf(c, texts.get(c.lineId) ?? '');
+    if (why) unrealizable.push({ id: c.eventId, why });
+    return !why;
+  };
+  const candidates = plan.ranked.flatMap((seats) => seats.filter(realizable).map((c, rank): PolicyCandidate => ({
     source: 'Q3', id: c.eventId, group: c.sectionId, rank, lineId: c.lineId, kind: 'layout-seat', at: c.at, from: c.from, to: c.to,
     seatAfter: c.seat.id, seat: c.seat, changesLight: false, holdsOk: SCALE_HOLDS, folds: ['line-grow'],
     reason: `${c.scale.kind} ${c.scale.source === 'meaning' ? 'key phrase' : 'whole line'} at ${c.scale.ratio}× on the ${c.scale.edge} edge (${c.sectionId})`,
   })));
-  return { plan, candidates };
+  return { plan, candidates, unrealizable };
+}
+
+/** An approved seat as the line's scale composition (render/scale-pose.ts LineScale): its span on the drawn text (calls on their own track). */
+export function lineScaleOf(c: LayoutSeatCandidate, text: string, eventId = c.eventId): LineScale | undefined {
+  const { map } = splitCalls(text);
+  const kept = c.scale.span.from < map.length ? map.slice(c.scale.span.from, c.scale.span.to).filter((m) => m >= 0) : [];
+  if (!kept.length) return undefined;
+  return { eventId, sectionId: c.sectionId, kind: c.scale.kind, source: c.scale.source, ratio: c.scale.ratio, targetSize: c.scale.targetSize, readingSize: c.scale.readingSize, span: { from: kept[0], to: kept.at(-1)! + 1 }, edge: c.scale.edge, rows: c.scale.rows, carrierRole: c.scale.carrierExtends.role, carrierId: c.scale.carrierExtends.carrierId };
+}
+
+/** Why a seat's composition misses 1.6× when laid as the renderer lays it, on the shaped glyph measure; '' when it does not. */
+export function scaleMissOf(c: LayoutSeatCandidate, text: string): string {
+  const ls = lineScaleOf(c, text);
+  const spec = SET_SPECS[c.seat.id.split('+scale:')[0]];
+  if (!ls || !spec) return ls ? '' : 'no span on the drawn text';
+  const main = splitCalls(text).main;
+  const reading = blockOf(main.replace(/[\s　]+/g, ' ').trim(), spec, spec.even ? (x: string) => [...x].length * 100 : shapedMeasure).size;
+  const d = scaleLayout(main, ls, reading, spec, shapedMeasure);
+  return d.kind === 'miss' ? `unrealizable: ${d.why ?? 'under 1.6× as drawn'}` : '';
 }
 
 /**
@@ -52,7 +84,7 @@ export function scaleCandidates(free: Free, song: SongTimeline, world: StyleWorl
 export function momentCandidates(free: Free, song: SongTimeline, world: StyleWorld, meaning: Meaning | undefined, meaningRef: string): { plan: MomentPlan; candidates: PolicyCandidate[]; noRoom: { meaningRef: string; why: string }[] } | undefined {
   const caps = declaredMomentCaps(world);
   if (!caps) return undefined;
-  const plan = rankMoments(momentInputOf(free as never, song, world, meaning as never, meaningRef, caps));
+  const plan = rankMoments(momentInputOf(free, song, world, meaning, meaningRef, caps));
   const chosen = plan.chosen.map((c) => c.index);
   const passed = plan.candidates.filter((c) => !c.failed);
   const order = [...passed].sort((a, b) => {
@@ -64,10 +96,20 @@ export function momentCandidates(free: Free, song: SongTimeline, world: StyleWor
   // (every seat a line may stand in: a world the scheduler does not take over lists its composer's changes of set there)
   // (a line whose key word is blown up is drawn in a pose of its own, not in its set's box: the whole frame is its)
   const blown = new Set((free.job.treatment.cues as { cueId: string; world?: { blow?: unknown } }[]).filter((c) => c.world?.blow).map((c) => c.cueId));
-  const shown = shownBoxes(fromFreeJob(free as never, song, world, { seed: 0 }).lines).map((l) => (blown.has(l.id) ? { ...l, boxes: [{ x0: 0, y0: 0, x1: 1, y1: 1 }] } : l));
+  const shown = shownBoxes(fromFreeJob(free, song, world, { seed: 0 }).lines).map((l) => (blown.has(l.id) ? { ...l, boxes: [{ x0: 0, y0: 0, x1: 1, y1: 1 }] } : l));
   const noRoom: { meaningRef: string; why: string }[] = [];
+  const lines = fromFreeJob(free, song, world, { seed: 0 }).lines;
+  const worldLine = new Set((free.job.treatment.cues as { cueId: string; world?: unknown }[]).filter((c) => c.world).map((c) => c.cueId));
   const candidates = order.flatMap((c, rank) => {
     if (c.variant !== 'mini') return [momentCandidate(c, rank, free)];
+    // (a type-only mini moves the sung words themselves in their own seat: only a world line has that pose, and a
+    // blown-up line's pose is not its seat; else no form carries it, noForm)
+    if (c.family === 'type-only') {
+      const actor = c.ask!.cues.at(-1)!;
+      const seat = lines.find((l) => l.id === actor)?.seats[0]?.box;
+      if (!worldLine.has(actor) || blown.has(actor) || !seat) { noRoom.push({ meaningRef: c.meaningRef, why: 'noForm: no world pose of the line to move its own words in' }); return []; }
+      return [{ ...momentCandidate(c, rank, free), protectedRegion: seat }];
+    }
     const region = miniRegion(avoidOf(shown, c.window!.from, c.window!.to), momentsCapOf(world.id)!.miniShare);
     if (!region) { noRoom.push({ meaningRef: c.meaningRef, why: 'no free region of 15 % of the frame beside the words up in its window' }); return []; }
     return [{ ...momentCandidate(c, rank, free), protectedRegion: region }];

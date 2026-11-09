@@ -28,7 +28,9 @@ export interface WorldMomentCaps {
 export const MINI_FORMS: Record<MomentFamily, string[]> = {
   page: ['strike/tear', 'strike/slice', 'strike/burn', 'strike/wipe', 'freeze/stop', 'echo/ghost'],
   scene: ['strike/*', 'shape/*', 'freeze/*', 'echo/*'],
-  'type-only': ['echo/ghost', 'freeze/stop', 'shape/fall', 'shape/rise', 'shape/wave'],
+  // (critic 2026-11-10: type-only acts on the line's own phrase in its own seat, never extra copies in free space; only
+  // the forms with a motion of the sung words themselves: a crest runs on from the word, the word sinks or lifts)
+  'type-only': ['shape/fall', 'shape/rise', 'shape/wave'],
 };
 
 export const familyCarries = (family: MomentFamily, form: string, variant: string) => MINI_FORMS[family].some((k) => k === `${form}/${variant}` || k === `${form}/*`);

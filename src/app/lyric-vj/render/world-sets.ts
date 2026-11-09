@@ -15,8 +15,9 @@ import { RowBox, splitBlock, SplitSpec } from './world-split';
 
 const W = 1920;
 const H = 1080;
-const SAFE_X = 64;
-const SAFE_Y = 48;
+/** The safe area's margins, px at 1080p: the one definition (scale-policy FRAME, scale-pose SAFE_PX, mini-moments read it). */
+export const SAFE_X = 64;
+export const SAFE_Y = 48;
 
 export interface SetSpec {
   /** The anchor in frame fractions, y down. */

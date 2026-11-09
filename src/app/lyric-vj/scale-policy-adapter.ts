@@ -2,7 +2,7 @@
 // blowOf / blownParts / namedLater, read here, never changed) per sung section with the reason each line was not blown.
 // Plan-level only: reading sizes are blockOf() on the line's set with an estimated glyph width, show times are the
 // engine's rule without picture pulls (world-events-adapter.ts), and nothing is rendered.
-import type { freeJob } from './free-plan';
+import type { RenderJob } from './render/engine';
 import { validMeaning } from './free-plan';
 import { blowOf, type Meaning } from './lineplan-core';
 import { splitCalls } from './calls';
@@ -14,7 +14,8 @@ import type { SongTimeline } from './timeline';
 import { fromFreeJob } from './world-events-adapter';
 import { sharedOf } from './world-shared';
 
-type Free = ReturnType<typeof freeJob>;
+/** A free plan's draw (free-plan.ts freeJob): its job and its plan, structurally (no cycle through freeJob's return type). */
+type Free = { job: RenderJob; plan: unknown };
 interface PlanLine { cue: string; world?: { set: string; blow?: { from: number; to: number; stress: string } } }
 interface PlanShot { shot: string; lines: PlanLine[]; cuts?: { piece?: string }[] }
 interface Cue { id: string; start: number; end: number; text: string }

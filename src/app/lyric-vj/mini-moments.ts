@@ -8,7 +8,7 @@ import { checkMoments, type MomentAsk, type SignatureMoment } from './signature-
 import type { MomentPlan } from './moment-policy';
 import { carrierBox } from './render/hold-room';
 import { OBJECT_MARGIN } from './render/world-objects';
-import { SET_SPECS } from './render/world-sets';
+import { SAFE_X, SAFE_Y, SET_SPECS } from './render/world-sets';
 import type { SongTimeline } from './timeline';
 
 /** A mini moment as drawn: its action at the sung word, in its region, off every line's box. */
@@ -31,12 +31,15 @@ export interface MiniMoment {
   to: number;
   /** Its own area on the frame, fractions y down (15–30 % of the frame). */
   region: FrameBox;
-  /** The words it never draws over: every line's box up in its window, padded. */
+  /** The words it never draws over: every line's box up in its window, padded (none for type-only: it moves the words). */
   avoid: FrameBox[];
 }
 
+/** A type-only mini as the line's own words move (render/world-layout.ts): the evidence word as code points of the drawn text. */
+export interface LineMoment { id: string; form: string; variant: string; span: { from: number; to: number }; at: number; mainSec: number; to: number }
+
 /** Each line's boxes on the frame (every set it may stand in while up: its own, a change of set inside it) and when it is up. */
-export interface ShownBox { id: string; show: number; end: number; boxes: FrameBox[] }
+export interface ShownBox { id: string; show: number; end: number; /** Its exit: the next line's show (the engine takes it off for the next), never before its own end. */ until: number; boxes: FrameBox[] }
 
 /** A set's carrier round words laid in `box` (a card, a sign: render/hold-room.ts carrierBox, its shadow margin added), or undefined. */
 function carrierOf(set: string, box: FrameBox): FrameBox | undefined {
@@ -52,16 +55,22 @@ function carrierOf(set: string, box: FrameBox): FrameBox | undefined {
 
 /** The scheduler's lines as the boxes a mini keeps off: every seat's laid box and the carrier the words stand on. */
 export const shownBoxes = (lines: { id: string; show: number; end: number; seats: { id: string; box?: FrameBox }[] }[]): ShownBox[] =>
-  lines.map((l) => ({ id: l.id, show: l.show, end: l.end, boxes: l.seats.flatMap((x) => (x.box ? [x.box, ...(carrierOf(x.id, x.box) ? [carrierOf(x.id, x.box)!] : [])] : [])) }));
+  lines.map((l, i) => ({ id: l.id, show: l.show, end: l.end, until: Math.max(l.end, lines[i + 1]?.show ?? l.end + LINGER), boxes: l.seats.flatMap((x) => (x.box ? [x.box, ...(carrierOf(x.id, x.box) ? [carrierOf(x.id, x.box)!] : [])] : [])) }));
 
-/** Room kept round a line's planned box (a share of the frame): the plan's box is an estimate of the drawn one. */
+/**
+ * Room kept round a line's planned box, a share of the frame (≈ 58 px across, 32 px down): the plan's box is laid on the
+ * rough measure, and the real glyphs' advances and a hold's small moves (world-beats crack 9 px, light-sweep 2 %) reach
+ * past it by less than this (seat-geometry roughMeasure vs shapedMeasure differ by under one reading-size glyph).
+ */
 export const AVOID_PAD = 0.03;
+/** The last line's linger past its end when no line follows (render/show-time AFTER_LAST_SUNG and an exit's length, rounded up). */
+const LINGER = 1;
 /** The safe area, frame fractions (render/world-sets SAFE_X / SAFE_Y). */
-const SAFE = { x0: 64 / 1920, y0: 48 / 1080, x1: 1 - 64 / 1920, y1: 1 - 48 / 1080 };
+const SAFE = { x0: SAFE_X / 1920, y0: SAFE_Y / 1080, x1: 1 - SAFE_X / 1920, y1: 1 - SAFE_Y / 1080 };
 
 /** Every line's padded box up during [from, to] (its show to half a second past its end). */
 export const avoidOf = (lines: ShownBox[], from: number, to: number): FrameBox[] =>
-  lines.filter((l) => l.show < to && l.end + 0.5 > from).flatMap((l) => l.boxes).map((b) => ({ x0: b.x0 - AVOID_PAD, y0: b.y0 - AVOID_PAD, x1: b.x1 + AVOID_PAD, y1: b.y1 + AVOID_PAD }));
+  lines.filter((l) => l.show < to && l.until > from).flatMap((l) => l.boxes).map((b) => ({ x0: b.x0 - AVOID_PAD, y0: b.y0 - AVOID_PAD, x1: b.x1 + AVOID_PAD, y1: b.y1 + AVOID_PAD }));
 
 /**
  * A mini's own region: the largest band of the safe area beside the words up at the time (above, below, left or right of
@@ -110,12 +119,14 @@ export function approvedMoments(decisions: PolicyDecision[], plan: MomentPlan, s
     if (d.variant === 'big') {
       const sungOf = (id: string) => { const x = song.cues.find((q) => q.id === id); return x?.charStarts?.length ? { times: x.charStarts, source: 'line' } : undefined; };
       const { kept, dropped } = checkMoments([ask as MomentAsk], song.cues, sungOf);
-      if (kept[0]) big.push(kept[0]);
+      // (the drawn moment carries its trace: the reading's candidate and its evidence line)
+      if (kept[0]) big.push({ ...kept[0], meaningRef: c.meaningRef, evidenceCueId: ask.evidenceCueId ?? ask.cues.at(-1)! });
       else refused.push({ id: d.id, why: `the big moment's guards: ${dropped[0]?.reason ?? 'refused'}` });
       continue;
     }
-    const avoid = avoidOf(lines, c.window!.from, c.window!.to);
-    const region = regions.get(d.id) ?? miniRegion(avoid, [0.15, 0.3]);
+    // (a type-only mini acts in its line's own seat on its own words: nothing to keep off; a page mini beside them)
+    const avoid = c.family === 'type-only' ? [] : avoidOf(lines, c.window!.from, c.window!.to);
+    const region = regions.get(d.id) ?? (c.family === 'type-only' ? undefined : miniRegion(avoid, [0.15, 0.3]));
     if (!region) { refused.push({ id: d.id, why: 'no free region of 15 % of the frame beside the words' }); continue; }
     mini.push({
       id: d.id, meaningRef: c.meaningRef, evidenceCueId: ask.cues.at(-1)!, cueIds: [...ask.cues], form: ask.form, variant: ask.variant, word: ask.word.trim(), why: ask.why ?? '',

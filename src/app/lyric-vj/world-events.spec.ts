@@ -16,7 +16,7 @@ const line = (id: string, start: number, end: number, n = 0, seats = [LEFT, RIGH
   id, show: start - 0.2, start, end, seats,
   ...(n ? { words: Array.from({ length: n }, (_, k) => ({ text: `p${k}`, from: start + ((end - start) * k) / n, to: start + ((end - start) * (k + 1)) / n })) } : {}),
 });
-const input = (lines: WorldEventLine[], o: Partial<WorldEventInput> = {}): WorldEventInput => ({ lines, beats: [], sections: [{ start: 0, energy: 0.8 }], caps: caps(['layout-seat', 'page-handoff', 'camera-reframe']), seed: 0, ...o });
+const input = (lines: WorldEventLine[], o: Partial<WorldEventInput> = {}): WorldEventInput => ({ lines, beats: [], sections: [{ start: 0, energy: 0.8 }], caps: caps(['layout-seat', 'page-handoff', 'camera-reframe'], { ownPages: true }), seed: 0, ...o });
 const cuts = (es: WorldEvent[]) => es.filter((e) => e.kind !== 'keep');
 
 /** Every scheduled pair keeps the seam clock, the action gap and the light clock. */
@@ -158,7 +158,7 @@ describe('planWorldEvents', () => {
     const e = (id: string, at: number, kind: WorldEvent['kind'] = 'layout-seat'): WorldEvent => ({ id, lineIds: ['x'], kind, at, from: at, to: at, seatBefore: 'a', seatAfter: 'b', scope: 'line', changesLight: false, reason: '' });
     const r = countCuts([e('first', 0), e('x', 2), e('x', 2), e('same-frame', 2.02, 'camera-reframe'), e('k', 3, 'keep'), e('y', 5)], [0, 10]);
     expect(r.cuts).toBe(2);
-    expect(r.verifiedCompositionCutsPer10).toBe(2);
+    expect(r.planCutsPer10).toBe(2);
     expect(r.readingSeatChanges).toBe(2);
   });
 
@@ -173,7 +173,7 @@ describe('planWorldEvents', () => {
   it('rule 11: a fast ten-line run is not ten full page handoffs, and keeps some lines', () => {
     const lines = Array.from({ length: 10 }, (_, i) => line(`l${i}`, i * 1.25, i * 1.25 + 1.2, 2, [LEFT, RIGHT, TOP, CARD]));
     lines.forEach((l, i) => (l.seat = i % 2 ? 'w/card' : 'w/left'));
-    const plan = planWorldEvents(input(lines, { caps: caps(['layout-seat', 'page-handoff', 'carrier-swap', 'camera-reframe']) }));
+    const plan = planWorldEvents(input(lines, { caps: caps(['layout-seat', 'page-handoff', 'carrier-swap', 'camera-reframe'], { ownPages: true }) }));
     const pages = plan.events.filter((e) => e.kind === 'page-handoff');
     expect(pages.length).toBeLessThan(5);
     expect(plan.events.filter((e) => e.kind === 'keep').length).toBeGreaterThan(0);
@@ -189,8 +189,8 @@ describe('planWorldEvents', () => {
 
   it('schedules only the families the world allows, and only on approved seats', () => {
     const lines = Array.from({ length: 6 }, (_, i) => line(`l${i}`, i * 2.5, i * 2.5 + 2.4, 3));
-    const plan = planWorldEvents(input(lines, { caps: caps(['camera-reframe'], { seats: ['w/left'] }), sections: [{ start: 0, energy: 0.8 }, { start: 7, energy: 0.8 }] }));
-    for (const e of cuts(plan.events)) expect(e.kind).toBe('camera-reframe');
+    const plan = planWorldEvents(input(lines, { caps: caps(['camera-reframe'], { seats: ['w/left'] }), sections: [{ start: 0, energy: 0.8 }, { start: 7, energy: 0.8 }], cams: [{ lineId: 'l3', at: 7.3, sec: 0.5, kind: 'push-through' }] }));
+    expect(cuts(plan.events).map((e) => e.kind)).toEqual(['camera-reframe']);
     for (const e of plan.events) expect(['w/left', '']).toContain(e.seatAfter);
   });
 });

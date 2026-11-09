@@ -23,6 +23,10 @@ import { cuesIn, TreatmentV3, validateTreatment } from './treatment';
 import { checkMoments, ownCues, type SignatureMoment } from './signature-moments';
 import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
+import { compositionsOf } from './world-shared';
+import { planWorldEvents, type WorldEventTable } from './world-events';
+import { fromJob } from './world-events-adapter';
+import { applyWorldEvents } from './world-events-apply';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
 export const SIDED = new Set(['vertical', 'stair', 'quiet', 'typewriter', 'handwrite']);
@@ -332,6 +336,11 @@ export interface FreeOptions {
   base?: Record<string, unknown>;
   /** A style (free-styles.ts): its world is the whole of what the plan can draw from. */
   style?: FreeStyle;
+  /**
+   * false: the plan as it was before the song's one composition scheduler (Q1 phase 2): the composer's own reposes, no
+   * event table. For before/after comparisons only.
+   */
+  worldEvents?: boolean;
 }
 
 /** A song to a render job: about a millisecond of rules, then the engine. */
@@ -356,19 +365,33 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const world = o.style?.world;
   const start = world ? schemeFor(world, song.title, meaning.palette, seed ?? 0) : 0;
   const paletteId = world ? world.palette[start].id : rerollPalette(song.title, meaning.palette, calm, seed);
-  const { plan, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: poolOf(world, RECIPES, start) } : {}) });
+  const scheduled = !!world && o.worldEvents !== false && !!compositionsOf(world.id);
+  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
-  const base = composerBase(o.base ?? FREE_BASE(), plan, shots, palette, seed) as unknown as TreatmentV3;
-  const drawn = composerTreatment(song, plan as never, base, palette, world);
+  const base = composerBase(o.base ?? FREE_BASE(), composed, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
   const moments = freeMoments(song, meaning);
   const own = new Set(moments.flatMap(ownCues));
-  const treatment: TreatmentV3 = moments.length ? { ...drawn, cues: drawn.cues.map((c) => (own.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: moments } : drawn;
   const win = { start: 0, end: song.duration };
-  const checked = validateTreatment(treatment, song, win, TEMPLATES);
-  if (checked.errors.length) throw new Error(`plan refused: ${checked.errors.slice(0, 3).join(' / ')}`);
   const fps = o.fps ?? 30;
-  const job: RenderJob = { fps, window: win, beats: song.beats, downbeats: song.downbeats, beatStrength: song.beatStrength, tempo: song.tempo, cues: cuesIn(song, win), singers: song.singers, treatment: checked.treatment, assets: {}, fonts: { family: font }, meta: splitSongTitle(song.title), track: false, entrance: 'whole' };
+  const jobOf = (plan: typeof composed) => {
+    const drawn = composerTreatment(song, plan as never, base, palette, world);
+    const treatment: TreatmentV3 = moments.length ? { ...drawn, cues: drawn.cues.map((c) => (own.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: moments } : drawn;
+    const checked = validateTreatment(treatment, song, win, TEMPLATES);
+    if (checked.errors.length) throw new Error(`plan refused: ${checked.errors.slice(0, 3).join(' / ')}`);
+    const job: RenderJob = { fps, window: win, beats: song.beats, downbeats: song.downbeats, beatStrength: song.beatStrength, tempo: song.tempo, cues: cuesIn(song, win), singers: song.singers, treatment: checked.treatment, assets: {}, fonts: { family: font }, meta: splitSongTitle(song.title), track: false, entrance: 'whole' };
+    return { job, treatment };
+  };
+  const first = jobOf(composed);
+  if (!world || o.worldEvents === false) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
+  // the song's one composition plan (world-events.ts, Q1 phase 2): scheduled on the job as the renderer will set it, then
+  // written into the plan (its seats and the switches inside lines) and drawn; a world with no capability keeps its plan
+  const events = planWorldEvents(fromJob(first.job, song, world, { seed: seed ?? 0 }));
+  const plan = scheduled ? applyWorldEvents(composed as never, events, world) : composed;
+  const { job, treatment } = scheduled ? jobOf(plan) : first;
+  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: events.warnings, rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off' };
+  job.treatment.worldEvents = table;
+  treatment.worldEvents = table;
   return { job, plan, palette: paletteId, calm, treatment };
 }

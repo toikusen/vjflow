@@ -5,6 +5,7 @@
 // cells with its box (world-sets FaceLayout): a hoop, a balloon, a plaque or a pen loop is drawn round the words as they
 // were really set, never round a guess.
 import type { SetSpec } from './world-sets';
+import { pageSeat } from './page-seat';
 
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };
 /** No change to the block: only so the page gets its cells. */
@@ -85,12 +86,12 @@ for (const id of B5_MIRRORS) {
  * (the margin seat); art-deco: the secondary block on the axis inside the same stepped frame, a size down, the plaque
  * still drawn round the words as set. `lo` is the least type a line is offered the seat at (lineplan-core pageSeatsFor).
  */
-const pageSeat = (of: string, o: Partial<SetSpec>): SetSpec => { const { split: _split, ...s } = B5_SETS[of]; return { ...s, ...o, samePage: of }; };
+const seatOn = (of: string, o: Partial<SetSpec>): SetSpec => pageSeat(B5_SETS[of], of, o);
 const B5_PAGE_SEATS: Record<string, SetSpec> = {
-  'notebook/spiral+margin': pageSeat('notebook/spiral', { at: [0.2, 0.9], ax: -1, ay: 1, flush: -1, share: 0.58, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
-  'notebook/dotted+margin': pageSeat('notebook/dotted', { at: [0.86, 0.88], ax: 1, ay: 1, flush: 1, share: 0.5, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
-  'art-deco/marquee+second': pageSeat('art-deco/marquee', { at: [0.5, 0.56], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
-  'art-deco/marquee-low+second': pageSeat('art-deco/marquee-low', { at: [0.5, 0.36], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
+  'notebook/spiral+margin': seatOn('notebook/spiral', { at: [0.2, 0.9], ax: -1, ay: 1, flush: -1, share: 0.58, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
+  'notebook/dotted+margin': seatOn('notebook/dotted', { at: [0.86, 0.88], ax: 1, ay: 1, flush: 1, share: 0.5, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
+  'art-deco/marquee+second': seatOn('art-deco/marquee', { at: [0.5, 0.56], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
+  'art-deco/marquee-low+second': seatOn('art-deco/marquee-low', { at: [0.5, 0.36], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
   // (phase 3b, poster-panel: the marquee set as it is, split and all, its gold phrase on a panel of its own; offered only
   // where the line really splits, lineplan-core pageSeatsFor)
   'art-deco/marquee+panels': { ...B5_SETS['art-deco/marquee'], samePage: 'art-deco/marquee', panels: true, lo: B5_SETS['art-deco/marquee'].lo },

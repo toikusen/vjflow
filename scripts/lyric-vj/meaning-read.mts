@@ -56,3 +56,78 @@ export async function readMeaning(song: { title: string; cues: Cue[] }, calm?: b
   const usd = usage.input * READING_PRICE.input + usage.output * READING_PRICE.output;
   return { meaning: text && text.type === 'text' && msg.stop_reason === 'end_turn' ? JSON.parse(text.text) : undefined, usd, usage, stop: msg.stop_reason };
 }
+
+/** One candidate's re-judgement by the verify pass (ids: k<i> for keys[i], m<i> for moments[i]). */
+export interface Verdict {
+  id: string;
+  phraseSung: boolean;
+  lineSupports: boolean;
+  mapping: string;
+  directionOk: boolean;
+  wholeLineKey: boolean;
+  verdict: 'keep' | 'drop';
+  reason: string;
+}
+
+/** The verify request: the whole lyric, every key and moment candidate with its evidence and why, one verdict each. */
+export function verifyRequest(song: { title: string; cues: Cue[] }, m: Pick<Meaning, 'keys' | 'moments'>): { prompt: string; schema: object; ids: string[] } {
+  const keys = m.keys.map((k, i) => ({ id: `k${i}`, line: `k${i} key｜句 ${k.cue}｜phrase「${k.phrase}」｜why：${k.why ?? ''}` }));
+  const moments = (m.moments ?? []).map((x, i) => ({ id: `m${i}`, line: `m${i} moment ${x.form}/${x.variant}｜句 ${x.cues.join('+')}（證據句 ${x.evidenceCueId ?? x.cues.at(-1)}）｜word「${x.word}」｜why：${x.why}` }));
+  const ids = [...keys, ...moments].map((x) => x.id);
+  const forms = momentsHelp().split('\n').slice(1).join('\n');
+  const prompt = `你是這支歌詞動態影片的導演。前一輪閱讀從歌詞裡提出了下面這些候選：key 是要做視覺主次、放大強調的詞組；moment 是用固定形式畫出來的專屬時刻。請逐一獨立重新判斷每個候選，只能對清單裡的 id 作答，不能新增候選，也不要因為名額或其他候選而保留或刪除。
+
+逐項檢查：
+(a) phraseSung：phrase／word 是否在那一句（moment 看證據句）原樣唱出。
+(b) lineSupports：把整句連同否定、願望、疑問、條件、反諷一起讀，這句的真正意思是否支持這個形式（moment）或這個強調（key）。願望、否定、假設、反問不能當成已經發生的事。
+(c) mapping：若是比喻，寫出「本體→喻體」；若形式畫的是喻體或字面物件，而這句其實在講別的東西（例如句子講的是海的氣味，形式卻畫海浪），判為不支持。不是比喻就寫「非比喻」。
+(d) directionOk：主詞與受詞、誰對誰做了什麼，是否和 why 說的一致（例如「悲傷融化了從前」是悲傷把從前融化，不是悲傷自己消散）。
+(e) wholeLineKey：key 的 phrase 是否就是整句或幾乎整句。是的話，除非這句很短而且整句本身就是重點，否則 drop。
+
+verdict：以上都成立才 keep，否則 drop；reason 用一句話說明關鍵理由。
+
+歌名：${song.title}
+歌詞：
+${song.cues.map((c) => `${c.id} ${c.text}`).join('\n')}
+
+形式與它們畫的意思：
+${forms}
+
+候選：
+${[...keys, ...moments].map((x) => x.line).join('\n')}`;
+  const schema = { type: 'object', additionalProperties: false, required: ['verdicts'], properties: { verdicts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'phraseSung', 'lineSupports', 'mapping', 'directionOk', 'wholeLineKey', 'verdict', 'reason'], properties: {
+    id: { type: 'string', enum: ids.length ? ids : ['none'] }, phraseSung: { type: 'boolean' }, lineSupports: { type: 'boolean' }, mapping: { type: 'string' },
+    directionOk: { type: 'boolean' }, wholeLineKey: { type: 'boolean' }, verdict: { type: 'string', enum: ['keep', 'drop'] }, reason: { type: 'string' },
+  } } } } };
+  return { prompt, schema, ids };
+}
+
+/**
+ * Keeps a candidate only on a `keep` verdict whose own checks agree (sung, supported, right direction; a whole-line key
+ * stays only if the verdict says so). A candidate with no verdict is dropped; a duplicate verdict counts once (the first).
+ */
+export function applyVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M, verdicts: Verdict[]): { meaning: M; dropped: { id: string; why: string }[] } {
+  const byId = new Map<string, Verdict>();
+  for (const v of verdicts) if (!byId.has(v.id)) byId.set(v.id, v);
+  const dropped: { id: string; why: string }[] = [];
+  const keepOf = (id: string) => {
+    const v = byId.get(id);
+    const why = !v ? 'no verdict' : v.verdict !== 'keep' ? `drop: ${v.reason}` : !v.phraseSung ? 'keep overruled: phrase not sung' : !v.lineSupports ? 'keep overruled: line does not support it' : !v.directionOk ? 'keep overruled: direction wrong' : '';
+    if (why) dropped.push({ id, why });
+    return !why;
+  };
+  return { meaning: { ...m, keys: m.keys.filter((_, i) => keepOf(`k${i}`)), moments: (m.moments ?? []).filter((_, i) => keepOf(`m${i}`)) }, dropped };
+}
+
+/** The verify pass: one READING_MODEL call re-judging every key and moment candidate; returns the verified reading. */
+export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000): Promise<{ meaning: M; verdicts: Verdict[]; dropped: { id: string; why: string }[]; usd: number; usage: { input: number; output: number }; stop: string | null }> {
+  const { prompt, schema, ids } = verifyRequest(song, m);
+  if (!ids.length) return { meaning: m, verdicts: [], dropped: [], usd: 0, usage: { input: 0, output: 0 }, stop: null };
+  const msg = await new Anthropic({ maxRetries: 2 }).messages.create({ model: READING_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }], output_config: { effort, format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;
+  const text = msg.content.find((b) => b.type === 'text');
+  const usage = { input: msg.usage.input_tokens, output: msg.usage.output_tokens };
+  const usd = usage.input * READING_PRICE.input + usage.output * READING_PRICE.output;
+  if (!text || text.type !== 'text' || msg.stop_reason !== 'end_turn') throw new Error(`verify pass did not finish (${msg.stop_reason})`);
+  const verdicts = (JSON.parse(text.text) as { verdicts: Verdict[] }).verdicts;
+  return { ...applyVerdicts(m, verdicts), verdicts, usd, usage, stop: msg.stop_reason };
+}

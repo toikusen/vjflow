@@ -1,13 +1,16 @@
 // The line composer: a song's whole plan with no director. One cheap reading of the lyrics (or none), then rules.
-// npx tsx scripts/lyric-vj/lineplan.mts --song song.json --base base-treatment.json --out <dir> [--no-reading]
+// npx tsx scripts/lyric-vj/lineplan.mts --song song.json --base base-treatment.json --out <dir> [--no-reading] [--verify-meaning]
+// --verify-meaning: a fresh reading's keys and moments are re-judged by a second call (meaning-read.mts verifyCandidates)
+// before they are cached; a cache hit is used as stored. Off by default; turning it on in production is a later decision
+// (about two calls a song, ~$0.004 at 2026-11-09 prices).
 // then: npx tsx scripts/lyric-vj/typeplan.mts --song song.json --treatment <dir>/base.json --plan <dir>/plan.json --palette "$(cat <dir>/palette)" --out <dir>/final
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { composePlan, composerBase, Cue, fallbackParts, Meaning, PALETTES } from './lineplan-core.mts';
-import { isCalmSong, loadAnthropicEnv, readMeaning } from './meaning-read.mts';
+import { isCalmSong, loadAnthropicEnv, readMeaning, verifyCandidates } from './meaning-read.mts';
 
-const { values: a } = parseArgs({ options: { song: { type: 'string' }, base: { type: 'string' }, out: { type: 'string' }, 'no-reading': { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { song: { type: 'string' }, base: { type: 'string' }, out: { type: 'string' }, 'no-reading': { type: 'boolean', default: false }, 'verify-meaning': { type: 'boolean', default: false } } });
 loadAnthropicEnv();
 const out = a.out!;
 mkdirSync(out, { recursive: true });
@@ -28,6 +31,13 @@ let got: { meaning?: Meaning; usd: number } = { usd: 0 };
 const cached = join(out, 'meaning.json');
 if (existsSync(cached)) got.meaning = JSON.parse(readFileSync(cached, 'utf8'));
 else try { got = await read(); } catch (e) { console.log(`reading failed, rules only: ${e}`); }
+if (a['verify-meaning'] && !existsSync(cached) && valid(got.meaning)) {
+  try {
+    const v = await verifyCandidates(song, valid(got.meaning)!);
+    console.log(`verify: kept ${v.meaning.keys.length} keys, ${v.meaning.moments?.length ?? 0} moments; dropped ${v.dropped.map((d) => d.id).join(' ') || 'none'} ($${v.usd.toFixed(4)})`);
+    got = { meaning: v.meaning, usd: got.usd + v.usd };
+  } catch (e) { console.log(`verify failed, reading kept unverified: ${e}`); }
+}
 const meaning = valid(got.meaning) ?? { palette: calm ? 'frost' : 'tea', ground: 'grain', reading: '', parts: fallbackParts(cues, song.sections ?? [], calm), keys: [] };
 if (!existsSync(cached)) writeFileSync(cached, JSON.stringify(meaning, null, 1));
 const { plan, shots } = composePlan(song, meaning, calm);

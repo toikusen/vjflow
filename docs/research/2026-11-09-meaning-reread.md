@@ -173,4 +173,86 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
 
 合併後 palette 和 parts 不變，所以同目錄的 `base.json`、`plan.json`、`palette` 不必因為配色或分段而重算。但新的 keys 和 moments 會改變計畫，正式出片前仍要重跑 `lineplan.mts`。
 
-上面第一輪的換檔指令（`meaning.haiku-1109.json`）作廢。
+上面第一輪的換檔指令（`meaning.haiku-1109.json`）作廢；第二輪的指令也已被第三輪取代（見下）。
+
+---
+
+# 第三輪：候選複審（verify pass）
+
+**結論：多加一次呼叫，讓模型以導演身分逐一複審每個候選，就能擋下硬條件抓不到的語意誤讀。第二輪標出的 4 個問題擋下 3 個（snow c005 melt、snow c022 freeze、tsuzuki c001 海），另一個 choroin 雨被保留，但它本來就會被硬條件擋下。誤刪 1 個：tsuzuki c002 `strike/wipe` 是 Codex 認可的候選。複審五首花 $0.0122，加上 lineplan 旗標的一次實測 $0.0044，本輪共 $0.0166。Q5 的 `songsReaching36of45` 仍是 2，但留下的時刻都通過了語意複審。Q3 的 snow 因為整句 key 被刪，edgeFit 世界從 14／12／18 降到 4／4／3；nun 仍有 40／39／35。**
+
+## 機制
+
+- `scripts/lyric-vj/meaning-read.mts` 新增並匯出 `verifyCandidates()`、`verifyRequest()`、`applyVerdicts()`，之後 lineplan 可以直接重用。
+- 每首一次呼叫，模型 `claude-haiku-5-5`，effort `medium`。輸入是附 cue id 的完整歌詞，加上每個 key（句、phrase、why）和每個 moment（form／variant、句、證據句、word、why）。
+- 提示詞要求模型以導演身分逐一獨立重判，逐項回答：(a) phrase 是否原樣唱出；(b) 把否定、願望、疑問、條件、反諷一起讀，這句是否支持該形式或強調；(c) 若是比喻，寫出「本體→喻體」，形式畫的東西不是句子在講的就判不支持（例如海的氣味→海浪）；(d) 主受詞方向是否正確；(e) key 是否整句（除非短句且整句就是重點，否則 drop）。
+- 輸出用 strict schema，`id` 只能是清單裡的 `k<i>`／`m<i>`，不能新增候選。
+- `applyVerdicts` 的規則：只有 `keep` 而且 (a)(b)(d) 都為真才保留；`keep` 但自身檢查不一致時會被推翻；沒有 verdict 的候選一律 drop；重複的 verdict 只取第一個。
+- 單元測試：`scripts/lyric-vj/meaning-verify.test.mts`（fixture 回應 → 套用刪除；request 的 id 列舉）。
+- `lineplan.mts --verify-meaning`：只有在新讀歌詞時才複審，複審後的結果寫入快取；命中既有快取時照原樣使用。預設關閉，預設行為和 HEAD 逐位元組相同（已驗證）。用 tsuzuki 實測新讀＋複審：先讀花 $0.0017，複審花 $0.0027，刪掉 1 個 moment。**是否在正式環境開啟由之後決定**：每首約 2 次呼叫，約 $0.004。
+- 執行腳本是 `scripts/lyric-vj/meaning-verify.mts`：讀 `meaning.haiku-1109b.json`，寫出 `meaning.haiku-1109c.json`，報告在 `out/research/meaning-reread-1109/verify-1109c.json`（複本：`assets/.../verify-1109c.json`）。
+
+## 結果
+
+| 歌 | keys 前→後 | moments 前→後 | tokens in+out | USD |
+|---|---|---|---|---|
+| nun | 5→3 | 2→2 | 3274+2255 | 0.00145 |
+| snow | 5→1 | 7→5 | 3264+3772 | 0.00221 |
+| tsuzuki | 5→3 | 5→3 | 2750+3747 | 0.00215 |
+| choroin | 21→15 | 4→4 | 5312+7439 | 0.00425 |
+| tenmon | 6→3 | 1→1 | 2753+3734 | 0.00214 |
+| **合計** | **42→25** | **19→15** | | **0.0122** |
+
+**第二輪標出的 4 個問題：**
+- snow c005 melt：**已 drop**。理由寫明「方向是悲傷把從前化掉，why 卻說悲傷自己消散」。
+- snow c022 freeze：**已 drop**。理由是「屬願望而非已發生」。
+- tsuzuki c001 海 wave：**已 drop**。理由是「講的是海的氣味，形式卻畫海浪」。
+- choroin c043+c045 雨 fall：**仍保留**。複審認為 c045 的雨是真的雨。這個候選原本就被硬條件（配對規則）在 45／45 個世界擋下，不會演出。
+
+**誤刪：**
+- 第二輪單獨通過 `checkMoments` 的 12 個時刻中，留下 8 個，刪掉 4 個。其中 3 個是上面的預期刪除；誤刪 1 個：**tsuzuki c002 消えて wipe**。複審理由是「疑問句，消失沒有被肯定發生」，但 Codex 認為「どうして…消えてしまうの」問的是為什麼會消失，消失本身是前提。這次複審對疑問句太嚴格。
+- 和 Codex §1 表比對：moment 命中 6 個，留下 4 個（c005 melt 是預期刪除，c002 wipe 是誤刪）。key 命中 5 個，留下 3 個（柔中帶剛、信じてみる、君が最上級）。被刪的 nun「仁者無敵」和 snow「說再見」，第二輪的 phrase 都是整句，照規則 (e) 刪除是一致的，但也表示第一輪應該只取詞組。
+
+**choroin 的 21 個 key 留下 15 個。** 被刪的 6 個都是長整句；留下的有 7 個是「短句整句」的例外，這個例外的認定偏寬。
+
+**複審本身的弱點：** 重唱被當成 echo 的候選（nun c020+c021、choroin 三個 echo、tenmon あれ）全部被保留，但 `checkMoments` 的「重唱不算 echo」規則會擋下。所以複審負責語意，硬條件負責形式，兩者要一起用。另外 tenmon k2 的理由有指出 why 把「言ってみたい」的願望寫成承諾，但仍判 keep：複審對 key 的 why 錯誤是「修正說明」而不是 drop。
+
+## Q3／Q5 dry-run（`--meaning-suffix haiku-1109c`；Q5 另外跑了 `merged-1109c`，結果相同）
+
+**Q3**（`out/research/q3-1109/coverage-haiku-c.json`）：
+
+| 歌/seed | keys | 合法語意候選 | edgeFit 段 | 有 edgeFit 的世界（第二輪 → 第三輪） |
+|---|---|---|---|---|
+| nun/0,1,2 | 3 | 85／83／73 | 74／72／63 | 40／39／36 → 40／39／35 |
+| snow/0,1,2 | 1 | 13／9／9 | 4／4／3 | 14／12／18 → 4／4／3 |
+
+逐世界中位數：medianEdgeFit 2／2／1，medianToday 11。
+
+**Q5**（`out/research/q5-1109/moments-haiku-c.json`，seed 0）：`songsReaching36of45` = 2（診斷用）。有 ≥1 時刻的世界：nun 0、snow 45、tsuzuki 45、choroin 0、tenmon 0。
+
+每個候選在 45 個世界的結果（被選中／撞 Q2 hold／撞其他事件／因名額或間距未選）：
+
+| 候選 | 選中 | Q2 hold | 其他 | 名額或間距 |
+|---|---|---|---|---|
+| snow c001 大雪 fall | 2 | 35 | 2 | 6 |
+| snow c003 破碎 tear | 12 | 33 | 0 | 0 |
+| snow c008 飄雪 fall | 5 | 22 | 9 | 9 |
+| snow c009 楓葉 fall | 10 | 25 | 0 | 10 |
+| snow c042+c043 三年後 echo | 45 | 0 | 0 | 0 |
+| tsuzuki c011 波 wave | 42 | 0 | 0 | 3 |
+| tsuzuki c005+c007 echo | 11 | 0 | 3 | 31 |
+| tsuzuki c014+c016 echo | 36 | 6 | 2 | 1 |
+| nun c019 踢 tear | 0（timing：「踢」沒有逐字時間） | | | |
+| nun c020+c021、choroin ×4、tenmon ×1 | 0（legalCue：重唱或配對不合法） | | | |
+
+snow 的 Q2 hold 碰撞仍是排程缺口。拿掉 c005 和 c022 之後，snow 的楓葉 c009 被選中次數從 1 增加到 10。
+
+## 換檔指令（**尚未執行**；先確認其他 worktree 的量測已經結束）
+
+```sh
+cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
+./node_modules/.bin/tsx --tsconfig tsconfig.json scripts/lyric-vj/meaning-merge.mts --overlay-suffix haiku-1109c --out-suffix merged-1109c --effort medium+verify  # already run
+for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp -p $d/meaning.json $d/meaning.instant-1101.json && cp -p $d/meaning.merged-1109c.json $d/meaning.json; done
+```
+
+這組指令取代第二輪的 `merged-1109` 版本。

@@ -15,13 +15,14 @@ import { setWordSafe, wordBreaks } from './phrases';
 import { LineBeat, lineBeats, readingSec, setTogether } from './render/reading-window';
 import { OPEN, SETTLE, stressInk, WORLD_BEATS } from './render/world-beats';
 import { isLinked, LINK_PREPARE, moveState, pickWorldMoves } from './render/world-handoff';
-import { carrierRoom, growRoom, inkChecks } from './render/hold-room';
+import { absorbInk, carrierRoom, growRoom, inkChecks } from './render/hold-room';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
 import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure } from './render/seat-geometry';
 import { lineFace } from './fonts';
 import { compositionsOf, pageSeatsOf } from './world-shared';
+import { ABSORBABLE_HOLDS } from './world-events';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
@@ -1015,6 +1016,25 @@ export function pageSeatsFor(text: string, set: string, worldId: string, font?: 
   return pageSeatsOf(worldId, set).filter((x) => (SET_SPECS[x].panels ? lays(x).every((l) => !!panelSplit(l)) : lays(x).every((l) => fits(l, SET_SPECS[x].lo))));
 }
 
+/**
+ * The seats on which a line's ink-only hold may merge with its world's material move into one composite event (Q1 phase
+ * 4a, Codex 2026-11-10 §3 (b)): only for a hold the scheduler may absorb (world-events ABSORBABLE_HOLDS), only when the
+ * world declares a move on the same page that absorbs that kind, and only onto a seat of the same page whose words keep
+ * the hold's settled ink at 4.5:1 on the old ground, the new one and every ground the move lays under them meanwhile
+ * (hold-room.ts absorbInk, on the palette, as the plan reads every ink). The scheduler still checks the words' box and
+ * type are the same, the sung word, the reading time and the clocks. Undefined: the hold keeps its line as before.
+ */
+export function absorbSeatsFor(kind: string, set: string, seats: string[], worldId: string, slots?: Slots): { seats: string[]; ink: string } | undefined {
+  const from = SET_SPECS[set];
+  if (!ABSORBABLE_HOLDS.has(kind) || !slots || !from) return undefined;
+  const mats = Object.values(compositionsOf(worldId)?.materials ?? {}).filter((m) => m.seat === 'carrier' && m.at.includes('in-line') && !m.withheld && (m.absorbs ?? []).includes(kind));
+  if (!mats.length) return undefined;
+  const bases = from.ink ? [slots[from.ink]] : from.object ? [slots.ink, slots.plateInk] : [slots.ink];
+  let ink: string | undefined;
+  const ok = seats.filter((x) => SET_SPECS[x]?.samePage === set && mats.some((m) => bases.every((b) => { const r = absorbInk(kind, from, SET_SPECS[x], slots, b, m.under ?? []); if (r.ok) ink ??= r.ink; return r.ok; })));
+  return ok.length && ink ? { seats: ok, ink } : undefined;
+}
+
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */
 function reposeOf(c: Cue, set: string, W: WorldPool, beat: LineBeat | undefined, beats: number[], level: Level, calm: boolean, roll: (salt: string, n: number) => number) {
   const len0 = c.end - c.start;
@@ -1499,7 +1519,9 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     }, W.holds) : undefined;
     const heldBeat = held && 'kind' in held ? held : undefined;
     if (heldBeat) lastBeat = heldBeat.kind;
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {}), ...(blow ? { blow } : {}) } : undefined;
+    // (a scheduled world only: the seats where the line's ink-only hold may merge with a material move, phase 4a)
+    const absorb = heldBeat && seats?.length && W?.id ? absorbSeatsFor(heldBeat.kind, recipe.wline!.set, seats, W.id, W.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]) : undefined;
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {}), ...(absorb ? { beatAbsorb: absorb } : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

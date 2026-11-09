@@ -291,6 +291,14 @@ export interface MaterialMove {
   withheld?: string;
   /** What is known about how often it fires (a capability note, not a switch). */
   note?: string;
+  /**
+   * Q2 hold kinds this move may merge with on the same line into one composite event (phase 4a, Codex 2026-11-10 §3 (b)):
+   * only a move that keeps the words' geometry and the ground they are read on. The scheduler intersects it with its own
+   * whitelist (world-events ABSORBABLE_HOLDS: ink-swap, line-ink-settle), so no world can declare a geometry hold.
+   */
+  absorbs?: string[];
+  /** The palette slots the words stand on while the move runs (every intermediate ground the hold's ink must read on). */
+  under?: ('ground' | 'plate' | 'accent' | 'ink' | 'ink2' | 'plateInk' | 'faint')[];
 }
 
 /**
@@ -352,7 +360,11 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
     // (withheld 2026-11-10 when the scheduler approved Utsusemi 75.86 on a split the renderer did not make; back 2026-11-10
     // (phase 3c): pageSeatsFor, world-layout → panelsOf and the contract all part a line by seat-geometry panelSplit on
     // the renderer's own measure of the job's face, docs/research/2026-11-10-q1-phase3c.md)
-    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME, note: 'never fires under Q2 hold rules (0/2320 approved in the 29-song scan)' } } },
+    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME,
+      // (phase 4a: an ink-only hold on the line may merge with it into one composite event; the words stand on the
+      // ground's own black throughout the slide, world-b5-deco panelsOf)
+      absorbs: ['ink-swap', 'line-ink-settle'], under: ['ground'],
+      note: 'every hold on a line offered the panels in the 29-song scan is a line-grow, which keeps pinning (phase 4a hold-pins-4a.json)' } } },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

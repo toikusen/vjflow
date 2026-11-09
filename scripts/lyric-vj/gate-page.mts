@@ -43,4 +43,25 @@ async function moment(t: number, gw: number, gh: number) {
   on.grey.forEach((v, i) => { const d = Math.abs(v - off.grey[i]); if (d > 20) { n++; sum += d; const [x, y] = [i % gw, Math.floor(i / gw)]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } });
   return { n, sum, x0, x1, y0, y1, rules, soft: w.__soft > 0 };
 }
-w.gatePage = { moment };
+/**
+ * One frame as grey w×h, three ways (the composition check, measure-world-events.mts --frames): with the words, without
+ * them (what they stand on kept), and with their carriers taken away too. A JPEG of the frame with the words, for a look.
+ */
+async function layers(t: number, gw: number, gh: number, jpeg = false) {
+  const grey = async (on: boolean, carriers: boolean) => {
+    w.vjLyrics(on, carriers);
+    const img = new Image();
+    img.src = await w.grabAt(t, 0.85);
+    await img.decode();
+    const c = new OffscreenCanvas(gw, gh).getContext('2d', { willReadFrequently: true })!;
+    c.drawImage(img, 0, 0, gw, gh);
+    const d = c.getImageData(0, 0, gw, gh).data;
+    return { grey: Array.from({ length: gw * gh }, (_, i) => Math.round(0.3 * d[i * 4] + 0.59 * d[i * 4 + 1] + 0.11 * d[i * 4 + 2])), src: img.src };
+  };
+  const on = await grey(true, true);
+  const off = await grey(false, true);
+  const bare = await grey(false, false);
+  w.vjLyrics(true);
+  return { on: on.grey, off: off.grey, bare: bare.grey, ...(jpeg ? { jpeg: on.src } : {}) };
+}
+w.gatePage = { moment, layers };

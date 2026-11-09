@@ -253,6 +253,14 @@ export interface WorldCompositions {
    * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
    */
   enabled?: boolean;
+  /**
+   * Under the joint contract (phase 4c, Codex 2026-11-10 r3 §4): a line whose entrance is a visible composition may also
+   * take one reseat inside itself, at a sung word, with READ_STABLE of still reading after the entrance has landed and
+   * before the line ends, every clock and geometry check passed. Two composition changes, counted as two; never a hold
+   * beside them, never a third. Declared only where the owner accepted that density (art-deco: card 2026-11-10-art-deco-
+   * slow-inline-density); every other world keeps one primary action a line.
+   */
+  entranceAndInLine?: boolean;
 }
 
 /** How a material move runs (design-bar rule 9: the curve follows the material, never one shared ease). */
@@ -366,7 +374,7 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // inside a line on a marquee, its single plaque parts into the main plaque and a stepped secondary panel under the
   // gold phrase, slid down out of the main one (ease-out, no overshoot); the words never move, the panel is the ground's
   // own black, the plaque keeps the approved board's rules and minimum width
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME, entranceAndInLine: true,
     // (withheld 2026-11-10 when the scheduler approved Utsusemi 75.86 on a split the renderer did not make; back 2026-11-10
     // (phase 3c): pageSeatsFor, world-layout → panelsOf and the contract all part a line by seat-geometry panelSplit on
     // the renderer's own measure of the job's face, docs/research/2026-11-10-q1-phase3c.md)

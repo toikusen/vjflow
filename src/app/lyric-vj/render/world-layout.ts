@@ -87,6 +87,11 @@ export interface WorldLine {
   beatAbsorb?: { seats: string[]; inks: Record<string, string> };
   /** The line's scheme had a second ink for the whole line (line-ink-settle), for the record. */
   beatInk?: boolean;
+  /**
+   * Q1 phase 4c, a scheduled world under the joint contract only: every hold the line could take, each measured on the
+   * seat it names (lineplan-core holdCandidatesOf); none is drawn. The scheduler commits one (or none) as `beat`.
+   */
+  holdCands?: { seat: string; beat: NonNullable<WorldLine['beat']>; beatSafe?: boolean; beatInk?: boolean; rank: number; slack: number }[];
 }
 
 /** The margin round each small word a spreading copy may not enter, a share of the word's size. */

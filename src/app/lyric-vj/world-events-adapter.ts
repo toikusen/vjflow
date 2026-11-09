@@ -13,6 +13,7 @@ import { SET_SPECS } from './render/world-sets';
 import { WORLD_BEATS } from './render/world-beats';
 import { WORLD_ENTERS } from './render/world-motion';
 import { enterSec as lineEnterSec } from './render/enter-sec';
+import type { EnterKind } from './treatment';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
@@ -21,7 +22,7 @@ import { boxesMeet, laidSeat, panelSplit } from './render/seat-geometry';
 import { absorbInk } from './render/hold-room';
 import { lineFace } from './fonts';
 import { DEFAULT_DESIGN } from './design';
-import { ABSORBABLE_HOLDS, ACTION_GAP, BEAT_SNAP, holdIdOf, LIGHT_GAP, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, type AbsorbedHold, type AbsorbRoom, type CameraMove, type InputWarning, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { ABSORBABLE_HOLDS, ACTION_GAP, BEAT_SNAP, holdIdOf, LIGHT_GAP, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, type AbsorbedHold, type AbsorbRoom, type CameraMove, type InputWarning, type LineOutcome, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type JointHold, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 
 type Free = ReturnType<typeof freeJob>;
 type Job = Free['job'];
@@ -78,7 +79,7 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   const carrierRole: WorldCompositionCaps['carrierRole'] = world.sheet ? 'page' : world.standsOnPlate ? 'plate' : seats.some((s) => s.carrierId) ? 'object' : 'ground';
   const declared = compositionsOf(world.id);
   // (a world's declared seats, or all of its sets and the seats it adds on their pages)
-  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), source: 'declared' };
+  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), ...(declared.entranceAndInLine ? { entranceAndInLine: true } : {}), source: 'declared' };
   if (!o.derived) return { worldId: world.id, kinds: [], seats: sets, carrierRole, source: 'declared-off' };
   const differs = seats.some((a) => seats.some((b) => seatsDiffer(a, b)));
   const kinds: CompositionFamily[] = [
@@ -191,10 +192,12 @@ const fitsSet = (world: StyleWorld, set: string, text: string) => {
  * parts and the light changes of its grounds. A world with no capability comes in pinned, its own reposes given.
  * `window` keeps the lines that overlap it and the holds and handoffs on them; `derived` is the phase-1 dry run.
  */
-export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { seed?: number; window?: [number, number]; derived?: boolean; off?: boolean } = {}): WorldEventInput {
+export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { seed?: number; window?: [number, number]; derived?: boolean; off?: boolean; joint?: boolean } = {}): WorldEventInput {
   const { rows: all, handoffs, sections } = shownOf(job);
   const caps = capsOf(world, { derived: o.derived, off: o.off });
   const on = caps.source !== 'declared-off';
+  // (phase 4c: the composer's holds come in as candidates on each seat, none decided; only a scheduled world)
+  const joint = !!o.joint && on && !o.derived;
   // (a scheduled world's seats are laid on the renderer's own measure of the job's face; off, the old record as it was)
   const faces = on && !o.derived ? jobFaces(job) : undefined;
   const [a, b] = o.window ?? [-Infinity, Infinity];
@@ -209,13 +212,18 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
     const paged = (x: string) => !!pageOf(world, x);
     const legal = !w ? [] : o.derived ? caps.seats.filter((s) => s !== set && fitsSet(world, s, cue.text)) : on ? (w.seats ?? []).filter((s) => paged(s) === paged(set)) : (w.repose ?? []).map((r) => r.set);
     const hold = holdOf(id, w);
+    const cands = joint ? jointHoldsOf(id, w) : undefined;
+    // (the hold the composer would have committed on its own set: the one an absorption offer was found for)
+    const ownHold = cands?.filter((h) => h.seat === set).sort((x, y) => x.rank - y.rank)[0]?.hold;
     const words = sungWords(cue);
     const pinned = !on ? 'composition capability off' : !w ? 'not a world line' : shared.has(id) ? 'shares its shot' : o.derived ? undefined : !w.seats ? 'a set piece or a call keeps its set' : w.blow ? 'a blown-up word keeps its set' : hold ? `its ${hold.kind} hold was planned on this set (Q2)` : undefined;
     // (a blown-up word holds its picture until the line is read: a change of set only after, lineplan-core)
     const read = w?.blow ? cue.start + readingSec(cue.text, cue.start, cue.end) : undefined;
     const room0 = on && !o.derived ? holdRoom(cue, hold, legal) : undefined;
-    const absorb = on && !o.derived ? absorbRoomOf(hold, w, legal) : undefined;
-    const room1 = read === undefined ? room0 : { ...room0, spans: (room0?.spans ?? [[cue.start, cue.end]]).flatMap(([x, y]): [number, number][] => (y > Math.max(x, read) ? [[Math.max(x, read), y]] : [])) };
+    const absorb = on && !o.derived ? absorbRoomOf(joint ? ownHold : hold, w, legal) : undefined;
+    // (joint: no hold is decided, so the line's in-line room is the whole line until a hold is committed; an absorption
+    // offer rides on that room, never as an empty one)
+    const room1 = read === undefined ? (joint && absorb ? { spans: [[cue.start, cue.end]] as [number, number][] } : room0) : { ...room0, spans: (room0?.spans ?? [[cue.start, cue.end]]).flatMap(([x, y]): [number, number][] => (y > Math.max(x, read) ? [[Math.max(x, read), y]] : [])) };
     // (phase 4a: the absorption offer goes on last, over whatever room the line was left)
     const room = withAbsorb(room1, absorb);
     // (the longest the line's entrance can take: the world's own move at full pace, or the line's drawn entrance; the
@@ -223,7 +231,7 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
     const entrance = Math.max(w ? WORLD_ENTERS[w.enter]?.sec ?? 0 : 0, enter ? lineEnterSec(enter as never, 1) || 0 : 0);
     return {
       id, show, start: cue.start, end: cue.end, ...(words ? { words } : {}), settled: +(show + entrance).toFixed(3), seats: [own, ...legal.map((s) => seatIn(world, s, cue.text, faces))], seat: set,
-      ...(pinned ? { pinned } : {}), ...(room ? { inLine: room } : {}), ...(shared.has(id) ? { sharesShot: true } : {}),
+      ...(pinned ? { pinned } : {}), ...(room ? { inLine: room } : {}), ...(shared.has(id) ? { sharesShot: true } : {}), ...(cands?.length ? { holdCands: cands } : {}),
       // (a given repose whose time no sung word stands at is the composer's proportional guess: kept, labelled, counted)
       ...(!on && w?.repose?.length ? { given: w.repose.map((r) => ({ at: r.at, seat: r.set, reason: 'repose (composer, capability off)', ...(sungAt(words, r.at) ? {} : { unreliable: true }) })) } : {}),
     };
@@ -241,8 +249,17 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
     handoffs: handoffs.filter((h) => ids.has(h.lineId)),
     lights: lightsOf(sections).filter((l) => inWin(l.at)),
     cams,
+    ...(joint ? { joint: true } : {}),
     seed: o.seed ?? 0,
   };
+}
+
+/** A line's hold candidates as the composer listed them on each seat (phase 4c, WorldLine holdCands), in the scheduler's terms. */
+export function jointHoldsOf(id: string, w: WorldLine | undefined): JointHold[] {
+  return (w?.holdCands ?? []).flatMap((c) => {
+    const sec = c.beat.sec ?? WORLD_BEATS[c.beat.kind as BeatKind]?.sec;
+    return sec ? [{ seat: c.seat, hold: { lineId: id, at: c.beat.at, from: c.beat.at, to: +(c.beat.at + sec).toFixed(3), kind: c.beat.kind }, rank: c.rank, slack: c.slack }] : [];
+  });
 }
 
 /** fromJob on a free plan's job (the Q3 and Q5 adapters read its lines, holds and handoffs). */
@@ -546,4 +563,86 @@ export function failedComposites(events: WorldEvent[], checked: InputWarning[]):
   const named = (e: WorldEvent) => checked.filter((w) => w.reason.startsWith('final check') && (w.inputs[0] === e.id || w.inputs[0] === `${e.material}@${e.lineIds.at(-1)}`));
   const failed = events.filter((e) => e.absorbed && named(e).length);
   return { failed, warnings: failed.map((e) => ({ inputs: [e.id], reason: `final check: contract failure: the composite ${e.absorbed!.holdId} + ${e.absorbed!.materialId} did not land (${named(e).map((w) => w.reason.replace(/^final check: /, '')).join('; ')}); its hold and the line's layout restored, the material refused` })) };
+}
+
+/** Two times within this are the same drawn instant (the final checks' own landing tolerance, 2 ms). */
+const LANDED = 0.002;
+/** Float slack on a boundary comparison (s). */
+const EPS = 1e-6;
+/** Two switches within 50 ms are one switch (countCuts' own rule): the seam check reads them as one, never as two too close. */
+const SAME_SWITCH = 0.05;
+
+/** Where a joint contract failure is named: the line, so the caller can undo that line's commitment alone. */
+export const jointName = (lineId: string) => `joint:${lineId}`;
+
+/**
+ * The joint contract (phase 4c, Codex 2026-11-10 r2 §1) checked on the final job, line by line against the outcome the
+ * plan committed: at most one primary action a line (its switches and its standing hold; a composite is one); the winner
+ * is what is drawn (a hold drawn as planned on a hold line and nothing else; a switch and no hold on a composition line;
+ * neither on a keep line); a hold that lost leaves nothing behind (no beat drawn, none in the plan's holds, no candidate
+ * in the drawing); a kept settling state stays to the line's end (no switch after it inside the line, the event over
+ * before the line ends); a switch inside a line keeps READ_STABLE of still reading either side; across the song every
+ * committed hold keeps ACTION_GAP from every other action and BEAT_CLEAR from a switch of its own line, and the scheduler's
+ * own switches keep SEAM_GAP (the light clock is lightGapWarnings'). Each miss is a final-check InputWarning naming the
+ * line (`joint:<line>`).
+ */
+export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }, opts: { entranceAndInLine?: boolean } = {}): InputWarning[] {
+  if (!table.outcomes) return [];
+  const { rows } = shownOf(job);
+  // (the switches as the final job draws them, read off the drawing with real shows: the winner is what is drawn)
+  // (on the job's own faces, as the scheduler laid the seats: the table is not attached yet when the final check runs)
+  const drawnCuts = currentEvents({ job }, undefined, world, jobFaces(job)).filter((e) => e.kind !== 'keep');
+  const out: InputWarning[] = [];
+  const miss = (line: string, why: string) => out.push({ inputs: [jointName(line)], reason: `final check: joint: ${why}` });
+  const near = (a: number, b: number) => Math.abs(a - b) < LANDED;
+  const holds = table.holds ?? [];
+  const cuts = [...new Map(table.events.filter((e) => e.kind !== 'keep').map((e) => [e.id, e])).values()];
+  const absorbedIds = new Set(cuts.flatMap((e) => (e.absorbed ? [e.absorbed.holdId] : [])));
+  for (const o of table.outcomes) {
+    const row = rows.find((r) => r.id === o.lineId);
+    if (!row) continue;
+    const evs = cuts.filter((e) => e.lineIds.at(-1) === o.lineId);
+    const hs = holds.filter((h) => h.lineId === o.lineId);
+    const actions = evs.length + hs.filter((h) => !absorbedIds.has(holdIdOf(h))).length;
+    // (a world that declares it: an entrance and one reseat inside the line, two changes, no hold beside them)
+    const pairOk = !!opts.entranceAndInLine && actions === 2 && !hs.length && evs.filter((e) => e.scope === 'in-line').length === 1 && evs.some((e) => e.scope !== 'in-line' && e.kind !== 'camera-reframe');
+    if (actions > 1 && !pairOk) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
+    const drawn = holdOf(row.id, row.world);
+    if (row.world?.holdCands) miss(o.lineId, `hold candidates reached the drawing on ${o.lineId}`);
+    if (o.outcome === 'hold' || o.outcome === 'composite') {
+      const h = hs[0];
+      if (!h) miss(o.lineId, `${o.outcome} committed on ${o.lineId} with no hold in the plan`);
+      else if (!drawn || drawn.kind !== h.kind || !near(drawn.at, h.at) || !near(drawn.to, h.to)) miss(o.lineId, `committed ${holdIdOf(h)} ${h.at}–${h.to} drawn as ${drawn ? `${drawn.kind} ${drawn.at}–${drawn.to}` : 'none'}`);
+      if (o.outcome === 'hold' && evs.length) miss(o.lineId, `hold line ${o.lineId} also switches (${evs.map((e) => e.id).join(', ')})`);
+      if (o.outcome === 'composite' && !evs.some((e) => e.absorbed)) miss(o.lineId, `composite on ${o.lineId} has no absorbed event`);
+    } else {
+      if (drawn) miss(o.lineId, `a ${drawn.kind} hold is drawn on ${o.lineId}, whose outcome is ${o.outcome}: the losing hold left a residue`);
+      if (hs.length) miss(o.lineId, `${hs.map(holdIdOf).join(', ')} stands in the plan's holds on a ${o.outcome} line`);
+      if (o.outcome === 'composition' && !evs.length) miss(o.lineId, `composition committed on ${o.lineId}, nothing switches`);
+      if (o.outcome === 'keep' && evs.length) miss(o.lineId, `keep committed on ${o.lineId}, drawn with ${evs.map((e) => e.id).join(', ')}`);
+    }
+    const seen = drawnCuts.filter((d) => d.lineIds.at(-1) === o.lineId);
+    if ((o.outcome === 'composition' || o.outcome === 'composite') && !seen.length) miss(o.lineId, `${o.outcome} committed on ${o.lineId}, the drawing switches nothing there`);
+    if ((o.outcome === 'hold' || o.outcome === 'keep') && seen.length) miss(o.lineId, `${o.outcome} committed on ${o.lineId}, the drawing switches there (${seen.map((d) => `${d.kind}@${d.at}`).join(', ')})`);
+    if (drawn && KEPT.has(drawn.kind as BeatKind) && (row.world?.repose ?? []).some((r) => r.at > drawn.at - EPS)) miss(o.lineId, `the settled ${drawn.kind} on ${o.lineId} does not stay to the line's end: a switch inside the line after it`);
+    if (drawn && drawn.to > row.cue.end + EPS) miss(o.lineId, `the ${drawn.kind} on ${o.lineId} runs past the line's end (${drawn.to} > ${row.cue.end})`);
+    const settled = row.show + Math.max(row.world ? WORLD_ENTERS[row.world.enter]?.sec ?? 0 : 0, row.enter ? lineEnterSec(row.enter as EnterKind, 1) || 0 : 0);
+    // (still reading counted from when the words have landed: the entrance and any switch into the line done)
+    const landed = Math.max(row.cue.start, settled, ...evs.filter((x) => x.scope !== 'in-line').map((x) => x.to));
+    for (const e of evs.filter((x) => x.scope === 'in-line')) if (e.at - landed < READ_STABLE - EPS || row.cue.end - e.to < READ_STABLE - EPS) miss(o.lineId, `${e.id} at ${e.at} without ${READ_STABLE}s of still reading either side`);
+  }
+  // (across the song: each committed hold against every other action and switch; the scheduler's own switches by their seams)
+  const standing = holds.filter((h) => !absorbedIds.has(holdIdOf(h)));
+  for (const h of standing) {
+    for (const x of [...cuts.filter((e) => e.absorbed?.holdId !== holdIdOf(h)), ...standing.filter((y) => y !== h)]) {
+      const [from, to, what] = 'lineIds' in x ? [x.from, x.to, x.id] : [x.from, x.to, holdIdOf(x)];
+      if (h.from < to + ACTION_GAP - EPS && from < h.to + ACTION_GAP - EPS) miss(h.lineId, `${holdIdOf(h)} ${h.from}–${h.to} within ${ACTION_GAP}s of ${what}`);
+      // (a switch of the held line itself: never this near the event, beatOfLine's own clearance; the next line's show
+      // is kept off by ACTION_GAP above, holdEndBy's contract)
+      if ('lineIds' in x && x.lineIds.at(-1) === h.lineId && x.kind !== 'prop-beat' && (Math.abs(x.at - h.from) < BEAT_CLEAR - EPS || Math.abs(x.at - h.to) < BEAT_CLEAR / 2 - EPS)) miss(h.lineId, `${holdIdOf(h)} within ${BEAT_CLEAR}s of its line's switch ${x.id} at ${x.at}`);
+    }
+  }
+  const own = cuts.filter((e) => !e.fixed && e.kind !== 'prop-beat').sort((a, b) => a.at - b.at);
+  for (const [k, e] of own.entries()) for (const x of own.slice(k + 1)) if (x.at - e.at < SEAM_GAP - EPS && x.at - e.at >= SAME_SWITCH) miss(x.lineIds.at(-1)!, `${x.id} at ${x.at} within ${SEAM_GAP}s of ${e.id} at ${e.at}`);
+  return out;
 }

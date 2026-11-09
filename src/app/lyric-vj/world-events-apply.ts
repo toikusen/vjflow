@@ -7,7 +7,8 @@ import { compositionsOf, pageOf } from './world-shared';
 import type { WorldEventPlan } from './world-events';
 import type { LineScale } from './render/scale-pose';
 
-interface PlanLine { cue: string; world?: { set: string; exit?: string; repose?: { at: number; set: string; sec?: number; move?: string }[]; seats?: string[]; beat?: { at: number }; cam?: unknown; wipe?: { from: number; sec: number; move: string }; page?: { move: string; at: number; sec: number; draws: string }; scale?: LineScale } }
+type Beat = { kind?: string; at: number; sec?: number };
+interface PlanLine { cue: string; world?: { set: string; exit?: string; repose?: { at: number; set: string; sec?: number; move?: string }[]; seats?: string[]; beat?: Beat; cam?: unknown; wipe?: { from: number; sec: number; move: string }; page?: { move: string; at: number; sec: number; draws: string }; scale?: LineScale; holdCands?: { seat: string; beat: Beat; beatSafe?: boolean; beatInk?: boolean }[]; beatSkip?: string; beatSafe?: boolean; beatInk?: boolean } }
 interface PlanShot { shot: string; lines: PlanLine[]; cuts: { fx: string }[] }
 
 /**
@@ -73,5 +74,22 @@ export function applyWorldEvents<P extends { shots: PlanShot[] }>(p: P, plan: Wo
       if (inLine.length) l.world.repose = inLine;
       else delete l.world.repose;
     }
+  if (plan.outcomes) for (const s of out.shots) for (const l of s.lines) if (l.world) committed(l.cue, l.world, plan);
   return scaled(out);
+}
+
+const SKIPS: Record<string, string> = { supersededByComposition: 'superseded by a composition (joint, phase 4c)', noSafeCandidate: 'no safe candidate (joint, phase 4c)', landingFailed: 'landing failed: kept (joint, phase 4c)' };
+
+/**
+ * The joint contract's winner written onto a line (phase 4c): a committed hold becomes the line's `beat`, taken from the
+ * candidate measured on the very seat the line is drawn in (never one measured on another seat); a line that did not
+ * commit its hold keeps none, with the reason in `beatSkip`. The candidates themselves never reach the drawing.
+ */
+function committed(cue: string, w: NonNullable<PlanLine['world']>, plan: WorldEventPlan) {
+  const h = plan.holds.find((x) => x.lineId === cue);
+  const cand = h ? w.holdCands?.find((c) => c.seat === w.set && c.beat.kind === h.kind && Math.abs(c.beat.at - h.at) < 0.002) : undefined;
+  const o = plan.outcomes?.find((x) => x.lineId === cue);
+  if (cand) Object.assign(w, { beat: cand.beat, beatSafe: cand.beatSafe, beatInk: cand.beatInk });
+  else if (w.holdCands?.length && o?.reason && SKIPS[o.reason]) w.beatSkip = SKIPS[o.reason];
+  delete w.holdCands;
 }

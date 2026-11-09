@@ -1,0 +1,323 @@
+{
+ "before": {
+  "source": "out/research/q5-1109/moments.json",
+  "songsReaching36of45": 0,
+  "bySong": {
+   "nun": {
+    "meaning": "out/research/instant/plans/nun/meaning.json",
+    "sha256": "16bfb48f2b49a7b830cb99336cc05fec64a39a4acbc7aead646b05332384a9cb",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   },
+   "snow": {
+    "meaning": "out/research/instant/plans/snow/meaning.json",
+    "sha256": "4d09128579f259d3dc2ea27e9de34cbad457938fd8717621b34cd4487914c7af",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   },
+   "tsuzuki": {
+    "meaning": "out/research/instant/plans/tsuzuki/meaning.json",
+    "sha256": "2e580e221f0937429edaf66657f62ba30c46801f92b2f5e1597d44db05a8d25c",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   },
+   "choroin": {
+    "meaning": "out/research/instant/plans/choroin/meaning.json",
+    "sha256": "9d0d50c5ae51e1f0f655f3aa0453957570fd9588e07f0903a23e22ffeafc7ed8",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   },
+   "tenmon": {
+    "meaning": "out/research/instant/plans/tenmon/meaning.json",
+    "sha256": "691d56ecad3f56bccb60937f45b81be2b5fb78bd12fcd3fbf29eea349cafcf7b",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   }
+  }
+ },
+ "after": {
+  "source": "out/research/q5-1109/moments-haiku.json",
+  "songsReaching36of45": 1,
+  "bySong": {
+   "nun": {
+    "meaning": "out/research/instant/plans/nun/meaning.haiku-1109.json",
+    "sha256": "535080011ee17cf92a70dcdcb456b0117bdebc690457f121944ee6a58da854e7",
+    "candidates": 1,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noCandidatePassed": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 45,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 1,
+     "unknownLine": 0,
+     "checkMoments": {
+      "shout": 1
+     },
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0
+    }
+   },
+   "snow": {
+    "meaning": "out/research/instant/plans/snow/meaning.haiku-1109.json",
+    "sha256": "6af686dce504e88e3b91af857a87b919bbfdea91f6ae6067bac9b1041ab3adb7",
+    "candidates": 2,
+    "worldsWithMoment": 6,
+    "zeroReasons": {
+     "noCandidatePassed": 39
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 45,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 2,
+     "reading": 0,
+     "shout": 0,
+     "collision": 37
+    },
+    "today": {
+     "asks": 2,
+     "unknownLine": 0,
+     "checkMoments": {
+      "evidence": 1
+     },
+     "notChorus": 1,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0
+    }
+   },
+   "tsuzuki": {
+    "meaning": "out/research/instant/plans/tsuzuki/meaning.haiku-1109.json",
+    "sha256": "7502352fb708ebf897dfff899d1dde9fcac758f89c228b29dc479db381df104c",
+    "candidates": 1,
+    "worldsWithMoment": 45,
+    "zeroReasons": {},
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 1,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 1,
+     "overCap": 0,
+     "kept": 0
+    }
+   },
+   "choroin": {
+    "meaning": "out/research/instant/plans/choroin/meaning.haiku-1109.json",
+    "sha256": "10edbf27d14ff549fc8d15bd181839bca21e236862b3b53032aa426d9f14dc3b",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   },
+   "tenmon": {
+    "meaning": "out/research/instant/plans/tenmon/meaning.haiku-1109.json",
+    "sha256": "d5c7923862a64c6f24deab321e9bc206492138802891d77f84786adc6020cb4c",
+    "candidates": 0,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noMeaningCandidate": 45
+    },
+    "policyEliminated": {
+     "source": 0,
+     "legalCue": 0,
+     "evidence": 0,
+     "negated": 0,
+     "why": 0,
+     "timing": 0,
+     "capability": 0,
+     "reading": 0,
+     "shout": 0,
+     "collision": 0
+    },
+    "today": {
+     "asks": 0,
+     "unknownLine": 0,
+     "checkMoments": {},
+     "notChorus": 0,
+     "notDownbeat": 0,
+     "overCap": 0,
+     "kept": 0,
+     "reason": "noMeaningCandidate"
+    }
+   }
+  }
+ }
+}

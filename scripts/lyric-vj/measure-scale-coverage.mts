@@ -8,6 +8,7 @@
 // Sections are song.json sections with sung lines, a line in the section it starts in (the 11-09 measurement's basis).
 // `renderedScaleSections` here is PLANNED sections; phase 2 replaces it with the frames' own check.
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-scale-coverage.mts [--world riso] [--seeds 0,1,2] [--out out/research/q3-1109/coverage.json]
+//     [--meaning-suffix haiku-1109]  (the instant variant reads meaning.<suffix>.json beside each cached meaning.json instead)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -21,12 +22,13 @@ const SONGS = [
   { song: 'nun', db: 'yt_w_fCuUR3lEs' },
   { song: 'snow', db: 'yt_5i50aTB7JFo' },
 ];
+const { values: a } = parseArgs({ options: { world: { type: 'string' }, seeds: { type: 'string', default: '0,1,2' }, out: { type: 'string' }, 'meaning-suffix': { type: 'string' } } });
+const suffix = a['meaning-suffix'] ? `.${a['meaning-suffix']}` : '';
 // the measurement's meanings (keys empty), and the older line-plan readings that do name keys, as a second variant
 const VARIANTS = [
-  { id: 'instant', path: (s: string) => `out/research/instant/plans/${s}/meaning.json`, note: 'the meanings the 11-09 measurement used (world-clip.mts); keys: []' },
+  { id: 'instant', path: (s: string) => `out/research/instant/plans/${s}/meaning${suffix}.json`, note: suffix ? `the same instant plans re-read (meaning${suffix}.json)` : 'the meanings the 11-09 measurement used (world-clip.mts); keys: []' },
   { id: 'lineplan-keys', path: (s: string) => `out/research/lineplan/${s}/meaning.json`, note: 'supplementary: out/research/lineplan readings, 10 keys a song; also changes the parts, so today differs' },
 ];
-const { values: a } = parseArgs({ options: { world: { type: 'string' }, seeds: { type: 'string', default: '0,1,2' }, out: { type: 'string' } } });
 const seeds = a.seeds!.split(',').map(Number);
 const styles = OFFERED_STYLES.filter((s) => !a.world || s.id === a.world);
 

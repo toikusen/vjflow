@@ -1,0 +1,84 @@
+{
+ "reading": "回想海邊的夏日與消失的笑容，從懷念與不安，轉為一次次決定相信，最後以夢的延續與共同生存作結。",
+ "palette": "tide",
+ "ground": "gradient",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.35,
+   "fx": [
+    "paper-edge",
+    "crease",
+    "soft-rings"
+   ],
+   "what": "回想那天海的氣味與不知為何消逝的季節，語氣是懷舊又帶疑問。"
+  },
+  {
+   "from": "c005",
+   "tension": 0.6,
+   "fx": [
+    "soft-rings",
+    "dotscreen",
+    "paper-drift"
+   ],
+   "what": "反覆問「信じられる？」，在星光與海的廣闊裡尋找可以相信的東西。"
+  },
+  {
+   "from": "c010",
+   "tension": 0.4,
+   "fx": [
+    "overprint",
+    "rain",
+    "crease"
+   ],
+   "what": "笑容被浪遮住，失去的悲傷沉下來，但歌仍在一次次唱起對你的思念。"
+  },
+  {
+   "from": "c014",
+   "tension": 0.85,
+   "fx": [
+    "disc",
+    "block",
+    "herringbone"
+   ],
+   "what": "「信じてみる」由問轉成決定，在路的盡頭揮手的你成為前行的動力。"
+  },
+  {
+   "from": "c019",
+   "tension": 0.7,
+   "fx": [
+    "soft-rings",
+    "offcut",
+    "disc"
+   ],
+   "what": "再次確認星光與海的廣闊，相信的念頭更明亮，聲音向遠方傳開。"
+  },
+  {
+   "from": "c024",
+   "tension": 0.8,
+   "fx": [
+    "paper-drift",
+    "washi",
+    "disc"
+   ],
+   "what": "在夢的延續中再會、共同生存，暁の輝く今日に帶來迎向新一天的希望。"
+  }
+ ],
+ "moments": [
+  {
+   "cues": [
+    "c011"
+   ],
+   "form": "shape",
+   "variant": "wave",
+   "word": "波",
+   "why": "寄せる波把笑容遮住，波在此是消失與遮蔽的力量，不是單純的海景。"
+  }
+ ],
+ "keys": [
+  {
+   "cue": "c027",
+   "phrase": "共に生きよう"
+  }
+ ]
+}

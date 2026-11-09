@@ -6,6 +6,7 @@
 // No API calls by construction: the script imports only node:fs / node:path / node:util / node:crypto and this repo's
 // pure modules; the reading is the meaning.json on disk (its sha256 is written into the report).
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-free-moments.mts [--world silk] [--out out/research/q5-1109/moments.json]
+//     [--meaning-suffix haiku-1109]  (reads meaning.<suffix>.json beside each cached meaning.json instead)
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -23,13 +24,13 @@ const SONGS = [
   { song: 'choroin', db: 'yt_hCCskTJwvuc' },
   { song: 'tenmon', db: 'yt_iwYXfOhcsYI' },
 ];
-const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, out: { type: 'string' } } });
+const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, out: { type: 'string' }, 'meaning-suffix': { type: 'string' } } });
 const seed = Number(a.seed);
 const styles = OFFERED_STYLES.filter((s) => !a.world || s.id === a.world);
 const sum = (rs: Record<string, number>[]) => rs.reduce<Record<string, number>>((m, r) => { for (const [k, v] of Object.entries(r)) m[k] = (m[k] ?? 0) + v; return m; }, {});
 
 const songs = SONGS.map((s) => {
-  const path = `out/research/instant/plans/${s.song}/meaning.json`;
+  const path = `out/research/instant/plans/${s.song}/meaning${a['meaning-suffix'] ? `.${a['meaning-suffix']}` : ''}.json`;
   const text = readFileSync(path, 'utf8');
   const meaning = JSON.parse(text);
   const timeline = JSON.parse(readFileSync(`out/db/${s.db}/song.json`, 'utf8'));

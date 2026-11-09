@@ -1,0 +1,112 @@
+{
+ "reading": "嘴硬撒嬌的偶像式告白：想被愛又怕黏，吐槽與期待交替，最後在高喊中收尾。",
+ "palette": "sugar",
+ "ground": "gradient",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.5,
+   "fx": [
+    "rays",
+    "offcut",
+    "dots"
+   ],
+   "what": "開場的戀愛渴望與想贏過人生的念頭，語氣亂但興奮。"
+  },
+  {
+   "from": "c005",
+   "tension": 0.7,
+   "fx": [
+    "block",
+    "disc",
+    "offcut"
+   ],
+   "what": "成員點名與口號式喊叫，節奏感強，情緒外放。"
+  },
+  {
+   "from": "c010",
+   "tension": 0.45,
+   "fx": [
+    "washi",
+    "dotscreen",
+    "ledger"
+   ],
+   "what": "想要超絕美少女與作弊的願望，現實卻不如意，自嘲式的無奈。"
+  },
+  {
+   "from": "c015",
+   "tension": 0.55,
+   "fx": [
+    "paper-drift",
+    "crease",
+    "overprint"
+   ],
+   "what": "粉絲認錯人、忘記名字的尷尬，被人帶離現場的失落與不捨。"
+  },
+  {
+   "from": "c020",
+   "tension": 0.8,
+   "fx": [
+    "disc",
+    "peel",
+    "rays"
+   ],
+   "what": "副歌式的爆發：商売繁盛、クソデカ感情，把喜歡說到最大聲。"
+  },
+  {
+   "from": "c033",
+   "tension": 0.6,
+   "fx": [
+    "soft-rings",
+    "stitch",
+    "paper-drift"
+   ],
+   "what": "自承容易心動變成チョロイン，又要保持プラトニック，半推半就。"
+  },
+  {
+   "from": "c046",
+   "tension": 0.65,
+   "fx": [
+    "hatch",
+    "punched",
+    "motes"
+   ],
+   "what": "切換成偶像模式，卻暴露真正的寂寞與想見面的渴望。"
+  },
+  {
+   "from": "c059",
+   "tension": 0.85,
+   "fx": [
+    "herringbone",
+    "block",
+    "hatch"
+   ],
+   "what": "被說過的喜歡卻被推變心，轉為委屈、怨怪與要對方負責的撒嬌。"
+  },
+  {
+   "from": "c068",
+   "tension": 0.9,
+   "fx": [
+    "disc",
+    "rays",
+    "dots"
+   ],
+   "what": "結尾的全員衝刺與重複口號，情緒推到最高後定格式收束。"
+  }
+ ],
+ "moments": [],
+ "keys": [
+  {
+   "cue": "c001",
+   "phrase": "恋に恋"
+  },
+  {
+   "cue": "c030",
+   "phrase": "プラトニック"
+  },
+  {
+   "cue": "c065",
+   "phrase": "案外あっさり"
+  }
+ ]
+}

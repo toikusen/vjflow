@@ -1,0 +1,194 @@
+{
+ "date": "2026-11-09",
+ "model": "claude-haiku-5-5",
+ "effort": "low",
+ "suffix": "haiku-1109",
+ "totalUsd": 0.00655,
+ "rows": [
+  {
+   "song": "nun",
+   "db": "yt_w_fCuUR3lEs",
+   "title": "周杰倫 - 雙截棍",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "wrote": "out/research/instant/plans/nun/meaning.haiku-1109.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 4528,
+    "output": 1467
+   },
+   "usd": 0.00119,
+   "keys": {
+    "asked": 1,
+    "valid": 0
+   },
+   "moments": {
+    "asked": 1,
+    "validLines": 1,
+    "passCheckMoments": 0,
+    "dropped": [
+     "「(幹什麼? 幹什麼?) 已被我一腳踢開 哈!」 has a call beside it"
+    ]
+   },
+   "freeTier": {
+    "asks": 1,
+    "unknownLine": 0,
+    "checkMoments": {
+     "shout": 1
+    },
+    "notChorus": 0,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 6,
+   "palette": "lacquer"
+  },
+  {
+   "song": "snow",
+   "db": "yt_5i50aTB7JFo",
+   "title": "宋德鶴 - 三年後的大雪",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "wrote": "out/research/instant/plans/snow/meaning.haiku-1109.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 3923,
+    "output": 1323
+   },
+   "usd": 0.00105,
+   "keys": {
+    "asked": 1,
+    "valid": 1
+   },
+   "moments": {
+    "asked": 2,
+    "validLines": 2,
+    "passCheckMoments": 1,
+    "dropped": [
+     "「一瞬間」 is part of the word 「那一」"
+    ]
+   },
+   "freeTier": {
+    "asks": 2,
+    "unknownLine": 0,
+    "checkMoments": {
+     "evidence": 1
+    },
+    "notChorus": 1,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 5,
+   "palette": "frost"
+  },
+  {
+   "song": "tsuzuki",
+   "db": "yt_b3GCfyNKeLs",
+   "title": "Ado - 世界のつづき",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "wrote": "out/research/instant/plans/tsuzuki/meaning.haiku-1109.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 3687,
+    "output": 1673
+   },
+   "usd": 0.00121,
+   "keys": {
+    "asked": 1,
+    "valid": 1
+   },
+   "moments": {
+    "asked": 1,
+    "validLines": 1,
+    "passCheckMoments": 1,
+    "dropped": []
+   },
+   "freeTier": {
+    "asks": 1,
+    "unknownLine": 0,
+    "checkMoments": {},
+    "notChorus": 0,
+    "notDownbeat": 1,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 6,
+   "palette": "tide"
+  },
+  {
+   "song": "choroin",
+   "db": "yt_hCCskTJwvuc",
+   "title": "のんふぃく！ - プラトニックチョロイン",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "wrote": "out/research/instant/plans/choroin/meaning.haiku-1109.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 4977,
+    "output": 2162
+   },
+   "usd": 0.00158,
+   "keys": {
+    "asked": 3,
+    "valid": 3
+   },
+   "moments": {
+    "asked": 0,
+    "validLines": 0,
+    "passCheckMoments": 0,
+    "dropped": []
+   },
+   "freeTier": {
+    "asks": 0,
+    "unknownLine": 0,
+    "checkMoments": {},
+    "notChorus": 0,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0,
+    "reason": "noMeaningCandidate"
+   },
+   "parts": 9,
+   "palette": "sugar"
+  },
+  {
+   "song": "tenmon",
+   "db": "yt_iwYXfOhcsYI",
+   "title": "SITUASION - 天文対話",
+   "model": "claude-haiku-5-5",
+   "effort": "low",
+   "wrote": "out/research/instant/plans/tenmon/meaning.haiku-1109.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 3963,
+    "output": 2249
+   },
+   "usd": 0.00152,
+   "keys": {
+    "asked": 2,
+    "valid": 2
+   },
+   "moments": {
+    "asked": 0,
+    "validLines": 0,
+    "passCheckMoments": 0,
+    "dropped": []
+   },
+   "freeTier": {
+    "asks": 0,
+    "unknownLine": 0,
+    "checkMoments": {},
+    "notChorus": 0,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0,
+    "reason": "noMeaningCandidate"
+   },
+   "parts": 10,
+   "palette": "wine"
+  }
+ ]
+}

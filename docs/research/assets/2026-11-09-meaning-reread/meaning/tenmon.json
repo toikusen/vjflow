@@ -1,0 +1,117 @@
+{
+ "reading": "主角付出到快死也不被看見，用歡快、荒謬的語氣自嘲和反諷，副歌渴望被愛、想牽手擁抱，結尾以否定句冷冷收尾，說你在宇宙中無處容身。",
+ "palette": "wine",
+ "ground": "gradient",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.6,
+   "fx": [
+    "crease",
+    "overprint",
+    "paper-edge"
+   ],
+   "what": "為對方付出到快死，卻可能連存在都不被察覺，是帶著自憐的反諷。"
+  },
+  {
+   "from": "c003",
+   "tension": 0.8,
+   "fx": [
+    "herringbone",
+    "block",
+    "hatch"
+   ],
+   "what": "激烈否定對方、爭辯的情緒，語氣急促而有攻擊性。"
+  },
+  {
+   "from": "c007",
+   "tension": 0.5,
+   "fx": [
+    "soft-rings",
+    "stitch"
+   ],
+   "what": "「はぁ」的嘆息後，只剩想被愛、想去愛的低迴渴望。"
+  },
+  {
+   "from": "c010",
+   "tension": 0.7,
+   "fx": [
+    "disc",
+    "rays",
+    "peel"
+   ],
+   "what": "「いっせーので」集體喊出想說的話，宇宙的遠方與近身的親密交錯。"
+  },
+  {
+   "from": "c018",
+   "tension": 0.4,
+   "fx": [
+    "paper-drift",
+    "punched",
+    "ledger"
+   ],
+   "what": "不知自己為何而生，說「まあいいや」，是無所謂的自我放棄。"
+  },
+  {
+   "from": "c019",
+   "tension": 0.9,
+   "fx": [
+    "rays",
+    "offcut",
+    "disc"
+   ],
+   "what": "「友情・愛情・絆！ミラクル！」的高亢口號，明顯帶著諷刺的誇張。"
+  },
+  {
+   "from": "c021",
+   "tension": 0.7,
+   "fx": [
+    "deckle",
+    "crease",
+    "paper-edge"
+   ],
+   "what": "第二段再次以削身付出，卻預見對方的冷漠離去，悲感加深。"
+  },
+  {
+   "from": "c026",
+   "tension": 0.8,
+   "fx": [
+    "block",
+    "hatch",
+    "dots"
+   ],
+   "what": "質問鳥為何會飛，以荒謬的反問把情緒推向爆發。"
+  },
+  {
+   "from": "c030",
+   "tension": 0.5,
+   "fx": [
+    "stitch",
+    "washi",
+    "soft-rings"
+   ],
+   "what": "「君は頑張れるよ」是溫柔的鼓勵，語氣近乎安撫。"
+  },
+  {
+   "from": "c043",
+   "tension": 0.8,
+   "fx": [
+    "synth",
+    "dots",
+    "overprint"
+   ],
+   "what": "說你在宇宙中無處容身，還以「そうだね」冷淡附和，是最終的殘酷否定。"
+  }
+ ],
+ "moments": [],
+ "keys": [
+  {
+   "cue": "c043",
+   "phrase": "どこにもない"
+  },
+  {
+   "cue": "c002",
+   "phrase": "気付かれない"
+  }
+ ]
+}

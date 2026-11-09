@@ -1,0 +1,83 @@
+{
+ "reading": "歌者在三年後的大雪裡回想離去的人，思念與遺憾反覆糾纏，夢中一瞬的重逢終究只是回憶，情緒從低迴走向深沉的無奈與不捨。",
+ "palette": "frost",
+ "ground": "gradient",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.35,
+   "fx": [
+    "soft-rings",
+    "flow",
+    "overprint"
+   ],
+   "what": "開場以雪與離開點出孤單，語氣平靜卻帶著冷意。"
+  },
+  {
+   "from": "c014",
+   "tension": 0.7,
+   "fx": [
+    "deckle",
+    "paper-drift",
+    "soft-rings"
+   ],
+   "what": "副歌重複雪與思念，悲傷像融化般層層湧上，情緒最激烈。"
+  },
+  {
+   "from": "c019",
+   "tension": 0.45,
+   "fx": [
+    "crease",
+    "ledger",
+    "paper-edge"
+   ],
+   "what": "回到三年後的今天，才想起當年的大雪，語氣轉為回想與自省。"
+  },
+  {
+   "from": "c032",
+   "tension": 0.65,
+   "fx": [
+    "deckle",
+    "soft-rings",
+    "overprint"
+   ],
+   "what": "再次回到大雪與思念，悲傷更沉，遺憾在重複中加深。"
+  },
+  {
+   "from": "c042",
+   "tension": 0.3,
+   "fx": [
+    "paper-drift",
+    "motes",
+    "flow"
+   ],
+   "what": "尾聲只剩零落的字句，像雪落下後的餘韻，情緒漸漸淡去。"
+  }
+ ],
+ "moments": [
+  {
+   "cues": [
+    "c018"
+   ],
+   "form": "strike",
+   "variant": "melt",
+   "word": "融化",
+   "why": "悲傷像雪一樣融化，表示傷痛逐漸消散，而不是實際的熔化。"
+  },
+  {
+   "cues": [
+    "c017"
+   ],
+   "form": "freeze",
+   "variant": "stop",
+   "word": "一瞬間",
+   "why": "夢中見到你的那一刻被凍結，是短暫而珍貴的瞬間。"
+  }
+ ],
+ "keys": [
+  {
+   "cue": "c018",
+   "phrase": "融化了從前"
+  }
+ ]
+}

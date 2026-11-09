@@ -1,0 +1,174 @@
+{
+ "before": {
+  "source": "out/research/q3-1109/coverage.json",
+  "note": "the meanings the 11-09 measurement used (world-clip.mts); keys: []",
+  "bySeed": {
+   "0": {
+    "medianToday": 8,
+    "medianPolicy": 9,
+    "minPolicy": 0,
+    "maxPolicy": 17,
+    "medianEdgeFit": 0,
+    "worldsFullPolicy": 3
+   },
+   "1": {
+    "medianToday": 8,
+    "medianPolicy": 9,
+    "minPolicy": 0,
+    "maxPolicy": 17,
+    "medianEdgeFit": 0,
+    "worldsFullPolicy": 3
+   },
+   "2": {
+    "medianToday": 8,
+    "medianPolicy": 10,
+    "minPolicy": 0,
+    "maxPolicy": 17,
+    "medianEdgeFit": 0,
+    "worldsFullPolicy": 1
+   }
+  },
+  "perSongSeed": {
+   "nun/seed0": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "nun/seed1": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "nun/seed2": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "snow/seed0": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "snow/seed1": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "snow/seed2": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   }
+  }
+ },
+ "after": {
+  "source": "out/research/q3-1109/coverage-haiku.json",
+  "note": "the same instant plans re-read (meaning.haiku-1109.json)",
+  "bySeed": {
+   "0": {
+    "medianToday": 8,
+    "medianPolicy": 9,
+    "minPolicy": 0,
+    "maxPolicy": 17,
+    "medianEdgeFit": 0,
+    "worldsFullPolicy": 4
+   },
+   "1": {
+    "medianToday": 8,
+    "medianPolicy": 10,
+    "minPolicy": 0,
+    "maxPolicy": 17,
+    "medianEdgeFit": 0,
+    "worldsFullPolicy": 4
+   },
+   "2": {
+    "medianToday": 8,
+    "medianPolicy": 10,
+    "minPolicy": 0,
+    "maxPolicy": 17,
+    "medianEdgeFit": 0,
+    "worldsFullPolicy": 1
+   }
+  },
+  "perSongSeed": {
+   "nun/seed0": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "nun/seed1": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "nun/seed2": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 0,
+    "semanticChosen": 0,
+    "edgeFitSections": 0,
+    "worldsWithEdgeFit": 0
+   },
+   "snow/seed0": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 21,
+    "semanticChosen": 21,
+    "edgeFitSections": 16,
+    "worldsWithEdgeFit": 16
+   },
+   "snow/seed1": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 21,
+    "semanticChosen": 21,
+    "edgeFitSections": 17,
+    "worldsWithEdgeFit": 17
+   },
+   "snow/seed2": {
+    "keys": 0,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 27,
+    "semanticChosen": 27,
+    "edgeFitSections": 18,
+    "worldsWithEdgeFit": 18
+   }
+  }
+ }
+}

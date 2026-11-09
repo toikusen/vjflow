@@ -1,0 +1,79 @@
+{
+ "reading": "這首歌用誇張張揚的武打口吻，唱一個市井少年的自我吹噓與熱血，副歌的「快使用雙截棍」是興奮的呼喊；底下藏著一根不抽的菸、放了好多年的舊物等淡淡的懷念，並在「東亞病夫」的標籤被一腳踢開時轉為自信的反擊。",
+ "palette": "lacquer",
+ "ground": "gradient",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.3,
+   "fx": [
+    "ledger",
+    "washi",
+    "dotscreen"
+   ],
+   "what": "開場用市井生活的細節鋪陳，語氣輕鬆帶點戲謔。"
+  },
+  {
+   "from": "c007",
+   "tension": 0.5,
+   "fx": [
+    "herringbone",
+    "hatch",
+    "offcut"
+   ],
+   "what": "自我介紹與兵器炫耀，節奏加快，態度逐漸張揚。"
+  },
+  {
+   "from": "c009",
+   "tension": 0.8,
+   "fx": [
+    "block",
+    "rays",
+    "synth"
+   ],
+   "what": "副歌呼喊「幹什麼」與「快使用雙截棍」，情緒最亢奮，是熱血的爆發點。"
+  },
+  {
+   "from": "c013",
+   "tension": 0.6,
+   "fx": [
+    "overprint",
+    "crease",
+    "paper-edge"
+   ],
+   "what": "一根我不抽的菸、一放好多年，語氣轉為若有所思的懷舊與不自覺的掛念。"
+  },
+  {
+   "from": "c017",
+   "tension": 0.9,
+   "fx": [
+    "disc",
+    "peel",
+    "herringbone"
+   ],
+   "what": "打開任督二脈、一腳踢開東亞病夫的招牌，是反擊與揚眉吐氣的高點。"
+  },
+  {
+   "from": "c026",
+   "tension": 0.6,
+   "fx": [
+    "paper-drift",
+    "motes",
+    "soft-rings"
+   ],
+   "what": "輕功與正氣的誇耀逐步收束，語氣自信而輕盈，回到副歌式的吶喊。"
+  }
+ ],
+ "moments": [
+  {
+   "cues": [
+    "c019"
+   ],
+   "form": "strike",
+   "variant": "tear",
+   "word": "踢開",
+   "why": "這裡的踢開是真的一腳把「東亞病夫」的招牌踢走，表示拒絕與擺脫，而非字面上的物理破壞。"
+  }
+ ],
+ "keys": []
+}

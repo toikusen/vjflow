@@ -1,0 +1,172 @@
+{
+ "haiku1109e": {
+  "source": "out/research/q5-1109/moments-haiku-e.json",
+  "songsReaching36of45": 2,
+  "bySong": {
+   "nun": {
+    "meaning": "out/research/instant/plans/nun/meaning.haiku-1109e.json",
+    "sha256": "c1704c0856ed5c952183fe7fcbcd6bf669008d49957b5c285d7a91f5d7edf40e",
+    "candidates": 2,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noCandidatePassed": 45
+    }
+   },
+   "snow": {
+    "meaning": "out/research/instant/plans/snow/meaning.haiku-1109e.json",
+    "sha256": "5cfe14aa5e61c3df81010af7ba36b1c21e72b374905c1a05ee2b7a95e2ba4b82",
+    "candidates": 5,
+    "worldsWithMoment": 43,
+    "zeroReasons": {
+     "noCandidatePassed": 2
+    }
+   },
+   "tsuzuki": {
+    "meaning": "out/research/instant/plans/tsuzuki/meaning.haiku-1109e.json",
+    "sha256": "869f8afd115e7543db75c8a94b5cc8a2105e9a60bc1999f62986ef1ec6eacf47",
+    "candidates": 3,
+    "worldsWithMoment": 45,
+    "zeroReasons": {}
+   },
+   "choroin": {
+    "meaning": "out/research/instant/plans/choroin/meaning.haiku-1109e.json",
+    "sha256": "99a08cf42386f8d93cead109591b99f8abcd204f62e4b577f701a51751d55223",
+    "candidates": 4,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noCandidatePassed": 45
+    }
+   },
+   "tenmon": {
+    "meaning": "out/research/instant/plans/tenmon/meaning.haiku-1109e.json",
+    "sha256": "403c26eeee35007d77afad66cef4626fc7e0f32ba0630216ee9a4002764aac5f",
+    "candidates": 1,
+    "worldsWithMoment": 0,
+    "zeroReasons": {
+     "noCandidatePassed": 45
+    }
+   }
+  },
+  "perCandidateOver45Worlds": {
+   "nun/meaning.haiku-1109e.json#moments[0]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "timing: no trusted sung time for 「踢」 (no per-character timing; cue bounds only place the line's first word)": 45
+    }
+   },
+   "nun/meaning.haiku-1109e.json#moments[1]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "legalCue: the same line sung again is a repeat, not an echo": 45
+    }
+   },
+   "snow/meaning.haiku-1109e.json#moments[1]": {
+    "chosen": 12,
+    "notChosen": 0,
+    "collisionQ2hold": 33,
+    "collisionOther": 0,
+    "otherFloors": {}
+   },
+   "snow/meaning.haiku-1109e.json#moments[4]": {
+    "chosen": 39,
+    "notChosen": 0,
+    "collisionQ2hold": 6,
+    "collisionOther": 0,
+    "otherFloors": {}
+   },
+   "snow/meaning.haiku-1109e.json#moments[2]": {
+    "chosen": 6,
+    "notChosen": 8,
+    "collisionQ2hold": 22,
+    "collisionOther": 9,
+    "otherFloors": {}
+   },
+   "snow/meaning.haiku-1109e.json#moments[3]": {
+    "chosen": 10,
+    "notChosen": 10,
+    "collisionQ2hold": 25,
+    "collisionOther": 0,
+    "otherFloors": {}
+   },
+   "snow/meaning.haiku-1109e.json#moments[0]": {
+    "chosen": 2,
+    "notChosen": 6,
+    "collisionQ2hold": 35,
+    "collisionOther": 2,
+    "otherFloors": {}
+   },
+   "tsuzuki/meaning.haiku-1109e.json#moments[1]": {
+    "chosen": 20,
+    "notChosen": 0,
+    "collisionQ2hold": 25,
+    "collisionOther": 0,
+    "otherFloors": {}
+   },
+   "tsuzuki/meaning.haiku-1109e.json#moments[0]": {
+    "chosen": 31,
+    "notChosen": 14,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {}
+   },
+   "tsuzuki/meaning.haiku-1109e.json#moments[2]": {
+    "chosen": 32,
+    "notChosen": 2,
+    "collisionQ2hold": 9,
+    "collisionOther": 2,
+    "otherFloors": {}
+   },
+   "choroin/meaning.haiku-1109e.json#moments[0]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "legalCue: the same line sung again is a repeat, not an echo": 45
+    }
+   },
+   "choroin/meaning.haiku-1109e.json#moments[1]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "legalCue: the same line sung again is a repeat, not an echo": 45
+    }
+   },
+   "choroin/meaning.haiku-1109e.json#moments[2]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "legalCue: the same line sung again is a repeat, not an echo": 45
+    }
+   },
+   "choroin/meaning.haiku-1109e.json#moments[3]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "legalCue: a struck line must be the line before the striking one": 45
+    }
+   },
+   "tenmon/meaning.haiku-1109e.json#moments[0]": {
+    "chosen": 0,
+    "notChosen": 0,
+    "collisionQ2hold": 0,
+    "collisionOther": 0,
+    "otherFloors": {
+     "legalCue: the same line sung again is a repeat, not an echo": 45
+    }
+   }
+  }
+ }
+}

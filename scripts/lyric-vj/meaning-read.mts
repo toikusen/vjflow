@@ -1,6 +1,7 @@
 // The one cheap reading of a song's lyrics (claude-haiku-5-5, low effort unless asked): prompt, schema and call, shared by
 // lineplan.mts (which caches it as <out>/meaning.json) and meaning-reread.mts (which re-asks without touching caches).
 import Anthropic from '@anthropic-ai/sdk';
+import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -82,7 +83,7 @@ export function verifyRequest(song: { title: string; cues: Cue[] }, m: Pick<Mean
 逐項檢查：
 (a) phraseSung：phrase／word 是否在那一句（moment 看證據句）原樣唱出。
 (b) lineSupports：把整句連同否定、願望、疑問、條件、反諷一起讀，這句的真正意思是否支持這個形式（moment）或這個強調（key）。願望、否定、假設、反問不能當成已經發生的事。疑問句要分兩種：問「為什麼／怎麼會 X」的感嘆或反問（例如「どうして…消えてしまうの」），X 本身是確實發生的事，支持；問「X 會不會發生」或希望 X 發生（例如「期盼著…一瞬間」），X 沒有發生，不支持。
-(c) mapping：若是比喻，寫出「本體→喻體」；若形式畫的是喻體或字面物件，而這句其實在講別的東西（例如句子講的是海的氣味，形式卻畫海浪），判為不支持。不是比喻就寫「非比喻」。
+(c) mapping：若是比喻，寫出「本體→喻體」；若形式畫的是喻體或字面物件，而這句其實在講別的東西（例如句子講的是海的氣味，形式卻畫海浪），判為不支持。例外：句子本身明白說出「本體像／是喻體」的明喻或隱喻，而形式畫的正是這個喻體的動作或樣子（例如「回憶就像是那凋落的楓葉」→ 回憶→凋落的楓葉，畫飄落），這是句子自己給的畫面，判為支持；只有句子在講別的事、形式卻畫出喻體或字面物件時才不支持。不是比喻就寫「非比喻」。
 (d) directionOk：主詞與受詞、誰對誰做了什麼，是否和 why 說的一致（例如「悲傷融化了從前」是悲傷把從前融化，不是悲傷自己消散）。
 (e) wholeLineKey：key 的 phrase 是否就是整句或幾乎整句。是的話，除非這句很短而且整句本身就是重點，否則在 narrowedPhrase 填入同一句裡真正承載重點、原樣連續唱出的一段（不能換句、不能改字、補字或拼接），並以這段判斷 keep／drop；找不到這樣的一段就 drop。沒有收窄時 narrowedPhrase 填空字串；moment 一律填空字串。
 
@@ -133,15 +134,75 @@ export function applyVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M,
   return { meaning: { ...m, keys, moments: (m.moments ?? []).filter((_, i) => keepOf(`m${i}`)) }, dropped, narrowed };
 }
 
-/** The verify pass: one READING_MODEL call re-judging every key and moment candidate; returns the verified reading. */
-export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000): Promise<{ meaning: M; verdicts: Verdict[]; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[]; usd: number; usage: { input: number; output: number }; stop: string | null }> {
+/** One verify call's say on one candidate: kept after that call's applyVerdicts checks, the phrase it keeps, its reason. */
+export interface Vote { run: number; verdict: 'keep' | 'drop' | 'none'; kept: boolean; phrase?: string; reason: string }
+
+/** A candidate's votes across the verify calls and the outcome: kept on a majority, with the agreed phrase (keys only). */
+export interface VoteRecord { id: string; votes: Vote[]; keepVotes: number; kept: boolean; phrase?: string }
+
+/**
+ * Majority vote over independent verify calls on the same candidates. Each call's verdicts go through applyVerdicts
+ * first, so a keep vote is one that survives that call's own checks (sung, supported, direction, a narrowing sung in the
+ * cue). A candidate stays only if more than half the calls keep it. A kept key takes the phrase most keeping calls agree
+ * on (the original or one narrowing) when at least two agree and no other phrase ties it; otherwise its original phrase.
+ */
+export function voteVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M, runs: Verdict[][], cues: { id: string; text: string }[]): { meaning: M; votes: VoteRecord[]; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[] } {
+  const applied = runs.map((verdicts) => ({ verdicts, ...applyVerdicts(m, verdicts, cues) }));
+  const need = Math.floor(runs.length / 2) + 1;
+  const recordOf = (id: string, original?: string): VoteRecord => {
+    const votes = applied.map((r, run): Vote => {
+      const v = r.verdicts.find((x) => x.id === id);
+      const drop = r.dropped.find((d) => d.id === id);
+      const phrase = original === undefined || drop ? undefined : r.narrowed.find((n) => n.id === id)?.to ?? original;
+      return { run, verdict: v?.verdict ?? 'none', kept: !drop, ...(phrase !== undefined ? { phrase } : {}), reason: drop?.why ?? v?.reason ?? '' };
+    });
+    const keepVotes = votes.filter((x) => x.kept).length;
+    const kept = keepVotes >= need;
+    if (!kept || original === undefined) return { id, votes, keepVotes, kept };
+    const count = new Map<string, number>();
+    for (const x of votes) if (x.phrase !== undefined) count.set(x.phrase, (count.get(x.phrase) ?? 0) + 1);
+    const ranked = [...count].sort((p, q) => q[1] - p[1]);
+    const agreed = ranked[0][1] >= 2 && (ranked.length < 2 || ranked[1][1] < ranked[0][1]) ? ranked[0][0] : original;
+    return { id, votes, keepVotes, kept, phrase: agreed };
+  };
+  const keyVotes = m.keys.map((k, i) => recordOf(`k${i}`, k.phrase));
+  const momentVotes = (m.moments ?? []).map((_, i) => recordOf(`m${i}`));
+  const votes = [...keyVotes, ...momentVotes];
+  const dropped = votes.filter((r) => !r.kept).map((r) => ({ id: r.id, why: `${r.keepVotes}/${runs.length} keep: ${r.votes.filter((x) => !x.kept).map((x) => x.reason).join(' | ')}` }));
+  const narrowed = keyVotes.flatMap((r, i) => (r.kept && r.phrase !== m.keys[i].phrase ? [{ id: r.id, from: m.keys[i].phrase, to: r.phrase! }] : []));
+  const keys = m.keys.flatMap((k, i) => (keyVotes[i].kept ? [{ ...k, phrase: keyVotes[i].phrase! }] : []));
+  return { meaning: { ...m, keys, moments: (m.moments ?? []).filter((_, i) => momentVotes[i].kept) }, votes, dropped, narrowed };
+}
+
+/** USD ceiling for one verify call; a call over it fails the pass. */
+export const MAX_VERIFY_USD_PER_CALL = 0.5;
+
+/**
+ * A system line that differs per verify call (run index and a random nonce) and says nothing about the task. Identical
+ * requests sent together came back near-identical (2026-11-10: tsuzuki echoes 0/3 in one vote, 3/3 in the next), so
+ * each call gets its own prefix.
+ */
+export const verifyNonce = (run: number, runs: number): string => `review ${run + 1}/${runs} · ${randomUUID().slice(0, 8)}`;
+
+/**
+ * The verify pass: `runs` (default 3) independent READING_MODEL calls on the same user prompt re-judge every key and
+ * moment candidate, and voteVerdicts keeps the majority. No temperature or seed is sent (default sampling); each call's
+ * system line is a verifyNonce. A call that does not finish, or costs over MAX_VERIFY_USD_PER_CALL, fails the pass.
+ */
+export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000, runs = 3): Promise<{ meaning: M; runs: Verdict[][]; votes: VoteRecord[]; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[]; usd: number; usage: { input: number; output: number }; calls: { usd: number; usage: { input: number; output: number } }[]; stop: string | null }> {
   const { prompt, schema, ids } = verifyRequest(song, m);
-  if (!ids.length) return { meaning: m, verdicts: [], dropped: [], narrowed: [], usd: 0, usage: { input: 0, output: 0 }, stop: null };
-  const msg = await new Anthropic({ maxRetries: 2 }).messages.create({ model: READING_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }], output_config: { effort, format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;
-  const text = msg.content.find((b) => b.type === 'text');
-  const usage = { input: msg.usage.input_tokens, output: msg.usage.output_tokens };
-  const usd = usage.input * READING_PRICE.input + usage.output * READING_PRICE.output;
-  if (!text || text.type !== 'text' || msg.stop_reason !== 'end_turn') throw new Error(`verify pass did not finish (${msg.stop_reason})`);
-  const verdicts = (JSON.parse(text.text) as { verdicts: Verdict[] }).verdicts;
-  return { ...applyVerdicts(m, verdicts, song.cues), verdicts, usd, usage, stop: msg.stop_reason };
+  if (!ids.length) return { meaning: m, runs: [], votes: [], dropped: [], narrowed: [], usd: 0, usage: { input: 0, output: 0 }, calls: [], stop: null };
+  const client = new Anthropic({ maxRetries: 2 });
+  const one = async (_: unknown, run: number) => {
+    const msg = await client.messages.create({ model: READING_MODEL, max_tokens: maxTokens, system: verifyNonce(run, runs), messages: [{ role: 'user', content: prompt }], output_config: { effort, format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;
+    const text = msg.content.find((b) => b.type === 'text');
+    const usage = { input: msg.usage.input_tokens, output: msg.usage.output_tokens };
+    const usd = usage.input * READING_PRICE.input + usage.output * READING_PRICE.output;
+    if (usd > MAX_VERIFY_USD_PER_CALL) throw new Error(`verify call cost $${usd.toFixed(4)} > $${MAX_VERIFY_USD_PER_CALL}`);
+    if (!text || text.type !== 'text' || msg.stop_reason !== 'end_turn') throw new Error(`verify pass did not finish (${msg.stop_reason})`);
+    return { verdicts: (JSON.parse(text.text) as { verdicts: Verdict[] }).verdicts, usd, usage };
+  };
+  const calls = await Promise.all(Array.from({ length: runs }, one));
+  const usage = { input: calls.reduce((t, c) => t + c.usage.input, 0), output: calls.reduce((t, c) => t + c.usage.output, 0) };
+  return { ...voteVerdicts(m, calls.map((c) => c.verdicts), song.cues), runs: calls.map((c) => c.verdicts), usd: calls.reduce((t, c) => t + c.usd, 0), usage, calls: calls.map(({ usd, usage: u }) => ({ usd, usage: u })), stop: 'end_turn' };
 }

@@ -324,3 +324,111 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
 ```
 
 這組指令取代第三輪的 `merged-1109c` 版本。換檔前建議先決定怎麼處理上述兩個誤刪和判決不穩定的問題。
+
+
+---
+
+# 第五輪：三次複審多數決、明喻例外（2026-11-10）
+
+**結論：多數決沒有達到穩定目標。同一批 61 個候選，完整跑兩次三票多數決，去留判決有 4 個不同（目標是 0–1），收窄後的 phrase 另有 10 個不同。不穩定集中在大約 8 個邊界候選上：這些候選單次呼叫保留的機率接近一半，多投幾票也不會收斂。明喻例外有效：snow c009 楓葉 fall 兩次都是 3／3 保留。nun「仁者無敵」仍然被刪（1／3、0／3）。複審花 $0.0516（第四輪單次 $0.0183 的 2.8 倍），單次呼叫最貴 $0.0068。拿相同程式碼比較，Q3 數字和第四輪完全相同；Q5 多了 snow 楓葉，少了 tsuzuki c005+c007 echo。**
+
+## 機制
+
+- `meaning-read.mts`：
+  - `verifyCandidates(song, m, effort, maxTokens, runs = 3)` 用同一個 user prompt 同時送出 3 次呼叫，再交給新的 `voteVerdicts(m, runs, cues)` 彙整。
+  - 每次呼叫的結果先各自經過 `applyVerdicts`（phrase 是否唱出、整句是否支持、方向是否正確、收窄後的詞段是否在同一句裡），通過的才算一張保留票。≥2／3 票保留才留下。
+  - 收窄規則：只看投保留票的那幾次，統計每次留下的 phrase（原句或某個收窄）。票數最多的 phrase 至少要 2 票，而且不能和別的 phrase 同票，才會被採用；否則用原 phrase。
+  - 每個候選的每張票（verdict、是否保留、phrase、reason）都寫進 `votes[]`，三次呼叫的原始 verdict 寫進 `runs[]`。
+  - 單次呼叫超過 `MAX_VERIFY_USD_PER_CALL`（$0.50）就整個 pass 失敗。
+- **怎麼讓三次呼叫各自獨立**：請求本來就沒有指定 temperature，用的是 API 預設的取樣。但第一次完整跑（沒有加 nonce，報告存成 `verify-1109e-nononce-1/2.json`）時，同時送出的三個相同請求幾乎給出一樣的判決。例如 tsuzuki 的兩個 echo，第一次三票全刪（0／3），第二次三票全留（3／3）。所以改成每次呼叫帶不同的 `system` 行：`verifyNonce(run, runs)` = `review i/3 · <8 位隨機碼>`，內容和任務無關。加了 nonce 之後，同一次多數決內兩次呼叫的去留不一致率，和跨兩次多數決的不一致率相同，都是每 61 個平均 4.0 個（沒加 nonce 時分別是 4.0 和 5.22），可見三次呼叫已經各自獨立。沒有傳 seed，因為這個 API 不提供 seed 參數。
+- 規則 (c) 加入明喻例外：句子本身明白說出「本體像／是喻體」，而形式畫的正是這個喻體的動作或樣子時，判為支持（例子：「回憶就像是那凋落的楓葉」→ 畫飄落）。只有句子在講別的事、形式卻畫喻體或字面物件時，才判為不支持（例子：海的氣味→海浪）。
+- `meaning-verify.mts` 加上 `--runs`（預設 3）和 `--date`。報告裡每個候選都有 `vote`（`keepVotes`、`votes[]`、`phrase`）和 `verdicts[]`，每首有 `calls[]`（每次呼叫的 usage 和 USD）。
+- `lineplan.mts --verify-meaning` 現在走多數決。tsuzuki 新讀一次＋多數決，實測花 $0.0106，其中複審 $0.0087。預設路徑沒有呼叫 API；用 tsuzuki 的快取跑 HEAD 和新程式碼，`plan.json`、`base.json`、`palette`、`meaning.json` 逐位元組相同。
+- 單元測試：`meaning-verify.test.mts` 從 3 個 test 增加到 6 個，全部通過。新增的 3 個：
+  - 2／3 票數彙整：被推翻的 keep 算刪除票，沒有 verdict 的算沒投票。
+  - 收窄要 2 票同意：兩種不同收窄加上原句時用原句；未唱出的收窄算刪除票。
+  - 明喻 fixture：prompt 裡有明喻例外和海浪反例；楓葉以 2／3 保留，海的氣味刪除。
+
+## 穩定性（輸入都是第二輪 `haiku-1109b` 的 61 個候選）
+
+| 比較 | 去留不同 | 去留或 phrase 不同 |
+|---|---|---|
+| 第一次多數決 `haiku-1109e` vs 第二次 `haiku-1109e2`（有 nonce） | **4** | 14 |
+| 同上，沒有 nonce（`verify-1109e-nononce-1` vs `-2`） | 5 | 9 |
+| 本輪 prompt 的任兩次單次呼叫（6 次呼叫兩兩比較的平均） | 4.0 | 13.0 |
+| 第三輪 vs 第四輪的單次呼叫（兩輪 prompt 不同） | 18 | — |
+
+- 去留不同的 4 個：tsuzuki m4 echo「信じてみる」（2／3 → 1／3）、choroin k17「病んじゃうぞ」（1／3 → 2／3）、tenmon k2「宇宙の果てまで」和 k3「地獄の底まで」（3／3 → 1／3）。
+- 6 次呼叫中，判決不全然一致的候選有 8 個：上面 4 個，加上 tsuzuki m3（2／6 保留）、nun k3（1／6）、tenmon k0（4／6）、tenmon k1（5／6）。其餘 53 個在 6 次呼叫裡判決完全一致。
+- **推論**：這幾個邊界候選，單次呼叫保留的機率接近一半，取 3 票的多數，翻盤的機率也接近一半。所以 N=3 幾乎沒有降低去留差異（單次 4.0 → 多數決 4）。要讓差異降到 0–1，得換做法：例如把邊界候選（例如 6 票裡 2–4 票保留）明確標成「不確定」並一律保守刪除；或改寫規則，讓這些情況本來就有確定的答案（假設式警告、願望語境裡的短句、間隔一句的重唱算不算 echo）。光增加票數不夠。
+- phrase 的差異比去留大。同一個 key 在兩次多數決裡可能都 3／3 保留，卻收窄成不同的段落。例如 tsuzuki k3，一次收窄成「夢のつづきで」，另一次是「また会いましょう」。另外 choroin 有 6 個 key，一次收窄、一次維持原句。收窄的變異來自模型本身，2 票門檻只能擋掉一部分。
+
+## 已知案例（以第一次多數決 `haiku-1109e` 為準；括號內是兩次的保留票數）
+
+| 案例 | 預期 | 結果 |
+|---|---|---|
+| snow c009 楓葉 shape/fall | 保留 | **命中**（3／3、3／3；第四輪被刪） |
+| nun k3「仁者無敵」 | 收窄後保留 | **未命中**（1／3、0／3）。6 次中有 4 次已收窄成「仁者無敵」，其中 3 次仍判 drop，理由都是「句子本身沒有戲謔，why 說的反差不成立」：why 寫錯，就連詞組一起刪了 |
+| tsuzuki c002 消えて wipe | 保留 | **命中**（3／3、3／3） |
+| snow c005 melt | 刪除 | **命中**（0／3、0／3） |
+| snow c022 freeze | 刪除 | **命中**（0／3、0／3） |
+| tsuzuki c001 海 wave | 刪除 | **命中**（0／3、0／3） |
+| choroin c043+c045 雨 fall | 刪除，或被硬條件擋下 | 被保留（3／3、3／3），但 Q5 仍在 45／45 個世界被 `legalCue` 擋下：**被硬條件擋下** |
+
+和 Codex §1 表對照，key 部分：柔中帶剛、君が最上級（整句「リセマラいらないよ君が最上級」）、信じてみる、說再見（收窄成「學不會說再見」）都留下；仁者無敵沒有留下；無盡的思念、信じられる（key）、愛情欠乏、僕のこと見て不在第二輪的候選裡，複審不能新增。moment 部分：snow c009 fall、c003 tear、tsuzuki c002 wipe、c011 wave 都留下；nun c007 chain、tenmon c004 circle 不在候選裡。
+
+## 結果（`haiku-1109e`，每首留下的數量）
+
+| 歌 | keys 前→後（收窄） | moments 前→後 | USD |
+|---|---|---|---|
+| nun | 5→4（0） | 2→2 | 0.00748 |
+| snow | 5→5（2：才想起、學不會說再見） | 7→5 | 0.00830 |
+| tsuzuki | 5→5（2：よせる波に隠れてしまう、夢のつづきで） | 5→3 | 0.01069 |
+| choroin | 21→20（2） | 4→4 | 0.01633 |
+| tenmon | 6→6（2：存在にすら気付かれない、まあいいや） | 1→1 | 0.00881 |
+| **合計** | **42→40** | **19→15** | **0.05161** |
+
+第二次多數決（`haiku-1109e2`）：keys 4／5／5／21／4，moments 2／5／2／4／1，$0.05251。
+
+**本輪 API 花費**：沒有 nonce 的兩次完整多數決 $0.05459 和 $0.05160，tsuzuki 探測 $0.01014，有 nonce 的兩次 $0.05161 和 $0.05251，lineplan 實測 $0.0106，**合計約 $0.234**。單次呼叫最貴 $0.00676，遠低於 $0.50 上限。
+
+## Q3／Q5 dry-run（`--meaning-suffix haiku-1109e`）
+
+這個 branch（ac711a5）的程式碼比第四輪新，所以也用同一份程式碼重跑了 `haiku-1109d`（`coverage-haiku-d-ac711a5.json`、`moments-haiku-d-ac711a5.json`），讓兩邊只差在 meaning。
+
+**Q3**（`out/research/q3-1109/coverage-haiku-e.json`）：和同程式碼的 `haiku-1109d` **完全相同**。nun 的 keys 和第四輪逐位元組相同，snow 的 5 個 key 和收窄也一樣。
+- 有 edgeFit 的世界：nun 39／36／34，snow 41／41／44。
+- 逐世界 edgeFit 中位數：3／3／3。
+- 和第四輪文件裡的 nun 40／39／36 不同，原因是程式碼在 ac711a5 之前已經改了，不是 meaning 造成的。
+
+**Q5**（`out/research/q5-1109/moments-haiku-e.json`）：`songsReaching36of45` = 2，和同程式碼的 d 一樣。有 ≥1 時刻的世界：nun 0、snow 43、tsuzuki 45、choroin 0、tenmon 0。和同程式碼的 d 比較，候選的變化：
+
+| 候選 | d（ac711a5）選中／Q2 hold／名額或間距 | e 選中／Q2 hold／名額或間距 |
+|---|---|---|
+| snow c009 楓葉 fall | 不在候選裡 | 10／25／10（新增） |
+| snow c001 大雪 fall | 4／35／4 | 2／35／6 |
+| snow c008 飄雪 fall | 10／22／4 | 6／22／8 |
+| snow c042+c043 echo | 39／6／0 | 39／6／0 |
+| tsuzuki c011 波 wave | 25／0／20 | 31／0／14 |
+| tsuzuki c002 wipe | 20／25／0 | 20／25／0 |
+| tsuzuki c005+c007 echo | 10／4／28 | 被刪除（1／3） |
+| tsuzuki c014+c016 echo | 31／9／3 | 32／9／2 |
+
+nun、choroin、tenmon 仍然是 0，原因是 timing 或 legalCue。摘要檔：`assets/2026-11-09-meaning-reread/q3-summary-e.json`、`q5-summary-e.json`。
+
+## 檔案
+
+- 兩次多數決：`out/research/instant/plans/<song>/meaning.haiku-1109e.json`、`meaning.haiku-1109e2.json`；報告 `out/research/meaning-reread-1109/verify-1109e.json`、`verify-1109e2.json`
+- 沒有 nonce 的版本：`meaning.haiku-1109e-nononce-1/2.json`，報告 `verify-1109e-nononce-1/2.json`
+- 合併快取：`meaning.merged-1109e.json`（`source.effort` = `medium+verify-vote3`）
+- 複本：`docs/research/assets/2026-11-09-meaning-reread/` 底下的 `verify-1109e*.json`、`meaning-e/`、`meaning-e2/`、`meaning-merged-e/`
+- `meaning.json` 沒有改動，仍是 merged-1109d。
+
+## 換檔指令（merged-1109e；**未執行**）
+
+```sh
+cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
+for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp -p $d/meaning.json $d/meaning.merged-1109d.bak.json && cp -p $d/meaning.merged-1109e.json $d/meaning.json; done
+```
+
+這次的備份名是 `meaning.merged-1109d.bak.json`，因為 `meaning.instant-1101.json` 已經存了第四輪之前的原檔，不能覆蓋。建議先處理 nun「仁者無敵」，再決定邊界候選的作法，然後才換檔：一種是把「why 寫錯」和「詞組不值得強調」分開判斷，why 寫錯時改寫 why，不刪詞組；另一種是讓邊界票一律保守刪除。

@@ -32,7 +32,7 @@ import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
 import { OFFERED_STYLES } from '../../src/app/lyric-vj/free-styles';
-import { countCuts, planWorldEvents, SEAM_GAP, SHORT_LINE, seatsDiffer, type WorldEvent, type WorldEventInput } from '../../src/app/lyric-vj/world-events';
+import { countCuts, planWorldEvents, READ_STABLE, SEAM_GAP, SHORT_LINE, seatsDiffer, type WorldEvent, type WorldEventInput } from '../../src/app/lyric-vj/world-events';
 import { capsOf, currentEvents, fromJob, ONE_PAGE_WORLDS } from '../../src/app/lyric-vj/world-events-adapter';
 import { frameChange, GRID, judge, SEEN, stableTimes, type FrameChange } from './frame-change.mts';
 import { framePage } from './frame-page.mts';
@@ -63,14 +63,25 @@ export function supplyCap(input: WorldEventInput, w: [number, number]) {
   const own = (l: (typeof lines)[number]) => l.seats.find((s) => s.id === l.seat) ?? l.seats[0];
   const fixed = new Set([...(input.handoffs ?? []).map((h) => h.lineId), ...(input.cams ?? []).map((c) => c.lineId)]);
   const at: number[] = [];
+  // (a world that declares entranceAndInLine (art-deco): after a boundary switch, one sung word break inside the line with
+  // READ_STABLE after the words land and before the end, SEAM_GAP from the entrance, onto a differing seat on the line's
+  // carrier; not after a camera into the part, not on a pinned line)
+  const second = !!input.caps.entranceAndInLine;
+  const cams = new Set((input.cams ?? []).map((c) => c.lineId));
+  const take = (t: number) => { if (!at.length || t - at.at(-1)! >= SEAM_GAP) { at.push(t); return true; } return false; };
   lines.forEach((l, i) => {
     if (i === 0 || !(l.show > w[0] + 1 / 30 && l.show < w[1])) return;
     const prev = lines[i - 1];
     const can = fixed.has(l.id) || (l.pinned ? seatsDiffer(own(prev), own(l)) : l.end - l.start >= SHORT_LINE && l.seats.filter((s) => ok(s.id)).some((s) => prev.seats.some((p) => seatsDiffer(p, s))));
-    if (can && (!at.length || l.show - at.at(-1)! >= SEAM_GAP)) at.push(l.show);
+    if (!can || !take(l.show) || !second || l.pinned || cams.has(l.id) || !l.words || l.words.length < 2) return;
+    const landed = Math.max(l.start, l.settled ?? l.start);
+    const mine = own(l);
+    if (!l.seats.some((s) => ok(s.id) && (s.carrierId ?? '') === (mine?.carrierId ?? '') && seatsDiffer(mine, s))) return;
+    const b = l.words.slice(1).map((x) => x.from).find((x) => x - landed >= READ_STABLE && l.end - x >= READ_STABLE && x - l.show >= SEAM_GAP && x < w[1]);
+    if (b !== undefined) take(b);
   });
   const lineCount = lines.filter((l, i) => i > 0 && l.show > w[0] + 1 / 30 && l.show < w[1]).length;
-  return { lines: lineCount, cap: at.length, capPer10: per10(at.length, w) };
+  return { lines: lineCount, cap: at.length, capPer10: per10(at.length, w), ...(second ? { path: 'entrance + one in-line (entranceAndInLine)' } : {}) };
 }
 
 /** The frame check (frame-change.mts): every planned cut's two stable frames, read for move, scale, direction and ground. */
@@ -150,7 +161,7 @@ for (const seed of seeds) for (const w of WINDOWS) {
       row['joint'] = {
         cuts: jc.cuts, planCutsPer10: jc.planCutsPer10, byKind: jc.byKind, drawnCutsPer10: jd.planCutsPer10, unlaid: jUnlaid,
         unreliableBoundary: jCuts.filter((e) => e.unreliableBoundary).length, planExclUnreliablePer10: per10(jCuts.filter((e) => !e.unreliableBoundary).length, w.window),
-        outcomes, selected: (jt.outcomes ?? []).filter((o) => shown.has(o.lineId) && (o.outcome === 'hold' || o.outcome === 'composite' || o.reason === 'landingFailed')).length,
+        outcomes, twoActionLines: (jt.outcomes ?? []).filter((o) => shown.has(o.lineId) && (o.actions ?? 1) > 1).length, selected: (jt.outcomes ?? []).filter((o) => shown.has(o.lineId) && (o.outcome === 'hold' || o.outcome === 'composite' || o.reason === 'landingFailed')).length,
         holdsDrawn: drawnHolds(joint), holdsDrawnWired: drawnHolds(wired), supply: supplyCap(jointIn, w.window),
         contract: jt.warnings.filter((x) => x.reason.startsWith('final check')).map((x) => `${x.inputs.join(' / ')}: ${x.reason}`),
       };

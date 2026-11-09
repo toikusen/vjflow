@@ -25,7 +25,7 @@ import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
 import { compositionsOf, momentsCapOf, scaleOf } from './world-shared';
 import { planWorldEvents, type CompositionFamily, type InputWarning, type WorldEventInput, type WorldEventPlan, type WorldEventTable } from './world-events';
-import { failedComposites, fromJob, jobFaces, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
+import { failedComposites, fromJob, jobFaces, jointChecks, jointName, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
 import { validAccent } from './design';
 import { applyWorldEvents } from './world-events-apply';
 import { lineScaleOf, momentCandidates, scaleCandidates } from './policy-candidates';
@@ -379,6 +379,12 @@ export interface FreeOptions {
   meaningMoments?: boolean;
   /** Where the stored reading came from, for each moment's trace (meaningRef#moments[i]). */
   meaningRef?: string;
+  /**
+   * Q1 phase 4c (Codex 2026-11-10 r2 §1): on a world the scheduler takes over, Q1 seat changes and Q2 holds are
+   * arbitrated together, one primary action a line (hold, composition, declared composite or keep); the composer lists
+   * hold candidates per seat and commits none. Off by default (VJ_JOINT=1 does the same); no effect unless scheduled.
+   */
+  jointHolds?: boolean;
 }
 
 /** A song to a render job: about a millisecond of rules, then the engine. */
@@ -410,8 +416,9 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const env = (k: string) => (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[k] === '1';
   const scaleOn = !!world && !!scaleOf(world.id) && (o.scaleContrast ?? env('VJ_SCALE'));
   const momentsOn = !!world && !!momentsCapOf(world.id) && (o.meaningMoments ?? env('VJ_MOMENTS'));
+  const joint = scheduled && (o.jointHolds ?? env('VJ_JOINT'));
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
-  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}) } } : {}) });
+  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const base = composerBase(o.base ?? FREE_BASE(), composed, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
@@ -434,7 +441,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   if (!world || (o.worldEvents === false && !policyOn)) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
   // the song's one composition plan (world-events.ts, Q1 phase 2): scheduled on the job as the renderer will set it, then
   // written into the plan (its seats and the switches inside lines) and drawn; a world with no capability keeps its plan
-  const input = fromJob(first.job, song, world, { seed: seed ?? 0, off: !scheduled });
+  const input = fromJob(first.job, song, world, { seed: seed ?? 0, off: !scheduled, ...(joint ? { joint: true } : {}) });
   // Q3 / Q5 phase 2: their candidates, arbitrated by the same scheduler after Q2 / Q4 are protected and Q1 is laid
   const q3 = scaleOn ? scaleCandidates({ job: first.job, plan: composed }, song, world, { seed: seed ?? 0, songId: song.title ?? '', meaning }) : undefined;
   const q5 = momentsOn ? momentCandidates({ job: first.job, plan: composed }, song, world, meaning, o.meaningRef ?? 'meaning.json') : undefined;
@@ -450,7 +457,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
     const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
     const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
     // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
-    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events)] : [];
+    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, events)] : [];
     return { plan, job, treatment, checked };
   };
   o.trace?.(input, planned);
@@ -465,7 +472,17 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
     ({ plan, job, treatment, checked } = drawOf(events));
     checked = [...checked, ...lost];
   }
-  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}), ...(events.policy ? { policy: events.policy } : {}) };
+  // (phase 4c: a committed hold that did not land as planned is undone on its line alone, atomically: the line keeps
+  // its seat with no hold (the alternative the plan validated, its boundary keep), the outcome records the landing
+  // failure, and the failure stays a contract failure; nothing is re-added in its place)
+  const sunk = events.outcomes ? failedHolds(events, checked) : [];
+  if (sunk.length) {
+    const ids = new Set(sunk.map((x) => x.lineId));
+    events = { ...events, holds: events.holds.filter((h) => !ids.has(h.lineId)), outcomes: events.outcomes!.map((x) => (ids.has(x.lineId) ? { ...x, outcome: 'keep' as const, reason: 'landingFailed' as const, why: sunk.find((y) => y.lineId === x.lineId)!.why } : x)) };
+    ({ plan, job, treatment, checked } = drawOf(events));
+    checked = [...checked, ...sunk.map((x) => ({ inputs: [jointName(x.lineId)], reason: `final check: contract failure: the committed hold on ${x.lineId} did not land (${x.why}); the line kept its seat with no hold` }))];
+  }
+  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}), ...(events.policy ? { policy: events.policy } : {}), ...(events.outcomes ? { outcomes: events.outcomes } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
   return { job, plan, palette: paletteId, calm, treatment, ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))], unrealizable: q3?.unrealizable ?? [] } as FreePolicy } : {}) };
@@ -507,4 +524,14 @@ function scalesOf(decisions: NonNullable<WorldEventTable['policy']>, plan: Scale
     if (ls) out.set(d.lineId, ls);
   }
   return out;
+}
+
+/** The hold and composite lines of a joint plan whose landing the final check names (phase 4c), and what it said. */
+function failedHolds(events: WorldEventPlan, checked: InputWarning[]): { lineId: string; why: string }[] {
+  return (events.outcomes ?? []).flatMap((o) => {
+    if (o.outcome !== 'hold' && o.outcome !== 'composite') return [];
+    const hold = events.holds.find((h) => h.lineId === o.lineId);
+    const named = checked.filter((w) => w.reason.startsWith('final check') && (w.inputs[0] === jointName(o.lineId) || (hold && w.inputs[0] === `hold:${hold.kind}@${hold.lineId}`)));
+    return named.length ? [{ lineId: o.lineId, why: named.map((w) => w.reason.replace(/^final check: /, '')).join('; ') }] : [];
+  });
 }

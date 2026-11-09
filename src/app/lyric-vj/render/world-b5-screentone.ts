@@ -172,6 +172,23 @@ function parts(e: WorldEnv, heroX: number): { hero?: Box; rest?: Box } {
   return { hero: boxOf(hero), rest: boxOf(rest) };
 }
 
+/**
+ * The spiky balloon's oval round the words as drawn (`b`, frame px): always round them whatever their size, so a line set
+ * large (Q3's scale composition) keeps one whole balloon re-laid round it (a balloon by a frame edge runs off the frame,
+ * never cut inside it). Its spikes reach past the panel as the board's do.
+ */
+export function shoutOval(b: Box) {
+  const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+  const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min(Math.max(300, (b.y1 - b.y0) / 2 + 80), (Math.min(cy, H - cy) - 12) / 1.28));
+  return { cx, cy, rx: Math.max(230, (b.x1 - b.x0) / 2 + 130, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry)), ry };
+}
+/** The burst balloon's oval round the words as drawn, the same way. */
+export function burstOval(b: Box) {
+  const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
+  const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min((b.y1 - b.y0) / 2 + 150, (Math.min(cy, H - cy) - 12) / 1.28));
+  return { cx, cy, rx: Math.max(300, (b.x1 - b.x0) / 2 + 150, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry)), ry };
+}
+
 /** a: two panels; focus lines toward a spiky balloon round the line's first column; the last phrase down the next panel as a sound effect over tone and speed lines. */
 const A_LEFT: Pt[] = [[60, 60], [1180, 60], [1060, 1000], [60, 1000]];
 const A_RIGHT: Pt[] = [[1220, 60], [1860, 60], [1860, 1000], [1100, 1000]];
@@ -186,11 +203,7 @@ const shout: HandGround = (e) => frame(e, (c) => {
     rim(g, A_RIGHT, ink);
   }), 0, 0);
   const { hero } = parts(e, 0.335 * W);
-  const b = hero ?? wordsBox(e);
-  const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
-  // (its spikes reach past the panel, as the board's do, but never out of the frame: it stays round the words, no taller)
-  const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min(Math.max(300, (b.y1 - b.y0) / 2 + 80), (Math.min(cy, H - cy) - 12) / 1.28));
-  const rx = Math.max(230, (b.x1 - b.x0) / 2 + 130, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry));
+  const { cx, cy, rx, ry } = shoutOval(hero ?? wordsBox(e));
   focus(c, A_LEFT, cx, cy, Math.max(rx, ry) * 0.8, 220, ink, 71);
   rim(c, A_LEFT, ink);
   unlit(c, e, [A_LEFT, A_RIGHT]);
@@ -313,10 +326,7 @@ const burst: HandGround = (e) => frame(e, (c) => {
     speed(g, E_RIGHT, 50, ink, 17);
     rim(g, E_RIGHT, ink);
   }), 0, 0);
-  const b = wordsBox(e);
-  const [cx, cy] = [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
-  const ry = Math.max(oval((b.y1 - b.y0) / 2), Math.min((b.y1 - b.y0) / 2 + 150, (Math.min(cy, H - cy) - 12) / 1.28));
-  const rx = Math.max(300, (b.x1 - b.x0) / 2 + 150, round((b.x1 - b.x0) / 2, (b.y1 - b.y0) / 2, ry));
+  const { cx, cy, rx, ry } = burstOval(wordsBox(e));
   focus(c, E_LEFT, cx, cy, Math.max(rx, ry) * 0.8, 220, ink, 73);
   rim(c, E_LEFT, ink);
   spiky(c, cx, cy, rx, ry, 24, ink, paper, 11);

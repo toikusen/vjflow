@@ -2,7 +2,7 @@
 // blowOf / blownParts / namedLater, read here, never changed) per sung section with the reason each line was not blown.
 // Plan-level only: reading sizes are blockOf() on the line's set with an estimated glyph width, show times are the
 // engine's rule without picture pulls (world-events-adapter.ts), and nothing is rendered.
-import type { freeJob } from './free-plan';
+import type { RenderJob } from './render/engine';
 import { validMeaning } from './free-plan';
 import { blowOf, type Meaning } from './lineplan-core';
 import { splitCalls } from './calls';
@@ -14,7 +14,8 @@ import type { SongTimeline } from './timeline';
 import { fromFreeJob } from './world-events-adapter';
 import { sharedOf } from './world-shared';
 
-type Free = ReturnType<typeof freeJob>;
+/** A free plan's draw (free-plan.ts freeJob): its job and its plan, structurally (no cycle through freeJob's return type). */
+type Free = { job: RenderJob; plan: unknown };
 interface PlanLine { cue: string; world?: { set: string; blow?: { from: number; to: number; stress: string } } }
 interface PlanShot { shot: string; lines: PlanLine[]; cuts?: { piece?: string }[] }
 interface Cue { id: string; start: number; end: number; text: string }
@@ -47,7 +48,8 @@ export function scaleInputOf(free: Free, song: SongTimeline, world: StyleWorld, 
     const cue = cues.find((c) => c.id === l.id)!;
     const spec = specOf(l.seat ?? '', shareOf(l.id));
     if (!spec) estimated.push(l.id);
-    const readingSize = spec ? blockOf(cue.text, spec, measure).size : TYPE_FLOOR.hi;
+    // (the reading size of what the renderer lays: the line's main text, its calls on their own track; phase 2)
+    const readingSize = spec ? blockOf(splitCalls(cue.text).main.replace(/[\s　]+/g, ' ').trim(), spec, measure).size : TYPE_FLOOR.hi;
     const clear = (spec?.clear ?? []).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }));
     return { id: l.id, text: cue.text, show: l.show, start: l.start, end: l.end, readingSize, seat: l.seats[0], ...(clear.length ? { clear } : {}), ...(spec ? { track: spec.track } : {}), ...(shareOf(l.id) > 1 ? { sharesFrameWith: shotOf(l.id)!.lines.map((x) => x.cue).filter((x) => x !== l.id) } : {}) };
   });

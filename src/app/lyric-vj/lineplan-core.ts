@@ -665,6 +665,11 @@ export interface WorldPool {
    * composer's own repose, as before.
    */
   scheduled?: boolean;
+  /**
+   * The world's scale contrasts come from Q3's policy through the song's scheduler (world-shared.ts WORLD_SCALE, Q3 phase
+   * 2): the composer blows up no key word of its own (no blownParts / namedLater quota). Unset: today's blow path.
+   */
+  scaled?: boolean;
 }
 /** Each shared recipe's most a world's song may use of its lines (style standard §2.1). */
 export const SHARED_SHARE = 0.4;
@@ -1458,7 +1463,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const piece = pieceHere(s.start, newPart || keyLines.has(c.id), `${c.text} ${part.what}`);
     if (piece) { cuts[0]['piece'] = piece; cuts.splice(1); }
     const cueAt = cues.indexOf(c);
-    const blowable = recipe.wline && W?.stress?.length && !piece && !blownParts.has(part) ? blowOf(c, namedKey(c.id)) : undefined;
+    const blowable = recipe.wline && W?.stress?.length && !W.scaled && !piece && !blownParts.has(part) ? blowOf(c, namedKey(c.id)) : undefined;
     const blow = blowable && (namedKey(c.id) || !namedLater(part, cueAt)) ? { ...blowable, stress: W!.stress![meaning.parts.indexOf(part) % W!.stress!.length] } : undefined;
     if (blow) blownParts.add(part);
     // a blown-up key word holds its picture until the line is read: no change of set before

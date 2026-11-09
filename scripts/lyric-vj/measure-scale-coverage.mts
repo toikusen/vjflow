@@ -17,12 +17,95 @@ import { OFFERED_STYLES } from '../../src/app/lyric-vj/free-styles';
 import { scaleCapsOf } from '../../src/app/lyric-vj/scale-caps-draft';
 import { pickScaleContrasts, type ScalePlan } from '../../src/app/lyric-vj/scale-policy';
 import { scaleInputOf, todayScale } from '../../src/app/lyric-vj/scale-policy-adapter';
+import { splitCalls } from '../../src/app/lyric-vj/calls';
+import { scaleLayout } from '../../src/app/lyric-vj/render/scale-pose';
+import { shapedMeasure } from '../../src/app/lyric-vj/render/seat-geometry';
+import { blockOf, SET_SPECS } from '../../src/app/lyric-vj/render/world-sets';
+import type { WorldLine } from '../../src/app/lyric-vj/render/world-layout';
+import { scaleOf } from '../../src/app/lyric-vj/world-shared';
 
 const SONGS = [
   { song: 'nun', db: 'yt_w_fCuUR3lEs' },
   { song: 'snow', db: 'yt_5i50aTB7JFo' },
 ];
-const { values: a } = parseArgs({ options: { world: { type: 'string' }, seeds: { type: 'string', default: '0,1,2' }, out: { type: 'string' }, 'meaning-suffix': { type: 'string' } } });
+const { values: a } = parseArgs({ options: { world: { type: 'string' }, seeds: { type: 'string', default: '0,1,2' }, out: { type: 'string' }, 'meaning-suffix': { type: 'string' }, phase: { type: 'string', default: '1' } } });
+
+/**
+ * Phase 2 (2026-11-10, docs/research/2026-11-10-q3q5-phase2.md): the wiring on. freeJob with scaleContrast and
+ * meaningMoments on and the scheduler on (worldEvents: true, the five single-page worlds as today), five songs on their
+ * stored readings (merged-1109d, keys present), seeds as given, every world that declares `scale` (riso, screentone).
+ * Per sung section: the policy's candidates (semantic key or whole-line fallback), what the scheduler approved or refused
+ * and why (each candidate tried), the approved line's planned ratio and its DRAWN ratio — the renderer's own layout
+ * (render/scale-pose.ts scaleLayout, the function world-layout.ts draws from) on the shaped glyph measure
+ * (seat-geometry.ts shapedMeasure, a second guess at real advances; the browser's real glyphs are not available here) at
+ * the line's reading size in its set on that measure. A section counts as rendered only when the drawn ratio is ≥ 1.6,
+ * as edgeFit only when the drawn ratio is ≥ 1.8 on a key phrase; a drawn ratio below the planned one is `unrealized`.
+ */
+function phase2() {
+  const FIVE = [...SONGS, { song: 'tsuzuki', db: 'yt_b3GCfyNKeLs' }, { song: 'choroin', db: 'yt_hCCskTJwvuc' }, { song: 'tenmon', db: 'yt_iwYXfOhcsYI' }];
+  const worlds = OFFERED_STYLES.filter((s) => scaleOf(s.id) && (!a.world || s.id === a.world));
+  const rows: Record<string, unknown>[] = [];
+  for (const { song: sid, db } of FIVE) {
+    const song = JSON.parse(readFileSync(`out/db/${db}/song.json`, 'utf8'));
+    const path = `out/research/instant/plans/${sid}/meaning${suffix}.json`;
+    const meaning = JSON.parse(readFileSync(path, 'utf8'));
+    for (const seed of seeds)
+      for (const style of worlds) {
+        const f = freeJob(song, { style, seed, meaning, worldEvents: true, scaleContrast: true, meaningMoments: true, meaningRef: path });
+        const plan = f.policy!.scale!;
+        const decisions = f.policy!.decisions.filter((d) => d.source === 'Q3');
+        const lines = (f.treatment.cues as { cueId: string; world?: WorldLine }[]);
+        const cueText = (id: string) => (f.job.cues as { id: string; text: string }[]).find((c) => c.id === id)!.text;
+        const sections = plan.sections.map((s) => {
+          const tried = decisions.filter((d) => d.group === s.sectionId);
+          const ok = tried.find((d) => d.approved);
+          const drawnLine = ok ? lines.find((c) => c.cueId === ok.lineId) : undefined;
+          const sc = drawnLine?.world?.scale;
+          const spec = drawnLine?.world ? SET_SPECS[drawnLine.world.set] : undefined;
+          // (the renderer draws the line's main text, its calls on their own track: world-layout lays rt.cue.text)
+          const main = ok ? splitCalls(cueText(ok.lineId)).main : '';
+          const reading = spec ? blockOf(main.replace(/[\s　]+/g, ' ').trim(), spec, spec.even ? (x: string) => [...x].length * 100 : shapedMeasure).size : 0;
+          const drawn = sc && spec ? scaleLayout(main, sc, reading, spec, shapedMeasure) : undefined;
+          const c = s.chosen === undefined ? undefined : s.candidates[s.chosen];
+          return {
+            sectionId: s.sectionId, lineIds: s.lineIds, policyKind: s.kind, pool: s.pool,
+            candidates: s.candidates.map((x) => ({ lineId: x.lineId, source: x.source, text: x.text, legal: x.legal, kind: x.kind, ratio: x.ratio, score: x.score, ...(x.seat ? { edge: x.seat.edge } : {}), ...(x.legal ? {} : { reasons: x.reasons }) })),
+            policyChoice: c ? { lineId: c.lineId, source: c.source, text: c.text, ratio: c.ratio } : null,
+            tried: tried.map((d) => ({ id: d.id, rank: d.rank, approved: d.approved, reason: d.reason })),
+            chosen: ok ? { id: ok.id, lineId: ok.lineId, eventId: ok.eventId, shared: !!ok.shared, source: sc?.source, text: sc ? [...main].slice(sc.span.from, sc.span.to).join('') : undefined, edge: sc?.edge, plannedRatio: sc?.ratio, drawnRatio: drawn && drawn.kind !== 'miss' ? drawn.ratio : 0, drawnKind: drawn?.kind ?? 'miss', unrealized: !drawn || drawn.unrealized, ...(drawn?.why ? { why: drawn.why } : {}) } : null,
+            unrealizable: f.policy!.unrealizable.filter((u) => s.candidates.some((x) => u.id.startsWith(`scale:${x.lineId}`))).map((u) => `${u.id}: ${u.why}`),
+            rejection: ok ? null : tried.length ? tried.map((d) => d.reason).join(' | ') : s.reasons.join(' | '),
+          };
+        });
+        const rendered = sections.filter((x) => x.chosen && x.chosen.drawnKind !== 'miss').length;
+        rows.push({ world: style.id, song: sid, seed, meaning: path, keys: (meaning.keys ?? []).length, sungSections: plan.sungSections, plannedSections: plan.plannedSections, approvedSections: sections.filter((x) => x.chosen).length, renderedScaleSections: rendered, edgeFitSections: sections.filter((x) => x.chosen?.drawnKind === 'edgeFit').length, unrealized: sections.filter((x) => x.chosen?.unrealized).length, sections });
+      }
+  }
+  type R = { world: string; song: string; seed: number; sungSections: number; plannedSections: number; approvedSections: number; renderedScaleSections: number; edgeFitSections: number; unrealized: number; sections: { sectionId: string; candidates: { lineId: string; source: string; text: string; legal: boolean }[]; chosen: { lineId: string; text?: string } | null }[] };
+  const R = rows as unknown as R[];
+  const sum = (xs: R[], k: keyof R) => xs.reduce((n, r) => n + (r[k] as number), 0);
+  const perWorld = Object.fromEntries(worlds.map((w) => [w.id, Object.fromEntries(seeds.map((seed) => { const xs = R.filter((r) => r.world === w.id && r.seed === seed); return [seed, { sungSections: sum(xs, 'sungSections'), plannedSections: sum(xs, 'plannedSections'), approvedSections: sum(xs, 'approvedSections'), renderedScaleSections: sum(xs, 'renderedScaleSections'), edgeFitSections: sum(xs, 'edgeFitSections'), unrealized: sum(xs, 'unrealized') }]; }))]));
+  const overall = Object.fromEntries(seeds.map((seed) => { const xs = R.filter((r) => r.seed === seed); return [seed, { sungSections: sum(xs, 'sungSections'), renderedScaleSections: sum(xs, 'renderedScaleSections'), edgeFitSections: sum(xs, 'edgeFitSections'), unrealized: sum(xs, 'unrealized') }]; }));
+  // diversity: a section (song, seed) where both worlds have ≥ 2 legal candidates in common and both approved one
+  const div: { song: string; seed: number; sectionId: string; shared: number; choices: string[] }[] = [];
+  for (const { song } of FIVE) for (const seed of seeds) {
+    const of = R.filter((r) => r.song === song && r.seed === seed);
+    for (const s of of[0]?.sections ?? []) {
+      const per = of.map((r) => r.sections.find((x) => x.sectionId === s.sectionId)!);
+      const key = (c: { lineId: string; source: string; text: string }) => `${c.lineId}|${c.source}|${c.text}`;
+      const common = per.map((p) => new Set(p.candidates.filter((c) => c.legal).map(key))).reduce((x, y) => new Set([...x].filter((k) => y.has(k))));
+      if (common.size >= 2 && per.every((p) => p.chosen)) div.push({ song, seed, sectionId: s.sectionId, shared: common.size, choices: per.map((p) => `${p.chosen!.lineId}「${p.chosen!.text}」`) });
+    }
+  }
+  const report = {
+    note: 'phase 2: wiring on (scaleContrast, meaningMoments, worldEvents true); approved = the scheduler approved a candidate; rendered = drawn ratio ≥ 1.6 by the renderer\'s own layout (scale-pose.ts) on shapedMeasure, not browser pixels; edgeFit = drawn ≥ 1.8 on a key phrase',
+    date: '2026-11-10', seeds, worlds: worlds.map((w) => w.id), songs: FIVE.map((s) => s.song), apiCalls: 0,
+    summary: { perWorld, overall, diversity: { eligibleSections: div.length, distinctAcrossWorlds: div.filter((d) => new Set(d.choices).size >= 2).length, sections: div } },
+    rows,
+  };
+  if (a.out) { mkdirSync(dirname(a.out), { recursive: true }); writeFileSync(a.out, JSON.stringify(report)); }
+  console.log(JSON.stringify(report.summary, (k, v) => (k === 'sections' ? v.length : v)));
+}
 const suffix = a['meaning-suffix'] ? `.${a['meaning-suffix']}` : '';
 // the measurement's meanings (keys empty), and the older line-plan readings that do name keys, as a second variant
 const VARIANTS = [
@@ -31,6 +114,7 @@ const VARIANTS = [
 ];
 const seeds = a.seeds!.split(',').map(Number);
 const styles = OFFERED_STYLES.filter((s) => !a.world || s.id === a.world);
+if (a.phase === '2') { phase2(); process.exit(0); }
 
 const policyRow = (p: ScalePlan) => ({
   sungSections: p.sungSections,

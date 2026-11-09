@@ -243,6 +243,8 @@ export function currentEvents(free: { job: Job }, _song: SongTimeline | undefine
     if (i > 0 && q4) ev({ lineIds: [rows[i - 1].id, id], kind: 'page-handoff', at: q4.seam, from: q4.seam - (q4.prepare ?? LINK_PREPARE), to: q4.seam - (q4.prepare ?? LINK_PREPARE) + q4.dur, seatBefore: before, seatAfter: set, scope: 'line', changesLight: true, reason: q4.kind });
     else if (i > 0 && w?.page) ev({ lineIds: [rows[i - 1].id, id], kind: 'page-handoff', at: w.page.at, from: w.page.at, to: +(w.page.at + w.page.sec).toFixed(3), seatBefore: before, seatAfter: set, scope: 'line', reason: w.page.move, move: w.page.move, material: w.page.move, ...(compositionsOf(world.id)?.materials?.[w.page.move]?.counts === 'seen' ? { holdLevel: true } : {}) });
     else if (moved && wipe) ev({ lineIds: [rows[i - 1].id, id], kind: 'layout-seat', at: show, from: wipe.from, to: +(wipe.from + wipe.sec).toFixed(3), seatBefore: before, seatAfter: set, scope: 'line', reason: wipe.move, move: wipe.move, material: wipe.move });
+    // (a Q3 scale composition is the line's switch at its show, whether or not its set changes: one event)
+    else if (w?.scale && !moved) ev({ lineIds: [id], kind: 'layout-seat', at: show, from: show, to: show, seatBefore: before, seatAfter: `${set}+scale:${w.scale.edge}`, scope: 'line', reason: `scale ${w.scale.eventId}` });
     else if (moved) ev({ lineIds: [id], kind: 'layout-seat', at: show, from: show, to: show, seatBefore: before, seatAfter: set, scope: 'line', reason: 'set changes at the line' });
     else if (i > 0 && cam) ev({ lineIds: [id], kind: 'camera-reframe', at: cam.at, from: cam.at, to: cam.at + WORLD_CAM_SEC[cam.kind], seatBefore: before, seatAfter: set, scope: 'section', reason: `world camera ${cam.kind}` });
     here = set;

@@ -118,15 +118,53 @@ export interface WorldEventInput {
   /** The world camera's moves into parts the composer laid: kept as given. */
   cams?: CameraMove[];
   /**
-   * Candidates other policies propose (Q3 scale contrast, Q5 moments), each with its own window, to be arbitrated with
-   * everything above by the same clocks. A slot only for now: the scheduler does not read it yet (2026-11-09 phase 2).
+   * Candidates other policies propose (Q3 scale contrast, Q5 moments), each with its own window, arbitrated after Q2/Q4
+   * are protected and Q1 is laid, by the same clocks (2026-11-10 Q3/Q5 phase 2: arbitratePolicies). Absent: nothing is
+   * read and the plan is exactly the plan without them.
    */
   candidates?: PolicyCandidate[];
   seed: number;
 }
 
-/** A switch another policy proposes to the scheduler: where, how long, onto which seat, and why. */
-export interface PolicyCandidate { source: 'Q3' | 'Q5' | (string & {}); lineId: string; kind: CompositionFamily; at: number; from: number; to: number; seatAfter?: string; changesLight?: boolean; reason: string }
+/**
+ * A switch another policy proposes to the scheduler: where, how long, onto which seat, and why (Q3 a scale composition
+ * of a line, a `layout-seat` at its show held while it is sung; Q5 a signature moment over its whole occupied window).
+ * Candidates of one `group` are tried by `rank` and at most one of a group is approved; a refused one passes to the next,
+ * never moved in time (Codex §6). `budget` caps what a source approves across its groups.
+ */
+export interface PolicyCandidate {
+  source: 'Q3' | 'Q5' | (string & {});
+  lineId: string;
+  kind: CompositionFamily | 'signature-moment';
+  at: number;
+  from: number;
+  to: number;
+  seatAfter?: string;
+  changesLight?: boolean;
+  reason: string;
+  /** The candidate's own id (scale:<line>, moment:<line>:<form>/<variant>): its event's id unless it shares a Q1 event. */
+  id?: string;
+  /** One approval a group (a sung section's scale contrast, one reading's moment in its variants), tried by rank. */
+  group?: string;
+  rank?: number;
+  /** The seat the line takes (Q3): its box keeps off the world's protected regions. */
+  seat?: SeatCandidate;
+  /** Q2 hold kinds that may still run, in their own window, on the line this composition takes (glyph-level ones). */
+  holdsOk?: string[];
+  /** Q2 hold kinds this candidate is itself (a scale composition is the line's change of size: its line-grow folds into it, one event, no ratio multiplied). */
+  folds?: string[];
+  /** What the source approves at most across its groups: so many a song, so far apart, one a section. */
+  budget?: { key: string; max: number; apart: number; section?: string };
+  /** The frame the candidate occupies over [from, to]. */
+  protectedRegion?: FrameBox;
+  /** Its trace to the reading (Q5): the moment it is, the lines, the variant, its score. */
+  meaningRef?: string;
+  cueIds?: string[];
+  variant?: string;
+  score?: number;
+}
+/** What the scheduler made of one policy candidate: approved into an event (Q3) or a protected window (Q5), or why not. */
+export interface PolicyDecision { id: string; source: string; group?: string; lineId: string; rank?: number; at: number; from: number; to: number; approved: boolean; eventId?: string; shared?: boolean; reason: string; meaningRef?: string; variant?: string }
 
 export interface WorldEvent {
   id: string;
@@ -158,6 +196,8 @@ export interface WorldEvent {
   unreliableBoundary?: boolean;
   /** A move that keeps the words and their seat (the receipt's feed): a hold-level beat, never a plan cut (countCuts). */
   holdLevel?: boolean;
+  /** Policy candidates this switch carries (a Q3 scale composition on the line's own switch: one event, counted once). */
+  policy?: string[];
 }
 
 export interface RejectedCandidate { candidate: { lineId: string; kind: CompositionFamily; at: number; seatAfter?: string }; reason: string }
@@ -169,9 +209,9 @@ export interface InputWarning { inputs: string[]; reason: string }
 export interface HoldMove { lineId: string; kind: string; from: number; to: number | null; reason: string }
 /** A world camera move a scheduled world dropped: it collided with a switch the song keeps (a Q4 handoff, a composed seat, a hold). */
 export interface CamDrop { lineId: string; kind: string; at: number; reason: string }
-export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[]; camDrops?: CamDrop[] }
+export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[]; camDrops?: CamDrop[]; /** Q3/Q5 candidates and what became of each (only when the input had any). */ policy?: PolicyDecision[] }
 /** What a treatment carries of the plan (treatment.ts worldEvents): the events, the holds standing on their own, the input warnings and how many candidates were refused. */
-export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[]; camDrops?: CamDrop[] }
+export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[]; camDrops?: CamDrop[]; /** Q3/Q5 candidates and what became of each (only when their wiring is on). */ policy?: PolicyDecision[] }
 
 /** Two changes of the whole frame's light never closer than this, anywhere in the song (no more than three flashes a second). */
 export const LIGHT_GAP = 0.55;
@@ -613,13 +653,16 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       events.push({ id: `prop-beat:${a.lineId}:${a.propId}`, lineIds: [a.lineId], kind: 'prop-beat', at: r3(a.at), from: r3(a.at), to: r3(to), seatBefore: here, seatAfter: here, scope: 'in-line', changesLight: false, reason: a.reason, ...(caps.moves?.['prop-beat'] ? { move: caps.moves['prop-beat'] } : {}) });
       taken.push({ at: a.at, from: a.at, to, light: false, composition: true, what: `prop-beat ${a.propId}` });
     }
+  const policy = input.candidates ? arbitratePolicies(input.candidates, { lines, events, taken, holds, handoffs, holdMoves, cams, caps, lights: input.lights ?? [] }) : undefined;
+  // (after Q3/Q5 arbitration: a Q3 scale event is in `events`, an approved Q5 moment's window is counted here too)
+  const momentWindows: Action[] = (policy ?? []).filter((d) => d.approved && d.source === 'Q5').map((d) => ({ at: d.at, from: d.from, to: d.to, light: false, composition: false, what: d.id }));
   // (a camera move a switch the scheduler could not avoid collides with, a line's own seat forced on it or a given one:
   // dropped as well, the warning it raised resolved with it)
   if (allows.size)
     for (const c of [...cams.values()]) {
       const act: Action = { at: c.at, from: c.at, to: c.at + c.sec, light: false, composition: true, what: '', owner: boundaryOf(c.lineId) };
       const others: Action[] = events.filter((e) => e.kind !== 'keep' && e.kind !== 'camera-reframe' && e.lineIds.at(-1) !== c.lineId).map((e) => ({ at: e.at, from: e.from, to: e.to, light: false, composition: true, what: e.id }));
-      const why = conflict(act, others);
+      const why = conflict(act, [...others, ...momentWindows]);
       if (!why) continue;
       cams.delete(c.lineId);
       camDrops.push({ lineId: c.lineId, kind: c.kind, at: c.at, reason: why });
@@ -630,7 +673,108 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       for (let k = warnings.length - 1; k >= 0; k--) if (warnings[k].reason.includes(named)) warnings.splice(k, 1);
     }
   events.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
-  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}), ...(camDrops.length ? { camDrops } : {}) };
+  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}), ...(camDrops.length ? { camDrops } : {}), ...(policy ? { policy } : {}) };
+}
+
+interface PolicyContext { lines: WorldEventLine[]; events: WorldEvent[]; taken: Action[]; holds: HoldEvent[]; handoffs: HandoffCandidate[]; holdMoves: HoldMove[]; cams: Map<string, CameraMove>; caps: WorldCompositionCaps; lights: { at: number; what: string }[] }
+
+/**
+ * Q3 and Q5 candidates arbitrated after Q2 and Q4 are protected and Q1 is laid (Codex §2, §6): Q3 first, a section at a
+ * time, then Q5 by rank. A Q3 scale composition is the line's own switch at its show, held while the line is sung: it
+ * shares the line's Q1 switch when there is one (one event id, one window, one count) or becomes the line's switch in place
+ * of its keep; it is refused on a line whose words already have an event of their own while read (a Q2 hold, planned on
+ * its set; a Q4 handoff that lays it on its page; a camera move into it; a switch inside it), on a seat that enters the
+ * world's protected regions, or against the clocks. A Q5 moment is never a composition event: its whole occupied window
+ * keeps ACTION_GAP from every hold, handoff and cut (Q1's and Q3's), a big one LIGHT_GAP from every change of light, and
+ * it is approved into the protected record only (the renderer draws it from there). Within a group the next candidate
+ * is tried when one is refused; the budget (Q5: two a song, 30 s apart, one a section) counts approvals only.
+ */
+function arbitratePolicies(cands: PolicyCandidate[], ctx: PolicyContext): PolicyDecision[] {
+  const out: PolicyDecision[] = [];
+  const order = (c: PolicyCandidate) => (c.source === 'Q3' ? 0 : c.source === 'Q5' ? 1 : 2);
+  const sorted = [...cands].sort((a, b) => order(a) - order(b) || (a.group ?? '').localeCompare(b.group ?? '') || (a.rank ?? 0) - (b.rank ?? 0));
+  // (Q5 is ranked across groups: its best candidate first, so a weaker one never takes the budget from a better one)
+  const q5 = sorted.filter((c) => c.source === 'Q5').sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0));
+  const queue = [...sorted.filter((c) => c.source !== 'Q5'), ...q5];
+  const done = new Set<string>();
+  const approvedBy = new Map<string, PolicyDecision[]>();
+  const moments: Action[] = [];
+  // (the approved scale compositions while their lines are up: a moment keeps off them)
+  const scaled: { id: string; from: number; to: number }[] = [];
+  const decide = (c: PolicyCandidate, approved: boolean, reason: string, extra: Partial<PolicyDecision> = {}) => {
+    const d: PolicyDecision = { id: c.id ?? `${c.source}:${c.lineId}`, source: c.source, ...(c.group ? { group: c.group } : {}), lineId: c.lineId, ...(c.rank !== undefined ? { rank: c.rank } : {}), at: r3(c.at), from: r3(c.from), to: r3(c.to), approved, reason, ...(c.meaningRef ? { meaningRef: c.meaningRef } : {}), ...(c.variant ? { variant: c.variant } : {}), ...extra };
+    out.push(d);
+    if (approved && c.budget) approvedBy.set(c.budget.key, [...(approvedBy.get(c.budget.key) ?? []), d]);
+    if (approved && c.group) done.add(`${c.source}:${c.group}`);
+  };
+  const boundaryOf = (id: string) => `boundary:${id}`;
+  for (const c of queue) {
+    if (c.group && done.has(`${c.source}:${c.group}`)) { decide(c, false, 'not needed: its group already has an approved candidate'); continue; }
+    const line = ctx.lines.find((l) => l.id === c.lineId);
+    if (!line) { decide(c, false, 'line not shown'); continue; }
+    if (c.budget) {
+      const got = approvedBy.get(c.budget.key) ?? [];
+      const near = got.find((d) => Math.abs(d.at - c.at) < c.budget!.apart);
+      const sameSection = c.budget.section !== undefined ? got.find((d) => cands.find((x) => (x.id ?? '') === d.id)?.budget?.section === c.budget!.section) : undefined;
+      const why = got.length >= c.budget.max ? `budget: ${c.budget.max} already approved` : near ? `budget: within ${c.budget.apart}s of ${near.id}` : sameSection ? `budget: same section as ${sameSection.id}` : '';
+      if (why) { decide(c, false, why); continue; }
+    }
+    if (c.source === 'Q3') {
+      // (a hold whose move is glyph-level runs on the composition in its own window, unmoved; one that grows the block or
+      // moves its carrier was planned on the set's geometry, and one the scheduler moved off a handoff is not re-read)
+      const hold = ctx.holds.find((h) => h.lineId === line.id && !c.holdsOk?.includes(h.kind) && !c.folds?.includes(h.kind)) ?? (ctx.holdMoves.some((m) => m.lineId === line.id) ? { kind: 'moved', lineId: line.id } : undefined);
+      const folded = ctx.holds.find((h) => h.lineId === line.id && c.folds?.includes(h.kind));
+      const lineEvents = ctx.events.filter((e) => e.lineIds.at(-1) === line.id);
+      const why = hold ? `collisionQ2hold: its ${hold.kind} hold was planned on its set (Q2, fixed)`
+        : ctx.handoffs.some((h) => h.lineId === line.id) ? 'collisionQ4: a linked handoff lays the line on its page (Q4, fixed)'
+        : ctx.cams.has(line.id) ? 'collisionCamera: the world camera moves into the line'
+        : lineEvents.some((e) => e.scope === 'in-line' && e.kind !== 'keep') ? 'collisionQ1: the line switches seat inside itself'
+        : lineEvents.some((e) => e.material) ? 'collisionQ1: a world material move (3b) realises the line\'s switch'
+        : c.seat?.box && (ctx.caps.protectedRegion ?? []).some((p) => boxesMeet(c.seat!.box!, p)) ? 'protectedRegion: the scale seat enters the world\'s protected regions'
+        : conflict({ at: line.show, from: line.show, to: line.show, light: !!c.changesLight, composition: true, what: '', owner: boundaryOf(line.id) }, ctx.taken);
+      if (why) { decide(c, false, why); continue; }
+      const own = lineEvents.find((e) => e.scope !== 'in-line' && e.kind !== 'camera-reframe' && e.kind !== 'prop-beat');
+      const id = c.id ?? `scale:${line.id}`;
+      scaled.push({ id, from: line.show, to: line.end + 0.5 });
+      // (the line's grow is this change of size: folded, its hold no longer stands on its own)
+      const fold = folded ? `hold:${folded.kind}@${folded.lineId}` : undefined;
+      if (folded) ctx.holds.splice(ctx.holds.indexOf(folded), 1);
+      if (own && own.kind !== 'keep') {
+        own.policy = [...(own.policy ?? []), id];
+        if (fold) own.merged = [...(own.merged ?? []), fold];
+        decide(c, true, `shares ${own.id} (one event, counted once)${fold ? `; folds ${fold}` : ''}`, { eventId: own.id, shared: true });
+        continue;
+      }
+      const ev: WorldEvent = { id, lineIds: [line.id], kind: 'layout-seat', at: r3(line.show), from: r3(line.show), to: r3(line.show), seatBefore: own?.seatBefore ?? '', seatAfter: c.seatAfter ?? c.seat?.id ?? own?.seatAfter ?? '', ...(c.seat?.carrierId ? { carrierId: c.seat.carrierId } : {}), scope: own?.scope ?? 'line', changesLight: !!c.changesLight, reason: `Q3 ${c.reason}`, policy: [id], ...(fold ? { merged: [fold] } : {}) };
+      if (own) ctx.events.splice(ctx.events.indexOf(own), 1, ev);
+      else ctx.events.push(ev);
+      ctx.taken.push({ at: line.show, from: line.show, to: line.show, light: !!c.changesLight, composition: true, what: `Q3 ${id}`, owner: boundaryOf(line.id) });
+      decide(c, true, `${own ? `replaces ${own.id}'s keep as the line's switch` : 'the line\'s switch'}${fold ? `; folds ${fold}` : ''}`, { eventId: ev.id });
+      continue;
+    }
+    // Q5: the whole window clear of every hold, handoff and cut, and of the moments approved before it
+    const w = { from: c.from, to: c.to };
+    const gap = (a: { from: number; to: number }) => w.from < a.to + ACTION_GAP && a.from < w.to + ACTION_GAP;
+    const hold = ctx.holds.find((h) => gap(h));
+    const hand = ctx.handoffs.find((h) => { const from = h.seam - (h.prepare ?? LINK_PREPARE); return gap({ from, to: from + h.dur }); });
+    const cut = ctx.events.find((e) => e.kind !== 'keep' && gap(e));
+    const prior = moments.find((m) => gap(m));
+    // (the composition's rest and carrier reach past its ink box: any approved one up in the window keeps the moment off)
+    const big = scaled.find((q) => q.from < w.to && w.from < q.to);
+    const light = c.changesLight ? [...ctx.lights.map((l) => ({ at: l.at, what: l.what })), ...ctx.events.filter((e) => e.changesLight && e.kind !== 'keep').map((e) => ({ at: e.at, what: e.id }))].find((l) => Math.abs(l.at - c.at) < LIGHT_GAP) : undefined;
+    const why = hold ? `collisionQ2hold: overlaps Q2 ${hold.kind} on ${hold.lineId} (${ACTION_GAP}s between actions)`
+      : hand ? `collisionOther: overlaps Q4 ${hand.kind} into ${hand.lineId}`
+      : cut ? `collisionOther: overlaps ${cut.policy?.length ? 'Q3' : 'Q1'} ${cut.id}`
+      : prior ? `collisionOther: overlaps ${prior.what}`
+      : big ? `collisionOther: the Q3 composition ${big.id} is up in its window`
+      : light ? `collisionOther: light change within ${LIGHT_GAP}s of ${light.what}` : '';
+    if (why) { decide(c, false, why); continue; }
+    const id = c.id ?? `moment:${line.id}`;
+    moments.push({ at: c.at, from: c.from, to: c.to, light: !!c.changesLight, composition: false, what: `Q5 ${id}` });
+    ctx.taken.push({ at: c.at, from: c.from, to: c.to, light: !!c.changesLight, composition: false, what: `Q5 ${id}` });
+    decide(c, true, 'clear of every protected window', { eventId: id });
+  }
+  return out;
 }
 
 /** Events that change seat, carrier or framing; `keep` never does. */

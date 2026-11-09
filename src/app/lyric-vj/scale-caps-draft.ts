@@ -7,16 +7,8 @@
 import { SET_SPECS } from './render/world-sets';
 import type { StyleWorld } from './style-world';
 
-export type ScaleEdge = 'top' | 'bottom' | 'left' | 'right';
-/** What the big word stands on, running off the frame on its edge's side: the paper, a colour plate, a comic panel, the page, an object, the bare ground. */
-export type ScaleCarrierRole = 'paper' | 'plate' | 'panel' | 'page' | 'object' | 'ground';
-
-/**
- * How a world weighs the candidates of a section, each feature 0–1 (scale-policy.ts features): `short` a phrase of few
- * glyphs, `ratio` how near the size law's 2.4× it reaches, `room` how much of the frame it leaves empty, `sustain` how long
- * the line holds past its reading time, `order` how plainly the big word and its rest read in order (one side only).
- */
-export interface CandidateWeights { short: number; ratio: number; room: number; sustain: number; order: number }
+import { WORLD_SCALE, type CandidateWeights, type ScaleCarrierRole, type ScaleEdge } from './world-shared';
+export type { CandidateWeights, ScaleCarrierRole, ScaleEdge };
 
 export interface WorldScaleCaps {
   worldId: string;
@@ -28,7 +20,7 @@ export interface WorldScaleCaps {
   candidateWeights: CandidateWeights;
   /** The scale change's curve: a cut into the composition before the line is sung (Codex §2), held while sung. */
   curve: 'cut';
-  /** Codex's declaration, or derived from the world's sets for the dry run. */
+  /** The world's declaration (world-shared.ts WORLD_SCALE), or derived from its sets for the dry run. */
   source: 'declared' | 'derived';
   /** Why, for the report. */
   note: string;
@@ -36,37 +28,8 @@ export interface WorldScaleCaps {
 
 const EVEN: CandidateWeights = { short: 1, ratio: 1, room: 1, sustain: 1, order: 1 };
 
-/**
- * Codex §3's two tastes. riso: the whole big word against the paper's outer edge, the same sheet / plate running off the
- * frame, a second plate never entering the main word's guard; among meaning candidates it prefers the shorter phrase,
- * more empty paper and a line that holds to be read. screentone: the big word against a panel's inner edge, page and
- * panel frame running off, tone and speed lines kept out of the reading area; it prefers the candidate that sets up a
- * main and a minor panel with a clear reading order.
- */
-export const DECLARED_SCALE_CAPS: Record<string, WorldScaleCaps> = {
-  riso: {
-    worldId: 'riso',
-    // (its sets anchor top-left and bottom-right: the paper's corners are where its type already sits)
-    edges: ['bottom', 'left', 'top', 'right'],
-    carrierRole: 'paper',
-    sizeRange: [1.6, 2.4],
-    candidateWeights: { short: 1.6, ratio: 1, room: 1.4, sustain: 1.3, order: 0.6 },
-    curve: 'cut',
-    source: 'declared',
-    note: 'riso.edgeFit (Codex §3): paper edge, the sheet/plate runs off; prefers short phrases, empty paper, held lines',
-  },
-  screentone: {
-    worldId: 'screentone',
-    // (a manga page tiers its panels top to bottom: a panel bleeding off the page's top or bottom edge)
-    edges: ['top', 'bottom'],
-    carrierRole: 'panel',
-    sizeRange: [1.6, 2.4],
-    candidateWeights: { short: 0.8, ratio: 1, room: 0.7, sustain: 0.8, order: 1.8 },
-    curve: 'cut',
-    source: 'declared',
-    note: 'screentone.edgeFit (Codex §3): panel inner edge, page and panel frame run off; prefers a clear main/minor panel reading order',
-  },
-};
+/** The declared worlds' caps (phase 2: the declaration lives in world-shared.ts WORLD_SCALE). */
+export const DECLARED_SCALE_CAPS: Record<string, WorldScaleCaps> = Object.fromEntries(Object.entries(WORLD_SCALE).map(([id, s]) => [id, { worldId: id, ...s, source: 'declared' as const }]));
 
 /** The edges a world's own sets already lean on (their anchors' sides): where its type stands, the big word may too. */
 export function edgesOfSets(sets: string[]): ScaleEdge[] {

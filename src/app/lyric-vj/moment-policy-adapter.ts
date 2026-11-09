@@ -1,9 +1,10 @@
 // From today's free plan to the moment policy's input (moment-policy.ts), and today's free moment gate (free-plan.ts
 // freeMoments) taken apart stage by stage, so the two can be counted side by side. Plan-level only: nothing is rendered,
 // and nothing here reaches the network (the reading is whatever meaning.json the caller read from disk).
-import { FREE_MOMENTS_MAX, validMeaning, withoutEchoes, type freeJob } from './free-plan';
+import { FREE_MOMENTS_MAX, validMeaning, withoutEchoes } from './free-plan';
+import type { RenderJob } from './render/engine';
 import type { Cue, Meaning } from './lineplan-core';
-import { momentCapsOf } from './moment-caps-draft';
+import { momentCapsOf, type WorldMomentCaps } from './moment-caps-draft';
 import type { MomentInput, ProtectedEvent } from './moment-policy';
 import { checkMoments, type MomentAsk } from './signature-moments';
 import { analyzeStructure } from './structure';
@@ -12,7 +13,8 @@ import type { SongTimeline } from './timeline';
 import { LINK_PREPARE } from './render/world-handoff';
 import { fromFreeJob } from './world-events-adapter';
 
-type Free = ReturnType<typeof freeJob>;
+/** A free plan's draw, structurally (no cycle through freeJob's return type). */
+type Free = { job: RenderJob; plan: unknown };
 
 /**
  * A free plan as the policy's input: the plan's cues, the song's sections (the ochi stretch marked from analyzeStructure),
@@ -20,7 +22,7 @@ type Free = ReturnType<typeof freeJob>;
  * holds and Q4 linked handoffs (their whole windows). Q1 is not protected over Q5 (Codex §6: Q5 and Q1 are arbitrated
  * together), and Q3 has no events yet.
  */
-export function momentInputOf(free: Free, song: SongTimeline, world: StyleWorld, meaning: { moments?: unknown[] } | undefined, meaningRef: string): MomentInput {
+export function momentInputOf(free: Free, song: SongTimeline, world: StyleWorld, meaning: { moments?: unknown[] } | undefined, meaningRef: string, caps: WorldMomentCaps = momentCapsOf(world)): MomentInput {
   const ev = fromFreeJob(free, song, world, { seed: 0 });
   const ochi = analyzeStructure(song).ochi;
   const sections = (song.sections ?? []).map((s) => ({ start: s.start, end: s.end, type: s.type, ...(ochi && (s.start + s.end) / 2 >= ochi.start && (s.start + s.end) / 2 < ochi.end ? { ochi: true } : {}) }));
@@ -37,7 +39,7 @@ export function momentInputOf(free: Free, song: SongTimeline, world: StyleWorld,
     beats: song.beats ?? [],
     downbeats: song.downbeats ?? [],
     tempo: song.tempo,
-    caps: momentCapsOf(world),
+    caps,
     protected: prot,
     seats,
   };

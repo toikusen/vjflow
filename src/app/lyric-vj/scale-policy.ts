@@ -8,6 +8,7 @@
 import { splitCalls } from './calls';
 import { balancedRows } from './phrases';
 import { readingSec } from './render/reading-window';
+import { SAFE_X, SAFE_Y } from './render/world-sets';
 import type { ScaleCarrierRole, ScaleEdge, WorldScaleCaps } from './scale-caps-draft';
 import { SHORT_LINE, type FrameBox, type SeatCandidate, type WorldEventInput } from './world-events';
 
@@ -15,7 +16,7 @@ import { SHORT_LINE, type FrameBox, type SeatCandidate, type WorldEventInput } f
 export type Measure = (s: string) => number;
 
 /** The frame, px at 1080p, and its safe margins (render/world-sets.ts SAFE_X / SAFE_Y). */
-export const FRAME = { w: 1920, h: 1080, safeX: 64, safeY: 48 };
+export const FRAME = { w: 1920, h: 1080, safeX: SAFE_X, safeY: SAFE_Y };
 /** The law's multiplier over reading size, and the bars a big word and an ordinary scale contrast must reach. */
 export const SCALE_TARGET = 2.4;
 export const EDGE_FIT_MIN = 1.8;
@@ -27,6 +28,11 @@ export const CAP_W = 0.86;
 export const STRESS_PAD = 0.09;
 /** Candidates within this much of the best score are near-equal: the world's seeded hash chooses among them. */
 export const NEAR = 0.12;
+/**
+ * How far a scale carrier runs past the frame on its edge's side, a share of the frame: past any entrance's or exit's
+ * travel (world-motion moves stay within 3 % of the frame), so its own edge is never seen inside the frame.
+ */
+export const CARRIER_OVER = 0.04;
 /** Each size tried when a placement collides is this much smaller than the last, down to the world's least ratio. */
 const SHRINK = 0.96;
 const LEAD = 1.16;
@@ -54,6 +60,8 @@ export interface ScaleLine {
   track?: number;
   /** Lines set in the same frame (a pair or list shot): their room is not measured here, so no candidate is legal on it. */
   sharesFrameWith?: string[];
+  /** Why no scale composition can be drawn on the line at all (not a world line: the renderer has no world pose for it). */
+  refuse?: string;
 }
 
 export interface ScaleSection { id: string; start: number; end: number; type?: string }
@@ -154,6 +162,8 @@ export interface ScalePlan {
   seed: number;
   sections: SectionScale[];
   seats: LayoutSeatCandidate[];
+  /** Per section with a legal candidate: the chosen seat, then the other legal ones in the order the scheduler tries them. */
+  ranked: LayoutSeatCandidate[][];
   /** Every line's sizes: the chosen line's rest keeps its reading size, every other line keeps its own. */
   sizes: Record<string, { reading: number; rest: number; big?: number }>;
   sungSections: number;
@@ -173,7 +183,7 @@ export function sungSectionsOf<L extends { start: number }>(sections: ScaleSecti
   return sections.map((section) => ({ section, lines: lines.filter((l) => section.start <= l.start && l.start < section.end) })).filter((x) => x.lines.length);
 }
 
-interface Fit { size: number; seat: ScaleSeat; dropped: string[] }
+export interface Fit { size: number; seat: ScaleSeat; dropped: string[] }
 
 /**
  * The biggest legal setting of `big` (rows of the big text) with the rest of the line at reading size: on an edge the
@@ -181,7 +191,7 @@ interface Fit { size: number; seat: ScaleSeat; dropped: string[] }
  * left of it and the words after below or right of it. Starts at min(2.4 × reading, frameCap, the world's most) and
  * steps down to the world's least; undefined when nothing fits.
  */
-function fitOf(rows: string[], before: string, after: string, line: ScaleLine, caps: WorldScaleCaps, measure: Measure, carrierId: string): Fit | { why: string[] } {
+export function fitOf(rows: string[], before: string, after: string, line: Pick<ScaleLine, 'readingSize' | 'track' | 'clear'>, caps: Pick<WorldScaleCaps, 'edges' | 'sizeRange' | 'carrierRole'>, measure: Measure, carrierId: string): Fit | { why: string[] } {
   const R = line.readingSize;
   const track = line.track ?? 0.02;
   const emW = Math.max(...rows.map((r) => measure(r) / 100 + Math.max(0, [...r].length - 1) * track));
@@ -247,10 +257,13 @@ function fitOf(rows: string[], before: string, after: string, line: ScaleLine, c
       const ax: -1 | 0 | 1 = edge === 'left' ? -1 : edge === 'right' ? 1 : k;
       const ay: -1 | 0 | 1 = edge === 'top' ? -1 : edge === 'bottom' ? 1 : k;
       const at: [number, number] = [r3((ax === -1 ? ink.x0 : ax === 1 ? ink.x1 : (ink.x0 + ink.x1) / 2) / FRAME.w), r3((ay === -1 ? ink.y0 : ay === 1 ? ink.y1 : (ink.y0 + ink.y1) / 2) / FRAME.h)];
-      // the carrier: the ink box's band widened by a pad and carried past the frame on the edge's side
+      // the carrier: the band of the whole line (the big text and the rest it reads with) widened by a pad and carried past
+      // the frame on the edge's side; a comic panel is a whole tier of the page, edge to edge (phase 2: the rest read on it too)
       const m = 0.25 * S;
-      const over = 0.04;
-      const band = frac({ x0: ink.x0 - m, y0: ink.y0 - m, x1: ink.x1 + m, y1: ink.y1 + m });
+      const over = CARRIER_OVER;
+      const all = boxes.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }));
+      const band0 = frac({ x0: all.x0 - m, y0: all.y0 - m, x1: all.x1 + m, y1: all.y1 + m });
+      const band = caps.carrierRole === 'panel' && (edge === 'top' || edge === 'bottom') ? { ...band0, x0: -over, x1: 1 + over } : band0;
       const off: FrameBox = edge === 'bottom' ? { ...band, y1: 1 + over } : edge === 'top' ? { ...band, y0: -over } : edge === 'left' ? { ...band, x0: -over } : { ...band, x1: 1 + over };
       return { edge, anchor: { at, ax, ay }, inkBox: frac(ink), restBoxes: rest.map((r) => ({ ...r, box: frac(r.box) })), rows, carrierExtends: { side: edge, role: caps.carrierRole, carrierId, box: off } };
     }
@@ -264,6 +277,9 @@ function fitOf(rows: string[], before: string, after: string, line: ScaleLine, c
   }
   return { why: why.size ? [...why] : [`no allowed edge (${caps.edges.join('/')}) takes the line at ≥ ${(least / R).toFixed(2)}×`] };
 }
+
+/** The rows' line spacing, in ems (a row's step is LEAD × size). */
+export const SCALE_LEAD = LEAD;
 
 /** The world's features of a legal candidate, 0–1 each, and their weighted mean. */
 function scoreOf(c: ScaleCandidate, line: ScaleLine, caps: WorldScaleCaps, measure: Measure): { features: ScaleFeatures; score: number } {
@@ -296,6 +312,7 @@ function candidate(line: ScaleLine, source: ScaleSource, text: string, span: { f
   const R = line.readingSize;
   const base: ScaleCandidate = { lineId: line.id, source, text, span, readingSize: R, targetSize: 0, ratio: 0, kind: 'miss', legal: false, score: 0, reasons: [...reasons] };
   if (reasons.length) return base;
+  if (line.refuse) return { ...base, reasons: [line.refuse] };
   if (line.sharesFrameWith?.length) return { ...base, reasons: [`set in one frame with ${line.sharesFrameWith.join(', ')} (pair shot): their room at reading size is not measured, so no scale seat`] };
   if (line.end - line.start < SHORT_LINE) return { ...base, reasons: [`short line (${(line.end - line.start).toFixed(2)}s < ${SHORT_LINE}s): the scheduler keeps its seat`] };
   const carrierId = line.seat.carrierId ?? `${caps.carrierRole}:${caps.worldId}`;
@@ -338,6 +355,24 @@ function candidatesOf(lines: ScaleLine[], keys: ScaleInput['keys'], caps: WorldS
   return out;
 }
 
+/** A legal candidate as the layout-seat the scheduler receives: the line's composed seat enlarged on its own carrier. */
+function seatOf(pick: ScaleCandidate, line: ScaleLine, sectionId: string): LayoutSeatCandidate {
+  return {
+    // (a key phrase and its whole line are two candidates on one line: the phrase's id names its span)
+    eventId: `scale:${line.id}${pick.source === 'meaning' ? `@${pick.span.from}-${pick.span.to}` : ''}`,
+    family: 'layout-seat',
+    lineId: line.id,
+    sectionId,
+    at: line.show,
+    from: line.show,
+    to: line.show,
+    seat: { id: `${line.seat.id}+scale:${pick.seat!.edge}`, box: pick.seat!.inkBox, carrierId: pick.seat!.carrierExtends.carrierId },
+    scale: { kind: pick.kind as Exclude<ScaleKind, 'miss'>, source: pick.source, ratio: pick.ratio, targetSize: pick.targetSize, readingSize: line.readingSize, restSize: line.readingSize, span: pick.span, ...pick.seat! },
+    count: 1,
+    replacesGrow: true,
+  };
+}
+
 /** The legal candidates of the first tier that has any: meaning edgeFit, meaning scale, then sectionScale. */
 const TIERS: ((c: ScaleCandidate) => boolean)[] = [(c) => c.source === 'meaning' && c.kind === 'edgeFit', (c) => c.source === 'meaning' && c.kind === 'scale', (c) => c.source === 'sectionScale'];
 
@@ -354,6 +389,7 @@ export function pickScaleContrasts(input: ScaleInput): ScalePlan {
   const lines = [...input.lines].sort((a, b) => a.start - b.start);
   const sizes: ScalePlan['sizes'] = Object.fromEntries(lines.map((l) => [l.id, { reading: l.readingSize, rest: l.readingSize }]));
   const seats: LayoutSeatCandidate[] = [];
+  const ranked: LayoutSeatCandidate[][] = [];
   const sections = sungSectionsOf(input.sections, lines).map(({ section, lines: ls }): SectionScale => {
     const candidates = candidatesOf(ls, input.keys, input.caps, measure);
     const head = { sectionId: section.id, start: section.start, end: section.end, lineIds: ls.map((l) => l.id), candidates };
@@ -371,20 +407,10 @@ export function pickScaleContrasts(input: ScaleInput): ScalePlan {
     const chosen = candidates.indexOf(pick);
     const line = ls.find((l) => l.id === pick.lineId)!;
     sizes[line.id] = { reading: line.readingSize, rest: line.readingSize, big: pick.targetSize };
-    const box = pick.seat!.inkBox;
-    seats.push({
-      eventId: `scale:${line.id}`,
-      family: 'layout-seat',
-      lineId: line.id,
-      sectionId: section.id,
-      at: line.show,
-      from: line.show,
-      to: line.show,
-      seat: { id: `${line.seat.id}+scale:${pick.seat!.edge}`, box, carrierId: pick.seat!.carrierExtends.carrierId },
-      scale: { kind: pick.kind as Exclude<ScaleKind, 'miss'>, source: pick.source, ratio: pick.ratio, targetSize: pick.targetSize, readingSize: line.readingSize, restSize: line.readingSize, span: pick.span, ...pick.seat! },
-      count: 1,
-      replacesGrow: true,
-    });
+    seats.push(seatOf(pick, line, section.id));
+    // (the scheduler's fallbacks, Codex §2: the chosen one, then every other legal candidate, tier by tier, best first)
+    const rest = TIERS.flatMap((t) => candidates.filter((c) => c.legal && t(c) && c !== pick).sort((a, b) => b.score - a.score));
+    ranked.push([seatOf(pick, line, section.id), ...rest.map((c) => seatOf(c, ls.find((l) => l.id === c.lineId)!, section.id))]);
     const why = pick.source === 'sectionScale' ? `${candidates.some((c) => c.source === 'meaning') ? 'no key phrase fits' : 'no key phrase named'}: whole line ${pick.lineId} set at ${pick.ratio}×` : `key phrase 「${pick.text}」 at ${pick.ratio}×`;
     return { ...head, chosen, kind: pick.kind, ratio: pick.ratio, pool: pool.length, reasons: [`${why}; hash chose 1 of ${pool.length} near-equal (score ≥ ${(best - NEAR).toFixed(3)})`] };
   });
@@ -394,6 +420,7 @@ export function pickScaleContrasts(input: ScaleInput): ScalePlan {
     seed: input.seed,
     sections,
     seats,
+    ranked,
     sizes,
     sungSections: sections.length,
     plannedSections: sections.filter((s) => s.kind !== 'miss').length,

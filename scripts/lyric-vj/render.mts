@@ -38,7 +38,7 @@ const { values: a } = parseArgs({
     logo: { type: 'string' }, // group logo image (PNG with alpha)
     medium: { type: 'string' }, // override the treatment's medium (medium.ts)
     clip: { type: 'string' }, // 'a,b': render only this part of the window (previews)
-    layer: { type: 'string' }, // text | back: one compositing layer (text = ProRes 4444 with alpha)
+    layer: { type: 'string' }, // text | back | words: one compositing layer (text = ProRes 4444 with alpha; words = text without its carriers, QA)
     entrance: { type: 'string', default: 'whole' }, // fast lines: whole (quick entrance, default) | stagger (comparison) | cut (fallback)
     'motion-frames': { type: 'string' }, // QA: line ids whose motion check runs on every frame (60 fps), comma-separated
     live: { type: 'boolean', default: false }, // build each line near its time, as the browser preview does (composer plans only)
@@ -107,7 +107,7 @@ const job: RenderJob = {
   treatment: checked.treatment, assets,
   fonts: { family: a.font, display: a['font-display'], body: a['font-body'], script: a['font-script'] },
   meta: { ...splitSongTitle(song.title), logo: a.logo ? url(a.logo) : undefined },
-  layer: a.layer === 'text' || a.layer === 'back' ? a.layer : undefined,
+  layer: a.layer === 'text' || a.layer === 'back' || a.layer === 'words' ? a.layer : undefined,
   track: !!a.track,
   entrance: a.entrance as Entrance,
   ...(a.live ? { live: true } : {}),
@@ -127,7 +127,7 @@ const version = {
   options: { entrance: job.entrance },
   renderedAt: new Date().toISOString(),
 };
-const alpha = job.layer === 'text';
+const alpha = job.layer === 'text' || job.layer === 'words';
 const ext = alpha ? 'mov' : 'mp4';
 writeFileSync(join(out, 'job.json'), JSON.stringify(job));
 

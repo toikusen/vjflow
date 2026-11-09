@@ -11,8 +11,6 @@ import { clearOf } from './world-sets';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
-import { ARRIVAL_SEC } from './arrival';
-import { CARRIER_SEC } from './carrier-moves';
 import { pageCutBefore } from './cover';
 import { gateMotion, REST_FLOOR, setTogether } from './reading-window';
 import { isLineMotion } from './motion-transition';
@@ -75,7 +73,8 @@ import { vertical } from './vertical';
 import { foldRepeats } from './repeats';
 import { pullPictures } from './picture-lead';
 import { lanes } from './lanes';
-import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, enterSec as lineEnterSec, EXIT_SEC, FrameFx, LEAD, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { lastSungOf, leadOf, showTime } from './show-time';
+import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, enterSec as lineEnterSec, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
@@ -347,7 +346,8 @@ export interface RenderJob {
   /** QA: log every sprite's box per frame (codelayer.mts continuity checks). */
   track?: boolean;
   /** One layer only, for compositing in VJ software: 'text' = lyrics on transparency, 'back' = everything else. */
-  layer?: 'text' | 'back';
+  /** One compositing layer; `words` is the lyric layer without the carriers the lines stand on (QA: hold-events.mts). */
+  layer?: 'text' | 'back' | 'words';
   /**
    * Live use (browser preview and export) of a line composer's plan: each line is built near its time and released
    * after, so a song starts as fast as a short one and memory stays flat. Ignored for any other treatment.
@@ -663,7 +663,7 @@ export class LyricVjEngine {
   private gradient: THREE.Texture;
 
   constructor(canvas: HTMLCanvasElement, private job: RenderJob) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: job.layer === 'text' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: job.layer === 'text' || job.layer === 'words' });
     this.renderer.setPixelRatio(1);
     this.renderer.localClippingEnabled = true; // handwrite reveals glyphs with clip planes
     this.renderer.setSize(W, H, false);
@@ -916,13 +916,13 @@ export class LyricVjEngine {
       styled.splice(i + 1, 1);
     }
     // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
-    const lead = this.job.tempo !== undefined && this.job.tempo < 95 ? 0.35 : LEAD;
+    const lead = leadOf(this.job.tempo);
     // a line shows ahead of its voice, but never while the previous line's last word is still being sung
-    const lastSung = styled.map(({ cue }) => (cue.charTimed && cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : -Infinity));
+    const lastSung = styled.map(({ cue }) => lastSungOf(cue));
     // the entrance is over when the voice comes in: a line starts its animation that much earlier (as long as the line
     // before is no longer being sung)
     // an outline's light needs the dark ground its own cut brings: it starts with that cut, not ahead of it
-    const ENTER_LEAD: Record<string, number> = { slam: 0.3, pop: 0.3, wipe: 0.2, fade: 0.25, ink: 0.45, cut: 0, ...Object.fromEntries([...Object.entries(CARRIER_SEC), ...Object.entries(ARRIVAL_SEC)].map(([k, sec]) => [k, sec * 0.7])), 'soft-float': 0.4, 'cell-land': 0.3, 'reply-land': 0.25, 'edge-light': 0 };
+    // (render/show-time.ts ENTER_LEAD)
     // a line laid on a page (a cut-out page or a director's drawing, a painted frame) comes with its page's cut, not
     // ahead of it: ahead, it stood on the page before, whose figures were placed clear of another line (cover.ts)
     const pages = (treatment.graphics?.sections ?? []).filter((s) => s.layers.some((l) => l.kind === 'code' || (l.kind === 'photo' && l.own))).map((s) => s.start);
@@ -930,9 +930,7 @@ export class LyricVjEngine {
       // a message is sent on the line's first sung syllable, not ahead of it (the database's chat videos: the bubble
       // lands on the beat the voice comes in)
       if (threadShot(treatment.shots.find((s) => s.id === style.shot))) return cue.start;
-      const pace = Math.min(1, Math.max(0.35, (cue.end - cue.start) / 2));
-      const show = Math.max(cue.start - Math.max(lead, (ENTER_LEAD[style.enter] ?? 0.25) * pace), Math.min(cue.start, (lastSung[i - 1] ?? -Infinity) + 0.3));
-      return pageCutBefore(pages, show, cue.start);
+      return pageCutBefore(pages, showTime(cue, style.enter, lead, lastSung[i - 1]), cue.start);
     });
     // a handoff only runs where it costs neither line any reading: gated here on the times the lines really got
     for (const [i, { cue, style }] of styled.entries()) {
@@ -2510,12 +2508,15 @@ export class LyricVjEngine {
       (this.ghostPass.uniforms['uColA'].value as THREE.Color).set(chroma[0]);
       (this.ghostPass.uniforms['uColB'].value as THREE.Color).set(chroma[1]);
     }
-    if (this.job.layer === 'text') {
+    if (this.job.layer === 'text' || this.job.layer === 'words') {
       // the lyrics alone on transparency (their own colour treatment; grain and grading belong to the back layer)
       this.renderer.setRenderTarget(null);
       this.renderer.setClearColor(0x000000, 0);
       this.renderer.clear();
+      const hid: THREE.Object3D[] = [];
+      if (this.job.layer === 'words') this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && o.userData['decor']) { o.visible = false; hid.push(o); } });
       this.renderer.render(this.textScene, this.camera);
+      hid.forEach((o) => (o.visible = true));
       return;
     }
     if (this.job.layer === 'back') this.textRoot.visible = this.echoRoot.visible = false;

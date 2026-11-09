@@ -22,7 +22,7 @@ const job: RenderJob = await (await fetch(new URLSearchParams(location.search).g
 (globalThis as { __vjTrack?: boolean }).__vjTrack = !!job.track;
 await loadJobFonts(job);
 // a transparent page for the lyric layer
-if (job.layer === 'text') document.documentElement.style.background = document.body.style.background = 'transparent';
+if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 (window as unknown as { vjEngine: LyricVjEngine }).vjEngine = engine;
 window.vjReady = engine.init();

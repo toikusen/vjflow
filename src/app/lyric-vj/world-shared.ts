@@ -6,21 +6,53 @@
 // Moves in and out shared by all worlds are in render/world-motion.ts (SHARED_ENTERS, SHARED_EXITS).
 import type { StyleWorld } from './style-world';
 
-export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker';
+export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker' | HoldKind | 'line-ink-settle';
+/**
+ * The events that settle and stay (2026-11-09, Q2 of docs/research/2026-11-09-rhythm-gaps-codex.md): a short or medium
+ * line changes state once and keeps it, so the change is seen in a line too short for a pulse and back. Each only moves
+ * or extends what the world already draws: a phrase's ink, the line's own carrier, the copies behind a blown-up word,
+ * the line's own panel, the whole block.
+ */
+export type HoldKind = 'ink-swap' | 'carrier-settle' | 'plate-spread' | 'panel-open' | 'line-grow';
+export const HOLD_KINDS: HoldKind[] = ['ink-swap', 'carrier-settle', 'plate-spread', 'panel-open', 'line-grow'];
+/** How much a world likes each settling event, 0 never: the plan draws among those a line can take, by these weights. */
+export type HoldTaste = Record<HoldKind, number>;
 export type StressKind = 'extrude' | 'plate' | 'outline';
 /** A world's one camera move into a new part; `still` is none (a receipt lying on the counter is never flown at). */
 export type WorldCamera = 'push-through' | 'diagonal' | 'iso-slide' | 'still';
 
-export interface WorldShared { beats: BeatKind[]; stress: StressKind[]; camera: WorldCamera }
+export interface WorldShared { beats: BeatKind[]; stress: StressKind[]; camera: WorldCamera; holds: HoldTaste }
 
-const s = (beats: BeatKind[], stress: StressKind[], camera: WorldCamera): WorldShared => ({ beats, stress, camera });
+/** By family: a print world swaps its ink and spreads its plate, a lit or screen world opens its panel, a cut or laid world settles its carrier. */
+const HOLDS_BY_FAMILY: Record<StyleWorld['family'], HoldTaste> = {
+  print: { 'ink-swap': 2, 'carrier-settle': 2, 'plate-spread': 3, 'panel-open': 1, 'line-grow': 3 },
+  emissive: { 'ink-swap': 1, 'carrier-settle': 2, 'plate-spread': 2, 'panel-open': 3, 'line-grow': 3 },
+  wet: { 'ink-swap': 2, 'carrier-settle': 2, 'plate-spread': 2, 'panel-open': 1, 'line-grow': 3 },
+  stroke: { 'ink-swap': 2, 'carrier-settle': 2, 'plate-spread': 3, 'panel-open': 1, 'line-grow': 3 },
+  layered: { 'ink-swap': 1, 'carrier-settle': 3, 'plate-spread': 2, 'panel-open': 2, 'line-grow': 3 },
+  film: { 'ink-swap': 1, 'carrier-settle': 2, 'plate-spread': 2, 'panel-open': 3, 'line-grow': 3 },
+  ui: { 'ink-swap': 1, 'carrier-settle': 3, 'plate-spread': 1, 'panel-open': 3, 'line-grow': 3 },
+  wall: { 'ink-swap': 2, 'carrier-settle': 2, 'plate-spread': 3, 'panel-open': 1, 'line-grow': 3 },
+  air: { 'ink-swap': 2, 'carrier-settle': 2, 'plate-spread': 2, 'panel-open': 1, 'line-grow': 3 },
+};
+/** A world's own taste where its material says more than its family (a receipt never grows: it is printed to its roll's width). */
+const HOLDS_OWN: Record<string, Partial<HoldTaste>> = {
+  riso: { 'plate-spread': 3 },
+  terminal: { 'panel-open': 3, 'carrier-settle': 3, 'ink-swap': 1 },
+  screentone: { 'panel-open': 3, 'line-grow': 3, 'ink-swap': 0 },
+  blueprint: { 'ink-swap': 1, 'line-grow': 3 },
+  document: { 'line-grow': 0, 'carrier-settle': 0, 'panel-open': 0 },
+  notebook: { 'line-grow': 2 },
+};
+
+const s = (beats: BeatKind[], stress: StressKind[], camera: WorldCamera): Omit<WorldShared, 'holds'> => ({ beats, stress, camera });
 
 /**
  * Each world's share, chosen from what it is made of: a print world slips its plate, a lamp world flickers and
  * relights, a wet world spreads an echo, a cut world cracks; stress by the same logic (a press extrudes, a plate
  * misregisters, light outlines).
  */
-export const WORLD_SHARED: Record<string, WorldShared> = {
+export const WORLD_SHARED: Record<string, Omit<WorldShared, 'holds'>> = {
   silk: s(['ink-run', 'plate-slip'], ['plate', 'extrude'], 'diagonal'),
   'silk-cold': s(['light-sweep', 'ink-run'], ['plate', 'outline'], 'push-through'),
   riso: s(['plate-slip', 'ink-run', 'roll'], ['plate', 'extrude'], 'diagonal'),
@@ -78,7 +110,7 @@ export const WORLD_SHARED: Record<string, WorldShared> = {
 };
 
 /** A world no row names (a new one) takes the moves its family is made of until it is given its own. */
-const BY_FAMILY: Record<StyleWorld['family'], WorldShared> = {
+const BY_FAMILY: Record<StyleWorld['family'], Omit<WorldShared, 'holds'>> = {
   print: s(['ink-run', 'plate-slip'], ['plate', 'extrude'], 'diagonal'),
   emissive: s(['flicker', 'light-sweep'], ['outline', 'plate'], 'push-through'),
   wet: s(['echo', 'ink-run'], ['outline', 'extrude'], 'push-through'),
@@ -90,7 +122,8 @@ const BY_FAMILY: Record<StyleWorld['family'], WorldShared> = {
   air: s(['light-sweep', 'echo'], ['outline', 'plate'], 'push-through'),
 };
 
-export const sharedOf = (w: Pick<StyleWorld, 'id' | 'family'>): WorldShared => WORLD_SHARED[w.id] ?? BY_FAMILY[w.family];
+export const holdsOf = (w: Pick<StyleWorld, 'id' | 'family'>): HoldTaste => ({ ...HOLDS_BY_FAMILY[w.family], ...HOLDS_OWN[w.id] });
+export const sharedOf = (w: Pick<StyleWorld, 'id' | 'family'>): WorldShared => ({ ...(WORLD_SHARED[w.id] ?? BY_FAMILY[w.family]), holds: holdsOf(w) });
 
 /** A world whose time is cut in steps (a press, a lamp, a projector) runs its beats in steps too. */
 export const steppedWorld = (w: Pick<StyleWorld, 'timeBase'>) => /step|cut|snap|stutter|noise|cranked|flip/.test(w.timeBase.curve);

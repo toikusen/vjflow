@@ -1419,7 +1419,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
           const pairRoll = hash(`${seed}:${id}:beat`) % 7;
           const held = W.beats ? beatOfLine(x, W.beats, beats, [], lastBeat, pairRoll, pairLine, W.holds) : undefined;
           // (phase 4c: a shared shot keeps its set, so its holds are listed on that set only, for the scheduler to commit)
-          const cands = held && W.joint && W.scheduled && W.beats ? candsOf(holdCandidatesOf(x, W.beats, beats, [], lastBeat, pairRoll, pairLine, W.holds, true), W.pairSet, W.stepped) : undefined;
+          const cands = held && W.joint && W.scheduled && W.beats ? candsOf(holdCandidatesOf(x, W.beats, beats, [], '', pairRoll, pairLine, W.holds, true), W.pairSet, W.stepped) : undefined;
           if (held && 'kind' in held) lastBeat = held.kind;
           const beatPart = held ? (cands ? { ...('skip' in held ? skipped(held) : {}), ...(cands.length ? { holdCands: cands } : {}) } : 'kind' in held ? heldOf(held, W.stepped) : skipped(held)) : {};
           return { cue: id, budget: true, enter: 'cut', exit: 'fade', idle: 'still', trail: false, emphasis: pkey, method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '', world: { set: W.pairSet, enter: W.pairLine.enters[0], exit: W.pairLine.exits[0], hold: W.pairLine.hold, ...beatPart } };
@@ -1565,12 +1565,13 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7), holdLineFor(spec, true), W.holds) : undefined;
     const heldBeat = held && 'kind' in held ? held : undefined;
     // (phase 4c: every hold the line could take, on its own set and on each seat it may be read in, each measured on
-    // that seat's set and scheme; none committed here)
+    // that seat's set and scheme; none committed here, and no repeat avoidance: the line before's hold is the one the
+    // scheduler commits, so it demotes a repeat itself, world-events legalHold)
     const cands = held && W?.joint && W.scheduled && W.beats ? [recipe.wline!.set, ...(seats ?? [])].flatMap((x) => {
       const at = SET_SPECS[x];
       if (!at) return [];
       const line = holdLineFor(at, x === recipe.wline!.set);
-      return candsOf(holdCandidatesOf(c, W.beats!, beats, repose, lastBeat, roll('beat', 7), line, W.holds, true), x, W.stepped);
+      return candsOf(holdCandidatesOf(c, W.beats!, beats, repose, '', roll('beat', 7), line, W.holds, true), x, W.stepped);
     }) : undefined;
     if (heldBeat) lastBeat = heldBeat.kind;
     // (a scheduled world only: the seats where the line's ink-only hold may merge with a material move, phase 4a)

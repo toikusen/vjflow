@@ -78,7 +78,7 @@ export interface WorldEventLine {
 export interface JointHold { seat: string; hold: HoldEvent; rank: number; slack: number }
 /** What one line committed under the joint contract (phase 4c), and why a hold it could have taken was not. */
 export type LineOutcomeKind = 'hold' | 'composition' | 'composite' | 'keep';
-export type LineOutcomeReason = 'supersededByComposition' | 'noSafeCandidate' | 'designedQuiet' | 'landingFailed';
+export type LineOutcomeReason = 'supersededByComposition' | 'noSafeCandidate' | 'designedQuiet' | 'landingFailed' | 'cameraDropped';
 export interface LineOutcome {
   lineId: string;
   outcome: LineOutcomeKind;
@@ -580,8 +580,13 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const camIn = !!cam && i > 0;
       notes.set(line.id, { cands: line.holdCands?.length ?? 0, legal: false, mood });
       const legalHold = (s: SeatCandidate | undefined) => {
-        // (Codex r3 §3: the world's rank first, its line-ink-settle last resort; reading slack only among equal ranks)
-        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id).sort((a, b) => a.rank - b.rank || Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
+        // (Codex r3 §3: the world's rank first, its line-ink-settle last resort; reading slack only among equal ranks. The
+        // kind of the hold last committed goes after the others, never after the whole line's ink: beatOfLine's own
+        // repeat rule, on the committed hold instead of the composer's guess)
+        const last = holds.at(-1)?.kind;
+        const order = (h: JointHold) => [Number(h.hold.kind === 'line-ink-settle'), Number(h.hold.kind === last), h.rank];
+        const byOrder = (a: JointHold, b: JointHold) => { const [x, y] = [order(a), order(b)]; return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; };
+        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id).sort((a, b) => byOrder(a, b) || Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
         const h = hs.find((x) => !conflict(holdAction(x.hold), taken));
         if (h) notes.get(line.id)!.legal = true;
         return h;
@@ -908,7 +913,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       for (let k = warnings.length - 1; k >= 0; k--) if (warnings[k].reason.includes(named)) warnings.splice(k, 1);
     }
   events.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
-  const outcomes = joint ? lines.map((l) => outcomeOf(l, events, holds, notes.get(l.id), rejected.some((r) => r.candidate.lineId === l.id))) : undefined;
+  const dropped = new Set(camDrops.map((c) => c.lineId));
+  const outcomes = joint ? lines.map((l) => outcomeOf(l, events, holds, notes.get(l.id), rejected.some((r) => r.candidate.lineId === l.id), dropped.has(l.id))) : undefined;
   return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}), ...(camDrops.length ? { camDrops } : {}), ...(policy ? { policy } : {}), ...(outcomes ? { outcomes } : {}) };
 }
 
@@ -921,15 +927,17 @@ const holdAction = (h: HoldEvent): Action => ({ at: h.at, from: h.from, to: h.to
  * A line's committed action read off the final plan (phase 4c): a composite (an absorbed hold), a hold, a composition
  * (any switch of the line: its boundary, inside it, a Q4 handoff or camera move into it, a Q3 composition), else keep.
  * Why a line that could hold did not: a legal hold lost to a composition (`supersededByComposition`), or none was legal
- * (`noSafeCandidate`); a line with no hold that kept: a composition was tried and refused (`noSafeCandidate`), or none
+ * (`noSafeCandidate`), or the camera it lost to was dropped after the selection (`cameraDropped`); a line with no hold that kept: a composition was tried and refused (`noSafeCandidate`), or none
  * was asked for (`designedQuiet`).
  */
-function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEvent[], note: { cands: number; legal: boolean; mood: Mood } | undefined, refused: boolean): LineOutcome {
+export function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEvent[], note: { cands: number; legal: boolean; mood: Mood } | undefined, refused: boolean, camDropped = false): LineOutcome {
   const evs = events.filter((e) => e.lineIds.at(-1) === l.id && e.kind !== 'keep');
   const held = holds.find((h) => h.lineId === l.id);
   const [cands, legal] = [note?.cands ?? 0, !!note?.legal];
   const outcome: LineOutcomeKind = evs.some((e) => e.absorbed) ? 'composite' : held ? 'hold' : evs.length ? 'composition' : 'keep';
-  const reason: LineOutcomeReason | undefined = outcome === 'composition' ? (legal ? 'supersededByComposition' : cands ? 'noSafeCandidate' : undefined) : outcome === 'keep' ? (cands || refused ? 'noSafeCandidate' : 'designedQuiet') : undefined;
+  // (a keep line whose world camera was dropped after the selection: the composition its hold lost to is gone; the hold
+  // is not re-added)
+  const reason: LineOutcomeReason | undefined = outcome === 'composition' ? (legal ? 'supersededByComposition' : cands ? 'noSafeCandidate' : undefined) : outcome === 'keep' ? (camDropped ? 'cameraDropped' : cands || refused ? 'noSafeCandidate' : 'designedQuiet') : undefined;
   const primary = evs[0]?.id ?? (held ? holdIdOf(held) : undefined);
   return { lineId: l.id, outcome, ...(reason ? { reason } : {}), holdCands: cands, legalHold: legal, ...(primary ? { primary } : {}), ...(evs.length > 1 ? { actions: evs.length } : {}), mood: note?.mood ?? 'build' };
 }

@@ -457,7 +457,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
     const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
     const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
     // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
-    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, events, { entranceAndInLine: !!compositionsOf(world.id)?.entranceAndInLine })] : [];
+    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, world, events, { entranceAndInLine: !!compositionsOf(world.id)?.entranceAndInLine })] : [];
     return { plan, job, treatment, checked };
   };
   o.trace?.(input, planned);
@@ -467,7 +467,15 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   // half drawn and never by cancelling the hold: the material is refused, the hold and the line's layout are drawn as the
   // composer planned them, and the failure stays in the record as a contract failure)
   const { failed, warnings: lost } = failedComposites(events.events, checked);
-  if (failed.length) {
+  // (phase 4c, joint: a failed composite is undone whole, its event and the hold it committed together, the line kept
+  // with landingFailed; the 4a restore of the hold alone would re-add a hold the joint plan never chose on its own)
+  if (failed.length && events.outcomes) {
+    const ids = new Set(failed.map((e) => e.lineIds.at(-1)!));
+    const held = new Set(failed.map((e) => e.absorbed!.holdId));
+    events = { ...events, events: events.events.filter((e) => !failed.includes(e)), holds: events.holds.filter((h) => !held.has(`hold:${h.kind}@${h.lineId}`)), rejected: [...events.rejected, ...failed.map((e) => ({ candidate: { lineId: e.lineIds.at(-1)!, kind: e.kind as CompositionFamily, at: e.at, seatAfter: e.seatAfter }, reason: `absorb ${e.absorbed!.holdId}: the composite did not land: the line kept (joint)` }))], outcomes: events.outcomes.map((x) => (ids.has(x.lineId) ? { ...x, outcome: 'keep' as const, reason: 'landingFailed' as const, why: 'composite did not land' } : x)) };
+    ({ plan, job, treatment, checked } = drawOf(events));
+    checked = [...checked, ...lost.map((w) => ({ ...w, reason: w.reason.replace("its hold and the line's layout restored, the material refused", 'the line kept with no hold (joint)') }))];
+  } else if (failed.length) {
     events = { ...events, events: events.events.filter((e) => !failed.includes(e)), rejected: [...events.rejected, ...failed.map((e) => ({ candidate: { lineId: e.lineIds.at(-1)!, kind: e.kind as CompositionFamily, at: e.at, seatAfter: e.seatAfter }, reason: `absorb ${e.absorbed!.holdId}: the composite did not land: hold and layout restored` }))] };
     ({ plan, job, treatment, checked } = drawOf(events));
     checked = [...checked, ...lost];

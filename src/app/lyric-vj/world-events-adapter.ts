@@ -13,6 +13,7 @@ import { SET_SPECS } from './render/world-sets';
 import { WORLD_BEATS } from './render/world-beats';
 import { WORLD_ENTERS } from './render/world-motion';
 import { enterSec as lineEnterSec } from './render/enter-sec';
+import type { EnterKind } from './treatment';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
@@ -564,6 +565,13 @@ export function failedComposites(events: WorldEvent[], checked: InputWarning[]):
   return { failed, warnings: failed.map((e) => ({ inputs: [e.id], reason: `final check: contract failure: the composite ${e.absorbed!.holdId} + ${e.absorbed!.materialId} did not land (${named(e).map((w) => w.reason.replace(/^final check: /, '')).join('; ')}); its hold and the line's layout restored, the material refused` })) };
 }
 
+/** Two times within this are the same drawn instant (the final checks' own landing tolerance, 2 ms). */
+const LANDED = 0.002;
+/** Float slack on a boundary comparison (s). */
+const EPS = 1e-6;
+/** Two switches within 50 ms are one switch (countCuts' own rule): the seam check reads them as one, never as two too close. */
+const SAME_SWITCH = 0.05;
+
 /** Where a joint contract failure is named: the line, so the caller can undo that line's commitment alone. */
 export const jointName = (lineId: string) => `joint:${lineId}`;
 
@@ -578,12 +586,14 @@ export const jointName = (lineId: string) => `joint:${lineId}`;
  * own switches keep SEAM_GAP (the light clock is lightGapWarnings'). Each miss is a final-check InputWarning naming the
  * line (`joint:<line>`).
  */
-export function jointChecks(job: Job, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }, opts: { entranceAndInLine?: boolean } = {}): InputWarning[] {
+export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }, opts: { entranceAndInLine?: boolean } = {}): InputWarning[] {
   if (!table.outcomes) return [];
   const { rows } = shownOf(job);
+  // (the switches as the final job draws them, read off the drawing with real shows: the winner is what is drawn)
+  const drawnCuts = currentEvents({ job }, undefined, world).filter((e) => e.kind !== 'keep');
   const out: InputWarning[] = [];
   const miss = (line: string, why: string) => out.push({ inputs: [jointName(line)], reason: `final check: joint: ${why}` });
-  const near = (a: number, b: number) => Math.abs(a - b) < 0.002;
+  const near = (a: number, b: number) => Math.abs(a - b) < LANDED;
   const holds = table.holds ?? [];
   const cuts = [...new Map(table.events.filter((e) => e.kind !== 'keep').map((e) => [e.id, e])).values()];
   const absorbedIds = new Set(cuts.flatMap((e) => (e.absorbed ? [e.absorbed.holdId] : [])));
@@ -610,25 +620,28 @@ export function jointChecks(job: Job, table: { events: WorldEvent[]; holds?: Hol
       if (o.outcome === 'composition' && !evs.length) miss(o.lineId, `composition committed on ${o.lineId}, nothing switches`);
       if (o.outcome === 'keep' && evs.length) miss(o.lineId, `keep committed on ${o.lineId}, drawn with ${evs.map((e) => e.id).join(', ')}`);
     }
-    if (drawn && KEPT.has(drawn.kind as BeatKind) && (row.world?.repose ?? []).some((r) => r.at > drawn.at - 1e-6)) miss(o.lineId, `the settled ${drawn.kind} on ${o.lineId} does not stay to the line's end: a switch inside the line after it`);
-    if (drawn && drawn.to > row.cue.end + 1e-6) miss(o.lineId, `the ${drawn.kind} on ${o.lineId} runs past the line's end (${drawn.to} > ${row.cue.end})`);
-    const settled = row.show + Math.max(row.world ? WORLD_ENTERS[row.world.enter]?.sec ?? 0 : 0, row.enter ? lineEnterSec(row.enter as never, 1) || 0 : 0);
+    const seen = drawnCuts.filter((d) => d.lineIds.at(-1) === o.lineId);
+    if ((o.outcome === 'composition' || o.outcome === 'composite') && !seen.length) miss(o.lineId, `${o.outcome} committed on ${o.lineId}, the drawing switches nothing there`);
+    if ((o.outcome === 'hold' || o.outcome === 'keep') && seen.length) miss(o.lineId, `${o.outcome} committed on ${o.lineId}, the drawing switches there (${seen.map((d) => `${d.kind}@${d.at}`).join(', ')})`);
+    if (drawn && KEPT.has(drawn.kind as BeatKind) && (row.world?.repose ?? []).some((r) => r.at > drawn.at - EPS)) miss(o.lineId, `the settled ${drawn.kind} on ${o.lineId} does not stay to the line's end: a switch inside the line after it`);
+    if (drawn && drawn.to > row.cue.end + EPS) miss(o.lineId, `the ${drawn.kind} on ${o.lineId} runs past the line's end (${drawn.to} > ${row.cue.end})`);
+    const settled = row.show + Math.max(row.world ? WORLD_ENTERS[row.world.enter]?.sec ?? 0 : 0, row.enter ? lineEnterSec(row.enter as EnterKind, 1) || 0 : 0);
     // (still reading counted from when the words have landed: the entrance and any switch into the line done)
     const landed = Math.max(row.cue.start, settled, ...evs.filter((x) => x.scope !== 'in-line').map((x) => x.to));
-    for (const e of evs.filter((x) => x.scope === 'in-line')) if (e.at - landed < READ_STABLE - 1e-6 || row.cue.end - e.to < READ_STABLE - 1e-6) miss(o.lineId, `${e.id} at ${e.at} without ${READ_STABLE}s of still reading either side`);
+    for (const e of evs.filter((x) => x.scope === 'in-line')) if (e.at - landed < READ_STABLE - EPS || row.cue.end - e.to < READ_STABLE - EPS) miss(o.lineId, `${e.id} at ${e.at} without ${READ_STABLE}s of still reading either side`);
   }
   // (across the song: each committed hold against every other action and switch; the scheduler's own switches by their seams)
   const standing = holds.filter((h) => !absorbedIds.has(holdIdOf(h)));
   for (const h of standing) {
     for (const x of [...cuts.filter((e) => e.absorbed?.holdId !== holdIdOf(h)), ...standing.filter((y) => y !== h)]) {
       const [from, to, what] = 'lineIds' in x ? [x.from, x.to, x.id] : [x.from, x.to, holdIdOf(x)];
-      if (h.from < to + ACTION_GAP - 1e-6 && from < h.to + ACTION_GAP - 1e-6) miss(h.lineId, `${holdIdOf(h)} ${h.from}–${h.to} within ${ACTION_GAP}s of ${what}`);
+      if (h.from < to + ACTION_GAP - EPS && from < h.to + ACTION_GAP - EPS) miss(h.lineId, `${holdIdOf(h)} ${h.from}–${h.to} within ${ACTION_GAP}s of ${what}`);
       // (a switch of the held line itself: never this near the event, beatOfLine's own clearance; the next line's show
       // is kept off by ACTION_GAP above, holdEndBy's contract)
-      if ('lineIds' in x && x.lineIds.at(-1) === h.lineId && x.kind !== 'prop-beat' && (Math.abs(x.at - h.from) < BEAT_CLEAR - 1e-6 || Math.abs(x.at - h.to) < BEAT_CLEAR / 2 - 1e-6)) miss(h.lineId, `${holdIdOf(h)} within ${BEAT_CLEAR}s of its line's switch ${x.id} at ${x.at}`);
+      if ('lineIds' in x && x.lineIds.at(-1) === h.lineId && x.kind !== 'prop-beat' && (Math.abs(x.at - h.from) < BEAT_CLEAR - EPS || Math.abs(x.at - h.to) < BEAT_CLEAR / 2 - EPS)) miss(h.lineId, `${holdIdOf(h)} within ${BEAT_CLEAR}s of its line's switch ${x.id} at ${x.at}`);
     }
   }
   const own = cuts.filter((e) => !e.fixed && e.kind !== 'prop-beat').sort((a, b) => a.at - b.at);
-  for (const [k, e] of own.entries()) for (const x of own.slice(k + 1)) if (x.at - e.at < SEAM_GAP - 1e-6 && x.at - e.at >= 0.05) miss(x.lineIds.at(-1)!, `${x.id} at ${x.at} within ${SEAM_GAP}s of ${e.id} at ${e.at}`);
+  for (const [k, e] of own.entries()) for (const x of own.slice(k + 1)) if (x.at - e.at < SEAM_GAP - EPS && x.at - e.at >= SAME_SWITCH) miss(x.lineIds.at(-1)!, `${x.id} at ${x.at} within ${SEAM_GAP}s of ${e.id} at ${e.at}`);
   return out;
 }

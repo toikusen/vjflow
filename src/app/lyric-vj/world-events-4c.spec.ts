@@ -8,8 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { beatOfLine, holdCandidatesOf, type Cue } from './lineplan-core';
-import { ACTION_GAP, holdIdOf, planWorldEvents, READ_STABLE, SEAM_GAP, type HoldEvent, type JointHold, type PolicyCandidate, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { ACTION_GAP, holdIdOf, outcomeOf, planWorldEvents, READ_STABLE, SEAM_GAP, type HoldEvent, type JointHold, type PolicyCandidate, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 import { jointChecks, jointHoldsOf } from './world-events-adapter';
+import type { WorldLine } from './render/world-layout';
 
 describe('phase 4c: hold candidates before commitment (lineplan-core)', () => {
   const c: Cue = { id: 'x', start: 1, end: 3.5, text: '我們一起 走過那條 長長的街' };
@@ -192,8 +193,8 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
       expect(t.holds.some((h) => h.lineId === o.lineId)).toBe(false);
       expect(t.events.filter((e) => e.kind !== 'keep' && e.lineIds.at(-1) === o.lineId && e.scope === 'in-line')).toHaveLength(1);
     }
-    expect(jointChecks(f.job, t, { entranceAndInLine: true })).toEqual([]);
-    if (twos.length) expect(jointChecks(f.job, t).some((w) => /takes 2 primary actions/.test(w.reason))).toBe(true);
+    expect(jointChecks(f.job, style('art-deco').world, t, { entranceAndInLine: true })).toEqual([]);
+    if (twos.length) expect(jointChecks(f.job, style('art-deco').world, t).some((w) => /takes 2 primary actions/.test(w.reason))).toBe(true);
     // (notebook, the same contract without the declaration: one action a line)
     const n = freeJob(song, { style: style('notebook'), seed: 0, meaning, worldEvents: true, jointHolds: true }).treatment.worldEvents!;
     expect(n.outcomes!.every((o) => !o.actions)).toBe(true);
@@ -227,10 +228,10 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
   it('jointChecks: every part of the contract tampered is reported', () => {
     const f = freeJob(song, { style: style('document'), seed: 0, meaning, worldEvents: true, jointHolds: true });
     const t = f.treatment.worldEvents!;
-    expect(jointChecks(f.job, t)).toEqual([]);
+    expect(jointChecks(f.job, style('document').world, t)).toEqual([]);
     const holdLine = t.outcomes!.find((o) => o.outcome === 'hold')!.lineId;
     const compLine = t.outcomes!.find((o) => o.outcome === 'composition' && t.events.some((e) => e.lineIds.at(-1) === o.lineId && e.scope !== 'in-line' && e.kind === 'layout-seat' && !e.fixed))!.lineId;
-    const tamper = (edit: (cues: DrawnCue[], table: typeof t) => void) => { const j = structuredClone(f.job); const x = structuredClone(t); edit(j.treatment.cues as DrawnCue[], x); return jointChecks(j, x).map((w) => w.reason); };
+    const tamper = (edit: (cues: DrawnCue[], table: typeof t) => void) => { const j = structuredClone(f.job); const x = structuredClone(t); edit(j.treatment.cues as DrawnCue[], x); return jointChecks(j, style('document').world, x).map((w) => w.reason); };
     const reports = (re: RegExp, edit: Parameters<typeof tamper>[0]) => expect(tamper(edit).some((r) => re.test(r)), String(re)).toBe(true);
     const cue = (cues: DrawnCue[], id: string) => cues.find((c) => c.cueId === id)!;
     const ev = (o: Partial<WorldEvent>): WorldEvent => ({ id: 'layout-seat:zz:0', lineIds: [holdLine], kind: 'layout-seat', at: 0, from: 0, to: 0, seatBefore: '', seatAfter: '', scope: 'line', changesLight: false, reason: 'test', ...o });
@@ -250,6 +251,13 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     reports(new RegExp(`within ${ACTION_GAP}s of layout-seat:zz:0`), (_c, x) => x.events.push(ev({ lineIds: [other], at: h.to + 0.05, from: h.to + 0.05, to: h.to + 0.05 })));
     reports(/within 0.35s of its line's switch/, (_c, x) => { x.events.push(ev({ lineIds: [holdLine], at: h.from - 0.2, from: h.from - 0.3, to: h.from - 0.3 })); });
     reports(new RegExp(`within ${SEAM_GAP}s of`), (_c, x) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push(ev({ id: 'layout-seat:zz:1', lineIds: ['zz'], at: e.at + 0.3, from: e.at + 0.3, to: e.at + 0.3 })); });
+    // (a composite outcome with no absorbed event; the drawing, not the plan: a composition line drawn in the seat before, a keep line drawn moved)
+    reports(/has no absorbed event/, (_c, x) => { x.outcomes!.find((y) => y.lineId === holdLine)!.outcome = 'composite'; });
+    const prevOf = (id: string) => { const k = f.job.cues.findIndex((q) => q.id === id); return f.job.cues[Math.max(0, k - 1)].id; };
+    reports(/the drawing switches nothing there/, (c) => { cue(c, compLine).world!.set = cue(c, prevOf(compLine)).world!.set; });
+    const keepLine = t.outcomes!.find((o) => o.outcome === 'hold' && prevOf(o.lineId) !== o.lineId && cue(f.job.treatment.cues as DrawnCue[], prevOf(o.lineId)).world?.set === cue(f.job.treatment.cues as DrawnCue[], o.lineId).world?.set)?.lineId;
+    expect(keepLine).toBeDefined();
+    if (keepLine) reports(/the drawing switches there/, (c) => { const w = cue(c, keepLine).world!; w.set = cue(c, compLine).world!.set === w.set ? 'document/receipt' : cue(c, compLine).world!.set; });
     // (two changes on a line: reported unless the world declares entranceAndInLine)
     const two = (x: typeof t) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push({ ...e, id: `${e.id}:in`, scope: 'in-line', at: e.at + 1, from: e.at + 1, to: e.at + 1 }); };
     reports(/takes 2 primary actions/, (_c, x) => two(x));
@@ -276,9 +284,34 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     expect(t.holds).toEqual(base.treatment.worldEvents!.holds.filter((h) => h.lineId !== line));
   });
 
+  it('freeJob, joint: a composite that cannot land is undone whole (event and its hold), the line kept, one contract failure, no hold restored alone', () => {
+    let line = '';
+    const f = freeJob(song, { style: style('document'), seed: 0, meaning, worldEvents: true, jointHolds: true, trace: (input, plan) => {
+      const h = plan.holds[0];
+      line = h.lineId;
+      const l = input.lines.find((x) => x.id === line)!;
+      plan.events.push({ id: `carrier-swap:${line}:forced`, lineIds: [line], kind: 'carrier-swap', at: h.to, from: h.to, to: +(h.to + 0.3).toFixed(3), seatBefore: l.seat!, seatAfter: `${l.seat}+nowhere`, scope: 'in-line', changesLight: false, reason: 'forced', material: 'poster-panel', absorbed: { holdId: holdIdOf(h), kind: h.kind, hold: { at: h.at, from: h.from, to: h.to }, materialId: 'poster-panel', ink: '#ffd700', occupancy: { from: h.from, to: +(h.to + 0.3).toFixed(3) }, reason: 'forced' } });
+      plan.outcomes!.find((o) => o.lineId === line)!.outcome = 'composite';
+    } });
+    const t = f.treatment.worldEvents!;
+    expect(t.events.some((e) => e.id.endsWith(':forced'))).toBe(false);
+    expect(t.holds.some((h) => h.lineId === line)).toBe(false);
+    expect(t.outcomes!.find((o) => o.lineId === line)).toMatchObject({ outcome: 'keep', reason: 'landingFailed' });
+    expect((f.job.treatment.cues as DrawnCue[]).find((c) => c.cueId === line)!.world!.beat).toBeUndefined();
+    const lost = t.warnings.filter((w) => w.reason.startsWith('final check'));
+    expect(lost).toHaveLength(1);
+    expect(lost[0].reason).toMatch(/contract failure: the composite .* the line kept with no hold \(joint\)/);
+  });
+
+  it('a keep line whose camera was dropped after the selection says so', () => {
+    const l: WorldEventLine = { id: 'x', show: 1, start: 1, end: 3, seats: [A] };
+    expect(outcomeOf(l, [], [], { cands: 2, legal: true, mood: 'peak' }, false, true)).toMatchObject({ outcome: 'keep', reason: 'cameraDropped' });
+    expect(outcomeOf(l, [], [], { cands: 2, legal: true, mood: 'peak' }, false)).toMatchObject({ outcome: 'keep', reason: 'noSafeCandidate' });
+  });
+
   it('the composer\'s candidates in scheduler terms: one per seat and kind, each its own seat\'s window', () => {
-    const w = { set: 's', holdCands: [{ seat: 's', beat: { kind: 'line-grow' as const, at: 1, sec: 0.3 }, rank: 0, slack: 0.4 }, { seat: 't', beat: { kind: 'line-ink-settle' as const, at: 1.2, sec: 0.2 }, rank: 1, slack: 0.3 }] };
-    expect(jointHoldsOf('c', w as never)).toEqual([{ seat: 's', hold: { lineId: 'c', at: 1, from: 1, to: 1.3, kind: 'line-grow' }, rank: 0, slack: 0.4 }, { seat: 't', hold: { lineId: 'c', at: 1.2, from: 1.2, to: 1.4, kind: 'line-ink-settle' }, rank: 1, slack: 0.3 }]);
+    const w: Pick<WorldLine, 'holdCands'> = { holdCands: [{ seat: 's', beat: { kind: 'line-grow', at: 1, sec: 0.3 }, rank: 0, slack: 0.4 }, { seat: 't', beat: { kind: 'line-ink-settle', at: 1.2, sec: 0.2 }, rank: 1, slack: 0.3 }] };
+    expect(jointHoldsOf('c', w as WorldLine)).toEqual([{ seat: 's', hold: { lineId: 'c', at: 1, from: 1, to: 1.3, kind: 'line-grow' }, rank: 0, slack: 0.4 }, { seat: 't', hold: { lineId: 'c', at: 1.2, from: 1.2, to: 1.4, kind: 'line-ink-settle' }, rank: 1, slack: 0.3 }]);
     expect(holdIdOf({ kind: 'line-grow', lineId: 'c' } as HoldEvent)).toBe('hold:line-grow@c');
   });
 });

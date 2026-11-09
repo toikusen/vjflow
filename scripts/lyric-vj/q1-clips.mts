@@ -25,17 +25,24 @@ const SETS: Record<string, (readonly [string, string, number, number])[]> = {
   // (phase 4b: the two of the five new worlds whose numbers moved most, each over its measured window: riso's fast count
   // up, silk's calm count down)
   '4b': [['riso', 'nun', 70, 130], ['silk', 'snow', 60, 120]],
+  // (phase 4c: the joint contract against the scheduler as it was, where the lines' outcomes changed most: case files on
+  // the fast song (20 of 21 lines drawn otherwise), the pictogram cards on the calm one (16 of 17), both set in Huninn)
+  '4c': [['file', 'nun', 70, 130], ['card', 'snow', 60, 120]],
 };
 const { values: a } = parseArgs({ options: { out: { type: 'string', default: 'out/research/q1-1109/clips.json' }, treatments: { type: 'string' }, phase: { type: 'string', default: '3a' } } });
 const CLIPS = SETS[a.phase!];
+// (4c compares the scheduler on, joint off, with the joint contract, both on the clip's own font)
+const joint = a.phase === '4c';
+const font = joint ? 'Huninn' : undefined;
 type Cue = { cueId: string; world?: { set?: string; repose?: unknown[] } };
-const out: Record<string, unknown> = { commit: execSync('git rev-parse --short HEAD').toString().trim(), phase: a.phase, sides: { left: 'before: freeJob worldEvents:false (scheduler off, today\'s product)', right: 'after: freeJob worldEvents:true (scheduler on)' }, note: 'counts are plan level, after.drawn = the after job read back; inLine lists the after side\'s switches inside a line (pageSeat: to a same-page seat)' };
+const hb0 = (x?: Cue) => !!(x?.world as { beat?: unknown } | undefined)?.beat;
+const out: Record<string, unknown> = { commit: execSync('git rev-parse --short HEAD').toString().trim(), phase: a.phase, sides: joint ? { left: 'before: freeJob worldEvents:true (scheduler on, phase 4b contract: a hold pins its line)', right: 'after: freeJob worldEvents:true jointHolds:true (Q1/Q2 arbitrated together, one primary action a line)', font } : { left: 'before: freeJob worldEvents:false (scheduler off, today\'s product)', right: 'after: freeJob worldEvents:true (scheduler on)' }, note: 'counts are plan level, after.drawn = the after job read back; inLine lists the after side\'s switches inside a line (pageSeat: to a same-page seat)' };
 for (const [id, name, from, to] of CLIPS) {
   const song = JSON.parse(readFileSync(`out/db/${IDS[name]}/song.json`, 'utf8'));
   const meaning = existsSync(`out/research/instant/plans/${name}/meaning.json`) ? JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8')) : undefined;
   const style = OFFERED_STYLES.find((s) => s.id === id)!;
-  const before = freeJob(song, { style, seed: 0, meaning, worldEvents: false });
-  const after = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+  const before = freeJob(song, { style, seed: 0, meaning, worldEvents: joint, ...(font ? { font } : {}) });
+  const after = freeJob(song, { style, seed: 0, meaning, worldEvents: true, ...(joint ? { jointHolds: true, font } : {}) });
   const win: [number, number] = [from, to];
   const b = countCuts(currentEvents(before, song, style.world), win);
   const p = countCuts(after.treatment.worldEvents!.events, win);
@@ -49,6 +56,16 @@ for (const [id, name, from, to] of CLIPS) {
     before: { cuts: b.cuts, per10: b.planCutsPer10, byKind: b.byKind },
     after: { plan: { cuts: p.cuts, per10: p.planCutsPer10, byKind: p.byKind }, drawn: { cuts: d.cuts, per10: d.planCutsPer10 }, keeps: ev.filter((e) => e.kind === 'keep').length, materials: ev.filter((e) => e.material).map((e) => ({ material: e.material, at: e.at, from: e.from, to: e.to, lines: e.lineIds, seat: e.seatAfter })), camDrops: (after.treatment.worldEvents!.camDrops ?? []).filter((c) => c.at > from && c.at < to), inLine: ev.filter((e) => e.scope === 'in-line' && e.kind !== 'keep').map((e) => ({ at: e.at, line: e.lineIds[0], from: e.seatBefore, to: e.seatAfter, pageSeat: isPageSeat(e.seatAfter) || isPageSeat(e.seatBefore), reason: e.reason })), contract: after.treatment.worldEvents!.warnings.filter((w) => w.reason.startsWith('final check')).length },
     changed: { set: lines.filter((c) => old(c.cueId)?.world?.set !== c.world?.set).map((c) => c.cueId), repose: lines.filter((c) => JSON.stringify(old(c.cueId)?.world?.repose ?? []) !== JSON.stringify(c.world?.repose ?? [])).map((c) => c.cueId) },
+    // (4c: each line in the clip, both sides: its text and times (clip time = song time − from), what it draws, and on the
+    // right the outcome the joint plan committed and why)
+    ...(joint ? { lines: lines.map((c) => {
+      const s = song.cues.find((x: { id: string }) => x.id === c.cueId);
+      const o = after.treatment.worldEvents!.outcomes?.find((x) => x.lineId === c.cueId);
+      const sw = (f: typeof after) => f.treatment.worldEvents!.events.filter((e) => e.kind !== 'keep' && e.lineIds.at(-1) === c.cueId).map((e) => ({ kind: e.kind, scope: e.scope, at: e.at, clip: +(e.at - from).toFixed(2), to: e.seatAfter }));
+      const hb = (x?: Cue) => ((x?.world as { beat?: { kind: string; at: number } } | undefined)?.beat);
+      return { cue: c.cueId, text: s.text, start: s.start, clip: +(s.start - from).toFixed(2), before: { set: old(c.cueId)?.world?.set, hold: hb(old(c.cueId))?.kind, switches: sw(before) }, after: { set: c.world?.set, hold: hb(c)?.kind, switches: sw(after), outcome: o?.outcome, reason: o?.reason } };
+    }), outcomes: lines.reduce<Record<string, number>>((m, c) => { const o = after.treatment.worldEvents!.outcomes?.find((x) => x.lineId === c.cueId); const k = o ? `${o.outcome}${o.reason ? `/${o.reason}` : ''}` : 'none'; return { ...m, [k]: (m[k] ?? 0) + 1 }; }, {}),
+      holds: { before: lines.filter((c) => hb0(old(c.cueId))).length, after: lines.filter((c) => hb0(c)).length } } : {}),
   };
   if (a.treatments) for (const [side, f] of [['before', before], ['after', after]] as const) {
     mkdirSync(join(a.treatments, `${id}-${name}-${side}`), { recursive: true });

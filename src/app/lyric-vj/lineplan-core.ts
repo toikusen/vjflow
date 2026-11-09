@@ -13,9 +13,15 @@ import { splitSongTitle } from './structure';
 import { Handoff, HANDOFF_TRANSITION, HandoffKind, handoffTimes } from './render/lyric-handoff';
 import { setWordSafe, wordBreaks } from './phrases';
 import { LineBeat, lineBeats, readingSec, setTogether } from './render/reading-window';
-import { WORLD_BEATS } from './render/world-beats';
-import { moveState, pickWorldMoves } from './render/world-handoff';
-import type { BeatKind, StressKind } from './world-shared';
+import { OPEN, SETTLE, stressInk, WORLD_BEATS } from './render/world-beats';
+import { isLinked, LINK_PREPARE, moveState, pickWorldMoves } from './render/world-handoff';
+import { carrierRoom, growRoom, inkChecks } from './render/hold-room';
+import type { Slots } from './render/world-objects';
+import { WORLD_ENTERS } from './render/world-motion';
+import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
+import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
+import { WORLD_CAM_SEC } from './render/world-cam';
+import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import type { MomentAsk } from './signature-moments';
 import { closingLine } from './song-parts';
@@ -637,6 +643,10 @@ export interface WorldPool {
   columns: Record<string, boolean>;
   /** What happens while a line is held, the world's own two or three (world-shared.ts), and whether in steps. */
   beats?: BeatKind[];
+  /** How much the world likes each settling event (world-shared.ts holds). */
+  holds?: Partial<HoldTaste>;
+  /** The world's schemes, by index (a blown-up word's copies spread only where its stress can be drawn). */
+  inks?: Slots[];
   stepped?: boolean;
   /** Every entrance and exit the world's own lines use (the shared ones are added by the composer). */
   enters?: string[];
@@ -687,32 +697,268 @@ export function blowOf(c: Cue, named?: string): { from: number; to: number } | u
   return undefined;
 }
 
-/** A held line's event needs this much line, s. */
-export const BEAT_MIN_LINE = 1.5;
+/** A held line's event needs this much line, s: under it a line only lands (Q2, 2026-11-09). */
+export const BEAT_MIN_LINE = 0.6;
+/** Under this a line is short, under `long` medium: each takes a settling event of its own length range, s. */
+export const HOLD_LINE = { short: 1.5, long: 3 };
+export const HOLD_SEC = { short: [0.12, 0.22], medium: [0.22, 0.4] } as const;
+/** An event starts this long after the entrance has run and is done this long before the line's end, s. */
+export const HOLD_AFTER_ENTER = 0.1;
+export const HOLD_BEFORE_END = 0.12;
 /** An event never lands this near a change of set: two things at once read as one muddle. */
 const BEAT_CLEAR = 0.35;
+/** Nor runs over one of the shot's cuts, nor starts this soon after one (a fast song cuts every half second: 0.35 left no room). */
+const CUT_CLEAR = 0.15;
+/** Where in the line an event aims, a share of its length: a short line's second stress, a medium line's middle. */
+const HOLD_AIM = { short: 0.45, medium: 0.55 };
+/** A phrase that takes the key ink is this share of the line's characters. */
+const SWAP_SHARE = [0.35, 0.6] as const;
+
+/** What the plan knows of a world line when it places its event. */
+export interface HoldLine {
+  /** The line's entrance at its pace, s. */
+  enterSec: number;
+  /** A world camera into the part lands here, s: nothing else moves before. */
+  camEnd?: number;
+  /** The set's own carrier slides along its slack, or opens past an edge, by enough to see (hold-room.ts carrierRoom). */
+  settle?: boolean;
+  open?: boolean;
+  /** Both inks of a phrase swap read at 4.5:1 on what the words stand on (hold-room.ts swapReads); unknown counts as yes. */
+  swapOk?: boolean;
+  /** The scheme has a second ink, apart enough from the line's own, that reads on what the words stand on (hold-room.ts settleInk). */
+  inkSettle?: boolean;
+  /** The set's key ink reads at 4.5:1 on every ground under the words: a pulse that runs the key over them may play. */
+  keyOk?: boolean;
+  /** The blown-up key word ends the line: its copies spread into empty frame, never toward small words after it. */
+  keyLast?: boolean;
+  /** Laid into its page: no travel, its page printed round it. */
+  fixed?: boolean;
+  /** One ink for the whole line (no key ink). */
+  plain?: boolean;
+  /** The words stand on something drawn to their measure (a card, a plate, a carrier per row): the block never grows past it. */
+  standsOn?: boolean;
+  /** Lines sharing a shot. */
+  pair?: boolean;
+  /** The block has no room to grow by the least step (growFits). */
+  noGrow?: boolean;
+  /** A blown-up key word, stressed this way (only when the stress can be drawn); a blown-up line never grows. */
+  stress?: StressKind;
+  blown?: boolean;
+  /** The shot's other cuts during the line, s: an event keeps clear of them as of a change of set. */
+  cutsAt?: number[];
+  /** The event is over by then, s: 0.1 s before the next line shows, or before a linked handoff into it starts (holdEndBy). */
+  endBy?: number;
+  /** The line's key phrase. */
+  key?: string;
+}
+/** A line's event; `safe` and `ink` are for the record (the line had a safe window; its scheme a second ink for the whole line). */
+export type HoldPlan = { kind: BeatKind; at: number; sec: number; stays?: boolean; span?: { from: number; to: number }; safe?: boolean; ink?: boolean };
+/** No event, why, and whether the line had a safe window at all; an empty pool says which families each fell for (they overlap). */
+export type HoldSkip = { skip: string; safe?: boolean; ink?: boolean; why?: ('span' | 'palette' | 'carrier' | 'grow' | 'world-policy')[] };
+/** A hold event is over this long before the next line shows, or before a linked handoff into it starts, s. */
+export const HOLD_BEFORE_NEXT = 0.1;
+/**
+ * When a line's event must be over (the Q1 scheduler's contract, 2026-11-09): HOLD_BEFORE_NEXT before the next line
+ * shows, before a handoff into it starts, and before this line's linked exit (Q4) starts its `prepare` phase; the last
+ * line only by its own end. The next line's
+ * show is the renderer's own (render/show-time.ts showTime) for the earliest of the entrances it may take.
+ */
+export function holdEndBy(c: Cue, next?: Cue, handoffFrom?: number, opts: { lead?: number; enters?: string[]; prepare?: number } = {}): number | undefined {
+  if (!next) return undefined;
+  const shows = Math.min(...(opts.enters?.length ? opts.enters : ['cut']).map((e) => showTime(next, e, opts.lead ?? LEAD, lastSungOf(c))));
+  // (a linked exit starts its prepare phase that long before the next line shows)
+  return Math.min(shows - (opts.prepare ?? 0), handoffFrom ?? Infinity) - HOLD_BEFORE_NEXT;
+}
+/** A line's record of its missing event: the reason, the families its empty pool fell for, and whether it had a safe window. */
+const skipped = (h: HoldSkip) => ({ beatSkip: h.skip, ...(h.why?.length ? { beatWhy: h.why } : {}), ...(h.safe !== undefined ? { beatSafe: h.safe } : {}), ...(h.ink !== undefined ? { beatInk: h.ink } : {}) });
+/** A line's planned event as the renderer takes it, and the record beside it. */
+const heldOf = (h: HoldPlan, stepped?: boolean) => { const { safe, ink, ...beat } = h; return { beat: { ...beat, ...(stepped ? { stepped: true } : {}) }, beatSafe: safe, beatInk: ink }; };
+/**
+ * Settled states that are kept to the line's end: no change of set nor cut after them in the line. The block's size, and
+ * the inks, were checked against the ground and the set they land on (a phrase swapped before silk snow c040 changed set
+ * onto top-slab read at 0.81 low, 2026-11-09 gate).
+ */
+const KEPT = new Set<BeatKind>(['line-grow', 'ink-swap', 'line-ink-settle']);
+/**
+ * Events that belong to the line's first set: the copies of a blown-up word, the carrier the plan measured, and every one
+ * that lays the key or a second ink on the words (that ink was read on the ground under the first set; a key run after
+ * silk's change of set onto top-slab read 0.67–0.75 low on three 大雪 lines, 2026-11-09 gate).
+ */
+const FIRST_SET = new Set<BeatKind>(['plate-spread', 'carrier-settle', 'panel-open', 'ink-swap', 'line-ink-settle', 'ink-run', 'light-sweep', 'roll', 'beat-punch']);
+/** World pulses that run the key ink over the words. */
+const KEY_PULSES = new Set<BeatKind>(['ink-run', 'light-sweep', 'roll', 'beat-punch']);
+/** World pulses that are no hold event for now (round 2: 0 of 2 each passed on the frames): long lines go on to the others. */
+const NOT_HELD = new Set<BeatKind>(['crack', 'plate-slip']);
+/** The whole line's change of ink, s: quicker than the others, it is the fallback of the shortest lines too. */
+export const LINE_INK_SEC = { short: [0.12, 0.18], medium: [0.22, 0.3] } as const;
+
+/** The phrase that takes the key ink at once, as code-point indices: the longest run of whole words within 35–60 % of the line, apart from the key word if it can be. */
+export function swapSpan(text: string, key?: string): { from: number; to: number } | undefined {
+  const cs = [...text];
+  const counts = (a: number, b: number) => cs.slice(a, b).filter((ch) => /[\p{L}\p{N}]/u.test(ch)).length;
+  const all = counts(0, cs.length);
+  if (all < 2) return undefined;
+  const stops = [...wordBreaks(text)].sort((a, b) => a - b);
+  const at = key ? [...text.slice(0, Math.max(0, text.indexOf(key)))].length : -1;
+  const keyRange = key && at >= 0 && text.includes(key) ? [at, at + [...key].length] : undefined;
+  const runs: { from: number; to: number; apart: boolean; tail: boolean }[] = [];
+  for (let j = 0; j < stops.length; j++) for (let k = j + 1; k < stops.length; k++) {
+    const share = counts(stops[j], stops[k]) / all;
+    if (share < SWAP_SHARE[0] || share > SWAP_SHARE[1]) continue;
+    runs.push({ from: stops[j], to: stops[k], apart: !keyRange || stops[k] <= keyRange[0] || stops[j] >= keyRange[1], tail: stops[k] === cs.length });
+  }
+  // (the most ink that is still a phrase: a small swap is seldom seen on the whole frame)
+  const best = runs.sort((x, y) => Number(y.apart) - Number(x.apart) || counts(y.from, y.to) - counts(x.from, x.to) || Number(y.tail) - Number(x.tail) || x.from - y.from)[0];
+  return best && { from: best.from, to: best.to };
+}
+
+const fract = (x: number) => x - Math.floor(x);
 
 /**
- * The one thing that happens while a line is held (world-beats.ts): the world's kinds in turn, never the line before's,
- * on the song beat nearest the middle of the held stretch. One that dims or turns a character waits for the line to be
- * read; the others wait for the entrance. Nothing when the line has no room for one.
+ * The one thing that happens while a line is held (world-beats.ts), or why nothing does. A line under 0.6 s only lands.
+ * The event has a safe window: it starts 0.1 s after the entrance has run (one that dims or turns a character waits
+ * for the reading) and is over 0.12 s before the line ends. A short line (< 1.5 s) takes a 0.12–0.22 s change, a medium
+ * one (< 3 s) a 0.22–0.4 s change, and the change stays; a long one keeps its world's own pulses first. It lands on the song
+ * beat nearest its aim in the window, else on a word break the singing times, else not at all; never near a change of set
+ * nor before a world camera has landed; never the kind of the line before when another fits.
  */
-export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: { at: number }[], last: string, roll: number): { kind: BeatKind; at: number } | undefined {
-  if (c.end - c.start < BEAT_MIN_LINE || !kinds.length) return undefined;
+export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: { at: number }[], last: string, roll: number, line: HoldLine = { enterSec: 0.5 }, holds: Partial<HoldTaste> = {}): HoldPlan | HoldSkip {
+  const len = c.end - c.start;
+  if (len < BEAT_MIN_LINE) return { skip: 'under 0.6 s' };
+  const band = len < HOLD_LINE.short ? 'short' : len < HOLD_LINE.long ? 'medium' : 'long';
+  const span = line.plain ? undefined : swapSpan(c.text, line.key);
+  // (the same predicates the renderer draws with, hold-room.ts: an event planned here is never a silent one there)
+  const can: Record<HoldKind, boolean> = {
+    'ink-swap': !!span && line.swapOk !== false,
+    // (a blown-up line stands on the ground: its set's carrier is off for its first set, world-layout)
+    'carrier-settle': !!line.settle && !line.fixed && !line.blown,
+    'panel-open': !!line.open && !line.fixed && !line.blown,
+    // (a spread of a blown-up word's copies is seen only on a long line: on shorter ones it measured 0.7 % of the frame)
+    'plate-spread': band === 'long' && !!line.keyLast && (line.stress === 'extrude' || line.stress === 'plate'),
+    'line-grow': !line.pair && !line.standsOn && !line.blown && !line.noGrow,
+  };
+  const taste = (k: BeatKind) => (k in can ? (can[k as HoldKind] ? holds[k as HoldKind] ?? 0 : 0) : 0);
+  // (a weighted draw without replacement, the same for the same roll)
+  const settling = (Object.keys(can) as HoldKind[]).filter((k) => taste(k) > 0).map((k, i) => ({ k, w: taste(k) * (0.35 + fract(Math.sin((roll + 1) * 12.9898 + i * 78.233) * 43758.5453)) })).sort((a, b) => b.w - a.w).map((x) => x.k as BeatKind);
+  // (a pulse that lays the key on the words plays only where the key reads at 4.5:1, as every ink does)
+  const pulses = kinds.filter((k) => !NOT_HELD.has(k) && !(KEY_PULSES.has(k) && line.keyOk === false));
+  const own = [...pulses.slice(roll % Math.max(1, pulses.length)), ...pulses.slice(0, roll % Math.max(1, pulses.length))];
+  // (a pulse and back is no hold event: short and medium lines take only the settling ones; the whole line's ink is the
+  // last of them, for a line none of the others fits)
+  const fallback: BeatKind[] = line.inkSettle ? ['line-ink-settle'] : [];
+  const order = [...(band === 'long' ? [...own, ...settling] : settling).sort((a, b) => Number(a === last) - Number(b === last)), ...fallback];
   const need = readingSec(c.text, c.start, c.end);
-  const order = [...kinds.slice(roll % kinds.length), ...kinds.slice(0, roll % kinds.length)].sort((a, b) => Number(a === last) - Number(b === last));
+  const n = [...c.text].length;
+  const breaks = c.charStarts ? [...wordBreaks(c.text)].filter((k) => k > 0 && k < n).map((k) => c.charStarts![k]).filter((x) => x !== undefined) : [];
+  const entered = Math.max(c.start + line.enterSec + HOLD_AFTER_ENTER, line.camEnd ?? 0);
+  // (never past the next line's start: an event that does not fit takes another beat or none, never delays the line)
+  const ends = Math.min(c.end - HOLD_BEFORE_END, line.endBy ?? Infinity);
+  // whether the line leaves any event a window at all: a beat or a sung word break after its entrance with the band's
+  // quickest change done before its end, clear of its cuts and changes of set (what any kind needs, before its own rules)
+  const quickest = band === 'long' ? HOLD_SEC.medium[0] : band === 'short' ? LINE_INK_SEC.short[0] : LINE_INK_SEC.medium[0];
+  const safe = [...beats, ...breaks].some((x) => x >= entered && x + quickest <= ends && repose.every((r) => Math.abs(r.at - x) >= BEAT_CLEAR) && (line.cutsAt ?? []).every((t) => t < x - CUT_CLEAR || t > x + quickest + CUT_CLEAR / 2));
+  if (!order.length) {
+    // (why the pool is empty: each family's own reason, overlapping, never summed)
+    const why: HoldSkip['why'] = [];
+    if (!span) why.push('span');
+    if ((span && line.swapOk === false) || line.inkSettle === false) why.push('palette');
+    if (!can['carrier-settle'] && !can['panel-open']) why.push('carrier');
+    if (!can['line-grow']) why.push('grow');
+    if ((Object.keys(can) as HoldKind[]).some((k) => can[k] && !holds[k])) why.push('world-policy');
+    return { skip: 'no event the world allows on this line', why, safe, ink: !!line.inkSettle };
+  }
+  let why = '';
   for (const kind of order) {
     const m = WORLD_BEATS[kind];
-    const from = c.start + (m.hides ? need : Math.min(need, 0.7));
-    const to = c.end + 0.1 - m.sec;
-    if (to < from) continue;
-    const aim = (from + to) / 2;
-    const clear = (x: number) => repose.every((r) => Math.abs(r.at - x) >= BEAT_CLEAR && Math.abs(r.at - (x + m.sec)) >= BEAT_CLEAR / 2);
-    const at = beats.filter((b) => b >= from && b <= to && clear(b)).sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0] ?? (clear(aim) ? aim : undefined);
-    if (at !== undefined) return { kind, at: +at.toFixed(3) };
+    const stays = !!m.stays;
+    const from = m.hides ? Math.max(entered, c.start + need) : entered;
+    const room = ends - from;
+    const [lo, hi] = band === 'long' ? [m.sec, m.sec] : kind === 'line-ink-settle' ? LINE_INK_SEC[band] : HOLD_SEC[band];
+    const sec0 = band === 'long' && !stays ? m.sec : !stays ? Math.min(m.sec, hi) : Math.min(hi, Math.max(lo, room / 3));
+    // (a quicker change fits between a fast song's cuts where a slower one does not: the band's shortest is tried next)
+    for (const sec of [...new Set([sec0, band === 'long' ? sec0 : lo])]) {
+      const to = ends - sec;
+      if (to < from) { why ||= 'no room after the entrance'; continue; }
+      const aim = band === 'long' ? (from + to) / 2 : c.start + len * HOLD_AIM[band];
+      // a block that has grown keeps its size: no change of set after it, where the new set was laid out for the old size;
+      // a blown-up word's copies, the carrier the plan measured and the ground the new ink was read on (measured once, under
+    // the line's first set) are only in its first set
+      const clear = (x: number) => repose.every((r) => Math.abs(r.at - x) >= BEAT_CLEAR && Math.abs(r.at - (x + sec)) >= BEAT_CLEAR / 2 && !(KEPT.has(kind) && r.at > x) && !(FIRST_SET.has(kind) && r.at < x + sec))
+        && (line.cutsAt ?? []).every((t) => (t < x - CUT_CLEAR || t > x + sec + CUT_CLEAR / 2) && !(KEPT.has(kind) && t > x) && kind !== 'line-grow');
+      const near = (xs: number[]) => xs.filter((b) => b >= from && b <= to && clear(b)).sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0];
+      const at = near(beats) ?? near(breaks);
+      if (at !== undefined) return { kind, at: +at.toFixed(3), sec: +sec.toFixed(3), ...(stays ? { stays: true } : {}), ...(kind === 'ink-swap' ? { span } : {}), safe: true, ink: !!line.inkSettle };
+      why ||= [...beats, ...breaks].some((b) => b >= from && b <= to) ? 'every beat in the window is near a cut or a change of set' : 'no beat or word break in the window';
+    }
   }
-  return undefined;
+  return { skip: why, safe, ink: !!line.inkSettle };
 }
+
+/**
+ * What a set tells the event planner. The words stand on something drawn to their measure when the set brings its own
+ * object or a carrier layer under each letter, or when its page draws a card or plate under them (`on`, plate ink) and is not handed the
+ * words' cells (a page handed the cells draws its balloon round them as they are, grown or not: world-layout restRects).
+ */
+/** A line's block as the plan can see it: the set's own layout on a rough measure (a CJK character one em, anything else half). */
+const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, (x) => [...x].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 100 : 55), 0));
+/** The plan asks the measure it is unsure of for this much more than the renderer needs, so what it plans is drawn. */
+const ROUGH = 1.25;
+/** The growth the plan asks room for on its rough measure; the renderer, measuring the real glyphs, needs only GROW.least (world-beats.ts). */
+const GROW_PLAN = 1.1;
+
+/**
+ * Whether a line set this way could grow, from its anchored side, inside the frame's safe edge and clear of its page's
+ * graphics (hold-room.ts growRoom, the renderer's own test). The plan asks for the whole want on its rough measure; the
+ * renderer, measuring the real glyphs, settles for the least.
+ */
+export function growFits(text: string, spec: SetSpec, want = GROW_PLAN): boolean {
+  const b = roughBlock(text, spec);
+  // (the room the renderer reads the line in is padded 14 px round its block: world-layout restRects)
+  const r = { x0: 946 + b.cx - b.w / 2, x1: 974 + b.cx + b.w / 2, y0: 526 - b.cy - b.h / 2, y1: 554 - b.cy + b.h / 2 };
+  return growRoom(r, spec, want, want) > 1;
+}
+
+/**
+ * What a set tells the event planner. The words stand on something drawn to their measure when the set brings its own
+ * object or a carrier layer under each letter, or when its page draws a card or plate under them (`on`, plate ink) and is
+ * not handed the words' cells (a page handed the cells draws its balloon round them as they are, grown or not:
+ * world-layout restRects). Its carrier settles or opens only where the renderer's room (hold-room.ts) is clear by a margin.
+ */
+export function holdLineOf(spec: SetSpec | undefined, enterWant: number, c?: Cue, slots?: Slots): HoldLine {
+  // (the entrance at the line's pace, as the renderer runs it: never under 0.6 of its own length)
+  const pace = c ? Math.max(0.6, Math.min(1, (c.end - c.start) / 2)) : 1;
+  // (a set that only keeps its rows, with nothing drawn under them, stands on its page's ground: it may grow, clear of the page's graphics)
+  const pageCarrier = !!(spec?.on || spec?.ink === 'plateInk');
+  const block = spec && c ? roughBlock(c.text, spec) : undefined;
+  const room = (kind: 'carrier-settle' | 'panel-open') => {
+    const m = spec && block ? carrierRoom(kind, spec, block) : undefined;
+    return !!m && Math.max(Math.abs(m.dx), Math.abs(m.dy), Math.abs(m.ox) * 2) >= (kind === 'panel-open' ? OPEN.least : SETTLE.least) * ROUGH;
+  };
+  return {
+    enterSec: enterWant * pace,
+    fixed: !!spec?.fixed,
+    plain: !!spec?.plain,
+    standsOn: !!(spec?.object || spec?.under?.some((u) => u.carrier) || (pageCarrier && !spec?.shear)),
+    settle: room('carrier-settle'),
+    open: room('panel-open'),
+    ...(spec && slots ? inkFits(spec, slots) : {}),
+    ...(spec && c ? { noGrow: !growFits(c.text, spec) } : {}),
+  };
+}
+
+/**
+ * What a line on this set may do with its inks, on the scheme alone (hold-room.ts inkChecks, the renderer's own test with
+ * what it sees added): a key-ink pulse, a phrase swap, a whole line's second ink. The words' ink is the set's, or, on an
+ * object, either of the two an object takes: each must allow it.
+ */
+function inkFits(spec: SetSpec, slots: Slots) {
+  const bases = spec.ink ? [slots[spec.ink]] : spec.object ? [slots.ink, slots.plateInk] : [slots.ink];
+  const checks = bases.map((base) => inkChecks(spec, slots, base));
+  return { swapOk: checks.every((x) => x.swapOk), inkSettle: checks.every((x) => !!x.settle), keyOk: checks.every((x) => x.keyOk) };
+}
+
+/** Whether a stress can be drawn on a scheme as the renderer will try it (its first choice, not the fallback). */
+const stressDrawn = (kind: StressKind, slots?: Slots) => !slots || !!stressInk(kind, slots.ink, slots.ground, slots, slots.accent);
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */
 function reposeOf(c: Cue, set: string, W: WorldPool, beat: LineBeat | undefined, beats: number[], level: Level, calm: boolean, roll: (salt: string, n: number) => number) {
@@ -857,6 +1103,8 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   const inChorus = (c: Cue) => song.sections?.find((x) => c.start >= x.start && c.start < x.end)?.type === 'chorus';
   const partOfCue = (id: string) => { const i = cues.findIndex((c) => c.id === id); return [...meaning.parts].filter((p) => cues.findIndex((c) => c.id === p.from) <= i).at(-1) ?? meaning.parts[0]; };
   const lineBeatsOf = new Map(lineBeats(cues, song.duration).map((b) => [b.id, b]));
+  // (the next line shows as the renderer shows it, for the earliest of the entrances the world's lines take)
+  const showOpts = { lead: songLead(song.tempo), enters: [...new Set(['cut', 'reply-land', ...(W?.recipes ?? []).map((r) => r.enter)])] };
   const beatOf = new Map(lineBeats(cues, song.duration).map((b) => [b.id, b]));
   // every other chorus part opens on its lead line in lights; a part change that is already something else takes no iris
   // (its lead: the first of its opening lines short enough for a paper with the time for one)
@@ -1050,7 +1298,13 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
           exitsUsed.set(out, (exitsUsed.get(out) ?? 0) + 1);
           lastExit = out;
         }
-        if (worldPair) return { cue: id, budget: true, enter: 'cut', exit: 'fade', idle: 'still', trail: false, emphasis: keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase), method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '', world: { set: W.pairSet, enter: W.pairLine.enters[0], exit: W.pairLine.exits[0], hold: W.pairLine.hold } };
+        if (worldPair) {
+          const pkey = keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase);
+          const held = W.beats ? beatOfLine(x, W.beats, beats, [], lastBeat, hash(`${seed}:${id}:beat`) % 7, { ...holdLineOf(SET_SPECS[W.pairSet], WORLD_ENTERS[W.pairLine.enters[0]]?.sec ?? 0, x, W.inks?.[schemeOf(part)]), pair: true, key: pkey, endBy: holdEndBy(x, cues[cues.indexOf(x) + 1], hands.get(cues[cues.indexOf(x) + 1]?.id ?? '')?.from, showOpts) }, W.holds) : undefined;
+          if (held && 'kind' in held) lastBeat = held.kind;
+          const beatPart = held ? ('kind' in held ? heldOf(held, W.stepped) : skipped(held)) : {};
+          return { cue: id, budget: true, enter: 'cut', exit: 'fade', idle: 'still', trail: false, emphasis: pkey, method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '', world: { set: W.pairSet, enter: W.pairLine.enters[0], exit: W.pairLine.exits[0], hold: W.pairLine.hold, ...beatPart } };
+        }
         return { cue: id, budget: true, enter: k ? (pair.kind === 'chat' ? 'cut' : 'reply-land') : r.enter, exit: out ?? r.exit, idle: 'still', trail: false, emphasis: keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase), method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' };
       });
       // (a world's pair set that is laid into a page of its own brings that page with it, as its single lines do)
@@ -1166,12 +1420,26 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     for (const r of repose) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
     // cuts in time order, each a set's first frame when one lands there (a beat cut closer than a blink to a repose gives way)
     if (repose.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !repose.some((r) => r.at === cuts[i - 1]['at'])) cuts.splice(i - 1, 1); }
-    const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7)) : undefined;
-    if (held) lastBeat = held.kind;
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
     // (render/world-handoff.ts: the least used family that fits the world and the time the song leaves the line)
     const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}), ...(blow ? { blow } : {}) } : undefined;
+    const camHere = W?.camera && cuts[0]?.cam === W.camera;
+    const spec = recipe.wline ? SET_SPECS[recipe.wline.set] : undefined;
+    const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7), {
+      ...holdLineOf(spec, hand ? 0 : WORLD_ENTERS[wEnter ?? recipe.wline.enter]?.sec ?? 0.5, c, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]),
+      // (a block grows in the set it is in when it grows, and keeps the size into any set after: every one must have room)
+      ...(repose.some((r) => SET_SPECS[r.set] && !growFits(c.text, SET_SPECS[r.set])) ? { noGrow: true } : {}),
+      ...(camHere ? { camEnd: s.start + (WORLD_CAM_SEC[W!.camera!] ?? 0.5) } : {}),
+      pair: recipe.template === 'world-pair', key, blown: !!blow,
+      cutsAt: cuts.slice(1).map((x) => Number(x['at'])).filter((x) => Number.isFinite(x) && x > c.start && x < c.end),
+      // (a linked exit into the next line starts LINK_PREPARE before that line shows: the event is over before it, render/world-handoff)
+      endBy: holdEndBy(c, cues[cues.indexOf(c) + 1], hands.get(cues[cues.indexOf(c) + 1]?.id ?? '')?.from, { ...showOpts, ...(isLinked(wExit) ? { prepare: LINK_PREPARE } : {}) }),
+      // (the copies behind a blown-up word are drawn only in an ink the ground shows and the words read on: render/world-layout)
+      ...(blow && stressDrawn(blow.stress, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]) ? { stress: blow.stress, keyLast: !/[\p{L}\p{N}]/u.test([...c.text].slice(blow.to).join('')) } : {}),
+    }, W.holds) : undefined;
+    const heldBeat = held && 'kind' in held ? held : undefined;
+    if (heldBeat) lastBeat = heldBeat.kind;
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

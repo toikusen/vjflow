@@ -4,13 +4,15 @@
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from './glyphs';
 import { nearestWeight } from '../fonts';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, keyInk, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, FaceLayout, SET_SPECS, SetSpec, shearedSize } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
-import { beatProgress, WORLD_BEATS } from './world-beats';
+import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
+import { carrierBox, carrierRoom, growRoom, inkChecks, keyFor } from './hold-room';
+export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
@@ -47,10 +49,22 @@ export interface WorldLine {
   blow?: { from: number; to: number; stress: StressKind };
   /** The world's camera into a new part, which the line's words take with the ground (world-cam.ts): its kind and start. */
   cam?: { kind: string; at: number; dir: number };
-  /** The one thing that happens while the line is held (world-beats.ts): which, when, and in steps or smooth. */
-  beat?: { kind: BeatKind; at: number; stepped?: boolean };
+  /**
+   * The one thing that happens while the line is held (world-beats.ts): which, when, for how long (the plan's, else the
+   * move's own), whether it stays, the phrase it names, and in steps or smooth.
+   */
+  beat?: { kind: BeatKind; at: number; sec?: number; stays?: boolean; span?: { from: number; to: number }; stepped?: boolean };
+  /** Why the plan gave the line no event (lineplan-core beatOfLine), for the record: the reason, the families an empty
+   * pool fell for, and whether the line left any event a safe window. */
+  beatSkip?: string;
+  beatWhy?: string[];
+  beatSafe?: boolean;
+  /** The line's scheme had a second ink for the whole line (line-ink-settle), for the record. */
+  beatInk?: boolean;
 }
 
+/** The margin round each small word a spreading copy may not enter, a share of the word's size. */
+const SPREAD_MARGIN = 0.15;
 /** The glyph picture size a line with a blown-up key word is drawn from, px. */
 const BLOW_TEX = 360;
 const ROTATED = /[ー〜～…―‐]/;
@@ -200,23 +214,11 @@ const STRESS: Record<StressKind, { dx: number; dy: number; s: number; a: number 
   // light round the letters, twice, fainter outward
   outline: [{ dx: 0, dy: 0, s: 1.07, a: 0.34 }, { dx: 0, dy: 0, s: 1.15, a: 0.16 }],
 };
-/** The colour a stress is drawn in, of the scheme's slots: it must be seen on the ground and the words must read on it, else the next stress. */
-export function stressInk(kind: StressKind, ink: string, ground: string, slots: Slots, key: string): string | undefined {
-  const pool = kind === 'outline' ? [key, slots.ink2, slots.accent] : kind === 'plate' ? [key, slots.accent, slots.ink2] : [slots.ink2, slots.faint, slots.plateInk, slots.accent];
-  // outline sits round the letters, never under a stroke: it only has to be seen; the others lie under the edges
-  return pool.find((c) => c && /^#[0-9a-f]{6}$/i.test(c) && contrast(c, ground) >= 1.4 && (kind === 'outline' || contrast(ink, c) >= 3));
-}
 
 function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, variant: number) {
   if (!spec.object) return undefined;
-  const [px, py] = spec.pad ?? [0, 0];
-  // the object takes at least its share of the frame, and stays in the frame
-  // a split line's object holds its hero part only: the small part is set apart from it, or under it on the page
-  const hero = block.hero ?? { cx: 0, cy: 0, w: block.w, h: block.h };
-  // a carrier grows to its share only as far as it can stay centred on the words: pushed back into the frame, a big card
-  // left its line at its top edge and the rest of it empty (silent-film's corner card, 2026-11-04 audit ①)
-  const centred = (c: number, frame: number) => (CARRIERS.has(spec.object!) ? Math.max(0, 2 * (frame - Math.abs(c))) : Infinity);
-  const [ow, oh] = [Math.max(hero.w + px * 2, Math.min(centred(block.cx + hero.cx, 960), (spec.fill?.[0] ?? 0) * 1920)), Math.max(hero.h + py * 2, Math.min(centred(block.cy + hero.cy, 540), (spec.fill?.[1] ?? 0) * 1080))];
+  // the object takes at least its share of the frame, and stays in the frame (hold-room.ts carrierBox)
+  const { ow, oh, x, y } = carrierBox(spec, block)!;
   const cv = paintObject(spec.object, ow, oh, slots, seed, variant);
   const tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -224,8 +226,7 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   m.renderOrder = LAYER;
   m.userData['noVeil'] = true;
   m.userData['decor'] = true;
-  const inside = (c: number, half: number, frame: number) => (half >= frame ? -c : Math.min(frame - half, Math.max(half - frame, c)) - c);
-  m.position.set(hero.cx + inside(block.cx + hero.cx, ow / 2, 960), hero.cy + inside(block.cy + hero.cy, oh / 2, 540), 0);
+  m.position.set(x, y, 0);
   return m;
 }
 
@@ -261,16 +262,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const baked = !!(wl.surface || sets.some((s) => s.surface));
   // the key reads against what is really under the words: the object's plate, the card or banners a set's page draws
   // (a set inked for the plate stands on one), else the ground (pink key letters sat on a white hint card at 2:1)
-  const keyOf = (s: SetSpec) => {
-    if (s.plain) return inkOn(s);
-    const on = s.on ?? (s.object || (s.ink === 'plateInk' && !s.under) ? ['plate' as const] : undefined);
-    const base = s.key ? slots[s.key] : rt.palette.accent;
-    // off an object, the key reads on the background and on what the picture really puts under the line (rt.under);
-    // it stays apart from the body ink: a key pushed to read until it was the body's black marked nothing (brutalist's
-    // red on 世界のつづき, 2026-11-05), so another accent of the palette comes first
-    const grounds = on ? on.map((k) => slots[k]) : [rt.palette.background, ...(rt.under ?? [])];
-    return keyInk(base, [slots.accent, slots.ink2, rt.palette.accent], inkOn(s), grounds, on && (s.object || s.on) ? 6 : 4.5);
-  };
+  // what the renderer sees under a line that the plan does not (hold-room.ts Seen)
+  const seen = { background: rt.palette.background, under: rt.under, accent: rt.palette.accent };
+  // the key reads on what is really under the words: the object's plate, the card or banners a set's page draws, else the
+  // background and what the picture puts there (hold-room.ts keyFor)
+  const keyOf = (s: SetSpec) => keyFor(s, slots, inkOn(s), seen);
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;
@@ -314,10 +310,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   poses.forEach((p) => { if (p.object) body.add(p.object); });
   underLayers.forEach((layer) => layer.forEach((u) => body.add(u.mesh)));
   const stressCopies: { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; i: number; d: { dx: number; dy: number; s: number; a: number } }[] = [];
+  let stressed: StressKind | undefined;
   if (blown) {
     const groundInk = wl.fixedInk ? slots.ink : rt.palette.text;
     const kinds = [wl.blow!.stress, ...(['extrude', 'plate', 'outline'] as StressKind[]).filter((k) => k !== wl.blow!.stress)];
     const kind = kinds.find((k) => stressInk(k, groundInk, rt.palette.background, slots, keyOf(sets[0])));
+    stressed = kind;
     if (kind) {
       const c = stressInk(kind, groundInk, rt.palette.background, slots, keyOf(sets[0]))!;
       const keyIds = gs.map((g, i) => (g.src !== undefined && g.src >= wl.blow!.from && g.src < wl.blow!.to && g.char.trim() ? i : -1)).filter((i) => i >= 0);
@@ -358,15 +356,24 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   if (caret) { caret.userData['noVeil'] = true; caret.userData['decor'] = true; caret.userData['inFrame'] = true; body.add(caret); }
   // the held line's one event (world-beats.ts): its key ink per pose, a baked surface's key pictures, the copies behind
   const beatMove = wl.beat ? WORLD_BEATS[wl.beat.kind] : undefined;
-  const keyCols = sets.map((s) => new THREE.Color(keyOf(s)));
-  // a beat's key ink only where it reads as well as the line's own ink on what that ink was set to read on (a cut-hole
-  // world's key was its sheet's colour: three lines vanished mid-roll at the reading gate, 2026-11-04)
-  const backdropOf = (ink: string) => [rt.palette.background, slots.plate, slots.ground].filter((c) => /^#[0-9a-f]{6}$/i.test(c ?? '')).sort((x, y) => contrast(ink, y) - contrast(ink, x))[0];
-  const keyReads = (p: number) => { const base = inkOn(sets[p]); const back = backdropOf(base); return !back || !/^#[0-9a-f]{6}$/i.test(base) || contrast(keyOf(sets[p]), back) >= 3; };
-  const keyOkBy = sets.map((_, p) => keyReads(p));
+  // what each set's words may do with their inks (hold-room.ts inkChecks, the plan's own test): every new ink, a passing
+  // key run's too, reads at 4.5:1 on every ground under the words (a key run at 3:1 on silk's top-slab read low, 大雪
+  // c028, 2026-11-09 review; a phrase swapped on the palette's ground came out low on silk's edge-bleed band)
+  const inks = sets.map((s) => inkChecks(s, slots, inkOn(s), seen));
+  const settleBy = inks.map((x) => x.settle);
+  const settling = wl.beat?.kind === 'line-ink-settle';
+  const keyCols = sets.map((s, p) => new THREE.Color(settling ? settleBy[p] ?? inkOn(s) : keyOf(s)));
+  const keyOkBy = inks.map((x) => x.keyOk);
   const apartBy = sets.map((_, p) => gs.map((g) => !!splitInkOf(g, p)));
-  const usesKey = !!wl.beat && ['ink-run', 'light-sweep', 'roll', 'beat-punch'].includes(wl.beat.kind);
-  const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(keyOf(s), false, p) }).texture)) : undefined;
+  const usesKey = !!wl.beat && ['ink-run', 'light-sweep', 'roll', 'beat-punch', 'ink-swap', 'line-ink-settle'].includes(wl.beat.kind);
+  const beatSec = wl.beat?.sec ?? beatMove?.sec ?? 0;
+  const stays = !!beatMove?.stays;
+  const span = wl.beat?.span;
+  const inSpan = gs.map((g) => (span && g.src !== undefined && g.src >= span.from && g.src < span.to ? 1 : 0));
+  const swapOkBy = inks.map((x) => x.swapOk);
+  // the pose the event lands in
+  const beatPose = wl.beat ? (wl.repose ?? []).filter((r) => wl.beat!.at >= r.at).length : 0;
+  const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(settling ? settleBy[p] ?? inkOn(s) : keyOf(s), false, p) }).texture)) : undefined;
   const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
   if (ghosts) ghosts.forEach((g) => { g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
   const mixed = new THREE.Color();
@@ -396,8 +403,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     plane.setFromNormalAndCoplanarPoint(unit, at);
   };
 
-  const restRects = () => poses.map((p, i) => {
-    const [cx, cy, pad] = [960 + p.block.cx + firstX, 540 - (p.block.cy + firstAt), 14];
+  const restRects = (grown = true) => poses.map((p, i) => {
+    const [cx0, cy0, pad] = [960 + p.block.cx + firstX, 540 - (p.block.cy + firstAt), 14];
     // carried: the whole line on an opaque carrier (a split line's small part stands off it, so it is not)
     const carried = !!p.object && !p.block.small?.length && CARRIERS.has(sets[i].object!);
     // the room the line is read in covers the whole of its slow travel and its swell, not only where it starts: a
@@ -410,12 +417,62 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     // (a sheared block's room is what it covers as drawn; its page is handed the layout to build its planes round the words)
     const sh = p.spec.shear;
     const [bw, bh] = shearedSize(p.block.w, p.block.h, sh);
-    const [hw, hh] = [(bw / 2) * grow + reach(gx, p.block.cx, bw / 2, 960), (bh / 2) * grow + reach(gy, p.block.cy, bh / 2, 540)];
-    const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w, h: p.block.h, shear: sh, size: p.block.size, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j], -p.y[j], (p.sizes?.[j] ?? p.scale) * tex] as [number, number, number]] : [])) };
+    // (a block that will grow is read, and its page drawn round it, at its grown size from the start)
+    const g = grown && i >= beatPose ? growTo() : 1;
+    const [hw, hh] = [(bw / 2) * grow * g + reach(gx, p.block.cx, bw / 2, 960), (bh / 2) * grow * g + reach(gy, p.block.cy, bh / 2, 540)];
+    // (it grows from the side its set is anchored on: that edge stays put)
+    const [cx, cy] = [cx0 - p.spec.ax * (bw / 2) * grow * (g - 1), cy0 - p.spec.ay * (bh / 2) * grow * (g - 1)];
+    const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: sh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])) };
     return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}) } };
   });
   // the camera into a new part never carries the first line's box out of the frame (world-cam.ts camReach)
   let camRoom: CamRoom | undefined;
+
+  // How far the settling events may go, worked out once from the line as it is set (undefined: not this line's event).
+  const objectBase = poses.map((p) => p.object?.position.clone());
+  let grown: number | undefined;
+  /** The block's grown size: the plan's want, less what the frame's safe edge and the page's graphics leave; 1 when under the least. */
+  const growTo = () => {
+    if (grown !== undefined) return grown;
+    grown = 1;
+    if (wl.beat?.kind !== 'line-grow' || slot.of > 1) return grown;
+    const r = restRects(false)[beatPose]?.rect;
+    if (!r) return grown;
+    grown = growRoom(r, { ...poses[beatPose].spec, clear: sets[beatPose].clear });
+    return grown;
+  };
+  const growShare = () => (growTo() - 1) / (GROW.want - 1);
+  let spreadK: number | undefined;
+  /** How far the copies behind a blown-up word may spread: never into the margin round a small word they did not reach before. */
+  const spreadTo = () => {
+    if (spreadK !== undefined) return spreadK;
+    spreadK = 1;
+    if (wl.beat?.kind !== 'plate-spread' || !blown || (stressed !== 'extrude' && stressed !== 'plate') || !stressCopies.length) return spreadK;
+    const p = poses[0];
+    const box = (i: number, dx = 0, dy = 0) => { const h = ((p.sizes?.[i] ?? p.scale) * tex) / 2; return { x0: p.x[i] + dx - h, x1: p.x[i] + dx + h, y0: p.y[i] + dy - h, y1: p.y[i] + dy + h }; };
+    const rest = gs.map((_, i) => i).filter((i) => p.shown[i] && !stressCopies.some((c) => c.i === i)).map((i) => { const b = box(i); const m = SPREAD_MARGIN * (b.x1 - b.x0); return { x0: b.x0 - m, x1: b.x1 + m, y0: b.y0 - m, y1: b.y1 + m }; });
+    const meets = (a: { x0: number; x1: number; y0: number; y1: number }, b: typeof a) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+    const at = (f: number) => stressCopies.map((c) => { const size = (p.sizes?.[c.i] ?? p.scale) * tex; return box(c.i, c.d.dx * size * f, c.d.dy * size * f); });
+    const before = at(1);
+    const fits = (f: number) => at(f).every((b, j) => rest.every((r) => meets(before[j], r) || !meets(b, r)));
+    for (let f = SPREAD.want; f >= SPREAD.least - 1e-9; f -= 0.05) if (fits(f)) return (spreadK = f);
+    return spreadK;
+  };
+  const spreadShare = () => (spreadTo() - 1) / (SPREAD.want - 1);
+  let carried_: { dx: number; dy: number; ox: number; sx: number } | null | undefined;
+  /**
+   * Where the line's own carrier may go: it slides along its slack round the words (never leaving less than its margin
+   * past them) toward the frame's middle, or opens past the edge with more frame beyond it. Null: not this line's event.
+   */
+  const carrierMove = () => {
+    if (carried_ !== undefined) return carried_ ?? undefined;
+    carried_ = null;
+    const p = poses[beatPose];
+    const kind = wl.beat?.kind;
+    if ((kind !== 'carrier-settle' && kind !== 'panel-open') || !p?.object) return undefined;
+    carried_ = carrierRoom(kind, sets[beatPose], p.block, seed, [firstX, firstAt]) ?? null;
+    return carried_ ?? undefined;
+  };
 
   return {
     group,
@@ -436,9 +493,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const [sx, sy] = [blockPose.sx ?? 1, blockPose.sy ?? 1];
       const shift = blockPose.pivot ? (blockPose.pivot * (p.block.w / 2) * (sx - 1)) : 0;
       body.position.set(p.block.cx + firstX + (blockPose.dx ?? 0) - shift, p.block.cy + firstAt + (blockPose.dy ?? 0), 0);
-      const bq = beatMove && !out && wl.beat ? beatProgress(wl.beat.at, beatMove.sec, t, !!wl.beat.stepped) : undefined;
-      const bb = bq !== undefined ? beatMove!.block?.(bq) : undefined;
+      const bq = beatMove && (!out || stays) && wl.beat ? beatProgress(wl.beat.at, beatSec, t, !!wl.beat.stepped, stays) : undefined;
+      const bb0 = bq !== undefined ? beatMove!.block?.(bq) : undefined;
+      // (a block that grows grows only as far as the frame and its page leave it: growTo)
+      const bb = bb0 && wl.beat!.kind === 'line-grow' ? { sx: 1 + ((bb0.sx ?? 1) - 1) * growShare(), sy: 1 + ((bb0.sy ?? 1) - 1) * growShare() } : bb0;
       body.scale.set(sx * (bb?.sx ?? 1), sy * (bb?.sy ?? 1), 1);
+      if (bb && wl.beat!.kind === 'line-grow') body.position.add(scratch.set(-p.spec.ax * (p.block.w / 2) * ((bb.sx ?? 1) - 1), p.spec.ay * (p.block.h / 2) * ((bb.sy ?? 1) - 1), 0));
       body.rotation.z = (p.spec.tilt ?? 0) + (blockPose.r ?? 0);
       // the camera into a new part moves the words with the frame, about the frame's centre
       const cam = wl.cam ? worldCam(wl.cam.kind, t - wl.cam.at, wl.cam.dir, (camRoom ??= restRects()[0]?.rect)) : undefined;
@@ -452,6 +512,14 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       shearBody(p.spec.shear);
       const whole_a = blockPose.a ?? 1;
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
+      // the line's own carrier settles or opens under the words (the words stay where they are)
+      const cm = bq !== undefined && k === beatPose ? beatMove!.carrier?.(bq) : undefined;
+      if (p.object && objectBase[k]) {
+        const mv = k === beatPose ? carrierMove() : undefined;
+        const [slide, open] = [cm?.slide ?? 0, cm?.open ?? 0];
+        p.object.position.set(objectBase[k]!.x + (mv?.dx ?? 0) * slide + (mv?.ox ?? 0) * open, objectBase[k]!.y + (mv?.dy ?? 0) * slide, 0);
+        p.object.scale.set(1 + (mv?.sx ?? 0) * open, 1, 1);
+      }
       const clip = move?.clip?.(out ? qOut : qIn);
       const hasClip = !!useClip;
       if (hasClip) { if (clip) setClip(clip, p); else plane.set(unit.set(0, 1, 0), 1e6); }
@@ -485,7 +553,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         // a line that locks word by word keeps at it after its entrance has run
         if (!out && wl.enter === 'signal-lock' && enterDur > 0) pose = entering!.glyph!(env);
         if (!out && qi >= 1 && holding) pose = { ...holding(env), ...(wl.enter === 'signal-lock' && enterDur > 0 ? pose : {}) };
-        const ev = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq }) : undefined;
+        const ev = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq, span: inSpan[i] }) : undefined;
         if (ev) pose = { ...pose, dx: (pose.dx ?? 0) + (ev.dx ?? 0), dy: (pose.dy ?? 0) + (ev.dy ?? 0), s: (pose.s ?? 1) * (ev.s ?? 1), sy: (pose.sy ?? 1) * (ev.sy ?? 1), r: (pose.r ?? 0) + (ev.r ?? 0), tone: Math.min(pose.tone ?? 1, ev.tone ?? 1), key: ev.key, ghost: ev.ghost };
         m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0), 0);
         const s = (p.sizes?.[i] ?? p.scale) * (pose.s ?? 1);
@@ -504,7 +572,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
           }
         }
         // (a split line's part on a carrier of its own keeps its own ink: the key was read for the set's carrier)
-        const keyed = (pose.key ?? 0) > 0 && keyOkBy[k] && !apartBy[k][i];
+        const keyed = (pose.key ?? 0) > 0 && (wl.beat?.kind === 'ink-swap' ? swapOkBy[k] : settling ? !!settleBy[k] : keyOkBy[k]) && !apartBy[k][i];
         const ink = keyed ? mixed.copy(inkLit[i]).lerp(keyCols[k], pose.key!) : inkLit[i];
         const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }
@@ -535,7 +603,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         c.mesh.visible = k === 0 && m.visible && m.material.opacity > 0.01;
         if (!c.mesh.visible) continue;
         const size = (p.sizes?.[c.i] ?? p.scale) * tex;
-        c.mesh.position.set(m.position.x + c.d.dx * size, m.position.y + c.d.dy * size, 0);
+        // (the copies spread further out, as far as the small words round the key leave them: spreadTo)
+        const f = bq !== undefined && beatMove!.spread ? 1 + (beatMove!.spread(bq) - 1) * spreadShare() : 1;
+        c.mesh.position.set(m.position.x + c.d.dx * size * f, m.position.y + c.d.dy * size * f, 0);
         c.mesh.scale.set(m.scale.x * c.d.s, m.scale.y * c.d.s, 1);
         c.mesh.rotation.z = m.rotation.z;
         c.mesh.material.opacity = c.d.a * m.material.opacity;

@@ -159,6 +159,8 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   };
   const sections: { start: number; layers: (KineticLayer | UiLayer)[]; transition?: { kind: string; dur?: number; dir?: number } }[] = [];
   const transitions = new Map<string, number>();
+  /** Whether each section is a shot's first cut (the one its line's ground and inks are set for). */
+  const opened: boolean[] = [];
   let hold: Hold | undefined;
   // the prop of the cut before and where it stood: the same one across the frame on the next cut reads as a jump
   let shown = { sprite: '', side: '' };
@@ -178,6 +180,13 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       if (when >= s.end - 0.05) continue;
       // a line's change of set (lineplan-core reposeOf) is the line's own cut at a word break: it keeps the light's own floor
       if (i > 0 && sections.length && when - sections[sections.length - 1].start < ((c as { repose?: boolean }).repose ? Math.min(gap, Math.max(world ? 0.55 : 0, REPOSE_GAP)) : gap)) continue;
+      // (the floor holds across lines too, 2026-11-09: 1710 of 20 859 world cuts on five songs came under 0.55 s of the
+      // next shot's first cut. The cut stays, only its change of light gives way: the cut of the shot before keeps the light
+      // it came from, so the frame's light changes once, with the new line's own ground)
+      if (i === 0 && sections.length > 1 && !opened[sections.length - 1] && when - sections[sections.length - 1].start < gap) {
+        const [prev, last] = [sections[sections.length - 2].layers[0] as KineticLayer, sections[sections.length - 1].layers[0] as KineticLayer];
+        if (lightOf(last) !== lightOf(prev)) keepLight(last, prev);
+      }
       let fx = (KINETIC_FX as readonly string[]).includes(c.fx) || isLineGround(c.fx) || (!!world && isWorldGround(c.fx)) ? c.fx : 'wall';
       if (!c.yields) throw new Error(`a composer cut always yields (${c.fx})`);
       const runsTo = landedEnd(times, i, gap, s.end);
@@ -219,6 +228,7 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       if (c.flash) layer.flash = c.flash as KineticLayer['flash'];
       const tk = c.transition && !WORLD_INS[c.transition] && sections.length && (!held2 || c.transitionSec) ? c.transition : '';
       if (tk) transitions.set(tk, (transitions.get(tk) ?? 0) + 1);
+      opened.push(i === 0);
       sections.push({ start: +when.toFixed(3), layers: [layer, ...(world?.id === 'terminal' && pal && fx !== 'terminal/reverse-block' && !c.piece ? desktopOf(pal, sections.length, when, runsTo) : [])], ...(tk && transitions.get(tk)! <= useCap(`tr:${tk}`) ? { transition: { kind: tk, ...(c.transitionSec ? { dur: c.transitionSec, dir: c.transitionDir } : {}) } } : {}) });
     }
   }
@@ -258,6 +268,17 @@ function worldLineOf(w: StyleWorld, line: WorldLine, ps: PlanShot, kanaSong: boo
   const slots = w.palette[scheme];
   const kana = kanaSong ? w.type.ja : w.type.tc;
   return { ...line, slots, surface: w.material.surface, core: slots[w.material.core], sheet: w.sheet, fixedInk: w.family === 'wet' || !!w.ownInk, pair: undefined, weight: kana.weight, callOn: w.standsOnPlate ? slots.plate : undefined, ...(w.callSlot ? { callInk: slots[w.callSlot] } : {}) };
+}
+
+/** What a cut's frame is lit by: its paper, its ink and whether it is turned dark. Two cuts alike in it change no light. */
+export const lightOf = (l: Pick<KineticLayer, 'paper' | 'ink' | 'dark'>) => `${l.paper}|${l.ink}|${l.dark ? 1 : 0}`;
+/** A cut that keeps the light of the one before it: the same paper, inks and scheme, its own ground and picture. */
+export function keepLight(l: KineticLayer, from: KineticLayer) {
+  Object.assign(l, { paper: from.paper, ink: from.ink, accent: from.accent });
+  if (from.dark) l.dark = true;
+  else delete l.dark;
+  if (l.world && from.world) l.world = { ...l.world, slots: from.world.slots };
+  if (from.sheetInks) l.sheetInks = from.sheetInks;
 }
 
 /** The treatment a composer plan is laid on when no director has seen the song: type settings only. */

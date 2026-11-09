@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatOfLine, BEAT_MIN_LINE, blowOf, BLOW_MAX, REPOSE_CALM_LINE } from './lineplan-core';
+import { beatOfLine, BEAT_MIN_LINE, blowOf, BLOW_MAX, HoldPlan, REPOSE_CALM_LINE } from './lineplan-core';
 import { blowPose, stressInk } from './render/world-layout';
 import { SET_SPECS } from './render/world-sets';
 import { contrast } from './contrast';
@@ -29,23 +29,23 @@ describe('shared world moves', () => {
   });
   it('places a held beat in the held stretch of a long line, on a beat', () => {
     const c = cue(10, 14);
-    const b = beatOfLine(c, ['ink-run', 'echo'], halfBeats, [], '', 0)!;
-    expect(b).toBeDefined();
+    const b = beatOfLine(c, ['ink-run', 'echo'], halfBeats, [], '', 0) as HoldPlan;
+    expect(b.kind).toBeDefined();
     expect(b.at).toBeGreaterThan(c.start + 0.5);
-    expect(b.at + WORLD_BEATS[b.kind].sec).toBeLessThanOrEqual(c.end + 0.1 + 1e-6);
+    expect(b.at + WORLD_BEATS[b.kind].sec).toBeLessThanOrEqual(c.end - 0.12 + 1e-6);
     expect(halfBeats).toContain(b.at);
   });
-  it('gives a short line none', () => {
-    expect(beatOfLine(cue(10, 10 + BEAT_MIN_LINE - 0.1), ['ink-run'], halfBeats, [], '', 0)).toBeUndefined();
+  it('gives a line too short to hold none, and says why', () => {
+    expect(beatOfLine(cue(10, 10 + BEAT_MIN_LINE - 0.1), ['ink-run'], halfBeats, [], '', 0)).toEqual({ skip: 'under 0.6 s' });
   });
   it('makes a beat that dims or turns characters wait for the reading', () => {
     const c = cue(10, 14.5);
-    const b = beatOfLine(c, ['roll'], halfBeats, [], '', 0)!;
+    const b = beatOfLine(c, ['roll'], halfBeats, [], '', 0) as HoldPlan;
     expect(b.at).toBeGreaterThanOrEqual(c.start + readingSec(c.text, c.start, c.end) - 1e-6);
   });
   it('keeps clear of a change of set and of the line before', () => {
     const c = cue(10, 14);
-    const b = beatOfLine(c, ['ink-run', 'echo'], halfBeats, [{ at: 12 }], 'ink-run', 0)!;
+    const b = beatOfLine(c, ['ink-run', 'echo'], halfBeats, [{ at: 12 }], 'ink-run', 0) as HoldPlan;
     expect(b.kind).toBe('echo');
     expect(Math.abs(b.at - 12)).toBeGreaterThanOrEqual(0.35);
   });
@@ -55,7 +55,7 @@ describe('shared world moves', () => {
     expect(beatProgress(1, 0.6, 1.25, true)! * 6 % 1).toBe(0);
   });
   it('never dims a character below half', () => {
-    for (let q = 0; q <= 1; q += 0.05) for (let i = 0; i < 8; i++) expect(WORLD_BEATS.flicker.glyph!({ q, i, n: 8, u: i / 7, v: 0, seed: 3, age: 2, sung: 1 }).tone!).toBeGreaterThanOrEqual(0.55);
+    for (let q = 0; q <= 1; q += 0.05) for (let i = 0; i < 8; i++) expect(WORLD_BEATS.flicker.glyph!({ q, i, n: 8, u: i / 7, v: 0, seed: 3, age: 2, sung: 1, span: 0 }).tone!).toBeGreaterThanOrEqual(0.55);
   });
   it('splits a long calm line at a word break into a second set', () => {
     const text = '無盡的思念總是破碎在冬天';
@@ -171,6 +171,6 @@ describe('shared world moves', () => {
     expect(camReach('push-through', 1)).toBe(1);
   });
   it('never turns a rolling character edge-on', () => {
-    for (let q = 0; q <= 1; q += 0.02) for (let u = 0; u <= 1; u += 0.25) expect(WORLD_BEATS.roll.glyph!({ q, i: 0, n: 5, u, v: 0, seed: 1, age: 2, sung: 1 }).sy ?? 1).toBeGreaterThanOrEqual(ROLL_LEAST);
+    for (let q = 0; q <= 1; q += 0.02) for (let u = 0; u <= 1; u += 0.25) expect(WORLD_BEATS.roll.glyph!({ q, i: 0, n: 5, u, v: 0, seed: 1, age: 2, sung: 1, span: 0 }).sy ?? 1).toBeGreaterThanOrEqual(ROLL_LEAST);
   });
 });

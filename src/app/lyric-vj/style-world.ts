@@ -151,6 +151,8 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     enters: [...new Set(w.layouts.lines.flatMap((l) => l.enters))],
     exits: [...new Set(w.layouts.lines.flatMap((l) => l.exits))],
     beats: sharedOf(w).beats,
+    holds: sharedOf(w).holds,
+    inks: w.palette,
     stress: sharedOf(w).stress,
     camera: sharedOf(w).camera === 'still' ? undefined : sharedOf(w).camera,
     stepped: steppedWorld(w),

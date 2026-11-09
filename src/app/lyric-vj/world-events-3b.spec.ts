@@ -11,7 +11,9 @@ import { fromJob, shownOf, sungAt, verifyWorldEvents } from './world-events-adap
 import { compositionsOf, WORLD_COMPOSITIONS, type MaterialMove } from './world-shared';
 import { WORLD_EXITS } from './render/world-motion';
 import { panelsOf } from './render/world-b5-deco';
-import { panelSplit } from './render/seat-geometry';
+import { laidSeat, panelSplit } from './render/seat-geometry';
+import { REST_FLOOR } from './render/reading-window';
+import { pageSeatsFor } from './lineplan-core';
 import { DECO_PANELS } from './render/world-b5-sets';
 import { eraseFront, feltAt, TRAY_H } from './render/chalk-erase';
 import { MOUTH_Y } from './render/world-doc-sets';
@@ -81,9 +83,8 @@ describe('phase 3b: material moves in the scheduler', () => {
   it('a withheld material yields no candidates; the same declaration not withheld does', () => {
     const deco = (m: MaterialMove) => caps(['layout-seat', 'carrier-swap'], { allowedAt: { 'carrier-swap': ['in-line'] }, materials: { 'poster-panel': m } });
     const l = line('a', 1, 5, [MARQUEE, PANELS], { words: words(1, 5, 4), settled: 1.4 });
-    expect(planWorldEvents(input([l], { caps: deco(PANEL) })).events.some((e) => e.kind === 'carrier-swap')).toBe(false);
-    const { withheld: _w, ...open } = PANEL;
-    expect(planWorldEvents(input([l], { caps: deco(open) })).events.some((e) => e.kind === 'carrier-swap')).toBe(true);
+    expect(planWorldEvents(input([l], { caps: deco({ ...PANEL, withheld: 'test' }) })).events.some((e) => e.kind === 'carrier-swap')).toBe(false);
+    expect(planWorldEvents(input([l], { caps: deco(PANEL) })).events.some((e) => e.kind === 'carrier-swap')).toBe(true);
   });
 
   it('chalkboard erase-reseat: a backing line still sung, or another line up during the wipe, means no wipe', () => {
@@ -372,10 +373,15 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
     expect(compositionsOf('document')!.kinds).not.toContain('camera-reframe');
   });
 
-  it('art-deco: the poster-panel is withheld (declared, never a candidate): Utsusemi 75.86 is no longer planned', () => {
-    expect(PANEL.withheld).toMatch(/shared real-width split/);
+  it('art-deco: the poster-panel is back (phase 3c) and Utsusemi 75.86 is refused at plan time: the engine draws that line as plain rows (its phrase rests under REST_FLOOR)', () => {
+    expect(PANEL.withheld).toBeUndefined();
     const f = run('art-deco', 'utsusemi', true);
-    expect(f.treatment.worldEvents!.events.some((e) => e.material === 'poster-panel' || e.kind === 'carrier-swap')).toBe(false);
+    expect(f.treatment.worldEvents!.events.some((e) => e.material === 'poster-panel')).toBe(false);
+    const text = (f.job.cues as { id: string; text: string }[]).find((c) => c.id === 'c009')!.text;
+    const laid = laidSeat(text, 'art-deco/marquee-low+panels', { font: f.job.fonts!.family })!;
+    expect(laid.parts!.small.rest!).toBeLessThan(REST_FLOOR);
+    expect(panelSplit(laid)).toBeUndefined();
+    expect(pageSeatsFor(text, 'art-deco/marquee-low', 'art-deco', f.job.fonts!.family)).not.toContain('art-deco/marquee-low+panels');
   });
 
   it('tear-next and feed-advance tampered (−1 s, +0.3 s, the wrong length) are reported by the final check', () => {

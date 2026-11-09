@@ -347,9 +347,10 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // gold phrase, slid down out of the main one (ease-out, no overshoot); the words never move, the panel is the ground's
   // own black, the plaque keeps the approved board's rules and minimum width
   'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
-    // (withheld 2026-11-10: the scheduler approved Utsusemi 75.86 on a split the renderer did not make. Re-enable once
-    // lineplan-core pageSeatsFor and world-b5-deco panelsOf split a line with the same real widths)
-    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME, withheld: 'scheduler and renderer split the line with different widths; needs the shared real-width split' } } },
+    // (withheld 2026-11-10 when the scheduler approved Utsusemi 75.86 on a split the renderer did not make; back 2026-11-10
+    // (phase 3c): pageSeatsFor, world-layout → panelsOf and the contract all part a line by seat-geometry panelSplit on
+    // the renderer's own measure of the job's face, docs/research/2026-11-10-q1-phase3c.md)
+    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME } } },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

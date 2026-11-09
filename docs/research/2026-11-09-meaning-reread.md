@@ -496,7 +496,7 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
   - 逐世界 edgeFit 中位數：3／3／3 → 4／3／3。
 - **Q5**（`moments-haiku-f.json`）：`songsReaching36of45` = 2。snow 43、tsuzuki 45 個世界有時刻。每個候選的選中次數和 e 完全相同；被刪掉的 choroin 雨和 tenmon あれ，本來就在 45／45 個世界被 legalCue 擋下，所以計畫層的時刻沒有變化。
 
-## 換檔指令（merged-1109f；**未執行**）
+## 換檔指令（已於 2026-11-10 執行，Q1 3c 合併之後；前一版備份為 meaning.merged-1109d.bak.json，原始 11-01 檔為 meaning.instant-1101.json）
 
 ```sh
 cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing

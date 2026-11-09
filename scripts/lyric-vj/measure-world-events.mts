@@ -10,6 +10,7 @@
 //            the frame nor turned is `unrealized`. verifiedCompositionCutsPer10 = (plan cuts − unrealized) per 10 s.
 // Plan counts (planCutsPer10) are the plan's own: they are not "verified" until --frames looked at them.
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-world-events.mts [--world chalkboard] [--frames] [--out out/research/q1-1109/wired.json]
+import { execSync } from 'node:child_process';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { dirname, extname, join, relative, resolve } from 'node:path';
@@ -96,7 +97,8 @@ for (const w of WINDOWS) {
   const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${w.song}/meaning.json`, 'utf8'));
   for (const style of styles) {
     const legacy = freeJob(song, { style, seed, meaning, worldEvents: false });
-    const wired = freeJob(song, { style, seed, meaning });
+    // (the scheduler is opt-in: the measurement takes the declared worlds over)
+    const wired = freeJob(song, { style, seed, meaning, worldEvents: true });
     const before = countCuts(currentEvents(legacy, song, style.world), w.window);
     const dry = planWorldEvents(fromJob(legacy.job, song, style.world, { seed, derived: true }));
     const dryRun = countCuts(dry.events, w.window);
@@ -137,7 +139,7 @@ const summary = Object.fromEntries(WINDOWS.map((w) => [w.name, {
   ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10), unrealized: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unrealized, 0) } : {}),
   onePage: { medianBefore: of(w.name, (r) => r['before'].planCutsPer10, true), medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10, true), ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10, true) } : {}) },
 }]));
-const report = { note: 'plan-level counts (planCutsPer10) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized', date: '2026-11-09', frames: !!frames, summary, rows };
+const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), note: 'plan-level counts (planCutsPer10) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized', date: '2026-11-09', frames: !!frames, summary, rows };
 if (a.out) {
   mkdirSync(dirname(a.out), { recursive: true });
   writeFileSync(a.out, JSON.stringify(report, null, 1));

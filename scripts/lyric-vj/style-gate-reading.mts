@@ -15,6 +15,7 @@
 // (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json, every
 // world including the held ones, 5 songs, seed 0 (rules a world's design owns: style-gate-rules.accepted.json), measured the default way (re-recorded 2026-11-04 after the carrier
 // default, the call placer and the repeat-per-shot fix; a world's moments count rose where repeats now keep their shot).
+import { execSync } from 'node:child_process';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, relative, resolve } from 'node:path';
@@ -110,7 +111,7 @@ await browser.close();
 server.close();
 if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
-const out = { checked, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
+const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
 console.log(JSON.stringify({ ...out, fails: out.fails.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
 // the rules against a world's recorded counts: a world that got worse on any rule fails

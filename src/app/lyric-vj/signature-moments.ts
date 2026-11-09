@@ -172,7 +172,7 @@ export const HITS_PER_SEC = 3;
  * What the director asks for. `cues`: the line (one id); or the line struck and the line striking it (two, in order,
  * tear only); or, for an echo, the earlier line and the line answering it (two, in order, any distance apart).
  */
-export interface MomentAsk { cues: string[]; form: string; variant: string; word: string; why: string }
+export interface MomentAsk { cues: string[]; form: string; variant: string; word: string; why: string; /** The line `word` is sung in (readings from 2026-11-09 on; older caches lack it). */ evidenceCueId?: string }
 /** An ask that passed, with what the renderer needs: when the word is sung and every involved line's character times. */
 export interface SignatureMoment extends MomentAsk { form: MomentForm; at: number; sung: Record<string, number[]>; sungSource: Record<string, string>; /** The line sung again straight after: the moment's second pass. */ repeat?: string }
 export interface Dropped { ask: MomentAsk; reason: string }
@@ -301,7 +301,7 @@ export function overusedForms(history: MomentRecord[], song: string, recent = 6)
  */
 export function momentsHelp(forms: Record<MomentForm, string[]> = MOMENT_FORMS): string {
   const lines = (Object.entries(forms) as [MomentForm, string[]][]).flatMap(([f, vs]) => vs.map((v) => `${f}/${v}：${(WORD_LISTS[f]?.[v] ?? []).slice(0, 6).join('、') || '前後兩句唱同一個詞'}`));
-  return `專屬時刻（moments）：整首最多 2 句、大多數歌是 0 句。只有某句歌詞「本身的意思」就是下面某一種時才列，不能因為字面出現某個字就列（比喻、否定、反諷照真正意思判斷）；最好在副歌。word 是這句裡原樣出現、帶著這個意思的完整詞。\n${lines.join('\n')}`;
+  return `專屬時刻（moments）：只有某句歌詞「本身的意思」就是下面某一種時才列，不能因為字面出現某個字就列（比喻、否定、反諷照真正意思判斷）。word 是這句裡原樣出現、帶著這個意思的完整詞。\n${lines.join('\n')}`;
 }
-export const MOMENTS_SCHEMA = { type: 'array', description: '專屬時刻，通常是空的', items: { type: 'object', additionalProperties: false, required: ['cues', 'form', 'variant', 'word', 'why'], properties: { cues: { type: 'array', items: { type: 'string' }, description: '一句的 id（echo 為先唱的那句與回應那句）' }, form: { type: 'string', enum: Object.keys(MOMENT_FORMS) }, variant: { type: 'string' }, word: { type: 'string' }, why: { type: 'string', description: '這句為什麼是這個意思（一句）' } } } } as const;
+export const MOMENTS_SCHEMA = { type: 'array', description: '逐句檢視全曲，列出所有完整句意確實支持現有 form／variant 的專屬時刻候選。每項須提供證據句 id、原文完整詞及語意理由；不能只因出現相關字詞就列入。候選數不等於實際演出數，不因副歌、預期名額或間距提前省略；後續由硬門檻、排序與排程選用。沒有成立候選時回傳空陣列。', items: { type: 'object', additionalProperties: false, required: ['cues', 'form', 'variant', 'word', 'evidenceCueId', 'why'], properties: { cues: { type: 'array', items: { type: 'string' }, description: '一句的 id（echo 為先唱的那句與回應那句）' }, form: { type: 'string', enum: Object.keys(MOMENT_FORMS) }, variant: { type: 'string' }, word: { type: 'string' }, evidenceCueId: { type: 'string', description: 'word 所在句的 id' }, why: { type: 'string', description: '引用證據句 id 與必要原文，說明誰或什麼發生何種變化，以及此形式如何表達這個意思；若為比喻，說明對應關係。不得把否定、願望、假設或反問改寫為已發生的事實。' } } } } as const;
 

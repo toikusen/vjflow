@@ -74,3 +74,103 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
 ```
 
 同一個目錄裡的 `base.json`、`plan.json`、`palette` 是用舊讀法算出來的；換檔後要用 `lineplan.mts` 重算，才會和新讀法一致。
+
+---
+
+# 第二輪（Codex 提示詞修正，`claude-haiku-5-5`，effort `medium`）
+
+**結論：照 Codex（`docs/research/2026-11-09-meaning-prompt-codex.md`）§2 改了提示詞，用 `medium` effort 重讀五首，總花費 $0.01496。key 從 7 個增加到 42 個，moment 候選從 4 個增加到 19 個。各自單獨跑 `checkMoments()` 時有 12 個通過，全部來自 snow（7）和 tsuzuki（5）。Codex §1 表列的候選中，key 命中 5／12，moment 命中 6／8。Q5 的 `songsReaching36of45` 從 1 變成 2（snow 45／45、tsuzuki 45／45）；Q3 的 nun 從 0 key 變成 5 key，在 36–40／45 個世界出現 edgeFit，逐世界 edgeFit 中位數從 0 變成 2。另有 4 個候選的 `why` 有讀錯或證據薄弱的問題（見下）。**
+
+## 提示詞改了什麼
+
+- `keys`、`keys.phrase`、`keys.why`、`moments`、`moments.why` 的 description 全部換成 Codex §2 的原文（`scripts/lyric-vj/meaning-read.mts` 的 keys schema；`src/app/lyric-vj/signature-moments.ts` 的 `MOMENTS_SCHEMA`）。
+- `keys` 新增必要欄位 `why`，並取消「2 到 6 個字」的限制；字串長度是否放得下交給 Q3 判斷。
+- `moments` 新增必要欄位 `evidenceCueId`（`word` 所在句的 id）。
+- `momentsHelp()` 刪掉「整首最多 2 句、大多數歌是 0 句」和「最好在副歌」；實際演出的上限仍由排程器負責。
+- 其餘 prompt 文字不變。`MomentAsk.evidenceCueId` 和 `Meaning.keys[].why` 設為選填，讀舊快取時不會出錯。用沒有 API key 的環境對 nun 的舊快取跑 `lineplan.mts`，產出的 plan.json 和改動前（HEAD）逐位元組相同。
+- effort：claude-api skill 的模型表寫明 Haiku 5.5 支援 `low` 到 `max`，預設是 `medium`。本輪用 `medium`，五次呼叫都是 `end_turn`。為了避免思考 token 把輸出截斷，`max_tokens` 拉到 16000；最壞情況每次約 $0.009，遠低於 $0.50 的上限。正式的 `lineplan.mts` 仍維持 `low`／6000。
+- `checkMoments()` 的 30 秒間距和 3 個上限會依輸入順序截斷，所以 `meaning-reread.mts` 先把每個候選單獨跑一次 `checkMoments([ask])`（`passAlone`），再整批跑一次（`passTogether`）。正式程式的上限邏輯沒有改。
+
+## 各首結果（`meaning.haiku-1109b.json`，報告：`out/research/meaning-reread-1109/haiku-1109b.json`）
+
+| 歌 | keys | moments 提出 | 單獨通過 checkMoments | 整批通過 | tokens in+out | USD |
+|---|---|---|---|---|---|---|
+| nun | 5 | 2 | 0（c019 有喊聲；c020+c021 是重唱，不算 echo） | 0 | 6303+3270 | 0.00227 |
+| snow | 5 | 7 | 7 | 3 | 5698+4161 | 0.00265 |
+| tsuzuki | 5 | 5 | 5 | 3 | 5462+3536 | 0.00231 |
+| choroin | 21 | 4 | 0（3 個是重唱，1 個的配對不合法） | 0 | 6752+9062 | 0.00521 |
+| tenmon | 6 | 1 | 0（重唱） | 0 | 5738+3896 | 0.00252 |
+| **合計** | **42** | **19** | **12** | **6** | 29953+23925 | **0.01496** |
+
+19 個候選的 `evidenceCueId` 都指向 `word` 所在的句子。
+
+## 和 Codex §1 表比對（人工閱讀）
+
+| 歌 | Codex 的 key：命中／漏掉 | Codex 的 moment：命中／漏掉 | 模型多出來的 |
+|---|---|---|---|
+| nun | 命中「柔中帶剛」c007；「仁者無敵」只出現在整句 phrase 裡（c022）。漏掉「雙截棍」c007 | 命中 c019 踢開（被喊聲擋下，符合 Codex 的判斷）。漏掉 c007 `shape/chain` | key：c016、c019、c027；moment：c020+c021 echo（是重唱，被拒絕） |
+| snow | 命中「說再見」（模型選的是同一句重唱的 c039，不是 c021，而且整句都當成 phrase）。漏掉「無盡的思念」c003 | 命中 c009 `shape/fall`、c003 `strike/tear`、melt（模型選同一句先唱的 c005，Codex 說的是 c018） | key：c002、c013、c020、c023；moment：c001 大雪 fall、c008 飄雪 fall、c022 一瞬間 freeze、c042+c043 echo |
+| tsuzuki | 命中「信じてみる」c014。漏掉「信じられる」c005（改用 c005+c007 echo moment 呈現） | 命中 c011 wave、c002 `strike/wipe` | key：c010、c011、c022、c027；moment：c001 海 wave、兩個 echo |
+| choroin | 命中「君が最上級」c066（整句）。漏掉「愛情欠乏」c024 | Codex 認為 0 個合理；模型提出 4 個，全部被硬條件擋下 | 共 21 個 key，接近逐句湊數，違反「不要逐句湊數」 |
+| tenmon | 漏掉「僕のこと見て」c006、「好きになって」c008、「好きになられて」c009（0／3） | 漏掉 c004 `shape/circle` | key：c001、c002、c012、c018、c037、c043；moment：c013+c038 echo（是重唱，被拒絕） |
+
+合計：key 命中 5／12，moment 命中 6／8。另外，模型常把**整句**當成 phrase（例如 nun c022、snow c039、choroin c038），新的描述「以完整詞組為準」被讀得太寬。
+
+**讀錯或證據薄弱（Codex 擔心的杜撰問題）：**
+1. **snow c005 melt**：`why` 寫「悲傷真的化開消散」。原句「那些悲傷融化了從前」的主詞是悲傷，被融化的是從前，模型把它讀成傷痛消散，正是 Codex 指出的誤讀。這個候選單獨通過 `checkMoments`，在 5／45 個世界被計畫選中。
+2. **choroin c043+c045 `shape/fall` 雨**：c043「雨降んないでよ」是希望不要下雨，模型卻把它和 c045 一起當成真的下雨。這是把願望或否定改寫成事實，已被配對規則擋下。
+3. **snow c022 freeze「一瞬間」**：`why` 有保留「是期待而非已發生」，但 Codex 認為「一瞬間」本身不足以證明時間凍結。證據薄弱，卻在 19／45 個世界被選中。
+4. **tsuzuki c001 wave「海」**：原句講的是「海のにおい」，是氣味的回憶。只因為有「海」字就選 wave，接近關鍵字觸發。在 17／45 個世界被選中。
+
+`why` 有保留否定或願望語氣的例子：snow c023「就像是」的假設、tsuzuki c014「みる」的嘗試、choroin c043 的 key。
+
+## Q3／Q5 dry-run（只在計畫層；`--meaning-suffix haiku-1109b`；合併檔 `merged-1109` 的數字幾乎相同）
+
+**Q3**（`out/research/q3-1109/coverage-haiku-b.json`，nun 和 snow、3 seeds、45 世界）：
+
+| 歌/seed | keys | 合法語意候選（段次） | edgeFit 段 | 有 edgeFit 的世界（round 1 → round 2） |
+|---|---|---|---|---|
+| nun/0,1,2 | 5 | 109／108／93 | 82／82／73 | 0 → 40／39／36 |
+| snow/0,1,2 | 5 | 52／51／54 | 20／19／24 | 16／17／18 → 14／12／18 |
+
+逐世界中位數：policy 9／9／10，medianEdgeFit 0 → 2，medianToday 8 → 10。
+
+**Q5**（`out/research/q5-1109/moments-haiku-b.json`，seed 0）：`songsReaching36of45` 1 → 2。有 ≥1 時刻的世界：nun 0、snow 45（38 個世界有 2 個時刻）、tsuzuki 45（45 個世界都有 2 個時刻）、choroin 0、tenmon 0。nun 的 c019 在新政策裡是被 timing 擋下（「踢」沒有逐字時間），不是喊聲。
+
+**排程缺口（被 Q2 hold 擋下，不是缺語意）**。數字是 45 個世界中撞上 Q2 hold 的世界數：
+
+| 候選 | 撞 Q2 hold | 撞其他事件（Q4 link） | 被選中 |
+|---|---|---|---|
+| snow c001 大雪 fall | 35 | 2 | 1 |
+| snow c003 破碎 tear | 33 | 0 | 12 |
+| snow c005 融化 melt | 33 | 2 | 5 |
+| snow c009 楓葉 fall | 25 | 0 | 1 |
+| snow c008 飄雪 fall | 22 | 9 | 0 |
+| snow c022 一瞬間 freeze | 7 | 4 | 19 |
+| tsuzuki c002 消えて wipe | 25 | 0 | 15 |
+| tsuzuki c001 海 wave | 13 | 0 | 17 |
+| tsuzuki c014+c016 echo | 6 | 2 | 36 |
+
+snow 的 c042+c043 echo 在 45 個世界都被選中，tsuzuki c011 波 在 12 個世界被選中，其餘未被選中的是因為每首 ≤2 個或間距 30 秒（notChosen）。每個候選在各世界的完整結果見 `docs/research/assets/2026-11-09-meaning-reread/q5-summary-b.json` 的 `perCandidateOver45Worlds`。
+
+## Q5 驗收（依 Codex §5 改寫）
+
+- `songsReaching36of45` 只作為診斷數字；3／5 不再是阻擋驗收的條件。
+- 導演確認的每一個合法語意候選，都要有逐世界的實現或拒絕紀錄（本次的 `perCandidateOver45Worlds` 是計畫層版本）。沒有候選的歌明確記 0。
+- 事先固定、而且符合總量與間距的導演選定時刻，必須在 ≥36／45 個世界**實際渲染成立**。不足的部分記為覆蓋缺口，不放寬硬條件，也不事後刪掉分母。
+- snow 的 Q2 hold 碰撞記為排程缺口，不歸類成缺語意。目前的 dry-run 只證明計畫層有選中，還不算實際演出驗收。
+
+## 合併快取（Codex §4）
+
+`scripts/lyric-vj/meaning-merge.mts` 以既有的 `meaning.json` 為底，只換掉 `keys` 和 `moments`，並在輸出中加上 `source: {base: <sha256>, overlay, model, effort, date}`。輸出為 `out/research/instant/plans/<song>/meaning.merged-1109.json`；單元測試是 `scripts/lyric-vj/meaning-merge.test.mts`。
+
+換檔指令（**尚未執行**；先確認其他 worktree 的量測已經結束）：
+
+```sh
+cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
+for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp -p $d/meaning.json $d/meaning.instant-1101.json && cp -p $d/meaning.merged-1109.json $d/meaning.json; done
+```
+
+合併後 palette 和 parts 不變，所以同目錄的 `base.json`、`plan.json`、`palette` 不必因為配色或分段而重算。但新的 keys 和 moments 會改變計畫，正式出片前仍要重跑 `lineplan.mts`。
+
+上面第一輪的換檔指令（`meaning.haiku-1109.json`）作廢。

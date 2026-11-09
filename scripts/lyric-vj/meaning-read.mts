@@ -1,4 +1,4 @@
-// The one cheap reading of a song's lyrics (claude-haiku-5-5, low effort): prompt, schema and call, shared by
+// The one cheap reading of a song's lyrics (claude-haiku-5-5, low effort unless asked): prompt, schema and call, shared by
 // lineplan.mts (which caches it as <out>/meaning.json) and meaning-reread.mts (which re-asks without touching caches).
 import Anthropic from '@anthropic-ai/sdk';
 import { existsSync, readFileSync } from 'node:fs';
@@ -41,18 +41,18 @@ export function readingRequest(song: { title: string; cues: Cue[] }, calm = isCa
       fx: { type: 'array', items: { type: 'string', enum: pool }, description: '這段的背景招式，三個，要符合這段的情緒和世界，不是逐詞配圖' }, what: { type: 'string', description: '這段的情緒（一句，引用一個歌詞裡的詞當根據）' },
     } } },
     moments: MOMENTS_SCHEMA,
-    keys: { type: 'array', description: '值得強調的句子才列，可以很少', items: { type: 'object', additionalProperties: false, required: ['cue', 'phrase'], properties: { cue: { type: 'string' }, phrase: { type: 'string', description: '這句歌詞裡原樣出現的一段，2 到 6 個字' } } } },
+    keys: { type: 'array', description: '逐句檢視全曲，列出所有有明確語意理由、值得形成視覺主次的候選詞組。重點可來自主題、情緒轉折、對比、決定或關係變化；不要為求稀少而漏列，也不要逐句湊數。每項提供 cue、phrase、why；沒有成立候選時回傳空陣列。', items: { type: 'object', additionalProperties: false, required: ['cue', 'phrase', 'why'], properties: { cue: { type: 'string' }, phrase: { type: 'string', description: '指定 cue 實際唱出的連續原文子字串，保留原字形，不得翻譯、改寫、拼接、補字或引用括號旁白。以完整且不扭曲句意的詞組為準，不為字數截斷詞組。' }, why: { type: 'string', description: '說明這個詞組在完整句意與前後文中的作用，以及為何值得強調；必須保留否定、疑問、願望、條件與反諷，不能只說它是關鍵詞。' } } } },
   } };
   const prompt = `讀這首歌的歌詞，判斷每段的情緒，替歌詞動態影片選配色和背景。只判斷整段的情緒和重點，不要逐句圖解；比喻、反諷、否定句要照真正的意思理解。\n歌名：${song.title}\n歌詞：\n${cues.map((c) => `${c.id} ${c.text}`).join('\n')}\n\n配色：\n${Object.entries(PALETTES).map(([k, v]) => `${k}：${v.what}`).join('\n')}\n\n背景招式：\n${pool.map((x) => `${x}：${helpOf(x)}`).join('\n')}\n\n${momentsHelp()}`;
   return { prompt, schema };
 }
 
 /** Asks READING_MODEL once (low effort, structured output) and returns the raw reading with its usage and cost. */
-export async function readMeaning(song: { title: string; cues: Cue[] }, calm?: boolean): Promise<{ meaning?: Meaning; usd: number; usage: { input: number; output: number }; stop: string | null }> {
+export async function readMeaning(song: { title: string; cues: Cue[] }, calm?: boolean, effort: 'low' | 'medium' | 'high' = 'low', maxTokens = 6000): Promise<{ meaning?: Meaning; usd: number; usage: { input: number; output: number }; stop: string | null }> {
   const { prompt, schema } = readingRequest(song, calm);
-  const msg = await new Anthropic({ maxRetries: 2 }).messages.create({ model: READING_MODEL, max_tokens: 6000, messages: [{ role: 'user', content: prompt }], output_config: { effort: 'low', format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;
+  const msg = await new Anthropic({ maxRetries: 2 }).messages.create({ model: READING_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }], output_config: { effort, format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;
   const text = msg.content.find((b) => b.type === 'text');
   const usage = { input: msg.usage.input_tokens, output: msg.usage.output_tokens };
   const usd = usage.input * READING_PRICE.input + usage.output * READING_PRICE.output;
-  return { meaning: text && text.type === 'text' ? JSON.parse(text.text) : undefined, usd, usage, stop: msg.stop_reason };
+  return { meaning: text && text.type === 'text' && msg.stop_reason === 'end_turn' ? JSON.parse(text.text) : undefined, usd, usage, stop: msg.stop_reason };
 }

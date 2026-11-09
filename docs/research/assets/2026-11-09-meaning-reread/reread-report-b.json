@@ -1,0 +1,667 @@
+{
+ "date": "2026-11-09",
+ "model": "claude-haiku-5-5",
+ "effort": "medium",
+ "suffix": "haiku-1109b",
+ "totalUsd": 0.01496,
+ "rows": [
+  {
+   "song": "nun",
+   "db": "yt_w_fCuUR3lEs",
+   "title": "周杰倫 - 雙截棍",
+   "model": "claude-haiku-5-5",
+   "effort": "medium",
+   "wrote": "out/research/instant/plans/nun/meaning.haiku-1109b.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 6303,
+    "output": 3270
+   },
+   "usd": 0.00227,
+   "keys": {
+    "asked": 5,
+    "valid": 5,
+    "list": [
+     {
+      "cue": "c007",
+      "phrase": "柔中帶剛",
+      "why": "形容雙截棍的特質，點出全曲功夫與態度的核心對比，值得強調。"
+     },
+     {
+      "cue": "c016",
+      "phrase": "一直在身邊",
+      "why": "接在「一放好多年」之後，表示一根不抽的菸一直陪著，是全曲少見的沉靜心事，與前段的熱血形成反差。"
+     },
+     {
+      "cue": "c019",
+      "phrase": "已被我一腳踢開",
+      "why": "「已被」是完成式，表示反抗已經發生，與前面的招牌形成對照，是情緒轉折的關鍵。"
+     },
+     {
+      "cue": "c022",
+      "phrase": "習武之人切記 \"仁者無敵\"",
+      "why": "引用格言，語氣看似正經，但接在張揚的自誇後形成反差，帶點戲謔。"
+     },
+     {
+      "cue": "c027",
+      "phrase": "為人耿直不屈 一身正氣",
+      "why": "自我標榜的正直形象，與前面的張狂對照，帶有調侃意味。"
+     }
+    ],
+    "dropped": []
+   },
+   "moments": {
+    "asked": 2,
+    "validLines": 2,
+    "passAlone": 0,
+    "passTogether": 0,
+    "alone": [
+     {
+      "cues": [
+       "c019"
+      ],
+      "form": "strike/tear",
+      "word": "踢",
+      "evidenceCueId": "c019",
+      "evidenceIsWordLine": true,
+      "why": "c019 原文「東亞病夫的招牌 已被我一腳踢開」，「踢」是把羞辱的招牌踢開，與「踢、打、破」的撕裂動作同義，表示反抗與推開。",
+      "pass": false,
+      "reason": "「(幹什麼? 幹什麼?) 已被我一腳踢開 哈!」 has a call beside it"
+     },
+     {
+      "cues": [
+       "c020",
+       "c021"
+      ],
+      "form": "echo/ghost",
+      "word": "雙截棍",
+      "evidenceCueId": "c021",
+      "evidenceIsWordLine": true,
+      "why": "c020 與 c021 皆唱「快使用雙截棍」，是副歌前後兩句重複同一詞的呼喊，並非比喻或否定。",
+      "pass": false,
+      "reason": "the same line sung again is a repeat, not an echo"
+     }
+    ]
+   },
+   "freeTier": {
+    "asks": 2,
+    "unknownLine": 0,
+    "checkMoments": {
+     "shout": 1,
+     "legalCue": 1
+    },
+    "notChorus": 0,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 10,
+   "palette": "lacquer"
+  },
+  {
+   "song": "snow",
+   "db": "yt_5i50aTB7JFo",
+   "title": "宋德鶴 - 三年後的大雪",
+   "model": "claude-haiku-5-5",
+   "effort": "medium",
+   "wrote": "out/research/instant/plans/snow/meaning.haiku-1109b.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 5698,
+    "output": 4161
+   },
+   "usd": 0.00265,
+   "keys": {
+    "asked": 5,
+    "valid": 5,
+    "list": [
+     {
+      "cue": "c002",
+      "phrase": "我再也不在你身邊",
+      "why": "「再也不」是明確的否定與結論，點出分離已成定局，是情緒的起點；它與後面「就像是你還在我身邊」的假想形成對照。"
+     },
+     {
+      "cue": "c013",
+      "phrase": "這次我們的手沒牽好",
+      "why": "「這次」暗示前次或過去的牽手，「沒牽好」是遺憾的具體來源，也襯托出副歌「遺憾總是能襯托出這樣美好」的反轉。"
+     },
+     {
+      "cue": "c020",
+      "phrase": "才想起大雪的那一天",
+      "why": "「才想起」表示遲來的記起，時間距離把當時的遺憾翻出來，是從現在回望的轉折。"
+     },
+     {
+      "cue": "c023",
+      "phrase": "就像是你還在我身邊",
+      "why": "「就像是」是假設與幻覺，不是真的還在；它與c002的否定對比，顯示思念中的想像與現實的落差。"
+     },
+     {
+      "cue": "c039",
+      "phrase": "思念的人總學不會說再見",
+      "why": "「學不會說再見」是放不下的執著，不是拒絕離開的堅定，而是無法從回憶中解脫的痛。"
+     }
+    ],
+    "dropped": []
+   },
+   "moments": {
+    "asked": 7,
+    "validLines": 7,
+    "passAlone": 7,
+    "passTogether": 3,
+    "alone": [
+     {
+      "cues": [
+       "c001"
+      ],
+      "form": "shape/fall",
+      "word": "大雪",
+      "evidenceCueId": "c001",
+      "evidenceIsWordLine": true,
+      "why": "c001「三年後的大雪」中大雪是真實降下的雪，動作是落下，屬於雪的墜落意象，以下落的形態呈現時間流逝。",
+      "pass": true,
+      "at": 2.16
+     },
+     {
+      "cues": [
+       "c003"
+      ],
+      "form": "strike/tear",
+      "word": "破碎",
+      "evidenceCueId": "c003",
+      "evidenceIsWordLine": true,
+      "why": "c003「無盡的思念總是破碎在冬天」中「破碎」是思念被擊碎的實際動作，表達思念在冬天一再碎裂。",
+      "pass": true,
+      "at": 6.84
+     },
+     {
+      "cues": [
+       "c005"
+      ],
+      "form": "strike/melt",
+      "word": "融化",
+      "evidenceCueId": "c005",
+      "evidenceIsWordLine": true,
+      "why": "c005「那些悲傷融化了從前」中悲傷真的化開消散，表示過去的悲傷已經被時間化掉。",
+      "pass": true,
+      "at": 14.18
+     },
+     {
+      "cues": [
+       "c008"
+      ],
+      "form": "shape/fall",
+      "word": "飄雪",
+      "evidenceCueId": "c008",
+      "evidenceIsWordLine": true,
+      "why": "c008「夜晚的橋邊在飄雪」描寫真實的落雪，與回憶的場景相連，畫面是雪緩緩往下飄。",
+      "pass": true,
+      "at": 46.52
+     },
+     {
+      "cues": [
+       "c009"
+      ],
+      "form": "shape/fall",
+      "word": "凋落的楓葉",
+      "evidenceCueId": "c009",
+      "evidenceIsWordLine": true,
+      "why": "c009「回憶就像是那凋落的楓葉」是比喻，本體是回憶，喻體是楓葉凋落；取的是凋落下墜、無法挽回的意思。",
+      "pass": true,
+      "at": 49.64
+     },
+     {
+      "cues": [
+       "c022"
+      ],
+      "form": "freeze/stop",
+      "word": "那三年大雪下的一瞬間",
+      "evidenceCueId": "c022",
+      "evidenceIsWordLine": true,
+      "why": "c022「期盼著那三年大雪下的一瞬間」中一瞬間是被期盼停住的重逢時刻，是短暫定格的畫面，但仍是期待而非已發生。",
+      "pass": true,
+      "at": 94.04
+     },
+     {
+      "cues": [
+       "c042",
+       "c043"
+      ],
+      "form": "echo/ghost",
+      "word": "三年後",
+      "evidenceCueId": "c043",
+      "evidenceIsWordLine": true,
+      "why": "c042「三年後的大雪」與c043「三年後的今天」前後兩句唱同一個詞，用重複強調時間的距離。",
+      "pass": true,
+      "at": 166.59
+     }
+    ]
+   },
+   "freeTier": {
+    "asks": 7,
+    "unknownLine": 0,
+    "checkMoments": {
+     "spacingOrCap": 4
+    },
+    "notChorus": 3,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 6,
+   "palette": "frost"
+  },
+  {
+   "song": "tsuzuki",
+   "db": "yt_b3GCfyNKeLs",
+   "title": "Ado - 世界のつづき",
+   "model": "claude-haiku-5-5",
+   "effort": "medium",
+   "wrote": "out/research/instant/plans/tsuzuki/meaning.haiku-1109b.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 5462,
+    "output": 3536
+   },
+   "usd": 0.00231,
+   "keys": {
+    "asked": 5,
+    "valid": 5,
+    "list": [
+     {
+      "cue": "c011",
+      "phrase": "よせる波に隠れてしまうの",
+      "why": "笑容被波浪遮住，是失去的具體畫面，也是全曲失落感的核心意象，後面的「信じてみる」正是對這份失去的回應。"
+     },
+     {
+      "cue": "c014",
+      "phrase": "信じてみる",
+      "why": "由「信じられる？」的疑問轉為主動的嘗試，是情緒轉折的關鍵；「みる」帶有試一試的不確定，因此是決心而非篤定。"
+     },
+     {
+      "cue": "c010",
+      "phrase": "かわることなく見えた笑顔",
+      "why": "笑容曾經看似永不改變，這份落差使後面的失去更痛，屬於對比的起點。"
+     },
+     {
+      "cue": "c022",
+      "phrase": "夢のつづきで また会いましょう",
+      "why": "把離別化為夢的延續，約定再見，是希望的落點，也呼應歌名「世界のつづき」。"
+     },
+     {
+      "cue": "c027",
+      "phrase": "共に生きよう",
+      "why": "從個人的回想走向共同生存的邀請，是全曲情感的收束與承諾。"
+     }
+    ],
+    "dropped": []
+   },
+   "moments": {
+    "asked": 5,
+    "validLines": 5,
+    "passAlone": 5,
+    "passTogether": 3,
+    "alone": [
+     {
+      "cues": [
+       "c011"
+      ],
+      "form": "shape/wave",
+      "word": "波",
+      "evidenceCueId": "c011",
+      "evidenceIsWordLine": true,
+      "why": "c011原句「どうして よせる波に隠れてしまうの」，波真的湧來遮住笑容，「波」是字面的海浪，符合shape/wave。",
+      "pass": true,
+      "at": 140.84
+     },
+     {
+      "cues": [
+       "c001"
+      ],
+      "form": "shape/wave",
+      "word": "海",
+      "evidenceCueId": "c001",
+      "evidenceIsWordLine": true,
+      "why": "c001「あの日遊んだ海のにおい」，海是實際回想的海，不是比喻，符合shape/wave。",
+      "pass": true,
+      "at": 34.82
+     },
+     {
+      "cues": [
+       "c002"
+      ],
+      "form": "strike/wipe",
+      "word": "消えて",
+      "evidenceCueId": "c002",
+      "evidenceIsWordLine": true,
+      "why": "c002「すぎる季節に消えてしまうの」，季節裡的某物真的消失了，「消えて」即消失之意，符合strike/wipe。",
+      "pass": true,
+      "at": 47.16
+     },
+     {
+      "cues": [
+       "c005",
+       "c007"
+      ],
+      "form": "echo/ghost",
+      "word": "信じられる",
+      "evidenceCueId": "c007",
+      "evidenceIsWordLine": true,
+      "why": "c005與c007前後兩句都唱「信じられる」，同一個詞在相鄰句迴響，符合echo/ghost。",
+      "pass": true,
+      "at": 81.32
+     },
+     {
+      "cues": [
+       "c014",
+       "c016"
+      ],
+      "form": "echo/ghost",
+      "word": "信じてみる",
+      "evidenceCueId": "c016",
+      "evidenceIsWordLine": true,
+      "why": "c014與c016前後兩句都唱「信じてみる」，同一個詞迴響並加重決心，符合echo/ghost。",
+      "pass": true,
+      "at": 174.14
+     }
+    ]
+   },
+   "freeTier": {
+    "asks": 5,
+    "unknownLine": 0,
+    "checkMoments": {
+     "spacingOrCap": 2
+    },
+    "notChorus": 2,
+    "notDownbeat": 1,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 6,
+   "palette": "tide"
+  },
+  {
+   "song": "choroin",
+   "db": "yt_hCCskTJwvuc",
+   "title": "のんふぃく！ - プラトニックチョロイン",
+   "model": "claude-haiku-5-5",
+   "effort": "medium",
+   "wrote": "out/research/instant/plans/choroin/meaning.haiku-1109b.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 6752,
+    "output": 9062
+   },
+   "usd": 0.00521,
+   "keys": {
+    "asked": 21,
+    "valid": 21,
+    "list": [
+     {
+      "cue": "c001",
+      "phrase": "恋に恋 来い",
+      "why": "開場的核心呼喊，「戀愛本身」成為渴望的對象，後段「恋に恋しているんです」呼應，定下全曲對戀愛的憧憬基調。"
+     },
+     {
+      "cue": "c013",
+      "phrase": "上流階級のはずなのに満たされないの",
+      "why": "「はずなのに」帶出反差，身分看似優渥卻仍不滿足，是自嘲式的心理描寫，為後段的渴望埋下伏筆。"
+     },
+     {
+      "cue": "c014",
+      "phrase": "深刻なときめき不足",
+      "why": "用誇張的病名式說法描述心動不足，語氣輕鬆但真實反映出對「被心動」的需要。"
+     },
+     {
+      "cue": "c018",
+      "phrase": "剥がされてく",
+      "why": "被工作人員慢慢帶離，是現場中距離感的具體畫面，與「もっと話したい」形成拉扯。"
+     },
+     {
+      "cue": "c019",
+      "phrase": "もっと話した～い",
+      "why": "前一句說時間不夠，這裡直接表達想繼續聊的渴望，是剝離感之後的情緒反應。"
+     },
+     {
+      "cue": "c030",
+      "phrase": "こう見えてプラトニックです",
+      "why": "說自己是柏拉圖式的，但「こう見えて」暗示與實際心情相反，為後面承認心動埋下反差。"
+     },
+     {
+      "cue": "c033",
+      "phrase": "きゅんときちゃうから",
+      "why": "承認自己會心動，與「プラトニック」的說法形成對照，揭露真正的情緒。"
+     },
+     {
+      "cue": "c034",
+      "phrase": "チョロインになり下がっちゃう",
+      "why": "自嘲容易被攻略，「なり下がる」帶點自貶的語氣，表示心動後的無奈與甜蜜。"
+     },
+     {
+      "cue": "c035",
+      "phrase": "ノンフィクションなラブを君と紡ぎたいから",
+      "why": "明確表達想要真實的戀愛，與前一段「フィクションみたいな恋」形成對比，是這段的主要渴望。"
+     },
+     {
+      "cue": "c038",
+      "phrase": "フィクションみたいな恋したい でも”繋がり”はNG",
+      "why": "「でも」轉折，想要如小說般的戀愛，卻否定實際的連結，是拉扯與否定的重點。"
+     },
+     {
+      "cue": "c041",
+      "phrase": "ひたすらかわいいって言われたい",
+      "why": "直接表達想被稱讚的心情，是這段情緒相對輕盈的核心。"
+     },
+     {
+      "cue": "c043",
+      "phrase": "君と会える日に雨降んないでよ",
+      "why": "表達希望見面那天不要下雨的期待，帶著小小的不安與在意。"
+     },
+     {
+      "cue": "c055",
+      "phrase": "直接会って話そうよ",
+      "why": "邀請面對面說話，與前面的配信和距離感形成對比，流露想要實際相處的渴望。"
+     },
+     {
+      "cue": "c056",
+      "phrase": "こう見えて寂しがりです",
+      "why": "再次以「こう見えて」反轉形象，承認自己其實很寂寞，揭露脆弱的一面。"
+     },
+     {
+      "cue": "c059",
+      "phrase": "きゅんとさせてほしい 恋に恋しているんです",
+      "why": "直接說想被心動，並承認自己是戀愛本身的追求者，是副歌情緒的核心宣言。"
+     },
+     {
+      "cue": "c061",
+      "phrase": "あんなにいっぱい言ってくれたじゃんか「スキスキ」",
+      "why": "回想對方曾經說過很多「スキスキ」，是委屈與期待的來源，為後面的指控做鋪陳。"
+     },
+     {
+      "cue": "c062",
+      "phrase": "推し変するとか結局嘘つき",
+      "why": "指控對方說要推變卻撒謊，語氣嬌嗔，是情緒轉折的關鍵，帶出被傷害的感受。"
+     },
+     {
+      "cue": "c063",
+      "phrase": "病んじゃうぞ",
+      "why": "以誇張的說法表達受傷與不滿，語氣仍帶撒嬌，是情緒最激動的表達之一。"
+     },
+     {
+      "cue": "c065",
+      "phrase": "案外あっさり堕ちちゃうの だって好きなんだもん",
+      "why": "承認自己輕易動心，「だって」給出理由，直接坦白喜歡，是全曲情感的誠實核心。"
+     },
+     {
+      "cue": "c066",
+      "phrase": "リセマラいらないよ君が最上級",
+      "why": "用遊戲用語宣告對方是最好的，不需要重來，是讚美與承諾的重要句。"
+     },
+     {
+      "cue": "c077",
+      "phrase": "永遠に愛してよね",
+      "why": "結尾以請求式的語氣要求永遠被愛，是全曲情感的收束與願望。"
+     }
+    ],
+    "dropped": []
+   },
+   "moments": {
+    "asked": 4,
+    "validLines": 4,
+    "passAlone": 0,
+    "passTogether": 0,
+    "alone": [
+     {
+      "cues": [
+       "c001",
+       "c002"
+      ],
+      "form": "echo/ghost",
+      "word": "恋に恋",
+      "evidenceCueId": "c002",
+      "evidenceIsWordLine": true,
+      "why": "c001 與 c002 連續重複「恋に恋 来い」，同一詞前後回唱，把戀愛本身當成渴望對象，形成回聲式的呼喊。",
+      "pass": false,
+      "reason": "the same line sung again is a repeat, not an echo"
+     },
+     {
+      "cues": [
+       "c008",
+       "c009"
+      ],
+      "form": "echo/ghost",
+      "word": "のんふぃく",
+      "evidenceCueId": "c009",
+      "evidenceIsWordLine": true,
+      "why": "c008 與 c009 連續重複「のんののんのんのんののんふぃく！はい！」，同一詞前後回唱，是曲名的口號式回聲。",
+      "pass": false,
+      "reason": "the same line sung again is a repeat, not an echo"
+     },
+     {
+      "cues": [
+       "c036",
+       "c037"
+      ],
+      "form": "echo/ghost",
+      "word": "のんふぃく",
+      "evidenceCueId": "c037",
+      "evidenceIsWordLine": true,
+      "why": "c036 與 c037 再次連續重複同一句「のんふぃく」，形成副歌後段的回聲，強調「ノンフィクション」的呼喊。",
+      "pass": false,
+      "reason": "the same line sung again is a repeat, not an echo"
+     },
+     {
+      "cues": [
+       "c043",
+       "c045"
+      ],
+      "form": "shape/fall",
+      "word": "雨",
+      "evidenceCueId": "c045",
+      "evidenceIsWordLine": true,
+      "why": "c045「雨はめんどくさいじゃん」中的「雨」就是實際的雨，是讓人嫌麻煩的對象；c043 則是希望見面那天不要下雨，同樣指向真實的雨，而非比喻。",
+      "pass": false,
+      "reason": "a struck line must be the line before the striking one"
+     }
+    ]
+   },
+   "freeTier": {
+    "asks": 4,
+    "unknownLine": 0,
+    "checkMoments": {
+     "legalCue": 4
+    },
+    "notChorus": 0,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 11,
+   "palette": "sugar"
+  },
+  {
+   "song": "tenmon",
+   "db": "yt_iwYXfOhcsYI",
+   "title": "SITUASION - 天文対話",
+   "model": "claude-haiku-5-5",
+   "effort": "medium",
+   "wrote": "out/research/instant/plans/tenmon/meaning.haiku-1109b.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 5738,
+    "output": 3896
+   },
+   "usd": 0.00252,
+   "keys": {
+    "asked": 6,
+    "valid": 6,
+    "list": [
+     {
+      "cue": "c001",
+      "phrase": "死にそうになっても",
+      "why": "開場即以瀕死表現愛的強度，但句尾的『も』帶出即使如此也無回應的讓步語氣，是整首痛楚的底。"
+     },
+     {
+      "cue": "c002",
+      "phrase": "死ぬまで存在にすら気付かれない",
+      "why": "否定式的存在感缺席，『にすら』強調連存在都不被注意，是主角被忽視的核心句。"
+     },
+     {
+      "cue": "c012",
+      "phrase": "宇宙の果てまで",
+      "why": "副歌的誇張承諾，與後段對方不在宇宙中的結論形成對照，是情緒的最高點。"
+     },
+     {
+      "cue": "c037",
+      "phrase": "地獄の底まで",
+      "why": "與宇宙之果相呼應的另一極端，把愛推向毀滅方向，痛感在此加深。"
+     },
+     {
+      "cue": "c018",
+      "phrase": "私は何のために産まれたのかわからないけどまあいいや",
+      "why": "自我存在的疑問被『まあいいや』草草收起，語氣看似放棄，實際是故作輕鬆的自嘲。"
+     },
+     {
+      "cue": "c043",
+      "phrase": "お前の居場所などこの宇宙のどこにもない",
+      "why": "結尾的冷淡宣判，句尾『それはそうだね』看似同意，實際是反諷式的認命，點出對方在宇宙中無處容身。"
+     }
+    ],
+    "dropped": []
+   },
+   "moments": {
+    "asked": 1,
+    "validLines": 1,
+    "passAlone": 0,
+    "passTogether": 0,
+    "alone": [
+     {
+      "cues": [
+       "c013",
+       "c038"
+      ],
+      "form": "echo/ghost",
+      "word": "あれ",
+      "evidenceCueId": "c038",
+      "evidenceIsWordLine": true,
+      "why": "c013 與 c038 同樣唱『あれあれあれあれ』，前後兩句重複同一個詞，形成回聲；這裡是驚訝或指向遠處的口頭語，不是具體的毀壞或變化，只取重複回聲的形式。",
+      "pass": false,
+      "reason": "the same line sung again is a repeat, not an echo"
+     }
+    ]
+   },
+   "freeTier": {
+    "asks": 1,
+    "unknownLine": 0,
+    "checkMoments": {
+     "legalCue": 1
+    },
+    "notChorus": 0,
+    "notDownbeat": 0,
+    "overCap": 0,
+    "kept": 0
+   },
+   "parts": 9,
+   "palette": "wine"
+  }
+ ]
+}

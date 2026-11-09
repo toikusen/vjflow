@@ -50,7 +50,8 @@ export interface Meaning {
   ground: string;
   reading: string;
   parts: SongPart[];
-  keys: { cue: string; phrase: string }[];
+  /** `why`: readings from 2026-11-09 on; older caches lack it. */
+  keys: { cue: string; phrase: string; why?: string }[];
   /** Lines the reading judged to mean one of the signature moments' senses (signature-moments.ts), usually none. */
   moments?: MomentAsk[];
 }

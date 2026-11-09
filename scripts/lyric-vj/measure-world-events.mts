@@ -42,13 +42,13 @@ async function framesOf() {
   const check = async (key: string, job: unknown, events: WorldEvent[]) => {
     const p = await page.job(key, job);
     const cues = await p.cues();
-    const out: { at: number; kind: string; scope: string; lineIds: string[]; realized: boolean; why: string; t?: [number, number]; m?: Omit<FrameChange, 'seen' | 'why'> }[] = [];
+    const out: { at: number; kind: string; scope: string; lineIds: string[]; material?: string; realized: boolean; why: string; t?: [number, number]; m?: Omit<FrameChange, 'seen' | 'why'> }[] = [];
     for (const e of events) {
       const t = stableTimes(e, cues);
       if (!t) { out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, realized: false, why: 'no reading time either side' }); continue; }
       const [x, y] = [await p.layers(t.before, GRID.w, GRID.h), await p.layers(t.after, GRID.w, GRID.h)];
       const { seen, why, ...m } = frameChange(x, y, e.scope === 'in-line');
-      out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, realized: seen, why, t: [t.before, t.after], m });
+      out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, ...(e.material ? { material: e.material } : {}), realized: seen, why, t: [t.before, t.after], m });
     }
     await p.close();
     return out;
@@ -80,7 +80,12 @@ for (const w of WINDOWS) {
       world: style.id, window: w.name, song: w.song, range: w.window, seed, onePage: ONE_PAGE_WORLDS.includes(style.id), caps: { kinds: capsOf(style.world).kinds, source: table.source },
       before: { cuts: before.cuts, planCutsPer10: before.planCutsPer10, byKind: before.byKind },
       dryRun: { cuts: dryRun.cuts, planCutsPer10: dryRun.planCutsPer10 },
-      wired: { cuts: plan.cuts, planCutsPer10: plan.planCutsPer10, planSeatChangesPer10: plan.planSeatChangesPer10, byKind: plan.byKind, drawnCutsPer10: drawn.planCutsPer10, unlaid, warnings: warnings.length, warningKinds: [...new Set(warnings.map((x) => x.reason.split(':')[0]))] },
+      wired: { cuts: plan.cuts, planCutsPer10: plan.planCutsPer10, planSeatChangesPer10: plan.planSeatChangesPer10, byKind: plan.byKind, drawnCutsPer10: drawn.planCutsPer10, unlaid, warnings: warnings.length, warningKinds: [...new Set(warnings.map((x) => x.reason.split(':')[0]))],
+        // (phase 3b: the world's own material moves among the cuts, the camera moves a scheduled world dropped, and the
+        // given switches whose time is the composer's proportional guess, not a sung word)
+        materials: cutEvents.reduce<Record<string, number>>((m, e) => (e.material ? { ...m, [e.material]: (m[e.material] ?? 0) + 1 } : m), {}),
+        camDrops: (table.camDrops ?? []).filter((c) => c.at > w.window[0] - 1 && c.at < w.window[1] + 1).length,
+        unreliableBoundary: cutEvents.filter((e) => e.unreliableBoundary).length },
       // (the whole song's final checks, a world the scheduler took over: any is a broken landing contract)
       contract: table.source === 'declared' ? table.warnings.filter((x) => x.reason.startsWith('final check')).map((x) => `${x.inputs.join(' / ')}: ${x.reason}`) : [],
     };
@@ -104,10 +109,12 @@ const summary = Object.fromEntries(WINDOWS.map((w) => [w.name, {
   medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10),
   medianWiredDrawn: of(w.name, (r) => r['wired'].drawnCutsPer10),
   ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10), unrealized: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unrealized, 0) } : {}),
+  unreliableBoundary: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unreliableBoundary, 0),
+  unreliableWorlds: (rows as Row[]).filter((r) => r['window'] === w.name && r['wired'].unreliableBoundary > 0).length,
   onePage: { medianBefore: of(w.name, (r) => r['before'].planCutsPer10, true), medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10, true), ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10, true) } : {}) },
 }]));
 const contract = (rows as Row[]).flatMap((r) => [...r['contract'].map((x: string) => `${r['world']} ${r['window']}: ${x}`), ...r['wired'].unlaid.map((t: number) => `${r['world']} ${r['window']}: planned cut at ${t} not laid`)]);
-const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: true, contract, note: 'plan-level counts (planCutsPer10) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized', date: '2026-11-09', frames: !!frames, summary, rows };
+const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: true, contract, note: 'plan-level counts (planCutsPer10) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized', date: new Date().toISOString().slice(0, 10), frames: !!frames, summary, rows };
 if (a.out) {
   mkdirSync(dirname(a.out), { recursive: true });
   writeFileSync(a.out, JSON.stringify(report, null, 1));

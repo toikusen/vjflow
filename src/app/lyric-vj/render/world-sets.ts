@@ -114,6 +114,8 @@ export interface FaceLayout {
   /** A set whose parts each stand on a panel of their own (`panels`): each cell's part (0 the main, 1 the small), and when the panels part, s, over how long. */
   parts?: number[];
   panels?: { from: number; sec: number };
+  /** Where the panels stand once parted (seat-geometry panelSplit, the scheduler's own split), frame px, y down. */
+  panelBoxes?: { main: { x0: number; y0: number; x1: number; y1: number }; panel: { x0: number; y0: number; x1: number; y1: number } };
 }
 
 /** A set's call-free boxes in the text root's own space (origin at the frame's centre, y up), px. */

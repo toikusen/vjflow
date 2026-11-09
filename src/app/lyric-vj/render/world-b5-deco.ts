@@ -59,27 +59,23 @@ const lerpRect = (a: Rect, b: Rect, k: number): Rect => ({ x0: a.x0 + (b.x0 - a.
  * narrower, its phrase in its inner room with even space above and below). While they part, the one plaque that held
  * both splits between the parts: its upper half rises to the main plaque, its lower half closes in to the panel, so
  * every word stands on the ground's black throughout and no rule ever crosses a word (only the gap between them opens).
- * None when the parts are too close or the panel would not be the lesser: the single plaque, as drawn before.
+ * None when the line's split gives none (seat-geometry panelSplit: the parts too close, or the panel not the lesser):
+ * the single plaque, as drawn before.
  */
 export function panelsOf(e: WorldEnv): { main: Rect; panel: Rect } | undefined {
   const f = (e.rect as { face?: FaceLayout } | undefined)?.face;
-  if (!f?.panels || !f.parts) return undefined;
-  const cs = cellsOf(e);
-  if (cs.length !== f.parts.length) return undefined;
-  const tail = cs.filter((_, i) => f.parts![i]);
-  const [m, t] = [boxOf(cs.filter((_, i) => !f.parts![i]), DECO_NARROW[0]), boxOf(tail, DECO_NARROW[0])];
-  if (!m || !t) return undefined;
+  // (where they stand once parted is the scheduler's own split, seat-geometry panelSplit, laid by world-layout on this
+  // line's measure: what was offered is what is drawn)
+  if (!f?.panels || !f.panelBoxes) return undefined;
+  const { main, panel } = f.panelBoxes;
+  const all = boxOf(cellsOf(e), DECO_NARROW[0]);
+  if (!all) return undefined;
   const P = DECO_PANELS;
-  const all = boxOf(cs, DECO_NARROW[0])!;
   const halfAll = Math.max(P.mainHalf, (all.x1 - all.x0) / 2 + P.mainPad);
-  const halfMain = Math.max(P.mainHalf, (m.x1 - m.x0) / 2 + P.mainPad);
-  const main = { x0: AX - halfMain, y0: m.y0 - P.mainPadY, x1: AX + halfMain, y1: m.y1 + P.mainPadY };
-  const halfT = (t.x1 - t.x0) / 2 + P.pad;
-  const padY = Math.max(P.inset * 2, P.padY * Math.max(...tail.map((q) => q.s)));
-  const panel = { x0: AX - halfT, y0: t.y0 - padY, x1: AX + halfT, y1: t.y1 + padY };
-  if (panel.y0 - main.y1 < P.gap || halfT > halfMain - P.narrower) return undefined;
   const k = f.panels.sec > 0 ? PANEL_EASE((e.now - f.panels.from) / f.panels.sec) : 1;
   const mid = (main.y1 + panel.y0) / 2;
+  // (they part from the one plaque the marquee draws round the whole line: its upper half rises to the plaque, its
+  // lower half closes in to the panel)
   const one = { x0: AX - halfAll, y0: all.y0 - P.mainPadY, x1: AX + halfAll, y1: all.y1 + P.mainPadY };
   return { main: lerpRect({ ...one, y1: mid }, main, k), panel: lerpRect({ ...one, y0: mid }, panel, k) };
 }

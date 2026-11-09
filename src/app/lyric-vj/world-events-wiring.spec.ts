@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { LINK_CLEAR, LINK_PREPARE, linkGrounds, sectionClock } from './render/world-handoff';
-import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, SEAM_GAP, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
-import { capsOf, currentEvents, fromJob, holdRoom, lightGapWarnings, ONE_PAGE_WORLDS, shownOf, verifyWorldEvents } from './world-events-adapter';
+import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { capsOf, currentEvents, fromJob, holdRoom, landedEvents, lightGapWarnings, ONE_PAGE_WORLDS, seatIn, shownOf, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
 import { compositionsOf, WORLD_COMPOSITIONS } from './world-shared';
 import { composePlan, RECIPES } from './lineplan-core';
@@ -290,5 +290,64 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase-2 review fixes
     expect(verifyWorldEvents(job, style.world, f.treatment.worldEvents!).map((w) => w.inputs[0])).toContain(e.id);
     const lit = { events: [...f.treatment.worldEvents!.events, { ...e, id: 'x1', changesLight: true }, { ...e, id: 'x2', at: e.at + 0.2, changesLight: true }] };
     expect(lightGapWarnings(f.job, lit).length).toBeGreaterThan(0);
+  });
+});
+
+describe('phase 3a: seats by their real geometry (step 2)', () => {
+  const world = FREE_STYLES.find((s) => s.id === 'blueprint')!.world;
+  it('a seat carries the box its words are really laid in, their type size and its carrier', () => {
+    const short = seatIn(world, 'blueprint/construct', '快使用');
+    const long = seatIn(world, 'blueprint/construct', '快使用雙截棍 哼哼哈兮');
+    expect(short.box && long.box).toBeTruthy();
+    expect(short.carrierId).toBe('ground:blueprint/construct');
+    // (left-anchored: the same left edge, a longer line runs further right)
+    expect(long.box!.x0).toBeCloseTo(short.box!.x0, 2);
+    expect(long.box!.x1).toBeGreaterThan(short.box!.x1);
+    expect(short.size).toBeGreaterThan(0);
+  });
+  it('seatsDiffer compares where the words stand, not set names: a longer line in the same place is no move, the same words moved are', () => {
+    const a = { id: 's/a', box: { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.3 }, size: 120, text: 'x' };
+    // another set name, another line, the same left edge and size: one composition
+    expect(seatsDiffer(a, { id: 's/b', box: { x0: 0.1, y0: 0.2, x1: 0.7, y1: 0.3 }, size: 120, text: 'yyyy' })).toBe(false);
+    // the same words, their box moved 0.1: another seat
+    expect(seatsDiffer(a, { ...a, id: 's/b', box: { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.3 } })).toBe(true);
+    // the same words a third larger: another seat; another line, a third larger: no (its size follows its length)
+    expect(seatsDiffer(a, { ...a, id: 's/b', size: 160 })).toBe(true);
+    expect(seatsDiffer(a, { ...a, id: 's/b', size: 160, text: 'other' })).toBe(false);
+    expect(seatsDiffer(a, { ...a, id: 's/b', size: 240, text: 'other' })).toBe(true);
+    // another carrier is another composition wherever the words stand
+    expect(seatsDiffer(a, { ...a, id: 's/b', carrierId: 'card' })).toBe(true);
+  });
+});
+
+describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every event lands as planned (step 1)', () => {
+  const song = existsSync(SONG) ? JSON.parse(readFileSync(SONG, 'utf8')) : undefined;
+  const meaning = existsSync(MEANING) ? JSON.parse(readFileSync(MEANING, 'utf8')) : undefined;
+  for (const id of ONE_PAGE_WORLDS)
+    it(`${id}: plan → applyWorldEvents → freeJob draws each event with its kind, seat, page, switch point and window`, () => {
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+      const table = f.treatment.worldEvents!;
+      const { events, extra } = landedEvents(f.job, style.world, table);
+      expect(events).toHaveLength(table.events.length);
+      for (const l of events) {
+        expect(l.why, l.id).toBeUndefined();
+        if (l.plan.kind === 'keep') { expect(l.drawn!.seat, l.id).toBe(l.plan.seat); continue; }
+        expect([l.drawn!.kind === l.plan.kind || (l.plan.kind === 'carrier-swap' && l.drawn!.kind === 'layout-seat'), l.drawn!.seat, l.drawn!.page, l.drawn!.at, l.drawn!.from, l.drawn!.to], l.id)
+          .toEqual([true, l.plan.seat, l.plan.page, l.plan.at, l.plan.from, l.plan.to].map((x, k) => (k >= 3 ? expect.closeTo(x as number, 2) : x)));
+      }
+      expect(extra).toEqual([]);
+    });
+
+  it('a drawn event moved off its approved time, or a cut drawn the plan does not hold, is reported by id', () => {
+    const style = FREE_STYLES.find((s) => s.id === 'chalkboard')!;
+    const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+    const e = f.treatment.worldEvents!.events.find((x) => x.scope === 'in-line' && x.kind === 'layout-seat')!;
+    const job = structuredClone(f.job);
+    const cue = (job.treatment.cues as { cueId: string; world?: { repose?: { at: number; set: string }[] } }[]).find((c) => c.cueId === e.lineIds[0])!;
+    cue.world!.repose = cue.world!.repose!.map((r) => ({ ...r, at: r.at + 0.2 }));
+    const out = verifyWorldEvents(job, style.world, f.treatment.worldEvents!);
+    expect(out.map((w) => w.inputs[0])).toContain(e.id);
+    expect(out.some((w) => /drawn that the plan does not hold/.test(w.reason))).toBe(true);
   });
 });

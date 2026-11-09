@@ -19,6 +19,7 @@ import { carrierRoom, growRoom, inkChecks } from './render/hold-room';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
+import { roughMeasure } from './render/seat-geometry';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
@@ -906,7 +907,7 @@ export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: {
  * words' cells (a page handed the cells draws its balloon round them as they are, grown or not: world-layout restRects).
  */
 /** A line's block as the plan can see it: the set's own layout on a rough measure (a CJK character one em, anything else half). */
-const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, (x) => [...x].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 100 : 55), 0));
+const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, roughMeasure);
 /** The plan asks the measure it is unsure of for this much more than the renderer needs, so what it plans is drawn. */
 const ROUGH = 1.25;
 /** The growth the plan asks room for on its rough measure; the renderer, measuring the real glyphs, needs only GROW.least (world-beats.ts). */

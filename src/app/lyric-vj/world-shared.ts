@@ -231,6 +231,16 @@ export interface WorldCompositions {
   moves: Partial<Record<CompositionFamily, string>>;
   pending?: Record<string, string>;
   /**
+   * Seats on the same page as a set of the world's (Q1 phase 3a): the same carrier, another reading area (notebook's
+   * main column and its lower margin, art-deco's main and secondary block inside the one stepped frame, blueprint's
+   * sheet note and the detail strip under its drawing). Keyed by the set whose page they are on; each is a set of its own
+   * (render/world-sets) laid by the renderer at its real geometry, offered only to a scheduled world (lineplan-core
+   * seatsFor), so a line may switch to one inside itself at a sung word without leaving its page.
+   */
+  pageSeats?: Record<string, string[]>;
+  /** The least type a same-page seat may set a line at, px at 1080p: a line that would be smaller there is not offered it. */
+  minType?: number;
+  /**
    * Whether the free path lets the scheduler take the world over by default. Off for all five (2026-11-09 phase-2 review:
    * fast 3.6 → 3.2 on the five, Q1 not accepted): only an explicit opt-in (freeJob worldEvents: true, or
    * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
@@ -261,8 +271,12 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' } },
 };
 
-/** The page a world lays one of its sets into (its own page under the words), or undefined. */
-export const pageOf = (w: Pick<StyleWorld, 'layouts'>, set: string): string | undefined => w.layouts.lines.find((l) => l.set === set)?.ground;
+/** Each seat a world adds on a page (pageSeats) and the set whose page it is on. */
+const PAGE_SEAT_OF: Record<string, string> = Object.fromEntries(Object.values(WORLD_COMPOSITIONS).flatMap((c) => Object.entries(c.pageSeats ?? {}).flatMap(([main, extra]) => extra.map((x) => [x, main]))));
+/** Whether a set is a seat the scheduler adds on a page of the world's (world-shared pageSeats), never one the composer lays. */
+export const isPageSeat = (set: string) => set in PAGE_SEAT_OF;
+/** The page a world lays one of its sets into (its own page under the words; a same-page seat's, its page's), or undefined. */
+export const pageOf = (w: Pick<StyleWorld, 'layouts'>, set: string): string | undefined => w.layouts.lines.find((l) => l.set === set)?.ground ?? (PAGE_SEAT_OF[set] ? pageOf(w, PAGE_SEAT_OF[set]) : undefined);
 
 /** A world's composition capability, or undefined: off (the scheduler only keeps what the composer laid). */
 export const compositionsOf = (id: string): WorldCompositions | undefined => WORLD_COMPOSITIONS[id];

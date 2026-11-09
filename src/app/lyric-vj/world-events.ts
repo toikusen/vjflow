@@ -13,7 +13,21 @@ export type Mood = 'quiet' | 'build' | 'peak';
 export interface FrameBox { x0: number; y0: number; x1: number; y1: number }
 
 /** A place a line's words can be set: its box on the frame and what carries it (a card, a panel, the page itself). */
-export interface SeatCandidate { id: string; box?: FrameBox; carrierId?: string; vertical?: boolean; /** Laid into a page of its own: changing between two such seats is a change of page, whose light is the page's own ground cut. */ paged?: boolean }
+export interface SeatCandidate {
+  id: string;
+  /** The words' box as laid (render/seat-geometry.ts) for `text`, else the set's nominal box. */
+  box?: FrameBox;
+  carrierId?: string;
+  vertical?: boolean;
+  /** Laid into a page of its own: changing between two such seats is a change of page, whose light is the page's own ground cut. */
+  paged?: boolean;
+  /** The type size the words are laid at, px at 1080p. */
+  size?: number;
+  /** The words the box was laid for: two seats of the same words are compared by their boxes' centres and sizes. */
+  text?: string;
+  /** The page graphics a seat the scheduler adds must keep its words off (a same-page seat, world-shared pageSeats). */
+  protect?: FrameBox[];
+}
 
 /** A word or phrase as it is really sung; absent on a line whose timing is not trusted per character. */
 export interface SungWord { text: string; from: number; to: number }
@@ -171,19 +185,29 @@ const centre = (b: FrameBox) => [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
 const overlaps = (a: FrameBox, b: FrameBox) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 /**
- * Whether two seats are really two compositions: another carrier, another direction, or a box that moved or changed size
- * enough to be seen (8 % of the frame, a quarter of its size). Seats without boxes differ by id.
+ * Whether two seats are really two compositions, by where the words really stand (Q1 phase 3a): another carrier,
+ * another direction, a box that moved 8 % of the frame, or type a size apart. The same words in two seats (a switch
+ * inside a line) are compared by their boxes' centres and a quarter of type size; two lines by the least move over the
+ * box's anchors (left, centre, right; top, middle, bottom), so a longer line in the same seat is no move, and only type
+ * nearly twice the size counts (the size follows the line's length: the frame check's own threshold, scripts/lyric-vj/
+ * frame-change.mts). Seats without boxes differ by id.
  */
 export function seatsDiffer(a: SeatCandidate | undefined, b: SeatCandidate | undefined): boolean {
   if (!a || !b) return a?.id !== b?.id;
   if (a.id === b.id) return false;
   if ((a.carrierId ?? '') !== (b.carrierId ?? '') || !!a.vertical !== !!b.vertical) return true;
-  if (!a.box || !b.box) return true;
-  const [[ax, ay], [bx, by]] = [centre(a.box), centre(b.box)];
-  const size = (x: FrameBox) => Math.max(1e-3, (x.x1 - x.x0) * (x.y1 - x.y0));
-  const ratio = size(a.box) / size(b.box);
-  return Math.hypot(ax - bx, ay - by) >= 0.08 || ratio >= 1.25 || ratio <= 0.8;
+  if (!a.box || !b.box) return a.id !== b.id;
+  const same = a.text === undefined || b.text === undefined || a.text === b.text;
+  const [p, q] = [a.box, b.box];
+  const least = (xs: number[]) => Math.min(...xs.map(Math.abs));
+  const [[ax, ay], [bx, by]] = [centre(p), centre(q)];
+  const move = same ? Math.hypot(ax - bx, ay - by) : Math.hypot(least([q.x0 - p.x0, bx - ax, q.x1 - p.x1]), least([q.y0 - p.y0, by - ay, q.y1 - p.y1]));
+  const area = (x: FrameBox) => Math.max(1e-3, (x.x1 - x.x0) * (x.y1 - x.y0));
+  const ratio = a.size && b.size ? Math.max(a.size, b.size) / Math.min(a.size, b.size) : same ? Math.max(area(p), area(q)) / Math.min(area(p), area(q)) : 1;
+  return move >= SEAT_MOVE || ratio >= (same ? 1.25 : 1.9);
 }
+/** The least move of the words that is another seat, a share of the frame. */
+export const SEAT_MOVE = 0.08;
 
 /** Each section's mood from its energy, both as heard and as ranked within the song (a calm song still has its peak). */
 export function moodsOf(sections: { start: number; energy: number }[]): Mood[] {
@@ -272,7 +296,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     for (const g of l.given ?? []) taken.push({ at: g.at, from: g.at, to: g.at, light: false, composition: true, what: `${l.id}'s given repose`, owner: `given:${l.id}@${g.at}` });
   }
 
-  const seatOk = (s: SeatCandidate) => (!caps.seats.length || caps.seats.includes(s.id)) && !(s.box && caps.protectedRegion?.some((p) => overlaps(s.box!, p)));
+  // (a seat's words keep off the world's protected regions and, for a seat the scheduler adds on a page, off that page's
+  // graphics, by the box they are really laid in)
+  const seatOk = (s: SeatCandidate) => (!caps.seats.length || caps.seats.includes(s.id)) && !(s.box && [...(caps.protectedRegion ?? []), ...(s.protect ?? [])].some((p) => overlaps(s.box!, p)));
   const isSectionStart = (i: number) => i > 0 && sections.some((s) => s.start > lines[i - 1].start + 1e-3 && lines[i].start >= s.start - 0.25);
 
   let seat: SeatCandidate | undefined;

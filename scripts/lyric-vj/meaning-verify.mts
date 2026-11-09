@@ -1,5 +1,6 @@
 // The verify pass (meaning-read.mts verifyCandidates) on stored re-reads: every key and moment candidate of
-// meaning.<from>.json re-judged once by claude-haiku-5-5; the survivors go to meaning.<to>.json beside it (never meaning.json),
+// meaning.<from>.json re-judged once by claude-haiku-5-5 (whole-line keys may come back narrowed); the survivors go to
+// meaning.<to>.json beside it (never meaning.json),
 // each candidate's verdict to the report.
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/meaning-verify.mts [--song snow] [--from haiku-1109b] [--to haiku-1109c]
 //     [--effort medium] [--report out/research/meaning-reread-1109/verify-1109c.json] [--force]
@@ -36,9 +37,9 @@ for (const s of SONGS.filter((x) => !a.song || x.song === a.song)) {
   const cand = [
     ...m.keys.map((k, i) => ({ id: `k${i}`, kind: 'key', cue: k.cue, text: k.phrase, why: k.why })),
     ...(m.moments ?? []).map((x, i) => ({ id: `m${i}`, kind: 'moment', cue: x.cues.join('+'), text: `${x.form}/${x.variant} ${x.word}`, why: x.why, passAlone: checkMoments([x as MomentAsk], song.cues, sungOf).kept.length === 1 })),
-  ].map((c) => ({ ...c, verdict: got.verdicts.find((v) => v.id === c.id), kept: !got.dropped.some((d) => d.id === c.id), dropWhy: got.dropped.find((d) => d.id === c.id)?.why }));
+  ].map((c) => ({ ...c, verdict: got.verdicts.find((v) => v.id === c.id), kept: !got.dropped.some((d) => d.id === c.id), dropWhy: got.dropped.find((d) => d.id === c.id)?.why, narrowedTo: got.narrowed.find((n) => n.id === c.id)?.to }));
   const row = { song: s.song, from: `${dir}/meaning.${a.from}.json`, wrote: target, stop: got.stop, usage: got.usage, usd: Number(got.usd.toFixed(5)),
-    keys: { before: m.keys.length, after: got.meaning.keys.length }, moments: { before: m.moments?.length ?? 0, after: got.meaning.moments?.length ?? 0 }, candidates: cand };
+    keys: { before: m.keys.length, after: got.meaning.keys.length, narrowed: got.narrowed.length }, moments: { before: m.moments?.length ?? 0, after: got.meaning.moments?.length ?? 0 }, candidates: cand };
   rows.push(row);
   console.log(`${s.song}: keys ${row.keys.after}/${row.keys.before}, moments ${row.moments.after}/${row.moments.before}, ${got.usage.input}+${got.usage.output} tok $${row.usd}`);
 }

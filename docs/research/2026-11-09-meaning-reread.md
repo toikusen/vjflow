@@ -255,4 +255,72 @@ cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
 for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp -p $d/meaning.json $d/meaning.instant-1101.json && cp -p $d/meaning.merged-1109c.json $d/meaning.json; done
 ```
 
-這組指令取代第二輪的 `merged-1109` 版本。
+這組指令取代第二輪的 `merged-1109` 版本；已被第四輪取代（見下）。
+
+---
+
+# 第四輪：疑問句規則、整句 key 收窄（今天最後一輪）
+
+**結論：tsuzuki c002 wipe 這次被保留。另有 10 個整句 key 被收窄成同句裡的一段後保留。Codex 表裡的 key 只回來 1 個，是 snow「說再見」，收窄成「學不會說再見」。新增 2 個誤刪：snow c009 楓葉 fall 和 nun「仁者無敵」。複審沒有重讀歌詞，花 $0.01828。Q3 的 snow 有 edgeFit 的世界從 4／4／3 回升到 41／41／44，逐世界 edgeFit 中位數為 3。Q5 的 `songsReaching36of45` 仍是 2。同一批候選在第三輪和第四輪的判決有幾處相反，單次複審有抽樣變異，正式採用前要處理。**
+
+## 改了什麼（只改複審，不重讀）
+
+- 規則 (b) 加上疑問句的分辨：問「為什麼／怎麼會 X」的感嘆或反問，X 本身確實發生，判為支持；問「X 會不會發生」或希望 X 發生，判為不支持。
+- 規則 (e) 改成：整句 key 不直接 drop。複審可以在新欄位 `narrowedPhrase` 填入同一句裡承載重點、原樣連續唱出的一段（不能換句、改字、補字或拼接）。沒有收窄時填空字串，moment 一律填空字串。
+- `applyVerdicts(m, verdicts, cues)` 套用收窄後，會用 validMeaning 同樣的 `text.includes` 原文檢查再確認一次；收窄後的詞段不在該句裡就 drop。收窄紀錄放在 `narrowed[]`。
+- 單元測試（`meaning-verify.test.mts`，3 個 test）：fixture 裡 tsuzuki c002 這種感嘆疑問判 keep 並保留，snow c022 這種願望判 drop。另有兩個收窄例子：合法的收窄被套用；改了字（「學會說再見」）或指到別句的收窄被 drop。最後確認 prompt 裡有疑問句規則、schema 有 `narrowedPhrase`。
+- 腳本：`meaning-verify.mts --to haiku-1109d --report out/research/meaning-reread-1109/verify-1109d.json`；`meaning-merge.mts --overlay-suffix haiku-1109d --out-suffix merged-1109d`。
+
+## 結果（輸入都是第二輪的 `haiku-1109b` 候選）
+
+| 歌 | keys（第三輪 → 第四輪） | 收窄 | moments（第三輪 → 第四輪） | USD |
+|---|---|---|---|---|
+| nun | 3 → 4 | 0 | 2 → 2 | 0.00254 |
+| snow | 1 → 5 | 2 | 5 → 4 | 0.00374 |
+| tsuzuki | 3 → 5 | 1 | 3 → 4 | 0.00330 |
+| choroin | 15 → 20 | 6 | 4 → 4 | 0.00572 |
+| tenmon | 3 → 5 | 1 | 1 → 1 | 0.00298 |
+| **合計** | **25 → 39** | **10** | **15 → 15** | **0.01828** |
+
+- **tsuzuki c002 消えて wipe：保留。** 複審理由是「確實消失的感嘆式疑問」。snow c022 願望仍然 drop。
+- **第二輪標出的 3 個誤讀維持 drop**：snow c005 melt、snow c022 freeze、tsuzuki c001 海。choroin 雨仍被保留，但硬條件會擋下。
+- **收窄的 10 個 key**：
+  - snow：「才想起」c020、「學不會說再見」c039
+  - tsuzuki：「よせる波に隠れてしまう」c011（只去掉了の，等於沒收窄）
+  - choroin：「はずなのに満たされないの」、「ノンフィクションなラブを君と紡ぎたい」、「でも”繋がり”はNG」、「恋に恋しているんです」、「いっぱい言ってくれたじゃんか「スキスキ」」、「だって好きなんだもん」
+  - tenmon：「わからないけどまあいいや」
+- **Codex 表的 key**：回來 1 個，snow「說再見」（以「學不會說再見」的形式）。「無盡的思念」從第二輪起就不在候選裡；複審不能新增候選，所以不可能回來，要靠讀歌詞那一輪列出。nun「仁者無敵」這次被整個 drop，複審理由是「整句沒有戲謔」，但 Codex 認為它是習武價值的重點，這是判錯 why 而連帶刪掉詞組，屬於誤刪。
+- **新的誤刪**：snow c009「回憶就像是那凋落的楓葉」shape/fall。第三輪保留它，這輪卻依規則 (c) 判為「畫喻體」而 drop。Codex 認為這句明確把回憶比作凋落，應該提出。規則 (c) 的例子（海的氣味→海浪）被套到「明喻、喻體就是形式的意思」的句子上了。
+- **判決不穩定**：同一批候選，第三輪和第四輪對 snow c009、nun k4「為人耿直不屈」、snow 的整句 key 都給出相反的判決。單次 Haiku 複審有抽樣變異。要穩定下來，可以跑多次取多數決，或在規則 (c) 補上「明喻、喻體就是形式所畫的意思時支持」；兩者都還沒做。
+
+## Q3／Q5 dry-run（`--meaning-suffix haiku-1109d`；Q5 另外跑了 `merged-1109d`，結果相同）
+
+**Q3**（`out/research/q3-1109/coverage-haiku-d.json`），有 edgeFit 的世界：
+- nun：40／39／36（第三輪 40／39／35）
+- snow：41／41／44（第三輪 4／4／3）
+
+逐世界 edgeFit 中位數為 3／3／3（第三輪 2／2／1）。
+
+**Q5**（`out/research/q5-1109/moments-haiku-d.json`）：`songsReaching36of45` = 2（診斷用）。每個候選在 45 個世界的結果：
+
+| 候選 | 選中 | Q2 hold | 其他 | 名額或間距 |
+|---|---|---|---|---|
+| snow c001 大雪 fall | 4 | 35 | 2 | 4 |
+| snow c003 破碎 tear | 12 | 33 | 0 | 0 |
+| snow c008 飄雪 fall | 9 | 22 | 9 | 5 |
+| snow c042+c043 echo | 45 | 0 | 0 | 0 |
+| tsuzuki c011 波 wave | 25 | 0 | 0 | 20 |
+| tsuzuki c002 消えて wipe | 20 | 25 | 0 | 0 |
+| tsuzuki c005+c007 echo | 11 | 0 | 3 | 31 |
+| tsuzuki c014+c016 echo | 34 | 6 | 2 | 3 |
+
+nun、choroin、tenmon 仍是 0，原因是 timing 或 legalCue。Q2 hold 碰撞仍是排程缺口。
+
+## 換檔指令（**尚未執行**；先確認其他 worktree 的量測已經結束）
+
+```sh
+cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
+for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp -p $d/meaning.json $d/meaning.instant-1101.json && cp -p $d/meaning.merged-1109d.json $d/meaning.json; done
+```
+
+這組指令取代第三輪的 `merged-1109c` 版本。換檔前建議先決定怎麼處理上述兩個誤刪和判決不穩定的問題。

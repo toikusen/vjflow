@@ -65,6 +65,8 @@ export interface Verdict {
   mapping: string;
   directionOk: boolean;
   wholeLineKey: boolean;
+  /** A whole-line key narrowed to its emphasis core: a contiguous sung piece of the same line; '' when not narrowed. */
+  narrowedPhrase: string;
   verdict: 'keep' | 'drop';
   reason: string;
 }
@@ -79,10 +81,10 @@ export function verifyRequest(song: { title: string; cues: Cue[] }, m: Pick<Mean
 
 逐項檢查：
 (a) phraseSung：phrase／word 是否在那一句（moment 看證據句）原樣唱出。
-(b) lineSupports：把整句連同否定、願望、疑問、條件、反諷一起讀，這句的真正意思是否支持這個形式（moment）或這個強調（key）。願望、否定、假設、反問不能當成已經發生的事。
+(b) lineSupports：把整句連同否定、願望、疑問、條件、反諷一起讀，這句的真正意思是否支持這個形式（moment）或這個強調（key）。願望、否定、假設、反問不能當成已經發生的事。疑問句要分兩種：問「為什麼／怎麼會 X」的感嘆或反問（例如「どうして…消えてしまうの」），X 本身是確實發生的事，支持；問「X 會不會發生」或希望 X 發生（例如「期盼著…一瞬間」），X 沒有發生，不支持。
 (c) mapping：若是比喻，寫出「本體→喻體」；若形式畫的是喻體或字面物件，而這句其實在講別的東西（例如句子講的是海的氣味，形式卻畫海浪），判為不支持。不是比喻就寫「非比喻」。
 (d) directionOk：主詞與受詞、誰對誰做了什麼，是否和 why 說的一致（例如「悲傷融化了從前」是悲傷把從前融化，不是悲傷自己消散）。
-(e) wholeLineKey：key 的 phrase 是否就是整句或幾乎整句。是的話，除非這句很短而且整句本身就是重點，否則 drop。
+(e) wholeLineKey：key 的 phrase 是否就是整句或幾乎整句。是的話，除非這句很短而且整句本身就是重點，否則在 narrowedPhrase 填入同一句裡真正承載重點、原樣連續唱出的一段（不能換句、不能改字、補字或拼接），並以這段判斷 keep／drop；找不到這樣的一段就 drop。沒有收窄時 narrowedPhrase 填空字串；moment 一律填空字串。
 
 verdict：以上都成立才 keep，否則 drop；reason 用一句話說明關鍵理由。
 
@@ -95,39 +97,51 @@ ${forms}
 
 候選：
 ${[...keys, ...moments].map((x) => x.line).join('\n')}`;
-  const schema = { type: 'object', additionalProperties: false, required: ['verdicts'], properties: { verdicts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'phraseSung', 'lineSupports', 'mapping', 'directionOk', 'wholeLineKey', 'verdict', 'reason'], properties: {
+  const schema = { type: 'object', additionalProperties: false, required: ['verdicts'], properties: { verdicts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'phraseSung', 'lineSupports', 'mapping', 'directionOk', 'wholeLineKey', 'narrowedPhrase', 'verdict', 'reason'], properties: {
     id: { type: 'string', enum: ids.length ? ids : ['none'] }, phraseSung: { type: 'boolean' }, lineSupports: { type: 'boolean' }, mapping: { type: 'string' },
-    directionOk: { type: 'boolean' }, wholeLineKey: { type: 'boolean' }, verdict: { type: 'string', enum: ['keep', 'drop'] }, reason: { type: 'string' },
+    directionOk: { type: 'boolean' }, wholeLineKey: { type: 'boolean' }, narrowedPhrase: { type: 'string' }, verdict: { type: 'string', enum: ['keep', 'drop'] }, reason: { type: 'string' },
   } } } } };
   return { prompt, schema, ids };
 }
 
 /**
  * Keeps a candidate only on a `keep` verdict whose own checks agree (sung, supported, right direction; a whole-line key
- * stays only if the verdict says so). A candidate with no verdict is dropped; a duplicate verdict counts once (the first).
+ * stays only if the verdict says so). A key's `narrowedPhrase` replaces its phrase only if that piece is sung word for
+ * word in the same cue (the same literal check validMeaning applies); otherwise the key is dropped. A candidate with no
+ * verdict is dropped; a duplicate verdict counts once (the first).
  */
-export function applyVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M, verdicts: Verdict[]): { meaning: M; dropped: { id: string; why: string }[] } {
+export function applyVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M, verdicts: Verdict[], cues: { id: string; text: string }[]): { meaning: M; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[] } {
   const byId = new Map<string, Verdict>();
   for (const v of verdicts) if (!byId.has(v.id)) byId.set(v.id, v);
   const dropped: { id: string; why: string }[] = [];
+  const narrowed: { id: string; from: string; to: string }[] = [];
   const keepOf = (id: string) => {
     const v = byId.get(id);
     const why = !v ? 'no verdict' : v.verdict !== 'keep' ? `drop: ${v.reason}` : !v.phraseSung ? 'keep overruled: phrase not sung' : !v.lineSupports ? 'keep overruled: line does not support it' : !v.directionOk ? 'keep overruled: direction wrong' : '';
     if (why) dropped.push({ id, why });
     return !why;
   };
-  return { meaning: { ...m, keys: m.keys.filter((_, i) => keepOf(`k${i}`)), moments: (m.moments ?? []).filter((_, i) => keepOf(`m${i}`)) }, dropped };
+  const keys = m.keys.flatMap((k, i) => {
+    const id = `k${i}`;
+    if (!keepOf(id)) return [];
+    const to = (byId.get(id)!.narrowedPhrase ?? '').trim();
+    if (!to || to === k.phrase) return [k];
+    if (!cues.find((c) => c.id === k.cue)?.text.includes(to)) { dropped.push({ id, why: `narrowed phrase 「${to}」 is not sung in ${k.cue}` }); return []; }
+    narrowed.push({ id, from: k.phrase, to });
+    return [{ ...k, phrase: to }];
+  });
+  return { meaning: { ...m, keys, moments: (m.moments ?? []).filter((_, i) => keepOf(`m${i}`)) }, dropped, narrowed };
 }
 
 /** The verify pass: one READING_MODEL call re-judging every key and moment candidate; returns the verified reading. */
-export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000): Promise<{ meaning: M; verdicts: Verdict[]; dropped: { id: string; why: string }[]; usd: number; usage: { input: number; output: number }; stop: string | null }> {
+export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000): Promise<{ meaning: M; verdicts: Verdict[]; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[]; usd: number; usage: { input: number; output: number }; stop: string | null }> {
   const { prompt, schema, ids } = verifyRequest(song, m);
-  if (!ids.length) return { meaning: m, verdicts: [], dropped: [], usd: 0, usage: { input: 0, output: 0 }, stop: null };
+  if (!ids.length) return { meaning: m, verdicts: [], dropped: [], narrowed: [], usd: 0, usage: { input: 0, output: 0 }, stop: null };
   const msg = await new Anthropic({ maxRetries: 2 }).messages.create({ model: READING_MODEL, max_tokens: maxTokens, messages: [{ role: 'user', content: prompt }], output_config: { effort, format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;
   const text = msg.content.find((b) => b.type === 'text');
   const usage = { input: msg.usage.input_tokens, output: msg.usage.output_tokens };
   const usd = usage.input * READING_PRICE.input + usage.output * READING_PRICE.output;
   if (!text || text.type !== 'text' || msg.stop_reason !== 'end_turn') throw new Error(`verify pass did not finish (${msg.stop_reason})`);
   const verdicts = (JSON.parse(text.text) as { verdicts: Verdict[] }).verdicts;
-  return { ...applyVerdicts(m, verdicts), verdicts, usd, usage, stop: msg.stop_reason };
+  return { ...applyVerdicts(m, verdicts, song.cues), verdicts, usd, usage, stop: msg.stop_reason };
 }

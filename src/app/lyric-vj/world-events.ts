@@ -566,10 +566,10 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
      * its boundary, a switch inside it, a declared composite, a hold on the seat it keeps, each by the same rules and
      * clocks as ever), then one commitment. The hard floors stand as before (a Q4 handoff, a camera into the part, a
      * pinned line's composed seat, a seat before that does not fit the line: each a composition the line already makes);
-     * a hold no longer pins anything. Where the line may keep its seat and has a legal hold there, the part's own reseat
-     * rate (reseatRate, unchanged) says which kind is preferred: a section start or a draw under the rate tries the
-     * compositions first (boundary, then a composite, then inside the line) and falls back to the hold; otherwise the
-     * hold. With no legal hold, the line is planned as before, but a switch inside it only when its boundary kept.
+     * a hold no longer pins anything. Where the line may keep its seat and has a legal hold there, the scheduler's own
+     * wish for a switch says which kind is preferred, unchanged from the plan without the contract (a section start, the
+     * composer's own change of set, or a draw under the part's reseatRate): wished, the compositions are tried first
+     * (boundary, then a composite, then inside the line) and the hold is the fallback; otherwise the hold. With no legal hold, the line is planned as before, but a switch inside it only when its boundary kept.
      */
     function jointLine() {
       const rate = reseatRate(mood, run);
@@ -627,10 +627,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         return camRide();
       }
       const canKeep = seats.some((s) => s.id === seat!.id) || !seatsDiffer(seat, own);
-      // (a seat of the line's that is the same composition as the one before is no switch either: a hold may stand on it)
-      const same = seats.find((s) => s.id === seat!.id) ?? (!seatsDiffer(seat, own) ? own : seats.find((s) => !seatsDiffer(seat, s)));
-      const kept = canKeep ? seats.find((s) => s.id === seat!.id) ?? own : same;
-      if (!kept || camIn) {
+      const kept = seats.find((s) => s.id === seat!.id) ?? own;
+      if (!canKeep || camIn) {
         // (a composition the line makes anyway: the seat before does not fit it, or the world camera moves into it)
         legalHold(own);
         boundary(line, i, sectionStart);
@@ -638,7 +636,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         return camRide();
       }
       const h = legalHold(kept);
-      const prefer = sectionStart || salt('reseat') < rate;
+      // (the scheduler's own wish for a switch, exactly as without the contract: a section start, the composer's own
+      // change of set, or the part's draw under its rate; only where none asks does the hold come first)
+      const prefer = sectionStart || (seatOk(own) && seatsDiffer(seat, own)) || salt('reseat') < rate;
       if (h && !prefer) { keepOn(kept, holdWhy(h)); commitHold(h); return; }
       if (h) {
         let m = mark();

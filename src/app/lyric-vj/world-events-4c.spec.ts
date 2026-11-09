@@ -40,8 +40,6 @@ describe('phase 4c: hold candidates before commitment (lineplan-core)', () => {
 
 const A: SeatCandidate = { id: 'w/a', box: { x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.3 }, size: 120 };
 const B: SeatCandidate = { id: 'w/b', box: { x0: 0.55, y0: 0.6, x1: 0.9, y1: 0.8 }, size: 120 };
-/** Same words, same box as A, another set id: no composition change. */
-const A2: SeatCandidate = { ...A, id: 'w/a2' };
 const caps: WorldCompositionCaps = { worldId: 'w', kinds: ['layout-seat'], seats: [], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'] } };
 const words = (start: number, end: number, n: number) => Array.from({ length: n }, (_, k) => ({ text: `p${k}`, from: +(start + ((end - start) * k) / n).toFixed(3), to: +(start + ((end - start) * (k + 1)) / n).toFixed(3) }));
 const hc = (lineId: string, seat: string, at: number, sec = 0.3, kind = 'line-grow', rank = 0, slack = 0.5): JointHold => ({ seat, hold: { lineId, at, from: at, to: +(at + sec).toFixed(3), kind }, rank, slack });
@@ -109,22 +107,16 @@ describe('phase 4c: the joint selector (world-events planWorldEvents, joint)', (
     expect(of(p2, 'a')).toMatchObject({ outcome: 'keep', reason: 'noSafeCandidate' });
   });
 
-  it('the seat before does not fit the line: its entrance is a composition, the line\'s one action, its hold superseded; a seat of the same composition lets the hold stand', () => {
-    const away = second({ seats: [B, A2], seat: B.id, holdCands: [hc('b', B.id, 4.5), hc('b', A2.id, 4.4)] });
-    const forced = planWorldEvents(joint([first, away], { seed: 5 }));
-    // (A is not among b's seats; A2 is the same composition as A: no switch, the hold on A2 when the draw keeps)
-    const outs = Array.from({ length: 12 }, (_, s) => planWorldEvents(joint([first, away], { seed: s })));
-    for (const p of outs) {
-      const o = of(p, 'b');
-      if (o.outcome === 'hold') expect(p.holds).toEqual([hc('b', A2.id, 4.4).hold]);
-      else expect(o.reason).toBe('supersededByComposition');
+  it('the seat before does not fit the line, or the composer changed set: the entrance is the line\'s one action, its hold superseded, whatever the draw', () => {
+    for (let seed = 0; seed < 12; seed++) {
+      const away = planWorldEvents(joint([first, second({ seats: [B], seat: B.id, holdCands: [hc('b', B.id, 4.5)] })], { seed }));
+      expect(of(away, 'b')).toMatchObject({ outcome: 'composition', reason: 'supersededByComposition' });
+      expect(away.holds).toEqual([]);
+      // (B is the composer's own set, A still legal: its change of set is the scheduler's wish as without the contract)
+      const moved = planWorldEvents(joint([first, second({ seat: B.id })], { seed }));
+      expect(of(moved, 'b')).toMatchObject({ outcome: 'composition', reason: 'supersededByComposition' });
+      expect(cutsOn(moved, 'b').map((e) => e.seatAfter)).toEqual([B.id]);
     }
-    expect(outs.some((p) => of(p, 'b').outcome === 'hold')).toBe(true);
-    // (no seat of the same composition: the entrance must switch, the hold is never also laid)
-    const noSame = planWorldEvents(joint([first, second({ seats: [B], seat: B.id, holdCands: [hc('b', B.id, 4.5)] })], { seed: 5 }));
-    expect(of(noSame, 'b')).toMatchObject({ outcome: 'composition', reason: 'supersededByComposition' });
-    expect(noSame.holds).toEqual([]);
-    expect(forced.outcomes).toHaveLength(2);
   });
 
   it('among a seat\'s holds, the larger reading slack wins, then the world\'s rank; a line with nothing asked keeps as designed quiet', () => {

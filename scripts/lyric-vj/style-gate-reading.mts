@@ -57,6 +57,8 @@ const moment = (p: Page, t: number) => p.evaluate(`window.gatePage.moment(${t}, 
 const fails: string[] = [];
 /** Contract warnings of the worlds the scheduler took over (VJ_WORLD_EVENTS=1): the final draw against its event plan. */
 const contract: string[] = [];
+/** Camera moves a taken-over world dropped because they collided with a switch the song keeps (resolved, for the record). */
+const camDrops: string[] = [];
 const fill: number[] = [];
 let checked = 0;
 const counts: Record<string, RuleCounts> = {};
@@ -71,6 +73,10 @@ for (const id of positionals) {
     // (a world the scheduler takes over must draw its plan as approved: any final-check warning is a broken contract)
     const table = job.treatment.worldEvents;
     if (table?.source === 'declared') contract.push(...table.warnings.filter((w) => w.reason.startsWith('final check')).map((w) => `${id} ${name} ${w.inputs.join(' / ')}: ${w.reason}`));
+    // (phase 3b: a world camera still colliding with another switch in a taken-over world, as an input the plan could not
+    // resolve, is a broken contract too: camera moves are scheduler inputs, dropped or failed, never just noted)
+    if (table?.source === 'declared') contract.push(...table.warnings.filter((w) => !w.reason.startsWith('final check') && /world camera/.test(`${w.reason} ${w.inputs.join(' ')}`)).map((w) => `${id} ${name} unresolved camera overlap ${w.inputs.join(' / ')}: ${w.reason}`));
+    camDrops.push(...(table?.camDrops ?? []).map((c) => `${id} ${name} ${c.kind}@${c.lineId}`));
     const file = join(work, `${id}-${name}.job.json`);
     writeFileSync(file, JSON.stringify({ ...job, live: true }));
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
@@ -118,7 +124,7 @@ await browser.close();
 server.close();
 if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
-const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, contract, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
+const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, contract, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
 console.log(JSON.stringify({ ...out, fails: out.fails.length, contract: contract.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
 if (contract.length) console.log('contract warnings', contract.length, contract.slice(0, 10));

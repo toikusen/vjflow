@@ -20,6 +20,7 @@ import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
 import { boxesMeet, laidSeat, roughMeasure, shapedMeasure } from './render/seat-geometry';
+import { DECO_PANELS } from './render/world-b5-sets';
 import { compositionsOf, pageSeatsOf } from './world-shared';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
@@ -996,7 +997,15 @@ export function pageSeatsFor(text: string, set: string, worldId: string): string
     const box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
     return box.x0 >= 0 && box.x1 <= 1 && box.y0 >= 0 && box.y1 <= 1 && ![...laid.protect, ...protect].some((p) => boxesMeet(box, p));
   };
-  return pageSeatsOf(worldId, set).filter((x) => fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo));
+  // (a seat that only carries the page's own layout another way, poster-panel: the line as its page set lays it, offered
+  // only where that layout really splits it into a main and a small part on both measures)
+  // (and only where the phrase's panel stays the lesser one: narrower than the main plaque, DECO_PANELS)
+  const P = DECO_PANELS;
+  const lesser = (l: ReturnType<typeof laidSeat>) => !!l?.parts && l.parts.small.w / 2 + P.pad <= Math.max(P.mainHalf, l.parts.main.w / 2 + P.mainPad) - P.narrower
+    // (with the gap between the plaque and the panel the deco page needs to draw them apart, world-b5-deco panelsOf)
+    && l.parts.small.y0 - P.padY * l.parts.small.size - (l.parts.main.y1 + P.mainPadY) >= P.gap;
+  const splits = (x: string) => [laidSeat(text, x), laidSeat(text, x, { measure: shapedMeasure })].every((l) => !!l?.split && lesser(l));
+  return pageSeatsOf(worldId, set).filter((x) => (SET_SPECS[x].panels ? splits(x) : fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo)));
 }
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */

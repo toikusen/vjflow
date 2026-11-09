@@ -3,8 +3,9 @@
 // and Q4 linked handoffs come in decided and are never moved; everything this adds is spaced round them. Pure and seeded:
 // no DOM, no clock, the same input gives the same plan. Phase 2 (docs/research/2026-11-09-q1-phase2.md): free-plan.ts runs
 // it once a song on the composer's plan and the renderer draws only what it approves (world-events-apply.ts).
-import { LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
+import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import { anchorMove, boxesMeet, centreMove, SEEN, type FracBox } from './render/seat-geometry';
+import type { MaterialMove } from './world-shared';
 
 export type CompositionFamily = 'layout-seat' | 'page-handoff' | 'carrier-swap' | 'camera-reframe' | 'ground-role' | 'prop-beat';
 export type WorldEventKind = CompositionFamily | 'keep';
@@ -28,6 +29,8 @@ export interface SeatCandidate {
   text?: string;
   /** The page graphics a seat the scheduler adds must keep its words off (a same-page seat, world-shared pageSeats). */
   protect?: FrameBox[];
+  /** The page the seat is laid on (two seats on one page may differ in what carries the words: a carrier swap). */
+  page?: string;
 }
 
 /** A word or phrase as it is really sung; absent on a line whose timing is not trusted per character. */
@@ -51,12 +54,14 @@ export interface WorldEventLine {
   /** Where a switch inside the line may fall (a hold's own room kept, Q2) and the seats it may take; anywhere, any seat when unset. */
   inLine?: { spans: [number, number][]; seats?: string[] };
   /** Changes of seat inside the line that come decided (an older world's own repose): kept as given, counted once. */
-  given?: { at: number; seat: string; reason: string }[];
+  given?: { at: number; seat: string; reason: string; /** Its time is the composer's proportional guess, not a sung word (reposeOf's fallback). */ unreliable?: boolean }[];
   /**
    * When the line's entrance has landed (its show plus the longest its entrance can take): the still reading before a
    * switch inside it is counted from here, never from its start while the words may still be coming in.
    */
   settled?: number;
+  /** The line shares its shot (and its page) with another: no page move of its own at its boundary. */
+  sharesShot?: boolean;
 }
 
 /** Q2's contract: a held line's one event, its whole window. */
@@ -95,6 +100,8 @@ export interface WorldCompositionCaps {
   allowedAt?: Partial<Record<CompositionFamily, EventScope[]>>;
   /** Whether the scheduler may lay a page handoff of its own (a world whose renderer draws one); else only Q4's count. */
   ownPages?: boolean;
+  /** The world's own material moves (world-shared.ts materials, phase 3b): laid only as approved events. */
+  materials?: Record<string, MaterialMove>;
 }
 
 export interface WorldEventInput {
@@ -144,6 +151,13 @@ export interface WorldEvent {
   camera?: string;
   /** Taken as given (a Q4 handoff): never moved by the scheduler. */
   fixed?: boolean;
+  /** The world's material move that realises the switch (world-shared materials), with its curve: never a plain cut. */
+  material?: string;
+  curve?: string;
+  /** A given switch whose time is the composer's proportional guess, not a sung word (counted, never trusted as a word break). */
+  unreliableBoundary?: boolean;
+  /** A move that keeps the words and their seat (the receipt's feed): a hold-level beat, never a plan cut (countCuts). */
+  holdLevel?: boolean;
 }
 
 export interface RejectedCandidate { candidate: { lineId: string; kind: CompositionFamily; at: number; seatAfter?: string }; reason: string }
@@ -153,9 +167,11 @@ export interface InputWarning { inputs: string[]; reason: string }
 
 /** A Q2 hold a scheduled world moved off a Q4 handoff it partly overlapped: to the nearest legal beat, or dropped (`to` null). */
 export interface HoldMove { lineId: string; kind: string; from: number; to: number | null; reason: string }
-export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[] }
+/** A world camera move a scheduled world dropped: it collided with a switch the song keeps (a Q4 handoff, a composed seat, a hold). */
+export interface CamDrop { lineId: string; kind: string; at: number; reason: string }
+export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[]; camDrops?: CamDrop[] }
 /** What a treatment carries of the plan (treatment.ts worldEvents): the events, the holds standing on their own, the input warnings and how many candidates were refused. */
-export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[] }
+export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[]; camDrops?: CamDrop[] }
 
 /** Two changes of the whole frame's light never closer than this, anywhere in the song (no more than three flashes a second). */
 export const LIGHT_GAP = 0.55;
@@ -168,20 +184,35 @@ export const READ_STABLE = 0.35;
 /** A line shorter than this keeps its seat: its words switch on time, nothing else moves. */
 export const SHORT_LINE = 0.75;
 /** A word break this near a beat lands on it. */
-const BEAT_SNAP = 0.12;
+export const BEAT_SNAP = 0.12;
 /** A full page handoff needs the line before up at least this long (world-handoff.ts pickWorldMoves). */
 const HANDOFF_UP = LINK_PREPARE + 0.5;
 
 /**
- * How each part of the song spends its switches: how often a line boundary reseats, how many in a row before one keeps,
- * how long a line must be for a switch inside it, and where a full page may hand over. Proposal values (Codex D), not yet
- * measured on video.
+ * How each part of the song spends its switches (rule 11: quiet, build, peak): how often a line boundary reseats, how long
+ * a line must be for a switch inside it, and where a full page may hand over. Proposal values (Codex D). Phase 3b removed
+ * the hard `run` cap (1 / 2 / 3 switches in a row, then a forced keep): no design rule asked for it (Codex phase-2 review
+ * §1: `keep` is normal, not every line a full exit and entrance, never "stop after n"). What stands in its place is a
+ * rhythm preference, STREAK_EASE: every switch in a row past the first (the scheduler's own, a composed seat, a Q4
+ * handoff, a page move: all count, as they are all seen) lowers the chance of the next optional switch the scheduler adds
+ * itself, never to zero, never a quota; the composer's own change of set is not optional and stands.
  */
-export const MOOD_PACE: Record<Mood, { reseat: number; run: number; inLine: number; pages: ('section' | 'carrier')[] }> = {
-  quiet: { reseat: 0.3, run: 1, inLine: 3.2, pages: ['section'] },
-  build: { reseat: 0.55, run: 2, inLine: 1.8, pages: ['section', 'carrier'] },
-  peak: { reseat: 0.75, run: 3, inLine: 1.3, pages: ['section', 'carrier'] },
+export const MOOD_PACE: Record<Mood, { reseat: number; inLine: number; pages: ('section' | 'carrier')[] }> = {
+  quiet: { reseat: 0.3, inLine: 3.2, pages: ['section'] },
+  build: { reseat: 0.55, inLine: 1.8, pages: ['section', 'carrier'] },
+  peak: { reseat: 0.75, inLine: 1.3, pages: ['section', 'carrier'] },
 };
+/**
+ * Each switch in a row eases the next optional reseat's chance by STREAK_EASE, down to STREAK_FLOOR of the part's rate.
+ * Provisional preference values (phase 3b), not derived from the section's energy and not measured on video: the part's
+ * energy already sets the rate (MOOD_PACE); these only keep a long run from reading as every line switching.
+ */
+export const STREAK_EASE = 0.2;
+export const STREAK_FLOOR = 0.4;
+/** The share of the part's rate left after `streak` switches in a row (the first switch eases nothing). */
+export const streakEase = (streak: number) => Math.max(STREAK_FLOOR, 1 - STREAK_EASE * Math.max(0, streak - 1));
+/** The part's optional reseat rate after `streak` switches in a row (a preference, not a cap). */
+export const reseatRate = (mood: Mood, streak: number) => MOOD_PACE[mood].reseat * streakEase(streak);
 
 const LIGHT_KINDS = new Set<WorldEventKind>(['page-handoff', 'carrier-swap', 'ground-role']);
 const IN_LINE_ORDER: CompositionFamily[] = ['layout-seat', 'carrier-swap', 'camera-reframe', 'ground-role'];
@@ -322,8 +353,19 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
   }
   for (const l of input.lights ?? []) taken.push({ at: l.at, from: l.at, to: l.at, light: true, composition: false, what: l.what, lightOnly: true });
   for (const h of holds) taken.push({ at: h.at, from: h.from, to: h.to, light: false, composition: false, what: `Q2 ${h.kind} on ${h.lineId}` });
-  // the composer's camera moves into parts, a pinned line's way in and given reposes: decided before anything optional
-  const cams = new Map((input.cams ?? []).map((c) => [c.lineId, c]));
+  // the composer's camera moves into parts, a pinned line's way in and given reposes: decided before anything optional.
+  // A world the scheduler takes over sees its camera moves as inputs like the rest (phase 3b): one that collides with a
+  // switch the song keeps (a Q4 handoff, a hold, a composed seat that really changes) is dropped, the camera stays still
+  // into that part, and the drop is in the plan (`camDrops`); a world with no capability keeps them, reported as before
+  const ownOf = (l: WorldEventLine) => l.seats.find((s) => s.id === l.seat) ?? l.seats[0];
+  const pinnedSwitches: Action[] = lines.flatMap((l, i) => (i > 0 && l.pinned && seatsDiffer(ownOf(lines[i - 1]), ownOf(l)) ? [{ at: l.show, from: l.show, to: l.show, light: false, composition: true, what: `${l.id}'s composed seat`, owner: boundaryOf(l.id) }] : []));
+  const camDrops: CamDrop[] = [];
+  const cams = new Map((input.cams ?? []).filter((c) => {
+    if (!allows.size) return true;
+    const why = conflict({ at: c.at, from: c.at, to: c.at + c.sec, light: false, composition: true, what: '', owner: boundaryOf(c.lineId) }, [...taken, ...pinnedSwitches]);
+    if (why) camDrops.push({ lineId: c.lineId, kind: c.kind, at: c.at, reason: why });
+    return !why;
+  }).map((c) => [c.lineId, c]));
   for (const c of cams.values()) taken.push({ at: c.at, from: c.at, to: c.at + c.sec, light: false, composition: true, what: `world camera ${c.kind} into ${c.lineId}`, owner: boundaryOf(c.lineId) });
   for (const [i, l] of lines.entries()) {
     if (i > 0 && l.pinned) taken.push({ at: l.show, from: l.show, to: l.show, light: false, composition: true, what: `${l.id}'s composed seat`, owner: boundaryOf(l.id) });
@@ -333,9 +375,15 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
   // (a seat's words keep off the world's protected regions and, for a seat the scheduler adds on a page, off that page's
   // graphics, by the box they are really laid in)
   const seatOk = (s: SeatCandidate) => (!caps.seats.length || caps.seats.includes(s.id)) && !(s.box && [...(caps.protectedRegion ?? []), ...(s.protect ?? [])].some((p) => boxesMeet(s.box!, p)));
+  // (the world's material moves, by what they do to the seat; each laid only as an event of its own family)
+  // (a withheld move is declared but never a candidate: world-shared MaterialMove.withheld)
+  const materials = Object.entries(caps.materials ?? {}).filter(([, m]) => allows.has(m.family) && !m.withheld);
+  const materialFor = (mode: MaterialMove['seat'], scope: EventScope) => materials.filter(([, m]) => m.seat === mode && m.at.includes(scope));
+  const offLimits = (box: FrameBox | undefined, m: MaterialMove) => !!box && (m.protectedRegion ?? []).some((p) => boxesMeet(box, p));
   const isSectionStart = (i: number) => i > 0 && sections.some((s) => s.start > lines[i - 1].start + 1e-3 && lines[i].start >= s.start - 0.25);
 
   let seat: SeatCandidate | undefined;
+  // (switches in a row, any of them: the rhythm preference reads it, nothing caps it)
   let run = 0;
   lines.forEach((line, i) => {
     const seats = line.seats.filter(seatOk);
@@ -349,7 +397,11 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       return pool.length ? pool[Math.floor(salt(pick) * pool.length)] : undefined;
     };
     const push = (e: Omit<WorldEvent, 'id'>, action?: Action) => {
-      events.push({ id: `${e.kind}:${line.id}:${events.filter((x) => x.lineIds[0] === line.id).length}`, ...e, at: r3(e.at), from: r3(e.from), to: r3(e.to) });
+      // (ids unique: an event on two lines counted under its first, the line's own next one numbered past it, so no
+      // two events share an id and countCuts never folds them into one)
+      let n = events.filter((x) => x.lineIds[0] === line.id).length;
+      while (events.some((x) => x.id === `${e.kind}:${line.id}:${n}`)) n++;
+      events.push({ id: `${e.kind}:${line.id}:${n}`, ...e, at: r3(e.at), from: r3(e.from), to: r3(e.to) });
       if (action) taken.push(action);
     };
     const before = seat?.id ?? '';
@@ -379,7 +431,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
           if (why) warnings.push({ inputs: [`${line.id} composed seat`], reason: `pinned seat breaks spacing: ${why}` });
           push({ lineIds: [line.id], kind: 'layout-seat', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: own.id, carrierId: own.carrierId, scope, changesLight: action.light, reason: `composed seat (${line.pinned})`, fixed: true });
           run += 1;
-        } else {
+        } else if (!(allows.size && pageMove(own, scope, reseatRate(mood, run)))) {
           push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: own.id, scope, changesLight: false, reason: `composed seat is the same composition (${line.pinned})` });
           run = 0;
         }
@@ -396,10 +448,35 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       for (const g of line.given) {
         const to = line.seats.find((s) => s.id === g.seat) ?? { id: g.seat };
         if (!seatsDiffer(seat, to)) { seat = to; continue; }
-        push({ lineIds: [line.id], kind: 'layout-seat', at: g.at, from: g.at, to: g.at, seatBefore: seat?.id ?? '', seatAfter: to.id, carrierId: to.carrierId, scope: 'in-line', changesLight: lightOf(to), reason: g.reason, fixed: true });
+        push({ lineIds: [line.id], kind: 'layout-seat', at: g.at, from: g.at, to: g.at, seatBefore: seat?.id ?? '', seatAfter: to.id, carrierId: to.carrierId, scope: 'in-line', changesLight: lightOf(to), reason: g.reason, fixed: true, ...(g.unreliable ? { unreliableBoundary: true } : {}) });
         seat = to;
       }
     } else if (own) inLine(line, mood);
+
+    /**
+     * The world's page move on the kept seat (the receipt's next segment, world-shared materials `same`), once the line
+     * before is sung: the seat stays, the paper under it changes. A pinned line may take one (its seat is not touched);
+     * a line sharing its shot never does (the shot's page is one page).
+     */
+    function pageMove(kept: SeatCandidate, scope: EventScope, rate: number) {
+      const l = line;
+      const prev = lines[i - 1];
+      if (!prev || l.sharesShot || l.end - l.start < SHORT_LINE || !(scope === 'section' || salt('page') < rate)) return false;
+      for (const [name, m] of materialFor('same', scope)) {
+        if (m.minLine && l.end - l.start < m.minLine) { reject(l.id, m.family, l.show, `${name}: line ${(l.end - l.start).toFixed(2)}s < ${m.minLine}s, too short to read past it`); continue; }
+        if (l.show < prev.end + m.clearOfSung - 1e-6) { reject(l.id, m.family, l.show, `${name}: the line before is still sung at ${l.show}`); continue; }
+        if (offLimits(kept.box, m)) { reject(l.id, m.family, l.show, `${name}: the words stand in its protected region`); continue; }
+        const light = !!m.changesLight;
+        const action: Action = { at: l.show, from: l.show, to: l.show + m.sec, light, composition: true, what: `${name} into ${l.id}`, owner: boundaryOf(l.id) };
+        const why = conflict(action, taken);
+        if (why) { reject(l.id, m.family, l.show, `${name}: ${why}`); continue; }
+        push({ lineIds: [prev.id, l.id], kind: m.family, at: l.show, from: l.show, to: l.show + m.sec, seatBefore: before, seatAfter: kept.id, carrierId: kept.carrierId, scope, changesLight: light, reason: `${name} (${mood})`, move: name, material: name, curve: m.curve, ...(m.counts === 'seen' ? { holdLevel: true } : {}) }, action);
+        seat = kept;
+        run += 1;
+        return true;
+      }
+      return false;
+    }
 
     /** The line boundary: keep, reseat, or a full page handoff where the song's shape asks for one. */
     function boundary(l: WorldEventLine, k: number, sectionStart: boolean) {
@@ -425,20 +502,38 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       if (l.end - l.start < SHORT_LINE) return keep(`short line (${(l.end - l.start).toFixed(2)}s < ${SHORT_LINE}s): words switch on time`);
       const target = other(seat, 'seat');
       const carrierEnd = !!target && (target.carrierId ?? '') !== (seat!.carrierId ?? '');
-      // (the composer's own change of set stands while the part's run allows; the scheduler adds one by the part's pace)
-      const wants = sectionStart || (run < pace.run && ((!!own && seatOk(own) && seatsDiffer(seat, own)) || salt('reseat') < pace.reseat));
-      if (!wants) return keep(run >= pace.run ? `${run} switch(es) in a row: this line keeps (${mood})` : `keep (${mood})`);
+      const rate = reseatRate(mood, run);
+      // (the composer's own change of set stands, however many switches came before it: no run cap, Codex phase-2 §1; the
+      // scheduler adds one of its own by the part's pace, eased after a run of switches: a preference, never a count)
+      const wants = sectionStart || (!!own && seatOk(own) && seatsDiffer(seat, own)) || salt('reseat') < rate;
       const prev = lines[k - 1];
-      const tries: { kind: CompositionFamily; at: number; from: number; to: number; seat: SeatCandidate; reason: string }[] = [];
+      if (!wants) return pageMove(kept, scope, rate) || keep(`keep (${mood})`);
+      const tries: { kind: CompositionFamily; at: number; from: number; to: number; seat: SeatCandidate; reason: string; material?: [string, MaterialMove] }[] = [];
       const pageWhy = sectionStart ? 'section start' : carrierEnd ? 'carrier ends' : '';
       // (a full page handoff of the scheduler's own only where the part's pace asks for a switch, never because the
       // composer changed set: rule 11, not every line a full exit and entrance)
-      const pageWants = sectionStart || salt('reseat') < pace.reseat;
+      const pageWants = sectionStart || salt('reseat') < rate;
       if (caps.ownPages && pageWants && at('page-handoff', scope) && target && pageWhy && pace.pages.includes(sectionStart ? 'section' : 'carrier')) {
         if (prev.end - prev.start >= HANDOFF_UP) tries.push({ kind: 'page-handoff', at: l.show, from: l.show - LINK_PREPARE, to: l.show - LINK_PREPARE + sec('page-handoff'), seat: target, reason: `${pageWhy} (${mood})` });
         else reject(l.id, 'page-handoff', l.show, `line before up ${(prev.end - prev.start).toFixed(2)}s < ${HANDOFF_UP}s`, target.id);
       }
       const seatKind: CompositionFamily | undefined = target && carrierEnd && at('carrier-swap', scope) ? 'carrier-swap' : at('layout-seat', scope) ? 'layout-seat' : undefined;
+      // (a reseat onto a region that meets the one just read is the world's erase first, where it has one: the old words
+      // wiped by its own move once sung and read still, the wipe over as the new line shows; else the plain cut)
+      if (seatKind && target && seat?.box && target.box && boxesMeet(seat.box, target.box))
+        for (const [name, m] of materialFor('over', scope).filter(([, x]) => x.family === seatKind)) {
+          // (as soon as the old line is sung and read still: no sung-out words left standing on the board through a
+          // gap; over EXIT_LEAD before the new line shows, as a line's exit always is, engine exitAt)
+          // (sung until the last voice before this line stops, a backing or overlapping line included)
+          const sungUntil = Math.max(...lines.slice(0, k).map((x) => x.end));
+          const from = r3(sungUntil + m.clearOfSung);
+          if (from + m.sec > l.show - EXIT_LEAD + 1e-6) { reject(l.id, seatKind, l.show, `${name}: ${prev.id} sung until ${sungUntil}, no ${m.sec}s for the wipe before ${l.show}`, target.id); continue; }
+          // (and no other line is up while the board is wiped: only the one being erased)
+          const other = lines.find((x, j) => j !== k - 1 && j !== k && x.show < from + m.sec && x.end > from);
+          if (other) { reject(l.id, seatKind, l.show, `${name}: ${other.id} is up during the wipe`, target.id); continue; }
+          if (offLimits(seat.box, m)) { reject(l.id, seatKind, l.show, `${name}: the old words stand in its protected region`, target.id); continue; }
+          tries.push({ kind: seatKind, at: l.show, from, to: r3(from + m.sec), seat: target, reason: `${name}: the region just read is wiped, then the line is set there (${mood})`, material: [name, m] });
+        }
       // (a reseat falls on the line's show, the frame its set is drawn from: no later time the renderer would not keep)
       if (seatKind && target) for (const t of [l.show]) tries.push({ kind: seatKind, at: t, from: t, to: t + sec(seatKind), seat: target, reason: `${sectionStart ? 'section start' : 'reseat'} (${mood})` });
       if (sectionStart && !target && at('ground-role', scope)) tries.push({ kind: 'ground-role', at: l.show, from: l.show, to: l.show + sec('ground-role'), seat: seat!, reason: `section start, no other seat (${mood})` });
@@ -446,11 +541,13 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         const light = LIGHT_KINDS.has(t.kind) || lightOf(t.seat);
         const why = conflict({ at: t.at, from: t.from, to: t.to, light, composition: true, what: '', owner: boundaryOf(l.id) }, taken);
         if (why) { reject(l.id, t.kind, t.at, why, t.seat.id); continue; }
-        push({ lineIds: t.kind === 'page-handoff' ? [prev.id, l.id] : [l.id], kind: t.kind, at: t.at, from: t.from, to: t.to, seatBefore: before, seatAfter: t.seat.id, carrierId: t.seat.carrierId, scope, changesLight: light, reason: t.reason, ...(caps.moves?.[t.kind] ? { move: caps.moves[t.kind] } : {}) }, { at: t.at, from: t.from, to: t.to, light, composition: true, what: `${t.kind} into ${l.id}`, owner: boundaryOf(l.id) });
+        const mat = t.material ? { move: t.material[0], material: t.material[0], curve: t.material[1].curve } : caps.moves?.[t.kind] ? { move: caps.moves[t.kind] } : {};
+        push({ lineIds: t.kind === 'page-handoff' || t.material ? [prev.id, l.id] : [l.id], kind: t.kind, at: t.at, from: t.from, to: t.to, seatBefore: before, seatAfter: t.seat.id, carrierId: t.seat.carrierId, scope, changesLight: light, reason: t.reason, ...mat }, { at: t.at, from: t.from, to: t.to, light, composition: true, what: `${t.kind} into ${l.id}`, owner: boundaryOf(l.id) });
         seat = t.seat;
         run += 1;
         return;
       }
+      if (canKeep && pageMove(kept, scope, rate)) return;
       keep(target || sectionStart ? 'every switch here collides: kept (see rejected)' : 'no other seat fits this line');
     }
 
@@ -474,25 +571,34 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         reject(l.id, kinds[0], mid, 'no sung word break inside the line');
         return;
       }
-      // (the words keep what they are read on: a reseat inside a line stays on its carrier, Codex A carrier-swap)
-      const pool = seats.filter((s) => (s.carrierId ?? '') === (seat?.carrierId ?? '') && (!l.inLine?.seats || l.inLine.seats.includes(s.id)) && seatsDiffer(seat, s));
+      // (the words keep what they are read on: a reseat inside a line stays on its carrier; a carrier swap changes what
+      // carries them on the same page, only by the world's own material move, the words themselves not moving, Codex A)
+      const swap = materialFor('carrier', 'in-line').find(([, m]) => m.family === 'carrier-swap');
+      const poolOf = (kind: CompositionFamily) => seats.filter((s) => (!l.inLine?.seats || l.inLine.seats.includes(s.id)) && seatsDiffer(seat, s) && (kind === 'carrier-swap'
+        ? !!swap && !!s.page && s.page === seat?.page && (s.carrierId ?? '') !== (seat?.carrierId ?? '') && !offLimits(s.box, swap[1])
+        : (s.carrierId ?? '') === (seat?.carrierId ?? '')));
+      let tried = false;
       for (const kind of kinds) {
-        const target = pool.length ? pool[Math.floor(salt('in-line') * pool.length)] : undefined;
+        const pool = poolOf(kind);
+        const target = pool.length ? pool[Math.floor(salt(kind === 'carrier-swap' ? 'carrier' : 'in-line') * pool.length)] : undefined;
         if (!target) continue;
+        tried = true;
+        const mat = kind === 'carrier-swap' && swap ? { move: swap[0], material: swap[0], curve: swap[1].curve } : caps.moves?.[kind] ? { move: caps.moves[kind] } : {};
+        const dur = kind === 'carrier-swap' && swap ? swap[1].sec : sec(kind);
         let last = '';
         for (const b of breaks) {
-          const to = b + sec(kind);
+          const to = b + dur;
           if (b - settled < READ_STABLE || l.end - to < READ_STABLE) { last = `less than ${READ_STABLE}s of still reading round ${b.toFixed(2)}`; continue; }
           if (!inRoom(b, to)) { last = `${b.toFixed(2)} is inside the room its hold keeps (Q2)`; continue; }
           const why = conflict({ at: b, from: b, to, light: false, composition: true, what: '' }, taken);
           if (why) { last = why; continue; }
-          push({ lineIds: [l.id], kind, at: b, from: b, to, seatBefore: seat?.id ?? '', seatAfter: target.id, carrierId: target.carrierId, scope: 'in-line', changesLight: false, reason: `word break${near(b) ? ' on a beat' : ''} (${m})`, ...(caps.moves?.[kind] ? { move: caps.moves[kind] } : {}) }, { at: b, from: b, to, light: false, composition: true, what: `in-line ${kind} on ${l.id}` });
+          push({ lineIds: [l.id], kind, at: b, from: b, to, seatBefore: seat?.id ?? '', seatAfter: target.id, carrierId: target.carrierId, scope: 'in-line', changesLight: false, reason: `word break${near(b) ? ' on a beat' : ''} (${m})`, ...mat }, { at: b, from: b, to, light: false, composition: true, what: `in-line ${kind} on ${l.id}` });
           seat = target;
           return;
         }
         if (last) reject(l.id, kind, mid, last);
-        return;
       }
+      if (tried) return;
       reject(l.id, kinds[0], mid, `no family target: no other seat on the same carrier for ${kinds.join('/')}`);
     }
   });
@@ -507,8 +613,24 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       events.push({ id: `prop-beat:${a.lineId}:${a.propId}`, lineIds: [a.lineId], kind: 'prop-beat', at: r3(a.at), from: r3(a.at), to: r3(to), seatBefore: here, seatAfter: here, scope: 'in-line', changesLight: false, reason: a.reason, ...(caps.moves?.['prop-beat'] ? { move: caps.moves['prop-beat'] } : {}) });
       taken.push({ at: a.at, from: a.at, to, light: false, composition: true, what: `prop-beat ${a.propId}` });
     }
+  // (a camera move a switch the scheduler could not avoid collides with, a line's own seat forced on it or a given one:
+  // dropped as well, the warning it raised resolved with it)
+  if (allows.size)
+    for (const c of [...cams.values()]) {
+      const act: Action = { at: c.at, from: c.at, to: c.at + c.sec, light: false, composition: true, what: '', owner: boundaryOf(c.lineId) };
+      const others: Action[] = events.filter((e) => e.kind !== 'keep' && e.kind !== 'camera-reframe' && e.lineIds.at(-1) !== c.lineId).map((e) => ({ at: e.at, from: e.from, to: e.to, light: false, composition: true, what: e.id }));
+      const why = conflict(act, others);
+      if (!why) continue;
+      cams.delete(c.lineId);
+      camDrops.push({ lineId: c.lineId, kind: c.kind, at: c.at, reason: why });
+      const own = events.findIndex((e) => e.kind === 'camera-reframe' && e.lineIds.at(-1) === c.lineId);
+      if (own >= 0) events.splice(own, 1);
+      for (const e of events) if (e.camera && e.lineIds.at(-1) === c.lineId) delete e.camera;
+      const named = `world camera ${c.kind} into ${c.lineId}`;
+      for (let k = warnings.length - 1; k >= 0; k--) if (warnings[k].reason.includes(named)) warnings.splice(k, 1);
+    }
   events.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
-  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}) };
+  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}), ...(camDrops.length ? { camDrops } : {}) };
 }
 
 /** Events that change seat, carrier or framing; `keep` never does. */
@@ -523,7 +645,8 @@ export const isReadingSeatChange = (e: WorldEvent) => isCut(e) && e.seatBefore !
  */
 export function countCuts(events: WorldEvent[], window: [number, number]) {
   const [a, b] = window;
-  const inside = [...new Map(events.filter((e) => isCut(e) && e.at > a + 1 / 30 && e.at < b).map((e) => [e.id, e])).values()].sort((x, y) => x.at - y.at);
+  // (a hold-level beat, the receipt's feed, is never a plan cut: it counts only where a frame check sees it)
+  const inside = [...new Map(events.filter((e) => isCut(e) && !e.holdLevel && e.at > a + 1 / 30 && e.at < b).map((e) => [e.id, e])).values()].sort((x, y) => x.at - y.at);
   const once = inside.filter((e, i) => i === 0 || e.at - inside[i - 1].at >= 0.05);
   const per10 = (n: number) => +((n * 10) / Math.max(1e-6, b - a)).toFixed(2);
   const seats = once.filter((e) => isReadingSeatChange(e) || inside.some((x) => x !== e && Math.abs(x.at - e.at) < 0.05 && isReadingSeatChange(x)));

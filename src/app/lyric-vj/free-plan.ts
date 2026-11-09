@@ -129,6 +129,12 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
   const runOf = (k: number) => parts.get(song.cues[k].id)?.run ?? 0;
   const subOf = (k: number) => { const p = parts.get(song.cues[k].id); return { n: song.cues.filter((x) => parts.get(x.id)?.run === runOf(k)).length, sec: +((p?.to ?? 0) - (p?.from ?? 0)).toFixed(1) }; };
   const receipt = { id: (songKeyOf(String(song0.title ?? '')) >>> 0).toString(16).toUpperCase().padStart(8, '0'), lines: song.cues.length, len: +(song0.duration ?? song.cues.at(-1)!.end).toFixed(1), bpm: Math.round(song0.tempo) };
+  // (a receipt's segments within a run, Q1 phase 3b: a line an approved page move opens starts one; a run starts its own)
+  const pageMoves = new Map((plan.shots as { lines: { cue: string; world?: { page?: { draws: string; at: number; sec: number } } }[] }[]).flatMap((s) => s.lines.flatMap((l) => (l.world?.page ? [[l.cue, l.world.page] as const] : []))));
+  const segmentOf = (i: number): { no: number; draws: string } | undefined => {
+    for (let k = i; k > 0 && runOf(k - 1) === runOf(k); k--) { const m = pageMoves.get(song.cues[k].id); if (m) return { no: k + 1, draws: m.draws }; }
+    return undefined;
+  };
   const itemOf = (id: string | undefined): WorldItem | undefined => {
     const i = prints ? song.cues.findIndex((x) => x.id === id) : -1;
     if (i < 0) return undefined;
@@ -140,6 +146,13 @@ export function composerTreatment(song0: SongTimeline, plan0: Plan, base: Treatm
       no: i + 1, part: partName(c.id), text: c.text, prev: Array.from({ length: Math.min(5, i) }, (_, k) => at(i - Math.min(5, i) + k)),
       at: c.start, dur: c.end - c.start, run: runOf(i), first, closing: c.id === closing, sub: subOf(i), song: receipt,
       ...(closed >= 0 ? { before: { part: partName(song.cues[i - 1].id), ...subOf(i - 1), closing: song.cues.slice(closed, i).some((x) => x.id === closing) } } : {}),
+      ...(() => {
+        const since = segmentOf(i);
+        const move = pageMoves.get(c.id);
+        if (!since) return {};
+        const runStart = song.cues.findIndex((x) => parts.get(x.id)?.run === runOf(i)) + 1;
+        return { since, ...(move ? { opens: { draws: move.draws, at: move.at, sec: move.sec }, ...(!first ? { segmentFrom: (i > 0 ? segmentOf(i - 1)?.no : undefined) ?? runStart } : {}) } : {}) };
+      })(),
     };
   };
   const linesAt = (a: number, b: number) => song.cues.filter((x) => x.start < b + 1 && x.end > a).map((x) => x.text).join(' ') || titleOf;
@@ -396,7 +409,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const { job, treatment } = scheduled ? jobOf(plan) : first;
   // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
   const checked = scheduled ? [...verifyWorldEvents(job, world, events), ...lightGapWarnings(job, events)] : [];
-  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}) };
+  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
   return { job, plan, palette: paletteId, calm, treatment };

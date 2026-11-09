@@ -35,6 +35,8 @@ export const isLinked = (kind?: string) => !!kind && LINKED.has(familyOf(kind));
 /** The time a page move takes before the words switch and after, s. */
 export const LINK_PREPARE = 0.25;
 export const LINK_CLEAR = 0.35;
+/** A line's exit is over this long before the next line shows (engine exitAt); a world's erase ends as early (world-events). */
+export const EXIT_LEAD = 0.02;
 
 /**
  * A world line's way in and out (the composer's pick, lineplan-core.ts). A world whose material allows no linked family

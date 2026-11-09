@@ -4,7 +4,7 @@
 // on the left and after on the right (`sides`). $0: stored meanings only, no render here (render.mts takes the treatments).
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/q1-clips.mts --out out/research/q1-1109/clips.json [--treatments dir] [--phase 2|3a]
 import { execSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
@@ -13,11 +13,15 @@ import { countCuts } from '../../src/app/lyric-vj/world-events';
 import { currentEvents } from '../../src/app/lyric-vj/world-events-adapter';
 import { isPageSeat } from '../../src/app/lyric-vj/world-shared';
 
-const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo' };
+const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', taimei: 'yt_ZQ8mn5fS5_M' };
 const SETS: Record<string, (readonly [string, string, number, number])[]> = {
   '2': [['chalkboard', 'snow', 60, 120], ['blueprint', 'snow', 60, 120], ['notebook', 'nun', 70, 130]],
   // (the three worlds that gained same-page seats; notebook and blueprint on phase 2's windows, art-deco where its secondary block is used)
   '3a': [['notebook', 'nun', 70, 130], ['art-deco', 'snow', 90, 150], ['blueprint', 'snow', 60, 120]],
+  // (phase 3b: where each world's own move falls. chalkboard's erase needs a breath after a line (nun's one before 114.3);
+  // the receipt's feeds and tears on nun; art-deco's poster-panel needs a spaced line on a marquee: 我愛台妹, no stored
+  // meaning, the free path's own fallback reading, the same on both sides)
+  '3b': [['chalkboard', 'nun', 70, 130], ['document', 'nun', 50, 110], ['art-deco', 'taimei', 10, 70]],
 };
 const { values: a } = parseArgs({ options: { out: { type: 'string', default: 'out/research/q1-1109/clips.json' }, treatments: { type: 'string' }, phase: { type: 'string', default: '3a' } } });
 const CLIPS = SETS[a.phase!];
@@ -25,7 +29,7 @@ type Cue = { cueId: string; world?: { set?: string; repose?: unknown[] } };
 const out: Record<string, unknown> = { commit: execSync('git rev-parse --short HEAD').toString().trim(), phase: a.phase, sides: { left: 'before: freeJob worldEvents:false (scheduler off, today\'s product)', right: 'after: freeJob worldEvents:true (scheduler on)' }, note: 'counts are plan level, after.drawn = the after job read back; inLine lists the after side\'s switches inside a line (pageSeat: to a same-page seat)' };
 for (const [id, name, from, to] of CLIPS) {
   const song = JSON.parse(readFileSync(`out/db/${IDS[name]}/song.json`, 'utf8'));
-  const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8'));
+  const meaning = existsSync(`out/research/instant/plans/${name}/meaning.json`) ? JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8')) : undefined;
   const style = OFFERED_STYLES.find((s) => s.id === id)!;
   const before = freeJob(song, { style, seed: 0, meaning, worldEvents: false });
   const after = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
@@ -40,7 +44,7 @@ for (const [id, name, from, to] of CLIPS) {
   out[id] = {
     song: name, window: win, lines: lines.length,
     before: { cuts: b.cuts, per10: b.planCutsPer10, byKind: b.byKind },
-    after: { plan: { cuts: p.cuts, per10: p.planCutsPer10, byKind: p.byKind }, drawn: { cuts: d.cuts, per10: d.planCutsPer10 }, keeps: ev.filter((e) => e.kind === 'keep').length, inLine: ev.filter((e) => e.scope === 'in-line' && e.kind !== 'keep').map((e) => ({ at: e.at, line: e.lineIds[0], from: e.seatBefore, to: e.seatAfter, pageSeat: isPageSeat(e.seatAfter) || isPageSeat(e.seatBefore), reason: e.reason })), contract: after.treatment.worldEvents!.warnings.filter((w) => w.reason.startsWith('final check')).length },
+    after: { plan: { cuts: p.cuts, per10: p.planCutsPer10, byKind: p.byKind }, drawn: { cuts: d.cuts, per10: d.planCutsPer10 }, keeps: ev.filter((e) => e.kind === 'keep').length, materials: ev.filter((e) => e.material).map((e) => ({ material: e.material, at: e.at, from: e.from, to: e.to, lines: e.lineIds, seat: e.seatAfter })), camDrops: (after.treatment.worldEvents!.camDrops ?? []).filter((c) => c.at > from && c.at < to), inLine: ev.filter((e) => e.scope === 'in-line' && e.kind !== 'keep').map((e) => ({ at: e.at, line: e.lineIds[0], from: e.seatBefore, to: e.seatAfter, pageSeat: isPageSeat(e.seatAfter) || isPageSeat(e.seatBefore), reason: e.reason })), contract: after.treatment.worldEvents!.warnings.filter((w) => w.reason.startsWith('final check')).length },
     changed: { set: lines.filter((c) => old(c.cueId)?.world?.set !== c.world?.set).map((c) => c.cueId), repose: lines.filter((c) => JSON.stringify(old(c.cueId)?.world?.repose ?? []) !== JSON.stringify(c.world?.repose ?? [])).map((c) => c.cueId) },
   };
   if (a.treatments) for (const [side, f] of [['before', before], ['after', after]] as const) {

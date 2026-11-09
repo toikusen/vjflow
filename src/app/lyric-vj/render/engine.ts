@@ -13,7 +13,7 @@ import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
 import { gateMotion, REST_FLOOR } from './reading-window';
 import { LinkContext, LinkFamilyKind, linkLayout, setLinkContext } from './motion-transition';
-import { sectionClock } from './world-handoff';
+import { sectionClock, EXIT_LEAD } from './world-handoff';
 import { approvedOf, lineShows, threadShot } from './line-shows';
 import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash, passKeeps, seamClear } from './lyric-handoff';
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
@@ -990,7 +990,7 @@ export class LyricVjEngine {
         return nextShow;
       })();
       // (a world's shared shot is gone before the next line shows, however late its own line runs)
-      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - 0.02 : persist ? Math.max(cue.end, leaveBy - exitSec - 0.02) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - 0.02);
+      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : persist ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
@@ -1020,6 +1020,9 @@ export class LyricVjEngine {
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
       };
       if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });
+      // a line its world erases (Q1 phase 3b, an approved event only): the erase is its way out, at the approved time
+      const wipe = (style.world as { wipe?: { from: number; sec: number } } | undefined)?.wipe;
+      if (wipe) Object.assign(rt, { exitAt: wipe.from, exitDur: wipe.sec });
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
       // dark type on a light field gets a halo of that field's colour: it then reads over a photo inset as well

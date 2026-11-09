@@ -92,6 +92,12 @@ export interface SetSpec {
    * to a world the scheduler takes over (world-shared pageSeats). Its `lo` is the least type a line is offered it at.
    */
   samePage?: string;
+  /**
+   * The words on the same page carried another way (Q1 phase 3b, art-deco poster-panel): the split line's parts each on a
+   * panel of their own, the main part on the page's plaque and the small part on a secondary panel under it. The layout is
+   * the page set's own, so the words do not move; only what carries them changes (a carrier swap).
+   */
+  panels?: boolean;
 }
 
 /** The size a block of `w` × `h` takes on screen once its set's shear has drawn it. */
@@ -102,7 +108,12 @@ export const shearedSize = (w: number, h: number, shear?: SetSpec['shear']): [nu
  * The layout a sheared set hands its page with the line's box: the block's centre (frame px, y down), its own size before
  * the shear, the shear, the type size and rows, and each shown character's centre (block px, y down) and size.
  */
-export interface FaceLayout { cx: number; cy: number; w: number; h: number; shear: [number, number, number, number]; size: number; rows: number; cells: [number, number, number][] }
+export interface FaceLayout {
+  cx: number; cy: number; w: number; h: number; shear: [number, number, number, number]; size: number; rows: number; cells: [number, number, number][];
+  /** A set whose parts each stand on a panel of their own (`panels`): each cell's part (0 the main, 1 the small), and when the panels part, s, over how long. */
+  parts?: number[];
+  panels?: { from: number; sec: number };
+}
 
 /** A set's call-free boxes in the text root's own space (origin at the frame's centre, y up), px. */
 export const clearOf = (id: string | undefined, W = 1920, H = 1080) =>

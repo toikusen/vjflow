@@ -15,6 +15,7 @@ import { carrierBox, carrierRoom, growRoom, inkChecks, keyFor } from './hold-roo
 import { slotSpec } from './seat-geometry';
 export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
+import { eraseFront } from './chalk-erase';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
 
@@ -24,7 +25,14 @@ export interface WorldLine {
   exit: string;
   hold: string;
   /** Sets the line moves to while it is up, at these seconds (a scheduled world: only the switches its event plan approved). */
-  repose?: { at: number; set: string }[];
+  repose?: { at: number; set: string; /** A carrier move's own time and name (art-deco poster-panel), else a cut. */ sec?: number; move?: string }[];
+  /**
+   * The line's way out is its world's erase (Q1 phase 3b chalkboard erase-reseat): from `from` for `sec`, by the exit
+   * named in `exit` (the board's eraser pass), only ever after the line is sung; the next line is set over the region.
+   */
+  wipe?: { from: number; sec: number; move: string };
+  /** The page under the line changes at its show by the world's own move (the receipt's tear or feed): which, when, how long. */
+  page?: { move: string; at: number; sec: number; draws: string };
   /** The other sets the composer found legal for the line (a scheduled world's candidates, world-events.ts); plan only. */
   seats?: string[];
   /** What its characters are made of. */
@@ -339,7 +347,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const scratch = new THREE.Vector3();
   const unit = new THREE.Vector3();
   const entering = WORLD_ENTERS[wl.enter];
-  const leaving = WORLD_EXITS[wl.exit];
+  // (a line its world erases goes by the one eraser front, chalk-erase.ts, not by its exit's own glyph move)
+  const leaving = wl.wipe ? undefined : WORLD_EXITS[wl.exit];
   const holding = WORLD_HOLDS[wl.hold];
   const need = readingSec(rt.cue.text, rt.cue.start, rt.cue.end);
   const room = () => Math.max(0, rt.exitAt - rt.showFrom - need);
@@ -353,8 +362,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const glyphIn = Math.max(0.18, enterDur);
   const dimBaked = new THREE.Color(0.1, 0.1, 0.1);
   const lit = new THREE.Color(1, 1, 1);
-  const useClip = entering?.clip || leaving?.clip;
+  const useClip = entering?.clip || leaving?.clip || wl.wipe;
   if (useClip) gs.forEach((g) => (g.mesh.material.clippingPlanes = [plane]));
+  if (wl.wipe) underLayers.forEach((layer) => layer.forEach((u) => (u.mesh.material.clippingPlanes = [plane])));
   const caret = wl.hold === 'cursor-wait' ? new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: color(words), transparent: true, depthTest: false, depthWrite: false })) : undefined;
   if (caret) { caret.userData['noVeil'] = true; caret.userData['decor'] = true; caret.userData['inFrame'] = true; body.add(caret); }
   // the held line's one event (world-beats.ts): its key ink per pose, a baked surface's key pictures, the copies behind
@@ -399,9 +409,20 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     const b = p.block;
     body.updateWorldMatrix(true, false);
     const [lo, hi] = c.axis === 'y' ? [new THREE.Vector3(0, b.h / 2 + b.size, 0), new THREE.Vector3(0, -b.h / 2 - b.size, 0)] : [new THREE.Vector3(-b.w / 2 - b.size, 0, 0), new THREE.Vector3(b.w / 2 + b.size, 0, 0)];
+    // (whole rows only: a cut through a row moves to that row's leading edge, so the row is not shown until it is whole)
+    let k = c.at;
+    if (c.rows && c.axis === 'y' && k > 0 && k < 1) {
+      const span = lo.y - hi.y;
+      const cut = lo.y - span * k;
+      for (let i = 0; i < p.y.length; i++) {
+        if (!p.shown[i]) continue;
+        const half = ((p.sizes?.[i] ?? p.scale) * tex) / 2;
+        if (p.y[i] + half > cut && p.y[i] - half < cut) k = Math.min(k, (lo.y - (p.y[i] + half)) / span);
+      }
+    }
     const [a, z] = [body.localToWorld(lo), body.localToWorld(hi)];
     const along = z.clone().sub(a);
-    const at = a.clone().add(along.clone().multiplyScalar(c.at));
+    const at = a.clone().add(along.clone().multiplyScalar(k));
     unit.copy(along).normalize().negate();
     plane.setFromNormalAndCoplanarPoint(unit, at);
   };
@@ -426,7 +447,15 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     // (it grows from the side its set is anchored on: that edge stays put)
     const [cx, cy] = [cx0 - p.spec.ax * (bw / 2) * grow * (g - 1), cy0 - p.spec.ay * (bh / 2) * grow * (g - 1)];
     const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: sh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])) };
-    return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}) } };
+    // (a set carried on panels, art-deco poster-panel: which part each cell is, and when the panels part, for the page)
+    if (face && sets[i].panels && p.block.small?.length) {
+      const row = rowsOfGlyphs(gs, p.block);
+      face.parts = gs.flatMap((gl, j) => (p.shown[j] ? [p.block.small!.includes(row.get(gl) ?? -1) ? 1 : 0] : []));
+      face.panels = { from: i ? wl.repose![i - 1].at : rt.showFrom, sec: i ? wl.repose![i - 1].sec ?? 0 : 0 };
+    }
+    // (the last pose of a line its world erases carries the wipe: the board wipes its own marks by the same front)
+    const wiped = wl.wipe && i === poses.length - 1 ? { wipe: { from: wl.wipe.from, sec: wl.wipe.sec } } : {};
+    return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}), ...wiped } };
   });
   // the camera into a new part never carries the first line's box out of the frame (world-cam.ts camReach)
   let camRoom: CamRoom | undefined;
@@ -485,11 +514,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const k = poseAt(t);
       const p = poses[k];
       const live = t >= rt.showFrom;
-      const gone = rt.style.exit === 'cut' ? t > rt.exitAt : t > rt.exitAt + rt.exitDur;
+      // (an erased line goes by its world's erase, whatever its style's exit: world-events wipe)
+      const gone = rt.style.exit === 'cut' && !wl.wipe ? t > rt.exitAt : t > rt.exitAt + rt.exitDur;
       body.visible = live && !gone;
       if (!body.visible) return;
       const qIn = sec(t - rt.showFrom, enterDur);
-      const out = t > rt.exitAt && rt.style.exit !== 'cut';
+      const out = t > rt.exitAt && (rt.style.exit !== 'cut' || !!wl.wipe);
       const qOut = out ? clamp01((t - rt.exitAt) / Math.max(0.05, rt.exitDur)) : 0;
       const move = out ? leaving : qIn < 1 ? entering : undefined;
       const blockPose = move?.block?.(out ? qOut : qIn, seed) ?? {};
@@ -526,6 +556,13 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const clip = move?.clip?.(out ? qOut : qIn);
       const hasClip = !!useClip;
       if (hasClip) { if (clip) setClip(clip, p); else plane.set(unit.set(0, 1, 0), 1e6); }
+      // the eraser's front: everything of the line right of it is wiped (one front for every row and the board's marks)
+      if (wl.wipe && t >= wl.wipe.from) {
+        const r = restRects().at(-1)!.rect;
+        group.updateWorldMatrix(true, false);
+        const at = group.localToWorld(scratch.set(eraseFront(t, wl.wipe, r.x0, r.x1) - 960, 0, 0));
+        plane.setFromNormalAndCoplanarPoint(unit.set(-1, 0, 0), at);
+      }
       // (the earlier line of a shared shot steps back for the later one only once its own reading time is over: dimmed
       // while still read, it fell under the reading gate, citypop tsuzuki c001)
       const rank = slot.of > 1 && (rt.later ?? []).length === 0 ? 1 : slot.of > 1 && t >= rt.exitAt && (rt.later ?? []).some((a) => t >= a + 0.2) ? 0.6 : 1;

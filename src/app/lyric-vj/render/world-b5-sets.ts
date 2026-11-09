@@ -11,6 +11,15 @@ const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70
 export const FLAT: [number, number, number, number] = [1, 0, 0, 1];
 /** art-deco's tall lettering: the face drawn narrow (board: scaleX .72, here .75 so no two strokes close up) and tracked wide. */
 export const DECO_NARROW: [number, number, number, number] = [0.75, 0, 0, 1];
+/**
+ * The poster-panel's proportions (Q1 phase 3b, round 2 after the critic): the main plaque is the marquee's own (half
+ * width at least `mainHalf` px, `mainPad` past the words, `mainPadY` above and below: world-b5-deco marqueeOf reads the
+ * same numbers); the secondary panel stands on the same axis, `pad` px past its phrase and `padY` of its type size above
+ * and below, its rule `inset` px clear of any word, and at least `narrower` px narrower than the main plaque either side,
+ * so it reads as the lesser (with one thin rule against the plaque's triple rules). A line whose phrase needs more is not
+ * carried on panels (lineplan-core pageSeatsFor).
+ */
+export const DECO_PANELS = { mainHalf: 620, mainPad: 110, mainPadY: 56, pad: 40, padY: 0.45, narrower: 40, gap: 24, inset: 12 } as const;
 /** art-deco's columns, a little less narrow (board d: scaleX .85). */
 export const DECO_COLUMN: [number, number, number, number] = [0.85, 0, 0, 1];
 /** screentone's sound effect, turned 10° up (board c: rotate(-10)). */
@@ -82,6 +91,10 @@ const B5_PAGE_SEATS: Record<string, SetSpec> = {
   'notebook/dotted+margin': pageSeat('notebook/dotted', { at: [0.86, 0.88], ax: 1, ay: 1, flush: 1, share: 0.5, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
   'art-deco/marquee+second': pageSeat('art-deco/marquee', { at: [0.5, 0.56], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
   'art-deco/marquee-low+second': pageSeat('art-deco/marquee-low', { at: [0.5, 0.36], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
+  // (phase 3b, poster-panel: the marquee set as it is, split and all, its gold phrase on a panel of its own; offered only
+  // where the line really splits, lineplan-core pageSeatsFor)
+  'art-deco/marquee+panels': { ...B5_SETS['art-deco/marquee'], samePage: 'art-deco/marquee', panels: true, lo: B5_SETS['art-deco/marquee'].lo },
+  'art-deco/marquee-low+panels': { ...B5_SETS['art-deco/marquee-low'], samePage: 'art-deco/marquee-low', panels: true, lo: B5_SETS['art-deco/marquee-low'].lo },
 };
 // (the turned notebook pages' margin seats, turned with them)
 for (const id of ['notebook/spiral', 'notebook/dotted']) {

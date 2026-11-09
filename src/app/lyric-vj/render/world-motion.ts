@@ -48,7 +48,16 @@ export interface GlyphPose {
 
 export interface BlockPose { dx?: number; dy?: number; sx?: number; sy?: number; r?: number; a?: number; pivot?: -1 | 0 | 1 }
 /** What of the block still shows: from its top or left edge up to `at` of the way across. */
-export interface Clip { axis: 'x' | 'y'; at: number }
+export interface Clip {
+  axis: 'x' | 'y';
+  at: number;
+  /**
+   * Whole rows only (a receipt's head prints a row at a time): a cut that would fall through a row of text is moved to
+   * that row's edge, so the row is either shown whole or not yet; never a row sliced inside the paper with no edge to
+   * explain it (2026-11-10 critic, document 58.3 s).
+   */
+  rows?: boolean;
+}
 
 export interface WorldMove {
   /** Seconds it wants at full pace. */

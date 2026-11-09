@@ -6,6 +6,8 @@
 // Moves in and out shared by all worlds are in render/world-motion.ts (SHARED_ENTERS, SHARED_EXITS).
 import type { StyleWorld } from './style-world';
 import { SET_SPECS } from './render/world-sets';
+import { TRAY_H } from './render/chalk-erase';
+import { MOUTH_Y } from './render/world-doc-sets';
 import type { CompositionFamily } from './world-events';
 
 export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker' | HoldKind | 'line-ink-settle';
@@ -225,12 +227,17 @@ export interface WorldCompositions {
   allowedAt: Partial<Record<CompositionFamily, ('section' | 'line' | 'in-line')[]>>;
   /** Each family's action time, s (a reseat is a cut: 0). */
   duration: Partial<Record<CompositionFamily, number>>;
-  /** How the move runs: a cut, or the world's own curve (world-cam.ts for a camera). */
-  curve: Partial<Record<CompositionFamily, 'cut' | 'world-camera' | 'page-link'>>;
+  /** How the move runs: a cut, or the world's own curve (world-cam.ts for a camera, a material move's own). */
+  curve: Partial<Record<CompositionFamily, 'cut' | 'world-camera' | 'page-link' | MoveCurve>>;
   /** Regions no seat may enter, frame fractions y down. */
   protectedRegion?: { x0: number; y0: number; x1: number; y1: number }[];
   moves: Partial<Record<CompositionFamily, string>>;
   pending?: Record<string, string>;
+  /**
+   * The world's own material moves (Q1 phase 3b, Codex C step 4): each a family the scheduler may lay only through an
+   * approved event, with its own time, curve and the regions its action keeps off. Never a keyword, never render-side.
+   */
+  materials?: Record<string, MaterialMove>;
   /**
    * Whether the world's seats on the same page as its sets are used (Q1 phase 3a): the same carrier, another reading
    * area (notebook's main column and its lower margin, art-deco's main and secondary block inside the one stepped frame,
@@ -246,6 +253,42 @@ export interface WorldCompositions {
    * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
    */
   enabled?: boolean;
+}
+
+/** How a material move runs (design-bar rule 9: the curve follows the material, never one shared ease). */
+export type MoveCurve = 'chalk-erase' | 'paper-feed' | 'paper-tear' | 'panel-slide';
+
+/**
+ * A world's own move (Q1 phase 3b). `seat` says what it does to where the words are read: `over` reseats the next line on
+ * a region that meets the one just sung, which is erased first (the old line's way out, its action ending as the new line
+ * shows); `same` keeps the seat and changes the page under it from the switch point on (the receipt's next segment);
+ * `carrier` changes what the same words stand on, on the same page, at a sung word inside the line (the words do not move).
+ * `clearOfSung`: the action starts at least this long after the line before was last sung (0: once it is sung).
+ * `minLine`: the shortest line that takes it. `protectedRegion`: frame fractions the action itself keeps off.
+ */
+export interface MaterialMove {
+  family: CompositionFamily;
+  at: ('section' | 'line' | 'in-line')[];
+  sec: number;
+  curve: MoveCurve;
+  seat: 'over' | 'same' | 'carrier';
+  clearOfSung: number;
+  minLine?: number;
+  changesLight?: boolean;
+  protectedRegion?: { x0: number; y0: number; x1: number; y1: number }[];
+  /** The move as the renderer names it (a world exit, a page's segment, a panel relation). */
+  draws: string;
+  /**
+   * 'seen': the seat and the words stay and only what is printed round them moves (Codex A: a prop- or hold-level beat,
+   * not a change of reading composition), so the plan never counts it as a cut; the measurement counts it only where the
+   * frame check sees it.
+   */
+  counts?: 'seen';
+  /**
+   * Declared but withheld from the plan (the reason): the scheduler is offered no candidate of it until the reason is
+   * resolved (the same pattern as Q3's WORLD_SCALE.withheld). The declaration stays, so its contract and renderer are kept.
+   */
+  withheld?: string;
 }
 
 /**
@@ -264,6 +307,12 @@ export interface WorldCompositions {
  */
 const BLUEPRINT_BORDER = [{ x0: 0, y0: 0, x1: 1, y1: 0.059 }, { x0: 0, y0: 0.941, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.033, y1: 1 }, { x0: 0.967, y0: 0, x1: 1, y1: 1 }];
 const NOTEBOOK_HEAD = [{ x0: 0, y0: 0, x1: 1, y1: 0.12 }];
+/** The chalk tray along the board's foot (the renderer's own, chalk-erase TRAY_H). */
+const CHALK_TRAY = { x0: 0, y0: 1 - TRAY_H / 1080, x1: 1, y1: 1 };
+/** The printer's mouth along the receipt's foot (the renderer's own, world-doc-sets MOUTH_Y). */
+const RECEIPT_MOUTH = { x0: 0, y0: MOUTH_Y / 1080, x1: 1, y1: 1 };
+/** The poster-panel: one declaration of its time and curve, read by the family's duration and the material move. */
+const POSTER_PANEL = { sec: 0.4, curve: 'panel-slide' as const };
 const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.05, y1: 1 }, { x0: 0.95, y0: 0, x1: 1, y1: 1 }];
 
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
@@ -273,17 +322,34 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: true, protectedRegion: BLUEPRINT_BORDER },
   // board-region: left / right / centre regions of the deep green board, also at a word inside a line (the same board
   // under the words, so nothing is pulled from under them); chalk changing colour is no cut
-  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' }, pending: { 'erase-reseat': 'needs an eraser pass drawn over a region already sung; never the line being sung' } },
-  // a thermal receipt: camera still, no shared page handoff, its stamp only a hold; its feed and tear are its own page
-  // moves, not drawn as a composition switch yet
-  document: { kinds: [], carrierRole: 'page', allowedAt: {}, duration: {}, curve: {}, moves: {}, pending: { 'feed-advance': 'the receipt feeding on to its next segment as a switch of its own', 'tear-next': 'tearing off along the paper edge once the line is sung' } },
+  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' },
+    // erase-reseat (phase 3b): a next region that meets the one just sung is wiped first by the board's own eraser pass
+    // (its approved exit), only once the line there is sung and read still 0.35 s past its last syllable; the line being
+    // sung is never touched (the wipe ends as the next line shows); the tray along the foot is never wiped over
+    materials: { 'erase-reseat': { family: 'layout-seat', at: ['section', 'line'], sec: 0.42, curve: 'chalk-erase', seat: 'over', clearOfSung: 0.35, draws: 'eraser-pass', protectedRegion: [CHALK_TRAY] } } },
+  // a thermal receipt: camera still, no shared page handoff (no Q4 link: WORLD_LINKS document has none), its stamp only a
+  // hold. Its own page moves (phase 3b) keep the line's seat and change the paper under it, once the line before is sung:
+  // tear-next tears the segment off along the tear bar (the approved part-change slip, four held steps up and left) and
+  // the next line prints on fresh paper whose torn top edge stands just over it, at a part's start; feed-advance feeds
+  // the printed rows up out of shot in held steps (straight up, never turning) and opens the next segment with a rule.
+  // The slip only goes by over a line long enough to be read past it (1.5 s, the page's own rule)
+  document: { kinds: ['page-handoff'], carrierRole: 'page', allowedAt: { 'page-handoff': ['section', 'line'] }, duration: {}, curve: {}, moves: {}, materials: {
+    'tear-next': { family: 'page-handoff', at: ['section'], sec: 0.25, curve: 'paper-tear', seat: 'same', clearOfSung: 0, minLine: 1.5, changesLight: true, draws: 'tear', protectedRegion: [RECEIPT_MOUTH] },
+    'feed-advance': { family: 'page-handoff', at: ['line'], sec: 0.3, curve: 'paper-feed', seat: 'same', clearOfSung: 0, minLine: 1.5, draws: 'feed', counts: 'seen', protectedRegion: [RECEIPT_MOUTH] },
+  } },
   // page-turn: the Q4 fold to the top binding; margin-seat: the main column and, on the same page, the margin seat under
   // it (phase 3a), at the world's least type or more: the one seat a line may take inside itself (the same page under it)
   notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: true, protectedRegion: NOTEBOOK_HEAD },
   // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; the secondary block on the axis
   // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: the one seat a line may take inside
-  // itself (the same frame under it). No marquee turned stage sign; the carrier-swap stays pending (phase 3 step 4)
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' }, pageSeats: true, protectedRegion: DECO_FRAME },
+  // itself (the same frame under it). No marquee turned stage sign. carrier-swap (phase 3b, poster-panel): at a sung word
+  // inside a line on a marquee, its single plaque parts into the main plaque and a stepped secondary panel under the
+  // gold phrase, slid down out of the main one (ease-out, no overshoot); the words never move, the panel is the ground's
+  // own black, the plaque keeps the approved board's rules and minimum width
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
+    // (withheld 2026-11-10: the scheduler approved Utsusemi 75.86 on a split the renderer did not make. Re-enable once
+    // lineplan-core pageSeatsFor and world-b5-deco panelsOf split a line with the same real widths)
+    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME, withheld: 'scheduler and renderer split the line with different widths; needs the shared real-width split' } } },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

@@ -9,7 +9,8 @@
 //            stable frames in reading time (frame-change.mts stableTimes), read for the words' move, their type scale
 //            and scale relation, their direction, the edges of what they stand on and their place on their carrier
 //            (frame-change.mts, calibrated on out/research/q1-1109/calib); a switch with none of these is `unrealized`.
-//            verifiedCompositionCutsPer10 = (plan cuts − unrealized) per 10 s.
+//            verifiedCompositionCutsPer10 = (plan cuts − unrealized + hold-level beats seen) per 10 s; also without
+//            detections only the carrier ring (outline) made, and without proportional-time boundaries (unreliableBoundary).
 // A world the scheduler takes over whose final draw does not match its plan (verifyWorldEvents, lightGapWarnings: the
 // table's "final check" warnings) fails the run: listed under `contract` and a non-zero exit.
 // Plan counts (planCutsPer10) are the plan's own: they are not "verified" until --frames looked at them.
@@ -22,7 +23,7 @@ import { freeJob } from '../../src/app/lyric-vj/free-plan';
 import { OFFERED_STYLES } from '../../src/app/lyric-vj/free-styles';
 import { countCuts, planWorldEvents, type WorldEvent } from '../../src/app/lyric-vj/world-events';
 import { capsOf, currentEvents, fromJob, ONE_PAGE_WORLDS } from '../../src/app/lyric-vj/world-events-adapter';
-import { frameChange, GRID, stableTimes, type FrameChange } from './frame-change.mts';
+import { frameChange, GRID, judge, SEEN, stableTimes, type FrameChange } from './frame-change.mts';
 import { framePage } from './frame-page.mts';
 
 const WINDOWS = [
@@ -42,13 +43,15 @@ async function framesOf() {
   const check = async (key: string, job: unknown, events: WorldEvent[]) => {
     const p = await page.job(key, job);
     const cues = await p.cues();
-    const out: { at: number; kind: string; scope: string; lineIds: string[]; realized: boolean; why: string; t?: [number, number]; m?: Omit<FrameChange, 'seen' | 'why'> }[] = [];
+    const out: { at: number; kind: string; scope: string; lineIds: string[]; material?: string; holdLevel?: boolean; unreliableBoundary?: boolean; outlineOnly?: boolean; realized: boolean; why: string; t?: [number, number]; m?: Omit<FrameChange, 'seen' | 'why'> }[] = [];
     for (const e of events) {
       const t = stableTimes(e, cues);
       if (!t) { out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, realized: false, why: 'no reading time either side' }); continue; }
       const [x, y] = [await p.layers(t.before, GRID.w, GRID.h), await p.layers(t.after, GRID.w, GRID.h)];
       const { seen, why, ...m } = frameChange(x, y, e.scope === 'in-line');
-      out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, realized: seen, why, t: [t.before, t.after], m });
+      // (seen only by the carrier ring, not yet validated on a hold-out or owner-labelled set: reported apart)
+      const outlineOnly = seen && !judge(m, { ...SEEN, outline: Infinity }).seen;
+      out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, ...(e.material ? { material: e.material } : {}), ...(e.holdLevel ? { holdLevel: true } : {}), ...(e.unreliableBoundary ? { unreliableBoundary: true } : {}), realized: seen, outlineOnly, why, t: [t.before, t.after], m });
     }
     await p.close();
     return out;
@@ -74,20 +77,39 @@ for (const w of WINDOWS) {
     const drawn = countCuts(drawnEvents, w.window);
     // (a switch the job lays on the same line within 0.3 s is the same switch: a camera's start and its line's show)
     const unlaid = plan.at.filter((t) => { const e = table.events.find((x) => x.kind !== 'keep' && Math.abs(x.at - t) < 0.05)!; return !drawnEvents.some((x) => Math.abs(x.at - t) < 0.3 && x.lineIds.at(-1) === e.lineIds.at(-1)); });
-    const cutEvents = [...new Map(table.events.filter((e) => inWin(e, w.window)).map((e) => [e.id, e])).values()].sort((x, y) => x.at - y.at).filter((e, i, xs) => i === 0 || e.at - xs[i - 1].at >= 0.05);
+    // (the plan's cuts as countCuts counts them; hold-level beats, the receipt's feed, apart: a cut only where seen)
+    const dedupe = (es: WorldEvent[]) => [...new Map(es.map((e) => [e.id, e])).values()].sort((x, y) => x.at - y.at).filter((e, i, xs) => i === 0 || e.at - xs[i - 1].at >= 0.05);
+    const cutEvents = dedupe(table.events.filter((e) => inWin(e, w.window) && !e.holdLevel));
+    const holdEvents = dedupe(table.events.filter((e) => inWin(e, w.window) && e.holdLevel));
+    const reliable = cutEvents.filter((e) => !e.unreliableBoundary).length;
     const warnings = table.warnings.filter((x) => x.inputs.some((i) => { const m = /@([\d.]+)/.exec(i); return !m || (Number(m[1]) > w.window[0] - 1 && Number(m[1]) < w.window[1] + 1); }));
     const row: Record<string, unknown> = {
       world: style.id, window: w.name, song: w.song, range: w.window, seed, onePage: ONE_PAGE_WORLDS.includes(style.id), caps: { kinds: capsOf(style.world).kinds, source: table.source },
       before: { cuts: before.cuts, planCutsPer10: before.planCutsPer10, byKind: before.byKind },
       dryRun: { cuts: dryRun.cuts, planCutsPer10: dryRun.planCutsPer10 },
-      wired: { cuts: plan.cuts, planCutsPer10: plan.planCutsPer10, planSeatChangesPer10: plan.planSeatChangesPer10, byKind: plan.byKind, drawnCutsPer10: drawn.planCutsPer10, unlaid, warnings: warnings.length, warningKinds: [...new Set(warnings.map((x) => x.reason.split(':')[0]))] },
+      wired: { cuts: plan.cuts, planCutsPer10: plan.planCutsPer10, planSeatChangesPer10: plan.planSeatChangesPer10, byKind: plan.byKind, drawnCutsPer10: drawn.planCutsPer10, unlaid, warnings: warnings.length, warningKinds: [...new Set(warnings.map((x) => x.reason.split(':')[0]))],
+        // (phase 3b: the world's own material moves among the cuts, the camera moves a scheduled world dropped, and the
+        // given switches whose time is the composer's proportional guess, not a sung word)
+        materials: cutEvents.reduce<Record<string, number>>((m, e) => (e.material ? { ...m, [e.material]: (m[e.material] ?? 0) + 1 } : m), {}),
+        camDrops: (table.camDrops ?? []).filter((c) => c.at > w.window[0] - 1 && c.at < w.window[1] + 1).length,
+        unreliableBoundary: cutEvents.filter((e) => e.unreliableBoundary).length, planExclUnreliablePer10: per10(reliable, w.window), holdLevel: holdEvents.length },
       // (the whole song's final checks, a world the scheduler took over: any is a broken landing contract)
       contract: table.source === 'declared' ? table.warnings.filter((x) => x.reason.startsWith('final check')).map((x) => `${x.inputs.join(' / ')}: ${x.reason}`) : [],
     };
     if (frames) {
-      const seen = await frames.check(`${style.id}-${w.song}`, wired.job, cutEvents);
-      const un = seen.filter((x) => !x.realized);
-      Object.assign(row['wired'] as object, { unrealized: un.length, verifiedCompositionCutsPer10: per10(plan.cuts - un.length, w.window), frames: seen });
+      const seen = await frames.check(`${style.id}-${w.song}`, wired.job, [...cutEvents, ...holdEvents]);
+      const cutsSeen = seen.filter((x) => !x.holdLevel);
+      const un = cutsSeen.filter((x) => !x.realized);
+      const holdsSeen = seen.filter((x) => x.holdLevel && x.realized);
+      const outlineOnly = cutsSeen.filter((x) => x.outlineOnly).length;
+      const verified = plan.cuts - un.length + holdsSeen.length;
+      Object.assign(row['wired'] as object, {
+        unrealized: un.length, holdLevelSeen: holdsSeen.length, outlineOnly,
+        verifiedCompositionCutsPer10: per10(verified, w.window),
+        verifiedExclOutlinePer10: per10(verified - outlineOnly - holdsSeen.filter((x) => x.outlineOnly).length, w.window),
+        verifiedExclUnreliablePer10: per10(verified - cutsSeen.filter((x) => x.realized && x.unreliableBoundary).length, w.window),
+        frames: seen,
+      });
       console.error(style.id, w.name, 'plan', plan.cuts, 'unrealized', un.length);
     }
     rows.push(row);
@@ -103,11 +125,14 @@ const summary = Object.fromEntries(WINDOWS.map((w) => [w.name, {
   medianDryRun: of(w.name, (r) => r['dryRun'].planCutsPer10),
   medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10),
   medianWiredDrawn: of(w.name, (r) => r['wired'].drawnCutsPer10),
-  ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10), unrealized: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unrealized, 0) } : {}),
-  onePage: { medianBefore: of(w.name, (r) => r['before'].planCutsPer10, true), medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10, true), ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10, true) } : {}) },
+  medianWiredPlanExclUnreliable: of(w.name, (r) => r['wired'].planExclUnreliablePer10),
+  ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10), medianVerifiedExclOutline: of(w.name, (r) => r['wired'].verifiedExclOutlinePer10), medianVerifiedExclUnreliable: of(w.name, (r) => r['wired'].verifiedExclUnreliablePer10), unrealized: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unrealized, 0), outlineOnly: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].outlineOnly, 0) } : {}),
+  unreliableBoundary: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unreliableBoundary, 0),
+  unreliableWorlds: (rows as Row[]).filter((r) => r['window'] === w.name && r['wired'].unreliableBoundary > 0).length,
+  onePage: { medianBefore: of(w.name, (r) => r['before'].planCutsPer10, true), medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10, true), medianWiredPlanExclUnreliable: of(w.name, (r) => r['wired'].planExclUnreliablePer10, true), ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10, true), medianVerifiedExclOutline: of(w.name, (r) => r['wired'].verifiedExclOutlinePer10, true) } : {}) },
 }]));
 const contract = (rows as Row[]).flatMap((r) => [...r['contract'].map((x: string) => `${r['world']} ${r['window']}: ${x}`), ...r['wired'].unlaid.map((t: number) => `${r['world']} ${r['window']}: planned cut at ${t} not laid`)]);
-const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: true, contract, note: 'plan-level counts (planCutsPer10) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized', date: '2026-11-09', frames: !!frames, summary, rows };
+const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: true, contract, note: 'plan-level counts (planCutsPer10, hold-level beats never counted) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized, plus hold-level beats it saw; ExclOutline drops detections only the carrier ring saw (not yet validated); ExclUnreliable drops given switches at proportional-time boundaries', date: new Date().toISOString().slice(0, 10), frames: !!frames, summary, rows };
 if (a.out) {
   mkdirSync(dirname(a.out), { recursive: true });
   writeFileSync(a.out, JSON.stringify(report, null, 1));

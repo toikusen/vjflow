@@ -9,6 +9,7 @@ import { smoothNoise } from './world-ink';
 import { titleOnly } from './world-b3-shared';
 import { R2 } from './r2-inks';
 import { titleNow } from './world-title';
+import { eraseFront, feltAt, FELT_W, TRAY_H } from './chalk-erase';
 
 const HAND = (px: number) => `400 ${px}px Iansui, Yomogi, sans-serif`;
 /** The slate: its own green, a low cloud of lighter patches (the board's mottle), and four long faint eraser arcs; kept. */
@@ -44,7 +45,7 @@ const slate = (e: WorldEnv) => kept(`cb2|${e.paper}|${e.seed % 3}`, W, H, (c) =>
   c.globalAlpha = 1;
 });
 /** The tray along the foot: aluminium with a lit lip and a shadowed underside, chalk dust in it, two sticks and a felt eraser. */
-const tray = (e: WorldEnv) => kept(`cb2-tray|${e.paper}|${e.seed % 3}`, W, 120, (c) => {
+const tray = (e: WorldEnv) => kept(`cb2-tray|${e.paper}|${e.seed % 3}`, W, TRAY_H, (c) => {
   const y = 52;
   c.fillStyle = e.slots.plate; c.fillRect(0, y, W, 68);
   c.fillStyle = R2.lip; c.fillRect(0, y, W, 10);
@@ -60,7 +61,7 @@ const tray = (e: WorldEnv) => kept(`cb2-tray|${e.paper}|${e.seed % 3}`, W, 120, 
   c.fillStyle = R2.felt; c.beginPath(); c.roundRect(ex, y - 40, 230, 46, 6); c.fill();
   c.fillStyle = R2.pad; c.fillRect(ex, y - 8, 230, 14);
 });
-const board = (e: WorldEnv) => atBase(e, (c) => { c.drawImage(slate(e), 0, 0); c.drawImage(tray(e), 0, H - 120); });
+const board = (e: WorldEnv) => atBase(e, (c) => { c.drawImage(slate(e), 0, 0); c.drawImage(tray(e), 0, H - TRAY_H); });
 
 /** A chalk line along points, a little off true, the board's tooth showing through it (crisp holes, never a blur). */
 function chalkLine(c: CanvasRenderingContext2D, pts: Pt[], tone: string, width: number, seed: number, k = 1) {
@@ -101,6 +102,8 @@ function marks(e: WorldEnv) {
   const title = titleOnly(titleNow(e)).slice(0, 8);
   atBase(e, (c) => {
     c.save();
+    // (a line being wiped: its marks go under the same eraser front as its words, chalk-erase.ts)
+    if (r.wipe && e.now >= r.wipe.from) { c.beginPath(); c.rect(-W, -H, W + eraseFront(e.now, r.wipe, r.x0, r.x1), H * 3); c.clip(); }
     c.globalAlpha = Math.min(1, e.weight * 2);
     // (each of the chalk sets stands in a band of its own: the ring low and short, the calm line under the lesson's place)
     const ringed = h <= w * 1.3 && h < 300 && r.y0 > 400 && w < 1150;
@@ -141,11 +144,32 @@ function marks(e: WorldEnv) {
 /** The light of an empty classroom: faint window shapes moving slowly across the board (a few percent of chalk-white light). */
 const lightOn = (e: WorldEnv) => atBase(e, (c) => { c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.045; for (let i = 0; i < 3; i++) { const x = ((e.now * 16 + i * 620) % (W + 900)) - 500; c.fillStyle = e.ink; c.beginPath(); c.moveTo(x, -20); c.lineTo(x + 340, -20); c.lineTo(x + 380, H - 130); c.lineTo(x + 40, H - 130); c.closePath(); c.fill(); } c.restore(); });
 
+/**
+ * The eraser over a line being wiped (Q1 phase 3b erase-reseat): the board's own felt eraser held upright across the
+ * line's room (as wipe-pass draws it), its front where the words end, and the chalk it lifts as a faint trace on the
+ * wiped side that settles out by the end of the stroke. Under the words: right of the front there are none left.
+ */
+function wiping(e: WorldEnv) {
+  const r = e.rect;
+  const f = r?.wipe ? feltAt(e.now, r.wipe, r) : undefined;
+  if (!r || !f) return;
+  atBase(e, (c) => {
+    c.save();
+    c.globalAlpha = 0.07 * (1 - f.q);
+    c.fillStyle = e.ink;
+    for (let i = 0; i < 4; i++) c.fillRect(f.x0, r.y0 + ((i + 0.5) * (r.y1 - r.y0)) / 4 - 14 + 6 * hash(i, e.seed), r.x1 - f.x0, 28);
+    c.globalAlpha = f.a;
+    c.fillStyle = R2.felt; c.fillRect(f.x0, f.y0 + f.dy, FELT_W, f.y1 - f.y0);
+    c.fillStyle = R2.pad; c.fillRect(f.x0 + FELT_W - 14, f.y0 + f.dy, 14, f.y1 - f.y0);
+    c.restore();
+  });
+}
+
 const Gs: Record<string, HandGround> = {
-  'chalkboard/slate': (e) => { board(e); marks(e); },
+  'chalkboard/slate': (e) => { board(e); marks(e); wiping(e); },
   // the same board worn greyer by a day of lessons: a wider haze of old wiping low across it
-  'chalkboard/worn': (e) => { board(e); atBase(e, (c) => { c.save(); c.globalAlpha = 0.05; c.strokeStyle = e.ink; c.lineWidth = 220; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(W * (0.2 + 0.3 * i), H * 1.25, 640 + 90 * i, -2.5, -0.7); c.stroke(); } c.restore(); }); marks(e); },
-  'chalkboard/after-class': (e) => { board(e); lightOn(e); },
+  'chalkboard/worn': (e) => { board(e); atBase(e, (c) => { c.save(); c.globalAlpha = 0.05; c.strokeStyle = e.ink; c.lineWidth = 220; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(W * (0.2 + 0.3 * i), H * 1.25, 640 + 90 * i, -2.5, -0.7); c.stroke(); } c.restore(); }); marks(e); wiping(e); },
+  'chalkboard/after-class': (e) => { board(e); lightOn(e); wiping(e); },
 };
 const INS: Record<string, HandIn> = {
   // a change of part: the eraser goes right to left across the board, the last lesson gone behind it but for a grey trace

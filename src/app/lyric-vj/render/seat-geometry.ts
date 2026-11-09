@@ -26,6 +26,10 @@ export interface LaidSeat {
   vertical: boolean;
   /** The page graphics the words keep off, frame fractions. */
   protect: FracBox[];
+  /** Whether the line is set split, a small part apart from the main one (world-split.ts). */
+  split: boolean;
+  /** A split line's parts as laid (drawn width, the set's shear across), px at 1080p: the main part's and the small part's widths and sizes. */
+  parts?: { main: { w: number; size: number; y0: number; y1: number }; small: { w: number; size: number; y0: number; y1: number } };
 }
 
 const r3 = (x: number) => +x.toFixed(3);
@@ -65,6 +69,13 @@ export function laidSeat(text: string, set: string | SetSpec, o: { slot?: { k: n
     rows: b.lines?.length ?? b.rows.length,
     vertical: !!spec.vertical,
     protect: (spec.clear ?? []).map(([a, c, d, e]) => ({ x0: a, y0: c, x1: d, y1: e })),
+    split: !!b.small?.length,
+    ...(b.small?.length && b.lines ? (() => {
+      const sx = Math.abs(spec.shear?.[0] ?? 1);
+      // (y in frame px, down: a row's centre is the block's centre less its own y)
+      const part = (small: boolean) => { const rs = b.lines!.filter((r, i) => !r.v && b.small!.includes(i) === small); return { w: Math.max(0, ...rs.map((r) => r.bw * sx)), size: Math.max(0, ...rs.map((r) => r.size)), y0: Math.min(...rs.map((r) => 540 - b.cy - r.y - r.size / 2)), y1: Math.max(...rs.map((r) => 540 - b.cy - r.y + r.size / 2)) }; };
+      return { parts: { main: part(false), small: part(true) } };
+    })() : {}),
   };
 }
 
@@ -93,4 +104,4 @@ export function anchorMove(p: FracBox, q: FracBox): number {
  * this far on their carrier. The scheduler reads `scale` too (world-events seatsDiffer): two lines' type must differ
  * this much to be two seats.
  */
-export const SEEN = { shift: 0.06, scale: 1.9, relation: 1.6, page: 0.08, onCarrier: 0.5 };
+export const SEEN = { shift: 0.06, scale: 1.9, relation: 1.6, page: 0.08, onCarrier: 0.5, outline: 0.08 };

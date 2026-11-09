@@ -4,6 +4,7 @@
 // by their names (world-events.ts seatsDiffer), and keeps a seat whose words would cross its page's graphics out.
 import { typeset } from '../typeset';
 import { layoutMeasure, ruleAdvance } from './layout-measure';
+import { REST_FLOOR } from './reading-window';
 import { DECO_PANELS } from './world-b5-sets';
 import { blockOf, SET_SPECS, shearedSize, type Block, type Measure, type SetSpec } from './world-sets';
 
@@ -40,8 +41,12 @@ export interface LaidSeat {
   parts?: { main: PartBox; small: PartBox };
 }
 
-/** A part of a split line, frame px, y down: the box its glyphs can take as the renderer draws them, and its type size. */
-export interface PartBox { x0: number; y0: number; x1: number; y1: number; size: number }
+/**
+ * A part of a split line, frame px, y down: the box its glyphs can take as the renderer draws them, its type size, and
+ * the least glyph it rests at as drawn (`rest`: its row's size through the set's shear, a particle set smaller; the
+ * engine's restSize, which sends a line under REST_FLOOR to plain stepped rows instead of its world's layout).
+ */
+export interface PartBox { x0: number; y0: number; x1: number; y1: number; size: number; rest?: number }
 
 const r3 = (x: number) => +x.toFixed(3);
 
@@ -97,11 +102,20 @@ export function laidSeat(text: string, set: string | SetSpec, o: { slot?: { k: n
 export function splitRows(b: Block, spec: SetSpec, measure: Measure): { main: PartBox; small: PartBox } | undefined {
   if (!b.lines || !b.small?.length) return undefined;
   const sx = Math.abs(spec.shear?.[0] ?? 1);
+  // (the typesetter's sizes on the whole line, as glyphs.ts makeGlyphs sets it: a particle reads its neighbours across a row)
+  const whole = [...b.rows.join('')];
+  const sizes = typeset(whole.join(''), Math.max(...b.lines.map((r) => r.size)) >= 110).map((x) => x.scale);
+  let at = 0;
   const rows = b.lines.map((r, i) => {
-    if (r.v) return undefined;
     const t = b.rows[i];
+    const from = at;
+    at += [...t].length;
+    if (r.v) return undefined;
     const cs = [...t];
     const ts = typeset(t, true);
+    // (the least glyph as the engine weighs it at rest: its size through the row's scale and the set's shear, a hair
+    // under for the glyph size's rounding)
+    const rest = Math.min(...cs.flatMap((ch, k) => (ch.trim() ? [r.size * sx * Math.min(1, sizes[from + k] ?? 1)] : []))) - 0.5;
     // (the glyph's size is rounded to whole px: a hair more than its scale)
     const grow = ts.map((x) => (x.scale > 1 ? x.scale + 0.01 : 1));
     const w = (cs.reduce((a, ch, k) => a + (measure(ch) / 100) * grow[k] + (k ? ts[k].gapBefore : 0), 0) + Math.max(0, cs.length - 1) * r.track) * r.size;
@@ -109,11 +123,11 @@ export function splitRows(b: Block, spec: SetSpec, measure: Measure): { main: Pa
     // (a bigger glyph sits on the row's baseline: it grows up by 0.92 of its growth and down by 0.08, glyphs.ts dy)
     const cx = 960 + b.cx + sx * (r.x0 + r.bw / 2);
     const cy = 540 - b.cy - r.y;
-    return { x0: cx - (w * sx) / 2, x1: cx + (w * sx) / 2, y0: cy - r.size * (0.5 + 0.92 * up), y1: cy + r.size * (0.5 + 0.08 * up), size: r.size, small: b.small!.includes(i) };
+    return { x0: cx - (w * sx) / 2, x1: cx + (w * sx) / 2, y0: cy - r.size * (0.5 + 0.92 * up), y1: cy + r.size * (0.5 + 0.08 * up), size: r.size, rest, small: b.small!.includes(i) };
   });
   const part = (small: boolean): PartBox | undefined => {
     const rs = rows.filter((r): r is NonNullable<typeof r> => !!r && r.small === small);
-    return rs.length ? { x0: Math.min(...rs.map((r) => r.x0)), y0: Math.min(...rs.map((r) => r.y0)), x1: Math.max(...rs.map((r) => r.x1)), y1: Math.max(...rs.map((r) => r.y1)), size: Math.max(...rs.map((r) => r.size)) } : undefined;
+    return rs.length ? { x0: Math.min(...rs.map((r) => r.x0)), y0: Math.min(...rs.map((r) => r.y0)), x1: Math.max(...rs.map((r) => r.x1)), y1: Math.max(...rs.map((r) => r.y1)), size: Math.max(...rs.map((r) => r.size)), rest: Math.min(...rs.map((r) => r.rest)) } : undefined;
   };
   const [main, small] = [part(false), part(true)];
   return main && small ? { main, small } : undefined;
@@ -126,7 +140,8 @@ export interface PanelRect { x0: number; y0: number; x1: number; y1: number }
  * A marquee line carried on panels (art-deco poster-panel, Q1 phase 3b/3c): the main part's plaque and the small part's
  * panel, both on the frame's axis, from the line's parts as drawn at most (laidSeat → splitRows); undefined when the
  * line does not split in two, the panel would not be the lesser (narrower than the plaque by DECO_PANELS.narrower each
- * side) or the two would not stand DECO_PANELS.gap apart. The one function the scheduler offers the seat by
+ * side), the two would not stand DECO_PANELS.gap apart, or a part rests under REST_FLOOR (the engine then draws the
+ * line as plain stepped rows, no plaque at all). The one function the scheduler offers the seat by
  * (lineplan-core pageSeatsFor), the renderer draws it by (world-layout → world-b5-deco panelsOf) and the contract checks
  * it by (world-events-adapter). `at` moves it with the line (a shared shot's slot offset, frame px, y down).
  */
@@ -141,6 +156,8 @@ export function panelSplit(laid: Pick<LaidSeat, 'parts'> | undefined, at: [numbe
   const padY = Math.max(P.inset * 2, P.padY * p.small.size);
   const panel = { x0: AX - halfT, y0: p.small.y0 - padY + at[1], x1: AX + halfT, y1: p.small.y1 + padY + at[1] };
   if (panel.y0 - main.y1 < P.gap || halfT > halfMain - P.narrower) return undefined;
+  // (a line resting under the type floor is drawn as plain stepped rows, not on its page's plaque: engine restSize)
+  if (Math.min(p.main.rest ?? Infinity, p.small.rest ?? Infinity) < REST_FLOOR) return undefined;
   return { main, panel };
 }
 

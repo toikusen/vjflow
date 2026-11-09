@@ -102,12 +102,15 @@ export const DEFAULT_DESIGN: Design = {
 };
 
 /** Repairs a director's design: known font, numbers in range, valid colours, stops sorted from the window start. */
+/** The accent face a design keeps: one of the catalogue's accent faces, else the default (the plan reads it too, free-plan). */
+export const validAccent = (f: string | undefined): string => (FONTS.some((x) => x.family === f && x.roles.includes('accent')) ? f! : DEFAULT_DESIGN.accentFont);
+
 export function validateDesign(d: Design | undefined, win: Window): { design: Design; fixes: string[] } {
   const fixes: string[] = [];
   if (!d) return { design: structuredClone(DEFAULT_DESIGN), fixes: ['沒有設計設定，使用預設'] };
   const font = FONTS.some((f) => f.family === d.font && f.roles.some((r) => r !== 'accent')) ? d.font : DEFAULT_DESIGN.font; // accent faces have no kana
   if (font !== d.font) fixes.push(`字型 ${d.font} 不在目錄裡，改用 ${font}`);
-  const accentFont = FONTS.some((f) => f.family === d.accentFont && f.roles.includes('accent')) ? d.accentFont : DEFAULT_DESIGN.accentFont;
+  const accentFont = validAccent(d.accentFont);
   const stops = (d.colorScript ?? [])
     .filter((s) => HEX.test(s.shadow) && HEX.test(s.highlight) && HEX.test(s.accent))
     .map((s) => ({ ...s, start: clamp(s.start, win.start, win.end), duotone: clamp(s.duotone, 0, 1), image: clamp(s.image ?? 1, 0, 1) }))

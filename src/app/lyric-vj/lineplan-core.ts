@@ -20,6 +20,7 @@ import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
 import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure } from './render/seat-geometry';
+import { lineFace } from './fonts';
 import { compositionsOf, pageSeatsOf } from './world-shared';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
@@ -665,10 +666,11 @@ export interface WorldPool {
    */
   scheduled?: boolean;
   /**
-   * The job's face, when the scheduler takes the world (Q1 phase 3c): the seats it adds are laid on the renderer's own
-   * measure of it (render/layout-measure.ts), so a seat offered is a seat drawn.
+   * The job's faces, when the scheduler takes the world (Q1 phase 3c): its font choice and its accent face. The seats it
+   * adds are laid on the renderer's own measure of the face each line is set in (fonts.ts lineFace, render/layout-
+   * measure.ts), so a seat offered is a seat drawn.
    */
-  font?: string;
+  faces?: { family: string; accent: string };
   /**
    * The world's scale contrasts come from Q3's policy through the song's scheduler (world-shared.ts WORLD_SCALE, Q3 phase
    * 2): the composer blows up no key word of its own (no blownParts / namedLater quota). Unset: today's blow path.
@@ -985,16 +987,17 @@ const stressDrawn = (kind: StressKind, slots?: Slots) => !slots || !!stressInk(k
  * change of page, so only ever at a line's boundary). The content stays the composer's; when a seat changes is the
  * scheduler's (world-events.ts).
  */
-export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns'> & { id?: string; font?: string }, level: Level, bound = false): string[] {
+export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns' | 'faces'> & { id?: string }, level: Level, bound = false): string[] {
   const own = W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : []));
-  return [...new Set([...own, ...(bound && W.id ? pageSeatsFor(c.text, set, W.id, W.font) : [])])];
+  const face = W.faces ? lineFace(c.text, { family: W.faces.family }, W.faces.accent) : undefined;
+  return [...new Set([...own, ...(bound && W.id ? pageSeatsFor(c.text, set, W.id, face) : [])])];
 }
 
 /**
  * The seats a world adds on the page of a line's set (world-shared pageSeats, Q1 phase 3a): the same page under the
  * words, another reading area. Only those where the line, as the plan lays it (render/seat-geometry.ts), keeps the
  * seat's least type (its `lo`) and stays clear of the page's graphics and the world's protected regions, with the plan's
- * margin for its rough measure. `font`: the job's face, measured as the renderer measures it (layout-measure); without
+ * margin for its rough measure. `font`: the line's face (fonts.ts lineFace), measured as the renderer measures it (layout-measure); without
  * it, the line must fit on the rough measure and on the shaped guess both (phase 3a).
  */
 export function pageSeatsFor(text: string, set: string, worldId: string, font?: string): string[] {

@@ -182,6 +182,19 @@ export function resolveFonts(choice?: FontChoice): Required<Fonts> {
 /** The Latin face for English lyric lines: the accent face when it reads easily, else a clean sans. */
 export const readingLatin = (accent: string) => (FONTS.find((f) => f.family === accent)?.legible === false ? 'Montserrat' : accent);
 
+/** Mostly Latin letters (an English line): set in the accent face. */
+export const isLatinLine = (text: string) => {
+  const letters = [...text].filter((c) => /\p{L}/u.test(c));
+  return letters.length > 0 && letters.filter((c) => /[A-Za-z]/.test(c)).length / letters.length >= 0.7;
+};
+
+/**
+ * The face a lyric line is set in, as the engine picks it (render/engine.ts, each line's runtime fonts): a mostly Latin
+ * line in the reading Latin face of the job's accent, any other in the job's display face. The plan lays a scheduled
+ * world's seats on it (Q1 phase 3c, render/layout-measure.ts).
+ */
+export const lineFace = (text: string, fonts: FontChoice | undefined, accentFont: string) => (isLatinLine(text) ? readingLatin(accentFont) : resolveFonts(fonts).display);
+
 /** The site's own interface faces (index.html), mirrored with the rest. */
 export const UI_FONTS = [
   { family: 'Unbounded', weights: [500, 700] },

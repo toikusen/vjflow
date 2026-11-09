@@ -42,6 +42,8 @@ export async function framePage(work = '.frame-page-work') {
     return {
       /** Each line's readable window as the engine computes it (the reading gate's). */
       cues: () => page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo }))) as Promise<{ id: string; from: number; to: number }[]>,
+      /** The engine's own record of each line (vjMetrics): a composer line it floored to plain rows says so (`floored`). */
+      metrics: () => page.evaluate('window.vjMetrics().cues') as Promise<{ id: string; floored?: boolean; restSize?: number; template?: string }[]>,
       layers: (t: number, gw: number, gh: number, jpeg = false) => page.evaluate(`window.gatePage.layers(${t}, ${gw}, ${gh}, ${jpeg})`) as Promise<FrameLayers>,
       close: async () => { await page.close(); rmSync(file, { force: true }); },
     };

@@ -479,7 +479,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       face.parts = gs.flatMap((gl, j) => (p.shown[j] ? [p.block.small!.includes(row.get(gl) ?? -1) ? 1 : 0] : []));
       face.panels = { from: i ? wl.repose![i - 1].at : rt.showFrom, sec: i ? wl.repose![i - 1].sec ?? 0 : 0 };
       // (the plaque and the panel as the scheduler offered them: the one split of seat-geometry, on this layout's measure)
-      const boxes = panelSplit(laidSeat(text, sets[i], { measure: measureOf(sets[i]) }), [firstX, -firstAt]);
+      // (never round a block that grows: the split is laid at its own size, and the scheduler pins a line with a hold)
+      const boxes = g === 1 ? panelSplit(laidSeat(text, sets[i], { measure: measureOf(sets[i]) }), [firstX, -firstAt]) : undefined;
       if (boxes) face.panelBoxes = boxes;
     }
     // (the last pose of a line its world erases carries the wipe: the board wipes its own marks by the same front)

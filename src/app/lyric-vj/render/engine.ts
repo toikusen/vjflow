@@ -67,7 +67,7 @@ import { freeZone } from './board';
 import { DIAGRAM_FX } from './kinetic-more';
 import { storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
-import { contrastFace, DEFAULT_FONTS, FontChoice, FONTS, nearestWeight, readingLatin, resolveFonts } from '../fonts';
+import { contrastFace, DEFAULT_FONTS, FontChoice, FONTS, isLatinLine, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
@@ -575,11 +575,8 @@ const plateMaterial = () =>
       }`,
   });
 
-/** Mostly Latin letters (an English line): set in the accent face. */
-export const isLatinLine = (text: string) => {
-  const letters = [...text].filter((c) => /\p{L}/u.test(c));
-  return letters.length > 0 && letters.filter((c) => /[A-Za-z]/.test(c)).length / letters.length >= 0.7;
-};
+/** Mostly Latin letters (an English line): set in the accent face (fonts.ts, where the plan reads it too). */
+export { isLatinLine };
 
 /** A line as live use holds it until it is built. */
 type LiveLine = { style: CueRuntime['style']; cue: TimelineCue };
@@ -1000,7 +997,7 @@ export class LyricVjEngine {
       const together = entrance === 'whole' && adjust.includes('fast-short');
       const rt: CueRuntime = {
         cue, style: paced, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
-        // an English line is set in the paired Latin face
+        // an English line is set in the paired Latin face (fonts.ts lineFace: the plan's reading of the same choice)
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: showAt[i],
         exitAt: Math.max(cue.start + 0.25 * pace, exitAt),

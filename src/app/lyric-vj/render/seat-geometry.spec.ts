@@ -14,8 +14,9 @@ import { blockOf, SET_SPECS } from './world-sets';
 
 const realish = shapedMeasure;
 /** Lines and the most their rough box and type may differ from the shaped-advance ones over every seat and slot (measured
- * 2026-11-09): a run of CJK none; spaces and marks set narrower than the rough 55 can change the rows a set picks. */
-const TEXTS: [string, number, number][] = [['快使用雙截棍', 0.001, 0.001], ['如果我有輕功 飛簷走壁', 0.02, 0.035], ['こんなに綺麗じゃん!', 0.035, 0.05], ['あの星あかりを 海の広さを', 0.16, 0.19], ['Baby I love you', 0.32, 0.22]];
+ * 2026-11-09; 2026-11-10 with phase 4's worlds, silk/edge-bleed's 260 px type the widest: 0.039 and 0.327): a run of CJK
+ * none; spaces and marks set narrower than the rough 55 can change the rows a set picks. */
+const TEXTS: [string, number, number][] = [['快使用雙截棍', 0.001, 0.001], ['如果我有輕功 飛簷走壁', 0.02, 0.035], ['こんなに綺麗じゃん!', 0.04, 0.05], ['あの星あかりを 海の広さを', 0.16, 0.19], ['Baby I love you', 0.33, 0.22]];
 
 describe('seat geometry: the plan lays a line where the renderer does', () => {
   it('a shared shot\'s slot is the renderer\'s own step (slotSpec), and laidSeat takes it', () => {

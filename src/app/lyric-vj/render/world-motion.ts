@@ -8,6 +8,7 @@ import { DOC_ENTERS, DOC_EXITS, DOC_HOLDS } from './world-doc-motion';
 import { B4B_ENTERS, B4B_EXITS, B4B_HOLDS } from './world-b4b-motion';
 import { B5_ENTERS, B5_EXITS, B5_HOLDS } from './world-b5-motion';
 import { B5B_ENTERS, B5B_EXITS, B5B_HOLDS } from './world-b5b-motion';
+import type { LinkFamily } from '../world-shared';
 
 export interface GlyphEnv {
   /** Progress through the entrance or the exit, 0..1. */
@@ -55,6 +56,11 @@ export interface WorldMove {
   glyph?(e: GlyphEnv): GlyphPose;
   block?(q: number, seed: number): BlockPose;
   clip?(q: number): Clip;
+  /**
+   * A linked move (world-handoff.ts): the words do not move at all; the world's page hands over across the boundary to
+   * the line before or after (motion-transition.ts link-*), along the axis or to the hinge the world's taste names.
+   */
+  link?: { family: LinkFamily; axis?: 'x' | 'y'; hinge?: 'left' | 'top' };
 }
 
 const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
@@ -216,6 +222,30 @@ export const SHARED_EXITS: Record<string, WorldMove> = {
 /** The shared entrances a planner may give any world's line (line-open only follows a line pressed into a rule). */
 export const SHARED_ENTER_POOL = ['stack-rise', 'roll-in'];
 export const SHARED_EXIT_POOL = ['squash-line', 'slice-out'];
+
+/**
+ * The three linked families (2026-11-09, docs/research/2026-11-09-rhythm-gaps-codex.md Q4 and -handoff-codex.md): the
+ * words stand still and switch on time; the page moves (motion-transition.ts link-*). A variant is `family.flavour`;
+ * mirrored or quicker variants are the same family.
+ */
+export const LINK_ENTERS: Record<string, WorldMove> = {
+  'edge-relay': { sec: 0, link: { family: 'edge-relay', axis: 'x' } },
+  'edge-relay.y': { sec: 0, link: { family: 'edge-relay', axis: 'y' } },
+  'layer-seat': { sec: 0, link: { family: 'layer-seat' } },
+  'frame-open': { sec: 0, link: { family: 'frame-open', hinge: 'left' } },
+  'frame-open.top': { sec: 0, link: { family: 'frame-open', hinge: 'top' } },
+};
+export const LINK_EXITS: Record<string, WorldMove> = { ...LINK_ENTERS };
+/** A move's family: its kind without the flavour after the dot. */
+export const familyOf = (kind: string) => kind.split('.')[0];
+/** The variant of a family a world with this taste takes. */
+export function linkKind(family: LinkFamily, taste: { axis: 'x' | 'y'; hinge?: 'left' | 'top' }) {
+  if (family === 'edge-relay') return taste.axis === 'y' ? 'edge-relay.y' : 'edge-relay';
+  if (family === 'frame-open') return taste.hinge === 'top' ? 'frame-open.top' : 'frame-open';
+  return family;
+}
+Object.assign(SHARED_ENTERS, LINK_ENTERS);
+Object.assign(SHARED_EXITS, LINK_EXITS);
 Object.assign(WORLD_ENTERS, SHARED_ENTERS);
 Object.assign(WORLD_EXITS, SHARED_EXITS);
 // style batch 3's loud worlds keep their moves in world-b3-motion.ts

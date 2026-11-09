@@ -87,6 +87,11 @@ export interface SetSpec {
   shear?: [number, number, number, number];
   /** Each character of a row stands this share of a size lower than the one before (a word a block, stepping down). */
   drop?: number;
+  /**
+   * A seat on the page of this other set (Q1 phase 3a): the same page under the words, another reading area, offered only
+   * to a world the scheduler takes over (world-shared pageSeats). Its `lo` is the least type a line is offered it at.
+   */
+  samePage?: string;
 }
 
 /** The size a block of `w` × `h` takes on screen once its set's shear has drawn it. */

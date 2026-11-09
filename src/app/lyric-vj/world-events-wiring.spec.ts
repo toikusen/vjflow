@@ -6,11 +6,13 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { LINK_CLEAR, LINK_PREPARE, linkGrounds, sectionClock } from './render/world-handoff';
-import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, SEAM_GAP, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
-import { capsOf, currentEvents, fromJob, holdRoom, lightGapWarnings, ONE_PAGE_WORLDS, shownOf, verifyWorldEvents } from './world-events-adapter';
+import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, READ_STABLE, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { capsOf, currentEvents, fromJob, holdRoom, landedEvents, lightGapWarnings, ONE_PAGE_WORLDS, seatIn, shownOf, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
-import { compositionsOf, WORLD_COMPOSITIONS } from './world-shared';
-import { composePlan, RECIPES } from './lineplan-core';
+import { compositionsOf, isPageSeat, pageOf, pageSeatsOf, WORLD_COMPOSITIONS } from './world-shared';
+import { SET_SPECS } from './render/world-sets';
+import { boxesMeet, laidSeat } from './render/seat-geometry';
+import { composePlan, pageSeatsFor, RECIPES } from './lineplan-core';
 import { poolOf } from './style-world';
 
 const LEFT: SeatCandidate = { id: 'w/left', box: { x0: 0.05, y0: 0.3, x1: 0.45, y1: 0.6 } };
@@ -290,5 +292,215 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase-2 review fixes
     expect(verifyWorldEvents(job, style.world, f.treatment.worldEvents!).map((w) => w.inputs[0])).toContain(e.id);
     const lit = { events: [...f.treatment.worldEvents!.events, { ...e, id: 'x1', changesLight: true }, { ...e, id: 'x2', at: e.at + 0.2, changesLight: true }] };
     expect(lightGapWarnings(f.job, lit).length).toBeGreaterThan(0);
+  });
+});
+
+describe('phase 3a: seats by their real geometry (step 2)', () => {
+  const world = FREE_STYLES.find((s) => s.id === 'blueprint')!.world;
+  it('a seat carries the box its words are really laid in, their type size and its carrier', () => {
+    const short = seatIn(world, 'blueprint/construct', '快使用');
+    const long = seatIn(world, 'blueprint/construct', '快使用雙截棍 哼哼哈兮');
+    expect(short.box && long.box).toBeTruthy();
+    expect(short.carrierId).toBe('ground:blueprint/construct');
+    // (left-anchored: the same left edge, a longer line runs further right)
+    expect(long.box!.x0).toBeCloseTo(short.box!.x0, 2);
+    expect(long.box!.x1).toBeGreaterThan(short.box!.x1);
+    expect(short.size).toBeGreaterThan(0);
+  });
+  it('seatsDiffer compares where the words stand, not set names: a longer line in the same place is no move, the same words moved are', () => {
+    const a = { id: 's/a', box: { x0: 0.1, y0: 0.2, x1: 0.4, y1: 0.3 }, size: 120, text: 'x' };
+    // another set name, another line, the same left edge and size: one composition
+    expect(seatsDiffer(a, { id: 's/b', box: { x0: 0.1, y0: 0.2, x1: 0.7, y1: 0.3 }, size: 120, text: 'yyyy' })).toBe(false);
+    // the same words, their box moved 0.1: another seat
+    expect(seatsDiffer(a, { ...a, id: 's/b', box: { x0: 0.2, y0: 0.2, x1: 0.5, y1: 0.3 } })).toBe(true);
+    // the same words a third larger: another seat; another line, a third larger: no (its size follows its length)
+    expect(seatsDiffer(a, { ...a, id: 's/b', size: 160 })).toBe(true);
+    expect(seatsDiffer(a, { ...a, id: 's/b', size: 160, text: 'other' })).toBe(false);
+    expect(seatsDiffer(a, { ...a, id: 's/b', size: 240, text: 'other' })).toBe(true);
+    // another carrier is another composition wherever the words stand
+    expect(seatsDiffer(a, { ...a, id: 's/b', carrierId: 'card' })).toBe(true);
+  });
+});
+
+describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every event lands as planned (step 1)', () => {
+  const song = existsSync(SONG) ? JSON.parse(readFileSync(SONG, 'utf8')) : undefined;
+  const meaning = existsSync(MEANING) ? JSON.parse(readFileSync(MEANING, 'utf8')) : undefined;
+  for (const id of ONE_PAGE_WORLDS)
+    it(`${id}: plan → applyWorldEvents → freeJob draws each event with its kind, seat, page, switch point and window`, () => {
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+      const table = f.treatment.worldEvents!;
+      const { events, extra } = landedEvents(f.job, style.world, table);
+      expect(events).toHaveLength(table.events.length);
+      for (const l of events) {
+        expect(l.why, l.id).toBeUndefined();
+        if (l.plan.kind === 'keep') { expect(l.drawn!.seat, l.id).toBe(l.plan.seat); continue; }
+        expect([l.drawn!.kind === l.plan.kind || (l.plan.kind === 'carrier-swap' && l.drawn!.kind === 'layout-seat'), l.drawn!.seat, l.drawn!.page, l.drawn!.at, l.drawn!.from, l.drawn!.to], l.id)
+          .toEqual([true, l.plan.seat, l.plan.page, l.plan.at, l.plan.from, l.plan.to].map((x, k) => (k >= 3 ? expect.closeTo(x as number, 2) : x)));
+      }
+      expect(extra).toEqual([]);
+    });
+
+  it('a drawn event moved off its approved time, or a cut drawn the plan does not hold, is reported by id', () => {
+    const style = FREE_STYLES.find((s) => s.id === 'chalkboard')!;
+    const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+    const e = f.treatment.worldEvents!.events.find((x) => x.scope === 'in-line' && x.kind === 'layout-seat')!;
+    const job = structuredClone(f.job);
+    const cue = (job.treatment.cues as { cueId: string; world?: { repose?: { at: number; set: string }[] } }[]).find((c) => c.cueId === e.lineIds[0])!;
+    cue.world!.repose = cue.world!.repose!.map((r) => ({ ...r, at: r.at + 0.2 }));
+    const out = verifyWorldEvents(job, style.world, f.treatment.worldEvents!);
+    expect(out.map((w) => w.inputs[0])).toContain(e.id);
+    expect(out.some((w) => /drawn that the plan does not hold/.test(w.reason))).toBe(true);
+  });
+});
+
+describe('phase 3a: same-page seats (step 3)', () => {
+  it('notebook, art-deco and blueprint declare seats on their own pages, at their least type, taken inside a line; chalkboard and document are as before', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint']) {
+      const c = compositionsOf(id)!;
+      expect(c.allowedAt['layout-seat']).toContain('in-line');
+      expect(c.pageSeats).toBe(true);
+      expect(pageSeatsOf(id).length).toBeGreaterThan(0);
+      expect(c.protectedRegion?.length).toBeGreaterThan(0);
+      const world = FREE_STYLES.find((s) => s.id === id)!.world;
+      for (const x of pageSeatsOf(id)) {
+        const main = SET_SPECS[x].samePage!;
+        expect(SET_SPECS[x].lo, x).toBeGreaterThanOrEqual(96);
+        expect(isPageSeat(x)).toBe(true);
+        // (the same page under the words: the same carrier, a different seat)
+        expect(pageOf(world, x), x).toBe(pageOf(world, main));
+        expect(seatIn(world, x, '快使用雙截棍').carrierId).toBe(seatIn(world, main, '快使用雙截棍').carrierId);
+        expect(seatsDiffer(seatIn(world, main, '快使用雙截棍'), seatIn(world, x, '快使用雙截棍')), x).toBe(true);
+      }
+    }
+    expect(compositionsOf('chalkboard')!.pageSeats).toBeUndefined();
+    expect(pageSeatsOf('chalkboard')).toEqual([]);
+    expect(compositionsOf('document')!.kinds).toEqual([]);
+  });
+
+  it('a same-page seat is offered only where the line keeps the world minimum type and stays off the page graphics', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint']) {
+      const c = compositionsOf(id)!;
+      for (const main of [...new Set(pageSeatsOf(id).map((x) => SET_SPECS[x].samePage!))])
+        for (const text of ['快使用', '快使用雙截棍 哼哼哈兮', '如果我有輕功 飛簷走壁 ', 'a much longer line of latin words than any seat takes in one row', '他們兒子我習慣從小就耳濡目染什麼刀槍跟棍棒我都耍的有模有樣']) {
+          for (const x of pageSeatsFor(text, main, id)) {
+            const laid = laidSeat(text, x)!;
+            expect(laid.size, `${x} ${text}`).toBeGreaterThanOrEqual(SET_SPECS[x].lo);
+            for (const p of [...laid.protect, ...(c.protectedRegion ?? [])]) expect(boxesMeet(laid.box, p), `${x} ${text}`).toBe(false);
+          }
+        }
+    }
+    // (a line too long for the detail strip at the least type is not offered it)
+    expect(pageSeatsFor('他們兒子我習慣從小就耳濡目染什麼刀槍跟棍棒我都耍的有模有樣', 'blueprint/construct', 'blueprint')).toEqual([]);
+  });
+});
+
+const SNOW = 'out/db/yt_5i50aTB7JFo/song.json';
+const SNOW_MEANING = 'out/research/instant/plans/snow/meaning.json';
+describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SONG) || !existsSync(MEANING))('phase 3a: in-line switches to same-page seats on real songs', () => {
+  const songs = existsSync(SNOW) && existsSync(SONG) ? [[JSON.parse(readFileSync(SONG, 'utf8')), JSON.parse(readFileSync(MEANING, 'utf8'))], [JSON.parse(readFileSync(SNOW, 'utf8')), JSON.parse(readFileSync(SNOW_MEANING, 'utf8'))]] : [];
+  for (const id of ['notebook', 'art-deco', 'blueprint'])
+    it(`${id}: at most one in-line switch a line, only at a sung word break, 0.35 s still either side, on the same page, the whitelist kept, the same seed the same table`, () => {
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      let seen = 0;
+      for (const [song, meaning] of songs) {
+        const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+        const table = f.treatment.worldEvents!;
+        expect(JSON.stringify(freeJob(song, { style, seed: 0, meaning, worldEvents: true }).treatment.worldEvents)).toBe(JSON.stringify(table));
+        expect(verifyWorldEvents(f.job, style.world, table)).toEqual([]);
+        const inp = fromJob(f.job, song, style.world);
+        const caps = capsOf(style.world);
+        for (const e of table.events.filter((x) => !x.fixed && x.kind !== 'keep')) expect(caps.seats, e.id).toContain(e.seatAfter);
+        const inLine = table.events.filter((e) => e.scope === 'in-line' && !e.fixed && e.kind !== 'keep');
+        seen += inLine.length;
+        const byLine = new Map<string, number>();
+        for (const e of inLine) {
+          const l = inp.lines.find((x) => x.id === e.lineIds[0])!;
+          byLine.set(l.id, (byLine.get(l.id) ?? 0) + 1);
+          // a sung word break the aligner timed, never a time in proportion
+          expect(l.words, e.id).toBeDefined();
+          expect(l.words!.slice(1).map((w) => w.from), e.id).toContain(e.at);
+          expect(e.at - l.start, e.id).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
+          expect(l.end - e.to, e.id).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
+          // the same page under the words: nothing is taken from under them, nothing laid over them
+          expect(pageOf(style.world, e.seatAfter), e.id).toBe(pageOf(style.world, e.seatBefore));
+          const cue = song.cues.find((c: { id: string }) => c.id === l.id);
+          const laid = laidSeat(cue.text, e.seatAfter)!;
+          if (isPageSeat(e.seatAfter)) {
+            expect(laid.size, e.id).toBeGreaterThanOrEqual(SET_SPECS[e.seatAfter].lo);
+            for (const p of laid.protect) expect(boxesMeet(laid.box, p), e.id).toBe(false);
+          }
+        }
+        for (const [line, n] of byLine) expect(n, line).toBe(1);
+        // no in-line switch on a line the aligner did not time
+        for (const l of inp.lines.filter((x) => !x.words)) expect(inLine.some((e) => e.lineIds.includes(l.id)), l.id).toBe(false);
+      }
+      expect(seen, id).toBeGreaterThan(0);
+    });
+
+  it('by default (scheduler off) notebook, art-deco and blueprint draw exactly as before: no same-page seat is offered or drawn', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint']) {
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      const [song, meaning] = songs[1];
+      const plain = freeJob(song, { style, seed: 0, meaning });
+      const before = freeJob(song, { style, seed: 0, meaning, worldEvents: false });
+      const { worldEvents: _w, ...rest } = plain.job.treatment;
+      expect(JSON.stringify(rest)).toBe(JSON.stringify(before.job.treatment));
+      expect(JSON.stringify(rest)).not.toMatch(/\+(margin|second|detail)/);
+    }
+  });
+});
+
+describe('phase 3a round 2: still reading after the entrance; Q2/Q4 overlaps resolved', () => {
+  it('the 0.35 s before an in-line switch counts from the end of the entrance, not the line start: a short window keeps', () => {
+    const words = [{ text: 'x', from: 10, to: 10.5 }, { text: 'y', from: 10.5, to: 13 }];
+    // the only sung break is 0.5 s after the start: with no entrance, 0.5 s of still reading, the switch lands
+    const open = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13), words }]));
+    expect(open.events.some((e) => e.scope === 'in-line' && e.at === 10.5)).toBe(true);
+    // its entrance lands at 10.3: 0.2 s of still reading before the break, so the line keeps its seat
+    const late = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13), words, settled: 10.3 }]));
+    expect(late.events.some((e) => e.scope === 'in-line')).toBe(false);
+    expect(late.rejected.some((r) => r.candidate.lineId === 'l' && /less than 0.35s of still reading/.test(r.reason))).toBe(true);
+  });
+
+  it('a scheduled world moves a hold that partly overlaps a handoff to the nearest legal beat, else just clear of it, else drops it; a world without capability only warns', () => {
+    const lines = [line('a', 0, 3), line('b', 3.4, 6)];
+    const hand = { lineId: 'b', kind: 'link-relay-x', dir: 0, seam: 3.2, dur: LINK_PREPARE + LINK_CLEAR };
+    const hold = { lineId: 'a', kind: 'line-grow', at: 2.8, from: 2.8, to: 3.1 };
+    const moved = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [1, 2, 2.5] }));
+    expect(moved.holdMoves).toEqual([expect.objectContaining({ lineId: 'a', from: 2.8, to: 2.5 })]);
+    expect(moved.holds[0]).toMatchObject({ at: 2.5, from: 2.5, to: 2.8 });
+    expect(moved.warnings.some((w) => /partly overlaps/.test(w.reason))).toBe(false);
+    // the hold window clears the handoff by ACTION_GAP
+    const w0 = hand.seam - LINK_PREPARE;
+    expect(moved.holds[0].to + ACTION_GAP).toBeLessThanOrEqual(w0 + 1e-6);
+    // no beat fits: the nearest time just clear of the handoff (2.95 − 0.10 − 0.3)
+    const edge = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [] }));
+    expect(edge.holdMoves?.[0].to).toBeCloseTo(2.549, 3);
+    // a line too short for any of it: dropped
+    const dropped = planWorldEvents(input([line('a', 2.6, 3), line('b', 3.4, 6)], { handoffs: [hand], holds: [hold], beats: [] }));
+    expect(dropped.holdMoves?.[0].to).toBeNull();
+    expect(dropped.holds).toEqual([]);
+    const off = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [2.5], caps: caps([]) }));
+    expect(off.holdMoves).toBeUndefined();
+    expect(off.warnings.some((w) => /partly overlaps/.test(w.reason))).toBe(true);
+  });
+});
+
+describe.skipIf(!existsSync('out/db/yt_5i50aTB7JFo/song.json'))('phase 3a round 2 on 大雪: art-deco c014 line-grow no longer overlaps the c015 handoff', () => {
+  it('the hold is moved (table holdMoves), drawn at its new beat, and the final check reports no overlap', () => {
+    const song = JSON.parse(readFileSync('out/db/yt_5i50aTB7JFo/song.json', 'utf8'));
+    const meaning = JSON.parse(readFileSync('out/research/instant/plans/snow/meaning.json', 'utf8'));
+    const style = FREE_STYLES.find((s) => s.id === 'art-deco')!;
+    const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+    const table = f.treatment.worldEvents!;
+    expect(table.holdMoves?.some((m) => m.lineId === 'c014' && m.to !== null)).toBe(true);
+    expect(table.warnings.filter((w) => /partly overlaps|final check/.test(w.reason))).toEqual([]);
+    const cue = (f.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!;
+    expect(cue.world!.beat!.at).toBe(table.holdMoves!.find((m) => m.lineId === 'c014')!.to);
+    // tampered back: the overlap is a final-check failure the gate and the measurement exit on
+    const job = structuredClone(f.job);
+    (job.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!.world!.beat!.at = 68.081;
+    expect(verifyWorldEvents(job, style.world, table).some((w) => /partly overlaps/.test(w.reason))).toBe(true);
   });
 });

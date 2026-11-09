@@ -19,6 +19,8 @@ import { carrierRoom, growRoom, inkChecks } from './render/hold-room';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
+import { boxesMeet, laidSeat, roughMeasure, shapedMeasure } from './render/seat-geometry';
+import { compositionsOf, pageSeatsOf } from './world-shared';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
@@ -907,7 +909,7 @@ export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: {
  * words' cells (a page handed the cells draws its balloon round them as they are, grown or not: world-layout restRects).
  */
 /** A line's block as the plan can see it: the set's own layout on a rough measure (a CJK character one em, anything else half). */
-const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, (x) => [...x].reduce((w, ch) => w + (/[\u3000-\u9fff\uff00-\uffef]/.test(ch) ? 100 : 55), 0));
+const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, roughMeasure);
 /** The plan asks the measure it is unsure of for this much more than the renderer needs, so what it plans is drawn. */
 const ROUGH = 1.25;
 /** The growth the plan asks room for on its rough measure; the renderer, measuring the real glyphs, needs only GROW.least (world-beats.ts). */
@@ -973,8 +975,28 @@ const stressDrawn = (kind: StressKind, slots?: Slots) => !slots || !!stressInk(k
  * change of page, so only ever at a line's boundary). The content stays the composer's; when a seat changes is the
  * scheduler's (world-events.ts).
  */
-export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns'>, level: Level, bound = false): string[] {
-  return [...new Set(W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : [])))];
+export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns'> & { id?: string }, level: Level, bound = false): string[] {
+  const own = W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : []));
+  return [...new Set([...own, ...(bound && W.id ? pageSeatsFor(c.text, set, W.id) : [])])];
+}
+
+/**
+ * The seats a world adds on the page of a line's set (world-shared pageSeats, Q1 phase 3a): the same page under the
+ * words, another reading area. Only those where the line, as the plan lays it (render/seat-geometry.ts), keeps the
+ * seat's least type (its `lo`) and stays clear of the page's graphics and the world's protected regions, with the plan's
+ * margin for its rough measure.
+ */
+export function pageSeatsFor(text: string, set: string, worldId: string): string[] {
+  const protect = compositionsOf(worldId)?.protectedRegion ?? [];
+  // (on the rough measure and on a second guess at the real advances, a line with spaces or Latin may set differently)
+  const fits = (laid: ReturnType<typeof laidSeat>, lo: number) => {
+    if (!laid || laid.size < lo) return false;
+    // (the box grown by the plan's doubt, ROUGH, round its centre)
+    const [cx, cy, hw, hh] = [(laid.box.x0 + laid.box.x1) / 2, (laid.box.y0 + laid.box.y1) / 2, ((laid.box.x1 - laid.box.x0) * ROUGH) / 2, ((laid.box.y1 - laid.box.y0) * ROUGH) / 2];
+    const box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
+    return box.x0 >= 0 && box.x1 <= 1 && box.y0 >= 0 && box.y1 <= 1 && ![...laid.protect, ...protect].some((p) => boxesMeet(box, p));
+  };
+  return pageSeatsOf(worldId, set).filter((x) => fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo));
 }
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */

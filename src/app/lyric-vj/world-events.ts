@@ -4,16 +4,31 @@
 // no DOM, no clock, the same input gives the same plan. Phase 2 (docs/research/2026-11-09-q1-phase2.md): free-plan.ts runs
 // it once a song on the composer's plan and the renderer draws only what it approves (world-events-apply.ts).
 import { LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
+import { anchorMove, boxesMeet, centreMove, SEEN, type FracBox } from './render/seat-geometry';
 
 export type CompositionFamily = 'layout-seat' | 'page-handoff' | 'carrier-swap' | 'camera-reframe' | 'ground-role' | 'prop-beat';
 export type WorldEventKind = CompositionFamily | 'keep';
 export type Mood = 'quiet' | 'build' | 'peak';
 
-/** A box in frame fractions, y down. */
-export interface FrameBox { x0: number; y0: number; x1: number; y1: number }
+/** A box in frame fractions, y down (render/seat-geometry.ts FracBox: one type). */
+export type FrameBox = FracBox;
 
 /** A place a line's words can be set: its box on the frame and what carries it (a card, a panel, the page itself). */
-export interface SeatCandidate { id: string; box?: FrameBox; carrierId?: string; vertical?: boolean; /** Laid into a page of its own: changing between two such seats is a change of page, whose light is the page's own ground cut. */ paged?: boolean }
+export interface SeatCandidate {
+  id: string;
+  /** The words' box as laid (render/seat-geometry.ts) for `text`, else the set's nominal box. */
+  box?: FrameBox;
+  carrierId?: string;
+  vertical?: boolean;
+  /** Laid into a page of its own: changing between two such seats is a change of page, whose light is the page's own ground cut. */
+  paged?: boolean;
+  /** The type size the words are laid at, px at 1080p. */
+  size?: number;
+  /** The words the box was laid for: two seats of the same words are compared by their boxes' centres and sizes. */
+  text?: string;
+  /** The page graphics a seat the scheduler adds must keep its words off (a same-page seat, world-shared pageSeats). */
+  protect?: FrameBox[];
+}
 
 /** A word or phrase as it is really sung; absent on a line whose timing is not trusted per character. */
 export interface SungWord { text: string; from: number; to: number }
@@ -37,6 +52,11 @@ export interface WorldEventLine {
   inLine?: { spans: [number, number][]; seats?: string[] };
   /** Changes of seat inside the line that come decided (an older world's own repose): kept as given, counted once. */
   given?: { at: number; seat: string; reason: string }[];
+  /**
+   * When the line's entrance has landed (its show plus the longest its entrance can take): the still reading before a
+   * switch inside it is counted from here, never from its start while the words may still be coming in.
+   */
+  settled?: number;
 }
 
 /** Q2's contract: a held line's one event, its whole window. */
@@ -131,9 +151,11 @@ export interface RejectedCandidate { candidate: { lineId: string; kind: Composit
 /** A protected input (Q2 or Q4) that breaks the spacing rules on its own: kept as given, reported for the measurement. */
 export interface InputWarning { inputs: string[]; reason: string }
 
-export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[] }
+/** A Q2 hold a scheduled world moved off a Q4 handoff it partly overlapped: to the nearest legal beat, or dropped (`to` null). */
+export interface HoldMove { lineId: string; kind: string; from: number; to: number | null; reason: string }
+export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[] }
 /** What a treatment carries of the plan (treatment.ts worldEvents): the events, the holds standing on their own, the input warnings and how many candidates were refused. */
-export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source'] }
+export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[] }
 
 /** Two changes of the whole frame's light never closer than this, anywhere in the song (no more than three flashes a second). */
 export const LIGHT_GAP = 0.55;
@@ -167,23 +189,29 @@ const DEFAULT_SEC: Record<CompositionFamily, number> = { 'layout-seat': 0, 'page
 
 const unit = (s: string) => ([...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261) >>> 0) / 2 ** 32;
 const r3 = (x: number) => +x.toFixed(3);
-const centre = (b: FrameBox) => [(b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2];
-const overlaps = (a: FrameBox, b: FrameBox) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
 /**
- * Whether two seats are really two compositions: another carrier, another direction, or a box that moved or changed size
- * enough to be seen (8 % of the frame, a quarter of its size). Seats without boxes differ by id.
+ * Whether two seats are really two compositions, by where the words really stand (Q1 phase 3a): another carrier,
+ * another direction, a box that moved 8 % of the frame, or type a size apart. The same words in two seats (a switch
+ * inside a line) are compared by their boxes' centres and a quarter of type size; two lines by the least move over the
+ * box's anchors (left, centre, right; top, middle, bottom), so a longer line in the same seat is no move, and only type
+ * nearly twice the size counts (the size follows the line's length: the frame check's own threshold, SEEN.scale).
+ * The move maths are the frame check's (render/seat-geometry.ts anchorMove, centreMove). Seats without boxes differ by id.
  */
 export function seatsDiffer(a: SeatCandidate | undefined, b: SeatCandidate | undefined): boolean {
   if (!a || !b) return a?.id !== b?.id;
   if (a.id === b.id) return false;
   if ((a.carrierId ?? '') !== (b.carrierId ?? '') || !!a.vertical !== !!b.vertical) return true;
-  if (!a.box || !b.box) return true;
-  const [[ax, ay], [bx, by]] = [centre(a.box), centre(b.box)];
-  const size = (x: FrameBox) => Math.max(1e-3, (x.x1 - x.x0) * (x.y1 - x.y0));
-  const ratio = size(a.box) / size(b.box);
-  return Math.hypot(ax - bx, ay - by) >= 0.08 || ratio >= 1.25 || ratio <= 0.8;
+  if (!a.box || !b.box) return a.id !== b.id;
+  const same = a.text === undefined || b.text === undefined || a.text === b.text;
+  const [p, q] = [a.box, b.box];
+  const move = same ? centreMove(p, q) : anchorMove(p, q);
+  const area = (x: FrameBox) => Math.max(1e-3, (x.x1 - x.x0) * (x.y1 - x.y0));
+  const ratio = a.size && b.size ? Math.max(a.size, b.size) / Math.min(a.size, b.size) : same ? Math.max(area(p), area(q)) / Math.min(area(p), area(q)) : 1;
+  return move >= SEAT_MOVE || ratio >= (same ? 1.25 : SEEN.scale);
 }
+/** The least move of the words that is another seat, a share of the frame. */
+export const SEAT_MOVE = 0.08;
 
 /** Each section's mood from its energy, both as heard and as ranked within the song (a calm song still has its peak). */
 export function moodsOf(sections: { start: number; energy: number }[]): Mood[] {
@@ -244,16 +272,46 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
   const handoffWindow = (h: HandoffCandidate) => ({ from: h.seam - (h.prepare ?? LINK_PREPARE), to: h.seam - (h.prepare ?? LINK_PREPARE) + h.dur });
   const q4Name = (h: HandoffCandidate) => `Q4 ${h.kind} into ${h.lineId}@${h.seam}`;
   const merged = new Map<HandoffCandidate, string[]>();
-  const holds = (input.holds ?? []).filter((h) => {
+  const holdMoves: HoldMove[] = [];
+  const holds = (input.holds ?? []).map((h) => ({ ...h })).filter((h) => {
     const into = handoffs.find((x) => { const w = handoffWindow(x); return h.from >= w.from - 1e-6 && h.to <= w.to + 1e-6; });
     if (into) {
       merged.set(into, [...(merged.get(into) ?? []), `hold:${h.kind}@${h.lineId}`]);
       return false;
     }
-    // (a hold that only partly overlaps a handoff keeps its whole window: both stay protected, the clash is reported)
+    const clash = (x: { from: number; to: number }) => handoffs.find((q) => { const w = handoffWindow(q); return x.from < w.to + ACTION_GAP && w.from < x.to + ACTION_GAP; });
     const part = handoffs.find((x) => { const w = handoffWindow(x); return h.from < w.to && w.from < h.to; });
-    if (part) warnings.push({ inputs: [`Q2 ${h.kind} on ${h.lineId}@${h.from}–${h.to}`, q4Name(part)], reason: 'hold partly overlaps a handoff window' });
-    return true;
+    if (!part) return true;
+    // (a world with no capability: both stay protected, the clash is reported)
+    if (!allows.size) {
+      warnings.push({ inputs: [`Q2 ${h.kind} on ${h.lineId}@${h.from}–${h.to}`, q4Name(part)], reason: 'hold partly overlaps a handoff window' });
+      return true;
+    }
+    // a world the scheduler takes over resolves it: the handoff is the page's own move and stays; the hold moves to the
+    // nearest beat of its line where its whole window stands clear of every handoff (ACTION_GAP) and ends by the line's
+    // end and ACTION_GAP before the next line shows (Codex cap ruling: 改選合法拍點或取消), else to the nearest time just
+    // clear of a handoff, else into the handoff's window (one action), else it is dropped
+    const k = lines.findIndex((l) => l.id === h.lineId);
+    const line = lines[k];
+    const sec = h.to - h.from;
+    const endBy = line ? Math.min(line.end, (lines[k + 1]?.show ?? Infinity) - ACTION_GAP) : -Infinity;
+    const legal = (b: number) => !!line && b >= line.start - 1e-6 && b + sec <= endBy + 1e-6 && !clash({ from: b, to: b + sec });
+    const nearest = (xs: number[]) => xs.filter(legal).sort((a, b) => Math.abs(a - h.at) - Math.abs(b - h.at))[0];
+    // (a beat first; else the nearest time the handoffs leave free, just past one or just before one)
+    const edges = handoffs.flatMap((q) => { const w = handoffWindow(q); return [w.to + ACTION_GAP + 1e-3, w.from - ACTION_GAP - sec - 1e-3]; });
+    const beat = line ? nearest([...input.beats, ...(input.downbeats ?? [])]) ?? nearest(edges) : undefined;
+    // (no legal beat: the hold slides the least it must to lie wholly inside the handoff's window, where it is the same
+    // action as the handoff (folded, counted once), when that still falls inside its line; else it is dropped)
+    const w = handoffWindow(part);
+    const inside = line && w.to - w.from >= sec ? Math.min(Math.max(h.from, w.from), w.to - sec) : undefined;
+    const folds = beat === undefined && inside !== undefined && inside >= line!.start && inside + sec <= endBy;
+    const at = beat ?? (folds ? inside : undefined);
+    holdMoves.push({ lineId: h.lineId, kind: h.kind, from: h.at, to: at === undefined ? null : r3(at), reason: `partly overlapped ${q4Name(part)}${folds ? ': folded into it' : ''}` });
+    if (at === undefined) return false;
+    Object.assign(h, { at: r3(at), from: r3(at), to: r3(at + sec) });
+    if (!folds) return true;
+    merged.set(part, [...(merged.get(part) ?? []), `hold:${h.kind}@${h.lineId}`]);
+    return false;
   });
   for (const [k, h] of handoffs.entries()) {
     const w = handoffWindow(h);
@@ -272,7 +330,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     for (const g of l.given ?? []) taken.push({ at: g.at, from: g.at, to: g.at, light: false, composition: true, what: `${l.id}'s given repose`, owner: `given:${l.id}@${g.at}` });
   }
 
-  const seatOk = (s: SeatCandidate) => (!caps.seats.length || caps.seats.includes(s.id)) && !(s.box && caps.protectedRegion?.some((p) => overlaps(s.box!, p)));
+  // (a seat's words keep off the world's protected regions and, for a seat the scheduler adds on a page, off that page's
+  // graphics, by the box they are really laid in)
+  const seatOk = (s: SeatCandidate) => (!caps.seats.length || caps.seats.includes(s.id)) && !(s.box && [...(caps.protectedRegion ?? []), ...(s.protect ?? [])].some((p) => boxesMeet(s.box!, p)));
   const isSectionStart = (i: number) => i > 0 && sections.some((s) => s.start > lines[i - 1].start + 1e-3 && lines[i].start >= s.start - 0.25);
 
   let seat: SeatCandidate | undefined;
@@ -398,12 +458,14 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     function inLine(l: WorldEventLine, m: Mood) {
       const kinds = IN_LINE_ORDER.filter((k) => at(k, 'in-line'));
       if (!kinds.length || l.end - l.start < MOOD_PACE[m].inLine) return;
+      if (holdMoves.some((x) => x.lineId === l.id)) return reject(l.id, kinds[0], (l.start + l.end) / 2, 'its hold was moved off a handoff: its room is not re-read, no in-line switch');
       if (l.inLine && !l.inLine.spans.length) return reject(l.id, kinds[0], (l.start + l.end) / 2, 'no room inside the line beside its hold (Q2)');
       if (!l.words || l.words.length < 2) {
         reject(l.id, kinds[0], (l.start + l.end) / 2, 'no reliable word boundary: no in-line switch (none faked by time)');
         return;
       }
-      const settled = Math.max(l.start, ...events.filter((e) => e.lineIds.includes(l.id) && e.kind !== 'keep').map((e) => e.to));
+      // (still reading starts once the words have landed: after the line's entrance and after any switch into it)
+      const settled = Math.max(l.start, l.settled ?? l.start, ...events.filter((e) => e.lineIds.includes(l.id) && e.kind !== 'keep').map((e) => e.to));
       const mid = (l.start + l.end) / 2;
       const near = (t: number) => [...input.beats, ...(input.downbeats ?? [])].some((b) => Math.abs(b - t) <= BEAT_SNAP);
       const inRoom = (t: number, to: number) => !l.inLine || l.inLine.spans.some(([a, b]) => t >= a - 1e-6 && to <= b + 1e-6);
@@ -446,7 +508,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       taken.push({ at: a.at, from: a.at, to, light: false, composition: true, what: `prop-beat ${a.propId}` });
     }
   events.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
-  return { events, holds, rejected, warnings };
+  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}) };
 }
 
 /** Events that change seat, carrier or framing; `keep` never does. */

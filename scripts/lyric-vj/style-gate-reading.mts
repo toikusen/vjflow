@@ -15,6 +15,8 @@
 // (no worlds named: every world not held). The recorded counts: scripts/lyric-vj/style-gate-rules.baseline.json, every
 // world including the held ones, 5 songs, seed 0 (rules a world's design owns: style-gate-rules.accepted.json), measured the default way (re-recorded 2026-11-04 after the carrier
 // default, the call placer and the repeat-per-shot fix; a world's moments count rose where repeats now keep their shot).
+// A world the composition scheduler takes over (VJ_WORLD_EVENTS=1) whose final draw does not match its event plan
+// (world-events-adapter verifyWorldEvents, lightGapWarnings) fails the run: listed under `contract`, exit non-zero.
 import { execSync } from 'node:child_process';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -53,6 +55,8 @@ const getFont = fontCache(resolve('out/font-cache'));
 /** One moment, read in the page (gate-page.mts): the reading measure, the rules and whether a soft clearing was drawn. */
 const moment = (p: Page, t: number) => p.evaluate(`window.gatePage.moment(${t}, ${GW}, ${GH})`) as Promise<{ n: number; sum: number; x0: number; x1: number; y0: number; y1: number; rules?: RuleMoment; soft: boolean }>;
 const fails: string[] = [];
+/** Contract warnings of the worlds the scheduler took over (VJ_WORLD_EVENTS=1): the final draw against its event plan. */
+const contract: string[] = [];
 const fill: number[] = [];
 let checked = 0;
 const counts: Record<string, RuleCounts> = {};
@@ -64,6 +68,9 @@ for (const id of positionals) {
     const song = JSON.parse(readFileSync(`out/db/${IDS[name]}/song.json`, 'utf8'));
     const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8'));
     const { job } = freeJob(song, { style, seed: Number(a.seed), meaning });
+    // (a world the scheduler takes over must draw its plan as approved: any final-check warning is a broken contract)
+    const table = job.treatment.worldEvents;
+    if (table?.source === 'declared') contract.push(...table.warnings.filter((w) => w.reason.startsWith('final check')).map((w) => `${id} ${name} ${w.inputs.join(' / ')}: ${w.reason}`));
     const file = join(work, `${id}-${name}.job.json`);
     writeFileSync(file, JSON.stringify({ ...job, live: true }));
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
@@ -111,9 +118,10 @@ await browser.close();
 server.close();
 if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
-const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
+const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, contract, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
-console.log(JSON.stringify({ ...out, fails: out.fails.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
+console.log(JSON.stringify({ ...out, fails: out.fails.length, contract: contract.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
+if (contract.length) console.log('contract warnings', contract.length, contract.slice(0, 10));
 // the rules against a world's recorded counts: a world that got worse on any rule fails
 const worse: string[] = [];
 if (a.baseline && existsSync(a.baseline)) {
@@ -131,4 +139,4 @@ if (a['write-baseline']) {
   const base = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   writeFileSync(file, JSON.stringify({ ...base, ...counts }, null, 1) + '\n');
 }
-process.exitCode = fails.length || worse.length ? 1 : 0;
+process.exitCode = fails.length || worse.length || contract.length ? 1 : 0;

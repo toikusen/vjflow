@@ -249,6 +249,8 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
       const table = f.treatment.worldEvents!;
       expect(table.events.some((e) => e.material === m), `${id} ${k} ${m}`).toBe(true);
       expect(verifyWorldEvents(f.job, style(id).world, table), `${id} ${k}`).toEqual([]);
+      // (an event on two lines never shares its id with the next line's own: countCuts folds by id)
+      expect(new Set(table.events.map((e) => e.id)).size).toBe(table.events.length);
       expect(table.warnings.filter((w) => w.reason.startsWith('final check'))).toEqual([]);
       expect(JSON.stringify(run(id, k, true).treatment.worldEvents)).toBe(JSON.stringify(table));
       // the world's own moves keep every clock among the scheduler's own switches

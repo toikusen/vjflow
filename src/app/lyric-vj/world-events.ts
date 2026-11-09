@@ -390,7 +390,11 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       return pool.length ? pool[Math.floor(salt(pick) * pool.length)] : undefined;
     };
     const push = (e: Omit<WorldEvent, 'id'>, action?: Action) => {
-      events.push({ id: `${e.kind}:${line.id}:${events.filter((x) => x.lineIds[0] === line.id).length}`, ...e, at: r3(e.at), from: r3(e.from), to: r3(e.to) });
+      // (ids unique: an event on two lines counted under its first, the line's own next one numbered past it, so no
+      // two events share an id and countCuts never folds them into one)
+      let n = events.filter((x) => x.lineIds[0] === line.id).length;
+      while (events.some((x) => x.id === `${e.kind}:${line.id}:${n}`)) n++;
+      events.push({ id: `${e.kind}:${line.id}:${n}`, ...e, at: r3(e.at), from: r3(e.from), to: r3(e.to) });
       if (action) taken.push(action);
     };
     const before = seat?.id ?? '';

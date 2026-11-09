@@ -12,7 +12,9 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { frameChange, GRID, judge, SEEN, stableTimes } from './frame-change.mts';
 
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { dir: { type: 'string', default: 'out/research/q1-1109/calib' }, from: { type: 'string', default: 'out/research/q1-1109/wired.json' }, tune: { type: 'boolean', default: false }, scoreOut: { type: 'string' } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { dir: { type: 'string', default: 'out/research/q1-1109/calib' }, from: { type: 'string', default: 'out/research/q1-1109/wired.json' }, tune: { type: 'boolean', default: false }, scoreOut: { type: 'string' }, outline: { type: 'string' } } });
+// (score at a phase's thresholds: --outline off scores phase 3a's (no carrier ring), the default phase 3b's)
+const THRESHOLDS = a.outline === undefined ? SEEN : { ...SEEN, outline: a.outline === 'off' ? Infinity : Number(a.outline) };
 const SONGS: Record<string, { db: string; plan: string }> = { fast: { db: 'yt_w_fCuUR3lEs', plan: 'nun' }, calm: { db: 'yt_5i50aTB7JFo', plan: 'snow' } };
 /** The picked events: world, clip, switch time. A mix of the phase-2 check's unrealized and realized, every family. */
 export const PICKS: [string, 'fast' | 'calm', number][] = [
@@ -74,13 +76,13 @@ if (positionals[0] === 'score') {
     return [id, { before: { on: g(0), off: g(1), bare: g(2) }, after: { on: g(3), off: g(4), bare: g(5) } }];
   }));
   const judged = Object.entries(labels).filter(([id, l]) => l.label !== 'unclear' && frames[id]);
-  const read = Object.fromEntries(Object.keys(frames).map((id) => [id, frameChange(frames[id].before, frames[id].after, index[id]?.scope === 'in-line')]));
+  const read = Object.fromEntries(Object.keys(frames).map((id) => [id, frameChange(frames[id].before, frames[id].after, index[id]?.scope === 'in-line', THRESHOLDS)]));
   const score = (seen: typeof SEEN) => judged.filter(([id, l]) => judge(read[id], seen).seen === (l.label === 'realized')).length;
   const rows = Object.entries(labels).map(([id, l]) => { const c = read[id]; return { id, label: l.label, check: c?.seen ? 'realized' : 'unrealized', phase2: index[id]?.phase2.realized ? 'realized' : 'unrealized', ...c }; });
   for (const r of rows) console.log([r.id.padEnd(28), r.label.padEnd(10), 'check', r.check.padEnd(10), 'phase2', r.phase2.padEnd(10), r.why].join('  '));
   const phase2 = judged.filter(([id, l]) => index[id]?.phase2.realized === (l.label === 'realized')).length;
-  const out = { thresholds: SEEN, judged: judged.length, unclear: Object.values(labels).filter((l) => l.label === 'unclear').length, agree: score(SEEN), phase2Agree: phase2, rows };
-  writeFileSync(join(a.dir!, 'score.json'), JSON.stringify(out, null, 1));
+  const out = { thresholds: { ...THRESHOLDS, outline: Number.isFinite(THRESHOLDS.outline) ? THRESHOLDS.outline : 'off' }, judged: judged.length, unclear: Object.values(labels).filter((l) => l.label === 'unclear').length, agree: score(THRESHOLDS), phase2Agree: phase2, rows };
+  writeFileSync(join(a.dir!, a.scoreOut ?? 'score.json'), JSON.stringify(out, null, 1));
   console.log(JSON.stringify({ judged: out.judged, unclear: out.unclear, agree: out.agree, phase2Agree: phase2 }));
   if (a.tune) {
     const tries: { seen: typeof SEEN; agree: number }[] = [];

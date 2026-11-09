@@ -996,7 +996,10 @@ export function pageSeatsFor(text: string, set: string, worldId: string): string
     const box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
     return box.x0 >= 0 && box.x1 <= 1 && box.y0 >= 0 && box.y1 <= 1 && ![...laid.protect, ...protect].some((p) => boxesMeet(box, p));
   };
-  return pageSeatsOf(worldId, set).filter((x) => fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo));
+  // (a seat that only carries the page's own layout another way, poster-panel: the line as its page set lays it, offered
+  // only where that layout really splits it into a main and a small part on both measures)
+  const splits = (x: string) => !!laidSeat(text, x)?.split && !!laidSeat(text, x, { measure: shapedMeasure })?.split;
+  return pageSeatsOf(worldId, set).filter((x) => (SET_SPECS[x].panels ? splits(x) : fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo)));
 }
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */

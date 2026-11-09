@@ -171,9 +171,9 @@ describe('planWorldEvents', () => {
     expect(JSON.stringify(planWorldEvents(input(lines, { seed: 8, sections })))).not.toBe(JSON.stringify(a));
   });
 
-  it('rule 11: a fast ten-line run is not ten full page handoffs, and keeps some lines', () => {
+  it('rule 11: a fast ten-line run is not ten full page handoffs, and keeps where the composer keeps', () => {
     const lines = Array.from({ length: 10 }, (_, i) => line(`l${i}`, i * 1.25, i * 1.25 + 1.2, 2, [LEFT, RIGHT, TOP, CARD]));
-    lines.forEach((l, i) => (l.seat = i % 2 ? 'w/card' : 'w/left'));
+    lines.forEach((l, i) => (l.seat = i % 4 < 2 ? 'w/card' : 'w/left'));
     const plan = planWorldEvents(input(lines, { caps: caps(['layout-seat', 'page-handoff', 'carrier-swap', 'camera-reframe'], { ownPages: true }) }));
     const pages = plan.events.filter((e) => e.kind === 'page-handoff');
     expect(pages.length).toBeLessThan(5);

@@ -3,10 +3,10 @@
 // a set laid into a page of its own takes that page under it. Nothing else changes: no cut, no ground, no timing is
 // added here (composerTreatment translates the plan as it stands, with no switch of its own).
 import type { StyleWorld } from './style-world';
-import { pageOf } from './world-shared';
+import { compositionsOf, pageOf } from './world-shared';
 import type { WorldEventPlan } from './world-events';
 
-interface PlanLine { cue: string; world?: { set: string; repose?: { at: number; set: string }[]; seats?: string[]; beat?: { at: number } } }
+interface PlanLine { cue: string; world?: { set: string; exit?: string; repose?: { at: number; set: string; sec?: number; move?: string }[]; seats?: string[]; beat?: { at: number }; cam?: unknown; wipe?: { from: number; sec: number; move: string }; page?: { move: string; at: number; sec: number; draws: string } } }
 interface PlanShot { shot: string; lines: PlanLine[]; cuts: { fx: string }[] }
 
 /**
@@ -18,17 +18,30 @@ interface PlanShot { shot: string; lines: PlanLine[]; cuts: { fx: string }[] }
 export function applyWorldEvents<P extends { shots: PlanShot[] }>(p: P, plan: WorldEventPlan, world: StyleWorld): P {
   const out = structuredClone(p);
   const page = (set: string) => pageOf(world, set);
-  const byLine = new Map<string, { boundary?: string; inLine: { at: number; set: string }[] }>();
+  const byLine = new Map<string, { boundary?: string; inLine: { at: number; set: string; sec?: number; move?: string }[] }>();
+  const materials = compositionsOf(world.id)?.materials ?? {};
+  // (the world's own material moves: an erase is the line before's way out, a page move the line's own page)
+  const wipes = new Map<string, NonNullable<NonNullable<PlanLine['world']>['wipe']>>();
+  const pages = new Map<string, NonNullable<NonNullable<PlanLine['world']>['page']>>();
   for (const e of plan.events) {
     const id = e.lineIds.at(-1)!;
     const row = byLine.get(id) ?? { inLine: [] };
+    const m = e.material ? materials[e.material] : undefined;
     if (e.scope === 'in-line') {
-      if (e.kind === 'layout-seat' && e.seatAfter) row.inLine.push({ at: e.at, set: e.seatAfter });
+      if ((e.kind === 'layout-seat' || e.kind === 'carrier-swap') && e.seatAfter) row.inLine.push({ at: e.at, set: e.seatAfter, ...(m ? { sec: m.sec, move: e.material } : {}) });
     } else if (row.boundary === undefined && e.kind !== 'camera-reframe' && e.seatAfter) row.boundary = e.seatAfter;
+    if (m?.seat === 'over' && e.lineIds.length > 1) wipes.set(e.lineIds[0], { from: e.from, sec: m.sec, move: e.material! });
+    if (m?.seat === 'same') pages.set(id, { move: e.material!, at: e.at, sec: m.sec, draws: m.draws });
     byLine.set(id, row);
   }
+  const drops = new Set((plan.camDrops ?? []).map((c) => c.lineId));
   for (const s of out.shots)
     for (const l of s.lines) {
+      if (l.world && drops.has(l.cue)) delete l.world.cam;
+      const wipe = wipes.get(l.cue);
+      if (l.world && wipe) Object.assign(l.world, { wipe, exit: materials[wipe.move].draws });
+      const move = pages.get(l.cue);
+      if (l.world && move) l.world.page = move;
       const row = byLine.get(l.cue) ?? (plan.holdMoves?.some((x) => x.lineId === l.cue) ? { inLine: [] } : undefined);
       if (!l.world || !row) continue;
       const set = row.boundary && row.boundary !== l.world.set && (l.world.seats ?? []).includes(row.boundary) ? row.boundary : l.world.set;

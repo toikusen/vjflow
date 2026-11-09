@@ -82,6 +82,10 @@ const B5_PAGE_SEATS: Record<string, SetSpec> = {
   'notebook/dotted+margin': pageSeat('notebook/dotted', { at: [0.86, 0.88], ax: 1, ay: 1, flush: 1, share: 0.5, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
   'art-deco/marquee+second': pageSeat('art-deco/marquee', { at: [0.5, 0.56], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
   'art-deco/marquee-low+second': pageSeat('art-deco/marquee-low', { at: [0.5, 0.36], ax: 0, ay: 0, share: 0.6, tall: 0.28, hi: 150, lo: 100, rows: [1, 2] }),
+  // (phase 3b, poster-panel: the marquee set as it is, split and all, its gold phrase on a panel of its own; offered only
+  // where the line really splits, lineplan-core pageSeatsFor)
+  'art-deco/marquee+panels': { ...B5_SETS['art-deco/marquee'], samePage: 'art-deco/marquee', panels: true, lo: B5_SETS['art-deco/marquee'].lo },
+  'art-deco/marquee-low+panels': { ...B5_SETS['art-deco/marquee-low'], samePage: 'art-deco/marquee-low', panels: true, lo: B5_SETS['art-deco/marquee-low'].lo },
 };
 // (the turned notebook pages' margin seats, turned with them)
 for (const id of ['notebook/spiral', 'notebook/dotted']) {

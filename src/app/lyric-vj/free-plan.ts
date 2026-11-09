@@ -396,7 +396,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const { job, treatment } = scheduled ? jobOf(plan) : first;
   // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
   const checked = scheduled ? [...verifyWorldEvents(job, world, events), ...lightGapWarnings(job, events)] : [];
-  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}) };
+  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
   return { job, plan, palette: paletteId, calm, treatment };

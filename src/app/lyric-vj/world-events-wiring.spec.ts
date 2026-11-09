@@ -132,13 +132,16 @@ describe('planWorldEvents with the wiring inputs', () => {
 });
 
 describe('the wiring', () => {
-  it('declares the five single-page worlds and no other; document keeps its camera still and has no switch of its own', () => {
+  it('declares the five single-page worlds and no other; document keeps its camera still and only its own page moves', () => {
     expect(Object.keys(WORLD_COMPOSITIONS).sort()).toEqual([...ONE_PAGE_WORLDS].sort());
     expect(compositionsOf('silk')).toBeUndefined();
-    expect(WORLD_COMPOSITIONS['document'].kinds).toEqual([]);
+    // (phase 3b: the receipt's own tear and feed, never a camera, never a seat change of the scheduler's own)
+    expect(WORLD_COMPOSITIONS['document'].kinds).toEqual(['page-handoff']);
+    expect(Object.values(WORLD_COMPOSITIONS['document'].materials!).every((m) => m.family === 'page-handoff' && m.seat === 'same')).toBe(true);
     // nothing is taken over by default (2026-11-09 review): only an explicit opt-in schedules them
     for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.enabled).toBeFalsy();
-    expect(WORLD_COMPOSITIONS['chalkboard'].pending?.['erase-reseat']).toMatch(/never the line being sung/);
+    // (no move is left pending: each bounded move now has a renderer and is laid only as an approved event)
+    for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.pending ?? {}).toEqual({});
     for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.allowedAt['camera-reframe'] ?? ['section']).toEqual(['section']);
   });
 
@@ -355,7 +358,7 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every even
 });
 
 describe('phase 3a: same-page seats (step 3)', () => {
-  it('notebook, art-deco and blueprint declare seats on their own pages, at their least type, taken inside a line; chalkboard and document are as before', () => {
+  it('notebook, art-deco and blueprint declare seats on their own pages, at their least type, taken inside a line; chalkboard and document have none', () => {
     for (const id of ['notebook', 'art-deco', 'blueprint']) {
       const c = compositionsOf(id)!;
       expect(c.allowedAt['layout-seat']).toContain('in-line');
@@ -363,7 +366,7 @@ describe('phase 3a: same-page seats (step 3)', () => {
       expect(pageSeatsOf(id).length).toBeGreaterThan(0);
       expect(c.protectedRegion?.length).toBeGreaterThan(0);
       const world = FREE_STYLES.find((s) => s.id === id)!.world;
-      for (const x of pageSeatsOf(id)) {
+      for (const x of pageSeatsOf(id).filter((y) => !SET_SPECS[y].panels)) {
         const main = SET_SPECS[x].samePage!;
         expect(SET_SPECS[x].lo, x).toBeGreaterThanOrEqual(96);
         expect(isPageSeat(x)).toBe(true);
@@ -375,7 +378,7 @@ describe('phase 3a: same-page seats (step 3)', () => {
     }
     expect(compositionsOf('chalkboard')!.pageSeats).toBeUndefined();
     expect(pageSeatsOf('chalkboard')).toEqual([]);
-    expect(compositionsOf('document')!.kinds).toEqual([]);
+    expect(pageSeatsOf('document')).toEqual([]);
   });
 
   it('a same-page seat is offered only where the line keeps the world minimum type and stays off the page graphics', () => {

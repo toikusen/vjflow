@@ -24,7 +24,14 @@ export interface WorldLine {
   exit: string;
   hold: string;
   /** Sets the line moves to while it is up, at these seconds (a scheduled world: only the switches its event plan approved). */
-  repose?: { at: number; set: string }[];
+  repose?: { at: number; set: string; /** A carrier move's own time and name (art-deco poster-panel), else a cut. */ sec?: number; move?: string }[];
+  /**
+   * The line's way out is its world's erase (Q1 phase 3b chalkboard erase-reseat): from `from` for `sec`, by the exit
+   * named in `exit` (the board's eraser pass), only ever after the line is sung; the next line is set over the region.
+   */
+  wipe?: { from: number; sec: number; move: string };
+  /** The page under the line changes at its show by the world's own move (the receipt's tear or feed): which, when, how long. */
+  page?: { move: string; at: number; sec: number; draws: string };
   /** The other sets the composer found legal for the line (a scheduled world's candidates, world-events.ts); plan only. */
   seats?: string[];
   /** What its characters are made of. */
@@ -426,6 +433,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     // (it grows from the side its set is anchored on: that edge stays put)
     const [cx, cy] = [cx0 - p.spec.ax * (bw / 2) * grow * (g - 1), cy0 - p.spec.ay * (bh / 2) * grow * (g - 1)];
     const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: sh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])) };
+    // (a set carried on panels, art-deco poster-panel: which part each cell is, and when the panels part, for the page)
+    if (face && sets[i].panels && p.block.small?.length) {
+      const row = rowsOfGlyphs(gs, p.block);
+      face.parts = gs.flatMap((gl, j) => (p.shown[j] ? [p.block.small!.includes(row.get(gl) ?? -1) ? 1 : 0] : []));
+      face.panels = { from: i ? wl.repose![i - 1].at : rt.showFrom, sec: i ? wl.repose![i - 1].sec ?? 0 : 0 };
+    }
     return { from: i ? wl.repose![i - 1].at : rt.showFrom, to: i < poses.length - 1 ? wl.repose![i].at : rt.exitAt + rt.exitDur, rect: { x0: cx - hw - pad, y0: cy - hh - pad, x1: cx + hw + pad, y1: cy + hh + pad, carried, ...(face ? { face } : {}) } };
   });
   // the camera into a new part never carries the first line's box out of the frame (world-cam.ts camReach)
@@ -485,11 +498,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const k = poseAt(t);
       const p = poses[k];
       const live = t >= rt.showFrom;
-      const gone = rt.style.exit === 'cut' ? t > rt.exitAt : t > rt.exitAt + rt.exitDur;
+      // (an erased line goes by its world's erase, whatever its style's exit: world-events wipe)
+      const gone = rt.style.exit === 'cut' && !wl.wipe ? t > rt.exitAt : t > rt.exitAt + rt.exitDur;
       body.visible = live && !gone;
       if (!body.visible) return;
       const qIn = sec(t - rt.showFrom, enterDur);
-      const out = t > rt.exitAt && rt.style.exit !== 'cut';
+      const out = t > rt.exitAt && (rt.style.exit !== 'cut' || !!wl.wipe);
       const qOut = out ? clamp01((t - rt.exitAt) / Math.max(0.05, rt.exitDur)) : 0;
       const move = out ? leaving : qIn < 1 ? entering : undefined;
       const blockPose = move?.block?.(out ? qOut : qIn, seed) ?? {};

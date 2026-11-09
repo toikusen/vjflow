@@ -247,7 +247,7 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
 
 snow 的 Q2 hold 碰撞仍是排程缺口。拿掉 c005 和 c022 之後，snow 的楓葉 c009 被選中次數從 1 增加到 10。
 
-## 換檔指令（**尚未執行**；先確認其他 worktree 的量測已經結束）
+## 換檔指令（已於 2026-11-10 執行，Q1 3a 合併 d298d7b 之後；舊檔備份為 meaning.instant-1101.json）
 
 ```sh
 cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
@@ -316,7 +316,7 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
 
 nun、choroin、tenmon 仍是 0，原因是 timing 或 legalCue。Q2 hold 碰撞仍是排程缺口。
 
-## 換檔指令（**尚未執行**；先確認其他 worktree 的量測已經結束）
+## 換檔指令（已於 2026-11-10 執行，Q1 3a 合併 d298d7b 之後；舊檔備份為 meaning.instant-1101.json）
 
 ```sh
 cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing

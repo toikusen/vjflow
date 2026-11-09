@@ -46,10 +46,10 @@ for (const id of Object.keys(B4_MIRRORS)) {
 /**
  * blueprint's detail strip (Q1 phase 3a; world-shared pageSeats, offered only to a scheduled world): the note written in
  * the strip under the sheet's drawing, inside the border and left of the title block, on the same sheet as its set's
- * note area; one row, a size down, never under the world's least type (`lo`, world-shared minType). Built from the set
+ * note area; one row, a size down; `lo` is the least type a line is offered it at (lineplan-core pageSeatsFor). Built from the set
  * itself (its inks, its page's graphics as `clear`) with no split part; nothing is drawn for it that the sheet does not have.
  */
-const detail = (of: string): SetSpec => { const { split: _split, ...s } = B4_SETS[of]; return { ...s, at: [0.0885, 0.92], ax: -1, ay: 1, flush: -1, share: 0.58, tall: 0.12, hi: 110, lo: 100, rows: [1, 1] }; };
+const detail = (of: string): SetSpec => { const { split: _split, ...s } = B4_SETS[of]; return { ...s, samePage: of, at: [0.0885, 0.92], ax: -1, ay: 1, flush: -1, share: 0.58, tall: 0.12, hi: 110, lo: 100, rows: [1, 1] }; };
 for (const id of ['blueprint/part', 'blueprint/construct']) {
   B4_SETS[`${id}+detail`] = detail(id);
   const s = detail(`${id}-r`);

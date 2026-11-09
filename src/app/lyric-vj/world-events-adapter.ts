@@ -11,10 +11,12 @@ import { approvedOf, lineShows, type Section as ShownSection } from './render/li
 import { readingSec } from './render/reading-window';
 import { SET_SPECS } from './render/world-sets';
 import { WORLD_BEATS } from './render/world-beats';
+import { WORLD_ENTERS } from './render/world-motion';
+import { enterSec as lineEnterSec } from './render/enter-sec';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import { LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
-import { compositionsOf, isPageSeat, linksOf, pageOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
+import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
 import { laidSeat } from './render/seat-geometry';
 import { LIGHT_GAP, seatsDiffer, type CameraMove, type InputWarning, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 
@@ -63,7 +65,7 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   const carrierRole: WorldCompositionCaps['carrierRole'] = world.sheet ? 'page' : world.standsOnPlate ? 'plate' : seats.some((s) => s.carrierId) ? 'object' : 'ground';
   const declared = compositionsOf(world.id);
   // (a world's declared seats, or all of its sets and the seats it adds on their pages)
-  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...Object.values(declared.pageSeats ?? {}).flat()], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), source: 'declared' };
+  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), source: 'declared' };
   if (!o.derived) return { worldId: world.id, kinds: [], seats: sets, carrierRole, source: 'declared-off' };
   const differs = seats.some((a) => seats.some((b) => seatsDiffer(a, b)));
   const kinds: CompositionFamily[] = [
@@ -103,7 +105,7 @@ export function shownOf(job: Job) {
   const linked = sections.filter((s) => s.transition?.kind.startsWith('link-') && s.transition.seam !== undefined).sort((x, y) => x.start - y.start);
   if (linked.length !== laid.length) throw new Error(`linkGrounds laid ${laid.length} handoffs on ${linked.length} sections`);
   const handoffs: HandoffCandidate[] = laid.map((x, k) => ({ lineId: x.id, kind: x.kind, dir: x.dir, seam: +(linked[k].start + linked[k].transition!.seam!).toFixed(3), dur: linked[k].transition!.dur ?? LINK_PREPARE + LINK_CLEAR, prepare: linked[k].transition!.seam! }));
-  const rows = styled.map(({ style, cue }, i) => ({ id: cue.id, cue, shot: style.shot, world: style.world as WorldLine | undefined, show: +showAt[i].toFixed(3) }));
+  const rows = styled.map(({ style, cue }, i) => ({ id: cue.id, cue, shot: style.shot, world: style.world as WorldLine | undefined, show: +showAt[i].toFixed(3), enter: style.enter as string | undefined }));
   // the composer's own lyric handoffs that survived the engine's gating: a page handoff each, fixed, its whole window
   const lyric: HandoffCandidate[] = styled.flatMap(({ style }, i) => (style.handoff ? [{ lineId: rows[i].id, kind: `lyric-${style.handoff.kind}`, dir: 0, seam: rows[i].show, prepare: +(rows[i].show - style.handoff.from).toFixed(3), dur: +(style.handoff.to - style.handoff.from).toFixed(3) }] : []));
   return { rows, handoffs: [...handoffs, ...lyric].sort((x, y) => x.seam - y.seam), sections };
@@ -161,7 +163,7 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
   const rows = all.filter((r) => r.cue.end > a && r.cue.start < b);
   const ids = new Set(rows.map((r) => r.id));
   const shared = new Set(all.filter((r, i) => all.some((x, j) => j !== i && x.shot === r.shot)).map((r) => r.id));
-  const lines: WorldEventLine[] = rows.map(({ id, cue, show, world: w, shot }) => {
+  const lines: WorldEventLine[] = rows.map(({ id, cue, show, world: w, shot, enter }) => {
     const set = w?.set ?? `${shot}:lyric`;
     const own = w ? seatIn(world, set, cue.text) : { id: set };
     // (the derived dry run offers every set of the world that takes the text, as phase 1 did)
@@ -175,8 +177,11 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
     const read = w?.blow ? cue.start + readingSec(cue.text, cue.start, cue.end) : undefined;
     const room0 = on && !o.derived ? holdRoom(cue, hold, legal) : undefined;
     const room = read === undefined ? room0 : { ...room0, spans: (room0?.spans ?? [[cue.start, cue.end]]).flatMap(([x, y]): [number, number][] => (y > Math.max(x, read) ? [[Math.max(x, read), y]] : [])) };
+    // (the longest the line's entrance can take: the world's own move at full pace, or the line's drawn entrance; the
+    // renderer runs either at its pace, never longer: world-layout enterDur, enter-sec.ts)
+    const entrance = Math.max(w ? WORLD_ENTERS[w.enter]?.sec ?? 0 : 0, enter ? lineEnterSec(enter as never, 1) || 0 : 0);
     return {
-      id, show, start: cue.start, end: cue.end, ...(words ? { words } : {}), seats: [own, ...legal.map((s) => seatIn(world, s, cue.text))], seat: set,
+      id, show, start: cue.start, end: cue.end, ...(words ? { words } : {}), settled: +(show + entrance).toFixed(3), seats: [own, ...legal.map((s) => seatIn(world, s, cue.text))], seat: set,
       ...(pinned ? { pinned } : {}), ...(room ? { inLine: room } : {}),
       ...(!on && w?.repose?.length ? { given: w.repose.map((r) => ({ at: r.at, seat: r.set, reason: 'repose (composer, capability off)' })) } : {}),
     };
@@ -207,7 +212,7 @@ export const fromFreeJob = (free: { job: Job }, song: SongTimeline, world: Style
  * world camera move into a part. A boundary carrying several is one event; ground fills, wipes, pieces and holds are none.
  * Read off the job as drawn (real shows, line-shows.ts), so it counts a scheduled job's realised plan the same way.
  */
-export function currentEvents(free: { job: Job }, _song: SongTimeline, world: StyleWorld): WorldEvent[] {
+export function currentEvents(free: { job: Job }, _song: SongTimeline | undefined, world: StyleWorld): WorldEvent[] {
   const { rows, handoffs } = shownOf(free.job);
   const hands = new Map(handoffs.map((h) => [h.lineId, h]));
   const out: WorldEvent[] = [];
@@ -255,7 +260,7 @@ export interface Landing {
  */
 export function landedEvents(job: Job, world: StyleWorld, table: { events: WorldEvent[] }): { events: Landing[]; extra: WorldEvent[] } {
   const { rows, sections } = shownOf(job);
-  const drawn = currentEvents({ job }, undefined as never, world);
+  const drawn = currentEvents({ job }, undefined, world);
   const claimed = new Set<WorldEvent>();
   const near = (a: number, b: number) => Math.abs(a - b) < 0.002;
   const pageUnder = (row: (typeof rows)[number]) => [...sections].reverse().find((s) => s.start <= row.cue.start + 1e-3)?.layers.find((l) => l.fx && pageOf(world, row.world?.set ?? '') === l.fx)?.fx;
@@ -330,6 +335,12 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   }
   const approved = new Set(table.events.filter((e) => e.kind === 'page-handoff').map((e) => e.lineIds[e.lineIds.length - 1]));
   for (const h of handoffs) if (!approved.has(h.lineId)) miss(`${h.kind}@${h.lineId}`, 'a handoff is laid that the plan does not hold');
+  // a Q2 hold drawn partly over a Q4 handoff's window (the scheduler moves or drops one; never both kept, Codex §6)
+  for (const r of rows) {
+    const h = holdOf(r.id, r.world);
+    const q = h && handoffs.find((x) => { const from = x.seam - (x.prepare ?? LINK_PREPARE); const to = from + x.dur; return h.from < to && from < h.to && !(h.from >= from - 1e-6 && h.to <= to + 1e-6); });
+    if (h && q) miss(`hold:${h.kind}@${h.lineId}`, `hold ${h.from}–${h.to} partly overlaps the ${q.kind} handoff into ${q.lineId}`);
+  }
   // event by event, both ways: each planned event as drawn (kind, seat, page, switch point, window), each drawn cut planned
   const landed = landedEvents(job, world, table);
   for (const l of landed.events) if (!l.same && !out.some((w) => w.inputs[0] === l.id)) miss(l.id, `landed otherwise: ${l.why}`);

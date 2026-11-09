@@ -74,9 +74,9 @@ for (const id of B5_MIRRORS) {
  * reading area of the page the set is laid into, built from the set itself (its inks, its surface, its shear, its page's
  * graphics as `clear`) with no split part. notebook: under the main column, flush to the red margin line, a size down
  * (the margin seat); art-deco: the secondary block on the axis inside the same stepped frame, a size down, the plaque
- * still drawn round the words as set. Never under the world's least type (`lo`, world-shared minType).
+ * still drawn round the words as set. `lo` is the least type a line is offered the seat at (lineplan-core pageSeatsFor).
  */
-const pageSeat = (of: string, o: Partial<SetSpec>): SetSpec => { const { split: _split, ...s } = B5_SETS[of]; return { ...s, ...o }; };
+const pageSeat = (of: string, o: Partial<SetSpec>): SetSpec => { const { split: _split, ...s } = B5_SETS[of]; return { ...s, ...o, samePage: of }; };
 const B5_PAGE_SEATS: Record<string, SetSpec> = {
   'notebook/spiral+margin': pageSeat('notebook/spiral', { at: [0.2, 0.9], ax: -1, ay: 1, flush: -1, share: 0.58, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
   'notebook/dotted+margin': pageSeat('notebook/dotted', { at: [0.86, 0.88], ax: 1, ay: 1, flush: 1, share: 0.5, tall: 0.3, hi: 150, lo: 96, rows: [1, 2] }),
@@ -86,6 +86,6 @@ const B5_PAGE_SEATS: Record<string, SetSpec> = {
 // (the turned notebook pages' margin seats, turned with them)
 for (const id of ['notebook/spiral', 'notebook/dotted']) {
   const s = B5_PAGE_SEATS[`${id}+margin`];
-  B5_PAGE_SEATS[`${id}-r+margin`] = { ...s, at: [1 - s.at[0], s.at[1]], ax: flip(s.ax), ...(s.flush !== undefined ? { flush: flip(s.flush) } : {}), ...(s.clear ? { clear: s.clear.map(([x0, y0, x1, y1]) => [1 - x1, y0, 1 - x0, y1] as [number, number, number, number]) } : {}) };
+  B5_PAGE_SEATS[`${id}-r+margin`] = { ...s, samePage: `${id}-r`, at: [1 - s.at[0], s.at[1]], ax: flip(s.ax), ...(s.flush !== undefined ? { flush: flip(s.flush) } : {}), ...(s.clear ? { clear: s.clear.map(([x0, y0, x1, y1]) => [1 - x1, y0, 1 - x0, y1] as [number, number, number, number]) } : {}) };
 }
 Object.assign(B5_SETS, B5_PAGE_SEATS);

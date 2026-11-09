@@ -6,7 +6,7 @@ import type { StyleWorld } from './style-world';
 import { pageOf } from './world-shared';
 import type { WorldEventPlan } from './world-events';
 
-interface PlanLine { cue: string; world?: { set: string; repose?: { at: number; set: string }[]; seats?: string[] } }
+interface PlanLine { cue: string; world?: { set: string; repose?: { at: number; set: string }[]; seats?: string[]; beat?: { at: number } } }
 interface PlanShot { shot: string; lines: PlanLine[]; cuts: { fx: string }[] }
 
 /**
@@ -29,7 +29,7 @@ export function applyWorldEvents<P extends { shots: PlanShot[] }>(p: P, plan: Wo
   }
   for (const s of out.shots)
     for (const l of s.lines) {
-      const row = byLine.get(l.cue);
+      const row = byLine.get(l.cue) ?? (plan.holdMoves?.some((x) => x.lineId === l.cue) ? { inLine: [] } : undefined);
       if (!l.world || !row) continue;
       const set = row.boundary && row.boundary !== l.world.set && (l.world.seats ?? []).includes(row.boundary) ? row.boundary : l.world.set;
       if (set !== l.world.set) {
@@ -37,6 +37,9 @@ export function applyWorldEvents<P extends { shots: PlanShot[] }>(p: P, plan: Wo
         if (from && to) for (const c of s.cuts) if (c.fx === from) c.fx = to;
         l.world.set = set;
       }
+      // (a hold the plan moved off a handoff: to its legal beat, or dropped)
+      const moved = plan.holdMoves?.find((x) => x.lineId === l.cue);
+      if (moved && l.world.beat) { if (moved.to === null) delete l.world.beat; else l.world.beat.at = moved.to; }
       const inLine = row.inLine.sort((a, b) => a.at - b.at);
       if (inLine.length) l.world.repose = inLine;
       else delete l.world.repose;

@@ -101,10 +101,10 @@ describe('planWorldEvents', () => {
     expect(countCuts([...plan.events, h], [0, 4]).byKind['page-handoff']).toBe(1);
   });
 
-  it('a hold only partly inside a handoff keeps its whole window protected, and is reported', () => {
+  it('a hold only partly inside a handoff keeps its whole window protected, and is reported (capability off; a scheduled world moves or drops it: world-events-wiring.spec.ts)', () => {
     // handoff 2.05–2.65 (seam 2.3); the hold runs on to 5.0: nothing may land in 2.65–5.0 either
     const lines = [line('a', 0, 2.3), line('b', 2.3, 6, 6)];
-    const plan = planWorldEvents(input(lines, { beats: [4.5], holds: [{ lineId: 'b', at: 2.4, from: 2.4, to: 5, kind: 'ink-run' }], handoffs: [{ lineId: 'b', kind: 'link-seat', dir: 0, seam: 2.3, dur: 0.6 }] }));
+    const plan = planWorldEvents(input(lines, { caps: caps([]), beats: [4.5], holds: [{ lineId: 'b', at: 2.4, from: 2.4, to: 5, kind: 'ink-run' }], handoffs: [{ lineId: 'b', kind: 'link-seat', dir: 0, seam: 2.3, dur: 0.6 }] }));
     expect(plan.holds).toHaveLength(1);
     expect(plan.events.find((e) => e.kind === 'page-handoff')?.merged).toBeUndefined();
     for (const e of cuts(plan.events).filter((x) => !x.fixed)) expect(e.to < 2.4 - ACTION_GAP || e.from > 5 + ACTION_GAP, `${e.id} at ${e.at}`).toBe(true);

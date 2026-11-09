@@ -9,7 +9,8 @@ import { LINK_CLEAR, LINK_PREPARE, linkGrounds, sectionClock } from './render/wo
 import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, READ_STABLE, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 import { capsOf, currentEvents, fromJob, holdRoom, landedEvents, lightGapWarnings, ONE_PAGE_WORLDS, seatIn, shownOf, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
-import { compositionsOf, isPageSeat, pageOf, WORLD_COMPOSITIONS } from './world-shared';
+import { compositionsOf, isPageSeat, pageOf, pageSeatsOf, WORLD_COMPOSITIONS } from './world-shared';
+import { SET_SPECS } from './render/world-sets';
 import { boxesMeet, laidSeat } from './render/seat-geometry';
 import { composePlan, pageSeatsFor, RECIPES } from './lineplan-core';
 import { poolOf } from './style-world';
@@ -358,10 +359,13 @@ describe('phase 3a: same-page seats (step 3)', () => {
     for (const id of ['notebook', 'art-deco', 'blueprint']) {
       const c = compositionsOf(id)!;
       expect(c.allowedAt['layout-seat']).toContain('in-line');
-      expect(Object.keys(c.pageSeats ?? {}).length).toBeGreaterThan(0);
-      expect(c.minType).toBeGreaterThanOrEqual(96);
+      expect(c.pageSeats).toBe(true);
+      expect(pageSeatsOf(id).length).toBeGreaterThan(0);
+      expect(c.protectedRegion?.length).toBeGreaterThan(0);
       const world = FREE_STYLES.find((s) => s.id === id)!.world;
-      for (const [main, extra] of Object.entries(c.pageSeats!)) for (const x of extra) {
+      for (const x of pageSeatsOf(id)) {
+        const main = SET_SPECS[x].samePage!;
+        expect(SET_SPECS[x].lo, x).toBeGreaterThanOrEqual(96);
         expect(isPageSeat(x)).toBe(true);
         // (the same page under the words: the same carrier, a different seat)
         expect(pageOf(world, x), x).toBe(pageOf(world, main));
@@ -370,18 +374,19 @@ describe('phase 3a: same-page seats (step 3)', () => {
       }
     }
     expect(compositionsOf('chalkboard')!.pageSeats).toBeUndefined();
+    expect(pageSeatsOf('chalkboard')).toEqual([]);
     expect(compositionsOf('document')!.kinds).toEqual([]);
   });
 
   it('a same-page seat is offered only where the line keeps the world minimum type and stays off the page graphics', () => {
     for (const id of ['notebook', 'art-deco', 'blueprint']) {
       const c = compositionsOf(id)!;
-      for (const [main, extra] of Object.entries(c.pageSeats!))
+      for (const main of [...new Set(pageSeatsOf(id).map((x) => SET_SPECS[x].samePage!))])
         for (const text of ['快使用', '快使用雙截棍 哼哼哈兮', '如果我有輕功 飛簷走壁 ', 'a much longer line of latin words than any seat takes in one row', '他們兒子我習慣從小就耳濡目染什麼刀槍跟棍棒我都耍的有模有樣']) {
           for (const x of pageSeatsFor(text, main, id)) {
             const laid = laidSeat(text, x)!;
-            expect(laid.size, `${x} ${text}`).toBeGreaterThanOrEqual(c.minType!);
-            for (const p of laid.protect) expect(boxesMeet(laid.box, p), `${x} ${text}`).toBe(false);
+            expect(laid.size, `${x} ${text}`).toBeGreaterThanOrEqual(SET_SPECS[x].lo);
+            for (const p of [...laid.protect, ...(c.protectedRegion ?? [])]) expect(boxesMeet(laid.box, p), `${x} ${text}`).toBe(false);
           }
         }
     }
@@ -422,7 +427,7 @@ describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SO
           const cue = song.cues.find((c: { id: string }) => c.id === l.id);
           const laid = laidSeat(cue.text, e.seatAfter)!;
           if (isPageSeat(e.seatAfter)) {
-            expect(laid.size, e.id).toBeGreaterThanOrEqual(compositionsOf(id)!.minType!);
+            expect(laid.size, e.id).toBeGreaterThanOrEqual(SET_SPECS[e.seatAfter].lo);
             for (const p of laid.protect) expect(boxesMeet(laid.box, p), e.id).toBe(false);
           }
         }
@@ -443,5 +448,55 @@ describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SO
       expect(JSON.stringify(rest)).toBe(JSON.stringify(before.job.treatment));
       expect(JSON.stringify(rest)).not.toMatch(/\+(margin|second|detail)/);
     }
+  });
+});
+
+describe('phase 3a round 2: still reading after the entrance; Q2/Q4 overlaps resolved', () => {
+  it('the 0.35 s before an in-line switch counts from the end of the entrance, not the line start: a short window keeps', () => {
+    const words = [{ text: 'x', from: 10, to: 10.5 }, { text: 'y', from: 10.5, to: 13 }];
+    // the only sung break is 0.5 s after the start: with no entrance, 0.5 s of still reading, the switch lands
+    const open = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13), words }]));
+    expect(open.events.some((e) => e.scope === 'in-line' && e.at === 10.5)).toBe(true);
+    // its entrance lands at 10.3: 0.2 s of still reading before the break, so the line keeps its seat
+    const late = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13), words, settled: 10.3 }]));
+    expect(late.events.some((e) => e.scope === 'in-line')).toBe(false);
+    expect(late.rejected.some((r) => r.candidate.lineId === 'l' && /less than 0.35s of still reading/.test(r.reason))).toBe(true);
+  });
+
+  it('a scheduled world moves a hold that partly overlaps a handoff to the nearest legal beat, or drops it; a world without capability only warns', () => {
+    const lines = [line('a', 0, 3), line('b', 3.4, 6)];
+    const hand = { lineId: 'b', kind: 'link-relay-x', dir: 0, seam: 3.2, dur: LINK_PREPARE + LINK_CLEAR };
+    const hold = { lineId: 'a', kind: 'line-grow', at: 2.8, from: 2.8, to: 3.1 };
+    const moved = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [1, 2, 2.5] }));
+    expect(moved.holdMoves).toEqual([expect.objectContaining({ lineId: 'a', from: 2.8, to: 2.5 })]);
+    expect(moved.holds[0]).toMatchObject({ at: 2.5, from: 2.5, to: 2.8 });
+    expect(moved.warnings.some((w) => /partly overlaps/.test(w.reason))).toBe(false);
+    // the hold window clears the handoff by ACTION_GAP
+    const w0 = hand.seam - LINK_PREPARE;
+    expect(moved.holds[0].to + ACTION_GAP).toBeLessThanOrEqual(w0 + 1e-6);
+    const dropped = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [] }));
+    expect(dropped.holdMoves?.[0].to).toBeNull();
+    expect(dropped.holds).toEqual([]);
+    const off = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [2.5], caps: caps([]) }));
+    expect(off.holdMoves).toBeUndefined();
+    expect(off.warnings.some((w) => /partly overlaps/.test(w.reason))).toBe(true);
+  });
+});
+
+describe.skipIf(!existsSync('out/db/yt_5i50aTB7JFo/song.json'))('phase 3a round 2 on 大雪: art-deco c014 line-grow no longer overlaps the c015 handoff', () => {
+  it('the hold is moved (table holdMoves), drawn at its new beat, and the final check reports no overlap', () => {
+    const song = JSON.parse(readFileSync('out/db/yt_5i50aTB7JFo/song.json', 'utf8'));
+    const meaning = JSON.parse(readFileSync('out/research/instant/plans/snow/meaning.json', 'utf8'));
+    const style = FREE_STYLES.find((s) => s.id === 'art-deco')!;
+    const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+    const table = f.treatment.worldEvents!;
+    expect(table.holdMoves?.some((m) => m.lineId === 'c014' && m.to !== null)).toBe(true);
+    expect(table.warnings.filter((w) => /partly overlaps|final check/.test(w.reason))).toEqual([]);
+    const cue = (f.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!;
+    expect(cue.world!.beat!.at).toBe(table.holdMoves!.find((m) => m.lineId === 'c014')!.to);
+    // tampered back: the overlap is a final-check failure the gate and the measurement exit on
+    const job = structuredClone(f.job);
+    (job.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!.world!.beat!.at = 68.081;
+    expect(verifyWorldEvents(job, style.world, table).some((w) => /partly overlaps/.test(w.reason))).toBe(true);
   });
 });

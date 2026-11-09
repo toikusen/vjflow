@@ -5,6 +5,7 @@
 // - camera: the one move the world's camera makes into a new part (render/kinetic.ts, world-layout.ts).
 // Moves in and out shared by all worlds are in render/world-motion.ts (SHARED_ENTERS, SHARED_EXITS).
 import type { StyleWorld } from './style-world';
+import { SET_SPECS } from './render/world-sets';
 import type { CompositionFamily } from './world-events';
 
 export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker' | HoldKind | 'line-ink-settle';
@@ -231,15 +232,14 @@ export interface WorldCompositions {
   moves: Partial<Record<CompositionFamily, string>>;
   pending?: Record<string, string>;
   /**
-   * Seats on the same page as a set of the world's (Q1 phase 3a): the same carrier, another reading area (notebook's
-   * main column and its lower margin, art-deco's main and secondary block inside the one stepped frame, blueprint's
-   * sheet note and the detail strip under its drawing). Keyed by the set whose page they are on; each is a set of its own
-   * (render/world-sets) laid by the renderer at its real geometry, offered only to a scheduled world (lineplan-core
-   * seatsFor), so a line may switch to one inside itself at a sung word without leaving its page.
+   * Whether the world's seats on the same page as its sets are used (Q1 phase 3a): the same carrier, another reading
+   * area (notebook's main column and its lower margin, art-deco's main and secondary block inside the one stepped frame,
+   * blueprint's sheet note and the detail strip under its drawing). The seats themselves are sets of their own, each
+   * naming its page's set (render/world-sets `samePage`, the one list), laid by the renderer at real geometry, offered
+   * only to a scheduled world (lineplan-core seatsFor) at no less than their own `lo`, so a line may switch to one inside
+   * itself at a sung word without leaving its page.
    */
-  pageSeats?: Record<string, string[]>;
-  /** The least type a same-page seat may set a line at, px at 1080p: a line that would be smaller there is not offered it. */
-  minType?: number;
+  pageSeats?: boolean;
   /**
    * Whether the free path lets the scheduler take the world over by default. Off for all five (2026-11-09 phase-2 review:
    * fast 3.6 → 3.2 on the five, Q1 not accepted): only an explicit opt-in (freeJob worldEvents: true, or
@@ -256,11 +256,21 @@ export interface WorldCompositions {
  * (Codex cap ruling: no independent camera beats this stage). A page handoff is a Q4 linked move (world-handoff.ts) the
  * scheduler protects; it lays none of its own.
  */
+/**
+ * The regions every seat of a world keeps its words off (Q1 phase 3a; seatOk reads them with each seat's laid box), on
+ * top of a same-page seat's own page graphics (its set's `clear`). blueprint: the drawing border and its zone marks,
+ * outside the inner border (64 px in); notebook: the head of every page (bindings, the number and date fields, the
+ * ruled head line); art-deco: the stepped double frame, the very boxes the marquee sets keep clear (world-b5-sets `clear`).
+ */
+const BLUEPRINT_BORDER = [{ x0: 0, y0: 0, x1: 1, y1: 0.059 }, { x0: 0, y0: 0.941, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.033, y1: 1 }, { x0: 0.967, y0: 0, x1: 1, y1: 1 }];
+const NOTEBOOK_HEAD = [{ x0: 0, y0: 0, x1: 1, y1: 0.12 }];
+const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.05, y1: 1 }, { x0: 0.95, y0: 0, x1: 1, y1: 1 }];
+
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // sheet-change: the next drawing sheet's own layout; detail-viewport: the push into a part, cut from the same sheet
   // (no invented engineering detail); the detail strip: the same sheet's note written under its drawing (phase 3a), the
   // one seat a line may take inside itself (the same sheet under the words)
-  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: { 'blueprint/part': ['blueprint/part+detail'], 'blueprint/part-r': ['blueprint/part-r+detail'], 'blueprint/construct': ['blueprint/construct+detail'], 'blueprint/construct-r': ['blueprint/construct-r+detail'] }, minType: 100 },
+  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: true, protectedRegion: BLUEPRINT_BORDER },
   // board-region: left / right / centre regions of the deep green board, also at a word inside a line (the same board
   // under the words, so nothing is pulled from under them); chalk changing colour is no cut
   chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' }, pending: { 'erase-reseat': 'needs an eraser pass drawn over a region already sung; never the line being sung' } },
@@ -269,17 +279,19 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   document: { kinds: [], carrierRole: 'page', allowedAt: {}, duration: {}, curve: {}, moves: {}, pending: { 'feed-advance': 'the receipt feeding on to its next segment as a switch of its own', 'tear-next': 'tearing off along the paper edge once the line is sung' } },
   // page-turn: the Q4 fold to the top binding; margin-seat: the main column and, on the same page, the margin seat under
   // it (phase 3a), at the world's least type or more: the one seat a line may take inside itself (the same page under it)
-  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: { 'notebook/spiral': ['notebook/spiral+margin'], 'notebook/spiral-r': ['notebook/spiral-r+margin'], 'notebook/dotted': ['notebook/dotted+margin'], 'notebook/dotted-r': ['notebook/dotted-r+margin'] }, minType: 96 },
+  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: true, protectedRegion: NOTEBOOK_HEAD },
   // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; the secondary block on the axis
   // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: the one seat a line may take inside
   // itself (the same frame under it). No marquee turned stage sign; the carrier-swap stays pending (phase 3 step 4)
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' }, pageSeats: { 'art-deco/marquee': ['art-deco/marquee+second'], 'art-deco/marquee-low': ['art-deco/marquee-low+second'] }, minType: 100 },
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' }, pageSeats: true, protectedRegion: DECO_FRAME },
 };
 
-/** Each seat a world adds on a page (pageSeats) and the set whose page it is on. */
-const PAGE_SEAT_OF: Record<string, string> = Object.fromEntries(Object.values(WORLD_COMPOSITIONS).flatMap((c) => Object.entries(c.pageSeats ?? {}).flatMap(([main, extra]) => extra.map((x) => [x, main]))));
-/** Whether a set is a seat the scheduler adds on a page of the world's (world-shared pageSeats), never one the composer lays. */
+/** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */
+const PAGE_SEAT_OF: Record<string, string> = Object.fromEntries(Object.entries(SET_SPECS).flatMap(([id, s]) => (s.samePage ? [[id, s.samePage]] : [])));
+/** Whether a set is a seat the scheduler adds on a page of the world's, never one the composer lays. */
 export const isPageSeat = (set: string) => set in PAGE_SEAT_OF;
+/** A world's same-page seats on a set's page (none when its compositions do not use them); every one of the world's when no set is named. */
+export const pageSeatsOf = (worldId: string, set?: string): string[] => (WORLD_COMPOSITIONS[worldId]?.pageSeats ? Object.keys(PAGE_SEAT_OF).filter((x) => x.startsWith(`${worldId}/`) && (set === undefined || PAGE_SEAT_OF[x] === set)) : []);
 /** The page a world lays one of its sets into (its own page under the words; a same-page seat's, its page's), or undefined. */
 export const pageOf = (w: Pick<StyleWorld, 'layouts'>, set: string): string | undefined => w.layouts.lines.find((l) => l.set === set)?.ground ?? (PAGE_SEAT_OF[set] ? pageOf(w, PAGE_SEAT_OF[set]) : undefined);
 

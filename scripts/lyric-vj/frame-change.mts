@@ -3,22 +3,15 @@
 // their carriers kept, with the carriers gone too). Read off them: where the words stand (anchor-tolerant, so a longer
 // line in the same seat is not a move), how big their type is (row or column thickness, not the ink's area, so other
 // words are not a change of scale), which way they run, what they stand on (the page and carrier without the words)
-// and where the words sit on their carrier. Pure numbers; the thresholds are calibrated on hand-labelled frames
-// (out/research/q1-1109/calib/labels.json, scripts/lyric-vj/q1-calib.mts).
+// and where the words sit on their carrier. Pure numbers; the thresholds were grid-searched on 28 frames Claude labelled
+// (out/research/q1-1109/calib/labels.json, scripts/lyric-vj/q1-calib.mts), no hold-out: provisional until checked on
+// held-out or owner-labelled samples. What counts as seen (SEEN) and the move maths are shared with the scheduler
+// (src/app/lyric-vj/render/seat-geometry.ts).
+import { anchorMove, centreMove, SEEN } from '../../src/app/lyric-vj/render/seat-geometry';
+export { SEEN };
 
 /** The check's grid, px (a 1920 × 1080 frame scaled down). */
 export const GRID = { w: 320, h: 180 };
-
-/**
- * What counts as seen, calibrated on the labelled set (28 events, 26 agree; q1-calib.mts score): the words' box moved
- * this share of the frame (on every anchor across lines, so a longer line in the same seat is no move), their type
- * changed size by this ratio (across lines the size follows the line's length: a 1.7 change was the same balloon), the
- * spread of sizes inside them changed this much (a blown-up word came or went), they turned, the edges of what they
- * stand on changed over this share of the frame (a new page, panel or carrier outline; a ground that only changes colour
- * keeps its edges), or the words moved this far on their carrier. Set on the conservative side of the labelled margins:
- * a check that counts too much is worse than one that counts too little.
- */
-export const SEEN = { shift: 0.06, scale: 1.9, relation: 1.6, page: 0.08, onCarrier: 0.5 };
 
 /** Grey difference that counts as a pixel changed. */
 const DIFF = 20;
@@ -110,11 +103,8 @@ export function frameChange(before: { on: number[]; off: number[]; bare: number[
   const [a, b] = [readFrame(before, w, h), readFrame(after, w, h)];
   if (!a.words || !b.words) return { seen: false, why: 'no words on a stable frame either side', shift: 0, centre: 0, scale: 1, relation: 1, turned: false, page: 0, onCarrier: 0 };
   const [p, q] = [a.words, b.words];
-  const least = (xs: number[]) => Math.min(...xs.map(Math.abs));
-  const dx = least([q.x0 - p.x0, (q.x0 + q.x1 - p.x0 - p.x1) / 2, q.x1 - p.x1]);
-  const dy = least([q.y0 - p.y0, (q.y0 + q.y1 - p.y0 - p.y1) / 2, q.y1 - p.y1]);
-  const shift = Math.hypot(dx, dy);
-  const centre = Math.hypot((q.x0 + q.x1 - p.x0 - p.x1) / 2, (q.y0 + q.y1 - p.y0 - p.y1) / 2);
+  const shift = anchorMove(p, q);
+  const centre = centreMove(p, q);
   const sa = a.runs?.size ?? 0;
   const sb = b.runs?.size ?? 0;
   const scale = sa > 0 && sb > 0 ? Math.max(sa, sb) / Math.min(sa, sb) : 1;

@@ -19,8 +19,8 @@ import { carrierRoom, growRoom, inkChecks } from './render/hold-room';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
-import { boxesMeet, laidSeat, roughMeasure } from './render/seat-geometry';
-import { compositionsOf } from './world-shared';
+import { boxesMeet, laidSeat, roughMeasure, shapedMeasure } from './render/seat-geometry';
+import { compositionsOf, pageSeatsOf } from './world-shared';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
@@ -982,18 +982,20 @@ export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, '
 /**
  * The seats a world adds on the page of a line's set (world-shared pageSeats, Q1 phase 3a): the same page under the
  * words, another reading area. Only those where the line, as the plan lays it (render/seat-geometry.ts), keeps the
- * world's least type and stays clear of the page's graphics, with the plan's margin for its rough measure.
+ * seat's least type (its `lo`) and stays clear of the page's graphics and the world's protected regions, with the plan's
+ * margin for its rough measure.
  */
 export function pageSeatsFor(text: string, set: string, worldId: string): string[] {
-  const caps = compositionsOf(worldId);
-  return (caps?.pageSeats?.[set] ?? []).filter((x) => {
-    const laid = laidSeat(text, x);
-    if (!laid || laid.size < (caps?.minType ?? 0)) return false;
-    // (the rough box grown by the plan's doubt, ROUGH, round its centre)
+  const protect = compositionsOf(worldId)?.protectedRegion ?? [];
+  // (on the rough measure and on a second guess at the real advances, a line with spaces or Latin may set differently)
+  const fits = (laid: ReturnType<typeof laidSeat>, lo: number) => {
+    if (!laid || laid.size < lo) return false;
+    // (the box grown by the plan's doubt, ROUGH, round its centre)
     const [cx, cy, hw, hh] = [(laid.box.x0 + laid.box.x1) / 2, (laid.box.y0 + laid.box.y1) / 2, ((laid.box.x1 - laid.box.x0) * ROUGH) / 2, ((laid.box.y1 - laid.box.y0) * ROUGH) / 2];
     const box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
-    return box.x0 >= 0 && box.x1 <= 1 && box.y0 >= 0 && box.y1 <= 1 && !laid.protect.some((p) => boxesMeet(box, p));
-  });
+    return box.x0 >= 0 && box.x1 <= 1 && box.y0 >= 0 && box.y1 <= 1 && ![...laid.protect, ...protect].some((p) => boxesMeet(box, p));
+  };
+  return pageSeatsOf(worldId, set).filter((x) => fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo));
 }
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */

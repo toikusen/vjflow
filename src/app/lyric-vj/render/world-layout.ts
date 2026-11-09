@@ -12,6 +12,7 @@ import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
 import { carrierBox, carrierRoom, growRoom, inkChecks, keyFor } from './hold-room';
+import { slotSpec } from './seat-geometry';
 export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
 import type { BeatKind, StressKind } from '../world-shared';
@@ -242,7 +243,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const family = rt.fonts.display;
   // (lines sharing a shot split the set: rows stack in its height, but columns stand side by side in its width, read
   // right to left; halving a column's height set a shared vertical sign at a third of its size)
-  const specOf = (id: string): SetSpec => { const s = SET_SPECS[id] ?? Object.values(SET_SPECS)[0]; return slot.of > 1 ? { ...s, ...(s.vertical ? { share: s.share / slot.of } : { tall: s.tall / slot.of }), rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined } : s; };
+  const specOf = (id: string): SetSpec => slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot);
   const sets = [wl.set, ...(wl.repose ?? []).map((r) => r.set)].map(specOf);
   // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
   // (a column line's blown-up word is set across: the big word reads in a row, and so does the small rest)

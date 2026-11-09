@@ -297,3 +297,79 @@ export const pageOf = (w: Pick<StyleWorld, 'layouts'>, set: string): string | un
 
 /** A world's composition capability, or undefined: off (the scheduler only keeps what the composer laid). */
 export const compositionsOf = (id: string): WorldCompositions | undefined => WORLD_COMPOSITIONS[id];
+
+// ---- Q3: one scale contrast a sung section (docs/research/2026-11-09-q3q5-codex.md §1–4, phase 2 2026-11-10) ----
+
+export type ScaleEdge = 'top' | 'bottom' | 'left' | 'right';
+/** What the big word stands on, running off the frame on its edge's side: the paper, a colour plate, a comic panel, the page, an object, the bare ground. */
+export type ScaleCarrierRole = 'paper' | 'plate' | 'panel' | 'page' | 'object' | 'ground';
+/**
+ * How a world weighs the candidates of a section, each feature 0–1 (scale-policy.ts features): `short` a phrase of few
+ * glyphs, `ratio` how near the size law's 2.4× it reaches, `room` how much of the frame it leaves empty, `sustain` how long
+ * the line holds past its reading time, `order` how plainly the big word and its rest read in order (one side only).
+ */
+export interface CandidateWeights { short: number; ratio: number; room: number; sustain: number; order: number }
+
+/**
+ * A world's `scale.edgeFit` capability (Codex §3): the edges a big word's ink box may sit on (preferred first), what
+ * carries it off the frame, how far it may grow over its reading size, the curve of the change (a cut before the line is
+ * sung, held while sung) and how the world weighs near-equal candidates. No lyric pattern, no meaning guessed from the
+ * world's name. A world without one gets no Q3 candidate.
+ */
+export interface WorldScale {
+  edges: ScaleEdge[];
+  carrierRole: ScaleCarrierRole;
+  /** Allowed size over reading size, [least, most]; the law's own bounds are 1.6 and 2.4. */
+  sizeRange: [number, number];
+  candidateWeights: CandidateWeights;
+  curve: 'cut';
+  note: string;
+}
+
+/**
+ * Codex §3's two tastes. riso: the whole big word against the paper's outer edge, the same sheet running off the frame, a
+ * second plate never entering the main word's guard; it prefers the shorter phrase, more empty paper and a line that holds
+ * to be read. screentone: the big word against a panel's inner edge, page and panel frame running off, tone and speed
+ * lines kept out of the reading area; it prefers a clear main and minor panel reading order. Edges and weights are the
+ * phase-1 proposal values (docs/research/2026-11-09-q3-phase1.md), not measured on video.
+ */
+export const WORLD_SCALE: Record<string, WorldScale> = {
+  // (its sets anchor top-left and bottom-right: the paper's corners are where its type already sits)
+  riso: { edges: ['bottom', 'left', 'top', 'right'], carrierRole: 'paper', sizeRange: [1.6, 2.4], candidateWeights: { short: 1.6, ratio: 1, room: 1.4, sustain: 1.3, order: 0.6 }, curve: 'cut', note: 'riso.edgeFit (Codex §3): paper edge, the sheet runs off; prefers short phrases, empty paper, held lines' },
+  // (a manga page tiers its panels top to bottom: a panel bleeding off the page's top or bottom edge)
+  screentone: { edges: ['top', 'bottom'], carrierRole: 'panel', sizeRange: [1.6, 2.4], candidateWeights: { short: 0.8, ratio: 1, room: 0.7, sustain: 0.8, order: 1.8 }, curve: 'cut', note: 'screentone.edgeFit (Codex §3): panel inner edge, page and panel frame run off; prefers a clear main/minor panel reading order' },
+};
+/** A world's declared scale capability, or undefined (no Q3 candidate). */
+export const scaleOf = (id: string): WorldScale | undefined => WORLD_SCALE[id];
+
+// ---- Q5: rare meaning moments (Codex §5–7, phase 2 2026-11-10) ----
+
+/**
+ * Where a mini moment lives (Codex §5 table): `page` opens, splits or keeps a local part of the world's own paper;
+ * `scene` moves an object the world already has, when it is about the line's meaning; `type-only` sets the whole evidence
+ * phrase into one keep / echo / spacing relation (never a plain re-ink or zoom passed off as a moment).
+ */
+export type MomentFamily = 'type-only' | 'page' | 'scene';
+
+/**
+ * What a world draws of a signature moment: the big one (render/signature.ts takes the line's treatment over the frame)
+ * and the mini families it renders (render/mini-moment.ts), best fit first, inside a region of `miniShare` of the frame
+ * round the line's own seat. `pending` names what the world is bounded to but no renderer draws yet: never scheduled.
+ */
+export interface WorldMoments { big: boolean; mini: MomentFamily[]; miniShare: [number, number]; pending?: Partial<Record<MomentFamily, string>> }
+
+/** A mini's region on the frame: a local action, not a full-screen effect shrunk into a corner (Codex §5). */
+export const MINI_SHARE: [number, number] = [0.15, 0.3];
+const SCENE_PENDING = 'the set pieces (render/world-pieces.ts) have no local action of their own yet: a scene mini is not drawn';
+/** Worlds that run their own moves (document's feed and tear, watercolor's strokes): a big takeover would fight them. */
+const NO_BIG = new Set(['document', 'watercolor']);
+/** The worlds not laid on a sheet of their own: no page to open, a page mini has nothing to act on. */
+const NO_PAGE = new Set(['dark-glitch', 'neon-stage', 'terminal', 'led-board', 'silent-film', 'gothic-lolita', 'gameshow']);
+const OFFERED = ['silk', 'silk-cold', 'riso', 'file', 'spy', 'card', 'dark-glitch', 'neon-stage', 'terminal', 'led-board', 'ink-wash', 'silent-film', 'stained-glass', 'gothic-lolita', 'ukiyoe', 'papercut', 'paper-lantern', 'chiyogami', 'woodcut', 'chalkboard', 'aizome', 'crayon', 'popart', 'gameshow', 'idol-live', 'y2k', 'psychedelic', 'graffiti', 'brutalist', 'citypop', 'phone', 'blueprint', 'xerox', 'cyanotype', 'isometric', 'cel80s', 'document', 'embroidery', 'screentone', 'art-deco', 'notebook', 'scrapbook', 'watercolor', 'midcentury', 'claymation'];
+/**
+ * The 45 offered worlds' moment capability (phase 2: the phase-1 draft's derivation from each world's own fields, written
+ * down as a declaration, the scene family held pending). Proposal values, not approved world by world on video.
+ */
+export const WORLD_MOMENTS: Record<string, WorldMoments> = Object.fromEntries(OFFERED.map((id) => [id, { big: !NO_BIG.has(id), mini: [...(NO_PAGE.has(id) ? [] : ['page' as const]), 'type-only' as const], miniShare: MINI_SHARE, pending: { scene: SCENE_PENDING } }]));
+/** A world's declared moment capability, or undefined (no Q5 candidate). */
+export const momentsCapOf = (id: string): WorldMoments | undefined => WORLD_MOMENTS[id];

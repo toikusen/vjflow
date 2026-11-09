@@ -1,14 +1,11 @@
 // DRAFT (Q5 phase 1, docs/research/2026-11-09-q5-phase1.md): what each world can draw of a signature moment, derived from
 // the world's own fields for a dry run. Not a declaration: no world has approved these values. Phase 2 moves the approved
 // ones into world-shared.ts beside Q1's `compositions` (Codex §8: one integration change, not here).
+// Phase 2 (2026-11-10): the declaration lives in world-shared.ts WORLD_MOMENTS; declaredMomentCaps reads it (the free
+// path), momentCapsOf stays the phase-1 derivation for the dry run.
 import type { StyleWorld } from './style-world';
-
-/**
- * Where a mini moment can live (Codex §5 table): `page` opens, splits or keeps a local part of the world's own paper or
- * plate; `scene` moves an object the world already has, when that object is about the line's meaning; `type-only` sets the
- * whole evidence phrase into one keep / echo / spacing relation (never a plain re-ink or zoom passed off as a moment).
- */
-export type MomentFamily = 'type-only' | 'page' | 'scene';
+import { momentsCapOf, type MomentFamily } from './world-shared';
+export type { MomentFamily };
 
 export interface WorldMomentCaps {
   worldId: string;
@@ -47,4 +44,15 @@ export function momentCapsOf(world: StyleWorld): WorldMomentCaps {
   const big = !world.ownMoves;
   const why = [big ? 'big: signature overlay' : 'no big: the world runs its own moves', world.sheet ? 'page: sheet world' : '', pieces.length ? `scene: ${pieces.length} pieces` : ''].filter(Boolean).join('; ');
   return { worldId: world.id, big, mini, pieces, source: 'derived', why };
+}
+
+/**
+ * A world's declared moment caps (world-shared.ts WORLD_MOMENTS), for the free path: undefined for a world that declares
+ * none (no Q5 candidate). Its pieces are listed only for a family the world renders (scene is pending everywhere).
+ */
+export function declaredMomentCaps(world: StyleWorld): WorldMomentCaps | undefined {
+  const d = momentsCapOf(world.id);
+  if (!d) return undefined;
+  const pieces = d.mini.includes('scene') ? world.pieces.map((id) => ({ id, ...(world.pieceWords?.[id] ? { words: world.pieceWords[id] } : {}) })) : [];
+  return { worldId: world.id, big: d.big, mini: [...d.mini], pieces, source: 'declared', why: `declared (world-shared WORLD_MOMENTS): big ${d.big ? 'yes' : 'no'}; mini ${d.mini.join('/') || 'none'}${d.pending ? `; pending ${Object.keys(d.pending).join('/')}` : ''}` };
 }

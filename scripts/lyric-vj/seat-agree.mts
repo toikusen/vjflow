@@ -10,7 +10,8 @@ import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import { FREE_STYLES } from '../../src/app/lyric-vj/free-styles';
 import { WORLD_COMPOSITIONS, pageSeatsOf } from '../../src/app/lyric-vj/world-shared';
-import { laidSeat, panelSplit } from '../../src/app/lyric-vj/render/seat-geometry';
+import { evenMeasure, laidSeat, panelSplit } from '../../src/app/lyric-vj/render/seat-geometry';
+import { SET_SPECS } from '../../src/app/lyric-vj/render/world-sets';
 import { SEAT_TEXTS } from '../../src/app/lyric-vj/render/seat-agree.texts';
 import { realAdvances } from './real-advances.mts';
 
@@ -35,7 +36,8 @@ for (const id of worlds) {
     for (const set of sets)
       for (const slot of [{ k: 0, of: 1 }, { k: 0, of: 2 }])
         for (const text of SEAT_TEXTS) {
-          const realM = (x: string) => [...x].reduce((w, c) => w + fixture[font][c], 0);
+          // (the renderer's measure as world-layout measureOf takes it: an even set one em a character)
+          const realM = SET_SPECS[set]?.even ? evenMeasure : (x: string) => [...x].reduce((w, c) => w + fixture[font][c], 0);
           const p = laidSeat(text, set, { slot, font })!;
           const r = laidSeat(text, set, { slot, measure: realM })!;
           const at = `${font} ${set} ${slot.of} ${text}`;

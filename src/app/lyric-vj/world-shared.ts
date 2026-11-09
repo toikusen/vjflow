@@ -289,6 +289,8 @@ export interface MaterialMove {
    * resolved (the same pattern as Q3's WORLD_SCALE.withheld). The declaration stays, so its contract and renderer are kept.
    */
   withheld?: string;
+  /** What is known about how often it fires (a capability note, not a switch). */
+  note?: string;
 }
 
 /**
@@ -350,7 +352,7 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
     // (withheld 2026-11-10 when the scheduler approved Utsusemi 75.86 on a split the renderer did not make; back 2026-11-10
     // (phase 3c): pageSeatsFor, world-layout → panelsOf and the contract all part a line by seat-geometry panelSplit on
     // the renderer's own measure of the job's face, docs/research/2026-11-10-q1-phase3c.md)
-    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME } } },
+    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME, note: 'never fires under Q2 hold rules (0/2320 approved in the 29-song scan)' } } },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

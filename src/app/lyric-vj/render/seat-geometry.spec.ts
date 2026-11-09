@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 import { FREE_STYLES } from '../free-styles';
 import { WORLD_COMPOSITIONS, pageSeatsOf } from '../world-shared';
-import { boxesMeet, laidSeat, panelSplit, shapedMeasure, slotSpec, type FracBox } from './seat-geometry';
+import { boxesMeet, evenMeasure, laidSeat, panelSplit, shapedMeasure, slotSpec, type FracBox } from './seat-geometry';
 import { layoutMeasure } from './layout-measure';
 import { REAL_ADVANCES } from './seat-agree.fixture';
 import { SEAT_TEXTS } from './seat-agree.texts';
@@ -68,12 +68,23 @@ describe('phase 3c: plan and picture agree on the real faces', () => {
         for (const set of sets)
           for (const slot of [{ k: 0, of: 1 }, { k: 0, of: 2 }])
             for (const text of SEAT_TEXTS) {
-              const [p, r] = [laidSeat(text, set, { slot, font })!, laidSeat(text, set, { slot, measure: real(font) })!];
+              const [p, r] = [laidSeat(text, set, { slot, font })!, laidSeat(text, set, { slot, measure: SET_SPECS[set].even ? evenMeasure : real(font) })!];
               const at = `${font} ${set} ${slot.of} ${text}`;
               expect(gap(p.boxPx, r.boxPx), at).toBeLessThanOrEqual(1);
               expect(Math.abs(p.size - r.size), at).toBeLessThanOrEqual(1);
             }
     });
+
+  it('blueprint/lettering (an even set): Latin and spaces laid one em a character on both sides, as world-layout measures it', () => {
+    expect(SET_SPECS['blueprint/lettering'].even).toBe(true);
+    for (const font of fonts)
+      for (const text of ['Baby I love you', 'Hold me tight tonight 抱緊我', 'Shine on me tonight forever 抱緊我'])
+        for (const slot of [{ k: 0, of: 1 }, { k: 0, of: 2 }]) {
+          const [p, r] = [laidSeat(text, 'blueprint/lettering', { slot, font })!, laidSeat(text, 'blueprint/lettering', { slot, measure: evenMeasure })!];
+          expect(gap(p.boxPx, r.boxPx), `${font} ${text}`).toBeLessThanOrEqual(1);
+          expect(p.size, `${font} ${text}`).toBe(r.size);
+        }
+  });
 
   it('art-deco marquee: the scheduler and the renderer split a line the same way, the two boxes within 1 px (spaces and Latin included)', () => {
     let both = 0;

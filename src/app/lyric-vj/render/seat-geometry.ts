@@ -18,6 +18,9 @@ export const roughMeasure = (x: string) => [...x].reduce((w, ch) => w + (/[　-�
  */
 export const shapedMeasure = (x: string) => [...x].reduce((w, ch) => w + ruleAdvance(ch), 0);
 
+/** An even set's measure (world-layout measureOf): every character one em. */
+export const evenMeasure = (x: string) => [...x].length * 100;
+
 /** A box in frame fractions, y down. */
 export interface FracBox { x0: number; y0: number; x1: number; y1: number }
 
@@ -69,7 +72,8 @@ export function laidSeat(text: string, set: string | SetSpec, o: { slot?: { k: n
   if (!given) return undefined;
   const spec = slotSpec(given, o.slot);
   // (the measure: one given (the renderer's own), else the renderer's as a table for the job's face, else the old rough one)
-  const measure = o.measure ?? (o.font ? layoutMeasure(o.font) : roughMeasure);
+  // (an even set gives every character, a space or a Latin letter too, a whole cell: world-layout measureOf measures it so)
+  const measure = o.measure ?? (o.font ? (spec.even ? evenMeasure : layoutMeasure(o.font)) : roughMeasure);
   const b = blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, measure);
   const [w, h] = shearedSize(b.w, b.h, spec.shear);
   // (the block's centre is frame px from the middle, y up; a split line's rows across are each placed from it, and its

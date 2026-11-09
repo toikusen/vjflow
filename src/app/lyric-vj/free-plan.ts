@@ -24,8 +24,8 @@ import { checkMoments, ownCues, type SignatureMoment } from './signature-moments
 import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
 import { compositionsOf, momentsCapOf, scaleOf } from './world-shared';
-import { planWorldEvents, type WorldEventTable } from './world-events';
-import { fromJob, jobFaces, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
+import { planWorldEvents, type CompositionFamily, type InputWarning, type WorldEventInput, type WorldEventPlan, type WorldEventTable } from './world-events';
+import { failedComposites, fromJob, jobFaces, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
 import { validAccent } from './design';
 import { applyWorldEvents } from './world-events-apply';
 import { lineScaleOf, momentCandidates, scaleCandidates } from './policy-candidates';
@@ -364,6 +364,8 @@ export interface FreeOptions {
    * world draws as before and carries its event table.
    */
   worldEvents?: boolean;
+  /** For the measurements only: the scheduler's input and its plan as made (before the final check), every candidate refused included. */
+  trace?: (input: WorldEventInput, plan: WorldEventPlan) => void;
   /**
    * Q3 phase 2: one scale contrast a sung section from the scale policy, approved by the song's scheduler, on a world that
    * declares `scale` (world-shared.ts WORLD_SCALE); the composer blows up no word of its own there. Off by default
@@ -436,18 +438,33 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   // Q3 / Q5 phase 2: their candidates, arbitrated by the same scheduler after Q2 / Q4 are protected and Q1 is laid
   const q3 = scaleOn ? scaleCandidates({ job: first.job, plan: composed }, song, world, { seed: seed ?? 0, songId: song.title ?? '', meaning }) : undefined;
   const q5 = momentsOn ? momentCandidates({ job: first.job, plan: composed }, song, world, meaning, o.meaningRef ?? 'meaning.json') : undefined;
-  const events = planWorldEvents(policyOn ? { ...input, candidates: [...(q3?.candidates ?? []), ...(q5?.candidates ?? [])] } : input);
-  const scale = q3 ? scalesOf(events.policy ?? [], q3.plan, first.job.cues as { id: string; text: string }[]) : new Map<string, LineScale>();
+  const planned = planWorldEvents(policyOn ? { ...input, candidates: [...(q3?.candidates ?? []), ...(q5?.candidates ?? [])] } : input);
+  const scale = q3 ? scalesOf(planned.policy ?? [], q3.plan, first.job.cues as { id: string; text: string }[]) : new Map<string, LineScale>();
   const regions = new Map((q5?.candidates ?? []).flatMap((c) => (c.id && c.protectedRegion ? [[c.id, c.protectedRegion] as const] : [])));
-  const drawnMoments = q5 ? approvedMoments(events.policy ?? [], q5.plan, song, shownBoxes(input.lines), regions) : undefined;
-  const plan = scheduled || scale.size ? applyWorldEvents(composed, events, world, scale.size ? { seats: scheduled, scale } : undefined) : composed;
+  const drawnMoments = q5 ? approvedMoments(planned.policy ?? [], q5.plan, song, shownBoxes(input.lines), regions) : undefined;
   const redraw = scheduled || scale.size > 0 || momentsOn;
   // (a type-only mini moves the line's own words: it goes onto the line, the overlay draws only page minis)
   const inLine = lineMoments(drawnMoments?.mini ?? [], first.job.cues as { id: string; text: string }[], new Map(input.lines.map((l) => [l.id, l.seat ?? ''])));
-  const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
-  const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
-  // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
-  const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events)] : [];
+  const drawOf = (events: typeof planned): { plan: typeof composed; job: RenderJob; treatment: TreatmentV3; checked: InputWarning[] } => {
+    const plan = scheduled || scale.size ? applyWorldEvents(composed, events, world, scale.size ? { seats: scheduled, scale } : undefined) : composed;
+    const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
+    const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
+    // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
+    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events)] : [];
+    return { plan, job, treatment, checked };
+  };
+  o.trace?.(input, planned);
+  let events = planned;
+  let { plan, job, treatment, checked } = drawOf(events);
+  // (phase 4a: a composite event (an ink-only hold merged with a material move) whose landing fails is undone, never left
+  // half drawn and never by cancelling the hold: the material is refused, the hold and the line's layout are drawn as the
+  // composer planned them, and the failure stays in the record as a contract failure)
+  const { failed, warnings: lost } = failedComposites(events.events, checked);
+  if (failed.length) {
+    events = { ...events, events: events.events.filter((e) => !failed.includes(e)), rejected: [...events.rejected, ...failed.map((e) => ({ candidate: { lineId: e.lineIds.at(-1)!, kind: e.kind as CompositionFamily, at: e.at, seatAfter: e.seatAfter }, reason: `absorb ${e.absorbed!.holdId}: the composite did not land: hold and layout restored` }))] };
+    ({ plan, job, treatment, checked } = drawOf(events));
+    checked = [...checked, ...lost];
+  }
   const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}), ...(events.policy ? { policy: events.policy } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;

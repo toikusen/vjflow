@@ -146,3 +146,31 @@ export function inkChecks(spec: SetSpec, slots: Slots, body: string, seen: Seen 
     settle: settleInk(body, [spec.plain ? undefined : key, slots.ink2, slots.accent, slots.plateInk, slots.ink, seen.accent], grounds),
   };
 }
+
+/** `a` blended toward `b` by k, per sRGB channel. */
+const blend = (a: string, b: string, k: number) => `#${channels(a).map((v, i) => Math.round(v + (channels(b)[i] - v) * k).toString(16).padStart(2, '0')).join('')}`;
+/** The blends of the line's ink toward its held ink that the reading check samples (the ends included). */
+export const ABSORB_BLENDS = [0, 0.25, 0.5, 0.75, 1];
+
+/**
+ * Whether an ink-only hold keeps its settled ink through a material move that changes what the same words stand on (Q1
+ * phase 4a, absorption; Codex 2026-11-10 §3): the hold's new ink (the whole line's settle ink, or a swapped phrase's key),
+ * the line's own ink, every blend between the two and the split part's own ink each read at READ_MIN on every ground
+ * under the words on the old seat, on the new seat and on each ground the move lays under them meanwhile (`under`); and
+ * the new seat gives the hold the very ink the old one did (the settled state is kept, never re-picked). The plan asks it
+ * on the palette alone, as it asks inkChecks; the renderer reads the same sets' inks per pose (world-layout settleBy).
+ */
+export function absorbInk(kind: string, from: SetSpec, to: SetSpec, slots: Slots, body: string, under: (keyof Slots)[] = [], seen: Seen = {}): { ok: true; ink: string } | { ok: false; why: string } {
+  const [a, b] = [inkChecks(from, slots, body, seen), inkChecks(to, slots, body, seen)];
+  const held = (x: typeof a) => (kind === 'line-ink-settle' ? x.settle : kind === 'ink-swap' && x.swapOk ? x.key : undefined);
+  const ink = held(a);
+  if (kind !== 'line-ink-settle' && kind !== 'ink-swap') return { ok: false, why: `${kind} is not an ink-only hold` };
+  if (!ink || !hex(ink) || !hex(body)) return { ok: false, why: `${kind}: no held ink on the old seat` };
+  const kept = held(b);
+  if (!kept || kept.toLowerCase() !== ink.toLowerCase()) return { ok: false, why: `${kind}: the new seat holds ${kept ?? 'no ink'}, not ${ink}` };
+  const grounds = [...new Set([...groundsUnder(from, slots, seen), ...groundsUnder(to, slots, seen), ...under.map((k) => slots[k]).filter(hex)])];
+  const split = [from.split?.ink, to.split?.ink].flatMap((k) => (k && hex(slots[k as keyof Slots]) ? [slots[k as keyof Slots]] : []));
+  const inks = [...ABSORB_BLENDS.map((k) => blend(body, ink, k)), ...split];
+  for (const g of grounds) for (const c of inks) if (contrast(c, g) < READ_MIN) return { ok: false, why: `${kind}: ink ${c} reads ${contrast(c, g).toFixed(2)}:1 on ${g} (< ${READ_MIN})` };
+  return { ok: true, ink };
+}

@@ -18,9 +18,10 @@ import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
 import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
 import { boxesMeet, laidSeat, panelSplit } from './render/seat-geometry';
+import { absorbInk } from './render/hold-room';
 import { lineFace } from './fonts';
 import { DEFAULT_DESIGN } from './design';
-import { ACTION_GAP, BEAT_SNAP, LIGHT_GAP, READ_STABLE, SEAM_GAP, seatsDiffer, type CameraMove, type InputWarning, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { ABSORBABLE_HOLDS, ACTION_GAP, BEAT_SNAP, holdIdOf, LIGHT_GAP, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, type AbsorbedHold, type AbsorbRoom, type CameraMove, type InputWarning, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 
 type Free = ReturnType<typeof freeJob>;
 type Job = Free['job'];
@@ -162,6 +163,21 @@ export function holdRoom(c: { text: string; start: number; end: number }, hold: 
   return { spans, ...(grows ? { seats: grows } : {}) };
 }
 
+/**
+ * What a held line offers for absorption (Q1 phase 4a, Codex 2026-11-10 §3 (b)): an ink-only hold (ABSORBABLE_HOLDS)
+ * the composer found keeps its ink on these of the line's legal seats (WorldLine beatAbsorb), with the ink it settles
+ * into on each and an ink-swap's phrase; undefined for every other kind, whatever the composer recorded. Kept apart from
+ * holdRoom so whatever narrows the line's room (a blown-up word's reading, a world's own seat rules) carries it as is.
+ */
+export function absorbRoomOf(hold: HoldEvent | undefined, w: Pick<WorldLine, 'beatAbsorb' | 'beat'> | undefined, seats: string[]): AbsorbRoom | undefined {
+  const offer = w?.beatAbsorb;
+  if (!hold || !offer || !ABSORBABLE_HOLDS.has(hold.kind)) return undefined;
+  const merge = offer.seats.filter((s) => seats.includes(s) && !!offer.inks[s]);
+  return merge.length ? { holdId: holdIdOf(hold), kind: hold.kind, seats: merge, inks: Object.fromEntries(merge.map((s) => [s, offer.inks[s]])), ...(w?.beat?.span ? { span: w.beat.span } : {}) } : undefined;
+}
+/** A line's in-line room with its absorption offer laid on last (phase 4a): never dropped by a room rebuilt before it. */
+export const withAbsorb = (room: WorldEventLine['inLine'], absorb: AbsorbRoom | undefined): WorldEventLine['inLine'] => (absorb ? { ...(room ?? { spans: [] }), absorb } : room);
+
 /** Whether a world's set takes a line's text (its length, a column's no Latin, never the closing set): the dry run's test. */
 const fitsSet = (world: StyleWorld, set: string, text: string) => {
   const l = world.layouts.lines.find((x) => x.set === set);
@@ -198,7 +214,10 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
     // (a blown-up word holds its picture until the line is read: a change of set only after, lineplan-core)
     const read = w?.blow ? cue.start + readingSec(cue.text, cue.start, cue.end) : undefined;
     const room0 = on && !o.derived ? holdRoom(cue, hold, legal) : undefined;
-    const room = read === undefined ? room0 : { ...room0, spans: (room0?.spans ?? [[cue.start, cue.end]]).flatMap(([x, y]): [number, number][] => (y > Math.max(x, read) ? [[Math.max(x, read), y]] : [])) };
+    const absorb = on && !o.derived ? absorbRoomOf(hold, w, legal) : undefined;
+    const room1 = read === undefined ? room0 : { ...room0, spans: (room0?.spans ?? [[cue.start, cue.end]]).flatMap(([x, y]): [number, number][] => (y > Math.max(x, read) ? [[Math.max(x, read), y]] : [])) };
+    // (phase 4a: the absorption offer goes on last, over whatever room the line was left)
+    const room = withAbsorb(room1, absorb);
     // (the longest the line's entrance can take: the world's own move at full pace, or the line's drawn entrance; the
     // renderer runs either at its pace, never longer: world-layout enterDur, enter-sec.ts)
     const entrance = Math.max(w ? WORLD_ENTERS[w.enter]?.sec ?? 0 : 0, enter ? lineEnterSec(enter as never, 1) || 0 : 0);
@@ -412,9 +431,12 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
       const box = laidSeat(r.cue.text, x.set, { font: faces?.(r.cue.text) })?.box;
       if (box && (m.protectedRegion ?? []).some((p) => boxesMeet(box, p))) miss(`${x.move}@${r.id}`, `${x.move} sets the words in its protected region`);
       // (a move onto panels is drawn only where the one split the renderer parts them by gives two: seat-geometry panelSplit)
-      if (SET_SPECS[x.set]?.panels && r.world?.beat) miss(`${x.move}@${r.id}`, `approved material move ${x.move} not drawn on ${r.id}: its line holds a ${r.world.beat.kind} (panels are laid at the line's own size)`);
+      // (a held line's panels only as the composite the plan approved with its ink-only hold, phase 4a: absorbedChecks)
+      const merged = table.events.find((e) => e.absorbed && e.lineIds.at(-1) === r.id && near(e.at, x.at) && e.material === x.move);
+      if (SET_SPECS[x.set]?.panels && r.world?.beat && !merged) miss(`${x.move}@${r.id}`, `approved material move ${x.move} not drawn on ${r.id}: its line holds a ${r.world.beat.kind} (panels are laid at the line's own size)`);
       if (SET_SPECS[x.set]?.panels && !panelSplit(laidSeat(r.cue.text, x.set, { font: faces?.(r.cue.text) }))) miss(`${x.move}@${r.id}`, `approved material move ${x.move} not drawn on ${r.id} at ${x.at}: the line does not part into a plaque and a lesser panel`);
     }
+  out.push(...absorbedChecks(job, world, table, faces));
   // a world camera's move drawn over another switch of the song: a scheduled world drops it (camDrops), never keeps both
   for (const r of rows) {
     const c = r.world?.cam && WORLD_CAM_SEC[r.world.cam.kind] ? r.world.cam : undefined;
@@ -450,4 +472,78 @@ export function lightGapWarnings(job: Job, table: { events: WorldEvent[] }): Inp
   const out: InputWarning[] = [];
   all.forEach((a, i) => { const b = all[i + 1]; if (b && b.at - a.at >= 0.05 && b.at - a.at < LIGHT_GAP) out.push({ inputs: [a.what, b.what], reason: `final check: light changes ${(b.at - a.at).toFixed(2)}s apart at ${a.at.toFixed(2)} (< ${LIGHT_GAP}s)` }); });
   return out;
+}
+
+/**
+ * The composite events (phase 4a, an ink-only hold merged with a material move) checked on the final job, each against its
+ * own record (Codex 2026-11-10 §3): the hold drawn on its line exactly as planned (kind, `at`, length; nothing moved it)
+ * and among the plan's holds; its kind one the scheduler may absorb; the material drawn on the line at its word, the one
+ * switch inside the line; the words in the same box at the same type on both seats; the occupancy the union of the two
+ * windows; the union clear of every other action of the song by ACTION_GAP and its switch SEAM_GAP from every other; the
+ * new seat off the world's protected regions. A mismatch is an InputWarning naming the event (a contract failure).
+ */
+export function absorbedChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[] }, faces = scheduledFaces(job)): InputWarning[] {
+  const { rows, handoffs, sections } = shownOf(job);
+  const out: InputWarning[] = [];
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.002;
+  const protect = compositionsOf(world.id)?.protectedRegion ?? [];
+  const lights = [...lightsOf(sections).map((l) => ({ at: l.at, what: l.what })), ...table.events.filter((x) => x.changesLight && x.kind !== 'keep').map((x) => ({ at: x.at, what: x.id }))];
+  for (const e of table.events.filter((x): x is WorldEvent & { absorbed: AbsorbedHold } => !!x.absorbed)) {
+    const a = e.absorbed;
+    const miss = (why: string) => out.push({ inputs: [e.id], reason: `final check: absorption ${a.holdId} + ${a.materialId}: ${why}` });
+    const row = rows.find((r) => r.id === e.lineIds.at(-1));
+    if (!row) { miss('line not shown'); continue; }
+    if (!ABSORBABLE_HOLDS.has(a.kind)) miss(`a ${a.kind} hold is not one the scheduler may absorb`);
+    const h = holdOf(row.id, row.world);
+    if (!h || holdIdOf(h) !== a.holdId || !near(h.at, a.hold.at) || !near(h.to, a.hold.to)) miss(`the hold is not drawn as planned (${a.hold.at}–${a.hold.to}; drawn ${h ? `${h.kind} ${h.at}–${h.to}` : 'none'})`);
+    if (!(table.holds ?? []).some((x) => holdIdOf(x) === a.holdId && near(x.at, a.hold.at) && near(x.to, a.hold.to))) miss('the hold is lost from the plan\'s holds');
+    // (an ink-swap's phrase is the one planned)
+    const span = row.world?.beat?.span;
+    if ((span?.from ?? -1) !== (a.hold.span?.from ?? -1) || (span?.to ?? -1) !== (a.hold.span?.to ?? -1)) miss(`the hold's phrase is drawn ${span ? `${span.from}–${span.to}` : 'whole'}, planned ${a.hold.span ? `${a.hold.span.from}–${a.hold.span.to}` : 'whole'}`);
+    // (the ink, again on the final job's own scheme: the same held ink on both seats, at 4.5:1 on every ground)
+    const [fromSpec, toSpec, mat] = [SET_SPECS[row.world?.set ?? ''], SET_SPECS[e.seatAfter], compositionsOf(world.id)?.materials?.[a.materialId]];
+    const slots = row.world?.slots;
+    if (!fromSpec || !toSpec || !slots) miss('no sets or scheme to read the ink on');
+    else {
+      const body = fromSpec.ink ? slots[fromSpec.ink] : slots.ink;
+      const r = absorbInk(a.kind, fromSpec, toSpec, slots, body, mat?.under ?? []);
+      if (!r.ok) miss(`ink: ${r.why}`);
+      else if (r.ink.toLowerCase() !== a.ink.toLowerCase()) miss(`ink: the final job holds ${r.ink}, planned ${a.ink}`);
+    }
+    const reposes = row.world?.repose ?? [];
+    if (reposes.length > 1) miss(`${reposes.length} switches inside the line (one at most)`);
+    const r = reposes.find((x) => near(x.at, e.at) && x.move === a.materialId && x.set === e.seatAfter);
+    if (!r) miss(`${a.materialId} not drawn on ${row.id} at ${e.at}`);
+    const occ = { from: Math.min(e.from, a.hold.from), to: Math.max(e.to, a.hold.to) };
+    if (!near(occ.from, a.occupancy.from) || !near(occ.to, a.occupancy.to)) miss(`occupancy ${a.occupancy.from}–${a.occupancy.to} is not the union ${r3(occ.from)}–${r3(occ.to)}`);
+    if (!(e.from < a.hold.to + ACTION_GAP && a.hold.from < e.to + ACTION_GAP)) miss('the hold and the material are two actions, not one');
+    const set = row.world?.set ?? '';
+    const [p, q] = [seatIn(world, set, row.cue.text, faces), seatIn(world, e.seatAfter, row.cue.text, faces)];
+    if (!sameWords(p, q)) miss(`the words do not keep their box and type from ${set} to ${e.seatAfter}`);
+    if (q.box && [...protect, ...(compositionsOf(world.id)?.materials?.[a.materialId]?.protectedRegion ?? [])].some((x) => boxesMeet(q.box!, x))) miss('the new seat enters a protected region');
+    // (every other action of the song: the other events, the other holds, the handoffs' windows)
+    const others = [
+      ...table.events.filter((x) => x !== e && x.kind !== 'keep').map((x) => ({ what: x.id, from: x.from, to: x.to, at: x.at, seam: x.kind !== 'prop-beat' })),
+      ...(table.holds ?? []).filter((x) => holdIdOf(x) !== a.holdId).map((x) => ({ what: holdIdOf(x), from: x.from, to: x.to, at: x.at, seam: false })),
+      ...handoffs.map((x) => { const from = x.seam - (x.prepare ?? LINK_PREPARE); return { what: `${x.kind}@${x.lineId}`, from, to: from + x.dur, at: x.seam, seam: true }; }),
+    ];
+    for (const o of others) {
+      if (occ.from < o.to + ACTION_GAP - 1e-6 && o.from < occ.to + ACTION_GAP - 1e-6) miss(`its window ${r3(occ.from)}–${r3(occ.to)} is within ${ACTION_GAP}s of ${o.what}`);
+      if (o.seam && Math.abs(o.at - e.at) < SEAM_GAP - 1e-6) miss(`its switch is within ${SEAM_GAP}s of ${o.what}`);
+    }
+    // (a composite that changes the frame's light keeps LIGHT_GAP from every other change of light; one frame is one change)
+    if (e.changesLight) for (const l of lights) if (l.what !== e.id && Math.abs(l.at - e.at) >= 0.05 && Math.abs(l.at - e.at) < LIGHT_GAP - 1e-6) miss(`its light change is within ${LIGHT_GAP}s of ${l.what}`);
+  }
+  return out;
+}
+
+/**
+ * The composite events whose landing failed on the final draw (any final-check warning naming the event or its material
+ * on its line), and the contract failure each leaves in the record (phase 4a): the caller drops them from the plan and
+ * draws again, so the hold and the line's layout come back as the composer planned them; nothing is silently cancelled.
+ */
+export function failedComposites(events: WorldEvent[], checked: InputWarning[]): { failed: WorldEvent[]; warnings: InputWarning[] } {
+  const named = (e: WorldEvent) => checked.filter((w) => w.reason.startsWith('final check') && (w.inputs[0] === e.id || w.inputs[0] === `${e.material}@${e.lineIds.at(-1)}`));
+  const failed = events.filter((e) => e.absorbed && named(e).length);
+  return { failed, warnings: failed.map((e) => ({ inputs: [e.id], reason: `final check: contract failure: the composite ${e.absorbed!.holdId} + ${e.absorbed!.materialId} did not land (${named(e).map((w) => w.reason.replace(/^final check: /, '')).join('; ')}); its hold and the line's layout restored, the material refused` })) };
 }

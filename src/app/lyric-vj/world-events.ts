@@ -51,8 +51,12 @@ export interface WorldEventLine {
    * blown-up word, its world has no capability): its boundary is a switch exactly when that seat differs, never re-decided.
    */
   pinned?: string;
-  /** Where a switch inside the line may fall (a hold's own room kept, Q2) and the seats it may take; anywhere, any seat when unset. */
-  inLine?: { spans: [number, number][]; seats?: string[] };
+  /**
+   * Where a switch inside the line may fall (a hold's own room kept, Q2) and the seats it may take; anywhere, any seat when
+   * unset. `absorb`: the line's ink-only hold may merge with a declared material move into one composite event (phase 4a),
+   * onto these seats only (the ones where the words keep their geometry and the hold's ink reads on every ground).
+   */
+  inLine?: { spans: [number, number][]; seats?: string[]; absorb?: AbsorbRoom };
   /** Changes of seat inside the line that come decided (an older world's own repose): kept as given, counted once. */
   given?: { at: number; seat: string; reason: string; /** Its time is the composer's proportional guess, not a sung word (reposeOf's fallback). */ unreliable?: boolean }[];
   /**
@@ -66,6 +70,21 @@ export interface WorldEventLine {
 
 /** Q2's contract: a held line's one event, its whole window. */
 export interface HoldEvent { lineId: string; at: number; from: number; to: number; kind: string }
+/** A hold's id as the plan names it everywhere (merged, absorbed, folded). */
+export const holdIdOf = (h: Pick<HoldEvent, 'kind' | 'lineId'>) => `hold:${h.kind}@${h.lineId}`;
+/**
+ * The Q2 hold kinds that may merge with a material move on the same line (Codex 2026-11-10 §3 (b), first whitelist): only
+ * those that change ink alone, keep their `at/sec/span` and their settled ink, and touch no geometry. Every other kind
+ * (line-grow, carrier-settle, panel-open, plate-spread, the pulses, copies of the words) keeps pinning its line.
+ */
+export const ABSORBABLE_HOLDS: ReadonlySet<string> = new Set(['ink-swap', 'line-ink-settle']);
+/** What a line offers for absorption: its hold (with an ink-swap's phrase), the seats that keep the words and their ground, and the ink the hold settles into on each. */
+export interface AbsorbRoom { holdId: string; kind: string; seats: string[]; inks: Record<string, string>; span?: { from: number; to: number } }
+/**
+ * An ink-only Q2 hold merged with a material move on its line into one composite event (phase 4a): the hold's original
+ * window and settled ink are kept as planned; the event occupies the union of both windows; the material is the switch.
+ */
+export interface AbsorbedHold { holdId: string; kind: string; hold: { at: number; from: number; to: number; span?: { from: number; to: number } }; materialId: string; ink: string; occupancy: { from: number; to: number }; reason: string }
 /** Q4's contract: a linked page move into `lineId`; `seam` is when the words switch, `dur` the whole move. */
 export interface HandoffCandidate { lineId: string; kind: string; dir: number; seam: number; dur: number; /** Defaults to LINK_PREPARE. */ prepare?: number; /** Defaults to true: a page change swaps a large area. */ changesLight?: boolean }
 /** A prop accent the song's reading asked for (never a keyword): the only way a prop-beat is scheduled. */
@@ -198,6 +217,8 @@ export interface WorldEvent {
   holdLevel?: boolean;
   /** Policy candidates this switch carries (a Q3 scale composition on the line's own switch: one event, counted once). */
   policy?: string[];
+  /** The line's ink-only hold this material move merged with (phase 4a): one composite event, the hold unmoved. */
+  absorbed?: AbsorbedHold;
 }
 
 export interface RejectedCandidate { candidate: { lineId: string; kind: CompositionFamily; at: number; seatAfter?: string }; reason: string }
@@ -283,6 +304,15 @@ export function seatsDiffer(a: SeatCandidate | undefined, b: SeatCandidate | und
 }
 /** The least move of the words that is another seat, a share of the frame. */
 export const SEAT_MOVE = 0.08;
+/** One pixel of the 1920 × 1080 frame, as a share of its width and of its height: how far two boxes of the same words may differ. */
+export const PX_X = 1 / 1920;
+export const PX_Y = 1 / 1080;
+/** Two seats that lay the words in the very same box (to a pixel of the frame) at the same type size: only what carries them may differ. */
+export function sameWords(a: SeatCandidate | undefined, b: SeatCandidate | undefined): boolean {
+  if (!a?.box || !b?.box || (a.size ?? 0) !== (b.size ?? 0) || !!a.vertical !== !!b.vertical) return false;
+  const [p, q] = [a.box, b.box];
+  return Math.abs(p.x0 - q.x0) <= PX_X && Math.abs(p.x1 - q.x1) <= PX_X && Math.abs(p.y0 - q.y0) <= PX_Y && Math.abs(p.y1 - q.y1) <= PX_Y;
+}
 
 /** Each section's mood from its energy, both as heard and as ranked within the song (a calm song still has its peak). */
 export function moodsOf(sections: { start: number; energy: number }[]): Mood[] {
@@ -295,7 +325,7 @@ export function moodsOf(sections: { start: number; energy: number }[]): Mood[] {
   });
 }
 
-interface Action { at: number; from: number; to: number; light: boolean; composition: boolean; what: string; /** A light change only: no time of its own. */ lightOnly?: boolean; /** One line's way in: its seat, its handoff and its camera are one switch, never a clash with each other. */ owner?: string }
+interface Action { at: number; from: number; to: number; light: boolean; composition: boolean; what: string; /** A light change only: no time of its own. */ lightOnly?: boolean; /** One line's way in: its seat, its handoff and its camera are one switch, never a clash with each other. */ owner?: string; /** The Q2 hold this action is (or carries, a composite): never a clash with its own absorption. */ hold?: string }
 
 /** Why `c` cannot stand among `taken`, or undefined. */
 function conflict(c: Action, taken: Action[]): string | undefined {
@@ -392,7 +422,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     taken.push(action);
   }
   for (const l of input.lights ?? []) taken.push({ at: l.at, from: l.at, to: l.at, light: true, composition: false, what: l.what, lightOnly: true });
-  for (const h of holds) taken.push({ at: h.at, from: h.from, to: h.to, light: false, composition: false, what: `Q2 ${h.kind} on ${h.lineId}` });
+  for (const h of holds) taken.push({ at: h.at, from: h.from, to: h.to, light: false, composition: false, what: `Q2 ${h.kind} on ${h.lineId}`, hold: holdIdOf(h) });
   // the composer's camera moves into parts, a pinned line's way in and given reposes: decided before anything optional.
   // A world the scheduler takes over sees its camera moves as inputs like the rest (phase 3b): one that collides with a
   // switch the song keeps (a Q4 handoff, a hold, a composed seat that really changes) is dropped, the camera stays still
@@ -596,6 +626,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const kinds = IN_LINE_ORDER.filter((k) => at(k, 'in-line'));
       if (!kinds.length || l.end - l.start < MOOD_PACE[m].inLine) return;
       if (holdMoves.some((x) => x.lineId === l.id)) return reject(l.id, kinds[0], (l.start + l.end) / 2, 'its hold was moved off a handoff: its room is not re-read, no in-line switch');
+      // (an ink-only hold may merge with the world's material move into one composite event, phase 4a; any other hold
+      // leaves the room its own rules leave, often none)
+      if (l.inLine?.absorb && !l.inLine.spans.length) return absorbInto(l, l.inLine.absorb, m);
       if (l.inLine && !l.inLine.spans.length) return reject(l.id, kinds[0], (l.start + l.end) / 2, 'no room inside the line beside its hold (Q2)');
       if (!l.words || l.words.length < 2) {
         reject(l.id, kinds[0], (l.start + l.end) / 2, 'no reliable word boundary: no in-line switch (none faked by time)');
@@ -640,6 +673,51 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       }
       if (tried) return;
       reject(l.id, kinds[0], mid, `no family target: no other seat on the same carrier for ${kinds.join('/')}`);
+    }
+
+    /**
+     * An ink-only hold and a declared material move on the same line as one composite event (phase 4a, Codex 2026-11-10
+     * §3 (b)): the material keeps every rule of its own (a sung word break, READ_STABLE of still reading either side, the
+     * same page, the declared seats that keep the words and their ground, its protected region, every global clock against
+     * everything but its own hold); the hold keeps its `at/sec/span` and settled ink (it is never moved to meet a word); the
+     * two must make one main action (their windows overlap or lie within ACTION_GAP), and the event occupies the union. If
+     * they cannot, the hold stands and the material is refused, with the layer in `rejected`.
+     */
+    function absorbInto(l: WorldEventLine, a: AbsorbRoom, m: Mood) {
+      const mid = (l.start + l.end) / 2;
+      const no = (why: string) => reject(l.id, 'carrier-swap', mid, `absorb ${a.holdId}: ${why}`);
+      const hold = holds.find((h) => holdIdOf(h) === a.holdId);
+      if (!hold) return no('the hold is not among the plan\'s holds (folded into a handoff): nothing to merge with');
+      if (!ABSORBABLE_HOLDS.has(hold.kind)) return no(`a ${hold.kind} hold keeps pinning its line (only ${[...ABSORBABLE_HOLDS].join(' / ')} merge)`);
+      const mats = materialFor('carrier', 'in-line').filter(([, x]) => at(x.family, 'in-line') && (x.absorbs ?? []).includes(hold.kind));
+      if (!mats.length) return no(`no material move of the world absorbs a ${hold.kind}`);
+      if (!l.words || l.words.length < 2) return no('no reliable word boundary: the material needs one (none faked by time)');
+      const settled = Math.max(l.start, l.settled ?? l.start, ...events.filter((e) => e.lineIds.includes(l.id) && e.kind !== 'keep').map((e) => e.to));
+      const near = (t: number) => [...input.beats, ...(input.downbeats ?? [])].some((b) => Math.abs(b - t) <= BEAT_SNAP);
+      const breaks = l.words.slice(1).map((w) => w.from).filter((b) => b > l.start && b < l.end).sort((x, y) => Number(near(y)) - Number(near(x)) || Math.abs(x - mid) - Math.abs(y - mid) || unit(`${seed}:${l.id}:${x}`) - unit(`${seed}:${l.id}:${y}`));
+      if (!breaks.length) return no('no sung word break inside the line');
+      let last = '';
+      for (const [name, x] of mats) {
+        // (the same page, another carrier, the very box and type of the words: only the ground under them is redrawn)
+        // (every seat that keeps the words, in the seed's own order: one refused by the clocks passes to the next)
+        const pool = seats.filter((s) => a.seats.includes(s.id) && !!a.inks[s.id] && !!s.page && s.page === seat?.page && (s.carrierId ?? '') !== (seat?.carrierId ?? '') && sameWords(seat, s) && !offLimits(s.box, x)).sort((p, q) => salt(`absorb:${p.id}`) - salt(`absorb:${q.id}`) || p.id.localeCompare(q.id));
+        if (!pool.length) { last = `${name}: no declared seat keeps the words, their type and their ground (geometry or ink)`; continue; }
+        for (const target of pool) for (const b of breaks) {
+          const to = b + x.sec;
+          if (b - settled < READ_STABLE || l.end - to < READ_STABLE) { last = `${name}: less than ${READ_STABLE}s of still reading round ${b.toFixed(2)}`; continue; }
+          if (!(b < hold.to + ACTION_GAP && hold.from < to + ACTION_GAP)) { last = `${name} at ${b.toFixed(2)}: not one main action with its hold ${hold.from}–${hold.to} (the hold is never moved to meet it)`; continue; }
+          const occ = { from: Math.min(b, hold.from), to: Math.max(to, hold.to) };
+          const light = !!x.changesLight;
+          const why = conflict({ at: b, from: occ.from, to: occ.to, light, composition: true, what: '' }, taken.filter((t) => t.hold !== a.holdId));
+          if (why) { last = `${name} at ${b.toFixed(2)}: ${why}`; continue; }
+          const reason = `${name} absorbs the ${hold.kind} hold: one main action over ${r3(occ.from)}–${r3(occ.to)}, the hold kept at ${hold.at}`;
+          const absorbed: AbsorbedHold = { holdId: a.holdId, kind: hold.kind, hold: { at: hold.at, from: hold.from, to: hold.to, ...(a.span ? { span: a.span } : {}) }, materialId: name, ink: a.inks[target.id], occupancy: { from: r3(occ.from), to: r3(occ.to) }, reason: `ink-only hold, same words and ground on ${target.id} (${m})` };
+          push({ lineIds: [l.id], kind: x.family, at: b, from: b, to, seatBefore: seat?.id ?? '', seatAfter: target.id, carrierId: target.carrierId, scope: 'in-line', changesLight: light, reason, move: name, material: name, curve: x.curve, absorbed }, { at: b, from: occ.from, to: occ.to, light, composition: true, what: `in-line ${name} on ${l.id} with ${a.holdId}`, hold: a.holdId });
+          seat = target;
+          return;
+        }
+      }
+      no(last);
     }
   });
 

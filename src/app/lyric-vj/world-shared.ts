@@ -94,3 +94,81 @@ export const sharedOf = (w: Pick<StyleWorld, 'id' | 'family'>): WorldShared => W
 
 /** A world whose time is cut in steps (a press, a lamp, a projector) runs its beats in steps too. */
 export const steppedWorld = (w: Pick<StyleWorld, 'timeBase'>) => /step|cut|snap|stutter|noise|cranked|flip/.test(w.timeBase.curve);
+
+/**
+ * The linked ways in and out every world may use besides its own (2026-11-09, Q4 in
+ * docs/research/2026-11-09-rhythm-gaps-codex.md, reworked after docs/research/2026-11-09-handoff-codex.md): between two
+ * lines sung back to back the words switch on time and stay still; the world's page hands over, opaque, along a real edge.
+ * `edge-relay`: the next page comes in by its paper edge while the last line is still read, and the last page goes off by
+ * its own edge once the next is up. `layer-seat`: the next sheet is laid down from above and the last is drawn out below,
+ * for a world made of stacked opaque sheets. `frame-open`: the last page folds away to a hinge the world draws (a
+ * notebook's binding, a book's spine). Drawn in render/motion-transition.ts (link-*), laid on by render/world-handoff.ts.
+ */
+export type LinkFamily = 'edge-relay' | 'layer-seat' | 'frame-open';
+/** Which of them a world takes, the axis its relay runs along, and the hinge its page folds to (none: no frame-open). */
+export interface LinkTaste { families: LinkFamily[]; axis: 'x' | 'y'; hinge?: 'left' | 'top' }
+
+const t = (families: LinkFamily[], axis: LinkTaste['axis'] = 'x', hinge?: LinkTaste['hinge']): LinkTaste => ({ families, axis, ...(hinge ? { hinge } : {}) });
+
+/**
+ * By what a world is made of. A page world hands its page on by the paper edge (its main family); a scene world (a
+ * stage, a room of blocks, a screen) slides its picture on as one piece, nothing more; a wash has no edge to hand on and
+ * keeps its own moves. Stacked sheets and hinged covers are named world by world below, only where the world draws them.
+ */
+const LINKS_BY_FAMILY: Record<StyleWorld['family'], LinkTaste> = {
+  print: t(['edge-relay']),
+  emissive: t(['edge-relay']),
+  wet: t([]),
+  stroke: t(['edge-relay']),
+  layered: t(['edge-relay']),
+  film: t(['edge-relay'], 'y'),
+  ui: t(['edge-relay'], 'y'),
+  wall: t(['edge-relay']),
+  air: t(['edge-relay']),
+};
+
+/** The worlds of each family as they stand (a world the planner knows only by its id takes its family's taste from here). */
+const MEMBERS: Record<StyleWorld['family'], string[]> = {
+  print: ['silk', 'silk-cold', 'riso', 'file', 'spy', 'card', 'popart', 'psychedelic', 'brutalist', 'document', 'art-deco', 'midcentury'],
+  emissive: ['dark-glitch', 'neon-stage', 'terminal', 'led-board', 'stained-glass'],
+  wet: ['ink-wash', 'ukiyoe', 'aizome', 'watercolor'],
+  film: ['silent-film', 'cel80s'],
+  layered: ['gothic-lolita', 'papercut', 'paper-lantern', 'chiyogami', 'idol-live', 'xerox', 'cyanotype', 'embroidery', 'scrapbook', 'claymation'],
+  stroke: ['woodcut', 'chalkboard', 'crayon', 'blueprint', 'screentone', 'notebook'],
+  ui: ['gameshow', 'y2k', 'phone', 'isometric'],
+  wall: ['graffiti'],
+  air: ['citypop'],
+};
+
+/**
+ * Scene worlds: objects stand about the frame (blocks, a stage and its tubes, a city, a lamp board, a hoop, a window's
+ * leads), so a page edge sliding across the whole frame cuts them through; they keep their own arrivals (a block world's
+ * tile reveal) and take no linked family (2026-11-09 v2 review: isometric's full-height seam sliced its cubes).
+ */
+const SCENES = ['isometric', 'gameshow', 'y2k', 'neon-stage', 'idol-live', 'citypop', 'stained-glass', 'dark-glitch', 'claymation', 'cel80s', 'led-board', 'embroidery'];
+
+/**
+ * Each world's taste: its family's, unless its own material says otherwise. Stacked opaque sheets: a notebook's pages, a
+ * case file's papers, a dealt card, cut paper in layers, a scrapbook's pasted pages, a copier's sheets. A hinge drawn by
+ * the world: a notebook's spiral binding (top), a gothic book's spine (left). A terminal and a phone scroll up; a film
+ * strip runs up through the gate; a receipt only
+ * feeds out of its printer and a lantern's lit paper is one sheet (none).
+ */
+export const WORLD_LINKS: Record<string, LinkTaste> = {
+  ...Object.fromEntries(Object.entries(MEMBERS).flatMap(([f, ids]) => ids.map((id) => [id, LINKS_BY_FAMILY[f as StyleWorld['family']]]))),
+  notebook: t(['edge-relay', 'layer-seat', 'frame-open'], 'y', 'top'),
+  'gothic-lolita': t(['edge-relay', 'frame-open'], 'x', 'left'),
+  file: t(['edge-relay', 'layer-seat']),
+  card: t(['edge-relay', 'layer-seat']),
+  papercut: t(['edge-relay', 'layer-seat']),
+  scrapbook: t(['edge-relay', 'layer-seat']),
+  xerox: t(['edge-relay', 'layer-seat']),
+  terminal: t(['edge-relay'], 'y'),
+  phone: t(['edge-relay'], 'y'),
+  ...Object.fromEntries(SCENES.map((id) => [id, t([])])),
+  document: t([]),
+  'paper-lantern': t([]),
+};
+
+/** A world's taste by its id; one no row names hands its page on by the edge, along x. */
+export const linksOf = (id: string): LinkTaste => WORLD_LINKS[id] ?? t(['edge-relay']);

@@ -14,7 +14,7 @@ import { Handoff, HANDOFF_TRANSITION, HandoffKind, handoffTimes } from './render
 import { setWordSafe, wordBreaks } from './phrases';
 import { LineBeat, lineBeats, readingSec, setTogether } from './render/reading-window';
 import { WORLD_BEATS } from './render/world-beats';
-import { SHARED_ENTER_POOL, SHARED_EXIT_POOL } from './render/world-motion';
+import { moveState, pickWorldMoves } from './render/world-handoff';
 import type { BeatKind, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import type { MomentAsk } from './signature-moments';
@@ -973,10 +973,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   let lineNo = 0;
   let lastBeat = '';
   // a world's lines go through its whole pool of ways in and out, its own and the shared, the least used first
-  const entersUsed = new Map<string, number>();
-  const worldExitsUsed = new Map<string, number>();
-  let lastWorldExit = { kind: '', end: -9 };
-  const leastUsed = (pool: string[], used: Map<string, number>) => [...pool].sort((a, b) => (used.get(a) ?? 0) - (used.get(b) ?? 0))[0];
+  const worldMoves = moveState();
   // each part blows up one line's key word, a line the reading named first (2026-11-04 gap 3: one type size everywhere)
   const blownParts = new Set<SongPart>();
   const namedKey = (id: string) => meaning.keys.find((k) => k.cue === id)?.phrase;
@@ -1172,12 +1169,8 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7)) : undefined;
     if (held) lastBeat = held.kind;
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
-    // (a line right after one pressed into a rule opens out of it: the rule is handed on)
-    const handedRule = !W?.ownMoves && lastWorldExit.kind === 'squash-line' && c.start - lastWorldExit.end < 0.8;
-    const wEnter = recipe.wline && W ? (handedRule ? 'line-open' : leastUsed([recipe.wline.enter, ...(W.enters ?? []), ...(W.ownMoves ? [] : SHARED_ENTER_POOL)], entersUsed)) : undefined;
-    const wExit = recipe.wline && W ? leastUsed([recipe.wline.exit, ...(W.exits ?? []), ...(W.ownMoves ? [] : SHARED_EXIT_POOL)], worldExitsUsed) : undefined;
-    if (wEnter) entersUsed.set(wEnter, (entersUsed.get(wEnter) ?? 0) + 1);
-    if (wExit) { worldExitsUsed.set(wExit, (worldExitsUsed.get(wExit) ?? 0) + 1); lastWorldExit = { kind: wExit, end: c.end }; }
+    // (render/world-handoff.ts: the least used family that fits the world and the time the song leaves the line)
+    const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };
     const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(held ? { beat: { ...held, ...(W!.stepped ? { stepped: true } : {}) } } : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };

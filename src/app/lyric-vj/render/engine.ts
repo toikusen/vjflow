@@ -15,7 +15,8 @@ import { ARRIVAL_SEC } from './arrival';
 import { CARRIER_SEC } from './carrier-moves';
 import { pageCutBefore } from './cover';
 import { gateMotion, REST_FLOOR, setTogether } from './reading-window';
-import { isLineMotion } from './motion-transition';
+import { isLineMotion, LinkContext, LinkFamilyKind, linkLayout, setLinkContext } from './motion-transition';
+import { linkGrounds, sectionClock } from './world-handoff';
 import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash, passKeeps, seamClear } from './lyric-handoff';
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
 import { hitAt } from './screen-hit';
@@ -607,6 +608,41 @@ export class LyricVjEngine {
   private probe?: CanvasRenderingContext2D;
   /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
   private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string }[] = [];
+  /**
+   * While a linked page move runs (world-handoff.ts linkGrounds), where the last line's words and the next line's are
+   * read, and when in the move they switch: the page edges keep their margin from them (motion-transition.ts linkLayout).
+   */
+  private linkContextAt(at: number): LinkContext | undefined {
+    const sec = this.job.treatment.graphics ? sectionAt(this.job.treatment.graphics, at) : undefined;
+    const tr = sec?.transition;
+    if (!sec || !tr?.kind.startsWith('link-')) return undefined;
+    const t0 = sec.start + (tr.seam ?? 0);
+    const union = (rs: Rect[]) => (rs.length ? { x0: Math.min(...rs.map((r) => r.x0)), y0: Math.min(...rs.map((r) => r.y0)), x1: Math.max(...rs.map((r) => r.x1)), y1: Math.max(...rs.map((r) => r.y1)) } : undefined);
+    const from = union(this.lyricRects.filter((r) => r.from < t0 - 0.06 && r.to > sec.start).map((r) => r.rect));
+    const to = union(this.lyricRects.filter((r) => Math.abs(r.from - t0) <= 0.08).map((r) => r.rect));
+    return { at: (tr.seam ?? 0) / (tr.dur ?? 1), from, to };
+  }
+
+  /**
+   * Each linked handoff as the frames will draw it (same context and layout as the draw): how many frames of its window
+   * a page edge really moves; 0 = the plain cut, the words too close to the page edge (motion-transition LINK_MIN). Read
+   * from the built lines, so a QA instance that draws nothing reports the same as the render.
+   */
+  private linkOutcomes(fps = 30) {
+    const secs = (this.job.treatment.graphics?.sections ?? []) as { start: number; transition?: { kind: string; dur?: number; dir?: number } }[];
+    return secs.filter((s) => s.transition?.kind.startsWith('link-')).map((s) => {
+      const tr = s.transition!;
+      const dur = tr.dur ?? 1, n = Math.max(1, Math.round(dur * fps));
+      const mode = tr.dir === 1 ? 'in' : tr.dir === -1 ? 'out' : 'both';
+      let moved = 0;
+      for (let f = 0; f <= n; f++) {
+        const ctx = this.linkContextAt(s.start + (f / n) * dur);
+        if (ctx && linkLayout(tr.kind.slice(5) as LinkFamilyKind, mode, f / n, ctx, W, H).edges.length) moved++;
+      }
+      return { start: +s.start.toFixed(2), kind: tr.kind, dir: tr.dir ?? 0, frames: n + 1, moved, drawn: moved ? ('link' as const) : ('plain-cut' as const) };
+    });
+  }
+
   /** The visible props, cards and decorations as placed in the last rendered frame (motionQa checks the lyrics against them). */
   private placedProps: Measured[] = [];
   /** The props were still gliding out of the way of a line that just came up (or back after one left). */
@@ -954,6 +990,8 @@ export class LyricVjEngine {
     const { late } = pullPictures(treatment.shots, treatment.graphics?.sections ?? [], styled.map(({ style }, i) => ({ shot: style.shot, show: showAt[i] })));
     for (const [i, { style }] of styled.entries()) if (late.has(style.shot) && styled.findIndex((x) => x.style.shot === style.shot) === i) showAt[i] = Math.max(showAt[i], late.get(style.shot)!);
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
+    // a world's linked ways in and out run on its page across the boundary between two lines (world-handoff.ts)
+    linkGrounds(treatment.graphics?.sections ?? [], styled.map(({ cue, style }, i) => ({ id: cue.id, show: showAt[i], start: cue.start, shot: style.shot, world: style.world, handoff: !!style.handoff })));
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
     setPieces(!!design.techniques?.includes('pieces'));
@@ -1427,8 +1465,9 @@ export class LyricVjEngine {
     return out;
   }
 
-  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number; light: number }[] } {
+  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number; light: number }[]; links: { start: number; kind: string; dir: number; frames: number; moved: number; drawn: 'link' | 'plain-cut' }[] } {
     return {
+      links: this.linkOutcomes(),
       // lines rebuilt light in a dark halo over a photo as played: the place that set it off and its share below 3:1
       // (POOR_SHARE and the median are experimental rules, recorded here to be checked against the picture)
       textGuard: this.cueLayers.flatMap(({ rt, guard: g }) => (g ? [{ id: rt.cue.id, text: rt.cue.text, from: +g.from.toFixed(2), to: +g.to.toFixed(2), rect: [g.rect.x0, g.rect.y0, g.rect.x1, g.rect.y1].map(Math.round), share: +g.share.toFixed(2), light: +g.light.toFixed(2) }] : [])),
@@ -1616,7 +1655,7 @@ export class LyricVjEngine {
     // playing, a line reads its ground a few times a cut (a transition may still be crossing the first read):
     // reading the canvas back every frame takes it off the graphics card
     const look = this.job.treatment.graphics!;
-    const sec = sectionAt(look, t);
+    const sec = sectionAt(look, sectionClock(look.sections, t));
     const age = t - sec.start;
     // a ground can change inside a cut (a plate lifting off, a transition crossing in its first moments): a read is
     // only good for a moment, shorter while a transition may be crossing
@@ -1734,7 +1773,7 @@ export class LyricVjEngine {
   private updateGlass(t: number) {
     const u = this.finalPass.uniforms;
     const look = this.job.treatment.graphics;
-    const l = look ? (sectionAt(look, t).layers.find((x) => x.kind === 'glass') as { crack: number; seed?: number } | undefined) : undefined;
+    const l = look ? (sectionAt(look, sectionClock(look.sections, t)).layers.find((x) => x.kind === 'glass') as { crack: number; seed?: number } | undefined) : undefined;
     this.glassFlash = 0;
     if (!l || !(l.crack > 0)) {
       u['uGlass'].value = 0;
@@ -1757,7 +1796,7 @@ export class LyricVjEngine {
     }
     // a fresh break (more cracked than the section before): the glass snaps in with a short white hit
     const secs = look!.sections;
-    const k = secs.indexOf(sectionAt(look!, t));
+    const k = secs.indexOf(sectionAt(look!, sectionClock(secs, t)));
     const before = (secs[k - 1]?.layers.find((x) => x.kind === 'glass') as { crack: number } | undefined)?.crack ?? 0;
     const since = t - secs[k].start;
     const fresh = l.crack > before + 0.05 && since < 0.3;
@@ -2317,10 +2356,15 @@ export class LyricVjEngine {
         setLineVeil((c, alpha) => this.veilLines(c, t, alpha));
         setBackPush(this.pushAt(t));
       }
-      drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
-        const tex = this.images.get(asset ?? shot.asset ?? '');
-        return tex?.image as CanvasImageSource | undefined;
-      }, (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
+      setLinkContext(this.linkContextAt(this.koma(bt)));
+      try {
+        drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
+          const tex = this.images.get(asset ?? shot.asset ?? '');
+          return tex?.image as CanvasImageSource | undefined;
+        }, (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
+      } finally {
+        setLinkContext(undefined);
+      }
       setLineVeil(undefined); // probes draw the look without it
       // (a title card takes the frame alone: a lock screen's big clock under it read as one word with the title)
       const scene = this.sceneAt(t);
@@ -2476,7 +2520,7 @@ export class LyricVjEngine {
     this.bloom.strength = Math.min(1.2, 0.55 + 0.9 * fx.hit + mfx.bloom);
     // a light field blooms to white: keep only a trace there; on a dark field a flat graphic look still glows around
     // every light object (a cream sprite got a white halo), so it stays low there too
-    if (this.job.treatment.graphics) this.bloom.strength = sectionAt(this.job.treatment.graphics, t).text ? 0.05 : Math.min(this.bloom.strength, 0.15);
+    if (this.job.treatment.graphics) this.bloom.strength = sectionAt(this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t)).text ? 0.05 : Math.min(this.bloom.strength, 0.15);
     // the cream paper bloomed to white and spilled over the printed figure, turning navy pale blue
     if (this.flatPrint(t)) this.bloom.strength = 0;
     // a scene's parts glow on their own (the LED's halo): a bloom over them washed the band's type grey
@@ -2591,7 +2635,7 @@ export class LyricVjEngine {
   private cuePalette(t: number, backdrop?: string): Palette {
     const p = this.paletteAt(t);
     if (!backdrop) return p;
-    const look = sectionAt(this.job.treatment.graphics!, t);
+    const look = sectionAt(this.job.treatment.graphics!, sectionClock(this.job.treatment.graphics!.sections, t));
     const light = luma(backdrop) > 0.5;
     const text = light ? (look.text && luma(look.text) < 0.4 ? look.text : '#1a1a1a') : look.text && luma(look.text) > 0.6 ? look.text : '#f4f2ee';
     return { ...p, text, background: backdrop };
@@ -2791,7 +2835,7 @@ export class LyricVjEngine {
       const pf = globalThis as { __vjProbe?: boolean };
       pf.__vjProbe = true; // a probe, not a frame (see backdropAt)
       try {
-        drawLook(ctx, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (a) => this.images.get(a ?? asset ?? '')?.image as CanvasImageSource | undefined);
+        drawLook(ctx, this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t), { since: 1, pulse: 0, index: 0 }, (a) => this.images.get(a ?? asset ?? '')?.image as CanvasImageSource | undefined);
       } finally {
         pf.__vjProbe = false;
       }
@@ -2836,7 +2880,7 @@ export class LyricVjEngine {
     const [kept, gliding] = [this.placedProps.length, this.propsGliding];
     let placed: Layer[] = [];
     try {
-      drawLook(this.probe, this.job.treatment.graphics, t, { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => (asPlayed ? (placed = this.makeRoom(ls, t)) : lyric ? avoidAll(ls, lyric) : ls));
+      drawLook(this.probe, this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t), { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => (asPlayed ? (placed = this.makeRoom(ls, t)) : lyric ? avoidAll(ls, lyric) : ls));
     } finally {
       pf.__vjProbe = false;
       // makeRoom logs what it placed for the motion QA: a probe is not a frame
@@ -2896,7 +2940,7 @@ export class LyricVjEngine {
     const base = this.job.treatment.styleAnchor.palette;
     if (!this.job.treatment.design) return base;
     const stop = colorAt(this.job.treatment.design.colorScript, t);
-    const look = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, t);
+    const look = this.job.treatment.graphics && sectionAt(this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t));
     return { ...base, accent: look?.accent ?? stop.accent, glow: look?.accent ?? stop.accent, line: stop.highlight, text: look?.text ?? base.text, background: look?.text ? '#ffffff' : base.background };
   }
 

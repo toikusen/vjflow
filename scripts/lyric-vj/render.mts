@@ -256,7 +256,7 @@ try {
     writeFileSync(join(out, 'scene-qa.json'), JSON.stringify(sceneQa, null, 1));
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, rendererErrors: [...rendererErrors] }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors] }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     // a storyboard that fails its check on the finished frames is not rendered: no half-made output
@@ -354,7 +354,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, rendererErrors: [...rendererErrors] }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors] }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

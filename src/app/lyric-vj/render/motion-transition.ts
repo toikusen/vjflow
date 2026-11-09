@@ -672,6 +672,101 @@ function part(e: Env, p: Pic, axis: 'x' | 'y', a: number, b: number, by: number)
   else ctx.drawImage(p, 0, a, w, span, 0, a + by, w, span);
 }
 
+/** A box in frame px, y down. */
+export interface LinkRect { x0: number; y0: number; x1: number; y1: number }
+/**
+ * What a linked page move needs to know besides its progress: when in it the words switch (`at`, 0..1) and where the
+ * last line's words and the next line's are read. Set by the engine for the one frame it draws (engine.ts), never kept.
+ */
+export interface LinkContext { at: number; from?: LinkRect; to?: LinkRect }
+let linkContext: LinkContext | undefined;
+export const setLinkContext = (c: LinkContext | undefined) => (linkContext = c);
+
+/** Room a page edge keeps from the words being read, px; the least run of page worth moving, px. */
+export const LINK_MARGIN = 24;
+/** The least run of page worth moving, a share of the frame on the move's axis: a thinner sliver reads as a glitch. */
+export const LINK_MIN = 0.06;
+export type LinkFamilyKind = 'relay-x' | 'relay-y' | 'seat' | 'open-top' | 'open-left';
+/** One page drawn whole and opaque, moved by (x, y) and squashed toward its hinge (sx, sy about the top-left corner). */
+export interface LinkDraw { pic: 'a' | 'b'; x: number; y: number; sx: number; sy: number }
+/** A page edge on screen this frame: the line x = at (axis 'x') or y = at (axis 'y'). */
+export interface LinkEdge { axis: 'x' | 'y'; at: number }
+
+/**
+ * The page move between two lines at progress k, as opaque whole pages and the edges they show. Before the switch
+ * (k < at) the last line is read on page a, which stays still, and the next page comes on by its own edge only as far as
+ * the margin round the last line's words; at the switch the words and the page under them change together, a hard cut;
+ * after it the next line is read on page b at rest, and what is left of page a goes off by its own edge, which never
+ * comes nearer the next line's words than the margin. A side with no room keeps its plain cut. `mode`: both pages move,
+ * only the next comes on ('in'), only the last goes off ('out').
+ */
+export function linkLayout(kind: LinkFamilyKind, mode: 'both' | 'in' | 'out', k: number, c: LinkContext, w: number, h: number): { draws: LinkDraw[]; edges: LinkEdge[] } {
+  const rest = (pic: 'a' | 'b'): LinkDraw => ({ pic, x: 0, y: 0, sx: 1, sy: 1 });
+  const m = LINK_MARGIN;
+  if (k < c.at) {
+    const p = outCubic(k / Math.max(1e-6, c.at));
+    const A = c.from;
+    if (mode === 'out' || kind.startsWith('open')) return { draws: [rest('a')], edges: [] };
+    if (kind === 'relay-x') {
+      const lim = A ? A.x1 + m : 0;
+      if (w - lim < LINK_MIN * w) return { draws: [rest('a')], edges: [] };
+      const at = w - (w - lim) * p;
+      return { draws: [rest('a'), { ...rest('b'), x: at }], edges: [{ axis: 'x', at }] };
+    }
+    if (kind === 'relay-y') {
+      const lim = A ? A.y1 + m : 0;
+      if (h - lim < LINK_MIN * h) return { draws: [rest('a')], edges: [] };
+      const at = h - (h - lim) * p;
+      return { draws: [rest('a'), { ...rest('b'), y: at }], edges: [{ axis: 'y', at }] };
+    }
+    // seat: the next sheet is laid down from above, its lower edge kept above the last line's words
+    const lim = A ? A.y0 - m : h;
+    if (lim < LINK_MIN * h) return { draws: [rest('a')], edges: [] };
+    const at = lim * p;
+    return { draws: [rest('a'), { ...rest('b'), y: at - h }], edges: [{ axis: 'y', at }] };
+  }
+  const q = inCubic((k - c.at) / Math.max(1e-6, 1 - c.at));
+  const B = c.to;
+  if (mode === 'in') return { draws: [rest('b')], edges: [] };
+  if (kind === 'relay-x' || kind === 'open-left') {
+    const lim = B ? B.x0 - m : w;
+    if (lim < LINK_MIN * w) return { draws: [rest('b')], edges: [] };
+    const at = lim * (1 - q);
+    if (at < 0.5) return { draws: [rest('b')], edges: [] };
+    const a = kind === 'relay-x' ? { ...rest('a'), x: at - w } : { ...rest('a'), sx: at / w };
+    return { draws: [rest('b'), a], edges: [{ axis: 'x', at }] };
+  }
+  if (kind === 'relay-y' || kind === 'open-top') {
+    const lim = B ? B.y0 - m : h;
+    if (lim < LINK_MIN * h) return { draws: [rest('b')], edges: [] };
+    const at = lim * (1 - q);
+    if (at < 0.5) return { draws: [rest('b')], edges: [] };
+    const a = kind === 'relay-y' ? { ...rest('a'), y: at - h } : { ...rest('a'), sy: at / h };
+    return { draws: [rest('b'), a], edges: [{ axis: 'y', at }] };
+  }
+  // seat: the last sheet is drawn out below, its upper edge kept under the next line's words
+  const lim = B ? B.y1 + m : 0;
+  if (h - lim < LINK_MIN * h) return { draws: [rest('b')], edges: [] };
+  const at = lim + (h - lim) * q;
+  if (h - at < 0.5) return { draws: [rest('b')], edges: [] };
+  return { draws: [rest('b'), { ...rest('a'), y: at }], edges: [{ axis: 'y', at }] };
+}
+
+/** Draws a linked page move: whole pages, opaque, no fading; a frame with no context is the plain cut. */
+function drawLink(e: Env, kind: LinkFamilyKind) {
+  const mode = e.dir === 1 ? 'in' : e.dir === -1 ? 'out' : 'both';
+  // (drawn without the engine's frame, as for a still: the next page at rest, the plain cut)
+  const draws = linkContext ? linkLayout(kind, mode, e.k, linkContext, e.w, e.h).draws : [{ pic: 'b' as const, x: 0, y: 0, sx: 1, sy: 1 }];
+  for (const d of draws) {
+    e.ctx.save();
+    e.ctx.globalAlpha = 1;
+    e.ctx.translate(d.x, d.y);
+    e.ctx.scale(d.sx, d.sy);
+    e.ctx.drawImage(d.pic === 'a' ? e.a : e.b, 0, 0, e.w, e.h);
+    e.ctx.restore();
+  }
+}
+
 /**
  * The line composer's handoffs (lyric-handoff.ts): the type moves on these same numbers. Kept out of MOTION so the
  * director's list of transitions does not offer them; they mean nothing without a line moving with them.
@@ -802,6 +897,13 @@ export const LINE_MOTION = {
       });
     },
   },
+  // the linked families' pages across a cue boundary (world-handoff.ts linkGrounds): `dir` 0 both pages move, 1 only the
+  // next comes on, -1 only the last goes off; the words switch on time and never move (linkLayout)
+  'link-relay-x': { sec: 0.6, mood: '前頁外緣帶出下一頁', draw: (e) => drawLink(e, 'relay-x') },
+  'link-relay-y': { sec: 0.6, mood: '前頁上緣帶出下一頁', draw: (e) => drawLink(e, 'relay-y') },
+  'link-seat': { sec: 0.6, mood: '新紙由上落下，舊紙由下抽出', draw: (e) => drawLink(e, 'seat') },
+  'link-open-left': { sec: 0.6, mood: '舊頁收向左側書脊', draw: (e) => drawLink(e, 'open-left') },
+  'link-open-top': { sec: 0.6, mood: '舊頁收向上方線圈', draw: (e) => drawLink(e, 'open-top') },
 } satisfies Record<string, Move>;
 
 export type MotionKind = keyof typeof MOTION;

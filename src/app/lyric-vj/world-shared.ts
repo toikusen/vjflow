@@ -230,6 +230,12 @@ export interface WorldCompositions {
   protectedRegion?: { x0: number; y0: number; x1: number; y1: number }[];
   moves: Partial<Record<CompositionFamily, string>>;
   pending?: Record<string, string>;
+  /**
+   * Whether the free path lets the scheduler take the world over by default. Off for all five (2026-11-09 phase-2 review:
+   * fast 3.6 → 3.2 on the five, Q1 not accepted): only an explicit opt-in (freeJob worldEvents: true, or
+   * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
+   */
+  enabled?: boolean;
 }
 
 /**
@@ -254,6 +260,9 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; no marquee turned stage sign
   'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' } },
 };
+
+/** The page a world lays one of its sets into (its own page under the words), or undefined. */
+export const pageOf = (w: Pick<StyleWorld, 'layouts'>, set: string): string | undefined => w.layouts.lines.find((l) => l.set === set)?.ground;
 
 /** A world's composition capability, or undefined: off (the scheduler only keeps what the composer laid). */
 export const compositionsOf = (id: string): WorldCompositions | undefined => WORLD_COMPOSITIONS[id];

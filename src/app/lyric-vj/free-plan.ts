@@ -25,7 +25,7 @@ import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
 import { compositionsOf } from './world-shared';
 import { planWorldEvents, type WorldEventTable } from './world-events';
-import { fromJob } from './world-events-adapter';
+import { fromJob, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
@@ -338,7 +338,9 @@ export interface FreeOptions {
   style?: FreeStyle;
   /**
    * false: the plan as it was before the song's one composition scheduler (Q1 phase 2): the composer's own reposes, no
-   * event table. For before/after comparisons only.
+   * event table (before/after comparisons). true: the scheduler takes over every world that declares compositions (off
+   * by default, world-shared.ts `enabled`; VJ_WORLD_EVENTS=1 does the same). Unset: only enabled worlds; every other
+   * world draws as before and carries its event table.
    */
   worldEvents?: boolean;
 }
@@ -365,7 +367,9 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const world = o.style?.world;
   const start = world ? schemeFor(world, song.title, meaning.palette, seed ?? 0) : 0;
   const paletteId = world ? world.palette[start].id : rerollPalette(song.title, meaning.palette, calm, seed);
-  const scheduled = !!world && o.worldEvents !== false && !!compositionsOf(world.id);
+  // (the scheduler takes a declared world over only when asked: no world is enabled by default, Q1 is not accepted yet)
+  const asked = o.worldEvents === true || (o.worldEvents !== false && (!!(world && compositionsOf(world.id)?.enabled) || (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.['VJ_WORLD_EVENTS'] === '1'));
+  const scheduled = !!world && asked && !!compositionsOf(world.id);
   const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
@@ -387,10 +391,12 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   if (!world || o.worldEvents === false) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
   // the song's one composition plan (world-events.ts, Q1 phase 2): scheduled on the job as the renderer will set it, then
   // written into the plan (its seats and the switches inside lines) and drawn; a world with no capability keeps its plan
-  const events = planWorldEvents(fromJob(first.job, song, world, { seed: seed ?? 0 }));
+  const events = planWorldEvents(fromJob(first.job, song, world, { seed: seed ?? 0, off: !scheduled }));
   const plan = scheduled ? applyWorldEvents(composed as never, events, world) : composed;
   const { job, treatment } = scheduled ? jobOf(plan) : first;
-  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: events.warnings, rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off' };
+  // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
+  const checked = scheduled ? [...verifyWorldEvents(job, world, events), ...lightGapWarnings(job, events)] : [];
+  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off' };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
   return { job, plan, palette: paletteId, calm, treatment };

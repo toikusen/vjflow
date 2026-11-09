@@ -88,6 +88,8 @@ export interface LineOutcome {
   legalHold: boolean;
   /** The committed action: an event id, or the hold's id. */
   primary?: string;
+  /** Two composition changes on the line (an entrance and one reseat inside it: entranceAndInLine worlds only), counted as two. */
+  actions?: number;
   mood: Mood;
   /** The words of a contract failure or another note (landing failed: what the final check named). */
   why?: string;
@@ -146,6 +148,8 @@ export interface WorldCompositionCaps {
   ownPages?: boolean;
   /** The world's own material moves (world-shared.ts materials, phase 3b): laid only as approved events. */
   materials?: Record<string, MaterialMove>;
+  /** Joint contract only: a visible entrance may be followed by one reseat inside the line (world-shared entranceAndInLine). */
+  entranceAndInLine?: boolean;
 }
 
 export interface WorldEventInput {
@@ -576,7 +580,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const camIn = !!cam && i > 0;
       notes.set(line.id, { cands: line.holdCands?.length ?? 0, legal: false, mood });
       const legalHold = (s: SeatCandidate | undefined) => {
-        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id).sort((a, b) => Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || a.rank - b.rank || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
+        // (Codex r3 §3: the world's rank first, its line-ink-settle last resort; reading slack only among equal ranks)
+        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id).sort((a, b) => a.rank - b.rank || Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
         const h = hs.find((x) => !conflict(holdAction(x.hold), taken));
         if (h) notes.get(line.id)!.legal = true;
         return h;
@@ -587,6 +592,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const switched = (from: number) => events.slice(from).some((e) => e.kind !== 'keep');
       const keepOn = (s: SeatCandidate, reason: string) => { run = 0; push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: s.id, scope, changesLight: false, reason }); seat = s; };
       const holdWhy = (h: JointHold) => `keep: its ${h.hold.kind} hold is the line's one action (joint, ${mood})`;
+      // (a world that declares it: after a visible entrance, one reseat inside the line, by inLine's own rules, settled
+      // from the entrance's end; a camera into the part is that entrance's own move, so none after it)
+      const second = () => { if (caps.entranceAndInLine && !camIn && switched(atIn)) inLine(line, mood); };
       if (!own) {
         push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: before, scope: 'line', changesLight: false, reason: 'no seat for this line: it stays as composed' });
         return camRide();
@@ -633,6 +641,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         legalHold(own);
         boundary(line, i, sectionStart);
         if (!switched(atIn) && !camIn) inLine(line, mood);
+        else second();
         return camRide();
       }
       const h = legalHold(kept);
@@ -643,7 +652,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       if (h) {
         let m = mark();
         boundary(line, i, sectionStart, true);
-        if (switched(m.e)) return;
+        if (switched(m.e)) return second();
         undo(m);
         // (a declared composite: the line's ink-only hold and the world's material move as one action, phase 4a)
         const a = line.inLine?.absorb;
@@ -667,6 +676,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       }
       boundary(line, i, sectionStart);
       if (!switched(atIn)) inLine(line, mood);
+      else second();
     }
 
     /**
@@ -921,7 +931,7 @@ function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEvent[], 
   const outcome: LineOutcomeKind = evs.some((e) => e.absorbed) ? 'composite' : held ? 'hold' : evs.length ? 'composition' : 'keep';
   const reason: LineOutcomeReason | undefined = outcome === 'composition' ? (legal ? 'supersededByComposition' : cands ? 'noSafeCandidate' : undefined) : outcome === 'keep' ? (cands || refused ? 'noSafeCandidate' : 'designedQuiet') : undefined;
   const primary = evs[0]?.id ?? (held ? holdIdOf(held) : undefined);
-  return { lineId: l.id, outcome, ...(reason ? { reason } : {}), holdCands: cands, legalHold: legal, ...(primary ? { primary } : {}), mood: note?.mood ?? 'build' };
+  return { lineId: l.id, outcome, ...(reason ? { reason } : {}), holdCands: cands, legalHold: legal, ...(primary ? { primary } : {}), ...(evs.length > 1 ? { actions: evs.length } : {}), mood: note?.mood ?? 'build' };
 }
 
 interface PolicyContext { lines: WorldEventLine[]; events: WorldEvent[]; taken: Action[]; holds: HoldEvent[]; handoffs: HandoffCandidate[]; holdMoves: HoldMove[]; cams: Map<string, CameraMove>; caps: WorldCompositionCaps; lights: { at: number; what: string }[]; /** Phase 4c: a committed hold is the line's one action; no composition is stacked on it. */ joint?: boolean }

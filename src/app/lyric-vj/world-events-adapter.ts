@@ -78,7 +78,7 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   const carrierRole: WorldCompositionCaps['carrierRole'] = world.sheet ? 'page' : world.standsOnPlate ? 'plate' : seats.some((s) => s.carrierId) ? 'object' : 'ground';
   const declared = compositionsOf(world.id);
   // (a world's declared seats, or all of its sets and the seats it adds on their pages)
-  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), source: 'declared' };
+  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), ...(declared.entranceAndInLine ? { entranceAndInLine: true } : {}), source: 'declared' };
   if (!o.derived) return { worldId: world.id, kinds: [], seats: sets, carrierRole, source: 'declared-off' };
   const differs = seats.some((a) => seats.some((b) => seatsDiffer(a, b)));
   const kinds: CompositionFamily[] = [
@@ -578,7 +578,7 @@ export const jointName = (lineId: string) => `joint:${lineId}`;
  * own switches keep SEAM_GAP (the light clock is lightGapWarnings'). Each miss is a final-check InputWarning naming the
  * line (`joint:<line>`).
  */
-export function jointChecks(job: Job, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }): InputWarning[] {
+export function jointChecks(job: Job, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }, opts: { entranceAndInLine?: boolean } = {}): InputWarning[] {
   if (!table.outcomes) return [];
   const { rows } = shownOf(job);
   const out: InputWarning[] = [];
@@ -593,7 +593,9 @@ export function jointChecks(job: Job, table: { events: WorldEvent[]; holds?: Hol
     const evs = cuts.filter((e) => e.lineIds.at(-1) === o.lineId);
     const hs = holds.filter((h) => h.lineId === o.lineId);
     const actions = evs.length + hs.filter((h) => !absorbedIds.has(holdIdOf(h))).length;
-    if (actions > 1) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
+    // (a world that declares it: an entrance and one reseat inside the line, two changes, no hold beside them)
+    const pairOk = !!opts.entranceAndInLine && actions === 2 && !hs.length && evs.filter((e) => e.scope === 'in-line').length === 1 && evs.some((e) => e.scope !== 'in-line' && e.kind !== 'camera-reframe');
+    if (actions > 1 && !pairOk) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
     const drawn = holdOf(row.id, row.world);
     if (row.world?.holdCands) miss(o.lineId, `hold candidates reached the drawing on ${o.lineId}`);
     if (o.outcome === 'hold' || o.outcome === 'composite') {
@@ -611,7 +613,9 @@ export function jointChecks(job: Job, table: { events: WorldEvent[]; holds?: Hol
     if (drawn && KEPT.has(drawn.kind as BeatKind) && (row.world?.repose ?? []).some((r) => r.at > drawn.at - 1e-6)) miss(o.lineId, `the settled ${drawn.kind} on ${o.lineId} does not stay to the line's end: a switch inside the line after it`);
     if (drawn && drawn.to > row.cue.end + 1e-6) miss(o.lineId, `the ${drawn.kind} on ${o.lineId} runs past the line's end (${drawn.to} > ${row.cue.end})`);
     const settled = row.show + Math.max(row.world ? WORLD_ENTERS[row.world.enter]?.sec ?? 0 : 0, row.enter ? lineEnterSec(row.enter as never, 1) || 0 : 0);
-    for (const e of evs.filter((x) => x.scope === 'in-line')) if (e.at - Math.max(row.cue.start, settled) < READ_STABLE - 1e-6 || row.cue.end - e.to < READ_STABLE - 1e-6) miss(o.lineId, `${e.id} at ${e.at} without ${READ_STABLE}s of still reading either side`);
+    // (still reading counted from when the words have landed: the entrance and any switch into the line done)
+    const landed = Math.max(row.cue.start, settled, ...evs.filter((x) => x.scope !== 'in-line').map((x) => x.to));
+    for (const e of evs.filter((x) => x.scope === 'in-line')) if (e.at - landed < READ_STABLE - 1e-6 || row.cue.end - e.to < READ_STABLE - 1e-6) miss(o.lineId, `${e.id} at ${e.at} without ${READ_STABLE}s of still reading either side`);
   }
   // (across the song: each committed hold against every other action and switch; the scheduler's own switches by their seams)
   const standing = holds.filter((h) => !absorbedIds.has(holdIdOf(h)));

@@ -119,16 +119,39 @@ describe('phase 4c: the joint selector (world-events planWorldEvents, joint)', (
     }
   });
 
-  it('among a seat\'s holds, the larger reading slack wins, then the world\'s rank; a line with nothing asked keeps as designed quiet', () => {
+  it('among a seat\'s holds the world\'s rank wins (line-ink-settle never wins by being shorter), slack only between equal ranks; a line with nothing asked keeps as designed quiet', () => {
     const cands = [hc('b', A.id, 4.5, 0.3, 'line-grow', 0, 0.2), hc('b', A.id, 5, 0.2, 'line-ink-settle', 2, 0.9)];
     const keepers = Array.from({ length: 24 }, (_, s) => planWorldEvents(joint([first, second({ holdCands: cands })], { seed: s }))).filter((p) => of(p, 'b').outcome === 'hold');
     expect(keepers.length).toBeGreaterThan(0);
-    for (const p of keepers) expect(p.holds[0].kind).toBe('line-ink-settle');
-    const tie = [hc('b', A.id, 4.5, 0.3, 'line-grow', 0, 0.52), hc('b', A.id, 5, 0.2, 'line-ink-settle', 2, 0.55)];
-    for (const p of Array.from({ length: 24 }, (_, s) => planWorldEvents(joint([first, second({ holdCands: tie })], { seed: s }))).filter((x) => of(x, 'b').outcome === 'hold')) expect(p.holds[0].kind).toBe('line-grow');
+    for (const p of keepers) expect(p.holds[0].kind).toBe('line-grow');
+    // (the higher rank illegal (inside a Q4 window): the settle is the fallback; the first line always commits a legal hold)
+    const handoff = { lineId: 'b', kind: 'link-relay-x', dir: 1, seam: 3.2, dur: 1.6, prepare: 0.3 };
+    const blocked = [hc('a', A.id, 2.9, 0.3, 'line-grow', 0, 0.2), hc('a', A.id, 1.5, 0.2, 'line-ink-settle', 2, 0.1)];
+    const fb = planWorldEvents(joint([{ ...first, holdCands: blocked }, second({ holdCands: undefined })], { handoffs: [handoff] }));
+    expect(fb.holds.map((h) => h.kind)).toEqual(['line-ink-settle']);
+    // (equal ranks: the larger slack step)
+    const tie = [hc('b', A.id, 4.5, 0.3, 'roll', 1, 0.2), hc('b', A.id, 5, 0.2, 'beat-punch', 1, 0.9)];
+    for (const p of Array.from({ length: 24 }, (_, s) => planWorldEvents(joint([first, second({ holdCands: tie })], { seed: s }))).filter((x) => of(x, 'b').outcome === 'hold')) expect(p.holds[0].kind).toBe('beat-punch');
     // (no hold, the draw keeps, nothing refused: designed quiet)
     const quiet = Array.from({ length: 24 }, (_, s) => planWorldEvents(joint([first, second({ holdCands: undefined, words: undefined, end: 6 })], { seed: s }))).map((p) => of(p, 'b'));
     expect(quiet.some((o) => o.outcome === 'keep' && o.reason === 'designedQuiet')).toBe(true);
+  });
+
+  it('a world that declares entranceAndInLine (art-deco) takes its entrance and one reseat inside the line, two changes, no hold; the same windows elsewhere keep one action', () => {
+    const sections = [{ start: 0, energy: 0.9 }, { start: 3.3, energy: 0.95 }];
+    const deco = planWorldEvents(joint([first, second()], { sections, caps: { ...caps, entranceAndInLine: true } }));
+    expect(cutsOn(deco, 'b').map((e) => e.scope)).toEqual(['section', 'in-line']);
+    expect(of(deco, 'b')).toMatchObject({ outcome: 'composition', actions: 2 });
+    expect(deco.holds).toEqual([]);
+    const inLine = cutsOn(deco, 'b').find((e) => e.scope === 'in-line')!;
+    expect(inLine.at - 3.6).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
+    expect(8 - inLine.to).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
+    expect(inLine.at - 3.2).toBeGreaterThanOrEqual(SEAM_GAP - 1e-6);
+    const plain = planWorldEvents(joint([first, second()], { sections }));
+    expect(cutsOn(plain, 'b')).toHaveLength(1);
+    expect(of(plain, 'b').actions).toBeUndefined();
+    // (no reliable word boundary: the entrance alone)
+    expect(cutsOn(planWorldEvents(joint([first, second({ words: undefined })], { sections, caps: { ...caps, entranceAndInLine: true } })), 'b')).toHaveLength(1);
   });
 
   it('Q3 is never stacked on a committed hold: refused on the hold line, the keep line\'s switch elsewhere, counted once', () => {
@@ -159,6 +182,23 @@ const NUN = 'out/db/yt_w_fCuUR3lEs/song.json';
 const have = existsSync(NUN) && existsSync('out/research/instant/plans/nun/meaning.json');
 type DrawnCue = { cueId: string; world?: { set: string; beat?: { kind: string; at: number; sec?: number }; holdCands?: unknown[]; repose?: { at: number; set: string; sec?: number; move?: string }[]; beatSkip?: string } };
 describe.skipIf(!have)('phase 4c on real jobs', () => {
+  it('art-deco under joint: entrance plus one in-line reseat lands clean, counted as two; the same table without the declaration is a contract miss', () => {
+    const f = freeJob(song, { style: style('art-deco'), seed: 0, meaning, worldEvents: true, jointHolds: true });
+    const t = f.treatment.worldEvents!;
+    expect(t.warnings.filter((w) => w.reason.startsWith('final check'))).toEqual([]);
+    const twos = t.outcomes!.filter((o) => o.actions === 2);
+    for (const o of twos) {
+      expect(o.outcome).toBe('composition');
+      expect(t.holds.some((h) => h.lineId === o.lineId)).toBe(false);
+      expect(t.events.filter((e) => e.kind !== 'keep' && e.lineIds.at(-1) === o.lineId && e.scope === 'in-line')).toHaveLength(1);
+    }
+    expect(jointChecks(f.job, t, { entranceAndInLine: true })).toEqual([]);
+    if (twos.length) expect(jointChecks(f.job, t).some((w) => /takes 2 primary actions/.test(w.reason))).toBe(true);
+    // (notebook, the same contract without the declaration: one action a line)
+    const n = freeJob(song, { style: style('notebook'), seed: 0, meaning, worldEvents: true, jointHolds: true }).treatment.worldEvents!;
+    expect(n.outcomes!.every((o) => !o.actions)).toBe(true);
+  });
+
   const song = JSON.parse(readFileSync(NUN, 'utf8'));
   const meaning = JSON.parse(readFileSync('out/research/instant/plans/nun/meaning.json', 'utf8'));
   const style = (id: string) => FREE_STYLES.find((s) => s.id === id)!;
@@ -210,6 +250,9 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     reports(new RegExp(`within ${ACTION_GAP}s of layout-seat:zz:0`), (_c, x) => x.events.push(ev({ lineIds: [other], at: h.to + 0.05, from: h.to + 0.05, to: h.to + 0.05 })));
     reports(/within 0.35s of its line's switch/, (_c, x) => { x.events.push(ev({ lineIds: [holdLine], at: h.from - 0.2, from: h.from - 0.3, to: h.from - 0.3 })); });
     reports(new RegExp(`within ${SEAM_GAP}s of`), (_c, x) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push(ev({ id: 'layout-seat:zz:1', lineIds: ['zz'], at: e.at + 0.3, from: e.at + 0.3, to: e.at + 0.3 })); });
+    // (two changes on a line: reported unless the world declares entranceAndInLine)
+    const two = (x: typeof t) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push({ ...e, id: `${e.id}:in`, scope: 'in-line', at: e.at + 1, from: e.at + 1, to: e.at + 1 }); };
+    reports(/takes 2 primary actions/, (_c, x) => two(x));
     reports(new RegExp(`without ${READ_STABLE}s of still reading`), (_c, x) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; e.scope = 'in-line'; e.at = e.from = e.to = f.job.cues.find((q) => q.id === compLine)!.end - 0.1; });
   });
 

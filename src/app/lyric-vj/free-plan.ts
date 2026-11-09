@@ -457,7 +457,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
     const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
     const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
     // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
-    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, events)] : [];
+    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, events, { entranceAndInLine: !!compositionsOf(world.id)?.entranceAndInLine })] : [];
     return { plan, job, treatment, checked };
   };
   o.trace?.(input, planned);

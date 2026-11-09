@@ -463,7 +463,7 @@ describe('phase 3a round 2: still reading after the entrance; Q2/Q4 overlaps res
     expect(late.rejected.some((r) => r.candidate.lineId === 'l' && /less than 0.35s of still reading/.test(r.reason))).toBe(true);
   });
 
-  it('a scheduled world moves a hold that partly overlaps a handoff to the nearest legal beat, or drops it; a world without capability only warns', () => {
+  it('a scheduled world moves a hold that partly overlaps a handoff to the nearest legal beat, else just clear of it, else drops it; a world without capability only warns', () => {
     const lines = [line('a', 0, 3), line('b', 3.4, 6)];
     const hand = { lineId: 'b', kind: 'link-relay-x', dir: 0, seam: 3.2, dur: LINK_PREPARE + LINK_CLEAR };
     const hold = { lineId: 'a', kind: 'line-grow', at: 2.8, from: 2.8, to: 3.1 };
@@ -474,7 +474,11 @@ describe('phase 3a round 2: still reading after the entrance; Q2/Q4 overlaps res
     // the hold window clears the handoff by ACTION_GAP
     const w0 = hand.seam - LINK_PREPARE;
     expect(moved.holds[0].to + ACTION_GAP).toBeLessThanOrEqual(w0 + 1e-6);
-    const dropped = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [] }));
+    // no beat fits: the nearest time just clear of the handoff (2.95 − 0.10 − 0.3)
+    const edge = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [] }));
+    expect(edge.holdMoves?.[0].to).toBeCloseTo(2.549, 3);
+    // a line too short for any of it: dropped
+    const dropped = planWorldEvents(input([line('a', 2.6, 3), line('b', 3.4, 6)], { handoffs: [hand], holds: [hold], beats: [] }));
     expect(dropped.holdMoves?.[0].to).toBeNull();
     expect(dropped.holds).toEqual([]);
     const off = planWorldEvents(input(lines, { handoffs: [hand], holds: [hold], beats: [2.5], caps: caps([]) }));

@@ -289,16 +289,29 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     }
     // a world the scheduler takes over resolves it: the handoff is the page's own move and stays; the hold moves to the
     // nearest beat of its line where its whole window stands clear of every handoff (ACTION_GAP) and ends by the line's
-    // end and ACTION_GAP before the next line shows, or is dropped (Codex cap ruling: 改選合法拍點或取消)
+    // end and ACTION_GAP before the next line shows (Codex cap ruling: 改選合法拍點或取消), else to the nearest time just
+    // clear of a handoff, else into the handoff's window (one action), else it is dropped
     const k = lines.findIndex((l) => l.id === h.lineId);
     const line = lines[k];
     const sec = h.to - h.from;
     const endBy = line ? Math.min(line.end, (lines[k + 1]?.show ?? Infinity) - ACTION_GAP) : -Infinity;
-    const at = line ? [...input.beats, ...(input.downbeats ?? [])].filter((b) => b >= line.start && b + sec <= endBy && !clash({ from: b, to: b + sec })).sort((a, b) => Math.abs(a - h.at) - Math.abs(b - h.at))[0] : undefined;
-    holdMoves.push({ lineId: h.lineId, kind: h.kind, from: h.at, to: at === undefined ? null : r3(at), reason: `partly overlapped ${q4Name(part)}` });
+    const legal = (b: number) => !!line && b >= line.start - 1e-6 && b + sec <= endBy + 1e-6 && !clash({ from: b, to: b + sec });
+    const nearest = (xs: number[]) => xs.filter(legal).sort((a, b) => Math.abs(a - h.at) - Math.abs(b - h.at))[0];
+    // (a beat first; else the nearest time the handoffs leave free, just past one or just before one)
+    const edges = handoffs.flatMap((q) => { const w = handoffWindow(q); return [w.to + ACTION_GAP + 1e-3, w.from - ACTION_GAP - sec - 1e-3]; });
+    const beat = line ? nearest([...input.beats, ...(input.downbeats ?? [])]) ?? nearest(edges) : undefined;
+    // (no legal beat: the hold slides the least it must to lie wholly inside the handoff's window, where it is the same
+    // action as the handoff (folded, counted once), when that still falls inside its line; else it is dropped)
+    const w = handoffWindow(part);
+    const inside = line && w.to - w.from >= sec ? Math.min(Math.max(h.from, w.from), w.to - sec) : undefined;
+    const folds = beat === undefined && inside !== undefined && inside >= line!.start && inside + sec <= endBy;
+    const at = beat ?? (folds ? inside : undefined);
+    holdMoves.push({ lineId: h.lineId, kind: h.kind, from: h.at, to: at === undefined ? null : r3(at), reason: `partly overlapped ${q4Name(part)}${folds ? ': folded into it' : ''}` });
     if (at === undefined) return false;
     Object.assign(h, { at: r3(at), from: r3(at), to: r3(at + sec) });
-    return true;
+    if (!folds) return true;
+    merged.set(part, [...(merged.get(part) ?? []), `hold:${h.kind}@${h.lineId}`]);
+    return false;
   });
   for (const [k, h] of handoffs.entries()) {
     const w = handoffWindow(h);

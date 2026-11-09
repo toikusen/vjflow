@@ -6,7 +6,7 @@ import type { Level, Recipe, WorldPool } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
 import type { SurfaceKind } from './render/world-glyph';
 import type { Slots } from './render/world-objects';
-import { sharedOf, steppedWorld } from './world-shared';
+import { compositionsOf, sharedOf, steppedWorld } from './world-shared';
 
 export type Family = 'print' | 'emissive' | 'wet' | 'stroke' | 'layered' | 'film' | 'ui' | 'wall' | 'air';
 export type Band = 'dark' | 'mid' | 'light';
@@ -155,6 +155,7 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     inks: w.palette,
     stress: sharedOf(w).stress,
     camera: sharedOf(w).camera === 'still' ? undefined : sharedOf(w).camera,
+    ...(compositionsOf(w.id) ? { scheduled: true } : {}),
     stepped: steppedWorld(w),
   };
 }

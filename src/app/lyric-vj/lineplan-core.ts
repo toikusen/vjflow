@@ -655,6 +655,12 @@ export interface WorldPool {
   camera?: string;
   /** How the world stresses a blown-up key word, two ways (world-shared.ts). */
   stress?: StressKind[];
+  /**
+   * The world declares how its composition changes (world-shared.ts compositions): the composer lays the line's content
+   * and its legal seats, the song's one scheduler (world-events.ts) times every change of seat (Q1 phase 2). Unset: the
+   * composer's own repose, as before.
+   */
+  scheduled?: boolean;
 }
 /** Each shared recipe's most a world's song may use of its lines (style standard §2.1). */
 export const SHARED_SHARE = 0.4;
@@ -706,7 +712,7 @@ export const HOLD_SEC = { short: [0.12, 0.22], medium: [0.22, 0.4] } as const;
 export const HOLD_AFTER_ENTER = 0.1;
 export const HOLD_BEFORE_END = 0.12;
 /** An event never lands this near a change of set: two things at once read as one muddle. */
-const BEAT_CLEAR = 0.35;
+export const BEAT_CLEAR = 0.35;
 /** Nor runs over one of the shot's cuts, nor starts this soon after one (a fast song cuts every half second: 0.35 left no room). */
 const CUT_CLEAR = 0.15;
 /** Where in the line an event aims, a share of its length: a short line's second stress, a medium line's middle. */
@@ -778,13 +784,13 @@ const heldOf = (h: HoldPlan, stepped?: boolean) => { const { safe, ink, ...beat 
  * the inks, were checked against the ground and the set they land on (a phrase swapped before silk snow c040 changed set
  * onto top-slab read at 0.81 low, 2026-11-09 gate).
  */
-const KEPT = new Set<BeatKind>(['line-grow', 'ink-swap', 'line-ink-settle']);
+export const KEPT = new Set<BeatKind>(['line-grow', 'ink-swap', 'line-ink-settle']);
 /**
  * Events that belong to the line's first set: the copies of a blown-up word, the carrier the plan measured, and every one
  * that lays the key or a second ink on the words (that ink was read on the ground under the first set; a key run after
  * silk's change of set onto top-slab read 0.67–0.75 low on three 大雪 lines, 2026-11-09 gate).
  */
-const FIRST_SET = new Set<BeatKind>(['plate-spread', 'carrier-settle', 'panel-open', 'ink-swap', 'line-ink-settle', 'ink-run', 'light-sweep', 'roll', 'beat-punch']);
+export const FIRST_SET = new Set<BeatKind>(['plate-spread', 'carrier-settle', 'panel-open', 'ink-swap', 'line-ink-settle', 'ink-run', 'light-sweep', 'roll', 'beat-punch']);
 /** World pulses that run the key ink over the words. */
 const KEY_PULSES = new Set<BeatKind>(['ink-run', 'light-sweep', 'roll', 'beat-punch']);
 /** World pulses that are no hold event for now (round 2: 0 of 2 each passed on the frames): long lines go on to the others. */
@@ -960,11 +966,21 @@ function inkFits(spec: SetSpec, slots: Slots) {
 /** Whether a stress can be drawn on a scheme as the renderer will try it (its first choice, not the fallback). */
 const stressDrawn = (kind: StressKind, slots?: Slots) => !slots || !!stressInk(kind, slots.ink, slots.ground, slots, slots.accent);
 
+/**
+ * The other sets a world line could legally be read in: a set of the world's own at the line's level whose recipe takes
+ * its text (its length, a column's no Latin). `bound`: also sets laid into a page of their own (a change to one is a
+ * change of page, so only ever at a line's boundary). The content stays the composer's; when a seat changes is the
+ * scheduler's (world-events.ts).
+ */
+export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns'>, level: Level, bound = false): string[] {
+  return [...new Set(W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : [])))];
+}
+
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */
 function reposeOf(c: Cue, set: string, W: WorldPool, beat: LineBeat | undefined, beats: number[], level: Level, calm: boolean, roll: (salt: string, n: number) => number) {
   const len0 = c.end - c.start;
   if (!W.pace.repose || (!calm && level === 0 && len0 < REPOSE_MIN_LINE * 1.4) || len0 < (calm ? REPOSE_CALM_LINE : REPOSE_MIN_LINE) || (beat?.spare ?? 0) < 0.2) return [];
-  const others = [...new Set(W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && !r.wline.ground && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : [])))];
+  const others = seatsFor(c, set, W, level);
   if (!others.length) return [];
   const hold = calm ? REPOSE_CALM_HOLD : REPOSE_MIN_HOLD;
   const count = calm ? (len0 >= REPOSE_CALM_TWICE ? 2 : 1) : len0 >= hold * 4.4 ? 2 : 1;
@@ -1414,7 +1430,12 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const blow = blowable && (namedKey(c.id) || !namedLater(part, cueAt)) ? { ...blowable, stress: W!.stress![meaning.parts.indexOf(part) % W!.stress!.length] } : undefined;
     if (blow) blownParts.add(part);
     // a blown-up key word holds its picture until the line is read: no change of set before
-    const repose = (recipe.wline && W && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
+    // (a world that declares its compositions has no repose of the composer's: the scheduler times every change of seat,
+    // on the seats laid here, after the hold is placed: Q1 phase 2)
+    const repose = (recipe.wline && W && !W.scheduled && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
+    // (a line with a set piece or a call beside it keeps its composed set: no seats offered; a blown-up word's line keeps its
+    // set at its boundary and may change only once it is read, world-events-adapter.ts)
+    const seats = recipe.wline && W?.scheduled && !piece && !hasCall(c.id) ? seatsFor(c, recipe.wline.set, W, level, true) : undefined;
     // (a calm song's change of set stays on its quiet grounds)
     const reposeGrounds = calm && W?.quiet.length ? W.quiet : W?.grounds[level] ?? [];
     for (const r of repose) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
@@ -1439,7 +1460,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     }, W.holds) : undefined;
     const heldBeat = held && 'kind' in held ? held : undefined;
     if (heldBeat) lastBeat = heldBeat.kind;
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {}), ...(blow ? { blow } : {}) } : undefined;
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

@@ -22,8 +22,10 @@ export interface WorldLine {
   enter: string;
   exit: string;
   hold: string;
-  /** Sets the line moves to while it is up, at these seconds. */
+  /** Sets the line moves to while it is up, at these seconds (a scheduled world: only the switches its event plan approved). */
   repose?: { at: number; set: string }[];
+  /** The other sets the composer found legal for the line (a scheduled world's candidates, world-events.ts); plan only. */
+  seats?: string[];
   /** What its characters are made of. */
   surface?: SurfaceKind;
   /** The second colour of that surface, a slot's value. */

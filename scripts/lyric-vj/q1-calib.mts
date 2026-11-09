@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { frameChange, GRID, judge, SEEN, stableTimes } from './frame-change.mts';
 
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { dir: { type: 'string', default: 'out/research/q1-1109/calib' }, from: { type: 'string', default: 'out/research/q1-1109/wired.json' }, tune: { type: 'boolean', default: false } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { dir: { type: 'string', default: 'out/research/q1-1109/calib' }, from: { type: 'string', default: 'out/research/q1-1109/wired.json' }, tune: { type: 'boolean', default: false }, scoreOut: { type: 'string' } } });
 const SONGS: Record<string, { db: string; plan: string }> = { fast: { db: 'yt_w_fCuUR3lEs', plan: 'nun' }, calm: { db: 'yt_5i50aTB7JFo', plan: 'snow' } };
 /** The picked events: world, clip, switch time. A mix of the phase-2 check's unrealized and realized, every family. */
 export const PICKS: [string, 'fast' | 'calm', number][] = [
@@ -84,7 +84,7 @@ if (positionals[0] === 'score') {
   console.log(JSON.stringify({ judged: out.judged, unclear: out.unclear, agree: out.agree, phase2Agree: phase2 }));
   if (a.tune) {
     const tries: { seen: typeof SEEN; agree: number }[] = [];
-    for (const shift of [0.04, 0.06, 0.08]) for (const scale of [1.4, 1.75, 2, 2.4]) for (const relation of [1.3, 1.6, 2, 9]) for (const page of [0.02, 0.03, 0.04, 0.06, 0.08, 0.1, 0.15]) for (const onCarrier of [0.2, 0.5, 9]) { const seen = { shift, scale, relation, page, onCarrier }; tries.push({ seen, agree: score(seen) }); }
+    for (const shift of [0.04, 0.06, 0.08]) for (const scale of [1.4, 1.75, 2, 2.4]) for (const relation of [1.3, 1.6, 2, 9]) for (const page of [0.02, 0.03, 0.04, 0.06, 0.08, 0.1, 0.15]) for (const onCarrier of [0.2, 0.5, 9]) { const seen = { shift, scale, relation, page, onCarrier, outline: SEEN.outline }; tries.push({ seen, agree: score(seen) }); }
     tries.sort((x, y) => y.agree - x.agree);
     console.log(tries.slice(0, 12).map((t) => `${t.agree}/${judged.length} ${JSON.stringify(t.seen)}`).join('\n'));
   }

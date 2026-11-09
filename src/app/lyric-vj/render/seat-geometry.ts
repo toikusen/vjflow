@@ -26,6 +26,8 @@ export interface LaidSeat {
   vertical: boolean;
   /** The page graphics the words keep off, frame fractions. */
   protect: FracBox[];
+  /** Whether the line is set split, a small part apart from the main one (world-split.ts). */
+  split: boolean;
 }
 
 const r3 = (x: number) => +x.toFixed(3);
@@ -65,6 +67,7 @@ export function laidSeat(text: string, set: string | SetSpec, o: { slot?: { k: n
     rows: b.lines?.length ?? b.rows.length,
     vertical: !!spec.vertical,
     protect: (spec.clear ?? []).map(([a, c, d, e]) => ({ x0: a, y0: c, x1: d, y1: e })),
+    split: !!b.small?.length,
   };
 }
 
@@ -93,4 +96,4 @@ export function anchorMove(p: FracBox, q: FracBox): number {
  * this far on their carrier. The scheduler reads `scale` too (world-events seatsDiffer): two lines' type must differ
  * this much to be two seats.
  */
-export const SEEN = { shift: 0.06, scale: 1.9, relation: 1.6, page: 0.08, onCarrier: 0.5 };
+export const SEEN = { shift: 0.06, scale: 1.9, relation: 1.6, page: 0.08, onCarrier: 0.5, outline: 0.08 };

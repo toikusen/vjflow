@@ -5,11 +5,14 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
-import { READ_STABLE, seatsDiffer } from './world-events';
+import { countCuts, planWorldEvents, seatsDiffer, type PolicyCandidate } from './world-events';
 import { fromJob, jobFaces, seatIn, shownOf, verifyWorldEvents } from './world-events-adapter';
-import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, WORLD_COMPOSITIONS } from './world-shared';
+import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, scaleOf, WORLD_COMPOSITIONS } from './world-shared';
 import { SAFE_X, SAFE_Y, SET_SPECS } from './render/world-sets';
-import { boxesMeet, laidSeat } from './render/seat-geometry';
+import { boxesMeet, laidSeat, type FracBox } from './render/seat-geometry';
+import { CARRIER_STROKE, scaleLayout, type LineScale } from './render/scale-pose';
+import { estimateMeasure } from './scale-policy';
+import { CARD_ROOM } from './render/world-p4-seats';
 import { pageSeatsFor } from './lineplan-core';
 
 const NEW = ['riso', 'silk', 'file', 'card', 'spy'];
@@ -49,12 +52,28 @@ describe('phase 4: the first five worlds declared from the ruling', () => {
     expect(compositionsOf('spy')!.kinds).not.toContain('page-handoff');
   });
 
-  it('a switch inside a line is released seat by seat: riso and spy only to their same-sheet seats; silk, file and card never', () => {
-    for (const id of ['riso', 'spy']) {
-      expect(compositionsOf(id)!.allowedAt['layout-seat'], id).toContain('in-line');
-      expect(compositionsOf(id)!.inLineSeats, id).toBe('page');
+  it('no switch inside a line for the five (the table lists none): their seats are taken at a line or a part', () => {
+    for (const id of NEW) expect(compositionsOf(id)!.allowedAt['layout-seat'], id).toEqual(['section', 'line']);
+  });
+
+  it('each declares its approved seats (its own sets and their same-sheet seats) and its protected regions, real furniture or none', () => {
+    for (const id of NEW) {
+      const c = compositionsOf(id)!;
+      const own = [...new Set(worldOf(id).layouts.lines.map((l) => l.set))];
+      expect([...(c.seats ?? [])].sort(), id).toEqual([...own, ...pageSeatsOf(id)].sort());
+      expect(Array.isArray(c.protectedRegion), id).toBe(true);
     }
-    for (const id of ['silk', 'file', 'card']) expect(compositionsOf(id)!.allowedAt['layout-seat'], id).toEqual(['section', 'line']);
+    // (riso, silk, spy: full-frame plates and cut paper under the words, card: furniture drawn round them; file: its tab)
+    for (const id of ['riso', 'silk', 'card', 'spy']) expect(compositionsOf(id)!.protectedRegion, id).toEqual([]);
+    expect(compositionsOf('file')!.protectedRegion).toEqual([{ x0: 0.719, y0: 0.037, x1: 0.891, y1: 0.12 }]);
+    // every seat of the five, any test line in any face, keeps off its world's protected regions (else seatOk would refuse the composer's own)
+    for (const id of NEW)
+      for (const set of compositionsOf(id)!.seats!)
+        for (const font of FACES)
+          for (const text of TEXTS.slice(0, -1)) {
+            const laid = laidSeat(text, set, { font })!;
+            for (const p of compositionsOf(id)!.protectedRegion!) expect(boxesMeet(laid.box, p), `${set} ${font} ${text}`).toBe(false);
+          }
   });
 });
 
@@ -100,9 +119,48 @@ describe('phase 4: the same-sheet seats', () => {
     for (const id of NEW) for (const main of [...new Set(pageSeatsOf(id).map((x) => SET_SPECS[x].samePage!))]) expect(pageSeatsFor(TEXTS.at(-1)!, main, id, 'Huninn'), main).toEqual([]);
   });
 
-  it('a card seat keeps the room the card draws round the words (its furniture above, its foot below); a case seat keeps off the header, tab and footer', () => {
-    for (const x of ['card/main+right', 'card/calm+right']) expect(SET_SPECS[x].clear?.length, x).toBeGreaterThan(0);
+  it('a card seat leaves the card its room: its furniture above the words and its foot below stay in the frame', () => {
+    for (const main of ['card/main', 'card/calm'])
+      for (const font of FACES)
+        for (const text of TEXTS)
+          for (const x of pageSeatsFor(text, main, 'card', font)) {
+            const b = laidSeat(text, x, { font })!.boxPx;
+            expect(b.y0 - CARD_ROOM.above, `${x} ${text}`).toBeGreaterThanOrEqual(0);
+            expect(b.y1 + CARD_ROOM.below, `${x} ${text}`).toBeLessThanOrEqual(1080);
+          }
     for (const x of ['file/case+next', 'file/catalogue+next']) expect(SET_SPECS[x].clear?.length, x).toBeGreaterThan(0);
+  });
+
+  it('a seat draws nothing its page does not: it differs from its set only in place, size, rows and the page graphics it keeps off (no field, label, small print or bar of its own)', () => {
+    const PLACE = new Set(['at', 'ax', 'ay', 'flush', 'stair', 'tilt', 'share', 'tall', 'hi', 'lo', 'rows', 'clear', 'samePage']);
+    for (const id of NEW)
+      for (const x of pageSeatsOf(id)) {
+        const [seat, base] = [SET_SPECS[x] as unknown as Record<string, unknown>, SET_SPECS[SET_SPECS[x].samePage!] as unknown as Record<string, unknown>];
+        for (const k of new Set([...Object.keys(seat), ...Object.keys(base)]))
+          if (!PLACE.has(k) && k !== 'split') expect(JSON.stringify(seat[k]), `${x} ${k}`).toBe(JSON.stringify(base[k]));
+        expect(seat['split'], x).toBeUndefined();
+      }
+  });
+
+  it('riso: a scale composition\'s second plate (the sheet edge printed off register) never runs inside the words\' ink', () => {
+    const plan = (edge: LineScale['edge'], rows: string[], span: { from: number; to: number }): LineScale => ({ eventId: 'scale:t', sectionId: 'S', kind: 'edgeFit', source: 'meaning', ratio: 2.4, targetSize: 300, readingSize: 120, span, edge, rows, carrierRole: scaleOf('riso')!.carrierRole, carrierId: 'paper:riso' });
+    let drawn = 0;
+    for (const edge of scaleOf('riso')!.edges)
+      for (const [text, from, to] of [['我愛你天荒地老', 3, 7], ['快使用雙截棍 哼哼哈兮', 0, 6], ['三年後的大雪', 3, 6]] as const) {
+        const d = scaleLayout(text, plan(edge, [[...text].slice(from, to).join('')], { from, to }), 120, { track: 0.02 }, estimateMeasure);
+        if (d.kind === 'miss') continue;
+        drawn++;
+        const c = { x0: d.carrierBox!.x0 * 1920, y0: d.carrierBox!.y0 * 1080, x1: d.carrierBox!.x1 * 1920, y1: d.carrierBox!.y1 * 1080 };
+        const q = CARRIER_STROKE.plateOffset;
+        const half = CARRIER_STROKE.plate / 2;
+        // (the plate's hairline on each side that stays in frame, as world-layout scaleCarrier strokes it)
+        const lines = [edge !== 'top' && { x0: c.x0, x1: c.x1, y0: c.y0 + q - half, y1: c.y0 + q + half }, edge !== 'bottom' && { x0: c.x0, x1: c.x1, y0: c.y1 - q - half, y1: c.y1 - q + half }, edge !== 'left' && { x0: c.x0 + q - half, x1: c.x0 + q + half, y0: c.y0, y1: c.y1 }, edge !== 'right' && { x0: c.x1 - q - half, x1: c.x1 - q + half, y0: c.y0, y1: c.y1 }].filter((x): x is FracBox => !!x);
+        for (const g of d.glyphs) {
+          const em = { x0: g.x - g.size / 2, y0: g.y - g.size / 2, x1: g.x + g.size / 2, y1: g.y + g.size / 2 };
+          for (const l of lines) expect(boxesMeet(em, l), `${edge} ${text} glyph ${g.i}`).toBe(false);
+        }
+      }
+    expect(drawn).toBeGreaterThan(0);
   });
 });
 
@@ -131,40 +189,23 @@ describe.skipIf(!onDisk)('phase 4 on real songs (雙截棍, 三年後的大雪)'
       });
     });
 
-  for (const id of ['riso', 'spy'])
-    it(`${id}: at most one switch inside a line, only at a word break the aligner timed, 0.35 s still either side, only to its set's same-sheet seat`, () => {
-      let seen = 0;
-      wired(id).forEach((f, k) => {
-        const [song] = songs[k];
-        const world = worldOf(id);
-        const table = f.treatment.worldEvents!;
-        const inp = fromJob(f.job, song, world);
-        const inLine = table.events.filter((e) => e.scope === 'in-line' && !e.fixed && e.kind !== 'keep');
-        seen += inLine.length;
-        const byLine = new Map<string, number>();
-        for (const e of inLine) {
-          const l = inp.lines.find((x) => x.id === e.lineIds[0])!;
-          byLine.set(l.id, (byLine.get(l.id) ?? 0) + 1);
-          expect(l.words, e.id).toBeDefined();
-          expect(l.words!.slice(1).map((w) => w.from), e.id).toContain(e.at);
-          expect(e.at - Math.max(l.start, l.settled ?? l.start), e.id).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
-          expect(l.end - e.to, e.id).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
-          expect(isPageSeat(e.seatAfter), e.id).toBe(true);
-          expect(SET_SPECS[e.seatAfter].samePage, e.id).toBe(e.seatBefore);
-          const cue = song.cues.find((c: { id: string }) => c.id === l.id);
-          const laid = laidSeat(cue.text, e.seatAfter, { font: jobFaces(f.job)(cue.text) })!;
-          expect(laid.size, e.id).toBeGreaterThanOrEqual(SET_SPECS[e.seatAfter].lo);
-        }
-        for (const [line, n] of byLine) expect(n, line).toBe(1);
-        for (const l of inp.lines.filter((x) => !x.words)) expect(inLine.some((e) => e.lineIds.includes(l.id)), l.id).toBe(false);
-      });
-      expect(seen, id).toBeGreaterThan(0);
-    });
-
-  for (const id of ['silk', 'file', 'card'])
+  for (const id of NEW)
     it(`${id}: no switch of the scheduler's own inside a line`, () => {
       for (const f of wired(id)) expect(f.treatment.worldEvents!.events.filter((e) => e.scope === 'in-line' && !e.fixed && e.kind !== 'keep')).toEqual([]);
     });
+
+  it('the scheduler still changes seat across lines on the five (the in-line rule blocks no boundary): its own reseats, some onto a same-sheet seat', () => {
+    let own = 0;
+    let onto = 0;
+    for (const id of NEW)
+      for (const f of wired(id))
+        for (const e of f.treatment.worldEvents!.events.filter((x) => x.kind === 'layout-seat' && !x.fixed && x.scope !== 'in-line')) {
+          own++;
+          if (isPageSeat(e.seatAfter)) onto++;
+        }
+    expect(own).toBeGreaterThan(0);
+    expect(onto).toBeGreaterThan(0);
+  });
 
   it('spy: a reframe falls only where a part of the song starts (the world camera into it), never inside a line or at a plain line change', () => {
     let reframes = 0;
@@ -215,19 +256,34 @@ describe.skipIf(!onDisk)('phase 4 on real songs (雙截棍, 三年後的大雪)'
     expect(counted).toBeGreaterThan(0);
   });
 
-  it('riso: a Q3 scale composition shares its line\'s switch: one event id, never a second cut at the line', () => {
+  it('riso: a Q3 scale composition shares its line\'s switch: one event id, never a second cut at the line (an approved candidate on a reseat and on a keep)', () => {
     const style = FREE_STYLES.find((s) => s.id === 'riso')!;
-    for (const [song, meaning] of songs) {
-      const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true, scaleContrast: true });
-      const table = f.treatment.worldEvents!;
-      const approved = (table.policy ?? []).filter((d) => d.source === 'Q3' && d.approved);
-      for (const d of approved) {
-        const own = table.events.filter((e) => e.lineIds.at(-1) === d.lineId && e.kind !== 'keep' && e.scope !== 'in-line' && e.kind !== 'camera-reframe');
-        expect(own.length, d.id).toBe(1);
-        expect(own[0].id, d.id).toBe(d.eventId);
+    let shared = 0;
+    let replaced = 0;
+    songs.forEach(([song], k) => {
+      const f = wired('riso')[k];
+      const input = fromJob(f.job, song, style.world, { seed: 0 });
+      const plain = planWorldEvents(input);
+      const free = (id: string) => !input.holds?.some((h) => h.lineId === id) && !input.handoffs?.some((h) => h.lineId === id) && !input.cams?.some((c) => c.lineId === id);
+      const at = (e: { lineIds: string[] }) => input.lines.find((l) => l.id === e.lineIds.at(-1))!;
+      const reseat = plain.events.find((e) => e.kind === 'layout-seat' && e.scope !== 'in-line' && free(e.lineIds.at(-1)!));
+      const keep = plain.events.find((e, n) => e.kind === 'keep' && n > 0 && free(e.lineIds.at(-1)!) && !plain.events.some((x) => x !== e && x.kind !== 'keep' && x.lineIds.at(-1) === e.lineIds.at(-1)));
+      const cand = (e: { lineIds: string[] }, n: number): PolicyCandidate => ({ source: 'Q3', id: `scale:${e.lineIds.at(-1)}`, group: `S${n}`, rank: 0, lineId: e.lineIds.at(-1)!, kind: 'layout-seat', at: at(e).show, from: at(e).show, to: at(e).show, seatAfter: `${at(e).seat}+scale:bottom`, reason: 'test: synthetic approved scale composition' });
+      const cands = [reseat && cand(reseat, 0), keep && cand(keep, 1)].filter((c): c is PolicyCandidate => !!c);
+      const plan = planWorldEvents({ ...input, candidates: cands });
+      for (const c of cands) {
+        const d = plan.policy!.find((x) => x.lineId === c.lineId)!;
+        expect(d.approved, `${c.lineId}: ${d.reason}`).toBe(true);
+        const cuts = plan.events.filter((e) => e.lineIds.at(-1) === c.lineId && e.kind !== 'keep' && e.scope !== 'in-line' && e.kind !== 'camera-reframe');
+        expect(cuts.map((e) => e.id), c.lineId).toEqual([d.eventId]);
+        if (d.shared) shared++;
+        else replaced++;
       }
-      expect(verifyWorldEvents(f.job, style.world, table)).toEqual([]);
-    }
+      // (the same count of cuts as without the candidates: the scale composition is no cut of its own where it shares one)
+      expect(countCuts(plan.events, [0, 1e4]).cuts - countCuts(plain.events, [0, 1e4]).cuts).toBe(cands.filter((c) => !plain.events.some((e) => e.kind !== 'keep' && e.lineIds.at(-1) === c.lineId)).length);
+    });
+    expect(shared).toBeGreaterThan(0);
+    expect(replaced).toBeGreaterThan(0);
   });
 
   it('by default (scheduler off) the five draw exactly as before: no same-sheet seat is offered or drawn', () => {

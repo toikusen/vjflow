@@ -197,9 +197,7 @@ export function fromJob(job: Job, song: SongTimeline, world: StyleWorld, o: { se
     const pinned = !on ? 'composition capability off' : !w ? 'not a world line' : shared.has(id) ? 'shares its shot' : o.derived ? undefined : !w.seats ? 'a set piece or a call keeps its set' : w.blow ? 'a blown-up word keeps its set' : hold ? `its ${hold.kind} hold was planned on this set (Q2)` : undefined;
     // (a blown-up word holds its picture until the line is read: a change of set only after, lineplan-core)
     const read = w?.blow ? cue.start + readingSec(cue.text, cue.start, cue.end) : undefined;
-    const held = on && !o.derived ? holdRoom(cue, hold, legal) : undefined;
-    // (phase 4: a world that releases switches inside a line seat by seat takes there only its same-page seats, world-shared inLineSeats)
-    const room0 = on && !o.derived && compositionsOf(world.id)?.inLineSeats === 'page' ? { spans: held?.spans ?? [[cue.start, cue.end] as [number, number]], seats: (held?.seats ?? legal).filter(isPageSeat) } : held;
+    const room0 = on && !o.derived ? holdRoom(cue, hold, legal) : undefined;
     const room = read === undefined ? room0 : { ...room0, spans: (room0?.spans ?? [[cue.start, cue.end]]).flatMap(([x, y]): [number, number][] => (y > Math.max(x, read) ? [[Math.max(x, read), y]] : [])) };
     // (the longest the line's entrance can take: the world's own move at full pace, or the line's drawn entrance; the
     // renderer runs either at its pace, never longer: world-layout enterDur, enter-sec.ts)

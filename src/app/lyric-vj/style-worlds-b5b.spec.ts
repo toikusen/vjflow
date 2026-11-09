@@ -14,12 +14,12 @@ const measure = (s: string) => [...s].length * 100;
 const [scrap, wc, mc, clay] = B5B_WORLDS;
 
 describe('style batch 5: scrapbook, watercolor, midcentury, claymation', () => {
-  it('are registered and held until passed', () => {
+  it('are registered and offered since the owner passed batch 5 (2026-11-09)', () => {
     expect(B5B_WORLDS.map((w) => w.id)).toEqual(['scrapbook', 'watercolor', 'midcentury', 'claymation']);
     for (const w of B5B_WORLDS) {
       expect(STYLE_WORLDS.find((x) => x.id === w.id)).toBe(w);
       expect(FREE_STYLES.some((s) => s.id === w.id)).toBe(true);
-      expect(HELD_WORLDS.has(w.id), w.id).toBe(true);
+      expect(HELD_WORLDS.has(w.id), w.id).toBe(false);
     }
   });
   it('have every part they name', () => {

@@ -16,14 +16,14 @@ const measure = (s: string) => [...s].length * 100;
 const [embroidery, screentone, deco, notebook] = B5_WORLDS;
 
 describe('style batch 5: embroidery, screentone, art-deco, notebook', () => {
-  it('are registered, held from the picker until the owner passes them', () => {
+  it('are registered and offered since the owner passed batch 5 (2026-11-09)', () => {
     expect(B5_WORLDS.map((w) => w.id)).toEqual(['embroidery', 'screentone', 'art-deco', 'notebook']);
     const offered = styleGroups().flatMap((g) => g.cards.map((c) => c.id));
     for (const w of B5_WORLDS) {
       expect(STYLE_WORLDS.find((x) => x.id === w.id)).toBe(w);
       expect(FREE_STYLES.some((s) => s.id === w.id)).toBe(true);
-      expect(HELD_WORLDS.has(w.id), w.id).toBe(true);
-      expect(offered).not.toContain(w.id);
+      expect(HELD_WORLDS.has(w.id), w.id).toBe(false);
+      expect(offered).toContain(w.id);
       expect(WORLD_SHARED[w.id], w.id).toBeTruthy();
     }
   });

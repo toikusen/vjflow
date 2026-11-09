@@ -89,27 +89,29 @@ function spiky(c: C, cx: number, cy: number, rx: number, ry: number, n: number, 
   c.strokeStyle = ink;
   c.stroke();
 }
-/** A vertical ellipse balloon with its tail (board `balloon`). */
+/** A vertical ellipse balloon with its tail (board `balloon`): one outline, the tail a short wedge on a wide root with
+ * straight sides, pointed toward the speaker. It never reaches the speaker: a long thin tail reads as a line. */
 function balloon(c: C, cx: number, cy: number, rx: number, ry: number, tail: Pt, ink: string, paper: string) {
-  const a = Math.atan2(tail[1] - cy, tail[0] - cx);
-  const p1: Pt = [cx + Math.cos(a - 0.12) * rx, cy + Math.sin(a - 0.12) * ry];
-  const p2: Pt = [cx + Math.cos(a + 0.12) * rx, cy + Math.sin(a + 0.12) * ry];
+  const a = Math.atan2((tail[1] - cy) / ry, (tail[0] - cx) / rx); // the ellipse's parametric angle toward the speaker
+  // the root is ~110 px along the rim whatever the balloon's proportions (a tall balloon has a short parametric step per px there)
+  const w = 55 / Math.max(40, Math.hypot(rx * Math.sin(a), ry * Math.cos(a)));
+  const edge: Pt = [cx + Math.cos(a) * rx, cy + Math.sin(a) * ry];
+  const d = Math.hypot(tail[0] - edge[0], tail[1] - edge[1]);
+  const len = Math.min(d, 96);
+  const tip: Pt = d < 1 ? edge : [edge[0] + ((tail[0] - edge[0]) / d) * len, edge[1] + ((tail[1] - edge[1]) / d) * len];
+  const root = (t: number): Pt => [cx + Math.cos(t) * rx, cy + Math.sin(t) * ry];
+  const back = root(a + w); // the rim arc starts here and ends at a - w; the tail closes the gap through the tip
   c.save();
   c.lineWidth = 5;
+  c.lineJoin = 'round';
   c.strokeStyle = ink;
   c.fillStyle = paper;
-  path(c, [p1, tail, p2]);
-  c.fill();
-  c.stroke();
   c.beginPath();
-  c.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  c.ellipse(cx, cy, rx, ry, 0, a + w, a - w + Math.PI * 2);
+  c.lineTo(...tip);
+  c.lineTo(...back);
+  c.closePath();
   c.fill();
-  c.stroke();
-  c.strokeStyle = paper;
-  c.lineWidth = 8;
-  c.beginPath();
-  c.moveTo(...p1);
-  c.lineTo(...p2);
   c.stroke();
   c.restore();
 }

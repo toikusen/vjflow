@@ -57,36 +57,43 @@ const inWin = (e: WorldEvent, w: [number, number]) => e.kind !== 'keep' && e.at 
 
 /**
  * The most composition switches a window's lines could carry under the joint contract (Codex 2026-11-10 r2 §4: report
- * the supply before the density): one primary action a line, at its show (the window's first frame excluded), where the
- * line can switch at all (a Q4 handoff or a camera into it, a pinned line whose composed seat differs from the line
- * before, or a line at least SHORT_LINE long, not pinned, with a legal seat that differs from one of the line before),
- * kept greedily SEAM_GAP apart. An upper bound: the clocks against holds, lights and the other lines are not applied.
+ * the supply before the density). Greedy, in time order, each kept only SEAM_GAP after the last kept: one primary
+ * action a line, at its show (the window's first frame excluded), where the line can switch at all (a Q4 handoff or a
+ * camera into it, a pinned line whose composed seat differs from the line before, or a line at least SHORT_LINE long,
+ * not pinned, with a legal seat that differs from one of the line before). Only reliable boundaries: a line's show is
+ * a drawn boundary, never a proportional guess, and a given switch marked `unreliable` is never counted. An upper
+ * bound: holds, lights and the other lines' clocks are not applied. `capTwo` (a world that declares entranceAndInLine,
+ * art-deco, Codex r3 §4): the same, plus after a boundary switch one sung word break inside the line (aligner-trusted
+ * words only) with READ_STABLE after the words land and before the end, SEAM_GAP from the entrance, onto a differing seat
+ * on the line's carrier; not after a camera into the part, not on a pinned line.
  */
 export function supplyCap(input: WorldEventInput, w: [number, number]) {
   const lines = [...input.lines].sort((x, y) => x.start - y.start);
   const ok = (id: string) => !input.caps.seats.length || input.caps.seats.includes(id);
   const own = (l: (typeof lines)[number]) => l.seats.find((s) => s.id === l.seat) ?? l.seats[0];
   const fixed = new Set([...(input.handoffs ?? []).map((h) => h.lineId), ...(input.cams ?? []).map((c) => c.lineId)]);
-  const at: number[] = [];
-  // (a world that declares entranceAndInLine (art-deco): after a boundary switch, one sung word break inside the line with
-  // READ_STABLE after the words land and before the end, SEAM_GAP from the entrance, onto a differing seat on the line's
-  // carrier; not after a camera into the part, not on a pinned line)
-  const second = !!input.caps.entranceAndInLine;
   const cams = new Set((input.cams ?? []).map((c) => c.lineId));
-  const take = (t: number) => { if (!at.length || t - at.at(-1)! >= SEAM_GAP) { at.push(t); return true; } return false; };
-  lines.forEach((l, i) => {
-    if (i === 0 || !(l.show > w[0] + 1 / 30 && l.show < w[1])) return;
-    const prev = lines[i - 1];
-    const can = fixed.has(l.id) || (l.pinned ? seatsDiffer(own(prev), own(l)) : l.end - l.start >= SHORT_LINE && l.seats.filter((s) => ok(s.id)).some((s) => prev.seats.some((p) => seatsDiffer(p, s))));
-    if (!can || !take(l.show) || !second || l.pinned || cams.has(l.id) || !l.words || l.words.length < 2) return;
-    const landed = Math.max(l.start, l.settled ?? l.start);
-    const mine = own(l);
-    if (!l.seats.some((s) => ok(s.id) && (s.carrierId ?? '') === (mine?.carrierId ?? '') && seatsDiffer(mine, s))) return;
-    const b = l.words.slice(1).map((x) => x.from).find((x) => x - landed >= READ_STABLE && l.end - x >= READ_STABLE && x - l.show >= SEAM_GAP && x < w[1]);
-    if (b !== undefined) take(b);
-  });
+  const run = (two: boolean) => {
+    const at: number[] = [];
+    const take = (t: number) => { if (!at.length || t - at.at(-1)! >= SEAM_GAP) { at.push(t); return true; } return false; };
+    lines.forEach((l, i) => {
+      if (i === 0 || !(l.show > w[0] + 1 / 30 && l.show < w[1])) return;
+      const prev = lines[i - 1];
+      const can = fixed.has(l.id) || (l.pinned ? seatsDiffer(own(prev), own(l)) : l.end - l.start >= SHORT_LINE && l.seats.filter((s) => ok(s.id)).some((s) => prev.seats.some((p) => seatsDiffer(p, s))));
+      if (!can || !take(l.show) || !two || l.pinned || cams.has(l.id) || !l.words || l.words.length < 2) return;
+      const landed = Math.max(l.start, l.settled ?? l.start);
+      const mine = own(l);
+      if (!l.seats.some((s) => ok(s.id) && (s.carrierId ?? '') === (mine?.carrierId ?? '') && seatsDiffer(mine, s))) return;
+      const b = l.words.slice(1).map((x) => x.from).find((x) => x - landed >= READ_STABLE && l.end - x >= READ_STABLE && x - l.show >= SEAM_GAP && x < w[1]);
+      if (b !== undefined) take(b);
+    });
+    // (given switches at proportional times are not supply: none is counted)
+    return at.length;
+  };
   const lineCount = lines.filter((l, i) => i > 0 && l.show > w[0] + 1 / 30 && l.show < w[1]).length;
-  return { lines: lineCount, cap: at.length, capPer10: per10(at.length, w), ...(second ? { path: 'entrance + one in-line (entranceAndInLine)' } : {}) };
+  const cap = run(false);
+  const capTwo = input.caps.entranceAndInLine ? run(true) : undefined;
+  return { lines: lineCount, cap, capPer10: per10(cap, w), ...(capTwo !== undefined ? { capTwo, capTwoPer10: per10(capTwo, w), path: 'entrance + one in-line (entranceAndInLine)' } : {}) };
 }
 
 /** The frame check (frame-change.mts): every planned cut's two stable frames, read for move, scale, direction and ground. */

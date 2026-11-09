@@ -677,6 +677,13 @@ export interface WorldPool {
    * 2): the composer blows up no key word of its own (no blownParts / namedLater quota). Unset: today's blow path.
    */
   scaled?: boolean;
+  /**
+   * Q1 phase 4c, a scheduled world only (Codex 2026-11-10 r2 §1): the line's holds are candidates, not commitments. The
+   * composer lists every hold the line could take on each seat it may be read in (`holdCands`, each measured on that
+   * seat's own set) and writes no `beat`; the song's scheduler commits one primary action a line (hold, composition,
+   * composite or keep) and writes the winner back (world-events-apply.ts). Unset: the composer commits its hold, as before.
+   */
+  joint?: boolean;
 }
 /** Each shared recipe's most a world's song may use of its lines (style standard §2.1). */
 export const SHARED_SHARE = 0.4;
@@ -795,6 +802,9 @@ export function holdEndBy(c: Cue, next?: Cue, handoffFrom?: number, opts: { lead
 const skipped = (h: HoldSkip) => ({ beatSkip: h.skip, ...(h.why?.length ? { beatWhy: h.why } : {}), ...(h.safe !== undefined ? { beatSafe: h.safe } : {}), ...(h.ink !== undefined ? { beatInk: h.ink } : {}) });
 /** A line's planned event as the renderer takes it, and the record beside it. */
 const heldOf = (h: HoldPlan, stepped?: boolean) => { const { safe, ink, ...beat } = h; return { beat: { ...beat, ...(stepped ? { stepped: true } : {}) }, beatSafe: safe, beatInk: ink }; };
+/** A line's hold on one seat, as the scheduler may commit it (phase 4c): the renderer's beat and its record, the seat it was measured on, its rank and slack. */
+export interface HoldCand { seat: string; beat: ReturnType<typeof heldOf>['beat']; beatSafe?: boolean; beatInk?: boolean; rank: number; slack: number }
+const candsOf = (got: HoldCandidate[] | HoldSkip, seat: string, stepped?: boolean): HoldCand[] => ('skip' in got ? [] : got.map((x) => ({ seat, ...heldOf(x.plan, stepped), rank: x.rank, slack: x.slack })));
 /**
  * Settled states that are kept to the line's end: no change of set nor cut after them in the line. The block's size, and
  * the inks, were checked against the ground and the set they land on (a phrase swapped before silk snow c040 changed set
@@ -845,6 +855,23 @@ const fract = (x: number) => x - Math.floor(x);
  * nor before a world camera has landed; never the kind of the line before when another fits.
  */
 export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: { at: number }[], last: string, roll: number, line: HoldLine = { enterSec: 0.5 }, holds: Partial<HoldTaste> = {}): HoldPlan | HoldSkip {
+  const got = holdCandidatesOf(c, kinds, beats, repose, last, roll, line, holds);
+  return 'skip' in got ? got : got[0].plan;
+}
+
+/**
+ * One hold the line could take, before any is committed (Q1 phase 4c, Codex 2026-11-10 r2 §1): the plan beatOfLine would
+ * store, its place in the world's own order of kinds (`rank`, 0 = the world's first choice) and its reading slack, s (the
+ * still reading the line keeps either side of the event inside its safe window, the lesser of the two).
+ */
+export interface HoldCandidate { plan: HoldPlan; rank: number; slack: number }
+
+/**
+ * Every hold a line could take, one per kind (each at its own best beat), in the world's own order (beatOfLine's
+ * preferences, unchanged), or why none: the candidate half of beatOfLine, which commits the first. `all` false stops at
+ * the first (beatOfLine's own path, the same work as before); true lists every kind, for the joint selector.
+ */
+export function holdCandidatesOf(c: Cue, kinds: BeatKind[], beats: number[], repose: { at: number }[], last: string, roll: number, line: HoldLine = { enterSec: 0.5 }, holds: Partial<HoldTaste> = {}, all = false): HoldCandidate[] | HoldSkip {
   const len = c.end - c.start;
   if (len < BEAT_MIN_LINE) return { skip: 'under 0.6 s' };
   const band = len < HOLD_LINE.short ? 'short' : len < HOLD_LINE.long ? 'medium' : 'long';
@@ -890,7 +917,9 @@ export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: {
     return { skip: 'no event the world allows on this line', why, safe, ink: !!line.inkSettle };
   }
   let why = '';
-  for (const kind of order) {
+  const found: HoldCandidate[] = [];
+  for (const [rank, kind] of order.entries()) {
+    if (found.length && !all) break;
     const m = WORLD_BEATS[kind];
     const stays = !!m.stays;
     const from = m.hides ? Math.max(entered, c.start + need) : entered;
@@ -909,11 +938,14 @@ export function beatOfLine(c: Cue, kinds: BeatKind[], beats: number[], repose: {
         && (line.cutsAt ?? []).every((t) => (t < x - CUT_CLEAR || t > x + sec + CUT_CLEAR / 2) && !(KEPT.has(kind) && t > x) && kind !== 'line-grow');
       const near = (xs: number[]) => xs.filter((b) => b >= from && b <= to && clear(b)).sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0];
       const at = near(beats) ?? near(breaks);
-      if (at !== undefined) return { kind, at: +at.toFixed(3), sec: +sec.toFixed(3), ...(stays ? { stays: true } : {}), ...(kind === 'ink-swap' ? { span } : {}), safe: true, ink: !!line.inkSettle };
+      if (at !== undefined) {
+        found.push({ plan: { kind, at: +at.toFixed(3), sec: +sec.toFixed(3), ...(stays ? { stays: true } : {}), ...(kind === 'ink-swap' ? { span } : {}), safe: true, ink: !!line.inkSettle }, rank, slack: +Math.min(at - from, ends - (at + sec)).toFixed(3) });
+        break;
+      }
       why ||= [...beats, ...breaks].some((b) => b >= from && b <= to) ? 'every beat in the window is near a cut or a change of set' : 'no beat or word break in the window';
     }
   }
-  return { skip: why, safe, ink: !!line.inkSettle };
+  return found.length ? found : { skip: why, safe, ink: !!line.inkSettle };
 }
 
 /**
@@ -1383,9 +1415,13 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
         }
         if (worldPair) {
           const pkey = keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase);
-          const held = W.beats ? beatOfLine(x, W.beats, beats, [], lastBeat, hash(`${seed}:${id}:beat`) % 7, { ...holdLineOf(SET_SPECS[W.pairSet], WORLD_ENTERS[W.pairLine.enters[0]]?.sec ?? 0, x, W.inks?.[schemeOf(part)]), pair: true, key: pkey, endBy: holdEndBy(x, cues[cues.indexOf(x) + 1], hands.get(cues[cues.indexOf(x) + 1]?.id ?? '')?.from, showOpts) }, W.holds) : undefined;
+          const pairLine: HoldLine = { ...holdLineOf(SET_SPECS[W.pairSet], WORLD_ENTERS[W.pairLine.enters[0]]?.sec ?? 0, x, W.inks?.[schemeOf(part)]), pair: true, key: pkey, endBy: holdEndBy(x, cues[cues.indexOf(x) + 1], hands.get(cues[cues.indexOf(x) + 1]?.id ?? '')?.from, showOpts) };
+          const pairRoll = hash(`${seed}:${id}:beat`) % 7;
+          const held = W.beats ? beatOfLine(x, W.beats, beats, [], lastBeat, pairRoll, pairLine, W.holds) : undefined;
+          // (phase 4c: a shared shot keeps its set, so its holds are listed on that set only, for the scheduler to commit)
+          const cands = held && W.joint && W.scheduled && W.beats ? candsOf(holdCandidatesOf(x, W.beats, beats, [], lastBeat, pairRoll, pairLine, W.holds, true), W.pairSet, W.stepped) : undefined;
           if (held && 'kind' in held) lastBeat = held.kind;
-          const beatPart = held ? ('kind' in held ? heldOf(held, W.stepped) : skipped(held)) : {};
+          const beatPart = held ? (cands ? { ...('skip' in held ? skipped(held) : {}), ...(cands.length ? { holdCands: cands } : {}) } : 'kind' in held ? heldOf(held, W.stepped) : skipped(held)) : {};
           return { cue: id, budget: true, enter: 'cut', exit: 'fade', idle: 'still', trail: false, emphasis: pkey, method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '', world: { set: W.pairSet, enter: W.pairLine.enters[0], exit: W.pairLine.exits[0], hold: W.pairLine.hold, ...beatPart } };
         }
         return { cue: id, budget: true, enter: k ? (pair.kind === 'chat' ? 'cut' : 'reply-land') : r.enter, exit: out ?? r.exit, idle: 'still', trail: false, emphasis: keyOf(x.text, meaning.keys.find((y) => y.cue === id)?.phrase), method: 'color', symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' };
@@ -1513,8 +1549,8 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };
     const camHere = W?.camera && cuts[0]?.cam === W.camera;
     const spec = recipe.wline ? SET_SPECS[recipe.wline.set] : undefined;
-    const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7), {
-      ...holdLineOf(spec, hand ? 0 : WORLD_ENTERS[wEnter ?? recipe.wline.enter]?.sec ?? 0.5, c, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]),
+    const holdLineFor = (spec: SetSpec | undefined, own: boolean): HoldLine => ({
+      ...holdLineOf(spec, hand ? 0 : WORLD_ENTERS[wEnter ?? recipe.wline!.enter]?.sec ?? 0.5, c, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]),
       // (a block grows in the set it is in when it grows, and keeps the size into any set after: every one must have room)
       ...(repose.some((r) => SET_SPECS[r.set] && !growFits(c.text, SET_SPECS[r.set])) ? { noGrow: true } : {}),
       ...(camHere ? { camEnd: s.start + (WORLD_CAM_SEC[W!.camera!] ?? 0.5) } : {}),
@@ -1523,13 +1559,24 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
       // (a linked exit into the next line starts LINK_PREPARE before that line shows: the event is over before it, render/world-handoff)
       endBy: holdEndBy(c, cues[cues.indexOf(c) + 1], hands.get(cues[cues.indexOf(c) + 1]?.id ?? '')?.from, { ...showOpts, ...(isLinked(wExit) ? { prepare: LINK_PREPARE } : {}) }),
       // (the copies behind a blown-up word are drawn only in an ink the ground shows and the words read on: render/world-layout)
-      ...(blow && stressDrawn(blow.stress, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]) ? { stress: blow.stress, keyLast: !/[\p{L}\p{N}]/u.test([...c.text].slice(blow.to).join('')) } : {}),
-    }, W.holds) : undefined;
+      // (a blown-up word's copies are laid in the line's own set only: another seat takes none of its stress)
+      ...(own && blow && stressDrawn(blow.stress, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]) ? { stress: blow.stress, keyLast: !/[\p{L}\p{N}]/u.test([...c.text].slice(blow.to).join('')) } : {}),
+    });
+    const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, lastBeat, roll('beat', 7), holdLineFor(spec, true), W.holds) : undefined;
     const heldBeat = held && 'kind' in held ? held : undefined;
+    // (phase 4c: every hold the line could take, on its own set and on each seat it may be read in, each measured on
+    // that seat's set and scheme; none committed here)
+    const cands = held && W?.joint && W.scheduled && W.beats ? [recipe.wline!.set, ...(seats ?? [])].flatMap((x) => {
+      const at = SET_SPECS[x];
+      if (!at) return [];
+      const line = holdLineFor(at, x === recipe.wline!.set);
+      return candsOf(holdCandidatesOf(c, W.beats!, beats, repose, lastBeat, roll('beat', 7), line, W.holds, true), x, W.stepped);
+    }) : undefined;
     if (heldBeat) lastBeat = heldBeat.kind;
     // (a scheduled world only: the seats where the line's ink-only hold may merge with a material move, phase 4a)
     const absorb = heldBeat && seats?.length && W?.id ? absorbSeatsFor(heldBeat.kind, recipe.wline!.set, seats, W.id, W.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]) : undefined;
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...(heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {}), ...(absorb ? { beatAbsorb: absorb } : {}), ...(blow ? { blow } : {}) } : undefined;
+    const beatPart = cands ? { ...(held && 'skip' in held ? skipped(held) : {}), ...(cands.length ? { holdCands: cands } : {}) } : heldBeat ? heldOf(heldBeat, W!.stepped) : held && 'skip' in held ? skipped(held) : {};
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...beatPart, ...(absorb ? { beatAbsorb: absorb } : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

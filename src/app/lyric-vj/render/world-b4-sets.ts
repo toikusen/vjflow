@@ -42,3 +42,16 @@ for (const id of Object.keys(B4_MIRRORS)) {
   const s = B4_SETS[id];
   B4_SETS[`${id}-r`] = { ...s, at: [1 - s.at[0], s.at[1]], ax: flip(s.ax), ...(s.flush !== undefined ? { flush: flip(s.flush) } : {}), ...(s.split?.at ? { split: { ...s.split, at: [1 - s.split.at[0], s.split.at[1]] as [number, number] } } : {}), ...(s.clear ? { clear: s.clear.map(([x0, y0, x1, y1]) => [1 - x1, y0, 1 - x0, y1] as [number, number, number, number]) } : {}) };
 }
+
+/**
+ * blueprint's detail strip (Q1 phase 3a; world-shared pageSeats, offered only to a scheduled world): the note written in
+ * the strip under the sheet's drawing, inside the border and left of the title block, on the same sheet as its set's
+ * note area; one row, a size down, never under the world's least type (`lo`, world-shared minType). Built from the set
+ * itself (its inks, its page's graphics as `clear`) with no split part; nothing is drawn for it that the sheet does not have.
+ */
+const detail = (of: string): SetSpec => { const { split: _split, ...s } = B4_SETS[of]; return { ...s, at: [0.0885, 0.92], ax: -1, ay: 1, flush: -1, share: 0.58, tall: 0.12, hi: 110, lo: 100, rows: [1, 1] }; };
+for (const id of ['blueprint/part', 'blueprint/construct']) {
+  B4_SETS[`${id}+detail`] = detail(id);
+  const s = detail(`${id}-r`);
+  B4_SETS[`${id}-r+detail`] = { ...s, at: [1 - s.at[0], s.at[1]], ax: flip(s.ax), flush: flip(s.flush ?? -1) };
+}

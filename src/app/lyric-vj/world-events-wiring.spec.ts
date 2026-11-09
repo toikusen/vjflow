@@ -6,11 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { LINK_CLEAR, LINK_PREPARE, linkGrounds, sectionClock } from './render/world-handoff';
-import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, READ_STABLE, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 import { capsOf, currentEvents, fromJob, holdRoom, landedEvents, lightGapWarnings, ONE_PAGE_WORLDS, seatIn, shownOf, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
-import { compositionsOf, WORLD_COMPOSITIONS } from './world-shared';
-import { composePlan, RECIPES } from './lineplan-core';
+import { compositionsOf, isPageSeat, pageOf, WORLD_COMPOSITIONS } from './world-shared';
+import { boxesMeet, laidSeat } from './render/seat-geometry';
+import { composePlan, pageSeatsFor, RECIPES } from './lineplan-core';
 import { poolOf } from './style-world';
 
 const LEFT: SeatCandidate = { id: 'w/left', box: { x0: 0.05, y0: 0.3, x1: 0.45, y1: 0.6 } };
@@ -349,5 +350,98 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every even
     const out = verifyWorldEvents(job, style.world, f.treatment.worldEvents!);
     expect(out.map((w) => w.inputs[0])).toContain(e.id);
     expect(out.some((w) => /drawn that the plan does not hold/.test(w.reason))).toBe(true);
+  });
+});
+
+describe('phase 3a: same-page seats (step 3)', () => {
+  it('notebook, art-deco and blueprint declare seats on their own pages, at their least type, taken inside a line; chalkboard and document are as before', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint']) {
+      const c = compositionsOf(id)!;
+      expect(c.allowedAt['layout-seat']).toContain('in-line');
+      expect(Object.keys(c.pageSeats ?? {}).length).toBeGreaterThan(0);
+      expect(c.minType).toBeGreaterThanOrEqual(96);
+      const world = FREE_STYLES.find((s) => s.id === id)!.world;
+      for (const [main, extra] of Object.entries(c.pageSeats!)) for (const x of extra) {
+        expect(isPageSeat(x)).toBe(true);
+        // (the same page under the words: the same carrier, a different seat)
+        expect(pageOf(world, x), x).toBe(pageOf(world, main));
+        expect(seatIn(world, x, '快使用雙截棍').carrierId).toBe(seatIn(world, main, '快使用雙截棍').carrierId);
+        expect(seatsDiffer(seatIn(world, main, '快使用雙截棍'), seatIn(world, x, '快使用雙截棍')), x).toBe(true);
+      }
+    }
+    expect(compositionsOf('chalkboard')!.pageSeats).toBeUndefined();
+    expect(compositionsOf('document')!.kinds).toEqual([]);
+  });
+
+  it('a same-page seat is offered only where the line keeps the world minimum type and stays off the page graphics', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint']) {
+      const c = compositionsOf(id)!;
+      for (const [main, extra] of Object.entries(c.pageSeats!))
+        for (const text of ['快使用', '快使用雙截棍 哼哼哈兮', '如果我有輕功 飛簷走壁 ', 'a much longer line of latin words than any seat takes in one row', '他們兒子我習慣從小就耳濡目染什麼刀槍跟棍棒我都耍的有模有樣']) {
+          for (const x of pageSeatsFor(text, main, id)) {
+            const laid = laidSeat(text, x)!;
+            expect(laid.size, `${x} ${text}`).toBeGreaterThanOrEqual(c.minType!);
+            for (const p of laid.protect) expect(boxesMeet(laid.box, p), `${x} ${text}`).toBe(false);
+          }
+        }
+    }
+    // (a line too long for the detail strip at the least type is not offered it)
+    expect(pageSeatsFor('他們兒子我習慣從小就耳濡目染什麼刀槍跟棍棒我都耍的有模有樣', 'blueprint/construct', 'blueprint')).toEqual([]);
+  });
+});
+
+const SNOW = 'out/db/yt_5i50aTB7JFo/song.json';
+const SNOW_MEANING = 'out/research/instant/plans/snow/meaning.json';
+describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SONG) || !existsSync(MEANING))('phase 3a: in-line switches to same-page seats on real songs', () => {
+  const songs = existsSync(SNOW) && existsSync(SONG) ? [[JSON.parse(readFileSync(SONG, 'utf8')), JSON.parse(readFileSync(MEANING, 'utf8'))], [JSON.parse(readFileSync(SNOW, 'utf8')), JSON.parse(readFileSync(SNOW_MEANING, 'utf8'))]] : [];
+  for (const id of ['notebook', 'art-deco', 'blueprint'])
+    it(`${id}: at most one in-line switch a line, only at a sung word break, 0.35 s still either side, on the same page, the whitelist kept, the same seed the same table`, () => {
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      let seen = 0;
+      for (const [song, meaning] of songs) {
+        const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+        const table = f.treatment.worldEvents!;
+        expect(JSON.stringify(freeJob(song, { style, seed: 0, meaning, worldEvents: true }).treatment.worldEvents)).toBe(JSON.stringify(table));
+        expect(verifyWorldEvents(f.job, style.world, table)).toEqual([]);
+        const inp = fromJob(f.job, song, style.world);
+        const caps = capsOf(style.world);
+        for (const e of table.events.filter((x) => !x.fixed && x.kind !== 'keep')) expect(caps.seats, e.id).toContain(e.seatAfter);
+        const inLine = table.events.filter((e) => e.scope === 'in-line' && !e.fixed && e.kind !== 'keep');
+        seen += inLine.length;
+        const byLine = new Map<string, number>();
+        for (const e of inLine) {
+          const l = inp.lines.find((x) => x.id === e.lineIds[0])!;
+          byLine.set(l.id, (byLine.get(l.id) ?? 0) + 1);
+          // a sung word break the aligner timed, never a time in proportion
+          expect(l.words, e.id).toBeDefined();
+          expect(l.words!.slice(1).map((w) => w.from), e.id).toContain(e.at);
+          expect(e.at - l.start, e.id).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
+          expect(l.end - e.to, e.id).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
+          // the same page under the words: nothing is taken from under them, nothing laid over them
+          expect(pageOf(style.world, e.seatAfter), e.id).toBe(pageOf(style.world, e.seatBefore));
+          const cue = song.cues.find((c: { id: string }) => c.id === l.id);
+          const laid = laidSeat(cue.text, e.seatAfter)!;
+          if (isPageSeat(e.seatAfter)) {
+            expect(laid.size, e.id).toBeGreaterThanOrEqual(compositionsOf(id)!.minType!);
+            for (const p of laid.protect) expect(boxesMeet(laid.box, p), e.id).toBe(false);
+          }
+        }
+        for (const [line, n] of byLine) expect(n, line).toBe(1);
+        // no in-line switch on a line the aligner did not time
+        for (const l of inp.lines.filter((x) => !x.words)) expect(inLine.some((e) => e.lineIds.includes(l.id)), l.id).toBe(false);
+      }
+      expect(seen, id).toBeGreaterThan(0);
+    });
+
+  it('by default (scheduler off) notebook, art-deco and blueprint draw exactly as before: no same-page seat is offered or drawn', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint']) {
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      const [song, meaning] = songs[1];
+      const plain = freeJob(song, { style, seed: 0, meaning });
+      const before = freeJob(song, { style, seed: 0, meaning, worldEvents: false });
+      const { worldEvents: _w, ...rest } = plain.job.treatment;
+      expect(JSON.stringify(rest)).toBe(JSON.stringify(before.job.treatment));
+      expect(JSON.stringify(rest)).not.toMatch(/\+(margin|second|detail)/);
+    }
   });
 });

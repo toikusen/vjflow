@@ -62,7 +62,8 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   const seats = sets.map((s) => seatIn(world, s));
   const carrierRole: WorldCompositionCaps['carrierRole'] = world.sheet ? 'page' : world.standsOnPlate ? 'plate' : seats.some((s) => s.carrierId) ? 'object' : 'ground';
   const declared = compositionsOf(world.id);
-  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? sets, carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), source: 'declared' };
+  // (a world's declared seats, or all of its sets and the seats it adds on their pages)
+  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...Object.values(declared.pageSeats ?? {}).flat()], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), source: 'declared' };
   if (!o.derived) return { worldId: world.id, kinds: [], seats: sets, carrierRole, source: 'declared-off' };
   const differs = seats.some((a) => seats.some((b) => seatsDiffer(a, b)));
   const kinds: CompositionFamily[] = [

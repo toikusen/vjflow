@@ -250,25 +250,30 @@ export interface WorldCompositions {
 
 /**
  * The five single-page worlds (Codex C). Their sets are each laid into a page of their own (blueprint, document,
- * notebook, art-deco): a seat change there is a page change, so it falls only on a line boundary, never inside a line
- * under words being read. A camera reframe is the world's own move into a part (world-cam.ts), never a beat of its own
+ * notebook, art-deco): a change to another set is a page change, so it falls only on a line boundary, never inside a
+ * line under words being read; a same-page seat (pageSeats, phase 3a) keeps the page and may be taken inside a line at a
+ * sung word. A camera reframe is the world's own move into a part (world-cam.ts), never a beat of its own
  * (Codex cap ruling: no independent camera beats this stage). A page handoff is a Q4 linked move (world-handoff.ts) the
  * scheduler protects; it lays none of its own.
  */
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // sheet-change: the next drawing sheet's own layout; detail-viewport: the push into a part, cut from the same sheet
-  // (no invented engineering detail)
-  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' } },
+  // (no invented engineering detail); the detail strip: the same sheet's note written under its drawing (phase 3a), the
+  // one seat a line may take inside itself (the same sheet under the words)
+  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: { 'blueprint/part': ['blueprint/part+detail'], 'blueprint/part-r': ['blueprint/part-r+detail'], 'blueprint/construct': ['blueprint/construct+detail'], 'blueprint/construct-r': ['blueprint/construct-r+detail'] }, minType: 100 },
   // board-region: left / right / centre regions of the deep green board, also at a word inside a line (the same board
   // under the words, so nothing is pulled from under them); chalk changing colour is no cut
   chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' }, pending: { 'erase-reseat': 'needs an eraser pass drawn over a region already sung; never the line being sung' } },
   // a thermal receipt: camera still, no shared page handoff, its stamp only a hold; its feed and tear are its own page
   // moves, not drawn as a composition switch yet
   document: { kinds: [], carrierRole: 'page', allowedAt: {}, duration: {}, curve: {}, moves: {}, pending: { 'feed-advance': 'the receipt feeding on to its next segment as a switch of its own', 'tear-next': 'tearing off along the paper edge once the line is sung' } },
-  // page-turn: the Q4 fold to the top binding; margin-seat: the main column and the margin reading areas, each a page
-  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' } },
-  // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; no marquee turned stage sign
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' } },
+  // page-turn: the Q4 fold to the top binding; margin-seat: the main column and, on the same page, the margin seat under
+  // it (phase 3a), at the world's least type or more: the one seat a line may take inside itself (the same page under it)
+  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: { 'notebook/spiral': ['notebook/spiral+margin'], 'notebook/spiral-r': ['notebook/spiral-r+margin'], 'notebook/dotted': ['notebook/dotted+margin'], 'notebook/dotted-r': ['notebook/dotted-r+margin'] }, minType: 96 },
+  // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; the secondary block on the axis
+  // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: the one seat a line may take inside
+  // itself (the same frame under it). No marquee turned stage sign; the carrier-swap stays pending (phase 3 step 4)
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-panel / frame-reseat' }, pageSeats: { 'art-deco/marquee': ['art-deco/marquee+second'], 'art-deco/marquee-low': ['art-deco/marquee-low+second'] }, minType: 100 },
 };
 
 /** Each seat a world adds on a page (pageSeats) and the set whose page it is on. */

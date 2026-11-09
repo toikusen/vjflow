@@ -11,10 +11,10 @@ import { clearOf } from './world-sets';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
-import { pageCutBefore } from './cover';
-import { gateMotion, REST_FLOOR, setTogether } from './reading-window';
-import { isLineMotion, LinkContext, LinkFamilyKind, linkLayout, setLinkContext } from './motion-transition';
-import { linkGrounds, sectionClock } from './world-handoff';
+import { gateMotion, REST_FLOOR } from './reading-window';
+import { LinkContext, LinkFamilyKind, linkLayout, setLinkContext } from './motion-transition';
+import { sectionClock } from './world-handoff';
+import { lineShows, threadShot } from './line-shows';
 import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash, passKeeps, seamClear } from './lyric-handoff';
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
 import { hitAt } from './screen-hit';
@@ -71,11 +71,8 @@ import { contrastFace, DEFAULT_FONTS, FontChoice, FONTS, nearestWeight, readingL
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
-import { foldRepeats } from './repeats';
-import { pullPictures } from './picture-lead';
 import { lanes } from './lanes';
-import { lastSungOf, leadOf, showTime } from './show-time';
-import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, enterSec as lineEnterSec, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
@@ -268,12 +265,6 @@ const GLYPH_CACHE = 900;
 /** Loudness from which heavy beats kick the type layer (kickAt); the lyrics' avoidance room counts the kick from here. */
 const KICK_LEVEL = 2.4;
 const KANA_TEMPLATES = new Set(['punch', 'beat-cut', 'scatter', 'title-card']);
-/** Vertical presentation forms (︕︖︙) in lyrics typed for vertical text set as wide blanks across: their horizontal
- * marks, one for one so character timings keep their indexes. */
-function horizontalPunct<T extends { text: string }>(c: T): T {
-  return c && /[︕︖︐]/.test(c.text) ? { ...c, text: c.text.replace(/︕/g, '！').replace(/︖/g, '？').replace(/︐/g, '、') } : c;
-}
-
 /** Paper grain closing over a patch in a few hard steps, thickest at its middle, its edge never a straight line. One ink. */
 function grainSteps(w: number, h: number, seed: number) {
   const [cw, ch] = [Math.ceil(w / 3), Math.ceil(h / 3)];
@@ -313,10 +304,6 @@ function irisMap() {
 }
 
 const RENDERERS: Record<string, TemplateRenderer> = { 'world-set': worldSet, 'world-pair': worldPair, 'build-cut': buildCut, punch, 'paper-feed': paperFeed, 'memory-card': memoryCard, 'index-pull': indexPull, 'lyric-band': lyricBand, 'phrase-panels': phrasePanels, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel, chat, notify, input, lanes, 'lyric-carrier': lyricCarrier, 'contrast-split': contrastSplit, editorial, 'corner-anchor': cornerAnchor, 'cross-anchor': crossAnchor, 'note-panel': notePanel, 'phrase-grid': phraseGrid, 'balance-line': balanceLine, 'dot-display': dotDisplay, 'turn-box': turnBox, 'frame-feed': frameFeed, 'lightbox-entry': lightboxEntry, counterweight: counterweightLayout, 'panel-route': panelRoute, 'reply-thread': replyThread };
-/** Laid out in frame px or sending from a fixed place: nothing can carry them across a handoff. */
-/** A thread sends each line as its own message, on the first sung syllable. */
-const threadShot = (s?: { template: string }) => s?.template === 'chat' || s?.template === 'reply-thread';
-const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -912,84 +899,24 @@ export class LyricVjEngine {
         this.shotLayers.set(shot.id, layer);
       }
     }
-    const all = treatment.cues
-      .map((style) => ({ style, cue: horizontalPunct(cues.find((c) => c.id === style.cueId)!) }))
-      .filter((x) => x.cue)
-      .sort((a, b) => a.cue.start - b.cue.start);
-    // shouts are call words beside the lead line that is up (the line before keeps showing through them)
-    const shouts = all.filter((x) => x.style.shout);
     const live = !!this.job.live && !!design.composer && !design.lineDirect;
     // a scene's lines are drawn by its parts: nothing below (merging, pacing, room-making, recolouring) touches them
     this.storyboard = treatment.storyboard ?? [];
     // the story's drawn props and the song's title, for the scene parts that show them
     setScenePictures((prop) => this.images.get(`spr:${prop}`)?.image as (CanvasImageSource & { width: number; height: number }) | undefined, this.job.meta ? { title: this.job.meta.title, artist: this.job.meta.artist } : undefined);
-    const sceneShots = new Set(treatment.shots.filter((s) => s.template === 'scene').map((s) => s.id));
-    const sorted = all.filter((x) => !x.style.shout && !sceneShots.has(x.style.shot));
     if (this.storyboard.length) {
       const text = this.storyboard.flatMap((sc) => shownTexts(sc, this.sceneSong()).map((x) => x.text)).join('') + 'iLiFE!';
       const faces = new Set([...SCENE_FONTS, ...this.storyboard.flatMap((sc) => sc.parts.flatMap((p) => (typeof p.params?.['font'] === 'string' ? [p.params['font'] as string] : [])))]);
       const extra = '特典券No.0046CHEKI×1¥2,000TIME UP0123456789:';
       await Promise.all([...faces].flatMap((f) => [400, 700, 900].map((wt) => document.fonts.load(`${wt} 100px "${f}"`, text + extra))));
     }
-    // a line sung again straight away stays up as one line that pulses on each repeat (repeats.ts); a chat keeps every
-    // message: the earlier ones stay up in the thread, and sending it three times is the point
-    const { lines: styled, repeats } = foldRepeats(sorted, (x) => !!threadShot(treatment.shots.find((s) => s.id === x.style.shot)));
-    // two lines sung back to back faster than either can be read are set together as one two-row line: the first
-    // stays up while the second is sung (word reveal follows the voice across both)
-    for (let i = 0; i + 1 < styled.length; i++) {
-      const a = styled[i].cue;
-      const b = styled[i + 1].cue;
-      // a chat sends each line as its own message: the thread keeps both up anyway
-      const inChat = threadShot(treatment.shots.find((s) => s.id === styled[i].style.shot));
-      // the composer's pair of lines in one shot is that same idea with each keeping its own line
-      // (the composer plans these itself, as pairs, so a recipe is chosen knowing the line's real length)
-      if (inChat || styled[i].style.budget || !setTogether(a, b) || repeats.has(a.id) || repeats.has(b.id)) continue;
-      const aLen = [...a.text].length;
-      styled[i] = {
-        style: { ...styled[i].style, rows: [aLen + 1], reveal: 'word' },
-        cue: { ...a, text: `${a.text} ${b.text}`, end: b.end, charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
-      };
-      styled.splice(i + 1, 1);
-    }
-    // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
-    const lead = leadOf(this.job.tempo);
-    // a line shows ahead of its voice, but never while the previous line's last word is still being sung
-    const lastSung = styled.map(({ cue }) => lastSungOf(cue));
-    // the entrance is over when the voice comes in: a line starts its animation that much earlier (as long as the line
-    // before is no longer being sung)
-    // an outline's light needs the dark ground its own cut brings: it starts with that cut, not ahead of it
-    // (render/show-time.ts ENTER_LEAD)
-    // a line laid on a page (a cut-out page or a director's drawing, a painted frame) comes with its page's cut, not
-    // ahead of it: ahead, it stood on the page before, whose figures were placed clear of another line (cover.ts)
-    const pages = (treatment.graphics?.sections ?? []).filter((s) => s.layers.some((l) => l.kind === 'code' || (l.kind === 'photo' && l.own))).map((s) => s.start);
-    const showAt = styled.map(({ cue, style }, i) => {
-      // a message is sent on the line's first sung syllable, not ahead of it (the database's chat videos: the bubble
-      // lands on the beat the voice comes in)
-      if (threadShot(treatment.shots.find((s) => s.id === style.shot))) return cue.start;
-      return pageCutBefore(pages, showTime(cue, style.enter, lead, lastSung[i - 1]), cue.start);
-    });
-    // a handoff only runs where it costs neither line any reading: gated here on the times the lines really got
-    for (const [i, { cue, style }] of styled.entries()) {
-      const h = style.handoff;
-      if (!h) continue;
-      const prev = styled[i - 1];
-      const layout = (s: { shot: string }) => treatment.shots.find((x) => x.id === s.shot)?.template ?? '';
-      const paceOf = (c: TimelineCue) => Math.min(1, Math.max(0.35, (c.end - c.start) / 2));
-      const read = !!prev && h.from - showAt[i - 1] >= lineEnterSec(prev.style.enter, paceOf(prev.cue)) + readingSec(prev.cue.text, prev.cue.start, prev.cue.end) - 0.05 && (showAt[i + 1] ?? Infinity) - h.to >= readingSec(cue.text, cue.start, cue.end) - 0.05;
-      if (!read || NO_HANDOFF.has(layout(style)) || NO_HANDOFF.has(layout(prev.style))) {
-        styled[i] = { cue, style: { ...style, handoff: undefined } };
-        // the picture stays with the line: a backdrop pushed off under a line that stays put reads as a mistake
-        const sec = treatment.graphics?.sections.find((s) => s.transition && isLineMotion(s.transition.kind) && Math.abs(s.start - h.from) < 0.06);
-        if (sec) delete sec.transition;
-      } else showAt[i] = h.kind === 'relay' ? h.from + 0.4 * (h.to - h.from) : h.from;
-    }
-    // a line never comes in on the picture before its own: its shot and the shot's first cut come forward to its entrance
-    // (picture-lead.ts); where they cannot, the line waits for its picture
-    const { late } = pullPictures(treatment.shots, treatment.graphics?.sections ?? [], styled.map(({ style }, i) => ({ shot: style.shot, show: showAt[i] })));
-    for (const [i, { style }] of styled.entries()) if (late.has(style.shot) && styled.findIndex((x) => x.style.shot === style.shot) === i) showAt[i] = Math.max(showAt[i], late.get(style.shot)!);
+    // which lines show and when, the handoffs that run, the pictures pulled to their lines and the linked page moves
+    // laid on the world's sections: one computation, shared with the plan (line-shows.ts); with the song's one event plan
+    // (Q1, world-events.ts) only the page handoffs that plan approved are laid
+    const events = (treatment as { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }).worldEvents?.events;
+    const approved = events ? new Set(events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds.at(-1)!)) : undefined;
+    const { styled, repeats, shouts, showAt } = lineShows(treatment as never, cues, this.job.tempo, treatment.graphics?.sections as never, approved) as unknown as { styled: LiveLine[]; repeats: Map<string, number[]>; shouts: LiveLine[]; showAt: number[] };
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
-    // a world's linked ways in and out run on its page across the boundary between two lines (world-handoff.ts)
-    linkGrounds(treatment.graphics?.sections ?? [], styled.map(({ cue, style }, i) => ({ id: cue.id, show: showAt[i], start: cue.start, shot: style.shot, world: style.world, handoff: !!style.handoff })));
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
     setPieces(!!design.techniques?.includes('pieces'));

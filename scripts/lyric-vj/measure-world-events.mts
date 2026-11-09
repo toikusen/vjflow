@@ -14,7 +14,13 @@
 // A world the scheduler takes over whose final draw does not match its plan (verifyWorldEvents, lightGapWarnings: the
 // table's "final check" warnings) fails the run: listed under `contract` and a non-zero exit.
 // Plan counts (planCutsPer10) are the plan's own: they are not "verified" until --frames looked at them.
-//   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-world-events.mts [--world chalkboard] [--frames] [--out out/research/q1-1109/wired.json]
+// Groups (phase 4, frozen 2026-11-10, docs/research/2026-11-10-phase4-codex.md §1): the original five single-page worlds,
+// the eight phase-4 worlds (riso, silk, file, pictogram = card, spy, popart, midcentury, screentone), the thirteen together
+// (the phase-4 target: fast 4.0, calm 4.8 a 10 s, plan median without the given switches at proportional-time
+// boundaries, `medianWiredPlanExclUnreliable`) and all 45; reported apart, never one for another. The frame-verified
+// columns stay provisional (the frame check is not calibrated on owner labels). --seeds 0,1,2: seed 0 is the headline,
+// the other seeds stability columns (plan counts only; --frames looks at seed 0).
+//   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-world-events.mts [--world chalkboard] [--seeds 0,1,2] [--frames] [--out out/research/q1-1109/wired.json]
 import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -30,8 +36,13 @@ const WINDOWS = [
   { name: 'fast', song: 'nun', db: 'yt_w_fCuUR3lEs', window: [76, 101] as [number, number] },
   { name: 'calm', song: 'snow', db: 'yt_5i50aTB7JFo', window: [67, 92] as [number, number] },
 ];
-const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, out: { type: 'string' }, frames: { type: 'boolean', default: false } } });
-const seed = Number(a.seed);
+const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, seeds: { type: 'string' }, out: { type: 'string' }, frames: { type: 'boolean', default: false } } });
+const seeds = (a.seeds ?? a.seed!).split(',').map(Number);
+const seed = seeds[0];
+/** The frozen groups (phase 4): the original five, the eight added in phase 4 (pictogram is the world `card`), and all thirteen. */
+export const GROUPS = { five: ['blueprint', 'chalkboard', 'document', 'notebook', 'art-deco'], eight: ['riso', 'silk', 'file', 'card', 'spy', 'popart', 'midcentury', 'screentone'] } as const;
+/** The phase-4 design target for the thirteen, per 10 s (not a proven ceiling): Codex 2026-11-10 §1. */
+export const TARGET_13 = { fast: 4.0, calm: 4.8 };
 const styles = OFFERED_STYLES.filter((s) => !a.world || a.world.split(',').includes(s.id));
 const median = (xs: number[]) => { const s = [...xs].sort((x, y) => x - y); const m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : 0; };
 const per10 = (n: number, w: [number, number]) => +((n * 10) / (w[1] - w[0])).toFixed(2);
@@ -61,7 +72,7 @@ async function framesOf() {
 
 const frames = a.frames ? await framesOf() : undefined;
 const rows = [];
-for (const w of WINDOWS) {
+for (const seed of seeds) for (const w of WINDOWS) {
   const song = JSON.parse(readFileSync(`out/db/${w.db}/song.json`, 'utf8'));
   const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${w.song}/meaning.json`, 'utf8'));
   for (const style of styles) {
@@ -92,11 +103,13 @@ for (const w of WINDOWS) {
         // given switches whose time is the composer's proportional guess, not a sung word)
         materials: cutEvents.reduce<Record<string, number>>((m, e) => (e.material ? { ...m, [e.material]: (m[e.material] ?? 0) + 1 } : m), {}),
         camDrops: (table.camDrops ?? []).filter((c) => c.at > w.window[0] - 1 && c.at < w.window[1] + 1).length,
-        unreliableBoundary: cutEvents.filter((e) => e.unreliableBoundary).length, planExclUnreliablePer10: per10(reliable, w.window), holdLevel: holdEvents.length },
+        unreliableBoundary: cutEvents.filter((e) => e.unreliableBoundary).length, planExclUnreliablePer10: per10(reliable, w.window), holdLevel: holdEvents.length,
+        // (phase 4a: composite events, an ink-only hold merged with a material move, in the window and over the song)
+        absorbed: cutEvents.filter((e) => e.absorbed).length, absorbedSong: table.events.filter((e) => e.absorbed).length },
       // (the whole song's final checks, a world the scheduler took over: any is a broken landing contract)
       contract: table.source === 'declared' ? table.warnings.filter((x) => x.reason.startsWith('final check')).map((x) => `${x.inputs.join(' / ')}: ${x.reason}`) : [],
     };
-    if (frames) {
+    if (frames && seed === seeds[0]) {
       const seen = await frames.check(`${style.id}-${w.song}`, wired.job, [...cutEvents, ...holdEvents]);
       const cutsSeen = seen.filter((x) => !x.holdLevel);
       const un = cutsSeen.filter((x) => !x.realized);
@@ -118,25 +131,44 @@ for (const w of WINDOWS) {
 await frames?.close();
 
 type Row = Record<string, any>;
-const of = (name: string, f: (r: Row) => number, only?: boolean) => median((rows as Row[]).filter((r) => r['window'] === name && (!only || r['onePage'])).map(f));
+const all = rows as Row[];
+const head = all.filter((r) => r['seed'] === seed);
+const of = (name: string, f: (r: Row) => number, only?: boolean) => median(head.filter((r) => r['window'] === name && (!only || r['onePage'])).map(f));
+/** One group's medians for one seed and window (plan, drawn, without proportional-time boundaries; verified provisional). */
+const groupOf = (ids: readonly string[] | undefined, s: number, name: string) => {
+  const rs = all.filter((r) => r['seed'] === s && r['window'] === name && (!ids || ids.includes(r['world'])));
+  const m = (f: (r: Row) => number) => median(rs.map(f));
+  return { worlds: rs.length, medianWiredPlanExclUnreliable: m((r) => r['wired'].planExclUnreliablePer10), medianWiredPlan: m((r) => r['wired'].planCutsPer10), medianWiredDrawn: m((r) => r['wired'].drawnCutsPer10), medianBefore: m((r) => r['before'].planCutsPer10),
+    ...(rs.some((r) => r['wired'].verifiedCompositionCutsPer10 !== undefined) ? { provisional: { medianVerified: m((r) => r['wired'].verifiedCompositionCutsPer10), medianVerifiedExclOutline: m((r) => r['wired'].verifiedExclOutlinePer10), medianVerifiedExclUnreliable: m((r) => r['wired'].verifiedExclUnreliablePer10), note: 'frame check not calibrated on owner labels' } } : {}) };
+};
+const groups = Object.fromEntries((['five', 'eight', 'thirteen', 'all45'] as const).map((g) => {
+  const ids = g === 'five' ? GROUPS.five : g === 'eight' ? GROUPS.eight : g === 'thirteen' ? [...GROUPS.five, ...GROUPS.eight] : undefined;
+  const bySeed = Object.fromEntries(seeds.map((s) => [s, Object.fromEntries(WINDOWS.map((w) => [w.name, groupOf(ids, s, w.name)]))]));
+  const headline = Object.fromEntries(WINDOWS.map((w) => [w.name, bySeed[seed][w.name].medianWiredPlanExclUnreliable]));
+  return [g, { worlds: ids ?? 'all offered', headline: { metric: 'medianWiredPlanExclUnreliable', seed, ...headline }, ...(g === 'thirteen' ? { target: TARGET_13, meets: Object.fromEntries(WINDOWS.map((w) => [w.name, headline[w.name] >= TARGET_13[w.name as 'fast' | 'calm']])) } : {}), stability: Object.fromEntries(WINDOWS.map((w) => [w.name, seeds.map((s) => bySeed[s][w.name].medianWiredPlanExclUnreliable)])), bySeed }];
+}));
 const summary = Object.fromEntries(WINDOWS.map((w) => [w.name, {
-  worlds: (rows as Row[]).filter((r) => r['window'] === w.name).length,
+  worlds: head.filter((r) => r['window'] === w.name).length,
   medianBefore: of(w.name, (r) => r['before'].planCutsPer10),
   medianDryRun: of(w.name, (r) => r['dryRun'].planCutsPer10),
   medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10),
   medianWiredDrawn: of(w.name, (r) => r['wired'].drawnCutsPer10),
   medianWiredPlanExclUnreliable: of(w.name, (r) => r['wired'].planExclUnreliablePer10),
-  ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10), medianVerifiedExclOutline: of(w.name, (r) => r['wired'].verifiedExclOutlinePer10), medianVerifiedExclUnreliable: of(w.name, (r) => r['wired'].verifiedExclUnreliablePer10), unrealized: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unrealized, 0), outlineOnly: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].outlineOnly, 0) } : {}),
-  unreliableBoundary: (rows as Row[]).filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unreliableBoundary, 0),
-  unreliableWorlds: (rows as Row[]).filter((r) => r['window'] === w.name && r['wired'].unreliableBoundary > 0).length,
+  ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10), medianVerifiedExclOutline: of(w.name, (r) => r['wired'].verifiedExclOutlinePer10), medianVerifiedExclUnreliable: of(w.name, (r) => r['wired'].verifiedExclUnreliablePer10), unrealized: head.filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unrealized, 0), outlineOnly: head.filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].outlineOnly, 0) } : {}),
+  unreliableBoundary: head.filter((r) => r['window'] === w.name).reduce((s, r) => s + r['wired'].unreliableBoundary, 0),
+  unreliableWorlds: head.filter((r) => r['window'] === w.name && r['wired'].unreliableBoundary > 0).length,
   onePage: { medianBefore: of(w.name, (r) => r['before'].planCutsPer10, true), medianWiredPlan: of(w.name, (r) => r['wired'].planCutsPer10, true), medianWiredPlanExclUnreliable: of(w.name, (r) => r['wired'].planExclUnreliablePer10, true), ...(frames ? { medianVerified: of(w.name, (r) => r['wired'].verifiedCompositionCutsPer10, true), medianVerifiedExclOutline: of(w.name, (r) => r['wired'].verifiedExclOutlinePer10, true) } : {}) },
 }]));
-const contract = (rows as Row[]).flatMap((r) => [...r['contract'].map((x: string) => `${r['world']} ${r['window']}: ${x}`), ...r['wired'].unlaid.map((t: number) => `${r['world']} ${r['window']}: planned cut at ${t} not laid`)]);
-const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: true, contract, note: 'plan-level counts (planCutsPer10, hold-level beats never counted) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized, plus hold-level beats it saw; ExclOutline drops detections only the carrier ring saw (not yet validated); ExclUnreliable drops given switches at proportional-time boundaries', date: new Date().toISOString().slice(0, 10), frames: !!frames, summary, rows };
+const contract = all.flatMap((r) => [...r['contract'].map((x: string) => `${r['world']} ${r['window']} seed ${r['seed']}: ${x}`), ...r['wired'].unlaid.map((t: number) => `${r['world']} ${r['window']} seed ${r['seed']}: planned cut at ${t} not laid`)]);
+// (the material moves the plans approved, and the composites among them: phase 4a absorption)
+const materials = all.reduce<Record<string, number>>((m, r) => { for (const [k, v] of Object.entries(r['wired'].materials as Record<string, number>)) m[`${k} seed ${r['seed']}`] = (m[`${k} seed ${r['seed']}`] ?? 0) + v; return m; }, {});
+const absorbed = Object.fromEntries(seeds.map((x) => [x, all.filter((r) => r['seed'] === x).reduce((n, r) => n + r['wired'].absorbedSong, 0)]));
+const report = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: true, seeds, groups, materials, absorbed, contract, note: 'plan-level counts (planCutsPer10, hold-level beats never counted) unless --frames: verifiedCompositionCutsPer10 = plan cuts less those the frame check found unrealized, plus hold-level beats it saw; ExclOutline drops detections only the carrier ring saw (not yet validated); ExclUnreliable drops given switches at proportional-time boundaries', date: new Date().toISOString().slice(0, 10), frames: !!frames, summary, rows };
 if (a.out) {
   mkdirSync(dirname(a.out), { recursive: true });
   writeFileSync(a.out, JSON.stringify(report, null, 1));
 }
 console.log(JSON.stringify(summary));
+for (const [g, x] of Object.entries(groups)) console.log(g, JSON.stringify(x.headline), JSON.stringify(x.stability), 'meets' in x ? JSON.stringify(x.meets) : '');
 if (contract.length) { console.error('CONTRACT', contract.length, contract.slice(0, 10)); process.exitCode = 1; }
-for (const r of rows as Row[]) console.log([r['window'], r['world'].padEnd(14), r['onePage'] ? '1p' : '  ', 'before', r['before'].planCutsPer10, 'dry', r['dryRun'].planCutsPer10, 'wired', r['wired'].planCutsPer10, 'drawn', r['wired'].drawnCutsPer10, 'unlaid', r['wired'].unlaid.length, ...(frames ? ['unreal', r['wired'].unrealized, 'verified', r['wired'].verifiedCompositionCutsPer10] : []), 'warn', r['wired'].warnings].join('\t'));
+for (const r of head) console.log([r['window'], r['world'].padEnd(14), r['onePage'] ? '1p' : '  ', 'before', r['before'].planCutsPer10, 'dry', r['dryRun'].planCutsPer10, 'wired', r['wired'].planCutsPer10, 'drawn', r['wired'].drawnCutsPer10, 'unlaid', r['wired'].unlaid.length, ...(frames ? ['unreal', r['wired'].unrealized, 'verified', r['wired'].verifiedCompositionCutsPer10] : []), 'warn', r['wired'].warnings].join('\t'));

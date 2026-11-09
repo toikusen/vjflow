@@ -5,7 +5,10 @@
 import { describe, expect, it } from 'vitest';
 import { FREE_STYLES } from '../free-styles';
 import { WORLD_COMPOSITIONS, pageSeatsOf } from '../world-shared';
-import { boxesMeet, laidSeat, shapedMeasure, slotSpec } from './seat-geometry';
+import { boxesMeet, laidSeat, panelSplit, shapedMeasure, slotSpec, type FracBox } from './seat-geometry';
+import { layoutMeasure } from './layout-measure';
+import { REAL_ADVANCES } from './seat-agree.fixture';
+import { SEAT_TEXTS } from './seat-agree.texts';
 import { pageSeatsFor } from '../lineplan-core';
 import { blockOf, SET_SPECS } from './world-sets';
 
@@ -48,4 +51,64 @@ describe('seat geometry: the plan lays a line where the renderer does', () => {
               for (const p of [...laid.protect, ...(WORLD_COMPOSITIONS[id].protectedRegion ?? [])]) expect(boxesMeet(laid.box, p), `${x} ${text}`).toBe(false);
             }
     });
+});
+
+describe('phase 3c: plan and picture agree on the real faces', () => {
+  // the browser's advances for the test lines (seat-agree.fixture.ts, read by scripts/lyric-vj/seat-agree.mts in the
+  // renderer's own Chromium): the renderer lays a line on them (world-layout measureOf); the plan on layout-measure's table
+  const fonts = Object.keys(REAL_ADVANCES);
+  const real = (font: string) => (x: string) => [...x].reduce((w, c) => w + REAL_ADVANCES[font][c], 0);
+  const gap = (a: FracBox, b: FracBox) => Math.max(...(['x0', 'y0', 'x1', 'y1'] as const).map((k) => Math.abs(a[k] - b[k])));
+
+  for (const id of Object.keys(WORLD_COMPOSITIONS))
+    it(`${id}: every seat, one slot and two, every test line in every face: the plan's box and type within 1 px of the renderer's`, () => {
+      const world = FREE_STYLES.find((s) => s.id === id)!.world;
+      const sets = [...new Set([...world.layouts.lines.map((l) => l.set), ...pageSeatsOf(id)])];
+      for (const font of fonts)
+        for (const set of sets)
+          for (const slot of [{ k: 0, of: 1 }, { k: 0, of: 2 }])
+            for (const text of SEAT_TEXTS) {
+              const [p, r] = [laidSeat(text, set, { slot, font })!, laidSeat(text, set, { slot, measure: real(font) })!];
+              const at = `${font} ${set} ${slot.of} ${text}`;
+              expect(gap(p.boxPx, r.boxPx), at).toBeLessThanOrEqual(1);
+              expect(Math.abs(p.size - r.size), at).toBeLessThanOrEqual(1);
+            }
+    });
+
+  it('art-deco marquee: the scheduler and the renderer split a line the same way, the two boxes within 1 px (spaces and Latin included)', () => {
+    let both = 0;
+    const latin = new Set<string>();
+    for (const font of fonts)
+      for (const set of ['art-deco/marquee+panels', 'art-deco/marquee-low+panels'])
+        for (const text of SEAT_TEXTS) {
+          const [p, r] = [panelSplit(laidSeat(text, set, { font })), panelSplit(laidSeat(text, set, { measure: real(font) }))];
+          expect(!!p, `${font} ${set} ${text}`).toBe(!!r);
+          if (!p || !r) continue;
+          both++;
+          if (/[A-Za-z]/.test(text)) latin.add(text);
+          expect(Math.max(gap(p.main, r.main), gap(p.panel, r.panel)), `${font} ${set} ${text}`).toBeLessThanOrEqual(1);
+        }
+    expect(both).toBeGreaterThan(0);
+    expect(latin.size, 'a split with Latin and spaces').toBeGreaterThan(0);
+  });
+
+  it('the plan offers the panels seat exactly where the split gives two boxes, on the job\'s face', () => {
+    for (const font of fonts)
+      for (const text of SEAT_TEXTS)
+        expect(pageSeatsFor(text, 'art-deco/marquee', 'art-deco', font).includes('art-deco/marquee+panels'), `${font} ${text}`).toBe(!!panelSplit(laidSeat(text, 'art-deco/marquee+panels', { measure: real(font) })));
+  });
+
+  it('the parts as drawn hold every glyph the typesetter enlarges (a leading kanji, Latin) and the gap where Latin meets kana', () => {
+    const spec = SET_SPECS['art-deco/marquee+panels'];
+    const m = layoutMeasure('Huninn');
+    const plain = laidSeat('漢字の話です ことばの話', spec, { measure: m })!.parts!;
+    const bare = laidSeat('かなのはなしです ことばの話', spec, { measure: m })!.parts!;
+    // (a leading kanji sets at 1.18: its row grows up past the em box; a row of kana does not)
+    expect(plain.main.y0).toBeLessThan(bare.main.y0);
+    const b = blockOf('Hold me tight tonight 抱緊我', spec, m);
+    const p = laidSeat('Hold me tight tonight 抱緊我', spec, { measure: m })!.parts!;
+    const row = b.lines![0];
+    // (wider than its row box: Latin sets at 1.08)
+    expect((p.main.x1 - p.main.x0) / 0.75).toBeGreaterThan(row.bw);
+  });
 });

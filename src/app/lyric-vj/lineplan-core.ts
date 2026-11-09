@@ -19,8 +19,7 @@ import { carrierRoom, growRoom, inkChecks } from './render/hold-room';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
-import { boxesMeet, laidSeat, roughMeasure, shapedMeasure } from './render/seat-geometry';
-import { DECO_PANELS } from './render/world-b5-sets';
+import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure } from './render/seat-geometry';
 import { compositionsOf, pageSeatsOf } from './world-shared';
 import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-time';
 import { WORLD_CAM_SEC } from './render/world-cam';
@@ -666,6 +665,11 @@ export interface WorldPool {
    */
   scheduled?: boolean;
   /**
+   * The job's face, when the scheduler takes the world (Q1 phase 3c): the seats it adds are laid on the renderer's own
+   * measure of it (render/layout-measure.ts), so a seat offered is a seat drawn.
+   */
+  font?: string;
+  /**
    * The world's scale contrasts come from Q3's policy through the song's scheduler (world-shared.ts WORLD_SCALE, Q3 phase
    * 2): the composer blows up no key word of its own (no blownParts / namedLater quota). Unset: today's blow path.
    */
@@ -981,20 +985,20 @@ const stressDrawn = (kind: StressKind, slots?: Slots) => !slots || !!stressInk(k
  * change of page, so only ever at a line's boundary). The content stays the composer's; when a seat changes is the
  * scheduler's (world-events.ts).
  */
-export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns'> & { id?: string }, level: Level, bound = false): string[] {
+export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns'> & { id?: string; font?: string }, level: Level, bound = false): string[] {
   const own = W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : []));
-  return [...new Set([...own, ...(bound && W.id ? pageSeatsFor(c.text, set, W.id) : [])])];
+  return [...new Set([...own, ...(bound && W.id ? pageSeatsFor(c.text, set, W.id, W.font) : [])])];
 }
 
 /**
  * The seats a world adds on the page of a line's set (world-shared pageSeats, Q1 phase 3a): the same page under the
  * words, another reading area. Only those where the line, as the plan lays it (render/seat-geometry.ts), keeps the
  * seat's least type (its `lo`) and stays clear of the page's graphics and the world's protected regions, with the plan's
- * margin for its rough measure.
+ * margin for its rough measure. `font`: the job's face, measured as the renderer measures it (layout-measure); without
+ * it, the line must fit on the rough measure and on the shaped guess both (phase 3a).
  */
-export function pageSeatsFor(text: string, set: string, worldId: string): string[] {
+export function pageSeatsFor(text: string, set: string, worldId: string, font?: string): string[] {
   const protect = compositionsOf(worldId)?.protectedRegion ?? [];
-  // (on the rough measure and on a second guess at the real advances, a line with spaces or Latin may set differently)
   const fits = (laid: ReturnType<typeof laidSeat>, lo: number) => {
     if (!laid || laid.size < lo) return false;
     // (the box grown by the plan's doubt, ROUGH, round its centre)
@@ -1002,15 +1006,10 @@ export function pageSeatsFor(text: string, set: string, worldId: string): string
     const box = { x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh };
     return box.x0 >= 0 && box.x1 <= 1 && box.y0 >= 0 && box.y1 <= 1 && ![...laid.protect, ...protect].some((p) => boxesMeet(box, p));
   };
-  // (a seat that only carries the page's own layout another way, poster-panel: the line as its page set lays it, offered
-  // only where that layout really splits it into a main and a small part on both measures)
-  // (and only where the phrase's panel stays the lesser one: narrower than the main plaque, DECO_PANELS)
-  const P = DECO_PANELS;
-  const lesser = (l: ReturnType<typeof laidSeat>) => !!l?.parts && l.parts.small.w / 2 + P.pad <= Math.max(P.mainHalf, l.parts.main.w / 2 + P.mainPad) - P.narrower
-    // (with the gap between the plaque and the panel the deco page needs to draw them apart, world-b5-deco panelsOf)
-    && l.parts.small.y0 - P.padY * l.parts.small.size - (l.parts.main.y1 + P.mainPadY) >= P.gap;
-  const splits = (x: string) => [laidSeat(text, x), laidSeat(text, x, { measure: shapedMeasure })].every((l) => !!l?.split && lesser(l));
-  return pageSeatsOf(worldId, set).filter((x) => (SET_SPECS[x].panels ? splits(x) : fits(laidSeat(text, x), SET_SPECS[x].lo) && fits(laidSeat(text, x, { measure: shapedMeasure }), SET_SPECS[x].lo)));
+  const lays = (x: string) => (font ? [laidSeat(text, x, { font })] : [laidSeat(text, x), laidSeat(text, x, { measure: shapedMeasure })]);
+  // (a seat that only carries the page's own layout another way, poster-panel: offered only where the one split the
+  // renderer draws it by, seat-geometry panelSplit, parts the line into a main plaque and a lesser panel)
+  return pageSeatsOf(worldId, set).filter((x) => (SET_SPECS[x].panels ? lays(x).every((l) => !!panelSplit(l)) : lays(x).every((l) => fits(l, SET_SPECS[x].lo))));
 }
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */

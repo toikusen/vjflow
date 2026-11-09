@@ -11,6 +11,7 @@ import { fromJob, shownOf, sungAt, verifyWorldEvents } from './world-events-adap
 import { compositionsOf, WORLD_COMPOSITIONS, type MaterialMove } from './world-shared';
 import { WORLD_EXITS } from './render/world-motion';
 import { panelsOf } from './render/world-b5-deco';
+import { panelSplit } from './render/seat-geometry';
 import { DECO_PANELS } from './render/world-b5-sets';
 import { eraseFront, feltAt, TRAY_H } from './render/chalk-erase';
 import { MOUTH_Y } from './render/world-doc-sets';
@@ -211,7 +212,9 @@ describe('phase 3b: panels as the deco page draws them', () => {
   const env = (now: number, from: number, sec: number) => {
     // a marquee line: the main row over the gold phrase, cells in frame px from the face's centre
     const cells: [number, number, number][] = [...[-300, -150, 0, 150, 300].map((x): [number, number, number] => [x, -80, 120]), ...[-200, -100, 0, 100, 200].map((x): [number, number, number] => [x, 180, 80])];
-    const face = { cx: 960, cy: 400, w: 800, h: 400, shear: [0.75, 0, 0, 1] as [number, number, number, number], size: 120, rows: 2, cells, parts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1], panels: { from, sec } };
+    // (where they part to: the one split, from the parts as drawn: main ink 690..1230 × 260..380, phrase 780..1140 × 540..620)
+    const panelBoxes = panelSplit({ parts: { main: { x0: 690, y0: 260, x1: 1230, y1: 380, size: 120 }, small: { x0: 780, y0: 540, x1: 1140, y1: 620, size: 80 } } })!;
+    const face = { cx: 960, cy: 400, w: 800, h: 400, shear: [0.75, 0, 0, 1] as [number, number, number, number], size: 120, rows: 2, cells, parts: [0, 0, 0, 0, 0, 1, 1, 1, 1, 1], panels: { from, sec }, panelBoxes };
     return { now, rect: { x0: 600, y0: 250, x1: 1320, y1: 650, face } } as never;
   };
   it('the one plaque parts into the main plaque and the phrase panel; every word stands on one of them throughout; the slide eases out without passing its place', () => {
@@ -243,6 +246,9 @@ describe('phase 3b: panels as the deco page draws them', () => {
     expect(end.panel.x1 - end.panel.x0).toBeLessThan(end.main.x1 - end.main.x0);
     // no panels on a face that does not ask for them
     expect(panelsOf({ now: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 1 } } as never)).toBeUndefined();
+    // the split gives none where the phrase's panel would not be the lesser, or the two would touch
+    expect(panelSplit({ parts: { main: { x0: 690, y0: 260, x1: 1230, y1: 380, size: 120 }, small: { x0: 400, y0: 540, x1: 1520, y1: 620, size: 80 } } })).toBeUndefined();
+    expect(panelSplit({ parts: { main: { x0: 690, y0: 260, x1: 1230, y1: 470, size: 120 }, small: { x0: 780, y0: 540, x1: 1140, y1: 620, size: 80 } } })).toBeUndefined();
   });
 });
 

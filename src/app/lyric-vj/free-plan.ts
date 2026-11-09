@@ -407,9 +407,9 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const env = (k: string) => (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[k] === '1';
   const scaleOn = !!world && !!scaleOf(world.id) && (o.scaleContrast ?? env('VJ_SCALE'));
   const momentsOn = !!world && !!momentsCapOf(world.id) && (o.meaningMoments ?? env('VJ_MOMENTS'));
-  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(scaleOn ? { scaled: true } : {}) } } : {}) });
-  const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
+  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(scheduled ? { font } : {}), ...(scaleOn ? { scaled: true } : {}) } } : {}) });
+  const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const base = composerBase(o.base ?? FREE_BASE(), composed, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
   // (Q5 wiring: the scheduler's approved moments replace today's gate; the first draw, scheduled on, carries none)
@@ -446,7 +446,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
   const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
   // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
-  const checked = scheduled ? [...verifyWorldEvents(job, world, events), ...lightGapWarnings(job, events)] : [];
+  const checked = scheduled ? [...verifyWorldEvents(job, world, events, font), ...lightGapWarnings(job, events)] : [];
   const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}), ...(events.policy ? { policy: events.policy } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;

@@ -28,7 +28,7 @@ export interface WorldEnv {
   ink: string;
   slots: Slots;
   /** The line's box; carried: it stands whole on an opaque carrier of its own (graphics.ts Rect). */
-  rect?: Box & { carried?: boolean };
+  rect?: Box & { carried?: boolean; /** The line is being wiped off the board from `from` for `sec` (chalk-erase.ts). */ wipe?: { from: number; sec: number } };
   weight: number;
   pulse: number;
   /** How loud this part is, 0..1. */

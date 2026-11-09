@@ -11,9 +11,9 @@ export const PRINT_ROWS = 12;
 
 export const DOC_ENTERS: Record<string, WorldMove> = {
   // the head prints the line from its top row down, band by band
-  'head-print': { sec: 0.42, clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : stepsOf(q, PRINT_ROWS) }) },
+  'head-print': { sec: 0.42, clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : stepsOf(q, PRINT_ROWS), rows: true }) },
   // the paper feeds the printed line up out of the head in three held steps, a row (world-doc-receipt ROW) with the rows above
-  'feed-step': { sec: 0.3, block: (q) => ({ dy: 42 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }), clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : 0.34 + 0.66 * stepsOf(q, 3) }) },
+  'feed-step': { sec: 0.3, block: (q) => ({ dy: 42 * (1 - stepsOf(q, 3)), a: q > 0.02 ? 1 : 0 }), clip: (q) => ({ axis: 'y', at: q >= 1 ? 1 : 0.34 + 0.66 * stepsOf(q, 3), rows: true }) },
 };
 
 export const DOC_EXITS: Record<string, WorldMove> = {

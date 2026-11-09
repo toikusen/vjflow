@@ -26,7 +26,7 @@ import { DOT_R } from './world-glyph-doc';
 import { DOC_INKS } from './doc-inks';
 import { code128 } from './world-doc-barcode';
 import { splitCalls } from '../calls';
-import { MARGIN, PITCH, ROLL, SMALL_G } from './world-doc-sets';
+import { MARGIN, MOUTH_Y, PITCH, ROLL, SMALL_G } from './world-doc-sets';
 import { ALL_LABEL_TEXT, say } from '../labels';
 
 const FACE = '"Noto Sans TC", "Noto Sans JP", sans-serif';
@@ -153,8 +153,6 @@ export const INK_BUDGET = 0.45;
 const FADE = { fresh: 0.64, step: 0.08, floor: 0.34 };
 /** Share of the closing line's time after which its tail prints under it. */
 const TAIL_AT = 0.7;
-/** The printer's top (feed, pair). */
-const MOUTH_Y = 968;
 
 // ---- paper and printer ----
 
@@ -169,19 +167,28 @@ function edgePts(w: number, y: number, dir: 1 | -1, kind: Edge, seed: number): [
   pts.push([w, y]);
   return pts;
 }
-interface PieceOpt { top?: Edge; bottom?: Edge; rot?: number; shadow?: [number, number]; seed?: number; dx?: number; dy?: number }
+interface PieceOpt {
+  top?: Edge; bottom?: Edge; rot?: number; shadow?: [number, number]; seed?: number; dx?: number; dy?: number;
+  /** The bottom tear is the one a piece under it starts from (its top tear, the same seed and teeth): a slip torn off it. */
+  pairs?: boolean;
+  /** The fibre laid in frame space at the piece's rest place, so two pieces of one roll match across their tear. */
+  tile?: boolean;
+  /** What it turns about, a share of its width and height (its middle when unset). */
+  pivot?: [number, number];
+}
 /**
  * A piece of thermal paper, w × h at (x, y), its edges flat, cut or torn, turned `rot` radians about its middle, its solid
  * shadow pushed by `shadow`, the roll's bend a faint shade at its long edges; `inside` prints on it in its own coordinates.
  */
 function piece(c: C, e: WorldEnv, x: number, y: number, w: number, h: number, o: PieceOpt, inside?: (c: C) => void) {
   const top = edgePts(w, 0, 1, o.top ?? 'flat', o.seed ?? 5);
-  const bottom = edgePts(w, h, -1, o.bottom ?? 'flat', (o.seed ?? 5) + 7).reverse();
+  const bottom = (o.pairs ? edgePts(w, h, 1, o.bottom ?? 'flat', o.seed ?? 5) : edgePts(w, h, -1, o.bottom ?? 'flat', (o.seed ?? 5) + 7)).reverse();
   const path = () => { c.beginPath(); [...top, ...bottom].forEach(([u, v], i) => (i ? c.lineTo(u, v) : c.moveTo(u, v))); c.closePath(); };
+  const [px, py] = o.pivot ? [w * o.pivot[0], h * o.pivot[1]] : [w / 2, h / 2];
   c.save();
-  c.translate(x + w / 2 + (o.dx ?? 0), y + h / 2 + (o.dy ?? 0));
+  c.translate(x + px + (o.dx ?? 0), y + py + (o.dy ?? 0));
   c.rotate(o.rot ?? 0);
-  c.translate(-w / 2, -h / 2);
+  c.translate(-px, -py);
   if (o.shadow) {
     c.save();
     c.translate(o.shadow[0], o.shadow[1]);
@@ -191,7 +198,9 @@ function piece(c: C, e: WorldEnv, x: number, y: number, w: number, h: number, o:
     c.restore();
   }
   path();
-  c.fillStyle = c.createPattern(paperTile(e.slots.plate, e.slots.plateInk), 'repeat')!;
+  const fibre = c.createPattern(paperTile(e.slots.plate, e.slots.plateInk), 'repeat')!;
+  if (o.tile) fibre.setTransform(new DOMMatrix().translate(-x, -y));
+  c.fillStyle = fibre;
   c.fill();
   c.save();
   path();
@@ -368,20 +377,13 @@ const ownCut = (e: WorldEnv, it: WorldItem) => it.at === undefined || e.now - e.
  */
 function tornSlip(c: C, e: WorldEnv, it: WorldItem, x0: number, x1: number, foot: number) {
   const b = it.before;
-  // (a segment torn off inside a part by an approved tear-next, Q1 phase 3b: its own rows only, no tail, timed from the
-  // event; the part change's slip as before)
-  const seg = it.opens?.draws === 'tear' && it.segmentFrom !== undefined ? it.opens : undefined;
-  const age = seg ? e.now - seg.at : e.age;
   // (a line too short to read past a slip going by keeps the frame to itself: the slip was torn off unseen)
-  if ((!b && !seg) || age < 0 || age > 0.25 || (it.dur ?? 0) < 1.5 || (!seg && !ownCut(e, it))) return;
-  const k = stepsOf((age - 0.03) / 0.2, 4);
+  if (!b || e.age > 0.25 || (it.dur ?? 0) < 1.5 || !ownCut(e, it)) return;
+  const k = stepsOf((e.age - 0.03) / 0.2, 4);
   if (k >= 1) return;
   const u = wordsOf(e);
   const w = x1 - x0;
-  const rows: Row[] = seg || !b ? [
-    ...it.prev.filter((x) => (x.run === undefined || x.run === it.run) && x.no >= (it.segmentFrom ?? 0)).slice(-3).map((x) => itemRow(x.no, x.text, x.at)),
-    rule('-'),
-  ] : [
+  const rows: Row[] = [
     ...it.prev.filter((x) => x.run !== it.run).slice(-2).map((x) => itemRow(x.no, x.text, x.at)),
     rule('-'),
     pairRow(`${u.subtotal}  ${b.part} ${b.n}${u.lines}`, `${b.sec.toFixed(1)}${u.sec}`, P.row),
@@ -395,6 +397,29 @@ function tornSlip(c: C, e: WorldEnv, it: WorldItem, x0: number, x1: number, foot
   piece(c, e, x0 - 220, foot - h, w, h, { bottom: 'tear', rot: -0.1 - 0.12 * k, shadow: [0, 30], seed: 21 + it.no, dx: -260 * k, dy: -(foot + 200) * k }, (p) => {
     let y = 20;
     for (const r of rows) { r.draw(p, y, MARGIN, w - MARGIN, ink); y += r.h; }
+  });
+}
+
+/**
+ * The segment torn off inside a part by an approved tear-next (Q1 phase 3b; round 2 after the critic): the roll above the
+ * line, from its tear down to the top of the frame, with the segment's rows printed where they stood. At rest it is the
+ * same paper: its torn foot is the very line the paper left under it starts from (one tear, the same teeth, `pairs`),
+ * its fibre is laid in frame space like the paper's (`tile`). Then it is pulled away up and to the left, as thin thermal
+ * paper goes: in the receipt's held steps, each longer than the last (it picks up speed), lifting off the desk (its
+ * shadow opens), turning a little about its torn foot. It does not bend (the approved motion notes: 紙不彎).
+ */
+function segmentSlip(c: C, e: WorldEnv, it: WorldItem, X0: number, X1: number, tearY: number, seed: number) {
+  const m = it.opens?.draws === 'tear' && it.segmentFrom !== undefined ? it.opens : undefined;
+  if (!m || (it.dur ?? 0) < 1.5) return;
+  const q = (e.now - m.at) / Math.max(0.05, m.sec);
+  if (q < 0 || q >= 1) return;
+  const k = stepsOf(q, 4);
+  const s = k * k;
+  const w = X1 - X0;
+  const h = tearY + 60;
+  const rows = it.prev.filter((x) => (x.run === undefined || x.run === it.run) && x.no >= it.segmentFrom!).reverse().map((x) => ({ row: itemRow(x.no, x.text, x.at), age: it.no - x.no }));
+  piece(c, e, X0, -60, w, h, { bottom: 'tear', pairs: true, tile: true, seed, rot: -0.14 * s, pivot: [0.85, 1], shadow: [6 + 22 * s, 4 + 30 * s], dx: -420 * s, dy: -(h + 120) * s }, (p) => {
+    layUp(p, rows, h - 6, 0, Infinity, MARGIN, w - MARGIN, e);
   });
 }
 
@@ -449,7 +474,8 @@ const roll = (kind: 'feed' | 'sheet' | 'pair'): HandGround => (e) => page(e, (c)
   const dry = layUp(scratch(), rows, headY, 0, budget, x0, x1, e);
   const top = dry.edge ? dry.top + lift : -60;
   const low = kind === 'feed' || kind === 'pair' ? MOUTH_Y + 10 : H + 60;
-  piece(c, e, X0, top, X1 - X0, low - top, { top: dry.edge ?? 'flat', shadow: kind === 'sheet' ? [18, 18] : [16, 0], seed: 5 + (it?.run ?? 0) });
+  const torn = it?.opens?.draws === 'tear' && it.segmentFrom !== undefined;
+  piece(c, e, X0, top, X1 - X0, low - top, { top: dry.edge ?? 'flat', shadow: kind === 'sheet' ? [18, 18] : [16, 0], seed: 5 + (it?.run ?? 0), ...(torn ? { tile: true } : {}) });
   tally.ink = 0;
   tally.largest = 0;
   c.save();
@@ -461,6 +487,7 @@ const roll = (kind: 'feed' | 'sheet' | 'pair'): HandGround => (e) => page(e, (c)
   if (qty) qty.draw(c, r.y1 + 14, x0, x1, ink);
   if (kind !== 'sheet') printer(c, X0, X1, MOUTH_Y);
   if (it) tornSlip(c, e, it, X0, X1, Math.min(560, r.y0 - 70));
+  if (it && torn) segmentSlip(c, e, it, X0, X1, top, 5 + (it.run ?? 0));
   if (it) fedAway(c, e, it, x0, x1, headY);
   publish();
 });

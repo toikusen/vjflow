@@ -11,7 +11,7 @@ import { clamp01, ease, H, HandGround, HandIn, kept, mixHex, W, WorldEnv } from 
 import type { C } from './world-b3-shared';
 import { B5 } from './b5-inks';
 import { Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
-import { DECO_COLUMN, DECO_NARROW } from './world-b5-sets';
+import { DECO_COLUMN, DECO_NARROW, DECO_PANELS } from './world-b5-sets';
 import type { FaceLayout } from './world-sets';
 
 const SERIF = (px: number) => `500 ${px}px "Noto Serif TC", "Kaisei Tokumin", serif`;
@@ -55,27 +55,32 @@ type Rect = { x0: number; y0: number; x1: number; y1: number };
 const lerpRect = (a: Rect, b: Rect, k: number): Rect => ({ x0: a.x0 + (b.x0 - a.x0) * k, y0: a.y0 + (b.y0 - a.y0) * k, x1: a.x1 + (b.x1 - a.x1) * k, y1: a.y1 + (b.y1 - a.y1) * k });
 /**
  * A marquee line carried on panels (Q1 phase 3b, poster-panel; world-sets `panels`): the main part's plaque (the board's,
- * at its least width) and the gold phrase's own panel under it, both on the axis. While they part, the one plaque that
- * held both splits between the parts: its upper half rises to the main plaque, its lower half narrows to the panel, so
- * every word stands on the ground's black throughout (only the gap between them opens). None when the parts are too
- * close to stand apart (the single plaque, as drawn before).
+ * at its least width) and the gold phrase's own panel under it, both on the axis, the panel the lesser (DECO_PANELS:
+ * narrower, its phrase in its inner room with even space above and below). While they part, the one plaque that held
+ * both splits between the parts: its upper half rises to the main plaque, its lower half closes in to the panel, so
+ * every word stands on the ground's black throughout and no rule ever crosses a word (only the gap between them opens).
+ * None when the parts are too close or the panel would not be the lesser: the single plaque, as drawn before.
  */
 export function panelsOf(e: WorldEnv): { main: Rect; panel: Rect } | undefined {
   const f = (e.rect as { face?: FaceLayout } | undefined)?.face;
   if (!f?.panels || !f.parts) return undefined;
   const cs = cellsOf(e);
   if (cs.length !== f.parts.length) return undefined;
-  const [m, t] = [boxOf(cs.filter((_, i) => !f.parts![i]), DECO_NARROW[0]), boxOf(cs.filter((_, i) => f.parts![i]), DECO_NARROW[0])];
+  const tail = cs.filter((_, i) => f.parts![i]);
+  const [m, t] = [boxOf(cs.filter((_, i) => !f.parts![i]), DECO_NARROW[0]), boxOf(tail, DECO_NARROW[0])];
   if (!m || !t) return undefined;
+  const P = DECO_PANELS;
   const all = boxOf(cs, DECO_NARROW[0])!;
-  const halfAll = Math.max(620, (all.x1 - all.x0) / 2 + 110);
-  const main = { x0: AX - Math.max(620, (m.x1 - m.x0) / 2 + 110), y0: m.y0 - 56, x1: AX + Math.max(620, (m.x1 - m.x0) / 2 + 110), y1: m.y1 + 56 };
-  const halfT = Math.max(360, (t.x1 - t.x0) / 2 + 90);
-  const panel = { x0: AX - halfT, y0: t.y0 - 36, x1: AX + halfT, y1: t.y1 + 36 };
-  if (panel.y0 - main.y1 < 24) return undefined;
+  const halfAll = Math.max(P.mainHalf, (all.x1 - all.x0) / 2 + P.mainPad);
+  const halfMain = Math.max(P.mainHalf, (m.x1 - m.x0) / 2 + P.mainPad);
+  const main = { x0: AX - halfMain, y0: m.y0 - P.mainPadY, x1: AX + halfMain, y1: m.y1 + P.mainPadY };
+  const halfT = (t.x1 - t.x0) / 2 + P.pad;
+  const padY = Math.max(P.inset * 2, P.padY * Math.max(...tail.map((q) => q.s)));
+  const panel = { x0: AX - halfT, y0: t.y0 - padY, x1: AX + halfT, y1: t.y1 + padY };
+  if (panel.y0 - main.y1 < P.gap || halfT > halfMain - P.narrower) return undefined;
   const k = f.panels.sec > 0 ? PANEL_EASE((e.now - f.panels.from) / f.panels.sec) : 1;
   const mid = (main.y1 + panel.y0) / 2;
-  const one = { x0: AX - halfAll, y0: all.y0 - 56, x1: AX + halfAll, y1: all.y1 + 56 };
+  const one = { x0: AX - halfAll, y0: all.y0 - P.mainPadY, x1: AX + halfAll, y1: all.y1 + P.mainPadY };
   return { main: lerpRect({ ...one, y1: mid }, main, k), panel: lerpRect({ ...one, y0: mid }, panel, k) };
 }
 
@@ -87,8 +92,8 @@ const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
   c.fillRect(0, 0, W, H);
   stepped(c, 70, 60, 1780, 960);
   const w = narrowBox(e);
-  const half = Math.max(620, (w.x1 - w.x0) / 2 + 110);
-  const whole = { x0: AX - half, y0: w.y0 - 56, x1: AX + half, y1: w.y1 + 56 };
+  const half = Math.max(DECO_PANELS.mainHalf, (w.x1 - w.x0) / 2 + DECO_PANELS.mainPad);
+  const whole = { x0: AX - half, y0: w.y0 - DECO_PANELS.mainPadY, x1: AX + half, y1: w.y1 + DECO_PANELS.mainPadY };
   // (a line carried on panels, poster-panel: the plaque parts into the main plaque and the gold phrase's panel)
   const parted = panelsOf(e);
   const p = parted?.main ?? whole;
@@ -108,12 +113,15 @@ const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
   diamond(c, AX, p.y0, 20, g1);
   diamond(c, AX, p.y1, 20, g1);
   if (parted) {
-    // the secondary panel: the ground's own black in a stepped double gold frame (the board's frame, smaller)
+    // the secondary panel, the lesser: the ground's own black, one thin gold rule round it (no steps, no second line),
+    // a small diamond on the axis at its foot only
     const q = parted.panel;
-    steppedPath(c, q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0, 14);
     c.fillStyle = e.slots.ground;
-    c.fill();
-    stepped(c, q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0, 14, 8, 2);
+    c.fillRect(q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0);
+    c.strokeStyle = g0;
+    c.lineWidth = 1.4;
+    c.strokeRect(q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0);
+    diamond(c, AX, q.y1, 10, g1);
   }
   const foot = parted ? parted.panel.y1 : p.y1;
   if (low) {

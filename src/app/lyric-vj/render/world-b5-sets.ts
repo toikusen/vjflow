@@ -11,6 +11,15 @@ const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70
 export const FLAT: [number, number, number, number] = [1, 0, 0, 1];
 /** art-deco's tall lettering: the face drawn narrow (board: scaleX .72, here .75 so no two strokes close up) and tracked wide. */
 export const DECO_NARROW: [number, number, number, number] = [0.75, 0, 0, 1];
+/**
+ * The poster-panel's proportions (Q1 phase 3b, round 2 after the critic): the main plaque is the marquee's own (half
+ * width at least `mainHalf` px, `mainPad` past the words, `mainPadY` above and below: world-b5-deco marqueeOf reads the
+ * same numbers); the secondary panel stands on the same axis, `pad` px past its phrase and `padY` of its type size above
+ * and below, its rule `inset` px clear of any word, and at least `narrower` px narrower than the main plaque either side,
+ * so it reads as the lesser (with one thin rule against the plaque's triple rules). A line whose phrase needs more is not
+ * carried on panels (lineplan-core pageSeatsFor).
+ */
+export const DECO_PANELS = { mainHalf: 620, mainPad: 110, mainPadY: 56, pad: 40, padY: 0.45, narrower: 40, gap: 24, inset: 12 } as const;
 /** art-deco's columns, a little less narrow (board d: scaleX .85). */
 export const DECO_COLUMN: [number, number, number, number] = [0.85, 0, 0, 1];
 /** screentone's sound effect, turned 10° up (board c: rotate(-10)). */

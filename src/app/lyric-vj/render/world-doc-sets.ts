@@ -7,6 +7,8 @@
 // receipt's rows, rules and printer are drawn round it (world-doc-receipt.ts). Never vertical: a receipt prints across.
 import type { SetSpec } from './world-sets';
 
+/** The printer's top (feed, pair): its mouth and tear bar, frame px (world-doc-receipt printer). */
+export const MOUTH_Y = 968;
 /** The paper's left and right edges on each page, frame px. */
 export const ROLL = { feed: [450, 1470], sheet: [470, 1450], total: [450, 1470] } as const;
 /** Print margin inside the paper's edges. */

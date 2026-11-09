@@ -66,6 +66,31 @@ export interface WorldEventLine {
   settled?: number;
   /** The line shares its shot (and its page) with another: no page move of its own at its boundary. */
   sharesShot?: boolean;
+  /**
+   * Phase 4c (joint arbitration, `WorldEventInput.joint`): every Q2 hold the line could take, each on the seat it was
+   * measured on, with the world's rank of its kind and its reading slack. Candidates, not constraints: the scheduler
+   * commits at most one primary action a line (a hold, a composition, a declared composite, or keep).
+   */
+  holdCands?: JointHold[];
+}
+
+/** A Q2 hold the composer found for a line on one seat (phase 4c): a candidate the joint selector may commit. */
+export interface JointHold { seat: string; hold: HoldEvent; rank: number; slack: number }
+/** What one line committed under the joint contract (phase 4c), and why a hold it could have taken was not. */
+export type LineOutcomeKind = 'hold' | 'composition' | 'composite' | 'keep';
+export type LineOutcomeReason = 'supersededByComposition' | 'noSafeCandidate' | 'designedQuiet' | 'landingFailed';
+export interface LineOutcome {
+  lineId: string;
+  outcome: LineOutcomeKind;
+  reason?: LineOutcomeReason;
+  /** Hold candidates the line had (all seats), and whether one was legal on the seat the line would keep. */
+  holdCands: number;
+  legalHold: boolean;
+  /** The committed action: an event id, or the hold's id. */
+  primary?: string;
+  mood: Mood;
+  /** The words of a contract failure or another note (landing failed: what the final check named). */
+  why?: string;
 }
 
 /** Q2's contract: a held line's one event, its whole window. */
@@ -142,6 +167,12 @@ export interface WorldEventInput {
    * read and the plan is exactly the plan without them.
    */
   candidates?: PolicyCandidate[];
+  /**
+   * Phase 4c (Codex 2026-11-10 r2 §1): Q1 seat changes and Q2 holds arbitrated together, one primary action a line. The
+   * lines' `holdCands` are candidates (`holds` is empty: no hold comes in decided); only the committed holds come out in
+   * the plan's `holds`, each line's outcome in `outcomes`. Unset: the hold comes in decided and pins its line, as before.
+   */
+  joint?: boolean;
   seed: number;
 }
 
@@ -230,9 +261,9 @@ export interface InputWarning { inputs: string[]; reason: string }
 export interface HoldMove { lineId: string; kind: string; from: number; to: number | null; reason: string }
 /** A world camera move a scheduled world dropped: it collided with a switch the song keeps (a Q4 handoff, a composed seat, a hold). */
 export interface CamDrop { lineId: string; kind: string; at: number; reason: string }
-export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[]; camDrops?: CamDrop[]; /** Q3/Q5 candidates and what became of each (only when the input had any). */ policy?: PolicyDecision[] }
+export interface WorldEventPlan { events: WorldEvent[]; holds: HoldEvent[]; rejected: RejectedCandidate[]; warnings: InputWarning[]; holdMoves?: HoldMove[]; camDrops?: CamDrop[]; /** Q3/Q5 candidates and what became of each (only when the input had any). */ policy?: PolicyDecision[]; /** Each line's committed action (phase 4c, joint only). */ outcomes?: LineOutcome[] }
 /** What a treatment carries of the plan (treatment.ts worldEvents): the events, the holds standing on their own, the input warnings and how many candidates were refused. */
-export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[]; camDrops?: CamDrop[]; /** Q3/Q5 candidates and what became of each (only when their wiring is on). */ policy?: PolicyDecision[] }
+export interface WorldEventTable { events: WorldEvent[]; holds: HoldEvent[]; warnings: InputWarning[]; rejected: number; source: WorldCompositionCaps['source']; holdMoves?: HoldMove[]; camDrops?: CamDrop[]; /** Q3/Q5 candidates and what became of each (only when their wiring is on). */ policy?: PolicyDecision[]; /** Each line's committed action (phase 4c, joint only). */ outcomes?: LineOutcome[] }
 
 /** Two changes of the whole frame's light never closer than this, anywhere in the song (no more than three flashes a second). */
 export const LIGHT_GAP = 0.55;
@@ -366,6 +397,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
   const events: WorldEvent[] = [];
   const taken: Action[] = [];
   const boundaryOf = (id: string) => `boundary:${id}`;
+  // (phase 4c: holds are candidates; one primary action a line. A world with no capability has nothing to arbitrate.)
+  const joint = !!input.joint && allows.size > 0;
+  const notes = new Map<string, { cands: number; legal: boolean; mood: Mood }>();
 
   const warnings: InputWarning[] = [];
   // Q4 first: given, never moved; a hold wholly inside one is the same action
@@ -481,7 +515,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     // (between two pages the light that changes is the page's own ground cut, already among `lights`: not a second one)
     const lightOf = (to: SeatCandidate) => (to.carrierId ?? '') !== (seat?.carrierId ?? '') && !(to.paged && seat?.paged);
     const atIn = events.length;
-    if (!own) {
+    if (joint) jointLine();
+    else if (!own) {
       push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: before, scope: 'line', changesLight: false, reason: 'no seat for this line: it stays as composed' });
     } else if (!seat) {
       seat = own;
@@ -508,13 +543,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         seat = own;
       } else boundary(line, i, sectionStart);
     }
-    // the world camera's move into the part this line opens: its own reframe, or one switch with the seat change it rides
-    if (cam && i > 0) {
-      const here = events.slice(atIn).find((e) => e.kind !== 'keep');
-      if (here) here.camera = cam.kind;
-      else push({ lineIds: [line.id], kind: 'camera-reframe', at: cam.at, from: cam.at, to: cam.at + cam.sec, seatBefore: seat?.id ?? '', seatAfter: seat?.id ?? '', scope: 'section', changesLight: false, reason: `world camera ${cam.kind} (composed)`, fixed: true, ...(caps.moves?.['camera-reframe'] ? { move: caps.moves['camera-reframe'] } : {}) });
-    }
-    if (line.given?.length) {
+    if (!joint) camRide();
+    if (joint) { /* (decided in jointLine: one primary action) */ } else if (line.given?.length) {
       for (const g of line.given) {
         const to = line.seats.find((s) => s.id === g.seat) ?? { id: g.seat };
         if (!seatsDiffer(seat, to)) { seat = to; continue; }
@@ -522,6 +552,122 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         seat = to;
       }
     } else if (own) inLine(line, mood);
+
+    /** The world camera's move into the part this line opens: its own reframe, or one switch with the seat change it rides. */
+    function camRide() {
+      if (!cam || i === 0) return;
+      const here = events.slice(atIn).find((e) => e.kind !== 'keep');
+      if (here) here.camera = cam.kind;
+      else push({ lineIds: [line.id], kind: 'camera-reframe', at: cam.at, from: cam.at, to: cam.at + cam.sec, seatBefore: seat?.id ?? '', seatAfter: seat?.id ?? '', scope: 'section', changesLight: false, reason: `world camera ${cam.kind} (composed)`, fixed: true, ...(caps.moves?.['camera-reframe'] ? { move: caps.moves['camera-reframe'] } : {}) });
+    }
+
+    /**
+     * The joint contract (phase 4c, Codex 2026-11-10 r2 §1) for one line: its candidates first (a reseat or page move at
+     * its boundary, a switch inside it, a declared composite, a hold on the seat it keeps, each by the same rules and
+     * clocks as ever), then one commitment. The hard floors stand as before (a Q4 handoff, a camera into the part, a
+     * pinned line's composed seat, a seat before that does not fit the line: each a composition the line already makes);
+     * a hold no longer pins anything. Where the line may keep its seat and has a legal hold there, the part's own reseat
+     * rate (reseatRate, unchanged) says which kind is preferred: a section start or a draw under the rate tries the
+     * compositions first (boundary, then a composite, then inside the line) and falls back to the hold; otherwise the
+     * hold. With no legal hold, the line is planned as before, but a switch inside it only when its boundary kept.
+     */
+    function jointLine() {
+      const rate = reseatRate(mood, run);
+      const camIn = !!cam && i > 0;
+      notes.set(line.id, { cands: line.holdCands?.length ?? 0, legal: false, mood });
+      const legalHold = (s: SeatCandidate | undefined) => {
+        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id).sort((a, b) => Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || a.rank - b.rank || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
+        const h = hs.find((x) => !conflict(holdAction(x.hold), taken));
+        if (h) notes.get(line.id)!.legal = true;
+        return h;
+      };
+      const commitHold = (h: JointHold) => { holds.push({ ...h.hold }); taken.push(holdAction(h.hold)); };
+      const mark = () => ({ e: events.length, t: taken.length, h: holds.length, seat, run });
+      const undo = (m: ReturnType<typeof mark>) => { events.length = m.e; taken.length = m.t; holds.length = m.h; seat = m.seat; run = m.run; };
+      const switched = (from: number) => events.slice(from).some((e) => e.kind !== 'keep');
+      const keepOn = (s: SeatCandidate, reason: string) => { run = 0; push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: s.id, scope, changesLight: false, reason }); seat = s; };
+      const holdWhy = (h: JointHold) => `keep: its ${h.hold.kind} hold is the line's one action (joint, ${mood})`;
+      if (!own) {
+        push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: before, scope: 'line', changesLight: false, reason: 'no seat for this line: it stays as composed' });
+        return camRide();
+      }
+      if (!seat) {
+        seat = own;
+        push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: seat.id, scope: 'line', changesLight: false, reason: 'the first composition is not a cut' });
+        if (camIn) return camRide();
+        const h = legalHold(own);
+        if (h) commitHold(h);
+        return;
+      }
+      const q4 = handoffs.find((h) => h.lineId === line.id);
+      if (q4) {
+        legalHold(own);
+        const w = handoffWindow(q4);
+        push({ lineIds: [lines[i - 1].id, line.id], kind: 'page-handoff', at: q4.seam, ...w, seatBefore: before, seatAfter: own.id, carrierId: own.carrierId, scope, changesLight: q4.changesLight ?? true, reason: `${q4.kind.startsWith('lyric-') ? 'lyric handoff' : 'Q4'} ${q4.kind} (protected)`, fixed: true, ...(merged.get(q4) ? { merged: merged.get(q4) } : {}), ...(caps.moves?.['page-handoff'] ? { move: caps.moves['page-handoff'] } : {}) });
+        seat = own;
+        run += 1;
+        return camRide();
+      }
+      if (line.pinned) {
+        const h = legalHold(own);
+        if (seatsDiffer(seat, own)) {
+          const action: Action = { at: line.show, from: line.show, to: line.show, light: lightOf(own), composition: true, what: `${line.id}'s composed seat`, owner: boundaryOf(line.id) };
+          const why = conflict(action, taken);
+          if (why) warnings.push({ inputs: [`${line.id} composed seat`], reason: `pinned seat breaks spacing: ${why}` });
+          push({ lineIds: [line.id], kind: 'layout-seat', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: own.id, carrierId: own.carrierId, scope, changesLight: action.light, reason: `composed seat (${line.pinned})`, fixed: true });
+          run += 1;
+          seat = own;
+          return camRide();
+        }
+        const prefer = sectionStart || salt('reseat') < rate;
+        if (h && !camIn && !prefer) { keepOn(own, holdWhy(h)); commitHold(h); return; }
+        if (pageMove(own, scope, rate)) { seat = own; return camRide(); }
+        if (h && !camIn) { keepOn(own, holdWhy(h)); commitHold(h); return; }
+        keepOn(own, `composed seat is the same composition (${line.pinned})`);
+        return camRide();
+      }
+      const canKeep = seats.some((s) => s.id === seat!.id) || !seatsDiffer(seat, own);
+      // (a seat of the line's that is the same composition as the one before is no switch either: a hold may stand on it)
+      const same = seats.find((s) => s.id === seat!.id) ?? (!seatsDiffer(seat, own) ? own : seats.find((s) => !seatsDiffer(seat, s)));
+      const kept = canKeep ? seats.find((s) => s.id === seat!.id) ?? own : same;
+      if (!kept || camIn) {
+        // (a composition the line makes anyway: the seat before does not fit it, or the world camera moves into it)
+        legalHold(own);
+        boundary(line, i, sectionStart);
+        if (!switched(atIn) && !camIn) inLine(line, mood);
+        return camRide();
+      }
+      const h = legalHold(kept);
+      const prefer = sectionStart || salt('reseat') < rate;
+      if (h && !prefer) { keepOn(kept, holdWhy(h)); commitHold(h); return; }
+      if (h) {
+        let m = mark();
+        boundary(line, i, sectionStart, true);
+        if (switched(m.e)) return;
+        undo(m);
+        // (a declared composite: the line's ink-only hold and the world's material move as one action, phase 4a)
+        const a = line.inLine?.absorb;
+        const ah = a && (line.holdCands ?? []).find((x) => x.seat === kept.id && holdIdOf(x.hold) === a.holdId && !conflict(holdAction(x.hold), taken));
+        if (a && ah) {
+          m = mark();
+          keepOn(kept, `keep: its ${ah.hold.kind} hold goes into a composite (joint, ${mood})`);
+          commitHold(ah);
+          absorbInto(line, a, mood);
+          if (events.slice(m.e).some((e) => e.absorbed)) return;
+          undo(m);
+        }
+        m = mark();
+        keepOn(kept, `keep (${mood})`);
+        inLine(line, mood);
+        if (switched(m.e)) return;
+        undo(m);
+        keepOn(kept, holdWhy(h));
+        commitHold(h);
+        return;
+      }
+      boundary(line, i, sectionStart);
+      if (!switched(atIn)) inLine(line, mood);
+    }
 
     /**
      * The world's page move on the kept seat (the receipt's next segment, world-shared materials `same`), once the line
@@ -549,7 +695,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
     }
 
     /** The line boundary: keep, reseat, or a full page handoff where the song's shape asks for one. */
-    function boundary(l: WorldEventLine, k: number, sectionStart: boolean) {
+    function boundary(l: WorldEventLine, k: number, sectionStart: boolean, force = false) {
       // (keep shows the line in the seat before: only where that seat is one of the line's own; else the line takes its
       // own seat, the composer's, however the clocks stand)
       const canKeep = seats.some((s) => s.id === seat!.id) || !seatsDiffer(seat, own);
@@ -575,7 +721,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const rate = reseatRate(mood, run);
       // (the composer's own change of set stands, however many switches came before it: no run cap, Codex phase-2 §1; the
       // scheduler adds one of its own by the part's pace, eased after a run of switches: a preference, never a count)
-      const wants = sectionStart || (!!own && seatOk(own) && seatsDiffer(seat, own)) || salt('reseat') < rate;
+      // (`force`: the joint selector asks for the line's compositions, its preference already drawn from the same rate)
+      const wants = force || sectionStart || (!!own && seatOk(own) && seatsDiffer(seat, own)) || salt('reseat') < rate;
       const prev = lines[k - 1];
       if (!wants) return pageMove(kept, scope, rate) || keep(`keep (${mood})`);
       const tries: { kind: CompositionFamily; at: number; from: number; to: number; seat: SeatCandidate; reason: string; material?: [string, MaterialMove] }[] = [];
@@ -731,7 +878,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       events.push({ id: `prop-beat:${a.lineId}:${a.propId}`, lineIds: [a.lineId], kind: 'prop-beat', at: r3(a.at), from: r3(a.at), to: r3(to), seatBefore: here, seatAfter: here, scope: 'in-line', changesLight: false, reason: a.reason, ...(caps.moves?.['prop-beat'] ? { move: caps.moves['prop-beat'] } : {}) });
       taken.push({ at: a.at, from: a.at, to, light: false, composition: true, what: `prop-beat ${a.propId}` });
     }
-  const policy = input.candidates ? arbitratePolicies(input.candidates, { lines, events, taken, holds, handoffs, holdMoves, cams, caps, lights: input.lights ?? [] }) : undefined;
+  const policy = input.candidates ? arbitratePolicies(input.candidates, { lines, events, taken, holds, handoffs, holdMoves, cams, caps, lights: input.lights ?? [], joint }) : undefined;
   // (after Q3/Q5 arbitration: a Q3 scale event is in `events`, an approved Q5 moment's window is counted here too)
   const momentWindows: Action[] = (policy ?? []).filter((d) => d.approved && d.source === 'Q5').map((d) => ({ at: d.at, from: d.from, to: d.to, light: false, composition: false, what: d.id }));
   // (a camera move a switch the scheduler could not avoid collides with, a line's own seat forced on it or a given one:
@@ -751,10 +898,33 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       for (let k = warnings.length - 1; k >= 0; k--) if (warnings[k].reason.includes(named)) warnings.splice(k, 1);
     }
   events.sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
-  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}), ...(camDrops.length ? { camDrops } : {}), ...(policy ? { policy } : {}) };
+  const outcomes = joint ? lines.map((l) => outcomeOf(l, events, holds, notes.get(l.id), rejected.some((r) => r.candidate.lineId === l.id))) : undefined;
+  return { events, holds, rejected, warnings, ...(holdMoves.length ? { holdMoves } : {}), ...(camDrops.length ? { camDrops } : {}), ...(policy ? { policy } : {}), ...(outcomes ? { outcomes } : {}) };
 }
 
-interface PolicyContext { lines: WorldEventLine[]; events: WorldEvent[]; taken: Action[]; holds: HoldEvent[]; handoffs: HandoffCandidate[]; holdMoves: HoldMove[]; cams: Map<string, CameraMove>; caps: WorldCompositionCaps; lights: { at: number; what: string }[] }
+/** Two hold candidates whose reading slack falls in the same step of this many seconds are tied: the world's rank decides, then the seed. */
+export const HOLD_SLACK_STEP = 0.1;
+/** A Q2 hold as an action on the song's clocks: never a composition, its whole window occupied. */
+const holdAction = (h: HoldEvent): Action => ({ at: h.at, from: h.from, to: h.to, light: false, composition: false, what: `Q2 ${h.kind} on ${h.lineId}`, hold: holdIdOf(h) });
+
+/**
+ * A line's committed action read off the final plan (phase 4c): a composite (an absorbed hold), a hold, a composition
+ * (any switch of the line: its boundary, inside it, a Q4 handoff or camera move into it, a Q3 composition), else keep.
+ * Why a line that could hold did not: a legal hold lost to a composition (`supersededByComposition`), or none was legal
+ * (`noSafeCandidate`); a line with no hold that kept: a composition was tried and refused (`noSafeCandidate`), or none
+ * was asked for (`designedQuiet`).
+ */
+function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEvent[], note: { cands: number; legal: boolean; mood: Mood } | undefined, refused: boolean): LineOutcome {
+  const evs = events.filter((e) => e.lineIds.at(-1) === l.id && e.kind !== 'keep');
+  const held = holds.find((h) => h.lineId === l.id);
+  const [cands, legal] = [note?.cands ?? 0, !!note?.legal];
+  const outcome: LineOutcomeKind = evs.some((e) => e.absorbed) ? 'composite' : held ? 'hold' : evs.length ? 'composition' : 'keep';
+  const reason: LineOutcomeReason | undefined = outcome === 'composition' ? (legal ? 'supersededByComposition' : cands ? 'noSafeCandidate' : undefined) : outcome === 'keep' ? (cands || refused ? 'noSafeCandidate' : 'designedQuiet') : undefined;
+  const primary = evs[0]?.id ?? (held ? holdIdOf(held) : undefined);
+  return { lineId: l.id, outcome, ...(reason ? { reason } : {}), holdCands: cands, legalHold: legal, ...(primary ? { primary } : {}), mood: note?.mood ?? 'build' };
+}
+
+interface PolicyContext { lines: WorldEventLine[]; events: WorldEvent[]; taken: Action[]; holds: HoldEvent[]; handoffs: HandoffCandidate[]; holdMoves: HoldMove[]; cams: Map<string, CameraMove>; caps: WorldCompositionCaps; lights: { at: number; what: string }[]; /** Phase 4c: a committed hold is the line's one action; no composition is stacked on it. */ joint?: boolean }
 
 /**
  * Q3 and Q5 candidates arbitrated after Q2 and Q4 are protected and Q1 is laid (Codex §2, §6): Q3 first, a section at a
@@ -800,8 +970,9 @@ function arbitratePolicies(cands: PolicyCandidate[], ctx: PolicyContext): Policy
     if (c.source === 'Q3') {
       // (a hold whose move is glyph-level runs on the composition in its own window, unmoved; one that grows the block or
       // moves its carrier was planned on the set's geometry, and one the scheduler moved off a handoff is not re-read)
-      const hold = ctx.holds.find((h) => h.lineId === line.id && !c.holdsOk?.includes(h.kind) && !c.folds?.includes(h.kind)) ?? (ctx.holdMoves.some((m) => m.lineId === line.id) ? { kind: 'moved', lineId: line.id } : undefined);
-      const folded = ctx.holds.find((h) => h.lineId === line.id && c.folds?.includes(h.kind));
+      // (joint, phase 4c: the hold the line committed is its one action; the scale composition lost to it and is not stacked)
+      const hold = ctx.holds.find((h) => h.lineId === line.id && (ctx.joint || (!c.holdsOk?.includes(h.kind) && !c.folds?.includes(h.kind)))) ?? (ctx.holdMoves.some((m) => m.lineId === line.id) ? { kind: 'moved', lineId: line.id } : undefined);
+      const folded = ctx.joint ? undefined : ctx.holds.find((h) => h.lineId === line.id && c.folds?.includes(h.kind));
       const lineEvents = ctx.events.filter((e) => e.lineIds.at(-1) === line.id);
       const why = hold ? `collisionQ2hold: its ${hold.kind} hold was planned on its set (Q2, fixed)`
         : ctx.handoffs.some((h) => h.lineId === line.id) ? 'collisionQ4: a linked handoff lays the line on its page (Q4, fixed)'

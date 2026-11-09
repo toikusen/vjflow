@@ -248,7 +248,8 @@ describe.skipIf(!files.every((f) => existsSync(f.song) && existsSync(f.meaning))
         for (const c of p.chosen) expect(c.scheduled.meaningRef.startsWith(f.meaning)).toBe(true);
       }
     }
-  });
+    // 25 full freeJob plans on real songs: ~2 s on an idle machine, past the 5 s default when the CPU is shared
+  }, 30000);
   it('a hypothetical (test-only) reading candidate on a real line passes on real timing and protected events', () => {
     const { song, meaning } = load(files[1]);
     const style = OFFERED_STYLES.find((s) => s.id === 'silk')!;

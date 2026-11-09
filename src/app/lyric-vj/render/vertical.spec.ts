@@ -1,15 +1,12 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { stubCanvas2d } from '../testdata/canvas-stub';
 import type { CueRuntime } from './runtime';
+import { vertical } from './vertical';
 
 // no canvas here: every 2D call is a no-op and every character measures 30 px
-beforeAll(() => {
-  const metrics = { width: 30, actualBoundingBoxAscent: 30, actualBoundingBoxDescent: 6, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 30 };
-  const stub = new Proxy({} as CanvasRenderingContext2D, {
-    get: (_, k) => (k === 'measureText' ? () => metrics : k === 'getImageData' ? (_x: number, _y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }) : () => ({ addColorStop: () => undefined })),
-    set: () => true,
-  });
-  HTMLCanvasElement.prototype.getContext = (() => stub) as never;
-});
+let restore: () => void;
+beforeAll(() => void (restore = stubCanvas2d()));
+afterAll(() => restore());
 
 const rt = (text: string, exit = 'fade') =>
   ({
@@ -19,14 +16,12 @@ const rt = (text: string, exit = 'fade') =>
   }) as unknown as CueRuntime;
 
 const glyphsOf = async (text: string, exit?: string) => {
-  const { vertical } = await import('./vertical');
   const l = vertical.cue(rt(text, exit));
   return { l, gs: l.group.children as unknown as { position: { x: number; y: number }; rotation: { z: number }; userData: Record<string, unknown> }[] };
 };
 
 describe('vertical text', () => {
   it('keeps a line with English words in its side column rather than across the middle', async () => {
-    const { vertical } = await import('./vertical');
     const l = vertical.cue({ ...rt('大家看到我都對我喊yes sir 因為我是公認最屌的rapper'), params: { position: 'right', step: 0, lift: 0 } } as unknown as CueRuntime);
     l.update(2.9, { flash: 0, hit: 0, shake: 0 });
     const xs = (l.group.children as unknown as { position: { x: number } }[]).map((g) => g.position.x).filter((x) => x !== 0);
@@ -69,7 +64,6 @@ describe('vertical text', () => {
   });
 
   it('drops a column in from above and melts it downward (y is up)', async () => {
-    const { vertical } = await import('./vertical');
     const at = (enter: string, exit: string, t: number) => {
       const l = vertical.cue({ ...rt('あい', exit), style: { enter, exit, reveal: 'line', idle: 'still' } } as unknown as CueRuntime);
       l.update(t, { flash: 0, hit: 0, shake: 0 });

@@ -12,6 +12,7 @@ import { B5B_SETS } from './world-b5b-sets';
 import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
+import { phase4Seats } from './world-p4-seats';
 
 const W = 1920;
 const H = 1080;
@@ -285,6 +286,8 @@ export const SET_SPECS: Record<string, SetSpec> = {
   // style batch 5's scrapbook, watercolor, midcentury and claymation keep theirs in world-b5b-sets.ts
   ...B5B_SETS,
 };
+// Q1 phase 4's same-sheet seats for riso, silk, file, card and spy, built from their sets above (world-p4-seats.ts)
+Object.assign(SET_SPECS, phase4Seats(SET_SPECS));
 
 /** Width of a string at size 100, in px. */
 export type Measure = (s: string) => number;

@@ -22,6 +22,9 @@ const SETS: Record<string, (readonly [string, string, number, number])[]> = {
   // the receipt's feeds and tears on nun; art-deco's poster-panel needs a spaced line on a marquee: 我愛台妹, no stored
   // meaning, the free path's own fallback reading, the same on both sides)
   '3b': [['chalkboard', 'nun', 70, 130], ['document', 'nun', 50, 110], ['art-deco', 'taimei', 10, 70]],
+  // (phase 4b: the two of the five new worlds whose numbers moved most, each over its measured window: riso's fast count
+  // up, silk's calm count down)
+  '4b': [['riso', 'nun', 70, 130], ['silk', 'snow', 60, 120]],
 };
 const { values: a } = parseArgs({ options: { out: { type: 'string', default: 'out/research/q1-1109/clips.json' }, treatments: { type: 'string' }, phase: { type: 'string', default: '3a' } } });
 const CLIPS = SETS[a.phase!];

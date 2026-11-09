@@ -132,9 +132,9 @@ describe('planWorldEvents with the wiring inputs', () => {
 });
 
 describe('the wiring', () => {
-  it('declares the five single-page worlds and no other; document keeps its camera still and only its own page moves', () => {
+  it('declares the single-page worlds and phase 4\'s, no other; document keeps its camera still and only its own page moves', () => {
     expect(Object.keys(WORLD_COMPOSITIONS).sort()).toEqual([...ONE_PAGE_WORLDS].sort());
-    expect(compositionsOf('silk')).toBeUndefined();
+    expect(compositionsOf('silk-cold')).toBeUndefined();
     // (phase 3b: the receipt's own tear and feed, never a camera, never a seat change of the scheduler's own)
     expect(WORLD_COMPOSITIONS['document'].kinds).toEqual(['page-handoff']);
     expect(Object.values(WORLD_COMPOSITIONS['document'].materials!).every((m) => m.family === 'page-handoff' && m.seat === 'same')).toBe(true);
@@ -181,7 +181,7 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('the wired free path 
   const meaning = existsSync(MEANING) ? JSON.parse(readFileSync(MEANING, 'utf8')) : undefined;
 
   it('a world with no capability draws exactly what it drew before, with its one event table added', () => {
-    for (const id of ['silk', 'terminal']) {
+    for (const id of ['silk-cold', 'terminal']) {
       const style = FREE_STYLES.find((s) => s.id === id)!;
       const before = freeJob(song, { style, seed: 0, meaning, worldEvents: false });
       const after = freeJob(song, { style, seed: 0, meaning });
@@ -337,7 +337,8 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every even
       expect(events).toHaveLength(table.events.length);
       for (const l of events) {
         expect(l.why, l.id).toBeUndefined();
-        if (l.plan.kind === 'keep') { expect(l.drawn!.seat, l.id).toBe(l.plan.seat); continue; }
+        // (a line no world set lays, a plain lyric in its shot, is drawn with no world seat: kept as it is)
+        if (l.plan.kind === 'keep') { expect(l.drawn!.seat, l.id).toBe(SET_SPECS[l.plan.seat] ? l.plan.seat : ''); continue; }
         expect([l.drawn!.kind === l.plan.kind || (l.plan.kind === 'carrier-swap' && l.drawn!.kind === 'layout-seat'), l.drawn!.seat, l.drawn!.page, l.drawn!.at, l.drawn!.from, l.drawn!.to], l.id)
           .toEqual([true, l.plan.seat, l.plan.page, l.plan.at, l.plan.from, l.plan.to].map((x, k) => (k >= 3 ? expect.closeTo(x as number, 2) : x)));
       }

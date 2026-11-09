@@ -323,6 +323,16 @@ const CHALK_TRAY = { x0: 0, y0: 1 - TRAY_H / 1080, x1: 1, y1: 1 };
 const RECEIPT_MOUTH = { x0: 0, y0: MOUTH_Y / 1080, x1: 1, y1: 1 };
 /** The poster-panel: one declaration of its time and curve, read by the family's duration and the material move. */
 const POSTER_PANEL = { sec: 0.4, curve: 'panel-slide' as const };
+/** The case file's folder tab with the file's name, top right of the case sheet (world-r2-file caseSheet, 1380–1710 × 40–130 px). */
+const FILE_TAB = { x0: 0.719, y0: 0.037, x1: 0.891, y1: 0.12 };
+/** Phase 4's approved seats: each world's own sets and the same-sheet seats built on them (render/world-p4-seats). */
+const P4_SEATS = {
+  riso: ['riso/offset-stair', 'riso/drop-right', 'riso/tilted', 'riso/offset-stair+drop', 'riso/drop-right+stair', 'riso/tilted+drop'],
+  silk: ['silk/edge-bleed', 'silk/top-slab', 'silk/poster-column', 'silk/edge-bleed+head', 'silk/top-slab+foot'],
+  file: ['file/pair', 'file/case', 'file/catalogue', 'file/sections', 'file/letter', 'file/case+next', 'file/catalogue+next'],
+  card: ['card/main', 'card/calm', 'card/fan', 'card/pair', 'card/long', 'card/main+right', 'card/calm+right'],
+  spy: ['spy/diagonal', 'spy/low-slash', 'spy/high-slash', 'spy/low-slash+high', 'spy/high-slash+low', 'spy/diagonal+low'],
+};
 const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.05, y1: 1 }, { x0: 0.95, y0: 0, x1: 1, y1: 1 }];
 
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
@@ -365,6 +375,35 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
       // ground's own black throughout the slide, world-b5-deco panelsOf)
       absorbs: ['ink-swap', 'line-ink-settle'], under: ['ground'],
       note: 'every hold on a line offered the panels in the 29-song scan is a line-grow, which keeps pinning (phase 4a hold-pins-4a.json)' } } },
+  // ---- phase 4, the first five of the eight (docs/research/2026-11-10-phase4-codex.md §2, in its order; -q1-phase4b.md) ----
+  // Each off by default (enabled false): only the opt-in schedules them. A reseat is a cut; a sheet handoff is the world's
+  // own Q4 linked move along its paper's outline (world-handoff.ts, WORLD_LINKS), protected, never laid by the scheduler.
+  // No switch inside a line for any of the five: the table lists none (riso 換句優先, silk 換句／換段, file and card at
+  // their entries, spy's slash-seat with no in-line); their same-sheet seats (world-p4-seats) are taken at a line or a part.
+  // paper-seat: along the approved stair, the bottom-right type area and the sheet they are printed on. A Q3 scale
+  // composition on a line shares its switch (one event id, world-events arbitratePolicies); the second plate's edge is
+  // printed outside the words' guard (scale-pose CARRIER_STROKE). protectedRegion none: the paper has no fixed furniture,
+  // its plates are full-frame grounds under the words
+  riso: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.riso], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'paper-seat', 'page-handoff': 'sheet-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
+  // poster-seat: the poster's own type areas; re-inking, a squeegee pass or a colour change is no composition, and the
+  // rejected large ground flips are never brought back (no seat changes the ground). protectedRegion none: the pulled
+  // slabs are full-frame plates under the words, no furniture
+  silk: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.silk], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-seat', 'page-handoff': 'sheet-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
+  // case-seat: the real reading areas of the case sheet, index card, section sheet and letter paper, and the next entry on
+  // the same sheet; no invented case data, no decorative small print, no redaction over the words. protectedRegion: the
+  // folder's tab with the file's name (world-r2-file caseSheet); each page's own header and footer are its seats' `clear`.
+  // file-handoff: its layer-seat or edge relay (Q4)
+  file: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.file], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'case-seat', 'page-handoff': 'file-handoff' }, pageSeats: true, protectedRegion: [FILE_TAB], enabled: false },
+  // pictogram's card-seat: the board's cards and type proportions, the next card dealt where the reading composition
+  // really differs (seatsDiffer on the laid boxes: a card in the same place is no cut), never a flip forced on a beat;
+  // card-handoff: the dealt card laid over the last (Q4 layer-seat / edge relay). protectedRegion none: the card and its
+  // furniture are drawn round the words and move with them (world-p4-seats CARD_ROOM)
+  card: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.card], carrierRole: 'object', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'card-seat', 'page-handoff': 'card-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
+  // slash-seat: diagonal / low-slash / high-slash; scene-reframe: the world camera's push into a part only (world-cam.ts
+  // diagonal), dropped where the words would leave the frame (camDrops), else the line keeps its framing. No page
+  // handoff (none in the ruling's table). protectedRegion none: the cut-paper wedges and slices are the ground under the
+  // words, no furniture
+  spy: { kinds: ['layout-seat', 'camera-reframe'], seats: [...P4_SEATS.spy], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera' }, moves: { 'layout-seat': 'slash-seat', 'camera-reframe': 'scene-reframe' }, pageSeats: true, protectedRegion: [], enabled: false },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

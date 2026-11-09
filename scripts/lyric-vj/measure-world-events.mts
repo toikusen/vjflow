@@ -25,7 +25,7 @@
 // outcome in the window (hold / composition / composite / keep and why), the window's `supplyCap` (the most composition
 // switches its lines and boundaries could carry at one primary action a line, SEAM_GAP apart: reported before the
 // realised density) and the holds drawn on either side; groups then carry `joint` medians beside the wired ones.
-//   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-world-events.mts [--world chalkboard] [--seeds 0,1,2] [--frames] [--joint] [--out out/research/q1-1109/wired.json]
+//   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-world-events.mts [--world chalkboard] [--seeds 0,1,2] [--frames] [--joint] [--windows fast,calm,ja-fast,ja-calm] [--out out/research/q1-1109/wired.json]
 import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -38,11 +38,16 @@ import { frameChange, GRID, judge, SEEN, stableTimes, type FrameChange } from '.
 import { framePage } from './frame-page.mts';
 import { GROUPS, HEADLINE, THIRTEEN, TARGET_13 } from './phase4-groups.mts';
 
-const WINDOWS = [
+// (the two fixed clips are the headline; the Japanese pair, added for the owner-labelling pool's language strata
+// (docs/research/2026-11-10-frame-labelling.md), only on --windows and never in the phase-4 groups' target)
+const ALL_WINDOWS = [
   { name: 'fast', song: 'nun', db: 'yt_w_fCuUR3lEs', window: [76, 101] as [number, number] },
   { name: 'calm', song: 'snow', db: 'yt_5i50aTB7JFo', window: [67, 92] as [number, number] },
+  { name: 'ja-fast', song: 'tenmon', db: 'yt_iwYXfOhcsYI', window: [45, 70] as [number, number] },
+  { name: 'ja-calm', song: 'tsuzuki', db: 'yt_b3GCfyNKeLs', window: [54, 79] as [number, number] },
 ];
-const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, seeds: { type: 'string' }, out: { type: 'string' }, frames: { type: 'boolean', default: false }, joint: { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, seeds: { type: 'string' }, out: { type: 'string' }, frames: { type: 'boolean', default: false }, joint: { type: 'boolean', default: false }, windows: { type: 'string', default: 'fast,calm' } } });
+const WINDOWS = ALL_WINDOWS.filter((w) => a.windows!.split(',').includes(w.name));
 const seeds = (a.seeds ?? a.seed!).split(',').map(Number);
 const seed = seeds[0];
 const styles = OFFERED_STYLES.filter((s) => !a.world || a.world.split(',').includes(s.id));
@@ -90,7 +95,7 @@ async function framesOf() {
   const check = async (key: string, job: unknown, events: WorldEvent[]) => {
     const p = await page.job(key, job);
     const cues = await p.cues();
-    const out: { at: number; kind: string; scope: string; lineIds: string[]; material?: string; holdLevel?: boolean; unreliableBoundary?: boolean; outlineOnly?: boolean; realized: boolean; why: string; t?: [number, number]; m?: Omit<FrameChange, 'seen' | 'why'> }[] = [];
+    const out: { at: number; kind: string; scope: string; lineIds: string[]; material?: string; policy?: string[]; absorbed?: string; holdLevel?: boolean; unreliableBoundary?: boolean; outlineOnly?: boolean; realized: boolean; why: string; t?: [number, number]; m?: Omit<FrameChange, 'seen' | 'why'> }[] = [];
     for (const e of events) {
       const t = stableTimes(e, cues);
       if (!t) { out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, realized: false, why: 'no reading time either side' }); continue; }
@@ -98,7 +103,7 @@ async function framesOf() {
       const { seen, why, ...m } = frameChange(x, y, e.scope === 'in-line');
       // (seen only by the carrier ring, not yet validated on a hold-out or owner-labelled set: reported apart)
       const outlineOnly = seen && !judge(m, { ...SEEN, outline: Infinity }).seen;
-      out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, ...(e.material ? { material: e.material } : {}), ...(e.holdLevel ? { holdLevel: true } : {}), ...(e.unreliableBoundary ? { unreliableBoundary: true } : {}), realized: seen, outlineOnly, why, t: [t.before, t.after], m });
+      out.push({ at: e.at, kind: e.kind, scope: e.scope, lineIds: e.lineIds, ...(e.material ? { material: e.material } : {}), ...(e.holdLevel ? { holdLevel: true } : {}), ...(e.unreliableBoundary ? { unreliableBoundary: true } : {}), ...(e.policy?.length ? { policy: e.policy } : {}), ...(e.absorbed ? { absorbed: e.absorbed.kind } : {}), realized: seen, outlineOnly, why, t: [t.before, t.after], m });
     }
     await p.close();
     return out;
@@ -206,7 +211,7 @@ const groups = Object.fromEntries((['five', 'eight', 'thirteen', 'all45'] as con
   const bySeed = Object.fromEntries(seeds.map((s) => [s, Object.fromEntries(WINDOWS.map((w) => [w.name, groupOf(ids, s, w.name)]))]));
   const headline = Object.fromEntries(WINDOWS.map((w) => [w.name, bySeed[seed][w.name].medianWiredPlanExclUnreliable]));
   const jointHead = a.joint ? { jointHeadline: Object.fromEntries(WINDOWS.map((w) => [w.name, (bySeed[seed][w.name] as { joint?: { medianJointPlanExclUnreliable: number } }).joint?.medianJointPlanExclUnreliable])), jointStability: Object.fromEntries(WINDOWS.map((w) => [w.name, seeds.map((s) => (bySeed[s][w.name] as { joint?: { medianJointPlanExclUnreliable: number } }).joint?.medianJointPlanExclUnreliable)])) } : {};
-  return [g, { worlds: ids ?? 'all offered', headline: { metric: HEADLINE, seed, ...headline }, ...jointHead, ...(g === 'thirteen' ? { target: TARGET_13, meets: Object.fromEntries(WINDOWS.map((w) => [w.name, headline[w.name] >= TARGET_13[w.name as 'fast' | 'calm']])) } : {}), stability: Object.fromEntries(WINDOWS.map((w) => [w.name, seeds.map((s) => bySeed[s][w.name].medianWiredPlanExclUnreliable)])), bySeed }];
+  return [g, { worlds: ids ?? 'all offered', headline: { metric: HEADLINE, seed, ...headline }, ...jointHead, ...(g === 'thirteen' ? { target: TARGET_13, meets: Object.fromEntries(WINDOWS.filter((w) => w.name in TARGET_13).map((w) => [w.name, headline[w.name] >= TARGET_13[w.name as 'fast' | 'calm']])) } : {}), stability: Object.fromEntries(WINDOWS.map((w) => [w.name, seeds.map((s) => bySeed[s][w.name].medianWiredPlanExclUnreliable)])), bySeed }];
 }));
 const summary = Object.fromEntries(WINDOWS.map((w) => [w.name, {
   worlds: head.filter((r) => r['window'] === w.name).length,

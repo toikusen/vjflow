@@ -3,6 +3,7 @@
 // a set laid into a page of its own takes that page under it. Nothing else changes: no cut, no ground, no timing is
 // added here (composerTreatment translates the plan as it stands, with no switch of its own).
 import type { StyleWorld } from './style-world';
+import { pageOf } from './world-shared';
 import type { WorldEventPlan } from './world-events';
 
 interface PlanLine { cue: string; world?: { set: string; repose?: { at: number; set: string }[]; seats?: string[] } }
@@ -16,7 +17,7 @@ interface PlanShot { shot: string; lines: PlanLine[]; cuts: { fx: string }[] }
  */
 export function applyWorldEvents<P extends { shots: PlanShot[] }>(p: P, plan: WorldEventPlan, world: StyleWorld): P {
   const out = structuredClone(p);
-  const page = (set: string) => world.layouts.lines.find((l) => l.set === set)?.ground;
+  const page = (set: string) => pageOf(world, set);
   const byLine = new Map<string, { boundary?: string; inLine: { at: number; set: string }[] }>();
   for (const e of plan.events) {
     const id = e.lineIds.at(-1)!;

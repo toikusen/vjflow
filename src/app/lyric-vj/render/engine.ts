@@ -14,7 +14,7 @@ import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './car
 import { gateMotion, REST_FLOOR } from './reading-window';
 import { LinkContext, LinkFamilyKind, linkLayout, setLinkContext } from './motion-transition';
 import { sectionClock } from './world-handoff';
-import { lineShows, threadShot } from './line-shows';
+import { approvedOf, lineShows, threadShot } from './line-shows';
 import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash, passKeeps, seamClear } from './lyric-handoff';
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
 import { hitAt } from './screen-hit';
@@ -913,9 +913,7 @@ export class LyricVjEngine {
     // which lines show and when, the handoffs that run, the pictures pulled to their lines and the linked page moves
     // laid on the world's sections: one computation, shared with the plan (line-shows.ts); with the song's one event plan
     // (Q1, world-events.ts) only the page handoffs that plan approved are laid
-    const events = (treatment as { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }).worldEvents?.events;
-    const approved = events ? new Set(events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds.at(-1)!)) : undefined;
-    const { styled, repeats, shouts, showAt } = lineShows(treatment as never, cues, this.job.tempo, treatment.graphics?.sections as never, approved) as unknown as { styled: LiveLine[]; repeats: Map<string, number[]>; shouts: LiveLine[]; showAt: number[] };
+    const { styled, repeats, shouts, showAt } = lineShows(treatment, cues, this.job.tempo, treatment.graphics?.sections, approvedOf(treatment));
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)

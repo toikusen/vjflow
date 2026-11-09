@@ -90,8 +90,16 @@ export interface WorldEventInput {
   lights?: { at: number; what: string }[];
   /** The world camera's moves into parts the composer laid: kept as given. */
   cams?: CameraMove[];
+  /**
+   * Candidates other policies propose (Q3 scale contrast, Q5 moments), each with its own window, to be arbitrated with
+   * everything above by the same clocks. A slot only for now: the scheduler does not read it yet (2026-11-09 phase 2).
+   */
+  candidates?: PolicyCandidate[];
   seed: number;
 }
+
+/** A switch another policy proposes to the scheduler: where, how long, onto which seat, and why. */
+export interface PolicyCandidate { source: 'Q3' | 'Q5' | (string & {}); lineId: string; kind: CompositionFamily; at: number; from: number; to: number; seatAfter?: string; changesLight?: boolean; reason: string }
 
 export interface WorldEvent {
   id: string;
@@ -301,7 +309,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       if (q4) {
         // (a linked handoff runs between the composer's two pages: the line comes in on its own seat)
         const w = handoffWindow(q4);
-        push({ lineIds: [lines[i - 1].id, line.id], kind: 'page-handoff', at: q4.seam, ...w, seatBefore: before, seatAfter: own.id, carrierId: own.carrierId, scope, changesLight: q4.changesLight ?? true, reason: `Q4 ${q4.kind} (protected)`, fixed: true, ...(merged.get(q4) ? { merged: merged.get(q4) } : {}), ...(caps.moves?.['page-handoff'] ? { move: caps.moves['page-handoff'] } : {}) });
+        push({ lineIds: [lines[i - 1].id, line.id], kind: 'page-handoff', at: q4.seam, ...w, seatBefore: before, seatAfter: own.id, carrierId: own.carrierId, scope, changesLight: q4.changesLight ?? true, reason: `${q4.kind.startsWith('lyric-') ? 'lyric handoff' : 'Q4'} ${q4.kind} (protected)`, fixed: true, ...(merged.get(q4) ? { merged: merged.get(q4) } : {}), ...(caps.moves?.['page-handoff'] ? { move: caps.moves['page-handoff'] } : {}) });
         seat = own;
         run += 1;
       } else if (line.pinned) {
@@ -371,7 +379,8 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         else reject(l.id, 'page-handoff', l.show, `line before up ${(prev.end - prev.start).toFixed(2)}s < ${HANDOFF_UP}s`, target.id);
       }
       const seatKind: CompositionFamily | undefined = target && carrierEnd && at('carrier-swap', scope) ? 'carrier-swap' : at('layout-seat', scope) ? 'layout-seat' : undefined;
-      if (seatKind && target) for (const t of [...new Set([l.show, l.start])]) tries.push({ kind: seatKind, at: t, from: t, to: t + sec(seatKind), seat: target, reason: `${sectionStart ? 'section start' : 'reseat'} (${mood})` });
+      // (a reseat falls on the line's show, the frame its set is drawn from: no later time the renderer would not keep)
+      if (seatKind && target) for (const t of [l.show]) tries.push({ kind: seatKind, at: t, from: t, to: t + sec(seatKind), seat: target, reason: `${sectionStart ? 'section start' : 'reseat'} (${mood})` });
       if (sectionStart && !target && at('ground-role', scope)) tries.push({ kind: 'ground-role', at: l.show, from: l.show, to: l.show + sec('ground-role'), seat: seat!, reason: `section start, no other seat (${mood})` });
       for (const t of tries) {
         const light = LIGHT_KINDS.has(t.kind) || lightOf(t.seat);

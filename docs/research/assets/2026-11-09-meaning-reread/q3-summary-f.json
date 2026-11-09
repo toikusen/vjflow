@@ -1,0 +1,81 @@
+{
+ "haiku1109f": {
+  "source": "out/research/q3-1109/coverage-haiku-f.json",
+  "bySeed": {
+   "0": {
+    "medianToday": 10,
+    "medianPolicy": 9,
+    "medianEdgeFit": 4,
+    "worldsFullPolicy": 3
+   },
+   "1": {
+    "medianToday": 10,
+    "medianPolicy": 9,
+    "medianEdgeFit": 3,
+    "worldsFullPolicy": 3
+   },
+   "2": {
+    "medianToday": 10,
+    "medianPolicy": 10,
+    "medianEdgeFit": 3,
+    "worldsFullPolicy": 1
+   }
+  },
+  "perSongSeed": {
+   "nun/seed0": {
+    "keys": 3,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 79,
+    "semanticChosen": 79,
+    "edgeFitSections": 63,
+    "worldsWithEdgeFit": 39
+   },
+   "nun/seed1": {
+    "keys": 3,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 77,
+    "semanticChosen": 77,
+    "edgeFitSections": 60,
+    "worldsWithEdgeFit": 36
+   },
+   "nun/seed2": {
+    "keys": 3,
+    "worlds": 45,
+    "sections": 495,
+    "semanticLegalCandidates": 69,
+    "semanticChosen": 69,
+    "edgeFitSections": 53,
+    "worldsWithEdgeFit": 33
+   },
+   "snow/seed0": {
+    "keys": 5,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 113,
+    "semanticChosen": 109,
+    "edgeFitSections": 84,
+    "worldsWithEdgeFit": 43
+   },
+   "snow/seed1": {
+    "keys": 5,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 106,
+    "semanticChosen": 98,
+    "edgeFitSections": 77,
+    "worldsWithEdgeFit": 42
+   },
+   "snow/seed2": {
+    "keys": 5,
+    "worlds": 45,
+    "sections": 270,
+    "semanticLegalCandidates": 114,
+    "semanticChosen": 106,
+    "edgeFitSections": 82,
+    "worldsWithEdgeFit": 43
+   }
+  }
+ }
+}

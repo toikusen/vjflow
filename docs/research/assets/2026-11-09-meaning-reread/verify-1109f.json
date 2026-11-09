@@ -1,0 +1,6127 @@
+{
+ "date": "2026-11-10",
+ "effort": "medium",
+ "runs": 3,
+ "from": "haiku-1109b",
+ "to": "haiku-1109f",
+ "totalUsd": 0.07204,
+ "rows": [
+  {
+   "song": "nun",
+   "from": "out/research/instant/plans/nun/meaning.haiku-1109b.json",
+   "wrote": "out/research/instant/plans/nun/meaning.haiku-1109f.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 11971,
+    "output": 17168
+   },
+   "usd": 0.00978,
+   "calls": [
+    {
+     "usd": 0.00327,
+     "usage": {
+      "input": 3991,
+      "output": 5748
+     }
+    },
+    {
+     "usd": 0.00322,
+     "usage": {
+      "input": 3990,
+      "output": 5651
+     }
+    },
+    {
+     "usd": 0.00328,
+     "usage": {
+      "input": 3990,
+      "output": 5769
+     }
+    }
+   ],
+   "keys": {
+    "before": 5,
+    "after": 3,
+    "narrowed": 0
+   },
+   "moments": {
+    "before": 2,
+    "after": 2
+   },
+   "uncertain": [
+    {
+     "id": "k3",
+     "keepVotes": 0,
+     "note": "0/3 keep"
+    },
+    {
+     "id": "k4",
+     "keepVotes": 1,
+     "note": "1/3 keep"
+    }
+   ],
+   "candidates": [
+    {
+     "id": "k0",
+     "kind": "key",
+     "cue": "c007",
+     "text": "柔中帶剛",
+     "why": "形容雙截棍的特質，點出全曲功夫與態度的核心對比，值得強調。",
+     "vote": {
+      "id": "k0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "柔中帶剛",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「柔中帶剛」是c007原樣唱出的核心描述，整句也确实在形容雙截棍的特質，詞組與理由都成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "柔中帶剛",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「柔中帶剛」原樣出現在c007，句子直接描述雙截棍的特質，是全曲功夫與態度的核心，why 也正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "柔中帶剛",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「柔中帶剛」原樣出現在c007，直接描述雙截棍的特質，整句語意支持此強調，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "柔中帶剛",
+      "why": "形容雙截棍的特質，點出全曲功夫與態度的核心對比，值得強調。"
+     },
+     "verdicts": [
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「柔中帶剛」是c007原樣唱出的核心描述，整句也确实在形容雙截棍的特質，詞組與理由都成立。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「柔中帶剛」原樣出現在c007，句子直接描述雙截棍的特質，是全曲功夫與態度的核心，why 也正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「柔中帶剛」原樣出現在c007，直接描述雙截棍的特質，整句語意支持此強調，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k1",
+     "kind": "key",
+     "cue": "c016",
+     "text": "一直在身邊",
+     "why": "接在「一放好多年」之後，表示一根不抽的菸一直陪著，是全曲少見的沉靜心事，與前段的熱血形成反差。",
+     "vote": {
+      "id": "k1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "一直在身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c016確實唱「它一直在身邊」，句意是菸long-lasting地陪伴，支持沉靜、揮之不去的心事，與前段的熱血有反差。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "一直在身邊",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "一根不抽的菸一放多年仍一直在身邊，指揮之不去的舊事或負擔，帶出陰鬱的心事。",
+        "reason": "drop: 「一直在身邊」原文成立，但 why 把它說成全曲少見的沉靜心事並與熱血反差，屬於過度詮釋，解讀不正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "一直在身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c016 陳述一根不抽的菸一直在身邊，是確實的敘述而非否定或願望，與前段形成的反差解讀正確。"
+       }
+      ],
+      "keepVotes": 2,
+      "kept": true,
+      "note": "2/3 keep, 1 why-only drop",
+      "phrase": "一直在身邊",
+      "why": "接在「一放好多年」之後，表示一根不抽的菸一直陪著，是全曲少見的沉靜心事，與前段的熱血形成反差。"
+     },
+     "verdicts": [
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c016確實唱「它一直在身邊」，句意是菸long-lasting地陪伴，支持沉靜、揮之不去的心事，與前段的熱血有反差。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "一根不抽的菸一放多年仍一直在身邊，指揮之不去的舊事或負擔，帶出陰鬱的心事。",
+       "verdict": "drop",
+       "reason": "「一直在身邊」原文成立，但 why 把它說成全曲少見的沉靜心事並與熱血反差，屬於過度詮釋，解讀不正確。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c016 陳述一根不抽的菸一直在身邊，是確實的敘述而非否定或願望，與前段形成的反差解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k2",
+     "kind": "key",
+     "cue": "c019",
+     "text": "已被我一腳踢開",
+     "why": "「已被」是完成式，表示反抗已經發生，與前面的招牌形成對照，是情緒轉折的關鍵。",
+     "vote": {
+      "id": "k2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "一腳踢開",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c019幾乎整句都是「已被我一腳踢開」，收窄為「一腳踢開」後仍是實際發生的反抗動作，且why指出完成式與招牌對照的解讀正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "已被我一腳踢開",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「已被我一腳踢開」原樣唱出，完成式描述反抗已發生，與前句招牌形成對照，是情緒轉折點，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "已被我一腳踢開",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c019 扣除括號後本身很短，整段「已被我一腳踢開」就是重點，完成式確實表示反抗已發生，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "已被我一腳踢開",
+      "why": "「已被」是完成式，表示反抗已經發生，與前面的招牌形成對照，是情緒轉折的關鍵。"
+     },
+     "verdicts": [
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "一腳踢開",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c019幾乎整句都是「已被我一腳踢開」，收窄為「一腳踢開」後仍是實際發生的反抗動作，且why指出完成式與招牌對照的解讀正確。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「已被我一腳踢開」原樣唱出，完成式描述反抗已發生，與前句招牌形成對照，是情緒轉折點，why 正確。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c019 扣除括號後本身很短，整段「已被我一腳踢開」就是重點，完成式確實表示反抗已發生，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k3",
+     "kind": "key",
+     "cue": "c022",
+     "text": "習武之人切記 \"仁者無敵\"",
+     "why": "引用格言，語氣看似正經，但接在張揚的自誇後形成反差，帶點戲謔。",
+     "vote": {
+      "id": "k3",
+      "status": "uncertain",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "仁者無敵",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "這句是正經的習武格言，本身不是反諷；與前面自誇的反差只能從脈絡推得，不是句子真正的意思。",
+        "reason": "drop: 句子字面是認真的道德格言，why把它解讀成反諷或戲謔，與句意不符。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": false,
+        "whyOk": false,
+        "correctedWhy": "句子以正經口吻引用武德格言，沒有明顯反諷，只是歌曲中的武術設定，不值得放大強調。",
+        "reason": "drop: 整句只是引用格言作為合唱中的武術設定，句意並非戲謔，why 的反諷解讀站不住，詞組也不足以承載強調。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": false,
+        "whyOk": false,
+        "correctedWhy": "這是正面引用的武德格言，前一句只是呼喊雙截棍，並沒有張揚自誇，因此不構成值得強調的反差。",
+        "reason": "drop: 前文並非自誇，反差與戲謔的解讀不成立，且格言本身不足以作為視覺強調的詞組。"
+       }
+      ],
+      "keepVotes": 0,
+      "kept": false,
+      "note": "0/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "仁者無敵",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "這句是正經的習武格言，本身不是反諷；與前面自誇的反差只能從脈絡推得，不是句子真正的意思。",
+       "verdict": "drop",
+       "reason": "句子字面是認真的道德格言，why把它解讀成反諷或戲謔，與句意不符。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "仁者無敵",
+       "phraseOk": false,
+       "whyOk": false,
+       "correctedWhy": "句子以正經口吻引用武德格言，沒有明顯反諷，只是歌曲中的武術設定，不值得放大強調。",
+       "verdict": "drop",
+       "reason": "整句只是引用格言作為合唱中的武術設定，句意並非戲謔，why 的反諷解讀站不住，詞組也不足以承載強調。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "仁者無敵",
+       "phraseOk": false,
+       "whyOk": false,
+       "correctedWhy": "這是正面引用的武德格言，前一句只是呼喊雙截棍，並沒有張揚自誇，因此不構成值得強調的反差。",
+       "verdict": "drop",
+       "reason": "前文並非自誇，反差與戲謔的解讀不成立，且格言本身不足以作為視覺強調的詞組。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "uncertain (0/3 keep): drop: 句子字面是認真的道德格言，why把它解讀成反諷或戲謔，與句意不符。 | drop: 整句只是引用格言作為合唱中的武術設定，句意並非戲謔，why 的反諷解讀站不住，詞組也不足以承載強調。 | drop: 前文並非自誇，反差與戲謔的解讀不成立，且格言本身不足以作為視覺強調的詞組。",
+     "status": "uncertain"
+    },
+    {
+     "id": "k4",
+     "kind": "key",
+     "cue": "c027",
+     "text": "為人耿直不屈 一身正氣",
+     "why": "自我標榜的正直形象，與前面的張狂對照，帶有調侃意味。",
+     "vote": {
+      "id": "k4",
+      "status": "uncertain",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": false,
+        "whyOk": false,
+        "correctedWhy": "耿直不屈是角色的自我標榜，語氣與前一句「飛簷走壁」的自誇相同，並無明顯的張狂對照，詞組本身不足以作為強調點。",
+        "reason": "drop: 這句只是另一個自誇，與前句沒有實質反差，why的對照說法站不住，詞組也不值得放大。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "一身正氣",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「一身正氣」原樣連續唱在c027，承載自我標榜的重點，搭配哈的語氣，帶有調侃意味，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "為人耿直不屈 一身正氣",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "句中是主角自我吹噓的正直形象，語氣與前段的張揚自誇同調，而不是與前面形成對照。",
+        "reason": "drop: why 把同樣的自誇誤讀為對照，實際上前後是同一種口吻，對照理由不成立。"
+       }
+      ],
+      "keepVotes": 1,
+      "kept": false,
+      "note": "1/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "為人耿直不屈",
+       "phraseOk": false,
+       "whyOk": false,
+       "correctedWhy": "耿直不屈是角色的自我標榜，語氣與前一句「飛簷走壁」的自誇相同，並無明顯的張狂對照，詞組本身不足以作為強調點。",
+       "verdict": "drop",
+       "reason": "這句只是另一個自誇，與前句沒有實質反差，why的對照說法站不住，詞組也不值得放大。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "一身正氣",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「一身正氣」原樣連續唱在c027，承載自我標榜的重點，搭配哈的語氣，帶有調侃意味，why 正確。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "句中是主角自我吹噓的正直形象，語氣與前段的張揚自誇同調，而不是與前面形成對照。",
+       "verdict": "drop",
+       "reason": "why 把同樣的自誇誤讀為對照，實際上前後是同一種口吻，對照理由不成立。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "uncertain (1/3 keep): drop: 這句只是另一個自誇，與前句沒有實質反差，why的對照說法站不住，詞組也不值得放大。 | drop: why 把同樣的自誇誤讀為對照，實際上前後是同一種口吻，對照理由不成立。",
+     "status": "uncertain"
+    },
+    {
+     "id": "m0",
+     "kind": "moment",
+     "cue": "c019",
+     "text": "strike/tear 踢",
+     "why": "c019 原文「東亞病夫的招牌 已被我一腳踢開」，「踢」是把羞辱的招牌踢開，與「踢、打、破」的撕裂動作同義，表示反抗與推開。",
+     "passAlone": false,
+     "vote": {
+      "id": "m0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c019實際唱「一腳踢開」，句子寫的就是把招牌踢開的動作，strike/tear畫踢的形式與句意一致，主賓關係正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c019 原句唱「踢開」，形式畫的踢動作與句子動作一致，正是反抗推開羞辱招牌的時刻。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c019 確實唱出「一腳踢開」，踢的字面動作對應反抗推開羞辱招牌，strike/tear 的形式成立。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c019實際唱「一腳踢開」，句子寫的就是把招牌踢開的動作，strike/tear畫踢的形式與句意一致，主賓關係正確。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "字面動作：踢開招牌→以踢的動作表示反抗推開",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c019 原句唱「踢開」，形式畫的踢動作與句子動作一致，正是反抗推開羞辱招牌的時刻。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "字面：踢開招牌的動作；招牌為字面物件，非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c019 確實唱出「一腳踢開」，踢的字面動作對應反抗推開羞辱招牌，strike/tear 的形式成立。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m1",
+     "kind": "moment",
+     "cue": "c020+c021",
+     "text": "echo/ghost 雙截棍",
+     "why": "c020 與 c021 皆唱「快使用雙截棍」，是副歌前後兩句重複同一詞的呼喊，並非比喻或否定。",
+     "passAlone": false,
+     "vote": {
+      "id": "m1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c020與c021確實前後重複「快使用雙截棍」，echo/ghost正對應這種副歌重複，且不是比喻或否定。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c020 與 c021 前後兩句都唱「雙截棍」，符合回聲形式的定義，是副歌的重複呼喊，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c020 與 c021 都唱「快使用雙截棍」，符合 echo/ghost 前後兩句重複同一詞的形式，是副歌的呼喊鉤子。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c020與c021確實前後重複「快使用雙截棍」，echo/ghost正對應這種副歌重複，且不是比喻或否定。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c020 與 c021 前後兩句都唱「雙截棍」，符合回聲形式的定義，是副歌的重複呼喊，why 正確。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻；echo 前後兩句唱同一詞",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c020 與 c021 都唱「快使用雙截棍」，符合 echo/ghost 前後兩句重複同一詞的形式，是副歌的呼喊鉤子。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    }
+   ]
+  },
+  {
+   "song": "snow",
+   "from": "out/research/instant/plans/snow/meaning.haiku-1109b.json",
+   "wrote": "out/research/instant/plans/snow/meaning.haiku-1109f.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 11941,
+    "output": 25543
+   },
+   "usd": 0.01397,
+   "calls": [
+    {
+     "usd": 0.0042,
+     "usage": {
+      "input": 3979,
+      "output": 7611
+     }
+    },
+    {
+     "usd": 0.00498,
+     "usage": {
+      "input": 3980,
+      "output": 9173
+     }
+    },
+    {
+     "usd": 0.00478,
+     "usage": {
+      "input": 3982,
+      "output": 8759
+     }
+    }
+   ],
+   "keys": {
+    "before": 5,
+    "after": 5,
+    "narrowed": 3
+   },
+   "moments": {
+    "before": 7,
+    "after": 5
+   },
+   "uncertain": [],
+   "candidates": [
+    {
+     "id": "k0",
+     "kind": "key",
+     "cue": "c002",
+     "text": "我再也不在你身邊",
+     "why": "「再也不」是明確的否定與結論，點出分離已成定局，是情緒的起點；它與後面「就像是你還在我身邊」的假想形成對照。",
+     "vote": {
+      "id": "k0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "我再也不在你身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且本身就是重點，「再也不在你身邊」是確定的分離結論，why 的解讀與後句假想形成的對照都正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "我再也不在你身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句很短且本身就是分離的核心陳述，「再也不」是確定的否定，與c023的假設形成對照，解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "我再也不在你身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子是明確的否定與結論，整句短且本身就是重點，與c023的假設形成對照，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "我再也不在你身邊",
+      "why": "「再也不」是明確的否定與結論，點出分離已成定局，是情緒的起點；它與後面「就像是你還在我身邊」的假想形成對照。"
+     },
+     "verdicts": [
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且本身就是重點，「再也不在你身邊」是確定的分離結論，why 的解讀與後句假想形成的對照都正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句很短且本身就是分離的核心陳述，「再也不」是確定的否定，與c023的假設形成對照，解讀正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子是明確的否定與結論，整句短且本身就是重點，與c023的假設形成對照，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k1",
+     "kind": "key",
+     "cue": "c013",
+     "text": "這次我們的手沒牽好",
+     "why": "「這次」暗示前次或過去的牽手，「沒牽好」是遺憾的具體來源，也襯托出副歌「遺憾總是能襯托出這樣美好」的反轉。",
+     "vote": {
+      "id": "k1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "手沒牽好",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "「這次」指的是眼前回想的這一次分離，不是前次牽手；「手沒牽好」正是這段遺憾的具體來源。",
+        "reason": "drop: 「這次」被誤讀為暗示前次牽手，why 的解讀不正確，雖然詞組本身值得強調。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "手沒牽好",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句收窄為承載遺憾的「手沒牽好」原樣連續唱出，句意確為遺憾，why 的核心解讀正確（「襯托反轉」只是延伸）。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "這次我們的手沒牽好",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「沒牽好」是確實發生的遺憾，整句很短且就是遺憾的核心，why 的解讀可接受。"
+       }
+      ],
+      "keepVotes": 2,
+      "kept": true,
+      "note": "2/3 keep, 1 why-only drop",
+      "phrase": "手沒牽好",
+      "why": "「這次」暗示前次或過去的牽手，「沒牽好」是遺憾的具體來源，也襯托出副歌「遺憾總是能襯托出這樣美好」的反轉。"
+     },
+     "verdicts": [
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "手沒牽好",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "「這次」指的是眼前回想的這一次分離，不是前次牽手；「手沒牽好」正是這段遺憾的具體來源。",
+       "verdict": "drop",
+       "reason": "「這次」被誤讀為暗示前次牽手，why 的解讀不正確，雖然詞組本身值得強調。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "手沒牽好",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句收窄為承載遺憾的「手沒牽好」原樣連續唱出，句意確為遺憾，why 的核心解讀正確（「襯托反轉」只是延伸）。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「沒牽好」是確實發生的遺憾，整句很短且就是遺憾的核心，why 的解讀可接受。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "手沒牽好",
+     "status": "kept"
+    },
+    {
+     "id": "k2",
+     "kind": "key",
+     "cue": "c020",
+     "text": "才想起大雪的那一天",
+     "why": "「才想起」表示遲來的記起，時間距離把當時的遺憾翻出來，是從現在回望的轉折。",
+     "vote": {
+      "id": "k2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "才想起",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「才想起」是確實發生的遲來記起，正是從現在回望、翻出遺憾的轉折，收窄後的重點成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "才想起",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「才想起」這個遲來回憶的轉折詞，確實記起是已發生的事，why 對時間距離的解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "才想起大雪的那一天",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「才想起」是確實發生的遲來回憶，整句短且承載這個轉折，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "才想起",
+      "why": "「才想起」表示遲來的記起，時間距離把當時的遺憾翻出來，是從現在回望的轉折。"
+     },
+     "verdicts": [
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "才想起",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「才想起」是確實發生的遲來記起，正是從現在回望、翻出遺憾的轉折，收窄後的重點成立。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "才想起",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「才想起」這個遲來回憶的轉折詞，確實記起是已發生的事，why 對時間距離的解讀正確。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「才想起」是確實發生的遲來回憶，整句短且承載這個轉折，why 正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "才想起",
+     "status": "kept"
+    },
+    {
+     "id": "k3",
+     "kind": "key",
+     "cue": "c023",
+     "text": "就像是你還在我身邊",
+     "why": "「就像是」是假設與幻覺，不是真的還在；它與c002的否定對比，顯示思念中的想像與現實的落差。",
+     "vote": {
+      "id": "k3",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "你還在我身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「就像是」明確把句意標為假想，強調這個假想與 c002 的否定形成對照，why 的解讀正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "就像是你還在我身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句是假設與想像的對照，短句的整句即重點，與c002的否定形成落差，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "就像是你還在我身邊",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子本身就是假設與幻覺，與c002的否定形成對照，強調它是合理的，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "就像是你還在我身邊",
+      "why": "「就像是」是假設與幻覺，不是真的還在；它與c002的否定對比，顯示思念中的想像與現實的落差。"
+     },
+     "verdicts": [
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "你還在我身邊",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「就像是」明確把句意標為假想，強調這個假想與 c002 的否定形成對照，why 的解讀正確。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "假設性比喻：思念中的想像→你還在身邊",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句是假設與想像的對照，短句的整句即重點，與c002的否定形成落差，why 正確。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：假設語，「就像是你還在我身邊」是想像而非事實",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子本身就是假設與幻覺，與c002的否定形成對照，強調它是合理的，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k4",
+     "kind": "key",
+     "cue": "c039",
+     "text": "思念的人總學不會說再見",
+     "why": "「學不會說再見」是放不下的執著，不是拒絕離開的堅定，而是無法從回憶中解脫的痛。",
+     "vote": {
+      "id": "k4",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "學不會說再見",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「學不會」表示無法放下的執著與痛，收窄到「學不會說再見」後的解讀正確且值得強調。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "學不會說再見",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「學不會說再見」，表達放不下的執著與回憶中的痛，why 的解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "學不會說再見",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「學不會說再見」後，表達的是放不下的執著與痛，why 的解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "學不會說再見",
+      "why": "「學不會說再見」是放不下的執著，不是拒絕離開的堅定，而是無法從回憶中解脫的痛。"
+     },
+     "verdicts": [
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "學不會說再見",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「學不會」表示無法放下的執著與痛，收窄到「學不會說再見」後的解讀正確且值得強調。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "學不會說再見",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「學不會說再見」，表達放不下的執著與回憶中的痛，why 的解讀正確。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "學不會說再見",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「學不會說再見」後，表達的是放不下的執著與痛，why 的解讀正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "學不會說再見",
+     "status": "kept"
+    },
+    {
+     "id": "m0",
+     "kind": "moment",
+     "cue": "c001",
+     "text": "shape/fall 大雪",
+     "why": "c001「三年後的大雪」中大雪是真實降下的雪，動作是落下，屬於雪的墜落意象，以下落的形態呈現時間流逝。",
+     "passAlone": true,
+     "vote": {
+      "id": "m0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c001 直接唱的是真實降下的大雪，畫雪的下落與句意相符，雖然「時間流逝」是延伸但不影響成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子本身在講真實的大雪，畫面落下的雪與字面相符，「大雪」值得作為視覺主題。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句中的大雪是真實降下的雪，以墜落的雪作為時間流逝的圖像成立。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，字面的雪下落",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c001 直接唱的是真實降下的大雪，畫雪的下落與句意相符，雖然「時間流逝」是延伸但不影響成立。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "字面：大雪→落下的雪",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子本身在講真實的大雪，畫面落下的雪與字面相符，「大雪」值得作為視覺主題。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：大雪為字面的雪，形式畫雪的墜落",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句中的大雪是真實降下的雪，以墜落的雪作為時間流逝的圖像成立。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m1",
+     "kind": "moment",
+     "cue": "c003",
+     "text": "strike/tear 破碎",
+     "why": "c003「無盡的思念總是破碎在冬天」中「破碎」是思念被擊碎的實際動作，表達思念在冬天一再碎裂。",
+     "passAlone": true,
+     "vote": {
+      "id": "m1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「破碎」是句子自己給的比喻，形式畫碎裂的動作與思念被反覆撕裂的意思一致。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子自己用「破碎」描寫思念，碎裂的畫面是句子給出的意象，why 的核心（冬天一再碎裂）正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「總是」表示反覆發生的實際狀況，句子自己說思念在冬天破碎，畫面支持，why 大致正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "思念→被碎裂的物件（句子自己用破碎作比喻）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「破碎」是句子自己給的比喻，形式畫碎裂的動作與思念被反覆撕裂的意思一致。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "思念→碎裂之物",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子自己用「破碎」描寫思念，碎裂的畫面是句子給出的意象，why 的核心（冬天一再碎裂）正確。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "思念→碎裂之物（隱含比喻）；形式畫破碎的動作",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「總是」表示反覆發生的實際狀況，句子自己說思念在冬天破碎，畫面支持，why 大致正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m2",
+     "kind": "moment",
+     "cue": "c005",
+     "text": "strike/melt 融化",
+     "why": "c005「那些悲傷融化了從前」中悲傷真的化開消散，表示過去的悲傷已經被時間化掉。",
+     "passAlone": true,
+     "vote": {
+      "id": "m2",
+      "status": "rejected",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "悲傷是把從前融化的一方，融化的是從前，不是悲傷自己化開消散。",
+        "reason": "drop: 主詞與受詞顛倒：是悲傷融化了從前，why 卻寫成悲傷自己化掉，方向錯誤。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "悲傷是使從前融化的力量，融化的對象是從前，表示悲傷把過去化開、被時間消融，而不是悲傷自己消散。",
+        "reason": "drop: 主詞與受詞顛倒：句子是悲傷融化了從前，why 卻寫成悲傷自己被化掉，方向不符。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "悲傷把從前融化掉，是悲傷作用於過去的時光，不是悲傷自己化開消散。",
+        "reason": "drop: 主詞與受詞顛倒：句子是悲傷融化了從前，why 卻說悲傷自己化開消散，方向錯誤。"
+       }
+      ],
+      "keepVotes": 0,
+      "kept": false,
+      "note": "0/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "悲傷→融化的物件",
+       "directionOk": false,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "悲傷是把從前融化的一方，融化的是從前，不是悲傷自己化開消散。",
+       "verdict": "drop",
+       "reason": "主詞與受詞顛倒：是悲傷融化了從前，why 卻寫成悲傷自己化掉，方向錯誤。"
+      },
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "悲傷→融化之物（融化從前）",
+       "directionOk": false,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "悲傷是使從前融化的力量，融化的對象是從前，表示悲傷把過去化開、被時間消融，而不是悲傷自己消散。",
+       "verdict": "drop",
+       "reason": "主詞與受詞顛倒：句子是悲傷融化了從前，why 卻寫成悲傷自己被化掉，方向不符。"
+      },
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "悲傷→熱能或融化物（隱含比喻）；從前→被融化之物",
+       "directionOk": false,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "悲傷把從前融化掉，是悲傷作用於過去的時光，不是悲傷自己化開消散。",
+       "verdict": "drop",
+       "reason": "主詞與受詞顛倒：句子是悲傷融化了從前，why 卻說悲傷自己化開消散，方向錯誤。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "rejected (0/3 keep): drop: 主詞與受詞顛倒：是悲傷融化了從前，why 卻寫成悲傷自己化掉，方向錯誤。 | drop: 主詞與受詞顛倒：句子是悲傷融化了從前，why 卻寫成悲傷自己被化掉，方向不符。 | drop: 主詞與受詞顛倒：句子是悲傷融化了從前，why 卻說悲傷自己化開消散，方向錯誤。",
+     "status": "rejected"
+    },
+    {
+     "id": "m3",
+     "kind": "moment",
+     "cue": "c008",
+     "text": "shape/fall 飄雪",
+     "why": "c008「夜晚的橋邊在飄雪」描寫真實的落雪，與回憶的場景相連，畫面是雪緩緩往下飄。",
+     "passAlone": true,
+     "vote": {
+      "id": "m3",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c008 描寫的是真實的飄雪場景，畫面的雪緩緩下落與句意一致。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子描寫橋邊真實的飄雪，形式畫的正是字面的雪，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子描寫的是真實在下的雪，形式畫雪緩緩飄落，與場景一致。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，字面的落雪",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c008 描寫的是真實的飄雪場景，畫面的雪緩緩下落與句意一致。"
+      },
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "字面：飄雪→雪緩緩落下",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子描寫橋邊真實的飄雪，形式畫的正是字面的雪，why 正確。"
+      },
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：字面描寫夜晚橋邊的落雪",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子描寫的是真實在下的雪，形式畫雪緩緩飄落，與場景一致。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m4",
+     "kind": "moment",
+     "cue": "c009",
+     "text": "shape/fall 凋落的楓葉",
+     "why": "c009「回憶就像是那凋落的楓葉」是比喻，本體是回憶，喻體是楓葉凋落；取的是凋落下墜、無法挽回的意思。",
+     "passAlone": true,
+     "vote": {
+      "id": "m4",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子明說回憶像凋落的楓葉，形式畫葉子的飄落與無法挽回的意思正對應。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子明白以「回憶就像是」給出比喻，形式畫的是喻體楓葉凋落，屬於句子自己給的畫面，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子自己用「就像是」給出回憶與凋落楓葉的比喻，形式畫的正是這個凋落下墜的動作。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "回憶→凋落的楓葉（句子自己明說的明喻）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子明說回憶像凋落的楓葉，形式畫葉子的飄落與無法挽回的意思正對應。"
+      },
+      {
+       "id": "m4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "回憶→凋落的楓葉",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子明白以「回憶就像是」給出比喻，形式畫的是喻體楓葉凋落，屬於句子自己給的畫面，why 正確。"
+      },
+      {
+       "id": "m4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "回憶→凋落的楓葉（句子明說的比喻）；畫面為楓葉凋落",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子自己用「就像是」給出回憶與凋落楓葉的比喻，形式畫的正是這個凋落下墜的動作。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m5",
+     "kind": "moment",
+     "cue": "c022",
+     "text": "freeze/stop 那三年大雪下的一瞬間",
+     "why": "c022「期盼著那三年大雪下的一瞬間」中一瞬間是被期盼停住的重逢時刻，是短暫定格的畫面，但仍是期待而非已發生。",
+     "passAlone": true,
+     "vote": {
+      "id": "m5",
+      "status": "rejected",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "「期盼著」是願望，重逢的一瞬間尚未發生，不能把它畫成已定格的實際畫面。",
+        "reason": "drop: 整句是期盼而非已發生，形式把尚未發生的重逢定格成畫面，違反願望不能當成已發生的原則。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "句子是期盼三年大雪下的一瞬間，這一瞬間尚未發生，只是願望，不應畫成已經定格的實際畫面。",
+        "reason": "drop: 句子是願望而非已發生，把它畫成真實定格的瞬間違反了願望不能當作已發生的原則。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "句子是期盼一個尚未發生的重逢瞬間，定格畫面只能當作願望，不能當成已經停住的事實。",
+        "reason": "drop: 「期盼著」表示願望而非已發生，定格的形式把未發生的瞬間當成實際畫面，不支持。"
+       }
+      ],
+      "keepVotes": 0,
+      "kept": false,
+      "note": "0/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m5",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻，期盼中的一瞬間被定格",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "「期盼著」是願望，重逢的一瞬間尚未發生，不能把它畫成已定格的實際畫面。",
+       "verdict": "drop",
+       "reason": "整句是期盼而非已發生，形式把尚未發生的重逢定格成畫面，違反願望不能當成已發生的原則。"
+      },
+      {
+       "id": "m5",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻：期盼→定格的瞬間",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "句子是期盼三年大雪下的一瞬間，這一瞬間尚未發生，只是願望，不應畫成已經定格的實際畫面。",
+       "verdict": "drop",
+       "reason": "句子是願望而非已發生，把它畫成真實定格的瞬間違反了願望不能當作已發生的原則。"
+      },
+      {
+       "id": "m5",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻：被期盼的重逢瞬間，形式畫定格",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "句子是期盼一個尚未發生的重逢瞬間，定格畫面只能當作願望，不能當成已經停住的事實。",
+       "verdict": "drop",
+       "reason": "「期盼著」表示願望而非已發生，定格的形式把未發生的瞬間當成實際畫面，不支持。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "rejected (0/3 keep): drop: 整句是期盼而非已發生，形式把尚未發生的重逢定格成畫面，違反願望不能當成已發生的原則。 | drop: 句子是願望而非已發生，把它畫成真實定格的瞬間違反了願望不能當作已發生的原則。 | drop: 「期盼著」表示願望而非已發生，定格的形式把未發生的瞬間當成實際畫面，不支持。",
+     "status": "rejected"
+    },
+    {
+     "id": "m6",
+     "kind": "moment",
+     "cue": "c042+c043",
+     "text": "echo/ghost 三年後",
+     "why": "c042「三年後的大雪」與c043「三年後的今天」前後兩句唱同一個詞，用重複強調時間的距離。",
+     "passAlone": true,
+     "vote": {
+      "id": "m6",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c042 與 c043 確實重複「三年後」，重複的時間詞正強調時間距離，與句意相符。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「三年後」在相鄰兩句原樣重複，形式的回聲正對應時間距離的強調，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c042與c043相鄰重複「三年後」，確實強調時間距離，且句意是實際的時間跨度，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m6",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，前後兩句重複「三年後」",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c042 與 c043 確實重複「三年後」，重複的時間詞正強調時間距離，與句意相符。"
+      },
+      {
+       "id": "m6",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：重複的時間詞強調距離",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「三年後」在相鄰兩句原樣重複，形式的回聲正對應時間距離的強調，why 正確。"
+      },
+      {
+       "id": "m6",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：前後兩句重複「三年後」，形式畫回聲式重複",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c042與c043相鄰重複「三年後」，確實強調時間距離，且句意是實際的時間跨度，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    }
+   ]
+  },
+  {
+   "song": "tsuzuki",
+   "from": "out/research/instant/plans/tsuzuki/meaning.haiku-1109b.json",
+   "wrote": "out/research/instant/plans/tsuzuki/meaning.haiku-1109f.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 10398,
+    "output": 27777
+   },
+   "usd": 0.01493,
+   "calls": [
+    {
+     "usd": 0.00545,
+     "usage": {
+      "input": 3466,
+      "output": 10201
+     }
+    },
+    {
+     "usd": 0.00465,
+     "usage": {
+      "input": 3467,
+      "output": 8600
+     }
+    },
+    {
+     "usd": 0.00483,
+     "usage": {
+      "input": 3465,
+      "output": 8976
+     }
+    }
+   ],
+   "keys": {
+    "before": 5,
+    "after": 5,
+    "narrowed": 1
+   },
+   "moments": {
+    "before": 5,
+    "after": 3
+   },
+   "uncertain": [
+    {
+     "id": "m3",
+     "keepVotes": 1,
+     "note": "1/3 keep"
+    }
+   ],
+   "candidates": [
+    {
+     "id": "k0",
+     "kind": "key",
+     "cue": "c011",
+     "text": "よせる波に隠れてしまうの",
+     "why": "笑容被波浪遮住，是失去的具體畫面，也是全曲失落感的核心意象，後面的「信じてみる」正是對這份失去的回應。",
+     "vote": {
+      "id": "k0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "よせる波に隠れてしまう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子是為何笑容被波浪遮住的確實發生之事，收窄後的「よせる波に隠れてしまう」承載失去的畫面，why 解讀正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "よせる波に隠れてしまう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「どうして」是對已發生的失去的感嘆，波遮住笑顔的畫面正是句子核心，why 解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "よせる波に隠れてしまう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄後的「よせる波に隠れてしまう」是確實發生的失去畫面，why 正確描述了笑容被波浪遮住這個全曲失落核心。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "よせる波に隠れてしまう",
+      "why": "笑容被波浪遮住，是失去的具體畫面，也是全曲失落感的核心意象，後面的「信じてみる」正是對這份失去的回應。"
+     },
+     "verdicts": [
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻（字面：波浪遮住笑容）",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "よせる波に隠れてしまう",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子是為何笑容被波浪遮住的確實發生之事，收窄後的「よせる波に隠れてしまう」承載失去的畫面，why 解讀正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：笑顔が波に隠れる，字面的波浪",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "よせる波に隠れてしまう",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「どうして」是對已發生的失去的感嘆，波遮住笑顔的畫面正是句子核心，why 解讀正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：字面描述波浪湧來遮住笑容",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "よせる波に隠れてしまう",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄後的「よせる波に隠れてしまう」是確實發生的失去畫面，why 正確描述了笑容被波浪遮住這個全曲失落核心。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "よせる波に隠れてしまう",
+     "status": "kept"
+    },
+    {
+     "id": "k1",
+     "kind": "key",
+     "cue": "c014",
+     "text": "信じてみる",
+     "why": "由「信じられる？」的疑問轉為主動的嘗試，是情緒轉折的關鍵；「みる」帶有試一試的不確定，因此是決心而非篤定。",
+     "vote": {
+      "id": "k1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "信じてみる",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句只有「信じてみる」兩次且很短，整句即重點；「みる」是嘗試與決心而非已成事實，why 解讀正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "信じてみる",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句很短且就是重點，「信じてみる」表示嘗試而非已確信，從前面的疑問轉為主動，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "信じてみる",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且即為重點，「信じてみる」表達嘗試與決心，why 正確指出它是從疑問轉向主動嘗試。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "信じてみる",
+      "why": "由「信じられる？」的疑問轉為主動的嘗試，是情緒轉折的關鍵；「みる」帶有試一試的不確定，因此是決心而非篤定。"
+     },
+     "verdicts": [
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句只有「信じてみる」兩次且很短，整句即重點；「みる」是嘗試與決心而非已成事實，why 解讀正確。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句很短且就是重點，「信じてみる」表示嘗試而非已確信，從前面的疑問轉為主動，why 正確。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且即為重點，「信じてみる」表達嘗試與決心，why 正確指出它是從疑問轉向主動嘗試。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k2",
+     "kind": "key",
+     "cue": "c010",
+     "text": "かわることなく見えた笑顔",
+     "why": "笑容曾經看似永不改變，這份落差使後面的失去更痛，屬於對比的起點。",
+     "vote": {
+      "id": "k2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "かわることなく見えた笑顔",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「見えた」點出表象與後來失去的落差，強調「不變的笑容」作為對比起點成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "かわることなく見えた笑顔",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「見えた」是曾經的事實，與後面失去形成對比，作為起點值得強調，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "かわることなく見えた笑顔",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「見えた」點出笑容當時只是看似不變，作為後續失去的對比起點，why 的解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "かわることなく見えた笑顔",
+      "why": "笑容曾經看似永不改變，這份落差使後面的失去更痛，屬於對比的起點。"
+     },
+     "verdicts": [
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「見えた」點出表象與後來失去的落差，強調「不變的笑容」作為對比起點成立。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「見えた」是曾經的事實，與後面失去形成對比，作為起點值得強調，why 正確。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "かわることなく見えた笑顔",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「見えた」點出笑容當時只是看似不變，作為後續失去的對比起點，why 的解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k3",
+     "kind": "key",
+     "cue": "c022",
+     "text": "夢のつづきで また会いましょう",
+     "why": "把離別化為夢的延續，約定再見，是希望的落點，也呼應歌名「世界のつづき」。",
+     "vote": {
+      "id": "k3",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "夢のつづきで また会いましょう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句雖是願望式約定，但十四字的短句本身即是情感落點，why 把它讀為希望而非已發生之事，且呼應「つづき」正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "夢のつづきで また会いましょう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且本身就是希望與約定的重點，「また会いましょう」是願望而非已發生，why 以希望來理解，正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "夢のつづきで また会いましょう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是重點，「また会いましょう」是希望與約定而非已發生之事，why 把它讀作希望的落點並呼應歌名正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "夢のつづきで また会いましょう",
+      "why": "把離別化為夢的延續，約定再見，是希望的落點，也呼應歌名「世界のつづき」。"
+     },
+     "verdicts": [
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句雖是願望式約定，但十四字的短句本身即是情感落點，why 把它讀為希望而非已發生之事，且呼應「つづき」正確。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且本身就是希望與約定的重點，「また会いましょう」是願望而非已發生，why 以希望來理解，正確。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是重點，「また会いましょう」是希望與約定而非已發生之事，why 把它讀作希望的落點並呼應歌名正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k4",
+     "kind": "key",
+     "cue": "c027",
+     "text": "共に生きよう",
+     "why": "從個人的回想走向共同生存的邀請，是全曲情感的收束與承諾。",
+     "vote": {
+      "id": "k4",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "共に生きよう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「共に生きよう」是邀請與意願，不是已發生之事，作為全曲收束的強調詞組成立，why 解讀正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "共に生きよう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「共に生きよう」是邀請與承諾，不當作已發生，且是結尾的情感收束，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "共に生きよう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「共に生きよう」是邀請與承諾的語氣而非已發生之事，why 正確理解為收束與承諾。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "共に生きよう",
+      "why": "從個人的回想走向共同生存的邀請，是全曲情感的收束與承諾。"
+     },
+     "verdicts": [
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「共に生きよう」是邀請與意願，不是已發生之事，作為全曲收束的強調詞組成立，why 解讀正確。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「共に生きよう」是邀請與承諾，不當作已發生，且是結尾的情感收束，why 正確。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「共に生きよう」是邀請與承諾的語氣而非已發生之事，why 正確理解為收束與承諾。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m0",
+     "kind": "moment",
+     "cue": "c011",
+     "text": "shape/wave 波",
+     "why": "c011原句「どうして よせる波に隠れてしまうの」，波真的湧來遮住笑容，「波」是字面的海浪，符合shape/wave。",
+     "passAlone": true,
+     "vote": {
+      "id": "m0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句中「よせる波」是字面的實際事物且確實遮住笑容，畫波浪符合句意，why 正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子本身在講波浪遮住笑顔，畫波浪與句意一致，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c011 字面寫的就是波湧來，shape/wave 畫的正是句中的波，why 描述正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻（字面：波浪真的湧來遮住笑容）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句中「よせる波」是字面的實際事物且確實遮住笑容，畫波浪符合句意，why 正確。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：字面的波浪遮住笑顔",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子本身在講波浪遮住笑顔，畫波浪與句意一致，why 正確。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：字面的波浪湧來遮住笑容，句子本身講的就是波",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c011 字面寫的就是波湧來，shape/wave 畫的正是句中的波，why 描述正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m1",
+     "kind": "moment",
+     "cue": "c001",
+     "text": "shape/wave 海",
+     "why": "c001「あの日遊んだ海のにおい」，海是實際回想的海，不是比喻，符合shape/wave。",
+     "passAlone": true,
+     "vote": {
+      "id": "m1",
+      "status": "rejected",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "句子講的是「海のにおい」這份嗅覺記憶，不是海浪本身；畫波浪與句意不符，應強調的是氣味與回想。",
+        "reason": "drop: 形式畫的波浪是句子沒有在講的東西，句子重點是海的氣味，lineSupports 與 whyOk 都不成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": false,
+        "whyOk": false,
+        "correctedWhy": "句子講的是記憶中海的氣味（嗅覺），不是海浪，畫海浪與句意不符。",
+        "reason": "drop: 「海のにおい」講的是氣味，形式卻畫海浪，屬於畫了句子沒在講的東西。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "句子說的是海的氣味這份回想，並不是海浪；形式畫海浪與句子講的東西不符。",
+        "reason": "drop: c001 句子講的是「海のにおい」（氣味），形式畫海浪，與句意不符，而 why 誤把它當成海浪畫面。"
+       }
+      ],
+      "keepVotes": 0,
+      "kept": false,
+      "note": "0/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "句子講海的氣味（回想的嗅覺），形式畫的是海浪，不是句中所講之物",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "句子講的是「海のにおい」這份嗅覺記憶，不是海浪本身；畫波浪與句意不符，應強調的是氣味與回想。",
+       "verdict": "drop",
+       "reason": "形式畫的波浪是句子沒有在講的東西，句子重點是海的氣味，lineSupports 與 whyOk 都不成立。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻：句子講的是海的氣味，形式卻畫海浪",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": false,
+       "whyOk": false,
+       "correctedWhy": "句子講的是記憶中海的氣味（嗅覺），不是海浪，畫海浪與句意不符。",
+       "verdict": "drop",
+       "reason": "「海のにおい」講的是氣味，形式卻畫海浪，屬於畫了句子沒在講的東西。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "句子講的是海的氣味（回想的記憶），形式卻畫海浪（shape/wave），不是同一件事",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "句子說的是海的氣味這份回想，並不是海浪；形式畫海浪與句子講的東西不符。",
+       "verdict": "drop",
+       "reason": "c001 句子講的是「海のにおい」（氣味），形式畫海浪，與句意不符，而 why 誤把它當成海浪畫面。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "rejected (0/3 keep): drop: 形式畫的波浪是句子沒有在講的東西，句子重點是海的氣味，lineSupports 與 whyOk 都不成立。 | drop: 「海のにおい」講的是氣味，形式卻畫海浪，屬於畫了句子沒在講的東西。 | drop: c001 句子講的是「海のにおい」（氣味），形式畫海浪，與句意不符，而 why 誤把它當成海浪畫面。",
+     "status": "rejected"
+    },
+    {
+     "id": "m2",
+     "kind": "moment",
+     "cue": "c002",
+     "text": "strike/wipe 消えて",
+     "why": "c002「すぎる季節に消えてしまうの」，季節裡的某物真的消失了，「消えて」即消失之意，符合strike/wipe。",
+     "passAlone": true,
+     "vote": {
+      "id": "m2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「どうして…消えてしまうの」問的是確實發生的消失，「消えて」對應擦去/消失的形式，why 正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「どうして…消えてしまうの」問的是已發生的消失，擦去的形式與之相符，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「消えてしまう」是確實發生的消失，是問為何會消失的感嘆句，strike/wipe 符合且 why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻（消失：某物在季節中真的消失）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「どうして…消えてしまうの」問的是確實發生的消失，「消えて」對應擦去/消失的形式，why 正確。"
+      },
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：季節中的某物真的消失",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「どうして…消えてしまうの」問的是已發生的消失，擦去的形式與之相符，why 正確。"
+      },
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：字面的某物在季節中消失",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「消えてしまう」是確實發生的消失，是問為何會消失的感嘆句，strike/wipe 符合且 why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m3",
+     "kind": "moment",
+     "cue": "c005+c007",
+     "text": "echo/ghost 信じられる",
+     "why": "c005與c007前後兩句都唱「信じられる」，同一個詞在相鄰句迴響，符合echo/ghost。",
+     "passAlone": true,
+     "vote": {
+      "id": "m3",
+      "status": "uncertain",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "c005與c007之間隔著c006，並非相鄰句；這是跨句重複「信じられる」的回聲，強調反覆追問能否相信。",
+        "reason": "drop: 重複詞本身值得強調，但 why 誤說成相鄰句迴響，解讀有誤，因此不保留。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「信じられる？」在前後句重複，迴響形式對應反覆自問的語意，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "drop: c005 與 c007 皆是疑問「信じられる？」，問的是能不能相信、尚未發生，不能支持 echo 形式所強調的已成立之事。"
+       }
+      ],
+      "keepVotes": 1,
+      "kept": false,
+      "note": "1/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻（重複的回聲形式）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "c005與c007之間隔著c006，並非相鄰句；這是跨句重複「信じられる」的回聲，強調反覆追問能否相信。",
+       "verdict": "drop",
+       "reason": "重複詞本身值得強調，但 why 誤說成相鄰句迴響，解讀有誤，因此不保留。"
+      },
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：前後句重複同一個疑問",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「信じられる？」在前後句重複，迴響形式對應反覆自問的語意，why 正確。"
+      },
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻：字面重複「信じられる」",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "drop",
+       "reason": "c005 與 c007 皆是疑問「信じられる？」，問的是能不能相信、尚未發生，不能支持 echo 形式所強調的已成立之事。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "uncertain (1/3 keep): drop: 重複詞本身值得強調，但 why 誤說成相鄰句迴響，解讀有誤，因此不保留。 | drop: c005 與 c007 皆是疑問「信じられる？」，問的是能不能相信、尚未發生，不能支持 echo 形式所強調的已成立之事。",
+     "status": "uncertain"
+    },
+    {
+     "id": "m4",
+     "kind": "moment",
+     "cue": "c014+c016",
+     "text": "echo/ghost 信じてみる",
+     "why": "c014與c016前後兩句都唱「信じてみる」，同一個詞迴響並加重決心，符合echo/ghost。",
+     "passAlone": true,
+     "vote": {
+      "id": "m4",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c014與c016反覆唱「信じてみる」，回聲強化決心，符合 echo/ghost 的前後兩句定義，why 正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「信じてみる」在前後句重複，迴響形式強化決心，句意支持，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c014 與 c016 皆為決心式的陳述，前後迴響正加重決心，echo/ghost 形式與句意相符，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻（重複的回聲形式）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c014與c016反覆唱「信じてみる」，回聲強化決心，符合 echo/ghost 的前後兩句定義，why 正確。"
+      },
+      {
+       "id": "m4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：前後句重複同一個決心",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「信じてみる」在前後句重複，迴響形式強化決心，句意支持，why 正確。"
+      },
+      {
+       "id": "m4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻：字面重複「信じてみる」",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c014 與 c016 皆為決心式的陳述，前後迴響正加重決心，echo/ghost 形式與句意相符，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    }
+   ]
+  },
+  {
+   "song": "choroin",
+   "from": "out/research/instant/plans/choroin/meaning.haiku-1109b.json",
+   "wrote": "out/research/instant/plans/choroin/meaning.haiku-1109f.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 18084,
+    "output": 37516
+   },
+   "usd": 0.02057,
+   "calls": [
+    {
+     "usd": 0.00739,
+     "usage": {
+      "input": 6028,
+      "output": 13569
+     }
+    },
+    {
+     "usd": 0.00568,
+     "usage": {
+      "input": 6029,
+      "output": 10154
+     }
+    },
+    {
+     "usd": 0.0075,
+     "usage": {
+      "input": 6027,
+      "output": 13793
+     }
+    }
+   ],
+   "keys": {
+    "before": 21,
+    "after": 21,
+    "narrowed": 5
+   },
+   "moments": {
+    "before": 4,
+    "after": 3
+   },
+   "uncertain": [
+    {
+     "id": "m3",
+     "keepVotes": 2,
+     "note": "2/3 keep"
+    }
+   ],
+   "candidates": [
+    {
+     "id": "k0",
+     "kind": "key",
+     "cue": "c001",
+     "text": "恋に恋 来い",
+     "why": "開場的核心呼喊，「戀愛本身」成為渴望的對象，後段「恋に恋しているんです」呼應，定下全曲對戀愛的憧憬基調。",
+     "vote": {
+      "id": "k0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "恋に恋 来い",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "開場核心呼喊，「恋に恋 来い」把戀愛本身當成渴望對象，且只是整句的一部分。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "恋に恋 来い",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「恋に恋 来い」是整句的核心呼喊，把戀愛本身當作渴望對象，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "恋に恋 来い",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「恋に恋 来い」是整句中的核心渴望呼喊，「来い」雖是願望但正是重點，why 對戀愛本身作為渴望對象的解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "恋に恋 来い",
+      "why": "開場的核心呼喊，「戀愛本身」成為渴望的對象，後段「恋に恋しているんです」呼應，定下全曲對戀愛的憧憬基調。"
+     },
+     "verdicts": [
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "開場核心呼喊，「恋に恋 来い」把戀愛本身當成渴望對象，且只是整句的一部分。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「恋に恋 来い」是整句的核心呼喊，把戀愛本身當作渴望對象，why 正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「恋に恋 来い」是整句中的核心渴望呼喊，「来い」雖是願望但正是重點，why 對戀愛本身作為渴望對象的解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k1",
+     "kind": "key",
+     "cue": "c013",
+     "text": "上流階級のはずなのに満たされないの",
+     "why": "「はずなのに」帶出反差，身分看似優渥卻仍不滿足，是自嘲式的心理描寫，為後段的渴望埋下伏筆。",
+     "vote": {
+      "id": "k1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "上流階級のはずなのに満たされないの",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「はずなのに」製造身分與滿足感的反差，是自嘲式心理描寫，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "上流階級のはずなのに満たされないの",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「はずなのに」形成身分與不滿的反差，是句中有效的強調段落，解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "上流階級のはずなのに満たされないの",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「はずなのに」的反差與「満たされないの」的不滿是整句真正承載的意思，收窄後仍成立，why 解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "上流階級のはずなのに満たされないの",
+      "why": "「はずなのに」帶出反差，身分看似優渥卻仍不滿足，是自嘲式的心理描寫，為後段的渴望埋下伏筆。"
+     },
+     "verdicts": [
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「はずなのに」製造身分與滿足感的反差，是自嘲式心理描寫，成立。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「はずなのに」形成身分與不滿的反差，是句中有效的強調段落，解讀正確。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "上流階級のはずなのに満たされないの",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「はずなのに」的反差與「満たされないの」的不滿是整句真正承載的意思，收窄後仍成立，why 解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k2",
+     "kind": "key",
+     "cue": "c014",
+     "text": "深刻なときめき不足",
+     "why": "用誇張的病名式說法描述心動不足，語氣輕鬆但真實反映出對「被心動」的需要。",
+     "vote": {
+      "id": "k2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "深刻なときめき不足",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "誇張的病名式自嘲，原句實際唱出，語氣成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "深刻なときめき不足",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「深刻なときめき不足」是自嘲式的核心說法，語氣與 why 一致。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "深刻なときめき不足",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「深刻なときめき不足」是整句中自嘲的誇張說法，確實是值得強調的詞組，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "深刻なときめき不足",
+      "why": "用誇張的病名式說法描述心動不足，語氣輕鬆但真實反映出對「被心動」的需要。"
+     },
+     "verdicts": [
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "誇張的病名式自嘲，原句實際唱出，語氣成立。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「深刻なときめき不足」是自嘲式的核心說法，語氣與 why 一致。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "誇張的自嘲說法，非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「深刻なときめき不足」是整句中自嘲的誇張說法，確實是值得強調的詞組，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k3",
+     "kind": "key",
+     "cue": "c018",
+     "text": "剥がされてく",
+     "why": "被工作人員慢慢帶離，是現場中距離感的具體畫面，與「もっと話したい」形成拉扯。",
+     "vote": {
+      "id": "k3",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "剥がされてく",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「剥がされてく」是字面的被帶離，描寫現場距離感，句意支持。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "剥がされてく",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「剥がされてく」描寫被慢慢帶離的具體畫面，與句意及 why 一致。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "剥がされてく",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「剥がされてく」描寫被慢慢帶離的現場距離感，確實是句中承載畫面的動詞，why 解讀合理。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "剥がされてく",
+      "why": "被工作人員慢慢帶離，是現場中距離感的具體畫面，與「もっと話したい」形成拉扯。"
+     },
+     "verdicts": [
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「剥がされてく」是字面的被帶離，描寫現場距離感，句意支持。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「剥がされてく」描寫被慢慢帶離的具體畫面，與句意及 why 一致。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「剥がされてく」描寫被慢慢帶離的現場距離感，確實是句中承載畫面的動詞，why 解讀合理。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k4",
+     "kind": "key",
+     "cue": "c019",
+     "text": "もっと話した～い",
+     "why": "前一句說時間不夠，這裡直接表達想繼續聊的渴望，是剝離感之後的情緒反應。",
+     "vote": {
+      "id": "k4",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "もっと話した～い",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "直接表達想繼續聊的渴望，是願望語氣，強調合理。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "もっと話した～い",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「もっと話したい」是句中明確的願望，強調與前句時間不足的對照成立。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "もっと話した～い",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「もっと話したい」是明確的渴望，願望本身就是強調重點，不被當成已發生事件，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "もっと話した～い",
+      "why": "前一句說時間不夠，這裡直接表達想繼續聊的渴望，是剝離感之後的情緒反應。"
+     },
+     "verdicts": [
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "直接表達想繼續聊的渴望，是願望語氣，強調合理。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「もっと話したい」是句中明確的願望，強調與前句時間不足的對照成立。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「もっと話したい」是明確的渴望，願望本身就是強調重點，不被當成已發生事件，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k5",
+     "kind": "key",
+     "cue": "c030",
+     "text": "こう見えてプラトニックです",
+     "why": "說自己是柏拉圖式的，但「こう見えて」暗示與實際心情相反，為後面承認心動埋下反差。",
+     "vote": {
+      "id": "k5",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "こう見えてプラトニックです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「こう見えて」設下外表與自稱的反差，為後段揭露心動鋪墊。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "こう見えてプラトニックです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句子很短且整句就是反轉的重點，「こう見えて」與 プラトニック 的對照成立。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "こう見えてプラトニックです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句很短且就是自我宣告的重點，「こう見えて」形成與外表的反差，why 的反差解讀可接受。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "こう見えてプラトニックです",
+      "why": "說自己是柏拉圖式的，但「こう見えて」暗示與實際心情相反，為後面承認心動埋下反差。"
+     },
+     "verdicts": [
+      {
+       "id": "k5",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「こう見えて」設下外表與自稱的反差，為後段揭露心動鋪墊。"
+      },
+      {
+       "id": "k5",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句子很短且整句就是反轉的重點，「こう見えて」與 プラトニック 的對照成立。"
+      },
+      {
+       "id": "k5",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句很短且就是自我宣告的重點，「こう見えて」形成與外表的反差，why 的反差解讀可接受。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k6",
+     "kind": "key",
+     "cue": "c033",
+     "text": "きゅんときちゃうから",
+     "why": "承認自己會心動，與「プラトニック」的說法形成對照，揭露真正的情緒。",
+     "vote": {
+      "id": "k6",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "きゅんときちゃうから",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "直接承認會心動，與前面的プラトニック形成揭露，句意成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "きゅんときちゃうから",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句很短且就是承認心動的關鍵，與前句的 プラトニック 形成對照。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "きゅんときちゃうから",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句很短且就是心動的坦白，與前句的プラトニック形成對照，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "きゅんときちゃうから",
+      "why": "承認自己會心動，與「プラトニック」的說法形成對照，揭露真正的情緒。"
+     },
+     "verdicts": [
+      {
+       "id": "k6",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "直接承認會心動，與前面的プラトニック形成揭露，句意成立。"
+      },
+      {
+       "id": "k6",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句很短且就是承認心動的關鍵，與前句的 プラトニック 形成對照。"
+      },
+      {
+       "id": "k6",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句很短且就是心動的坦白，與前句的プラトニック形成對照，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k7",
+     "kind": "key",
+     "cue": "c034",
+     "text": "チョロインになり下がっちゃう",
+     "why": "自嘲容易被攻略，「なり下がる」帶點自貶的語氣，表示心動後的無奈與甜蜜。",
+     "vote": {
+      "id": "k7",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "チョロインになり下がっちゃう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「なり下がる」自嘲式說自己容易被攻略，語意與解讀一致。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "チョロインになり下がっちゃう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「チョロインになり下がっちゃう」整段是自嘲的重點，解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "チョロインになり下がっちゃう",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「チョロインになり下がっちゃう」是整句的自嘲重點，語氣與 why 的自貶解讀一致。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "チョロインになり下がっちゃう",
+      "why": "自嘲容易被攻略，「なり下がる」帶點自貶的語氣，表示心動後的無奈與甜蜜。"
+     },
+     "verdicts": [
+      {
+       "id": "k7",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「なり下がる」自嘲式說自己容易被攻略，語意與解讀一致。"
+      },
+      {
+       "id": "k7",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「チョロインになり下がっちゃう」整段是自嘲的重點，解讀正確。"
+      },
+      {
+       "id": "k7",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「チョロインになり下がっちゃう」是整句的自嘲重點，語氣與 why 的自貶解讀一致。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k8",
+     "kind": "key",
+     "cue": "c035",
+     "text": "ノンフィクションなラブを君と紡ぎたいから",
+     "why": "明確表達想要真實的戀愛，與前一段「フィクションみたいな恋」形成對比，是這段的主要渴望。",
+     "vote": {
+      "id": "k8",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "ノンフィクションなラブを君と紡ぎたい",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句是願望，收窄到「ノンフィクションなラブを君と紡ぎたい」後仍是核心渴望，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "ノンフィクションなラブを君と紡ぎたい",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「ノンフィクションなラブを君と紡ぎたい」後，仍是真實戀愛的渴望核心，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "ノンフィクションなラブを君と紡ぎたい",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「ノンフィクションなラブ」是整句的真正渴望，收窄後仍原樣連續，why 與 フィクション 的對比解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "ノンフィクションなラブを君と紡ぎたい",
+      "why": "明確表達想要真實的戀愛，與前一段「フィクションみたいな恋」形成對比，是這段的主要渴望。"
+     },
+     "verdicts": [
+      {
+       "id": "k8",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "ノンフィクションなラブを君と紡ぎたい",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句是願望，收窄到「ノンフィクションなラブを君と紡ぎたい」後仍是核心渴望，成立。"
+      },
+      {
+       "id": "k8",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "ノンフィクションなラブを君と紡ぎたい",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「ノンフィクションなラブを君と紡ぎたい」後，仍是真實戀愛的渴望核心，why 正確。"
+      },
+      {
+       "id": "k8",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "ノンフィクションなラブを君と紡ぎたい",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「ノンフィクションなラブ」是整句的真正渴望，收窄後仍原樣連續，why 與 フィクション 的對比解讀正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "ノンフィクションなラブを君と紡ぎたい",
+     "status": "kept"
+    },
+    {
+     "id": "k9",
+     "kind": "key",
+     "cue": "c038",
+     "text": "フィクションみたいな恋したい でも”繋がり”はNG",
+     "why": "「でも」轉折，想要如小說般的戀愛，卻否定實際的連結，是拉扯與否定的重點。",
+     "vote": {
+      "id": "k9",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "でも”繋がり”はNG",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「でも”繋がり”はNG」後，轉折與否定正是拉扯重點，句意支持。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "フィクションみたいな恋したい でも”繋がり”はNG",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句本身就是「想要小說般的戀愛、卻否定連結」的拉扯，整句即重點。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "でも”繋がり”はNG",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「でも」之後的否定是整句拉扯的核心，收窄後原樣連續，why 對轉折與否定的解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "でも”繋がり”はNG",
+      "why": "「でも」轉折，想要如小說般的戀愛，卻否定實際的連結，是拉扯與否定的重點。"
+     },
+     "verdicts": [
+      {
+       "id": "k9",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "でも”繋がり”はNG",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「でも”繋がり”はNG」後，轉折與否定正是拉扯重點，句意支持。"
+      },
+      {
+       "id": "k9",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句本身就是「想要小說般的戀愛、卻否定連結」的拉扯，整句即重點。"
+      },
+      {
+       "id": "k9",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "でも”繋がり”はNG",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「でも」之後的否定是整句拉扯的核心，收窄後原樣連續，why 對轉折與否定的解讀正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "でも”繋がり”はNG",
+     "status": "kept"
+    },
+    {
+     "id": "k10",
+     "kind": "key",
+     "cue": "c041",
+     "text": "ひたすらかわいいって言われたい",
+     "why": "直接表達想被稱讚的心情，是這段情緒相對輕盈的核心。",
+     "vote": {
+      "id": "k10",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "ひたすらかわいいって言われたい",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「言われたい」是願望，表達想被稱讚，情緒核心成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "ひたすらかわいいって言われたい",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「ひたすらかわいいって言われたい」是句中明確的願望，why 描述正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "ひたすらかわいいって言われたい",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「ひたすらかわいいって言われたい」是直接的願望，句意支持強調，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "ひたすらかわいいって言われたい",
+      "why": "直接表達想被稱讚的心情，是這段情緒相對輕盈的核心。"
+     },
+     "verdicts": [
+      {
+       "id": "k10",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「言われたい」是願望，表達想被稱讚，情緒核心成立。"
+      },
+      {
+       "id": "k10",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「ひたすらかわいいって言われたい」是句中明確的願望，why 描述正確。"
+      },
+      {
+       "id": "k10",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「ひたすらかわいいって言われたい」是直接的願望，句意支持強調，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k11",
+     "kind": "key",
+     "cue": "c043",
+     "text": "君と会える日に雨降んないでよ",
+     "why": "表達希望見面那天不要下雨的期待，帶著小小的不安與在意。",
+     "vote": {
+      "id": "k11",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "君と会える日に雨降んないでよ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句且整句就是希望見面那天不下雨的願望，屬於願望語氣，不是已發生的事。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "君と会える日に雨降んないでよ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是希望見面日不要下雨的願望，why 把它解讀為期待與在意，正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "君と会える日に雨降んないでよ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短而是見面前的期待與擔心，願望語氣支持強調，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "君と会える日に雨降んないでよ",
+      "why": "表達希望見面那天不要下雨的期待，帶著小小的不安與在意。"
+     },
+     "verdicts": [
+      {
+       "id": "k11",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句且整句就是希望見面那天不下雨的願望，屬於願望語氣，不是已發生的事。"
+      },
+      {
+       "id": "k11",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是希望見面日不要下雨的願望，why 把它解讀為期待與在意，正確。"
+      },
+      {
+       "id": "k11",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短而是見面前的期待與擔心，願望語氣支持強調，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k12",
+     "kind": "key",
+     "cue": "c055",
+     "text": "直接会って話そうよ",
+     "why": "邀請面對面說話，與前面的配信和距離感形成對比，流露想要實際相處的渴望。",
+     "vote": {
+      "id": "k12",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "直接会って話そうよ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句整句即重點，邀請面對面說話與前句配信形成對比，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "直接会って話そうよ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是邀請面對面相處的重點，與前句配信的距離感形成對比。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "直接会って話そうよ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是面對面相處的邀請，與前面的配信形成對比，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "直接会って話そうよ",
+      "why": "邀請面對面說話，與前面的配信和距離感形成對比，流露想要實際相處的渴望。"
+     },
+     "verdicts": [
+      {
+       "id": "k12",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句整句即重點，邀請面對面說話與前句配信形成對比，成立。"
+      },
+      {
+       "id": "k12",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是邀請面對面相處的重點，與前句配信的距離感形成對比。"
+      },
+      {
+       "id": "k12",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是面對面相處的邀請，與前面的配信形成對比，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k13",
+     "kind": "key",
+     "cue": "c056",
+     "text": "こう見えて寂しがりです",
+     "why": "再次以「こう見えて」反轉形象，承認自己其實很寂寞，揭露脆弱的一面。",
+     "vote": {
+      "id": "k13",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "こう見えて寂しがりです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「こう見えて」反轉後承認寂寞，揭露脆弱面，與k5同樣成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "こう見えて寂しがりです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且以「こう見えて」反轉出寂寞的脆弱面，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "こう見えて寂しがりです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「こう見えて」反轉形象並承認寂寞，整句短且是脆弱面的重點，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "こう見えて寂しがりです",
+      "why": "再次以「こう見えて」反轉形象，承認自己其實很寂寞，揭露脆弱的一面。"
+     },
+     "verdicts": [
+      {
+       "id": "k13",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「こう見えて」反轉後承認寂寞，揭露脆弱面，與k5同樣成立。"
+      },
+      {
+       "id": "k13",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且以「こう見えて」反轉出寂寞的脆弱面，why 正確。"
+      },
+      {
+       "id": "k13",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「こう見えて」反轉形象並承認寂寞，整句短且是脆弱面的重點，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k14",
+     "kind": "key",
+     "cue": "c059",
+     "text": "きゅんとさせてほしい 恋に恋しているんです",
+     "why": "直接說想被心動，並承認自己是戀愛本身的追求者，是副歌情緒的核心宣言。",
+     "vote": {
+      "id": "k14",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "恋に恋しているんです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句收窄到「恋に恋しているんです」後，仍是自我定位的核心宣言，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "きゅんとさせてほしい 恋に恋しているんです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句是想被心動並承認戀愛本身是追求對象的宣言，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "恋に恋しているんです",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「恋に恋しているんです」是整句中自我宣言的承載段，收窄後原樣連續，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "恋に恋しているんです",
+      "why": "直接說想被心動，並承認自己是戀愛本身的追求者，是副歌情緒的核心宣言。"
+     },
+     "verdicts": [
+      {
+       "id": "k14",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "恋に恋しているんです",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句收窄到「恋に恋しているんです」後，仍是自我定位的核心宣言，成立。"
+      },
+      {
+       "id": "k14",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句是想被心動並承認戀愛本身是追求對象的宣言，why 正確。"
+      },
+      {
+       "id": "k14",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "恋に恋しているんです",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「恋に恋しているんです」是整句中自我宣言的承載段，收窄後原樣連續，why 正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "恋に恋しているんです",
+     "status": "kept"
+    },
+    {
+     "id": "k15",
+     "kind": "key",
+     "cue": "c061",
+     "text": "あんなにいっぱい言ってくれたじゃんか「スキスキ」",
+     "why": "回想對方曾經說過很多「スキスキ」，是委屈與期待的來源，為後面的指控做鋪陳。",
+     "vote": {
+      "id": "k15",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "いっぱい言ってくれたじゃんか「スキスキ」",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "過去已發生的「言ってくれた」是委屈來源，收窄後仍承載重點，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "いっぱい言ってくれたじゃんか「スキスキ」",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄後的回想與委屈段落原樣唱出，是後面指控的鋪陳，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "あんなにいっぱい言ってくれたじゃんか",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "句中是過去確實發生的回想，收窄到「言ってくれたじゃんか」承載委屈與期待，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "いっぱい言ってくれたじゃんか「スキスキ」",
+      "why": "回想對方曾經說過很多「スキスキ」，是委屈與期待的來源，為後面的指控做鋪陳。"
+     },
+     "verdicts": [
+      {
+       "id": "k15",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "いっぱい言ってくれたじゃんか「スキスキ」",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "過去已發生的「言ってくれた」是委屈來源，收窄後仍承載重點，成立。"
+      },
+      {
+       "id": "k15",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "いっぱい言ってくれたじゃんか「スキスキ」",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄後的回想與委屈段落原樣唱出，是後面指控的鋪陳，why 正確。"
+      },
+      {
+       "id": "k15",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "あんなにいっぱい言ってくれたじゃんか",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "句中是過去確實發生的回想，收窄到「言ってくれたじゃんか」承載委屈與期待，why 正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "いっぱい言ってくれたじゃんか「スキスキ」",
+     "status": "kept"
+    },
+    {
+     "id": "k16",
+     "kind": "key",
+     "cue": "c062",
+     "text": "推し変するとか結局嘘つき",
+     "why": "指控對方說要推變卻撒謊，語氣嬌嗔，是情緒轉折的關鍵，帶出被傷害的感受。",
+     "vote": {
+      "id": "k16",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "推し変するとか結局嘘つき",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "是對對方說要推變的指控，語氣嬌嗔，為情緒轉折的關鍵，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "推し変するとか結局嘘つき",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「推し変するとか結局嘘つき」是嬌嗔式指控，是情緒轉折的關鍵，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "推し変するとか結局嘘つき",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句幾乎就是嬌嗔的指控重點，「推し変するとか」是對方可能說的話，why 解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "推し変するとか結局嘘つき",
+      "why": "指控對方說要推變卻撒謊，語氣嬌嗔，是情緒轉折的關鍵，帶出被傷害的感受。"
+     },
+     "verdicts": [
+      {
+       "id": "k16",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "是對對方說要推變的指控，語氣嬌嗔，為情緒轉折的關鍵，成立。"
+      },
+      {
+       "id": "k16",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「推し変するとか結局嘘つき」是嬌嗔式指控，是情緒轉折的關鍵，why 正確。"
+      },
+      {
+       "id": "k16",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句幾乎就是嬌嗔的指控重點，「推し変するとか」是對方可能說的話，why 解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k17",
+     "kind": "key",
+     "cue": "c063",
+     "text": "病んじゃうぞ",
+     "why": "以誇張的說法表達受傷與不滿，語氣仍帶撒嬌，是情緒最激動的表達之一。",
+     "vote": {
+      "id": "k17",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "病んじゃうぞ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "是假設式的誇張威脅，表達不滿而非已發生事實，強調可成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "病んじゃうぞ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「病んじゃうぞ」是誇張的不滿表達，語氣嬌嗔，why 的情緒解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "病んじゃうぞ",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「病んじゃうぞ」是假設性的誇張威脅而非已發生事實，作為撒嬌式的情緒強調是合理的，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "病んじゃうぞ",
+      "why": "以誇張的說法表達受傷與不滿，語氣仍帶撒嬌，是情緒最激動的表達之一。"
+     },
+     "verdicts": [
+      {
+       "id": "k17",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "是假設式的誇張威脅，表達不滿而非已發生事實，強調可成立。"
+      },
+      {
+       "id": "k17",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「病んじゃうぞ」是誇張的不滿表達，語氣嬌嗔，why 的情緒解讀正確。"
+      },
+      {
+       "id": "k17",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "誇張的威脅語氣，非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「病んじゃうぞ」是假設性的誇張威脅而非已發生事實，作為撒嬌式的情緒強調是合理的，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k18",
+     "kind": "key",
+     "cue": "c065",
+     "text": "案外あっさり堕ちちゃうの だって好きなんだもん",
+     "why": "承認自己輕易動心，「だって」給出理由，直接坦白喜歡，是全曲情感的誠實核心。",
+     "vote": {
+      "id": "k18",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "だって好きなんだもん",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「だって好きなんだもん」後即為直接坦白，是全曲情感核心。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "だって好きなんだもん",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄到「だって好きなんだもん」即是直接坦白的核心，與整句意思一致。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "だって好きなんだもん",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句是直接坦白的核心，收窄到「だって好きなんだもん」保留理由與告白，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "だって好きなんだもん",
+      "why": "承認自己輕易動心，「だって」給出理由，直接坦白喜歡，是全曲情感的誠實核心。"
+     },
+     "verdicts": [
+      {
+       "id": "k18",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "だって好きなんだもん",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「だって好きなんだもん」後即為直接坦白，是全曲情感核心。"
+      },
+      {
+       "id": "k18",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "だって好きなんだもん",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄到「だって好きなんだもん」即是直接坦白的核心，與整句意思一致。"
+      },
+      {
+       "id": "k18",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "だって好きなんだもん",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句是直接坦白的核心，收窄到「だって好きなんだもん」保留理由與告白，why 正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "だって好きなんだもん",
+     "status": "kept"
+    },
+    {
+     "id": "k19",
+     "kind": "key",
+     "cue": "c066",
+     "text": "リセマラいらないよ君が最上級",
+     "why": "用遊戲用語宣告對方是最好的，不需要重來，是讚美與承諾的重要句。",
+     "vote": {
+      "id": "k19",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "リセマラいらないよ君が最上級",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句整句即重點，用遊戲比喻宣告對方最好，句意明確支持。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "リセマラいらないよ君が最上級",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是宣告對方最好的核心，遊戲用語的比喻解讀正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "リセマラいらないよ君が最上級",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句以遊戲用語比喻對方已是最好，不需重來，喻意與 why 的讚美解讀一致。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "リセマラいらないよ君が最上級",
+      "why": "用遊戲用語宣告對方是最好的，不需要重來，是讚美與承諾的重要句。"
+     },
+     "verdicts": [
+      {
+       "id": "k19",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "君→遊戲中的最上級角色（不需重抽）",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句整句即重點，用遊戲比喻宣告對方最好，句意明確支持。"
+      },
+      {
+       "id": "k19",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是宣告對方最好的核心，遊戲用語的比喻解讀正確。"
+      },
+      {
+       "id": "k19",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "リセマラ→重新抽卡以求更好；君→最上級，即不需要重來",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句以遊戲用語比喻對方已是最好，不需重來，喻意與 why 的讚美解讀一致。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k20",
+     "kind": "key",
+     "cue": "c077",
+     "text": "永遠に愛してよね",
+     "why": "結尾以請求式的語氣要求永遠被愛，是全曲情感的收束與願望。",
+     "vote": {
+      "id": "k20",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "永遠に愛してよね",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句整句即請求式願望，是結尾收束，成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "永遠に愛してよね",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是永遠被愛的請求，是全曲收束的願望，why 正確。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "永遠に愛してよね",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句短且是結尾的請求與願望，作為全曲收束的強調合理，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "永遠に愛してよね",
+      "why": "結尾以請求式的語氣要求永遠被愛，是全曲情感的收束與願望。"
+     },
+     "verdicts": [
+      {
+       "id": "k20",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句整句即請求式願望，是結尾收束，成立。"
+      },
+      {
+       "id": "k20",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是永遠被愛的請求，是全曲收束的願望，why 正確。"
+      },
+      {
+       "id": "k20",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句短且是結尾的請求與願望，作為全曲收束的強調合理，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m0",
+     "kind": "moment",
+     "cue": "c001+c002",
+     "text": "echo/ghost 恋に恋",
+     "why": "c001 與 c002 連續重複「恋に恋 来い」，同一詞前後回唱，把戀愛本身當成渴望對象，形成回聲式的呼喊。",
+     "passAlone": false,
+     "vote": {
+      "id": "m0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c001與c002連續重唱「恋に恋」，回聲形式與句意的呼喊相符。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c001 與 c002 原樣回唱「恋に恋」，句意是對戀愛本身的呼喊，回聲形式成立。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c001 與 c002 前後唱同一詞「恋に恋」，符合 echo/ghost 形式，且戀愛渴望的解讀正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，echo形式對應同詞前後重唱",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c001與c002連續重唱「恋に恋」，回聲形式與句意的呼喊相符。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c001 與 c002 原樣回唱「恋に恋」，句意是對戀愛本身的呼喊，回聲形式成立。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻；前後句同詞回聲",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c001 與 c002 前後唱同一詞「恋に恋」，符合 echo/ghost 形式，且戀愛渴望的解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m1",
+     "kind": "moment",
+     "cue": "c008+c009",
+     "text": "echo/ghost のんふぃく",
+     "why": "c008 與 c009 連續重複「のんののんのんのんののんふぃく！はい！」，同一詞前後回唱，是曲名的口號式回聲。",
+     "passAlone": false,
+     "vote": {
+      "id": "m1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c008與c009連續重唱含「のんふぃく」的句子，回聲形式成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c008 與 c009 原樣重複含「のんふぃく」的口號，回聲形式對應曲名呼喊。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c008 與 c009 連續重複含「のんふぃく」的句子，符合回聲形式，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，echo形式對應同詞前後重唱",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c008與c009連續重唱含「のんふぃく」的句子，回聲形式成立。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c008 與 c009 原樣重複含「のんふぃく」的口號，回聲形式對應曲名呼喊。"
+      },
+      {
+       "id": "m1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻；前後句同詞回聲",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c008 與 c009 連續重複含「のんふぃく」的句子，符合回聲形式，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m2",
+     "kind": "moment",
+     "cue": "c036+c037",
+     "text": "echo/ghost のんふぃく",
+     "why": "c036 與 c037 再次連續重複同一句「のんふぃく」，形成副歌後段的回聲，強調「ノンフィクション」的呼喊。",
+     "passAlone": false,
+     "vote": {
+      "id": "m2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c036與c037再次連續重唱，副歌後段的回聲形式成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c036 與 c037 再次原樣回唱，副歌後段的回聲與口號性質一致。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c036 與 c037 連續重複含「のんふぃく」的句子，符合回聲形式，why 正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，echo形式對應同詞前後重唱",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c036與c037再次連續重唱，副歌後段的回聲形式成立。"
+      },
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c036 與 c037 再次原樣回唱，副歌後段的回聲與口號性質一致。"
+      },
+      {
+       "id": "m2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻；前後句同詞回聲",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c036 與 c037 連續重複含「のんふぃく」的句子，符合回聲形式，why 正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m3",
+     "kind": "moment",
+     "cue": "c043+c045",
+     "text": "shape/fall 雨",
+     "why": "c045「雨はめんどくさいじゃん」中的「雨」就是實際的雨，是讓人嫌麻煩的對象；c043 則是希望見面那天不要下雨，同樣指向真實的雨，而非比喻。",
+     "passAlone": false,
+     "vote": {
+      "id": "m3",
+      "status": "uncertain",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c045「雨はめんどくさい」就是字面的雨，句子在講雨，落雨形式支持。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c045 的「雨」是字面的雨且句子也在講雨，畫雨落下的形式與句意相符。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "drop: 形式畫的是正在墜落的雨，但 c043 是希望不要下雨的否定願望，c045 只說雨麻煩，句子並未描寫雨落下，不支持該形式。"
+       }
+      ],
+      "keepVotes": 2,
+      "kept": false,
+      "note": "2/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，字面的雨",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c045「雨はめんどくさい」就是字面的雨，句子在講雨，落雨形式支持。"
+      },
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c045 的「雨」是字面的雨且句子也在講雨，畫雨落下的形式與句意相符。"
+      },
+      {
+       "id": "m3",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "字面的雨（非比喻）；形式畫墜落的雨，但 c043 否定下雨、c045 只說雨很麻煩，未描寫雨落下",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "drop",
+       "reason": "形式畫的是正在墜落的雨，但 c043 是希望不要下雨的否定願望，c045 只說雨麻煩，句子並未描寫雨落下，不支持該形式。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "uncertain (2/3 keep): drop: 形式畫的是正在墜落的雨，但 c043 是希望不要下雨的否定願望，c045 只說雨麻煩，句子並未描寫雨落下，不支持該形式。",
+     "status": "uncertain"
+    }
+   ]
+  },
+  {
+   "song": "tenmon",
+   "from": "out/research/instant/plans/tenmon/meaning.haiku-1109b.json",
+   "wrote": "out/research/instant/plans/tenmon/meaning.haiku-1109f.json",
+   "stop": "end_turn",
+   "usage": {
+    "input": 10409,
+    "output": 23492
+   },
+   "usd": 0.01279,
+   "calls": [
+    {
+     "usd": 0.00438,
+     "usage": {
+      "input": 3469,
+      "output": 8065
+     }
+    },
+    {
+     "usd": 0.00396,
+     "usage": {
+      "input": 3470,
+      "output": 7220
+     }
+    },
+    {
+     "usd": 0.00445,
+     "usage": {
+      "input": 3470,
+      "output": 8207
+     }
+    }
+   ],
+   "keys": {
+    "before": 6,
+    "after": 5,
+    "narrowed": 1
+   },
+   "moments": {
+    "before": 1,
+    "after": 0
+   },
+   "uncertain": [
+    {
+     "id": "k4",
+     "keepVotes": 3,
+     "note": "no two calls agree on the phrase (「わからないけどまあいいや」 「私は何のために産まれたのかわからない」 「まあいいや」)"
+    },
+    {
+     "id": "m0",
+     "keepVotes": 1,
+     "note": "1/3 keep"
+    }
+   ],
+   "candidates": [
+    {
+     "id": "k0",
+     "kind": "key",
+     "cue": "c001",
+     "text": "死にそうになっても",
+     "why": "開場即以瀕死表現愛的強度，但句尾的『も』帶出即使如此也無回應的讓步語氣，是整首痛楚的底。",
+     "vote": {
+      "id": "k0",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "死にそうになっても",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "「死にそうになっても」是假設的讓步（即使快死也…），不是已發生的事；「無回應」要靠下一句 c002 才成立，不是『も』本身帶出的。",
+        "reason": "drop: 句中「〜ても」是假設讓步，不能當成已發生的瀕死，且 why 把無回應歸到『も』上，解讀不正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "死にそうになっても",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「死にそうになっても」是讓步子句，以瀕死表現愛的強度，句意支持強調；「も」的讓步語氣與理由一致。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "死にそうになっても",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「死にそうになっても」原樣出現在c001，是讓步式假設而非已發生的事，且『も』帶出無回應的痛楚，why解讀正確。"
+       }
+      ],
+      "keepVotes": 2,
+      "kept": true,
+      "note": "2/3 keep, 1 why-only drop",
+      "phrase": "死にそうになっても",
+      "why": "開場即以瀕死表現愛的強度，但句尾的『も』帶出即使如此也無回應的讓步語氣，是整首痛楚的底。"
+     },
+     "verdicts": [
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "「死にそうになっても」是假設的讓步（即使快死也…），不是已發生的事；「無回應」要靠下一句 c002 才成立，不是『も』本身帶出的。",
+       "verdict": "drop",
+       "reason": "句中「〜ても」是假設讓步，不能當成已發生的瀕死，且 why 把無回應歸到『も』上，解讀不正確。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「死にそうになっても」是讓步子句，以瀕死表現愛的強度，句意支持強調；「も」的讓步語氣與理由一致。"
+      },
+      {
+       "id": "k0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「死にそうになっても」原樣出現在c001，是讓步式假設而非已發生的事，且『も』帶出無回應的痛楚，why解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "k1",
+     "kind": "key",
+     "cue": "c002",
+     "text": "死ぬまで存在にすら気付かれない",
+     "why": "否定式的存在感缺席，『にすら』強調連存在都不被注意，是主角被忽視的核心句。",
+     "vote": {
+      "id": "k1",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "死ぬまで存在にすら気付かれない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「きっと…気付かれない」是說話者確信的否定性判斷，不是願望或假設，「にすら」強調存在感缺席，正是主角被忽視的核心。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "存在にすら気付かれない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句幾乎就是重點，收窄到「存在にすら気付かれない」後，否定式與「にすら」的強調正確，是被忽視的核心。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "存在にすら気付かれない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句幾乎是key，收窄到承載重點的「存在にすら気付かれない」，否定式的被忽視正是句子主旨，why正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "存在にすら気付かれない",
+      "why": "否定式的存在感缺席，『にすら』強調連存在都不被注意，是主角被忽視的核心句。"
+     },
+     "verdicts": [
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "死ぬまで存在にすら気付かれない",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「きっと…気付かれない」是說話者確信的否定性判斷，不是願望或假設，「にすら」強調存在感缺席，正是主角被忽視的核心。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "存在にすら気付かれない",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句幾乎就是重點，收窄到「存在にすら気付かれない」後，否定式與「にすら」的強調正確，是被忽視的核心。"
+      },
+      {
+       "id": "k1",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "存在にすら気付かれない",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句幾乎是key，收窄到承載重點的「存在にすら気付かれない」，否定式的被忽視正是句子主旨，why正確。"
+      }
+     ],
+     "kept": true,
+     "narrowedTo": "存在にすら気付かれない",
+     "status": "kept"
+    },
+    {
+     "id": "k2",
+     "kind": "key",
+     "cue": "c012",
+     "text": "宇宙の果てまで",
+     "why": "副歌的誇張承諾，與後段對方不在宇宙中的結論形成對照，是情緒的最高點。",
+     "vote": {
+      "id": "k2",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "宇宙の果てまで",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "此句是「想…宇宙の果てまで（みたい）」的願望式誇飾，表達愛意的極端程度，不是已承諾的誓言。",
+        "reason": "drop: 句子是願望（〜みたい）而非承諾，why 把它寫成承諾，解讀有誤，雖然詞組本身值得強調。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "宇宙の果てまで",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "「言ってみたい」的願望語境下，「宇宙の果てまで」是想像中的誇張表白，不是已經做出的承諾；與c043的否定形成對照這點成立。",
+        "reason": "drop: 詞組本身是值得強調的誇張高點，但why把願望語境誤讀為承諾，whyOk不成立。"
+       },
+       {
+        "run": 2,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "宇宙の果てまで",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "這句是『想說出口』的願望與誇張（前句為「言ってみたい」），不是已經做出的承諾。",
+        "reason": "drop: 詞組本身是情緒高點值得強調，但why把願望句當成已做出的承諾，解讀錯誤。"
+       }
+      ],
+      "keepVotes": 0,
+      "kept": true,
+      "note": "0/3 keep, 3 why-only drop",
+      "phrase": "宇宙の果てまで",
+      "why": "此句是「想…宇宙の果てまで（みたい）」的願望式誇飾，表達愛意的極端程度，不是已承諾的誓言。"
+     },
+     "verdicts": [
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "此句是「想…宇宙の果てまで（みたい）」的願望式誇飾，表達愛意的極端程度，不是已承諾的誓言。",
+       "verdict": "drop",
+       "reason": "句子是願望（〜みたい）而非承諾，why 把它寫成承諾，解讀有誤，雖然詞組本身值得強調。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "「言ってみたい」的願望語境下，「宇宙の果てまで」是想像中的誇張表白，不是已經做出的承諾；與c043的否定形成對照這點成立。",
+       "verdict": "drop",
+       "reason": "詞組本身是值得強調的誇張高點，但why把願望語境誤讀為承諾，whyOk不成立。"
+      },
+      {
+       "id": "k2",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "這句是『想說出口』的願望與誇張（前句為「言ってみたい」），不是已經做出的承諾。",
+       "verdict": "drop",
+       "reason": "詞組本身是情緒高點值得強調，但why把願望句當成已做出的承諾，解讀錯誤。"
+      }
+     ],
+     "kept": true,
+     "status": "kept",
+     "whyTo": "此句是「想…宇宙の果てまで（みたい）」的願望式誇飾，表達愛意的極端程度，不是已承諾的誓言。"
+    },
+    {
+     "id": "k3",
+     "kind": "key",
+     "cue": "c037",
+     "text": "地獄の底まで",
+     "why": "與宇宙之果相呼應的另一極端，把愛推向毀滅方向，痛感在此加深。",
+     "vote": {
+      "id": "k3",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "地獄の底まで",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "與 c012 同為「想…地獄の底まで」的願望式並列極端語，是戲謔式的誇張，不是痛感加深的敘述。",
+        "reason": "drop: 句中是願望並列的誇飾，why 讀成毀滅與痛感加深，對這句語氣的解讀不正確。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": true,
+        "phrase": "地獄の底まで",
+        "phraseOk": true,
+        "whyOk": false,
+        "correctedWhy": "「ちゅーしてみたい」的願望之後，「地獄の底まで」是想像中的誇張極端，屬於愛的幻想式強度，並非已經發生的痛感加深。",
+        "reason": "drop: 句子是願望式誇張而非實際痛苦，why把它讀成痛感加深，whyOk不成立。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "地獄の底まで",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "短句本身即重點，以極端地獄之底呼應宇宙之果，強調痛感加深，解讀正確。"
+       }
+      ],
+      "keepVotes": 1,
+      "kept": true,
+      "note": "1/3 keep, 2 why-only drop",
+      "phrase": "地獄の底まで",
+      "why": "與 c012 同為「想…地獄の底まで」的願望式並列極端語，是戲謔式的誇張，不是痛感加深的敘述。"
+     },
+     "verdicts": [
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "與 c012 同為「想…地獄の底まで」的願望式並列極端語，是戲謔式的誇張，不是痛感加深的敘述。",
+       "verdict": "drop",
+       "reason": "句中是願望並列的誇飾，why 讀成毀滅與痛感加深，對這句語氣的解讀不正確。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": false,
+       "correctedWhy": "「ちゅーしてみたい」的願望之後，「地獄の底まで」是想像中的誇張極端，屬於愛的幻想式強度，並非已經發生的痛感加深。",
+       "verdict": "drop",
+       "reason": "句子是願望式誇張而非實際痛苦，why把它讀成痛感加深，whyOk不成立。"
+      },
+      {
+       "id": "k3",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "短句本身即重點，以極端地獄之底呼應宇宙之果，強調痛感加深，解讀正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept",
+     "whyTo": "與 c012 同為「想…地獄の底まで」的願望式並列極端語，是戲謔式的誇張，不是痛感加深的敘述。"
+    },
+    {
+     "id": "k4",
+     "kind": "key",
+     "cue": "c018",
+     "text": "私は何のために産まれたのかわからないけどまあいいや",
+     "why": "自我存在的疑問被『まあいいや』草草收起，語氣看似放棄，實際是故作輕鬆的自嘲。",
+     "vote": {
+      "id": "k4",
+      "status": "uncertain",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "わからないけどまあいいや",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "「わからないけど」是實際的存在困惑，「まあいいや」草草收起的語氣正是故作輕鬆，收窄後這段承載了整句的張力。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "私は何のために産まれたのかわからない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句過長，收窄到存在意義的疑問後仍是連續原句，主體的自我存在疑問值得強調，why對語氣的解讀可成立。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "まあいいや",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "整句過長，收窄到「まあいいや」這段承載草草收起的語氣，故作輕鬆的解讀成立。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": false,
+      "note": "no two calls agree on the phrase (「わからないけどまあいいや」 「私は何のために産まれたのかわからない」 「まあいいや」)"
+     },
+     "verdicts": [
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "わからないけどまあいいや",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "「わからないけど」是實際的存在困惑，「まあいいや」草草收起的語氣正是故作輕鬆，收窄後這段承載了整句的張力。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "私は何のために産まれたのかわからない",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句過長，收窄到存在意義的疑問後仍是連續原句，主體的自我存在疑問值得強調，why對語氣的解讀可成立。"
+      },
+      {
+       "id": "k4",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "まあいいや",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "整句過長，收窄到「まあいいや」這段承載草草收起的語氣，故作輕鬆的解讀成立。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "uncertain (no two calls agree on the phrase (「わからないけどまあいいや」 「私は何のために産まれたのかわからない」 「まあいいや」)): ",
+     "status": "uncertain"
+    },
+    {
+     "id": "k5",
+     "kind": "key",
+     "cue": "c043",
+     "text": "お前の居場所などこの宇宙のどこにもない",
+     "why": "結尾的冷淡宣判，句尾『それはそうだね』看似同意，實際是反諷式的認命，點出對方在宇宙中無處容身。",
+     "vote": {
+      "id": "k5",
+      "status": "kept",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "お前の居場所などこの宇宙のどこにもない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "前半是說話者明確的否定宣判，後接「それはそうだね」的反諷式附和，點出對方在宇宙中無處容身，詞組與解讀皆成立。"
+       },
+       {
+        "run": 1,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "お前の居場所などこの宇宙のどこにもない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "收窄掉句尾「それはそうだね」後，這段是否定式的冷淡宣判，句尾的反諷解讀與強調一致。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phrase": "お前の居場所などこの宇宙のどこにもない",
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "詞組是對方無處容身的否定宣判，與句尾反諷式的『それはそうだね』相符，why正確。"
+       }
+      ],
+      "keepVotes": 3,
+      "kept": true,
+      "note": "3/3 keep",
+      "phrase": "お前の居場所などこの宇宙のどこにもない",
+      "why": "結尾的冷淡宣判，句尾『それはそうだね』看似同意，實際是反諷式的認命，點出對方在宇宙中無處容身。"
+     },
+     "verdicts": [
+      {
+       "id": "k5",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "お前の居場所などこの宇宙のどこにもない",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "前半是說話者明確的否定宣判，後接「それはそうだね」的反諷式附和，點出對方在宇宙中無處容身，詞組與解讀皆成立。"
+      },
+      {
+       "id": "k5",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": true,
+       "narrowedPhrase": "お前の居場所などこの宇宙のどこにもない",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "收窄掉句尾「それはそうだね」後，這段是否定式的冷淡宣判，句尾的反諷解讀與強調一致。"
+      },
+      {
+       "id": "k5",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "詞組是對方無處容身的否定宣判，與句尾反諷式的『それはそうだね』相符，why正確。"
+      }
+     ],
+     "kept": true,
+     "status": "kept"
+    },
+    {
+     "id": "m0",
+     "kind": "moment",
+     "cue": "c013+c038",
+     "text": "echo/ghost あれ",
+     "why": "c013 與 c038 同樣唱『あれあれあれあれ』，前後兩句重複同一個詞，形成回聲；這裡是驚訝或指向遠處的口頭語，不是具體的毀壞或變化，只取重複回聲的形式。",
+     "passAlone": false,
+     "vote": {
+      "id": "m0",
+      "status": "uncertain",
+      "votes": [
+       {
+        "run": 0,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": false,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "drop: 「あれ」只是無實義的口頭語感嘆，重複回聲的形式雖然存在，但重複本身不承載歌詞的意義，不值得作為專屬時刻強調。"
+       },
+       {
+        "run": 1,
+        "verdict": "drop",
+        "kept": false,
+        "whyOnly": false,
+        "phraseOk": false,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "drop: 「あれあれあれあれ」是無實義的感嘆口頭語，重複回聲本身不構成值得專屬化的時刻，形式與句意沒有支持關係。"
+       },
+       {
+        "run": 2,
+        "verdict": "keep",
+        "kept": true,
+        "whyOnly": false,
+        "phraseOk": true,
+        "whyOk": true,
+        "correctedWhy": "",
+        "reason": "c013與證據句c038都原樣唱「あれ」，echo形式只取重複，句子的驚訝語氣與之相符，why正確。"
+       }
+      ],
+      "keepVotes": 1,
+      "kept": false,
+      "note": "1/3 keep"
+     },
+     "verdicts": [
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻，形式畫的是前後句重複同一詞的回聲，不是具體物件",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": false,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "drop",
+       "reason": "「あれ」只是無實義的口頭語感嘆，重複回聲的形式雖然存在，但重複本身不承載歌詞的意義，不值得作為專屬時刻強調。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": false,
+       "mapping": "非比喻；形式只取重複回聲，不畫具體物件",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": false,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "drop",
+       "reason": "「あれあれあれあれ」是無實義的感嘆口頭語，重複回聲本身不構成值得專屬化的時刻，形式與句意沒有支持關係。"
+      },
+      {
+       "id": "m0",
+       "phraseSung": true,
+       "lineSupports": true,
+       "mapping": "非比喻（echo只重複「あれ」，不畫具體物件）",
+       "directionOk": true,
+       "wholeLineKey": false,
+       "narrowedPhrase": "",
+       "phraseOk": true,
+       "whyOk": true,
+       "correctedWhy": "",
+       "verdict": "keep",
+       "reason": "c013與證據句c038都原樣唱「あれ」，echo形式只取重複，句子的驚訝語氣與之相符，why正確。"
+      }
+     ],
+     "kept": false,
+     "dropWhy": "uncertain (1/3 keep): drop: 「あれ」只是無實義的口頭語感嘆，重複回聲的形式雖然存在，但重複本身不承載歌詞的意義，不值得作為專屬時刻強調。 | drop: 「あれあれあれあれ」是無實義的感嘆口頭語，重複回聲本身不構成值得專屬化的時刻，形式與句意沒有支持關係。",
+     "status": "uncertain"
+    }
+   ]
+  }
+ ]
+}

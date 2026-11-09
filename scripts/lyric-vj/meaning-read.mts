@@ -68,6 +68,12 @@ export interface Verdict {
   wholeLineKey: boolean;
   /** A whole-line key narrowed to its emphasis core: a contiguous sung piece of the same line; '' when not narrowed. */
   narrowedPhrase: string;
+  /** The phrase itself (narrowed if narrowedPhrase is set), read with the whole line, is worth emphasis; moments: the form is. */
+  phraseOk: boolean;
+  /** The candidate's `why` reads the line right. */
+  whyOk: boolean;
+  /** When whyOk is false: the why rewritten to what the line really says; '' otherwise. */
+  correctedWhy: string;
   verdict: 'keep' | 'drop';
   reason: string;
 }
@@ -87,7 +93,9 @@ export function verifyRequest(song: { title: string; cues: Cue[] }, m: Pick<Mean
 (d) directionOk：主詞與受詞、誰對誰做了什麼，是否和 why 說的一致（例如「悲傷融化了從前」是悲傷把從前融化，不是悲傷自己消散）。
 (e) wholeLineKey：key 的 phrase 是否就是整句或幾乎整句。是的話，除非這句很短而且整句本身就是重點，否則在 narrowedPhrase 填入同一句裡真正承載重點、原樣連續唱出的一段（不能換句、不能改字、補字或拼接），並以這段判斷 keep／drop；找不到這樣的一段就 drop。沒有收窄時 narrowedPhrase 填空字串；moment 一律填空字串。
 
-verdict：以上都成立才 keep，否則 drop；reason 用一句話說明關鍵理由。
+(f) phraseOk 與 whyOk 分開判斷：phraseOk＝不管 why 怎麼寫，這個詞組（有收窄就看收窄後那段；moment 看這個形式）照整句的真正意思是否值得強調；whyOk＝候選的 why 對這句的解讀是否正確。why 寫錯但詞組本身值得強調時，phraseOk 填 true、whyOk 填 false，並在 correctedWhy 用一句話寫出正確的理由；why 正確時 correctedWhy 填空字串。
+
+verdict：(a)–(e) 都成立而且 phraseOk、whyOk 都為真才 keep，否則 drop；reason 用一句話說明關鍵理由。
 
 歌名：${song.title}
 歌詞：
@@ -98,15 +106,15 @@ ${forms}
 
 候選：
 ${[...keys, ...moments].map((x) => x.line).join('\n')}`;
-  const schema = { type: 'object', additionalProperties: false, required: ['verdicts'], properties: { verdicts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'phraseSung', 'lineSupports', 'mapping', 'directionOk', 'wholeLineKey', 'narrowedPhrase', 'verdict', 'reason'], properties: {
+  const schema = { type: 'object', additionalProperties: false, required: ['verdicts'], properties: { verdicts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'phraseSung', 'lineSupports', 'mapping', 'directionOk', 'wholeLineKey', 'narrowedPhrase', 'phraseOk', 'whyOk', 'correctedWhy', 'verdict', 'reason'], properties: {
     id: { type: 'string', enum: ids.length ? ids : ['none'] }, phraseSung: { type: 'boolean' }, lineSupports: { type: 'boolean' }, mapping: { type: 'string' },
-    directionOk: { type: 'boolean' }, wholeLineKey: { type: 'boolean' }, narrowedPhrase: { type: 'string' }, verdict: { type: 'string', enum: ['keep', 'drop'] }, reason: { type: 'string' },
+    directionOk: { type: 'boolean' }, wholeLineKey: { type: 'boolean' }, narrowedPhrase: { type: 'string' }, phraseOk: { type: 'boolean' }, whyOk: { type: 'boolean' }, correctedWhy: { type: 'string' }, verdict: { type: 'string', enum: ['keep', 'drop'] }, reason: { type: 'string' },
   } } } } };
   return { prompt, schema, ids };
 }
 
 /**
- * Keeps a candidate only on a `keep` verdict whose own checks agree (sung, supported, right direction; a whole-line key
+ * Keeps a candidate only on a `keep` verdict whose own checks agree (sung, supported, right direction, phraseOk not false; a whole-line key
  * stays only if the verdict says so). A key's `narrowedPhrase` replaces its phrase only if that piece is sung word for
  * word in the same cue (the same literal check validMeaning applies); otherwise the key is dropped. A candidate with no
  * verdict is dropped; a duplicate verdict counts once (the first).
@@ -118,7 +126,7 @@ export function applyVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M,
   const narrowed: { id: string; from: string; to: string }[] = [];
   const keepOf = (id: string) => {
     const v = byId.get(id);
-    const why = !v ? 'no verdict' : v.verdict !== 'keep' ? `drop: ${v.reason}` : !v.phraseSung ? 'keep overruled: phrase not sung' : !v.lineSupports ? 'keep overruled: line does not support it' : !v.directionOk ? 'keep overruled: direction wrong' : '';
+    const why = !v ? 'no verdict' : v.verdict !== 'keep' ? `drop: ${v.reason}` : !v.phraseSung ? 'keep overruled: phrase not sung' : !v.lineSupports ? 'keep overruled: line does not support it' : !v.directionOk ? 'keep overruled: direction wrong' : v.phraseOk === false ? 'keep overruled: phrase not an emphasis' : '';
     if (why) dropped.push({ id, why });
     return !why;
   };
@@ -134,44 +142,63 @@ export function applyVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M,
   return { meaning: { ...m, keys, moments: (m.moments ?? []).filter((_, i) => keepOf(`m${i}`)) }, dropped, narrowed };
 }
 
-/** One verify call's say on one candidate: kept after that call's applyVerdicts checks, the phrase it keeps, its reason. */
-export interface Vote { run: number; verdict: 'keep' | 'drop' | 'none'; kept: boolean; phrase?: string; reason: string }
-
-/** A candidate's votes across the verify calls and the outcome: kept on a majority, with the agreed phrase (keys only). */
-export interface VoteRecord { id: string; votes: Vote[]; keepVotes: number; kept: boolean; phrase?: string }
+/**
+ * One verify call's say on one candidate. `kept`: survives that call's applyVerdicts checks. `whyOnly`: a key the call
+ * drops only because its why is wrong (phrase sung, phraseOk, whyOk false, any narrowing sung in the cue).
+ */
+export interface Vote { run: number; verdict: 'keep' | 'drop' | 'none'; kept: boolean; whyOnly: boolean; phrase?: string; phraseOk?: boolean; whyOk?: boolean; correctedWhy?: string; reason: string }
 
 /**
- * Majority vote over independent verify calls on the same candidates. Each call's verdicts go through applyVerdicts
- * first, so a keep vote is one that survives that call's own checks (sung, supported, direction, a narrowing sung in the
- * cue). A candidate stays only if more than half the calls keep it. A kept key takes the phrase most keeping calls agree
- * on (the original or one narrowing) when at least two agree and no other phrase ties it; otherwise its original phrase.
+ * A candidate's votes and the outcome. kept: every call keeps it (a key may count why-only drops, see voteVerdicts);
+ * uncertain: some but not all calls keep it, or the calls do not agree on its phrase; rejected: no call keeps it.
+ * Uncertain and rejected are both dropped; the votes stay for a later owner pass.
  */
-export function voteVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M, runs: Verdict[][], cues: { id: string; text: string }[]): { meaning: M; votes: VoteRecord[]; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[] } {
+export interface VoteRecord { id: string; status: 'kept' | 'uncertain' | 'rejected'; votes: Vote[]; keepVotes: number; kept: boolean; phrase?: string; why?: string; note: string }
+
+/**
+ * Unanimous vote over independent verify calls ("moments only when the line means it": doubt resolves to not doing it).
+ * - A moment stays only if every call keeps it.
+ * - A key stays if every call either keeps it or drops it only because the why is wrong (whyOnly), and at least two
+ *   calls say the phrase itself is worth emphasis (phraseOk). Its phrase is the one at least two calls agree on (original
+ *   or a narrowing) with no tie; otherwise it is uncertain. When at least two calls say whyOk false, the why becomes the
+ *   first such call's correctedWhy.
+ * - A missing verdict counts as a drop.
+ */
+export function voteVerdicts<M extends Pick<Meaning, 'keys' | 'moments'>>(m: M, runs: Verdict[][], cues: { id: string; text: string }[]): { meaning: M; votes: VoteRecord[]; dropped: { id: string; why: string }[]; uncertain: VoteRecord[]; narrowed: { id: string; from: string; to: string }[]; rewhy: { id: string; from: string; to: string }[] } {
   const applied = runs.map((verdicts) => ({ verdicts, ...applyVerdicts(m, verdicts, cues) }));
-  const need = Math.floor(runs.length / 2) + 1;
-  const recordOf = (id: string, original?: string): VoteRecord => {
+  const recordOf = (id: string, key?: { cue: string; phrase: string; why?: string }): VoteRecord => {
+    const cueText = key ? cues.find((c) => c.id === key.cue)?.text ?? '' : '';
     const votes = applied.map((r, run): Vote => {
       const v = r.verdicts.find((x) => x.id === id);
       const drop = r.dropped.find((d) => d.id === id);
-      const phrase = original === undefined || drop ? undefined : r.narrowed.find((n) => n.id === id)?.to ?? original;
-      return { run, verdict: v?.verdict ?? 'none', kept: !drop, ...(phrase !== undefined ? { phrase } : {}), reason: drop?.why ?? v?.reason ?? '' };
+      const to = (v?.narrowedPhrase ?? '').trim();
+      const whyOnly = !!key && !!drop && !!v && v.phraseSung && v.phraseOk && !v.whyOk && (!to || cueText.includes(to));
+      const phrase = !key ? undefined : !drop ? r.narrowed.find((n) => n.id === id)?.to ?? key.phrase : whyOnly ? to || key.phrase : undefined;
+      return { run, verdict: v?.verdict ?? 'none', kept: !drop, whyOnly, ...(phrase !== undefined ? { phrase } : {}), ...(v ? { phraseOk: v.phraseOk, whyOk: v.whyOk, correctedWhy: v.correctedWhy } : {}), reason: drop?.why ?? v?.reason ?? '' };
     });
     const keepVotes = votes.filter((x) => x.kept).length;
-    const kept = keepVotes >= need;
-    if (!kept || original === undefined) return { id, votes, keepVotes, kept };
+    const out = (status: VoteRecord['status'], note: string, extra: Partial<VoteRecord> = {}): VoteRecord => ({ id, status, votes, keepVotes, kept: status === 'kept', note, ...extra });
+    const counted = votes.filter((x) => x.kept || x.whyOnly).length;
+    if (!counted) return out('rejected', `0/${runs.length} keep`);
+    if (counted < runs.length || !runs.length) return out('uncertain', `${keepVotes}/${runs.length} keep`);
+    if (!key) return out('kept', `${keepVotes}/${runs.length} keep`);
+    if (votes.filter((x) => x.phraseOk).length < 2 && keepVotes < runs.length) return out('uncertain', 'fewer than 2 calls say the phrase itself is an emphasis');
     const count = new Map<string, number>();
     for (const x of votes) if (x.phrase !== undefined) count.set(x.phrase, (count.get(x.phrase) ?? 0) + 1);
     const ranked = [...count].sort((p, q) => q[1] - p[1]);
-    const agreed = ranked[0][1] >= 2 && (ranked.length < 2 || ranked[1][1] < ranked[0][1]) ? ranked[0][0] : original;
-    return { id, votes, keepVotes, kept, phrase: agreed };
+    if (!(ranked[0][1] >= 2 && (ranked.length < 2 || ranked[1][1] < ranked[0][1]))) return out('uncertain', `no two calls agree on the phrase (${ranked.map(([p]) => `「${p}」`).join(' ')})`);
+    const wrongWhy = votes.filter((x) => x.whyOk === false && (x.correctedWhy ?? '').trim());
+    const why = wrongWhy.length >= 2 ? wrongWhy[0].correctedWhy!.trim() : key.why;
+    return out('kept', `${keepVotes}/${runs.length} keep${votes.some((x) => x.whyOnly) ? `, ${votes.filter((x) => x.whyOnly).length} why-only drop` : ''}`, { phrase: ranked[0][0], why });
   };
-  const keyVotes = m.keys.map((k, i) => recordOf(`k${i}`, k.phrase));
+  const keyVotes = m.keys.map((k, i) => recordOf(`k${i}`, k));
   const momentVotes = (m.moments ?? []).map((_, i) => recordOf(`m${i}`));
   const votes = [...keyVotes, ...momentVotes];
-  const dropped = votes.filter((r) => !r.kept).map((r) => ({ id: r.id, why: `${r.keepVotes}/${runs.length} keep: ${r.votes.filter((x) => !x.kept).map((x) => x.reason).join(' | ')}` }));
+  const dropped = votes.filter((r) => !r.kept).map((r) => ({ id: r.id, why: `${r.status} (${r.note}): ${r.votes.filter((x) => !x.kept).map((x) => x.reason).join(' | ')}` }));
   const narrowed = keyVotes.flatMap((r, i) => (r.kept && r.phrase !== m.keys[i].phrase ? [{ id: r.id, from: m.keys[i].phrase, to: r.phrase! }] : []));
-  const keys = m.keys.flatMap((k, i) => (keyVotes[i].kept ? [{ ...k, phrase: keyVotes[i].phrase! }] : []));
-  return { meaning: { ...m, keys, moments: (m.moments ?? []).filter((_, i) => momentVotes[i].kept) }, votes, dropped, narrowed };
+  const rewhy = keyVotes.flatMap((r, i) => (r.kept && r.why !== m.keys[i].why ? [{ id: r.id, from: m.keys[i].why ?? '', to: r.why ?? '' }] : []));
+  const keys = m.keys.flatMap((k, i) => (keyVotes[i].kept ? [{ ...k, phrase: keyVotes[i].phrase!, why: keyVotes[i].why }] : []));
+  return { meaning: { ...m, keys, moments: (m.moments ?? []).filter((_, i) => momentVotes[i].kept) }, votes, dropped, uncertain: votes.filter((r) => r.status === 'uncertain'), narrowed, rewhy };
 }
 
 /** USD ceiling for one verify call; a call over it fails the pass. */
@@ -186,12 +213,12 @@ export const verifyNonce = (run: number, runs: number): string => `review ${run 
 
 /**
  * The verify pass: `runs` (default 3) independent READING_MODEL calls on the same user prompt re-judge every key and
- * moment candidate, and voteVerdicts keeps the majority. No temperature or seed is sent (default sampling); each call's
+ * moment candidate, and voteVerdicts keeps only what all of them keep. No temperature or seed is sent (default sampling); each call's
  * system line is a verifyNonce. A call that does not finish, or costs over MAX_VERIFY_USD_PER_CALL, fails the pass.
  */
-export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000, runs = 3): Promise<{ meaning: M; runs: Verdict[][]; votes: VoteRecord[]; dropped: { id: string; why: string }[]; narrowed: { id: string; from: string; to: string }[]; usd: number; usage: { input: number; output: number }; calls: { usd: number; usage: { input: number; output: number } }[]; stop: string | null }> {
+export async function verifyCandidates<M extends Meaning>(song: { title: string; cues: Cue[] }, m: M, effort: 'low' | 'medium' | 'high' = 'medium', maxTokens = 16000, runs = 3): Promise<{ meaning: M; runs: Verdict[][]; votes: VoteRecord[]; dropped: { id: string; why: string }[]; uncertain: VoteRecord[]; narrowed: { id: string; from: string; to: string }[]; rewhy: { id: string; from: string; to: string }[]; usd: number; usage: { input: number; output: number }; calls: { usd: number; usage: { input: number; output: number } }[]; stop: string | null }> {
   const { prompt, schema, ids } = verifyRequest(song, m);
-  if (!ids.length) return { meaning: m, runs: [], votes: [], dropped: [], narrowed: [], usd: 0, usage: { input: 0, output: 0 }, calls: [], stop: null };
+  if (!ids.length) return { meaning: m, runs: [], votes: [], dropped: [], uncertain: [], narrowed: [], rewhy: [], usd: 0, usage: { input: 0, output: 0 }, calls: [], stop: null };
   const client = new Anthropic({ maxRetries: 2 });
   const one = async (_: unknown, run: number) => {
     const msg = await client.messages.create({ model: READING_MODEL, max_tokens: maxTokens, system: verifyNonce(run, runs), messages: [{ role: 'user', content: prompt }], output_config: { effort, format: { type: 'json_schema', schema } } } as never) as Anthropic.Message;

@@ -1,0 +1,142 @@
+{
+ "reading": "表面是熱鬧的宇宙對話與假裝開朗，底下是自我中心的委屈與反諷，末段以冷酷的否定收尾。",
+ "palette": "wine",
+ "ground": "grain",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.7,
+   "fx": [
+    "overprint",
+    "crease",
+    "dotscreen"
+   ],
+   "what": "為對方犧牲到快死，卻被反諷地認為不會被注意，委屈與痛感並存。"
+  },
+  {
+   "from": "c003",
+   "tension": 0.8,
+   "fx": [
+    "block",
+    "hatch",
+    "offcut"
+   ],
+   "what": "激烈的爭執與反駁，語氣急促、帶著對立的火氣。"
+  },
+  {
+   "from": "c007",
+   "tension": 0.3,
+   "fx": [
+    "soft-rings",
+    "overprint",
+    "crease"
+   ],
+   "what": "短促的嘆息，情緒暫停，一瞬間的疲憊與停頓。"
+  },
+  {
+   "from": "c008",
+   "tension": 0.6,
+   "fx": [
+    "soft-rings",
+    "stitch",
+    "paper-drift"
+   ],
+   "what": "副歌的渴望：想去愛、想被愛，語氣輕而執著。"
+  },
+  {
+   "from": "c018",
+   "tension": 0.4,
+   "fx": [
+    "ledger",
+    "crease",
+    "punched"
+   ],
+   "what": "對自身存在的漠然，說不知道為何出生，卻用『まあいいや』帶過，帶著疏離與自嘲。"
+  },
+  {
+   "from": "c019",
+   "tension": 0.9,
+   "fx": [
+    "disc",
+    "rays",
+    "offcut"
+   ],
+   "what": "誇張高亢的歡呼詞彙堆疊，表面熱情，實為諷刺式的狂喜。"
+  },
+  {
+   "from": "c021",
+   "tension": 0.75,
+   "fx": [
+    "deckle",
+    "overprint",
+    "paper-edge"
+   ],
+   "what": "再次強調為愛削身、四肢欠缺卻被人嫌棄離去，痛感深、帶控訴。"
+  },
+  {
+   "from": "c025",
+   "tension": 0.85,
+   "fx": [
+    "herringbone",
+    "hatch",
+    "offcut"
+   ],
+   "what": "強迫式的樂觀與反問，急切地要對方看見世界的美，節奏緊繃。"
+  },
+  {
+   "from": "c030",
+   "tension": 0.6,
+   "fx": [
+    "disc",
+    "paper-drift",
+    "washi"
+   ],
+   "what": "對自己或對方的鼓勵，語氣較柔，像在安慰也像在硬撐。"
+  },
+  {
+   "from": "c043",
+   "tension": 0.5,
+   "fx": [
+    "ledger",
+    "paper-edge",
+    "crease"
+   ],
+   "what": "以『そうだね』輕描淡寫地承認對方在宇宙中無處容身，冷淡而殘酷的反諷收束。"
+  }
+ ],
+ "keys": [
+  {
+   "cue": "c001",
+   "phrase": "死にそうになっても",
+   "why": "開場即以瀕死表現愛的強度，但句尾的『も』帶出即使如此也無回應的讓步語氣，是整首痛楚的底。"
+  },
+  {
+   "cue": "c002",
+   "phrase": "存在にすら気付かれない",
+   "why": "否定式的存在感缺席，『にすら』強調連存在都不被注意，是主角被忽視的核心句。"
+  },
+  {
+   "cue": "c012",
+   "phrase": "宇宙の果てまで",
+   "why": "此句是「想…宇宙の果てまで（みたい）」的願望式誇飾，表達愛意的極端程度，不是已承諾的誓言。"
+  },
+  {
+   "cue": "c037",
+   "phrase": "地獄の底まで",
+   "why": "與 c012 同為「想…地獄の底まで」的願望式並列極端語，是戲謔式的誇張，不是痛感加深的敘述。"
+  },
+  {
+   "cue": "c043",
+   "phrase": "お前の居場所などこの宇宙のどこにもない",
+   "why": "結尾的冷淡宣判，句尾『それはそうだね』看似同意，實際是反諷式的認命，點出對方在宇宙中無處容身。"
+  }
+ ],
+ "moments": [],
+ "source": {
+  "base": "dd7129383bcc4c5ad707c3e662879f40c9edae802f5f6aa2d61ca8e1abd4b574",
+  "overlay": "out/research/instant/plans/tenmon/meaning.haiku-1109f.json",
+  "model": "claude-haiku-5-5",
+  "effort": "medium+verify-unanimous3",
+  "date": "2026-11-10"
+ }
+}

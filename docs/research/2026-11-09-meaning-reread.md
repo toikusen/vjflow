@@ -432,3 +432,75 @@ for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp
 ```
 
 這次的備份名是 `meaning.merged-1109d.bak.json`，因為 `meaning.instant-1101.json` 已經存了第四輪之前的原檔，不能覆蓋。建議先處理 nun「仁者無敵」，再決定邊界候選的作法，然後才換檔：一種是把「why 寫錯」和「詞組不值得強調」分開判斷，why 寫錯時改寫 why，不刪詞組；另一種是讓邊界票一律保守刪除。
+
+
+---
+
+# 第六輪：三票一致才保留，why 錯誤與詞組分開判（2026-11-10）
+
+**結論：改成三票一致才保留。拿不準的候選一律不做，標成 `uncertain` 並留下票數，之後由人工或 owner 再救回。這次只跑了一次（`haiku-1109f`），花 $0.07204，超過本步驟 $0.06 的預算：新增欄位讓輸出 token 變多（每次呼叫約多 40%）。因此沒有跑第二次，穩定度也沒有量。nun「仁者無敵」仍然沒有留下：3 票都認為 why 錯了，但其中 2 票也認為詞組本身不值得強調，所以判為 uncertain。**
+
+## 規則
+
+- `Verdict` 新增三個欄位，schema 裡都是必填：
+  - `phraseOk`：先不看 why，詞組本身（有收窄就看收窄後的那段；moment 看形式）是否值得強調。
+  - `whyOk`：why 對這句的解讀是否正確。
+  - `correctedWhy`：why 寫錯時，寫出正確的理由。
+- prompt 新增規則 (f)，要求分開判斷這兩件事；verdict 要 (a)–(e) 都成立，而且 phraseOk 和 whyOk 都為真，才能填 keep。`applyVerdicts` 遇到 `phraseOk` 為 false 的 keep 也會推翻。
+- `voteVerdicts` 改成三票一致（`meaning-read.mts`）：
+  - moment：3／3 保留才留下。
+  - key：每一票都要是「保留」或「只因 why 錯而刪」。後者的條件是 phrase 有唱出、phraseOk 為真、whyOk 為假，而且收窄後的段落也在同一句裡。此外要有 ≥2 票認為 phraseOk，才能救回。
+  - phrase：要有 ≥2 票同意同一個 phrase（原句或某個收窄），而且沒有同票，否則判 uncertain。
+  - why：有 ≥2 票判 whyOk 為假時，把 why 換成其中第一票的 `correctedWhy`。correctedWhy 是自由文字，沒辦法對內容做多數決，所以只看票數門檻。
+  - 狀態分三種：`kept`；`uncertain`（1–2 票保留，或 phrase 沒有共識）；`rejected`（0 票保留）。後兩種都刪除。報告裡每首都有 `uncertain[]`，每個候選有 `vote.status`、`votes[]`（含 phraseOk、whyOk、correctedWhy、whyOnly）和 `whyTo`。
+- 單元測試：`meaning-verify.test.mts` 共 8 個，全部通過。新增或改寫的有：三票一致與 uncertain／rejected 的分類、收窄沒有共識就判 uncertain、why 錯誤救回（仁者無敵 fixture，以及「一票因別的理由刪除」就不救）、moment 不適用救回、schema 欄位和 prompt 規則。
+- 預設路徑：用 tsuzuki 的快取跑，`plan.json` 和 HEAD 逐位元組相同，沒有呼叫 API。
+
+## 結果（`haiku-1109f`，輸入是第二輪 `haiku-1109b` 的候選）
+
+| 歌 | keys 前→後 | moments 前→後 | USD |
+|---|---|---|---|
+| nun | 5→3 | 2→2 | 0.00978 |
+| snow | 5→5（收窄 3） | 7→5 | 0.01397 |
+| tsuzuki | 5→5（收窄 1） | 5→3 | 0.01493 |
+| choroin | 21→21（收窄 5） | 4→3 | 0.02057 |
+| tenmon | 6→5（收窄 1；換掉 why 2） | 1→0 | 0.01279 |
+| **合計** | **42→39** | **19→13** | **0.07204** |
+
+單次呼叫最貴 $0.0075。
+
+**uncertain 清單（7 個，留給 owner 判斷）：**
+- nun k3「仁者無敵」：0／3 保留，1 票是只因 why 錯而刪，2 票認為 phraseOk 為假。
+- nun k4「為人耿直不屈 一身正氣」：1／3。
+- tsuzuki m3 echo「信じられる」：1／3。
+- choroin m3 雨 fall：2／3。之前本來就被 legalCue 擋下。
+- tenmon k4：3／3 保留，但三票收窄成三種不同段落，沒有共識。
+- tenmon m0 echo「あれ」：1／3。之前本來就被 legalCue 擋下。
+- （snow k1「這次我們的手沒牽好」最後判 kept，收窄成「手沒牽好」：2 票保留、1 票只因 why 錯而刪。）
+
+**rejected**：snow c005 melt、c022 freeze、tsuzuki c001 海，都是 0／3。
+
+**用 why 錯誤救回的 key：**
+- tenmon k2「宇宙の果てまで」：0 票保留，3 票都是只因 why 錯而刪。why 換成「願望式誇飾，表達愛意的極端程度」。
+- tenmon k3「地獄の底まで」：1 票保留，2 票只因 why 錯而刪。
+
+這兩個 key 都是原本的 why 把願望寫成承諾，救回後的 why 保留了願望語氣。
+
+**已知案例**：snow c009 楓葉保留、tsuzuki c002 wipe 保留、melt／freeze／海刪除，都**命中**。nun 仁者無敵**未命中**（uncertain，理由見上）。choroin 雨改判 uncertain 並刪除，符合 Codex「choroin 0 個合理」的判斷。
+
+## Q3／Q5 dry-run（`--meaning-suffix haiku-1109f`，和 `haiku-1109e` 同一份程式碼）
+
+- **Q3**（`coverage-haiku-f.json`）有 edgeFit 的世界：
+  - nun：39／36／34 → 39／36／33。edgeFit 段從 69／69／59 降到 63／60／53，因為少了 k4。
+  - snow：41／41／44 → 43／42／43。edgeFit 段從 58／57／63 升到 84／77／82，因為「手沒牽好」收窄後放得進去。
+  - 逐世界 edgeFit 中位數：3／3／3 → 4／3／3。
+- **Q5**（`moments-haiku-f.json`）：`songsReaching36of45` = 2。snow 43、tsuzuki 45 個世界有時刻。每個候選的選中次數和 e 完全相同；被刪掉的 choroin 雨和 tenmon あれ，本來就在 45／45 個世界被 legalCue 擋下，所以計畫層的時刻沒有變化。
+
+## 換檔指令（merged-1109f；**未執行**）
+
+```sh
+cd /Users/seitumbp2025/vjflow.worktrees/lyric-editing
+for s in nun snow tsuzuki choroin tenmon; do d=out/research/instant/plans/$s; cp -p $d/meaning.json $d/meaning.merged-1109d.bak.json && cp -p $d/meaning.merged-1109f.json $d/meaning.json; done
+```
+
+這組指令取代第五輪的 merged-1109e 版本。換檔前，建議 owner 先看一遍 uncertain 清單，特別是 nun「仁者無敵」。

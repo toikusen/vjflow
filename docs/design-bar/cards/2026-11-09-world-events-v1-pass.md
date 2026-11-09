@@ -17,7 +17,7 @@ pair: ""
 supersedes: ""
 blind: false
 anchor: true
-source: "transcript b1656c41-c6be-4018-ab8d-17ab46a436d2.jsonl @ 2026-11-09T14:20:57Z"
+source: "transcript b1656c41-c6be-4018-ab8d-17ab46a436d2.jsonl @ 2026-11-09T14:35:57Z"
 ---
 
 ## 業主原話
@@ -26,11 +26,11 @@ source: "transcript b1656c41-c6be-4018-ab8d-17ab46a436d2.jsonl @ 2026-11-09T14:2
 
 ## 看到什麼
 
-Q1 排程器接管下的三個單頁世界：換座位只在句子出現時或可靠詞界，keep 為常態，切換密度與改前相近或略低（chalkboard 12→14、blueprint 17→13、notebook 18→16）。
+Q1 排程器接管下的三個單頁世界：換座位只在句子出現時或可靠詞界，keep 為常態；切換數 chalkboard 12→14、blueprint 17→13、notebook 18→16。
 
 ## 適用界線
 
-放行的是排程器接管後的閱讀與節奏沒有變差；不是對密度目標（4.0／6）的驗收。預設仍關閉。
+放行的是接管後閱讀與節奏沒有變差；不是對密度目標 4.0／6 的驗收。預設仍關閉。
 
 ## inferred
 

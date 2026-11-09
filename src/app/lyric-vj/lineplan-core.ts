@@ -1024,15 +1024,23 @@ export function pageSeatsFor(text: string, set: string, worldId: string, font?: 
  * (hold-room.ts absorbInk, on the palette, as the plan reads every ink). The scheduler still checks the words' box and
  * type are the same, the sung word, the reading time and the clocks. Undefined: the hold keeps its line as before.
  */
-export function absorbSeatsFor(kind: string, set: string, seats: string[], worldId: string, slots?: Slots): { seats: string[]; ink: string } | undefined {
+export function absorbSeatsFor(kind: string, set: string, seats: string[], worldId: string, slots?: Slots): { seats: string[]; inks: Record<string, string> } | undefined {
   const from = SET_SPECS[set];
   if (!ABSORBABLE_HOLDS.has(kind) || !slots || !from) return undefined;
   const mats = Object.values(compositionsOf(worldId)?.materials ?? {}).filter((m) => m.seat === 'carrier' && m.at.includes('in-line') && !m.withheld && (m.absorbs ?? []).includes(kind));
   if (!mats.length) return undefined;
   const bases = from.ink ? [slots[from.ink]] : from.object ? [slots.ink, slots.plateInk] : [slots.ink];
-  let ink: string | undefined;
-  const ok = seats.filter((x) => SET_SPECS[x]?.samePage === set && mats.some((m) => bases.every((b) => { const r = absorbInk(kind, from, SET_SPECS[x], slots, b, m.under ?? []); if (r.ok) ink ??= r.ink; return r.ok; })));
-  return ok.length && ink ? { seats: ok, ink } : undefined;
+  // (each seat's own held ink, the first base's: the one the renderer lays on the set's ink, world-layout settleBy)
+  const inks: Record<string, string> = {};
+  for (const x of seats) {
+    if (SET_SPECS[x]?.samePage !== set) continue;
+    for (const m of mats) {
+      const rs = bases.map((b) => absorbInk(kind, from, SET_SPECS[x], slots, b, m.under ?? []));
+      if (rs.every((r) => r.ok)) { inks[x] = (rs[0] as { ink: string }).ink; break; }
+    }
+  }
+  const ok = Object.keys(inks);
+  return ok.length ? { seats: ok, inks } : undefined;
 }
 
 /** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */

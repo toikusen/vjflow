@@ -80,6 +80,11 @@ export interface WorldLine {
   beatSkip?: string;
   beatWhy?: string[];
   beatSafe?: boolean;
+  /**
+   * Q1 phase 4a, a scheduled world only: the same-page seats on which the line's ink-only hold may merge with its world's
+   * material move into one composite event, each with the ink the hold settles into there (lineplan-core absorbSeatsFor).
+   */
+  beatAbsorb?: { seats: string[]; inks: Record<string, string> };
   /** The line's scheme had a second ink for the whole line (line-ink-settle), for the record. */
   beatInk?: boolean;
 }

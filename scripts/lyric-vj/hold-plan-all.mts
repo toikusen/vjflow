@@ -2,8 +2,9 @@
 // lines with an event by length bucket, skip reasons and kinds. VJ_WORLD_EVENTS=1 to tally the scheduled five too.
 // Phase 4a (Codex 2026-11-10 §3): each hold is `independent` (its own event), `absorbed` (merged with a material move
 // into one composite event that landed: the final check names no failure of it) or `lost` (planned by the composer and
-// not drawn: dropped off a handoff, or a composite whose hold did not survive). Only drawn holds (independent + absorbed)
-// count toward coverage (`ev`); `merged` fields are never read as success.
+// not drawn: the scheduler dropped it off a Q4 handoff, holdMoves `to: null`; a composite that fails to land is undone
+// and its hold drawn on its own, so it counts as independent). Only drawn holds (independent + absorbed) count toward
+// coverage; `merged` fields are never read as success.
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/hold-plan-all.mts > out.json
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';

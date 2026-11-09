@@ -31,6 +31,7 @@ import { countCuts, planWorldEvents, type WorldEvent } from '../../src/app/lyric
 import { capsOf, currentEvents, fromJob, ONE_PAGE_WORLDS } from '../../src/app/lyric-vj/world-events-adapter';
 import { frameChange, GRID, judge, SEEN, stableTimes, type FrameChange } from './frame-change.mts';
 import { framePage } from './frame-page.mts';
+import { GROUPS, HEADLINE, THIRTEEN, TARGET_13 } from './phase4-groups.mts';
 
 const WINDOWS = [
   { name: 'fast', song: 'nun', db: 'yt_w_fCuUR3lEs', window: [76, 101] as [number, number] },
@@ -39,10 +40,6 @@ const WINDOWS = [
 const { values: a } = parseArgs({ options: { world: { type: 'string' }, seed: { type: 'string', default: '0' }, seeds: { type: 'string' }, out: { type: 'string' }, frames: { type: 'boolean', default: false } } });
 const seeds = (a.seeds ?? a.seed!).split(',').map(Number);
 const seed = seeds[0];
-/** The frozen groups (phase 4): the original five, the eight added in phase 4 (pictogram is the world `card`), and all thirteen. */
-export const GROUPS = { five: ['blueprint', 'chalkboard', 'document', 'notebook', 'art-deco'], eight: ['riso', 'silk', 'file', 'card', 'spy', 'popart', 'midcentury', 'screentone'] } as const;
-/** The phase-4 design target for the thirteen, per 10 s (not a proven ceiling): Codex 2026-11-10 §1. */
-export const TARGET_13 = { fast: 4.0, calm: 4.8 };
 const styles = OFFERED_STYLES.filter((s) => !a.world || a.world.split(',').includes(s.id));
 const median = (xs: number[]) => { const s = [...xs].sort((x, y) => x - y); const m = s.length >> 1; return s.length ? (s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) : 0; };
 const per10 = (n: number, w: [number, number]) => +((n * 10) / (w[1] - w[0])).toFixed(2);
@@ -142,10 +139,10 @@ const groupOf = (ids: readonly string[] | undefined, s: number, name: string) =>
     ...(rs.some((r) => r['wired'].verifiedCompositionCutsPer10 !== undefined) ? { provisional: { medianVerified: m((r) => r['wired'].verifiedCompositionCutsPer10), medianVerifiedExclOutline: m((r) => r['wired'].verifiedExclOutlinePer10), medianVerifiedExclUnreliable: m((r) => r['wired'].verifiedExclUnreliablePer10), note: 'frame check not calibrated on owner labels' } } : {}) };
 };
 const groups = Object.fromEntries((['five', 'eight', 'thirteen', 'all45'] as const).map((g) => {
-  const ids = g === 'five' ? GROUPS.five : g === 'eight' ? GROUPS.eight : g === 'thirteen' ? [...GROUPS.five, ...GROUPS.eight] : undefined;
+  const ids = g === 'five' ? GROUPS.five : g === 'eight' ? GROUPS.eight : g === 'thirteen' ? THIRTEEN : undefined;
   const bySeed = Object.fromEntries(seeds.map((s) => [s, Object.fromEntries(WINDOWS.map((w) => [w.name, groupOf(ids, s, w.name)]))]));
   const headline = Object.fromEntries(WINDOWS.map((w) => [w.name, bySeed[seed][w.name].medianWiredPlanExclUnreliable]));
-  return [g, { worlds: ids ?? 'all offered', headline: { metric: 'medianWiredPlanExclUnreliable', seed, ...headline }, ...(g === 'thirteen' ? { target: TARGET_13, meets: Object.fromEntries(WINDOWS.map((w) => [w.name, headline[w.name] >= TARGET_13[w.name as 'fast' | 'calm']])) } : {}), stability: Object.fromEntries(WINDOWS.map((w) => [w.name, seeds.map((s) => bySeed[s][w.name].medianWiredPlanExclUnreliable)])), bySeed }];
+  return [g, { worlds: ids ?? 'all offered', headline: { metric: HEADLINE, seed, ...headline }, ...(g === 'thirteen' ? { target: TARGET_13, meets: Object.fromEntries(WINDOWS.map((w) => [w.name, headline[w.name] >= TARGET_13[w.name as 'fast' | 'calm']])) } : {}), stability: Object.fromEntries(WINDOWS.map((w) => [w.name, seeds.map((s) => bySeed[s][w.name].medianWiredPlanExclUnreliable)])), bySeed }];
 }));
 const summary = Object.fromEntries(WINDOWS.map((w) => [w.name, {
   worlds: head.filter((r) => r['window'] === w.name).length,

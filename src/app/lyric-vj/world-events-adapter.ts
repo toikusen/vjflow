@@ -14,11 +14,11 @@ import { WORLD_BEATS } from './render/world-beats';
 import { WORLD_ENTERS } from './render/world-motion';
 import { enterSec as lineEnterSec } from './render/enter-sec';
 import { WORLD_CAM_SEC } from './render/world-cam';
-import { LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
+import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
 import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
-import { laidSeat } from './render/seat-geometry';
-import { ACTION_GAP, LIGHT_GAP, SEAM_GAP, seatsDiffer, type CameraMove, type InputWarning, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { boxesMeet, laidSeat } from './render/seat-geometry';
+import { ACTION_GAP, BEAT_SNAP, LIGHT_GAP, READ_STABLE, SEAM_GAP, seatsDiffer, type CameraMove, type InputWarning, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 
 type Free = ReturnType<typeof freeJob>;
 type Job = Free['job'];
@@ -79,8 +79,8 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   return { worldId: world.id, kinds, seats: sets, carrierRole, source: 'derived', ownPages: true };
 }
 
-/** How near a sung word's start a switch must fall to count as at that word (a beat snap, world-events BEAT_SNAP). */
-export const SUNG_NEAR = 0.12;
+/** How near a sung word's start a switch must fall to count as at that word: the scheduler's own snap (world-events BEAT_SNAP). */
+export const SUNG_NEAR = BEAT_SNAP;
 /** Whether `t` falls at a word the line really sings (the aligner's trusted times), not at a proportional guess. */
 export const sungAt = (words: SungWord[] | undefined, t: number) => !!words?.some((w) => Math.abs(w.from - t) <= SUNG_NEAR);
 
@@ -146,7 +146,9 @@ export function holdRoom(c: { text: string; start: number; end: number }, hold: 
   const kind = hold.kind as BeatKind;
   const [before, after]: [number, number][] = [[c.start, hold.at - BEAT_CLEAR], [hold.to + BEAT_CLEAR / 2, c.end]];
   const spans = (KEPT.has(kind) && FIRST_SET.has(kind) ? [] : KEPT.has(kind) ? [before] : FIRST_SET.has(kind) ? [after] : [before, after]).filter(([a, b]) => b > a);
-  const grows = kind === 'line-grow' ? seats.filter((s) => SET_SPECS[s] && growFits(c.text, SET_SPECS[s])) : undefined;
+  // (a growing block's page is drawn round it at its grown size from the start: panels built round its parts would stand
+  // off the words until it grows, so a seat carried on panels is never one a grow may move into)
+  const grows = kind === 'line-grow' ? seats.filter((s) => SET_SPECS[s] && !SET_SPECS[s].panels && growFits(c.text, SET_SPECS[s])) : undefined;
   return { spans, ...(grows ? { seats: grows } : {}) };
 }
 
@@ -239,7 +241,7 @@ export function currentEvents(free: { job: Job }, _song: SongTimeline | undefine
     // (the line before wiped by the world's own erase as this one shows: one reseat, its window the wipe's)
     const wipe = i > 0 ? rows[i - 1].world?.wipe : undefined;
     if (i > 0 && q4) ev({ lineIds: [rows[i - 1].id, id], kind: 'page-handoff', at: q4.seam, from: q4.seam - (q4.prepare ?? LINK_PREPARE), to: q4.seam - (q4.prepare ?? LINK_PREPARE) + q4.dur, seatBefore: before, seatAfter: set, scope: 'line', changesLight: true, reason: q4.kind });
-    else if (i > 0 && w?.page) ev({ lineIds: [rows[i - 1].id, id], kind: 'page-handoff', at: w.page.at, from: w.page.at, to: +(w.page.at + w.page.sec).toFixed(3), seatBefore: before, seatAfter: set, scope: 'line', reason: w.page.move, move: w.page.move, material: w.page.move });
+    else if (i > 0 && w?.page) ev({ lineIds: [rows[i - 1].id, id], kind: 'page-handoff', at: w.page.at, from: w.page.at, to: +(w.page.at + w.page.sec).toFixed(3), seatBefore: before, seatAfter: set, scope: 'line', reason: w.page.move, move: w.page.move, material: w.page.move, ...(compositionsOf(world.id)?.materials?.[w.page.move]?.counts === 'seen' ? { holdLevel: true } : {}) });
     else if (moved && wipe) ev({ lineIds: [rows[i - 1].id, id], kind: 'layout-seat', at: show, from: wipe.from, to: +(wipe.from + wipe.sec).toFixed(3), seatBefore: before, seatAfter: set, scope: 'line', reason: wipe.move, move: wipe.move, material: wipe.move });
     else if (moved) ev({ lineIds: [id], kind: 'layout-seat', at: show, from: show, to: show, seatBefore: before, seatAfter: set, scope: 'line', reason: 'set changes at the line' });
     else if (i > 0 && cam) ev({ lineIds: [id], kind: 'camera-reframe', at: cam.at, from: cam.at, to: cam.at + WORLD_CAM_SEC[cam.kind], seatBefore: before, seatAfter: set, scope: 'section', reason: `world camera ${cam.kind}` });
@@ -352,14 +354,46 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
       if (under && !under.layers.some((l) => l.fx === page)) miss(e.id, `${set} drawn on page ${under.layers[0]?.fx}, not its own ${page}`);
     }
   }
-  // (an erase drawn on a line is the next line's approved reseat; one no event holds is a switch the plan does not count)
+  // the world's material moves as drawn, each against its own declaration (world-shared materials), not only its plan:
+  // an erase starts once every line before is sung and read still (clearOfSung), ends EXIT_LEAD before the next line
+  // shows, no other line up meanwhile, the old words off its protected region; a page move once the line before is
+  // sung, on a line long enough; a carrier swap at a sung word, READ_STABLE still either side of it
+  const materials = compositionsOf(world.id)?.materials ?? {};
+  const sungBefore = (k: number) => Math.max(-Infinity, ...rows.slice(0, k).map((x) => x.cue.end));
   rows.forEach((r, i) => {
     const wp = r.world?.wipe;
     if (!wp) return;
+    const name = `${wp.move}@${r.id}`;
     const next = rows[i + 1];
-    if (!next || !table.events.some((e) => e.material === wp.move && e.lineIds.at(-1) === next.id && near(e.from, wp.from) && near(e.to, wp.from + wp.sec))) miss(`${wp.move}@${r.id}`, `a ${wp.move} is drawn on ${r.id} that the plan does not hold`);
-    else if (next.cue.start < wp.from - 1e-6 || r.cue.end > wp.from + 1e-6) miss(`${wp.move}@${r.id}`, `${wp.move} on ${r.id} ${wp.from}–${wp.from + wp.sec} touches a line being sung`);
+    const m = materials[wp.move];
+    if (!next || !table.events.some((e) => e.material === wp.move && e.lineIds.at(-1) === next.id && near(e.from, wp.from) && near(e.to, wp.from + wp.sec))) return void miss(name, `a ${wp.move} is drawn on ${r.id} that the plan does not hold`);
+    if (!m) return void miss(name, `${wp.move} is not a move ${world.id} declares`);
+    if (wp.from < sungBefore(i + 1) + m.clearOfSung - 1e-6) miss(name, `${wp.move} on ${r.id} starts ${wp.from}, before the lines up to it are sung and read still (${r3(sungBefore(i + 1))} + ${m.clearOfSung}s)`);
+    if (wp.from + wp.sec > next.show - EXIT_LEAD + 1e-6) miss(name, `${wp.move} on ${r.id} ends ${r3(wp.from + wp.sec)}, after ${next.id} shows (${next.show} − ${EXIT_LEAD}s)`);
+    if (rows.some((x, j) => j !== i && j !== i + 1 && x.show < wp.from + wp.sec && x.cue.end > wp.from)) miss(name, `${wp.move} on ${r.id} runs while another line is up`);
+    // (what is wiped is the line as it last stands: its last repose's set, else its own)
+    const box = r.world ? laidSeat(r.cue.text, r.world.repose?.at(-1)?.set ?? r.world.set)?.box : undefined;
+    if (box && (m.protectedRegion ?? []).some((p) => boxesMeet(box, p))) miss(name, `${wp.move} on ${r.id} wipes over its protected region`);
   });
+  rows.forEach((r, i) => {
+    const pm = r.world?.page;
+    const m = pm ? materials[pm.move] : undefined;
+    if (!pm || !m) return;
+    if (pm.at < sungBefore(i) + m.clearOfSung - 1e-6) miss(`${pm.move}@${r.id}`, `${pm.move} into ${r.id} at ${pm.at} while the line before is sung (${r3(sungBefore(i))})`);
+    if (m.minLine && r.cue.end - r.cue.start < m.minLine - 1e-6) miss(`${pm.move}@${r.id}`, `${pm.move} on a line under ${m.minLine}s`);
+    if (!near(pm.sec, m.sec)) miss(`${pm.move}@${r.id}`, `${pm.move} drawn over ${pm.sec}s, declared ${m.sec}s`);
+    for (const p of m.protectedRegion ?? []) { const b = r.world ? laidSeat(r.cue.text, r.world.set)?.box : undefined; if (b && boxesMeet(b, p)) miss(`${pm.move}@${r.id}`, `${pm.move} under words in its protected region`); }
+  });
+  for (const r of rows)
+    for (const x of r.world?.repose ?? []) {
+      const m = x.move ? materials[x.move] : undefined;
+      if (!x.move) continue;
+      if (!m) { miss(`${x.move}@${r.id}`, `${x.move} is not a move ${world.id} declares`); continue; }
+      const settled = r.show + Math.max(r.world ? WORLD_ENTERS[r.world.enter]?.sec ?? 0 : 0, r.enter ? lineEnterSec(r.enter as never, 1) || 0 : 0);
+      if (x.at - Math.max(r.cue.start, settled) < READ_STABLE - 1e-6 || r.cue.end - (x.at + (x.sec ?? 0)) < READ_STABLE - 1e-6) miss(`${x.move}@${r.id}`, `${x.move} at ${x.at} without ${READ_STABLE}s of still reading either side`);
+      if (!sungAt(sungWords(r.cue), x.at)) miss(`${x.move}@${r.id}`, `${x.move} at ${x.at} is at no sung word`);
+      if (!near(x.sec ?? 0, m.sec)) miss(`${x.move}@${r.id}`, `${x.move} drawn over ${x.sec}s, declared ${m.sec}s`);
+    }
   // a world camera's move drawn over another switch of the song: a scheduled world drops it (camDrops), never keeps both
   for (const r of rows) {
     const c = r.world?.cam && WORLD_CAM_SEC[r.world.cam.kind] ? r.world.cam : undefined;

@@ -3,7 +3,7 @@
 // and Q4 linked handoffs come in decided and are never moved; everything this adds is spaced round them. Pure and seeded:
 // no DOM, no clock, the same input gives the same plan. Phase 2 (docs/research/2026-11-09-q1-phase2.md): free-plan.ts runs
 // it once a song on the composer's plan and the renderer draws only what it approves (world-events-apply.ts).
-import { LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
+import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import { anchorMove, boxesMeet, centreMove, SEEN, type FracBox } from './render/seat-geometry';
 import type { MaterialMove } from './world-shared';
 
@@ -156,6 +156,8 @@ export interface WorldEvent {
   curve?: string;
   /** A given switch whose time is the composer's proportional guess, not a sung word (counted, never trusted as a word break). */
   unreliableBoundary?: boolean;
+  /** A move that keeps the words and their seat (the receipt's feed): a hold-level beat, never a plan cut (countCuts). */
+  holdLevel?: boolean;
 }
 
 export interface RejectedCandidate { candidate: { lineId: string; kind: CompositionFamily; at: number; seatAfter?: string }; reason: string }
@@ -182,7 +184,7 @@ export const READ_STABLE = 0.35;
 /** A line shorter than this keeps its seat: its words switch on time, nothing else moves. */
 export const SHORT_LINE = 0.75;
 /** A word break this near a beat lands on it. */
-const BEAT_SNAP = 0.12;
+export const BEAT_SNAP = 0.12;
 /** A full page handoff needs the line before up at least this long (world-handoff.ts pickWorldMoves). */
 const HANDOFF_UP = LINK_PREPARE + 0.5;
 
@@ -200,12 +202,16 @@ export const MOOD_PACE: Record<Mood, { reseat: number; inLine: number; pages: ('
   build: { reseat: 0.55, inLine: 1.8, pages: ['section', 'carrier'] },
   peak: { reseat: 0.75, inLine: 1.3, pages: ['section', 'carrier'] },
 };
-/** Each switch in a row eases the next optional reseat's chance by this share, down to STREAK_FLOOR of the part's rate. */
+/**
+ * Each switch in a row eases the next optional reseat's chance by STREAK_EASE, down to STREAK_FLOOR of the part's rate.
+ * Provisional preference values (phase 3b), not derived from the section's energy and not measured on video: the part's
+ * energy already sets the rate (MOOD_PACE); these only keep a long run from reading as every line switching.
+ */
 export const STREAK_EASE = 0.2;
 export const STREAK_FLOOR = 0.4;
 /** The share of the part's rate left after `streak` switches in a row (the first switch eases nothing). */
-/** The part's optional reseat rate after `streak` switches in a row (a preference, not a cap). */
 export const streakEase = (streak: number) => Math.max(STREAK_FLOOR, 1 - STREAK_EASE * Math.max(0, streak - 1));
+/** The part's optional reseat rate after `streak` switches in a row (a preference, not a cap). */
 export const reseatRate = (mood: Mood, streak: number) => MOOD_PACE[mood].reseat * streakEase(streak);
 
 const LIGHT_KINDS = new Set<WorldEventKind>(['page-handoff', 'carrier-swap', 'ground-role']);
@@ -463,7 +469,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         const action: Action = { at: l.show, from: l.show, to: l.show + m.sec, light, composition: true, what: `${name} into ${l.id}`, owner: boundaryOf(l.id) };
         const why = conflict(action, taken);
         if (why) { reject(l.id, m.family, l.show, `${name}: ${why}`); continue; }
-        push({ lineIds: [prev.id, l.id], kind: m.family, at: l.show, from: l.show, to: l.show + m.sec, seatBefore: before, seatAfter: kept.id, carrierId: kept.carrierId, scope, changesLight: light, reason: `${name} (${mood})`, move: name, material: name, curve: m.curve }, action);
+        push({ lineIds: [prev.id, l.id], kind: m.family, at: l.show, from: l.show, to: l.show + m.sec, seatBefore: before, seatAfter: kept.id, carrierId: kept.carrierId, scope, changesLight: light, reason: `${name} (${mood})`, move: name, material: name, curve: m.curve, ...(m.counts === 'seen' ? { holdLevel: true } : {}) }, action);
         seat = kept;
         run += 1;
         return true;
@@ -516,9 +522,14 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       if (seatKind && target && seat?.box && target.box && boxesMeet(seat.box, target.box))
         for (const [name, m] of materialFor('over', scope).filter(([, x]) => x.family === seatKind)) {
           // (as soon as the old line is sung and read still: no sung-out words left standing on the board through a
-          // gap; over 0.02 s before the new line shows, as a line's exit always is, engine exitAt)
-          const from = r3(prev.end + m.clearOfSung);
-          if (from + m.sec > l.show - 0.02 + 1e-6) { reject(l.id, seatKind, l.show, `${name}: ${prev.id} sung until ${prev.end}, no ${m.sec}s for the wipe before ${l.show}`, target.id); continue; }
+          // gap; over EXIT_LEAD before the new line shows, as a line's exit always is, engine exitAt)
+          // (sung until the last voice before this line stops, a backing or overlapping line included)
+          const sungUntil = Math.max(...lines.slice(0, k).map((x) => x.end));
+          const from = r3(sungUntil + m.clearOfSung);
+          if (from + m.sec > l.show - EXIT_LEAD + 1e-6) { reject(l.id, seatKind, l.show, `${name}: ${prev.id} sung until ${sungUntil}, no ${m.sec}s for the wipe before ${l.show}`, target.id); continue; }
+          // (and no other line is up while the board is wiped: only the one being erased)
+          const other = lines.find((x, j) => j !== k - 1 && j !== k && x.show < from + m.sec && x.end > from);
+          if (other) { reject(l.id, seatKind, l.show, `${name}: ${other.id} is up during the wipe`, target.id); continue; }
           if (offLimits(seat.box, m)) { reject(l.id, seatKind, l.show, `${name}: the old words stand in its protected region`, target.id); continue; }
           tries.push({ kind: seatKind, at: l.show, from, to: r3(from + m.sec), seat: target, reason: `${name}: the region just read is wiped, then the line is set there (${mood})`, material: [name, m] });
         }
@@ -633,7 +644,8 @@ export const isReadingSeatChange = (e: WorldEvent) => isCut(e) && e.seatBefore !
  */
 export function countCuts(events: WorldEvent[], window: [number, number]) {
   const [a, b] = window;
-  const inside = [...new Map(events.filter((e) => isCut(e) && e.at > a + 1 / 30 && e.at < b).map((e) => [e.id, e])).values()].sort((x, y) => x.at - y.at);
+  // (a hold-level beat, the receipt's feed, is never a plan cut: it counts only where a frame check sees it)
+  const inside = [...new Map(events.filter((e) => isCut(e) && !e.holdLevel && e.at > a + 1 / 30 && e.at < b).map((e) => [e.id, e])).values()].sort((x, y) => x.at - y.at);
   const once = inside.filter((e, i) => i === 0 || e.at - inside[i - 1].at >= 0.05);
   const per10 = (n: number) => +((n * 10) / Math.max(1e-6, b - a)).toFixed(2);
   const seats = once.filter((e) => isReadingSeatChange(e) || inside.some((x) => x !== e && Math.abs(x.at - e.at) < 0.05 && isReadingSeatChange(x)));

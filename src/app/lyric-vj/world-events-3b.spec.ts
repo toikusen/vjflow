@@ -11,6 +11,10 @@ import { fromJob, shownOf, sungAt, verifyWorldEvents } from './world-events-adap
 import { compositionsOf, WORLD_COMPOSITIONS, type MaterialMove } from './world-shared';
 import { WORLD_EXITS } from './render/world-motion';
 import { panelsOf } from './render/world-b5-deco';
+import { DECO_PANELS } from './render/world-b5-sets';
+import { eraseFront, feltAt, TRAY_H } from './render/chalk-erase';
+import { MOUTH_Y } from './render/world-doc-sets';
+import { DOC_ENTERS } from './render/world-doc-motion';
 import { frameChange, stableTimes } from './render/frame-check';
 
 const LEFT: SeatCandidate = { id: 'w/left', box: { x0: 0.05, y0: 0.3, x1: 0.45, y1: 0.6 } };
@@ -71,6 +75,16 @@ describe('phase 3b: material moves in the scheduler', () => {
     const fenced = planWorldEvents(input([line('a', 1, 3, [LOW]), line('b', 5, 7, [OVER, LOW])], { caps: chalk }));
     expect(fenced.events.some((x) => x.material)).toBe(false);
     expect(fenced.rejected.some((r) => /protected region/.test(r.reason))).toBe(true);
+  });
+
+  it('chalkboard erase-reseat: a backing line still sung, or another line up during the wipe, means no wipe', () => {
+    // a is still sung (to 4.6) after the backing line x before b (to 3): the wipe of x waits for a, and here has no room
+    const backing = planWorldEvents(input([line('a', 1, 4.6, [RIGHT]), line('x', 2, 3, [LEFT]), line('b', 5.3, 7, [CENTRE, LEFT])], { caps: chalk }));
+    expect(backing.events.some((x) => x.material)).toBe(false);
+    expect(backing.rejected.some((r) => /erase-reseat: x sung until 4.6/.test(r.reason))).toBe(true);
+    // with room after it, the wipe starts only once a is sung and read still
+    const roomy = planWorldEvents(input([line('a', 1, 4.6, [RIGHT]), line('x', 2, 3, [LEFT]), line('b', 6.5, 8, [CENTRE, LEFT])], { caps: chalk }));
+    for (const e of roomy.events.filter((x) => x.material)) expect(e.from).toBeGreaterThanOrEqual(4.6 + ERASE.clearOfSung - 1e-6);
   });
 
   it('document tear-next and feed-advance: the seat stays, the page changes once the line before is sung, never on a shared shot or a short line', () => {
@@ -203,10 +217,44 @@ describe('phase 3b: panels as the deco page draws them', () => {
       expect(p.panel.y0).toBeGreaterThanOrEqual(last - 1e-6);
       last = p.panel.y0;
     }
+    // no rule of either panel comes within DECO_PANELS.inset of a word's ink (cells as drawn, narrowed by the set's shear)
+    const ink = (part: number) => { const e0 = env(0, 0, 0) as unknown as { rect: { face: { cx: number; cy: number; cells: [number, number, number][]; parts: number[] } } }; const f = e0.rect.face; const cs = f.cells.filter((_, i) => f.parts[i] === part).map(([u, v, sz]) => ({ x: f.cx + 0.75 * u, y: f.cy + v, s: sz })); return { x0: Math.min(...cs.map((c) => c.x - (c.s * 0.75) / 2)), x1: Math.max(...cs.map((c) => c.x + (c.s * 0.75) / 2)), y0: Math.min(...cs.map((c) => c.y - c.s / 2)), y1: Math.max(...cs.map((c) => c.y + c.s / 2)) }; };
+    const [mi, ti] = [ink(0), ink(1)];
+    for (const q of [0, 0.1, 0.25, 0.5, 0.75, 1]) {
+      const p = panelsOf(env(10 + q * 0.4, 10, 0.4))!;
+      expect(ti.y0 - p.panel.y0, `panel top at ${q}`).toBeGreaterThanOrEqual(DECO_PANELS.inset);
+      expect(p.panel.y1 - ti.y1, `panel foot at ${q}`).toBeGreaterThanOrEqual(DECO_PANELS.inset);
+      expect(ti.x0 - p.panel.x0).toBeGreaterThanOrEqual(DECO_PANELS.inset);
+      expect(p.panel.x1 - ti.x1).toBeGreaterThanOrEqual(DECO_PANELS.inset);
+      // (the plaque's triple rules run 28 px inside its edges)
+      expect(mi.y0 - (p.main.y0 + 28)).toBeGreaterThanOrEqual(DECO_PANELS.inset);
+      expect(p.main.y1 - 28 - mi.y1).toBeGreaterThanOrEqual(DECO_PANELS.inset);
+    }
     const end = panelsOf(env(20, 10, 0.4))!;
     expect(end.panel.x1 - end.panel.x0).toBeLessThan(end.main.x1 - end.main.x0);
     // no panels on a face that does not ask for them
     expect(panelsOf({ now: 0, rect: { x0: 0, y0: 0, x1: 1, y1: 1 } } as never)).toBeUndefined();
+  });
+});
+
+describe('phase 3b round 2: one eraser front for the words and the board', () => {
+  it('the front starts at the line’s right edge, runs left without turning back, ends past its left edge; the felt comes and goes', () => {
+    const wipe = { from: 10, sec: ERASE.sec };
+    let last = Infinity;
+    for (let q = 0; q <= 1.0001; q += 0.05) { const x = eraseFront(10 + q * wipe.sec, wipe, 400, 1200); expect(x).toBeLessThanOrEqual(last + 1e-9); last = x; }
+    expect(eraseFront(10, wipe, 400, 1200)).toBe(1200);
+    expect(eraseFront(10 + wipe.sec, wipe, 400, 1200)).toBeLessThan(400);
+    expect(feltAt(9.9, wipe, { x0: 400, y0: 300, x1: 1200, y1: 600 })).toBeUndefined();
+    expect(feltAt(10, wipe, { x0: 400, y0: 300, x1: 1200, y1: 600 })!.a).toBe(0);
+    expect(feltAt(10 + wipe.sec / 2, wipe, { x0: 400, y0: 300, x1: 1200, y1: 600 })!.a).toBe(1);
+    // the board's tray is the declaration's protected region, read from the renderer's own number
+    expect(ERASE.protectedRegion![0].y0).toBeCloseTo(1 - TRAY_H / 1080, 6);
+    // the receipt's mouth likewise
+    expect(TEAR.protectedRegion![0].y0).toBeCloseTo(MOUTH_Y / 1080, 6);
+  });
+
+  it('the receipt prints whole rows only (no row sliced inside the paper)', () => {
+    for (const k of ['head-print', 'feed-step']) for (let q = 0; q < 1; q += 0.1) expect(DOC_ENTERS[k].clip!(q).rows, k).toBe(true);
   });
 });
 
@@ -234,7 +282,7 @@ describe('phase 3b: the frame check reads a carrier changing round still words',
   });
 });
 
-const SONGS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', taimei: 'yt_ZQ8mn5fS5_M' };
+const SONGS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', taimei: 'yt_ZQ8mn5fS5_M', utsusemi: 'yt_zN5-4JfdVRM' };
 const have = Object.values(SONGS).every((db) => existsSync(`out/db/${db}/song.json`)) && existsSync('out/research/instant/plans/nun/meaning.json');
 const load = (k: string) => ({ song: JSON.parse(readFileSync(`out/db/${SONGS[k]}/song.json`, 'utf8')), meaning: existsSync(`out/research/instant/plans/${k}/meaning.json`) ? JSON.parse(readFileSync(`out/research/instant/plans/${k}/meaning.json`, 'utf8')) : undefined });
 
@@ -243,7 +291,7 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
   const run = (id: string, k: string, worldEvents?: boolean) => { const { song, meaning } = load(k); return freeJob(song, { style: style(id), seed: 0, meaning, ...(worldEvents === undefined ? {} : { worldEvents }) }); };
 
   it('each new kind is planned, drawn as planned (verifyWorldEvents), the same seed the same table', () => {
-    const cases: [string, string, string][] = [['chalkboard', 'nun', 'erase-reseat'], ['document', 'nun', 'feed-advance'], ['document', 'nun', 'tear-next'], ['art-deco', 'taimei', 'poster-panel']];
+    const cases: [string, string, string][] = [['chalkboard', 'nun', 'erase-reseat'], ['document', 'nun', 'feed-advance'], ['document', 'nun', 'tear-next'], ['art-deco', 'utsusemi', 'poster-panel']];
     for (const [id, k, m] of cases) {
       const f = run(id, k, true);
       const table = f.treatment.worldEvents!;
@@ -268,9 +316,26 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
     const { rows } = shownOf(f.job);
     expect(e.from).toBeGreaterThanOrEqual(rows.find((r) => r.id === e.lineIds[0])!.cue.end + ERASE.clearOfSung - 1e-6);
     expect(e.to).toBeLessThan(rows.find((r) => r.id === e.lineIds[1])!.show);
-    const job = structuredClone(f.job);
-    (job.treatment.cues as typeof cues).find((c) => c.cueId === e.lineIds[0])!.world!.wipe!.from = e.from - 1;
-    expect(verifyWorldEvents(job, style('chalkboard').world, f.treatment.worldEvents!).length).toBeGreaterThan(0);
+    // tampered either way, the final check reports it by name: a second earlier (before the line is sung and read still)
+    // or 0.3 s later (no longer the approved window)
+    for (const shift of [-1, 0.3]) {
+      const job = structuredClone(f.job);
+      (job.treatment.cues as typeof cues).find((c) => c.cueId === e.lineIds[0])!.world!.wipe!.from = e.from + shift;
+      expect(verifyWorldEvents(job, style('chalkboard').world, f.treatment.worldEvents!).map((w) => w.inputs[0]), `${shift}`).toContain(`erase-reseat@${e.lineIds[0]}`);
+    }
+    // a wipe drawn right up to the next show, or one starting the moment the line ends, breaks its own declaration
+    const late = structuredClone(f.job);
+    const w = (late.treatment.cues as typeof cues).find((c) => c.cueId === e.lineIds[0])!.world!.wipe!;
+    w.from = rows.find((r) => r.id === e.lineIds[1])!.show - ERASE.sec;
+    expect(verifyWorldEvents(late, style('chalkboard').world, f.treatment.worldEvents!).some((x) => /after .* shows|the plan does not hold/.test(x.reason))).toBe(true);
+    // the erase start against every line before it really sung (charStarts), backing lines included
+    const song = load('nun').song as { cues: { id: string; start: number; end: number; charStarts?: number[] }[] };
+    const k = song.cues.findIndex((c) => c.id === e.lineIds[1]);
+    for (const c of song.cues.slice(0, k)) {
+      expect(e.from, c.id).toBeGreaterThanOrEqual(c.end + ERASE.clearOfSung - 1e-6);
+      for (const t of c.charStarts ?? []) expect(t, c.id).toBeLessThan(e.from);
+    }
+    for (const c of song.cues.slice(k)) for (const t of c.charStarts ?? []) expect(t, c.id).toBeGreaterThan(e.to);
   });
 
   it('document: the receipt item opens a segment at the approved time and the receipt keeps no linked handoff, camera still', () => {
@@ -283,16 +348,22 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
       expect(it.opens!.draws).toBe(WORLD_COMPOSITIONS['document'].materials![e.material!].draws);
     }
     expect(shownOf(f.job).handoffs).toEqual([]);
+    // a feed keeps the seat and the words: a hold-level beat the plan never counts as a cut; a tear is a cut
+    const all = f.treatment.worldEvents!.events;
+    for (const e of all.filter((x) => x.material === 'feed-advance')) expect(e.holdLevel).toBe(true);
+    for (const e of all.filter((x) => x.material === 'tear-next')) expect(e.holdLevel).toBeFalsy();
+    const win: [number, number] = [0, 400];
+    expect(countCuts(all, win).cuts).toBe(countCuts(all.filter((x) => x.material !== 'feed-advance'), win).cuts);
     expect(compositionsOf('document')!.kinds).not.toContain('camera-reframe');
   });
 
   it('art-deco: the poster-panel is the line’s repose onto its marquee’s panels, at a sung word, the words on the same page', () => {
-    const f = run('art-deco', 'taimei', true);
+    const f = run('art-deco', 'utsusemi', true);
     const e = f.treatment.worldEvents!.events.find((x) => x.material === 'poster-panel')!;
     const cue = (f.treatment.cues as { cueId: string; world?: { set: string; repose?: { at: number; set: string; sec?: number; move?: string }[] } }[]).find((c) => c.cueId === e.lineIds[0])!;
     expect(cue.world!.repose).toContainEqual({ at: e.at, set: e.seatAfter, sec: PANEL.sec, move: 'poster-panel' });
     expect(e.seatAfter).toBe(`${cue.world!.set}+panels`);
-    const inp = fromJob(f.job, load('taimei').song, style('art-deco').world);
+    const inp = fromJob(f.job, load('utsusemi').song, style('art-deco').world);
     expect(sungAt(inp.lines.find((l) => l.id === e.lineIds[0])!.words, e.at)).toBe(true);
   });
 

@@ -6,6 +6,8 @@
 // Moves in and out shared by all worlds are in render/world-motion.ts (SHARED_ENTERS, SHARED_EXITS).
 import type { StyleWorld } from './style-world';
 import { SET_SPECS } from './render/world-sets';
+import { TRAY_H } from './render/chalk-erase';
+import { MOUTH_Y } from './render/world-doc-sets';
 import type { CompositionFamily } from './world-events';
 
 export type BeatKind = 'ink-run' | 'light-sweep' | 'echo' | 'plate-slip' | 'crack' | 'roll' | 'beat-punch' | 'flicker' | HoldKind | 'line-ink-settle';
@@ -276,6 +278,12 @@ export interface MaterialMove {
   protectedRegion?: { x0: number; y0: number; x1: number; y1: number }[];
   /** The move as the renderer names it (a world exit, a page's segment, a panel relation). */
   draws: string;
+  /**
+   * 'seen': the seat and the words stay and only what is printed round them moves (Codex A: a prop- or hold-level beat,
+   * not a change of reading composition), so the plan never counts it as a cut; the measurement counts it only where the
+   * frame check sees it.
+   */
+  counts?: 'seen';
 }
 
 /**
@@ -294,10 +302,12 @@ export interface MaterialMove {
  */
 const BLUEPRINT_BORDER = [{ x0: 0, y0: 0, x1: 1, y1: 0.059 }, { x0: 0, y0: 0.941, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.033, y1: 1 }, { x0: 0.967, y0: 0, x1: 1, y1: 1 }];
 const NOTEBOOK_HEAD = [{ x0: 0, y0: 0, x1: 1, y1: 0.12 }];
-/** The chalk tray along the board's foot (world-b2-chalk tray, 120 px). */
-const CHALK_TRAY = { x0: 0, y0: 1 - 120 / 1080, x1: 1, y1: 1 };
-/** The printer's mouth along the receipt's foot (world-doc-sets MOUTH). */
-const RECEIPT_MOUTH = { x0: 0, y0: 0.88, x1: 1, y1: 1 };
+/** The chalk tray along the board's foot (the renderer's own, chalk-erase TRAY_H). */
+const CHALK_TRAY = { x0: 0, y0: 1 - TRAY_H / 1080, x1: 1, y1: 1 };
+/** The printer's mouth along the receipt's foot (the renderer's own, world-doc-sets MOUTH_Y). */
+const RECEIPT_MOUTH = { x0: 0, y0: MOUTH_Y / 1080, x1: 1, y1: 1 };
+/** The poster-panel: one declaration of its time and curve, read by the family's duration and the material move. */
+const POSTER_PANEL = { sec: 0.4, curve: 'panel-slide' as const };
 const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.05, y1: 1 }, { x0: 0.95, y0: 0, x1: 1, y1: 1 }];
 
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
@@ -320,7 +330,7 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // The slip only goes by over a line long enough to be read past it (1.5 s, the page's own rule)
   document: { kinds: ['page-handoff'], carrierRole: 'page', allowedAt: { 'page-handoff': ['section', 'line'] }, duration: {}, curve: {}, moves: {}, materials: {
     'tear-next': { family: 'page-handoff', at: ['section'], sec: 0.25, curve: 'paper-tear', seat: 'same', clearOfSung: 0, minLine: 1.5, changesLight: true, draws: 'tear', protectedRegion: [RECEIPT_MOUTH] },
-    'feed-advance': { family: 'page-handoff', at: ['line'], sec: 0.3, curve: 'paper-feed', seat: 'same', clearOfSung: 0, minLine: 1.5, draws: 'feed', protectedRegion: [RECEIPT_MOUTH] },
+    'feed-advance': { family: 'page-handoff', at: ['line'], sec: 0.3, curve: 'paper-feed', seat: 'same', clearOfSung: 0, minLine: 1.5, draws: 'feed', counts: 'seen', protectedRegion: [RECEIPT_MOUTH] },
   } },
   // page-turn: the Q4 fold to the top binding; margin-seat: the main column and, on the same page, the margin seat under
   // it (phase 3a), at the world's least type or more: the one seat a line may take inside itself (the same page under it)
@@ -331,8 +341,8 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // inside a line on a marquee, its single plaque parts into the main plaque and a stepped secondary panel under the
   // gold phrase, slid down out of the main one (ease-out, no overshoot); the words never move, the panel is the ground's
   // own black, the plaque keeps the approved board's rules and minimum width
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': 0.4 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': 'panel-slide' }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
-    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], sec: 0.4, curve: 'panel-slide', seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME } } },
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
+    materials: { 'poster-panel': { family: 'carrier-swap', at: ['in-line'], ...POSTER_PANEL, seat: 'carrier', clearOfSung: 0, draws: 'panels', protectedRegion: DECO_FRAME } } },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

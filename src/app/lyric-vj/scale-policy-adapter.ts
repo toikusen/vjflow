@@ -47,7 +47,8 @@ export function scaleInputOf(free: Free, song: SongTimeline, world: StyleWorld, 
     const cue = cues.find((c) => c.id === l.id)!;
     const spec = specOf(l.seat ?? '', shareOf(l.id));
     if (!spec) estimated.push(l.id);
-    const readingSize = spec ? blockOf(cue.text, spec, measure).size : TYPE_FLOOR.hi;
+    // (the reading size of what the renderer lays: the line's main text, its calls on their own track; phase 2)
+    const readingSize = spec ? blockOf(splitCalls(cue.text).main.replace(/[\s　]+/g, ' ').trim(), spec, measure).size : TYPE_FLOOR.hi;
     const clear = (spec?.clear ?? []).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }));
     return { id: l.id, text: cue.text, show: l.show, start: l.start, end: l.end, readingSize, seat: l.seats[0], ...(clear.length ? { clear } : {}), ...(spec ? { track: spec.track } : {}), ...(shareOf(l.id) > 1 ? { sharesFrameWith: shotOf(l.id)!.lines.map((x) => x.cue).filter((x) => x !== l.id) } : {}) };
   });

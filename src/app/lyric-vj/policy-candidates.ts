@@ -8,6 +8,9 @@ import type { Meaning } from './lineplan-core';
 import { declaredMomentCaps } from './moment-caps-draft';
 import { MOMENTS_PER_SONG, rankMoments, type MomentCandidateResult, type MomentPlan } from './moment-policy';
 import { momentInputOf } from './moment-policy-adapter';
+import { avoidOf, miniRegion, shownBoxes } from './mini-moments';
+import { fromFreeJob } from './world-events-adapter';
+import { momentsCapOf } from './world-shared';
 import { MOMENTS_APART } from './signature-moments';
 import { DECLARED_SCALE_CAPS } from './scale-caps-draft';
 import { pickScaleContrasts, type Measure, type ScalePlan } from './scale-policy';
@@ -46,7 +49,7 @@ export function scaleCandidates(free: Free, song: SongTimeline, world: StyleWorl
  * by score), each with its variant's whole occupied window, one group a reading's moment, budgeted two a song, 30 s
  * apart, one a section. The scheduler approves; nothing here moves a semantic onset. Undefined without capability.
  */
-export function momentCandidates(free: Free, song: SongTimeline, world: StyleWorld, meaning: Meaning | undefined, meaningRef: string): { plan: MomentPlan; candidates: PolicyCandidate[] } | undefined {
+export function momentCandidates(free: Free, song: SongTimeline, world: StyleWorld, meaning: Meaning | undefined, meaningRef: string): { plan: MomentPlan; candidates: PolicyCandidate[]; noRoom: { meaningRef: string; why: string }[] } | undefined {
   const caps = declaredMomentCaps(world);
   if (!caps) return undefined;
   const plan = rankMoments(momentInputOf(free as never, song, world, meaning as never, meaningRef, caps));
@@ -57,8 +60,17 @@ export function momentCandidates(free: Free, song: SongTimeline, world: StyleWor
     if (x >= 0 || y >= 0) return (x < 0 ? Infinity : x) - (y < 0 ? Infinity : y);
     return b.score!.total - a.score!.total || a.at! - b.at! || a.index - b.index;
   });
-  const candidates = order.map((c, rank) => momentCandidate(c, rank, free));
-  return { plan, candidates };
+  // a mini's own region beside the words up in its window (mini-moments.ts miniRegion): none, no mini (Codex §5)
+  // (every seat a line may stand in: a world the scheduler does not take over lists its composer's changes of set there)
+  const shown = shownBoxes(fromFreeJob(free as never, song, world, { seed: 0 }).lines);
+  const noRoom: { meaningRef: string; why: string }[] = [];
+  const candidates = order.flatMap((c, rank) => {
+    if (c.variant !== 'mini') return [momentCandidate(c, rank, free)];
+    const region = miniRegion(avoidOf(shown, c.window!.from, c.window!.to), momentsCapOf(world.id)!.miniShare);
+    if (!region) { noRoom.push({ meaningRef: c.meaningRef, why: 'no free region of 15 % of the frame beside the words up in its window' }); return []; }
+    return [{ ...momentCandidate(c, rank, free), protectedRegion: region }];
+  });
+  return { plan, candidates, noRoom };
 }
 
 const momentCandidate = (c: MomentCandidateResult, rank: number, free: Free): PolicyCandidate => {

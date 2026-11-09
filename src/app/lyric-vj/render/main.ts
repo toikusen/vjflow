@@ -2,6 +2,7 @@
 import { LyricVjEngine, RenderJob } from './engine';
 import { loadJobFonts } from './job-fonts';
 import { isSignature, signatureCues, signatureIds, signatureLayer, signatureWindows } from './signature';
+import { miniMomentLayer, miniMomentsOf } from './mini-moment';
 
 declare global {
   interface Window {
@@ -31,15 +32,19 @@ const stage = document.getElementById('stage') as HTMLCanvasElement;
 // signature moments (paid tiers): drawn over the engine's frame, their lines taken off it
 const signature = isSignature(job) ? await signatureLayer(job) : null;
 if (signature) engine.onCues = signatureCues as never;
+// mini moments (Q5 phase 2): drawn over the frame round their lines, every line kept (render/mini-moment.ts)
+const mini = miniMomentsOf(job).length ? await miniMomentLayer(job) : null;
 window.grabAt = async (t, quality) => {
   // a freeze moment holds the engine's frame at its stopping word while only its line moves
   await engine.renderAt(signature ? signature.stageAt(t) : t);
-  return (signature ? signature.compose(stage, t) : stage).toDataURL('image/jpeg', quality);
+  const framed = signature ? signature.compose(stage, t) : stage;
+  return (mini ? mini.compose(framed, t) : framed).toDataURL('image/jpeg', quality);
 };
 window.vjLyrics = (on, carriers) => engine.showLyrics(on, carriers);
 window.vjMetrics = () => {
   engine.buildAll();
   const m = engine.metrics();
+  if (mini) (m as { miniMoments?: unknown }).miniMoments = mini.metrics();
   if (!signature) return m;
   // the moments' lines are measured from their own timeline, on the engine's exits for them
   signatureWindows(m.cues);

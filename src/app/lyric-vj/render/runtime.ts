@@ -76,6 +76,8 @@ export interface CueLayer {
   framed?: boolean;
   /** Where the line stands and for how long, when it knows better than a measure of its meshes (a world line that changes set). */
   poses?(): { from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }[];
+  /** A Q3 scale composition as drawn (world-layout.ts): its event, planned and drawn ratio, whether it fell short. */
+  scale?: { eventId: string; planned: number; drawn: number; kind: string; unrealized: boolean; carrier: string; why?: string };
 }
 
 export interface ShotLayer {

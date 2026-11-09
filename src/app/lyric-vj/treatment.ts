@@ -1,6 +1,7 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
 import type { SignatureMoment } from './signature-moments';
+import type { MiniMoment } from './mini-moments';
 import type { WorldEventTable } from './world-events';
 import type { WorldLine } from './render/world-layout';
 import { WORLD_TEMPLATES } from './templates-world';
@@ -195,6 +196,8 @@ export interface TreatmentV3 {
   interludes?: Interlude[];
   /** The paid tiers' signature moments (signature-moments.ts), drawn over the frame by render/signature.ts. */
   signature?: SignatureMoment[];
+  /** Q5 phase 2: mini moments the scheduler approved, drawn round their lines by render/mini-moment.ts (mini-moments.ts). */
+  miniMoments?: MiniMoment[];
   /**
    * The song's one composition event plan (world-events.ts, Q1): Q2 holds, Q4 handoffs and every change of seat, each
    * once. The renderer lays only the page handoffs it approves (render/line-shows.ts).

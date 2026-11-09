@@ -23,10 +23,16 @@ import { cuesIn, TreatmentV3, validateTreatment } from './treatment';
 import { checkMoments, ownCues, type SignatureMoment } from './signature-moments';
 import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
-import { compositionsOf } from './world-shared';
+import { compositionsOf, momentsCapOf, scaleOf } from './world-shared';
 import { planWorldEvents, type WorldEventTable } from './world-events';
 import { fromJob, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
+import { momentCandidates, scaleCandidates } from './policy-candidates';
+import { approvedMoments, shownBoxes, type MiniMoment } from './mini-moments';
+import { splitCalls } from './calls';
+import type { LineScale } from './render/scale-pose';
+import type { ScalePlan } from './scale-policy';
+import type { MomentPlan } from './moment-policy';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
 export const SIDED = new Set(['vertical', 'stair', 'quiet', 'typewriter', 'handwrite']);
@@ -343,6 +349,19 @@ export interface FreeOptions {
    * world draws as before and carries its event table.
    */
   worldEvents?: boolean;
+  /**
+   * Q3 phase 2: one scale contrast a sung section from the scale policy, approved by the song's scheduler, on a world that
+   * declares `scale` (world-shared.ts WORLD_SCALE); the composer blows up no word of its own there. Off by default
+   * (VJ_SCALE=1 does the same): every world draws as before.
+   */
+  scaleContrast?: boolean;
+  /**
+   * Q5 phase 2: the reading's moments ranked by the moment policy and approved by the scheduler (big and mini), on a world
+   * that declares `moments` (WORLD_MOMENTS), in place of today's chorus-downbeat gate. Off by default (VJ_MOMENTS=1).
+   */
+  meaningMoments?: boolean;
+  /** Where the stored reading came from, for each moment's trace (meaningRef#moments[i]). */
+  meaningRef?: string;
 }
 
 /** A song to a render job: about a millisecond of rules, then the engine. */
@@ -370,34 +389,71 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   // (the scheduler takes a declared world over only when asked: no world is enabled by default, Q1 is not accepted yet)
   const asked = o.worldEvents === true || (o.worldEvents !== false && (!!(world && compositionsOf(world.id)?.enabled) || (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.['VJ_WORLD_EVENTS'] === '1'));
   const scheduled = !!world && asked && !!compositionsOf(world.id);
-  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled } } : {}) });
+  // (Q3 / Q5 phase 2: only when asked, only on a world that declares the capability)
+  const env = (k: string) => (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.[k] === '1';
+  const scaleOn = !!world && !!scaleOf(world.id) && (o.scaleContrast ?? env('VJ_SCALE'));
+  const momentsOn = !!world && !!momentsCapOf(world.id) && (o.meaningMoments ?? env('VJ_MOMENTS'));
+  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(scaleOn ? { scaled: true } : {}) } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
   const base = composerBase(o.base ?? FREE_BASE(), composed, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
-  const moments = freeMoments(song, meaning);
-  const own = new Set(moments.flatMap(ownCues));
+  // (Q5 wiring: the scheduler's approved moments replace today's gate; the first draw, scheduled on, carries none)
+  const today = momentsOn ? [] : freeMoments(song, meaning);
   const win = { start: 0, end: song.duration };
   const fps = o.fps ?? 30;
-  const jobOf = (plan: typeof composed) => {
+  const jobOf = (plan: typeof composed, moments: SignatureMoment[] = today, mini: MiniMoment[] = []) => {
+    const own = new Set(moments.flatMap(ownCues));
     const drawn = composerTreatment(song, plan as never, base, palette, world);
-    const treatment: TreatmentV3 = moments.length ? { ...drawn, cues: drawn.cues.map((c) => (own.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: moments } : drawn;
+    const signed: TreatmentV3 = moments.length ? { ...drawn, cues: drawn.cues.map((c) => (own.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: moments } : drawn;
+    const treatment: TreatmentV3 = mini.length ? { ...signed, miniMoments: mini } : signed;
     const checked = validateTreatment(treatment, song, win, TEMPLATES);
     if (checked.errors.length) throw new Error(`plan refused: ${checked.errors.slice(0, 3).join(' / ')}`);
     const job: RenderJob = { fps, window: win, beats: song.beats, downbeats: song.downbeats, beatStrength: song.beatStrength, tempo: song.tempo, cues: cuesIn(song, win), singers: song.singers, treatment: checked.treatment, assets: {}, fonts: { family: font }, meta: splitSongTitle(song.title), track: false, entrance: 'whole' };
     return { job, treatment };
   };
   const first = jobOf(composed);
-  if (!world || o.worldEvents === false) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
+  const policyOn = scaleOn || momentsOn;
+  if (!world || (o.worldEvents === false && !policyOn)) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
   // the song's one composition plan (world-events.ts, Q1 phase 2): scheduled on the job as the renderer will set it, then
   // written into the plan (its seats and the switches inside lines) and drawn; a world with no capability keeps its plan
-  const events = planWorldEvents(fromJob(first.job, song, world, { seed: seed ?? 0, off: !scheduled }));
-  const plan = scheduled ? applyWorldEvents(composed as never, events, world) : composed;
-  const { job, treatment } = scheduled ? jobOf(plan) : first;
+  const input = fromJob(first.job, song, world, { seed: seed ?? 0, off: !scheduled });
+  // Q3 / Q5 phase 2: their candidates, arbitrated by the same scheduler after Q2 / Q4 are protected and Q1 is laid
+  const q3 = scaleOn ? scaleCandidates({ job: first.job, plan: composed }, song, world, { seed: seed ?? 0, songId: song.title ?? '', meaning }) : undefined;
+  const q5 = momentsOn ? momentCandidates({ job: first.job, plan: composed }, song, world, meaning, o.meaningRef ?? 'meaning.json') : undefined;
+  const events = planWorldEvents(policyOn ? { ...input, candidates: [...(q3?.candidates ?? []), ...(q5?.candidates ?? [])] } : input);
+  const scale = q3 ? scalesOf(events.policy ?? [], q3.plan, first.job.cues as { id: string; text: string }[]) : new Map<string, LineScale>();
+  const regions = new Map((q5?.candidates ?? []).flatMap((c) => (c.id && c.protectedRegion ? [[c.id, c.protectedRegion] as const] : [])));
+  const drawnMoments = q5 ? approvedMoments(events.policy ?? [], q5.plan, song, shownBoxes(input.lines), regions) : undefined;
+  const plan = scheduled ? applyWorldEvents(composed as never, events, world, scale.size ? { seats: true, scale } : undefined) : scale.size ? applyWorldEvents(composed as never, events, world, { seats: false, scale }) : composed;
+  const redraw = scheduled || scale.size > 0 || momentsOn;
+  const { job, treatment } = redraw ? jobOf(plan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
   // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
   const checked = scheduled ? [...verifyWorldEvents(job, world, events), ...lightGapWarnings(job, events)] : [];
-  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}) };
+  const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.policy ? { policy: events.policy } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
-  return { job, plan, palette: paletteId, calm, treatment };
+  return { job, plan, palette: paletteId, calm, treatment, ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))] } as FreePolicy } : {}) };
+}
+
+/** What Q3 / Q5 planned and the scheduler made of it (measurement only; the treatment carries the decisions). */
+export interface FreePolicy { scale?: ScalePlan; moments?: MomentPlan; decisions: NonNullable<WorldEventTable['policy']>; refused: { id: string; why: string }[] }
+
+/**
+ * Each approved Q3 seat as the line's scale composition (render/scale-pose.ts LineScale): its span moved onto the line as
+ * drawn (the calls go to their own track), its plan's sizes, edge, rows and carrier.
+ */
+function scalesOf(decisions: NonNullable<WorldEventTable['policy']>, plan: ScalePlan, cues: { id: string; text: string }[]): Map<string, LineScale> {
+  const out = new Map<string, LineScale>();
+  const seats = plan.ranked.flat();
+  for (const d of decisions.filter((x) => x.source === 'Q3' && x.approved)) {
+    const c = seats.find((x) => x.eventId === d.id);
+    const cue = cues.find((x) => x.id === d.lineId);
+    if (!c || !cue) continue;
+    const { map } = splitCalls(cue.text);
+    const kept = c.scale.span.from < map.length ? map.slice(c.scale.span.from, c.scale.span.to).filter((m) => m >= 0) : [];
+    if (!kept.length) continue;
+    out.set(d.lineId, { eventId: d.eventId ?? d.id, sectionId: c.sectionId, kind: c.scale.kind, source: c.scale.source, ratio: c.scale.ratio, targetSize: c.scale.targetSize, readingSize: c.scale.readingSize, span: { from: kept[0], to: kept.at(-1)! + 1 }, edge: c.scale.edge, rows: c.scale.rows, carrierRole: c.scale.carrierExtends.role, carrierId: c.scale.carrierExtends.carrierId });
+  }
+  return out;
 }

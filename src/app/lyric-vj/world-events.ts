@@ -575,6 +575,8 @@ function arbitratePolicies(cands: PolicyCandidate[], ctx: PolicyContext): Policy
   const done = new Set<string>();
   const approvedBy = new Map<string, PolicyDecision[]>();
   const moments: Action[] = [];
+  // (the approved scale compositions' ink boxes while their lines are up: a moment's region keeps off them)
+  const scaled: { id: string; box: FrameBox; from: number; to: number }[] = [];
   const decide = (c: PolicyCandidate, approved: boolean, reason: string, extra: Partial<PolicyDecision> = {}) => {
     const d: PolicyDecision = { id: c.id ?? `${c.source}:${c.lineId}`, source: c.source, ...(c.group ? { group: c.group } : {}), lineId: c.lineId, ...(c.rank !== undefined ? { rank: c.rank } : {}), at: r3(c.at), from: r3(c.from), to: r3(c.to), approved, reason, ...(c.meaningRef ? { meaningRef: c.meaningRef } : {}), ...(c.variant ? { variant: c.variant } : {}), ...extra };
     out.push(d);
@@ -608,6 +610,7 @@ function arbitratePolicies(cands: PolicyCandidate[], ctx: PolicyContext): Policy
       if (why) { decide(c, false, why); continue; }
       const own = lineEvents.find((e) => e.scope !== 'in-line' && e.kind !== 'camera-reframe' && e.kind !== 'prop-beat');
       const id = c.id ?? `scale:${line.id}`;
+      if (c.seat?.box) scaled.push({ id, box: c.seat.box, from: line.show, to: line.end + 0.5 });
       // (the line's grow is this change of size: folded, its hold no longer stands on its own)
       const fold = folded ? `hold:${folded.kind}@${folded.lineId}` : undefined;
       if (folded) ctx.holds.splice(ctx.holds.indexOf(folded), 1);
@@ -631,11 +634,13 @@ function arbitratePolicies(cands: PolicyCandidate[], ctx: PolicyContext): Policy
     const hand = ctx.handoffs.find((h) => { const from = h.seam - (h.prepare ?? LINK_PREPARE); return gap({ from, to: from + h.dur }); });
     const cut = ctx.events.find((e) => e.kind !== 'keep' && gap(e));
     const prior = moments.find((m) => gap(m));
+    const big = c.protectedRegion ? scaled.find((q) => q.from < w.to && w.from < q.to && boxesMeet(q.box, c.protectedRegion!)) : undefined;
     const light = c.changesLight ? [...ctx.lights.map((l) => ({ at: l.at, what: l.what })), ...ctx.events.filter((e) => e.changesLight && e.kind !== 'keep').map((e) => ({ at: e.at, what: e.id }))].find((l) => Math.abs(l.at - c.at) < LIGHT_GAP) : undefined;
     const why = hold ? `collisionQ2hold: overlaps Q2 ${hold.kind} on ${hold.lineId} (${ACTION_GAP}s between actions)`
       : hand ? `collisionOther: overlaps Q4 ${hand.kind} into ${hand.lineId}`
       : cut ? `collisionOther: overlaps ${cut.policy?.length ? 'Q3' : 'Q1'} ${cut.id}`
       : prior ? `collisionOther: overlaps ${prior.what}`
+      : big ? `collisionOther: its region meets the Q3 composition ${big.id}`
       : light ? `collisionOther: light change within ${LIGHT_GAP}s of ${light.what}` : '';
     if (why) { decide(c, false, why); continue; }
     const id = c.id ?? `moment:${line.id}`;

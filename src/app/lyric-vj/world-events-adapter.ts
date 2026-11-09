@@ -228,6 +228,8 @@ export function currentEvents(free: { job: Job }, _song: SongTimeline | undefine
     const cam = w?.cam && WORLD_CAM_SEC[w.cam.kind] ? w.cam : undefined;
     const before = here;
     if (i > 0 && q4) ev({ lineIds: [rows[i - 1].id, id], kind: 'page-handoff', at: q4.seam, from: q4.seam - (q4.prepare ?? LINK_PREPARE), to: q4.seam - (q4.prepare ?? LINK_PREPARE) + q4.dur, seatBefore: before, seatAfter: set, scope: 'line', changesLight: true, reason: q4.kind });
+    // (a Q3 scale composition is the line's switch at its show, whether or not its set changes: one event)
+    else if (w?.scale && !moved) ev({ lineIds: [id], kind: 'layout-seat', at: show, from: show, to: show, seatBefore: before, seatAfter: `${set}+scale:${w.scale.edge}`, scope: 'line', reason: `scale ${w.scale.eventId}` });
     else if (moved) ev({ lineIds: [id], kind: 'layout-seat', at: show, from: show, to: show, seatBefore: before, seatAfter: set, scope: 'line', reason: 'set changes at the line' });
     else if (i > 0 && cam) ev({ lineIds: [id], kind: 'camera-reframe', at: cam.at, from: cam.at, to: cam.at + WORLD_CAM_SEC[cam.kind], seatBefore: before, seatAfter: set, scope: 'section', reason: `world camera ${cam.kind}` });
     here = set;

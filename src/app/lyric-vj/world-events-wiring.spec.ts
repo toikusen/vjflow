@@ -7,9 +7,11 @@ import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { LINK_CLEAR, LINK_PREPARE, linkGrounds, sectionClock } from './render/world-handoff';
 import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, SEAM_GAP, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
-import { capsOf, currentEvents, fromJob, holdRoom, ONE_PAGE_WORLDS } from './world-events-adapter';
+import { capsOf, currentEvents, fromJob, holdRoom, lightGapWarnings, ONE_PAGE_WORLDS, shownOf, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
 import { compositionsOf, WORLD_COMPOSITIONS } from './world-shared';
+import { composePlan, RECIPES } from './lineplan-core';
+import { poolOf } from './style-world';
 
 const LEFT: SeatCandidate = { id: 'w/left', box: { x0: 0.05, y0: 0.3, x1: 0.45, y1: 0.6 } };
 const RIGHT: SeatCandidate = { id: 'w/right', box: { x0: 0.55, y0: 0.3, x1: 0.95, y1: 0.6 } };
@@ -132,6 +134,8 @@ describe('the wiring', () => {
     expect(Object.keys(WORLD_COMPOSITIONS).sort()).toEqual([...ONE_PAGE_WORLDS].sort());
     expect(compositionsOf('silk')).toBeUndefined();
     expect(WORLD_COMPOSITIONS['document'].kinds).toEqual([]);
+    // nothing is taken over by default (2026-11-09 review): only an explicit opt-in schedules them
+    for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.enabled).toBeFalsy();
     expect(WORLD_COMPOSITIONS['chalkboard'].pending?.['erase-reseat']).toMatch(/never the line being sung/);
     for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.allowedAt['camera-reframe'] ?? ['section']).toEqual(['section']);
   });
@@ -186,8 +190,15 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('the wired free path 
   for (const id of ONE_PAGE_WORLDS)
     it(`${id}: every cut in the table is drawn (the plan as drawn counts the same), the same seed the same table, every clock kept`, () => {
       const style = FREE_STYLES.find((s) => s.id === id)!;
-      const a = freeJob(song, { style, seed: 0, meaning });
-      expect(JSON.stringify(freeJob(song, { style, seed: 0, meaning }).treatment.worldEvents)).toBe(JSON.stringify(a.treatment.worldEvents));
+      const a = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+      expect(JSON.stringify(freeJob(song, { style, seed: 0, meaning, worldEvents: true }).treatment.worldEvents)).toBe(JSON.stringify(a.treatment.worldEvents));
+      // the final draw matches its plan: seats, pages, times, handoffs, and the light clock holds
+      expect(verifyWorldEvents(a.job, style.world, a.treatment.worldEvents!)).toEqual([]);
+      expect(lightGapWarnings(a.job, a.treatment.worldEvents!)).toEqual([]);
+      expect(a.treatment.worldEvents!.warnings.filter((w) => w.reason.startsWith('final check'))).toEqual([]);
+      // every switch at a boundary falls on the line's show, the frame its set is drawn from
+      const shows = new Map(shownOf(a.job).rows.map((r) => [r.id, r.show]));
+      for (const e of a.treatment.worldEvents!.events.filter((x) => x.scope !== 'in-line' && !['keep', 'page-handoff', 'camera-reframe'].includes(x.kind))) expect(e.at, e.id).toBe(shows.get(e.lineIds.at(-1)!));
       const table = a.treatment.worldEvents!;
       expect(table.source).toBe('declared');
       const win: [number, number] = [76, 101];
@@ -203,4 +214,81 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('the wired free path 
       expect(table.holds.length + table.events.flatMap((e) => e.merged ?? []).length).toBe(held.length);
       for (const h of table.holds) expect(held.find((c) => c.cueId === h.lineId)!.world!.beat!.at).toBe(h.at);
     });
+});
+
+describe('phase-2 review fixes', () => {
+  it('a declared seat whitelist is kept: a candidate outside it is never taken, a pinned own seat still stands', () => {
+    const C: SeatCandidate = { ...TOP, id: 'w/c' };
+    const lines = Array.from({ length: 8 }, (_, i) => line(`l${i}`, i * 2.5, i * 2.5 + 2.4, 3, [i % 2 ? LEFT : RIGHT, C]));
+    const plan = planWorldEvents(input(lines, { caps: caps(['layout-seat'], { seats: ['w/left', 'w/right'] }) }));
+    for (const e of plan.events) expect(e.seatAfter).not.toBe('w/c');
+    const pinned = planWorldEvents(input([line('a', 0, 2), { ...line('b', 2.2, 4, 0, [C]), pinned: 'test', seat: 'w/c' }], { caps: caps(['layout-seat'], { seats: ['w/left', 'w/right'] }) }));
+    expect(pinned.events.find((e) => e.lineIds.includes('b'))?.seatAfter).toBe('w/c');
+  });
+
+  it('a boundary switch falls on the line show or not at all (no later start the renderer would not keep)', () => {
+    // b's show collides with a's in-line seam floor, its start would not: it keeps rather than switch at its start
+    const a = { ...line('a', 0, 3, 0), words: [{ text: 'x', from: 0, to: 2.15 }, { text: 'y', from: 2.15, to: 3 }] };
+    const plan = planWorldEvents(input([a, { ...line('b', 3, 5), seats: [RIGHT, LEFT], seat: 'w/right' }]));
+    for (const e of plan.events.filter((x) => x.lineIds.at(-1) === 'b' && x.scope !== 'in-line')) expect(e.kind === 'keep' || e.at === 2.8).toBe(true);
+  });
+
+  it("the composer's lyric handoff is a fixed page handoff with its own window, counted once and protected", () => {
+    const plan = planWorldEvents(input([line('a', 0, 2), line('b', 2.6, 5, 3)], { handoffs: [{ lineId: 'b', kind: 'lyric-relay', dir: 0, seam: 2.4, prepare: 0.6, dur: 1.1 }] }));
+    const h = plan.events.find((e) => e.kind === 'page-handoff')!;
+    expect([h.fixed, h.from, h.at, h.to]).toEqual([true, 1.8, 2.4, 2.9]);
+    expect(countCuts(plan.events, [0, 6]).byKind['page-handoff']).toBe(1);
+    for (const e of plan.events.filter((x) => x.scope === 'in-line')) expect(e.from).toBeGreaterThanOrEqual(2.9 + ACTION_GAP - 1e-6);
+  });
+});
+
+describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase-2 review fixes on real songs', () => {
+  const load = (db: string, plan: string) => ({ song: JSON.parse(readFileSync(`out/db/${db}/song.json`, 'utf8')), meaning: existsSync(`out/research/instant/plans/${plan}/meaning.json`) ? JSON.parse(readFileSync(`out/research/instant/plans/${plan}/meaning.json`, 'utf8')) : undefined });
+  const nun = existsSync(SONG) ? load('yt_w_fCuUR3lEs', 'nun') : undefined;
+
+  it('the paid pool keeps its reposes: poolOf never marks the five as scheduled', () => {
+    for (const id of ONE_PAGE_WORLDS) expect(poolOf(FREE_STYLES.find((s) => s.id === id)!.world, RECIPES).scheduled, id).toBeFalsy();
+    const W = poolOf(FREE_STYLES.find((s) => s.id === 'chalkboard')!.world, RECIPES);
+    const { plan } = composePlan(nun!.song, { ...nun!.meaning, palette: 'tea' }, false, { reroll: 0, world: W });
+    const lines = (plan as unknown as { shots: { lines: { world?: { repose?: unknown[] } }[] }[] }).shots.flatMap((s) => s.lines);
+    expect(lines.filter((l) => l.world?.repose?.length).length).toBeGreaterThan(0);
+  });
+
+  it('by default the five draw as before; only an opt-in schedules them', () => {
+    const style = FREE_STYLES.find((s) => s.id === 'chalkboard')!;
+    const before = freeJob(nun!.song, { style, seed: 0, meaning: nun!.meaning, worldEvents: false });
+    const plain = freeJob(nun!.song, { style, seed: 0, meaning: nun!.meaning });
+    const { worldEvents: _w, ...rest } = plain.job.treatment;
+    expect(plain.treatment.worldEvents?.source).toBe('declared-off');
+    expect(JSON.stringify(rest)).toBe(JSON.stringify(before.job.treatment));
+    expect(freeJob(nun!.song, { style, seed: 0, meaning: nun!.meaning, worldEvents: true }).treatment.worldEvents?.source).toBe('declared');
+  });
+
+  it('regressions: art-deco choroin c061 and chalkboard nun c041 switch on their show or keep, the seam clock kept', () => {
+    const cases: [string, string, string, string][] = [['art-deco', 'yt_hCCskTJwvuc', 'choroin', 'c061'], ['chalkboard', 'yt_w_fCuUR3lEs', 'nun', 'c041']];
+    for (const [id, db, plan, cue] of cases) {
+      if (!existsSync(`out/db/${db}/song.json`)) continue;
+      const { song, meaning } = load(db, plan);
+      const style = FREE_STYLES.find((s) => s.id === id)!;
+      const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+      const show = shownOf(f.job).rows.find((r) => r.id === cue)!.show;
+      const own = f.treatment.worldEvents!.events.filter((e) => e.lineIds.at(-1) === cue && e.scope !== 'in-line' && e.kind !== 'keep' && e.kind !== 'camera-reframe');
+      for (const e of own) {
+        expect(e.at, `${id} ${cue}`).toBe(show);
+        for (const x of f.treatment.worldEvents!.events.filter((y) => y !== e && y.kind !== 'keep' && !y.fixed)) expect(Math.abs(x.at - e.at)).toBeGreaterThanOrEqual(SEAM_GAP - 1e-6);
+      }
+    }
+  });
+
+  it('a final draw that does not match its plan is reported by event id, never accepted silently', () => {
+    const style = FREE_STYLES.find((s) => s.id === 'blueprint')!;
+    const f = freeJob(nun!.song, { style, seed: 0, meaning: nun!.meaning, worldEvents: true });
+    const e = f.treatment.worldEvents!.events.find((x) => x.kind === 'layout-seat' && x.scope !== 'in-line')!;
+    const job = structuredClone(f.job);
+    const cue = (job.treatment.cues as { cueId: string; world?: { set: string } }[]).find((c) => c.cueId === e.lineIds.at(-1))!;
+    cue.world!.set = cue.world!.set === 'blueprint/notes' ? 'blueprint/construct' : 'blueprint/notes';
+    expect(verifyWorldEvents(job, style.world, f.treatment.worldEvents!).map((w) => w.inputs[0])).toContain(e.id);
+    const lit = { events: [...f.treatment.worldEvents!.events, { ...e, id: 'x1', changesLight: true }, { ...e, id: 'x2', at: e.at + 0.2, changesLight: true }] };
+    expect(lightGapWarnings(f.job, lit).length).toBeGreaterThan(0);
+  });
 });

@@ -58,9 +58,10 @@ describe('planWorldEvents', () => {
     const plan = planWorldEvents(input(lines, { handoffs: [{ lineId: 'b', kind: 'link-relay-x', dir: 0, seam, dur: LINK_PREPARE + LINK_CLEAR }] }));
     const h = plan.events.find((e) => e.kind === 'page-handoff' && e.fixed)!;
     expect([h.at, h.from, h.to]).toEqual([seam, seam - LINK_PREPARE, seam + LINK_CLEAR]);
-    // c shows at 2.5, inside the handoff's clear and under the seam floor: its reseat moves to its first sung frame
+    // c shows at 2.5, inside the handoff's clear and under the seam floor: its reseat is dropped (a boundary switch falls
+    // on the show the set is drawn from, or not at all) and the line keeps
     expect(plan.rejected.some((r) => r.candidate.lineId === 'c' && r.candidate.at === 2.5 && /Q4 link-relay-x/.test(r.reason))).toBe(true);
-    expect(plan.events.find((e) => e.lineIds.includes('c') && e.scope !== 'in-line')?.at).toBe(2.7);
+    expect(plan.events.find((e) => e.lineIds.includes('c') && e.scope !== 'in-line')?.kind).toBe('keep');
     // with no later window it is dropped, and the line keeps
     const tight = planWorldEvents(input([line('a', 0, 2), line('b', 2, 2.4), line('c', 2.5, 5, 3)], { handoffs: [{ lineId: 'b', kind: 'link-relay-x', dir: 0, seam, dur: LINK_PREPARE + LINK_CLEAR }] }));
     expect(tight.events.find((e) => e.lineIds.includes('c') && e.scope !== 'in-line')?.kind).toBe('keep');

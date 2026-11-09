@@ -1,0 +1,144 @@
+{
+ "reading": "在海邊的回憶與消逝的季節之間，歌者反覆問「信不信得過」，最後在黎明的日出裡選擇相信，並約定夢的延續。",
+ "palette": "tide",
+ "ground": "gradient",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.4,
+   "fx": [
+    "soft-rings",
+    "paper-edge",
+    "overprint"
+   ],
+   "what": "開場以疑問追憶海的氣味與消逝的季節，語氣悵然而安靜。"
+  },
+  {
+   "from": "c005",
+   "tension": 0.7,
+   "fx": [
+    "soft-rings",
+    "motes",
+    "flow"
+   ],
+   "what": "「信じられる？」反覆發問，星光與海的廣闊被拿來當作懸而未決的信念，帶著顫動的期待。"
+  },
+  {
+   "from": "c010",
+   "tension": 0.5,
+   "fx": [
+    "deckle",
+    "crease",
+    "overprint"
+   ],
+   "what": "笑容被波浪隱沒的失落感再度浮現，情緒轉向低迴、層層回想。"
+  },
+  {
+   "from": "c014",
+   "tension": 0.8,
+   "fx": [
+    "herringbone",
+    "block",
+    "hatch"
+   ],
+   "what": "「信じてみる」由問轉為主動的決心，手揮向路的盡頭，節奏推向最有力的一段。"
+  },
+  {
+   "from": "c017",
+   "tension": 0.6,
+   "fx": [
+    "stitch",
+    "soft-rings",
+    "flow"
+   ],
+   "what": "我的歌與你的呼喚相連，彼此的聲音終將相遇，情緒從個人轉向牽絆。"
+  },
+  {
+   "from": "c021",
+   "tension": 0.7,
+   "fx": [
+    "soft-rings",
+    "motes",
+    "rain"
+   ],
+   "what": "再次確認信任，星光與海的記憶重新被召回，語氣穩定而堅定。"
+  },
+  {
+   "from": "c022",
+   "tension": 0.9,
+   "fx": [
+    "disc",
+    "paper-drift",
+    "offcut"
+   ],
+   "what": "夢的延續與黎明的輝光，「共に生きよう」把希望推到頂點，情緒明亮而釋放。"
+  }
+ ],
+ "keys": [
+  {
+   "cue": "c011",
+   "phrase": "よせる波に隠れてしまう",
+   "why": "笑容被波浪遮住，是失去的具體畫面，也是全曲失落感的核心意象，後面的「信じてみる」正是對這份失去的回應。"
+  },
+  {
+   "cue": "c014",
+   "phrase": "信じてみる",
+   "why": "由「信じられる？」的疑問轉為主動的嘗試，是情緒轉折的關鍵；「みる」帶有試一試的不確定，因此是決心而非篤定。"
+  },
+  {
+   "cue": "c010",
+   "phrase": "かわることなく見えた笑顔",
+   "why": "笑容曾經看似永不改變，這份落差使後面的失去更痛，屬於對比的起點。"
+  },
+  {
+   "cue": "c022",
+   "phrase": "夢のつづきで また会いましょう",
+   "why": "把離別化為夢的延續，約定再見，是希望的落點，也呼應歌名「世界のつづき」。"
+  },
+  {
+   "cue": "c027",
+   "phrase": "共に生きよう",
+   "why": "從個人的回想走向共同生存的邀請，是全曲情感的收束與承諾。"
+  }
+ ],
+ "moments": [
+  {
+   "cues": [
+    "c011"
+   ],
+   "form": "shape",
+   "variant": "wave",
+   "word": "波",
+   "evidenceCueId": "c011",
+   "why": "c011原句「どうして よせる波に隠れてしまうの」，波真的湧來遮住笑容，「波」是字面的海浪，符合shape/wave。"
+  },
+  {
+   "cues": [
+    "c002"
+   ],
+   "form": "strike",
+   "variant": "wipe",
+   "word": "消えて",
+   "evidenceCueId": "c002",
+   "why": "c002「すぎる季節に消えてしまうの」，季節裡的某物真的消失了，「消えて」即消失之意，符合strike/wipe。"
+  },
+  {
+   "cues": [
+    "c014",
+    "c016"
+   ],
+   "form": "echo",
+   "variant": "ghost",
+   "word": "信じてみる",
+   "evidenceCueId": "c016",
+   "why": "c014與c016前後兩句都唱「信じてみる」，同一個詞迴響並加重決心，符合echo/ghost。"
+  }
+ ],
+ "source": {
+  "base": "f58fabc23cd6d7522f7572e8cc2a2e7aced36e0125db6ad0a5032102163ef404",
+  "overlay": "out/research/instant/plans/tsuzuki/meaning.haiku-1109f.json",
+  "model": "claude-haiku-5-5",
+  "effort": "medium+verify-unanimous3",
+  "date": "2026-11-10"
+ }
+}

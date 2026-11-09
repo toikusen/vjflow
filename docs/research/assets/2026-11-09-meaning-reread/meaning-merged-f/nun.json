@@ -1,0 +1,142 @@
+{
+ "reading": "這首歌用童趣般的武打誇耀寫出少年的自信與張揚，副歌連番呼喊「快使用雙截棍」製造亢奮，而「一根我不抽的菸」「一放好多年」等句隱約透出青春裡的叛逆與藏不住的寂寞。",
+ "palette": "lacquer",
+ "ground": "grain",
+ "parts": [
+  {
+   "from": "c001",
+   "tension": 0.35,
+   "fx": [
+    "smoke",
+    "zones",
+    "film"
+   ],
+   "what": "市井街景的煙味與熱鬧，情緒輕鬆帶點雜亂的日常感"
+  },
+  {
+   "from": "c005",
+   "tension": 0.55,
+   "fx": [
+    "beams",
+    "fill"
+   ],
+   "what": "從小耳濡目染、什麼兵器都耍得有模有樣，自信逐漸升溫"
+  },
+  {
+   "from": "c009",
+   "tension": 0.8,
+   "fx": [
+    "beatbg",
+    "bolt",
+    "split"
+   ],
+   "what": "呼吸吐納、氣沉丹田的爆發前奏，以呼喊推向高點"
+  },
+  {
+   "from": "c014",
+   "tension": 0.7,
+   "fx": [
+    "crack",
+    "stamp",
+    "glitch"
+   ],
+   "what": "惹毛我的人有危險，帶挑釁與硬氣的語氣"
+  },
+  {
+   "from": "c015",
+   "tension": 0.6,
+   "fx": [
+    "bleed",
+    "tear",
+    "smoke"
+   ],
+   "what": "一根我不抽的菸反覆出現，是放不下的執念與隱約的心緒，語氣由張揚轉為低落"
+  },
+  {
+   "from": "c020",
+   "tension": 0.9,
+   "fx": [
+    "beatbg",
+    "spiral",
+    "bolt"
+   ],
+   "what": "快使用雙截棍的密集呼喊，情緒全面亢奮、節奏狂熱"
+  },
+  {
+   "from": "c027",
+   "tension": 0.75,
+   "fx": [
+    "beams",
+    "rays",
+    "stamp"
+   ],
+   "what": "為人耿直不屈、一身正氣，英雄式的宣告"
+  },
+  {
+   "from": "c047",
+   "tension": 0.85,
+   "fx": [
+    "glitch",
+    "invert",
+    "synth"
+   ],
+   "what": "副歌收束的層層疊加呼喊，衝到最高後被哼聲打散"
+  },
+  {
+   "from": "c053",
+   "tension": 0.4,
+   "fx": [
+    "fill",
+    "dots"
+   ],
+   "what": "手刀防禦、哼聲漸弱，熱度回落收尾"
+  }
+ ],
+ "keys": [
+  {
+   "cue": "c007",
+   "phrase": "柔中帶剛",
+   "why": "形容雙截棍的特質，點出全曲功夫與態度的核心對比，值得強調。"
+  },
+  {
+   "cue": "c016",
+   "phrase": "一直在身邊",
+   "why": "接在「一放好多年」之後，表示一根不抽的菸一直陪著，是全曲少見的沉靜心事，與前段的熱血形成反差。"
+  },
+  {
+   "cue": "c019",
+   "phrase": "已被我一腳踢開",
+   "why": "「已被」是完成式，表示反抗已經發生，與前面的招牌形成對照，是情緒轉折的關鍵。"
+  }
+ ],
+ "moments": [
+  {
+   "cues": [
+    "c019"
+   ],
+   "form": "strike",
+   "variant": "tear",
+   "word": "踢",
+   "evidenceCueId": "c019",
+   "why": "c019 原文「東亞病夫的招牌 已被我一腳踢開」，「踢」是把羞辱的招牌踢開，與「踢、打、破」的撕裂動作同義，表示反抗與推開。"
+  },
+  {
+   "cues": [
+    "c020",
+    "c021"
+   ],
+   "form": "echo",
+   "variant": "ghost",
+   "word": "雙截棍",
+   "evidenceCueId": "c021",
+   "why": "c020 與 c021 皆唱「快使用雙截棍」，是副歌前後兩句重複同一詞的呼喊，並非比喻或否定。"
+  }
+ ],
+ "source": {
+  "base": "8db8e1215452e520f201f0a9300cece2ed1d20cc3544cd8256e9bfa981dd233b",
+  "overlay": "out/research/instant/plans/nun/meaning.haiku-1109f.json",
+  "model": "claude-haiku-5-5",
+  "effort": "medium+verify-unanimous3",
+  "date": "2026-11-10"
+ }
+}

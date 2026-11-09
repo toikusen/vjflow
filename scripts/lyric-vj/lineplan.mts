@@ -1,8 +1,8 @@
 // The line composer: a song's whole plan with no director. One cheap reading of the lyrics (or none), then rules.
 // npx tsx scripts/lyric-vj/lineplan.mts --song song.json --base base-treatment.json --out <dir> [--no-reading] [--verify-meaning]
-// --verify-meaning: a fresh reading's keys and moments are re-judged by a second call (meaning-read.mts verifyCandidates)
-// before they are cached; a cache hit is used as stored. Off by default; turning it on in production is a later decision
-// (about two calls a song, ~$0.004 at 2026-11-09 prices).
+// --verify-meaning: a fresh reading's keys and moments are re-judged by three verify calls, kept only when unanimous
+// (meaning-read.mts verifyCandidates) before they are cached; a cache hit is used as stored. Off by default; turning it on
+// in production is a later decision (four calls a song, ~$0.01 at 2026-11-10 prices).
 // then: npx tsx scripts/lyric-vj/typeplan.mts --song song.json --treatment <dir>/base.json --plan <dir>/plan.json --palette "$(cat <dir>/palette)" --out <dir>/final
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

@@ -298,8 +298,18 @@ const markRow = (part: string) => centred(`*** ${part} ***`, P.row, 500, 12);
  * fit the room and the ink budget.
  */
 function above(e: WorldEnv, it: WorldItem): { row: Row; age: number; edge?: Edge }[] {
-  const mine = it.first ? [] : it.prev.filter((x) => x.run === undefined || x.run === it.run);
+  const seg = it.since;
+  const mine = it.first ? [] : it.prev.filter((x) => (x.run === undefined || x.run === it.run) && (!seg || x.no >= seg.no));
   const out: { row: Row; age: number; edge?: Edge }[] = [...mine].reverse().map((x) => ({ row: itemRow(x.no, x.text, x.at), age: it.no - x.no }));
+  // (a segment an approved page move opened inside the run, Q1 phase 3b: its top is the torn edge, or the rule the feed
+  // printed under the rows it carried out of shot; nothing older is on it)
+  if (seg) {
+    if (!(seg.no === it.no || mine[0]?.no === seg.no)) return out;
+    const age = it.no - seg.no;
+    if (seg.draws === 'tear') out.push({ row: { h: 34, ink: 0, draw: () => undefined }, age, edge: 'tear' });
+    else out.push({ row: rule('-'), age });
+    return out;
+  }
   // (where the part opened: on this line, on the first of its rows on record, or past the record, out of shot anyway)
   const opened = it.first || mine.length < it.prev.length || it.no - 1 === mine.length;
   if (!opened) return out;
@@ -358,13 +368,20 @@ const ownCut = (e: WorldEnv, it: WorldItem) => it.at === undefined || e.now - e.
  */
 function tornSlip(c: C, e: WorldEnv, it: WorldItem, x0: number, x1: number, foot: number) {
   const b = it.before;
+  // (a segment torn off inside a part by an approved tear-next, Q1 phase 3b: its own rows only, no tail, timed from the
+  // event; the part change's slip as before)
+  const seg = it.opens?.draws === 'tear' && it.segmentFrom !== undefined ? it.opens : undefined;
+  const age = seg ? e.now - seg.at : e.age;
   // (a line too short to read past a slip going by keeps the frame to itself: the slip was torn off unseen)
-  if (!b || e.age > 0.25 || (it.dur ?? 0) < 1.5 || !ownCut(e, it)) return;
-  const k = stepsOf((e.age - 0.03) / 0.2, 4);
+  if ((!b && !seg) || age < 0 || age > 0.25 || (it.dur ?? 0) < 1.5 || (!seg && !ownCut(e, it))) return;
+  const k = stepsOf((age - 0.03) / 0.2, 4);
   if (k >= 1) return;
   const u = wordsOf(e);
   const w = x1 - x0;
-  const rows: Row[] = [
+  const rows: Row[] = seg || !b ? [
+    ...it.prev.filter((x) => (x.run === undefined || x.run === it.run) && x.no >= (it.segmentFrom ?? 0)).slice(-3).map((x) => itemRow(x.no, x.text, x.at)),
+    rule('-'),
+  ] : [
     ...it.prev.filter((x) => x.run !== it.run).slice(-2).map((x) => itemRow(x.no, x.text, x.at)),
     rule('-'),
     pairRow(`${u.subtotal}  ${b.part} ${b.n}${u.lines}`, `${b.sec.toFixed(1)}${u.sec}`, P.row),
@@ -444,8 +461,26 @@ const roll = (kind: 'feed' | 'sheet' | 'pair'): HandGround => (e) => page(e, (c)
   if (qty) qty.draw(c, r.y1 + 14, x0, x1, ink);
   if (kind !== 'sheet') printer(c, X0, X1, MOUTH_Y);
   if (it) tornSlip(c, e, it, X0, X1, Math.min(560, r.y0 - 70));
+  if (it) fedAway(c, e, it, x0, x1, headY);
   publish();
 });
+
+/**
+ * The rows of the segment before, carried up out of shot as an approved feed-advance opens the next (Q1 phase 3b): in
+ * four held steps straight up over the move's time, the paper's own feed (never turning, never easing), drawn over the
+ * paper above the head while the new segment's rule prints; gone once the move is over.
+ */
+function fedAway(c: C, e: WorldEnv, it: WorldItem, x0: number, x1: number, headY: number) {
+  const m = it.opens?.draws === 'feed' && it.segmentFrom !== undefined ? it.opens : undefined;
+  if (!m) return;
+  const q = (e.now - m.at) / Math.max(0.05, m.sec);
+  if (q < 0 || q >= 1) return;
+  const rows = it.prev.filter((x) => (x.run === undefined || x.run === it.run) && x.no >= it.segmentFrom!).reverse().map((x) => ({ row: itemRow(x.no, x.text, x.at), age: it.no - x.no }));
+  c.save();
+  c.translate(0, -stepsOf(q, 4) * H);
+  layUp(c, rows, headY - ROW, 0, Infinity, x0, x1, e);
+  c.restore();
+}
 
 /**
  * c: the closing line (the last of the last chorus) is the receipt's last item, in the second colour, near the top of the

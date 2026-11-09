@@ -12,6 +12,7 @@ import type { C } from './world-b3-shared';
 import { B5 } from './b5-inks';
 import { Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox } from './world-b5-shared';
 import { DECO_COLUMN, DECO_NARROW } from './world-b5-sets';
+import type { FaceLayout } from './world-sets';
 
 const SERIF = (px: number) => `500 ${px}px "Noto Serif TC", "Kaisei Tokumin", serif`;
 const AX = W / 2;
@@ -48,6 +49,36 @@ function caption(c: C, e: WorldEnv, y: number, tone: string, px = 26, extra = ''
 /** How many rays are drawn yet: one after another as the page opens (board motion), all of them by 0.6 s. */
 const raysUp = (e: WorldEnv, n: number) => Math.floor(clamp01(e.age / 0.6) * n);
 
+/** The poster-panel's slide: out fast, settling, never past its place (design-bar rule 9: a panel slides, no bounce). */
+const PANEL_EASE = (q: number) => 1 - Math.pow(1 - clamp01(q), 3);
+type Rect = { x0: number; y0: number; x1: number; y1: number };
+const lerpRect = (a: Rect, b: Rect, k: number): Rect => ({ x0: a.x0 + (b.x0 - a.x0) * k, y0: a.y0 + (b.y0 - a.y0) * k, x1: a.x1 + (b.x1 - a.x1) * k, y1: a.y1 + (b.y1 - a.y1) * k });
+/**
+ * A marquee line carried on panels (Q1 phase 3b, poster-panel; world-sets `panels`): the main part's plaque (the board's,
+ * at its least width) and the gold phrase's own panel under it, both on the axis. While they part, the one plaque that
+ * held both splits between the parts: its upper half rises to the main plaque, its lower half narrows to the panel, so
+ * every word stands on the ground's black throughout (only the gap between them opens). None when the parts are too
+ * close to stand apart (the single plaque, as drawn before).
+ */
+export function panelsOf(e: WorldEnv): { main: Rect; panel: Rect } | undefined {
+  const f = (e.rect as { face?: FaceLayout } | undefined)?.face;
+  if (!f?.panels || !f.parts) return undefined;
+  const cs = cellsOf(e);
+  if (cs.length !== f.parts.length) return undefined;
+  const [m, t] = [boxOf(cs.filter((_, i) => !f.parts![i]), DECO_NARROW[0]), boxOf(cs.filter((_, i) => f.parts![i]), DECO_NARROW[0])];
+  if (!m || !t) return undefined;
+  const all = boxOf(cs, DECO_NARROW[0])!;
+  const halfAll = Math.max(620, (all.x1 - all.x0) / 2 + 110);
+  const main = { x0: AX - Math.max(620, (m.x1 - m.x0) / 2 + 110), y0: m.y0 - 56, x1: AX + Math.max(620, (m.x1 - m.x0) / 2 + 110), y1: m.y1 + 56 };
+  const halfT = Math.max(360, (t.x1 - t.x0) / 2 + 90);
+  const panel = { x0: AX - halfT, y0: t.y0 - 36, x1: AX + halfT, y1: t.y1 + 36 };
+  if (panel.y0 - main.y1 < 24) return undefined;
+  const k = f.panels.sec > 0 ? PANEL_EASE((e.now - f.panels.from) / f.panels.sec) : 1;
+  const mid = (main.y1 + panel.y0) / 2;
+  const one = { x0: AX - halfAll, y0: all.y0 - 56, x1: AX + halfAll, y1: all.y1 + 56 };
+  return { main: lerpRect({ ...one, y1: mid }, main, k), panel: lerpRect({ ...one, y0: mid }, panel, k) };
+}
+
 /** a: a stepped double frame; a sunburst from below the axis; a black plaque round the words with triple rules top and bottom, a diamond on the axis at each; chevrons under it. */
 const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
   smallStart(e);
@@ -57,7 +88,10 @@ const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
   stepped(c, 70, 60, 1780, 960);
   const w = narrowBox(e);
   const half = Math.max(620, (w.x1 - w.x0) / 2 + 110);
-  const p = { x0: AX - half, y0: w.y0 - 56, x1: AX + half, y1: w.y1 + 56 };
+  const whole = { x0: AX - half, y0: w.y0 - 56, x1: AX + half, y1: w.y1 + 56 };
+  // (a line carried on panels, poster-panel: the plaque parts into the main plaque and the gold phrase's panel)
+  const parted = panelsOf(e);
+  const p = parted?.main ?? whole;
   c.save();
   c.beginPath();
   c.rect(110, 100, 1700, 880);
@@ -73,6 +107,15 @@ const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
   line(c, p.x1, p.y0, p.x1, p.y1, 2.4, g0);
   diamond(c, AX, p.y0, 20, g1);
   diamond(c, AX, p.y1, 20, g1);
+  if (parted) {
+    // the secondary panel: the ground's own black in a stepped double gold frame (the board's frame, smaller)
+    const q = parted.panel;
+    steppedPath(c, q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0, 14);
+    c.fillStyle = e.slots.ground;
+    c.fill();
+    stepped(c, q.x0, q.y0, q.x1 - q.x0, q.y1 - q.y0, 14, 8, 2);
+  }
+  const foot = parted ? parted.panel.y1 : p.y1;
   if (low) {
     if (p.y0 - 150 > 90) {
       c.fillStyle = e.slots.ground;
@@ -80,11 +123,11 @@ const marqueeOf = (low: boolean): HandGround => (e) => frame(e, (c) => {
       caption(c, e, p.y0 - 86, g0);
       [0, 1, 2].forEach((i) => { c.strokeStyle = g0; c.lineWidth = 2; c.beginPath(); c.moveTo(AX - 60, p.y0 - 140 - i * 22); c.lineTo(AX, p.y0 - 166 - i * 22); c.lineTo(AX + 60, p.y0 - 140 - i * 22); c.stroke(); });
     }
-  } else if (p.y1 + 150 < 990) {
+  } else if (foot + 150 < 990) {
     c.fillStyle = e.slots.ground;
-    c.fillRect(600, p.y1 + 70, 720, 50);
-    caption(c, e, p.y1 + 102, g0);
-    [0, 1, 2].forEach((i) => { c.strokeStyle = g0; c.lineWidth = 2; c.beginPath(); c.moveTo(AX - 60, p.y1 + 140 + i * 22); c.lineTo(AX, p.y1 + 166 + i * 22); c.lineTo(AX + 60, p.y1 + 140 + i * 22); c.stroke(); });
+    c.fillRect(600, foot + 70, 720, 50);
+    caption(c, e, foot + 102, g0);
+    [0, 1, 2].forEach((i) => { c.strokeStyle = g0; c.lineWidth = 2; c.beginPath(); c.moveTo(AX - 60, foot + 140 + i * 22); c.lineTo(AX, foot + 166 + i * 22); c.lineTo(AX + 60, foot + 140 + i * 22); c.stroke(); });
   }
   smallEnd();
 });

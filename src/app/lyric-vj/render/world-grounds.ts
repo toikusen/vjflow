@@ -66,6 +66,15 @@ export interface WorldItem {
   before?: { part: string; n: number; sec: number; closing: boolean };
   /** The song as a receipt prints it: its id (a hash of its title, hex), lines, length (s) and analysed tempo. */
   song?: { id: string; lines: number; len: number; bpm: number };
+  /**
+   * The line opens a new segment of its run by an approved page move (Q1 phase 3b, the receipt's tear-next or
+   * feed-advance): how (`tear` off along the tear bar, or `feed` the printed rows up out of shot), when, over how long.
+   */
+  opens?: { draws: string; at: number; sec: number };
+  /** The line that opened the current segment of its run and how (none: the run's own start). */
+  since?: { no: number; draws: string };
+  /** The segment before, when this line opens one: its rows' first line number (they go with the torn slip or the feed). */
+  segmentFrom?: number;
 }
 
 type Ground = (e: WorldEnv) => void;

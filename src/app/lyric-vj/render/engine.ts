@@ -1020,6 +1020,9 @@ export class LyricVjEngine {
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
       };
       if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });
+      // a line its world erases (Q1 phase 3b, an approved event only): the erase is its way out, at the approved time
+      const wipe = (style.world as { wipe?: { from: number; sec: number } } | undefined)?.wipe;
+      if (wipe) Object.assign(rt, { exitAt: wipe.from, exitDur: wipe.sec });
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
       // dark type on a light field gets a halo of that field's colour: it then reads over a photo inset as well

@@ -13,7 +13,9 @@ import { beatUnderScale, COPY_HOLDS } from './render/scale-pose';
 import { boxesMeet } from './render/seat-geometry';
 import { momentCandidates, scaleCandidates } from './policy-candidates';
 import { carrierPlan, SAFE_PX, SCALE_HOLDS, scaleLayout, type LineScale } from './render/scale-pose';
-import { LIFT, lineMomentLift } from './render/line-moment';
+import { LIFT, LIFT_MIN, liftRoom, lineMomentLift } from './render/line-moment';
+import { laidSeat } from './render/seat-geometry';
+import { SET_SPECS } from './render/world-sets';
 import { burstOval, shoutOval } from './render/world-b5-screentone';
 import { miniMomentsOf } from './render/mini-moment';
 import { estimateMeasure, FRAME, pickScaleContrasts, type ScaleLine } from './scale-policy';
@@ -197,6 +199,39 @@ describe('round-2 review rules', () => {
   });
 });
 
+describe('final review rules', () => {
+  it('draws no scale composition whose glyphs would leave the safe area (any world)', () => {
+    const plan: LineScale = { eventId: 'scale:c1', sectionId: 'S0', kind: 'scale', source: 'sectionScale', ratio: 1.7, targetSize: 170, readingSize: 100, span: { from: 0, to: 9 }, edge: 'left', rows: ['這次我們的手沒牽好'], carrierRole: 'paper', carrierId: 'paper:riso' };
+    const ok = scaleLayout('這次我們的手沒牽好', plan, 100, {}, estimateMeasure);
+    expect(ok.kind === 'miss' || ok.inSafe).toBe(true);
+    // (a measure that reports glyphs far wider than they lay: the drawn rows run past the safe area, so it is a miss)
+    const wide = scaleLayout('這次我們的手沒牽好', plan, 100, {}, (x) => (x.length === 1 ? 260 : estimateMeasure(x)));
+    if (wide.kind !== 'miss') expect(wide.inSafe).toBe(true);
+    else expect(wide.why).toBeDefined();
+  });
+
+  it('moves a line\'s words no further than its set leaves room: rows and columns never meet at the most lift', () => {
+    const text = 'どうして よせる波に隠れてしまうの';
+    let checked = 0;
+    for (const [set, spec] of Object.entries(SET_SPECS)) {
+      const laid = laidSeat(text, set);
+      if (!laid) continue;
+      const room = liftRoom(set, text);
+      expect(room).toBeLessThanOrEqual(LIFT + 1e-9);
+      // (the gap to the next row's or the next glyph's em box, at its own size: the most lift never closes it, and a set
+      // whose rows already touch (lead ≤ 1) gives no room at all)
+      const gap = laid.vertical ? spec.track : laid.rows > 1 ? spec.lead - 1 : 1;
+      expect(Math.max(0, gap) - room).toBeGreaterThanOrEqual(-1e-9);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(20);
+    const tight = Object.keys(SET_SPECS).find((k) => SET_SPECS[k].lead <= 1.04 && !SET_SPECS[k].vertical && (laidSeat(text, k)?.rows ?? 1) > 1);
+    if (tight) expect(liftRoom(tight, text)).toBeLessThanOrEqual(0.04 + 1e-9);
+    expect(LIFT_MIN).toBeGreaterThan(0);
+    expect(lineMomentLift({ form: 'shape', variant: 'wave', span: { from: 0, to: 1 }, at: 0, mainSec: 0.5, to: 1, lift: 0.02 }, 0.1, 0, 10)).toBeLessThanOrEqual(0.02 + 1e-9);
+  });
+});
+
 describe('lineMomentLift (a type-only mini moves the line\'s own words)', () => {
   const m = { form: 'shape', variant: 'wave', span: { from: 7, to: 8 }, at: 10, mainSec: 0.5, to: 10.8 };
   it('moves nothing before the word, outside its window, or past LIFT', () => {
@@ -239,7 +274,8 @@ describe('miniRegion (a mini moment\'s own area)', () => {
 describe('world capabilities', () => {
   it('declares scale for riso and screentone only, and moments for the 45 offered worlds', () => {
     expect(Object.keys(DECLARED_SCALE_CAPS).sort()).toEqual(['riso', 'screentone']);
-    expect(FREE_STYLES.filter((s) => scaleOf(s.id)).map((s) => s.id).sort()).toEqual(['riso', 'screentone']);
+    // (screentone's declaration is withheld after two critic rounds: no scale candidate until its page re-lays its grid)
+    expect(FREE_STYLES.filter((s) => scaleOf(s.id)).map((s) => s.id).sort()).toEqual(['riso']);
     expect(momentsCapOf('no-such-world')).toBeUndefined();
     expect(scaleOf('no-such-world')).toBeUndefined();
     expect(MINI_SHARE).toEqual([0.15, 0.3]);
@@ -273,7 +309,7 @@ const SONGS = [
 const haveOut = SONGS.every((s) => existsSync(s.db) && existsSync(s.meaning));
 
 describe.skipIf(!haveOut)('freeJob with the Q3 / Q5 wiring (三年後的大雪, 世界のつづき)', () => {
-  const load = (s: (typeof SONGS)[number]) => ({ song: JSON.parse(readFileSync(s.db, 'utf8')), meaning: JSON.parse(readFileSync(s.meaning, 'utf8')) });
+  const load = (s: { db: string; meaning: string }) => ({ song: JSON.parse(readFileSync(s.db, 'utf8')), meaning: JSON.parse(readFileSync(s.meaning, 'utf8')) });
   const style = (id: string) => FREE_STYLES.find((s) => s.id === id)!;
 
   it('leaves the default output byte-identical with the wiring off', () => {
@@ -293,9 +329,20 @@ describe.skipIf(!haveOut)('freeJob with the Q3 / Q5 wiring (三年後的大雪, 
     expect(run()).toBe(run());
   });
 
-  it('writes each approved scale composition onto its line, one a section, attributed to the section it starts in', () => {
+  it('gives withheld screentone no scale candidate and leaves riso unchanged', () => {
     const { song, meaning } = load(SONGS[0]);
-    const f = freeJob(song, { style: style('screentone'), seed: 0, meaning, scaleContrast: true });
+    const tone = freeJob(song, { style: style('screentone'), seed: 0, meaning, scaleContrast: true, worldEvents: true });
+    expect(tone.policy?.scale).toBeUndefined();
+    expect((tone.treatment.worldEvents?.policy ?? []).filter((d) => d.source === 'Q3')).toEqual([]);
+    expect(JSON.stringify(tone.job)).not.toContain('"scale":{"eventId"');
+    const riso = freeJob(song, { style: style('riso'), seed: 0, meaning, scaleContrast: true });
+    expect(riso.policy?.scale?.sungSections).toBeGreaterThan(0);
+  });
+
+  it('writes each approved scale composition onto its line, one a section, attributed to the section it starts in', () => {
+    // (riso: プラトニックチョロイン, where its edgeFit lands at seed 0; screentone's capability is withheld)
+    const { song, meaning } = load({ db: 'out/db/yt_hCCskTJwvuc/song.json', meaning: 'out/research/instant/plans/choroin/meaning.json' });
+    const f = freeJob(song, { style: style('riso'), seed: 0, meaning, scaleContrast: true });
     const scaled = (f.treatment.cues as { cueId: string; world?: { scale?: LineScale } }[]).filter((c) => c.world?.scale);
     expect(scaled.length).toBeGreaterThan(0);
     const sections = scaled.map((c) => c.world!.scale!.sectionId);

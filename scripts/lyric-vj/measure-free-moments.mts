@@ -47,7 +47,7 @@ function phase2() {
     const f = freeJob(s.timeline, { style, seed, meaning: s.meaning, worldEvents: true, scaleContrast: true, meaningMoments: true, meaningRef: s.path });
     const p = f.policy;
     const plan = p?.moments;
-    const t = f.treatment as { signature?: { cues: string[]; form: string; variant: string; word: string }[]; miniMoments?: { id: string; meaningRef: string; evidenceCueId: string; word: string; family: string; at: number; region: { x0: number; y0: number; x1: number; y1: number } }[] };
+    const t = f.treatment as { signature?: { cues: string[]; form: string; variant: string; word: string; meaningRef?: string; evidenceCueId?: string }[]; miniMoments?: { id: string; meaningRef: string; evidenceCueId: string; word: string; family: string; at: number; region: { x0: number; y0: number; x1: number; y1: number } }[] };
     const decisions = (p?.decisions ?? []).filter((d) => d.source === 'Q5');
     const fate = (ref: string) => {
       const c = plan?.candidates.find((x) => x.meaningRef === ref);
@@ -60,7 +60,7 @@ function phase2() {
       if (d.approved) return { outcome: 'chosen', variant: d.variant, at: d.at, window: [d.from, d.to] };
       return { outcome: /^collisionQ2hold/.test(d.reason) ? 'collisionQ2hold' : /^collision/.test(d.reason) ? 'collisionOther' : /^budget/.test(d.reason) ? 'budget' : /^not needed/.test(d.reason) ? 'notNeeded' : 'other', variant: d.variant, reason: d.reason };
     };
-    const realized = [...(t.signature ?? []).map((m) => ({ variant: 'big', id: `moment:${m.cues.at(-1)}:${m.form}/${m.variant}`, word: m.word, evidenceCueId: m.cues.at(-1) })), ...(t.miniMoments ?? []).map((m) => ({ variant: 'mini', id: m.id, word: m.word, evidenceCueId: m.evidenceCueId, meaningRef: m.meaningRef, family: m.family, at: m.at, regionShare: +((m.region.x1 - m.region.x0) * (m.region.y1 - m.region.y0)).toFixed(3) }))];
+    const realized = [...(t.signature ?? []).map((m) => ({ variant: 'big', id: `moment:${m.cues.at(-1)}:${m.form}/${m.variant}`, word: m.word, meaningRef: m.meaningRef, evidenceCueId: m.evidenceCueId ?? m.cues.at(-1) })), ...(t.miniMoments ?? []).map((m) => ({ variant: 'mini', id: m.id, word: m.word, evidenceCueId: m.evidenceCueId, meaningRef: m.meaningRef, family: m.family, at: m.at, regionShare: +((m.region.x1 - m.region.x0) * (m.region.y1 - m.region.y0)).toFixed(3) }))];
     return {
       song: s.song, world: style.id, seed, declared: !!plan, candidates: plan?.candidates.length ?? 0, realizedMoments: realized.length, realized,
       perCandidate: (plan?.candidates ?? []).map((c) => ({ meaningRef: c.meaningRef, word: c.ask?.word, ...fate(c.meaningRef) })),

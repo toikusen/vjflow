@@ -128,6 +128,8 @@ export function scaleLayout(text: string, plan: LineScale, readingSize: number, 
   const glyphBox = glyphs.reduce((u, g) => ({ x0: Math.min(u.x0, g.x - g.size / 2), y0: Math.min(u.y0, g.y - g.size / 2), x1: Math.max(u.x1, g.x + g.size / 2), y1: Math.max(u.y1, g.y + g.size / 2) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
   const r1 = (b: FracBox): FracBox => ({ x0: +b.x0.toFixed(1), y0: +b.y0.toFixed(1), x1: +b.x1.toFixed(1), y1: +b.y1.toFixed(1) });
   const inSafe = glyphBox.x0 >= SAFE_PX.x0 - 1e-6 && glyphBox.y0 >= SAFE_PX.y0 - 1e-6 && glyphBox.x1 <= SAFE_PX.x1 + 1e-6 && glyphBox.y1 <= SAFE_PX.y1 + 1e-6;
+  // (a composition whose glyphs leave the declared safe area is not drawn: the line stands as composed, review 2026-11-10)
+  if (!inSafe) return { ...miss(`glyphs leave the safe area (${r1(glyphBox).x0}, ${r1(glyphBox).y0}, ${r1(glyphBox).x1}, ${r1(glyphBox).y1} px)`), glyphBox: r1(glyphBox), inSafe };
   return { size: S, ratio, planned: plan.ratio, unrealized: ratio < plan.ratio - 0.01, kind, edge: seat.edge, inkBox: r1(ink), carrierBox: seat.carrierExtends.box, glyphs, glyphBox: r1(glyphBox), inSafe };
 }
 

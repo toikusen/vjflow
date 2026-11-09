@@ -36,7 +36,7 @@ export interface MiniMoment {
 }
 
 /** A type-only mini as the line's own words move (render/world-layout.ts): the evidence word as code points of the drawn text. */
-export interface LineMoment { id: string; form: string; variant: string; span: { from: number; to: number }; at: number; mainSec: number; to: number }
+export interface LineMoment { id: string; form: string; variant: string; span: { from: number; to: number }; at: number; mainSec: number; to: number; /** The most its words move, ems: the set's own room (render/line-moment liftRoom). */ lift?: number }
 
 /** Each line's boxes on the frame (every set it may stand in while up: its own, a change of set inside it) and when it is up. */
 export interface ShownBox { id: string; show: number; end: number; /** Its exit: the next line's show (the engine takes it off for the next), never before its own end. */ until: number; boxes: FrameBox[] }

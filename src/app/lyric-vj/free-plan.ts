@@ -31,6 +31,7 @@ import { lineScaleOf, momentCandidates, scaleCandidates } from './policy-candida
 import { approvedMoments, shownBoxes, type LineMoment, type MiniMoment } from './mini-moments';
 import { splitCalls } from './calls';
 import type { LineScale } from './render/scale-pose';
+import { liftRoom } from './render/line-moment';
 import type { ScalePlan } from './scale-policy';
 import type { MomentPlan } from './moment-policy';
 
@@ -425,10 +426,10 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const scale = q3 ? scalesOf(events.policy ?? [], q3.plan, first.job.cues as { id: string; text: string }[]) : new Map<string, LineScale>();
   const regions = new Map((q5?.candidates ?? []).flatMap((c) => (c.id && c.protectedRegion ? [[c.id, c.protectedRegion] as const] : [])));
   const drawnMoments = q5 ? approvedMoments(events.policy ?? [], q5.plan, song, shownBoxes(input.lines), regions) : undefined;
-  const plan = scheduled || scale.size ? applyWorldEvents(composed as never, events, world, scale.size ? { seats: scheduled, scale } : undefined) : composed;
+  const plan = scheduled || scale.size ? applyWorldEvents(composed, events, world, scale.size ? { seats: scheduled, scale } : undefined) : composed;
   const redraw = scheduled || scale.size > 0 || momentsOn;
   // (a type-only mini moves the line's own words: it goes onto the line, the overlay draws only page minis)
-  const inLine = lineMoments(drawnMoments?.mini ?? [], first.job.cues as { id: string; text: string }[]);
+  const inLine = lineMoments(drawnMoments?.mini ?? [], first.job.cues as { id: string; text: string }[], new Map(input.lines.map((l) => [l.id, l.seat ?? ''])));
   const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
   const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
   // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
@@ -440,7 +441,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
 }
 
 /** Each type-only mini as its line's own moment: the evidence word's span on the drawn text (calls on their own track). */
-function lineMoments(minis: MiniMoment[], cues: { id: string; text: string }[]): Map<string, LineMoment> {
+function lineMoments(minis: MiniMoment[], cues: { id: string; text: string }[], sets: Map<string, string>): Map<string, LineMoment> {
   const out = new Map<string, LineMoment>();
   for (const m of minis.filter((x) => x.family === 'type-only')) {
     const cue = cues.find((c) => c.id === m.evidenceCueId);
@@ -448,7 +449,7 @@ function lineMoments(minis: MiniMoment[], cues: { id: string; text: string }[]):
     if (!cue || at < 0) continue;
     const from = [...cue.text.slice(0, at)].length;
     const kept = splitCalls(cue.text).map.slice(from, from + [...m.word].length).filter((x) => x >= 0);
-    if (kept.length) out.set(cue.id, { id: m.id, form: m.form, variant: m.variant, span: { from: kept[0], to: kept.at(-1)! + 1 }, at: m.at, mainSec: m.mainSec, to: m.to });
+    if (kept.length) out.set(cue.id, { id: m.id, form: m.form, variant: m.variant, span: { from: kept[0], to: kept.at(-1)! + 1 }, at: m.at, mainSec: m.mainSec, to: m.to, lift: liftRoom(sets.get(cue.id) ?? '', splitCalls(cue.text).main) });
   }
   return out;
 }

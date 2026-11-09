@@ -10,7 +10,7 @@ import { MOMENTS_PER_SONG, rankMoments, type MomentCandidateResult, type MomentP
 import { momentInputOf } from './moment-policy-adapter';
 import { avoidOf, miniRegion, shownBoxes } from './mini-moments';
 import { fromFreeJob } from './world-events-adapter';
-import { momentsCapOf } from './world-shared';
+import { momentsCapOf, scaleOf } from './world-shared';
 import { MOMENTS_APART } from './signature-moments';
 import { DECLARED_SCALE_CAPS } from './scale-caps-draft';
 import { pickScaleContrasts, type LayoutSeatCandidate, type Measure, type ScalePlan } from './scale-policy';
@@ -23,6 +23,7 @@ import type { StyleWorld } from './style-world';
 import type { SongTimeline } from './timeline';
 import type { PolicyCandidate } from './world-events';
 import { SCALE_HOLDS } from './render/scale-pose';
+import { LIFT_MIN, liftRoom } from './render/line-moment';
 
 /** A free plan's first draw (free-plan.ts freeJob): its job and its plan; structural, so the adapters stay off its return type. */
 type Free = { job: RenderJob; plan: unknown };
@@ -34,7 +35,8 @@ type Free = { job: RenderJob; plan: unknown };
  * still counts. Undefined for a world without `scale` (no candidate, no record).
  */
 export function scaleCandidates(free: Free, song: SongTimeline, world: StyleWorld, o: { seed: number; songId: string; meaning?: Meaning; measure?: Measure }): { plan: ScalePlan; candidates: PolicyCandidate[]; unrealizable: { id: string; why: string }[] } | undefined {
-  const caps = DECLARED_SCALE_CAPS[world.id];
+  // (a withheld declaration gives no candidate: world-shared scaleOf)
+  const caps = scaleOf(world.id) ? DECLARED_SCALE_CAPS[world.id] : undefined;
   if (!caps) return undefined;
   const input = scaleInputOf(free, song, world, { seed: o.seed, songId: o.songId, meaning: o.meaning, measure: o.measure });
   const estimated = new Set(input.estimated);
@@ -99,6 +101,7 @@ export function momentCandidates(free: Free, song: SongTimeline, world: StyleWor
   const shown = shownBoxes(fromFreeJob(free, song, world, { seed: 0 }).lines).map((l) => (blown.has(l.id) ? { ...l, boxes: [{ x0: 0, y0: 0, x1: 1, y1: 1 }] } : l));
   const noRoom: { meaningRef: string; why: string }[] = [];
   const lines = fromFreeJob(free, song, world, { seed: 0 }).lines;
+  const texts = new Map(free.job.cues.map((c) => [c.id, splitCalls(c.text).main]));
   const worldLine = new Set((free.job.treatment.cues as { cueId: string; world?: unknown }[]).filter((c) => c.world).map((c) => c.cueId));
   const candidates = order.flatMap((c, rank) => {
     if (c.variant !== 'mini') return [momentCandidate(c, rank, free)];
@@ -108,6 +111,9 @@ export function momentCandidates(free: Free, song: SongTimeline, world: StyleWor
       const actor = c.ask!.cues.at(-1)!;
       const seat = lines.find((l) => l.id === actor)?.seats[0]?.box;
       if (!worldLine.has(actor) || blown.has(actor) || !seat) { noRoom.push({ meaningRef: c.meaningRef, why: 'noForm: no world pose of the line to move its own words in' }); return []; }
+      // (and only where its set leaves the words room to move without reaching another row or glyph)
+      const set = lines.find((l) => l.id === actor)?.seats[0]?.id ?? '';
+      if (liftRoom(set, texts.get(actor) ?? '') < LIFT_MIN) { noRoom.push({ meaningRef: c.meaningRef, why: `noForm: ${set} leaves its rows no room to move (< ${LIFT_MIN} em)` }); return []; }
       return [{ ...momentCandidate(c, rank, free), protectedRegion: seat }];
     }
     const region = miniRegion(avoidOf(shown, c.window!.from, c.window!.to), momentsCapOf(world.id)!.miniShare);

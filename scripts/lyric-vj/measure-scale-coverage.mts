@@ -7,6 +7,10 @@
 //            candidates, their semantic source, score, kind, estimated ratio and rejection reasons, and the choice.
 // Sections are song.json sections with sung lines, a line in the section it starts in (the 11-09 measurement's basis).
 // `renderedScaleSections` here is PLANNED sections; phase 2 replaces it with the frames' own check.
+// Phase 4e (2026-11-10, docs/research/2026-11-10-screentone-page-layout.md): `--phase 2` also lays a page-carried
+// composition's whole page (render/page-layout.ts scalePage) and counts it drawn only with a legal page; per section
+// `rejections` lists every reason a candidate fell and `pageRefusals` counts its candidates refused for the page by
+// cause (noPageSolution geometry, collisionQ4exit, bracketCall); `chosen.page.mode` closed / bleed; out/research/q3-1109/phase4e.json.
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-scale-coverage.mts [--world riso] [--seeds 0,1,2] [--out out/research/q3-1109/coverage.json]
 //     [--meaning-suffix haiku-1109]  (the instant variant reads meaning.<suffix>.json beside each cached meaning.json instead)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -18,7 +22,7 @@ import { scaleCapsOf } from '../../src/app/lyric-vj/scale-caps-draft';
 import { pickScaleContrasts, type ScalePlan } from '../../src/app/lyric-vj/scale-policy';
 import { scaleInputOf, todayScale } from '../../src/app/lyric-vj/scale-policy-adapter';
 import { splitCalls } from '../../src/app/lyric-vj/calls';
-import { scaleLayout } from '../../src/app/lyric-vj/render/scale-pose';
+import { scaleLayout, scalePage } from '../../src/app/lyric-vj/render/scale-pose';
 import { shapedMeasure } from '../../src/app/lyric-vj/render/seat-geometry';
 import { blockOf, SET_SPECS } from '../../src/app/lyric-vj/render/world-sets';
 import type { WorldLine } from '../../src/app/lyric-vj/render/world-layout';
@@ -65,26 +69,35 @@ function phase2() {
           // (the renderer draws the line's main text, its calls on their own track: world-layout lays rt.cue.text)
           const main = ok ? splitCalls(cueText(ok.lineId)).main : '';
           const reading = spec ? blockOf(main.replace(/[\s　]+/g, ' ').trim(), spec, spec.even ? (x: string) => [...x].length * 100 : shapedMeasure).size : 0;
-          const drawn = sc && spec ? scaleLayout(main, sc, reading, spec, shapedMeasure) : undefined;
+          const laid = sc && spec ? scaleLayout(main, sc, reading, spec, shapedMeasure) : undefined;
+          // (phase 4e: a page-carried composition is drawn only on the whole page laid again round it, render/page-layout.ts;
+          // with no legal page it is a miss, exactly as world-layout draws it)
+          const page = laid && sc && ok ? scalePage(sc, laid, ok.lineId) : undefined;
+          const drawn = page && !page.ok ? { ...laid!, kind: 'miss' as const, ratio: 0, unrealized: true, why: page.why.join('; ') } : laid;
           const c = s.chosen === undefined ? undefined : s.candidates[s.chosen];
           return {
             sectionId: s.sectionId, lineIds: s.lineIds, policyKind: s.kind, pool: s.pool,
             candidates: s.candidates.map((x) => ({ lineId: x.lineId, source: x.source, text: x.text, legal: x.legal, kind: x.kind, ratio: x.ratio, score: x.score, ...(x.seat ? { edge: x.seat.edge } : {}), ...(x.legal ? {} : { reasons: x.reasons }) })),
             policyChoice: c ? { lineId: c.lineId, source: c.source, text: c.text, ratio: c.ratio } : null,
             tried: tried.map((d) => ({ id: d.id, rank: d.rank, approved: d.approved, reason: d.reason })),
-            chosen: ok ? { id: ok.id, lineId: ok.lineId, eventId: ok.eventId, shared: !!ok.shared, source: sc?.source, text: sc ? [...main].slice(sc.span.from, sc.span.to).join('') : undefined, edge: sc?.edge, plannedRatio: sc?.ratio, drawnRatio: drawn && drawn.kind !== 'miss' ? drawn.ratio : 0, drawnKind: drawn?.kind ?? 'miss', unrealized: !drawn || drawn.unrealized, ...(drawn?.why ? { why: drawn.why } : {}) } : null,
+            chosen: ok ? { id: ok.id, lineId: ok.lineId, eventId: ok.eventId, shared: !!ok.shared, source: sc?.source, text: sc ? [...main].slice(sc.span.from, sc.span.to).join('') : undefined, edge: sc?.edge, plannedRatio: sc?.ratio, drawnRatio: drawn && drawn.kind !== 'miss' ? drawn.ratio : 0, drawnKind: drawn?.kind ?? 'miss', unrealized: !drawn || drawn.unrealized, ...(drawn?.why ? { why: drawn.why } : {}), ...(page ? { page: page.ok ? { mode: page.mode, edge: page.edge, panels: page.panels.length, carriers: page.carriers.map((c) => c.kind), tail: !!page.carriers[0].tail } : { refused: page.why } } : {}) } : null,
             unrealizable: f.policy!.unrealizable.filter((u) => s.candidates.some((x) => u.id.startsWith(`scale:${x.lineId}`))).map((u) => `${u.id}: ${u.why}`),
             rejection: ok ? null : tried.length ? tried.map((d) => d.reason).join(' | ') : s.reasons.join(' | '),
+            // (every reason a candidate of the section fell, the plan-time page check included: `noPageSolution: …`)
+            rejections: [...new Set([...(ok ? [] : tried.length ? tried.map((d) => d.reason) : s.reasons), ...f.policy!.unrealizable.filter((u) => s.candidates.some((x) => u.id.startsWith(`scale:${x.lineId}`))).map((u) => u.why)])],
+            // (candidates of the section refused for the page, by cause: no legal page geometry (noPageSolution), the next
+            // line's Q4 link sliding the page out (collisionQ4exit), a bracketed call beside the line (bracketCall))
+            pageRefusals: (() => { const ws = [...tried.map((d) => d.reason), ...f.policy!.unrealizable.filter((u) => s.candidates.some((x) => u.id.startsWith(`scale:${x.lineId}`))).map((u) => u.why)]; return { noPageSolution: ws.filter((w) => w.startsWith('noPageSolution')).length, collisionQ4exit: ws.filter((w) => w.startsWith('collisionQ4exit')).length, bracketCall: ws.filter((w) => w.startsWith('bracketCall')).length }; })(),
           };
         });
         const rendered = sections.filter((x) => x.chosen && x.chosen.drawnKind !== 'miss').length;
-        rows.push({ world: style.id, song: sid, seed, meaning: path, keys: (meaning.keys ?? []).length, sungSections: plan.sungSections, plannedSections: plan.plannedSections, approvedSections: sections.filter((x) => x.chosen).length, renderedScaleSections: rendered, edgeFitSections: sections.filter((x) => x.chosen?.drawnKind === 'edgeFit').length, unrealized: sections.filter((x) => x.chosen?.unrealized).length, sections });
+        rows.push({ world: style.id, song: sid, seed, meaning: path, keys: (meaning.keys ?? []).length, sungSections: plan.sungSections, plannedSections: plan.plannedSections, approvedSections: sections.filter((x) => x.chosen).length, renderedScaleSections: rendered, edgeFitSections: sections.filter((x) => x.chosen?.drawnKind === 'edgeFit').length, unrealized: sections.filter((x) => x.chosen?.unrealized).length, ...Object.fromEntries((['noPageSolution', 'collisionQ4exit', 'bracketCall'] as const).flatMap((k) => [[`${k}Sections`, sections.filter((x) => x.pageRefusals[k] > 0).length], [`${k}Candidates`, sections.reduce((n, x) => n + x.pageRefusals[k], 0)]])), closed: sections.filter((x) => x.chosen && 'page' in x.chosen && x.chosen.page && 'mode' in x.chosen.page && x.chosen.page.mode === 'closed').length, bleed: sections.filter((x) => x.chosen && 'page' in x.chosen && x.chosen.page && 'mode' in x.chosen.page && x.chosen.page.mode === 'bleed').length, pageRefusedDrawn: sections.filter((x) => x.chosen && 'page' in x.chosen && x.chosen.page && 'refused' in x.chosen.page).length, sections });
       }
   }
   type R = { world: string; song: string; seed: number; sungSections: number; plannedSections: number; approvedSections: number; renderedScaleSections: number; edgeFitSections: number; unrealized: number; sections: { sectionId: string; candidates: { lineId: string; source: string; text: string; legal: boolean }[]; chosen: { lineId: string; text?: string } | null }[] };
   const R = rows as unknown as R[];
   const sum = (xs: R[], k: keyof R) => xs.reduce((n, r) => n + (r[k] as number), 0);
-  const perWorld = Object.fromEntries(worlds.map((w) => [w.id, Object.fromEntries(seeds.map((seed) => { const xs = R.filter((r) => r.world === w.id && r.seed === seed); return [seed, { sungSections: sum(xs, 'sungSections'), plannedSections: sum(xs, 'plannedSections'), approvedSections: sum(xs, 'approvedSections'), renderedScaleSections: sum(xs, 'renderedScaleSections'), edgeFitSections: sum(xs, 'edgeFitSections'), unrealized: sum(xs, 'unrealized') }]; }))]));
+  const perWorld = Object.fromEntries(worlds.map((w) => [w.id, Object.fromEntries(seeds.map((seed) => { const xs = R.filter((r) => r.world === w.id && r.seed === seed); return [seed, { sungSections: sum(xs, 'sungSections'), plannedSections: sum(xs, 'plannedSections'), approvedSections: sum(xs, 'approvedSections'), renderedScaleSections: sum(xs, 'renderedScaleSections'), edgeFitSections: sum(xs, 'edgeFitSections'), unrealized: sum(xs, 'unrealized'), ...Object.fromEntries(['closed', 'bleed', 'noPageSolutionSections', 'noPageSolutionCandidates', 'collisionQ4exitSections', 'collisionQ4exitCandidates', 'bracketCallSections', 'bracketCallCandidates', 'pageRefusedDrawn'].map((k) => [k, sum(xs, k as keyof R)])) }]; }))]));
   const overall = Object.fromEntries(seeds.map((seed) => { const xs = R.filter((r) => r.seed === seed); return [seed, { sungSections: sum(xs, 'sungSections'), renderedScaleSections: sum(xs, 'renderedScaleSections'), edgeFitSections: sum(xs, 'edgeFitSections'), unrealized: sum(xs, 'unrealized') }]; }));
   // diversity: a section (song, seed) where both worlds have ≥ 2 legal candidates in common and both approved one
   const div: { song: string; seed: number; sectionId: string; shared: number; choices: string[] }[] = [];

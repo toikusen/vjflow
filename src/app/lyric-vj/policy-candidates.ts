@@ -22,7 +22,10 @@ import { scaleInputOf } from './scale-policy-adapter';
 import type { StyleWorld } from './style-world';
 import type { SongTimeline } from './timeline';
 import type { PolicyCandidate } from './world-events';
-import { SCALE_HOLDS } from './render/scale-pose';
+import { carrierPage, SCALE_HOLDS, scalePage, type PageContext } from './render/scale-pose';
+import type { PageLine } from './render/page-layout';
+import { laidSeat } from './render/seat-geometry';
+import { scheduledFaces, shownOf } from './world-events-adapter';
 import { LIFT_MIN, liftRoom } from './render/line-moment';
 
 /** A free plan's first draw (free-plan.ts freeJob): its job and its plan; structural, so the adapters stay off its return type. */
@@ -45,6 +48,9 @@ export function scaleCandidates(free: Free, song: SongTimeline, world: StyleWorl
   // composition that will be drawn; the renderer still gives it back on a miss, render/scale-pose beatUnderScale)
   const texts = new Map(free.job.cues.map((c) => [c.id, c.text]));
   const unrealizable: { id: string; why: string }[] = [];
+  // (a page-carried seat carries its page context: the plan, the commit and the frames lay one page from the same lines)
+  const pages = plan.ranked.some((seats) => seats.some((c) => c.seat.carrierId?.startsWith('ground:'))) ? pageContexts(free.job) : undefined;
+  for (const seats of plan.ranked) for (const c of seats) { const ctx = c.seat.carrierId?.startsWith('ground:') ? pages?.get(c.lineId) : undefined; if (ctx) c.page = ctx; }
   const realizable = (c: LayoutSeatCandidate) => {
     const why = scaleMissOf(c, texts.get(c.lineId) ?? '');
     if (why) unrealizable.push({ id: c.eventId, why });
@@ -63,7 +69,26 @@ export function lineScaleOf(c: LayoutSeatCandidate, text: string, eventId = c.ev
   const { map } = splitCalls(text);
   const kept = c.scale.span.from < map.length ? map.slice(c.scale.span.from, c.scale.span.to).filter((m) => m >= 0) : [];
   if (!kept.length) return undefined;
-  return { eventId, sectionId: c.sectionId, kind: c.scale.kind, source: c.scale.source, ratio: c.scale.ratio, targetSize: c.scale.targetSize, readingSize: c.scale.readingSize, span: { from: kept[0], to: kept.at(-1)! + 1 }, edge: c.scale.edge, rows: c.scale.rows, carrierRole: c.scale.carrierExtends.role, carrierId: c.scale.carrierExtends.carrierId };
+  return { eventId, sectionId: c.sectionId, kind: c.scale.kind, source: c.scale.source, ratio: c.scale.ratio, targetSize: c.scale.targetSize, readingSize: c.scale.readingSize, span: { from: kept[0], to: kept.at(-1)! + 1 }, edge: c.scale.edge, rows: c.scale.rows, carrierRole: c.scale.carrierExtends.role, carrierId: c.scale.carrierExtends.carrierId, ...(c.page ? { page: c.page } : {}) };
+}
+
+/**
+ * Each line's page context for a page-carried composition (render/page-layout.ts): its show and end, and every other line
+ * on screen meanwhile (shown before this one is gone, not gone before it shows) with the box its set lays it in, read off
+ * the first draw (real shows, world-events-adapter shownOf; laid seats, render/seat-geometry laidSeat). The plan's page
+ * check and the renderer's commit both lay the page from this; the frames lay it from the faces really on screen.
+ */
+export function pageContexts(job: RenderJob): Map<string, PageContext> {
+  const { rows } = shownOf(job as never);
+  const faces = scheduledFaces(job as never);
+  const laid = new Map(rows.map((r) => { const set = r.world?.set; const l = set ? laidSeat(r.cue.text, set, { font: faces?.(r.cue.text) }) : undefined; return [r.id, l] as const; }));
+  // (a line is on screen from its show until the next line shows, the world's own lines handing over at each show; the
+  // last one until its end: engine.ts lyricRects, a line's room from its show to its exit)
+  const gone = (i: number) => rows[i + 1]?.show ?? rows[i].cue.end;
+  return new Map(rows.map((r, i) => [r.id, {
+    show: r.show, end: gone(i),
+    others: rows.flatMap((o, j) => (j !== i && o.show < gone(i) && gone(j) > r.show && laid.get(o.id) ? [{ id: o.id, boxes: [laid.get(o.id)!.boxPx], size: laid.get(o.id)!.size, show: o.show, end: gone(j) } as PageLine] : [])),
+  }]));
 }
 
 /** Why a seat's composition misses 1.6× when laid as the renderer lays it, on the shaped glyph measure; '' when it does not. */
@@ -74,7 +99,12 @@ export function scaleMissOf(c: LayoutSeatCandidate, text: string): string {
   const main = splitCalls(text).main;
   const reading = blockOf(main.replace(/[\s　]+/g, ' ').trim(), spec, spec.even ? (x: string) => [...x].length * 100 : shapedMeasure).size;
   const d = scaleLayout(main, ls, reading, spec, shapedMeasure);
-  return d.kind === 'miss' ? `unrealizable: ${d.why ?? 'under 1.6× as drawn'}` : '';
+  if (d.kind === 'miss') return `unrealizable: ${d.why ?? 'under 1.6× as drawn'}`;
+  // (a page-carried composition is drawn only on a whole page laid again round it, render/page-layout.ts: a line whose
+  // calls stand beside it would need a carrier the page does not lay for them, so it is refused here, not half-drawn)
+  if (carrierPage(ls) && splitCalls(text).calls.length) return 'bracketCall: the line has a bracketed call beside it (the re-laid page lays no carrier for it)';
+  const page = scalePage(ls, d, c.lineId);
+  return page && !page.ok ? page.why.join('; ') : '';
 }
 
 /**

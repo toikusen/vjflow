@@ -71,6 +71,10 @@ export function beyondCells(e: WorldEnv, least = 40): Box[] {
   ];
   return bands.filter((b) => b.x1 - b.x0 > least && b.y1 - b.y0 > least);
 }
+/** The box round some boxes (a box round nothing is inside out: x0 = +Infinity). */
+export const unionOf = (bs: Box[]): Box => bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+/** A glyph's em box, frame px: its centre and its size (a cell's `s`, a laid glyph's `size`). */
+export const emBox = (g: { x: number; y: number; s?: number; size?: number }): Box => { const h = (g.s ?? g.size ?? 0) / 2; return { x0: g.x - h, y0: g.y - h, x1: g.x + h, y1: g.y + h }; };
 /** A box grown by a margin. */
 export const grow = (b: Box, mx: number, my = mx): Box => ({ x0: b.x0 - mx, y0: b.y0 - my, x1: b.x1 + mx, y1: b.y1 + my });
 /** Whether two boxes overlap. */

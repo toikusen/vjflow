@@ -117,6 +117,11 @@ export interface FaceLayout {
   panels?: { from: number; sec: number };
   /** Where the panels stand once parted (seat-geometry panelSplit, the scheduler's own split), frame px, y down. */
   panelBoxes?: { main: { x0: number; y0: number; x1: number; y1: number }; panel: { x0: number; y0: number; x1: number; y1: number } };
+  /** A Q3 scale composition carried by its page (render/page-layout.ts): the edge it may bleed through, its line, its show. */
+  scale?: { edge: 'top' | 'bottom' | 'left' | 'right'; line: string; show: number };
+  /** The line the face sets, and when it shows (a page laid round several lines reads them in that order). */
+  line?: string;
+  show?: number;
 }
 
 /** A set's call-free boxes in the text root's own space (origin at the frame's centre, y up), px. */

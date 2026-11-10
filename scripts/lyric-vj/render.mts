@@ -161,11 +161,12 @@ const rendererErrors = new Set<string>();
 const fault = (msg: string) => { rendererErrors.add(msg); console.error(msg); };
 // a page-carried scale composition's page checked on every frame drawn (render/page-layout.ts verifyPage, engine.ts
 // pageGlyphCheck): each page's tally added up, written into metrics.json `pageChecks`
-const pageChecks = { frames: 0, relaid: 0, glyphFrames: 0, fails: [] as string[] };
+const pageChecks = { frames: 0, relaid: 0, glyphFrames: 0, pageFallbackFrames: 0, pageTurnFrames: 0, carrierCoveredFrames: 0, fails: [] as string[] };
 const takePageChecks = async (page: Page) => {
   const c = (await page.evaluate(() => (globalThis as { vjPageChecks?: typeof pageChecks }).vjPageChecks)) ?? undefined;
   if (!c) return;
-  pageChecks.frames += c.frames; pageChecks.relaid += c.relaid; pageChecks.glyphFrames += c.glyphFrames ?? 0; pageChecks.fails.push(...c.fails);
+  for (const k of ['frames', 'relaid', 'glyphFrames', 'pageFallbackFrames', 'pageTurnFrames', 'carrierCoveredFrames'] as const) pageChecks[k] += c[k] ?? 0;
+  pageChecks.fails.push(...c.fails);
   await page.evaluate(() => { delete (globalThis as { vjPageChecks?: unknown }).vjPageChecks; });
 };
 async function openPage(): Promise<Page> {

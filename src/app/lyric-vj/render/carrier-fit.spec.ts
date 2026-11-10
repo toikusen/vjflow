@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { bandFit, edgesOf, gapOf, LINE_CLEAR, reachOf, strokeClear, subtractBox, toPx, type Band, type FracBox } from './carrier-fit';
 import { blockOf, SET_SPECS, TYPE_FLOOR, type SetSpec } from './world-sets';
 import { layoutMeasure } from './layout-measure';
-import { roughMeasure } from './seat-geometry';
+import { roughMeasure, slotSpec } from './seat-geometry';
 import { BALLOON_TAIL, wedgeTail } from './balloon-tail';
 import { countMoment, declaredRules, emptyCounts, regressions, RULES, type RuleMoment } from '../reading-rules';
 import { frameChange, GRID } from './frame-check';
@@ -109,6 +109,22 @@ describe('the band sets as their pages print them (midcentury, claymation, scrap
         }
       expect(fit, set).toBeGreaterThan(TEXTS.length * FACES.length * 0.6);
     });
+
+  it('a shared shot\'s two lines are fitted where world-layout draws them, a slot above and below the set\'s place (scrapbook\'s torn paper, choroin c020/c021)', () => {
+    let n = 0;
+    for (const set of ['scrapbook/dots', 'scrapbook/card', 'midcentury/cut', 'claymation/strips'])
+      for (const k of [0, 1])
+        for (const text of TEXTS.slice(0, 6)) {
+          const spec = slotSpec(SET_SPECS[set], { k, of: 2 });
+          const b = blockOf(text, spec, layoutMeasure('Huninn'));
+          if (b.bandMiss) continue;
+          // (world-layout firstAt)
+          const shift = (0.5 - k) * Math.max(b.h + b.size * 0.4, spec.tall * 1080);
+          expect(bandFit({ ...b, cy: b.cy + shift }, spec).ok, `${set} ${k} ${text}`).toBe(true);
+          n++;
+        }
+    expect(n).toBeGreaterThan(20);
+  });
 
   it('midcentury\'s cut-r and sleeve lines of the critic\'s frames now fit (they ran 3 px and 7 px from the edge and the key line)', () => {
     for (const [set, text] of [['midcentury/cut-r', '三年後的大雪'], ['midcentury/cut-r', '夜晚的橋邊在飄雪'], ['midcentury/sleeve', '這次我們的手沒牽好'], ['midcentury/sleeve', '三年後的大雪']] as const)

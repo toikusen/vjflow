@@ -9,6 +9,7 @@ import { splitCalls } from './calls';
 import { balancedRows } from './phrases';
 import { readingSec } from './render/reading-window';
 import { pageGlyphRoom } from './render/page-layout';
+import type { PageContext } from './render/scale-pose';
 import { SAFE_X, SAFE_Y } from './render/world-sets';
 import type { ScaleCarrierRole, ScaleEdge, WorldScaleCaps } from './scale-caps-draft';
 import { SHORT_LINE, type FrameBox, type SeatCandidate, type WorldEventInput } from './world-events';
@@ -98,6 +99,8 @@ export interface ScaleSeat {
   rows: string[];
   /** The carrier under the big text, running past the frame on the edge's side (the glyphs never do). */
   carrierExtends: { side: ScaleEdge; role: ScaleCarrierRole; carrierId: string; box: FrameBox };
+  /** A page-carried seat (`ground:` carrier): whether its page's carrier closes in frame or bleeds through the edge. */
+  pageMode?: 'closed' | 'bleed';
 }
 
 export interface ScaleFeatures { short: number; ratio: number; room: number; sustain: number; order: number }
@@ -157,6 +160,8 @@ export interface LayoutSeatCandidate {
   count: 1;
   /** The scale change is this event: a Q2 grow on the same line is not scheduled on top of it. */
   replacesGrow: true;
+  /** A page-carried seat's page context (policy-candidates pageContexts), set before the page is checked. */
+  page?: PageContext;
 }
 
 export interface ScalePlan {
@@ -194,7 +199,7 @@ export interface Fit { size: number; seat: ScaleSeat; dropped: string[] }
  * left of it and the words after below or right of it. Starts at min(2.4 × reading, frameCap, the world's most) and
  * steps down to the world's least; undefined when nothing fits.
  */
-export function fitOf(rows: string[], before: string, after: string, line: Pick<ScaleLine, 'readingSize' | 'track' | 'clear'>, caps: Pick<WorldScaleCaps, 'edges' | 'sizeRange' | 'carrierRole'>, measure: Measure, carrierId: string): Fit | { why: string[] } {
+export function fitOf(rows: string[], before: string, after: string, line: Pick<ScaleLine, 'readingSize' | 'track' | 'clear'>, caps: Pick<WorldScaleCaps, 'edges' | 'sizeRange' | 'carrierRole'>, measure: Measure, carrierId: string, closedMin = SCALE_MIN): Fit | { why: string[] } {
   const R = line.readingSize;
   const track = line.track ?? 0.02;
   const emW = Math.max(...rows.map((r) => measure(r) / 100 + Math.max(0, [...r].length - 1) * track));
@@ -203,7 +208,18 @@ export function fitOf(rows: string[], before: string, after: string, line: Pick<
   // old page's graphics (`clear`) are gone, and the ink box keeps the room the page's carrier needs on every side but
   // the declared edge, render/page-layout.ts pageGlyphRoom, the same room the page lays its balloon in)
   const page = carrierId.startsWith('ground:') ? carrierId.slice('ground:'.length).split(':')[0] : undefined;
-  const safeOf = (edge?: ScaleEdge): FrameBox => (page && edge ? pageGlyphRoom(page, edge) : { x0: FRAME.safeX, y0: FRAME.safeY, x1: FRAME.w - FRAME.safeX, y1: FRAME.h - FRAME.safeY });
+  // (closed first, Codex phase 4 §4 ruling 2026-11-10 r2: the page's carrier whole in frame, room on all four sides; it
+  // bleeds through the declared edge only when the closed setting cannot reach the bar, closedMin: 1.8× for a key
+  // phrase's edgeFit, 1.6× for a whole line)
+  if (page) {
+    const closed = fitIn('closed');
+    if ('seat' in closed && closed.size >= closedMin * R - 1e-6) return closed;
+    const bleed = fitIn('bleed');
+    return 'seat' in bleed || !('seat' in closed) ? bleed : closed;
+  }
+  return fitIn(undefined);
+  function fitIn(mode: 'closed' | 'bleed' | undefined): Fit | { why: string[] } {
+  const safeOf = (edge?: ScaleEdge): FrameBox => (page && edge && mode ? pageGlyphRoom(page, edge, mode) : { x0: FRAME.safeX, y0: FRAME.safeY, x1: FRAME.w - FRAME.safeX, y1: FRAME.h - FRAME.safeY });
   const safeW = Math.min(...[undefined, ...caps.edges].map((e) => { const b = safeOf(e); return b.x1 - b.x0; }));
   const frameCap = Math.min((CAP_H * FRAME.h) / emH, (CAP_W * safeW) / emW);
   const most = Math.min(SCALE_TARGET, caps.sizeRange[1]) * R;
@@ -278,7 +294,7 @@ export function fitOf(rows: string[], before: string, after: string, line: Pick<
       const band0 = frac({ x0: all.x0 - m, y0: all.y0 - m, x1: all.x1 + m, y1: all.y1 + m });
       const band = caps.carrierRole === 'panel' && (edge === 'top' || edge === 'bottom') ? { ...band0, x0: -over, x1: 1 + over } : band0;
       const off: FrameBox = edge === 'bottom' ? { ...band, y1: 1 + over } : edge === 'top' ? { ...band, y0: -over } : edge === 'left' ? { ...band, x0: -over } : { ...band, x1: 1 + over };
-      return { edge, anchor: { at, ax, ay }, inkBox: frac(ink), restBoxes: rest.map((r) => ({ ...r, box: frac(r.box) })), rows, carrierExtends: { side: edge, role: caps.carrierRole, carrierId, box: off } };
+      return { edge, anchor: { at, ax, ay }, inkBox: frac(ink), restBoxes: rest.map((r) => ({ ...r, box: frac(r.box) })), rows, carrierExtends: { side: edge, role: caps.carrierRole, carrierId, box: off }, ...(mode ? { pageMode: mode } : {}) };
     }
     return undefined;
   };
@@ -288,7 +304,8 @@ export function fitOf(rows: string[], before: string, after: string, line: Pick<
     if (fits.length) return { size: S, seat: fits[0], dropped: caps.edges.filter((e) => e !== fits[0].edge && !fits.some((f) => f.edge === e)).map((e) => `${e}: no room at ${(S / R).toFixed(2)}×`) };
     if (S * SHRINK < least - 1e-6 && S > least + 1e-6) S = least / SHRINK;
   }
-  return { why: why.size ? [...why] : [`no allowed edge (${caps.edges.join('/')}) takes the line at ≥ ${(least / R).toFixed(2)}×`] };
+  return { why: why.size ? [...why].map((w) => (mode ? `${mode}: ${w}` : w)) : [`no allowed edge (${caps.edges.join('/')}) takes the line at ≥ ${(least / R).toFixed(2)}×`] };
+  }
 }
 
 /** The rows' line spacing, in ems (a row's step is LEAD × size). */
@@ -335,7 +352,7 @@ function candidate(line: ScaleLine, source: ScaleSource, text: string, span: { f
   for (const n of breaks) {
     const rows = n === 1 ? [text.trim()] : balancedRows(text, n).filter(Boolean);
     if (rows.length !== n) continue;
-    const fit = fitOf(rows, before, after, line, caps, measure, carrierId);
+    const fit = fitOf(rows, before, after, line, caps, measure, carrierId, source === 'meaning' ? EDGE_FIT_MIN : SCALE_MIN);
     if ('why' in fit) { tried.push(...fit.why.map((w) => `${n} row${n > 1 ? 's' : ''}: ${w}`)); continue; }
     const ratio = r3(fit.size / R);
     const kind: ScaleKind = source === 'meaning' && ratio >= EDGE_FIT_MIN - 1e-6 ? 'edgeFit' : 'scale';

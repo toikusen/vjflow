@@ -494,7 +494,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     // page is laid again whole round them, render/page-layout.ts)
     const pageScale = scaling && i === 0 && paged?.ok ? { edge: wl.scale!.edge, line: rt.cue.id, show: rt.showFrom } : undefined;
     const fsh: SetSpec['shear'] | undefined = sh ?? (pageScale ? [1, 0, 0, 1] : undefined);
-    const face: FaceLayout | undefined = fsh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: fsh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])), ...(pageScale ? { scale: pageScale } : {}) };
+    const face: FaceLayout | undefined = fsh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: fsh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])), line: rt.cue.id, show: rt.showFrom, ...(pageScale ? { scale: pageScale } : {}) };
     // (a set carried on panels, art-deco poster-panel: which part each cell is, and when the panels part, for the page)
     if (face && sets[i].panels && p.block.small?.length) {
       const row = rowsOfGlyphs(gs, p.block);

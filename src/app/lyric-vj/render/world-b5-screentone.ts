@@ -12,6 +12,7 @@ import { beyondCells, Box, boxOf, cellsOf, cutTime, frame, grow, openingData, ou
 import { B5_MIRRORS } from './world-b5-sets';
 import { BALLOON, boxesOfCells, pageLayout, type PageInput, type PageLine } from './page-layout';
 import type { FaceLayout } from './world-sets';
+import { WORLD_PAGES } from '../world-shared';
 
 type Pt = [number, number];
 const SERIF = (px: number) => `400 ${px}px "Cactus Classical Serif", "Zen Antique", serif`;
@@ -215,7 +216,7 @@ const shout: HandGround = (e) => frame(e, (c) => {
 });
 
 /** b: one wide quiet panel: a night sky in four tone steps with scratched stars, a black horizon and line-tone sea; a narration box round the columns. */
-const B_PANEL: Pt[] = [[60, 60], [1860, 60], [1860, 1000], [60, 1000]];
+const B_PANEL: Pt[] = (({ x0, y0, x1, y1 }) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[])(WORLD_PAGES['screentone'].panel);
 const STARS: [number, number, number][] = [[300, 140, 9], [420, 260, 5], [1500, 120, 8], [1650, 230, 5], [1380, 300, 4], [200, 380, 4], [1760, 400, 5]];
 const narration: HandGround = (e) => frame(e, (c) => {
   smallStart(e);
@@ -339,10 +340,44 @@ const burst: HandGround = (e) => frame(e, (c) => {
 /** A face's cells, frame px y down (world-b5-shared cellsOf, one face at a time). */
 const cellsOfFace = (f: FaceLayout) => { const [a, b, c, d] = f.shear; return f.cells.map(([u, v, s]) => ({ x: f.cx + a * u + c * v, y: f.cy + b * u + d * v, s: s * Math.max(Math.abs(a), Math.abs(d)) })); };
 /** What every drawn frame's page check came to (render.mts writes it into metrics.json; the reading gate counts it). */
-export type PageTally = { frames: number; relaid: number; fails: string[]; glyphFrames: number };
-const tally = (): PageTally => ((globalThis as { vjPageChecks?: PageTally }).vjPageChecks ??= { frames: 0, relaid: 0, fails: [], glyphFrames: 0 });
-/** The carrier each page-carried composition's page drew this frame, frame px (engine.ts pageGlyphCheck reads it). */
-export type PageDrawn = Record<string, { stamp: number; outline: [number, number][] }>;
+/**
+ * frames: pages checked; relaid: drawn re-laid; fallback: frames whose lines left no legal page, drawn whole on the
+ * original page (counted apart, never half a page); turn / covered: frames a page turn or a set piece drew over a re-laid
+ * page, with its carrier kept clear / not kept clear; glyphFrames: frames whose drawn glyphs were checked (engine.ts).
+ */
+export type PageTally = { frames: number; relaid: number; fails: string[]; glyphFrames: number; pageFallbackFrames: number; pageTurnFrames: number; carrierCoveredFrames: number };
+export const pageTally = (): PageTally => ((globalThis as { vjPageChecks?: PageTally }).vjPageChecks ??= { frames: 0, relaid: 0, fails: [], glyphFrames: 0, pageFallbackFrames: 0, pageTurnFrames: 0, carrierCoveredFrames: 0 });
+const tally = pageTally;
+/** The carrier each page-carried composition's page drew this frame, device px (engine.ts pageGlyphCheck reads it); `fallback` when the frame went back to the original page. */
+export type PageDrawn = Record<string, { stamp: number; outline: [number, number][]; fallback?: boolean }>;
+const pageLast = () => globalThis as { vjPageLast?: PageDrawn; vjFrameStamp?: number };
+/** The re-laid carrier of the composition handed with the box, as drawn this frame (device px), or undefined. */
+function drawnCarrier(e: WorldEnv): [number, number][] | undefined {
+  const r = e.rect as (WorldEnv['rect'] & { face?: FaceLayout; faces?: FaceLayout[] }) | undefined;
+  const line = (r?.faces ?? (r?.face ? [r.face] : [])).find((f) => f.scale)?.scale?.line;
+  const d = line ? pageLast().vjPageLast?.[line] : undefined;
+  return d && !d.fallback && d.stamp === (pageLast().vjFrameStamp ?? 0) ? d.outline : undefined;
+}
+/**
+ * Whatever a page turn or a set piece lays over a page re-laid round a composition keeps off its carrier (rule 8: the
+ * sung line's balloon is never papered over): clipped outside the carrier as drawn this frame, and the frame counted.
+ * Call inside the draw's own save/restore.
+ */
+function keepCarrier(c: C, e: WorldEnv) {
+  const r = e.rect as (WorldEnv['rect'] & { face?: FaceLayout; faces?: FaceLayout[] }) | undefined;
+  if (!(r?.faces ?? (r?.face ? [r.face] : [])).some((f) => f.scale)) return;
+  const o = drawnCarrier(e);
+  if (!o) { tally().carrierCoveredFrames++; return; }
+  tally().pageTurnFrames++;
+  const m = c.getTransform();
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.beginPath();
+  c.rect(-W, -H, W * 4, H * 4);
+  o.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+  c.closePath();
+  c.clip('evenodd');
+  c.setTransform(m);
+}
 
 /**
  * The page laid again whole round a Q3 scale composition it carries (render/page-layout.ts, Codex phase 4 §4): when a
@@ -357,16 +392,19 @@ function relaid(page: string, e: WorldEnv): boolean {
   const fs = r?.faces ?? (r?.face ? [r.face] : []);
   const hero = fs.find((f) => f.scale);
   if (!hero?.scale) return false;
-  const lines: PageLine[] = fs.map((f, k) => ({ id: f.scale?.line ?? `${hero.scale!.line}+other#${k}`, boxes: boxesOfCells(cellsOfFace(f)), size: f.size, ...(f.scale ? { scaled: true, show: f.scale.show } : {}) }));
+  // (every face on screen is a line present: the box handed is the union of the lines up now, engine.ts makeRoom)
+  const lines: PageLine[] = fs.map((f, k) => ({ id: f.scale?.line ?? f.line ?? `face#${k}`, boxes: boxesOfCells(cellsOfFace(f)), size: f.size, ...(f.scale ? { scaled: true, show: f.scale.show } : f.show !== undefined ? { show: f.show } : {}) }));
   const input: PageInput = { page, edge: hero.scale.edge, lines, seed: 7 };
   const t = tally();
   t.frames++;
-  let sol = pageLayout(input);
+  const sol = pageLayout(input);
   if (!sol.ok) {
-    t.fails.push(`${e.now.toFixed(3)} ${hero.scale.line} ${sol.why.join('; ')}`.slice(0, 400));
-    sol = pageLayout({ ...input, lines: lines.filter((l) => l.scaled) });
-    if (!sol.ok) return false;
-  } else t.relaid++;
+    // (no legal page for the lines on screen now: the whole page as composed, never the scaled line's page alone)
+    t.pageFallbackFrames++;
+    (pageLast().vjPageLast ??= {})[hero.scale.line] = { stamp: pageLast().vjFrameStamp ?? 0, outline: [], fallback: true };
+    return false;
+  }
+  t.relaid++;
   const laid = sol;
   frame(e, (c) => {
     smallStart(e);
@@ -377,7 +415,7 @@ function relaid(page: string, e: WorldEnv): boolean {
     const main = laid.carriers[0];
     // (the carrier as it lands on the frame, through this context's transform: a turned page's mirror included)
     const m = c.getTransform();
-    const g0 = globalThis as { vjPageLast?: PageDrawn; vjFrameStamp?: number };
+    const g0 = pageLast();
     (g0.vjPageLast ??= {})[hero.scale!.line] = { stamp: g0.vjFrameStamp ?? 0, outline: main.outline.map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f] as [number, number]) };
     const g = laid.carriers[0] && input.lines.find((l) => l.scaled)!.boxes.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
     const [cx, cy] = [(g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2];
@@ -417,6 +455,7 @@ const INS: Record<string, HandIn> = {
     const x = W * (1 - ease(q, 3));
     c.save();
     if (e.rect) outside(c, grow(wordsBox(e), 24));
+    keepCarrier(c, e);
     c.fillStyle = e.slots.ground;
     c.fillRect(x, 0, W - x, H);
     c.fillStyle = e.slots.ink;
@@ -434,6 +473,7 @@ const PIECES: Record<string, Piece> = {
     const [cx, cy] = [(w.x0 + w.x1) / 2, (w.y0 + w.y1) / 2];
     c.save();
     outside(c, w);
+    keepCarrier(c, e);
     focus(c, [[0, 0], [W, 0], [W, H], [0, H]], cx, cy, Math.hypot(w.x1 - w.x0, w.y1 - w.y0) / 2, 160, e.slots.ink, e.seed + 3);
     c.restore();
   }) },
@@ -444,6 +484,7 @@ const PIECES: Record<string, Piece> = {
     const n = Math.floor(clamp01(q / 0.6) * 6);
     c.save();
     outside(c, w);
+    keepCarrier(c, e);
     for (let i = 0; i < n; i++) {
       const [x, y] = [120 + R() * (W - 240), 110 + R() * (H - 260)];
       if (x > w.x0 - 40 && x < w.x1 + 40 && y > w.y0 - 40 && y < w.y1 + 40) continue;
@@ -464,6 +505,7 @@ const PIECES: Record<string, Piece> = {
     const w = grow(wordsBox(e), 40);
     c.save();
     outside(c, w);
+    keepCarrier(c, e);
     speed(c, [[60, 60], [1860, 60], [1860, 1000], [60, 1000]], 80, e.slots.ink, e.seed + 41, ease(clamp01(q / 0.5), 2));
     c.restore();
   }) },

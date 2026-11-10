@@ -13,19 +13,20 @@
 // panel with no words is never drawn. Where no such page is legal the result is a refusal (`noPageSolution`) and the
 // caller keeps the line's original page and pose whole.
 // Pure: no DOM, no THREE.
-import type { ScaleEdge } from '../world-shared';
+import { pageCapOf, WORLD_PAGES, type PageCarrierKind, type ScaleEdge, type WorldPage } from '../world-shared';
+import { emBox, grow, meets, unionOf as union, type Box } from './world-b5-shared';
 import { SAFE_X, SAFE_Y } from './world-sets';
 
 export type Pt = [number, number];
-export interface Box { x0: number; y0: number; x1: number; y1: number }
+export type { Box };
+export { emBox };
 
 export const PAGE_W = 1920;
 export const PAGE_H = 1080;
 /** The declared safe area, frame px y down (world-sets SAFE_X / SAFE_Y). */
 export const PAGE_SAFE: Box = { x0: SAFE_X, y0: SAFE_Y, x1: PAGE_W - SAFE_X, y1: PAGE_H - SAFE_Y };
-/** The board's one wide panel (screentone b, B_PANEL) and its 7 px frame line (TONES.frame). */
-export const PAGE_PANEL: Box = { x0: 60, y0: 60, x1: 1860, y1: 1000 };
-export const PANEL_RIM = 7;
+/** screentone's one wide panel (world-shared WORLD_PAGES; the board's B_PANEL) and its frame line. */
+export const PAGE_PANEL: Box = WORLD_PAGES['screentone'].panel;
 /** How far an open panel and a bleeding balloon run past the frame on the declared edge. */
 export const BLEED_OVER = 40;
 /** Least white between a panel frame line and any text box, px (beyond half the rim). */
@@ -38,25 +39,30 @@ export const GUTTER = 40;
  * padding across and down (the board's caption box, 44 / 34).
  */
 export const BALLOON = { pad: 24, stroke: 5, spike: 44, step: 104, corner: 60, oval: 110, boxPad: [44, 34] as [number, number] };
-/** The balloon's tail as fixed after the batch-5 card (2026-11-09-screentone-balloon-thin-line): a short wedge on a wide root. */
-export const TAIL = { root: 110, len: 96, lean: 0.45 };
 /** A present line's narration box, px round its glyphs (the board's narration box, 46 / 40). */
 export const NARRATION_PAD: [number, number] = [46, 40];
+/** screentone's tail (world-shared WORLD_PAGES): a short wedge on a wide root. */
+export const TAIL = WORLD_PAGES['screentone'].tail;
 
-export type CarrierKind = 'spiky' | 'oval' | 'box';
-/** The carrier a page set lays round its scaled line: the page's own kind of balloon or box. */
-export const carrierKindOf = (page: string): CarrierKind => (/balloons/.test(page) ? 'oval' : /narration|caption/.test(page) ? 'box' : 'spiky');
+export type CarrierKind = PageCarrierKind;
+/** The carrier a page lays round its scaled line, as its world declares it (world-shared WORLD_PAGES); undefined for a page none declares. */
+export const carrierKindOf = (page: string): CarrierKind | undefined => pageCapOf(page)?.kind;
+const capsOf = (page: string): WorldPage => pageCapOf(page)?.world ?? WORLD_PAGES['screentone'];
 
-/** A line present on the page at a moment: its glyphs' em boxes as drawn, its type size, when it shows. */
-export interface PageLine { id: string; boxes: Box[]; size: number; show?: number; scaled?: boolean }
+/** A line on the page: its glyphs' em boxes as drawn, its type size, when it shows and when it is gone. */
+export interface PageLine { id: string; boxes: Box[]; size: number; show?: number; end?: number; scaled?: boolean }
 export interface PageInput {
-  /** The page (the set's ground, `screentone/shout`, …): it names the carrier kind. */
+  /** The page (the set's ground, `screentone/shout`, …): its world's declaration names the carrier kind. */
   page: string;
   /** The edge the scale event declares: the only side the page may bleed through. */
   edge: ScaleEdge;
   lines: PageLine[];
+  /** The moment the page is laid for: a line not shown yet (show > at) or gone (end ≤ at) is not present and is carried by nothing. */
+  at?: number;
   seed?: number;
 }
+/** Whether a line stands on the page at `at` (no time given: every line handed is present). */
+export const presentAt = (l: PageLine, at?: number) => at === undefined || ((l.show === undefined || l.show <= at + 1e-6) && (l.end === undefined || l.end > at));
 export interface PagePanel { pts: Pt[]; open?: 'top' | 'bottom'; carries: string[] }
 export interface PageCarrier {
   line: string;
@@ -72,9 +78,6 @@ export type PageLayout = PageSolution | PageRefusal;
 
 // ---- geometry ----
 
-const union = (bs: Box[]): Box => bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
-const grow = (b: Box, mx: number, my = mx): Box => ({ x0: b.x0 - mx, y0: b.y0 - my, x1: b.x1 + mx, y1: b.y1 + my });
-const meets = (a: Box, b: Box) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 const inBox = (p: Pt, b: Box, e = 1e-6) => p[0] >= b.x0 - e && p[0] <= b.x1 + e && p[1] >= b.y0 - e && p[1] <= b.y1 + e;
 const rectPts = (b: Box): Pt[] => [[b.x0, b.y0], [b.x1, b.y0], [b.x1, b.y1], [b.x0, b.y1]];
 /** A small seeded hash in [0, 1). */
@@ -188,7 +191,7 @@ function outlineOf(kind: CarrierKind, base: Box, r: number, seed: number): Pt[] 
  * declared edge, TAIL.len long, leaning toward the nearer corner of the panel. Tried along that side, then the two
  * sides across; the first that keeps clear of every text box and inside the panel and the safe area.
  */
-function withTail(outline: Pt[], base: Box, edge: ScaleEdge, room: Box, texts: Box[]): { outline: Pt[]; tail: NonNullable<PageCarrier['tail']> } | undefined {
+function withTail(outline: Pt[], base: Box, edge: ScaleEdge, room: Box, texts: Box[], TAIL: WorldPage['tail']): { outline: Pt[]; tail: NonNullable<PageCarrier['tail']> } | undefined {
   const away: 'top' | 'bottom' | 'left' | 'right' = edge === 'top' ? 'bottom' : edge === 'bottom' ? 'top' : edge === 'left' ? 'right' : 'left';
   const tries: { side: typeof away; f: number }[] = [0.72, 0.28, 0.5].map((f) => ({ side: away, f }));
   for (const side of (['left', 'right', 'top', 'bottom'] as const).filter((s) => s !== away && s !== edge)) tries.push({ side, f: 0.6 });
@@ -242,16 +245,22 @@ export function pageRoom(page: string): number {
   const reach = kind === 'spiky' ? BALLOON.pad + cornerCut(BALLOON.corner) + BALLOON.spike * 1.2 : kind === 'oval' ? BALLOON.pad + cornerCut(BALLOON.oval) : BALLOON.boxPad[0];
   return Math.ceil(reach + BALLOON.stroke / 2 + 2);
 }
-/** Where a page-carried composition's ink box may stand, px y down: the safe area within the panel, less the carrier's room on every side but the declared edge. */
-export function pageGlyphRoom(page: string, edge: ScaleEdge): Box {
+/**
+ * Where a page-carried composition's ink box may stand, px y down: the safe area within the panel, less the carrier's
+ * room on all four sides for a `closed` carrier (the page's first choice: its whole outline in frame), or on every side
+ * but the declared edge for a `bleed` one (the fallback, run off through that edge).
+ */
+export function pageGlyphRoom(page: string, edge: ScaleEdge, mode: 'closed' | 'bleed' = 'bleed'): Box {
   const m = pageRoom(page);
-  const inner = { x0: Math.max(PAGE_SAFE.x0, PAGE_PANEL.x0 + PANEL_RIM / 2), y0: Math.max(PAGE_SAFE.y0, PAGE_PANEL.y0 + PANEL_RIM / 2), x1: Math.min(PAGE_SAFE.x1, PAGE_PANEL.x1 - PANEL_RIM / 2), y1: Math.min(PAGE_SAFE.y1, PAGE_PANEL.y1 - PANEL_RIM / 2) };
-  return { x0: edge === 'left' ? PAGE_SAFE.x0 : inner.x0 + m, y0: edge === 'top' ? PAGE_SAFE.y0 : inner.y0 + m, x1: edge === 'right' ? PAGE_SAFE.x1 : inner.x1 - m, y1: edge === 'bottom' ? PAGE_SAFE.y1 : inner.y1 - m };
+  const { panel, rim } = capsOf(page);
+  const inner = { x0: Math.max(PAGE_SAFE.x0, panel.x0 + rim / 2), y0: Math.max(PAGE_SAFE.y0, panel.y0 + rim / 2), x1: Math.min(PAGE_SAFE.x1, panel.x1 - rim / 2), y1: Math.min(PAGE_SAFE.y1, panel.y1 - rim / 2) };
+  const open = (e: ScaleEdge) => mode === 'bleed' && edge === e;
+  return { x0: open('left') ? PAGE_SAFE.x0 : inner.x0 + m, y0: open('top') ? PAGE_SAFE.y0 : inner.y0 + m, x1: open('right') ? PAGE_SAFE.x1 : inner.x1 - m, y1: open('bottom') ? PAGE_SAFE.y1 : inner.y1 - m };
 }
 
-/** The single panel of the re-laid page: the board's wide panel, open past the frame on the declared edge in bleed. */
-function panelOf(mode: 'closed' | 'bleed', edge: ScaleEdge): PagePanel {
-  const b = { ...PAGE_PANEL };
+/** The single panel of the re-laid page: its world's widest panel, open past the frame on the declared edge in bleed. */
+function panelOf(caps: WorldPage, mode: 'closed' | 'bleed', edge: ScaleEdge): PagePanel {
+  const b = { ...caps.panel };
   if (mode === 'bleed') {
     if (edge === 'top') b.y0 = -BLEED_OVER;
     if (edge === 'bottom') b.y1 = PAGE_H + BLEED_OVER;
@@ -259,10 +268,11 @@ function panelOf(mode: 'closed' | 'bleed', edge: ScaleEdge): PagePanel {
   return { pts: rectPts(b), ...(mode === 'bleed' && (edge === 'top' || edge === 'bottom') ? { open: edge } : {}), carries: [] };
 }
 /** The panel's inside, less half its frame line: where every carrier and every word stays. */
-const panelInner = (p: PagePanel): Box => { const b = union(p.pts.map(([x, y]) => ({ x0: x, y0: y, x1: x, y1: y }))); return grow(b, -PANEL_RIM / 2); };
+const panelInner = (p: PagePanel, rim: number): Box => grow(ptsBox(p.pts), -rim / 2);
+const ptsBox = (pts: Pt[]): Box => union(pts.map(([x, y]) => ({ x0: x, y0: y, x1: x, y1: y })));
 /** Where a carrier's outline (with its stroke) may run: the safe area within the panel, past the frame only on the bleed edge. */
-function outlineRoom(panel: PagePanel, mode: 'closed' | 'bleed', edge: ScaleEdge): Box {
-  const p = panelInner(panel);
+function outlineRoom(panel: PagePanel, mode: 'closed' | 'bleed', edge: ScaleEdge, rim: number): Box {
+  const p = panelInner(panel, rim);
   const s = BALLOON.stroke / 2;
   const r = { x0: Math.max(PAGE_SAFE.x0, p.x0) + s, y0: Math.max(PAGE_SAFE.y0, p.y0) + s, x1: Math.min(PAGE_SAFE.x1, p.x1) - s, y1: Math.min(PAGE_SAFE.y1, p.y1) - s };
   if (mode === 'closed') return r;
@@ -282,31 +292,36 @@ export function pageLayout(input: PageInput): PageLayout {
   const hero = scaled[0];
   if (!hero.boxes.length) return { ok: false, why: ['noPageSolution: the scaled line has no glyphs'] };
   if (input.edge !== 'top' && input.edge !== 'bottom') return { ok: false, why: [`noPageSolution: a page bleeds through its top or bottom only, not ${input.edge}`] };
-  const kind = carrierKindOf(input.page);
+  const cap = pageCapOf(input.page);
+  if (!cap) return { ok: false, why: [`noPageSolution: no world declares the page ${input.page} (world-shared WORLD_PAGES)`] };
+  const kind = cap.kind;
+  if (!presentAt(hero, input.at)) return { ok: false, why: ['noPageSolution: the scaled line is not on the page at this moment'] };
+  // (only the lines present now: a line not shown yet never fills the page, one gone is carried by nothing)
+  const present = input.lines.filter((l) => presentAt(l, input.at));
   const g = union(hero.boxes);
-  const texts = input.lines.flatMap((l) => l.boxes);
+  const texts = present.flatMap((l) => l.boxes);
   for (const mode of ['closed', 'bleed'] as const) {
-    const panel = panelOf(mode, input.edge);
-    const room = outlineRoom(panel, mode, input.edge);
+    const panel = panelOf(cap.world, mode, input.edge);
+    const room = outlineRoom(panel, mode, input.edge, cap.world.rim);
     const { base, r } = baseOf(kind, g, mode, input.edge);
     let outline = outlineOf(kind, base, r, input.seed ?? 7);
     let tail: PageCarrier['tail'];
     if (kind === 'oval') {
-      const t = withTail(outline, base, input.edge, room, texts);
+      const t = withTail(outline, base, input.edge, room, texts, cap.world.tail);
       if (!t) { why.push(`${mode}: no wedge tail clear of the words inside the panel`); continue; }
       ({ outline, tail } = t);
     }
     const carriers: PageCarrier[] = [{ line: hero.id, kind, outline, ...(tail ? { tail } : {}) }];
     // the other lines present, each in a narration box of its own inside the panel, clear of the balloon and each other
     let placed = true;
-    for (const l of input.lines.filter((x) => !x.scaled)) {
+    for (const l of present.filter((x) => !x.scaled)) {
       const b = grow(union(l.boxes), ...NARRATION_PAD);
       const clash = !inBox([b.x0, b.y0], room) || !inBox([b.x1, b.y1], room) ? 'outside the panel' : polyMeetsBox(outline, grow(b, BALLOON.stroke)) ? `over the scaled line's ${kind}` : carriers.slice(1).some((c) => meets(union(c.outline.map(([x, y]) => ({ x0: x, y0: y, x1: x, y1: y }))), b)) ? 'over another line' : '';
       if (clash) { why.push(`${mode}: present line ${l.id} has no narration box (${clash})`); placed = false; break; }
       carriers.push({ line: l.id, kind: 'narration', outline: rectPts(b) });
     }
     if (!placed) continue;
-    const sol: PageSolution = { ok: true, mode, edge: input.edge, panels: [{ ...panel, carries: input.lines.map((l) => l.id) }], carriers, foot: mode === 'bleed' && input.edge === 'bottom' ? 'top' : 'bottom' };
+    const sol: PageSolution = { ok: true, mode, edge: input.edge, panels: [{ ...panel, carries: present.map((l) => l.id) }], carriers, foot: mode === 'bleed' && input.edge === 'bottom' ? 'top' : 'bottom' };
     const bad = verifyPage(sol, input);
     if (!bad.length) return sol;
     why.push(...bad.map((b) => `${mode}: ${b.invariant} (${b.detail})`));
@@ -328,13 +343,18 @@ export interface PageViolation { invariant: PageInvariant; detail: string }
 export function verifyPage(sol: PageSolution, input: PageInput): PageViolation[] {
   const out: PageViolation[] = [];
   const bad = (invariant: PageInvariant, detail: string) => out.push({ invariant, detail });
-  const lines = input.lines;
+  const cap = pageCapOf(input.page);
+  const { rim, tail: TAIL } = cap?.world ?? WORLD_PAGES['screentone'];
+  // (the lines present at the moment checked; one handed but not shown yet, or gone, must be carried by nothing)
+  const lines = input.lines.filter((l) => presentAt(l, input.at));
+  const absent = input.lines.filter((l) => !presentAt(l, input.at));
   const hero = lines.find((l) => l.scaled);
   const texts = lines.flatMap((l) => l.boxes);
   const s = BALLOON.stroke / 2;
   // every present line has exactly one carrier, and every carrier a present line
   for (const l of lines) { const n = sol.carriers.filter((c) => c.line === l.id).length; if (n !== 1) bad('oneCarrier', `${l.id} has ${n} carriers`); }
-  for (const c of sol.carriers) if (!lines.some((l) => l.id === c.line)) bad('oneCarrier', `a carrier for ${c.line}, which is not present`);
+  for (const c of sol.carriers) if (!lines.some((l) => l.id === c.line)) bad('oneCarrier', `a carrier for ${c.line}, which is ${absent.some((l) => l.id === c.line) ? 'not shown yet or gone' : 'not on the page'}`);
+  for (const p of sol.panels) for (const id of p.carries) if (absent.some((l) => l.id === id)) bad('oneCarrier', `a panel carries ${id}, which is not shown yet or gone`);
   // glyphs inside the safe area
   for (const l of lines) for (const b of l.boxes) if (!inBox([b.x0, b.y0], PAGE_SAFE) || !inBox([b.x1, b.y1], PAGE_SAFE)) { bad('glyphsInSafe', `${l.id} glyph (${b.x0.toFixed(0)}, ${b.y0.toFixed(0)}, ${b.x1.toFixed(0)}, ${b.y1.toFixed(0)})`); break; }
   // each carrier: one closed simple path; it holds its words and their padding
@@ -377,13 +397,17 @@ export function verifyPage(sol: PageSolution, input: PageInput): PageViolation[]
       if (Math.abs(w - TAIL.root) > 1 || len > TAIL.len + 1 || len < TAIL.len * 0.5 || len / w > 1) bad('tailWedge', `root ${w.toFixed(0)} px, length ${len.toFixed(0)} px (fixed tail ${TAIL.root} / ${TAIL.len})`);
       const tri: Pt[] = [root[0], tip, root[1]];
       if (texts.some((b) => polyMeetsBox(tri, grow(b, TEXT_CLEAR)))) bad('tailClear', 'the tail meets a text box');
-      const room = outlineRoom(sol.panels[0], sol.mode, sol.edge);
+      const room = outlineRoom(sol.panels[0], sol.mode, sol.edge, rim);
       if (!tri.every((p) => inBox(p, room))) bad('tailClear', 'the tail leaves the panel or the safe area');
     } else if (main.kind === 'oval') bad('tailAttached', 'an oval balloon with no tail');
   }
-  // panels: each carries a present line; none inside or across another; gutters to the frame and between them
-  for (const p of sol.panels) if (!p.carries.some((id) => lines.some((l) => l.id === id))) bad('noEmptyPanel', 'a panel with no present line');
-  const pbox = (p: PagePanel) => union(p.pts.map(([x, y]) => ({ x0: x, y0: y, x1: x, y1: y })));
+  // panels: each holds the glyphs of a present line (read off the geometry, not its own list); none inside or across
+  // another (an old panel's line left inside the page); gutters to the frame and between them
+  const pbox = (p: PagePanel) => ptsBox(p.pts);
+  for (const p of sol.panels) {
+    const inner = panelInner(p, rim);
+    if (!lines.some((l) => l.boxes.length && l.boxes.every((b) => inBox([b.x0, b.y0], inner) && inBox([b.x1, b.y1], inner)))) bad('noEmptyPanel', 'a panel that holds no present line\'s words');
+  }
   sol.panels.forEach((p, i) => sol.panels.slice(i + 1).forEach((q) => { if (meets(grow(pbox(p), GUTTER / 2), grow(pbox(q), GUTTER / 2))) bad('noInnerPanelLine', 'two panels overlap or share a frame line'); }));
   for (const p of sol.panels) {
     const b = pbox(p);
@@ -398,7 +422,7 @@ export function verifyPage(sol: PageSolution, input: PageInput): PageViolation[]
       for (let k = 0; k <= n; k++) {
         const pt: Pt = [a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n];
         if (hidden(pt)) continue;
-        if (texts.some((t) => inBox(pt, grow(t, TEXT_CLEAR + PANEL_RIM / 2), 0))) { bad('panelLineClear', `a panel line at (${pt[0].toFixed(0)}, ${pt[1].toFixed(0)}) runs by a text box`); k = n + 1; }
+        if (texts.some((t) => inBox(pt, grow(t, TEXT_CLEAR + rim / 2), 0))) { bad('panelLineClear', `a panel line at (${pt[0].toFixed(0)}, ${pt[1].toFixed(0)}) runs by a text box`); k = n + 1; }
       }
     }
   // reading order: a line sung earlier never stands wholly below a later one; hierarchy: the scaled line's type is the page's largest
@@ -406,7 +430,7 @@ export function verifyPage(sol: PageSolution, input: PageInput): PageViolation[]
   for (let i = 1; i < byShow.length; i++) if (union(byShow[i - 1].boxes).y0 > union(byShow[i].boxes).y1) bad('readingOrder', `${byShow[i - 1].id} stands below ${byShow[i].id}, sung after it`);
   if (hero) { const big = Math.max(...hero.boxes.map((b) => b.y1 - b.y0)); for (const l of lines) if (l !== hero && Math.max(...l.boxes.map((b) => b.y1 - b.y0)) >= big) bad('hierarchy', `${l.id} set as large as the scaled line`); }
   // narration boxes: inside the panel, clear of the scaled carrier and of each other
-  const room = sol.panels[0] ? outlineRoom(sol.panels[0], 'closed', sol.edge) : PAGE_SAFE;
+  const room = sol.panels[0] ? outlineRoom(sol.panels[0], 'closed', sol.edge, rim) : PAGE_SAFE;
   sol.carriers.filter((c) => c.kind === 'narration').forEach((c, i, all) => {
     if (!c.outline.every((p) => inBox(p, room))) bad('carrierClear', `${c.line}'s narration box leaves the panel`);
     if (main && polyMeetsBox(main.outline, union(c.outline.map(([x, y]) => ({ x0: x, y0: y, x1: x, y1: y }))))) bad('carrierClear', `${c.line}'s narration box meets the scaled line's carrier`);
@@ -416,4 +440,4 @@ export function verifyPage(sol: PageSolution, input: PageInput): PageViolation[]
 }
 
 /** The page's lines from glyph cells (centre, size), frame px: each glyph its em box. */
-export const boxesOfCells = (cells: { x: number; y: number; s: number }[]): Box[] => cells.map((c) => ({ x0: c.x - c.s / 2, y0: c.y - c.s / 2, x1: c.x + c.s / 2, y1: c.y + c.s / 2 }));
+export const boxesOfCells = (cells: { x: number; y: number; s: number }[]): Box[] => cells.map(emBox);

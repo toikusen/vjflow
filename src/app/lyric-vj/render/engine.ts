@@ -73,7 +73,7 @@ import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { boxInsideOutline } from './page-layout';
-import type { PageDrawn, PageTally } from './world-b5-screentone';
+import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
 import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
@@ -2514,10 +2514,12 @@ export class LyricVjEngine {
       this.textRoot.updateMatrixWorld(true);
       const boxes = layer.inkBoxes();
       if (!boxes.length) continue;
-      const tally = (g.vjPageChecks ??= { frames: 0, relaid: 0, fails: [], glyphFrames: 0 });
-      tally.glyphFrames = (tally.glyphFrames ?? 0) + 1;
+      const tally = pageTally();
+      tally.glyphFrames++;
       const drawn = g.vjPageLast?.[rt.cue.id];
       const at = this.renderedAt.toFixed(3);
+      // (a frame its page drew whole as composed, its lines leaving no legal page: counted apart, pageFallbackFrames)
+      if (drawn?.fallback && drawn.stamp === stamp) continue;
       if (!drawn || drawn.stamp !== stamp) { if (tally.fails.length < 400) tally.fails.push(`${at} ${rt.cue.id} oneCarrier: glyphs drawn with no page laid round them this frame`); continue; }
       const out = boxes.filter((b) => !boxInsideOutline(drawn.outline, b));
       if (out.length && tally.fails.length < 400) tally.fails.push(`${at} ${rt.cue.id} balloonHolds: ${out.length} glyph(s) as drawn leave the carrier (${out.map((b) => `${b.x0.toFixed(0)},${b.y0.toFixed(0)}`).slice(0, 3).join(' ')})`);

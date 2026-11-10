@@ -47,6 +47,8 @@ export const RULES = {
   overflowPixels: 3,
   /** Rule crossing: lyric pixels within the clearance (LINE_CLEAR, 12 px of 1080p) of a declared line. */
   ruleCrossPixels: 2,
+  /** A declaration is the line's when at least this share of the ink in its scope stands on its carriers. */
+  onCarrier: 0.5,
 };
 
 /** What a frame's lines are declared to be read on, frame px of 1920 × 1080 (render/carrier-fit.ts Declared). */
@@ -73,13 +75,21 @@ export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: 
     // OVERFLOW_ZONE of it; a call set apart from the line on the paper, as the call placer sets it, does not)
     const zones = d.carriers.map((b) => sc(b, OVERFLOW_ZONE_PX * sx));
     const lines = d.lines.map((b) => sc(b, RULE_CLEAR_PX * sx));
+    let [ink, on1, off1, cross1] = [0, 0, 0, 0];
     for (let y = Math.max(0, Math.floor(scope.y0)); y < Math.min(h, Math.ceil(scope.y1)); y++)
       for (let x = Math.max(0, Math.floor(scope.x0)); x < Math.min(w, Math.ceil(scope.x1)); x++) {
         const i = y * w + x;
         if (Math.max(Math.abs(on[i * 4] - off[i * 4]), Math.abs(on[i * 4 + 1] - off[i * 4 + 1]), Math.abs(on[i * 4 + 2] - off[i * 4 + 2])) <= RULES.textDelta) continue;
-        if (zones.some((b) => inB(x, y, b)) && !carriers.some((b) => inB(x, y, b))) overflow++;
-        if (lines.some((b) => inB(x, y, b))) ruleCross++;
+        ink++;
+        if (carriers.some((b) => inB(x, y, b))) on1++;
+        else if (zones.some((b) => inB(x, y, b))) off1++;
+        if (lines.some((b) => inB(x, y, b))) cross1++;
       }
+    // (a page that declared its bands but is not the one the words are read on, a page sliding in or out beside the line,
+    // has most of the ink off its bands: its declaration is not this line's, RULES.onCarrier)
+    if (!d.carriers.length || on1 < RULES.onCarrier * ink) continue;
+    overflow += off1;
+    ruleCross += cross1;
   }
   return { overflow, ruleCross };
 }

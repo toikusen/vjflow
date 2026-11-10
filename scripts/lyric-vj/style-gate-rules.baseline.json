@@ -6,7 +6,9 @@
   "plate": 0,
   "small": 0,
   "cross": 2,
-  "low": 1
+  "low": 1,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "silk-cold": {
   "moments": 489,
@@ -15,7 +17,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 5
+  "low": 5,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "riso": {
   "moments": 489,
@@ -24,7 +28,9 @@
   "plate": 0,
   "small": 3,
   "cross": 0,
-  "low": 4
+  "low": 4,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "file": {
   "moments": 489,
@@ -33,7 +39,9 @@
   "plate": 0,
   "small": 0,
   "cross": 4,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "spy": {
   "moments": 489,
@@ -42,7 +50,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 2
+  "low": 2,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "card": {
   "moments": 489,
@@ -51,7 +61,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "dark-glitch": {
   "moments": 489,
@@ -60,7 +72,9 @@
   "plate": 2,
   "small": 1,
   "cross": 0,
-  "low": 5
+  "low": 5,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "neon-stage": {
   "moments": 489,
@@ -69,7 +83,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 1
+  "low": 1,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "terminal": {
   "moments": 489,
@@ -78,7 +94,9 @@
   "plate": 1,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "led-board": {
   "moments": 489,
@@ -87,7 +105,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "ink-wash": {
   "moments": 489,
@@ -96,7 +116,9 @@
   "plate": 0,
   "small": 0,
   "cross": 1,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "silent-film": {
   "moments": 489,
@@ -105,7 +127,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "stained-glass": {
   "moments": 489,
@@ -114,7 +138,9 @@
   "plate": 0,
   "small": 0,
   "cross": 5,
-  "low": 2
+  "low": 2,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "gothic-lolita": {
   "moments": 489,
@@ -123,7 +149,9 @@
   "plate": 1,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "ukiyoe": {
   "moments": 489,
@@ -132,7 +160,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 3
+  "low": 3,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "papercut": {
   "moments": 489,
@@ -141,7 +171,9 @@
   "plate": 5,
   "small": 0,
   "cross": 0,
-  "low": 1
+  "low": 1,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "paper-lantern": {
   "moments": 489,
@@ -150,7 +182,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "chiyogami": {
   "moments": 489,
@@ -159,7 +193,9 @@
   "plate": 0,
   "small": 0,
   "cross": 34,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "woodcut": {
   "moments": 489,
@@ -168,7 +204,9 @@
   "plate": 8,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "chalkboard": {
   "moments": 489,
@@ -177,7 +215,9 @@
   "plate": 0,
   "small": 1,
   "cross": 1,
-  "low": 6
+  "low": 6,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "aizome": {
   "moments": 489,
@@ -186,7 +226,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 1
+  "low": 1,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "crayon": {
   "moments": 489,
@@ -195,7 +237,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "popart": {
   "moments": 489,
@@ -204,7 +248,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "gameshow": {
   "moments": 489,
@@ -213,7 +259,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "idol-live": {
   "moments": 489,
@@ -222,7 +270,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "y2k": {
   "moments": 489,
@@ -231,7 +281,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "psychedelic": {
   "moments": 489,
@@ -240,7 +292,9 @@
   "plate": 0,
   "small": 0,
   "cross": 6,
-  "low": 5
+  "low": 5,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "graffiti": {
   "moments": 489,
@@ -249,7 +303,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 2
+  "low": 2,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "brutalist": {
   "moments": 489,
@@ -258,7 +314,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "citypop": {
   "moments": 489,
@@ -267,7 +325,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 2
+  "low": 2,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "cyanotype": {
   "moments": 489,
@@ -276,7 +336,9 @@
   "plate": 50,
   "small": 0,
   "cross": 6,
-  "low": 2
+  "low": 2,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "isometric": {
   "moments": 489,
@@ -285,7 +347,9 @@
   "plate": 7,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "cel80s": {
   "moments": 489,
@@ -294,7 +358,9 @@
   "plate": 20,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "phone": {
   "moments": 489,
@@ -303,7 +369,9 @@
   "plate": 1,
   "small": 1,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "blueprint": {
   "moments": 489,
@@ -312,7 +380,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "xerox": {
   "moments": 489,
@@ -321,7 +391,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "document": {
   "moments": 489,
@@ -330,7 +402,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "embroidery": {
   "moments": 489,
@@ -339,7 +413,9 @@
   "plate": 2,
   "small": 2,
   "cross": 0,
-  "low": 1
+  "low": 1,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "screentone": {
   "moments": 489,
@@ -348,7 +424,9 @@
   "plate": 0,
   "small": 0,
   "cross": 4,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "art-deco": {
   "moments": 489,
@@ -357,7 +435,9 @@
   "plate": 0,
   "small": 2,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "notebook": {
   "moments": 489,
@@ -366,7 +446,9 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "scrapbook": {
   "moments": 489,
@@ -375,7 +457,9 @@
   "plate": 0,
   "small": 0,
   "cross": 141,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "watercolor": {
   "moments": 489,
@@ -384,16 +468,20 @@
   "plate": 40,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "midcentury": {
   "moments": 489,
   "glow": 0,
   "clip": 0,
-  "plate": 155,
+  "plate": 167,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "claymation": {
   "moments": 489,
@@ -402,6 +490,8 @@
   "plate": 0,
   "small": 0,
   "cross": 0,
-  "low": 0
+  "low": 0,
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  }
 }

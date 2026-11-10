@@ -6,6 +6,7 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, easeIn, H, HandGround, HandIn, ObjectPaint, W, WorldEnv } from './world-craft';
 import { burstPath, focusOf, halftone, label, onPage, rng, sparklePath, speedLines, still, titleOf } from './world-b3-shared';
 import { B3 } from './b3-inks';
+import { wedgeTail } from './balloon-tail';
 
 const K = (e: { slots: { ink: string } }) => e.slots.ink;
 /** The board's register slip: colour plates sit this far off the key. */
@@ -235,13 +236,14 @@ const PIECES: Record<string, Piece> = {
 const balloon = (corner: 'left' | 'right', side = false): ObjectPaint => (c, w, h, s) => {
   const [cx, cy, rx, ry] = [w / 2, h / 2, w / 2 - 4, h / 2 - 4];
   const dir = corner === 'left' ? -1 : 1;
-  const angle = (deg: number) => ((corner === 'left' ? 180 - deg : deg) * Math.PI) / 180;
-  const [a0, a1] = side ? [angle(34), angle(46)] : [angle(62), angle(80)];
-  const tip: [number, number] = side ? [cx + dir * rx * 1.3, cy + ry * 0.96] : [cx + dir * (rx * 0.62 + 40), cy + ry + 40];
+  // the speaker it points to: out of the lower corner, or sideways (its tip above the balloon's foot)
+  const aim: [number, number] = side ? [cx + dir * rx * 1.3, cy + ry * 0.96] : [cx + dir * (rx * 0.62 + 40), cy + ry + 40];
+  // (phase 4d round 2, critic fig. 1: the tail read long, 1.3–1.4 times its root; now the short wide wedge every balloon
+  // carrier takes, render/balloon-tail.ts)
+  const { from, to, tip } = wedgeTail(cx, cy, rx, ry, aim);
   // one contour: the rim the long way round from one root of the tail to the other, out to the tip and back. Drawn as an
   // ellipse plus a separate triangle, the rim between the roots was stroked across the tail's mouth (owner 2026-11-04)
-  const [from, to] = a0 > a1 ? [a0, a1] : [a1, a0];
-  const shape = () => { c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, from, to + Math.PI * 2); c.lineTo(...tip); c.closePath(); };
+  const shape = () => { c.beginPath(); c.ellipse(cx, cy, rx, ry, 0, from, to); c.lineTo(...tip); c.closePath(); };
   shape();
   c.lineJoin = 'round';
   c.lineWidth = 16;

@@ -7,7 +7,7 @@
 // of a word are painted in free space (critic 2026-11-10). Inks are read off the frame under the region (signature.ts inkFor).
 import type { RenderJob } from './engine';
 import type { MiniMoment } from '../mini-moments';
-import { canvas, groundUnder, inkFor, inksAt, mixHex, type Inks } from './signature';
+import { canvas, groundUnder, inkFor, inksAt, mixHex, type GroundAt, type Inks } from './signature';
 
 const W = 1920;
 const H = 1080;
@@ -29,12 +29,14 @@ export function phaseOf(m: Pick<MiniMoment, 'prepareAt' | 'at' | 'mainSec' | 'to
   return { on, prep, main, left };
 }
 
-export interface MiniLayer { compose(stage: HTMLCanvasElement, t: number): HTMLCanvasElement; metrics(): Record<string, unknown>[] }
+export interface MiniLayer { compose(stage: HTMLCanvasElement, t: number, behind?: GroundAt): HTMLCanvasElement; metrics(): Record<string, unknown>[] }
 
 /** Returns the layer that draws every approved mini over the frame. */
 export async function miniMomentLayer(job: RenderJob): Promise<MiniLayer> {
   const minis = miniMomentsOf(job);
   const out = canvas(W, H);
+  /** The lyric layer rendered on its own (transparent). */
+  const layered = job.layer === 'text' || job.layer === 'words';
   const o = out.getContext('2d')!;
   // (each mini is drawn on a layer of its own, then every line's box is erased from it: their union, however they overlap)
   const layer = canvas(W, H);
@@ -106,13 +108,17 @@ export async function miniMomentLayer(job: RenderJob): Promise<MiniLayer> {
   };
 
   return {
-    compose(stage, t) {
+    compose(stage, t, behind?: GroundAt) {
       o.setTransform(1, 0, 0, 1, 0, 0);
+      // (a layered output keeps its alpha: the last frame cleared, not drawn under)
+      o.clearRect(0, 0, W, H);
       o.drawImage(stage, 0, 0, W, H);
       for (const m of minis) {
         if (!phaseOf(m, t).on) continue;
         const r = m.region;
-        const inks = inkFor(inksAt(job, t), groundUnder(o, Math.floor(r.x0 * W), Math.floor(r.y0 * H), Math.ceil(r.x1 * W), Math.ceil(r.y1 * H)));
+        const box = [Math.floor(r.x0 * W), Math.floor(r.y0 * H), Math.ceil(r.x1 * W), Math.ceil(r.y1 * H)] as const;
+        // (on a layered output the canvas under the moment is empty: its inks read the look behind, render/engine groundBehind)
+        const inks = inkFor(inksAt(job, t), (layered && behind?.(t, ...box)) || groundUnder(o, ...box));
         x.clearRect(0, 0, W, H);
         x.save();
         clipOf(m);

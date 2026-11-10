@@ -53,8 +53,29 @@ export interface FrameChange {
 export const OUTLINE_RING = 0.08;
 
 const maskOf = (a: number[], b: number[]) => a.map((v, i) => Math.abs(v - b[i]) > DIFF);
-/** Where the grey changes sharply: a drawn edge (a line, an outline, a texture's dots). */
-const edges = (g: number[], w: number, h: number) => g.map((v, i) => { const [x, y] = [i % w, Math.floor(i / w)]; return x + 1 < w && y + 1 < h && Math.max(Math.abs(v - g[i + 1]), Math.abs(v - g[i + w])) > DIFF; });
+/** The window and least coherence of an edge that belongs to a line or an outline (reading-rules' own: RULES.coherWin, coherence). */
+const COHER = { win: 5, least: 0.5 };
+/**
+ * Where the grey changes sharply along a drawn line or outline: an edge whose gradients round it agree in direction
+ * (structure-tensor coherence). A screen of dots, grain or speckle points every way and is no edge here (phase 4d round
+ * 2: popart's halftone re-centred round the next line read as a changed ground and ring, a cut where only dots changed).
+ */
+function edges(g: number[], w: number, h: number): boolean[] {
+  const raw = g.map((v, i) => { const [x, y] = [i % w, Math.floor(i / w)]; return x + 1 < w && y + 1 < h && Math.max(Math.abs(v - g[i + 1]), Math.abs(v - g[i + w])) > DIFF; });
+  const [gx, gy] = [new Float32Array(w * h), new Float32Array(w * h)];
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) { const i = y * w + x; gx[i] = g[i + 1] - g[i - 1]; gy[i] = g[i + w] - g[i - w]; }
+  const integral = (f: (i: number) => number) => { const s = new Float64Array((w + 1) * (h + 1)); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) s[(y + 1) * (w + 1) + x + 1] = f(y * w + x) + s[y * (w + 1) + x + 1] + s[(y + 1) * (w + 1) + x] - s[y * (w + 1) + x]; return s; };
+  const [sxx, syy, sxy] = [integral((i) => gx[i] * gx[i]), integral((i) => gy[i] * gy[i]), integral((i) => gx[i] * gy[i])];
+  const r = COHER.win >> 1;
+  return raw.map((on, i) => {
+    if (!on) return false;
+    const [x, y] = [i % w, Math.floor(i / w)];
+    const [ax, ay, bx, by] = [Math.max(0, x - r), Math.max(0, y - r), Math.min(w, x + r + 1), Math.min(h, y + r + 1)];
+    const box = (s: Float64Array) => s[by * (w + 1) + bx] - s[ay * (w + 1) + bx] - s[by * (w + 1) + ax] + s[ay * (w + 1) + ax];
+    const [jxx, jyy, jxy] = [box(sxx), box(syy), box(sxy)];
+    return Math.sqrt((jxx - jyy) ** 2 + 4 * jxy * jxy) / (jxx + jyy + 1e-6) > COHER.least;
+  });
+}
 /** A mask grown by r px. */
 function grown(m: boolean[], w: number, h: number, r: number): boolean[] {
   const out = [...m];

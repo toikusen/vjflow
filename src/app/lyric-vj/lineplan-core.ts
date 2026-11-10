@@ -20,7 +20,7 @@ import { lineInkOf, turnTakes } from './render/turn-rule';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
-import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure } from './render/seat-geometry';
+import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure, slotSpec } from './render/seat-geometry';
 import { lineFace } from './fonts';
 import { compositionsOf, pageSeatsOf } from './world-shared';
 import { ABSORBABLE_HOLDS, BEAT_SNAP, sectionAt, SWAP_CAP } from './world-events';
@@ -386,13 +386,21 @@ export function levelOf(tension: number, cps: number, calm: boolean): Level {
 /** A recipe for this line: fits its length and level, unlike the last line's layout and the recent entrances. */
 export function pickRecipe(c: Cue, level: Level, recent: Recipe[], seed: number, allow: (r: Recipe) => boolean = () => true, spare = Infinity, world = '', lean: (r: Recipe) => number = () => 0, from: Recipe[] = RECIPES): Recipe {
   const n = glyphs(c.text);
-  const fits = (r: Recipe) => r.level === level && n >= (r.min ?? 0) && n <= (r.max ?? Infinity) && allow(r) && spare >= (r.spare ?? 0) && (!r.fit || r.fit.test(c.text) || (!!r.world && r.fit.test(world)));
+  const fits = (r: Recipe) => r.level === level && n >= (r.min ?? 0) && n <= (r.max ?? Infinity) && allow(r) && spare >= (r.spare ?? 0) && (!r.fit || r.fit.test(c.text) || (!!r.world && r.fit.test(world))) && !bandMissed(r.wline?.set, c.text);
   const pool = from.filter(fits);
   // with nothing fitting at this level, a world's own sets that can still hold the line come first: a line past a set's
   // length (a letter a tile, a letter a card) ran off the frame
   const own0 = from.filter((r) => r.level === level && r.wline && !r.fit);
-  const roomy = own0.filter((r) => n <= (r.max ?? Infinity));
-  const own = roomy.length ? roomy : own0;
+  // (a set whose bands cannot hold the line at the type floor is the last resort, render/carrier-fit.ts: first the world's
+  // sets at this level that take its length and can hold it, then, only where bands were what failed, its sets at any level
+  // that can; past every set's length, a set with no band to run off before one with a band. A world without bands keeps
+  // the old choice exactly)
+  const sized = own0.filter((r) => n <= (r.max ?? Infinity));
+  const holds = (r: Recipe) => n <= (r.max ?? Infinity) && !bandMissed(r.wline?.set, c.text);
+  const roomy = sized.filter(holds);
+  const anyLevel = !roomy.length && sized.length ? from.filter((r) => r.wline && !r.fit && holds(r)) : [];
+  const loose = (rs: Recipe[]) => { const free = rs.filter((r) => !bandMissed(r.wline?.set, c.text)); return free.length ? free : rs; };
+  const own = roomy.length ? roomy : anyLevel.length ? anyLevel : sized.length ? sized : loose(own0);
   const use = pool.length ? pool : from !== RECIPES ? (own.length ? own : from.filter((r) => !r.fit)) : RECIPES.filter((r) => r.level === level && r.template === 'stair');
   const score = (r: Recipe) => {
     const age = (f: (x: Recipe) => boolean) => { const i = recent.map(f).lastIndexOf(true); return i < 0 ? 99 : recent.length - i; };
@@ -1097,6 +1105,11 @@ export function holdCandidatesOf(c: Cue, kinds: BeatKind[], beats: number[], rep
  */
 /** A line's block as the plan can see it: the set's own layout on a rough measure (a CJK character one em, anything else half). */
 const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　]+/g, ' ').trim(), spec, roughMeasure);
+/** A set whose bands its page prints at fixed places cannot hold the line even at the type floor (render/carrier-fit.ts): another set takes it. */
+// (measured wide on purpose: every character but ASCII an em, ASCII 0.6 em; the rough measure's half em for marks outside
+// its CJK ranges let choroin's こっちだって高まりたいの︕ onto the sleeve, where the face set its vertical mark an em)
+const bandMeasure = (x: string) => [...x].reduce((w, ch) => w + (/[\x20-\x7e]/.test(ch) ? 60 : 100), 0);
+const bandMissed = (set: string | undefined, text: string, slot?: { k: number; of: number }) => !!set && !!SET_SPECS[set]?.bands && !!blockOf(text.replace(/[\s　]+/g, ' ').trim(), slotSpec(SET_SPECS[set], slot), bandMeasure).bandMiss;
 /** The plan asks the measure it is unsure of for this much more than the renderer needs, so what it plans is drawn. */
 const ROUGH = 1.25;
 /** The growth the plan asks room for on its rough measure; the renderer, measuring the real glyphs, needs only GROW.least (world-beats.ts). */
@@ -1163,7 +1176,7 @@ const stressDrawn = (kind: StressKind, slots?: Slots) => !slots || !!stressInk(k
  * scheduler's (world-events.ts).
  */
 export function seatsFor(c: Pick<Cue, 'text'>, set: string, W: Pick<WorldPool, 'recipes' | 'columns' | 'faces'> & { id?: string }, level: Level, bound = false): string[] {
-  const own = W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) ? [r.wline.set] : []));
+  const own = W.recipes.flatMap((r) => (r.wline && r.level === level && r.wline.set !== set && (bound || !r.wline.ground) && (r.max ?? 99) >= glyphs(c.text) && glyphs(c.text) >= (r.min ?? 0) && (!W.columns[r.wline.set] || !/[A-Za-z0-9]/.test(c.text)) && !bandMissed(r.wline.set, c.text) ? [r.wline.set] : []));
   const face = W.faces ? lineFace(c.text, { family: W.faces.family }, W.faces.accent) : undefined;
   return [...new Set([...own, ...(bound && W.id ? pageSeatsFor(c.text, set, W.id, face) : [])])];
 }
@@ -1392,6 +1405,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   for (const [id, name] of force.recipes ?? []) if (isArrival(RECIPES.find((r) => r.id === name)?.enter ?? '')) hands.delete(id);
   // a handoff's picture changes when it starts, ahead of the line it hands to
   const pairs = planPairs(cues, beatOf, hands, calm, force.pairs, new Map([...(force.recipes ?? []), ...[...(force.custom?.keys() ?? [])].map((id) => [id, 'custom'] as [string, string]), ...[...leadIds].map((id) => [id, 'lead'] as [string, string])]));
+  // (a world's shared shot lays its lines a slot each in its pair set; where that set's bands cannot hold one of them at
+  // the floor, render/carrier-fit, the lines are laid one a shot instead of run off the band)
+  if (W && !W.handoffs && SET_SPECS[W.pairSet]?.bands)
+    for (const [id, p] of [...pairs]) { const ids = [id, ...p.also]; if (ids.some((x, k) => bandMissed(W.pairSet, cues.find((y) => y.id === x)?.text ?? '', { k, of: ids.length }))) pairs.delete(id); }
   // a pair of quick lines has no seconds for a handoff, into it or out of it
   for (const [id, p] of pairs) if (p.kind === 'list' && setTogether(cues.find((c) => c.id === id)!, cues.find((c) => c.id === p.also[0])!)) for (const x of [id, ...p.also, cues[cues.findIndex((c) => c.id === p.also.at(-1)) + 1]?.id ?? '']) if (!force.hands?.has(x)) hands.delete(x);
   // a call beside a line is laid out from where the line stands: a world keeps such a line alone and where it lands
@@ -1592,7 +1609,9 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const repeat = again && ofPart(again.recipe) && !isDirected(again.recipe) && hasRoom(again.recipe) && !(isArrival(again.recipe.enter) && hands.has(c.id)) && sharedRoom(again.recipe) ? again.recipe : undefined;
     const canLead = !!lead && !named && (beat?.spare ?? 0) >= (lead.spare ?? 0) && glyphs(c.text) <= (lead.max ?? 99);
     if (canLead) leadsUsed += 1;
-    const recipe = named ?? (canLead ? lead! : repeat ?? pickRecipe(c, level, recent, seed, allowed, beat?.spare ?? Infinity, part.what, lean, W?.recipes.filter(ofPart)));
+    // (a named, leading or repeated set whose bands cannot hold this line at the type floor gives way to a set that can)
+    const banded = (r?: Recipe) => (r && !bandMissed(r.wline?.set, c.text) ? r : undefined);
+    const recipe = banded(named) ?? (canLead ? banded(lead!) : undefined) ?? banded(repeat) ?? pickRecipe(c, level, recent, seed, allowed, beat?.spare ?? Infinity, part.what, lean, W?.recipes.filter(ofPart));
     if (W && !recipe.wline) sharedLines += 1;
     if (recipe.fit && !canLead) {
       devices.set(recipe.id, (devices.get(recipe.id) ?? 0) + 1);

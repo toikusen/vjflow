@@ -10,7 +10,7 @@ declare global {
     vjReady: Promise<void>;
     renderAt: (t: number) => Promise<void>;
     /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
-    grabAt: (t: number, quality: number) => Promise<string>;
+    grabAt: (t: number, quality: number, type?: string) => Promise<string>;
     vjLyrics: (on: boolean, carriers?: boolean) => void;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
     vjRows: () => ReturnType<LyricVjEngine['rowBreaks']>;
@@ -37,13 +37,18 @@ const signature = isSignature(job) ? await signatureLayer(job) : null;
 if (signature) engine.onCues = signatureCues as never;
 // mini moments (Q5 phase 2): drawn over the frame round their lines, every line kept (render/mini-moment.ts)
 const mini = miniMomentsOf(job).length ? await miniMomentLayer(job) : null;
-window.grabAt = async (t, quality) => {
+// (whether the lyrics are shown: the signature layer draws its lines only with them, so a frame without the words has none)
+let lyricsOn = true;
+window.grabAt = async (t, quality, type = 'image/jpeg') => {
   // a freeze moment holds the engine's frame at its stopping word while only its line moves
   await engine.renderAt(signature ? signature.stageAt(t) : t);
-  const framed = signature ? signature.compose(stage, t) : stage;
-  return (mini ? mini.compose(framed, t) : framed).toDataURL('image/jpeg', quality);
+  // (the look behind a region, for an overlay's inks on a layered output, render/engine groundBehind)
+  const behind = (at: number, x0: number, y0: number, x1: number, y1: number) => engine.groundBehind(at, x0, y0, x1, y1);
+  // (the back layer carries no lines: the signature layer's lines belong to the lyric layer, as the engine's do)
+  const framed = signature ? signature.compose(stage, t, lyricsOn && job.layer !== 'back', behind) : stage;
+  return (mini ? mini.compose(framed, t, behind) : framed).toDataURL(type, quality);
 };
-window.vjLyrics = (on, carriers) => engine.showLyrics(on, carriers);
+window.vjLyrics = (on, carriers) => { lyricsOn = on; engine.showLyrics(on, carriers); };
 window.vjMetrics = () => {
   engine.buildAll();
   const m = engine.metrics();

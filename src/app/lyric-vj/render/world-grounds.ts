@@ -1020,6 +1020,9 @@ export function drawWorldGround(e: WorldEnv, fx: string) {
   c.translate(W / 2, H / 2);
   c.scale(1.12, 1.12);
   c.translate(-W / 2 + 70 * Math.sin(e.now * speed + k), -H / 2 + 34 * Math.cos(e.now * speed * 0.8 + k));
+  // (the reading gate's list of what the words are read on starts again with every page drawn over the last: render/carrier-fit declareCarrier)
+  const g = globalThis as { __vjDeclared?: unknown[] };
+  if (g.__vjDeclared) g.__vjDeclared.length = 0;
   WORLD_GROUNDS[fx]?.(e);
   c.restore();
 }

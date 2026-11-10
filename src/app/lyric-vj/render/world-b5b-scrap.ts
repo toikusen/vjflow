@@ -10,8 +10,9 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, HandGround, HandIn, isLight, mixHex, WorldEnv } from './world-craft';
 import { C, mirrorGround, onPage, rng, still } from './world-b3-shared';
 import { B5B } from './b5b-inks';
-import { B5B_MIRRORED } from './world-b5b-sets';
-import { Box, dataRows, frame, H, isJa, meets, page, small, W } from './world-b5b-shared';
+import { B5B_MIRRORED, SET_BANDS } from './world-b5b-sets';
+import { declareCarrier, toPx } from './carrier-fit';
+import { Box, dataRows, frame, H, isJa, meets, page, small, twoPhrases, W } from './world-b5b-shared';
 
 type Pt = [number, number];
 const TK = (px: number, ja: boolean, w = 500) => `${w} ${px}px ${ja ? '"M PLUS Rounded 1c"' : '"Noto Sans HK"'}, "Noto Sans TC", sans-serif`;
@@ -161,7 +162,7 @@ const cardPage: HandGround = (e) => { page(e, 'scrap-card', (c) => {
   ticket(c, e, 1340, 836, 520, 200, -6);
   tape(c, 1800, 800, 130, 48, 38, 0);
   paperGrain(c, 3);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/card'].filter((b) => b.part !== 'small' || twoPhrases(e)).map((b) => toPx(b.box)), []); };
 
 /** b: a dotted page, a torn paper laid across it for the line, three gold stars, the manila tag. */
 const dotsPage: HandGround = (e) => { page(e, 'scrap-dots', (c) => {
@@ -171,7 +172,7 @@ const dotsPage: HandGround = (e) => { page(e, 'scrap-dots', (c) => {
   for (const [x, y, r, a] of [[1600, 290, 34, 8], [1690, 370, 22, -12], [1560, 430, 16, 20]]) if (!meets({ x0: x - r - 10, y0: y - r - 10, x1: x + r + 10, y1: y + r + 10 }, e.rect, 8)) star(c, x, y, r, a);
   tag(c, e, 1240, 760, 470, 190, -4);
   paperGrain(c, 4);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/dots'].map((b) => toPx(b.box)), []); };
 
 /** c: the whole spread: ticking, dots, gingham and a red sheet overlapping, a torn cream banner across them, two tapes at its ends. */
 const spreadPage: HandGround = (e) => { page(e, 'scrap-spread', (c) => {
@@ -186,7 +187,7 @@ const spreadPage: HandGround = (e) => { page(e, 'scrap-spread', (c) => {
   tape(c, 1700, 280, 170, 54, 22, 0);
   ticket(c, e, 1330, 840, 500, 200, -5);
   paperGrain(c, 5);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/spread'].map((b) => toPx(b.box)), []); };
 
 /** d: a striped page, two ruled index cards overlapping, a wire clip, tapes; the data in a line under them. */
 const indexPage: HandGround = (e) => { page(e, 'scrap-index', (c) => {
@@ -202,7 +203,7 @@ const indexPage: HandGround = (e) => { page(e, 'scrap-index', (c) => {
   tape(c, 1790, 600, 150, 50, 36, 0);
   small(c, [dataRows(e).artist, dataRows(e).title, dataRows(e).part].filter(Boolean).join('　'), 200, 960, TK(34, isJa(e)), 34, isLight(s.ground) ? s.ink : s.faint);
   paperGrain(c, 6);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/index'].filter((b) => b.part !== 'small' || twoPhrases(e)).map((b) => toPx(b.box)), []); };
 
 const Gs: Record<string, HandGround> = { 'scrapbook/card': cardPage, 'scrapbook/dots': dotsPage, 'scrapbook/spread': spreadPage, 'scrapbook/index': indexPage };
 for (const [id, page] of Object.entries(B5B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);

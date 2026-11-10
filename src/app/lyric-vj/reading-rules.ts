@@ -9,6 +9,9 @@
 //   cross  — lines or edges of the picture run under the strokes being read (oriented ones: a fine dot screen or grain is
 //            texture, not a line; popart's halftone counted 70 of 489 moments though every word read, 2026-11-05)
 //   low    — the ink misses 4.5:1 against what is really behind it (or against its own keyline, when it has one)
+//   carrier-overflow  — (phase 4d round 2) the lyric layer's ink, what is printed with its letters included, runs off the
+//            band or plate its page declares it is read on (render/carrier-fit.ts declareCarrier)
+//   rule-crosses-text — a line the page declares (a key plate's registration line) comes within LINE_CLEAR of that ink
 // The fifth rule, no soft glow laid behind the words, is counted where the clearing is drawn (the gate watches gradients).
 
 /** Thresholds, calibrated on the 2026-11-04 audit's own examples (out/research/rules-1104). */
@@ -40,7 +43,100 @@ export const RULES = {
   keylineReach: 3,
   /** Low: this share of the strokes' solid pixels miss the floor. */
   lowShare: 0.5,
+  /** Carrier overflow: this many lyric pixels (of the 480 × 270 read) past every declared carrier, its edge given one pixel (a cut edge's jitter). */
+  overflowPixels: 3,
+  /** Rule crossing: lyric pixels within the clearance (LINE_CLEAR, 12 px of 1080p) of a declared line. */
+  ruleCrossPixels: 2,
+  /** A declaration is the line's when at least this share of the ink in its scope stands on its carriers. */
+  onCarrier: 0.5,
+  /** A declared carrier is on screen when a channel's median inside it stands this far off the ground round it. */
+  carrierSeen: 16,
 };
+
+/** What a frame's lines are declared to be read on, frame px of 1920 × 1080 (render/carrier-fit.ts Declared). */
+export interface DeclaredMoment { carriers: Bx[]; lines: Bx[]; scope: Bx }
+type Bx = { x0: number; y0: number; x1: number; y1: number };
+/** The 1080p clearance a declared line keeps from the ink (render/carrier-fit LINE_CLEAR). */
+export const RULE_CLEAR_PX = 12;
+/** Ink joined to the ink on a carrier within this many 1080p px is the same run of type (a line's letters stand closer; a call apart, further). */
+export const OVERFLOW_JOIN_PX = 12;
+
+/**
+ * Whether a declared carrier is on screen where it is declared: along at least three of its four edges, a channel's median
+ * just inside stands off the one just outside (a band seen through a transition's other layer, or another page's band
+ * lying over this one, does not show its own edges there).
+ */
+function carrierSeen(off: ArrayLike<number>, w: number, h: number, b: Bx): boolean {
+  const med = (xs: number[]) => { const s = [...xs].sort((p, q) => p - q); return s[s.length >> 1] ?? 0; };
+  const strip = (x0: number, y0: number, x1: number, y1: number) => {
+    const ch: number[][] = [[], [], []];
+    for (let y = Math.max(0, Math.floor(y0)); y < Math.min(h, Math.ceil(y1)); y++)
+      for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) for (let c = 0; c < 3; c++) ch[c].push(off[(y * w + x) * 4 + c]);
+    return ch[0].length ? ch.map(med) : undefined;
+  };
+  const sides = [
+    [strip(b.x0 + 2, b.y0 + 2, b.x1 - 2, b.y0 + 5), strip(b.x0 + 2, b.y0 - 5, b.x1 - 2, b.y0 - 2)],
+    [strip(b.x0 + 2, b.y1 - 5, b.x1 - 2, b.y1 - 2), strip(b.x0 + 2, b.y1 + 2, b.x1 - 2, b.y1 + 5)],
+    [strip(b.x0 + 2, b.y0 + 2, b.x0 + 5, b.y1 - 2), strip(b.x0 - 5, b.y0 + 2, b.x0 - 2, b.y1 - 2)],
+    [strip(b.x1 - 5, b.y0 + 2, b.x1 - 2, b.y1 - 2), strip(b.x1 + 2, b.y0 + 2, b.x1 + 5, b.y1 - 2)],
+  ];
+  return sides.filter(([i, o]) => !!i && !!o && [0, 1, 2].some((c) => Math.abs(i[c] - o![c]) > RULES.carrierSeen)).length >= 3;
+}
+
+/**
+ * The two declared-geometry rules on one moment: lyric pixels (on against off) inside a line's scope that stand on none of
+ * its declared carriers, and lyric pixels within the clearance of a declared line. Pixel counts at w × h.
+ */
+export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: number, h: number, declared: DeclaredMoment[]): { overflow: number; ruleCross: number } {
+  const [sx, sy] = [w / 1920, h / 1080];
+  const sc = (b: Bx, m = 0) => ({ x0: b.x0 * sx - m, y0: b.y0 * sy - m, x1: b.x1 * sx + m, y1: b.y1 * sy + m });
+  const inB = (x: number, y: number, b: Bx) => x + 0.5 >= b.x0 && x + 0.5 <= b.x1 && y + 0.5 >= b.y0 && y + 0.5 <= b.y1;
+  let [overflow, ruleCross] = [0, 0];
+  for (const d of declared) {
+    const scope = sc(d.scope);
+    // (a carrier counts only where it is seen: its inside stands off the ground just round it in the frame without the
+    // words. A page drawn into a transition's other layer declares bands that are not on screen, or not where it says)
+    const seen = d.carriers.filter((b) => carrierSeen(off, w, h, sc(b)));
+    const carriers = seen.map((b) => sc(b, 1));
+    const lines = d.lines.map((b) => sc(b, RULE_CLEAR_PX * sx));
+    const [x0, y0, x1, y1] = [Math.max(0, Math.floor(scope.x0)), Math.max(0, Math.floor(scope.y0)), Math.min(w, Math.ceil(scope.x1)), Math.min(h, Math.ceil(scope.y1))];
+    const isInk = (x: number, y: number) => { const i = y * w + x; return Math.max(Math.abs(on[i * 4] - off[i * 4]), Math.abs(on[i * 4 + 1] - off[i * 4 + 1]), Math.abs(on[i * 4 + 2] - off[i * 4 + 2])) > RULES.textDelta; };
+    const onC = (x: number, y: number) => carriers.some((b) => inB(x, y, b));
+    let [ink, on1, cross1] = [0, 0, 0];
+    const queue: number[] = [];
+    const reached = new Uint8Array(w * h);
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        if (!isInk(x, y)) continue;
+        ink++;
+        if (onC(x, y)) { on1++; reached[y * w + x] = 1; queue.push(y * w + x); }
+        if (lines.some((b) => inB(x, y, b))) cross1++;
+      }
+    // (the overflow is the ink joined to the ink on the carrier, within OVERFLOW_JOIN px, that stands off it: a glyph or a
+    // run of a line carried past the band's edge or end; a call the call placer sets apart on the paper is not joined)
+    const r = Math.max(1, Math.round(OVERFLOW_JOIN_PX * sx));
+    let off1 = 0;
+    while (queue.length) {
+      const i = queue.pop()!;
+      const [px, py] = [i % w, Math.floor(i / w)];
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          const [qx, qy] = [px + dx, py + dy];
+          if (qx < x0 || qy < y0 || qx >= x1 || qy >= y1) continue;
+          const j = qy * w + qx;
+          if (reached[j] || !isInk(qx, qy)) continue;
+          reached[j] = 1;
+          queue.push(j);
+          if (!onC(qx, qy)) off1++;
+        }
+    }
+    // (a page that declared its bands but is not the one the words are read on has most of the ink off its bands: RULES.onCarrier)
+    if (!carriers.length || on1 < RULES.onCarrier * ink) continue;
+    overflow += off1;
+    ruleCross += cross1;
+  }
+  return { overflow, ruleCross };
+}
 
 export interface RuleMoment {
   /** Share of the frame the words cover. */
@@ -56,6 +152,9 @@ export interface RuleMoment {
   cross: number;
   /** Share of the strokes' solid pixels under the contrast floor. */
   low: number;
+  /** Lyric pixels off their declared carriers, and within a declared line's clearance (declaredRules; none when nothing is declared). */
+  overflow?: number;
+  ruleCross?: number;
 }
 
 const lumAt = (d: ArrayLike<number>, i: number) => 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
@@ -164,15 +263,20 @@ export function readMoment(on: ArrayLike<number>, off: ArrayLike<number>, w: num
 }
 
 /** Per-rule counts of failing moments, the gate's unit (a world's before and after are compared on these). */
-export interface RuleCounts { moments: number; glow: number; clip: number; plate: number; small: number; cross: number; low: number }
-export const emptyCounts = (): RuleCounts => ({ moments: 0, glow: 0, clip: 0, plate: 0, small: 0, cross: 0, low: 0 });
+export interface RuleCounts { moments: number; glow: number; clip: number; plate: number; small: number; cross: number; low: number; 'carrier-overflow': number; 'rule-crosses-text': number }
+export const emptyCounts = (): RuleCounts => ({ moments: 0, glow: 0, clip: 0, plate: 0, small: 0, cross: 0, low: 0, 'carrier-overflow': 0, 'rule-crosses-text': 0 });
 /** Adds one moment (and whether a soft clearing was drawn for it) to the counts. */
 export function countMoment(c: RuleCounts, m: RuleMoment, glow: boolean): RuleCounts {
-  return { moments: c.moments + 1, glow: c.glow + (glow ? 1 : 0), clip: c.clip + (m.clip ? 1 : 0), plate: c.plate + (m.plate < 0 ? 1 : 0), small: c.small + (m.small ? 1 : 0), cross: c.cross + (m.cross > RULES.cross ? 1 : 0), low: c.low + (m.low > RULES.lowShare ? 1 : 0) };
+  return { moments: c.moments + 1, glow: c.glow + (glow ? 1 : 0), clip: c.clip + (m.clip ? 1 : 0), plate: c.plate + (m.plate < 0 ? 1 : 0), small: c.small + (m.small ? 1 : 0), cross: c.cross + (m.cross > RULES.cross ? 1 : 0), low: c.low + (m.low > RULES.lowShare ? 1 : 0),
+    'carrier-overflow': (c['carrier-overflow'] ?? 0) + ((m.overflow ?? 0) >= RULES.overflowPixels ? 1 : 0), 'rule-crosses-text': (c['rule-crosses-text'] ?? 0) + ((m.ruleCross ?? 0) >= RULES.ruleCrossPixels ? 1 : 0) };
 }
+/** Rules with no baseline and no slack: any moment fails (phase 4d round 3 review). */
+export const ABSOLUTE_RULES = ['carrier-overflow', 'rule-crosses-text'] as const;
 /** The rules a world got worse on against its recorded counts (shares of its moments, so a changed line count is fair). */
 export function regressions(before: RuleCounts, after: RuleCounts, slack = 0.02): string[] {
   const keys = ['glow', 'clip', 'plate', 'small', 'cross', 'low'] as const;
   const share = (c: RuleCounts, k: (typeof keys)[number]) => c[k] / Math.max(1, c.moments);
-  return keys.filter((k) => share(after, k) > share(before, k) + slack);
+  // (the two declared-geometry rules are absolute: one glyph off its band or within a declared line's clearance is a
+  // fault whatever the world counted before, ABSOLUTE_RULES)
+  return [...keys.filter((k) => share(after, k) > share(before, k) + slack), ...ABSOLUTE_RULES.filter((k) => (after[k] ?? 0) > 0)];
 }

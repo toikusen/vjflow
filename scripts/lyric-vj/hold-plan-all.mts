@@ -11,6 +11,10 @@
 // (holds the plan committed that the final job draws / holds it committed, a composite's only when its event landed) and
 // `primaryCoverage` (lines with a primary action, hold or composition / lines with an outcome). A composition satisfies
 // the primary-action coverage only; it never counts as Q2 hold coverage.
+// Pairs rules (Codex 2026-11-10 pairs C): the denominator stays; beside it every hold candidate refused by the rules, by
+// kind and reason (`rejects`: no-reason / repeat-kind / section-cap / timing / span, the composer's beatRejects and the
+// joint selector's outcome holdRejects), the colour changes (ink-swap, line-ink-settle) by reason (`swapWhy`), and the sung lines in a row that share a
+// hold kind (`repeats`, 0 by the rule).
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/hold-plan-all.mts > out.json
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -29,6 +33,9 @@ let onNonCarrier = 0;
 const split: Record<string, { independent: number; absorbed: number; lost: number }> = {};
 const outcomes: Record<string, Record<string, number>> = {};
 const selected = { committed: 0, drawn: 0 };
+const rejects: Record<string, number> = {};
+const swapWhy: Record<string, number> = {};
+let repeats = 0;
 for (const st of FREE_STYLES) for (const name of Object.keys(IDS)) {
   const song = JSON.parse(readFileSync(`out/db/${IDS[name]}/song.json`, 'utf8'));
   let meaning; try { meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8')); } catch {}
@@ -38,8 +45,14 @@ for (const st of FREE_STYLES) for (const name of Object.keys(IDS)) {
   const absorbed = new Set<string>((table?.events ?? []).filter((e: any) => e.absorbed && !failed.has(e.id)).map((e: any) => e.absorbed.holdId));
   const dropped = new Set<string>((table?.holdMoves ?? []).filter((m: any) => m.to === null).map((m: any) => m.lineId));
   const outOf = new Map<string, any>((table?.outcomes ?? []).map((o: any) => [o.lineId, o]));
+  const tick = (m: Record<string, number>, k: string) => void (m[k] = (m[k] ?? 0) + 1);
+  for (const o of table?.outcomes ?? []) for (const r of o.holdRejects ?? []) tick(rejects, `${r.kind}:${r.reason}`);
+  const sung = (t.cues as any[]).map((c) => ({ c, s: song.cues.find((x: any) => x.id === c.cueId) })).filter((x) => x.s).sort((a, b) => a.s.start - b.s.start);
+  sung.forEach(({ c }, k) => { const p = sung[k - 1]?.c.world?.beat; if (p && c.world?.beat && p.kind === c.world.beat.kind) repeats++; });
   for (const c of t.cues as any[]) {
     const s = song.cues.find((x: any) => x.id === c.cueId); if (!s) continue;
+    for (const r of c.world?.beatRejects ?? []) tick(rejects, `${r.kind}:${r.reason}`);
+    if (['ink-swap', 'line-ink-settle'].includes(c.world?.beat?.kind)) tick(swapWhy, `${c.world.beat.kind}:${c.world.beat.why?.kind ?? 'none'}`);
     const b = B(s.end - s.start);
     const o = outOf.get(c.cueId);
     if (o) {
@@ -59,4 +72,4 @@ for (const st of FREE_STYLES) for (const name of Object.keys(IDS)) {
   }
 }
 const primary = Object.fromEntries(Object.entries(outcomes).map(([b, x]) => { const n = Object.values(x).reduce((a, v) => a + v, 0); const act = Object.entries(x).filter(([k]) => !k.startsWith('keep')).reduce((a, [, v]) => a + v, 0); return [b, { primary: act, lines: n, pct: +((100 * act) / Math.max(1, n)).toFixed(1) }]; }));
-console.log(JSON.stringify({ commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', joint: process.env['VJ_JOINT'] === '1', worlds: FREE_STYLES.length, onNonCarrier, tally, split, outcomes, selectedHoldRealization: { ...selected, pct: +((100 * selected.drawn) / Math.max(1, selected.committed)).toFixed(1) }, primaryCoverage: primary, coverage: Object.fromEntries(Object.entries(tally).map(([b, x]) => [b, { realised: (split[b]?.independent ?? 0) + (split[b]?.absorbed ?? 0), lines: x.lines, pct: +((100 * ((split[b]?.independent ?? 0) + (split[b]?.absorbed ?? 0))) / Math.max(1, x.lines)).toFixed(1) }])), pool, skips, kinds }, null, 1));
+console.log(JSON.stringify({ commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', joint: process.env['VJ_JOINT'] === '1', worlds: FREE_STYLES.length, onNonCarrier, tally, split, outcomes, selectedHoldRealization: { ...selected, pct: +((100 * selected.drawn) / Math.max(1, selected.committed)).toFixed(1) }, primaryCoverage: primary, coverage: Object.fromEntries(Object.entries(tally).map(([b, x]) => [b, { realised: (split[b]?.independent ?? 0) + (split[b]?.absorbed ?? 0), lines: x.lines, pct: +((100 * ((split[b]?.independent ?? 0) + (split[b]?.absorbed ?? 0))) / Math.max(1, x.lines)).toFixed(1) }])), pool, skips, kinds, rejects, swapWhy, repeats }, null, 1));

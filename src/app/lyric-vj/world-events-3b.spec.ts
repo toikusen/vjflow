@@ -304,26 +304,29 @@ const load = (k: string) => ({ song: JSON.parse(readFileSync(`out/db/${SONGS[k]}
 
 describe.skipIf(!have)('phase 3b on real songs', () => {
   const style = (id: string) => FREE_STYLES.find((s) => s.id === id)!;
-  const run = (id: string, k: string, worldEvents?: boolean) => { const { song, meaning } = load(k); return freeJob(song, { style: style(id), seed: 0, meaning, ...(worldEvents === undefined ? {} : { worldEvents }) }); };
+  const run = (id: string, k: string, worldEvents?: boolean, seed = 0) => { const { song, meaning } = load(k); return freeJob(song, { style: style(id), seed, meaning, ...(worldEvents === undefined ? {} : { worldEvents }) }); };
+  // (chalkboard's erase on nun is laid at seed 1 since pairs B: the seed-0 one followed a reseat inside the line before,
+  // which is no longer laid, Codex 2026-11-10)
+  const ERASE_SEED = 1;
 
   it('each new kind is planned, drawn as planned (verifyWorldEvents), the same seed the same table', () => {
-    const cases: [string, string, string][] = [['chalkboard', 'nun', 'erase-reseat'], ['document', 'nun', 'feed-advance'], ['document', 'nun', 'tear-next']];
-    for (const [id, k, m] of cases) {
-      const f = run(id, k, true);
+    const cases: [string, string, string, number][] = [['chalkboard', 'nun', 'erase-reseat', ERASE_SEED], ['document', 'nun', 'feed-advance', 0], ['document', 'nun', 'tear-next', 0]];
+    for (const [id, k, m, seed] of cases) {
+      const f = run(id, k, true, seed);
       const table = f.treatment.worldEvents!;
       expect(table.events.some((e) => e.material === m), `${id} ${k} ${m}`).toBe(true);
       expect(verifyWorldEvents(f.job, style(id).world, table), `${id} ${k}`).toEqual([]);
       // (an event on two lines never shares its id with the next line's own: countCuts folds by id)
       expect(new Set(table.events.map((e) => e.id)).size).toBe(table.events.length);
       expect(table.warnings.filter((w) => w.reason.startsWith('final check'))).toEqual([]);
-      expect(JSON.stringify(run(id, k, true).treatment.worldEvents)).toBe(JSON.stringify(table));
+      expect(JSON.stringify(run(id, k, true, seed).treatment.worldEvents)).toBe(JSON.stringify(table));
       // the world's own moves keep every clock among the scheduler's own switches
       expectClocks(table.events.filter((e) => !e.fixed));
     }
   });
 
   it('chalkboard: the erased line carries the wipe and the eraser exit; its wipe starts after it is sung and read still; tampered earlier it is reported', () => {
-    const f = run('chalkboard', 'nun', true);
+    const f = run('chalkboard', 'nun', true, ERASE_SEED);
     const e = f.treatment.worldEvents!.events.find((x) => x.material === 'erase-reseat')!;
     const cues = f.treatment.cues as { cueId: string; world?: { wipe?: { from: number; sec: number }; exit?: string } }[];
     const old = cues.find((c) => c.cueId === e.lineIds[0])!;
@@ -415,7 +418,7 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
     // approved and not drawn at all
     expect(verifyWorldEvents(f.job, style('art-deco').world, table).some((w) => /approved material move poster-panel not drawn|not in the drawn repose/.test(w.reason))).toBe(true);
     // the same for an erase whose wipe the final draw lost
-    const c = run('chalkboard', 'nun', true);
+    const c = run('chalkboard', 'nun', true, ERASE_SEED);
     const er = c.treatment.worldEvents!.events.find((x) => x.material === 'erase-reseat')!;
     const job = structuredClone(c.job);
     delete (job.treatment.cues as { cueId: string; world?: { wipe?: unknown } }[]).find((x) => x.cueId === er.lineIds[0])!.world!.wipe;

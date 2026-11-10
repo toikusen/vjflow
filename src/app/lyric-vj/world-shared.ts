@@ -253,14 +253,8 @@ export interface WorldCompositions {
    * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
    */
   enabled?: boolean;
-  /**
-   * Under the joint contract (phase 4c, Codex 2026-11-10 r3 §4): a line whose entrance is a visible composition may also
-   * take one reseat inside itself, at a sung word, with READ_STABLE of still reading after the entrance has landed and
-   * before the line ends, every clock and geometry check passed. Two composition changes, counted as two; never a hold
-   * beside them, never a third. Declared only where the owner accepted that density (art-deco: card 2026-11-10-art-deco-
-   * slow-inline-density); every other world keeps one primary action a line.
-   */
-  entranceAndInLine?: boolean;
+  // (no `entranceAndInLine`: the second composition a line once took after a visible entrance is withdrawn, Codex
+  // 2026-11-10 pairs B, card 2026-11-10-no-inline-line-move; every world takes one visible composition a line at most)
 }
 
 /** How a material move runs (design-bar rule 9: the curve follows the material, never one shared ease). */
@@ -347,12 +341,12 @@ const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, 
 
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // sheet-change: the next drawing sheet's own layout; detail-viewport: the push into a part, cut from the same sheet
-  // (no invented engineering detail); the detail strip: the same sheet's note written under its drawing (phase 3a), the
-  // one seat a line may take inside itself (the same sheet under the words)
-  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: true, protectedRegion: BLUEPRINT_BORDER },
-  // board-region: left / right / centre regions of the deep green board, also at a word inside a line (the same board
-  // under the words, so nothing is pulled from under them); chalk changing colour is no cut
-  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' },
+  // (no invented engineering detail); the detail strip: the same sheet's note written under its drawing (phase 3a), taken
+  // at a line or a part only: a line being sung never changes seat (Codex 2026-11-10 pairs B)
+  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: true, protectedRegion: BLUEPRINT_BORDER },
+  // board-region: left / right / centre regions of the deep green board, at a line or a part (never inside a line being
+  // sung, Codex 2026-11-10 pairs B); chalk changing colour is no cut
+  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' },
     // erase-reseat (phase 3b): a next region that meets the one just sung is wiped first by the board's own eraser pass
     // (its approved exit), only once the line there is sung and read still 0.35 s past its last syllable; the line being
     // sung is never touched (the wipe ends as the next line shows); the tray along the foot is never wiped over
@@ -368,15 +362,15 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
     'feed-advance': { family: 'page-handoff', at: ['line'], sec: 0.3, curve: 'paper-feed', seat: 'same', clearOfSung: 0, minLine: 1.5, draws: 'feed', counts: 'seen', protectedRegion: [RECEIPT_MOUTH] },
   } },
   // page-turn: the Q4 fold to the top binding; margin-seat: the main column and, on the same page, the margin seat under
-  // it (phase 3a), at the world's least type or more: the one seat a line may take inside itself (the same page under it)
-  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: true, protectedRegion: NOTEBOOK_HEAD },
+  // it (phase 3a), at the world's least type or more, at a line or a part (never inside a line, Codex 2026-11-10 pairs B)
+  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: true, protectedRegion: NOTEBOOK_HEAD },
   // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; the secondary block on the axis
-  // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: the one seat a line may take inside
-  // itself (the same frame under it). No marquee turned stage sign. carrier-swap (phase 3b, poster-panel): at a sung word
+  // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: taken at a line or a part only (the
+  // in-line move onto it was rejected, card 2026-11-10-no-inline-line-move). No marquee turned stage sign. carrier-swap (phase 3b, poster-panel): at a sung word
   // inside a line on a marquee, its single plaque parts into the main plaque and a stepped secondary panel under the
   // gold phrase, slid down out of the main one (ease-out, no overshoot); the words never move, the panel is the ground's
   // own black, the plaque keeps the approved board's rules and minimum width
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME, entranceAndInLine: true,
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
     // (withheld 2026-11-10 when the scheduler approved Utsusemi 75.86 on a split the renderer did not make; back 2026-11-10
     // (phase 3c): pageSeatsFor, world-layout → panelsOf and the contract all part a line by seat-geometry panelSplit on
     // the renderer's own measure of the job's face, docs/research/2026-11-10-q1-phase3c.md)
@@ -485,10 +479,38 @@ export const WORLD_SCALE: Record<string, WorldScale> = {
   // (its sets anchor top-left and bottom-right: the paper's corners are where its type already sits)
   riso: { edges: ['bottom', 'left', 'top', 'right'], carrierRole: 'paper', sizeRange: [1.6, 2.4], candidateWeights: { short: 1.6, ratio: 1, room: 1.4, sustain: 1.3, order: 0.6 }, curve: 'cut', note: 'riso.edgeFit (Codex §3): paper edge, the sheet runs off; prefers short phrases, empty paper, held lines' },
   // (a manga page tiers its panels top to bottom: a panel bleeding off the page's top or bottom edge)
-  // (withheld 2026-11-10 after two critic rounds, docs/research/2026-11-10-q3q5-critic-r2.md: the re-laid balloon cannot
-  // close in frame and the page's other panels stay as empty shells; the page must re-lay its whole grid round it first)
-  screentone: { edges: ['top', 'bottom'], carrierRole: 'panel', sizeRange: [1.6, 2.4], candidateWeights: { short: 0.8, ratio: 1, room: 0.7, sustain: 0.8, order: 1.8 }, curve: 'cut', note: 'screentone.edgeFit (Codex §3): panel inner edge, page and panel frame run off; prefers a clear main/minor panel reading order', withheld: 'the page does not re-lay its panel grid round a scaled balloon: the balloon runs off the frame and the other panels stay empty (critic r2)' },
+  // (withheld 2026-11-10 after two critic rounds, docs/research/2026-11-10-q3q5-critic-r2.md: the re-laid balloon could
+  // not close in frame and the page's other panels stayed as empty shells; back 2026-11-10 phase 4e once the page lays
+  // itself whole round the composition, render/page-layout.ts, docs/research/2026-11-10-screentone-page-layout.md)
+  screentone: { edges: ['top', 'bottom'], carrierRole: 'panel', sizeRange: [1.6, 2.4], candidateWeights: { short: 0.8, ratio: 1, room: 0.7, sustain: 0.8, order: 1.8 }, curve: 'cut', note: 'screentone.edgeFit (Codex §3): panel inner edge, page and panel frame run off; prefers a clear main/minor panel reading order' },
 };
+/** The carrier a page lays round a scaled line (render/page-layout.ts): a spiky balloon, a rounded balloon with a tail, a narration box. */
+export type PageCarrierKind = 'spiky' | 'oval' | 'box';
+/**
+ * A world whose pages draw their own carriers (a `ground:` carrier) and can lay themselves again whole round a Q3 scale
+ * composition (render/page-layout.ts, docs/research/2026-11-10-screentone-page-layout.md): the one panel the page keeps,
+ * its frame line, the carrier each page lays, and the balloon's tail. popart can declare the same later.
+ */
+export interface WorldPage {
+  /** The one panel of the re-laid page, frame px y down (the board's widest panel). */
+  panel: { x0: number; y0: number; x1: number; y1: number };
+  rim: number;
+  /** Each page (ground) id, without its mirrored `-r`, and the carrier it lays. */
+  carriers: Record<string, PageCarrierKind>;
+  /** The balloon's tail: root width and length, px, and its lean across (a short wide wedge). */
+  tail: { root: number; len: number; lean: number };
+}
+export const WORLD_PAGES: Record<string, WorldPage> = {
+  // (board b's one wide panel, its 7 px frame; the tail as fixed after the batch-5 card 2026-11-09-screentone-balloon-thin-line)
+  screentone: { panel: { x0: 60, y0: 60, x1: 1860, y1: 1000 }, rim: 7, carriers: { 'screentone/shout': 'spiky', 'screentone/burst': 'spiky', 'screentone/sfx': 'spiky', 'screentone/balloons': 'oval', 'screentone/narration': 'box', 'screentone/caption': 'box' }, tail: { root: 110, len: 96, lean: 0.45 } },
+};
+/** The page capability a page (ground) id belongs to, and the carrier it lays; undefined for a page no world declares. */
+export function pageCapOf(page: string): { world: WorldPage; kind: PageCarrierKind } | undefined {
+  const world = WORLD_PAGES[page.split('/')[0]];
+  const kind = world?.carriers[page.replace(/-r$/, '')];
+  return world && kind ? { world, kind } : undefined;
+}
+
 /** A world's declared scale capability, or undefined (no Q3 candidate): none for a world whose declaration is withheld. */
 export const scaleOf = (id: string): WorldScale | undefined => (WORLD_SCALE[id]?.withheld ? undefined : WORLD_SCALE[id]);
 

@@ -274,8 +274,8 @@ describe('miniRegion (a mini moment\'s own area)', () => {
 describe('world capabilities', () => {
   it('declares scale for riso and screentone only, and moments for the 45 offered worlds', () => {
     expect(Object.keys(DECLARED_SCALE_CAPS).sort()).toEqual(['riso', 'screentone']);
-    // (screentone's declaration is withheld after two critic rounds: no scale candidate until its page re-lays its grid)
-    expect(FREE_STYLES.filter((s) => scaleOf(s.id)).map((s) => s.id).sort()).toEqual(['riso']);
+    // (screentone, withheld after two critic rounds, is back once its page lays itself whole, render/page-layout.ts)
+    expect(FREE_STYLES.filter((s) => scaleOf(s.id)).map((s) => s.id).sort()).toEqual(['riso', 'screentone']);
     expect(momentsCapOf('no-such-world')).toBeUndefined();
     expect(scaleOf('no-such-world')).toBeUndefined();
     expect(MINI_SHARE).toEqual([0.15, 0.3]);
@@ -329,18 +329,20 @@ describe.skipIf(!haveOut)('freeJob with the Q3 / Q5 wiring (三年後的大雪, 
     expect(run()).toBe(run());
   });
 
-  it('gives withheld screentone no scale candidate and leaves riso unchanged', () => {
+  it('gives screentone scale candidates only on a whole page of its own and leaves riso unchanged', () => {
     const { song, meaning } = load(SONGS[0]);
     const tone = freeJob(song, { style: style('screentone'), seed: 0, meaning, scaleContrast: true, worldEvents: true });
-    expect(tone.policy?.scale).toBeUndefined();
-    expect((tone.treatment.worldEvents?.policy ?? []).filter((d) => d.source === 'Q3')).toEqual([]);
-    expect(JSON.stringify(tone.job)).not.toContain('"scale":{"eventId"');
+    expect(tone.policy?.scale?.sungSections).toBeGreaterThan(0);
+    // (every approved composition is carried by its page, re-laid whole: a ground carrier, never a band)
+    const ok = (tone.treatment.worldEvents?.policy ?? []).filter((d) => d.source === 'Q3' && d.approved);
+    expect(ok.length).toBeGreaterThan(0);
+    for (const c of tone.treatment.cues as { world?: { scale?: LineScale } }[]) if (c.world?.scale) expect(c.world.scale.carrierId.startsWith('ground:screentone/')).toBe(true);
     const riso = freeJob(song, { style: style('riso'), seed: 0, meaning, scaleContrast: true });
     expect(riso.policy?.scale?.sungSections).toBeGreaterThan(0);
   });
 
   it('writes each approved scale composition onto its line, one a section, attributed to the section it starts in', () => {
-    // (riso: プラトニックチョロイン, where its edgeFit lands at seed 0; screentone's capability is withheld)
+    // (riso: プラトニックチョロイン, where its edgeFit lands at seed 0; screentone's own in page-layout.spec.ts)
     const { song, meaning } = load({ db: 'out/db/yt_hCCskTJwvuc/song.json', meaning: 'out/research/instant/plans/choroin/meaning.json' });
     const f = freeJob(song, { style: style('riso'), seed: 0, meaning, scaleContrast: true });
     const scaled = (f.treatment.cues as { cueId: string; world?: { scale?: LineScale } }[]).filter((c) => c.world?.scale);

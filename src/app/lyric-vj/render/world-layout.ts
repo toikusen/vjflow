@@ -7,7 +7,7 @@ import { nearestWeight } from '../fonts';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, FaceLayout, SET_SPECS, SetSpec, shearedSize } from './world-sets';
-import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS } from './world-motion';
+import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS, type WorldMove } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
@@ -18,7 +18,7 @@ import { CamRoom, worldCam } from './world-cam';
 import { eraseFront } from './chalk-erase';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
-import { beatUnderScale, CARRIER_STROKE, carrierPlan, SAFE_PX, scaleLayout, type LineScale, type ScaleDraw } from './scale-pose';
+import { beatUnderScale, CARRIER_STROKE, carrierPlan, SAFE_PX, scaleLayout, scalePage, type LineScale, type ScaleDraw } from './scale-pose';
 import { lineMomentLift } from './line-moment';
 import type { LineMoment } from '../mini-moments';
 
@@ -284,7 +284,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return s.even ? (x: string) => [...x].length * 100 : (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
   // Q3's scale composition, laid again on the real glyphs from the set's own reading size (one pose, the line's whole
   // reading: never with a change of set inside it); under 1.6× it is not drawn and the line stands as composed
-  const scaled: ScaleDraw | undefined = wl0.scale && slot.of === 1 && !wl0.repose?.length ? scaleLayout(rt.cue.text, wl0.scale, blockOf(text, sets[0], measureOf(sets[0])).size, sets[0], measureOf({ ...sets[0], even: false })) : undefined;
+  const laid: ScaleDraw | undefined = wl0.scale && slot.of === 1 && !wl0.repose?.length ? scaleLayout(rt.cue.text, wl0.scale, blockOf(text, sets[0], measureOf(sets[0])).size, sets[0], measureOf({ ...sets[0], even: false })) : undefined;
+  // (a composition its page carries is drawn only on the whole page laid again round it, render/page-layout.ts: with no
+  // legal page the composition is not drawn at all and the line stands on its original page, whole; never half of it)
+  const paged = laid && wl0.scale ? scalePage(wl0.scale, laid, rt.cue.id) : undefined;
+  const scaled: ScaleDraw | undefined = paged && !paged.ok ? { size: laid!.size, ratio: 1, planned: laid!.planned, unrealized: true, kind: 'miss', glyphs: [], why: paged.why.join('; ') } : laid;
   const scaling = !!scaled && scaled.kind !== 'miss';
   // (a composition not drawn on the real glyphs gives the line back the line-grow it folded: never neither, beatUnderScale)
   const restored = beatUnderScale(wl0.scale, scaled?.kind, wl0.beat as LineScale['folded']) as WorldLine['beat'];
@@ -382,9 +386,13 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   const scratch = new THREE.Vector3();
   const unit = new THREE.Vector3();
-  const entering = WORLD_ENTERS[wl.enter];
+  // (a composition its page carries comes and goes as a cut over its move's own time: a move that carries the glyphs
+  // (a rise, a slide, a swell) would take them off the carrier laid round them, render/page-layout.ts; the declared
+  // scale curve is `cut`, world-shared WORLD_SCALE)
+  const pageCut = scaling && !!paged?.ok;
+  const entering = pageCut ? cutOf(WORLD_ENTERS[wl.enter], 'in') : WORLD_ENTERS[wl.enter];
   // (a line its world erases goes by the one eraser front, chalk-erase.ts, not by its exit's own glyph move)
-  const leaving = wl.wipe ? undefined : WORLD_EXITS[wl.exit];
+  const leaving = wl.wipe ? undefined : pageCut ? cutOf(WORLD_EXITS[wl.exit], 'out') : WORLD_EXITS[wl.exit];
   const holding = WORLD_HOLDS[wl.hold];
   const need = readingSec(rt.cue.text, rt.cue.start, rt.cue.end);
   const room = () => Math.max(0, rt.exitAt - rt.showFrom - need);
@@ -482,7 +490,11 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     const [hw, hh] = [(bw / 2) * grow * g + reach(gx, p.block.cx, bw / 2, 960), (bh / 2) * grow * g + reach(gy, p.block.cy, bh / 2, 540)];
     // (it grows from the side its set is anchored on: that edge stays put)
     const [cx, cy] = [cx0 - p.spec.ax * (bw / 2) * grow * (g - 1), cy0 - p.spec.ay * (bh / 2) * grow * (g - 1)];
-    const face: FaceLayout | undefined = sh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: sh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])) };
+    // (a scale composition its page carries hands the page its glyphs, upright, and the edge it may bleed through: the
+    // page is laid again whole round them, render/page-layout.ts)
+    const pageScale = scaling && i === 0 && paged?.ok ? { edge: wl.scale!.edge, line: rt.cue.id, show: rt.showFrom } : undefined;
+    const fsh: SetSpec['shear'] | undefined = sh ?? (pageScale ? [1, 0, 0, 1] : undefined);
+    const face: FaceLayout | undefined = fsh && { cx, cy, w: p.block.w * g, h: p.block.h * g, shear: fsh, size: p.block.size * g, rows: Math.max(1, p.block.rows.length), cells: gs.flatMap((_, j) => (p.shown[j] ? [[p.x[j] * g, -p.y[j] * g, (p.sizes?.[j] ?? p.scale) * tex * g] as [number, number, number]] : [])), line: rt.cue.id, show: rt.showFrom, ...(pageScale ? { scale: pageScale } : {}) };
     // (a set carried on panels, art-deco poster-panel: which part each cell is, and when the panels part, for the page)
     if (face && sets[i].panels && p.block.small?.length) {
       const row = rowsOfGlyphs(gs, p.block);
@@ -547,6 +559,23 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     return carried_ ?? undefined;
   };
 
+  // (a scale composition's glyphs as inked, em boxes in frame px: its glyph pictures carry a wide transparent pad, which
+  // a measure of the meshes reads as 50–160 px out of the frame on a composition flush with the safe edge)
+  const inkBoxes = () => {
+    const v = new THREE.Vector3();
+    const ws = new THREE.Vector3();
+    // (seen: the glyph and every group above it shown, an entrance's hidden body included)
+    const seen = (o: THREE.Object3D | null): boolean => !o || (o.visible && seen(o.parent));
+    return gs.flatMap((g) => {
+      if (!seen(g.mesh) || g.mesh.material.opacity <= 0.01) return [];
+      g.mesh.updateWorldMatrix(true, false);
+      g.mesh.getWorldPosition(v);
+      g.mesh.getWorldScale(ws);
+      const half = (Math.abs(ws.y) * tex) / 2;
+      const [x, y] = [v.x + 960, 540 - v.y];
+      return [{ x0: x - half, y0: y - half, x1: x + half, y1: y + half }];
+    });
+  };
   return {
     group,
     // (a set laid into its page's composition is placed inside the safe area by its numbers: it is neither refitted nor drifted)
@@ -704,26 +733,16 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     },
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: restRects,
-    // (a scale composition's glyphs as inked, em boxes in frame px: its glyph pictures carry a wide transparent pad, which
-    // a measure of the meshes reads as 50–160 px out of the frame on a composition flush with the safe edge)
     ...(scaling ? { inkRect: () => {
-      const v = new THREE.Vector3();
-      const ws = new THREE.Vector3();
-      let box: { x0: number; y0: number; x1: number; y1: number } | undefined;
-      gs.forEach((g) => {
-        if (!g.mesh.visible || g.mesh.material.opacity <= 0.01) return;
-        g.mesh.updateWorldMatrix(true, false);
-        g.mesh.getWorldPosition(v);
-        g.mesh.getWorldScale(ws);
-        const half = (Math.abs(ws.y) * tex) / 2;
-        const [x, y] = [v.x + 960, 540 - v.y];
-        box = box ? { x0: Math.min(box.x0, x - half), y0: Math.min(box.y0, y - half), x1: Math.max(box.x1, x + half), y1: Math.max(box.y1, y + half) } : { x0: x - half, y0: y - half, x1: x + half, y1: y + half };
-      });
-      return box;
-    } } : {}),
+      const bs = inkBoxes();
+      return bs.length ? bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) })) : undefined;
+    }, inkBoxes } : {}),
     ...(scaled ? { scale: { eventId: wl.scale!.eventId, planned: scaled.planned, drawn: scaled.kind === 'miss' ? 0 : scaled.ratio, kind: scaled.kind, unrealized: scaled.unrealized, carrier: carrier?.why ?? ({ page: 'page: re-laid round the words', object: 'object: re-laid round the words', sheet: 'none' } as const)[carrierPlan(wl.scale!, SET_SPECS[wl.set]?.object)], inkBox: scaled.inkBox, safe: SAFE_PX, glyphBox: scaled.glyphBox, inSafe: scaled.inSafe, ...(scaled.why ? { why: scaled.why } : {}) } } : {}),
   };
 }
+
+/** A move as a still cut over its own time (a linked move unchanged: its words do not move): shown from the start going in, gone halfway going out. */
+export const cutOf = (m: WorldMove | undefined, way: 'in' | 'out'): WorldMove | undefined => (!m || m.link ? m : { sec: m.sec, block: (q) => ({ a: way === 'in' ? (q > 0.02 ? 1 : 0) : q < 0.5 ? 1 : 0 }) });
 
 /** The scale composition as a pose: every glyph where scaleLayout put it, about the composition's own centre. */
 function scalePose(gs: Glyph[], d: ScaleDraw, tex: number, spec: SetSpec): Pose {

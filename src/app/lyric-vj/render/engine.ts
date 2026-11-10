@@ -72,6 +72,8 @@ import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
+import { boxInsideOutline } from './page-layout';
+import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
 import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
@@ -2220,7 +2222,10 @@ export class LyricVjEngine {
     this.renderer.forceContextLoss();
   }
 
+  /** The time of the frame being drawn (page checks name it). */
+  private renderedAt = 0;
   async renderAt(t: number) {
+    this.renderedAt = t;
     this.keepLines(t);
     this.placedProps = [];
     const { shot, prev } = this.shotAt(t);
@@ -2490,8 +2495,36 @@ export class LyricVjEngine {
     }
     if (this.job.layer === 'back') this.textRoot.visible = this.echoRoot.visible = false;
     const back = this.carriersOnly ? this.wordsAway() : undefined;
+    this.pageGlyphCheck();
     this.composer.render();
     back?.();
+  }
+
+  /**
+   * A page-carried scale composition's glyphs as drawn on this frame against the carrier its page laid on this same frame
+   * (render/page-layout.ts, Codex phase 4 §4: checked on every output frame, entering, still, leaving and at seams):
+   * every visible glyph's em box inside the outline. A frame that breaks it is counted (render.mts metrics.json
+   * `pageChecks`; the reading gate's contract).
+   */
+  private pageGlyphCheck() {
+    const g = globalThis as { vjPageLast?: PageDrawn; vjFrameStamp?: number; vjPageChecks?: PageTally };
+    const stamp = g.vjFrameStamp ?? 0;
+    for (const { rt, layer } of this.cueLayers) {
+      if (!layer.inkBoxes || !layer.scale || layer.scale.kind === 'miss' || !layer.scale.carrier.startsWith('page') || !layer.group.visible) continue;
+      this.textRoot.updateMatrixWorld(true);
+      const boxes = layer.inkBoxes();
+      if (!boxes.length) continue;
+      const tally = pageTally();
+      tally.glyphFrames++;
+      const drawn = g.vjPageLast?.[rt.cue.id];
+      const at = this.renderedAt.toFixed(3);
+      // (a frame its page drew whole as composed, its lines leaving no legal page: counted apart, pageFallbackFrames)
+      if (drawn?.fallback && drawn.stamp === stamp) continue;
+      if (!drawn || drawn.stamp !== stamp) { if (tally.fails.length < 400) tally.fails.push(`${at} ${rt.cue.id} oneCarrier: glyphs drawn with no page laid round them this frame`); continue; }
+      const out = boxes.filter((b) => !boxInsideOutline(drawn.outline, b));
+      if (out.length && tally.fails.length < 400) tally.fails.push(`${at} ${rt.cue.id} balloonHolds: ${out.length} glyph(s) as drawn leave the carrier (${out.map((b) => `${b.x0.toFixed(0)},${b.y0.toFixed(0)}`).slice(0, 3).join(' ')})`);
+    }
+    g.vjFrameStamp = stamp + 1;
   }
 
   private textMask?: THREE.WebGLRenderTarget;

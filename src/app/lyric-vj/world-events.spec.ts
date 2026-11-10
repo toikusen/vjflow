@@ -16,6 +16,12 @@ const line = (id: string, start: number, end: number, n = 0, seats = [LEFT, RIGH
   id, show: start - 0.2, start, end, seats,
   ...(n ? { words: Array.from({ length: n }, (_, k) => ({ text: `p${k}`, from: start + ((end - start) * k) / n, to: start + ((end - start) * (k + 1)) / n })) } : {}),
 });
+// (since pairs B (Codex 2026-11-10) the only switch inside a line is a carrier swap: the same words in the same box on the
+// same page, only what carries them changes; the in-line clocks below are those of that one family)
+const PLAIN: SeatCandidate = { id: 'w/plain', box: { x0: 0.2, y0: 0.4, x1: 0.8, y1: 0.6 }, size: 100, page: 'pg', carrierId: 'ground:pg' };
+const PANELS: SeatCandidate = { ...PLAIN, id: 'w/panels', carrierId: 'ground:pg:panels' };
+const panelCaps = caps(['carrier-swap'], { allowedAt: { 'carrier-swap': ['in-line'] }, materials: { panel: { family: 'carrier-swap', at: ['in-line'], sec: 0.3, curve: 'panel-slide', seat: 'carrier', clearOfSung: 0, draws: 'panels' } } });
+const panelLine = (id: string, start: number, end: number, n = 0): WorldEventLine => ({ ...line(id, start, end, n, [PLAIN, PANELS]), seat: PLAIN.id });
 const input = (lines: WorldEventLine[], o: Partial<WorldEventInput> = {}): WorldEventInput => ({ lines, beats: [], sections: [{ start: 0, energy: 0.8 }], caps: caps(['layout-seat', 'page-handoff', 'camera-reframe'], { ownPages: true }), seed: 0, ...o });
 const cuts = (es: WorldEvent[]) => es.filter((e) => e.kind !== 'keep');
 
@@ -80,14 +86,15 @@ describe('planWorldEvents', () => {
   });
 
   it('keeps every Q2 hold; an in-line switch goes to another word break, or none', () => {
-    const l = line('a', 0, 4, 4);
-    const prev = line('p', -3, -0.3);
+    const l = panelLine('a', 0, 4, 4);
+    const prev = panelLine('p', -3, -0.3);
     // the hold covers the middle break (2.0) and the one after (3.0): only 1.0 is left
-    const plan = planWorldEvents(input([prev, l], { holds: [{ lineId: 'a', at: 1.6, from: 1.6, to: 3.2, kind: 'ink-run' }] }));
+    const plan = planWorldEvents(input([prev, l], { caps: panelCaps, holds: [{ lineId: 'a', at: 1.6, from: 1.6, to: 3.2, kind: 'ink-run' }] }));
     expect(plan.holds).toHaveLength(1);
     const inLine = plan.events.filter((e) => e.scope === 'in-line');
+    expect(inLine).toHaveLength(1);
     for (const e of inLine) expect(e.to < 1.6 - ACTION_GAP || e.from > 3.2 + ACTION_GAP).toBe(true);
-    const blocked = planWorldEvents(input([prev, l], { holds: [{ lineId: 'a', at: 0.5, from: 0.5, to: 3.6, kind: 'roll' }] }));
+    const blocked = planWorldEvents(input([prev, l], { caps: panelCaps, holds: [{ lineId: 'a', at: 0.5, from: 0.5, to: 3.6, kind: 'roll' }] }));
     expect(blocked.events.filter((e) => e.scope === 'in-line')).toHaveLength(0);
     expect(blocked.rejected.some((r) => /Q2 roll/.test(r.reason))).toBe(true);
   });
@@ -120,8 +127,20 @@ describe('planWorldEvents', () => {
   });
 
   it('says why when no in-line family has anywhere to go', () => {
-    const plan = planWorldEvents(input([line('p', -3, -0.4, 0, [LEFT]), line('a', 0, 3, 3, [LEFT])], { caps: caps(['layout-seat']) }));
+    const plan = planWorldEvents(input([line('p', -3, -0.4, 0, [PLAIN]), line('a', 0, 3, 3, [PLAIN])], { caps: panelCaps }));
     expect(plan.events.filter((e) => e.scope === 'in-line')).toHaveLength(0);
+    expect(plan.rejected.some((r) => r.candidate.lineId === 'a' && /no family target/.test(r.reason))).toBe(true);
+  });
+
+  it('pairs B: a reseat is never laid inside a line, even where a world declares one in-line; a carrier swap that moves the words is not offered', () => {
+    const lines = [line('p', -3, -0.4), line('a', 0, 3, 3), line('b', 3.4, 8, 5)];
+    for (let seed = 0; seed < 12; seed++) {
+      const plan = planWorldEvents(input(lines, { seed, beats: [1, 2, 5, 6], caps: caps(['layout-seat'], { allowedAt: { 'layout-seat': ['section', 'line', 'in-line'] } }) }));
+      expect(plan.events.filter((e) => e.scope === 'in-line')).toEqual([]);
+    }
+    const moved: SeatCandidate = { ...PANELS, box: { x0: 0.2, y0: 0.1, x1: 0.8, y1: 0.3 } };
+    const plan = planWorldEvents(input([panelLine('p', -3, -0.4), { ...line('a', 0, 3, 3, [PLAIN, moved]), seat: PLAIN.id }], { caps: panelCaps, beats: [1, 2] }));
+    expect(plan.events.filter((e) => e.scope === 'in-line')).toEqual([]);
     expect(plan.rejected.some((r) => r.candidate.lineId === 'a' && /no family target/.test(r.reason))).toBe(true);
   });
 
@@ -141,14 +160,15 @@ describe('planWorldEvents', () => {
   });
 
   it('no reliable word boundary: no in-line switch, none faked by proportional time', () => {
-    const plan = planWorldEvents(input([line('p', -3, -0.4), line('a', 0, 5)]));
+    const plan = planWorldEvents(input([panelLine('p', -3, -0.4), panelLine('a', 0, 5)], { caps: panelCaps }));
     expect(plan.events.filter((e) => e.scope === 'in-line')).toHaveLength(0);
     expect(plan.rejected.some((r) => r.candidate.lineId === 'a' && /no reliable word boundary/.test(r.reason))).toBe(true);
   });
 
   it('an in-line switch lands on a sung word break with still reading either side', () => {
-    const plan = planWorldEvents(input([line('p', -3, -0.4), line('a', 0, 3, 3)], { beats: [1, 2] }));
+    const plan = planWorldEvents(input([panelLine('p', -3, -0.4), panelLine('a', 0, 3, 3)], { caps: panelCaps, beats: [1, 2] }));
     const e = plan.events.find((x) => x.scope === 'in-line')!;
+    expect(e.kind).toBe('carrier-swap');
     expect([1, 2]).toContain(e.at);
     expect(e.at - 0).toBeGreaterThanOrEqual(READ_STABLE);
     expect(3 - e.to).toBeGreaterThanOrEqual(READ_STABLE);

@@ -7,6 +7,7 @@
 import { fitOf, SCALE_LEAD, SCALE_MIN, EDGE_FIT_MIN, FRAME, SCALE_TARGET, STRESS_PAD, type Measure } from '../scale-policy';
 import type { ScaleCarrierRole, ScaleEdge } from '../world-shared';
 import type { FracBox } from './seat-geometry';
+import { emBox, pageLayout, type PageLayout, type PageLine } from './page-layout';
 
 /** What the plan writes on an approved line (world-events-apply.ts): enough for the renderer to lay it again. */
 export interface LineScale {
@@ -27,7 +28,10 @@ export interface LineScale {
   carrierId: string;
   /** A Q2 line-grow this composition folded (its change of size): drawn again if the composition is not (beatUnderScale). */
   folded?: { kind: string; at: number; sec?: number; stays?: boolean; span?: { from: number; to: number }; stepped?: boolean };
+  /** A page-carried composition's page context (render/page-layout.ts), as the plan read it: the line's show and end, and every other line on screen meanwhile (their laid boxes, shows and ends). Commit time lays the page from the same. */
+  page?: PageContext;
 }
+export interface PageContext { show: number; end: number; others: PageLine[] }
 
 /**
  * Q2 holds that may run on a scale composition (render/world-beats.ts): the ones that act on each glyph's ink, tone,
@@ -79,7 +83,7 @@ export function scaleLayout(text: string, plan: LineScale, readingSize: number, 
   if (most < SCALE_MIN) return miss(`the plan's ${plan.targetSize}px is under ${SCALE_MIN}× the drawn reading size ${R.toFixed(0)}px`);
   const track = set.track ?? 0.02;
   const clear = (set.clear ?? []).map(([x0, y0, x1, y1]) => ({ x0, y0, x1, y1 }));
-  const fit = fitOf(plan.rows, before, after, { readingSize: R, track, ...(clear.length ? { clear } : {}) }, { edges: [plan.edge], sizeRange: [SCALE_MIN, most], carrierRole: plan.carrierRole }, measure, plan.carrierId);
+  const fit = fitOf(plan.rows, before, after, { readingSize: R, track, ...(clear.length ? { clear } : {}) }, { edges: [plan.edge], sizeRange: [SCALE_MIN, most], carrierRole: plan.carrierRole }, measure, plan.carrierId, plan.source === 'meaning' ? EDGE_FIT_MIN : SCALE_MIN);
   if ('why' in fit) return miss(fit.why.join('; '));
   const S = fit.size;
   const seat = fit.seat;
@@ -141,6 +145,33 @@ export function scaleLayout(text: string, plan: LineScale, readingSize: number, 
  * again round the composition. Never two: no band over a page's carrier, no carrier left without its words.
  */
 export const carrierPlan = (s: Pick<LineScale, 'carrierId'>, object?: string): 'page' | 'object' | 'sheet' => (s.carrierId.startsWith('ground:') ? 'page' : object ? 'object' : 'sheet');
+
+/** The page a `ground:` carrier names (`ground:screentone/shout` → `screentone/shout`), else undefined. */
+export const carrierPage = (s: Pick<LineScale, 'carrierId'>): string | undefined => (s.carrierId.startsWith('ground:') ? s.carrierId.slice('ground:'.length).split(':')[0] : undefined);
+
+/**
+ * The whole page a page-carried composition is drawn on (render/page-layout.ts, Codex phase 4 §4): its page laid again
+ * round the scaled glyphs as drawn and every other line present (`others`). Undefined for a composition not carried by
+ * its page or not drawn; a refusal when no legal page exists, and then the composition is not drawn at all (the line
+ * stands on its original page, whole: world-layout treats it as a miss).
+ */
+export function scalePage(plan: Pick<LineScale, 'carrierId' | 'edge' | 'page'>, d: ScaleDraw, lineId: string, others?: PageLine[]): PageLayout | undefined {
+  const page = carrierPage(plan);
+  if (!page || d.kind === 'miss') return undefined;
+  const ctx = plan.page;
+  const hero: PageLine = { id: lineId, boxes: d.glyphs.map(emBox), size: d.size, scaled: true, ...(ctx ? { show: ctx.show, end: ctx.end } : {}) };
+  const lines = [hero, ...(others ?? ctx?.others ?? [])];
+  if (!ctx) return pageLayout({ page, edge: plan.edge, lines });
+  // (laid at every moment the lines on screen change, from the show to the end: one refusal refuses the whole line)
+  const moments = [...new Set([ctx.show, ...lines.flatMap((l) => [l.show, l.end]).filter((t): t is number => t !== undefined && t > ctx.show && t < ctx.end)])].sort((a, b) => a - b);
+  let first: PageLayout | undefined;
+  for (const at of moments) {
+    const r = pageLayout({ page, edge: plan.edge, lines, at });
+    if (!r.ok) return { ok: false, why: r.why.map((w) => `${w} (at ${at.toFixed(2)} s)`) };
+    first ??= r;
+  }
+  return first;
+}
 
 /**
  * The hold a scale composition draws (Codex Q3 §2: the composition is the line's change of size): none of a folded

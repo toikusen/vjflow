@@ -78,6 +78,8 @@ export interface CueLayer {
   poses?(): { from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }[];
   /** Where the words are inked now, frame px y down, when it differs from a measure of their meshes (a scale composition: glyph em boxes, not the pictures' transparent pad). */
   inkRect?(): { x0: number; y0: number; x1: number; y1: number } | undefined;
+  /** The same, each glyph's own em box (a page-carried scale composition is checked glyph by glyph against its carrier). */
+  inkBoxes?(): { x0: number; y0: number; x1: number; y1: number }[];
   /** A Q3 scale composition as drawn (world-layout.ts): its event, planned and drawn ratio, whether it fell short. */
   scale?: { eventId: string; planned: number; drawn: number; kind: string; unrealized: boolean; carrier: string; /** px y down: the planned ink box, the declared safe area, the drawn glyphs' em boxes. */ inkBox?: { x0: number; y0: number; x1: number; y1: number }; safe?: { x0: number; y0: number; x1: number; y1: number }; glyphBox?: { x0: number; y0: number; x1: number; y1: number }; inSafe?: boolean; why?: string };
 }

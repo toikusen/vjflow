@@ -5,7 +5,7 @@
 import type { freeJob } from './free-plan';
 import type { StyleWorld } from './style-world';
 import type { SongTimeline, TimelineCue } from './timeline';
-import { BEAT_CLEAR, FIRST_SET, growFits, KEPT } from './lineplan-core';
+import { BEAT_CLEAR, FIRST_SET, growFits, KEPT, SWAP_SNAP } from './lineplan-core';
 import { wordBreaks } from './phrases';
 import { approvedOf, lineShows, type Section as ShownSection } from './render/line-shows';
 import { readingSec } from './render/reading-window';
@@ -465,6 +465,7 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
       if (SET_SPECS[x.set]?.panels && !panelSplit(laidSeat(r.cue.text, x.set, { font: faces?.(r.cue.text) }))) miss(`${x.move}@${r.id}`, `approved material move ${x.move} not drawn on ${r.id} at ${x.at}: the line does not part into a plaque and a lesser panel`);
     }
   out.push(...absorbedChecks(job, world, table, faces));
+  out.push(...holdSequenceChecks(job));
   // a world camera's move drawn over another switch of the song: a scheduled world drops it (camDrops), never keeps both
   for (const r of rows) {
     const c = r.world?.cam && WORLD_CAM_SEC[r.world.cam.kind] ? r.world.cam : undefined;
@@ -486,6 +487,30 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   const landed = landedEvents(job, world, table, faces);
   for (const l of landed.events) if (!l.same && !out.some((w) => w.inputs[0] === l.id)) miss(l.id, `landed otherwise: ${l.why}`);
   for (const d of landed.extra) miss(`${d.kind}@${d.lineIds.at(-1)}@${d.at}`, `a ${d.kind} is drawn that the plan does not hold`);
+  return out;
+}
+
+/**
+ * Codex 2026-11-10 pairs C on the final drawing, whatever path chose the holds (holds-first, joint, a fallback): no two
+ * sung lines in a row draw the same hold kind (a line between with none lifts it); every ink-swap carries its reason
+ * (`why`: kind, source, the span it swapped) and lands at its phrase's sung start or on a beat inside the phrase within
+ * SWAP_SNAP of it. (The section cap needs the song's sections, which the job does not carry: the plan and the reports
+ * count it, lineplan-core swapCausesOf and hold-plan-all.mts.)
+ */
+export function holdSequenceChecks(job: Job): InputWarning[] {
+  const rows = [...shownOf(job).rows].sort((a, b) => a.cue.start - b.cue.start);
+  const out: InputWarning[] = [];
+  const miss = (id: string, why: string) => out.push({ inputs: [id], reason: `final check: pairs C: ${why}` });
+  rows.forEach((r, k) => {
+    const b = r.world?.beat as (NonNullable<WorldLine['beat']> & { why?: { kind: string; source: string; span: { from: number; to: number }; at: number } }) | undefined;
+    if (!b) return;
+    const prev = rows[k - 1]?.world?.beat;
+    if (prev && prev.kind === b.kind) miss(`hold:${b.kind}@${r.id}`, `${r.id} draws a ${b.kind} straight after ${rows[k - 1].id}'s`);
+    if (b.kind !== 'ink-swap') return;
+    if (!b.why?.source || !b.span || b.why.span.from !== b.span.from || b.why.span.to !== b.span.to) return void miss(`hold:${b.kind}@${r.id}`, `the ink-swap on ${r.id} carries no reason for its phrase`);
+    const t = r.cue.charStarts?.[b.span.from];
+    if (t === undefined || b.at < t - EPS || b.at > t + SWAP_SNAP + EPS) miss(`hold:${b.kind}@${r.id}`, `the ink-swap on ${r.id} at ${b.at} is not at its phrase's sung start (${t ?? 'none'})`);
+  });
   return out;
 }
 

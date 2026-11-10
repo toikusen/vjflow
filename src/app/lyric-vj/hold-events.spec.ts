@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatOfLine, growFits, HoldLine, HoldPlan, HoldSkip, holdLineOf, HOLD_AFTER_ENTER, HOLD_BEFORE_END, HOLD_BEFORE_NEXT, HOLD_SEC, holdEndBy, LINE_INK_SEC, swapSpan } from './lineplan-core';
+import { beatOfLine, growFits, HoldLine, HoldPlan, HoldSkip, type SwapCause, holdLineOf, HOLD_AFTER_ENTER, HOLD_BEFORE_END, HOLD_BEFORE_NEXT, HOLD_SEC, holdEndBy, LINE_INK_SEC, swapSpan } from './lineplan-core';
 import { LEAD, showTime } from './render/show-time';
 import { LINK_PREPARE } from './render/world-handoff';
 import { CARRIERS, carrierRoom, groundsUnder, inkChecks, PANEL_OBJECTS, settleInk, swapReads } from './render/hold-room';
@@ -12,7 +12,9 @@ import { HOLD_KINDS, sharedOf } from './world-shared';
 import type { SongTimeline } from './timeline';
 
 const halfBeats = Array.from({ length: 400 }, (_, i) => i * 0.5);
-const cue = (start: number, end: number, text = '我再也不在你身邊') => ({ id: 'c1', start, end, text, charStarts: [...text].map((_, k) => start + ((end - start) * 0.9 * k) / [...text].length) });
+const cue = (start: number, end: number, text = '我再也不在你身邊') => ({ id: 'c1', start, end, text, charTimed: true, charStarts: [...text].map((_, k) => start + ((end - start) * 0.9 * k) / [...text].length) });
+/** A traceable reason for an ink-swap (pairs C, Codex 2026-11-10): without one a line takes none. */
+const why: Pick<HoldLine, 'swapWhy'> = { swapWhy: [{ kind: 'section', source: 'section:1' } as SwapCause] };
 const all = { 'ink-swap': 1, 'carrier-settle': 1, 'plate-spread': 1, 'panel-open': 1, 'line-grow': 1 };
 const open: HoldLine = { enterSec: 0.2 };
 const event = (x: HoldPlan | HoldSkip) => { if ('skip' in x) throw new Error(`skipped: ${x.skip}`); return x; };
@@ -57,25 +59,30 @@ describe('hold events (Q2, 2026-11-09)', () => {
   it('keeps one action a moment: clear of a change of set and of a world camera, and a block never grows before one', () => {
     const c = cue(10, 12.8);
     for (let roll = 0; roll < 7; roll++) {
-      const b = event(beatOfLine(c, [], halfBeats, [{ at: 11.5 }], '', roll, { enterSec: 0.2, camEnd: 10.9 }, all));
+      const b = event(beatOfLine(c, [], halfBeats, [{ at: 11.5 }], '', roll, { enterSec: 0.2, camEnd: 10.9, ...why }, all));
       expect(Math.abs(b.at - 11.5)).toBeGreaterThanOrEqual(0.35);
       expect(b.at).toBeGreaterThanOrEqual(10.9);
       if (b.kind === 'line-grow') expect(b.at).toBeGreaterThan(11.5);
       // the shot's own cut is kept clear of too
-      const c2 = event(beatOfLine(c, [], halfBeats, [], '', roll, { enterSec: 0.2, cutsAt: [11.5] }, all));
-      expect(c2.at > 11.5 + 0.15 - 1e-9 || c2.at + c2.sec < 11.5 - 0.075 + 1e-9).toBe(true);
-      expect(c2.kind).not.toBe('line-grow');
+      // (pairs C: the swap's time is its phrase's sung start; where that falls on the cut, no swap and the timing is why)
+      const c2 = beatOfLine(c, [], halfBeats, [], '', roll, { enterSec: 0.2, cutsAt: [11.5], ...why }, all);
+      if ('kind' in c2) {
+        expect(c2.at > 11.5 + 0.15 - 1e-9 || c2.at + c2.sec < 11.5 - 0.075 + 1e-9).toBe(true);
+        expect(c2.kind).not.toBe('line-grow');
+      } else expect(c2.rejects).toContainEqual({ kind: 'ink-swap', reason: 'timing' });
     }
     // a blown-up line never grows (its key word already fills the frame)
-    for (let roll = 0; roll < 7; roll++) expect(event(beatOfLine(c, [], halfBeats, [], '', roll, { enterSec: 0.2, blown: true }, { 'line-grow': 1, 'ink-swap': 1 })).kind).toBe('ink-swap');
+    for (let roll = 0; roll < 7; roll++) expect(event(beatOfLine(c, [], halfBeats, [], '', roll, { enterSec: 0.2, blown: true, ...why }, { 'line-grow': 1, 'ink-swap': 1 })).kind).toBe('ink-swap');
     // nowhere left but next to the change of set: no event, and the reason
     expect(beatOfLine(cue(10, 11.2), [], [10.5], [{ at: 10.6 }], '', 0, open, all)).toMatchObject({ skip: 'every beat in the window is near a cut or a change of set' });
   });
   it('never repeats the kind of the line before when another fits, and never draws a kind its world weighs 0', () => {
     const c = cue(10, 12.4);
     for (let roll = 0; roll < 7; roll++) {
-      expect(event(beatOfLine(c, [], halfBeats, [], 'ink-swap', roll, open, { 'ink-swap': 1, 'line-grow': 1 })).kind).toBe('line-grow');
-      expect(event(beatOfLine(c, [], halfBeats, [], '', roll, open, { 'ink-swap': 1, 'line-grow': 0 })).kind).toBe('ink-swap');
+      expect(event(beatOfLine(c, [], halfBeats, [], 'ink-swap', roll, { ...open, ...why }, { 'ink-swap': 1, 'line-grow': 1 })).kind).toBe('line-grow');
+      expect(event(beatOfLine(c, [], halfBeats, [], '', roll, { ...open, ...why }, { 'ink-swap': 1, 'line-grow': 0 })).kind).toBe('ink-swap');
+      // (pairs C: the only kind left is the line before's: none, never the repeat; a line before that kept lifts it)
+      expect(beatOfLine(c, [], halfBeats, [], 'ink-swap', roll, { ...open, ...why }, { 'ink-swap': 1, 'line-grow': 0 })).toMatchObject({ skip: expect.stringMatching(/sung line before took a ink-swap/), rejects: [{ kind: 'ink-swap', reason: 'repeat-kind' }] });
     }
     const receipt = sharedOf(STYLE_WORLDS.find((w) => w.id === 'document')!);
     expect(receipt.holds['line-grow']).toBe(0);

@@ -93,7 +93,16 @@ export interface LineOutcome {
   mood: Mood;
   /** The words of a contract failure or another note (landing failed: what the final check named). */
   why?: string;
+  /** Hold candidates refused by the pairs C rules (no kind of the sung line before, SWAP_CAP a section), for the record. */
+  holdRejects?: HoldRefusal[];
 }
+
+/** At most this many ink-swaps a music section, counted over the whole song timeline (Codex 2026-11-10 pairs C: a cap, not a quota). */
+export const SWAP_CAP = 2;
+/** The music section a time falls in: the last that starts by it (0 when the song has none: one cap for the whole song). */
+export const sectionAt = (sections: { start: number }[], t: number) => Math.max(0, sections.reduce((k, x, i) => (x.start <= t + 1e-6 ? i : k), -1));
+/** A hold candidate the selector refused (pairs C), for the record: the kind of the sung line before, or its section's swaps spent. */
+export interface HoldRefusal { kind: string; reason: 'repeat-kind' | 'section-cap' }
 
 /** Q2's contract: a held line's one event, its whole window. */
 export interface HoldEvent { lineId: string; at: number; from: number; to: number; kind: string }
@@ -406,7 +415,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
   const boundaryOf = (id: string) => `boundary:${id}`;
   // (phase 4c: holds are candidates; one primary action a line. A world with no capability has nothing to arbitrate.)
   const joint = !!input.joint && allows.size > 0;
-  const notes = new Map<string, { cands: number; legal: boolean; mood: Mood }>();
+  const notes = new Map<string, { cands: number; legal: boolean; mood: Mood; rejects?: HoldRefusal[] }>();
 
   const warnings: InputWarning[] = [];
   // Q4 first: given, never moved; a hold wholly inside one is the same action
@@ -595,14 +604,23 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const rate = reseatRate(mood, run);
       const camIn = !!cam && i > 0;
       notes.set(line.id, { cands: line.holdCands?.length ?? 0, legal: false, mood });
+      // (pairs C, Codex 2026-11-10: never the kind the sung line before committed, whatever kind (a line before that kept
+      // lifts it), and no ink-swap past SWAP_CAP in the line's music section, counted over the song; refused, never moved)
+      const prevKind = i > 0 ? holds.find((h) => h.lineId === lines[i - 1].id)?.kind : undefined;
+      const sectionOf = (id: string) => sectionAt(sections, lines.find((l) => l.id === id)?.start ?? -Infinity);
+      const swaps = holds.filter((h) => h.kind === 'ink-swap' && sectionOf(h.lineId) === sectionAt(sections, line.start)).length;
+      const barred = (h: JointHold): HoldRefusal['reason'] | undefined => (prevKind && h.hold.kind === prevKind ? 'repeat-kind' : h.hold.kind === 'ink-swap' && swaps >= SWAP_CAP ? 'section-cap' : undefined);
+      const refuse = (h: JointHold) => {
+        const why = barred(h);
+        const note = notes.get(line.id)!;
+        if (why && !(note.rejects ?? []).some((r) => r.kind === h.hold.kind && r.reason === why)) note.rejects = [...(note.rejects ?? []), { kind: h.hold.kind, reason: why }];
+        return !!why;
+      };
       const legalHold = (s: SeatCandidate | undefined) => {
-        // (Codex r3 §3: the world's rank first, its line-ink-settle last resort; reading slack only among equal ranks. The
-        // kind of the hold last committed goes after the others, never after the whole line's ink: beatOfLine's own
-        // repeat rule, on the committed hold instead of the composer's guess)
-        const last = holds.at(-1)?.kind;
-        const order = (h: JointHold) => [Number(h.hold.kind === 'line-ink-settle'), Number(h.hold.kind === last), h.rank];
-        const byOrder = (a: JointHold, b: JointHold) => { const [x, y] = [order(a), order(b)]; return x[0] - y[0] || x[1] - y[1] || x[2] - y[2]; };
-        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id).sort((a, b) => byOrder(a, b) || Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
+        // (Codex r3 §3: the world's rank first, its line-ink-settle last resort; reading slack only among equal ranks)
+        const order = (h: JointHold) => [Number(h.hold.kind === 'line-ink-settle'), h.rank];
+        const byOrder = (a: JointHold, b: JointHold) => { const [x, y] = [order(a), order(b)]; return x[0] - y[0] || x[1] - y[1]; };
+        const hs = s ? (line.holdCands ?? []).filter((h) => h.seat === s.id && !refuse(h)).sort((a, b) => byOrder(a, b) || Math.floor(b.slack / HOLD_SLACK_STEP) - Math.floor(a.slack / HOLD_SLACK_STEP) || salt(`hold:${a.hold.kind}`) - salt(`hold:${b.hold.kind}`)) : [];
         const h = hs.find((x) => !conflict(holdAction(x.hold), taken));
         if (h) notes.get(line.id)!.legal = true;
         return h;
@@ -677,7 +695,7 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         undo(m);
         // (a declared composite: the line's ink-only hold and the world's material move as one action, phase 4a)
         const a = line.inLine?.absorb;
-        const ah = a && (line.holdCands ?? []).find((x) => x.seat === kept.id && holdIdOf(x.hold) === a.holdId && !conflict(holdAction(x.hold), taken));
+        const ah = a && (line.holdCands ?? []).find((x) => x.seat === kept.id && holdIdOf(x.hold) === a.holdId && !refuse(x) && !conflict(holdAction(x.hold), taken));
         if (a && ah) {
           m = mark();
           keepOn(kept, `keep: its ${ah.hold.kind} hold goes into a composite (joint, ${mood})`);
@@ -947,7 +965,7 @@ const holdAction = (h: HoldEvent): Action => ({ at: h.at, from: h.from, to: h.to
  * (`noSafeCandidate`), or the camera it lost to was dropped after the selection (`cameraDropped`); a line with no hold that kept: a composition was tried and refused (`noSafeCandidate`), or none
  * was asked for (`designedQuiet`).
  */
-export function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEvent[], note: { cands: number; legal: boolean; mood: Mood } | undefined, refused: boolean, camDropped = false): LineOutcome {
+export function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEvent[], note: { cands: number; legal: boolean; mood: Mood; rejects?: HoldRefusal[] } | undefined, refused: boolean, camDropped = false): LineOutcome {
   const evs = events.filter((e) => e.lineIds.at(-1) === l.id && e.kind !== 'keep');
   const held = holds.find((h) => h.lineId === l.id);
   const [cands, legal] = [note?.cands ?? 0, !!note?.legal];
@@ -956,7 +974,7 @@ export function outcomeOf(l: WorldEventLine, events: WorldEvent[], holds: HoldEv
   // is not re-added)
   const reason: LineOutcomeReason | undefined = outcome === 'composition' ? (legal ? 'supersededByComposition' : cands ? 'noSafeCandidate' : undefined) : outcome === 'keep' ? (camDropped ? 'cameraDropped' : cands || refused ? 'noSafeCandidate' : 'designedQuiet') : undefined;
   const primary = evs[0]?.id ?? (held ? holdIdOf(held) : undefined);
-  return { lineId: l.id, outcome, ...(reason ? { reason } : {}), holdCands: cands, legalHold: legal, ...(primary ? { primary } : {}), ...(evs.length > 1 ? { actions: evs.length } : {}), mood: note?.mood ?? 'build' };
+  return { lineId: l.id, outcome, ...(reason ? { reason } : {}), holdCands: cands, legalHold: legal, ...(primary ? { primary } : {}), ...(evs.length > 1 ? { actions: evs.length } : {}), mood: note?.mood ?? 'build', ...(note?.rejects?.length ? { holdRejects: note.rejects } : {}) };
 }
 
 interface PolicyContext { lines: WorldEventLine[]; events: WorldEvent[]; taken: Action[]; holds: HoldEvent[]; handoffs: HandoffCandidate[]; holdMoves: HoldMove[]; cams: Map<string, CameraMove>; caps: WorldCompositionCaps; lights: { at: number; what: string }[]; /** Phase 4c: a committed hold is the line's one action; no composition is stacked on it. */ joint?: boolean }

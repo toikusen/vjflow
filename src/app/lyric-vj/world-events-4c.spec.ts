@@ -13,9 +13,11 @@ import { jointChecks, jointHoldsOf } from './world-events-adapter';
 import type { WorldLine } from './render/world-layout';
 
 describe('phase 4c: hold candidates before commitment (lineplan-core)', () => {
-  const c: Cue = { id: 'x', start: 1, end: 3.5, text: '我們一起 走過那條 長長的街' };
+  // (an ink-swap needs a traceable reason and the phrase's sung times since pairs C, Codex 2026-11-10)
+  const text = '我們一起 走過那條 長長的街';
+  const c: Cue = { id: 'x', start: 1, end: 3.5, text, charTimed: true, charStarts: [...text].map((_, k) => +(1 + (2.3 * k) / [...text].length).toFixed(3)) };
   const beats = Array.from({ length: 20 }, (_, k) => +(0.5 + k * 0.25).toFixed(2));
-  const line = { enterSec: 0.3, inkSettle: true, swapOk: true, key: '長長的街' };
+  const line = { enterSec: 0.3, inkSettle: true, swapOk: true, key: '長長的街', swapWhy: [{ kind: 'meaning' as const, source: 'key:x', cover: { from: 10, to: 14 } }] };
   const taste = { 'ink-swap': 1, 'line-grow': 1 };
 
   it('beatOfLine commits exactly the first candidate; the candidate list keeps the world\'s order and lists every kind', () => {
@@ -307,18 +309,18 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
   });
 });
 
-// (the commit before phase 4c, a9a9027: its --q1 fingerprint, default-hash.mts, on the same disk caches)
-const BASE_Q1 = 'out/research/q1-1109/hash-4c/base-q1-seed0.json';
+// (the --q1 fingerprint, default-hash.mts, on the same disk caches: a9a9027's (hash-4c/base-q1-seed0.json) until the pairs
+// rules, which change the scheduled job on purpose (B: no reseat inside a line; C: motivated ink-swaps), so the pin moved to
+// that commit's, hash-pairs/c-q1.json)
+const BASE_Q1 = 'out/research/q1-1109/hash-pairs/c-q1.json';
 describe.skipIf(!have || !existsSync(BASE_Q1))('phase 4c: joint off is the job before it', () => {
-  it('scheduler on, joint off: no joint residue (the a9a9027 fingerprint held until the pairs rules); joint asked on a world the scheduler does not take: the default job', () => {
+  it('scheduler on, joint off: byte for byte the pinned --q1 job; joint asked on a world the scheduler does not take: the default job', () => {
     const rows = JSON.parse(readFileSync(BASE_Q1, 'utf8')).rows as Record<string, string>;
     const song = JSON.parse(readFileSync(NUN, 'utf8'));
     const meaning = JSON.parse(readFileSync('out/research/instant/plans/nun/meaning.json', 'utf8'));
     for (const id of ['document', 'silk', 'art-deco']) {
       const f = freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0, meaning, worldEvents: true });
-      // (2026-11-10 pairs rules: art-deco's reseats inside a line are gone (B) and every world's ink-swaps need a reason
-      // (C), so the --q1 job is no longer a9a9027's byte for byte; the fingerprint is still on disk for the record)
-      expect(createHash('sha256').update(JSON.stringify(f.job)).digest('hex').slice(0, 16), id).not.toBe(id === 'art-deco' ? rows[`nun/${id}`] : '');
+      expect(createHash('sha256').update(JSON.stringify(f.job)).digest('hex').slice(0, 16), id).toBe(rows[`nun/${id}`]);
       expect(JSON.stringify(f.job)).not.toMatch(/holdCands|"outcomes"/);
       const off = freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0, meaning, jointHolds: true });
       expect(JSON.stringify(off.job)).toBe(JSON.stringify(freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0, meaning }).job));

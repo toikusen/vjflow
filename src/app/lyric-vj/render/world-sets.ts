@@ -313,28 +313,41 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   // (the carrier containment rule, render/carrier-fit.ts: the line is set smaller, its widths and heights together, until
   // its ink, what is printed with it and the padding stay on its bands clear of their lines; at the type floor a miss is
   // marked, never drawn over: the composer takes another set, lineplan-core)
-  const floor = Math.max(given.lo, TYPE_FLOOR.lo);
+  // (the line is set smaller inside its own carrier down to the set's own least type, `lo`, before another set is taken:
+  // a set with no room past the floor is no reason to lift a line off its carrier onto a busier page, phase 4d round 3)
+  const floor = given.lo;
   // (each part that misses its band is set smaller on its own: the hero by the set's width and height, a split line's
   // small part by its container's width; a part that fits keeps its size)
-  let [fm, fs] = [1, 1];
-  let last = first;
-  for (let i = 0; i < 60; i++) {
-    const miss = new Set(bandFit(last, given).parts.filter((p) => p.miss).map((p) => p.part));
-    if (!miss.size) return last;
-    const size = (part: 'main' | 'small') => (part === 'small' ? Math.min(...(last.lines ?? []).filter((_, k) => (last.small ?? []).includes(k)).map((r) => r.size)) : last.size);
-    if ([...miss].every((p) => size(p) <= floor)) break;
-    if (miss.has('main')) fm *= 0.97;
-    if (miss.has('small')) fs *= 0.97;
-    const sp = given.split && { ...given.split, ...(given.split.share ? { share: given.split.share * fs } : {}), ...(given.split.wide ? { wide: given.split.wide * fm } : {}), ...(given.split.tall ? { tall: given.split.tall * fm } : {}) };
-    last = layBlock(text, { ...given, share: given.share * fm, tall: given.tall * fm, ...(sp ? { split: sp } : {}) }, measure);
+  const shrink = (spec: SetSpec) => {
+    let [fm, fs] = [1, 1];
+    let last = layBlock(text, spec, measure, floor);
+    for (let i = 0; i < 60; i++) {
+      const miss = new Set(bandFit(last, given).parts.filter((p) => p.miss).map((p) => p.part));
+      if (!miss.size) return last;
+      const size = (part: 'main' | 'small') => (part === 'small' ? Math.min(...(last.lines ?? []).filter((_, k) => (last.small ?? []).includes(k)).map((r) => r.size)) : last.size);
+      if ([...miss].every((p) => size(p) <= floor)) break;
+      if (miss.has('main')) fm *= 0.97;
+      if (miss.has('small')) fs *= 0.97;
+      const sp = spec.split && { ...spec.split, ...(spec.split.share ? { share: spec.split.share * fs } : {}), ...(spec.split.wide ? { wide: spec.split.wide * fm } : {}), ...(spec.split.tall ? { tall: spec.split.tall * fm } : {}) };
+      last = layBlock(text, { ...spec, share: spec.share * fm, tall: spec.tall * fm, ...(sp ? { split: sp } : {}) }, measure, floor);
+    }
+    return last;
+  };
+  const kept = shrink(given);
+  if (bandFit(kept, given).ok) return kept;
+  // (a run with no break of its own that its carrier cannot hold in one row even at its least type is cut into the set's
+  // rows at its characters, as a split part is wrapped to its container (world-split wrapRows): still on its carrier,
+  // before any other set is taken)
+  if (!given.wrap && !given.vertical && given.rows[1] > 1) {
+    const wrapped = shrink({ ...given, wrap: true });
+    if (bandFit(wrapped, given).ok) return wrapped;
   }
-  if (bandFit(last, given).ok) return last;
-  return { ...last, bandMiss: true };
+  return { ...kept, bandMiss: true };
 }
 
-function layBlock(text: string, given: SetSpec, measure: Measure): Block {
-  const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, TYPE_FLOOR.lo) };
-  const split = splitBlock(text, spec, measure, TYPE_FLOOR.lo);
+function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = TYPE_FLOOR.lo): Block {
+  const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, floorLo) };
+  const split = splitBlock(text, spec, measure, floorLo);
   if (split) return split;
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {

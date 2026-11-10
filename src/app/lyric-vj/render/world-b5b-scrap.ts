@@ -172,7 +172,7 @@ const dotsPage: HandGround = (e) => { page(e, 'scrap-dots', (c) => {
   for (const [x, y, r, a] of [[1600, 290, 34, 8], [1690, 370, 22, -12], [1560, 430, 16, 20]]) if (!meets({ x0: x - r - 10, y0: y - r - 10, x1: x + r + 10, y1: y + r + 10 }, e.rect, 8)) star(c, x, y, r, a);
   tag(c, e, 1240, 760, 470, 190, -4);
   paperGrain(c, 4);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/dots'].map((b) => toPx(b.box)), []); };
 
 /** c: the whole spread: ticking, dots, gingham and a red sheet overlapping, a torn cream banner across them, two tapes at its ends. */
 const spreadPage: HandGround = (e) => { page(e, 'scrap-spread', (c) => {
@@ -187,7 +187,7 @@ const spreadPage: HandGround = (e) => { page(e, 'scrap-spread', (c) => {
   tape(c, 1700, 280, 170, 54, 22, 0);
   ticket(c, e, 1330, 840, 500, 200, -5);
   paperGrain(c, 5);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/spread'].map((b) => toPx(b.box)), []); };
 
 /** d: a striped page, two ruled index cards overlapping, a wire clip, tapes; the data in a line under them. */
 const indexPage: HandGround = (e) => { page(e, 'scrap-index', (c) => {

@@ -83,14 +83,14 @@ describe('carrier containment: a part read on a band keeps its ink, what is prin
 describe('the band sets as their pages print them (midcentury, claymation, scrapbook), every face and test line', () => {
   const sets = Object.keys(SET_SPECS).filter((k) => SET_SPECS[k].bands?.length);
   it('declares its bands and, for midcentury, its key plates\' lines', () => {
-    expect(sets.sort()).toEqual(['claymation/strips', 'claymation/strips-r', 'midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve', 'scrapbook/card', 'scrapbook/card-r', 'scrapbook/index', 'scrapbook/index-r']);
+    expect(sets.sort()).toEqual(['claymation/strips', 'claymation/strips-r', 'midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve', 'scrapbook/card', 'scrapbook/card-r', 'scrapbook/dots', 'scrapbook/index', 'scrapbook/index-r', 'scrapbook/spread']);
     for (const s of ['midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve']) for (const b of SET_SPECS[s].bands!) expect(b.lines?.length, s).toBe(4);
     // (the key plate is the bar itself, printed off register by its offset)
     const [x, y, w, h] = MC_BARS.cut.main;
     expect(SET_SPECS['midcentury/cut'].bands![0].lines).toEqual(edgesOf(x + MC_BARS.cut.key[0], y + MC_BARS.cut.key[1], w, h, 6));
   });
 
-  for (const set of ['midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve', 'claymation/strips', 'claymation/strips-r', 'scrapbook/card', 'scrapbook/card-r', 'scrapbook/index', 'scrapbook/index-r'])
+  for (const set of ['midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve', 'claymation/strips', 'claymation/strips-r', 'scrapbook/card', 'scrapbook/card-r', 'scrapbook/index', 'scrapbook/index-r', 'scrapbook/dots', 'scrapbook/spread'])
     it(`${set}: each line either stays on its bands with its padding and 12 px from their lines, or is marked a miss — never drawn over the edge`, () => {
       const spec = SET_SPECS[set];
       let fit = 0;

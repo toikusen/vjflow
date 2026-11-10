@@ -41,6 +41,9 @@ const CLAY_BANDS: Band[] = [{ box: frac([...CLAY_STRIPS.main]), part: 'main' }, 
  * 1.6°) moves its edges: the card for the first phrase over the gingham panel (the small part's), two ruled index cards.
  */
 const SCRAP_CARD: Band[] = [{ box: frac([242, 248, 1306, 312]), part: 'main' }, { box: frac([215, 185, 1470, 770]), part: 'small' }];
+/** The torn papers the dots and spread pages lay the line on (world-b5b-scrap dotsPage tornPaper, spreadPage banner), taken in by their torn edges' reach (9 and 12 px). */
+const SCRAP_DOTS: Band[] = [{ box: frac([199, 255, 1494, 596]), part: 'main' }];
+const SCRAP_SPREAD: Band[] = [{ box: frac([134, 342, 1652, 404]), part: 'main' }];
 const SCRAP_INDEX: Band[] = [{ box: frac([176, 252, 1248, 286]), part: 'main' }, { box: frac([485, 599, 1330, 292]), part: 'small' }];
 
 export const B5B_SETS: Record<string, SetSpec> = {
@@ -48,8 +51,8 @@ export const B5B_SETS: Record<string, SetSpec> = {
   // the gingham under it; a calm line in stickers on a torn navy paper among star stickers; the shout across a torn cream
   // banner over a full spread; one phrase a ruled index card
   'scrapbook/card': { ...base, split: { small: 'tail', scale: 1, track: 0.12, ink: 'accent', at: [0.56, 0.69], share: 0.62 }, at: [0.466, 0.37], ax: 0, ay: 0, share: 0.6, tall: 0.24, hi: 168, rows: [1, 2], lead: 1.22, track: 0.1, under: STICKER, on: ['plate'], keepRows: true, clear: [[0.68, 0.75, 0.99, 0.99]], fixed: true, bands: SCRAP_CARD },
-  'scrapbook/dots': { ...base, at: [0.47, 0.47], ax: 0, ay: 0, share: 0.66, tall: 0.46, hi: 128, rows: [1, 3], lead: 1.7, track: 0.1, stair: 1.2, under: STICKER, on: ['plate'], keepRows: true, clear: [[0.69, 0.22, 0.84, 0.43], [0.62, 0.68, 0.92, 0.92]], fixed: true },
-  'scrapbook/spread': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.82, tall: 0.36, hi: 292, rows: [1, 2], lead: 1.12, track: 0.06, under: STICKER, on: ['plate'], keepRows: true, clear: [[0.68, 0.76, 0.98, 0.99], [0, 0, 1, 0.22]], fixed: true },
+  'scrapbook/dots': { ...base, at: [0.47, 0.47], ax: 0, ay: 0, share: 0.66, tall: 0.46, hi: 128, rows: [1, 3], lead: 1.7, track: 0.1, stair: 1.2, under: STICKER, on: ['plate'], keepRows: true, clear: [[0.69, 0.22, 0.84, 0.43], [0.62, 0.68, 0.92, 0.92]], fixed: true, bands: SCRAP_DOTS },
+  'scrapbook/spread': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.82, tall: 0.36, hi: 292, rows: [1, 2], lead: 1.12, track: 0.06, under: STICKER, on: ['plate'], keepRows: true, clear: [[0.68, 0.76, 0.98, 0.99], [0, 0, 1, 0.22]], fixed: true, bands: SCRAP_SPREAD },
   'scrapbook/index': { ...base, split: { small: 'tail', scale: 1, track: 0.1, ink: 'accent', at: [0.62, 0.69], share: 0.62 }, at: [0.4, 0.37], ax: 0, ay: 0, share: 0.6, tall: 0.24, hi: 120, rows: [1, 2], lead: 1.2, track: 0.1, under: STICKER, on: ['plate'], keepRows: true, clear: [[0.04, 0.84, 0.6, 0.97]], fixed: true, bands: SCRAP_INDEX },
   // watercolor (board a–d): the line painted in indigo over an ochre wash, its last phrase in crimson; a night sky with the
   // line reserved white in it over a glazed sea; a few big painted characters over two pale glazes; two vertical brush
@@ -90,4 +93,4 @@ export const B5B_MIRRORED: Record<string, string> = {
 };
 
 /** The unmirrored sets' bands by set id, for the pages that print them (they declare them to the reading gate). */
-export const SET_BANDS: Record<string, Band[]> = { 'midcentury/cut': MC_CUT, 'midcentury/sleeve': MC_SLEEVE, 'claymation/strips': CLAY_BANDS, 'scrapbook/card': SCRAP_CARD, 'scrapbook/index': SCRAP_INDEX };
+export const SET_BANDS: Record<string, Band[]> = { 'midcentury/cut': MC_CUT, 'midcentury/sleeve': MC_SLEEVE, 'claymation/strips': CLAY_BANDS, 'scrapbook/card': SCRAP_CARD, 'scrapbook/index': SCRAP_INDEX, 'scrapbook/dots': SCRAP_DOTS, 'scrapbook/spread': SCRAP_SPREAD };

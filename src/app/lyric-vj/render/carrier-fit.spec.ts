@@ -164,8 +164,10 @@ describe('a balloon\'s tail is the short wide wedge (cards 2026-11-04-popart-bal
 
 describe('the reading gate\'s declared-geometry rules (carrier-overflow, rule-crosses-text), one glyph enough', () => {
   const [w, h] = [480, 270];
-  const frames = (ink: [number, number, number, number][]) => {
+  // (the band drawn in the frame, 100–400 × 50–150 at 480 × 270, in a mid grey; `drawn` false: a page not on screen)
+  const frames = (ink: [number, number, number, number][], drawn = true) => {
     const off = new Uint8ClampedArray(w * h * 4).fill(200);
+    if (drawn) for (let y = 50; y < 150; y++) for (let x = 100; x < 400; x++) { const i = (y * w + x) * 4; off[i] = off[i + 1] = off[i + 2] = 120; }
     const on = Uint8ClampedArray.from(off);
     for (const [x0, y0, x1, y1] of ink) for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * w + x) * 4; on[i] = on[i + 1] = on[i + 2] = 20; }
     return { on, off };
@@ -186,6 +188,10 @@ describe('the reading gate\'s declared-geometry rules (carrier-overflow, rule-cr
     expect([c['carrier-overflow'], c['rule-crosses-text']]).toEqual([1, 1]);
     // (an absolute count: the one glyph fails the moment however many glyphs read well beside it)
     expect(r.overflow).toBeLessThan(0.05 * 250 * 40);
+  });
+  it('a band declared by a page that is not on screen (a transition\'s other layer) is not read', () => {
+    const { on, off } = frames([[130, 80, 380, 120], [380, 80, 404, 120]], false);
+    expect(declaredRules(on, off, w, h, declared)).toEqual({ overflow: 0, ruleCross: 0 });
   });
   it('a world that gets worse on either rule regresses; a count recorded before the rules existed reads as none', () => {
     const before = { ...emptyCounts(), moments: 10 } as ReturnType<typeof emptyCounts>;

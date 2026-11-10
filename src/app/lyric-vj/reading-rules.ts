@@ -49,6 +49,8 @@ export const RULES = {
   ruleCrossPixels: 2,
   /** A declaration is the line's when at least this share of the ink in its scope stands on its carriers. */
   onCarrier: 0.5,
+  /** A declared carrier is on screen when a channel's median inside it stands this far off the ground round it. */
+  carrierSeen: 16,
 };
 
 /** What a frame's lines are declared to be read on, frame px of 1920 × 1080 (render/carrier-fit.ts Declared). */
@@ -58,6 +60,21 @@ type Bx = { x0: number; y0: number; x1: number; y1: number };
 export const RULE_CLEAR_PX = 12;
 /** How far past a declared carrier the overflow rule reads, 1080p px (a glyph off the band's end is within it; a call apart is not). */
 export const OVERFLOW_ZONE_PX = 48;
+
+/** Whether a declared carrier is on screen: the median of each channel inside it (a margin in) against just outside it. */
+function carrierSeen(off: ArrayLike<number>, w: number, h: number, b: Bx): boolean {
+  const med = (xs: number[]) => { const s = [...xs].sort((p, q) => p - q); return s[s.length >> 1] ?? 0; };
+  const [ins, out]: number[][][] = [[[], [], []], [[], [], []]];
+  for (let y = Math.max(0, Math.floor(b.y0) - 3); y < Math.min(h, Math.ceil(b.y1) + 3); y++)
+    for (let x = Math.max(0, Math.floor(b.x0) - 3); x < Math.min(w, Math.ceil(b.x1) + 3); x++) {
+      const inner = x >= b.x0 + 2 && x < b.x1 - 2 && y >= b.y0 + 2 && y < b.y1 - 2;
+      const ring = x < b.x0 - 1 || x >= b.x1 + 1 || y < b.y0 - 1 || y >= b.y1 + 1;
+      if (!inner && !ring) continue;
+      for (let c = 0; c < 3; c++) (inner ? ins : out)[c].push(off[(y * w + x) * 4 + c]);
+    }
+  if (!ins[0].length || !out[0].length) return false;
+  return [0, 1, 2].some((c) => Math.abs(med(ins[c]) - med(out[c])) > RULES.carrierSeen);
+}
 
 /**
  * The two declared-geometry rules on one moment: lyric pixels (on against off) inside a line's scope that stand on none of
@@ -70,10 +87,13 @@ export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: 
   let [overflow, ruleCross] = [0, 0];
   for (const d of declared) {
     const scope = sc(d.scope);
-    const carriers = d.carriers.map((b) => sc(b, 1));
+    // (a carrier counts only where it is seen: its inside stands off the ground just round it in the frame without the
+    // words. A page drawn into a transition's other layer declares bands that are not on screen, or not where it says)
+    const seen = d.carriers.filter((b) => carrierSeen(off, w, h, sc(b)));
+    const carriers = seen.map((b) => sc(b, 1));
     // (overflow is read only near a carrier: a glyph or its misregistration running off a band's end or edge lies within
     // OVERFLOW_ZONE of it; a call set apart from the line on the paper, as the call placer sets it, does not)
-    const zones = d.carriers.map((b) => sc(b, OVERFLOW_ZONE_PX * sx));
+    const zones = seen.map((b) => sc(b, OVERFLOW_ZONE_PX * sx));
     const lines = d.lines.map((b) => sc(b, RULE_CLEAR_PX * sx));
     let [ink, on1, off1, cross1] = [0, 0, 0, 0];
     for (let y = Math.max(0, Math.floor(scope.y0)); y < Math.min(h, Math.ceil(scope.y1)); y++)
@@ -87,7 +107,7 @@ export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: 
       }
     // (a page that declared its bands but is not the one the words are read on, a page sliding in or out beside the line,
     // has most of the ink off its bands: its declaration is not this line's, RULES.onCarrier)
-    if (!d.carriers.length || on1 < RULES.onCarrier * ink) continue;
+    if (!carriers.length || on1 < RULES.onCarrier * ink) continue;
     overflow += off1;
     ruleCross += cross1;
   }

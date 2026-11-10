@@ -88,7 +88,7 @@ for (const id of positionals) {
     });
     await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, resolve(work))}/render.html?job=/${relative(ROOT, resolve(file))}`);
     await page.waitForSelector('body[data-ready="1"]', { timeout: 200000 });
-    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text })));
+    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, template: (c as { template?: string }).template })));
     for (const c of cues) {
       // the video's own ending fade takes the last line with it, in every style
       const ending = c === cues.at(-1);
@@ -97,7 +97,8 @@ for (const id of positionals) {
         const share = n / (GW * GH);
         checked++;
         if (share >= READ.minShare) fill.push(((x1 - x0) * (y1 - y0)) / (GW * GH));
-        if (share < READ.minShare || sum / Math.max(1, n) < READ.minDelta) fails.push(`${id} ${name} ${c.id} ${t.toFixed(2)} share ${share.toFixed(4)} delta ${(sum / Math.max(1, n)).toFixed(0)} ${c.text.slice(0, 10)}`);
+        // (a line the signature layer draws is read the same way: grabAt composes it only with the lyrics shown, render/main.ts)
+        if (share < READ.minShare || sum / Math.max(1, n) < READ.minDelta) fails.push(`${id} ${name} ${c.id}${c.template === 'signature' ? ' [signature]' : ''} ${t.toFixed(2)} share ${share.toFixed(4)} delta ${(sum / Math.max(1, n)).toFixed(0)} ${c.text.slice(0, 10)}`);
         if (!r) continue;
         const m = r;
         counts[id] = countMoment(counts[id] ?? emptyCounts(), m, soft);

@@ -255,7 +255,8 @@ export interface SignatureLayer {
   /** The time the engine renders the frame at t from: t, or the held time while a freeze stops the frame. */
   stageAt(t: number): number;
   /** Draws the frame at t into its own canvas: the engine's picture, then the moments. */
-  compose(stage: HTMLCanvasElement, t: number): HTMLCanvasElement;
+  /** The engine's frame with the moments over it; `text` false: the frame only, as the engine's lyrics are hidden (the reading gate's frame without the words). */
+  compose(stage: HTMLCanvasElement, t: number, text?: boolean): HTMLCanvasElement;
   metrics(): Record<string, unknown>[];
 }
 
@@ -804,18 +805,23 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   };
   return {
     stageAt: (t) => built.map((b) => b.stageAt?.(t)).find((v) => v !== undefined) ?? t,
-    compose(stage, t) {
+    compose(stage, t, text = true) {
       const j = joltAt(jolts, t);
       x.setTransform(1, 0, 0, 1, 0, 0);
-      x.fillStyle = inksAt(job, t).paper; // the paper's own colour, if a jolt pulls the frame off the edge
-      x.fillRect(0, 0, W, H);
+      // (a lyric layer on its own keeps its alpha: nothing under the frame; else the paper's own colour, if a jolt pulls
+      // the frame off the edge)
+      if (job.layer === 'text' || job.layer === 'words') x.clearRect(0, 0, W, H);
+      else {
+        x.fillStyle = inksAt(job, t).paper;
+        x.fillRect(0, 0, W, H);
+      }
       x.translate(W / 2 + j.dx, H / 2 + j.dy);
       x.rotate(j.rot * RAD);
       x.scale(j.zoom, j.zoom);
       x.translate(-W / 2, -H / 2);
       x.drawImage(stage, 0, 0, W, H);
       for (const b of built) {
-        if (t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
+        if (!text || t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
         const p = placement.get(b);
         const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
         const on = inksOn(b, groundUnder(x, ...region));

@@ -66,6 +66,11 @@ export interface SetSpec {
   keepRows?: boolean;
   /** Laid into its ground's composition: no travel or swell while it is up. */
   fixed?: boolean;
+  /**
+   * The carrier each row stands on when its page lays one a row (card/pair: the first row on the cream card, the second
+   * on the red one): every ink a hold draws over the words must read on each (hold-room partGrounds).
+   */
+  rowOn?: (keyof Slots)[];
   /** What the words stand on when the set's own page draws it (a card, a banner, two banners): the key ink reads on each. */
   on?: (keyof Slots)[];
   /** The slot the key words start from, when not the accent (an accent banner under the words). */

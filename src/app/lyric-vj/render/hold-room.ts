@@ -127,6 +127,19 @@ export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
   return (on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? []), slots.plate, slots.ground]).filter(hex);
 }
 /**
+ * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red
+ * card its page lays, not on the plate; a roll's purple key ran over it at 1.2:1): the set's carrier (groundsUnder), each
+ * row's own carrier where its page lays one per row (`rowOn`), and the ground under a split line's small part when it
+ * stands off the carrier and takes the line's inks (no split ink of its own: world-layout keys it). A new ink a hold
+ * draws over the words must read on every one.
+ */
+export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn' | 'split'>, slots: Slots, seen: Seen = {}): string[] {
+  const own = groundsUnder(spec, slots, seen);
+  const rows = (spec.rowOn ?? []).map((k) => slots[k]);
+  const off = spec.split && !spec.split.ink && carrierSlots(spec) ? [seen.background ?? slots.ground, ...(seen.under ?? [])] : [];
+  return [...new Set([...own, ...rows, ...off].filter(hex))];
+}
+/**
  * A set's key ink, as the renderer marks a key word (world-layout keyOf): the set's own key or the accent, moved until it
  * reads on what the words stand on and stays apart from the body ink; a one-ink set's key is its ink.
  */
@@ -142,10 +155,10 @@ export function keyFor(spec: SetSpec, slots: Slots, body: string, seen: Seen = {
 /**
  * What a line on this set may do with its inks, worked out the same by the plan (palette only) and the renderer (with
  * what it sees): a key-ink pulse (keyOk), a phrase swap (swapOk), and the second ink a whole line settles into (settle).
- * Each new ink reads at READ_MIN on every ground under the words (groundsUnder).
+ * Each new ink reads at READ_MIN on every ground under every part of the words (partGrounds).
  */
 export function inkChecks(spec: SetSpec, slots: Slots, body: string, seen: Seen = {}) {
-  const grounds = groundsUnder(spec, slots, seen);
+  const grounds = partGrounds(spec, slots, seen);
   const key = keyFor(spec, slots, body, seen);
   const back = [seen.background ?? slots.ground, slots.plate, slots.ground].filter(hex).sort((x, y) => contrast(body, y) - contrast(body, x))[0];
   const reads = (c: string) => hex(c) && grounds.every((g) => contrast(c, g) >= READ_MIN);

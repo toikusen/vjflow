@@ -23,7 +23,7 @@ export const R2_SETS: Record<string, SetSpec> = {
   // a long line with no break to take (a run of kana) on one wide card, low in the frame
   'card/long': { ...base, at: [0.5, 0.6], ax: 0, ay: 0, share: 0.8, tall: 0.3, hi: 150, rows: [1, 2], lead: 1.2, track: 0, tilt: 0.035, ink: 'plateInk', fixed: true },
   'card/fan': { ...base, at: [0.26, 0.613], ax: -1, ay: -1, share: 0.52, tall: 0.24, hi: 226, rows: [1, 1], lead: 1, track: 0, flush: -1, ink: 'plateInk', fixed: true },
-  'card/pair': { ...base, at: [0.106, 0.269], ax: -1, ay: -1, share: 0.86, tall: 0.72, hi: 150, rows: [2, 2], lead: 2.84, track: 0, flush: -1, stair: 2.28, ink: 'plateInk', rowInk: ['plateInk', 'plate'], keepRows: true, fixed: true },
+  'card/pair': { ...base, at: [0.106, 0.269], ax: -1, ay: -1, share: 0.86, tall: 0.72, hi: 150, rows: [2, 2], lead: 2.84, track: 0, flush: -1, stair: 2.28, ink: 'plateInk', rowInk: ['plateInk', 'plate'], rowOn: ['plate', 'ink2'], keepRows: true, fixed: true },
   // chalkboard (board a–d): the lesson, its answer row in yellow; the calm line over a long rule; the short loud line ringed;
   // two columns, the second in yellow. The board is the same everywhere, so these move between each other while sung
   'chalkboard/lesson': { ...base, at: [0.078, 0.23], ax: -1, ay: -1, share: 0.8, tall: 0.62, hi: 196, rows: [1, 2], lead: 1.7, track: 0.01, flush: -1, stair: 0.26, tilt: 0.02, rowInk: ['ink', 'ink2'] },

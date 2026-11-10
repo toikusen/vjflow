@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beatOfLine, BEAT_MIN_LINE, blowOf, BLOW_MAX, HoldPlan } from './lineplan-core';
+import { beatOfLine, BEAT_MIN_LINE, blowOf, BLOW_MAX, HoldPlan, REPOSE_CALM_LINE } from './lineplan-core';
 import { blowPose, stressInk } from './render/world-layout';
 import { SET_SPECS } from './render/world-sets';
 import { contrast } from './contrast';
@@ -7,6 +7,7 @@ import type { Glyph } from './render/glyphs';
 import { freeJob, freeMoments, FREE_MOMENTS_MAX } from './free-plan';
 import { CAM_EDGE, camReach, worldCam } from './render/world-cam';
 import { FREE_STYLES } from './free-styles';
+import { wordBreaks } from './phrases';
 import type { SongTimeline } from './timeline';
 import { STYLE_WORLDS } from './style-worlds';
 import { sharedOf, WORLD_SHARED } from './world-shared';
@@ -56,6 +57,27 @@ describe('shared world moves', () => {
   it('never dims a character below half', () => {
     for (let q = 0; q <= 1; q += 0.05) for (let i = 0; i < 8; i++) expect(WORLD_BEATS.flicker.glyph!({ q, i, n: 8, u: i / 7, v: 0, seed: 3, age: 2, sung: 1, span: 0 }).tone!).toBeGreaterThanOrEqual(0.55);
   });
+  it('turns a long calm line\'s ground at a sung word break, under words on their own carrier (ukiyoe), the set kept', () => {
+    const text = '無盡的思念總是破碎在冬天';
+    const n = [...text].length;
+    const cues = Array.from({ length: 12 }, (_, i) => ({ id: `c${i + 1}`, start: 4 + i * 5, end: 4 + i * 5 + 4.6, text, charStarts: Array.from({ length: n }, (_, k) => 4 + i * 5 + (4.2 * k) / n) }));
+    const end = 4 + 12 * 5 + 2;
+    const song = { title: 'calm', duration: end, tempo: 70, beats: Array.from({ length: Math.ceil(end / 0.857) }, (_, i) => i * 0.857), downbeats: [], sections: [{ start: 0, end, type: 'verse', energy: 0.3 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+    const { treatment, plan, calm } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === 'ukiyoe')!, seed: 0 });
+    expect(calm).toBe(true);
+    expect(treatment.cues.filter((c) => (c as { world?: { repose?: unknown[] } }).world?.repose?.length)).toEqual([]);
+    const breaks = [...wordBreaks(text)];
+    const turns = (plan as unknown as { shots: { cuts: { at?: number; repose?: boolean }[] }[] }).shots.flatMap((s) => s.cuts.filter((x) => x.repose));
+    expect(turns.length).toBeGreaterThan(6);
+    for (const t of turns) {
+      const cue = cues.find((x) => t.at! > x.start && t.at! < x.end)!;
+      expect(cue.end - cue.start).toBeGreaterThanOrEqual(REPOSE_CALM_LINE);
+      // the ground turns on a sung word break, or on the song beat nearest it (within 0.3 s)
+      const near = breaks.filter((k) => k > 0 && k < n).map((k) => Math.abs(cue.charStarts[k] - t.at!));
+      expect(Math.min(...near), `${t.at} lands at a word break`).toBeLessThanOrEqual(0.3 + 1e-6);
+    }
+  });
+
   it('a long calm line keeps its one set; its ground does not turn under words standing on it', () => {
     const text = '無盡的思念總是破碎在冬天';
     const n = [...text].length;

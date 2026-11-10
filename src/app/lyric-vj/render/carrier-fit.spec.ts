@@ -189,6 +189,12 @@ describe('the reading gate\'s declared-geometry rules (carrier-overflow, rule-cr
     // (an absolute count: the one glyph fails the moment however many glyphs read well beside it)
     expect(r.overflow).toBeLessThan(0.05 * 250 * 40);
   });
+  it('a glyph wholly past the band\'s end joined to the line counts; a call set apart on the paper does not', () => {
+    // (the line runs on, a letter's gap past the band's end; a call 30 px of 1080p above the band, apart from the line)
+    expect(declaredRules(...Object.values(frames([[130, 80, 398, 120], [400, 80, 425, 120]])) as [Uint8ClampedArray, Uint8ClampedArray], w, h, declared).overflow).toBeGreaterThanOrEqual(RULES.overflowPixels);
+    const call = frames([[130, 80, 330, 120], [150, 35, 220, 42]]);
+    expect(declaredRules(call.on, call.off, w, h, declared).overflow).toBe(0);
+  });
   it('a band declared by a page that is not on screen (a transition\'s other layer) is not read', () => {
     const { on, off } = frames([[130, 80, 380, 120], [380, 80, 404, 120]], false);
     expect(declaredRules(on, off, w, h, declared)).toEqual({ overflow: 0, ruleCross: 0 });

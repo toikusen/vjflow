@@ -58,8 +58,8 @@ export interface DeclaredMoment { carriers: Bx[]; lines: Bx[]; scope: Bx }
 type Bx = { x0: number; y0: number; x1: number; y1: number };
 /** The 1080p clearance a declared line keeps from the ink (render/carrier-fit LINE_CLEAR). */
 export const RULE_CLEAR_PX = 12;
-/** How far past a declared carrier the overflow rule reads, 1080p px (a glyph off the band's end is within it; a call apart is not). */
-export const OVERFLOW_ZONE_PX = 48;
+/** Ink joined to the ink on a carrier within this many 1080p px is the same run of type (a line's letters stand closer; a call apart, further). */
+export const OVERFLOW_JOIN_PX = 12;
 
 /** Whether a declared carrier is on screen: the median of each channel inside it (a margin in) against just outside it. */
 function carrierSeen(off: ArrayLike<number>, w: number, h: number, b: Bx): boolean {
@@ -91,22 +91,39 @@ export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: 
     // words. A page drawn into a transition's other layer declares bands that are not on screen, or not where it says)
     const seen = d.carriers.filter((b) => carrierSeen(off, w, h, sc(b)));
     const carriers = seen.map((b) => sc(b, 1));
-    // (overflow is read only near a carrier: a glyph or its misregistration running off a band's end or edge lies within
-    // OVERFLOW_ZONE of it; a call set apart from the line on the paper, as the call placer sets it, does not)
-    const zones = seen.map((b) => sc(b, OVERFLOW_ZONE_PX * sx));
     const lines = d.lines.map((b) => sc(b, RULE_CLEAR_PX * sx));
-    let [ink, on1, off1, cross1] = [0, 0, 0, 0];
-    for (let y = Math.max(0, Math.floor(scope.y0)); y < Math.min(h, Math.ceil(scope.y1)); y++)
-      for (let x = Math.max(0, Math.floor(scope.x0)); x < Math.min(w, Math.ceil(scope.x1)); x++) {
-        const i = y * w + x;
-        if (Math.max(Math.abs(on[i * 4] - off[i * 4]), Math.abs(on[i * 4 + 1] - off[i * 4 + 1]), Math.abs(on[i * 4 + 2] - off[i * 4 + 2])) <= RULES.textDelta) continue;
+    const [x0, y0, x1, y1] = [Math.max(0, Math.floor(scope.x0)), Math.max(0, Math.floor(scope.y0)), Math.min(w, Math.ceil(scope.x1)), Math.min(h, Math.ceil(scope.y1))];
+    const isInk = (x: number, y: number) => { const i = y * w + x; return Math.max(Math.abs(on[i * 4] - off[i * 4]), Math.abs(on[i * 4 + 1] - off[i * 4 + 1]), Math.abs(on[i * 4 + 2] - off[i * 4 + 2])) > RULES.textDelta; };
+    const onC = (x: number, y: number) => carriers.some((b) => inB(x, y, b));
+    let [ink, on1, cross1] = [0, 0, 0];
+    const queue: number[] = [];
+    const reached = new Uint8Array(w * h);
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        if (!isInk(x, y)) continue;
         ink++;
-        if (carriers.some((b) => inB(x, y, b))) on1++;
-        else if (zones.some((b) => inB(x, y, b))) off1++;
+        if (onC(x, y)) { on1++; reached[y * w + x] = 1; queue.push(y * w + x); }
         if (lines.some((b) => inB(x, y, b))) cross1++;
       }
-    // (a page that declared its bands but is not the one the words are read on, a page sliding in or out beside the line,
-    // has most of the ink off its bands: its declaration is not this line's, RULES.onCarrier)
+    // (the overflow is the ink joined to the ink on the carrier, within OVERFLOW_JOIN px, that stands off it: a glyph or a
+    // run of a line carried past the band's edge or end; a call the call placer sets apart on the paper is not joined)
+    const r = Math.max(1, Math.round(OVERFLOW_JOIN_PX * sx));
+    let off1 = 0;
+    while (queue.length) {
+      const i = queue.pop()!;
+      const [px, py] = [i % w, Math.floor(i / w)];
+      for (let dy = -r; dy <= r; dy++)
+        for (let dx = -r; dx <= r; dx++) {
+          const [qx, qy] = [px + dx, py + dy];
+          if (qx < x0 || qy < y0 || qx >= x1 || qy >= y1) continue;
+          const j = qy * w + qx;
+          if (reached[j] || !isInk(qx, qy)) continue;
+          reached[j] = 1;
+          queue.push(j);
+          if (!onC(qx, qy)) off1++;
+        }
+    }
+    // (a page that declared its bands but is not the one the words are read on has most of the ink off its bands: RULES.onCarrier)
     if (!carriers.length || on1 < RULES.onCarrier * ink) continue;
     overflow += off1;
     ruleCross += cross1;

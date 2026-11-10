@@ -2,9 +2,44 @@
 
 The screentone whole-page layout contract (Codex `2026-11-10-phase4-codex.md` §4, r2 §5 point 4): one pure `pageLayout()` from the glyphs as drawn, every line present and the declared bleed edge, read by the scheduler (plan time, shaped measure), the renderer (before it commits the pose, and on every frame) and the verifier. Every invariant is a check (`verifyPage`) and a unit test; a page that has no legal solution is refused and the line stays on its original page, whole. Measured: invariants pass on every candidate the scheduler approves, so `WORLD_SCALE.screentone.withheld` is removed. Q3 stays opt-in (`VJ_SCALE`); default fingerprints unchanged.
 
-**結論：已重新開啟。** 契約實作完成，所有不變量在量測上通過：計畫層 3 個 seed 的所有核准構圖都有合法整頁（`pageRefusedDrawn` 0）；閘門（screentone，VJ_SCALE 開，5 首）489 個時刻 fails 0、contract 0、退步 0，含 138 個逐幀頁面檢查；業主片段逐幀檢查見下方「片段」。因此 `world-shared.ts WORLD_SCALE.screentone` 拿掉 `withheld`。仍是 opt-in（`VJ_SCALE` / `scaleContrast`），預設輸出逐位元組不變。
+**結論（第二輪）：維持重新開啟，現在以閉合為主。** 77 次核准中 71 次閉合、6 次 bleed；所有核准構圖在每個在場句子改變的時刻都有合法整頁（`pageRefusedDrawn` 0），幾何上的 `noPageSolution` 是 0。閘門開／關都是 fails 0、contract 0、退步 0；片段逐幀 fallback 0、載體被蓋 0、字框失敗 0。因此 `world-shared.ts WORLD_SCALE.screentone` 拿掉 `withheld`。仍是 opt-in（`VJ_SCALE` / `scaleContrast`），預設輸出逐位元組不變。
 
-## 契約（實作版）
+## 第二輪（code review「merge with changes」與評審 `2026-11-10-screentone-page-layout-critic.md` 之後）
+
+本節取代下文第一輪的對應段落；第一輪數字保留作紀錄，標「第一輪」。
+
+1. **先閉合（closed-first）**：`scale-policy.ts fitOf` 對 `ground:` 載體先用 `pageGlyphRoom(page, edge, 'closed')`（四邊都留 `pageRoom`），能到門檻（關鍵詞 edgeFit 1.8×、整句 1.6×，`closedMin`）就用閉合；達不到才用 `bleed`（只在宣告邊不留空間）。座位記 `pageMode`；`scaleLayout` 用同一個門檻重擬合。`pageLayout` 本身也是先試 closed。
+2. **原子式逐幀退回**：計畫、提交、逐幀用同一份在場句子。計畫層 `policy-candidates.ts pageContexts` 從第一次繪製的實際 show 與 `laidSeat` 框算出每句的頁面情境（show、下一句 show 為止、期間在畫面上的其他句子），掛在 `LineScale.page`；`scale-pose.ts scalePage` 在情境內每個「在場句子改變」的時刻各排一次，任一時刻無解就整句拒絕。逐幀的 `relaid()` 用畫面上真的 face（每個 face 現在帶自己的 `line`／`show`）。某幀若仍無解，**整頁畫回原版面**，計入 `pageFallbackFrames`（不再只重排放大句、丟掉其他句的載體）。
+3. **拒絕原因分開**：幾何 `noPageSolution`（目前 0）、`collisionQ4exit`（下一句以 Q4 link 進場，把這頁當舊 set 的圖片滑出）、`bracketCall`（句子旁有括號呼喊，新頁不替它擺載體）。單位一律分「段落數」與「候選數」。
+4. **翻頁進場不蓋載體**：世界的 `manga-flip` 進場與三個 set piece（tone-flash、scratch-stars、manga-speed）在重排頁上一律剪掉載體輪廓（`keepCarrier`），計入 `pageTurnFrames`；若當幀找不到已畫的載體而無法剪掉，計入 `carrierCoveredFrames`，閘門把它列為 contract。依規則 8，唱這句時把它的氣球蓋成白紙是缺陷，不是可接受的計數；所以修掉，而不是只記錄。
+5. **以前觸發不了的不變量**：在場與否依時間（`PageInput.at`，`presentAt`）；未到 show 的句子不得被任何載體或分格承載（`oneCarrier`）；`noEmptyPanel` 改從幾何讀（分格內是否真的有在場句子的字），不信分格自己的清單；`readingOrder` 用真實 show。新增以真實輸入觸發的測試（見下表「第二輪新增」）。**Q4 接縫**：兩個方向（Q4 handoff 把該句帶進自己的頁＝既有 `collisionQ4`；下一句的 handoff 把頁滑出＝`collisionQ4exit`）都由排程器排除，所以目前沒有放大句會處在 Q4 接縫上；逐幀的頁面檢查與字框檢查仍在每幀執行，日後宣告允許時會直接生效。
+6. **程式**：`world-shared.ts WORLD_PAGES`（頁面能力：單一分格、框線寬、每個頁面的載體種類、尾巴）取代頁面 id 的 regex，`pageCapOf` 查詢，popart 之後可宣告同一種能力；`B_PANEL`／`PAGE_PANEL` 都來自它；`unionOf`、`emBox`（字 → em 框）放在 `world-b5-shared.ts`，四處共用。
+
+### 第二輪數字（commit 3efbf77）
+
+計畫層（`measure-scale-coverage.mts --phase 2 --world screentone --out out/research/q3-1109/phase4e.json`，5 首，58 個有唱詞段落）：
+
+| seed | 畫出 | edgeFit | unrealized | closed | bleed | noPageSolution 段落／候選 | collisionQ4exit 段落／候選 | bracketCall 段落／候選 | 核准但頁面不成立 |
+|---|---|---|---|---|---|---|---|---|---|
+| 0 | 24 | 7 | 1 | 23 | 1 | 0／0 | 13／13 | 4／7 | 0 |
+| 1 | 25 | 6 | 0 | 25 | 0 | 0／0 | 13／17 | 5／8 | 0 |
+| 2 | 28 | 6 | 1 | 23 | 5 | 0／0 | 13／15 | 6／6 | 0 |
+
+- 三個 seed 合計 77 次：closed 71（spiky 17、box 46、oval 8），bleed 6（全是 box，choroin 4 句、tenmon 1 句，整句 1.67–1.79×：閉合時連 1.6× 都排不進）。
+- 大雪 seed 0 的五句（c004、c011、c020、c029、c036）全部 closed；c020「才想起」edgeFit 2.4× 也是閉合。
+- 第一輪文件裡的「9／4」混用了候選數與段落數；上表一律分開寫。
+
+閘門（screentone，5 首，seed 0，commit 3efbf77）：
+- VJ_SCALE 開（`out/research/q3q5-1110/gate-4e-r2-on.log`）：489 個時刻 fails 0、contract 0、退步 0；頁面檢查 92 幀全部重排（fallback 0、蓋住載體 0），字框檢查 46 幀；cross 7（baseline 4，2 % 容許內）。
+- VJ_SCALE 關（`gate-4e-r2-off.log`）：489 個時刻 fails 0、contract 0、退步 0，頁面檢查 0 幀，cross 7。
+
+指紋（`out/research/q3-1109/hash-4e/r2-*.json`）：seed 0／1／2 = `12ec6c83…`／`b754f055…`／`9b13e671…`，`--q1` = `9422bbda…`，都沒變。
+
+測試：tsc app／spec 通過；`ng test` 140 檔／1706（第一輪 1699；新增真實輸入的 presence、geometric noEmptyPanel、真實 show 的 readingOrder、逐時刻 `scalePage`、未宣告頁面、fitter 先閉合）。
+
+片段（重繪，`~/Desktop/vj/output/語意巨字與時刻_2026-11-10/v2/screentone_改前改後.mp4`，同樣的參數，渲染前都等 pgrep 為空）：c011、c020 都是閉合載體。逐幀：頁面 190 幀全部重排，fallback 0，翻頁進場經過重排頁 11 幀、載體全部保留（carrierCoveredFrames 0），字框 181 幀失敗 0。評審影格 `out/research/q3q5-1110/critic-4e/screentone-snow_{55.35s,57.5s,63s,85s,86.5s}_{before,after}.png`：55.35 s 是翻頁進場（白紙不再蓋住氣球），57.5／85／86.5 s 是閉合載體。63 s 兩邊相同：c013 被 `collisionQ4exit` 擋下，該幀是世界原本的頁面與 roll-in 進字（評審看到的「01:03 單字巨框」是原頁的進字動作，不是重排頁）。
+
+## 契約（實作版，第一輪；第二輪的改動見上節）
 
 `src/app/lyric-vj/render/page-layout.ts`（純函式，無 DOM／THREE）。
 
@@ -45,7 +80,7 @@ The screentone whole-page layout contract (Codex `2026-11-10-phase4-codex.md` §
 | 字不被進出場帶出載體 | 每幀 `pageGlyphCheck` | cuts a page-carried composition in and out… | — |
 | 排程器與渲染端同一份幾何 | — | stands a page-carried ink box inside the page glyph room…；leaves a sheet carrier (riso) fitted as before | — |
 
-## 數字
+## 數字（第一輪，已被第二輪取代）
 
 計畫層（`npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-scale-coverage.mts --phase 2 --world screentone --out out/research/q3-1109/phase4e.json`，5 首 × seed 0／1／2，0 次 API；「畫出」＝渲染端自己的 `scaleLayout`＋`scalePage` 在 shaped measure 下成立）：
 
@@ -65,7 +100,7 @@ The screentone whole-page layout contract (Codex `2026-11-10-phase4-codex.md` §
 
 測試：`npx tsc --noEmit -p tsconfig.app.json`、`-p tsconfig.spec.json` 通過；`npx ng test --watch=false` 140 檔／1699（原 139／1671；新增 `page-layout.spec.ts` 28 個，`q3q5-wiring.spec.ts` 兩個暫停期測試改為重開後的版本）。
 
-## 片段
+## 片段（第一輪 v2，已重繪）
 
 `~/Desktop/vj/output/語意巨字與時刻_2026-11-10/v2/screentone_改前改後.mp4`（左＝改前 scale 關、右＝改後 scale 開；三年後的大雪 55–115 秒，seed 0，`--font Huninn --fps 30 --workers 1 --unconfirmed`，`nice -n 10`，每次渲染前等 `pgrep -f "scripts/lyric-vj/render[.]mts"` 為空）＋`說明.md`。treatment：`out/research/q3q5-1110/tr4e/screentone-snow-{before,after}/treatment.json`（`freeJob(…, { scaleContrast: true })`）。
 

@@ -667,9 +667,9 @@ export interface WorldPool {
    */
   scheduled?: boolean;
   /**
-   * The song's composition scheduler is asked for (the Q1 opt-in, free-plan): no line changes seat while it is sung, the
-   * composer's own reposes included, on a world the scheduler takes over or not (Codex 2026-11-10 pairs B). Unset: the
-   * composer's reposes as before (today's product).
+   * The song's composition scheduler is asked for (the Q1 opt-in, free-plan): the composer lays no turn of ground inside a
+   * line either (Codex 2026-11-10 pairs B). Unset: a long line's ground may turn behind its still words (no line changes
+   * set while it is sung on any path, owner 2026-11-10).
    */
   stillLines?: boolean;
   /**
@@ -1212,7 +1212,10 @@ export function absorbSeatsFor(kind: string, set: string, seats: string[], world
   return ok.length ? { seats: ok, inks } : undefined;
 }
 
-/** The sets a line moves to while it is sung, each on a beat as near a phrase's end as the beats fall. */
+/**
+ * Where a long line's ground turns while it is sung, each on a beat as near a phrase's end as the beats fall. The set each
+ * turn names is the seat it once moved the words to (before 2026-11-10); only its time is used now: the words stay.
+ */
 function reposeOf(c: Cue, set: string, W: WorldPool, beat: LineBeat | undefined, beats: number[], level: Level, calm: boolean, roll: (salt: string, n: number) => number) {
   const len0 = c.end - c.start;
   if (!W.pace.repose || (!calm && level === 0 && len0 < REPOSE_MIN_LINE * 1.4) || len0 < (calm ? REPOSE_CALM_LINE : REPOSE_MIN_LINE) || (beat?.spare ?? 0) < 0.2) return [];
@@ -1683,15 +1686,18 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     // a blown-up key word holds its picture until the line is read: no change of set before
     // (a world that declares its compositions has no repose of the composer's: the scheduler times every change of seat,
     // on the seats laid here, after the hold is placed: Q1 phase 2)
-    const repose = (recipe.wline && W && !W.scheduled && !W.stillLines && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
+    // A sung line keeps its set, and so its seat, size, breaks and block, from its first sung character to its end (owner
+    // 2026-11-10, cards no-inline-line-move and motivated-colour-pass): a change of set lands only at a line boundary. The
+    // composer's turn inside a long line stays a change of ground behind the still words: its cut, never its set.
+    const turns = (recipe.wline && W && !W.scheduled && !W.stillLines && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
     // (a line with a set piece or a call beside it keeps its composed set: no seats offered; a blown-up word's line keeps its
     // set at its boundary and may change only once it is read, world-events-adapter.ts)
     const seats = recipe.wline && W?.scheduled && !piece && !hasCall(c.id) ? seatsFor(c, recipe.wline.set, W, level, true) : undefined;
-    // (a calm song's change of set stays on its quiet grounds)
+    // (a calm song's turn stays on its quiet grounds)
     const reposeGrounds = calm && W?.quiet.length ? W.quiet : W?.grounds[level] ?? [];
-    for (const r of repose) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
-    // cuts in time order, each a set's first frame when one lands there (a beat cut closer than a blink to a repose gives way)
-    if (repose.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !repose.some((r) => r.at === cuts[i - 1]['at'])) cuts.splice(i - 1, 1); }
+    for (const r of turns) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
+    // cuts in time order (a beat cut closer than a blink to a turn gives way)
+    if (turns.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !turns.some((r) => r.at === cuts[i - 1]['at'])) cuts.splice(i - 1, 1); }
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
     // (render/world-handoff.ts: the least used family that fits the world and the time the song leaves the line)
     const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };
@@ -1699,8 +1705,6 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const spec = recipe.wline ? SET_SPECS[recipe.wline.set] : undefined;
     const holdLineFor = (spec: SetSpec | undefined, own: boolean): HoldLine => ({
       ...holdLineOf(spec, hand ? 0 : WORLD_ENTERS[wEnter ?? recipe.wline!.enter]?.sec ?? 0.5, c, W?.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]),
-      // (a block grows in the set it is in when it grows, and keeps the size into any set after: every one must have room)
-      ...(repose.some((r) => SET_SPECS[r.set] && !growFits(c.text, SET_SPECS[r.set])) ? { noGrow: true } : {}),
       ...(camHere ? { camEnd: s.start + (WORLD_CAM_SEC[W!.camera!] ?? 0.5) } : {}),
       pair: recipe.template === 'world-pair', key, blown: !!blow,
       cutsAt: cuts.slice(1).map((x) => Number(x['at'])).filter((x) => Number.isFinite(x) && x > c.start && x < c.end),
@@ -1712,7 +1716,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     });
     // (pairs C: the repeat rule and the section cap are the committer's: the composer's here, the scheduler's under the joint contract)
     const jointHere = !!(W?.joint && W.scheduled);
-    const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, repose, jointHere ? '' : lastBeat, roll('beat', 7), { ...holdLineFor(spec, true), ...swapLine(c, !jointHere) }, W.holds) : undefined;
+    const held = recipe.wline && W?.beats ? beatOfLine(c, W.beats, beats, [], jointHere ? '' : lastBeat, roll('beat', 7), { ...holdLineFor(spec, true), ...swapLine(c, !jointHere) }, W.holds) : undefined;
     const heldBeat = held && 'kind' in held ? held : undefined;
     // (phase 4c: every hold the line could take, on its own set and on each seat it may be read in, each measured on
     // that seat's set and scheme; none committed here, and no repeat avoidance: the line before's hold is the one the
@@ -1721,14 +1725,14 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
       const at = SET_SPECS[x];
       if (!at) return [];
       const line = { ...holdLineFor(at, x === recipe.wline!.set), ...swapLine(c, false) };
-      return candsOf(holdCandidatesOf(c, W.beats!, beats, repose, '', roll('beat', 7), line, W.holds, true), x, W.stepped);
+      return candsOf(holdCandidatesOf(c, W.beats!, beats, [], '', roll('beat', 7), line, W.holds, true), x, W.stepped);
     }) : undefined;
     lastBeat = heldBeat?.kind ?? '';
     if (!jointHere) spend(c, held);
     // (a scheduled world only: the seats where the line's ink-only hold may merge with a material move, phase 4a)
     const absorb = heldBeat && seats?.length && W?.id ? absorbSeatsFor(heldBeat.kind, recipe.wline!.set, seats, W.id, W.inks?.[Number(cuts[0]?.['scheme'] ?? 0)]) : undefined;
     const beatPart = cands ? { ...(held && 'skip' in held ? skipped(held) : rejectsOf(held)), ...(cands.length ? { holdCands: cands } : {}) } : heldBeat ? { ...heldOf(heldBeat, W!.stepped), ...rejectsOf(heldBeat) } : held && 'skip' in held ? skipped(held) : {};
-    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(repose.length ? { repose } : {}), ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...beatPart, ...(absorb ? { beatAbsorb: absorb } : {}), ...(blow ? { blow } : {}) } : undefined;
+    const worldLine = recipe.wline ? { set: recipe.wline.set, enter: wEnter ?? recipe.wline.enter, exit: wExit ?? recipe.wline.exit, hold: recipe.wline.hold, drift: travel, swell: calm ? 0.08 : 0.05, ...(seats ? { seats } : {}), ...(W?.camera && cuts[0]?.cam === W.camera ? { cam: { kind: W.camera, at: s.start, dir: 1 } } : {}), ...beatPart, ...(absorb ? { beatAbsorb: absorb } : {}), ...(blow ? { blow } : {}) } : undefined;
     const params = { ...recipe.params, ...(CARRIERS.has(recipe.template) ? { side } : {}), ...(recipe.id === 'band-stick' && roll('cross', 2) ? { cross: true } : {}) };
     return { shot: s.id, level: level / 2, chapter: '', lyric: { template: recipe.template, side, params }, lines: [{ cue: c.id, budget: true, ...(hit ? { hit } : {}), ...(fine ? { fine } : {}), ...(breathes ? { breath: +tail.toFixed(2) } : {}), ...(ringed ? { oval: true } : {}), ...(relays_ ? { relay: true } : {}), ...(iconHere ? { icon: iconHere } : {}), ...(recipe.state ? { inkState: recipe.state } : {}), ...(beat?.linger ? { linger: beat.linger } : {}), ...(hand ? { handoff: hand } : {}), ...(worldLine ? { world: worldLine } : {}), enter: recipe.enter, exit: wayOut ?? recipe.exit, idle: beat?.payoff && !recipe.state && recipe.idle !== 'reflection-rest' ? 'still' : breathes ? 'breath-rule' : recipe.idle, trail: !!recipe.trail && !wayOut, emphasis: key, method: breathes || relays_ || ringed ? 'color' : recipe.mark ?? marksOf[roll('mark', marksOf.length)], textCam: recipe.wline ? undefined : rig ? { ...textCam, rig } : recipe.enter === 'corner-land' ? { ...textCam, kind: 'tilt', amount: 0.6 } : textCam, symbol: 'sparkle', emphasis2: '', method2: 'color', zh: '' }], cuts };
   });

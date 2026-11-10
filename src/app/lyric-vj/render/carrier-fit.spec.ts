@@ -243,3 +243,19 @@ describe('the frame check: a change of dots or of colour alone is no cut, an out
     expect(frameChange(frame(ground(() => 230), at), frame(outline, at)).seen).toBe(true);
   });
 });
+
+describe('a hand object read on the colour it is drawn in (chiyogami tsuzuki c013: a key run white on the cream noshi)', () => {
+  it('the objects that fill with the scheme\'s ground are the ones that take its ink, and their key reads on that ground', async () => {
+    const { GROUND_FACED, carrierSlots, inkChecks } = await import('./hold-room');
+    const { handInked } = await import('./world-packs');
+    expect([...GROUND_FACED].sort()).toEqual([...handInked].sort());
+    for (const o of GROUND_FACED) expect(carrierSlots({ object: o as never }), o).toEqual(['ground']);
+    // (a cream ground and a red plate, the body ink dark: a white key reads on the plate, not on the cream noshi)
+    const slots = { ground: '#f6ead5', plate: '#c23a22', ink: '#2a1a12', ink2: '#ffffff', accent: '#ffffff', faint: '#f1e2c4', plateInk: '#ffffff' } as never;
+    const x = inkChecks({ ...SET_SPECS['chiyogami/noshi'] }, slots, '#2a1a12');
+    const { contrast } = await import('../contrast');
+    // (the key the run lays is one that reads on the cream face; read on the plate it stayed white)
+    if (x.keyOk) expect(contrast(x.key, '#f6ead5')).toBeGreaterThanOrEqual(4.5);
+    expect(x.key.toLowerCase()).not.toBe('#ffffff');
+  });
+});

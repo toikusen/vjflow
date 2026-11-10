@@ -110,7 +110,14 @@ export const swapReads = (base: string, key: string, back: string | undefined, u
 export interface Seen { background?: string; under?: string[]; accent?: string }
 const hex = (c?: string): c is string => !!c && /^#[0-9a-f]{6}$/i.test(c);
 /** The slots a set's words stand on when it draws (or its page draws) a carrier under them; undefined off a carrier. */
-export const carrierSlots = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>): (keyof Slots)[] | undefined => spec.on ?? (spec.object || (spec.ink === 'plateInk' && !spec.under) ? ['plate'] : undefined);
+/**
+ * Hand objects whose face is the scheme's ground, not its plate (world-packs handInked: the shikishi board, the noshi strip,
+ * the folded kite each fill with slots.ground and take the scheme's ink, world-objects objectInk). Read as plate, a key run
+ * in a light ink passed on chiyogami's red plate and ran white on the cream noshi: tsuzuki c013 158.05 blank, 2026-11-10.
+ */
+export const GROUND_FACED = new Set(['shikishi', 'noshi', 'fold-kite']);
+export const carrierSlots = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>): (keyof Slots)[] | undefined =>
+  spec.on ?? (spec.object && GROUND_FACED.has(spec.object) ? ['ground'] : spec.object || (spec.ink === 'plateInk' && !spec.under) ? ['plate'] : undefined);
 /**
  * Every ground under a set's words: its carrier, else the background, what the picture puts there, and the plate and
  * ground colours the page may lay under the words where nothing measured it (terminal's windows, silk's bands).

@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import type { SongTimeline } from './timeline';
+import { turnTakes } from './render/turn-rule';
+import { turnChecks } from './world-events-adapter';
+import { pageOf } from './world-shared';
 
 type Line = { cueId: string; world?: { set: string; repose?: unknown[] } };
 type Turn = { at?: number; repose?: boolean };
@@ -49,5 +52,46 @@ describe('no change of set inside a sung line (default path)', () => {
       const events = (f.treatment as { worldEvents?: { events: { kind: string; scope: string }[] } }).worldEvents?.events ?? [];
       expect(events.filter((e) => e.scope === 'in-line'), `seed ${seed}`).toEqual([]);
     }
+  });
+
+  it('card/pair stands on its page: a turn off it is refused by the rule, laid by no composer, and named by the final check', () => {
+    const card = FREE_STYLES.find((s) => s.id === 'card')!;
+    const slots = card.world.palette[0];
+    const pages = new Set(card.world.layouts.lines.flatMap((l) => (l.ground ? [l.ground] : [])));
+    const print = { ink: slots.ink, paper: slots.ground };
+    expect(pageOf(card.world, 'card/pair')).toBe('card/pair');
+    expect(turnTakes({ set: 'card/pair', page: 'card/pair', pages, fx: 'card/table', slots, ink: slots.ink, before: print, after: print })).toMatch(/stands on its page/);
+    expect(turnTakes({ set: 'card/main', pages, fx: 'card/fan', slots, ink: slots.ink, before: print, after: print })).toMatch(/another set's page/);
+    expect(turnTakes({ set: 'card/main', pages, fx: 'card/table', slots, ink: slots.ink, before: print, after: print })).toBeUndefined();
+    // words standing on the ground directly (spy/low-slash has no carrier) read worse on a darker print after the turn;
+    // words on their own carrier (card/main's plate) do not depend on it
+    const flat = { ...slots, plate: '#ffffff', ground: '#ffffff' };
+    expect(turnTakes({ set: 'spy/low-slash', pages, fx: 'spy/x', slots: flat, ink: '#222222', before: { ink: '#222222', paper: '#ffffff' }, after: { ink: '#222222', paper: '#555555' } })).toMatch(/worse/);
+    expect(turnTakes({ set: 'card/main', pages, fx: 'card/table', slots, ink: slots.plateInk, before: print, after: { ink: slots.ink, paper: '#555555' } })).toBeUndefined();
+    // the composer lays no turn under a card/pair line (tsuzuki, where the review found c011's second row lost on cream)
+    const db = 'out/db/yt_b3GCfyNKeLs/song.json';
+    if (!existsSync(db)) return;
+    const song = JSON.parse(readFileSync(db, 'utf8')) as SongTimeline;
+    const meaning = existsSync('out/research/instant/plans/tsuzuki/meaning.json') ? JSON.parse(readFileSync('out/research/instant/plans/tsuzuki/meaning.json', 'utf8')) : undefined;
+    const { job, plan } = freeJob(song, { style: card, seed: 0, meaning });
+    const turns = turnsOf(plan).map((t) => t.at!);
+    const lines = job.treatment.cues as unknown as Line[];
+    for (const l of lines.filter((x) => x.world?.set === 'card/pair')) {
+      const c = song.cues.find((x) => x.id === l.cueId)!;
+      expect(turns.filter((t) => t > c.start && t < c.end), l.cueId).toEqual([]);
+    }
+    expect(turnChecks(job, card.world, turns)).toEqual([]);
+    // planted: the card/pair line's ground turned to the table halfway through is named
+    const paired = lines.find((x) => x.world?.set === 'card/pair' && x.cueId === 'c011');
+    expect(paired, 'c011 is still laid on card/pair').toBeTruthy();
+    if (!paired) return;
+    const c = song.cues.find((x) => x.id === paired.cueId)!;
+    const at = +((c.start + c.end) / 2).toFixed(3);
+    const tampered = structuredClone(job);
+    const sections = (tampered.treatment as unknown as { graphics: { sections: { start: number; layers: { kind: string; fx?: string }[] }[] } }).graphics.sections;
+    const under = [...sections].reverse().find((x) => x.start <= c.start)!;
+    sections.push({ ...structuredClone(under), start: at, layers: under.layers.map((l) => (l.kind === 'kinetic' ? { ...l, fx: 'card/table' } : l)) });
+    sections.sort((x, y) => x.start - y.start);
+    expect(turnChecks(tampered, card.world, [at]).map((w) => w.reason).join(' ')).toMatch(/final check: turn: the set stands on its page card\/pair/);
   });
 });

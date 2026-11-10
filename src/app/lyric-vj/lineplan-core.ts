@@ -16,6 +16,7 @@ import { LineBeat, lineBeats, readingSec, setTogether } from './render/reading-w
 import { OPEN, SETTLE, stressInk, WORLD_BEATS } from './render/world-beats';
 import { isLinked, LINK_PREPARE, moveState, pickWorldMoves } from './render/world-handoff';
 import { absorbInk, carrierRoom, growRoom, inkChecks } from './render/hold-room';
+import { lineInkOf, turnTakes } from './render/turn-rule';
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
@@ -672,6 +673,10 @@ export interface WorldPool {
    * set while it is sung on any path, owner 2026-11-10).
    */
   stillLines?: boolean;
+  /** Every ground a set of the world's is laid into (its page): a turn onto one brings that set's carrier (turn-rule.ts). */
+  pages?: ReadonlySet<string>;
+  /** The world draws its words in its own ink whatever print is under them (world-layout fixedInk). */
+  fixedInk?: boolean;
   /**
    * The job's faces, when the scheduler takes the world (Q1 phase 3c): its font choice and its accent face. The seats it
    * adds are laid on the renderer's own measure of the face each line is set in (fonts.ts lineFace, render/layout-
@@ -1695,9 +1700,19 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     const seats = recipe.wline && W?.scheduled && !piece && !hasCall(c.id) ? seatsFor(c, recipe.wline.set, W, level, true) : undefined;
     // (a calm song's turn stays on its quiet grounds)
     const reposeGrounds = calm && W?.quiet.length ? W.quiet : W?.grounds[level] ?? [];
-    for (const r of turns) cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx: reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length] } as (typeof cuts)[number]);
+    // (a turn is kept only when the words keep all they are read on: their page, their carrier, an ink that reads on the
+    // new ground, render/turn-rule.ts; the print's light is the cut's own, its scheme and its dark)
+    const kept: number[] = [];
+    for (const r of turns) {
+      const fx = reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length];
+      const slots = W!.inks?.[Number(cuts[0]?.['scheme'] ?? 0)];
+      const print = slots ? { ink: slots.ink, paper: slots.ground, dark: !!cuts[0]?.['dark'] } : undefined;
+      if (!slots || !print || turnTakes({ set: recipe.wline!.set, page: recipe.wline!.ground, pages: W!.pages ?? new Set(), fx, slots, ink: lineInkOf(recipe.wline!.set, slots, !!W!.fixedInk, print), before: print, after: print })) continue;
+      cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx } as (typeof cuts)[number]);
+      kept.push(r.at);
+    }
     // cuts in time order (a beat cut closer than a blink to a turn gives way)
-    if (turns.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !turns.some((r) => r.at === cuts[i - 1]['at'])) cuts.splice(i - 1, 1); }
+    if (kept.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !kept.includes(Number(cuts[i - 1]['at']))) cuts.splice(i - 1, 1); }
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
     // (render/world-handoff.ts: the least used family that fits the world and the time the song leaves the line)
     const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };

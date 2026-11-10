@@ -25,6 +25,7 @@ import { parseArgs } from 'node:util';
 import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
+import { turnChecks } from '../../src/app/lyric-vj/world-events-adapter';
 import { FREE_STYLES, HELD_WORLDS } from '../../src/app/lyric-vj/free-styles';
 import { countMoment, emptyCounts, RuleCounts, RuleMoment, regressions } from '../../src/app/lyric-vj/reading-rules';
 import { fontCache } from './font-cache.mts';
@@ -34,6 +35,14 @@ const { values: a, positionals } = parseArgs({ allowPositionals: true, options: 
 if (!positionals.length) positionals.push(...FREE_STYLES.filter((s) => !HELD_WORLDS.has(s.id)).map((s) => s.id));
 /** Share of a frame a line must change, and how hard, to count as there. */
 export const READ = { minShare: 0.002, minDelta: 40 };
+/**
+ * A turn of ground inside a sung line (lineplan-core's turn, review 2026-11-10) is read just before it and once it has
+ * landed: the words must keep at least `keep` of the pixels they changed before it (a carrier taken away leaves its white
+ * row on cream: card 2161 → 430), and their share of solid ink under 4.5:1 may not rise past `low` while it rises by more
+ * than `lowRise`. A turn that fails, or one the plan's own final check names (world-events-adapter turnChecks), fails
+ * the run under `turns`.
+ */
+export const TURN = { before: 0.12, after: 0.2, keep: 0.7, low: 0.5, lowRise: 0.05 };
 const [GW, GH] = [320, 180];
 const work = join(a.out!, 'work', positionals.join('-').slice(0, 30));
 mkdirSync(work, { recursive: true });
@@ -57,6 +66,9 @@ const moment = (p: Page, t: number) => p.evaluate(`window.gatePage.moment(${t}, 
 const fails: string[] = [];
 /** Contract warnings of the worlds the scheduler took over (VJ_WORLD_EVENTS=1): the final draw against its event plan. */
 const contract: string[] = [];
+/** Turns of ground inside sung lines that take from the words (TURN), and how many were read. */
+const turns: string[] = [];
+let turnsRead = 0;
 /** Camera moves a taken-over world dropped because they collided with a switch the song keeps (resolved, for the record). */
 const camDrops: string[] = [];
 /** A page-carried composition's page as the gate's frames drew it (render/page-layout.ts): checked, re-laid, fallen back whole, turned over, carrier covered, glyphs checked. */
@@ -71,7 +83,9 @@ for (const id of positionals) {
   for (const name of a.songs!.split(',')) {
     const song = JSON.parse(readFileSync(`out/db/${IDS[name]}/song.json`, 'utf8'));
     const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8'));
-    const { job } = freeJob(song, { style, seed: Number(a.seed), meaning });
+    const { job, plan } = freeJob(song, { style, seed: Number(a.seed), meaning });
+    const turnsAt = (plan as unknown as { shots: { cuts: { at?: number; repose?: boolean }[] }[] }).shots.flatMap((s) => s.cuts.filter((x) => x.repose).map((x) => Number(x.at)));
+    turns.push(...turnChecks(job, style.world, turnsAt).map((w) => `${id} ${name} ${w.inputs[0]}: ${w.reason}`));
     // (a world the scheduler takes over must draw its plan as approved: any final-check warning is a broken contract)
     const table = job.treatment.worldEvents;
     if (table?.source === 'declared') contract.push(...table.warnings.filter((w) => w.reason.startsWith('final check')).map((w) => `${id} ${name} ${w.inputs.join(' / ')}: ${w.reason}`));
@@ -118,6 +132,20 @@ for (const id of positionals) {
         }
       }
     }
+    // every turn of ground inside a sung line, read just before it and once it has landed (TURN)
+    for (const c of cues) {
+      const sc = (song.cues as { id: string; text: string; start: number; end: number; charStarts?: number[] }[]).find((x) => x.id === c.id);
+      if (!sc) continue;
+      const k = [...sc.text].findIndex((ch) => /[\p{L}\p{N}]/u.test(ch));
+      const first = Math.max(sc.charStarts?.[Math.max(0, k)] ?? sc.start, c.from);
+      for (const t of turnsAt.filter((x) => x > first + TURN.before && x < Math.min(sc.end, c.to) - TURN.after)) {
+        const [p, q] = [await moment(page, t - TURN.before), await moment(page, t + TURN.after)];
+        turnsRead++;
+        const [lowP, lowQ] = [p.rules?.low ?? 0, q.rules?.low ?? 0];
+        if (q.n < TURN.keep * p.n) turns.push(`${id} ${name} ${c.id} ${t.toFixed(2)} words ${p.n} → ${q.n} px after the turn`);
+        if (lowQ > TURN.low && lowQ > lowP + TURN.lowRise) turns.push(`${id} ${name} ${c.id} ${t.toFixed(2)} low ${lowP.toFixed(2)} → ${lowQ.toFixed(2)} after the turn`);
+      }
+    }
     // (a page-carried scale composition's page is checked on every frame the gate draws, render/page-layout.ts: a frame
     // that breaks its contract is a broken contract here too)
     const pc = (await page.evaluate(() => (globalThis as { vjPageChecks?: Record<string, number> & { fails: string[] } }).vjPageChecks)) ?? undefined;
@@ -135,9 +163,10 @@ await browser.close();
 server.close();
 if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
-const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, pageChecks: pageCounts, contract, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
+const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, pageChecks: pageCounts, contract, turnsRead, turns, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
-console.log(JSON.stringify({ ...out, fails: out.fails.length, contract: contract.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
+console.log(JSON.stringify({ ...out, fails: out.fails.length, contract: contract.length, turns: turns.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
+if (turns.length) console.log('turn faults', turns.length, turns.slice(0, 10));
 if (contract.length) console.log('contract warnings', contract.length, contract.slice(0, 10));
 // the rules against a world's recorded counts: a world that got worse on any rule fails
 const worse: string[] = [];
@@ -156,4 +185,4 @@ if (a['write-baseline']) {
   const base = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
   writeFileSync(file, JSON.stringify({ ...base, ...counts }, null, 1) + '\n');
 }
-process.exitCode = fails.length || worse.length || contract.length ? 1 : 0;
+process.exitCode = fails.length || worse.length || contract.length || turns.length ? 1 : 0;

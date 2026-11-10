@@ -22,6 +22,7 @@ import type { WorldLine } from './render/world-layout';
 import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
 import { boxesMeet, laidSeat, panelSplit } from './render/seat-geometry';
 import { absorbInk, inkChecks } from './render/hold-room';
+import { lineInkOf, turnTakes, type TurnPrint } from './render/turn-rule';
 import { lineFace } from './fonts';
 import { DEFAULT_DESIGN } from './design';
 import { ABSORBABLE_HOLDS, ACTION_GAP, BEAT_SNAP, holdIdOf, LIGHT_GAP, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, type AbsorbedHold, type AbsorbRoom, type CameraMove, type InputWarning, type LineOutcome, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type JointHold, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
@@ -489,6 +490,37 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   const landed = landedEvents(job, world, table, faces);
   for (const l of landed.events) if (!l.same && !out.some((w) => w.inputs[0] === l.id)) miss(l.id, `landed otherwise: ${l.why}`);
   for (const d of landed.extra) miss(`${d.kind}@${d.lineIds.at(-1)}@${d.at}`, `a ${d.kind} is drawn that the plan does not hold`);
+  return out;
+}
+
+/**
+ * Every turn of ground the composer kept inside a world line (`turnsAt`: the plan's cuts marked `repose`), as drawn while
+ * the line is sung (from its first sung character to its end), checked by the composer's own rule (render/turn-rule.ts
+ * turnTakes, review 2026-11-10): the words keep their page and their carrier, and their ink reads no worse than before
+ * and at READ_MIN when it did. Every path, the default included.
+ */
+export function turnChecks(job: Job, world: StyleWorld, turnsAt: number[]): InputWarning[] {
+  const { rows, sections } = shownOf(job);
+  const pages = new Set(world.layouts.lines.flatMap((l) => (l.ground ? [l.ground] : [])));
+  const printOf = (x: ShownSection | undefined) => (x?.layers as ({ kind: string; fx?: string } & TurnPrint)[] | undefined)?.find((l) => l.kind === 'kinetic');
+  const out: InputWarning[] = [];
+  for (const r of rows) {
+    const w = r.world as (WorldLine & { fixedInk?: boolean }) | undefined;
+    if (!w?.slots) continue;
+    const chars = [...r.cue.text];
+    const k = chars.findIndex((ch) => /[\p{L}\p{N}]/u.test(ch));
+    const first = (r.cue as { charStarts?: number[] }).charStarts?.[Math.max(0, k)] ?? r.cue.start;
+    const before = printOf([...sections].reverse().find((x) => x.start <= Math.max(r.cue.start, r.show) + 1e-3));
+    if (!before) continue;
+    const ink = lineInkOf(w.set, w.slots, !!w.fixedInk, before);
+    for (const x of sections) {
+      if (x.start <= first + 1e-3 || x.start >= r.cue.end - 1e-3 || !turnsAt.some((t) => Math.abs(t - x.start) < 0.02)) continue;
+      const after = printOf(x);
+      if (!after?.fx) continue;
+      const why = turnTakes({ set: w.set, page: pageOf(world, w.set), pages, fx: after.fx, slots: w.slots, ink, before, after });
+      if (why) out.push({ inputs: [`turn@${r.id}@${x.start}`], reason: `final check: turn: ${why}` });
+    }
+  }
   return out;
 }
 

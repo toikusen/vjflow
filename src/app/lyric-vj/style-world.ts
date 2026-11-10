@@ -153,6 +153,8 @@ export function poolOf(w: StyleWorld, shared: Recipe[], start = 0): WorldPool {
     beats: sharedOf(w).beats,
     holds: sharedOf(w).holds,
     inks: w.palette,
+    pages: new Set(w.layouts.lines.flatMap((l) => (l.ground ? [l.ground] : []))),
+    fixedInk: w.family === 'wet' || !!w.ownInk,
     stress: sharedOf(w).stress,
     camera: sharedOf(w).camera === 'still' ? undefined : sharedOf(w).camera,
     stepped: steppedWorld(w),

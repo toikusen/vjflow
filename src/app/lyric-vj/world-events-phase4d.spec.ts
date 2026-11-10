@@ -43,7 +43,6 @@ describe('phase 4d: popart and midcentury declared from the ruling (rows 6–7)'
       expect(c.pageSeats, id).toBe(true);
       expect(c.pending ?? {}, id).toEqual({});
       expect(c.materials, id).toBeUndefined();
-      expect(c.entranceAndInLine, id).toBeUndefined();
     }
   });
 
@@ -190,13 +189,18 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
     expect(own(wired('midcentury')).length).toBeGreaterThan(0);
   });
 
-  it('popart: holds-first pins every line of both songs (a Q2 hold, a blown-up word, a set piece or a shared shot), so the scheduler keeps the composer\'s seats; with Q1 and Q2 arbitrated together it reseats, onto a same-page seat on some seeds', () => {
+  it('popart: holds-first reseats only lines no hold, blown-up word, set piece or shared shot pins (rules B/C left them free of a colour-change hold), never inside a line; with Q1 and Q2 arbitrated together it reseats, onto a same-page seat on some seeds', () => {
+    // (before rule C every popart line was pinned by a hold and the scheduler kept the composer's seats; rule C's limits
+    // on colour-change holds, docs/research/2026-11-10-pairs-rules.md, leave some lines free, and only those move)
     songs.forEach(([song], k) => {
       const f = wired('popart')[k];
       const input = fromJob(f.job, song, style('popart').world, { seed: 0 });
-      expect(input.lines.filter((l) => !l.pinned).map((l) => l.id), `song ${k}`).toEqual([]);
+      const free = new Set(input.lines.filter((l) => !l.pinned).map((l) => l.id));
+      for (const e of own([f])) {
+        expect(free.has(e.lineIds.at(-1)!), `song ${k} ${e.id}`).toBe(true);
+        expect(e.scope, e.id).not.toBe('in-line');
+      }
     });
-    expect(own(wired('popart'))).toEqual([]);
     expect(own(wired('popart', 0, true)).length).toBeGreaterThan(0);
     expect([0, 1, 2].flatMap((seed) => own(wired('popart', seed, true))).some((e) => isPageSeat(e.seatAfter))).toBe(true);
   });

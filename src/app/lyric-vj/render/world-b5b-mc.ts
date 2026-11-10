@@ -15,7 +15,7 @@ import { clamp01, ease, HandGround, HandIn, mixHex, WorldEnv } from './world-cra
 import { C, mirrorGround, onPage, rng, still } from './world-b3-shared';
 import { B5B } from './b5b-inks';
 import { B5B_MIRRORED, MC_BARS, SET_BANDS } from './world-b5b-sets';
-import { declareCarrier, toPx } from './carrier-fit';
+import { declareCarrier, LINE_CLEAR, strokeClear, subtractBox, toPx } from './carrier-fit';
 import { dataLine, frame, H, isJa, meets, page, small, twoPhrases, W } from './world-b5b-shared';
 
 type Pt = [number, number];
@@ -41,12 +41,15 @@ const rect = (x: number, y: number, w: number, h: number): Pt[] => [[x, y], [x +
 /** A cut shape printed in one ink. */
 const shape = (c: C, pts: Pt[], fill: string, seed: number, amp = 2.2) => { path(c, cut(pts, amp, seed)); c.fillStyle = fill; c.fill(); };
 /** A colour bar and its black key plate printed a few pixels out of register (a rough keyline, down and right). */
-function bar(c: C, x: number, y: number, w: number, h: number, fill: string, key: string, seed: number, off: Pt = [16, 14]) {
+function bar(c: C, x: number, y: number, w: number, h: number, fill: string, key: string, seed: number, off: Pt = [16, 14], words?: WorldEnv['rect']) {
   shape(c, rect(x, y, w, h), fill, seed);
-  path(c, cut(rect(x + off[0], y + off[1], w, h), 1.5, seed + 40));
-  c.strokeStyle = key;
-  c.lineWidth = 3;
-  c.stroke();
+  // (the key plate's line is never drawn within LINE_CLEAR of the words: render/carrier-fit strokeClear)
+  strokeClear(c, () => {
+    path(c, cut(rect(x + off[0], y + off[1], w, h), 1.5, seed + 40));
+    c.strokeStyle = key;
+    c.lineWidth = MC_BARS.keyWidth;
+    c.stroke();
+  }, [], words);
 }
 /** The atomic starburst: `n` thin spikes round a hub, long and short in turn, a ball at the end of each long one. */
 function starburst(c: C, x: number, y: number, r: number, fill: string, n = 12, rot = 0) {
@@ -139,8 +142,14 @@ function litho(c: C, seed: number, dens = 1) {
 /** Tells the reading gate the bars this frame's line is read on and their key plates' lines (the set's own bands, the second only where it is printed). */
 const declareBands = (e: WorldEnv, set: string) => {
   const bands = SET_BANDS[set].filter((b) => b.part !== 'small' || twoPhrases(e));
-  declareCarrier(e, bands.map((b) => toPx(b.box)), bands.flatMap((b) => (b.lines ?? []).map(toPx)));
+  // (the key plates' lines as drawn: cleared round the words, strokeClear)
+  const r = inked(e.rect);
+  const keep = r && { x0: r.x0 - LINE_CLEAR, y0: r.y0 - LINE_CLEAR, x1: r.x1 + LINE_CLEAR, y1: r.y1 + LINE_CLEAR };
+  declareCarrier(e, bands.map((b) => toPx(b.box)), bands.flatMap((b) => (b.lines ?? []).map(toPx)).flatMap((l) => (keep ? subtractBox(l, keep) : [l])));
 };
+/** The words' box grown by the second plate's reach (REGISTER, 0.03 em: under 8 px at the sets' largest 190 px). */
+const REG_REACH = 8;
+const inked = (r: WorldEnv['rect']) => r && { x0: r.x0 - REG_REACH, y0: r.y0 - REG_REACH, x1: r.x1 + REG_REACH, y1: r.y1 + REG_REACH };
 const keyOf = (e: WorldEnv) => `${e.item?.part}|${e.item?.at}`;
 /** A ground that is dark at dusk: the teal ink run deeper with black. */
 const duskOf = (e: WorldEnv) => mixHex(e.slots.ink2, e.slots.ink, 0.45);
@@ -151,8 +160,8 @@ const cutPage: HandGround = (e) => { page(e, 'mc-cut', (c) => {
   const s = e.slots;
   const { main, small: second } = MC_BARS.cut;
   c.fillStyle = s.ground; c.fillRect(0, 0, W, H);
-  bar(c, main[0], main[1], main[2], main[3], s.plate, s.ink, 1);
-  if (twoPhrases(e)) bar(c, second[0], second[1], second[2], second[3], s.ink2, s.ink, 2);
+  bar(c, main[0], main[1], main[2], main[3], s.plate, s.ink, 1, undefined, inked(e.rect));
+  if (twoPhrases(e)) bar(c, second[0], second[1], second[2], second[3], s.ink2, s.ink, 2, undefined, inked(e.rect));
   bassColumn(c, 1640, 120, 860, s.ink, s.accent, 4);
   boomerang(c, 1300, 950, 0.95, -0.2, s.accent);
   starburst(c, 1530, 140, 70, s.ink2, 12, 0.2);
@@ -207,8 +216,8 @@ const sleevePage: HandGround = (e) => { page(e, 'mc-sleeve', (c) => {
   const s = e.slots;
   const { main, mainKey, small: second, smallKey } = MC_BARS.sleeve;
   c.fillStyle = s.ground; c.fillRect(0, 0, W, H);
-  bar(c, main[0], main[1], main[2], main[3], s.ink, s.accent, 30, [mainKey[0], mainKey[1]]);
-  if (twoPhrases(e)) bar(c, second[0], second[1], second[2], second[3], s.faint, s.ink, 31, [smallKey[0], smallKey[1]]);
+  bar(c, main[0], main[1], main[2], main[3], s.ink, s.accent, 30, [mainKey[0], mainKey[1]], inked(e.rect));
+  if (twoPhrases(e)) bar(c, second[0], second[1], second[2], second[3], s.faint, s.ink, 31, [smallKey[0], smallKey[1]], inked(e.rect));
   shape(c, rect(1430, 520, 40, 240), s.accent, 33);
   boomerang(c, 1640, 300, 1.2, -0.35, s.ink2);
   boomerang(c, 1680, 840, 0.9, 2.8, s.accent);

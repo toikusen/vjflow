@@ -7,6 +7,7 @@ import { keyInk } from './key-ink';
 import { GROW, OPEN, SETTLE } from './world-beats';
 import type { Slots } from './world-objects';
 import type { Block, SetSpec } from './world-sets';
+import { gapOf, LINE_CLEAR, toPx } from './carrier-fit';
 
 /** Every ink a line is read in reads at least this on what is under it (WCAG AA). */
 export const READ_MIN = 4.5;
@@ -33,7 +34,7 @@ export interface Rect { x0: number; y0: number; x1: number; y1: number }
  * bleed set already leaves past it may stay there but go no further) and clear of its page's graphics: the largest step
  * from the want down to the least, else 1 (no event).
  */
-export function growRoom(r: Rect, spec: Pick<SetSpec, 'ax' | 'ay' | 'clear'>, want = GROW.want, least = GROW.least): number {
+export function growRoom(r: Rect, spec: Pick<SetSpec, 'ax' | 'ay' | 'clear' | 'bands'>, want = GROW.want, least = GROW.least): number {
   const at = (k: number): Rect => {
     const [w, h] = [(r.x1 - r.x0) * k, (r.y1 - r.y0) * k];
     const x0 = spec.ax < 0 ? r.x0 : spec.ax > 0 ? r.x1 - w : (r.x0 + r.x1 - w) / 2;
@@ -43,7 +44,9 @@ export function growRoom(r: Rect, spec: Pick<SetSpec, 'ax' | 'ay' | 'clear'>, wa
   const clear = (spec.clear ?? []).map(([a, b, c, d]) => ({ x0: a * 1920, y0: b * 1080, x1: c * 1920, y1: d * 1080 }));
   const meets = (q: Rect, c: Rect) => q.x0 < c.x1 && q.x1 > c.x0 && q.y0 < c.y1 && q.y1 > c.y0;
   const inside = (q: Rect) => q.x0 >= Math.min(GROW_EDGE, r.x0) && q.x1 <= Math.max(1920 - GROW_EDGE, r.x1) && q.y0 >= Math.min(GROW_EDGE, r.y0) && q.y1 <= Math.max(1080 - GROW_EDGE, r.y1);
-  for (let k = want; k >= least - 1e-9; k -= 0.01) { const q = at(k); if (inside(q) && clear.every((c) => meets(r, c) || !meets(q, c))) return +k.toFixed(2); }
+  // (a line on a band its page prints at a fixed place grows only inside one band, clear of its lines: render/carrier-fit)
+  const onBand = (q: Rect) => !spec.bands?.length || spec.bands.some((b) => { const p = toPx(b.box); return q.x0 >= p.x0 && q.x1 <= p.x1 && q.y0 >= p.y0 && q.y1 <= p.y1 && (b.lines ?? []).every((l) => gapOf(q, toPx(l)) >= LINE_CLEAR); });
+  for (let k = want; k >= least - 1e-9; k -= 0.01) { const q = at(k); if (inside(q) && onBand(q) && clear.every((c) => meets(r, c) || !meets(q, c))) return +k.toFixed(2); }
   return 1;
 }
 

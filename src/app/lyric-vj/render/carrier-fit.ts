@@ -51,8 +51,10 @@ const union = (bs: Box[]): Box => ({ x0: Math.min(...bs.map((b) => b.x0)), y0: M
  * A block's parts as the renderer lays them, frame px, y down, with each part's type size: the whole block, or a split
  * line's hero rows and small rows (seat-geometry laidSeat's own row geometry).
  */
-export function partBoxes(b: Block): { part: 'main' | 'small'; box: Box; size: number }[] {
-  if (!b.lines?.length) return [{ part: 'main', size: b.size, box: { x0: 960 + b.cx - b.w / 2, x1: 960 + b.cx + b.w / 2, y0: 540 - b.cy - b.h / 2, y1: 540 - b.cy + b.h / 2 } }];
+export function partBoxes(b: Block, lead = 1): { part: 'main' | 'small'; box: Box; size: number }[] {
+  // (a block's height is its rows at its leading: the ink stands half a leading's extra inside it top and bottom)
+  const half = (Math.max(0, lead - 1) * b.size) / 2;
+  if (!b.lines?.length) return [{ part: 'main', size: b.size, box: { x0: 960 + b.cx - b.w / 2, x1: 960 + b.cx + b.w / 2, y0: 540 - b.cy - b.h / 2 + half, y1: 540 - b.cy + b.h / 2 - half } }];
   const rows = b.lines.map((r, i) => ({ part: (b.small ?? []).includes(i) ? ('small' as const) : ('main' as const), size: r.size, box: r.v ? { x0: 960 + b.cx + r.x0, x1: 960 + b.cx + r.x0 + r.bw, y0: 540 - b.cy - r.y, y1: 540 - b.cy - r.y + r.size } : { x0: 960 + b.cx + r.x0, x1: 960 + b.cx + r.x0 + r.bw, y0: 540 - b.cy - r.y - r.size / 2, y1: 540 - b.cy - r.y + r.size / 2 } }));
   return (['main', 'small'] as const).flatMap((part) => { const rs = rows.filter((r) => r.part === part); return rs.length ? [{ part, size: Math.max(...rs.map((r) => r.size)), box: union(rs.map((r) => r.box)) }] : []; });
 }
@@ -64,9 +66,9 @@ export interface BandFit {
 }
 
 /** Whether every part of a block read on a band fits it with its padding and keeps clear of the band's lines. */
-export function bandFit(b: Block, spec: Pick<SetSpec, 'bands' | 'under'>): BandFit {
+export function bandFit(b: Block, spec: Pick<SetSpec, 'bands' | 'under' | 'lead'>): BandFit {
   const [rl, rt, rr, rb] = reachOf(spec);
-  const parts = partBoxes(b).flatMap(({ part, box, size }) => {
+  const parts = partBoxes(b, spec.lead).flatMap(({ part, box, size }) => {
     const band = (spec.bands ?? []).find((x) => (x.part ?? 'main') === part);
     if (!band) return [];
     const ink = { x0: box.x0 - rl * size, y0: box.y0 - rt * size, x1: box.x1 + rr * size, y1: box.y1 + rb * size };

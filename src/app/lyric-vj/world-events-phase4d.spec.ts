@@ -12,6 +12,10 @@ import { SAFE_X, SAFE_Y, SET_SPECS } from './render/world-sets';
 import { boxesMeet, laidSeat } from './render/seat-geometry';
 import { carrierBox } from './render/hold-room';
 import { POP_PANELS, POP_SHADOW, POP_TAIL } from './render/world-p4-seats';
+import { wedgeTail } from './render/balloon-tail';
+import { bandFit } from './render/carrier-fit';
+import { blockOf } from './render/world-sets';
+import { layoutMeasure } from './render/layout-measure';
 import { pageSeatsFor } from './lineplan-core';
 
 const NEW = ['popart', 'midcentury'];
@@ -112,7 +116,7 @@ describe('phase 4d: the same-page seats', () => {
       }
   });
 
-  it('popart: a balloon seat\'s whole balloon, keyline and short tail stay inside its own panel, the words inside the balloon\'s rim; a caption box and its shadow inside the panel', () => {
+  it('popart: a balloon seat\'s whole balloon, keyline and short wide tail stay inside its own panel, the words inside the balloon\'s rim; a caption box and its shadow inside the panel', () => {
     let n = 0;
     for (const { x, main, font, text } of offered('popart')) {
       const spec = SET_SPECS[x];
@@ -121,16 +125,19 @@ describe('phase 4d: the same-page seats', () => {
       const c = carrierBox(spec, block)!;
       const [ox, oy] = [960 + block.cx + c.x, 540 - (block.cy + c.y)];
       const o = { x0: ox - c.ow / 2, y0: oy - c.oh / 2, x1: ox + c.ow / 2, y1: oy + c.oh / 2 };
-      const [px0, py0, px1, py1] = POP_PANELS[main as keyof typeof POP_PANELS].own;
+      const [px0, py0, px1, py1] = POP_PANELS[main].own.map((v, i) => v * (i % 2 ? 1080 : 1920));
       const at = `${x} ${font} ${text}`;
       const line = POP_TAIL.line / 2;
       if (spec.object === 'pop-caption') {
         expect([o.x0 - 3 >= px0, o.y0 - 3 >= py0, o.x1 + POP_SHADOW <= px1, o.y1 + POP_SHADOW <= py1], at).toEqual([true, true, true, true]);
       } else {
-        // (world-b3-popart balloon: the ellipse fills the object less 4 px, the tail's tip 40 px under the rim, a 16 px keyline)
-        expect([o.x0 - line >= px0, o.y0 - line >= py0, o.x1 + line <= px1, o.y1 - 4 + POP_TAIL.below + line <= py1], at).toEqual([true, true, true, true]);
-        const [rx, ry] = [c.ow / 2 - 4 - line, c.oh / 2 - 4 - line];
-        for (const [qx, qy] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) expect(((qx - ox) / rx) ** 2 + ((qy - oy) / ry) ** 2, `${at} corner`).toBeLessThan(1);
+        // (world-b3-popart balloon: the ellipse fills the object less 4 px, a 16 px keyline, the tail render/balloon-tail's wedge)
+        const [cx, cy, rx, ry] = [ox, oy, c.ow / 2 - 4, c.oh / 2 - 4];
+        const dir = spec.object === 'pop-balloon' ? -1 : 1;
+        const { tip } = wedgeTail(cx, cy, rx, ry, [cx + dir * (rx * 0.62 + 40), cy + ry + 40]);
+        expect([o.x0 - line >= px0, o.y0 - line >= py0, o.x1 + line <= px1, o.y1 + line <= py1, tip[1] + line <= py1, tip[0] - line >= px0, tip[0] + line <= px1], at).toEqual([true, true, true, true, true, true, true]);
+        const [ex, ey] = [rx - line, ry - line];
+        for (const [qx, qy] of [[b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]]) expect(((qx - ox) / ex) ** 2 + ((qy - oy) / ey) ** 2, `${at} corner`).toBeLessThan(1);
       }
       n++;
     }
@@ -221,6 +228,25 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
       expect(counted).toBeGreaterThan(0);
       expect(kept).toBeGreaterThan(0);
     });
+
+  it('midcentury: every line the composer or the scheduler lays on the cut, cut-r or sleeve bars stays on its bar, with its padding, clear of the key plate lines (off and on)', () => {
+    let n = 0;
+    songs.forEach(([song, meaning]) => {
+      for (const f of [freeJob(song, { style: style('midcentury'), seed: 0, meaning }), wired('midcentury')[songs.findIndex(([s]) => s === song)]]) {
+        const face = jobFaces(f.job);
+        for (const c of f.job.treatment.cues as { cueId: string; world?: { set?: string } }[]) {
+          const set = c.world?.set;
+          if (!set || !['midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve'].includes(set)) continue;
+          const text = song.cues.find((x: { id: string }) => x.id === c.cueId).text as string;
+          const b = blockOf(text.replace(/[\s　]+/g, ' ').trim(), SET_SPECS[set], layoutMeasure(face(text)));
+          expect(b.bandMiss, `${set} ${text}`).toBeUndefined();
+          expect(bandFit(b, SET_SPECS[set]).ok, `${set} ${text}`).toBe(true);
+          n++;
+        }
+      }
+    });
+    expect(n).toBeGreaterThan(0);
+  });
 
   it('by default (scheduler off) both draw exactly as before: no same-page seat is offered or drawn', () => {
     for (const id of NEW)

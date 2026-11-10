@@ -13,7 +13,7 @@ import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
 import { phase4Seats } from './world-p4-seats';
-import type { Band } from './carrier-fit';
+import { bandFit, type Band } from './carrier-fit';
 
 const W = 1920;
 const H = 1080;
@@ -308,6 +308,31 @@ export const TYPE_FLOOR = { hi: 150, lo: 84 };
 
 /** The rows and size a line takes in a set: the biggest type the set allows, in as few rows as keep it near that. */
 export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
+  const first = layBlock(text, given, measure);
+  if (!given.bands?.length || bandFit(first, given).ok) return first;
+  // (the carrier containment rule, render/carrier-fit.ts: the line is set smaller, its widths and heights together, until
+  // its ink, what is printed with it and the padding stay on its bands clear of their lines; at the type floor a miss is
+  // marked, never drawn over: the composer takes another set, lineplan-core)
+  const floor = Math.max(given.lo, TYPE_FLOOR.lo);
+  // (each part that misses its band is set smaller on its own: the hero by the set's width and height, a split line's
+  // small part by its container's width; a part that fits keeps its size)
+  let [fm, fs] = [1, 1];
+  let last = first;
+  for (let i = 0; i < 60; i++) {
+    const miss = new Set(bandFit(last, given).parts.filter((p) => p.miss).map((p) => p.part));
+    if (!miss.size) return last;
+    const size = (part: 'main' | 'small') => (part === 'small' ? Math.min(...(last.lines ?? []).filter((_, k) => (last.small ?? []).includes(k)).map((r) => r.size)) : last.size);
+    if ([...miss].every((p) => size(p) <= floor)) break;
+    if (miss.has('main')) fm *= 0.97;
+    if (miss.has('small')) fs *= 0.97;
+    const sp = given.split && { ...given.split, ...(given.split.share ? { share: given.split.share * fs } : {}), ...(given.split.wide ? { wide: given.split.wide * fm } : {}), ...(given.split.tall ? { tall: given.split.tall * fm } : {}) };
+    last = layBlock(text, { ...given, share: given.share * fm, tall: given.tall * fm, ...(sp ? { split: sp } : {}) }, measure);
+  }
+  if (bandFit(last, given).ok) return last;
+  return { ...last, bandMiss: true };
+}
+
+function layBlock(text: string, given: SetSpec, measure: Measure): Block {
   const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, TYPE_FLOOR.lo) };
   const split = splitBlock(text, spec, measure, TYPE_FLOOR.lo);
   if (split) return split;

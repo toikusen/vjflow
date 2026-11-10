@@ -251,11 +251,15 @@ export function partsOf(text: string, times: number[], word: string): { main: { 
   return { main, asides, shout, wordAt, wordLen: [...word].length };
 }
 
+/** What the frame shows under a region at t, frame px y down (render/engine groundBehind): the ground an overlay's inks read on a layered output. */
+export type GroundAt = (t: number, x0: number, y0: number, x1: number, y1: number) => Ground | undefined;
+
 export interface SignatureLayer {
   /** The time the engine renders the frame at t from: t, or the held time while a freeze stops the frame. */
   stageAt(t: number): number;
   /** Draws the frame at t into its own canvas: the engine's picture, then the moments. */
-  compose(stage: HTMLCanvasElement, t: number): HTMLCanvasElement;
+  /** The engine's frame with the moments over it; `text` false: the frame only, as the engine's lyrics are hidden (the reading gate's frame without the words). */
+  compose(stage: HTMLCanvasElement, t: number, text?: boolean, behind?: GroundAt): HTMLCanvasElement;
   metrics(): Record<string, unknown>[];
 }
 
@@ -795,6 +799,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   // each moment's inks are picked on the ground under its text as it comes up and held, so the type does not change
   // colour frame to frame; picked again only where the ground moved from under them (a camera's slide)
   const picked = new Map<Built, Inks>();
+  /** The lyric layer rendered on its own (transparent): nothing under the moments on this canvas. */
+  const layered = job.layer === 'text' || job.layer === 'words';
   const inksOn = (b: Built, ground: Ground) => {
     const held = picked.get(b);
     if (held && contrast(held.ink, ground.mean) >= 3 && (held.halo || !ground.mixed)) return held;
@@ -804,21 +810,28 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   };
   return {
     stageAt: (t) => built.map((b) => b.stageAt?.(t)).find((v) => v !== undefined) ?? t,
-    compose(stage, t) {
+    compose(stage, t, text = true, behind) {
       const j = joltAt(jolts, t);
       x.setTransform(1, 0, 0, 1, 0, 0);
-      x.fillStyle = inksAt(job, t).paper; // the paper's own colour, if a jolt pulls the frame off the edge
-      x.fillRect(0, 0, W, H);
+      // (a lyric layer on its own keeps its alpha: nothing under the frame; else the paper's own colour, if a jolt pulls
+      // the frame off the edge)
+      if (layered) x.clearRect(0, 0, W, H);
+      else {
+        x.fillStyle = inksAt(job, t).paper;
+        x.fillRect(0, 0, W, H);
+      }
       x.translate(W / 2 + j.dx, H / 2 + j.dy);
       x.rotate(j.rot * RAD);
       x.scale(j.zoom, j.zoom);
       x.translate(-W / 2, -H / 2);
       x.drawImage(stage, 0, 0, W, H);
       for (const b of built) {
-        if (t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
+        if (!text || t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
         const p = placement.get(b);
         const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
-        const on = inksOn(b, groundUnder(x, ...region));
+        // (a layered output's canvas is cleared under the moment: its inks read the look behind, as the opaque frame's do)
+        // (picked once there: the look is drawn again for it, not read off this frame)
+        const on = layered && behind ? picked.get(b) ?? inksOn(b, behind(t, ...region) ?? groundUnder(x, ...region)) : inksOn(b, groundUnder(x, ...region));
         if (!p) {
           b.draw(t, on);
           continue;

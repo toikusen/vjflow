@@ -13,6 +13,7 @@ import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
 import { phase4Seats } from './world-p4-seats';
+import { bandFit as fitOnBands, type Band } from './carrier-fit';
 
 const W = 1920;
 const H = 1080;
@@ -100,6 +101,13 @@ export interface SetSpec {
    * the page set's own, so the words do not move; only what carries them changes (a carrier swap).
    */
   panels?: boolean;
+  /**
+   * The bands or plates the set's page prints at fixed places under the words, a part each (render/carrier-fit.ts): the
+   * line is set so its ink, what is printed with it and a padding stay inside, clear of the band's lines (blockOf).
+   */
+  bands?: Band[];
+  /** The shared shot's slot this spec was taken for (seat-geometry slotSpec): where world-layout moves the block, for the band fit. */
+  slot?: { k: number; of: number };
 }
 
 /** The size a block of `w` × `h` takes on screen once its set's shear has drawn it. */
@@ -126,7 +134,9 @@ export interface FaceLayout {
 
 /** A set's call-free boxes in the text root's own space (origin at the frame's centre, y up), px. */
 export const clearOf = (id: string | undefined, W = 1920, H = 1080) =>
-  (SET_SPECS[id ?? '']?.clear ?? []).map(([x0, y0, x1, y1]) => ({ x0: x0 * W - W / 2, y0: H / 2 - y1 * H, x1: x1 * W - W / 2, y1: H / 2 - y0 * H }));
+  // (and the bands the page prints under the line, render/carrier-fit: a call set across a band's edge reads broken and
+  // its ink runs off the band, phase 4d round 3; a call stands on the paper beside them)
+  [...(SET_SPECS[id ?? '']?.clear ?? []), ...(SET_SPECS[id ?? '']?.bands ?? []).map((b) => b.box)].map(([x0, y0, x1, y1]) => ({ x0: x0 * W - W / 2, y0: H / 2 - y1 * H, x1: x1 * W - W / 2, y1: H / 2 - y0 * H }));
 
 export interface Block {
   rows: string[];
@@ -141,6 +151,8 @@ export interface Block {
   lines?: RowBox[];
   small?: number[];
   hero?: { cx: number; cy: number; w: number; h: number };
+  /** A line on bands (SetSpec.bands) that does not fit them even at the type floor: the composer takes another set. */
+  bandMiss?: boolean;
 }
 
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };
@@ -305,8 +317,56 @@ export const TYPE_FLOOR = { hi: 150, lo: 84 };
 
 /** The rows and size a line takes in a set: the biggest type the set allows, in as few rows as keep it near that. */
 export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
-  const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, TYPE_FLOOR.lo) };
-  const split = splitBlock(text, spec, measure, TYPE_FLOOR.lo);
+  const first = layBlock(text, given, measure);
+  if (!given.bands?.length) return first;
+  // (a line in a shared shot is moved off its set's place by its slot, as world-layout lays it (firstAt): fitted where it is drawn)
+  const slot = given.slot;
+  const placed = (b: Block): Block => (slot && slot.of > 1 && !given.vertical ? { ...b, cy: b.cy + ((slot.of - 1) / 2 - slot.k) * Math.max(b.h + b.size * 0.4, given.tall * H) } : b);
+  const bandFit = (b: Block, s: SetSpec) => fitOnBands(placed(b), s);
+  if (bandFit(first, given).ok) return first;
+  // (the carrier containment rule, render/carrier-fit.ts: the line is set smaller, its widths and heights together, until
+  // its ink, what is printed with it and the padding stay on its bands clear of their lines; at the type floor a miss is
+  // marked, never drawn over: the composer takes another set, lineplan-core)
+  // (the line is set smaller inside its own carrier down to the least type a line may take, the set's `lo` or the product's
+  // floor (TYPE_FLOOR.lo, never set small) whichever is larger, then wrapped at its characters, before another set is
+  // taken: a set with no room past the floor is no reason to lift a line off its carrier onto a busier page)
+  const floor = Math.max(given.lo, TYPE_FLOOR.lo);
+  // (each part that misses its band is set smaller on its own: the hero by the set's width and height, a split line's
+  // small part by its container's width; a part that fits keeps its size)
+  const shrink = (spec: SetSpec) => {
+    let [fm, fs] = [1, 1];
+    let last = layBlock(text, spec, measure, floor);
+    for (let i = 0; i < 60; i++) {
+      const miss = new Set(bandFit(last, given).parts.filter((p) => p.miss).map((p) => p.part));
+      if (!miss.size) return last;
+      const size = (part: 'main' | 'small') => (part === 'small' ? Math.min(...(last.lines ?? []).filter((_, k) => (last.small ?? []).includes(k)).map((r) => r.size)) : last.size);
+      if ([...miss].every((p) => size(p) <= floor)) break;
+      if (miss.has('main')) fm *= 0.97;
+      if (miss.has('small')) fs *= 0.97;
+      const sp = spec.split && { ...spec.split, ...(spec.split.share ? { share: spec.split.share * fs } : {}), ...(spec.split.wide ? { wide: spec.split.wide * fm } : {}), ...(spec.split.tall ? { tall: spec.split.tall * fm } : {}) };
+      last = layBlock(text, { ...spec, share: spec.share * fm, tall: spec.tall * fm, ...(sp ? { split: sp } : {}) }, measure, floor);
+    }
+    return last;
+  };
+  // (no part is set under the floor by the fit: a split line's small part the set itself already lays smaller (world-split
+  // splitBlock's container clamp, a path of its own) keeps that size and goes no smaller)
+  const least = (b: Block, part: 'main' | 'small') => (part === 'small' ? Math.min(...(b.lines ?? []).filter((_, k) => (b.small ?? []).includes(k)).map((r) => r.size)) : b.size);
+  const legal = (b: Block) => bandFit(b, given).ok && (['main', 'small'] as const).every((p) => { const x = least(b, p); return !Number.isFinite(x) || x >= Math.min(floor, least(first, p)); });
+  const kept = shrink(given);
+  if (legal(kept)) return kept;
+  // (a run with no break of its own that its carrier cannot hold in one row even at its least type is cut into the set's
+  // rows at its characters, as a split part is wrapped to its container (world-split wrapRows): still on its carrier,
+  // before any other set is taken)
+  if (!given.wrap && !given.vertical && given.rows[1] > 1) {
+    const wrapped = shrink({ ...given, wrap: true });
+    if (legal(wrapped)) return wrapped;
+  }
+  return { ...kept, bandMiss: true };
+}
+
+function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = TYPE_FLOOR.lo): Block {
+  const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, floorLo) };
+  const split = splitBlock(text, spec, measure, floorLo);
   if (split) return split;
   const options: { rows: string[]; size: number }[] = [];
   for (let n = spec.rows[0]; n <= spec.rows[1]; n++) {

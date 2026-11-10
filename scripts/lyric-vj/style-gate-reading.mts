@@ -3,7 +3,7 @@
 // (dark words left on a dark ground after a line moved off its paper). No video written.
 // The same moments are read against the shared reading rules (src/app/lyric-vj/reading-rules.ts): words cut by the frame,
 // a dark plate under them, small words on an empty frame, the picture's lines under the strokes, ink under 4.5:1, and a
-// soft glow laid behind them. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
+// soft glow laid behind them, and (phase 4d round 2) ink off the band its page declares or within 12 px of a declared line. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
 // The frame without the words keeps what they stand on (a card, a banner, a tape): only the glyphs are taken away, so a
 // line on its own carrier is read against the carrier, not against the ground the carrier hides. This is the default
 // since 2026-11-04: taking the carrier away with the words (the old way) read a dark word against the dark ground under
@@ -26,7 +26,7 @@ import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
 import { FREE_STYLES, HELD_WORLDS } from '../../src/app/lyric-vj/free-styles';
-import { countMoment, emptyCounts, RuleCounts, RuleMoment, regressions } from '../../src/app/lyric-vj/reading-rules';
+import { countMoment, emptyCounts, RULES, RuleCounts, RuleMoment, regressions } from '../../src/app/lyric-vj/reading-rules';
 import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
@@ -90,7 +90,7 @@ for (const id of positionals) {
     });
     await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, resolve(work))}/render.html?job=/${relative(ROOT, resolve(file))}`);
     await page.waitForSelector('body[data-ready="1"]', { timeout: 200000 });
-    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text })));
+    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, template: (c as { template?: string }).template })));
     for (const c of cues) {
       // the video's own ending fade takes the last line with it, in every style
       const ending = c === cues.at(-1);
@@ -99,11 +99,12 @@ for (const id of positionals) {
         const share = n / (GW * GH);
         checked++;
         if (share >= READ.minShare) fill.push(((x1 - x0) * (y1 - y0)) / (GW * GH));
-        if (share < READ.minShare || sum / Math.max(1, n) < READ.minDelta) fails.push(`${id} ${name} ${c.id} ${t.toFixed(2)} share ${share.toFixed(4)} delta ${(sum / Math.max(1, n)).toFixed(0)} ${c.text.slice(0, 10)}`);
+        // (a line the signature layer draws is read the same way: grabAt composes it only with the lyrics shown, render/main.ts)
+        if (share < READ.minShare || sum / Math.max(1, n) < READ.minDelta) fails.push(`${id} ${name} ${c.id}${c.template === 'signature' ? ' [signature]' : ''} ${t.toFixed(2)} share ${share.toFixed(4)} delta ${(sum / Math.max(1, n)).toFixed(0)} ${c.text.slice(0, 10)}`);
         if (!r) continue;
         const m = r;
         counts[id] = countMoment(counts[id] ?? emptyCounts(), m, soft);
-        const why = [soft && 'glow', m.clip && 'clip', m.plate < 0 && 'plate', m.small && 'small', m.cross > 0.08 && `cross ${m.cross.toFixed(2)}`, m.low > 0.5 && `low ${m.low.toFixed(2)}`].filter(Boolean);
+        const why = [soft && 'glow', m.clip && 'clip', m.plate < 0 && 'plate', m.small && 'small', m.cross > 0.08 && `cross ${m.cross.toFixed(2)}`, m.low > 0.5 && `low ${m.low.toFixed(2)}`, (m.overflow ?? 0) >= RULES.overflowPixels && `carrier-overflow ${m.overflow}`, (m.ruleCross ?? 0) >= RULES.ruleCrossPixels && `rule-crosses-text ${m.ruleCross}`].filter(Boolean);
         if (why.length) moments.push(`${id} ${name} ${c.id} ${t.toFixed(2)} ${why.join(' ')} ${c.text.slice(0, 10)}`);
         if (why.length && a.shots) {
           const stem = `${name}-${c.id}-${t.toFixed(2)}`;

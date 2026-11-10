@@ -1,10 +1,10 @@
 // The reading gate's page side (style-gate-reading.mts), bundled and added before the render page's own scripts: it
 // watches for a soft clearing behind the words and reads one moment against the shared reading rules.
-import { readMoment } from '../../src/app/lyric-vj/reading-rules';
+import { declaredRules, readMoment, type DeclaredMoment } from '../../src/app/lyric-vj/reading-rules';
 
 /** A soft clearing behind the words: a gradient made by one of the clearing functions while a moment is grabbed. */
 export const SOFT = /clearWords|holdInkGround|wiped|plainRound/;
-const w = window as unknown as { __soft: number; __watch: boolean; vjLyrics(on: boolean, carriers?: boolean): void; __carriers?: boolean; grabAt(t: number, q: number): Promise<string>; gatePage: unknown };
+const w = window as unknown as { __vjDeclared?: DeclaredMoment[]; __soft: number; __watch: boolean; vjLyrics(on: boolean, carriers?: boolean): void; __carriers?: boolean; grabAt(t: number, q: number): Promise<string>; gatePage: unknown };
 w.__soft = 0;
 for (const proto of [CanvasRenderingContext2D.prototype, OffscreenCanvasRenderingContext2D.prototype] as unknown as Record<string, (...a: unknown[]) => unknown>[])
   for (const name of ['createRadialGradient', 'createLinearGradient']) {
@@ -30,7 +30,13 @@ async function moment(t: number, gw: number, gh: number) {
   };
   w.__soft = 0;
   w.__watch = true;
+  // (what the frame's pages declare its lines are read on: render/carrier-fit declareCarrier, while the frame is drawn)
+  w.__vjDeclared = [];
   const on = await shot(true);
+  // (a frame draws its shots' grounds bottom to top and each world ground starts the list afresh, world-grounds
+  // drawWorldGround: an exiting shot's page lies under the one being read, so what is left is the page the words are seen on)
+  const declared = w.__vjDeclared;
+  w.__vjDeclared = undefined;
   w.__watch = false;
   const off = await shot(false);
   // a plate found under a carrier is read again on the ground the carrier stands on (the carrier is the world's object)
@@ -38,6 +44,7 @@ async function moment(t: number, gw: number, gh: number) {
   if (rules && rules.plate < 0 && w.__carriers) {
     rules = readMoment(on.big, off.big, 480, 270, (await shot(false, false)).big);
   }
+  if (rules && declared.length) rules = { ...rules, ...(({ overflow, ruleCross }) => ({ overflow, ruleCross }))(declaredRules(on.big, off.big, 480, 270, declared)) };
   w.vjLyrics(true);
   let [n, sum, x0, x1, y0, y1] = [0, 0, gw, 0, gh, 0];
   on.grey.forEach((v, i) => { const d = Math.abs(v - off.grey[i]); if (d > 20) { n++; sum += d; const [x, y] = [i % gw, Math.floor(i / gw)]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } });

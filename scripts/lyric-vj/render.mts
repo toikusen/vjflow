@@ -204,15 +204,15 @@ async function openPage(): Promise<Page> {
     }
   }
 }
-const shoot = (page: Page, type: 'jpeg' | 'png') => page.locator('#stage').screenshot({ type, ...(type === 'jpeg' ? { quality: 92 } : { omitBackground: true }) });
 
 try {
   if (a.stills) {
     const page = await openPage();
     const frames: FrameStats[] = [];
     for (const t of a.stills.split(',').map(Number)) {
-      await page.evaluate((x) => window.renderAt(x), t);
-      const png = await shoot(page, 'png');
+      // (the frame as the video takes it: the signature layer's moments composed over the engine's, grabAt)
+      const pngUrl = await page.evaluate((x) => window.grabAt(x, 1, 'image/png'), t);
+      const png = Buffer.from(pngUrl.slice(pngUrl.indexOf(',') + 1), 'base64');
       writeFileSync(join(out, `still_${t.toFixed(2)}.png`), png);
       // a thumbnail's pixels, decoded by the page (no image library here), for the frame checks
       const px = await page.evaluate(async (b64) => {
@@ -315,8 +315,9 @@ try {
           if (f % 60 === 0 && statfsSync(out).bavail * statfsSync(out).bsize < 400e6) throw new Error('磁碟可用空間不足 400MB，停止渲染');
           const t = range.start + f / fps; // time from the frame index: no drift
           if (alpha) {
-            await page.evaluate((x) => window.renderAt(x), t);
-            ff.stdin.write(await shoot(page, 'png'));
+            // (the lyric layer as PNG with its alpha, the signature layer's lines composed in it as in the video)
+            const url = await page.evaluate((x) => window.grabAt(x, 1, 'image/png'), t);
+            ff.stdin.write(Buffer.from(url.slice(url.indexOf(',') + 1), 'base64'));
           } else {
             // the frame straight from the canvas: a page screenshot went through the compositor and was the bottleneck
             const url = await page.evaluate((x) => window.grabAt(x, 0.92), t);

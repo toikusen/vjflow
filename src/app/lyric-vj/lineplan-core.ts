@@ -19,7 +19,7 @@ import { absorbInk, carrierRoom, growRoom, inkChecks } from './render/hold-room'
 import type { Slots } from './render/world-objects';
 import { WORLD_ENTERS } from './render/world-motion';
 import { blockOf, SET_SPECS, SetSpec } from './render/world-sets';
-import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure } from './render/seat-geometry';
+import { boxesMeet, laidSeat, panelSplit, roughMeasure, shapedMeasure, slotSpec } from './render/seat-geometry';
 import { lineFace } from './fonts';
 import { compositionsOf, pageSeatsOf } from './world-shared';
 import { ABSORBABLE_HOLDS } from './world-events';
@@ -967,7 +967,7 @@ const roughBlock = (text: string, spec: SetSpec) => blockOf(text.replace(/[\s　
 // (measured wide on purpose: every character but ASCII an em, ASCII 0.6 em; the rough measure's half em for marks outside
 // its CJK ranges let choroin's こっちだって高まりたいの︕ onto the sleeve, where the face set its vertical mark an em)
 const bandMeasure = (x: string) => [...x].reduce((w, ch) => w + (/[\x20-\x7e]/.test(ch) ? 60 : 100), 0);
-const bandMissed = (set: string | undefined, text: string) => !!set && !!SET_SPECS[set]?.bands && !!blockOf(text.replace(/[\s　]+/g, ' ').trim(), SET_SPECS[set], bandMeasure).bandMiss;
+const bandMissed = (set: string | undefined, text: string, slot?: { k: number; of: number }) => !!set && !!SET_SPECS[set]?.bands && !!blockOf(text.replace(/[\s　]+/g, ' ').trim(), slotSpec(SET_SPECS[set], slot), bandMeasure).bandMiss;
 /** The plan asks the measure it is unsure of for this much more than the renderer needs, so what it plans is drawn. */
 const ROUGH = 1.25;
 /** The growth the plan asks room for on its rough measure; the renderer, measuring the real glyphs, needs only GROW.least (world-beats.ts). */
@@ -1260,6 +1260,10 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   for (const [id, name] of force.recipes ?? []) if (isArrival(RECIPES.find((r) => r.id === name)?.enter ?? '')) hands.delete(id);
   // a handoff's picture changes when it starts, ahead of the line it hands to
   const pairs = planPairs(cues, beatOf, hands, calm, force.pairs, new Map([...(force.recipes ?? []), ...[...(force.custom?.keys() ?? [])].map((id) => [id, 'custom'] as [string, string]), ...[...leadIds].map((id) => [id, 'lead'] as [string, string])]));
+  // (a world's shared shot lays its lines a slot each in its pair set; where that set's bands cannot hold one of them at
+  // the floor, render/carrier-fit, the lines are laid one a shot instead of run off the band)
+  if (W && !W.handoffs && SET_SPECS[W.pairSet]?.bands)
+    for (const [id, p] of [...pairs]) { const ids = [id, ...p.also]; if (ids.some((x, k) => bandMissed(W.pairSet, cues.find((y) => y.id === x)?.text ?? '', { k, of: ids.length }))) pairs.delete(id); }
   // a pair of quick lines has no seconds for a handoff, into it or out of it
   for (const [id, p] of pairs) if (p.kind === 'list' && setTogether(cues.find((c) => c.id === id)!, cues.find((c) => c.id === p.also[0])!)) for (const x of [id, ...p.also, cues[cues.findIndex((c) => c.id === p.also.at(-1)) + 1]?.id ?? '']) if (!force.hands?.has(x)) hands.delete(x);
   // a call beside a line is laid out from where the line stands: a world keeps such a line alone and where it lands

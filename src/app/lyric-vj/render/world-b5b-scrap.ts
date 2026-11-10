@@ -12,7 +12,7 @@ import { C, mirrorGround, onPage, rng, still } from './world-b3-shared';
 import { B5B } from './b5b-inks';
 import { B5B_MIRRORED, SET_BANDS } from './world-b5b-sets';
 import { declareCarrier, toPx } from './carrier-fit';
-import { Box, dataRows, frame, H, isJa, meets, page, small, W } from './world-b5b-shared';
+import { Box, dataRows, frame, H, isJa, meets, page, small, twoPhrases, W } from './world-b5b-shared';
 
 type Pt = [number, number];
 const TK = (px: number, ja: boolean, w = 500) => `${w} ${px}px ${ja ? '"M PLUS Rounded 1c"' : '"Noto Sans HK"'}, "Noto Sans TC", sans-serif`;
@@ -162,7 +162,7 @@ const cardPage: HandGround = (e) => { page(e, 'scrap-card', (c) => {
   ticket(c, e, 1340, 836, 520, 200, -6);
   tape(c, 1800, 800, 130, 48, 38, 0);
   paperGrain(c, 3);
-}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/card'].map((b) => toPx(b.box)), []); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/card'].filter((b) => b.part !== 'small' || twoPhrases(e)).map((b) => toPx(b.box)), []); };
 
 /** b: a dotted page, a torn paper laid across it for the line, three gold stars, the manila tag. */
 const dotsPage: HandGround = (e) => { page(e, 'scrap-dots', (c) => {
@@ -203,7 +203,7 @@ const indexPage: HandGround = (e) => { page(e, 'scrap-index', (c) => {
   tape(c, 1790, 600, 150, 50, 36, 0);
   small(c, [dataRows(e).artist, dataRows(e).title, dataRows(e).part].filter(Boolean).join('　'), 200, 960, TK(34, isJa(e)), 34, isLight(s.ground) ? s.ink : s.faint);
   paperGrain(c, 6);
-}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/index'].map((b) => toPx(b.box)), []); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['scrapbook/index'].filter((b) => b.part !== 'small' || twoPhrases(e)).map((b) => toPx(b.box)), []); };
 
 const Gs: Record<string, HandGround> = { 'scrapbook/card': cardPage, 'scrapbook/dots': dotsPage, 'scrapbook/spread': spreadPage, 'scrapbook/index': indexPage };
 for (const [id, page] of Object.entries(B5B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);

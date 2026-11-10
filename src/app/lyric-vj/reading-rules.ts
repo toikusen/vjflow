@@ -54,6 +54,8 @@ export interface DeclaredMoment { carriers: Bx[]; lines: Bx[]; scope: Bx }
 type Bx = { x0: number; y0: number; x1: number; y1: number };
 /** The 1080p clearance a declared line keeps from the ink (render/carrier-fit LINE_CLEAR). */
 export const RULE_CLEAR_PX = 12;
+/** How far past a declared carrier the overflow rule reads, 1080p px (a glyph off the band's end is within it; a call apart is not). */
+export const OVERFLOW_ZONE_PX = 48;
 
 /**
  * The two declared-geometry rules on one moment: lyric pixels (on against off) inside a line's scope that stand on none of
@@ -67,12 +69,15 @@ export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: 
   for (const d of declared) {
     const scope = sc(d.scope);
     const carriers = d.carriers.map((b) => sc(b, 1));
+    // (overflow is read only near a carrier: a glyph or its misregistration running off a band's end or edge lies within
+    // OVERFLOW_ZONE of it; a call set apart from the line on the paper, as the call placer sets it, does not)
+    const zones = d.carriers.map((b) => sc(b, OVERFLOW_ZONE_PX * sx));
     const lines = d.lines.map((b) => sc(b, RULE_CLEAR_PX * sx));
     for (let y = Math.max(0, Math.floor(scope.y0)); y < Math.min(h, Math.ceil(scope.y1)); y++)
       for (let x = Math.max(0, Math.floor(scope.x0)); x < Math.min(w, Math.ceil(scope.x1)); x++) {
         const i = y * w + x;
         if (Math.max(Math.abs(on[i * 4] - off[i * 4]), Math.abs(on[i * 4 + 1] - off[i * 4 + 1]), Math.abs(on[i * 4 + 2] - off[i * 4 + 2])) <= RULES.textDelta) continue;
-        if (carriers.length && !carriers.some((b) => inB(x, y, b))) overflow++;
+        if (zones.some((b) => inB(x, y, b)) && !carriers.some((b) => inB(x, y, b))) overflow++;
         if (lines.some((b) => inB(x, y, b))) ruleCross++;
       }
   }

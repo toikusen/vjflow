@@ -17,6 +17,7 @@ import { bandFit } from './render/carrier-fit';
 import { blockOf } from './render/world-sets';
 import { layoutMeasure } from './render/layout-measure';
 import { pageSeatsFor } from './lineplan-core';
+import { setWordSafe } from './phrases';
 
 const NEW = ['popart', 'midcentury'];
 const TEXTS = ['快使用', '快使用雙截棍 哼哼哈兮', '如果我有輕功 飛簷走壁', '三年後的大雪', 'こんなに綺麗じゃん!', 'あの星あかりを 海の広さを', 'Baby I love you', '他們兒子我習慣從小就耳濡目染什麼刀槍跟棍棒我都耍的有模有樣'];
@@ -231,9 +232,11 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
 
   it('midcentury: every line the composer or the scheduler lays on the cut, cut-r or sleeve bars stays on its bar, with its padding, clear of the key plate lines (off and on)', () => {
     let n = 0;
+    setWordSafe(true);
     songs.forEach(([song, meaning]) => {
       for (const f of [freeJob(song, { style: style('midcentury'), seed: 0, meaning }), wired('midcentury')[songs.findIndex(([s]) => s === song)]]) {
         const face = jobFaces(f.job);
+        setWordSafe(true);
         for (const c of f.job.treatment.cues as { cueId: string; world?: { set?: string } }[]) {
           const set = c.world?.set;
           if (!set || !['midcentury/cut', 'midcentury/cut-r', 'midcentury/sleeve'].includes(set)) continue;
@@ -245,6 +248,32 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
         }
       }
     });
+    setWordSafe(false);
+    expect(n).toBeGreaterThan(0);
+  });
+
+  it('midcentury, claymation, scrapbook on the gate\'s other songs (scheduler off): a line no band of a set can hold never gets that set (choroin\'s 21-character line went to the one-row sleeve when no other set of its level took 21)', () => {
+    const more = [['out/db/yt_hCCskTJwvuc/song.json', 'out/research/instant/plans/choroin/meaning.json'], ['out/db/yt_b3GCfyNKeLs/song.json', 'out/research/instant/plans/tsuzuki/meaning.json'], ['out/db/yt_iwYXfOhcsYI/song.json', 'out/research/instant/plans/tenmon/meaning.json']].filter(([a, b]) => existsSync(a) && existsSync(b));
+    let n = 0;
+    // (the renderer and the composer break lines at word-safe places, render/engine setWordSafe)
+    setWordSafe(true);
+    for (const [sf, mf] of more) {
+      const [song, meaning] = [JSON.parse(readFileSync(sf, 'utf8')), JSON.parse(readFileSync(mf, 'utf8'))];
+      for (const id of ['midcentury', 'claymation', 'scrapbook']) {
+        const f = freeJob(song, { style: style(id), seed: 0, meaning });
+        const face = jobFaces(f.job);
+        // (freeJob leaves word-safe breaks off when it is done)
+        setWordSafe(true);
+        for (const c of f.job.treatment.cues as { cueId: string; world?: { set?: string } }[]) {
+          const set = c.world?.set;
+          if (!set || !SET_SPECS[set]?.bands) continue;
+          const text = (song.cues.find((x: { id: string }) => x.id === c.cueId).text as string).replace(/[\s　]+/g, ' ').trim();
+          expect(blockOf(text, SET_SPECS[set], layoutMeasure(face(text))).bandMiss, `${id} ${set} ${text}`).toBeUndefined();
+          n++;
+        }
+      }
+    }
+    setWordSafe(false);
     expect(n).toBeGreaterThan(0);
   });
 

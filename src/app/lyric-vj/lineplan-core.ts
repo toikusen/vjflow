@@ -667,6 +667,12 @@ export interface WorldPool {
    */
   scheduled?: boolean;
   /**
+   * The song's composition scheduler is asked for (the Q1 opt-in, free-plan): no line changes seat while it is sung, the
+   * composer's own reposes included, on a world the scheduler takes over or not (Codex 2026-11-10 pairs B). Unset: the
+   * composer's reposes as before (today's product).
+   */
+  stillLines?: boolean;
+  /**
    * The job's faces, when the scheduler takes the world (Q1 phase 3c): its font choice and its accent face. The seats it
    * adds are laid on the renderer's own measure of the face each line is set in (fonts.ts lineFace, render/layout-
    * measure.ts), so a seat offered is a seat drawn.
@@ -1535,7 +1541,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     // a blown-up key word holds its picture until the line is read: no change of set before
     // (a world that declares its compositions has no repose of the composer's: the scheduler times every change of seat,
     // on the seats laid here, after the hold is placed: Q1 phase 2)
-    const repose = (recipe.wline && W && !W.scheduled && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
+    const repose = (recipe.wline && W && !W.scheduled && !W.stillLines && !piece && !hasCall(c.id) ? reposeOf(c, recipe.wline.set, W, beat, beats, level, calm, roll) : []).filter((r) => !blow || r.at >= c.start + readingSec(c.text, c.start, c.end));
     // (a line with a set piece or a call beside it keeps its composed set: no seats offered; a blown-up word's line keeps its
     // set at its boundary and may change only once it is read, world-events-adapter.ts)
     const seats = recipe.wline && W?.scheduled && !piece && !hasCall(c.id) ? seatsFor(c, recipe.wline.set, W, level, true) : undefined;

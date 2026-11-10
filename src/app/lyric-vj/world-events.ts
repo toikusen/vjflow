@@ -88,7 +88,7 @@ export interface LineOutcome {
   legalHold: boolean;
   /** The committed action: an event id, or the hold's id. */
   primary?: string;
-  /** Two composition changes on the line (an entrance and one reseat inside it: entranceAndInLine worlds only), counted as two. */
+  /** More than one action on the line (never approved: one visible composition a line, Codex 2026-11-10 pairs B), for the record. */
   actions?: number;
   mood: Mood;
   /** The words of a contract failure or another note (landing failed: what the final check named). */
@@ -120,8 +120,12 @@ export interface PropAccent { lineId: string; at: number; propId: string; reason
 export interface CameraMove { lineId: string; at: number; sec: number; kind: string }
 
 export type EventScope = 'section' | 'line' | 'in-line';
-/** Where each family may fall unless the world says otherwise: inside a line only a reseat on the same carrier (no carrier is taken from under words being read), a camera only into a part (no camera beats of its own, Codex cap ruling). */
-export const DEFAULT_ALLOWED_AT: Record<CompositionFamily, EventScope[]> = { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['section', 'line'], 'camera-reframe': ['section'], 'ground-role': ['section'], 'prop-beat': ['in-line'] };
+/**
+ * Where each family may fall unless the world says otherwise: a reseat only at a line or a part, never inside a line being
+ * sung (Codex 2026-11-10 pairs B: its anchor, type size, breaks and block never change while it is read), a camera only
+ * into a part (no camera beats of its own, Codex cap ruling).
+ */
+export const DEFAULT_ALLOWED_AT: Record<CompositionFamily, EventScope[]> = { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['section', 'line'], 'camera-reframe': ['section'], 'ground-role': ['section'], 'prop-beat': ['in-line'] };
 
 /**
  * What a world allows of the six families (Codex C's `compositions` declaration, held here until phase 2 moves it into
@@ -148,8 +152,6 @@ export interface WorldCompositionCaps {
   ownPages?: boolean;
   /** The world's own material moves (world-shared.ts materials, phase 3b): laid only as approved events. */
   materials?: Record<string, MaterialMove>;
-  /** Joint contract only: a visible entrance may be followed by one reseat inside the line (world-shared entranceAndInLine). */
-  entranceAndInLine?: boolean;
 }
 
 export interface WorldEventInput {
@@ -311,7 +313,8 @@ export const streakEase = (streak: number) => Math.max(STREAK_FLOOR, 1 - STREAK_
 export const reseatRate = (mood: Mood, streak: number) => MOOD_PACE[mood].reseat * streakEase(streak);
 
 const LIGHT_KINDS = new Set<WorldEventKind>(['page-handoff', 'carrier-swap', 'ground-role']);
-const IN_LINE_ORDER: CompositionFamily[] = ['layout-seat', 'carrier-swap', 'camera-reframe', 'ground-role'];
+// (no layout-seat: a line being sung never changes seat, Codex 2026-11-10 pairs B; a carrier swap keeps the words where they are)
+const IN_LINE_ORDER: CompositionFamily[] = ['carrier-swap', 'camera-reframe', 'ground-role'];
 const DEFAULT_SEC: Record<CompositionFamily, number> = { 'layout-seat': 0, 'page-handoff': LINK_PREPARE + LINK_CLEAR, 'carrier-swap': 0.3, 'camera-reframe': 0.42, 'ground-role': 0.3, 'prop-beat': 0.4 };
 
 const unit = (s: string) => ([...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0, 2166136261) >>> 0) / 2 ** 32;
@@ -552,10 +555,23 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       for (const g of line.given) {
         const to = line.seats.find((s) => s.id === g.seat) ?? { id: g.seat };
         if (!seatsDiffer(seat, to)) { seat = to; continue; }
+        // (a world the scheduler takes over never draws a given repose: no reseat inside a line being sung, Codex
+        // 2026-11-10 pairs B. Only a world with no capability, which the scheduler does not take, keeps its composer's
+        // own as the record of what it draws, the opt-in itself lays none: free-plan stillLines)
+        if (allows.size) { reject(line.id, 'layout-seat', g.at, 'given repose inside the line: no in-line layout-seat (pairs B)', to.id); continue; }
         push({ lineIds: [line.id], kind: 'layout-seat', at: g.at, from: g.at, to: g.at, seatBefore: seat?.id ?? '', seatAfter: to.id, carrierId: to.carrierId, scope: 'in-line', changesLight: lightOf(to), reason: g.reason, fixed: true, ...(g.unreliable ? { unreliableBoundary: true } : {}) });
         seat = to;
       }
-    } else if (own) inLine(line, mood);
+    } else if (own && !entered()) inLine(line, mood);
+    else if (own) rejectInLine(line);
+
+    /** Whether the line came in by a visible composition (its seat, a page move, the camera into its part): its one. */
+    function entered() { return events.slice(atIn).some((e) => e.kind !== 'keep'); }
+    /** A switch inside a line that came in by a visible composition: refused, never a second one (pairs B). */
+    function rejectInLine(l: WorldEventLine) {
+      const kinds = IN_LINE_ORDER.filter((k) => at(k, 'in-line'));
+      if (kinds.length && l.end - l.start >= MOOD_PACE[mood].inLine) reject(l.id, kinds[0], (l.start + l.end) / 2, 'the line came in by a visible composition: no second one inside it (pairs B)');
+    }
 
     /** The world camera's move into the part this line opens: its own reframe, or one switch with the seat change it rides. */
     function camRide() {
@@ -597,9 +613,9 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       const switched = (from: number) => events.slice(from).some((e) => e.kind !== 'keep');
       const keepOn = (s: SeatCandidate, reason: string) => { run = 0; push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: s.id, scope, changesLight: false, reason }); seat = s; };
       const holdWhy = (h: JointHold) => `keep: its ${h.hold.kind} hold is the line's one action (joint, ${mood})`;
-      // (a world that declares it: after a visible entrance, one reseat inside the line, by inLine's own rules, settled
-      // from the entrance's end; a camera into the part is that entrance's own move, so none after it)
-      const second = () => { if (caps.entranceAndInLine && !camIn && switched(atIn)) inLine(line, mood); };
+      // (a line that came in by a visible composition takes nothing more inside it: one a line, Codex 2026-11-10 pairs B;
+      // the second one art-deco once took after its entrance is withdrawn)
+      const second = () => rejectInLine(line);
       if (!own) {
         push({ lineIds: [line.id], kind: 'keep', at: line.show, from: line.show, to: line.show, seatBefore: before, seatAfter: before, scope: 'line', changesLight: false, reason: 'no seat for this line: it stays as composed' });
         return camRide();
@@ -806,11 +822,12 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
         reject(l.id, kinds[0], mid, 'no sung word break inside the line');
         return;
       }
-      // (the words keep what they are read on: a reseat inside a line stays on its carrier; a carrier swap changes what
-      // carries them on the same page, only by the world's own material move, the words themselves not moving, Codex A)
+      // (the words keep what they are read on and where they stand: a carrier swap changes what carries them on the same
+      // page, only by the world's own material move, the words in the very box at the very type (sameWords: no anchor,
+      // size or break changes inside a line, Codex 2026-11-10 pairs B); no other family reseats a line being sung)
       const swap = materialFor('carrier', 'in-line').find(([, m]) => m.family === 'carrier-swap');
       const poolOf = (kind: CompositionFamily) => seats.filter((s) => (!l.inLine?.seats || l.inLine.seats.includes(s.id)) && seatsDiffer(seat, s) && (kind === 'carrier-swap'
-        ? !!swap && !!s.page && s.page === seat?.page && (s.carrierId ?? '') !== (seat?.carrierId ?? '') && !offLimits(s.box, swap[1])
+        ? !!swap && !!s.page && s.page === seat?.page && (s.carrierId ?? '') !== (seat?.carrierId ?? '') && !offLimits(s.box, swap[1]) && (!seat?.box || !s.box || sameWords(seat, s))
         : (s.carrierId ?? '') === (seat?.carrierId ?? '')));
       let tried = false;
       for (const kind of kinds) {

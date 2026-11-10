@@ -79,7 +79,7 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   const carrierRole: WorldCompositionCaps['carrierRole'] = world.sheet ? 'page' : world.standsOnPlate ? 'plate' : seats.some((s) => s.carrierId) ? 'object' : 'ground';
   const declared = compositionsOf(world.id);
   // (a world's declared seats, or all of its sets and the seats it adds on their pages)
-  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), ...(declared.entranceAndInLine ? { entranceAndInLine: true } : {}), source: 'declared' };
+  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), source: 'declared' };
   if (!o.derived) return { worldId: world.id, kinds: [], seats: sets, carrierRole, source: 'declared-off' };
   const differs = seats.some((a) => seats.some((b) => seatsDiffer(a, b)));
   const kinds: CompositionFamily[] = [
@@ -378,6 +378,17 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   const out: InputWarning[] = [];
   const miss = (id: string, why: string) => out.push({ inputs: [id], reason: `final check: ${why}` });
   const near = (a: number, b: number) => Math.abs(a - b) < 0.002;
+  // (Codex 2026-11-10 pairs B: a line being sung never changes seat, and takes one visible composition at most, its
+  // entrance and a carrier swap inside it together included; the drawing is read for both too, not only the plan)
+  for (const e of table.events) if (e.kind === 'layout-seat' && e.scope === 'in-line') miss(e.id, `pairs B: an in-line layout-seat on ${e.lineIds.at(-1)} at ${e.at} (a line being sung never changes seat)`);
+  const visible = new Map<string, string[]>();
+  for (const e of table.events) if (VISIBLE_COMPOSITIONS.has(e.kind)) visible.set(e.lineIds.at(-1)!, [...(visible.get(e.lineIds.at(-1)!) ?? []), e.id]);
+  for (const [line, ids] of visible) if (ids.length > 1) miss(line, `pairs B: ${line} takes ${ids.length} visible compositions (${ids.join(', ')}); one at most`);
+  for (const r of rows) for (const x of r.world?.repose ?? []) {
+    if (!x.move) miss(`repose@${r.id}@${x.at}`, `pairs B: ${r.id} is drawn changing seat to ${x.set} at ${x.at} while it is sung`);
+    // (a carrier swap keeps the words in the very box at the very type: only what carries them changes)
+    else if (r.world && !sameWords(seatIn(world, r.world.set, r.cue.text, faces), seatIn(world, x.set, r.cue.text, faces))) miss(`${x.move}@${r.id}`, `pairs B: ${x.move} on ${r.id} at ${x.at} moves the words (box or type differs from ${r.world.set} to ${x.set})`);
+  }
   for (const e of table.events) {
     const row = rows.find((r) => r.id === e.lineIds[e.lineIds.length - 1]);
     if (!row) { miss(e.id, 'line not shown'); continue; }
@@ -565,6 +576,8 @@ export function failedComposites(events: WorldEvent[], checked: InputWarning[]):
   return { failed, warnings: failed.map((e) => ({ inputs: [e.id], reason: `final check: contract failure: the composite ${e.absorbed!.holdId} + ${e.absorbed!.materialId} did not land (${named(e).map((w) => w.reason.replace(/^final check: /, '')).join('; ')}); its hold and the line's layout restored, the material refused` })) };
 }
 
+/** What changes the composition a line is read in (a seat, its carrier, its page, its ground, the camera into it); a prop accent or a keep never does. */
+const VISIBLE_COMPOSITIONS: ReadonlySet<string> = new Set(['layout-seat', 'carrier-swap', 'page-handoff', 'ground-role', 'camera-reframe']);
 /** Two times within this are the same drawn instant (the final checks' own landing tolerance, 2 ms). */
 const LANDED = 0.002;
 /** Float slack on a boundary comparison (s). */
@@ -586,7 +599,7 @@ export const jointName = (lineId: string) => `joint:${lineId}`;
  * own switches keep SEAM_GAP (the light clock is lightGapWarnings'). Each miss is a final-check InputWarning naming the
  * line (`joint:<line>`).
  */
-export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }, opts: { entranceAndInLine?: boolean } = {}): InputWarning[] {
+export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }): InputWarning[] {
   if (!table.outcomes) return [];
   const { rows } = shownOf(job);
   // (the switches as the final job draws them, read off the drawing with real shows: the winner is what is drawn)
@@ -604,9 +617,8 @@ export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldE
     const evs = cuts.filter((e) => e.lineIds.at(-1) === o.lineId);
     const hs = holds.filter((h) => h.lineId === o.lineId);
     const actions = evs.length + hs.filter((h) => !absorbedIds.has(holdIdOf(h))).length;
-    // (a world that declares it: an entrance and one reseat inside the line, two changes, no hold beside them)
-    const pairOk = !!opts.entranceAndInLine && actions === 2 && !hs.length && evs.filter((e) => e.scope === 'in-line').length === 1 && evs.some((e) => e.scope !== 'in-line' && e.kind !== 'camera-reframe');
-    if (actions > 1 && !pairOk) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
+    // (one a line, every world: the entrance-and-reseat pair art-deco once took is withdrawn, Codex 2026-11-10 pairs B)
+    if (actions > 1) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
     const drawn = holdOf(row.id, row.world);
     if (row.world?.holdCands) miss(o.lineId, `hold candidates reached the drawing on ${o.lineId}`);
     if (o.outcome === 'hold' || o.outcome === 'composite') {

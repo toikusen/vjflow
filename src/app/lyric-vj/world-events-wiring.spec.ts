@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { LINK_CLEAR, LINK_PREPARE, linkGrounds, sectionClock } from './render/world-handoff';
-import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, READ_STABLE, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
+import { ACTION_GAP, countCuts, LIGHT_GAP, planWorldEvents, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, SHORT_LINE, type SeatCandidate, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
 import { capsOf, currentEvents, fromJob, holdRoom, landedEvents, lightGapWarnings, ONE_PAGE_WORLDS, seatIn, shownOf, verifyWorldEvents } from './world-events-adapter';
 import { applyWorldEvents } from './world-events-apply';
 import { compositionsOf, isPageSeat, pageOf, pageSeatsOf, WORLD_COMPOSITIONS } from './world-shared';
@@ -26,6 +26,12 @@ const line = (id: string, start: number, end: number, n = 0, seats = [LEFT, RIGH
   ...(n ? { words: Array.from({ length: n }, (_, k) => ({ text: `p${k}`, from: start + ((end - start) * k) / n, to: start + ((end - start) * (k + 1)) / n })) } : {}),
 });
 const input = (lines: WorldEventLine[], o: Partial<WorldEventInput> = {}): WorldEventInput => ({ lines, beats: [], sections: [{ start: 0, energy: 0.9 }], caps: caps(['layout-seat']), seed: 0, ...o });
+// (since pairs B (Codex 2026-11-10) a line being sung never changes seat: the one switch left inside a line is a carrier
+// swap, the same words in the same box on the same page; the in-line clocks below are that family's)
+const PLAIN: SeatCandidate = { id: 'w/plain', box: { x0: 0.2, y0: 0.4, x1: 0.8, y1: 0.6 }, size: 100, page: 'pg', carrierId: 'ground:pg' };
+const PANELS: SeatCandidate = { ...PLAIN, id: 'w/panels', carrierId: 'ground:pg:panels' };
+const panelCaps = caps(['layout-seat', 'carrier-swap'], { allowedAt: { 'layout-seat': ['section', 'line'], 'carrier-swap': ['in-line'] }, materials: { panel: { family: 'carrier-swap', at: ['in-line'], sec: 0.3, curve: 'panel-slide', seat: 'carrier', clearOfSung: 0, draws: 'panels' } } });
+const panel = (l: WorldEventLine): WorldEventLine => ({ ...l, seats: [PLAIN, PANELS], seat: PLAIN.id });
 const cuts = (es: WorldEvent[]) => es.filter((e) => e.kind !== 'keep');
 function expectClocks(es: WorldEvent[]) {
   const c = cuts(es);
@@ -40,15 +46,15 @@ function expectClocks(es: WorldEvent[]) {
 describe('planWorldEvents with the wiring inputs', () => {
   it('cross-line spacing: an in-line switch keeps 0.65 s seam and 0.10 s action from the next line, 0.55 s light across lines', () => {
     // a's only sung break is 0.5 s before b shows, b's own seat is pinned: a's switch would sit under the seam floor
-    const a = { ...line('a', 0, 3, 0), words: [{ text: 'x', from: 0, to: 2.3 }, { text: 'y', from: 2.3, to: 3 }] };
+    const a = { ...panel(line('a', 0, 3, 0)), words: [{ text: 'x', from: 0, to: 2.3 }, { text: 'y', from: 2.3, to: 3 }] };
     const b = { ...line('b', 3, 5), pinned: 'test', seat: 'w/right' };
-    const plan = planWorldEvents(input([a, b]));
+    const plan = planWorldEvents(input([a, b], { caps: panelCaps }));
     expect(plan.events.some((e) => e.scope === 'in-line' && e.lineIds.includes('a'))).toBe(false);
     expect(plan.rejected.some((r) => r.candidate.lineId === 'a' && /seam within 0.65s of b's composed seat/.test(r.reason))).toBe(true);
     // with the break 0.7 s before, the switch lands and both clocks hold
     const a2 = { ...a, words: [{ text: 'x', from: 0, to: 2 }, { text: 'y', from: 2.1, to: 3 }] };
-    const ok = planWorldEvents(input([a2, b]));
-    expect(ok.events.some((e) => e.scope === 'in-line' && e.at === 2.1)).toBe(true);
+    const ok = planWorldEvents(input([a2, b], { caps: panelCaps }));
+    expect(ok.events.some((e) => e.scope === 'in-line' && e.kind === 'carrier-swap' && e.at === 2.1)).toBe(true);
     expectClocks(ok.events);
     // a ground's light change 0.2 s from a line's change of carrier: the change gives way (the line keeps the seat before)
     const lit = planWorldEvents(input([line('a', 0, 2, 0, [LEFT]), { ...line('b', 2.4, 4.4, 0, [{ ...PAGE_B, paged: false }, LEFT]), seat: 'w/page-b' }], { lights: [{ at: 2.4, what: 'ground light' }] }));
@@ -67,11 +73,11 @@ describe('planWorldEvents with the wiring inputs', () => {
     expect(holdRoom(c, { lineId: 'x', kind: 'ink-swap', at: 11, from: 11, to: 11.3 }, [])?.spans).toEqual([]);
     // a grown block keeps its size to the end: a switch only before it, BEAT_CLEAR clear
     expect(holdRoom(c, { lineId: 'x', kind: 'line-grow', at: 12, from: 12, to: 12.3 }, [])?.spans).toEqual([[10, 11.65]]);
-    const l = { ...line('l', 10, 13, 4), inLine: { spans: [[11.9 + 0.175, 13]] as [number, number][] } };
-    const plan = planWorldEvents(input([line('a', 7, 9.5), l], { holds: [{ lineId: 'l', kind: 'ink-run', at: 11, from: 11, to: 11.9 }] }));
+    const l = { ...panel(line('l', 10, 13, 4)), inLine: { spans: [[11.9 + 0.175, 13]] as [number, number][] } };
+    const plan = planWorldEvents(input([panel(line('a', 7, 9.5)), l], { caps: panelCaps, holds: [{ lineId: 'l', kind: 'ink-run', at: 11, from: 11, to: 11.9 }] }));
     for (const e of plan.events.filter((x) => x.scope === 'in-line')) expect(e.at).toBeGreaterThanOrEqual(12.075 - 1e-6);
     expect(plan.holds).toHaveLength(1);
-    const none = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13, 4), inLine: { spans: [] } }]));
+    const none = planWorldEvents(input([panel(line('a', 7, 9.5)), { ...panel(line('l', 10, 13, 4)), inLine: { spans: [] } }], { caps: panelCaps }));
     expect(none.events.some((e) => e.scope === 'in-line')).toBe(false);
     expect(none.rejected.some((r) => /beside its hold/.test(r.reason))).toBe(true);
   });
@@ -345,24 +351,30 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every even
       expect(extra).toEqual([]);
     });
 
-  it('a drawn event moved off its approved time, or a cut drawn the plan does not hold, is reported by id', () => {
+  it('a cut drawn the plan does not hold is reported, and a reseat drawn inside a line is a pairs B failure by name', () => {
     const style = FREE_STYLES.find((s) => s.id === 'chalkboard')!;
     const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
-    const e = f.treatment.worldEvents!.events.find((x) => x.scope === 'in-line' && x.kind === 'layout-seat')!;
+    const table = f.treatment.worldEvents!;
+    expect(table.events.filter((x) => x.scope === 'in-line' && x.kind === 'layout-seat')).toEqual([]);
+    const e = table.events.find((x) => x.kind === 'layout-seat' && x.scope !== 'in-line' && !x.fixed)!;
     const job = structuredClone(f.job);
-    const cue = (job.treatment.cues as { cueId: string; world?: { repose?: { at: number; set: string }[] } }[]).find((c) => c.cueId === e.lineIds[0])!;
-    cue.world!.repose = cue.world!.repose!.map((r) => ({ ...r, at: r.at + 0.2 }));
-    const out = verifyWorldEvents(job, style.world, f.treatment.worldEvents!);
-    expect(out.map((w) => w.inputs[0])).toContain(e.id);
+    const cue = (job.treatment.cues as { cueId: string; world?: { set: string; repose?: { at: number; set: string }[] } }[]).find((c) => c.cueId === e.lineIds.at(-1))!;
+    const row = song.cues.find((c: { id: string }) => c.id === cue.cueId);
+    cue.world!.repose = [{ at: +((row.start + row.end) / 2).toFixed(3), set: e.seatBefore }];
+    const out = verifyWorldEvents(job, style.world, table);
     expect(out.some((w) => /drawn that the plan does not hold/.test(w.reason))).toBe(true);
+    expect(out.some((w) => w.inputs[0].startsWith(`repose@${cue.cueId}`) && /pairs B: .* changing seat/.test(w.reason))).toBe(true);
+    // (an in-line layout-seat put into the plan itself is named too)
+    const planted = { ...table, events: [...table.events, { ...e, id: 'layout-seat:planted:0', scope: 'in-line' as const }] };
+    expect(verifyWorldEvents(f.job, style.world, planted).some((w) => w.inputs[0] === 'layout-seat:planted:0' && /pairs B: an in-line layout-seat/.test(w.reason))).toBe(true);
   });
 });
 
 describe('phase 3a: same-page seats (step 3)', () => {
-  it('notebook, art-deco and blueprint declare seats on their own pages, at their least type, taken inside a line; chalkboard and document have none', () => {
+  it('notebook, art-deco and blueprint declare seats on their own pages, at their least type, taken at a line or a part (never inside one, pairs B); chalkboard and document have none', () => {
+    for (const id of ['notebook', 'art-deco', 'blueprint', 'chalkboard']) expect(compositionsOf(id)!.allowedAt['layout-seat']).not.toContain('in-line');
     for (const id of ['notebook', 'art-deco', 'blueprint']) {
       const c = compositionsOf(id)!;
-      expect(c.allowedAt['layout-seat']).toContain('in-line');
       expect(c.pageSeats).toBe(true);
       expect(pageSeatsOf(id).length).toBeGreaterThan(0);
       expect(c.protectedRegion?.length).toBeGreaterThan(0);
@@ -404,9 +416,8 @@ const SNOW_MEANING = 'out/research/instant/plans/snow/meaning.json';
 describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SONG) || !existsSync(MEANING))('phase 3a: in-line switches to same-page seats on real songs', () => {
   const songs = existsSync(SNOW) && existsSync(SONG) ? [[JSON.parse(readFileSync(SONG, 'utf8')), JSON.parse(readFileSync(MEANING, 'utf8'))], [JSON.parse(readFileSync(SNOW, 'utf8')), JSON.parse(readFileSync(SNOW_MEANING, 'utf8'))]] : [];
   for (const id of ['notebook', 'art-deco', 'blueprint'])
-    it(`${id}: at most one in-line switch a line, only at a sung word break, 0.35 s still either side, on the same page, the whitelist kept, the same seed the same table`, () => {
+    it(`${id}: no reseat inside a line (pairs B); any carrier swap left keeps the words, one a line, at a sung word break, 0.35 s still either side, on the same page; the same seed the same table`, () => {
       const style = FREE_STYLES.find((s) => s.id === id)!;
-      let seen = 0;
       for (const [song, meaning] of songs) {
         const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
         const table = f.treatment.worldEvents!;
@@ -416,7 +427,8 @@ describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SO
         const caps = capsOf(style.world);
         for (const e of table.events.filter((x) => !x.fixed && x.kind !== 'keep')) expect(caps.seats, e.id).toContain(e.seatAfter);
         const inLine = table.events.filter((e) => e.scope === 'in-line' && !e.fixed && e.kind !== 'keep');
-        seen += inLine.length;
+        expect(inLine.filter((e) => e.kind === 'layout-seat'), id).toEqual([]);
+        for (const e of inLine) { const t = song.cues.find((c: { id: string }) => c.id === e.lineIds[0]).text; expect(sameWords(seatIn(style.world, e.seatBefore, t), seatIn(style.world, e.seatAfter, t)), e.id).toBe(true); }
         const byLine = new Map<string, number>();
         for (const e of inLine) {
           const l = inp.lines.find((x) => x.id === e.lineIds[0])!;
@@ -439,7 +451,8 @@ describe.skipIf(!existsSync(SNOW) || !existsSync(SNOW_MEANING) || !existsSync(SO
         // no in-line switch on a line the aligner did not time
         for (const l of inp.lines.filter((x) => !x.words)) expect(inLine.some((e) => e.lineIds.includes(l.id)), l.id).toBe(false);
       }
-      expect(seen, id).toBeGreaterThan(0);
+      // (the same-page seats were reached inside a line; since pairs B only a boundary that keeps the composer's page takes
+      // one, which these two songs never do at seed 0: docs/research/2026-11-10-pairs-rules.md, limitations)
     });
 
   it('by default (scheduler off) notebook, art-deco and blueprint draw exactly as before: no same-page seat is offered or drawn', () => {
@@ -459,10 +472,10 @@ describe('phase 3a round 2: still reading after the entrance; Q2/Q4 overlaps res
   it('the 0.35 s before an in-line switch counts from the end of the entrance, not the line start: a short window keeps', () => {
     const words = [{ text: 'x', from: 10, to: 10.5 }, { text: 'y', from: 10.5, to: 13 }];
     // the only sung break is 0.5 s after the start: with no entrance, 0.5 s of still reading, the switch lands
-    const open = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13), words }]));
+    const open = planWorldEvents(input([panel(line('a', 7, 9.5)), { ...panel(line('l', 10, 13)), words }], { caps: panelCaps }));
     expect(open.events.some((e) => e.scope === 'in-line' && e.at === 10.5)).toBe(true);
     // its entrance lands at 10.3: 0.2 s of still reading before the break, so the line keeps its seat
-    const late = planWorldEvents(input([line('a', 7, 9.5), { ...line('l', 10, 13), words, settled: 10.3 }]));
+    const late = planWorldEvents(input([panel(line('a', 7, 9.5)), { ...panel(line('l', 10, 13)), words, settled: 10.3 }], { caps: panelCaps }));
     expect(late.events.some((e) => e.scope === 'in-line')).toBe(false);
     expect(late.rejected.some((r) => r.candidate.lineId === 'l' && /less than 0.35s of still reading/.test(r.reason))).toBe(true);
   });

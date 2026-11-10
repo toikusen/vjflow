@@ -425,7 +425,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const momentsOn = !!world && !!momentsCapOf(world.id) && (o.meaningMoments ?? env('VJ_MOMENTS'));
   const joint = scheduled && (o.jointHolds ?? env('VJ_JOINT'));
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
-  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
+  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(asked ? { stillLines: true } : {}), ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const base = composerBase(o.base ?? FREE_BASE(), composed, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
@@ -464,7 +464,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
     const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
     const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
     // (the second draw is checked against the plan it carries: seats, pages, times, handoffs and the light clock)
-    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, world, events, { entranceAndInLine: !!compositionsOf(world.id)?.entranceAndInLine })] : [];
+    const checked = scheduled ? [...verifyWorldEvents(job, world, events, jobFaces(job)), ...lightGapWarnings(job, events), ...jointChecks(job, world, events)] : [];
     return { plan, job, treatment, checked };
   };
   o.trace?.(input, planned);

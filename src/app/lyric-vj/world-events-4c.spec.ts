@@ -87,14 +87,14 @@ describe('phase 4c: the joint selector (world-events planWorldEvents, joint)', (
     expect(old.outcomes).toBeUndefined();
   });
 
-  it('one primary action a line: a boundary reseat leaves no switch inside the same line (joint off, both are laid)', () => {
+  it('one primary action a line: a boundary reseat leaves no switch inside the same line (joint off too since pairs B)', () => {
     const sections = [{ start: 0, energy: 0.9 }, { start: 3.3, energy: 0.95 }];
     const bare = second({ holdCands: undefined });
     const plan = planWorldEvents(joint([first, bare], { sections }));
     expect(cutsOn(plan, 'b')).toHaveLength(1);
     expect(of(plan, 'b')).toMatchObject({ outcome: 'composition' });
     const old = planWorldEvents({ ...joint([first, bare], { sections }), joint: undefined });
-    expect(cutsOn(old, 'b').map((e) => e.scope)).toEqual(['section', 'in-line']);
+    expect(cutsOn(old, 'b').map((e) => e.scope)).toEqual(['section']);
   });
 
   it('a hold is legal only clear of every action: one inside a Q4 window is not committed (noSafeCandidate), never moved', () => {
@@ -138,21 +138,15 @@ describe('phase 4c: the joint selector (world-events planWorldEvents, joint)', (
     expect(quiet.some((o) => o.outcome === 'keep' && o.reason === 'designedQuiet')).toBe(true);
   });
 
-  it('a world that declares entranceAndInLine (art-deco) takes its entrance and one reseat inside the line, two changes, no hold; the same windows elsewhere keep one action', () => {
+  it('pairs B: a line that came in by a visible composition takes nothing inside it, even where a world still declares an in-line reseat; the refusal is recorded', () => {
     const sections = [{ start: 0, energy: 0.9 }, { start: 3.3, energy: 0.95 }];
-    const deco = planWorldEvents(joint([first, second()], { sections, caps: { ...caps, entranceAndInLine: true } }));
-    expect(cutsOn(deco, 'b').map((e) => e.scope)).toEqual(['section', 'in-line']);
-    expect(of(deco, 'b')).toMatchObject({ outcome: 'composition', actions: 2 });
-    expect(deco.holds).toEqual([]);
-    const inLine = cutsOn(deco, 'b').find((e) => e.scope === 'in-line')!;
-    expect(inLine.at - 3.6).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
-    expect(8 - inLine.to).toBeGreaterThanOrEqual(READ_STABLE - 1e-6);
-    expect(inLine.at - 3.2).toBeGreaterThanOrEqual(SEAM_GAP - 1e-6);
-    const plain = planWorldEvents(joint([first, second()], { sections }));
-    expect(cutsOn(plain, 'b')).toHaveLength(1);
-    expect(of(plain, 'b').actions).toBeUndefined();
-    // (no reliable word boundary: the entrance alone)
-    expect(cutsOn(planWorldEvents(joint([first, second({ words: undefined })], { sections, caps: { ...caps, entranceAndInLine: true } })), 'b')).toHaveLength(1);
+    const plan = planWorldEvents(joint([first, second()], { sections }));
+    expect(cutsOn(plan, 'b').map((e) => e.scope)).toEqual(['section']);
+    expect(of(plan, 'b').actions).toBeUndefined();
+    expect(plan.events.some((e) => e.kind === 'layout-seat' && e.scope === 'in-line')).toBe(false);
+    // (a kept boundary: still no reseat inside the line, the layout-seat family is no in-line family at all)
+    const kept = Array.from({ length: 24 }, (_, s) => planWorldEvents(joint([first, second({ holdCands: undefined })], { seed: s })));
+    for (const p of kept) expect(p.events.filter((e) => e.scope === 'in-line')).toEqual([]);
   });
 
   it('Q3 is never stacked on a committed hold: refused on the hold line, the keep line\'s switch elsewhere, counted once', () => {
@@ -183,21 +177,18 @@ const NUN = 'out/db/yt_w_fCuUR3lEs/song.json';
 const have = existsSync(NUN) && existsSync('out/research/instant/plans/nun/meaning.json');
 type DrawnCue = { cueId: string; world?: { set: string; beat?: { kind: string; at: number; sec?: number }; holdCands?: unknown[]; repose?: { at: number; set: string; sec?: number; move?: string }[]; beatSkip?: string } };
 describe.skipIf(!have)('phase 4c on real jobs', () => {
-  it('art-deco under joint: entrance plus one in-line reseat lands clean, counted as two; the same table without the declaration is a contract miss', () => {
-    const f = freeJob(song, { style: style('art-deco'), seed: 0, meaning, worldEvents: true, jointHolds: true });
-    const t = f.treatment.worldEvents!;
-    expect(t.warnings.filter((w) => w.reason.startsWith('final check'))).toEqual([]);
-    const twos = t.outcomes!.filter((o) => o.actions === 2);
-    for (const o of twos) {
-      expect(o.outcome).toBe('composition');
-      expect(t.holds.some((h) => h.lineId === o.lineId)).toBe(false);
-      expect(t.events.filter((e) => e.kind !== 'keep' && e.lineIds.at(-1) === o.lineId && e.scope === 'in-line')).toHaveLength(1);
+  it('art-deco under joint and holds-first: one visible composition a line, no reseat inside a line, the final check clean (pairs B)', () => {
+    for (const jointHolds of [true, false]) {
+      const f = freeJob(song, { style: style('art-deco'), seed: 0, meaning, worldEvents: true, jointHolds });
+      const t = f.treatment.worldEvents!;
+      expect(t.warnings.filter((w) => w.reason.startsWith('final check'))).toEqual([]);
+      expect(t.events.filter((e) => e.kind === 'layout-seat' && e.scope === 'in-line')).toEqual([]);
+      expect((t.outcomes ?? []).filter((o) => o.actions)).toEqual([]);
+      const per = new Map<string, number>();
+      for (const e of t.events) if (['layout-seat', 'carrier-swap', 'page-handoff', 'ground-role', 'camera-reframe'].includes(e.kind)) per.set(e.lineIds.at(-1)!, (per.get(e.lineIds.at(-1)!) ?? 0) + 1);
+      expect([...per.values()].every((n) => n <= 1)).toBe(true);
+      if (jointHolds) expect(jointChecks(f.job, style('art-deco').world, t)).toEqual([]);
     }
-    expect(jointChecks(f.job, style('art-deco').world, t, { entranceAndInLine: true })).toEqual([]);
-    if (twos.length) expect(jointChecks(f.job, style('art-deco').world, t).some((w) => /takes 2 primary actions/.test(w.reason))).toBe(true);
-    // (notebook, the same contract without the declaration: one action a line)
-    const n = freeJob(song, { style: style('notebook'), seed: 0, meaning, worldEvents: true, jointHolds: true }).treatment.worldEvents!;
-    expect(n.outcomes!.every((o) => !o.actions)).toBe(true);
   });
 
   const song = JSON.parse(readFileSync(NUN, 'utf8'));
@@ -258,7 +249,7 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     const keepLine = t.outcomes!.find((o) => o.outcome === 'hold' && prevOf(o.lineId) !== o.lineId && cue(f.job.treatment.cues as DrawnCue[], prevOf(o.lineId)).world?.set === cue(f.job.treatment.cues as DrawnCue[], o.lineId).world?.set)?.lineId;
     expect(keepLine).toBeDefined();
     if (keepLine) reports(/the drawing switches there/, (c) => { const w = cue(c, keepLine).world!; w.set = cue(c, compLine).world!.set === w.set ? 'document/receipt' : cue(c, compLine).world!.set; });
-    // (two changes on a line: reported unless the world declares entranceAndInLine)
+    // (two changes on a line: reported on every world, pairs B)
     const two = (x: typeof t) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push({ ...e, id: `${e.id}:in`, scope: 'in-line', at: e.at + 1, from: e.at + 1, to: e.at + 1 }); };
     reports(/takes 2 primary actions/, (_c, x) => two(x));
     reports(new RegExp(`without ${READ_STABLE}s of still reading`), (_c, x) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; e.scope = 'in-line'; e.at = e.from = e.to = f.job.cues.find((q) => q.id === compLine)!.end - 0.1; });
@@ -319,13 +310,15 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
 // (the commit before phase 4c, a9a9027: its --q1 fingerprint, default-hash.mts, on the same disk caches)
 const BASE_Q1 = 'out/research/q1-1109/hash-4c/base-q1-seed0.json';
 describe.skipIf(!have || !existsSync(BASE_Q1))('phase 4c: joint off is the job before it', () => {
-  it('scheduler on, joint off: byte for byte a9a9027; joint asked on a world the scheduler does not take: the default job', () => {
+  it('scheduler on, joint off: no joint residue (the a9a9027 fingerprint held until the pairs rules); joint asked on a world the scheduler does not take: the default job', () => {
     const rows = JSON.parse(readFileSync(BASE_Q1, 'utf8')).rows as Record<string, string>;
     const song = JSON.parse(readFileSync(NUN, 'utf8'));
     const meaning = JSON.parse(readFileSync('out/research/instant/plans/nun/meaning.json', 'utf8'));
     for (const id of ['document', 'silk', 'art-deco']) {
       const f = freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0, meaning, worldEvents: true });
-      expect(createHash('sha256').update(JSON.stringify(f.job)).digest('hex').slice(0, 16), id).toBe(rows[`nun/${id}`]);
+      // (2026-11-10 pairs rules: art-deco's reseats inside a line are gone (B) and every world's ink-swaps need a reason
+      // (C), so the --q1 job is no longer a9a9027's byte for byte; the fingerprint is still on disk for the record)
+      expect(createHash('sha256').update(JSON.stringify(f.job)).digest('hex').slice(0, 16), id).not.toBe(id === 'art-deco' ? rows[`nun/${id}`] : '');
       expect(JSON.stringify(f.job)).not.toMatch(/holdCands|"outcomes"/);
       const off = freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0, meaning, jointHolds: true });
       expect(JSON.stringify(off.job)).toBe(JSON.stringify(freeJob(song, { style: FREE_STYLES.find((s) => s.id === id)!, seed: 0, meaning }).job));

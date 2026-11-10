@@ -496,8 +496,8 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
 /**
  * Every turn of ground the composer kept inside a world line (`turnsAt`: the plan's cuts marked `repose`), as drawn while
  * the line is sung (from its first sung character to its end), checked by the composer's own rule (render/turn-rule.ts
- * turnTakes, review 2026-11-10): the words keep their page and their carrier, and their ink reads no worse than before
- * and at READ_MIN when it did. Every path, the default included.
+ * turnTakes, review 2026-11-10): the words keep their page and stand on a carrier of their own, and their ink reads no
+ * worse than before and at READ_MIN when it did. Every path, the default included.
  */
 export function turnChecks(job: Job, world: StyleWorld, turnsAt: number[]): InputWarning[] {
   const { rows, sections } = shownOf(job);
@@ -517,7 +517,7 @@ export function turnChecks(job: Job, world: StyleWorld, turnsAt: number[]): Inpu
       if (x.start <= first + 1e-3 || x.start >= r.cue.end - 1e-3 || !turnsAt.some((t) => Math.abs(t - x.start) < 0.02)) continue;
       const after = printOf(x);
       if (!after?.fx) continue;
-      const why = turnTakes({ set: w.set, page: pageOf(world, w.set), pages, fx: after.fx, slots: w.slots, ink, before, after });
+      const why = turnTakes({ set: w.set, page: pageOf(world, w.set), pages, fx: after.fx, slots: w.slots, ink, before, after, blown: !!w.blow });
       if (why) out.push({ inputs: [`turn@${r.id}@${x.start}`], reason: `final check: turn: ${why}` });
     }
   }

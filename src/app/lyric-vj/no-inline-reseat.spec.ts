@@ -7,6 +7,8 @@ import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import type { SongTimeline } from './timeline';
 import { turnTakes } from './render/turn-rule';
+import { carrierSlots } from './render/hold-room';
+import { SET_SPECS } from './render/world-sets';
 import { turnChecks } from './world-events-adapter';
 import { pageOf } from './world-shared';
 
@@ -24,8 +26,9 @@ function longLines(): SongTimeline {
 }
 
 describe('no change of set inside a sung line (default path)', () => {
-  it('a line the composer would turn mid-line is laid as one set; the turn stays a ground cut', () => {
+  it('a line the composer would turn mid-line is laid as one set; a turn stays a ground cut, only under words on a carrier', () => {
     const song = longLines();
+    const turned: Record<string, number> = {};
     for (const id of ['spy', 'chalkboard', 'silk']) {
       const style = FREE_STYLES.find((s) => s.id === id)!;
       expect(style.world.pace.repose, id).toBe(true);
@@ -33,10 +36,29 @@ describe('no change of set inside a sung line (default path)', () => {
       const lines = treatment.cues as unknown as Line[];
       expect(lines.filter((l) => l.world).length, id).toBeGreaterThan(0);
       expect(lines.filter((l) => l.world?.repose?.length), id).toEqual([]);
-      // the turn the composer found inside a line is still there, as a cut only
+      // a turn the composer kept is a cut only, inside a line whose words stand on a carrier of their own (turn-rule)
       const turns = turnsOf(plan);
-      expect(turns.length, id).toBeGreaterThan(0);
-      for (const t of turns) expect(song.cues.some((c) => t.at! > c.start && t.at! < c.end), `${id} turn ${t.at} inside a line`).toBe(true);
+      turned[id] = turns.length;
+      for (const t of turns) {
+        const c = song.cues.find((x) => t.at! > x.start && t.at! < x.end);
+        expect(c, `${id} turn ${t.at} inside a line`).toBeTruthy();
+        const set = lines.find((l) => l.cueId === c!.id)!.world!.set;
+        expect(carrierSlots(SET_SPECS[set]), `${id} ${set} has a carrier`).toBeTruthy();
+      }
+    }
+    // spy, chalkboard and silk words stand on the ground: no turn
+    expect(turned).toEqual({ spy: 0, chalkboard: 0, silk: 0 });
+    // silent-film's title cards carry their words: on 大雪 their turns stay, every one under a carrier
+    const db = 'out/db/yt_5i50aTB7JFo/song.json';
+    if (!existsSync(db)) return;
+    const snow = JSON.parse(readFileSync(db, 'utf8')) as SongTimeline;
+    const f = freeJob(snow, { style: FREE_STYLES.find((s) => s.id === 'silent-film')!, seed: 0 });
+    const kept = turnsOf(f.plan);
+    expect(kept.length).toBeGreaterThan(0);
+    for (const t of kept) {
+      const c = snow.cues.find((x) => t.at! > x.start && t.at! < x.end)!;
+      const l = (f.treatment.cues as unknown as Line[]).find((x) => x.cueId === c.id)!;
+      expect(carrierSlots(SET_SPECS[l.world!.set]), `${c.id} ${l.world!.set}`).toBeTruthy();
     }
   });
 
@@ -63,10 +85,10 @@ describe('no change of set inside a sung line (default path)', () => {
     expect(turnTakes({ set: 'card/pair', page: 'card/pair', pages, fx: 'card/table', slots, ink: slots.ink, before: print, after: print })).toMatch(/stands on its page/);
     expect(turnTakes({ set: 'card/main', pages, fx: 'card/fan', slots, ink: slots.ink, before: print, after: print })).toMatch(/another set's page/);
     expect(turnTakes({ set: 'card/main', pages, fx: 'card/table', slots, ink: slots.ink, before: print, after: print })).toBeUndefined();
-    // words standing on the ground directly (spy/low-slash has no carrier) read worse on a darker print after the turn;
-    // words on their own carrier (card/main's plate) do not depend on it
-    const flat = { ...slots, plate: '#ffffff', ground: '#ffffff' };
-    expect(turnTakes({ set: 'spy/low-slash', pages, fx: 'spy/x', slots: flat, ink: '#222222', before: { ink: '#222222', paper: '#ffffff' }, after: { ink: '#222222', paper: '#555555' } })).toMatch(/worse/);
+    // words standing on the ground (spy/low-slash has no carrier) or a blown-up word: the plan cannot read the new picture
+    expect(turnTakes({ set: 'spy/low-slash', pages, fx: 'spy/x', slots, ink: slots.ink, before: print, after: print })).toMatch(/ground itself/);
+    expect(turnTakes({ set: 'card/main', pages, fx: 'card/table', slots, ink: slots.plateInk, before: print, after: print, blown: true })).toMatch(/blown-up word/);
+    // words on their own carrier (card/main's plate) do not depend on the print under the frame
     expect(turnTakes({ set: 'card/main', pages, fx: 'card/table', slots, ink: slots.plateInk, before: print, after: { ink: slots.ink, paper: '#555555' } })).toBeUndefined();
     // the composer lays no turn under a card/pair line (tsuzuki, where the review found c011's second row lost on cream)
     const db = 'out/db/yt_b3GCfyNKeLs/song.json';

@@ -257,13 +257,14 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase-2 review fixes
   const load = (db: string, plan: string) => ({ song: JSON.parse(readFileSync(`out/db/${db}/song.json`, 'utf8')), meaning: existsSync(`out/research/instant/plans/${plan}/meaning.json`) ? JSON.parse(readFileSync(`out/research/instant/plans/${plan}/meaning.json`, 'utf8')) : undefined });
   const nun = existsSync(SONG) ? load('yt_w_fCuUR3lEs', 'nun') : undefined;
 
-  it('the paid pool is never scheduled, and its lines keep their set while sung: a turn is a ground cut only', () => {
+  it('the paid pool is never scheduled, and its lines keep their set while sung (no turn under chalk on the board)', () => {
     for (const id of ONE_PAGE_WORLDS) expect(poolOf(FREE_STYLES.find((s) => s.id === id)!.world, RECIPES).scheduled, id).toBeFalsy();
     const W = poolOf(FREE_STYLES.find((s) => s.id === 'chalkboard')!.world, RECIPES);
     const { plan } = composePlan(nun!.song, { ...nun!.meaning, palette: 'tea' }, false, { reroll: 0, world: W });
     const shots = (plan as unknown as { shots: { lines: { world?: { repose?: unknown[] } }[]; cuts: { repose?: boolean }[] }[] }).shots;
     expect(shots.flatMap((s) => s.lines).filter((l) => l.world?.repose?.length)).toEqual([]);
-    expect(shots.flatMap((s) => s.cuts).filter((x) => x.repose).length).toBeGreaterThan(0);
+    // (chalkboard's words stand on the board itself: no ground turns under them, render/turn-rule.ts)
+    expect(shots.flatMap((s) => s.cuts).filter((x) => x.repose)).toEqual([]);
   });
 
   it('by default the five draw as before; only an opt-in schedules them', () => {

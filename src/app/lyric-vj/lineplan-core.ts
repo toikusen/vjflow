@@ -1707,7 +1707,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
       const fx = reposeGrounds[(reposeGrounds.indexOf(cuts.at(-1)!.fx as string) + 1) % reposeGrounds.length];
       const slots = W!.inks?.[Number(cuts[0]?.['scheme'] ?? 0)];
       const print = slots ? { ink: slots.ink, paper: slots.ground, dark: !!cuts[0]?.['dark'] } : undefined;
-      if (!slots || !print || turnTakes({ set: recipe.wline!.set, page: recipe.wline!.ground, pages: W!.pages ?? new Set(), fx, slots, ink: lineInkOf(recipe.wline!.set, slots, !!W!.fixedInk, print), before: print, after: print })) continue;
+      if (!slots || !print || turnTakes({ set: recipe.wline!.set, page: recipe.wline!.ground, pages: W!.pages ?? new Set(), fx, slots, ink: lineInkOf(recipe.wline!.set, slots, !!W!.fixedInk, print), before: print, after: print, blown: !!blow })) continue;
       cuts.push({ ...cuts[0], at: r.at, repose: true, transition: '', beat: (cuts.at(-1)?.beat ?? 0) + 1, fx } as (typeof cuts)[number]);
       kept.push(r.at);
     }

@@ -994,6 +994,9 @@ function arbitratePolicies(cands: PolicyCandidate[], ctx: PolicyContext): Policy
       const lineEvents = ctx.events.filter((e) => e.lineIds.at(-1) === line.id);
       const why = hold ? `collisionQ2hold: its ${hold.kind} hold was planned on its set (Q2, fixed)`
         : ctx.handoffs.some((h) => h.lineId === line.id) ? 'collisionQ4: a linked handoff lays the line on its page (Q4, fixed)'
+        // (a composition its page carries is laid on a whole page of its own, render/page-layout.ts: a linked handoff into
+        // the next line slides that page out as a picture of the old set, never the page laid round the composition)
+        : c.seat?.carrierId?.startsWith('ground:') && ctx.handoffs.some((h) => h.lineId === ctx.lines[ctx.lines.indexOf(line) + 1]?.id) ? 'noPageSolution: the next line\'s linked handoff (Q4, fixed) carries the page out, not laid whole round the composition'
         : ctx.cams.has(line.id) ? 'collisionCamera: the world camera moves into the line'
         : lineEvents.some((e) => e.scope === 'in-line' && e.kind !== 'keep') ? 'collisionQ1: the line switches seat inside itself'
         : lineEvents.some((e) => e.material) ? 'collisionQ1: a world material move (3b) realises the line\'s switch'

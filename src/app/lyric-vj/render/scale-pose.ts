@@ -7,6 +7,7 @@
 import { fitOf, SCALE_LEAD, SCALE_MIN, EDGE_FIT_MIN, FRAME, SCALE_TARGET, STRESS_PAD, type Measure } from '../scale-policy';
 import type { ScaleCarrierRole, ScaleEdge } from '../world-shared';
 import type { FracBox } from './seat-geometry';
+import { pageLayout, type PageLayout, type PageLine } from './page-layout';
 
 /** What the plan writes on an approved line (world-events-apply.ts): enough for the renderer to lay it again. */
 export interface LineScale {
@@ -141,6 +142,22 @@ export function scaleLayout(text: string, plan: LineScale, readingSize: number, 
  * again round the composition. Never two: no band over a page's carrier, no carrier left without its words.
  */
 export const carrierPlan = (s: Pick<LineScale, 'carrierId'>, object?: string): 'page' | 'object' | 'sheet' => (s.carrierId.startsWith('ground:') ? 'page' : object ? 'object' : 'sheet');
+
+/** The page a `ground:` carrier names (`ground:screentone/shout` → `screentone/shout`), else undefined. */
+export const carrierPage = (s: Pick<LineScale, 'carrierId'>): string | undefined => (s.carrierId.startsWith('ground:') ? s.carrierId.slice('ground:'.length).split(':')[0] : undefined);
+
+/**
+ * The whole page a page-carried composition is drawn on (render/page-layout.ts, Codex phase 4 §4): its page laid again
+ * round the scaled glyphs as drawn and every other line present (`others`). Undefined for a composition not carried by
+ * its page or not drawn; a refusal when no legal page exists, and then the composition is not drawn at all (the line
+ * stands on its original page, whole: world-layout treats it as a miss).
+ */
+export function scalePage(plan: Pick<LineScale, 'carrierId' | 'edge'>, d: ScaleDraw, lineId: string, others: PageLine[] = [], show?: number): PageLayout | undefined {
+  const page = carrierPage(plan);
+  if (!page || d.kind === 'miss') return undefined;
+  const boxes = d.glyphs.map((g) => ({ x0: g.x - g.size / 2, y0: g.y - g.size / 2, x1: g.x + g.size / 2, y1: g.y + g.size / 2 }));
+  return pageLayout({ page, edge: plan.edge, lines: [{ id: lineId, boxes, size: d.size, scaled: true, ...(show !== undefined ? { show } : {}) }, ...others] });
+}
 
 /**
  * The hold a scale composition draws (Codex Q3 §2: the composition is the line's change of size): none of a folded

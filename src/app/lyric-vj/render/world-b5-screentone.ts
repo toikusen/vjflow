@@ -10,6 +10,8 @@ import { clamp01, ease, H, HandGround, HandIn, kept, W, WorldEnv } from './world
 import { C, halftone, rng, sparklePath } from './world-b3-shared';
 import { beyondCells, Box, boxOf, cellsOf, cutTime, frame, grow, openingData, outside, small, smallEnd, smallStart, wordsBox, mirrored } from './world-b5-shared';
 import { B5_MIRRORS } from './world-b5-sets';
+import { BALLOON, boxesOfCells, pageLayout, type PageInput, type PageLine } from './page-layout';
+import type { FaceLayout } from './world-sets';
 
 type Pt = [number, number];
 const SERIF = (px: number) => `400 ${px}px "Cactus Classical Serif", "Zen Antique", serif`;
@@ -334,7 +336,79 @@ const burst: HandGround = (e) => frame(e, (c) => {
   smallEnd();
 });
 
-const Gs: Record<string, HandGround> = { 'screentone/burst': burst, 'screentone/shout': shout, 'screentone/narration': narration, 'screentone/sfx': sfx, 'screentone/balloons': balloons, 'screentone/caption': caption };
+/** A face's cells, frame px y down (world-b5-shared cellsOf, one face at a time). */
+const cellsOfFace = (f: FaceLayout) => { const [a, b, c, d] = f.shear; return f.cells.map(([u, v, s]) => ({ x: f.cx + a * u + c * v, y: f.cy + b * u + d * v, s: s * Math.max(Math.abs(a), Math.abs(d)) })); };
+/** What every drawn frame's page check came to (render.mts writes it into metrics.json; the reading gate counts it). */
+export type PageTally = { frames: number; relaid: number; fails: string[]; glyphFrames: number };
+const tally = (): PageTally => ((globalThis as { vjPageChecks?: PageTally }).vjPageChecks ??= { frames: 0, relaid: 0, fails: [], glyphFrames: 0 });
+/** The carrier each page-carried composition's page drew this frame, frame px (engine.ts pageGlyphCheck reads it). */
+export type PageDrawn = Record<string, { stamp: number; outline: [number, number][] }>;
+
+/**
+ * The page laid again whole round a Q3 scale composition it carries (render/page-layout.ts, Codex phase 4 §4): when a
+ * line handed with the box is a page-carried composition, the page draws no panel of its own layout, only the one
+ * panel the layout gives (open on the bleed edge), its kind of carrier round the scaled line and a narration box round
+ * every other line present, then its foot on the side away from the bleed. The layout is checked on this frame's lines
+ * (verifyPage, inside pageLayout) and the frame counted; a frame whose lines leave no legal page is counted as failed and
+ * drawn with the scaled line's own page. False when no composition is handed: the page draws as composed.
+ */
+function relaid(page: string, e: WorldEnv): boolean {
+  const r = e.rect as (WorldEnv['rect'] & { face?: FaceLayout; faces?: FaceLayout[] }) | undefined;
+  const fs = r?.faces ?? (r?.face ? [r.face] : []);
+  const hero = fs.find((f) => f.scale);
+  if (!hero?.scale) return false;
+  const lines: PageLine[] = fs.map((f, k) => ({ id: f.scale?.line ?? `${hero.scale!.line}+other#${k}`, boxes: boxesOfCells(cellsOfFace(f)), size: f.size, ...(f.scale ? { scaled: true, show: f.scale.show } : {}) }));
+  const input: PageInput = { page, edge: hero.scale.edge, lines, seed: 7 };
+  const t = tally();
+  t.frames++;
+  let sol = pageLayout(input);
+  if (!sol.ok) {
+    t.fails.push(`${e.now.toFixed(3)} ${hero.scale.line} ${sol.why.join('; ')}`.slice(0, 400));
+    sol = pageLayout({ ...input, lines: lines.filter((l) => l.scaled) });
+    if (!sol.ok) return false;
+  } else t.relaid++;
+  const laid = sol;
+  frame(e, (c) => {
+    smallStart(e);
+    const [ink, paper] = [e.slots.ink, e.slots.ground];
+    c.fillStyle = paper;
+    c.fillRect(0, 0, W, H);
+    const panel = laid.panels[0];
+    const main = laid.carriers[0];
+    // (the carrier as it lands on the frame, through this context's transform: a turned page's mirror included)
+    const m = c.getTransform();
+    const g0 = globalThis as { vjPageLast?: PageDrawn; vjFrameStamp?: number };
+    (g0.vjPageLast ??= {})[hero.scale!.line] = { stamp: g0.vjFrameStamp ?? 0, outline: main.outline.map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f] as [number, number]) };
+    const g = laid.carriers[0] && input.lines.find((l) => l.scaled)!.boxes.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+    const [cx, cy] = [(g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2];
+    // the panel's own tone: focus lines toward a shout, a light tone with speed lines behind a speech balloon, tone
+    // deepening downward behind a narration box (the boards' a, d and the caption page)
+    if (main.kind === 'spiky') focus(c, panel.pts, cx, cy, Math.max(g.x1 - g.x0, g.y1 - g.y0) * 0.5, 220, ink, 71);
+    else if (main.kind === 'oval') { tone(c, panel.pts, 0, ink, paper); speed(c, panel.pts, 40, ink, 13); }
+    else ([[0, 0, 420], [1, 420, 700], [2, 700, H]] as [Tone, number, number][]).forEach(([st, y0, y1]) => { c.save(); path(c, panel.pts); c.clip(); tone(c, [[0, y0], [W, y0], [W, y1 + 1], [0, y1 + 1]], st, ink, paper); c.restore(); });
+    rim(c, panel.pts, ink);
+    for (const k of laid.carriers) {
+      c.save();
+      c.lineJoin = k.kind === 'oval' ? 'round' : 'miter';
+      c.lineWidth = k.kind === 'narration' ? 4 : BALLOON.stroke;
+      c.strokeStyle = ink;
+      c.fillStyle = paper;
+      path(c, k.outline);
+      c.fill();
+      c.stroke();
+      c.restore();
+    }
+    // the foot on the side away from the bleed (under the panel, or over it when the page bleeds through its bottom)
+    const d = openingData(e, ' ');
+    small(c, [d, cutTime(e)].filter(Boolean).join(' '), 70, laid.foot === 'top' ? 40 : 1040, 24, SERIF, ink);
+    smallEnd();
+  });
+  return true;
+}
+/** A page that lays itself again round a scale composition it carries, else as composed. */
+const orRelaid = (page: string, g: HandGround): HandGround => (e) => { if (!relaid(page, e)) g(e); };
+
+const Gs: Record<string, HandGround> = Object.fromEntries(Object.entries({ 'screentone/burst': burst, 'screentone/shout': shout, 'screentone/narration': narration, 'screentone/sfx': sfx, 'screentone/balloons': balloons, 'screentone/caption': caption }).map(([id, g]) => [id, orRelaid(id, g)]));
 
 const INS: Record<string, HandIn> = {
   // the page is turned: the next page's edge sweeps in from the right with its black rule and a hard shadow, never over the words

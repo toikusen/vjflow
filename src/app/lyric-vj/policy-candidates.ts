@@ -22,7 +22,7 @@ import { scaleInputOf } from './scale-policy-adapter';
 import type { StyleWorld } from './style-world';
 import type { SongTimeline } from './timeline';
 import type { PolicyCandidate } from './world-events';
-import { SCALE_HOLDS } from './render/scale-pose';
+import { carrierPage, SCALE_HOLDS, scalePage } from './render/scale-pose';
 import { LIFT_MIN, liftRoom } from './render/line-moment';
 
 /** A free plan's first draw (free-plan.ts freeJob): its job and its plan; structural, so the adapters stay off its return type. */
@@ -74,7 +74,12 @@ export function scaleMissOf(c: LayoutSeatCandidate, text: string): string {
   const main = splitCalls(text).main;
   const reading = blockOf(main.replace(/[\s　]+/g, ' ').trim(), spec, spec.even ? (x: string) => [...x].length * 100 : shapedMeasure).size;
   const d = scaleLayout(main, ls, reading, spec, shapedMeasure);
-  return d.kind === 'miss' ? `unrealizable: ${d.why ?? 'under 1.6× as drawn'}` : '';
+  if (d.kind === 'miss') return `unrealizable: ${d.why ?? 'under 1.6× as drawn'}`;
+  // (a page-carried composition is drawn only on a whole page laid again round it, render/page-layout.ts: a line whose
+  // calls stand beside it would need a carrier the page does not lay for them, so it is refused here, not half-drawn)
+  if (carrierPage(ls) && splitCalls(text).calls.length) return 'noPageSolution: the line has a call beside it (no carrier for it on the re-laid page)';
+  const page = scalePage(ls, d, c.lineId);
+  return page && !page.ok ? page.why.join('; ') : '';
 }
 
 /**

@@ -467,9 +467,10 @@ export const WORLD_SCALE: Record<string, WorldScale> = {
   // (its sets anchor top-left and bottom-right: the paper's corners are where its type already sits)
   riso: { edges: ['bottom', 'left', 'top', 'right'], carrierRole: 'paper', sizeRange: [1.6, 2.4], candidateWeights: { short: 1.6, ratio: 1, room: 1.4, sustain: 1.3, order: 0.6 }, curve: 'cut', note: 'riso.edgeFit (Codex §3): paper edge, the sheet runs off; prefers short phrases, empty paper, held lines' },
   // (a manga page tiers its panels top to bottom: a panel bleeding off the page's top or bottom edge)
-  // (withheld 2026-11-10 after two critic rounds, docs/research/2026-11-10-q3q5-critic-r2.md: the re-laid balloon cannot
-  // close in frame and the page's other panels stay as empty shells; the page must re-lay its whole grid round it first)
-  screentone: { edges: ['top', 'bottom'], carrierRole: 'panel', sizeRange: [1.6, 2.4], candidateWeights: { short: 0.8, ratio: 1, room: 0.7, sustain: 0.8, order: 1.8 }, curve: 'cut', note: 'screentone.edgeFit (Codex §3): panel inner edge, page and panel frame run off; prefers a clear main/minor panel reading order', withheld: 'the page does not re-lay its panel grid round a scaled balloon: the balloon runs off the frame and the other panels stay empty (critic r2)' },
+  // (withheld 2026-11-10 after two critic rounds, docs/research/2026-11-10-q3q5-critic-r2.md: the re-laid balloon could
+  // not close in frame and the page's other panels stayed as empty shells; back 2026-11-10 phase 4e once the page lays
+  // itself whole round the composition, render/page-layout.ts, docs/research/2026-11-10-screentone-page-layout.md)
+  screentone: { edges: ['top', 'bottom'], carrierRole: 'panel', sizeRange: [1.6, 2.4], candidateWeights: { short: 0.8, ratio: 1, room: 0.7, sustain: 0.8, order: 1.8 }, curve: 'cut', note: 'screentone.edgeFit (Codex §3): panel inner edge, page and panel frame run off; prefers a clear main/minor panel reading order' },
 };
 /** A world's declared scale capability, or undefined (no Q3 candidate): none for a world whose declaration is withheld. */
 export const scaleOf = (id: string): WorldScale | undefined => (WORLD_SCALE[id]?.withheld ? undefined : WORLD_SCALE[id]);

@@ -108,7 +108,7 @@
 
 ## 5. 限制（照實）
 
-- **整句換墨變多。** C 的白名單只約束 `ink-swap`。被拒的片語換色，在世界順位上常由 `line-ink-settle`（整句一起換到第二墨色）接手；file 70–130 秒 21 句裡 9 句是整句換墨，因為「連續不同種」讓它與 keep 或其他種類交替。整批 `line-ink-settle` 784 → 1389。業主覺得「隨便換」的若是「顏色在固定時間點變」，整句換墨可能仍會被看成同一件事；要不要把同樣的理由規則延伸到整句換墨，需要業主看片後決定，這次沒有自行延伸。
+- **（已由 §7 解除）整句換墨變多。** C 的白名單只約束 `ink-swap`。被拒的片語換色，在世界順位上常由 `line-ink-settle`（整句一起換到第二墨色）接手；file 70–130 秒 21 句裡 9 句是整句換墨，因為「連續不同種」讓它與 keep 或其他種類交替。整批 `line-ink-settle` 784 → 1389。業主覺得「隨便換」的若是「顏色在固定時間點變」，整句換墨可能仍會被看成同一件事；要不要把同樣的理由規則延伸到整句換墨，需要業主看片後決定，這次沒有自行延伸。
 - **段落能量門檻 0.15 是提案值**，只依兩首歌的段落能量分布選定，沒在影片上量；雙截棍前五段都被標成 chorus，類型變化只出現在 chorus → verse／bridge。
 - **meaning 理由很少成立**：整首 45 世界 × 5 首只有 77 次。推論（未逐句量）：meaning 詞組常在句首，演唱起點早於進句結束，落不進閱讀窗；`timing` 拒絕 822 次可能多半是這個原因。要確認需要逐句列出被拒 span 的錨點與 `entered`。
 - **重複句規則依文字相同判斷**，不是依音樂分析的樂句；呼喊不同的同一句會被視為同一組，歌詞稍有差異的重複不會被認出。
@@ -120,3 +120,36 @@
 ## 6. 給業主的片子
 
 `~/Desktop/vj/output/換色與句內_2026-11-10/v1/`：四組，左 = 業主盲看時那支 holds-first（`pairs-4c/1-甲、2-乙、3-乙、4-甲`），右 = 同條件（seed 0、Huninn、排程器開、holds-first、同時間窗）在本 commit 重新渲染。治療檔與清單：`out/research/q1-1109/pairs-rules/clips/`（`pairs-rules-clips.mts`、`run.sh`，一次一支渲染，metadata 去除）。spy 是回歸對照。
+
+## 7. 擴充：所有顏色變化都要理由（694c32b）
+
+**推論（不是 Codex 原文）**：業主原話是「顏色變換要合理，不是隨便換」，指的是任何顏色變化，不只片語換色。所以把 C 擴充到整句換墨（`line-ink-settle`）。這是依業主措辭所做的延伸，Codex C 的白名單原本只寫 `ink-swap`。§5 第一條限制因此解除。
+
+| 實作 | 位置 |
+|---|---|
+| `COLOUR_HOLDS` = `ink-swap`、`line-ink-settle`；按鍵色的脈衝（ink-run、light-sweep、roll、beat-punch：換過去再換回來）不算 | `lineplan-core.ts` `COLOUR_HOLDS` |
+| 整句換墨只在有理由的句子成為最後備援，理由同樣是 meaning／section／repeat，`why` 記在 hold 上（沒有詞組時 `span` 為整句）；沒有理由的句子 keep，不再整句換墨 | `holdCandidatesOf` `settleCause`、`fallback` |
+| 兩種顏色變化共用每段 2 次的額度（composer 的 `spend`、joint 選擇器的 `colour`） | `lineplan-core.ts`、`world-events.ts` `jointLine` |
+| 時間：meaning 理由 → 該詞組的演唱起點（或詞組內、距離 ≤ 0.12 秒的拍點），只用可靠逐字時間；section／repeat 理由沒有詞組 → 閱讀入場後的第一個拍點（在閱讀窗內、離換座／剪接夠遠）；找不到就不換 | `settleAt` |
+| verifier：整句換墨沒有 `why` 報錯；有詞組時檢查時間 | `holdSequenceChecks` |
+| joint 篡改測試從 document 換到 card（document 的 hold 幾乎全是整句換墨，擴充後 joint 下 0 個） | `world-events-4c.spec.ts` |
+
+**數字（694c32b）**
+
+- 雙截棍 file holds-first 70–130 秒（21 句）：ink-swap 19 → 3 → **2**；整句換墨 0 → 9 → **2**；keep 0 → 7 → **15**（改前 → §3 版 → 本版）。4 個顏色變化都有 `why`（section 1、repeat 3），每段最多 2 次，連續同種 0。整首：ink-swap 4、整句換墨 4、keep 39／53。窗內被拒：`ink-swap` no-reason 12、section-cap 3、timing 2、repeat-kind 2；`line-ink-settle` no-reason 12、section-cap 3、timing 2。
+- card 60–120：ink-swap 2、整句換墨 2、keep 2；spy 135–190：整句換墨 1、keep 4；art-deco 不變。
+- 13 世界組 seed 0：OFF 3.6／3.2、ON 3.6／3.2（不變）；原五 ON 3.6／2.8，全 45 ON 3.2／3.2。contract 0。
+- Q2 覆蓋率（舊分母）OFF：0.6–1.5 秒 **11.9 %**（59/495）、1.5–3 秒 **27.1 %**（1477/5445）、> 3 秒 **59.0 %**（2841/4815）；ON：11.9 %、28.8 %、64.4 %。hold 總數 6475 → 4377（OFF）。ink-swap 181、整句換墨 1389 → **304**。
+- 被拒（OFF，整批）：`line-ink-settle` no-reason 3205、timing 945、section-cap 173、repeat-kind 102；`ink-swap` no-reason 2113、timing 797、span 253、section-cap 147、repeat-kind 68。顏色變化的理由：ink-swap meaning 77、section 41、repeat 63；整句換墨 section 164、repeat 114、meaning 26。連續同種 0。
+- 預設產品：仍然只因 hold 改變。225 組把 hold、`holds` 表與 hold 相關警告拿掉後，與 e78987a 全部相同。新指紋 seed 0 `4082184a…`、`--q1` `41415d9a…`（`hash-pairs/c-seed0.json`、`c-q1.json`，覆蓋 §3.4 的 `f8e0b00e…`／`aa59d72b…`）。
+- 閘門（art-deco、file、card、spy，5 首）：見下表。450 個排程器開的 job，final check 0。
+- 測試：141 檔／**1722** 全過；tsc app／spec 通過。
+
+| 閘門 | 時刻 | fails | contract | regressions |
+|---|---:|---:|---:|---:|
+| 排程器關（694c32b） | 1956 | 0 | 0 | 0 |
+| 排程器開（694c32b） | 1956 | 0 | 0 | 0 |
+
+**片子**：`~/Desktop/vj/output/換色與句內_2026-11-10/v2/`。第1組計畫沒變，沿用 v1；第2–4組重新渲染（`out/research/q1-1109/pairs-rules/clips2/`）。
+
+**新的限制**：Q2 覆蓋率大幅下降（1.5–3 秒 55 % → 27 %），因為很多世界的備援 hold 原本就是整句換墨（document 幾乎全是）。document 在 joint 下沒有 hold，業主看到的 document 會比以前安靜很多。section／repeat 理由的整句換墨落在入場後第一拍，不是某個詞，這是「沒有詞組時」的人為選擇，沒有在影片上驗證過。

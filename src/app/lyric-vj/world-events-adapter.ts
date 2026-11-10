@@ -5,11 +5,13 @@
 import type { freeJob } from './free-plan';
 import type { StyleWorld } from './style-world';
 import type { SongTimeline, TimelineCue } from './timeline';
-import { BEAT_CLEAR, FIRST_SET, growFits, KEPT } from './lineplan-core';
+import { BEAT_CLEAR, FIRST_SET, growFits, KEPT, SWAP_SNAP } from './lineplan-core';
 import { wordBreaks } from './phrases';
 import { approvedOf, lineShows, type Section as ShownSection } from './render/line-shows';
 import { readingSec } from './render/reading-window';
-import { SET_SPECS } from './render/world-sets';
+import { blockOf, SET_SPECS } from './render/world-sets';
+import { objectInk } from './render/world-objects';
+import { layoutMeasure } from './render/layout-measure';
 import { WORLD_BEATS } from './render/world-beats';
 import { WORLD_ENTERS } from './render/world-motion';
 import { enterSec as lineEnterSec } from './render/enter-sec';
@@ -19,7 +21,7 @@ import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
 import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
 import { boxesMeet, laidSeat, panelSplit } from './render/seat-geometry';
-import { absorbInk } from './render/hold-room';
+import { absorbInk, inkChecks } from './render/hold-room';
 import { lineFace } from './fonts';
 import { DEFAULT_DESIGN } from './design';
 import { ABSORBABLE_HOLDS, ACTION_GAP, BEAT_SNAP, holdIdOf, LIGHT_GAP, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, type AbsorbedHold, type AbsorbRoom, type CameraMove, type InputWarning, type LineOutcome, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type JointHold, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
@@ -79,7 +81,7 @@ export function capsOf(world: StyleWorld, o: { derived?: boolean; off?: boolean 
   const carrierRole: WorldCompositionCaps['carrierRole'] = world.sheet ? 'page' : world.standsOnPlate ? 'plate' : seats.some((s) => s.carrierId) ? 'object' : 'ground';
   const declared = compositionsOf(world.id);
   // (a world's declared seats, or all of its sets and the seats it adds on their pages)
-  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), ...(declared.entranceAndInLine ? { entranceAndInLine: true } : {}), source: 'declared' };
+  if (declared && !o.derived && !o.off) return { worldId: world.id, kinds: declared.kinds, seats: declared.seats ?? [...sets, ...pageSeatsOf(world.id)], carrierRole: declared.carrierRole, allowedAt: declared.allowedAt, duration: declared.duration, moves: declared.moves, ...(declared.protectedRegion ? { protectedRegion: declared.protectedRegion } : {}), ...(declared.materials ? { materials: declared.materials } : {}), source: 'declared' };
   if (!o.derived) return { worldId: world.id, kinds: [], seats: sets, carrierRole, source: 'declared-off' };
   const differs = seats.some((a) => seats.some((b) => seatsDiffer(a, b)));
   const kinds: CompositionFamily[] = [
@@ -378,6 +380,17 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   const out: InputWarning[] = [];
   const miss = (id: string, why: string) => out.push({ inputs: [id], reason: `final check: ${why}` });
   const near = (a: number, b: number) => Math.abs(a - b) < 0.002;
+  // (Codex 2026-11-10 pairs B: a line being sung never changes seat, and takes one visible composition at most, its
+  // entrance and a carrier swap inside it together included; the drawing is read for both too, not only the plan)
+  for (const e of table.events) if (e.kind === 'layout-seat' && e.scope === 'in-line') miss(e.id, `pairs B: an in-line layout-seat on ${e.lineIds.at(-1)} at ${e.at} (a line being sung never changes seat)`);
+  const visible = new Map<string, string[]>();
+  for (const e of table.events) if (VISIBLE_COMPOSITIONS.has(e.kind)) visible.set(e.lineIds.at(-1)!, [...(visible.get(e.lineIds.at(-1)!) ?? []), e.id]);
+  for (const [line, ids] of visible) if (ids.length > 1) miss(line, `pairs B: ${line} takes ${ids.length} visible compositions (${ids.join(', ')}); one at most`);
+  for (const r of rows) for (const x of r.world?.repose ?? []) {
+    if (!x.move) miss(`repose@${r.id}@${x.at}`, `pairs B: ${r.id} is drawn changing seat to ${x.set} at ${x.at} while it is sung`);
+    // (a carrier swap keeps the words in the very box at the very type: only what carries them changes)
+    else if (r.world && !sameWords(seatIn(world, r.world.set, r.cue.text, faces), seatIn(world, x.set, r.cue.text, faces))) miss(`${x.move}@${r.id}`, `pairs B: ${x.move} on ${r.id} at ${x.at} moves the words (box or type differs from ${r.world.set} to ${x.set})`);
+  }
   for (const e of table.events) {
     const row = rows.find((r) => r.id === e.lineIds[e.lineIds.length - 1]);
     if (!row) { miss(e.id, 'line not shown'); continue; }
@@ -454,6 +467,7 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
       if (SET_SPECS[x.set]?.panels && !panelSplit(laidSeat(r.cue.text, x.set, { font: faces?.(r.cue.text) }))) miss(`${x.move}@${r.id}`, `approved material move ${x.move} not drawn on ${r.id} at ${x.at}: the line does not part into a plaque and a lesser panel`);
     }
   out.push(...absorbedChecks(job, world, table, faces));
+  out.push(...holdSequenceChecks(job));
   // a world camera's move drawn over another switch of the song: a scheduled world drops it (camDrops), never keeps both
   for (const r of rows) {
     const c = r.world?.cam && WORLD_CAM_SEC[r.world.cam.kind] ? r.world.cam : undefined;
@@ -475,6 +489,93 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   const landed = landedEvents(job, world, table, faces);
   for (const l of landed.events) if (!l.same && !out.some((w) => w.inputs[0] === l.id)) miss(l.id, `landed otherwise: ${l.why}`);
   for (const d of landed.extra) miss(`${d.kind}@${d.lineIds.at(-1)}@${d.at}`, `a ${d.kind} is drawn that the plan does not hold`);
+  return out;
+}
+
+/** Hold kinds that leave the words in another colour (pairs C as extended): their change must be seen. */
+const COLOUR_KINDS = new Set(['ink-swap', 'line-ink-settle']);
+const lowHex = (c: string | undefined) => (c ?? '').toLowerCase();
+
+/**
+ * Whether a colour-change hold changes the words' colour as the line is drawn (review 2026-11-10: a phrase swapped into
+ * the accent its row is already printed in, or a whole-line ink that finds no second ink and falls back to its own, draws
+ * nothing). The inks are resolved as world-layout draws them, from what the job fixes: the set's own ink (its slot, its
+ * object's, the world's fixed ink) else the type colour of the print under the line (a dark print turns paper and ink
+ * over), the set's per-row inks and a split part's own ink, the reading's colour-marked characters in the key; then the
+ * new ink by hold-room inkChecks, the renderer's own predicates. What only the drawn frame knows (the picture's colours
+ * under the box, render engine backdropAt) is not read here: the frames are sampled for it. Every character the change
+ * covers (the phrase, or the whole line but a split part) must end in another ink, else it is not seen.
+ */
+export function colourChangeSeen(job: Job, lineId: string, beat: { kind: string; span?: { from: number; to: number } }, set?: string): { seen: boolean; why?: string } {
+  if (!COLOUR_KINDS.has(beat.kind)) return { seen: true };
+  const { rows, sections } = shownOf(job);
+  const row = rows.find((r) => r.id === lineId);
+  const w = row?.world as (WorldLine & { fixedInk?: boolean }) | undefined;
+  const spec = SET_SPECS[set ?? w?.set ?? ''];
+  const slots = w?.slots;
+  if (!row || !w || !spec || !slots) return { seen: true };
+  const under = [...sections].reverse().find((x) => x.start <= row.cue.start + 1e-3);
+  const kin = (under?.layers as { kind: string; ink?: string; paper?: string; accent?: string; dark?: boolean }[] | undefined)?.find((l) => l.kind === 'kinetic' && l.ink && l.paper);
+  const pal = (job.treatment as { styleAnchor?: { palette?: { text?: string; background?: string; accent?: string } } }).styleAnchor?.palette ?? {};
+  const base = spec.ink ? slots[spec.ink] : spec.object ? objectInk(spec.object, slots) : w.fixedInk ? slots.ink : kin ? (kin.dark ? kin.paper! : kin.ink!) : pal.text ?? slots.ink;
+  const seen = { background: kin ? (kin.dark ? kin.ink : kin.paper) : pal.background, accent: kin?.accent ?? pal.accent };
+  const inks = inkChecks(spec, slots, base, seen);
+  const chars = [...row.cue.text];
+  // (the reading's colour-marked characters are drawn in the key when they are a phrase, not most of the line)
+  const marked = new Set(((job.treatment.cues as { cueId: string; emphasis?: { from: number; to: number; method?: string }[] }[]).find((c) => c.cueId === lineId)?.emphasis ?? []).filter((e) => e.method === 'color').flatMap((e) => Array.from({ length: e.to - e.from }, (_, k) => e.from + k)));
+  const marks = marked.size > 0 && marked.size <= 0.6 * chars.filter((c) => !/\s/.test(c)).length;
+  // (each character's row in the block as laid on the job's own face: per-row inks and a split's small part)
+  const block = spec.rowInk || spec.split?.ink ? blockOf(row.cue.text.replace(/[\s　]+/g, ' ').trim(), spec, layoutMeasure(jobFaces(job)(row.cue.text))) : undefined;
+  const rowOf: (number | undefined)[] = chars.map(() => undefined);
+  let p = 0;
+  block?.rows.forEach((r, k) => { for (const ch of r) { while (p < chars.length && chars[p] !== ch) p++; if (p < chars.length) rowOf[p++] = k; } });
+  const small = new Set(block?.small ?? []);
+  const apart = (i: number) => !!spec.split?.ink && rowOf[i] !== undefined && small.has(rowOf[i]!);
+  const before = chars.map((_, i) => {
+    if (apart(i)) return slots[spec.split!.ink! as keyof typeof slots];
+    const r = spec.rowInk && rowOf[i] !== undefined ? spec.rowInk[Math.min(spec.rowInk.length - 1, rowOf[i]!)] : undefined;
+    const own = !r || r === (spec.ink ?? spec.rowInk![0]);
+    return own && marks && marked.has(i) ? inks.key : r ? slots[r as keyof typeof slots] : base;
+  });
+  const settle = beat.kind === 'line-ink-settle';
+  const after = chars.map((_, i) => (apart(i) ? before[i] : settle ? inks.settle ?? base : beat.span && i >= beat.span.from && i < beat.span.to && inks.swapOk ? inks.key : before[i]));
+  const covered = chars.map((c, i) => i).filter((i) => !/[\s\p{P}]/u.test(chars[i]) && !apart(i) && (settle || (!!beat.span && i >= beat.span.from && i < beat.span.to)));
+  if (!covered.length) return { seen: false, why: 'no character the change covers' };
+  const same = covered.filter((i) => lowHex(before[i]) === lowHex(after[i]));
+  return same.length ? { seen: false, why: `${same.length} of ${covered.length} characters keep their ink (${lowHex(before[same[0]])})${settle && !inks.settle ? ': no second ink reads under the line' : ''}` } : { seen: true };
+}
+
+/**
+ * Codex 2026-11-10 pairs C on the final drawing, whatever path chose the holds (holds-first, joint, a fallback): no two
+ * sung lines in a row draw the same hold kind (a line between with none lifts it); every ink-swap carries its reason
+ * (`why`: kind, source, the span it swapped) and lands at its phrase's sung start or on a beat inside the phrase within
+ * SWAP_SNAP of it. (The section cap needs the song's sections, which the job does not carry: the plan and the reports
+ * count it, lineplan-core swapCausesOf and hold-plan-all.mts.)
+ */
+export function holdSequenceChecks(job: Job): InputWarning[] {
+  const rows = [...shownOf(job).rows].sort((a, b) => a.cue.start - b.cue.start);
+  const out: InputWarning[] = [];
+  const miss = (id: string, why: string) => out.push({ inputs: [id], reason: `final check: pairs C: ${why}` });
+  rows.forEach((r, k) => {
+    const b = r.world?.beat as (NonNullable<WorldLine['beat']> & { why?: { kind: string; source: string; span: { from: number; to: number }; at: number } }) | undefined;
+    if (!b) return;
+    const prev = rows[k - 1]?.world?.beat;
+    if (prev && prev.kind === b.kind) miss(`hold:${b.kind}@${r.id}`, `${r.id} draws a ${b.kind} straight after ${rows[k - 1].id}'s`);
+    const vis = colourChangeSeen(job, r.id, b);
+    if (!vis.seen) miss(`hold:${b.kind}@${r.id}`, `planned colour change not visible on ${r.id}: ${vis.why}`);
+    // (the whole line's ink is a colour change too: it carries its reason; its time is checked where the reason names a phrase)
+    if (b.kind === 'line-ink-settle') {
+      if (!b.why?.source) return void miss(`hold:${b.kind}@${r.id}`, `the whole-line ink on ${r.id} carries no reason`);
+      const whole = b.why.span.from === 0 && b.why.span.to === [...r.cue.text].length;
+      const t = whole ? undefined : r.cue.charStarts?.[b.why.span.from];
+      if (!whole && (t === undefined || b.at < t - EPS || b.at > t + SWAP_SNAP + EPS)) miss(`hold:${b.kind}@${r.id}`, `the whole-line ink on ${r.id} at ${b.at} is not at its phrase's sung start (${t ?? 'none'})`);
+      return;
+    }
+    if (b.kind !== 'ink-swap') return;
+    if (!b.why?.source || !b.span || b.why.span.from !== b.span.from || b.why.span.to !== b.span.to) return void miss(`hold:${b.kind}@${r.id}`, `the ink-swap on ${r.id} carries no reason for its phrase`);
+    const t = r.cue.charStarts?.[b.span.from];
+    if (t === undefined || b.at < t - EPS || b.at > t + SWAP_SNAP + EPS) miss(`hold:${b.kind}@${r.id}`, `the ink-swap on ${r.id} at ${b.at} is not at its phrase's sung start (${t ?? 'none'})`);
+  });
   return out;
 }
 
@@ -565,6 +666,8 @@ export function failedComposites(events: WorldEvent[], checked: InputWarning[]):
   return { failed, warnings: failed.map((e) => ({ inputs: [e.id], reason: `final check: contract failure: the composite ${e.absorbed!.holdId} + ${e.absorbed!.materialId} did not land (${named(e).map((w) => w.reason.replace(/^final check: /, '')).join('; ')}); its hold and the line's layout restored, the material refused` })) };
 }
 
+/** What changes the composition a line is read in (a seat, its carrier, its page, its ground, the camera into it); a prop accent or a keep never does. */
+const VISIBLE_COMPOSITIONS: ReadonlySet<string> = new Set(['layout-seat', 'carrier-swap', 'page-handoff', 'ground-role', 'camera-reframe']);
 /** Two times within this are the same drawn instant (the final checks' own landing tolerance, 2 ms). */
 const LANDED = 0.002;
 /** Float slack on a boundary comparison (s). */
@@ -586,7 +689,7 @@ export const jointName = (lineId: string) => `joint:${lineId}`;
  * own switches keep SEAM_GAP (the light clock is lightGapWarnings'). Each miss is a final-check InputWarning naming the
  * line (`joint:<line>`).
  */
-export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }, opts: { entranceAndInLine?: boolean } = {}): InputWarning[] {
+export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldEvent[]; holds?: HoldEvent[]; outcomes?: LineOutcome[] }): InputWarning[] {
   if (!table.outcomes) return [];
   const { rows } = shownOf(job);
   // (the switches as the final job draws them, read off the drawing with real shows: the winner is what is drawn)
@@ -604,9 +707,8 @@ export function jointChecks(job: Job, world: StyleWorld, table: { events: WorldE
     const evs = cuts.filter((e) => e.lineIds.at(-1) === o.lineId);
     const hs = holds.filter((h) => h.lineId === o.lineId);
     const actions = evs.length + hs.filter((h) => !absorbedIds.has(holdIdOf(h))).length;
-    // (a world that declares it: an entrance and one reseat inside the line, two changes, no hold beside them)
-    const pairOk = !!opts.entranceAndInLine && actions === 2 && !hs.length && evs.filter((e) => e.scope === 'in-line').length === 1 && evs.some((e) => e.scope !== 'in-line' && e.kind !== 'camera-reframe');
-    if (actions > 1 && !pairOk) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
+    // (one a line, every world: the entrance-and-reseat pair art-deco once took is withdrawn, Codex 2026-11-10 pairs B)
+    if (actions > 1) miss(o.lineId, `${o.lineId} takes ${actions} primary actions (${[...evs.map((e) => e.id), ...hs.map(holdIdOf)].join(', ')}); one at most`);
     const drawn = holdOf(row.id, row.world);
     if (row.world?.holdCands) miss(o.lineId, `hold candidates reached the drawing on ${o.lineId}`);
     if (o.outcome === 'hold' || o.outcome === 'composite') {

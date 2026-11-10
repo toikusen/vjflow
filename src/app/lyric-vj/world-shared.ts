@@ -253,14 +253,8 @@ export interface WorldCompositions {
    * VJ_WORLD_EVENTS=1) schedules them, as the measurement and the gate do.
    */
   enabled?: boolean;
-  /**
-   * Under the joint contract (phase 4c, Codex 2026-11-10 r3 §4): a line whose entrance is a visible composition may also
-   * take one reseat inside itself, at a sung word, with READ_STABLE of still reading after the entrance has landed and
-   * before the line ends, every clock and geometry check passed. Two composition changes, counted as two; never a hold
-   * beside them, never a third. Declared only where the owner accepted that density (art-deco: card 2026-11-10-art-deco-
-   * slow-inline-density); every other world keeps one primary action a line.
-   */
-  entranceAndInLine?: boolean;
+  // (no `entranceAndInLine`: the second composition a line once took after a visible entrance is withdrawn, Codex
+  // 2026-11-10 pairs B, card 2026-11-10-no-inline-line-move; every world takes one visible composition a line at most)
 }
 
 /** How a material move runs (design-bar rule 9: the curve follows the material, never one shared ease). */
@@ -345,12 +339,12 @@ const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, 
 
 export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // sheet-change: the next drawing sheet's own layout; detail-viewport: the push into a part, cut from the same sheet
-  // (no invented engineering detail); the detail strip: the same sheet's note written under its drawing (phase 3a), the
-  // one seat a line may take inside itself (the same sheet under the words)
-  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: true, protectedRegion: BLUEPRINT_BORDER },
-  // board-region: left / right / centre regions of the deep green board, also at a word inside a line (the same board
-  // under the words, so nothing is pulled from under them); chalk changing colour is no cut
-  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' },
+  // (no invented engineering detail); the detail strip: the same sheet's note written under its drawing (phase 3a), taken
+  // at a line or a part only: a line being sung never changes seat (Codex 2026-11-10 pairs B)
+  blueprint: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'sheet-change', 'camera-reframe': 'detail-viewport' }, pageSeats: true, protectedRegion: BLUEPRINT_BORDER },
+  // board-region: left / right / centre regions of the deep green board, at a line or a part (never inside a line being
+  // sung, Codex 2026-11-10 pairs B); chalk changing colour is no cut
+  chalkboard: { kinds: ['layout-seat', 'camera-reframe', 'page-handoff'], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'board-region' },
     // erase-reseat (phase 3b): a next region that meets the one just sung is wiped first by the board's own eraser pass
     // (its approved exit), only once the line there is sung and read still 0.35 s past its last syllable; the line being
     // sung is never touched (the wipe ends as the next line shows); the tray along the foot is never wiped over
@@ -366,15 +360,15 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
     'feed-advance': { family: 'page-handoff', at: ['line'], sec: 0.3, curve: 'paper-feed', seat: 'same', clearOfSung: 0, minLine: 1.5, draws: 'feed', counts: 'seen', protectedRegion: [RECEIPT_MOUTH] },
   } },
   // page-turn: the Q4 fold to the top binding; margin-seat: the main column and, on the same page, the margin seat under
-  // it (phase 3a), at the world's least type or more: the one seat a line may take inside itself (the same page under it)
-  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: true, protectedRegion: NOTEBOOK_HEAD },
+  // it (phase 3a), at the world's least type or more, at a line or a part (never inside a line, Codex 2026-11-10 pairs B)
+  notebook: { kinds: ['layout-seat', 'page-handoff'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'margin-seat', 'page-handoff': 'page-turn' }, pageSeats: true, protectedRegion: NOTEBOOK_HEAD },
   // poster-panel / frame-reseat: the approved poster's panels and frames, each a page; the secondary block on the axis
-  // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: the one seat a line may take inside
-  // itself (the same frame under it). No marquee turned stage sign. carrier-swap (phase 3b, poster-panel): at a sung word
+  // inside the marquee's stepped frame (phase 3a), the plaque drawn round it as set: taken at a line or a part only (the
+  // in-line move onto it was rejected, card 2026-11-10-no-inline-line-move). No marquee turned stage sign. carrier-swap (phase 3b, poster-panel): at a sung word
   // inside a line on a marquee, its single plaque parts into the main plaque and a stepped secondary panel under the
   // gold phrase, slid down out of the main one (ease-out, no overshoot); the words never move, the panel is the ground's
   // own black, the plaque keeps the approved board's rules and minimum width
-  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line', 'in-line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME, entranceAndInLine: true,
+  'art-deco': { kinds: ['layout-seat', 'camera-reframe', 'page-handoff', 'carrier-swap'], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'], 'page-handoff': ['section', 'line'], 'carrier-swap': ['in-line'] }, duration: { 'layout-seat': 0, 'carrier-swap': POSTER_PANEL.sec }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera', 'page-handoff': 'page-link', 'carrier-swap': POSTER_PANEL.curve }, moves: { 'layout-seat': 'poster-panel / frame-reseat', 'carrier-swap': 'poster-panel' }, pageSeats: true, protectedRegion: DECO_FRAME,
     // (withheld 2026-11-10 when the scheduler approved Utsusemi 75.86 on a split the renderer did not make; back 2026-11-10
     // (phase 3c): pageSeatsFor, world-layout → panelsOf and the contract all part a line by seat-geometry panelSplit on
     // the renderer's own measure of the job's face, docs/research/2026-11-10-q1-phase3c.md)

@@ -390,15 +390,16 @@ export function pickRecipe(c: Cue, level: Level, recent: Recipe[], seed: number,
   // with nothing fitting at this level, a world's own sets that can still hold the line come first: a line past a set's
   // length (a letter a tile, a letter a card) ran off the frame
   const own0 = from.filter((r) => r.level === level && r.wline && !r.fit);
-  // (a set whose bands cannot hold the line at the type floor is the last resort: first the world's sets at this level that
-  // can, then its sets at any level that can, render/carrier-fit.ts)
-  const holds = (r: Recipe) => n <= (r.max ?? Infinity) && !bandMissed(r.wline?.set, c.text);
-  const roomy = own0.filter(holds);
-  const anyLevel = roomy.length ? [] : from.filter((r) => r.wline && !r.fit && holds(r));
-  // (past every set's length: a set with no band to run off before one with a band)
+  // (a set whose bands cannot hold the line at the type floor is the last resort, render/carrier-fit.ts: first the world's
+  // sets at this level that take its length and can hold it, then, only where bands were what failed, its sets at any level
+  // that can; past every set's length, a set with no band to run off before one with a band. A world without bands keeps
+  // the old choice exactly)
   const sized = own0.filter((r) => n <= (r.max ?? Infinity));
+  const holds = (r: Recipe) => n <= (r.max ?? Infinity) && !bandMissed(r.wline?.set, c.text);
+  const roomy = sized.filter(holds);
+  const anyLevel = !roomy.length && sized.length ? from.filter((r) => r.wline && !r.fit && holds(r)) : [];
   const loose = (rs: Recipe[]) => { const free = rs.filter((r) => !bandMissed(r.wline?.set, c.text)); return free.length ? free : rs; };
-  const own = roomy.length ? roomy : anyLevel.length ? anyLevel : sized.length ? loose(sized) : loose(own0);
+  const own = roomy.length ? roomy : anyLevel.length ? anyLevel : sized.length ? sized : loose(own0);
   const use = pool.length ? pool : from !== RECIPES ? (own.length ? own : from.filter((r) => !r.fit)) : RECIPES.filter((r) => r.level === level && r.template === 'stair');
   const score = (r: Recipe) => {
     const age = (f: (x: Recipe) => boolean) => { const i = recent.map(f).lastIndexOf(true); return i < 0 ? 99 : recent.length - i; };

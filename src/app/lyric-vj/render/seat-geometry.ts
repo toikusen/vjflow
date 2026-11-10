@@ -58,7 +58,7 @@ const r3 = (x: number) => +x.toFixed(3);
  * in its height, columns side by side in its width, one row fewer and no object. The renderer and the plan read it here.
  */
 export function slotSpec(s: SetSpec, slot: { k: number; of: number } = { k: 0, of: 1 }): SetSpec {
-  return slot.of > 1 ? { ...s, ...(s.vertical ? { share: s.share / slot.of } : { tall: s.tall / slot.of }), rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined } : s;
+  return slot.of > 1 ? { ...s, ...(s.vertical ? { share: s.share / slot.of } : { tall: s.tall / slot.of }), rows: [1, Math.max(1, s.rows[1] - 1)] as [number, number], object: undefined, ...(s.bands ? { slot } : {}) } : s;
 }
 
 /**

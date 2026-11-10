@@ -61,19 +61,26 @@ export const RULE_CLEAR_PX = 12;
 /** Ink joined to the ink on a carrier within this many 1080p px is the same run of type (a line's letters stand closer; a call apart, further). */
 export const OVERFLOW_JOIN_PX = 12;
 
-/** Whether a declared carrier is on screen: the median of each channel inside it (a margin in) against just outside it. */
+/**
+ * Whether a declared carrier is on screen where it is declared: along at least three of its four edges, a channel's median
+ * just inside stands off the one just outside (a band seen through a transition's other layer, or another page's band
+ * lying over this one, does not show its own edges there).
+ */
 function carrierSeen(off: ArrayLike<number>, w: number, h: number, b: Bx): boolean {
   const med = (xs: number[]) => { const s = [...xs].sort((p, q) => p - q); return s[s.length >> 1] ?? 0; };
-  const [ins, out]: number[][][] = [[[], [], []], [[], [], []]];
-  for (let y = Math.max(0, Math.floor(b.y0) - 3); y < Math.min(h, Math.ceil(b.y1) + 3); y++)
-    for (let x = Math.max(0, Math.floor(b.x0) - 3); x < Math.min(w, Math.ceil(b.x1) + 3); x++) {
-      const inner = x >= b.x0 + 2 && x < b.x1 - 2 && y >= b.y0 + 2 && y < b.y1 - 2;
-      const ring = x < b.x0 - 1 || x >= b.x1 + 1 || y < b.y0 - 1 || y >= b.y1 + 1;
-      if (!inner && !ring) continue;
-      for (let c = 0; c < 3; c++) (inner ? ins : out)[c].push(off[(y * w + x) * 4 + c]);
-    }
-  if (!ins[0].length || !out[0].length) return false;
-  return [0, 1, 2].some((c) => Math.abs(med(ins[c]) - med(out[c])) > RULES.carrierSeen);
+  const strip = (x0: number, y0: number, x1: number, y1: number) => {
+    const ch: number[][] = [[], [], []];
+    for (let y = Math.max(0, Math.floor(y0)); y < Math.min(h, Math.ceil(y1)); y++)
+      for (let x = Math.max(0, Math.floor(x0)); x < Math.min(w, Math.ceil(x1)); x++) for (let c = 0; c < 3; c++) ch[c].push(off[(y * w + x) * 4 + c]);
+    return ch[0].length ? ch.map(med) : undefined;
+  };
+  const sides = [
+    [strip(b.x0 + 2, b.y0 + 2, b.x1 - 2, b.y0 + 5), strip(b.x0 + 2, b.y0 - 5, b.x1 - 2, b.y0 - 2)],
+    [strip(b.x0 + 2, b.y1 - 5, b.x1 - 2, b.y1 - 2), strip(b.x0 + 2, b.y1 + 2, b.x1 - 2, b.y1 + 5)],
+    [strip(b.x0 + 2, b.y0 + 2, b.x0 + 5, b.y1 - 2), strip(b.x0 - 5, b.y0 + 2, b.x0 - 2, b.y1 - 2)],
+    [strip(b.x1 - 5, b.y0 + 2, b.x1 - 2, b.y1 - 2), strip(b.x1 + 2, b.y0 + 2, b.x1 + 5, b.y1 - 2)],
+  ];
+  return sides.filter(([i, o]) => !!i && !!o && [0, 1, 2].some((c) => Math.abs(i[c] - o![c]) > RULES.carrierSeen)).length >= 3;
 }
 
 /**

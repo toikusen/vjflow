@@ -159,6 +159,15 @@ const getFont = fontCache(resolve('out/font-cache'));
 // did not load): written into metrics.json so the delivery gate (beta/quality.mts) sees them, not only the log
 const rendererErrors = new Set<string>();
 const fault = (msg: string) => { rendererErrors.add(msg); console.error(msg); };
+// a page-carried scale composition's page checked on every frame drawn (render/page-layout.ts verifyPage, engine.ts
+// pageGlyphCheck): each page's tally added up, written into metrics.json `pageChecks`
+const pageChecks = { frames: 0, relaid: 0, glyphFrames: 0, fails: [] as string[] };
+const takePageChecks = async (page: Page) => {
+  const c = (await page.evaluate(() => (globalThis as { vjPageChecks?: typeof pageChecks }).vjPageChecks)) ?? undefined;
+  if (!c) return;
+  pageChecks.frames += c.frames; pageChecks.relaid += c.relaid; pageChecks.glyphFrames += c.glyphFrames ?? 0; pageChecks.fails.push(...c.fails);
+  await page.evaluate(() => { delete (globalThis as { vjPageChecks?: unknown }).vjPageChecks; });
+};
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   // Google Fonts from the disk cache shared by every worktree (out/ is shared; font-cache.mts). A miss with no network
@@ -214,6 +223,7 @@ try {
       frames.push(frameStats(t, px));
     }
     // a pre-render check (no full render needed): lines too short to read, lines left over an instrumental
+    await takePageChecks(page);
     const m = await page.evaluate(() => window.vjMetrics());
     // the storyboard's texts measured on frames drawn as played: size, what shows of them, contrast, time up
     const sceneQa = await page.evaluate(() => window.vjSceneQa());
@@ -256,7 +266,7 @@ try {
     writeFileSync(join(out, 'scene-qa.json'), JSON.stringify(sceneQa, null, 1));
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors] }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}) }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     // a storyboard that fails its check on the finished frames is not rendered: no half-made output
@@ -316,6 +326,7 @@ try {
         }
         ff.stdin.end();
         await new Promise((r, j) => ff.on('close', (c) => (c ? j(new Error(`ffmpeg ${c}`)) : r(null))));
+        await takePageChecks(page);
         await page.close();
         return file;
       }
@@ -354,7 +365,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors] }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}) }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

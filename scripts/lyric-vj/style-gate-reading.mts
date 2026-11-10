@@ -59,6 +59,8 @@ const fails: string[] = [];
 const contract: string[] = [];
 /** Camera moves a taken-over world dropped because they collided with a switch the song keeps (resolved, for the record). */
 const camDrops: string[] = [];
+/** Frames on which a page-carried composition's page was checked (render/page-layout.ts). */
+let pageFrames = 0;
 const fill: number[] = [];
 let checked = 0;
 const counts: Record<string, RuleCounts> = {};
@@ -116,6 +118,10 @@ for (const id of positionals) {
         }
       }
     }
+    // (a page-carried scale composition's page is checked on every frame the gate draws, render/page-layout.ts: a frame
+    // that breaks its contract is a broken contract here too)
+    const pc = (await page.evaluate(() => (globalThis as { vjPageChecks?: { frames: number; glyphFrames: number; fails: string[] } }).vjPageChecks)) ?? undefined;
+    if (pc) { pageFrames += pc.frames + (pc.glyphFrames ?? 0); contract.push(...pc.fails.map((f) => `${id} ${name} page: ${f}`)); }
     await page.close();
     console.log(id, name, 'fails so far', fails.length);
   }
@@ -124,7 +130,7 @@ await browser.close();
 server.close();
 if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
-const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, contract, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
+const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, pageFrames, contract, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
 console.log(JSON.stringify({ ...out, fails: out.fails.length, contract: contract.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
 if (contract.length) console.log('contract warnings', contract.length, contract.slice(0, 10));

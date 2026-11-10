@@ -17,7 +17,7 @@
 
 沒有禁止 line-grow 或其他 hold 的動畫（Codex B §3）。
 
-**預設產品不受 B 影響**：排程器沒被要求時，composer 自己的 repose 照舊（例：chalkboard 的 `pace.repose: true`），預設指紋 seed 0 = `12ec6c83…`，與 phase 4c 相同（`out/research/q1-1109/hash-pairs/b-seed0.json`，commit e4680da）。
+**B 只落在排程器路徑上**（排程器被要求時：holds-first 與 joint）。排程器關閉時，也就是今天的預設產品，composer 自己的 repose 照舊：獨立審查量到 spy 大雪 seed 0–2 仍記錄 45 個句內 `layout-seat`，其中 31 句是在演唱中換座。chalkboard 等 `pace.repose: true` 的世界也一樣。這是**待業主決定**的事項，不是「任何路徑都不換座」。預設指紋 seed 0 = `12ec6c83…`，與 phase 4c 相同（`out/research/q1-1109/hash-pairs/b-seed0.json`，commit e4680da）。
 
 ## 2. 規則 C：換色要有理由
 
@@ -132,7 +132,7 @@
 | 兩種顏色變化共用每段 2 次的額度（composer 的 `spend`、joint 選擇器的 `colour`） | `lineplan-core.ts`、`world-events.ts` `jointLine` |
 | 時間：meaning 理由 → 該詞組的演唱起點（或詞組內、距離 ≤ 0.12 秒的拍點），只用可靠逐字時間；section／repeat 理由沒有詞組 → 閱讀入場後的第一個拍點（在閱讀窗內、離換座／剪接夠遠）；找不到就不換 | `settleAt` |
 | verifier：整句換墨沒有 `why` 報錯；有詞組時檢查時間 | `holdSequenceChecks` |
-| joint 篡改測試從 document 換到 card（document 的 hold 幾乎全是整句換墨，擴充後 joint 下 0 個） | `world-events-4c.spec.ts` |
+| joint 篡改測試暫時從 document 換到 card；b889960 已換回 document | `world-events-4c.spec.ts` |
 
 **數字（694c32b）**
 
@@ -152,4 +152,36 @@
 
 **片子**：`~/Desktop/vj/output/換色與句內_2026-11-10/v2/`。第1組計畫沒變，沿用 v1；第2–4組重新渲染（`out/research/q1-1109/pairs-rules/clips2/`）。
 
-**新的限制**：Q2 覆蓋率大幅下降（1.5–3 秒 55 % → 27 %），因為很多世界的備援 hold 原本就是整句換墨（document 幾乎全是）。document 在 joint 下沒有 hold，業主看到的 document 會比以前安靜很多。section／repeat 理由的整句換墨落在入場後第一拍，不是某個詞，這是「沒有詞組時」的人為選擇，沒有在影片上驗證過。
+**新的限制**：Q2 覆蓋率大幅下降（1.5–3 秒 55 % → 27 %），因為很多世界的備援 hold 原本就是整句換墨（document 幾乎全是）。（更正：694c32b 的版本裡，`plain` 句子拿不到理由，document 在 joint 下一度變成 0 個 hold。b889960 修好之後，document 雙截棍 seed 0 joint 仍有 8 個 hold，原本的篡改前提都成立。原先寫的「document 在 joint 下沒有 hold」是錯的。）section／repeat 理由的整句換墨落在入場後第一拍，不是某個詞，這是「沒有詞組時」的人為選擇，沒有在影片上驗證過。
+
+## 8. 審查後修正（b889960）
+
+獨立審查（`out/research/q1-1109/pairs-rules/review.md`）判定規則本身通過，但片子、說明與文件不通過。本輪修正如下：
+
+1. **換色一定看得到。** `colourChangeSeen`（`world-events-adapter.ts`）依 world-layout 的畫法，從 job 解出每個字的墨色：
+   - 換色前的墨色：set 自己的墨色（slot、object、fixed ink），否則用線下 print 的字色（深色 print 會把紙與墨對調）；再套上每行墨色、split 的墨色，以及 reading 標成 color 的字（用 key）。
+   - 換色後的墨色：用 hold-room `inkChecks` 算出新墨色。
+   - 換色涵蓋的每個字都必須真的變色，否則就不是換色。
+   - `freeJob` 在每條路徑上都把看不到的換色 hold 拿掉；joint 則對每個座位的顏色候選做同樣的事。該句改為 keep，記成 `invisible`。`holdSequenceChecks` 遇到「計畫有換色但畫面看不到」就報錯。
+   - 測得到的案例：file c028（第二行本來就是 accent）、spy c038（深色 print 下找不到讀得清的第二墨色），都被拿掉。
+   - 限制：線框下方畫面的顏色（engine `backdropAt`，取自像素）不在 job 裡，計畫看不到，所以另外抽幀確認（見下）。
+2. **只換完整詞組。** `swapSpan` 只取 `phraseSpans` 的完整詞組；單一詞組時，不以前一個詞的助詞開頭，也不以帶出後面詞的字結尾。card c026 的「的橋邊在」不再出現，該句改為整句換墨（有 repeat 理由）。
+3. **補回篡改測試。** 「句內 carrier-swap 畫在核准時間之外會被點名、準時則不會」（`world-events-wiring.spec.ts`）。
+4. joint 篡改測試換回 document，§7 與 §5 的錯誤理由已更正（見上）。
+
+**數字（b889960）**
+- 雙截棍 file 70–130 秒（21 句）：ink-swap 1、整句換墨 2、keep 16。3 個換色都有 `why`，每段最多 2 次，連續同種 0。窗內被拒：`invisible` 1（ink-swap），其餘同 §7。
+- card：ink-swap 1、整句換墨 3；spy：0。
+- 13 世界組 seed 0：OFF 與 ON 都是 3.6／3.2；原五 ON 3.6／2.8；全 45 ON 3.2／3.2；contract 0。
+- Q2 覆蓋率（舊分母）
+  - OFF：11.9 %、**26.5 %**（1444/5445）、**59.0 %**（2840/4815）
+  - ON：11.9 %、28.0 %、64.3 %
+  - 整批 `invisible`（OFF）：ink-swap 18、整句換墨 14。
+- 預設產品仍然只因 hold 改變：拿掉 hold 欄位、`holds` 表與 hold 相關警告後，225 組全部與 e78987a 相同。新指紋 seed 0 `69af54b8…`、`--q1` `aef5d3f3…`。
+- 閘門（art-deco、file、card、spy，5 首歌）：排程器關／開各 1956 個時刻，fails 0、contract 0、regressions 0。450 個排程器開的 job，final check 0。
+- 測試：141 檔／**1724** 全過；tsc app／spec 通過。
+
+**抽幀確認**（`~/Desktop/vj/output/換色與句內_2026-11-10/v3/` 右半）：
+- file 29.0→29.8（整句變藍）、49.7→50.4（「"仁者無敵"」變藍）、52.3→53.0（整句變藍）。
+- card 8.0→8.35（整句變紫）、9.4→10.1（「在你身邊」變紫）、48.3→49.0（整句變紫）。
+- 以上每一處都看得到顏色改變，字不移動。spy 這段沒有換色。

@@ -340,6 +340,8 @@ const P4_SEATS = {
   file: ['file/pair', 'file/case', 'file/catalogue', 'file/sections', 'file/letter', 'file/case+next', 'file/catalogue+next'],
   card: ['card/main', 'card/calm', 'card/fan', 'card/pair', 'card/long', 'card/main+right', 'card/calm+right'],
   spy: ['spy/diagonal', 'spy/low-slash', 'spy/high-slash', 'spy/low-slash+high', 'spy/high-slash+low', 'spy/diagonal+low'],
+  popart: ['popart/balloon', 'popart/balloon-r', 'popart/narration', 'popart/sfx', 'popart/twin', 'popart/narration-r', 'popart/balloon+low', 'popart/balloon-r+low', 'popart/narration+foot', 'popart/narration-r+foot'],
+  midcentury: ['midcentury/cut', 'midcentury/cut-r', 'midcentury/dusk', 'midcentury/planes', 'midcentury/sleeve', 'midcentury/dusk+right'],
 };
 const DECO_FRAME = [{ x0: 0, y0: 0, x1: 1, y1: 0.09 }, { x0: 0, y0: 0.9, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 0.05, y1: 1 }, { x0: 0.95, y0: 0, x1: 1, y1: 1 }];
 
@@ -412,6 +414,22 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // handoff (none in the ruling's table). protectedRegion none: the cut-paper wedges and slices are the ground under the
   // words, no furniture
   spy: { kinds: ['layout-seat', 'camera-reframe'], seats: [...P4_SEATS.spy], carrierRole: 'ground', allowedAt: { 'layout-seat': ['section', 'line'], 'camera-reframe': ['section'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'camera-reframe': 'world-camera' }, moves: { 'layout-seat': 'slash-seat', 'camera-reframe': 'scene-reframe' }, pageSeats: true, protectedRegion: [], enabled: false },
+  // ---- phase 4, rows 6–7 of the table (docs/research/2026-11-10-q1-phase4d.md): off by default, no switch inside a line
+  // (the table lists none), seats taken at a line or a part ----
+  // balloon-seat: at a line the whole carrier relation changes with it (the balloon, its keyline and short wide tail, the
+  // speed lines' and the dots' focus all drawn round the words: world-b3-popart strip reads the line's box), along the
+  // approved balloon and caption layouts: a smaller balloon low in the same wide panel, the caption in the sea panel's other
+  // corner (world-p4-seats). A screen of dots re-centred round another line is no cut: only the laid boxes count
+  // (seatsDiffer). comic-handoff: the page's own Q4 edge relay (WORLD_LINKS print). protectedRegion none: the panels and
+  // the title tag are each page's own graphics (a balloon seat's `clear` keeps it off the other panel), the balloon and
+  // the caption are drawn round the words and move with them
+  popart: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.popart], carrierRole: 'object', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'balloon-seat', 'page-handoff': 'comic-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
+  // poster-seat: along cut / dusk / planes / sleeve, their main and secondary phrases, white space and colour-plane roles:
+  // the words never leave the plane they are read on (the cut and sleeve bars are printed at fixed places, so they take
+  // no seat; the dusk line has its sheet's other reading area, low right). A plain colour change is no cut.
+  // sleeve-handoff: the sleeve's own Q4 edge relay (WORLD_LINKS print). protectedRegion none: the Bass column, the atomic
+  // shapes and the small print are each page's own graphics, kept clear by its sets' `clear`
+  midcentury: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.midcentury], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-seat', 'page-handoff': 'sleeve-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

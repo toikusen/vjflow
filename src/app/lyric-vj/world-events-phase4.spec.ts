@@ -22,7 +22,8 @@ const worldOf = (id: string) => FREE_STYLES.find((s) => s.id === id)!.world;
 
 describe('phase 4: the first five worlds declared from the ruling', () => {
   it('riso, silk, file, card and spy are declared in the ruling\'s families, all off by default, with the old five', () => {
-    expect(Object.keys(WORLD_COMPOSITIONS)).toEqual(['blueprint', 'chalkboard', 'document', 'notebook', 'art-deco', ...NEW]);
+    // (popart and midcentury follow them, phase 4d: world-events-phase4d.spec.ts)
+    expect(Object.keys(WORLD_COMPOSITIONS).slice(0, 10)).toEqual(['blueprint', 'chalkboard', 'document', 'notebook', 'art-deco', ...NEW]);
     for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.enabled).toBeFalsy();
     for (const id of NEW) expect(compositionsOf(id)!.enabled, id).toBe(false);
     expect(compositionsOf('riso')!.moves).toEqual({ 'layout-seat': 'paper-seat', 'page-handoff': 'sheet-handoff' });

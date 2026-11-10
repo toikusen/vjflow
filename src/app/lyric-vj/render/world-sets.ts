@@ -322,9 +322,10 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   // (the carrier containment rule, render/carrier-fit.ts: the line is set smaller, its widths and heights together, until
   // its ink, what is printed with it and the padding stay on its bands clear of their lines; at the type floor a miss is
   // marked, never drawn over: the composer takes another set, lineplan-core)
-  // (the line is set smaller inside its own carrier down to the set's own least type, `lo`, before another set is taken:
-  // a set with no room past the floor is no reason to lift a line off its carrier onto a busier page, phase 4d round 3)
-  const floor = given.lo;
+  // (the line is set smaller inside its own carrier down to the least type a line may take, the set's `lo` or the product's
+  // floor (TYPE_FLOOR.lo, never set small) whichever is larger, then wrapped at its characters, before another set is
+  // taken: a set with no room past the floor is no reason to lift a line off its carrier onto a busier page)
+  const floor = Math.max(given.lo, TYPE_FLOOR.lo);
   // (each part that misses its band is set smaller on its own: the hero by the set's width and height, a split line's
   // small part by its container's width; a part that fits keeps its size)
   const shrink = (spec: SetSpec) => {
@@ -342,14 +343,18 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
     }
     return last;
   };
+  // (no part is set under the floor by the fit: a split line's small part the set itself already lays smaller (world-split
+  // splitBlock's container clamp, a path of its own) keeps that size and goes no smaller)
+  const least = (b: Block, part: 'main' | 'small') => (part === 'small' ? Math.min(...(b.lines ?? []).filter((_, k) => (b.small ?? []).includes(k)).map((r) => r.size)) : b.size);
+  const legal = (b: Block) => bandFit(b, given).ok && (['main', 'small'] as const).every((p) => { const x = least(b, p); return !Number.isFinite(x) || x >= Math.min(floor, least(first, p)); });
   const kept = shrink(given);
-  if (bandFit(kept, given).ok) return kept;
+  if (legal(kept)) return kept;
   // (a run with no break of its own that its carrier cannot hold in one row even at its least type is cut into the set's
   // rows at its characters, as a split part is wrapped to its container (world-split wrapRows): still on its carrier,
   // before any other set is taken)
   if (!given.wrap && !given.vertical && given.rows[1] > 1) {
     const wrapped = shrink({ ...given, wrap: true });
-    if (bandFit(wrapped, given).ok) return wrapped;
+    if (legal(wrapped)) return wrapped;
   }
   return { ...kept, bandMiss: true };
 }

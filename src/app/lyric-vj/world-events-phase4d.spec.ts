@@ -8,7 +8,7 @@ import { FREE_STYLES } from './free-styles';
 import { countCuts, seatsDiffer } from './world-events';
 import { fromJob, jobFaces, seatIn, verifyWorldEvents } from './world-events-adapter';
 import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, WORLD_COMPOSITIONS } from './world-shared';
-import { SAFE_X, SAFE_Y, SET_SPECS } from './render/world-sets';
+import { SAFE_X, SAFE_Y, SET_SPECS, TYPE_FLOOR } from './render/world-sets';
 import { boxesMeet, laidSeat } from './render/seat-geometry';
 import { carrierBox } from './render/hold-room';
 import { POP_PANELS, POP_SHADOW, POP_TAIL } from './render/world-p4-seats';
@@ -268,7 +268,10 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
           const set = c.world?.set;
           if (!set || !SET_SPECS[set]?.bands) continue;
           const text = (song.cues.find((x: { id: string }) => x.id === c.cueId).text as string).replace(/[\s　]+/g, ' ').trim();
-          expect(blockOf(text, SET_SPECS[set], layoutMeasure(face(text))).bandMiss, `${id} ${set} ${text}`).toBeUndefined();
+          const b = blockOf(text, SET_SPECS[set], layoutMeasure(face(text)));
+          expect(b.bandMiss, `${id} ${set} ${text}`).toBeUndefined();
+          // (the band fit never sets type under the product's floor, TYPE_FLOOR.lo 84: neither part, 9120f50 never set small)
+          expect(Math.min(b.size, ...(b.lines ?? []).map((r) => r.size)), `${id} ${set} ${text}`).toBeGreaterThanOrEqual(TYPE_FLOOR.lo);
           n++;
         }
       }

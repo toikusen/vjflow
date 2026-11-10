@@ -13,7 +13,8 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, HandGround, HandIn, mixHex, WorldEnv } from './world-craft';
 import { C, mirrorGround, onPage, rng, still } from './world-b3-shared';
 import { B5B } from './b5b-inks';
-import { B5B_MIRRORED } from './world-b5b-sets';
+import { B5B_MIRRORED, SET_BANDS } from './world-b5b-sets';
+import { declareCarrier, toPx } from './carrier-fit';
 import { dataLine, frame, H, isJa, meets, page, small, twoPhrases, W } from './world-b5b-shared';
 
 type Pt = [number, number];
@@ -143,7 +144,7 @@ const stripsPage: HandGround = (e) => { page(e, 'clay-strips', (c) => {
   strip(c, 150, 170, 1300, 300, s.plate, 20);
   if (twoPhrases(e)) strip(c, 470, 580, 1310, 300, s.faint, 21);
   pressedLabel(c, e, 150, 1000, s.ground);
-}, keyOf(e)); };
+}, keyOf(e)); declareCarrier(e, SET_BANDS['claymation/strips'].filter((b) => b.part !== 'small' || twoPhrases(e)).map((b) => toPx(b.box)), []); };
 
 const Gs: Record<string, HandGround> = { 'claymation/slab': slabPage, 'claymation/night': nightPage, 'claymation/letters': lettersPage, 'claymation/strips': stripsPage };
 for (const [id, page] of Object.entries(B5B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);

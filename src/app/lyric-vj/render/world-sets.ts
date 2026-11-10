@@ -13,6 +13,7 @@ import type { Slots, WorldObject } from './world-objects';
 import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
 import { phase4Seats } from './world-p4-seats';
+import type { Band } from './carrier-fit';
 
 const W = 1920;
 const H = 1080;
@@ -100,6 +101,11 @@ export interface SetSpec {
    * the page set's own, so the words do not move; only what carries them changes (a carrier swap).
    */
   panels?: boolean;
+  /**
+   * The bands or plates the set's page prints at fixed places under the words, a part each (render/carrier-fit.ts): the
+   * line is set so its ink, what is printed with it and a padding stay inside, clear of the band's lines (blockOf).
+   */
+  bands?: Band[];
 }
 
 /** The size a block of `w` × `h` takes on screen once its set's shear has drawn it. */
@@ -136,6 +142,8 @@ export interface Block {
   lines?: RowBox[];
   small?: number[];
   hero?: { cx: number; cy: number; w: number; h: number };
+  /** A line on bands (SetSpec.bands) that does not fit them even at the type floor: the composer takes another set. */
+  bandMiss?: boolean;
 }
 
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };

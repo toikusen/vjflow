@@ -14,7 +14,8 @@ import type { Piece } from './world-pieces';
 import { clamp01, ease, HandGround, HandIn, mixHex, WorldEnv } from './world-craft';
 import { C, mirrorGround, onPage, rng, still } from './world-b3-shared';
 import { B5B } from './b5b-inks';
-import { B5B_MIRRORED } from './world-b5b-sets';
+import { B5B_MIRRORED, MC_BARS, SET_BANDS } from './world-b5b-sets';
+import { declareCarrier, toPx } from './carrier-fit';
 import { dataLine, frame, H, isJa, meets, page, small, twoPhrases, W } from './world-b5b-shared';
 
 type Pt = [number, number];
@@ -135,6 +136,11 @@ function litho(c: C, seed: number, dens = 1) {
   c.fillStyle = 'rgba(255,250,235,0.5)';
   for (let i = 0; i < 5000 * dens; i++) c.fillRect(r() * W, r() * H, 1, 1);
 }
+/** Tells the reading gate the bars this frame's line is read on and their key plates' lines (the set's own bands, the second only where it is printed). */
+const declareBands = (e: WorldEnv, set: string) => {
+  const bands = SET_BANDS[set].filter((b) => b.part !== 'small' || twoPhrases(e));
+  declareCarrier(e, bands.map((b) => toPx(b.box)), bands.flatMap((b) => (b.lines ?? []).map(toPx)));
+};
 const keyOf = (e: WorldEnv) => `${e.item?.part}|${e.item?.at}`;
 /** A ground that is dark at dusk: the teal ink run deeper with black. */
 const duskOf = (e: WorldEnv) => mixHex(e.slots.ink2, e.slots.ink, 0.45);
@@ -143,15 +149,16 @@ const duskOf = (e: WorldEnv) => mixHex(e.slots.ink2, e.slots.ink, 0.45);
  * at the right with its orange square; a boomerang and a starburst. */
 const cutPage: HandGround = (e) => { page(e, 'mc-cut', (c) => {
   const s = e.slots;
+  const { main, small: second } = MC_BARS.cut;
   c.fillStyle = s.ground; c.fillRect(0, 0, W, H);
-  bar(c, 170, 230, 1300, 260, s.plate, s.ink, 1);
-  if (twoPhrases(e)) bar(c, 150, 600, 980, 250, s.ink2, s.ink, 2);
+  bar(c, main[0], main[1], main[2], main[3], s.plate, s.ink, 1);
+  if (twoPhrases(e)) bar(c, second[0], second[1], second[2], second[3], s.ink2, s.ink, 2);
   bassColumn(c, 1640, 120, 860, s.ink, s.accent, 4);
   boomerang(c, 1300, 950, 0.95, -0.2, s.accent);
   starburst(c, 1530, 140, 70, s.ink2, 12, 0.2);
   small(c, dataLine(e, ' ── '), 206, 186, SM(30, isJa(e)), 30, s.ink, 5);
   litho(c, 3);
-}, keyOf(e)); };
+}, keyOf(e)); declareBands(e, 'midcentury/cut'); };
 
 /** b: dusk: the line in cream; an atomic starburst and two twinkles up at the right; a kidney and a boomerang laid over each
  * other low at the left (the overlap a third ink). */
@@ -198,16 +205,17 @@ const planesPage: HandGround = (e) => { page(e, 'mc-planes', (c) => {
  * boomerangs and a starburst at the right; the data under the bars. */
 const sleevePage: HandGround = (e) => { page(e, 'mc-sleeve', (c) => {
   const s = e.slots;
+  const { main, mainKey, small: second, smallKey } = MC_BARS.sleeve;
   c.fillStyle = s.ground; c.fillRect(0, 0, W, H);
-  bar(c, 150, 280, 1200, 200, s.ink, s.accent, 30, [20, 16]);
-  if (twoPhrases(e)) bar(c, 130, 540, 1320, 200, s.faint, s.ink, 31, [40, 16]);
+  bar(c, main[0], main[1], main[2], main[3], s.ink, s.accent, 30, [mainKey[0], mainKey[1]]);
+  if (twoPhrases(e)) bar(c, second[0], second[1], second[2], second[3], s.faint, s.ink, 31, [smallKey[0], smallKey[1]]);
   shape(c, rect(1430, 520, 40, 240), s.accent, 33);
   boomerang(c, 1640, 300, 1.2, -0.35, s.ink2);
   boomerang(c, 1680, 840, 0.9, 2.8, s.accent);
   starburst(c, 1700, 560, 80, s.ink, 12, 0.15);
   small(c, dataLine(e, ' ── '), 186, 880, SM(30, isJa(e)), 30, s.ink, 5);
   litho(c, 6);
-}, keyOf(e)); };
+}, keyOf(e)); declareBands(e, 'midcentury/sleeve'); };
 
 const Gs: Record<string, HandGround> = { 'midcentury/cut': cutPage, 'midcentury/dusk': duskPage, 'midcentury/planes': planesPage, 'midcentury/sleeve': sleevePage };
 for (const [id, page] of Object.entries(B5B_MIRRORED)) if (Gs[page]) Gs[id] = mirrorGround(Gs[page]);

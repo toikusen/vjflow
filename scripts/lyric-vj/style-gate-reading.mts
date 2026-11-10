@@ -3,7 +3,7 @@
 // (dark words left on a dark ground after a line moved off its paper). No video written.
 // The same moments are read against the shared reading rules (src/app/lyric-vj/reading-rules.ts): words cut by the frame,
 // a dark plate under them, small words on an empty frame, the picture's lines under the strokes, ink under 4.5:1, and a
-// soft glow laid behind them. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
+// soft glow laid behind them, and (phase 4d round 2) ink off the band its page declares or within 12 px of a declared line. Counts per world go to <out>/<worlds>.json; --baseline fails a world that got worse.
 // The frame without the words keeps what they stand on (a card, a banner, a tape): only the glyphs are taken away, so a
 // line on its own carrier is read against the carrier, not against the ground the carrier hides. This is the default
 // since 2026-11-04: taking the carrier away with the words (the old way) read a dark word against the dark ground under
@@ -26,7 +26,7 @@ import * as esbuild from 'esbuild';
 import { chromium, Page } from 'playwright';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
 import { FREE_STYLES, HELD_WORLDS } from '../../src/app/lyric-vj/free-styles';
-import { countMoment, emptyCounts, RuleCounts, RuleMoment, regressions } from '../../src/app/lyric-vj/reading-rules';
+import { countMoment, emptyCounts, RULES, RuleCounts, RuleMoment, regressions } from '../../src/app/lyric-vj/reading-rules';
 import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
@@ -101,7 +101,7 @@ for (const id of positionals) {
         if (!r) continue;
         const m = r;
         counts[id] = countMoment(counts[id] ?? emptyCounts(), m, soft);
-        const why = [soft && 'glow', m.clip && 'clip', m.plate < 0 && 'plate', m.small && 'small', m.cross > 0.08 && `cross ${m.cross.toFixed(2)}`, m.low > 0.5 && `low ${m.low.toFixed(2)}`].filter(Boolean);
+        const why = [soft && 'glow', m.clip && 'clip', m.plate < 0 && 'plate', m.small && 'small', m.cross > 0.08 && `cross ${m.cross.toFixed(2)}`, m.low > 0.5 && `low ${m.low.toFixed(2)}`, (m.overflow ?? 0) >= RULES.overflowPixels && `carrier-overflow ${m.overflow}`, (m.ruleCross ?? 0) >= RULES.ruleCrossPixels && `rule-crosses-text ${m.ruleCross}`].filter(Boolean);
         if (why.length) moments.push(`${id} ${name} ${c.id} ${t.toFixed(2)} ${why.join(' ')} ${c.text.slice(0, 10)}`);
         if (why.length && a.shots) {
           const stem = `${name}-${c.id}-${t.toFixed(2)}`;

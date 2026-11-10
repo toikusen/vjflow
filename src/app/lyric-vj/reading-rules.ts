@@ -9,6 +9,9 @@
 //   cross  — lines or edges of the picture run under the strokes being read (oriented ones: a fine dot screen or grain is
 //            texture, not a line; popart's halftone counted 70 of 489 moments though every word read, 2026-11-05)
 //   low    — the ink misses 4.5:1 against what is really behind it (or against its own keyline, when it has one)
+//   carrier-overflow  — (phase 4d round 2) the lyric layer's ink, what is printed with its letters included, runs off the
+//            band or plate its page declares it is read on (render/carrier-fit.ts declareCarrier)
+//   rule-crosses-text — a line the page declares (a key plate's registration line) comes within LINE_CLEAR of that ink
 // The fifth rule, no soft glow laid behind the words, is counted where the clearing is drawn (the gate watches gradients).
 
 /** Thresholds, calibrated on the 2026-11-04 audit's own examples (out/research/rules-1104). */
@@ -40,7 +43,41 @@ export const RULES = {
   keylineReach: 3,
   /** Low: this share of the strokes' solid pixels miss the floor. */
   lowShare: 0.5,
+  /** Carrier overflow: this many lyric pixels (of the 480 × 270 read) past every declared carrier, its edge given one pixel (a cut edge's jitter). */
+  overflowPixels: 3,
+  /** Rule crossing: lyric pixels within the clearance (LINE_CLEAR, 12 px of 1080p) of a declared line. */
+  ruleCrossPixels: 2,
 };
+
+/** What a frame's lines are declared to be read on, frame px of 1920 × 1080 (render/carrier-fit.ts Declared). */
+export interface DeclaredMoment { carriers: Bx[]; lines: Bx[]; scope: Bx }
+type Bx = { x0: number; y0: number; x1: number; y1: number };
+/** The 1080p clearance a declared line keeps from the ink (render/carrier-fit LINE_CLEAR). */
+export const RULE_CLEAR_PX = 12;
+
+/**
+ * The two declared-geometry rules on one moment: lyric pixels (on against off) inside a line's scope that stand on none of
+ * its declared carriers, and lyric pixels within the clearance of a declared line. Pixel counts at w × h.
+ */
+export function declaredRules(on: ArrayLike<number>, off: ArrayLike<number>, w: number, h: number, declared: DeclaredMoment[]): { overflow: number; ruleCross: number } {
+  const [sx, sy] = [w / 1920, h / 1080];
+  const sc = (b: Bx, m = 0) => ({ x0: b.x0 * sx - m, y0: b.y0 * sy - m, x1: b.x1 * sx + m, y1: b.y1 * sy + m });
+  const inB = (x: number, y: number, b: Bx) => x + 0.5 >= b.x0 && x + 0.5 <= b.x1 && y + 0.5 >= b.y0 && y + 0.5 <= b.y1;
+  let [overflow, ruleCross] = [0, 0];
+  for (const d of declared) {
+    const scope = sc(d.scope);
+    const carriers = d.carriers.map((b) => sc(b, 1));
+    const lines = d.lines.map((b) => sc(b, RULE_CLEAR_PX * sx));
+    for (let y = Math.max(0, Math.floor(scope.y0)); y < Math.min(h, Math.ceil(scope.y1)); y++)
+      for (let x = Math.max(0, Math.floor(scope.x0)); x < Math.min(w, Math.ceil(scope.x1)); x++) {
+        const i = y * w + x;
+        if (Math.max(Math.abs(on[i * 4] - off[i * 4]), Math.abs(on[i * 4 + 1] - off[i * 4 + 1]), Math.abs(on[i * 4 + 2] - off[i * 4 + 2])) <= RULES.textDelta) continue;
+        if (carriers.length && !carriers.some((b) => inB(x, y, b))) overflow++;
+        if (lines.some((b) => inB(x, y, b))) ruleCross++;
+      }
+  }
+  return { overflow, ruleCross };
+}
 
 export interface RuleMoment {
   /** Share of the frame the words cover. */
@@ -56,6 +93,9 @@ export interface RuleMoment {
   cross: number;
   /** Share of the strokes' solid pixels under the contrast floor. */
   low: number;
+  /** Lyric pixels off their declared carriers, and within a declared line's clearance (declaredRules; none when nothing is declared). */
+  overflow?: number;
+  ruleCross?: number;
 }
 
 const lumAt = (d: ArrayLike<number>, i: number) => 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
@@ -164,15 +204,17 @@ export function readMoment(on: ArrayLike<number>, off: ArrayLike<number>, w: num
 }
 
 /** Per-rule counts of failing moments, the gate's unit (a world's before and after are compared on these). */
-export interface RuleCounts { moments: number; glow: number; clip: number; plate: number; small: number; cross: number; low: number }
-export const emptyCounts = (): RuleCounts => ({ moments: 0, glow: 0, clip: 0, plate: 0, small: 0, cross: 0, low: 0 });
+export interface RuleCounts { moments: number; glow: number; clip: number; plate: number; small: number; cross: number; low: number; 'carrier-overflow': number; 'rule-crosses-text': number }
+export const emptyCounts = (): RuleCounts => ({ moments: 0, glow: 0, clip: 0, plate: 0, small: 0, cross: 0, low: 0, 'carrier-overflow': 0, 'rule-crosses-text': 0 });
 /** Adds one moment (and whether a soft clearing was drawn for it) to the counts. */
 export function countMoment(c: RuleCounts, m: RuleMoment, glow: boolean): RuleCounts {
-  return { moments: c.moments + 1, glow: c.glow + (glow ? 1 : 0), clip: c.clip + (m.clip ? 1 : 0), plate: c.plate + (m.plate < 0 ? 1 : 0), small: c.small + (m.small ? 1 : 0), cross: c.cross + (m.cross > RULES.cross ? 1 : 0), low: c.low + (m.low > RULES.lowShare ? 1 : 0) };
+  return { moments: c.moments + 1, glow: c.glow + (glow ? 1 : 0), clip: c.clip + (m.clip ? 1 : 0), plate: c.plate + (m.plate < 0 ? 1 : 0), small: c.small + (m.small ? 1 : 0), cross: c.cross + (m.cross > RULES.cross ? 1 : 0), low: c.low + (m.low > RULES.lowShare ? 1 : 0),
+    'carrier-overflow': (c['carrier-overflow'] ?? 0) + ((m.overflow ?? 0) >= RULES.overflowPixels ? 1 : 0), 'rule-crosses-text': (c['rule-crosses-text'] ?? 0) + ((m.ruleCross ?? 0) >= RULES.ruleCrossPixels ? 1 : 0) };
 }
 /** The rules a world got worse on against its recorded counts (shares of its moments, so a changed line count is fair). */
 export function regressions(before: RuleCounts, after: RuleCounts, slack = 0.02): string[] {
-  const keys = ['glow', 'clip', 'plate', 'small', 'cross', 'low'] as const;
-  const share = (c: RuleCounts, k: (typeof keys)[number]) => c[k] / Math.max(1, c.moments);
+  const keys = ['glow', 'clip', 'plate', 'small', 'cross', 'low', 'carrier-overflow', 'rule-crosses-text'] as const;
+  // (a count recorded before a rule existed reads as none)
+  const share = (c: RuleCounts, k: (typeof keys)[number]) => (c[k] ?? 0) / Math.max(1, c.moments);
   return keys.filter((k) => share(after, k) > share(before, k) + slack);
 }

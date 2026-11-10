@@ -351,6 +351,20 @@ describe.skipIf(!existsSync(SONG) || !existsSync(MEANING))('phase 3a: every even
       expect(extra).toEqual([]);
     });
 
+  it('an in-line carrier swap drawn off its approved time is reported by id; drawn on time, it is not (the switch left inside a line, pairs B)', () => {
+    const style = FREE_STYLES.find((s) => s.id === 'art-deco')!;
+    const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+    const cues = f.job.treatment.cues as { cueId: string; world?: { set: string; repose?: { at: number; set: string; sec?: number; move?: string }[] } }[];
+    const c = cues.find((x) => x.world && song.cues.find((y: { id: string }) => y.id === x.cueId))!;
+    const row = song.cues.find((y: { id: string }) => y.id === c.cueId);
+    const at = +((row.start + row.end) / 2).toFixed(3);
+    const ev: WorldEvent = { id: `carrier-swap:${c.cueId}:planted`, lineIds: [c.cueId], kind: 'carrier-swap', at, from: at, to: +(at + 0.4).toFixed(3), seatBefore: c.world!.set, seatAfter: `${c.world!.set}+panels`, scope: 'in-line', changesLight: false, reason: 'test', material: 'poster-panel', curve: 'panel-slide' };
+    const table = { ...f.treatment.worldEvents!, events: [...f.treatment.worldEvents!.events, ev] };
+    const drawn = (shift: number) => { const j = structuredClone(f.job); (j.treatment.cues as typeof cues).find((x) => x.cueId === c.cueId)!.world!.repose = [{ at: +(at + shift).toFixed(3), set: ev.seatAfter, sec: 0.4, move: 'poster-panel' }]; return verifyWorldEvents(j, style.world, table).filter((w) => w.inputs[0] === ev.id && /not in the drawn repose/.test(w.reason)); };
+    expect(drawn(0.2)).toHaveLength(1);
+    expect(drawn(0)).toEqual([]);
+  });
+
   it('a cut drawn the plan does not hold is reported, and a reseat drawn inside a line is a pairs B failure by name', () => {
     const style = FREE_STYLES.find((s) => s.id === 'chalkboard')!;
     const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });

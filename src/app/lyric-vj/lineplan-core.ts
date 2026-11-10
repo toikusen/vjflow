@@ -714,6 +714,8 @@ export const BLOW_MAX = 4;
 const BLOW_SHARE = 0.6;
 /** A blown-up word does not open on a particle (的楓葉 is 楓葉). */
 const LEAD_PARTICLE = /^[的之了在把被和與跟也就都還又]/;
+/** A phrase does not end on a word that leads into the words after it (的橋邊在 | 飄雪). */
+const TRAIL_PARTICLE = /[的之在把被和與跟]$/;
 /** A line needs this long up for its key word to be blown up: the small rest has to be read too. */
 const BLOW_MIN_LINE = 1.4;
 /**
@@ -804,7 +806,7 @@ export interface SwapCause { kind: 'meaning' | 'section' | 'repeat'; source: str
 /** The reason an ink-swap was drawn for, as the hold records it: its cause, the phrase it swapped and when (the phrase's sung start or a beat inside it). */
 export type SwapWhy = Omit<SwapCause, 'cover'> & { span: { from: number; to: number }; at: number };
 /** Why a hold candidate was not taken (pairs C), for the record: no reason, the kind of the sung line before, its section's swaps spent, no reliable time, no span for its reason. */
-export type HoldRejectReason = 'no-reason' | 'repeat-kind' | 'section-cap' | 'timing' | 'span';
+export type HoldRejectReason = 'no-reason' | 'repeat-kind' | 'section-cap' | 'timing' | 'span' | 'invisible';
 export interface HoldReject { kind: BeatKind; reason: HoldRejectReason }
 /** A beat this near the phrase's sung start, and inside the phrase's sung interval, is where its swap lands (the scheduler's own snap). */
 export const SWAP_SNAP = BEAT_SNAP;
@@ -867,11 +869,18 @@ export function swapSpan(text: string, key?: string, cover?: { from: number; to:
   const stops = [...wordBreaks(text)].sort((a, b) => a - b);
   const at = key ? [...text.slice(0, Math.max(0, text.indexOf(key)))].length : -1;
   const keyRange = key && at >= 0 && text.includes(key) ? [at, at + [...key].length] : undefined;
+  // (a whole phrase only (review 2026-11-10: 「的橋邊在」 took 的 from 夜晚的 and 在 from 在飄雪): where the line has
+  // phrases apart (spaces, commas) a run starts at one and ends at one; in a single phrase it neither opens on a particle
+  // that belongs to the words before nor ends on one that leads into the words after)
+  const phrases = phraseSpans(text, 99);
+  const trimEnd = (b: number) => { let e = b; while (e > 0 && /[\s，,、]/.test(cs[e - 1])) e--; return e; };
+  const wholePhrase = (a: number, b: number) => (phrases.length > 1 ? phrases.some(([x]) => x === a) && phrases.some(([, y]) => y === trimEnd(b)) : !LEAD_PARTICLE.test(cs[a] ?? '') && !TRAIL_PARTICLE.test(cs[trimEnd(b) - 1] ?? ''));
   const runs: { from: number; to: number; apart: boolean; tail: boolean }[] = [];
   for (let j = 0; j < stops.length; j++) for (let k = j + 1; k < stops.length; k++) {
     const share = counts(stops[j], stops[k]) / all;
     if (share < SWAP_SHARE[0] || share > SWAP_SHARE[1]) continue;
     if (cover && !(stops[j] <= cover.from && stops[k] >= cover.to)) continue;
+    if (!wholePhrase(stops[j], stops[k])) continue;
     runs.push({ from: stops[j], to: stops[k], apart: !!cover || !keyRange || stops[k] <= keyRange[0] || stops[j] >= keyRange[1], tail: stops[k] === cs.length });
   }
   // (the most ink that is still a phrase: a small swap is seldom seen on the whole frame)

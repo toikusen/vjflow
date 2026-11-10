@@ -9,7 +9,9 @@ import { BEAT_CLEAR, FIRST_SET, growFits, KEPT, SWAP_SNAP } from './lineplan-cor
 import { wordBreaks } from './phrases';
 import { approvedOf, lineShows, type Section as ShownSection } from './render/line-shows';
 import { readingSec } from './render/reading-window';
-import { SET_SPECS } from './render/world-sets';
+import { blockOf, SET_SPECS } from './render/world-sets';
+import { objectInk } from './render/world-objects';
+import { layoutMeasure } from './render/layout-measure';
 import { WORLD_BEATS } from './render/world-beats';
 import { WORLD_ENTERS } from './render/world-motion';
 import { enterSec as lineEnterSec } from './render/enter-sec';
@@ -19,7 +21,7 @@ import { EXIT_LEAD, LINK_CLEAR, LINK_PREPARE } from './render/world-handoff';
 import type { WorldLine } from './render/world-layout';
 import { compositionsOf, isPageSeat, linksOf, pageOf, pageSeatsOf, sharedOf, WORLD_COMPOSITIONS, type BeatKind } from './world-shared';
 import { boxesMeet, laidSeat, panelSplit } from './render/seat-geometry';
-import { absorbInk } from './render/hold-room';
+import { absorbInk, inkChecks } from './render/hold-room';
 import { lineFace } from './fonts';
 import { DEFAULT_DESIGN } from './design';
 import { ABSORBABLE_HOLDS, ACTION_GAP, BEAT_SNAP, holdIdOf, LIGHT_GAP, READ_STABLE, sameWords, SEAM_GAP, seatsDiffer, type AbsorbedHold, type AbsorbRoom, type CameraMove, type InputWarning, type LineOutcome, type CompositionFamily, type FrameBox, type HandoffCandidate, type HoldEvent, type JointHold, type SeatCandidate, type SungWord, type WorldCompositionCaps, type WorldEvent, type WorldEventInput, type WorldEventLine } from './world-events';
@@ -490,6 +492,59 @@ export function verifyWorldEvents(job: Job, world: StyleWorld, table: { events: 
   return out;
 }
 
+/** Hold kinds that leave the words in another colour (pairs C as extended): their change must be seen. */
+const COLOUR_KINDS = new Set(['ink-swap', 'line-ink-settle']);
+const lowHex = (c: string | undefined) => (c ?? '').toLowerCase();
+
+/**
+ * Whether a colour-change hold changes the words' colour as the line is drawn (review 2026-11-10: a phrase swapped into
+ * the accent its row is already printed in, or a whole-line ink that finds no second ink and falls back to its own, draws
+ * nothing). The inks are resolved as world-layout draws them, from what the job fixes: the set's own ink (its slot, its
+ * object's, the world's fixed ink) else the type colour of the print under the line (a dark print turns paper and ink
+ * over), the set's per-row inks and a split part's own ink, the reading's colour-marked characters in the key; then the
+ * new ink by hold-room inkChecks, the renderer's own predicates. What only the drawn frame knows (the picture's colours
+ * under the box, render engine backdropAt) is not read here: the frames are sampled for it. Every character the change
+ * covers (the phrase, or the whole line but a split part) must end in another ink, else it is not seen.
+ */
+export function colourChangeSeen(job: Job, lineId: string, beat: { kind: string; span?: { from: number; to: number } }, set?: string): { seen: boolean; why?: string } {
+  if (!COLOUR_KINDS.has(beat.kind)) return { seen: true };
+  const { rows, sections } = shownOf(job);
+  const row = rows.find((r) => r.id === lineId);
+  const w = row?.world as (WorldLine & { fixedInk?: boolean }) | undefined;
+  const spec = SET_SPECS[set ?? w?.set ?? ''];
+  const slots = w?.slots;
+  if (!row || !w || !spec || !slots) return { seen: true };
+  const under = [...sections].reverse().find((x) => x.start <= row.cue.start + 1e-3);
+  const kin = (under?.layers as { kind: string; ink?: string; paper?: string; accent?: string; dark?: boolean }[] | undefined)?.find((l) => l.kind === 'kinetic' && l.ink && l.paper);
+  const pal = (job.treatment as { styleAnchor?: { palette?: { text?: string; background?: string; accent?: string } } }).styleAnchor?.palette ?? {};
+  const base = spec.ink ? slots[spec.ink] : spec.object ? objectInk(spec.object, slots) : w.fixedInk ? slots.ink : kin ? (kin.dark ? kin.paper! : kin.ink!) : pal.text ?? slots.ink;
+  const seen = { background: kin ? (kin.dark ? kin.ink : kin.paper) : pal.background, accent: kin?.accent ?? pal.accent };
+  const inks = inkChecks(spec, slots, base, seen);
+  const chars = [...row.cue.text];
+  // (the reading's colour-marked characters are drawn in the key when they are a phrase, not most of the line)
+  const marked = new Set(((job.treatment.cues as { cueId: string; emphasis?: { from: number; to: number; method?: string }[] }[]).find((c) => c.cueId === lineId)?.emphasis ?? []).filter((e) => e.method === 'color').flatMap((e) => Array.from({ length: e.to - e.from }, (_, k) => e.from + k)));
+  const marks = marked.size > 0 && marked.size <= 0.6 * chars.filter((c) => !/\s/.test(c)).length;
+  // (each character's row in the block as laid on the job's own face: per-row inks and a split's small part)
+  const block = spec.rowInk || spec.split?.ink ? blockOf(row.cue.text.replace(/[\s　]+/g, ' ').trim(), spec, layoutMeasure(jobFaces(job)(row.cue.text))) : undefined;
+  const rowOf: (number | undefined)[] = chars.map(() => undefined);
+  let p = 0;
+  block?.rows.forEach((r, k) => { for (const ch of r) { while (p < chars.length && chars[p] !== ch) p++; if (p < chars.length) rowOf[p++] = k; } });
+  const small = new Set(block?.small ?? []);
+  const apart = (i: number) => !!spec.split?.ink && rowOf[i] !== undefined && small.has(rowOf[i]!);
+  const before = chars.map((_, i) => {
+    if (apart(i)) return slots[spec.split!.ink! as keyof typeof slots];
+    const r = spec.rowInk && rowOf[i] !== undefined ? spec.rowInk[Math.min(spec.rowInk.length - 1, rowOf[i]!)] : undefined;
+    const own = !r || r === (spec.ink ?? spec.rowInk![0]);
+    return own && marks && marked.has(i) ? inks.key : r ? slots[r as keyof typeof slots] : base;
+  });
+  const settle = beat.kind === 'line-ink-settle';
+  const after = chars.map((_, i) => (apart(i) ? before[i] : settle ? inks.settle ?? base : beat.span && i >= beat.span.from && i < beat.span.to && inks.swapOk ? inks.key : before[i]));
+  const covered = chars.map((c, i) => i).filter((i) => !/[\s\p{P}]/u.test(chars[i]) && !apart(i) && (settle || (!!beat.span && i >= beat.span.from && i < beat.span.to)));
+  if (!covered.length) return { seen: false, why: 'no character the change covers' };
+  const same = covered.filter((i) => lowHex(before[i]) === lowHex(after[i]));
+  return same.length ? { seen: false, why: `${same.length} of ${covered.length} characters keep their ink (${lowHex(before[same[0]])})${settle && !inks.settle ? ': no second ink reads under the line' : ''}` } : { seen: true };
+}
+
 /**
  * Codex 2026-11-10 pairs C on the final drawing, whatever path chose the holds (holds-first, joint, a fallback): no two
  * sung lines in a row draw the same hold kind (a line between with none lifts it); every ink-swap carries its reason
@@ -506,6 +561,8 @@ export function holdSequenceChecks(job: Job): InputWarning[] {
     if (!b) return;
     const prev = rows[k - 1]?.world?.beat;
     if (prev && prev.kind === b.kind) miss(`hold:${b.kind}@${r.id}`, `${r.id} draws a ${b.kind} straight after ${rows[k - 1].id}'s`);
+    const vis = colourChangeSeen(job, r.id, b);
+    if (!vis.seen) miss(`hold:${b.kind}@${r.id}`, `planned colour change not visible on ${r.id}: ${vis.why}`);
     // (the whole line's ink is a colour change too: it carries its reason; its time is checked where the reason names a phrase)
     if (b.kind === 'line-ink-settle') {
       if (!b.why?.source) return void miss(`hold:${b.kind}@${r.id}`, `the whole-line ink on ${r.id} carries no reason`);

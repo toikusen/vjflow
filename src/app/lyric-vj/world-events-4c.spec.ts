@@ -218,9 +218,8 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     }
   });
 
-  // (a world that still commits holds under joint since pairs C made every colour change need a reason: the receipt's
-  // holds were nearly all whole-line ink, so the tampering runs on the pictogram cards)
-  const HELD = 'card';
+  // (the receipt: its joint holds are whole-line ink, each now with its reason; the tampering runs on them as before)
+  const HELD = 'document';
   it('jointChecks: every part of the contract tampered is reported', () => {
     const f = freeJob(song, { style: style(HELD), seed: 0, meaning, worldEvents: true, jointHolds: true });
     const t = f.treatment.worldEvents!;
@@ -253,7 +252,7 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     reports(/the drawing switches nothing there/, (c) => { cue(c, compLine).world!.set = cue(c, prevOf(compLine)).world!.set; });
     const keepLine = t.outcomes!.find((o) => o.outcome === 'hold' && prevOf(o.lineId) !== o.lineId && cue(f.job.treatment.cues as DrawnCue[], prevOf(o.lineId)).world?.set === cue(f.job.treatment.cues as DrawnCue[], o.lineId).world?.set)?.lineId;
     expect(keepLine).toBeDefined();
-    if (keepLine) reports(/the drawing switches there/, (c) => { const w = cue(c, keepLine).world!; w.set = cue(c, compLine).world!.set === w.set ? 'card/long' : cue(c, compLine).world!.set; });
+    if (keepLine) reports(/the drawing switches there/, (c) => { const w = cue(c, keepLine).world!; w.set = cue(c, compLine).world!.set === w.set ? 'document/receipt' : cue(c, compLine).world!.set; });
     // (two changes on a line: reported on every world, pairs B)
     const two = (x: typeof t) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push({ ...e, id: `${e.id}:in`, scope: 'in-line', at: e.at + 1, from: e.at + 1, to: e.at + 1 }); };
     reports(/takes 2 primary actions/, (_c, x) => two(x));

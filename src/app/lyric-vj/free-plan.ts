@@ -25,7 +25,7 @@ import { closingLine, lineParts, type LinePart } from './song-parts';
 import { labelLangOf, partLabelOf } from './labels';
 import { compositionsOf, momentsCapOf, scaleOf } from './world-shared';
 import { planWorldEvents, type CompositionFamily, type InputWarning, type WorldEventInput, type WorldEventPlan, type WorldEventTable } from './world-events';
-import { failedComposites, fromJob, jobFaces, jointChecks, jointName, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
+import { colourChangeSeen, failedComposites, fromJob, jobFaces, jointChecks, jointName, lightGapWarnings, verifyWorldEvents } from './world-events-adapter';
 import { validAccent } from './design';
 import { applyWorldEvents } from './world-events-apply';
 import { lineScaleOf, momentCandidates, scaleCandidates } from './policy-candidates';
@@ -425,15 +425,15 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const momentsOn = !!world && !!momentsCapOf(world.id) && (o.meaningMoments ?? env('VJ_MOMENTS'));
   const joint = scheduled && (o.jointHolds ?? env('VJ_JOINT'));
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
-  const { plan: composed, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(asked ? { stillLines: true } : {}), ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
+  const { plan: composed0, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(asked ? { stillLines: true } : {}), ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
-  const base = composerBase(o.base ?? FREE_BASE(), composed, shots, palette, seed) as unknown as TreatmentV3;
+  const base = composerBase(o.base ?? FREE_BASE(), composed0, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)
   // (Q5 wiring: the scheduler's approved moments replace today's gate; the first draw, scheduled on, carries none)
   const today = momentsOn ? [] : freeMoments(song, meaning);
   const win = { start: 0, end: song.duration };
   const fps = o.fps ?? 30;
-  const jobOf = (plan: typeof composed, moments: SignatureMoment[] = today, mini: MiniMoment[] = []) => {
+  const jobOf = (plan: typeof composed0, moments: SignatureMoment[] = today, mini: MiniMoment[] = []) => {
     const own = new Set(moments.flatMap(ownCues));
     const drawn = composerTreatment(song, plan as never, base, palette, world);
     const signed: TreatmentV3 = moments.length ? { ...drawn, cues: drawn.cues.map((c) => (own.has(c.cueId) ? { ...c, fine: undefined, hit: undefined } : c)), signature: moments } : drawn;
@@ -443,7 +443,10 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
     const job: RenderJob = { fps, window: win, beats: song.beats, downbeats: song.downbeats, beatStrength: song.beatStrength, tempo: song.tempo, cues: cuesIn(song, win), singers: song.singers, treatment: checked.treatment, assets: {}, fonts: { family: font }, meta: splitSongTitle(song.title), track: false, entrance: 'whole' };
     return { job, treatment };
   };
-  const first = jobOf(composed);
+  // (pairs C, review 2026-11-10: a colour change the drawn ink would not show is no change: the line keeps, every path)
+  const drafted = jobOf(composed0);
+  const composed = seenColours(composed0, drafted.job);
+  const first = composed === composed0 ? drafted : jobOf(composed);
   const policyOn = scaleOn || momentsOn;
   if (!world || (o.worldEvents === false && !policyOn)) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
   // the song's one composition plan (world-events.ts, Q1 phase 2): scheduled on the job as the renderer will set it, then
@@ -459,7 +462,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const redraw = scheduled || scale.size > 0 || momentsOn;
   // (a type-only mini moves the line's own words: it goes onto the line, the overlay draws only page minis)
   const inLine = lineMoments(drawnMoments?.mini ?? [], first.job.cues as { id: string; text: string }[], new Map(input.lines.map((l) => [l.id, l.seat ?? ''])));
-  const drawOf = (events: typeof planned): { plan: typeof composed; job: RenderJob; treatment: TreatmentV3; checked: InputWarning[] } => {
+  const drawOf = (events: typeof planned): { plan: typeof composed0; job: RenderJob; treatment: TreatmentV3; checked: InputWarning[] } => {
     const plan = scheduled || scale.size ? applyWorldEvents(composed, events, world, scale.size ? { seats: scheduled, scale } : undefined) : composed;
     const drawnPlan = inLine.size ? withLineMoments(plan, inLine) : plan;
     const { job, treatment } = redraw ? jobOf(drawnPlan, drawnMoments?.big ?? today, drawnMoments?.mini ?? []) : first;
@@ -501,6 +504,41 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
   return { job, plan, palette: paletteId, calm, treatment, ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))], unrealizable: q3?.unrealizable ?? [] } as FreePolicy } : {}) };
+}
+
+/**
+ * The plan with every colour-change hold the drawn ink would not show taken off its line (world-events-adapter
+ * colourChangeSeen, on the job drawn from it): the line keeps, the reason in `beatSkip` and an `invisible` refusal in
+ * `beatRejects`; under the joint contract the same for each colour candidate on the seat it was measured on. The same
+ * plan object when nothing is hidden.
+ */
+function seenColours<P extends { shots: { lines: { cue: string; world?: Record<string, unknown> }[] }[] }>(plan: P, job: RenderJob): P {
+  type Beat = { kind: string; at: number; span?: { from: number; to: number } };
+  let touched = false;
+  const out = structuredClone(plan);
+  for (const s of out.shots) for (const l of s.lines) {
+    const w = l.world as { beat?: Beat; beatSkip?: string; beatRejects?: { kind: string; reason: string }[]; beatAbsorb?: unknown; holdCands?: { seat: string; beat: Beat }[] } | undefined;
+    if (!w) continue;
+    const b = w.beat;
+    const v = b ? colourChangeSeen(job, l.cue, b) : { seen: true };
+    if (b && !v.seen) {
+      touched = true;
+      delete w.beat;
+      delete w.beatAbsorb;
+      w.beatSkip = `colour change not visible on the drawn ink (pairs C): ${v.why}`;
+      w.beatRejects = [...(w.beatRejects ?? []), { kind: b.kind, reason: 'invisible' }];
+    }
+    if (w.holdCands) {
+      const kept = w.holdCands.filter((c) => colourChangeSeen(job, l.cue, c.beat, c.seat).seen);
+      if (kept.length !== w.holdCands.length) {
+        touched = true;
+        for (const c of w.holdCands.filter((x) => !kept.includes(x))) if (!(w.beatRejects ?? []).some((r) => r.kind === c.beat.kind && r.reason === 'invisible')) w.beatRejects = [...(w.beatRejects ?? []), { kind: c.beat.kind, reason: 'invisible' }];
+        if (kept.length) w.holdCands = kept;
+        else delete w.holdCands;
+      }
+    }
+  }
+  return touched ? out : plan;
 }
 
 /** Each type-only mini as its line's own moment: the evidence word's span on the drawn text (calls on their own track). */

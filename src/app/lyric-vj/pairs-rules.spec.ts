@@ -8,9 +8,10 @@ import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { holdCandidatesOf, SECTION_ENERGY_STEP, swapCausesOf, swapSpan, SWAP_SNAP, type Cue, type HoldLine } from './lineplan-core';
 import { planWorldEvents, sectionAt, SWAP_CAP, type JointHold, type SeatCandidate, type WorldEventInput, type WorldEventLine } from './world-events';
-import { holdSequenceChecks } from './world-events-adapter';
+import { colourChangeSeen, holdSequenceChecks } from './world-events-adapter';
 
-const text = '我們一起 走過那條 長長的街';
+// (two whole phrases of half the line each: a swap takes a whole phrase, never a run that cuts one, review 2026-11-10)
+const text = '我們一起走過 那條長長的街';
 const n = [...text].length;
 const timed = (start: number, end: number, o: Partial<Cue> = {}): Cue => ({ id: 'x', start, end, text, charTimed: true, charStarts: [...text].map((_, k) => +(start + ((end - start) * 0.9 * k) / n).toFixed(3)), ...o });
 const swapOnly = { 'ink-swap': 1 };
@@ -88,11 +89,11 @@ describe('pairs C: an ink-swap candidate (holdCandidatesOf)', () => {
 
   it('a meaning reason swaps its own phrase (or a run holding it whole), never the run apart from it', () => {
     const key = '長長的街';
-    const cover = { from: 10, to: 14 };
-    expect(swapSpan(text, key)).not.toEqual(expect.objectContaining({ to: 14 }));
+    const cover = { from: 9, to: 13 };
+    expect(swapSpan(text, key)).not.toEqual(expect.objectContaining({ to: 13 }));
     const sp = swapSpan(text, key, cover)!;
-    expect(sp.from).toBeLessThanOrEqual(10);
-    expect(sp.to).toBeGreaterThanOrEqual(14);
+    expect(sp.from).toBeLessThanOrEqual(9);
+    expect(sp.to).toBeGreaterThanOrEqual(13);
     const got = holdCandidatesOf(timed(1, 4), [], [], [], '', 0, line({ key, swapWhy: [{ kind: 'meaning', source: 'key:x', cover }] }), swapOnly, true);
     expect(Array.isArray(got) && got[0].plan.span).toEqual(sp);
   });
@@ -113,10 +114,10 @@ describe('pairs C: an ink-swap candidate (holdCandidatesOf)', () => {
     const capped = holdCandidatesOf(timed(1, 4), [], [2, 2.5, 3], [], '', 0, line({ inkSettle: true, plain: true, swapWhy: section, swapCapped: true }), swapOnly, true);
     expect('skip' in capped && capped.rejects).toContainEqual({ kind: 'line-ink-settle', reason: 'section-cap' });
     const c = timed(1, 4);
-    // (the phrase is sung from 2.929: the beat at 3 lies inside it within SWAP_SNAP, so the change lands on the beat)
-    expect(c.charStarts![10]).toBe(2.929);
-    const meant = holdCandidatesOf(c, [], [2, 2.5, 3], [], '', 0, line({ inkSettle: true, plain: true, swapWhy: [{ kind: 'meaning', source: 'key:x', cover: { from: 10, to: 14 } }] }), swapOnly, true);
-    expect(Array.isArray(meant) && meant[0].plan).toMatchObject({ kind: 'line-ink-settle', at: 3, why: { source: 'key:x', span: { from: 10, to: 14 } } });
+    // (the phrase is sung from 2.869: the beat at 2.9 lies inside it within SWAP_SNAP, so the change lands on the beat)
+    expect(c.charStarts![9]).toBe(2.869);
+    const meant = holdCandidatesOf(c, [], [2, 2.5, 2.9], [], '', 0, line({ inkSettle: true, plain: true, swapWhy: [{ kind: 'meaning', source: 'key:x', cover: { from: 9, to: 13 } }] }), swapOnly, true);
+    expect(Array.isArray(meant) && meant[0].plan).toMatchObject({ kind: 'line-ink-settle', at: 2.9, why: { source: 'key:x', span: { from: 9, to: 13 } } });
   });
 });
 
@@ -164,6 +165,8 @@ describe.skipIf(!have)('pairs C on 雙截棍 (file, the world the owner called �
         const b = c.world?.beat;
         const prev = cues[k - 1]?.c.world?.beat;
         if (b && prev) expect(b.kind, `${cues[k - 1].c.cueId} > ${c.cueId}`).not.toBe(prev.kind);
+        // (every colour change is seen on the drawn ink: review 2026-11-10, a swap into the row's own accent drew nothing)
+        if (b && ['ink-swap', 'line-ink-settle'].includes(b.kind)) expect(colourChangeSeen(f.job, c.cueId, b).seen, c.cueId).toBe(true);
         if (b?.kind !== 'ink-swap') return;
         expect(b.why?.source, c.cueId).toMatch(/^(key|moment|section|repeat):/);
         expect(b.why!.span).toEqual(b.span);
@@ -178,6 +181,21 @@ describe.skipIf(!have)('pairs C on 雙截棍 (file, the world the owner called �
       expect(f.treatment.worldEvents?.warnings.filter((w) => w.reason.startsWith('final check')) ?? []).toEqual([]);
       expect(holdSequenceChecks(f.job)).toEqual([]);
     });
+
+  it('a colour change the drawn ink would not show is taken off its line (file case: the second row is printed in the accent the swap would lay); kept, with the refusal on record', () => {
+    const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
+    const cues = f.job.treatment.cues as (DrawnCue & { world?: { beatSkip?: string; beatRejects?: { kind: string; reason: string }[] } })[];
+    const hidden = cues.filter((c) => c.world?.beatRejects?.some((r) => r.reason === 'invisible'));
+    expect(hidden.length).toBeGreaterThan(0);
+    for (const c of hidden) { expect(c.world!.beat).toBeUndefined(); expect(c.world!.beatSkip).toMatch(/not visible on the drawn ink/); }
+    // (planted back: c028's second row 從小就耳濡目染 already stands in the accent the swap would lay; the final check names it)
+    const j = structuredClone(f.job);
+    const back = (j.treatment.cues as DrawnCue[]).find((c) => c.cueId === 'c028')!;
+    const at = 97.84;
+    back.world!.beat = { kind: 'ink-swap', at, span: { from: 8, to: 15 }, why: { kind: 'section', source: 'section:6', span: { from: 8, to: 15 }, at } };
+    expect(colourChangeSeen(j, 'c028', back.world!.beat!)).toMatchObject({ seen: false });
+    expect(holdSequenceChecks(j).some((w) => w.inputs[0] === 'hold:ink-swap@c028' && /planned colour change not visible/.test(w.reason))).toBe(true);
+  });
 
   it('the final check reads the drawing: a hold kind drawn twice in a row, an ink-swap with no reason or off its phrase\'s time, each named', () => {
     const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });

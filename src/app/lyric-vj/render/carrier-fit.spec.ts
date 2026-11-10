@@ -199,11 +199,11 @@ describe('the reading gate\'s declared-geometry rules (carrier-overflow, rule-cr
     const { on, off } = frames([[130, 80, 380, 120], [380, 80, 404, 120]], false);
     expect(declaredRules(on, off, w, h, declared)).toEqual({ overflow: 0, ruleCross: 0 });
   });
-  it('a world that gets worse on either rule regresses; a count recorded before the rules existed reads as none', () => {
-    const before = { ...emptyCounts(), moments: 10 } as ReturnType<typeof emptyCounts>;
-    delete (before as Partial<typeof before>)['carrier-overflow'];
-    const after = { ...emptyCounts(), moments: 10, 'carrier-overflow': 1 };
-    expect(regressions(before, after)).toEqual(['carrier-overflow']);
+  it('both rules are absolute: one moment fails whatever the baseline recorded, with no slack', () => {
+    const before = { ...emptyCounts(), moments: 489, 'carrier-overflow': 53, 'rule-crosses-text': 194 };
+    expect(regressions(before, { ...emptyCounts(), moments: 489, 'carrier-overflow': 1 })).toEqual(['carrier-overflow']);
+    expect(regressions(before, { ...emptyCounts(), moments: 489, 'rule-crosses-text': 1 })).toEqual(['rule-crosses-text']);
+    expect(regressions(before, { ...emptyCounts(), moments: 489 })).toEqual([]);
   });
 });
 

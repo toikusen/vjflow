@@ -263,10 +263,13 @@ export function countMoment(c: RuleCounts, m: RuleMoment, glow: boolean): RuleCo
   return { moments: c.moments + 1, glow: c.glow + (glow ? 1 : 0), clip: c.clip + (m.clip ? 1 : 0), plate: c.plate + (m.plate < 0 ? 1 : 0), small: c.small + (m.small ? 1 : 0), cross: c.cross + (m.cross > RULES.cross ? 1 : 0), low: c.low + (m.low > RULES.lowShare ? 1 : 0),
     'carrier-overflow': (c['carrier-overflow'] ?? 0) + ((m.overflow ?? 0) >= RULES.overflowPixels ? 1 : 0), 'rule-crosses-text': (c['rule-crosses-text'] ?? 0) + ((m.ruleCross ?? 0) >= RULES.ruleCrossPixels ? 1 : 0) };
 }
+/** Rules with no baseline and no slack: any moment fails (phase 4d round 3 review). */
+export const ABSOLUTE_RULES = ['carrier-overflow', 'rule-crosses-text'] as const;
 /** The rules a world got worse on against its recorded counts (shares of its moments, so a changed line count is fair). */
 export function regressions(before: RuleCounts, after: RuleCounts, slack = 0.02): string[] {
-  const keys = ['glow', 'clip', 'plate', 'small', 'cross', 'low', 'carrier-overflow', 'rule-crosses-text'] as const;
-  // (a count recorded before a rule existed reads as none)
-  const share = (c: RuleCounts, k: (typeof keys)[number]) => (c[k] ?? 0) / Math.max(1, c.moments);
-  return keys.filter((k) => share(after, k) > share(before, k) + slack);
+  const keys = ['glow', 'clip', 'plate', 'small', 'cross', 'low'] as const;
+  const share = (c: RuleCounts, k: (typeof keys)[number]) => c[k] / Math.max(1, c.moments);
+  // (the two declared-geometry rules are absolute: one glyph off its band or within a declared line's clearance is a
+  // fault whatever the world counted before, ABSOLUTE_RULES)
+  return [...keys.filter((k) => share(after, k) > share(before, k) + slack), ...ABSOLUTE_RULES.filter((k) => (after[k] ?? 0) > 0)];
 }

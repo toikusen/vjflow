@@ -159,7 +159,7 @@ describe('phase 4d: the same-page seats', () => {
 const SONGS = [['out/db/yt_w_fCuUR3lEs/song.json', 'out/research/instant/plans/nun/meaning.json'], ['out/db/yt_5i50aTB7JFo/song.json', 'out/research/instant/plans/snow/meaning.json']];
 const onDisk = SONGS.every(([s, m]) => existsSync(s) && existsSync(m));
 
-describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)', () => {
+describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)', { timeout: 60000 }, () => {
   const songs = onDisk ? SONGS.map(([s, m]) => [JSON.parse(readFileSync(s, 'utf8')), JSON.parse(readFileSync(m, 'utf8'))]) : [];
   const runs = new Map<string, ReturnType<typeof freeJob>[]>();
   const style = (id: string) => FREE_STYLES.find((s) => s.id === id)!;

@@ -458,7 +458,7 @@
   "small": 0,
   "cross": 141,
   "low": 0,
-  "carrier-overflow": 13,
+  "carrier-overflow": 0,
   "rule-crosses-text": 0
  },
  "watercolor": {
@@ -480,8 +480,8 @@
   "small": 0,
   "cross": 0,
   "low": 0,
-  "carrier-overflow": 53,
-  "rule-crosses-text": 194
+  "carrier-overflow": 0,
+  "rule-crosses-text": 0
  },
  "claymation": {
   "moments": 489,
@@ -491,7 +491,7 @@
   "small": 0,
   "cross": 0,
   "low": 0,
-  "carrier-overflow": 18,
+  "carrier-overflow": 0,
   "rule-crosses-text": 0
  }
 }

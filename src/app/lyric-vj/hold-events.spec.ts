@@ -152,7 +152,7 @@ describe('hold events (Q2, 2026-11-09)', () => {
   });
   it('settles the whole line into a second ink when no other family fits: every character, plain or not, once', () => {
     const c = cue(10, 12.2);
-    const b = event(beatOfLine(c, [], halfBeats, [], '', 0, { enterSec: 0.2, inkSettle: true, plain: true, standsOn: true }, all));
+    const b = event(beatOfLine(c, [], halfBeats, [], '', 0, { enterSec: 0.2, inkSettle: true, ...why, plain: true, standsOn: true }, all));
     expect(b.kind).toBe('line-ink-settle');
     expect(b.span).toBeUndefined();
     expect(b.sec).toBeGreaterThanOrEqual(LINE_INK_SEC.medium[0]);
@@ -162,7 +162,7 @@ describe('hold events (Q2, 2026-11-09)', () => {
     expect(at(0, 0)).toBe(at(1, 1));
     expect(WORLD_BEATS['line-ink-settle'].glyph!({ q: 1, i: 3, n: 5, u: 0.7, v: 0, seed: 1, age: 2, sung: 1, span: 0 })).toEqual({ key: 1 });
     // another family that fits comes first
-    expect(event(beatOfLine(c, [], halfBeats, [], '', 0, { enterSec: 0.2, inkSettle: true }, all)).kind).not.toBe('line-ink-settle');
+    expect(event(beatOfLine(c, [], halfBeats, [], '', 0, { enterSec: 0.2, inkSettle: true, ...why }, all)).kind).not.toBe('line-ink-settle');
   });
   it('skips the whole-line ink when the scheme has no second ink that reads on the ground, and says the palette is why', () => {
     expect(settleInk('#1a1a1a', ['#222222', '#d8d0c0'], ['#f2eee4'])).toBeUndefined();
@@ -175,7 +175,7 @@ describe('hold events (Q2, 2026-11-09)', () => {
   });
   it('times a one-second line: entrance done by 0.3 s, the change on the safe beat, settled by 0.6 s and kept', () => {
     const c = cue(20, 21);
-    const b = event(beatOfLine(c, [], [20.45, 20.9], [], '', 0, { enterSec: 0.2, inkSettle: true, plain: true, standsOn: true }, all));
+    const b = event(beatOfLine(c, [], [20.45, 20.9], [], '', 0, { enterSec: 0.2, inkSettle: true, ...why, plain: true, standsOn: true }, all));
     expect(b.kind).toBe('line-ink-settle');
     expect(b.at).toBe(20.45);
     expect(b.at + b.sec).toBeLessThanOrEqual(20.63 + 1e-9);
@@ -201,19 +201,19 @@ describe('hold events (Q2, 2026-11-09)', () => {
     const by = holdEndBy(c, next)!;
     let latest = 0;
     for (let roll = 0; roll < 7; roll++) {
-      const b = beatOfLine(c, [], beats, [], '', roll, { enterSec: 0.2, inkSettle: true, endBy: by }, all);
+      const b = beatOfLine(c, [], beats, [], '', roll, { enterSec: 0.2, inkSettle: true, ...why, endBy: by }, all);
       if ('kind' in b) { expect(b.at + b.sec).toBeLessThanOrEqual(by + 1e-9); latest = Math.max(latest, b.at + b.sec); }
       // without the next line the same event may run on to the line's own bound
-      const free = beatOfLine(c, [], beats, [], '', roll, { enterSec: 0.2, inkSettle: true }, all);
+      const free = beatOfLine(c, [], beats, [], '', roll, { enterSec: 0.2, inkSettle: true, ...why }, all);
       if ('kind' in free) expect(free.at + free.sec).toBeLessThanOrEqual(c.end - HOLD_BEFORE_END + 1e-9);
     }
     expect(latest).toBeGreaterThan(0);
     // nothing fits before the handoff: no event, and the line is not delayed for one
-    expect(beatOfLine(c, [], [10.5], [], '', 0, { enterSec: 0.2, inkSettle: true, endBy: 10.45 }, all)).toMatchObject({ skip: 'no room after the entrance' });
+    expect(beatOfLine(c, [], [10.5], [], '', 0, { enterSec: 0.2, inkSettle: true, ...why, endBy: 10.45 }, all)).toMatchObject({ skip: 'no room after the entrance' });
   });
   it('keeps a new ink only where it was read: never before a cut or a change of set, nor in a set after the first', () => {
     const c = cue(10, 12.8);
-    for (let roll = 0; roll < 7; roll++) for (const line of [{ enterSec: 0.2, inkSettle: true, plain: true, standsOn: true }, { enterSec: 0.2, standsOn: true }] as HoldLine[]) {
+    for (let roll = 0; roll < 7; roll++) for (const line of [{ enterSec: 0.2, inkSettle: true, ...why, plain: true, standsOn: true }, { enterSec: 0.2, standsOn: true }] as HoldLine[]) {
       const cut = beatOfLine(c, [], halfBeats, [], '', roll, { ...line, cutsAt: [12.3] }, all);
       if ('kind' in cut && (cut.kind === 'ink-swap' || cut.kind === 'line-ink-settle')) expect(cut.at).toBeGreaterThan(12.3);
       const set = beatOfLine(c, [], halfBeats, [{ at: 11.0 }], '', roll, line, all);
@@ -245,7 +245,7 @@ describe('hold events (Q2, 2026-11-09)', () => {
     expect(linked).toBeLessThan(holdEndBy(c, next)!);
     expect(linked).toBeLessThan(c.end - HOLD_BEFORE_END);
     for (let roll = 0; roll < 7; roll++) {
-      const b = beatOfLine(c, [], Array.from({ length: 400 }, (_, i) => i * 0.05), [], '', roll, { enterSec: 0.2, inkSettle: true, endBy: linked }, all);
+      const b = beatOfLine(c, [], Array.from({ length: 400 }, (_, i) => i * 0.05), [], '', roll, { enterSec: 0.2, inkSettle: true, ...why, endBy: linked }, all);
       if ('kind' in b) expect(b.at + b.sec).toBeLessThanOrEqual(linked + 1e-9);
     }
   });

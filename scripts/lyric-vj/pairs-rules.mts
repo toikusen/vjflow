@@ -44,7 +44,8 @@ for (const [world, name, from, to] of PAIRS) {
       const repeats = lines.slice(1).filter((l, i) => l.world?.beat && lines[i].world?.beat && l.world.beat.kind === lines[i].world!.beat!.kind).map((l) => `${lines[lines.indexOf(l) - 1].cueId}>${l.cueId}:${l.world!.beat!.kind}`);
       const swaps = lines.filter((l) => l.world?.beat?.kind === 'ink-swap');
       const perSection: Record<string, number> = {};
-      for (const l of swaps) { const k = `${sectionOf(cue(l.cueId).start)}`; perSection[k] = (perSection[k] ?? 0) + 1; }
+      // (one colour budget a section: a phrase's ink and the whole line's together, pairs C as extended)
+      for (const l of lines.filter((x) => ['ink-swap', 'line-ink-settle'].includes(x.world?.beat?.kind ?? ''))) { const k = `${sectionOf(cue(l.cueId).start)}`; perSection[k] = (perSection[k] ?? 0) + 1; }
       const rejects: Record<string, number> = {};
       for (const l of lines) for (const x of l.world?.beatRejects ?? []) { const k = `${x.kind}:${x.reason}`; rejects[k] = (rejects[k] ?? 0) + 1; }
       return {
@@ -52,10 +53,13 @@ for (const [world, name, from, to] of PAIRS) {
         holds: lines.filter((l) => l.world?.beat).length,
         kinds,
         inkSwaps: swaps.length,
+        lineInkSettles: lines.filter((l) => l.world?.beat?.kind === 'line-ink-settle').length,
+        keeps: lines.filter((l) => !l.world?.beat).length,
+        colourWithWhy: lines.filter((l) => ['ink-swap', 'line-ink-settle'].includes(l.world?.beat?.kind ?? '') && l.world!.beat!.why?.source).length,
         inkSwapsWithWhy: swaps.filter((l) => l.world?.beat?.why?.source).length,
         inkSwapWhy: swaps.map((l) => ({ line: l.cueId, text: cue(l.cueId).text, at: l.world!.beat!.at, why: l.world!.beat!.why })),
-        maxInkSwapsPerSection: Math.max(0, ...Object.values(perSection)),
-        inkSwapsPerSection: perSection,
+        maxColourPerSection: Math.max(0, ...Object.values(perSection)),
+        colourPerSection: perSection,
         consecutiveSameKind: repeats.length,
         repeats,
         rejects,
@@ -68,4 +72,4 @@ for (const [world, name, from, to] of PAIRS) {
   out[`${world}/${name}`] = { window: [from, to], ...sides };
 }
 writeFileSync(a.out!, JSON.stringify(out, null, 1));
-console.log(Object.entries(out).filter(([k]) => k.includes('/')).map(([k, v]) => { const s = v as Record<string, { window: Record<string, unknown>; song: Record<string, unknown>; contract: number }>; return `${k} holdsFirst win inkSwaps ${s.holdsFirst.window.inkSwaps} repeats ${s.holdsFirst.window.consecutiveSameKind} inLineSeat ${JSON.stringify(s.holdsFirst.song.inLineLayoutSeat)} two ${s.holdsFirst.song.linesWithTwoCompositions} | joint inLineSeat ${JSON.stringify(s.joint.song.inLineLayoutSeat)} two ${s.joint.song.linesWithTwoCompositions} | contract ${s.holdsFirst.contract}/${s.joint.contract}`; }).join('\n'));
+console.log(Object.entries(out).filter(([k]) => k.includes('/')).map(([k, v]) => { const s = v as Record<string, { window: Record<string, unknown>; song: Record<string, unknown>; contract: number }>; return `${k} holdsFirst win inkSwaps ${s.holdsFirst.window.inkSwaps} settles ${s.holdsFirst.window.lineInkSettles} keeps ${s.holdsFirst.window.keeps} colourMax ${s.holdsFirst.song.maxColourPerSection} repeats ${s.holdsFirst.window.consecutiveSameKind} inLineSeat ${JSON.stringify(s.holdsFirst.song.inLineLayoutSeat)} two ${s.holdsFirst.song.linesWithTwoCompositions} | joint inLineSeat ${JSON.stringify(s.joint.song.inLineLayoutSeat)} two ${s.joint.song.linesWithTwoCompositions} | contract ${s.holdsFirst.contract}/${s.joint.contract}`; }).join('\n'));

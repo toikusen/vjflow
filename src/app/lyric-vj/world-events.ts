@@ -608,8 +608,10 @@ export function planWorldEvents(input: WorldEventInput): WorldEventPlan {
       // lifts it), and no ink-swap past SWAP_CAP in the line's music section, counted over the song; refused, never moved)
       const prevKind = i > 0 ? holds.find((h) => h.lineId === lines[i - 1].id)?.kind : undefined;
       const sectionOf = (id: string) => sectionAt(sections, lines.find((l) => l.id === id)?.start ?? -Infinity);
-      const swaps = holds.filter((h) => h.kind === 'ink-swap' && sectionOf(h.lineId) === sectionAt(sections, line.start)).length;
-      const barred = (h: JointHold): HoldRefusal['reason'] | undefined => (prevKind && h.hold.kind === prevKind ? 'repeat-kind' : h.hold.kind === 'ink-swap' && swaps >= SWAP_CAP ? 'section-cap' : undefined);
+      // (the colour changes, a phrase's or the whole line's, share one budget a section: the owner's 顏色變換要合理)
+      const colour = (k: string) => k === 'ink-swap' || k === 'line-ink-settle';
+      const swaps = holds.filter((h) => colour(h.kind) && sectionOf(h.lineId) === sectionAt(sections, line.start)).length;
+      const barred = (h: JointHold): HoldRefusal['reason'] | undefined => (prevKind && h.hold.kind === prevKind ? 'repeat-kind' : colour(h.hold.kind) && swaps >= SWAP_CAP ? 'section-cap' : undefined);
       const refuse = (h: JointHold) => {
         const why = barred(h);
         const note = notes.get(line.id)!;

@@ -793,6 +793,12 @@ export interface HoldLine {
   /** The line's music section has had its SWAP_CAP ink-swaps already (counted over the whole song): no more. */
   swapCapped?: boolean;
 }
+/**
+ * The holds that change the words' colour and stay (pairs C, extended 2026-11-10 by the owner's 「顏色變換要合理」 to every
+ * colour change): each needs a reason, and together they share SWAP_CAP a section. The key pulses (a run of ink that goes
+ * back) are not counted: they leave the words as they were.
+ */
+export const COLOUR_HOLDS: ReadonlySet<string> = new Set(['ink-swap', 'line-ink-settle']);
 /** A traceable reason for an ink-swap (pairs C): a meaning key or moment on the line, the first sung line after a change of section, the second time a phrase comes back. */
 export interface SwapCause { kind: 'meaning' | 'section' | 'repeat'; source: string; cover?: { from: number; to: number } }
 /** The reason an ink-swap was drawn for, as the hold records it: its cause, the phrase it swapped and when (the phrase's sung start or a beat inside it). */
@@ -980,7 +986,12 @@ export function holdCandidatesOf(c: Cue, kinds: BeatKind[], beats: number[], rep
   const own = [...pulses.slice(roll % Math.max(1, pulses.length)), ...pulses.slice(0, roll % Math.max(1, pulses.length))];
   // (a pulse and back is no hold event: short and medium lines take only the settling ones; the whole line's ink is the
   // last of them, for a line none of the others fits)
-  const fallback: BeatKind[] = line.inkSettle ? ['line-ink-settle'] : [];
+  // (the whole line's ink is a change of colour too (the owner: 顏色變換要合理, any colour): only for a line with a reason,
+  // within the section's colour budget, else the line keeps; pairs C as extended 2026-11-10)
+  // (a plain line has no phrase to swap, but its whole ink may still change for a reason)
+  const settleCause = (line.swapWhy ?? [])[0];
+  if (line.inkSettle) { if (!settleCause) no('line-ink-settle', 'no-reason'); else if (line.swapCapped) no('line-ink-settle', 'section-cap'); }
+  const fallback: BeatKind[] = line.inkSettle && settleCause && !line.swapCapped ? ['line-ink-settle'] : [];
   // (pairs C: never the kind the sung line before took, whatever kind, the whole line's ink included: the next of the
   // world's own order, else none; a line before that kept lifts it, `last` empty)
   const listed = [...(band === 'long' ? [...own, ...settling] : settling), ...fallback];
@@ -1016,6 +1027,19 @@ export function holdCandidatesOf(c: Cue, kinds: BeatKind[], beats: number[], rep
     const snapped = beats.filter((x) => x >= a - 1e-6 && x < b && Math.abs(x - a) <= SWAP_SNAP).sort((x, y) => Math.abs(x - a) - Math.abs(y - a));
     return [...snapped, a].find((x) => x >= from - 1e-6 && x <= to + 1e-6 && clear(x));
   };
+  // (the whole line's ink: a meaning reason names a phrase, so at that phrase's sung start (or a beat inside it that near
+  // it), on trusted times only; a section or repeat reason is about the line, so the first beat after the entrance that
+  // the window and its clearances allow; none, no change)
+  const settleAt = (from: number, to: number, clear: (x: number) => boolean) => {
+    const cover = settleCause?.cover;
+    if (cover) {
+      if (!timed) return undefined;
+      const [a, b] = [c.charStarts![cover.from], cover.to < n ? c.charStarts![cover.to] : c.end];
+      const snapped = beats.filter((x) => x >= a - 1e-6 && x < b && Math.abs(x - a) <= SWAP_SNAP).sort((x, y) => Math.abs(x - a) - Math.abs(y - a));
+      return [...snapped, a].find((x) => x >= from - 1e-6 && x <= to + 1e-6 && clear(x));
+    }
+    return [...beats].sort((x, y) => x - y).find((x) => x >= from - 1e-6 && x <= to + 1e-6 && clear(x));
+  };
   let why = '';
   const found: HoldCandidate[] = [];
   for (const [rank, kind] of order.entries()) {
@@ -1037,15 +1061,16 @@ export function holdCandidatesOf(c: Cue, kinds: BeatKind[], beats: number[], rep
       const clear = (x: number) => repose.every((r) => Math.abs(r.at - x) >= BEAT_CLEAR && Math.abs(r.at - (x + sec)) >= BEAT_CLEAR / 2 && !(KEPT.has(kind) && r.at > x) && !(FIRST_SET.has(kind) && r.at < x + sec))
         && (line.cutsAt ?? []).every((t) => (t < x - CUT_CLEAR || t > x + sec + CUT_CLEAR / 2) && !(KEPT.has(kind) && t > x) && kind !== 'line-grow');
       const near = (xs: number[]) => xs.filter((b) => b >= from && b <= to && clear(b)).sort((a, b) => Math.abs(a - aim) - Math.abs(b - aim))[0];
-      const at = kind === 'ink-swap' ? swapAt(from, to, clear) : near(beats) ?? near(breaks);
+      const at = kind === 'ink-swap' ? swapAt(from, to, clear) : kind === 'line-ink-settle' ? settleAt(from, to, clear) : near(beats) ?? near(breaks);
       if (at !== undefined) {
-        const swapWhy = kind === 'ink-swap' && pick ? { why: { kind: pick.cause.kind, source: pick.cause.source, span: pick.span!, at: +at.toFixed(3) } } : {};
+        const swapWhy = kind === 'ink-swap' && pick ? { why: { kind: pick.cause.kind, source: pick.cause.source, span: pick.span!, at: +at.toFixed(3) } }
+          : kind === 'line-ink-settle' && settleCause ? { why: { kind: settleCause.kind, source: settleCause.source, span: settleCause.cover ?? { from: 0, to: n }, at: +at.toFixed(3) } } : {};
         found.push({ plan: { kind, at: +at.toFixed(3), sec: +sec.toFixed(3), ...(stays ? { stays: true } : {}), ...(kind === 'ink-swap' ? { span } : {}), ...swapWhy, safe: true, ink: !!line.inkSettle }, rank, slack: +Math.min(at - from, ends - (at + sec)).toFixed(3) });
         break;
       }
-      why ||= kind === 'ink-swap' ? 'no reliable sung time of the swapped phrase inside the window' : [...beats, ...breaks].some((b) => b >= from && b <= to) ? 'every beat in the window is near a cut or a change of set' : 'no beat or word break in the window';
+      why ||= kind === 'ink-swap' ? 'no reliable sung time of the swapped phrase inside the window' : kind === 'line-ink-settle' ? 'no time for the whole line\'s ink inside the window (its phrase\'s sung start, else a beat after the entrance)' : [...beats, ...breaks].some((b) => b >= from && b <= to) ? 'every beat in the window is near a cut or a change of set' : 'no beat or word break in the window';
     }
-    if (kind === 'ink-swap' && !found.some((x) => x.plan.kind === 'ink-swap')) no('ink-swap', 'timing');
+    if ((kind === 'ink-swap' || kind === 'line-ink-settle') && !found.some((x) => x.plan.kind === kind)) no(kind, 'timing');
   }
   if (found.length && rejects.length) found[0].plan.rejects = rejects;
   return found.length ? found : { skip: why, safe, ink: !!line.inkSettle, ...(rejects.length ? { rejects } : {}) };
@@ -1444,7 +1469,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   const sectionOfCue = (c: Cue) => sectionAt(song.sections ?? [], c.start);
   const swapsIn = new Map<number, number>();
   const swapLine = (c: Cue, commit: boolean) => ({ swapWhy: swapCauses.get(c.id) ?? [], ...(commit && (swapsIn.get(sectionOfCue(c)) ?? 0) >= SWAP_CAP ? { swapCapped: true } : {}) });
-  const spend = (c: Cue, h: HoldPlan | HoldSkip | undefined) => { if (h && 'kind' in h && h.kind === 'ink-swap') swapsIn.set(sectionOfCue(c), (swapsIn.get(sectionOfCue(c)) ?? 0) + 1); };
+  const spend = (c: Cue, h: HoldPlan | HoldSkip | undefined) => { if (h && 'kind' in h && COLOUR_HOLDS.has(h.kind)) swapsIn.set(sectionOfCue(c), (swapsIn.get(sectionOfCue(c)) ?? 0) + 1); };
   // a world's lines go through its whole pool of ways in and out, its own and the shared, the least used first
   const worldMoves = moveState();
   // each part blows up one line's key word, a line the reading named first (2026-11-04 gap 3: one type size everywhere)

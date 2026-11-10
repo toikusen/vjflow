@@ -13,7 +13,7 @@
 // the primary-action coverage only; it never counts as Q2 hold coverage.
 // Pairs rules (Codex 2026-11-10 pairs C): the denominator stays; beside it every hold candidate refused by the rules, by
 // kind and reason (`rejects`: no-reason / repeat-kind / section-cap / timing / span, the composer's beatRejects and the
-// joint selector's outcome holdRejects), the ink-swaps by reason (`swapWhy`), and the sung lines in a row that share a
+// joint selector's outcome holdRejects), the colour changes (ink-swap, line-ink-settle) by reason (`swapWhy`), and the sung lines in a row that share a
 // hold kind (`repeats`, 0 by the rule).
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/hold-plan-all.mts > out.json
 import { execSync } from 'node:child_process';
@@ -52,7 +52,7 @@ for (const st of FREE_STYLES) for (const name of Object.keys(IDS)) {
   for (const c of t.cues as any[]) {
     const s = song.cues.find((x: any) => x.id === c.cueId); if (!s) continue;
     for (const r of c.world?.beatRejects ?? []) tick(rejects, `${r.kind}:${r.reason}`);
-    if (c.world?.beat?.kind === 'ink-swap') tick(swapWhy, c.world.beat.why?.kind ?? 'none');
+    if (['ink-swap', 'line-ink-settle'].includes(c.world?.beat?.kind)) tick(swapWhy, `${c.world.beat.kind}:${c.world.beat.why?.kind ?? 'none'}`);
     const b = B(s.end - s.start);
     const o = outOf.get(c.cueId);
     if (o) {

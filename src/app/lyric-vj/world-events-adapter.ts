@@ -506,6 +506,14 @@ export function holdSequenceChecks(job: Job): InputWarning[] {
     if (!b) return;
     const prev = rows[k - 1]?.world?.beat;
     if (prev && prev.kind === b.kind) miss(`hold:${b.kind}@${r.id}`, `${r.id} draws a ${b.kind} straight after ${rows[k - 1].id}'s`);
+    // (the whole line's ink is a colour change too: it carries its reason; its time is checked where the reason names a phrase)
+    if (b.kind === 'line-ink-settle') {
+      if (!b.why?.source) return void miss(`hold:${b.kind}@${r.id}`, `the whole-line ink on ${r.id} carries no reason`);
+      const whole = b.why.span.from === 0 && b.why.span.to === [...r.cue.text].length;
+      const t = whole ? undefined : r.cue.charStarts?.[b.why.span.from];
+      if (!whole && (t === undefined || b.at < t - EPS || b.at > t + SWAP_SNAP + EPS)) miss(`hold:${b.kind}@${r.id}`, `the whole-line ink on ${r.id} at ${b.at} is not at its phrase's sung start (${t ?? 'none'})`);
+      return;
+    }
     if (b.kind !== 'ink-swap') return;
     if (!b.why?.source || !b.span || b.why.span.from !== b.span.from || b.why.span.to !== b.span.to) return void miss(`hold:${b.kind}@${r.id}`, `the ink-swap on ${r.id} carries no reason for its phrase`);
     const t = r.cue.charStarts?.[b.span.from];

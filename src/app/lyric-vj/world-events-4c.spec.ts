@@ -218,13 +218,16 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     }
   });
 
+  // (a world that still commits holds under joint since pairs C made every colour change need a reason: the receipt's
+  // holds were nearly all whole-line ink, so the tampering runs on the pictogram cards)
+  const HELD = 'card';
   it('jointChecks: every part of the contract tampered is reported', () => {
-    const f = freeJob(song, { style: style('document'), seed: 0, meaning, worldEvents: true, jointHolds: true });
+    const f = freeJob(song, { style: style(HELD), seed: 0, meaning, worldEvents: true, jointHolds: true });
     const t = f.treatment.worldEvents!;
-    expect(jointChecks(f.job, style('document').world, t)).toEqual([]);
+    expect(jointChecks(f.job, style(HELD).world, t)).toEqual([]);
     const holdLine = t.outcomes!.find((o) => o.outcome === 'hold')!.lineId;
     const compLine = t.outcomes!.find((o) => o.outcome === 'composition' && t.events.some((e) => e.lineIds.at(-1) === o.lineId && e.scope !== 'in-line' && e.kind === 'layout-seat' && !e.fixed))!.lineId;
-    const tamper = (edit: (cues: DrawnCue[], table: typeof t) => void) => { const j = structuredClone(f.job); const x = structuredClone(t); edit(j.treatment.cues as DrawnCue[], x); return jointChecks(j, style('document').world, x).map((w) => w.reason); };
+    const tamper = (edit: (cues: DrawnCue[], table: typeof t) => void) => { const j = structuredClone(f.job); const x = structuredClone(t); edit(j.treatment.cues as DrawnCue[], x); return jointChecks(j, style(HELD).world, x).map((w) => w.reason); };
     const reports = (re: RegExp, edit: Parameters<typeof tamper>[0]) => expect(tamper(edit).some((r) => re.test(r)), String(re)).toBe(true);
     const cue = (cues: DrawnCue[], id: string) => cues.find((c) => c.cueId === id)!;
     const ev = (o: Partial<WorldEvent>): WorldEvent => ({ id: 'layout-seat:zz:0', lineIds: [holdLine], kind: 'layout-seat', at: 0, from: 0, to: 0, seatBefore: '', seatAfter: '', scope: 'line', changesLight: false, reason: 'test', ...o });
@@ -250,7 +253,7 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
     reports(/the drawing switches nothing there/, (c) => { cue(c, compLine).world!.set = cue(c, prevOf(compLine)).world!.set; });
     const keepLine = t.outcomes!.find((o) => o.outcome === 'hold' && prevOf(o.lineId) !== o.lineId && cue(f.job.treatment.cues as DrawnCue[], prevOf(o.lineId)).world?.set === cue(f.job.treatment.cues as DrawnCue[], o.lineId).world?.set)?.lineId;
     expect(keepLine).toBeDefined();
-    if (keepLine) reports(/the drawing switches there/, (c) => { const w = cue(c, keepLine).world!; w.set = cue(c, compLine).world!.set === w.set ? 'document/receipt' : cue(c, compLine).world!.set; });
+    if (keepLine) reports(/the drawing switches there/, (c) => { const w = cue(c, keepLine).world!; w.set = cue(c, compLine).world!.set === w.set ? 'card/long' : cue(c, compLine).world!.set; });
     // (two changes on a line: reported on every world, pairs B)
     const two = (x: typeof t) => { const e = x.events.find((y) => y.lineIds.at(-1) === compLine && y.kind !== 'keep')!; x.events.push({ ...e, id: `${e.id}:in`, scope: 'in-line', at: e.at + 1, from: e.at + 1, to: e.at + 1 }); };
     reports(/takes 2 primary actions/, (_c, x) => two(x));
@@ -258,9 +261,9 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
   });
 
   it('freeJob: a committed hold that cannot land is undone on its line alone, the line kept, a contract failure recorded, no hold re-added', () => {
-    const base = freeJob(song, { style: style('document'), seed: 0, meaning, worldEvents: true, jointHolds: true });
+    const base = freeJob(song, { style: style(HELD), seed: 0, meaning, worldEvents: true, jointHolds: true });
     let line = '';
-    const f = freeJob(song, { style: style('document'), seed: 0, meaning, worldEvents: true, jointHolds: true, trace: (_input, plan) => {
+    const f = freeJob(song, { style: style(HELD), seed: 0, meaning, worldEvents: true, jointHolds: true, trace: (_input, plan) => {
       // (the committed hold moved off every candidate: the apply finds no candidate measured for it, so none is drawn)
       const h = plan.holds[0];
       line = h.lineId;
@@ -279,7 +282,7 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
 
   it('freeJob, joint: a composite that cannot land is undone whole (event and its hold), the line kept, one contract failure, no hold restored alone', () => {
     let line = '';
-    const f = freeJob(song, { style: style('document'), seed: 0, meaning, worldEvents: true, jointHolds: true, trace: (input, plan) => {
+    const f = freeJob(song, { style: style(HELD), seed: 0, meaning, worldEvents: true, jointHolds: true, trace: (input, plan) => {
       const h = plan.holds[0];
       line = h.lineId;
       const l = input.lines.find((x) => x.id === line)!;

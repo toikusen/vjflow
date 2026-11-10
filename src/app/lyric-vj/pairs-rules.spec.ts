@@ -100,9 +100,23 @@ describe('pairs C: an ink-swap candidate (holdCandidatesOf)', () => {
   it('a section that spent its swaps refuses another (section-cap); the kind of the sung line before is never taken again (repeat-kind)', () => {
     const capped = holdCandidatesOf(timed(1, 4), [], [], [], '', 0, line({ swapWhy: section, swapCapped: true }), swapOnly, true);
     expect('skip' in capped && capped.rejects).toEqual([{ kind: 'ink-swap', reason: 'section-cap' }]);
-    const again = holdCandidatesOf(timed(1, 4), [], [], [], 'ink-swap', 0, line({ swapWhy: section, inkSettle: true }), swapOnly, true);
+    // (the whole line's ink, for the same reason, at the first beat after the entrance: a section reason names no phrase)
+    const again = holdCandidatesOf(timed(1, 4), [], [2, 2.5, 3], [], 'ink-swap', 0, line({ swapWhy: section, inkSettle: true }), swapOnly, true);
     expect(Array.isArray(again) && again.map((x) => x.plan.kind)).toEqual(['line-ink-settle']);
     expect(Array.isArray(again) && again[0].plan.rejects).toContainEqual({ kind: 'ink-swap', reason: 'repeat-kind' });
+    expect(Array.isArray(again) && again[0].plan).toMatchObject({ at: 2, why: { kind: 'section', source: 'section:2' } });
+  });
+
+  it('the whole line\'s ink is a colour change too (the owner\'s 顏色變換要合理): no reason, the line keeps; the section\'s budget is shared; a meaning reason times it at its phrase', () => {
+    const none = holdCandidatesOf(timed(1, 4), [], [2, 2.5, 3], [], '', 0, line({ inkSettle: true, plain: true }), swapOnly, true);
+    expect(none).toMatchObject({ rejects: [{ kind: 'line-ink-settle', reason: 'no-reason' }] });
+    const capped = holdCandidatesOf(timed(1, 4), [], [2, 2.5, 3], [], '', 0, line({ inkSettle: true, plain: true, swapWhy: section, swapCapped: true }), swapOnly, true);
+    expect('skip' in capped && capped.rejects).toContainEqual({ kind: 'line-ink-settle', reason: 'section-cap' });
+    const c = timed(1, 4);
+    // (the phrase is sung from 2.929: the beat at 3 lies inside it within SWAP_SNAP, so the change lands on the beat)
+    expect(c.charStarts![10]).toBe(2.929);
+    const meant = holdCandidatesOf(c, [], [2, 2.5, 3], [], '', 0, line({ inkSettle: true, plain: true, swapWhy: [{ kind: 'meaning', source: 'key:x', cover: { from: 10, to: 14 } }] }), swapOnly, true);
+    expect(Array.isArray(meant) && meant[0].plan).toMatchObject({ kind: 'line-ink-settle', at: 3, why: { source: 'key:x', span: { from: 10, to: 14 } } });
   });
 });
 

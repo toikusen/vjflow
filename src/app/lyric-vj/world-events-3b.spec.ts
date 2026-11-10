@@ -379,7 +379,8 @@ describe.skipIf(!have)('phase 3b on real songs', () => {
     expect(f.treatment.worldEvents!.events.some((e) => e.material === 'poster-panel')).toBe(false);
     const text = (f.job.cues as { id: string; text: string }[]).find((c) => c.id === 'c009')!.text;
     const laid = laidSeat(text, 'art-deco/marquee-low+panels', { font: f.job.fonts!.family })!;
-    expect(laid.parts!.small.rest!).toBeLessThan(REST_FLOOR);
+    // (since phase 4d round 6 the line is not split at all: its small part could only be set under the product floor, world-split)
+    if (laid.parts) expect(laid.parts.small.rest!).toBeLessThan(REST_FLOOR);
     expect(panelSplit(laid)).toBeUndefined();
     expect(pageSeatsFor(text, 'art-deco/marquee-low', 'art-deco', f.job.fonts!.family)).not.toContain('art-deco/marquee-low+panels');
   });

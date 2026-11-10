@@ -2791,6 +2791,18 @@ export class LyricVjEngine {
   }
 
   /**
+   * The look behind a region of the frame (frame px, y down) at t, as played: what an overlay drawn over the frame reads
+   * its inks on. On a layered output (the lyric layer alone, transparent) the frame under the overlay is empty, so its
+   * inks must come from here, never from the cleared canvas (phase 4d round 6: the echo picked cream on cream over
+   * `--layer back`). Undefined without a look.
+   */
+  groundBehind(t: number, x0: number, y0: number, x1: number, y1: number): { mean: string; mixed: boolean } | undefined {
+    const box = new THREE.Box3(new THREE.Vector3(x0 - W / 2, H / 2 - y1, 0), new THREE.Vector3(x1 - W / 2, H / 2 - y0, 0));
+    const b = this.backdropAt(t, box, true);
+    return b && { mean: b.mean, mixed: b.mixed };
+  }
+
+  /**
    * Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. `asPlayed`
    * places the objects as the frame does (room for every line up, eased), not with room for this box alone; `text`
    * also gives `poor`, the share of the box where that colour reads below 3:1.

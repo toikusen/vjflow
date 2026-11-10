@@ -42,8 +42,11 @@ let lyricsOn = true;
 window.grabAt = async (t, quality, type = 'image/jpeg') => {
   // a freeze moment holds the engine's frame at its stopping word while only its line moves
   await engine.renderAt(signature ? signature.stageAt(t) : t);
-  const framed = signature ? signature.compose(stage, t, lyricsOn) : stage;
-  return (mini ? mini.compose(framed, t) : framed).toDataURL(type, quality);
+  // (the look behind a region, for an overlay's inks on a layered output, render/engine groundBehind)
+  const behind = (at: number, x0: number, y0: number, x1: number, y1: number) => engine.groundBehind(at, x0, y0, x1, y1);
+  // (the back layer carries no lines: the signature layer's lines belong to the lyric layer, as the engine's do)
+  const framed = signature ? signature.compose(stage, t, lyricsOn && job.layer !== 'back', behind) : stage;
+  return (mini ? mini.compose(framed, t, behind) : framed).toDataURL(type, quality);
 };
 window.vjLyrics = (on, carriers) => { lyricsOn = on; engine.showLyrics(on, carriers); };
 window.vjMetrics = () => {

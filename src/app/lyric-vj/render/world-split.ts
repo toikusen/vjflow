@@ -109,6 +109,9 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
       ss = Math.max(floor, Math.round(Math.min(size * k, room / sEm)));
     }
     ss = Math.min(ss, Math.floor(room / sEm));
+    // (a part its container can hold only under the product's floor is not set small: the line is laid out whole,
+    // TYPE_FLOOR.lo, 9120f50 never set small; choroin c074's small part came out at 72 px, phase 4d round 6)
+    if (ss < floor) return undefined;
   }
   // two sizes that are not clearly two (a long hero already at the floor) read as a mistake: the line is laid out whole
   if (ss > size * 0.85 && k < 0.9) return undefined;

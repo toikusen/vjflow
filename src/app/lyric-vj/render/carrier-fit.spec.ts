@@ -259,3 +259,17 @@ describe('a hand object read on the colour it is drawn in (chiyogami tsuzuki c01
     expect(x.key.toLowerCase()).not.toBe('#ffffff');
   });
 });
+
+describe('a split line\'s small part is never clamped by its container under the product floor (choroin seed 2 c074 at 72 px)', () => {
+  it('a part its container could hold only under 84 px: the line is laid out whole; with room, it splits at 84 px or more', async () => {
+    const { splitBlock } = await import('./world-split');
+    const spec = SET_SPECS['midcentury/cut'];
+    const text = 'きゅんときちゃうから チョロインなの';
+    // (a container a third as wide: the small part would be clamped to ~60 px)
+    const narrow = splitBlock(text, { ...spec, split: { ...spec.split!, share: spec.split!.share! / 3 } }, roughMeasure, TYPE_FLOOR.lo);
+    expect(narrow).toBeUndefined();
+    const roomy = splitBlock(text, spec, roughMeasure, TYPE_FLOOR.lo)!;
+    expect(roomy.small?.length).toBeGreaterThan(0);
+    expect(Math.min(...roomy.lines!.filter((_, k) => roomy.small!.includes(k)).map((r) => r.size))).toBeGreaterThanOrEqual(TYPE_FLOOR.lo);
+  });
+});

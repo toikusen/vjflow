@@ -259,8 +259,8 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
     setWordSafe(true);
     for (const [sf, mf] of more) {
       const [song, meaning] = [JSON.parse(readFileSync(sf, 'utf8')), JSON.parse(readFileSync(mf, 'utf8'))];
-      for (const id of ['midcentury', 'claymation', 'scrapbook']) {
-        const f = freeJob(song, { style: style(id), seed: 0, meaning });
+      for (const id of ['midcentury', 'claymation', 'scrapbook']) for (const seed of [0, 1, 2]) {
+        const f = freeJob(song, { style: style(id), seed, meaning });
         const face = jobFaces(f.job);
         // (freeJob leaves word-safe breaks off when it is done)
         setWordSafe(true);

@@ -74,7 +74,7 @@ import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
-import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
@@ -1410,6 +1410,17 @@ export class LyricVjEngine {
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };
+  }
+
+  /**
+   * QA: every glyph shown on the frame last drawn, line by line (the measured ink probe, style-gate-ink.mts): the build
+   * on screen (a kinetic print's line shows one of its two inks a frame), its em boxes in frame px.
+   */
+  glyphBoxes(): { id: string; glyphs: GlyphBox[] }[] {
+    if (!this.textRoot.visible) return [];
+    this.textRoot.updateMatrixWorld(true);
+    const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
+    return this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => l.glyphBoxes && shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: l.glyphBoxes!() })).filter((x) => x.glyphs.length));
   }
 
   /** QA: where each line's type breaks into rows or columns as it rests, by source character (a check on word breaks). */

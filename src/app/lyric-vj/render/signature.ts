@@ -254,6 +254,12 @@ export function partsOf(text: string, times: number[], word: string): { main: { 
 /** What the frame shows under a region at t, frame px y down (render/engine groundBehind): the ground an overlay's inks read on a layered output. */
 export type GroundAt = (t: number, x0: number, y0: number, x1: number, y1: number) => Ground | undefined;
 
+/** A character a moment drew on the last frame composed (the measured ink probe): its em box in frame px, its opacity, and whether it is still unsung (its ghost tone, faint by design). */
+export interface SignatureGlyph { ch: string; x0: number; y0: number; x1: number; y1: number; a: number; ghost: boolean }
+/** Set while a frame is composed for the probe: every character drawn goes in. */
+let drawn: SignatureGlyph[] | undefined;
+let unsung = false;
+
 export interface SignatureLayer {
   /** The time the engine renders the frame at t from: t, or the held time while a freeze stops the frame. */
   stageAt(t: number): number;
@@ -261,6 +267,8 @@ export interface SignatureLayer {
   /** The engine's frame with the moments over it; `text` false: the frame only, as the engine's lyrics are hidden (the reading gate's frame without the words). */
   compose(stage: HTMLCanvasElement, t: number, text?: boolean, behind?: GroundAt): HTMLCanvasElement;
   metrics(): Record<string, unknown>[];
+  /** The characters drawn on the last frame composed while `__vjInkProbe` was set. */
+  glyphs(): SignatureGlyph[];
 }
 
 export interface Built { /** A freeze: the time the engine's frame is held at, while held. */ stageAt?: (t: number) => number | undefined; from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the text stands: the ground under it is read there for its inks. */ region: [number, number, number, number]; /** Everything the form draws, when wider than the text: what is fitted onto a story page's quiet paper (signature-place.ts); the region padded by default. */ extent?: Box; /** Draws the frame at t in the inks picked for the ground under the text (inkFor). */ draw: (t: number, on: Inks) => void; metrics: () => Record<string, unknown>[] }
@@ -300,11 +308,19 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     }
     c.fillStyle = fill;
     c.fillText(ch, a, b);
+    // (the measured ink probe asks where each character went on the frame, style-gate-ink.mts)
+    if (drawn && ch.trim()) {
+      const m = c.getTransform();
+      const [p, q] = [m.transformPoint({ x: a - size / 2, y: b - size / 2 }), m.transformPoint({ x: a + size / 2, y: b + size / 2 })];
+      drawn.push({ ch, x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y), a: c.globalAlpha, ghost: unsung });
+    }
   };
   /** One sung character: ghost tone until its time, then full ink with a short stamp. */
   const stampIn = (c: Ctx, ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press = 0, pressInk = '', kick = 0.32, halo = '') => {
     if (t < at) {
+      unsung = true;
       if (ghost) glyph(c, ch, a, b, size, ghost, 0, '', halo);
+      unsung = false;
       return;
     }
     const s = 1 + kick * (1 - clamp((t - at) / 0.1)) ** 2;
@@ -799,6 +815,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   // each moment's inks are picked on the ground under its text as it comes up and held, so the type does not change
   // colour frame to frame; picked again only where the ground moved from under them (a camera's slide)
   const picked = new Map<Built, Inks>();
+  let last: SignatureGlyph[] = [];
   /** The lyric layer rendered on its own (transparent): nothing under the moments on this canvas. */
   const layered = job.layer === 'text' || job.layer === 'words';
   const inksOn = (b: Built, ground: Ground) => {
@@ -811,6 +828,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   return {
     stageAt: (t) => built.map((b) => b.stageAt?.(t)).find((v) => v !== undefined) ?? t,
     compose(stage, t, text = true, behind) {
+      drawn = (globalThis as { __vjInkProbe?: boolean }).__vjInkProbe ? [] : undefined;
+      last = drawn ?? [];
       const j = joltAt(jolts, t);
       x.setTransform(1, 0, 0, 1, 0, 0);
       // (a lyric layer on its own keeps its alpha: nothing under the frame; else the paper's own colour, if a jolt pulls
@@ -845,5 +864,6 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       return out;
     },
     metrics: () => built.flatMap((b) => b.metrics()),
+    glyphs: () => last,
   };
 }

@@ -561,6 +561,22 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
 
   // (a scale composition's glyphs as inked, em boxes in frame px: its glyph pictures carry a wide transparent pad, which
   // a measure of the meshes reads as 50–160 px out of the frame on a composition flush with the safe edge)
+  // (whether each glyph's own entrance or exit is running on the last frame drawn: glyphBoxes)
+  const moving = gs.map(() => false);
+  const glyphBoxes = () => {
+    const v = new THREE.Vector3();
+    const ws = new THREE.Vector3();
+    const seen = (o: THREE.Object3D | null): boolean => !o || (o.visible && seen(o.parent));
+    return gs.flatMap((g, i) => {
+      if (!g.char.trim() || !seen(g.mesh) || g.mesh.material.opacity <= 0.01) return [];
+      g.mesh.updateWorldMatrix(true, false);
+      g.mesh.getWorldPosition(v);
+      g.mesh.getWorldScale(ws);
+      const half = (Math.abs(ws.y) * tex) / 2;
+      const [x, y] = [v.x + 960, 540 - v.y];
+      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: moving[i] }];
+    });
+  };
   const inkBoxes = () => {
     const v = new THREE.Vector3();
     const ws = new THREE.Vector3();
@@ -659,6 +675,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         if (!p.shown[i] || (synced && !out && t < landAt[i]) || left <= 0) { m.visible = false; return; }
         m.visible = true;
         const qi = synced && !out ? sec(t - landAt[i], glyphIn) : qIn;
+        moving[i] = out || qi < 1;
         const env: GlyphEnv = { q: out ? qOut : qi, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0 };
         let pose: GlyphPose = (out ? leaving?.glyph?.(env) : qi < 1 ? entering?.glyph?.(env) : undefined) ?? {};
         // a line that locks word by word keeps at it after its entrance has run
@@ -733,6 +750,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     },
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: restRects,
+    glyphBoxes,
     ...(scaling ? { inkRect: () => {
       const bs = inkBoxes();
       return bs.length ? bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) })) : undefined;

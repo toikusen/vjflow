@@ -12,6 +12,10 @@ declare global {
     /** Renders t and returns the frame as a JPEG data URL (faster than a page screenshot). */
     grabAt: (t: number, quality: number, type?: string) => Promise<string>;
     vjLyrics: (on: boolean, carriers?: boolean) => void;
+    /** Renders t and gives the composed frame's canvas, as grabAt encodes it (the measured ink probe reads its pixels). */
+    vjFrame: (t: number) => Promise<HTMLCanvasElement>;
+    /** Every glyph on the frame last rendered (engine glyphBoxes). */
+    vjGlyphs: () => ReturnType<LyricVjEngine['glyphBoxes']>;
     vjMetrics: () => ReturnType<LyricVjEngine['metrics']>;
     vjRows: () => ReturnType<LyricVjEngine['rowBreaks']>;
     vjSceneQa: () => ReturnType<LyricVjEngine['sceneQa']>;
@@ -39,15 +43,19 @@ if (signature) engine.onCues = signatureCues as never;
 const mini = miniMomentsOf(job).length ? await miniMomentLayer(job) : null;
 // (whether the lyrics are shown: the signature layer draws its lines only with them, so a frame without the words has none)
 let lyricsOn = true;
-window.grabAt = async (t, quality, type = 'image/jpeg') => {
+const frameAt = async (t: number) => {
   // a freeze moment holds the engine's frame at its stopping word while only its line moves
   await engine.renderAt(signature ? signature.stageAt(t) : t);
   // (the look behind a region, for an overlay's inks on a layered output, render/engine groundBehind)
   const behind = (at: number, x0: number, y0: number, x1: number, y1: number) => engine.groundBehind(at, x0, y0, x1, y1);
   // (the back layer carries no lines: the signature layer's lines belong to the lyric layer, as the engine's do)
   const framed = signature ? signature.compose(stage, t, lyricsOn && job.layer !== 'back', behind) : stage;
-  return (mini ? mini.compose(framed, t, behind) : framed).toDataURL(type, quality);
+  return mini ? mini.compose(framed, t, behind) : framed;
 };
+window.grabAt = async (t, quality, type = 'image/jpeg') => (await frameAt(t)).toDataURL(type, quality);
+window.vjFrame = frameAt;
+// (a signature moment's characters too, drawn on its own layer: under the id `signature`, with no index in a line)
+window.vjGlyphs = () => [...engine.glyphBoxes(), ...(signature ? [{ id: 'signature', glyphs: signature.glyphs().map((g, i) => ({ i, x0: g.x0, y0: g.y0, x1: g.x1, y1: g.y1, a: g.a, moving: g.ghost })) }] : [])];
 window.vjLyrics = (on, carriers) => { lyricsOn = on; engine.showLyrics(on, carriers); };
 window.vjMetrics = () => {
   engine.buildAll();

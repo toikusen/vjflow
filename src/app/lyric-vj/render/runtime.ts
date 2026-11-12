@@ -67,6 +67,9 @@ export interface FrameFx {
   shake: number;
 }
 
+/** A glyph as drawn on a frame (CueLayer glyphBoxes): its index in the line, em box (frame px, y down), opacity, and whether it is coming or going. */
+export interface GlyphBox { i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean }
+
 export interface CueLayer {
   group: THREE.Group;
   update(t: number, fx: FrameFx): void;
@@ -80,6 +83,11 @@ export interface CueLayer {
   inkRect?(): { x0: number; y0: number; x1: number; y1: number } | undefined;
   /** The same, each glyph's own em box (a page-carried scale composition is checked glyph by glyph against its carrier). */
   inkBoxes?(): { x0: number; y0: number; x1: number; y1: number }[];
+  /**
+   * Every glyph shown on the last frame drawn, its em box in frame px y down, its opacity and whether its own entrance or
+   * exit is running (the measured ink probe, style-gate-ink.mts, reads each glyph on what is under it on that frame).
+   */
+  glyphBoxes?(): GlyphBox[];
   /** A Q3 scale composition as drawn (world-layout.ts): its event, planned and drawn ratio, whether it fell short. */
   scale?: { eventId: string; planned: number; drawn: number; kind: string; unrealized: boolean; carrier: string; /** px y down: the planned ink box, the declared safe area, the drawn glyphs' em boxes. */ inkBox?: { x0: number; y0: number; x1: number; y1: number }; safe?: { x0: number; y0: number; x1: number; y1: number }; glyphBox?: { x0: number; y0: number; x1: number; y1: number }; inSafe?: boolean; why?: string };
 }

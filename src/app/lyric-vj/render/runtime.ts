@@ -74,6 +74,8 @@ export interface CueLayer {
   readable(): [number, number];
   /** Laid out in frame px from edge to edge (lyric lanes): neither fitted into the safe area nor drifted. */
   framed?: boolean;
+  /** The least type its words may rest at, px (render/type-floor.ts floorOf of a world line's set): the frame fit keeps it. */
+  floor?: number;
   /** Where the line stands and for how long, when it knows better than a measure of its meshes (a world line that changes set). */
   poses?(): { from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }[];
   /** Where the words are inked now, frame px y down, when it differs from a measure of their meshes (a scale composition: glyph em boxes, not the pictures' transparent pad). */

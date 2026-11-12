@@ -307,7 +307,9 @@ describe.skipIf(!have)('phase 4a on a real job', () => {
 // until the pairs rules: rule C changes the default holds on purpose (an ink-swap needs a reason, no hold kind twice in a
 // row; the jobs with their holds taken away are unchanged, docs/research/2026-11-10-pairs-rules.md), so the pin moved to
 // that commit's default, hash-pairs/c-seed0.json)
-const BASE = 'out/research/q1-1109/hash-pairs/c-seed0.json';
+// The type floor (2026-11-12, docs/research/2026-11-12-type-floor.md) changes the default sets on purpose (a set that cannot
+// hold a line at the floor gives way, lineplan-core seatMissed): the pin moved to that branch's default, type-floor/fp/after-s0.json)
+const BASE = 'out/research/type-floor/fp/after-s0.json';
 describe.skipIf(!existsSync(BASE) || !existsSync('out/db/yt_w_fCuUR3lEs/song.json') || !existsSync('out/research/instant/plans/nun/meaning.json'))('phase 4a: the default job is the base job', () => {
   it('art-deco, document, notebook on 雙截棍, scheduler off: byte for byte the pinned default job, no absorb room recorded', () => {
     const rows = JSON.parse(readFileSync(BASE, 'utf8')).rows as Record<string, string>;

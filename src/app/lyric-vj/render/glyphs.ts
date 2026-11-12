@@ -1,6 +1,7 @@
 // Glyph planes: every character is its own mesh so templates can animate per character (AE-style).
 // Textures are drawn at 2× with Canvas2D and cached per (char, font, size, style).
 import * as THREE from 'three';
+import { heldScale } from './type-floor';
 import { nearestWeight } from '../fonts';
 import { typeset } from '../typeset';
 import { dotPitch, exteriorOf } from './glyph-state';
@@ -392,12 +393,16 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
     const k = s.kanaScale ?? (s.size >= 130 ? defaultKana : 1);
     const small = k < 1 && KANA.test(char);
     // typesetting (typeset.ts) scales particles, a leading kanji and Latin; the kana scale wins where both apply
-    const f = small ? k : ts[index].scale;
+    const f0 = small ? k : ts[index].scale;
+    // (a particle or a kana set smaller never goes under the type floor, render/type-floor.ts: on a row at 84 px the
+    // typesetter's 0.78 set の at 66 px, 2026-11-12)
+    const f = f0 < 1 ? heldScale(f0, s.size) : f0;
     const cs = f !== 1 ? { ...s, size: Math.round(s.size * f), embolden: s.embolden && s.embolden * f } : s;
     const t = texture(char, cs);
     const mat = new THREE.MeshBasicMaterial({ map: t.texture, color, transparent: true, depthTest: false, depthWrite: false });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.w, t.h), mat);
     mesh.userData['size'] = cs.size;
+    mesh.userData['set'] = s.size;
     if (t.pieces && t.pieces.length > 1) {
       // the glyph draws nothing itself; its strokes are children that follow its opacity and colour (syncPieces)
       mesh.geometry.setDrawRange(0, 0);

@@ -5,6 +5,7 @@
 import { typeset } from '../typeset';
 import { layoutMeasure, ruleAdvance } from './layout-measure';
 import { REST_FLOOR } from './reading-window';
+import { leastOf } from './type-floor';
 import { DECO_PANELS } from './world-b5-sets';
 import { blockOf, SET_SPECS, shearedSize, type Block, type Measure, type SetSpec } from './world-sets';
 
@@ -31,6 +32,8 @@ export interface LaidSeat {
   boxPx: FracBox;
   /** The type size, px at 1080p (a split line's: its larger part's). */
   size: number;
+  /** The least type any part of it is set at, px at 1080p (render/type-floor.ts leastOf). */
+  least: number;
   rows: number;
   vertical: boolean;
   /** The page graphics the words keep off, frame fractions. */
@@ -89,6 +92,7 @@ export function laidSeat(text: string, set: string | SetSpec, o: { slot?: { k: n
     box: { x0: r3(x0 / 1920), y0: r3(y0 / 1080), x1: r3(x1 / 1920), y1: r3(y1 / 1080) },
     boxPx: { x0, y0, x1, y1 },
     size: Math.round(size),
+    least: Math.round(leastOf(b)),
     rows: b.lines?.length ?? b.rows.length,
     vertical: !!spec.vertical,
     protect: (spec.clear ?? []).map(([a, c, d, e]) => ({ x0: a, y0: c, x1: d, y1: e })),

@@ -8,6 +8,7 @@
 // quote   — a line as spoken dialogue: big corner brackets drawn first, the words typed in between
 // orbit   — the line set along an arc that slowly turns, characters following the curve
 import * as THREE from 'three';
+import { heldScale } from './type-floor';
 import { paperGlyph } from './paper-surface';
 import { chunks, balancedRows } from '../phrases';
 import { keywordRange } from './punch';
@@ -65,8 +66,12 @@ export const stack: TemplateRenderer = {
         // the frame, and goes as the next one lands; lines of any height never pile into each other
         const pair = !!rt.params['pair'];
         // each later line pushes this one up by its own height and back (smaller, dimmer)
-        const scale = pair ? 1 - 0.3 * Math.min(1, n) : Math.pow(0.7, n);
-        const lift = pair ? Math.min(1, n) * H * 0.4 : n * blockH * 0.78;
+        const shrunk = pair ? 1 - 0.3 * Math.min(1, n) : Math.pow(0.7, n);
+        // (while it is still read, the line before steps back no smaller than the type floor, render/type-floor.ts; pushed
+        // up by the extra half height it keeps: a 96 px line at 70 % read at 67 px, 2026-11-12)
+        const still = n <= 1;
+        const scale = still ? heldScale(shrunk, size) : shrunk;
+        const lift = (pair ? Math.min(1, n) * H * 0.4 : n * blockH * 0.78) + (scale - shrunk) * blockH * 0.5;
         // the line before stays at full strength, only smaller: dimmed it mixed into mid-tone grounds and could not be read
         const dim = pair ? (n <= 1 ? 1 : clamp01(2 - n)) : n > 0 ? Math.max(0.28, 1 - 0.32 * n) : 1;
         // pushed off the top of the frame: gone

@@ -8,6 +8,7 @@ import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
 import { clearOf } from './world-sets';
+import { fitAtFloor, TYPE_FLOOR } from './type-floor';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
@@ -127,6 +128,9 @@ interface CallLayer {
   dropped?: boolean;
 }
 
+/** A call's type, px: sung words too, so never under the type floor (type-floor.ts; set at 78 px before 2026-11-12). */
+export const CALL_SIZE = TYPE_FLOOR.lo;
+
 /** The layer's settled bounds in frame px (origin at the centre), with the layer laid out at its readable moment. */
 function settledBox(layer: CueLayer, parent?: THREE.Object3D, span = false): THREE.Box3 {
   const [from, to] = layer.readable();
@@ -229,11 +233,54 @@ function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   const ey = Math.max(Math.abs(box.min.y), Math.abs(box.max.y));
   // inside the safe area at rest, and inside the frame as it moves (motionPad: the kick and drift grow the box about
   // the centre, the sway and drift shift it); 行星 c010 and 天文対話 c036 sat in the safe area and swayed off the frame
-  const pad = motionPad({ x0: W / 2 - ex, y0: H / 2 - ey, x1: W / 2 + ex, y1: H / 2 + ey }, kick);
-  const mx = (pad.x1 - W / 2) / ex;
-  const my = (pad.y1 - H / 2) / ey;
-  fit.scale.setScalar(Math.min(1, (W / 2 - 48) / ex, (H / 2 - 40) / ey, W / 2 / (ex * mx), H / 2 / (ey * my)));
+  const scaleFor = (ex: number, ey: number, kicked = kick) => {
+    const pad = motionPad({ x0: W / 2 - ex, y0: H / 2 - ey, x1: W / 2 + ex, y1: H / 2 + ey }, kicked);
+    const mx = (pad.x1 - W / 2) / ex;
+    const my = (pad.y1 - H / 2) / ey;
+    return Math.min(1, (W / 2 - 48) / ex, (H / 2 - 40) / ey, W / 2 / (ex * mx), H / 2 / (ey * my));
+  };
+  let s = scaleFor(ex, ey);
+  // (the fit never sets a world line's words under the type floor, render/type-floor.ts: where what they stand on is
+  // what the frame cannot hold, the words alone are fitted, their carrier running past the safe edge; silk's slab set
+  // its words at 79 px, 2026-11-12)
+  if (s < 1 && layer.floor) {
+    const words = restingWords(layer, fit);
+    if (words.least < Infinity) {
+      const wx = Math.max(Math.abs(words.box.min.x), Math.abs(words.box.max.x));
+      const wy = Math.max(Math.abs(words.box.min.y), Math.abs(words.box.max.y));
+      // (the kick's 5 % on a heavy beat is motion: it may take the words into the safe margin, never past the frame)
+      s = fitAtFloor(s, words.least, layer.floor, scaleFor(wx, wy, false));
+    }
+  }
+  fit.scale.setScalar(s);
   return fit;
+}
+
+/** A line's words at rest (its middle and near the end of its reading), at the fit's scale 1: their em boxes' bound and least row type. */
+function restingWords(layer: CueLayer, parent: THREE.Object3D) {
+  const [from, to] = layer.readable();
+  const end = Number.isFinite(to) ? to : from + 1;
+  const vis = layer.group.visible;
+  layer.group.visible = true;
+  const box = new THREE.Box3();
+  const scale = new THREE.Vector3();
+  let least = Infinity;
+  for (const k of [0.5, 0.95]) {
+    measureAtRest(() => layer.update(from + (end - from) * k, { flash: 0, hit: 0, shake: 0 }));
+    parent.updateMatrixWorld(true);
+    layer.group.traverse((o) => {
+      if (!(o as THREE.Mesh).isMesh || !o.userData['size']) return;
+      for (let p: THREE.Object3D | null = o; p && p !== parent; p = p.parent) if (!p.visible || p.userData['decor']) return;
+      // (each glyph's em box, not its picture: a glyph's picture carries a wide transparent pad, and the pad alone pushed
+      // a line flush on the safe edge under the fit)
+      const em = o.userData['size'] * Math.abs(o.getWorldScale(scale).x);
+      const at = o.getWorldPosition(new THREE.Vector3());
+      box.expandByPoint(at.clone().addScalar(-em / 2)).expandByPoint(at.addScalar(em / 2));
+      least = Math.min(least, (o.userData['set'] ?? o.userData['size']) * Math.abs(scale.x));
+    });
+  }
+  layer.group.visible = vis;
+  return { box, least };
 }
 
 /** Where a laid-out line's phrases stand and the whole line's box, frame px from the centre: what a tracking camera calls at. */
@@ -1082,7 +1129,10 @@ export class LyricVjEngine {
       let layer = build();
       // the floor on type size: a line that would rest under it takes plain stepped rows, its moves given up for them
       const alone = !styled.some((x, j) => j !== i && x.style.shot === style.shot);
-      if (style.budget && alone && restSize(build(), fitToFrame) < REST_FLOOR) {
+      // (in a style world, a line laid by a shared template rests at the type floor too, render/type-floor.ts: a stack
+      // line set its words at 73 px among the world's own lines at 84 and up, silk チョロイン c046, 2026-11-12)
+      const floor = design.world && !rt.style.world ? TYPE_FLOOR.lo - 0.5 : REST_FLOOR;
+      if (style.budget && alone && restSize(build(), fitToFrame) < floor) {
         drawn = 'stair';
         rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };
         layer = build();
@@ -1745,7 +1795,7 @@ export class LyricVjEngine {
       const span = Math.max(0.2, (c.to - c.from) * dur);
       parts.forEach((part, k) => {
         // a shout is a sticker: the heaviest face, filled, on a thick dark keyline (the database's idol call words)
-        const face = scale > 1 ? { family: rt.fonts.body, weight: 900, size: Math.round(78 * scale) } : { family: rt.fonts.display, weight: 900, size: 78, shadow: true };
+        const face = scale > 1 ? { family: rt.fonts.body, weight: 900, size: Math.round(CALL_SIZE * scale) } : { family: rt.fonts.display, weight: 900, size: CALL_SIZE, shadow: true };
         const fill = makeGlyphs(part, face, new THREE.Color(rt.style.world ? readableOn(rt.style.world.callInk ?? rt.style.world.slots.accent, rt.style.world.callOn ?? rt.style.world.slots.ground) : readableOn(rt.palette.accent, rt.palette.background)));
         const keyline = scale > 1 ? makeGlyphs(part, { ...face, outline: Math.round(face.size * 0.16) }, new THREE.Color('#14081A')) : [];
         const glyphs = [...keyline, ...fill];
@@ -1767,7 +1817,7 @@ export class LyricVjEngine {
     group.visible = false;
     this.textRoot.add(group);
     const sizes = units.map((u, j) => {
-      const h = Math.round(78 * scale) * (scale > 1 ? 1.5 : 1.2);
+      const h = Math.round(CALL_SIZE * scale) * (scale > 1 ? 1.5 : 1.2);
       return { w: widths[j] * Math.cos(u.tilt) + h * Math.sin(Math.abs(u.tilt)), h: h * Math.cos(u.tilt) + widths[j] * Math.sin(Math.abs(u.tilt)) };
     });
     const call: CallLayer = { rt, group, units, sizes, line: box };

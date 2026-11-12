@@ -6,7 +6,8 @@ import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from 
 import { nearestWeight } from '../fonts';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
-import { Block, blockOf, FaceLayout, SET_SPECS, SetSpec, shearedSize } from './world-sets';
+import { Block, blockOf, FaceLayout, SAFE_X, SAFE_Y, SET_SPECS, SetSpec, shearedSize } from './world-sets';
+import { floorOf, underFloor } from './type-floor';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS, type WorldMove } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
@@ -215,7 +216,13 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   const adv = (ids: number[]) => ids.reduce((w, i) => w + gs[i].advance, 0) / tex;
   const big = Math.min((0.86 * 1920) / Math.max(0.01, adv(key)), 0.44 * 1080, normal * 4.2);
   if (big < normal * 1.6) return undefined;
-  const small = Math.max(40, Math.min(big * 0.3, normal * 0.75, (0.86 * 1920) / Math.max(0.01, adv(pre), adv(post))));
+  // (the words round the key are lyrics read at rest: never under the type floor, type-floor.ts; where the frame cannot
+  // hold them across at the floor the key is not blown up, and the line stands as its set lays it. They were set down to
+  // 40 px, 2026-11-12)
+  const across = (0.86 * 1920) / Math.max(0.01, adv(pre), adv(post));
+  const floor = floorOf(spec);
+  const small = Math.max(floor, Math.min(big * 0.3, normal * 0.75, across));
+  if (underFloor(across, floor) && (pre.length || post.length)) return undefined;
   const [preH, postH] = [pre.length ? small * 1.3 : 0, post.length ? small * 1.3 : 0];
   const h = preH + big + postH;
   const wk = adv(key) * big;
@@ -260,6 +267,9 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   m.position.set(x, y, 0);
   return m;
 }
+
+/** How near a frame half's edge (960 across, 540 down) a line's slow travel may carry it: the safe area's margin. */
+const driftEdge = (frame: number) => (frame > 600 ? SAFE_X : SAFE_Y);
 
 /** The worlds whose ground cuts a room of its own material round a line (uncut wood, a crayon bubble, undyed cloth, the lit opening). */
 const ROOM_FOLLOWS = new Set(['woodcut', 'crayon', 'aizome', 'paper-lantern']);
@@ -480,7 +490,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     // (only the hand worlds that cut a room of their own material round the words: elsewhere the box stays where the
     // line stands, so ukiyoe's approved kasumi and cards keep their measure)
     const [gx, gy] = p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? [0, 0] : wl.drift ?? [0, 0];
-    const reach = (d: number, c: number, half: number, frame: number) => Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half)) / 2;
+    const reach = (d: number, c: number, half: number, frame: number) => Math.min(Math.abs(d), 2 * Math.max(0, frame - driftEdge(frame) - Math.abs(c) - half)) / 2;
     const grow = 1 + (p.spec.fixed || !ROOM_FOLLOWS.has(wl.set.split('/')[0]) ? 0 : wl.swell ?? 0);
     // (a sheared block's room is what it covers as drawn; its page is handed the layout to build its planes round the words)
     const sh = p.spec.shear;
@@ -580,6 +590,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     group,
     // (a set laid into its page's composition is placed inside the safe area by its numbers: it is neither refitted nor drifted)
     framed: slot.of === 1 && sets.every((s) => s.fixed),
+    // (the frame fit keeps the words at their set's floor, engine fitToFrame)
+    floor: Math.max(...sets.map(floorOf)),
     update(t: number, _fx: FrameFx) {
       const k = poseAt(t);
       const p = poses[k];
@@ -642,7 +654,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const span = Math.max(0.5, rt.exitAt - rt.showFrom);
       const along = clamp01(age / span) - 0.5;
       // (never further than the frame leaves it)
-      const fit = (d: number, c: number, half: number, frame: number) => Math.sign(d) * Math.min(Math.abs(d), 2 * Math.max(0, frame - 24 - Math.abs(c) - half));
+      // (never past the safe area: a line that travelled to 24 px from the edge was shrunk by the engine's frame fit, under
+      // the type floor at its set's least type, silk's top slab at 79 px, 2026-11-12)
+      const fit = (d: number, c: number, half: number, frame: number) => Math.sign(d) * Math.min(Math.abs(d), 2 * Math.max(0, frame - driftEdge(frame) - Math.abs(c) - half));
       // (a set laid into its page's composition holds its place: the page is printed round it)
       const [gx, gy] = p.spec.fixed ? [0, 0] : wl.drift ?? [0, 0];
       body.position.x += fit(gx, p.block.cx, p.block.w / 2, 960) * along;

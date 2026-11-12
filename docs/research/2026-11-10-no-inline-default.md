@@ -202,3 +202,82 @@
 - hold 變多（OFF seed 0：+312），只在這 20 個世界；新的 hold 仍受換色理由、每段兩次、連續不同種的規則約束。
 - `pace.repose` 現在只代表「長句中間可以換地面（字有載體時）」，名字沒改。
 - 排程器開的 chiyogami つづく c013 fail，以及 card/pair 的 `roll` 鍵色，都是改前就有的問題，列為待辦。
+
+## 8. 第三輪（2026-11-12）：併入 phase 4D、每一部分的 hold 墨色、詞界 turn 測試
+
+程式：`d158cbc`（合併 feat/lyric-editing 4b333dc）、`7642658`、`14bd24c`。
+
+### 8.1 併入 phase 4D
+
+- `git merge feat/lyric-editing`（4b333dc）沒有衝突。
+- 4D 的帶狀容器（band containment、`bandMissed`）和句內不換座、`turnTakes` 兩條規則並存。
+- 4D 沒有任何地方寫 `repose`。
+
+### 8.2 hold 的墨色要在每一部分自己的載體上讀得到
+
+審查量到：card/pair 第二行站在頁面畫的紅卡上，不是 plate；`roll` 的紫色鍵色滾過它時只有 ≈1.2:1。原因是 hold 只對整句「一個載體」檢查。
+
+規則（`render/hold-room.ts` `partGrounds`、`inkChecks`）：
+
+- 所有會改字色的 hold 都在檢查範圍內：鍵色脈衝（roll、ink-run、light-sweep、beat-punch）、片語換色、整句換墨。
+- 它們要對**每一部分站的地方**都 ≥ 4.5:1：set 的載體（`groundsUnder`），以及頁面為每一行各畫一個載體時，每行自己的載體（新的 `SetSpec.rowOn`）。
+- 任何一部分讀不到，這種 hold 就不是候選。
+- 鍵色本身沒有改，只少了候選。
+- card/pair 宣告 `rowOn: ['plate', 'ink2']`（`world-r2-sets.ts`）。
+
+一度以為 split 的小段站在地面上（依 world-layout 的註解），所以也把地面算進去。抽幀檢查推翻了這點：popart tsuzuki c006、c014 的小段在自己的白色爆炸框裡，不在地面上（`out/research/q1-1109/no-inline/r4/grab/`）。`14bd24c` 已把這一條拿掉。之後若有 split 小段站在另一種顏色的載體上，需要像 `rowOn` 那樣另外宣告。
+
+掃描（`scripts/lyric-vj/hold-part-scan.mts`，45 世界 × 5 首，seed 0；墨色取計畫那一版自己的 `inkChecks`，部分的地面用本版模型）：
+
+| | hold 數 | 有一部分 < 4.5:1 |
+|---|---:|---:|
+| 改前 d158cbc，排程器關 | 2355 | **10**（全部 card/pair：beat-punch 4、roll 3、ink-swap 2、line-ink-settle 1） |
+| 改前 d158cbc，排程器開 | 2376 | 10 |
+| 改後 14bd24c，排程器關 | 2345 | **0** |
+| 改後 14bd24c，排程器開 | 2366 | **0** |
+
+片子 v6 右半（card 世界のつづき 130–185 秒）在 34.9／35.1／35.3 秒量第二行：米白字 (255,243,230) 在紅卡 (171,52,42) 上 **5.9:1**，沒有紫色。
+
+### 8.3 詞界 turn 測試補回
+
+`world-shared.spec.ts`：慢歌長句在 ukiyoe（字在自己的短冊上，turn 會保留）。
+
+- turn 超過 6 個。
+- 每個 turn 都落在唱到的詞界，或離詞界 0.3 秒內最近的拍點。
+- 每句 ≥ `REPOSE_CALM_LINE`。
+- 沒有一句帶 `repose`。
+
+### 8.4 數字（相對 4b333dc，14bd24c）
+
+**預設指紋**：seed 0／1／2 為 `a1c8935d…`／`cee589ee…`／`9b2d9cff…`。每個 seed 都是 99／225 列改變，就是 §4.2 那 20 個世界：
+
+- 19 個世界只因句內不換座與 turn 規則（`world.repose` 拿掉、turn 只留在有載體的字下面、hold 跟著變）。
+- card 另外因 card/pair 的 hold 少了紫色鍵色等候選。
+- popart、midcentury、scrapbook、claymation 等其他 25 個世界每列相同。
+
+**`--q1` 指紋**：`27645458…` → `641c1058…`。只有 card 3 列改變，原因是 card/pair 的 hold 候選在排程器路徑也一樣變少（墨色規則所有路徑共用）。其他世界相同。
+
+**句內換座掃描**（合併後重跑，`r4/scan-after.json`）：
+
+- off／on／付費換座的句子都是 0。
+- 句內 turn：off 2794、付費 2；`turnChecks` 都是 0。
+
+**閘門**（20 個改過的世界＋六個 4D 世界 popart、midcentury、scrapbook、claymation、chiyogami、ukiyoe，共 24 個，5 首）：
+
+- 排程器關、開各 11736 個時刻。
+- 兩邊都是 **exit 0**：fails 0、contract 0、rule regressions 0；turn 讀 922 次（關）、0 個問題。
+- 之前排程器開的那個 fail（chiyogami つづく c013）已由 4D 的 `GROUND_FACED` 修好。
+
+**測試**：tsc app／spec 通過；`npx ng test --watch=false`：**146 檔／1790 測試全過**。新檔是 `render/part-inks.spec.ts`：
+
+- card/pair 每個配色方案都包含紅卡。
+- 鍵色或換墨通過時，每個部分都 ≥ 4.5:1。
+- 拿掉 `rowOn` 時，至少有一個方案會錯放紫色鍵色。
+- 資料檢查：每一行的字色在它那行的載體上都 ≥ 4.5:1。
+
+**片子**：`~/Desktop/vj/output/換色與句內_2026-11-10/v6/`（card，左 = 46d2b53，右 = 14bd24c 的計畫，與 7642658 相同；metadata 去除）。spy 的計畫這輪沒變，不重渲染。
+
+**限制**：
+
+- `rowOn` 只宣告了 card/pair。是讀頁面程式找到的：`world-r2-card.ts` 的 pair 頁，第二張卡是 `ink2`。
+- 其他頁面若也是一行一個載體、顏色又不同，要逐一宣告。資料檢查只能抓到「行的字色在已宣告的載體上讀不清」這類。gameshow/qa 已用 `on` 列出兩種 banner。

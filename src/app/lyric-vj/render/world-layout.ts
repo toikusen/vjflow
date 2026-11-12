@@ -265,6 +265,8 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
 
 /** A hold's ink moved to read stays at least this far (OKLab) from the words' own ink, else the hold's ink is dropped: a change no one sees is no hold. */
 const KEY_APART = 0.08;
+/** A ring under at least this share of its letter's ink lies under the letter (a keyline, a band); less, it is laid off it (a misprint, a drop shadow). */
+const RING_UNDER = 0.97;
 /** A ring under at least this share of a glyph's ink is a ground the glyph is read on (measureInks). */
 const RING_SHARE = 0.05;
 /** The pixels of the glyph and ring pictures read for what a letter stands on, by picture. */
@@ -356,7 +358,31 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (a layer a set names as the letters' carrier, a sticker's backing, is what the words stand on: kept when they are taken away to be read)
   underLayers.forEach((layer, L) => { if (sets.some((st) => st.under?.[L]?.carrier)) layer.forEach((u) => (u.mesh.userData['decor'] = true)); });
   // (every ring is what its letter is read on: the measured ink probe keeps them all when it takes the words away, engine wordsAway)
-  underLayers.forEach((layer) => layer.forEach((u) => (u.mesh.userData['ring'] = true)));
+  /** Whether ring layer L lies under (nearly) all of its letters' ink on pose 0's first glyphs: a ground, not a shadow. */
+  function ringUnder(L: number): boolean {
+    const ids = gs.flatMap((g, i) => (g.char.trim() && unders[0][L]?.[i] ? [i] : [])).slice(0, 3);
+    const share = ids.map((i) => {
+      const [a, b] = [whole[0][i]?.image, unders[0][L][i].image] as (HTMLCanvasElement | OffscreenCanvas | undefined)[];
+      if (!a || !b || !('getContext' in a) || !('getContext' in b)) return 1;
+      const ctx = (c: HTMLCanvasElement | OffscreenCanvas) => c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+      const [da, db] = [ctx(a).getImageData(0, 0, a.width, a.height).data, ctx(b).getImageData(0, 0, b.width, b.height).data];
+      let [n, on] = [0, 0];
+      const step = Math.max(1, Math.floor(Math.min(a.width, a.height) / 60));
+      for (let y = 0; y < a.height; y += step)
+        for (let x = 0; x < a.width; x += step) {
+          if (da[(y * a.width + x) * 4 + 3] < 128) continue;
+          n++;
+          const [rx, ry] = [Math.round(x - a.width / 2 + b.width / 2), Math.round(y - a.height / 2 + b.height / 2)];
+          if (rx >= 0 && ry >= 0 && rx < b.width && ry < b.height && db[(ry * b.width + rx) * 4 + 3] >= 128) on++;
+        }
+      return n ? on / n : 1;
+    });
+    return !share.length || Math.min(...share) >= RING_UNDER;
+  }
+  // (a ring that lies under the whole of its letter, a keyline or a band grown round it, is what the letter is read on: the
+  // measured ink probe keeps it when it takes the words away, engine wordsAway; a ring laid off the letter, a misprint or a
+  // drop shadow, is mostly hidden behind it and is not its ground)
+  underLayers.forEach((layer, L) => { const ground = ringUnder(L); layer.forEach((u) => (u.mesh.userData['ring'] = ground)); });
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
@@ -619,6 +645,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
    * share of its ink pixels and the colours that ring really has there (a fan letter's member ring is its own colour,
    * not its slot's), and the share over none.
    */
+  const ringGrounds = (sets[0].under ?? []).map((_, L) => ringUnder(L));
   const ringCover = (k: number, i: number) => {
     const pix = (tx: THREE.Texture | undefined) => {
       const c = tx?.image as HTMLCanvasElement | OffscreenCanvas | undefined;
@@ -641,7 +668,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         let hit = false;
         for (let L = rings.length - 1; L >= 0 && !hit; L--) {
           const r = rings[L];
-          if (!r) continue;
+          if (!r || !ringGrounds[L]) continue;
           const [rx, ry] = [Math.round(x - letter.w / 2 + r.w / 2), Math.round(y - letter.h / 2 + r.h / 2)];
           const q = (ry * r.w + rx) * 4;
           if (rx < 0 || ry < 0 || rx >= r.w || ry >= r.h || r.a[q + 3] < 128) continue;

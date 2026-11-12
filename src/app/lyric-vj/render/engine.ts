@@ -74,14 +74,14 @@ import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
-import { groundTones, mergeTones, type Tones } from '../measured-ink';
+import { groundTones, INK_AIM, mergeTones, patchTone, readsOn, type Tones } from '../measured-ink';
 import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
 const H = 1080;
-/** A glyph's ground is read this share of its em box wide (groundTones): the frame's sway and kick move the words a few px. */
-const SWAY_BOX = 1.1;
+/** A glyph's ground is read this far past its em box each side, px (groundTones): a line's slow drift (up to 7 px each way), the frame's sway and kick move the words. */
+const DRIFT_PX = 10;
 /** Exits drawn over time (a glitch, a blade, falling dominoes, pixels, a shattering pane): given the gap to the next line. */
 const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter', 'fold-close']);
 /**
@@ -116,6 +116,27 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
   });
   return out;
 }
+
+/**
+ * The glyphs of a line whose layout gives none of its own (a template that is not a world's set: a floored line's stair):
+ * every shown, textured, opaque-enough mesh that is not what the words stand on, its picture's centre (the picture pads
+ * the glyph a third of its size each side: GLYPH_CORE of it is the glyph), its opacity and colour (QA: the probe gate).
+ */
+function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
+  const out: GlyphBox[] = [];
+  const b = new THREE.Box3();
+  group.traverseVisible((o) => {
+    const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor']) return;
+    b.setFromObject(m);
+    if (b.isEmpty()) return;
+    const [cx, cy, hw, hh] = [(b.min.x + b.max.x) / 2 + W / 2, H / 2 - (b.min.y + b.max.y) / 2, ((b.max.x - b.min.x) * GLYPH_CORE) / 2, ((b.max.y - b.min.y) * GLYPH_CORE) / 2];
+    out.push({ i: out.length, x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh, a: m.material.opacity ?? 1, moving: false, ink: `#${m.material.color.getHexString()}` });
+  });
+  return out;
+}
+/** The share of a glyph picture's plane that is the glyph (meshGlyphs). */
+const GLYPH_CORE = 0.62;
 
 /** A line's calls: their glyph units, where each sits, and the line's own box they are placed against. */
 interface CallLayer {
@@ -1149,7 +1170,12 @@ export class LyricVjEngine {
       if (style.budget) this.rests.set(cue.id, restSize(layer, undefined, fit));
       this.textRoot.add(fit);
       // (a world line settles its inks on what each glyph stands on as the frame shows it: world-layout measureInks)
-      const measure = (l: CueLayer, f: THREE.Group) => { if (!l.measureInks || !rt.groundTones) return; f.updateMatrixWorld(true); l.measureInks(rt.groundTones); };
+      const measure = (l: CueLayer, f: THREE.Group) => {
+        if (!rt.groundTones) return;
+        f.updateMatrixWorld(true);
+        if (l.measureInks) l.measureInks(rt.groundTones);
+        else this.bandUnread(l, f, rt);
+      };
       measure(layer, fit);
       const rig = rt.style.textCam?.rig;
       if (rig && isTrack(rig.kind)) {
@@ -1432,7 +1458,7 @@ export class LyricVjEngine {
     if (!this.textRoot.visible) return [];
     this.textRoot.updateMatrixWorld(true);
     const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
-    return this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => l.glyphBoxes && shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: l.glyphBoxes!() })).filter((x) => x.glyphs.length));
+    return this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: l.glyphBoxes ? l.glyphBoxes() : meshGlyphs(l.group) })).filter((x) => x.glyphs.length));
   }
 
   /** QA: where each line's type breaks into rows or columns as it rests, by source character (a check on word breaks). */
@@ -2859,6 +2885,66 @@ export class LyricVjEngine {
   }
 
   /**
+   * A line whose layout reads no ground of its own (a template that is not a world's set: a floored line's stair) is read
+   * here on the ground its glyphs stand on at rest (measured-ink, as world-layout measureInks reads a world's line): where
+   * its type does not read on some of them (cream over a lilac sky), each row's unread stretch stands on a crisp band of a
+   * ground it reads on, shown with the glyphs. The line keeps its ink.
+   */
+  private bandUnread(l: CueLayer, f: THREE.Group, rt: CueRuntime) {
+    if (!this.job.treatment.graphics) return;
+    const [from, to] = l.readable();
+    if (!(to > from)) return;
+    const mid = (from + to) / 2;
+    const seen = l.group.visible;
+    l.group.visible = true;
+    l.update(mid, { flash: 0, hit: 0, shake: 0 });
+    f.updateMatrixWorld(true);
+    const glyphs = meshGlyphs(l.group).filter((g) => g.a >= 0.5);
+    l.group.visible = seen;
+    if (!glyphs.length) return;
+    const box = glyphs.reduce((u, g) => ({ x0: Math.min(u.x0, g.x0), y0: Math.min(u.y0, g.y0), x1: Math.max(u.x1, g.x1), y1: Math.max(u.y1, g.y1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
+    const tones = this.groundTones([from + Math.min(0.5, (to - from) / 3), mid, to - Math.min(0.2, (to - from) / 3)], box, glyphs);
+    const short = glyphs.filter((g, i) => g.ink && !readsOn(g.ink, [tones[i]], INK_AIM));
+    if (!short.length) return;
+    // one band a row: glyphs whose centres lie within half a glyph of each other's height
+    const rows: GlyphBox[][] = [];
+    for (const g of [...short].sort((a, b) => a.y0 + a.y1 - b.y0 - b.y1)) {
+      const row = rows.find((r) => Math.abs((r[0].y0 + r[0].y1) / 2 - (g.y0 + g.y1) / 2) < (g.y1 - g.y0) / 2);
+      if (row) row.push(g);
+      else rows.push([g]);
+    }
+    const bands: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
+    for (const row of rows) {
+      const ink = row[0].ink!;
+      const tone = patchTone(ink, mergeTones(row.map((g) => tones[glyphs.indexOf(g)]))!, [rt.palette.background, rt.palette.text, rt.palette.accent]);
+      // (from the row's first unread glyph to its last, every glyph between them, a hair over their boxes)
+      const xs = glyphs.filter((g) => Math.abs((g.y0 + g.y1) / 2 - (row[0].y0 + row[0].y1) / 2) < (g.y1 - g.y0) / 2 && g.x1 >= Math.min(...row.map((r) => r.x0)) && g.x0 <= Math.max(...row.map((r) => r.x1)));
+      const pad = (row[0].y1 - row[0].y0) * 0.28;
+      const r = { x0: Math.min(...xs.map((g) => g.x0)) - pad, y0: Math.min(...xs.map((g) => g.y0)) - pad, x1: Math.max(...xs.map((g) => g.x1)) + pad, y1: Math.max(...xs.map((g) => g.y1)) + pad };
+      const band = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: tone, transparent: true, depthTest: false, depthWrite: false }));
+      band.renderOrder = -5;
+      Object.assign(band.userData, { decor: true, noVeil: true });
+      // (laid in the line's own group, at rest where the frame shows it)
+      const c = l.group.worldToLocal(new THREE.Vector3((r.x0 + r.x1) / 2 - W / 2, H / 2 - (r.y0 + r.y1) / 2, 0));
+      const s = new THREE.Vector3();
+      l.group.getWorldScale(s);
+      band.position.copy(c);
+      band.scale.set((r.x1 - r.x0) / Math.abs(s.x || 1), (r.y1 - r.y0) / Math.abs(s.y || 1), 1);
+      l.group.add(band);
+      bands.push(band);
+    }
+    // (shown with its glyphs: as see-through as the most opaque of them)
+    const update = l.update.bind(l);
+    l.update = (t, fx) => {
+      update(t, fx);
+      let a = 0;
+      l.group.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.visible && m.material.map && !m.userData['decor']) a = Math.max(a, m.material.opacity ?? 1); });
+      for (const b of bands) b.material.opacity = a;
+    };
+    l.inkFixes = [...(l.inkFixes ?? []), { pose: 0, kind: 'base', from: short[0].ink!, to: `band:${bands.map((b) => `#${b.material.color.getHexString()}`).join(',')}`, glyphs: short.length }];
+  }
+
+  /**
    * The ground under each glyph box (frame px, y down) of a line laid at `lyric`, as the look draws it at each of `times`
    * with room made for that line (measured-ink groundTones; the darkest and lightest over the times): what a world line's
    * inks must read on (runtime CueRuntime groundTones). Undefined without a look.
@@ -2868,7 +2954,7 @@ export class LyricVjEngine {
     if (!this.job.treatment.graphics || !some.length) return boxes.map(() => undefined);
     this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
     // (only the stretch the glyphs cover is read back; a line's twin, built in the other ink, asks the same: kept a while)
-    const m = Math.max(...some.map((b) => b.x1 - b.x0)) * (SWAY_BOX - 1);
+    const m = DRIFT_PX;
     const [x0, y0] = [Math.max(0, Math.floor(Math.min(...some.map((b) => b.x0)) - m)), Math.max(0, Math.floor(Math.min(...some.map((b) => b.y0)) - m))];
     const [x1, y1] = [Math.min(W, Math.ceil(Math.max(...some.map((b) => b.x1)) + m)), Math.min(H, Math.ceil(Math.max(...some.map((b) => b.y1)) + m))];
     if (x1 <= x0 || y1 <= y0) return boxes.map(() => undefined);
@@ -2889,8 +2975,8 @@ export class LyricVjEngine {
         if (this.toneReads.size > 24) this.toneReads.delete(this.toneReads.keys().next().value!);
         this.toneReads.set(key, d);
       }
-      // (a hair past the em box: the frame's sway and kick carry the words a few px off where they were measured)
-      return boxes.map((b) => (b ? groundTones(d!, x1 - x0, { x0: b.x0 - x0, y0: b.y0 - y0, x1: b.x1 - x0, y1: b.y1 - y0 }, SWAY_BOX) : undefined));
+      // (past the em box: the line's drift, the frame's sway and kick carry the words a few px off where they were measured)
+      return boxes.map((b) => (b ? groundTones(d!, x1 - x0, { x0: b.x0 - x0 - DRIFT_PX, y0: b.y0 - y0 - DRIFT_PX, x1: b.x1 - x0 + DRIFT_PX, y1: b.y1 - y0 + DRIFT_PX }, 1) : undefined));
     });
     return boxes.map((_, i) => mergeTones(reads.map((r) => r[i])));
   }

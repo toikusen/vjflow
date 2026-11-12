@@ -736,7 +736,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const m = gs[i].mesh;
       const f = Math.min(1, Math.max(0.05, (Math.abs(m.scale.y) * m.geometry.parameters.height) / c.height));
       const d = (c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D).getImageData(0, 0, c.width, c.height).data;
-      px.push(...onScreen(d, c.width, c.height, f, on ?? tint));
+      for (const q of onScreen(d, c.width, c.height, f, on ?? tint)) px.push(q);
     }
     // (read as the probe gate reads a glyph, measured-ink readGlyph: of the colours covering a tenth of it, the one nearest
     // its tint; its pixels near that colour; their median)

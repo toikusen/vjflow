@@ -173,7 +173,9 @@ export function onScreen(data: ArrayLike<number>, w: number, h: number, f: numbe
       out.push([toSrgb8(r / n + g[0] * (1 - A)), toSrgb8(gg / n + g[1] * (1 - A)), toSrgb8(bl / n + g[2] * (1 - A)), bx, by]);
     }
   if (!out.length) return [];
-  const [x0, x1, y0, y1] = [Math.min(...out.map((p) => p[3])), Math.max(...out.map((p) => p[3])) + 1, Math.min(...out.map((p) => p[4])), Math.max(...out.map((p) => p[4])) + 1];
+  // (folded, not spread: a large glyph's picture has more pixels than a call's arguments may)
+  let [x0, x1, y0, y1] = [Infinity, -Infinity, Infinity, -Infinity];
+  for (const p of out) [x0, x1, y0, y1] = [Math.min(x0, p[3]), Math.max(x1, p[3] + 1), Math.min(y0, p[4]), Math.max(y1, p[4] + 1)];
   return out.map(([r, gg, bl, x, y]) => [r, gg, bl, Math.min(2, Math.floor(((x - x0) / Math.max(1, x1 - x0)) * 3)) * 3 + Math.min(2, Math.floor(((y - y0) / Math.max(1, y1 - y0)) * 3))]);
 }
 

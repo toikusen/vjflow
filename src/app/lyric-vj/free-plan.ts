@@ -422,7 +422,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const world = o.style?.world;
   const start = world ? schemeFor(world, song.title, meaning.palette, seed ?? 0) : 0;
   const paletteId = world ? world.palette[start].id : rerollPalette(song.title, meaning.palette, calm, seed);
-  // (the scheduler takes a declared world over only when asked: no world is enabled by default, Q1 is not accepted yet)
+  // (the scheduler takes a declared world over only when asked or enabled: popart and midcentury are, world-shared.ts)
   const asked = o.worldEvents === true || (o.worldEvents !== false && (!!(world && compositionsOf(world.id)?.enabled) || (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.['VJ_WORLD_EVENTS'] === '1'));
   const scheduled = !!world && asked && !!compositionsOf(world.id);
   // (Q3 / Q5 phase 2: only when asked, only on a world that declares the capability)

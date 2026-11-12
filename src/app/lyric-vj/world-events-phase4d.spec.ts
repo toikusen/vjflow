@@ -28,9 +28,9 @@ const mains = (id: string) => [...new Set(pageSeatsOf(id).map((x) => SET_SPECS[x
 const offered = (id: string) => mains(id).flatMap((main) => [undefined, ...FACES].flatMap((font) => TEXTS.flatMap((text) => pageSeatsFor(text, main, id, font).map((x) => ({ x, main, font, text })))));
 
 describe('phase 4d: popart and midcentury declared from the ruling (rows 6–7)', () => {
-  it('both follow the first five in the table\'s order, off by default, in the ruling\'s families and moves', () => {
+  it('both follow the first five in the table\'s order, enabled (owner accepted v8, Codex pairs D.3), in the ruling\'s families and moves', () => {
     expect(Object.keys(WORLD_COMPOSITIONS)).toEqual(['blueprint', 'chalkboard', 'document', 'notebook', 'art-deco', 'riso', 'silk', 'file', 'card', 'spy', ...NEW]);
-    for (const id of NEW) expect(compositionsOf(id)!.enabled, id).toBe(false);
+    for (const id of NEW) expect(compositionsOf(id)!.enabled, id).toBe(true);
     expect(compositionsOf('popart')!.moves).toEqual({ 'layout-seat': 'balloon-seat', 'page-handoff': 'comic-handoff' });
     expect(compositionsOf('midcentury')!.moves).toEqual({ 'layout-seat': 'poster-seat', 'page-handoff': 'sleeve-handoff' });
     expect(compositionsOf('popart')!.carrierRole).toBe('object');
@@ -158,7 +158,8 @@ describe('phase 4d: the same-page seats', () => {
 const SONGS = [['out/db/yt_w_fCuUR3lEs/song.json', 'out/research/instant/plans/nun/meaning.json'], ['out/db/yt_5i50aTB7JFo/song.json', 'out/research/instant/plans/snow/meaning.json']];
 const onDisk = SONGS.every(([s, m]) => existsSync(s) && existsSync(m));
 
-describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)', { timeout: 60000 }, () => {
+// (120 s: midcentury's default job runs the scheduler since 2026-11-12, about 1.6× the scheduler-off job)
+describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)', { timeout: 120000 }, () => {
   const songs = onDisk ? SONGS.map(([s, m]) => [JSON.parse(readFileSync(s, 'utf8')), JSON.parse(readFileSync(m, 'utf8'))]) : [];
   const runs = new Map<string, ReturnType<typeof freeJob>[]>();
   const style = (id: string) => FREE_STYLES.find((s) => s.id === id)!;
@@ -256,7 +257,7 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
     expect(n).toBeGreaterThan(0);
   });
 
-  it('midcentury, claymation, scrapbook on the gate\'s other songs (scheduler off): a line no band of a set can hold never gets that set (choroin\'s 21-character line went to the one-row sleeve when no other set of its level took 21)', () => {
+  it('midcentury, claymation, scrapbook on the gate\'s other songs (the default product, midcentury now scheduled): a line no band of a set can hold never gets that set (choroin\'s 21-character line went to the one-row sleeve when no other set of its level took 21)', () => {
     const more = [['out/db/yt_hCCskTJwvuc/song.json', 'out/research/instant/plans/choroin/meaning.json'], ['out/db/yt_b3GCfyNKeLs/song.json', 'out/research/instant/plans/tsuzuki/meaning.json'], ['out/db/yt_iwYXfOhcsYI/song.json', 'out/research/instant/plans/tenmon/meaning.json']].filter(([a, b]) => existsSync(a) && existsSync(b));
     let n = 0;
     // (the renderer and the composer break lines at word-safe places, render/engine setWordSafe)
@@ -284,15 +285,21 @@ describe.skipIf(!onDisk)('phase 4d on real songs (雙截棍, 三年後的大雪)
     expect(n).toBeGreaterThan(0);
   });
 
-  it('by default (scheduler off) both draw exactly as before: no same-page seat is offered or drawn', () => {
+  it('enabled (2026-11-12): by default both are the scheduler\'s own job, byte for byte worldEvents true', () => {
     for (const id of NEW)
       for (const [song, meaning] of songs) {
         const plain = freeJob(song, { style: style(id), seed: 0, meaning });
+        expect(plain.treatment.worldEvents?.source, id).toBe('declared');
+        expect(JSON.stringify(plain.job), id).toBe(JSON.stringify(wired(id)[songs.findIndex(([s]) => s === song)].job));
+      }
+  });
+
+  it('scheduler off (worldEvents false): no same-page seat is offered or drawn', () => {
+    for (const id of NEW)
+      for (const [song, meaning] of songs) {
         const before = freeJob(song, { style: style(id), seed: 0, meaning, worldEvents: false });
-        expect(plain.treatment.worldEvents?.source, id).toBe('declared-off');
-        const { worldEvents: _w, ...rest } = plain.job.treatment;
+        const { worldEvents: _w, ...rest } = before.job.treatment;
         const drawn = JSON.stringify(rest);
-        expect(drawn, id).toBe(JSON.stringify(before.job.treatment));
         for (const x of pageSeatsOf(id)) expect(drawn.includes(`"${x}"`), `${id} ${x}`).toBe(false);
       }
   });

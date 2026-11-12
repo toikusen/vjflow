@@ -57,26 +57,41 @@ describe('shared world moves', () => {
   it('never dims a character below half', () => {
     for (let q = 0; q <= 1; q += 0.05) for (let i = 0; i < 8; i++) expect(WORLD_BEATS.flicker.glyph!({ q, i, n: 8, u: i / 7, v: 0, seed: 3, age: 2, sung: 1, span: 0 }).tone!).toBeGreaterThanOrEqual(0.55);
   });
-  it('splits a long calm line at a word break into a second set', () => {
+  it('turns a long calm line\'s ground at a sung word break, under words on their own carrier (ukiyoe), the set kept', () => {
     const text = '無盡的思念總是破碎在冬天';
     const n = [...text].length;
     const cues = Array.from({ length: 12 }, (_, i) => ({ id: `c${i + 1}`, start: 4 + i * 5, end: 4 + i * 5 + 4.6, text, charStarts: Array.from({ length: n }, (_, k) => 4 + i * 5 + (4.2 * k) / n) }));
     const end = 4 + 12 * 5 + 2;
     const song = { title: 'calm', duration: end, tempo: 70, beats: Array.from({ length: Math.ceil(end / 0.857) }, (_, i) => i * 0.857), downbeats: [], sections: [{ start: 0, end, type: 'verse', energy: 0.3 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
-    const { treatment, calm } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === 'silk-cold')!, seed: 0 });
+    const { treatment, plan, calm } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === 'ukiyoe')!, seed: 0 });
     expect(calm).toBe(true);
+    expect(treatment.cues.filter((c) => (c as { world?: { repose?: unknown[] } }).world?.repose?.length)).toEqual([]);
     const breaks = [...wordBreaks(text)];
-    const split = treatment.cues.filter((c) => (c as { world?: { repose?: { at: number }[] } }).world?.repose?.length);
-    expect(split.length).toBeGreaterThan(6);
-    for (const c of split) {
-      const cue = cues.find((x) => x.id === c.cueId)!;
+    const turns = (plan as unknown as { shots: { cuts: { at?: number; repose?: boolean }[] }[] }).shots.flatMap((s) => s.cuts.filter((x) => x.repose));
+    expect(turns.length).toBeGreaterThan(6);
+    for (const t of turns) {
+      const cue = cues.find((x) => t.at! > x.start && t.at! < x.end)!;
       expect(cue.end - cue.start).toBeGreaterThanOrEqual(REPOSE_CALM_LINE);
-      for (const r of (c as unknown as { world: { repose: { at: number }[] } }).world.repose) {
-        // on the break, or on the song beat nearest it (within 0.3 s)
-        const near = breaks.filter((k) => k > 0 && k < n).map((k) => Math.abs(cue.charStarts[k] - r.at));
-        expect(Math.min(...near), `${r.at} lands at a word break`).toBeLessThanOrEqual(0.3 + 1e-6);
-      }
+      // the ground turns on a sung word break, or on the song beat nearest it (within 0.3 s)
+      const near = breaks.filter((k) => k > 0 && k < n).map((k) => Math.abs(cue.charStarts[k] - t.at!));
+      expect(Math.min(...near), `${t.at} lands at a word break`).toBeLessThanOrEqual(0.3 + 1e-6);
     }
+  });
+
+  it('a long calm line keeps its one set; its ground does not turn under words standing on it', () => {
+    const text = '無盡的思念總是破碎在冬天';
+    const n = [...text].length;
+    const cues = Array.from({ length: 12 }, (_, i) => ({ id: `c${i + 1}`, start: 4 + i * 5, end: 4 + i * 5 + 4.6, text, charStarts: Array.from({ length: n }, (_, k) => 4 + i * 5 + (4.2 * k) / n) }));
+    const end = 4 + 12 * 5 + 2;
+    const song = { title: 'calm', duration: end, tempo: 70, beats: Array.from({ length: Math.ceil(end / 0.857) }, (_, i) => i * 0.857), downbeats: [], sections: [{ start: 0, end, type: 'verse', energy: 0.3 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+    const { treatment, plan, calm } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === 'silk-cold')!, seed: 0 });
+    expect(calm).toBe(true);
+    // no change of set while a line is sung (owner 2026-11-10): one set from the first sung character to the end
+    expect(treatment.cues.filter((c) => (c as { world?: { repose?: unknown[] } }).world?.repose?.length)).toEqual([]);
+    // silk-cold's words stand on the ground: what a new ground draws under them the plan cannot read, so no turn
+    // (render/turn-rule.ts; it was the calm line's word-break cut, 2026-11-04, before the review of 2026-11-10)
+    const turns = (plan as unknown as { shots: { cuts: { at?: number; repose?: boolean }[] }[] }).shots.flatMap((s) => s.cuts.filter((x) => x.repose));
+    expect(turns).toEqual([]);
   });
   it('blows up a whole short word of the line, the named one first', () => {
     const word = (t: string, named?: string) => { const b = blowOf({ id: 'x', start: 0, end: 3, text: t }, named); return b && [...t].slice(b.from, b.to).join(''); };

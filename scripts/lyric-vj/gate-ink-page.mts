@@ -2,7 +2,9 @@
 // moment drawn with and without the words (what they stand on kept), every glyph shown read on the pixels under it.
 import { readGlyph, type GlyphRead } from '../../src/app/lyric-vj/measured-ink';
 
-type Box = { i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean };
+/** Under this opacity a glyph is fading in or out, not read (style-gate-ink.mts). */
+export const FAINT = 0.35;
+type Box = { i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean; ink?: string };
 const w = window as unknown as { __vjInkProbe?: boolean; vjLyrics(on: boolean, carriers?: boolean): void; vjFrame(t: number): Promise<HTMLCanvasElement>; vjGlyphs(): { id: string; glyphs: Box[] }[]; inkPage: unknown };
 
 /** A glyph's reading, or why it was not read: still coming or going, faint (its own fade), or too little ink to read. */
@@ -35,8 +37,9 @@ async function moment(t: number, ids: string[]): Promise<Read[]> {
   return lines.flatMap((l) => l.glyphs.map((g): Read => {
     const box: Read['box'] = [Math.round(g.x0), Math.round(g.y0), Math.round(g.x1), Math.round(g.y1)];
     if (g.moving) return { id: l.id, i: g.i, skip: 'moving', box };
-    if (g.a < 0.98) return { id: l.id, i: g.i, skip: 'faint', box };
-    const r = readGlyph(on, off, rw, { x0: g.x0 - x0, y0: g.y0 - y0, x1: g.x1 - x0, y1: g.y1 - y0 });
+    // (a glyph drawn see-through by design, a lantern's lit paper, is read as it is; only one nearly gone is not read)
+    if (g.a < FAINT) return { id: l.id, i: g.i, skip: 'faint', box };
+    const r = readGlyph(on, off, rw, { x0: g.x0 - x0, y0: g.y0 - y0, x1: g.x1 - x0, y1: g.y1 - y0 }, g.ink);
     return r ? { id: l.id, i: g.i, r, box } : { id: l.id, i: g.i, skip: 'small', box };
   }));
 }

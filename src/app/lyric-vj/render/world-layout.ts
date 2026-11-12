@@ -11,13 +11,15 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
-import { carrierBox, carrierRoom, growRoom, inkChecks, keyFor } from './hold-room';
+import { carrierBox, carrierRoom, carrierSlots, growRoom, inkChecks, keyFor } from './hold-room';
 import { laidSeat, panelSplit, slotSpec } from './seat-geometry';
 export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
 import { eraseFront } from './chalk-erase';
 import type { BeatKind, StressKind } from '../world-shared';
 import { contrast } from '../contrast';
+import { drawnInk as drawnInk_, onScreen, INK_AIM, inkFor, mergeTones, patchTone, readsOn, type Tones } from '../measured-ink';
+import { inkDistance, readableHue } from './key-ink';
 import { beatUnderScale, CARRIER_STROKE, carrierPlan, SAFE_PX, scaleLayout, scalePage, type LineScale, type ScaleDraw } from './scale-pose';
 import { lineMomentLift } from './line-moment';
 import type { LineMoment } from '../mini-moments';
@@ -261,6 +263,16 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   return m;
 }
 
+/** A hold's ink moved to read stays at least this far (OKLab) from the words' own ink, else the hold's ink is dropped: a change no one sees is no hold. */
+const KEY_APART = 0.08;
+/** A ring under at least this share of a glyph's ink is a ground the glyph is read on (measureInks). */
+const RING_SHARE = 0.05;
+/** The pixels of the glyph and ring pictures read for what a letter stands on, by picture. */
+const RING_PIX = new WeakMap<object, { w: number; h: number; a: Uint8ClampedArray }>();
+/** What a world whose glyphs are made of a material holds its drawn ink to (measureInks): a hair over INK_AIM, the screen's own mixing being estimated, not read. */
+const MATERIAL_AIM = INK_AIM + 0.2;
+/** A band (measureInks) runs round its glyphs' em boxes this much over. */
+const BAND_PAD = 1.08;
 /** The worlds whose ground cuts a room of its own material round a line (uncut wood, a crayon bubble, undyed cloth, the lit opening). */
 const ROOM_FOLLOWS = new Set(['woodcut', 'crayon', 'aizome', 'paper-lantern']);
 /** Builds a line in a world. `slot` stacks it among the lines of a shared shot. */
@@ -343,6 +355,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const underLayers = Array.from({ length: Math.max(0, ...unders.map((u) => u.length)) }, (_, L) => makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, 'white').map((u) => { const o = -4.8 + L * 0.2; u.mesh.renderOrder = o; u.mesh.traverse((x) => (x.renderOrder = o)); u.mesh.visible = false; u.mesh.userData['noVeil'] = true; return u; }));
   // (a layer a set names as the letters' carrier, a sticker's backing, is what the words stand on: kept when they are taken away to be read)
   underLayers.forEach((layer, L) => { if (sets.some((st) => st.under?.[L]?.carrier)) layer.forEach((u) => (u.mesh.userData['decor'] = true)); });
+  // (every ring is what its letter is read on: the measured ink probe keeps them all when it takes the words away, engine wordsAway)
+  underLayers.forEach((layer) => layer.forEach((u) => (u.mesh.userData['ring'] = true)));
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
@@ -563,6 +577,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // a measure of the meshes reads as 50–160 px out of the frame on a composition flush with the safe edge)
   // (whether each glyph's own entrance or exit is running on the last frame drawn: glyphBoxes)
   const moving = gs.map(() => false);
+  // (the ink each glyph was drawn in on the last frame: the probe reads that colour as the glyph's, not a copy behind it)
+  const drawnInk = gs.map(() => 0);
   const glyphBoxes = () => {
     const v = new THREE.Vector3();
     const ws = new THREE.Vector3();
@@ -574,7 +590,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       g.mesh.getWorldScale(ws);
       const half = (Math.abs(ws.y) * tex) / 2;
       const [x, y] = [v.x + 960, 540 - v.y];
-      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: moving[i] }];
+      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: moving[i], ink: `#${drawnInk[i].toString(16).padStart(6, '0')}` }];
     });
   };
   const inkBoxes = () => {
@@ -592,7 +608,308 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       return [{ x0: x - half, y0: y - half, x1: x + half, y1: y + half }];
     });
   };
-  return {
+  // Legibility is absolute (owner): every ink a glyph is drawn in reads at 4.5:1 on the ground it really stands on, measured
+  // off the look under each glyph's box (rt.groundTones), not on what the set declares (y2k/strips' roll ran grey on a pink
+  // foil cell at 3.12:1, cel80s/ending-l's part stood cream on a lilac sky at 2.53:1; 2026-11-12). A glyph on its own
+  // carrier (the pose's object) is read on the carrier, a ringed set's on its innermost ring, as drawn by the line itself.
+  // each ring's tone a pose draws (moved where its letters' ink would not read on it: measureInks)
+  const ringTone = sets.map((st) => (st.under ?? []).map((u) => slots[u.tone]));
+  /**
+   * What a glyph's ink stands on among its rings: over each ring (outermost first; the innermost one there counts) the
+   * share of its ink pixels and the colours that ring really has there (a fan letter's member ring is its own colour,
+   * not its slot's), and the share over none.
+   */
+  const ringCover = (k: number, i: number) => {
+    const pix = (tx: THREE.Texture | undefined) => {
+      const c = tx?.image as HTMLCanvasElement | OffscreenCanvas | undefined;
+      if (!c || !('getContext' in c)) return undefined;
+      let d = RING_PIX.get(c);
+      if (!d) RING_PIX.set(c, (d = { w: c.width, h: c.height, a: (c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D).getImageData(0, 0, c.width, c.height).data }));
+      return d;
+    };
+    const letter = pix(whole[k][i]);
+    const rings = unders[k].map((L) => pix(L[i]));
+    const seen = rings.map(() => [] as number[]);
+    let [n, none] = [0, 0];
+    if (!letter) return { rings: rings.map(() => 0), tones: rings.map(() => undefined as Tones), none: 1 };
+    const step = Math.max(1, Math.floor(Math.min(letter.w, letter.h) / 60));
+    for (let y = 0; y < letter.h; y += step)
+      for (let x = 0; x < letter.w; x += step) {
+        if (letter.a[(y * letter.w + x) * 4 + 3] < 128) continue;
+        n++;
+        // (the same point of each ring's picture, both centred on the glyph's cell)
+        let hit = false;
+        for (let L = rings.length - 1; L >= 0 && !hit; L--) {
+          const r = rings[L];
+          if (!r) continue;
+          const [rx, ry] = [Math.round(x - letter.w / 2 + r.w / 2), Math.round(y - letter.h / 2 + r.h / 2)];
+          const q = (ry * r.w + rx) * 4;
+          if (rx < 0 || ry < 0 || rx >= r.w || ry >= r.h || r.a[q + 3] < 128) continue;
+          seen[L].push(q);
+          hit = true;
+        }
+        if (!hit) none++;
+      }
+    const tones = seen.map((qs, L): Tones => {
+      if (!qs.length) return undefined;
+      const a = rings[L]!.a;
+      const lum = (q: number) => 0.2126 * a[q] + 0.7152 * a[q + 1] + 0.0722 * a[q + 2];
+      const sorted = [...qs].sort((p, q) => lum(p) - lum(q));
+      const hex = (q: number) => `#${[a[q], a[q + 1], a[q + 2]].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+      return { lo: hex(sorted[Math.floor(sorted.length * 0.2)]), hi: hex(sorted[Math.floor(sorted.length * 0.8)]) };
+    });
+    return n ? { rings: seen.map((q) => q.length / n), tones, none: none / n } : { rings: rings.map(() => 0), tones, none: 1 };
+  };
+  const inkFixes: NonNullable<CueLayer['inkFixes']> = [];
+  // the bands laid under the glyphs no one ink of their run reads on (measureInks), a band a row and pose: one crisp shape
+  // round the glyphs' em boxes as they stand each frame, under the glyphs and every ring of them, kept with the carriers
+  // when the words are taken away (it is what they stand on); bandTone: each glyph's band colour, per pose
+  const bandTone = poses.map(() => gs.map((): string | undefined => undefined));
+  const bands: { k: number; ids: number[]; mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial> }[] = [];
+  const bandOf = (k: number, ids: number[], tone: string) => {
+    const rows = rowsOfGlyphs(gs, poses[k].block);
+    const byRow = new Map<number, number[]>();
+    for (const i of ids) { bandTone[k][i] = tone; const r = rows.get(gs[i]) ?? 0; byRow.set(r, [...(byRow.get(r) ?? []), i]); }
+    for (const row of byRow.values()) {
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: tone, transparent: true, depthTest: false, depthWrite: false }));
+      mesh.renderOrder = -5;
+      Object.assign(mesh.userData, { decor: true, noVeil: true });
+      mesh.visible = false;
+      body.add(mesh);
+      bands.push({ k, ids: row, mesh });
+    }
+  };
+  /**
+   * Called by the engine once the line stands where the frame shows it (fitted, in the text root): each pose is put at
+   * rest, each glyph's em box read off its mesh, and the ground under it measured (groundTones).
+   */
+  /**
+   * The ink a glyph is really drawn in for a tint: the tint itself, or on a world whose glyphs are made of a material (a
+   * stitch, a grain, a print) the median of its picture's own colours, which its threads and highlights lift or sink from
+   * the tint (embroidery's slate thread read 4.47 on linen where its tint read over 6, 2026-11-12). Read off a run's first
+   * two glyphs.
+   */
+  const drawnOf = new Map<string, string>();
+  // (a material's drawn ink is read as the screen shows it, measured-ink onScreen: embroidery's navy satin shows as a mid
+  // slate on screen, 4.47 on its linen where its tint read over 8, 2026-11-12; a hair over INK_AIM for what is left)
+  const aim = baked ? MATERIAL_AIM : INK_AIM;
+  const drawn = (tint: string, ids: number[], k: number, on0?: string) => {
+    if (!baked || !ids.length) return tint;
+    // (grounds a hair apart are read as one)
+    const on = on0 && `#${[1, 3, 5].map((j) => Math.min(255, Math.round(parseInt(on0.slice(j, j + 2), 16) / 12) * 12).toString(16).padStart(2, '0')).join('')}`;
+    const key = `${tint}|${k}|${on ?? ''}|${ids.slice(0, 2).map((i) => `${gs[i].char}${Math.abs(gs[i].mesh.scale.y).toFixed(2)}`).join('')}`;
+    const got = drawnOf.get(key);
+    if (got) return got;
+    const px: number[][] = [];
+    for (const i of ids.slice(0, 2)) {
+      const c = glyphTexture(gs[i].char, { ...style, surface: surfaceOf(tint, false, k) }).texture.image as HTMLCanvasElement | OffscreenCanvas | undefined;
+      if (!c || !('getContext' in c)) continue;
+      // (at the size the frame shows it, over the ground it is read on: the screen mixes a material's threads, and the
+      // cloth between them, down to the glyph's size, in linear light; measured-ink onScreen)
+      const m = gs[i].mesh;
+      const f = Math.min(1, Math.max(0.05, (Math.abs(m.scale.y) * m.geometry.parameters.height) / c.height));
+      const d = (c.getContext('2d', { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D).getImageData(0, 0, c.width, c.height).data;
+      px.push(...onScreen(d, c.width, c.height, f, on ?? tint));
+    }
+    // (read as the probe gate reads a glyph, measured-ink readGlyph: of the colours covering a tenth of it, the one nearest
+    // its tint; its pixels near that colour; their median)
+    const out = drawnInk_(px, tint, on);
+    drawnOf.set(key, out);
+    return out;
+  };
+  /** Whether a run's drawn ink reads on every tone given, drawn over each (a material's cloth shows between its threads). */
+  const readsDrawn = (tint: string, grounds: Tones[], ids: number[], k: number, min: number) =>
+    grounds.every((g) => !g || [g.lo, g.hi].every((t) => contrast(drawn(tint, ids, k, baked ? t : undefined), t) >= min));
+  /** inkFor on what the run is really drawn in: a material's tint moved until its drawn colour reads, else inkFor's world ink. */
+  const readingInk = (own: string, grounds: Tones[], ids: number[], k: number) => {
+    if (!baked) return inkFor(own, grounds, [slots.ink, slots.plateInk, slots.ink2, slots.plate, slots.ground, slots.accent], INK_AIM);
+    const gs_ = grounds.filter((g): g is NonNullable<Tones> => !!g);
+    if (!gs_.length) return { ink: own, ok: true, moved: false };
+    let c = own;
+    for (let n = 0; n < 6; n++) {
+      if (readsDrawn(c, gs_, ids, k, MATERIAL_AIM)) return { ink: c, ok: true, moved: c !== own };
+      const worst = gs_.flatMap((g) => [g.lo, g.hi]).sort((a, b) => contrast(drawn(c, ids, k, a), a) - contrast(drawn(c, ids, k, b), b))[0];
+      const e = drawn(c, ids, k, worst);
+      // (the tint is asked for what its drawn colour misses by, on top of the aim)
+      const m = readableHue(c, worst, Math.min(21, MATERIAL_AIM * Math.max(1, contrast(c, worst) / Math.max(1, contrast(e, worst))) + 0.2 * n));
+      if (!m || m.toLowerCase() === c.toLowerCase()) break;
+      c = m;
+    }
+    const world = [slots.ink, slots.plateInk, slots.ink2, slots.plate, slots.ground, slots.accent].filter((x) => /^#[0-9a-f]{6}$/i.test(x));
+    const best = world.sort((a, b) => Math.min(...gs_.flatMap((g) => [contrast(drawn(b, ids, k), g.lo), contrast(drawn(b, ids, k), g.hi)])) - Math.min(...gs_.flatMap((g) => [contrast(drawn(a, ids, k), g.lo), contrast(drawn(a, ids, k), g.hi)])))[0];
+    if (best && readsDrawn(best, gs_, ids, k, MATERIAL_AIM)) return { ink: best, ok: true, moved: true };
+    return { ink: own, ok: false, moved: false };
+  };
+  const measureInks = (groundTones: NonNullable<CueRuntime['groundTones']>) => {
+    inkFixes.length = 0;
+    for (const b of bands) b.mesh.removeFromParent();
+    bands.length = 0;
+    bandTone.forEach((r) => r.fill(undefined));
+    const world = [slots.ink, slots.plateInk, slots.ink2, slots.plate, slots.ground, slots.accent];
+    // (the page under a line that grows is drawn round it grown, as the frame draws it: restRects as the engine reads them)
+    let spans = restRects();
+    const v = new THREE.Vector3();
+    const ws = new THREE.Vector3();
+    const still: FrameFx = { flash: 0, hit: 0, shake: 0 };
+    poses.forEach((p, k) => {
+      let span = spans[k];
+      if (!span) return;
+      const rows = p.object && p.block.small?.length ? rowsOfGlyphs(gs, p.block) : undefined;
+      const onObject = (g: Glyph) => !!p.object && !(rows && p.block.small!.includes(rows.get(g) ?? -1));
+      const mid = (span.from + span.to) / 2;
+      const holdHere = !!wl.beat && k === beatPose;
+      const holdTimes = holdHere ? [-0.15 / Math.max(0.01, beatSec), 0.25, 0.5, 0.75].map((q) => wl.beat!.at + beatSec * q).concat(stays ? [wl.beat!.at + beatSec + 0.15] : []) : [];
+      // read while the line is read: its entrance over, its exit not begun, inside this pose
+      const [from, to] = [Math.max(span.from, rt.showFrom + enterDur + 0.01), Math.min(span.to, rt.exitAt - 0.01)];
+      const inside = (t: number) => t >= from && t <= to;
+      const baseTimes = [from + 0.5, mid, to - 0.05].filter(inside);
+      // each glyph's em box off its mesh as the frame draws it at t (frame px y down): a hold that moves the words (a
+      // line that grows) carries them over other ground, so every moment is read where the glyphs then are
+      const boxesAt = (t: number) => {
+        self.update(t, still);
+        return gs.map((g, i) => {
+          if (!p.shown[i] || !g.char.trim() || onObject(g) || !g.mesh.visible) return undefined;
+          g.mesh.updateWorldMatrix(true, false);
+          g.mesh.getWorldPosition(v);
+          g.mesh.getWorldScale(ws);
+          const half = (Math.abs(ws.y) * tex) / 2;
+          return half > 0 ? { x0: v.x + 960 - half, y0: 540 - v.y - half, x1: v.x + 960 + half, y1: 540 - v.y + half } : undefined;
+        });
+      };
+      // (a glyph on the pose's own carrier stands on the carrier the line draws, in its slots' colours: claymation's plaque)
+      const onCarrier = mergeTones((carrierSlots(sets[k]) ?? []).map((c) => slots[c]).filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => ({ lo: c, hi: c })));
+      const tonesAt = (times: number[]) => {
+        const at = times.length ? times : [Math.min(Math.max(mid, from), to)];
+        const reads = at.map((t) => groundTones([t], span.rect, boxesAt(t)));
+        return gs.map((g, i) => (p.shown[i] && g.char.trim() && onObject(g) ? onCarrier : mergeTones(reads.map((r) => r[i]))));
+      };
+      let base = tonesAt([...baseTimes, ...holdTimes.filter(inside)]);
+      // a line that grows into ground its ink does not read on (y2k's hook growing onto its gel button) does not grow: the
+      // hold's move is dropped where the words read at rest and not grown (the line keeps its ink, the page its button)
+      if (holdHere && wl.beat!.kind === 'line-grow' && growTo() > 1) {
+        // (at rest: before it grows; a grow stays, so the pose's end is grown)
+        const before = baseTimes.filter((t) => t < wl.beat!.at);
+        const rest = tonesAt(before.length ? before : [Math.max(from, wl.beat!.at - 0.15)]);
+        const grows = gs.some((g, i) => rest[i] && base[i] && readsOn(tintOf(g, k), [rest[i]], INK_AIM) && !readsOn(tintOf(g, k), [base[i]], INK_AIM));
+        if (grows) {
+          grown = 1;
+          spans = restRects();
+          span = spans[k];
+          inkFixes.push({ pose: k, kind: 'hold', from: 'line-grow', to: 'dropped', glyphs: gs.length });
+          base = tonesAt([...baseTimes, ...holdTimes.filter(inside)]);
+        }
+      }
+      // a ringed set's letters stand on their rings where a ring lies under their ink (a keyline, a band, a misprint): each
+      // ring tone under a share of a glyph's ink is its ground, the look only where no ring is (a ring in the letter's own
+      // ink bolds it, it is not its ground); a ring that does not let the ink read moves its tone first (the letters keep
+      // theirs), else the letters move theirs (below)
+      const under = sets[k].under ?? [];
+      const ringed = under.length > 0;
+      const looks = [...base];
+      const covers = ringed ? gs.map((g, i) => (p.shown[i] && g.char.trim() && (base[i] || onObject(g)) ? ringCover(k, i) : undefined)) : [];
+      const ringGround = (i: number) => {
+        const c = covers[i];
+        if (!c) return base[i];
+        const own = tintOf(gs[i], k);
+        const tones = c.rings.flatMap((share, L) => (share >= RING_SHARE && c.tones[L] && contrast(c.tones[L]!.lo, own) >= 1.2 ? [c.tones[L]] : []));
+        // (on its own carrier the rest of the letter stands on the carrier, read as such: only its rings are measured)
+        return mergeTones([...tones, ...((c.none >= RING_SHARE || !tones.length) && !onObject(gs[i]) ? [looks[i]] : [])]);
+      };
+      if (ringed) {
+        under.forEach((u, L) => {
+          // (only a ring of one tone, its slot's, is moved: a ring that varies glyph by glyph keeps its colours, and the
+          // letters move theirs instead, below)
+          const ids = gs.flatMap((g, i) => (covers[i] && covers[i]!.rings[L] >= RING_SHARE && covers[i]!.tones[L] && contrast(covers[i]!.tones[L]!.lo, tintOf(g, k)) >= 1.2 ? [i] : []));
+          if (!ids.length || ids.some((i) => contrast(covers[i]!.tones[L]!.lo, ringTone[k][L]) > 1.15 || contrast(covers[i]!.tones[L]!.hi, ringTone[k][L]) > 1.15)) return;
+          const owns = [...new Set(ids.map((i) => tintOf(gs[i], k).toLowerCase()))];
+          if (owns.every((o) => readsOn(o, ids.map((i) => covers[i]!.tones[L]), INK_AIM))) return;
+          const worst = owns.sort((a, b) => contrast(a, ringTone[k][L]) - contrast(b, ringTone[k][L]))[0];
+          const moved = readableHue(ringTone[k][L], worst, INK_AIM + 0.2);
+          if (!moved || !owns.every((o) => contrast(o, moved) >= INK_AIM + 0.2)) return;
+          inkFixes.push({ pose: k, kind: 'base', from: ringTone[k][L], to: `ring:${moved}`, glyphs: ids.length });
+          ringTone[k][L] = moved;
+          unders[k][L] = gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceKey({ kind: u.kind, tint: moved, core: tintOf(g, k), eaten: false }) }).texture);
+          for (const i of ids) covers[i] = ringCover(k, i);
+        });
+        gs.forEach((_, i) => { if (covers[i]) base[i] = ringGround(i); });
+      }
+      const read = base.map(Boolean);
+      // the base inks, a run of one ink at a time (a part, a row, the key words): kept where it reads, else one ink for the
+      // run where one reads on all of it, else glyph by glyph (measured-ink inksFor)
+      const runs = new Map<string, number[]>();
+      gs.forEach((g, i) => { if (read[i] && base[i]) { const c = tintOf(g, k).toLowerCase(); runs.set(c, [...(runs.get(c) ?? []), i]); } });
+      for (const [own, ids] of runs) {
+        const one = readingInk(own, ids.map((i) => base[i]), ids, k);
+        if (one.ok) {
+          if (one.ink === own) continue;
+          for (const i of ids) {
+            inksBy[k][i].set(one.ink);
+            if (baked) whole[k][i] = glyphTexture(gs[i].char, { ...style, surface: surfaceOf(one.ink, false, k) }).texture;
+            if (damaged) damaged[k][i] = glyphTexture(gs[i].char, { ...style, surface: surfaceOf(one.ink, true, k) }).texture;
+          }
+          inkFixes.push({ pose: k, kind: 'base', from: own, to: one.ink, glyphs: ids.length });
+          continue;
+        }
+        // no one ink reads on the whole run (a line crossing a white disc on a deep sky, a column running off its strip, a
+        // row over a cloud's rim): the run keeps its ink and stands on a band of one ground it reads on, crisp, from its
+        // first glyph that does not read to its last (each glyph's em box a hair over, so they meet as one band, under the
+        // letters' rings); the band is those glyphs' ground from then on
+        const short = ids.filter((i) => !readsDrawn(own, [base[i]], ids, k, aim));
+        // (a glyph on its carrier is never laid on a band: the carrier is its ground)
+        const flat = short.filter((i) => !onObject(gs[i]));
+        if (flat.length) {
+          const tone = patchTone(drawn(own, ids, k), mergeTones(flat.map((i) => base[i]))!, world);
+          const [lo, hi] = [Math.min(...flat), Math.max(...flat)];
+          // (every glyph read between them is laid on it, a key word of another ink too: the band is one)
+          const laid = gs.flatMap((g, j) => (j >= lo && j <= hi && base[j] && !bandTone[k][j] && !onObject(g) ? [j] : []));
+          bandOf(k, laid, tone);
+          for (const i of laid) {
+            // (a ringed letter's rings lie on the band: it reads on them where they are under it, on the band elsewhere)
+            looks[i] = { lo: tone, hi: tone };
+            base[i] = covers[i] ? ringGround(i) : looks[i];
+          }
+        }
+        inkFixes.push({ pose: k, kind: 'base', from: own, to: `band:${[...new Set(ids.flatMap((i) => (bandTone[k][i] ? [bandTone[k][i]] : [])))].join(',')}`, glyphs: ids.filter((i) => bandTone[k][i]).length });
+      }
+      // (a glyph of another run laid on a band reads on the band, its ink moved as little as it must)
+      gs.forEach((g, i) => {
+        const tone = bandTone[k][i];
+        const own = `#${inksBy[k][i].getHexString()}`;
+        if (!tone || readsDrawn(own, [{ lo: tone, hi: tone }], [i], k, aim)) return;
+        const got = readingInk(own, [{ lo: tone, hi: tone }], [i], k);
+        if (!got.ok || got.ink === own) return;
+        inksBy[k][i].set(got.ink);
+        if (baked) whole[k][i] = glyphTexture(g.char, { ...style, surface: surfaceOf(got.ink, false, k) }).texture;
+        if (damaged) damaged[k][i] = glyphTexture(g.char, { ...style, surface: surfaceOf(got.ink, true, k) }).texture;
+        inkFixes.push({ pose: k, kind: 'base', from: own, to: got.ink, glyphs: 1 });
+      });
+      // the hold's ink (a key run, a sweep, a swap, a settle): it reads on every glyph it runs over, else it moves as little
+      // as it must, else it is dropped (the hold keeps its motion, the words their ink): never a new ink under 4.5:1
+      if (!holdHere || !usesKey) return;
+      const keyed = gs.map((_, i) => read[i] && !apartBy[k][i]);
+      const held = settling ? settleBy[k] : keyCols[k] && `#${keyCols[k].getHexString()}`;
+      if (!held) return;
+      // (a glyph on its patch is read on the patch)
+      const tones = tonesAt(holdTimes.slice(1)).map((t, i) => (!keyed[i] ? undefined : bandTone[k][i] ? (covers[i] ? ((looks[i] = { lo: bandTone[k][i]!, hi: bandTone[k][i]! }), ringGround(i)) : { lo: bandTone[k][i]!, hi: bandTone[k][i]! }) : covers[i] ? ((looks[i] = t), ringGround(i)) : t));
+      const keyIds = gs.flatMap((_, i) => (keyed[i] ? [i] : []));
+      if (readsDrawn(held, tones, keyIds, k, aim)) return;
+      const bodies = keyIds.map((i) => `#${inksBy[k][i].getHexString()}`);
+      const got = readingInk(held, tones, keyIds, k);
+      const apart = got.ok && bodies.every((b) => inkDistance(b, got.ink) >= KEY_APART);
+      if (apart) {
+        keyCols[k].set(got.ink);
+        if (settling) settleBy[k] = got.ink;
+        if (keyMaps) keyMaps[k] = gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(got.ink, false, k) }).texture);
+      } else {
+        keyOkBy[k] = false;
+        swapOkBy[k] = false;
+        settleBy[k] = undefined;
+      }
+      inkFixes.push({ pose: k, kind: 'hold', from: held, to: apart ? got.ink : 'dropped', glyphs: keyed.filter(Boolean).length });
+    });
+    // (the frame's own update puts the line back where the playing time has it)
+  };
+  const self: CueLayer = {
     group,
     // (a set laid into its page's composition is placed inside the safe area by its numbers: it is neither refitted nor drifted)
     framed: slot.of === 1 && sets.every((s) => s.fixed),
@@ -704,6 +1021,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         // (a split line's part on a carrier of its own keeps its own ink: the key was read for the set's carrier)
         const keyed = (pose.key ?? 0) > 0 && (wl.beat?.kind === 'ink-swap' ? swapOkBy[k] : settling ? !!settleBy[k] : keyOkBy[k]) && !apartBy[k][i];
         const ink = keyed ? mixed.copy(inkLit[i]).lerp(keyCols[k], pose.key!) : inkLit[i];
+        drawnInk[i] = ink.getHex();
         const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }
         const tone = Math.min(1, (pose.tone ?? 1) * rank);
@@ -716,6 +1034,21 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
           else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }
       });
+      // (a band goes with its glyphs: round their em boxes as they stand, a hair over, shown while they are)
+      for (const b of bands) {
+        const shown = b.ids.filter((i) => gs[i].mesh.visible && gs[i].mesh.material.opacity > 0.01);
+        b.mesh.visible = b.k === k && shown.length > 0;
+        if (!b.mesh.visible) continue;
+        let [x0, y0, x1, y1, a] = [Infinity, Infinity, -Infinity, -Infinity, 0];
+        for (const i of shown) {
+          const m = gs[i].mesh;
+          const h = (Math.abs(m.scale.y) * tex * BAND_PAD) / 2;
+          [x0, y0, x1, y1, a] = [Math.min(x0, m.position.x - h), Math.min(y0, m.position.y - h), Math.max(x1, m.position.x + h), Math.max(y1, m.position.y + h), Math.max(a, m.material.opacity)];
+        }
+        b.mesh.position.set((x0 + x1) / 2, (y0 + y1) / 2, 0);
+        b.mesh.scale.set(x1 - x0, y1 - y0, 1);
+        b.mesh.material.opacity = a;
+      }
       underLayers.forEach((layer, L) => layer.forEach((u, i) => {
         const m = gs[i].mesh;
         const map = unders[k][L]?.[i];
@@ -751,12 +1084,15 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: restRects,
     glyphBoxes,
+    inkFixes,
+    measureInks,
     ...(scaling ? { inkRect: () => {
       const bs = inkBoxes();
       return bs.length ? bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) })) : undefined;
     }, inkBoxes } : {}),
     ...(scaled ? { scale: { eventId: wl.scale!.eventId, planned: scaled.planned, drawn: scaled.kind === 'miss' ? 0 : scaled.ratio, kind: scaled.kind, unrealized: scaled.unrealized, carrier: carrier?.why ?? ({ page: 'page: re-laid round the words', object: 'object: re-laid round the words', sheet: 'none' } as const)[carrierPlan(wl.scale!, SET_SPECS[wl.set]?.object)], inkBox: scaled.inkBox, safe: SAFE_PX, glyphBox: scaled.glyphBox, inSafe: scaled.inSafe, ...(scaled.why ? { why: scaled.why } : {}) } } : {}),
   };
+  return self;
 }
 
 /** A move as a still cut over its own time (a linked move unchanged: its words do not move): shown from the start going in, gone halfway going out. */

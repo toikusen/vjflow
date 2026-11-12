@@ -130,13 +130,15 @@ export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red
  * card its page lays, not on the plate; a roll's purple key ran over it at 1.2:1): the set's carrier (groundsUnder) and
  * each row's own carrier where its page lays one per row (`rowOn`). A new ink a hold draws over the words must read on
- * every one. (A split line's small part is not taken to stand on the ground: popart's tail part sits in a white burst of
+ * every one, and on each colour the page lays there that no slot names (`tones`). (A split line's small part is not taken to stand on the ground: popart's tail part sits in a white burst of
  * its own, frame-checked 2026-11-12; a split part on a carrier of another colour would need its own `rowOn`-like slot.)
  */
-export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn'>, slots: Slots, seen: Seen = {}): string[] {
+export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn' | 'tones'>, slots: Slots, seen: Seen = {}): string[] {
   const own = groundsUnder(spec, slots, seen);
   const rows = (spec.rowOn ?? []).map((k) => slots[k]);
-  return [...new Set([...own, ...rows].filter(hex))];
+  // (and every colour the set's page lays under the words that no slot names: SetSpec tones, 2026-11-12)
+  const tones = (spec.tones ?? []).map((t) => (t in slots ? slots[t as keyof Slots] : t));
+  return [...new Set([...own, ...rows, ...tones].filter(hex))];
 }
 /**
  * A set's key ink, as the renderer marks a key word (world-layout keyOf): the set's own key or the accent, moved until it

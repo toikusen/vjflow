@@ -74,11 +74,14 @@ import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
+import { groundTones, mergeTones, type Tones } from '../measured-ink';
 import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
 const H = 1080;
+/** A glyph's ground is read this share of its em box wide (groundTones): the frame's sway and kick move the words a few px. */
+const SWAY_BOX = 1.1;
 /** Exits drawn over time (a glitch, a blade, falling dominoes, pixels, a shattering pane): given the gap to the next line. */
 const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter', 'fold-close']);
 /**
@@ -666,7 +669,9 @@ export class LyricVjEngine {
   /** Hides every lyric mesh but the carriers (decor) for one render; returns what puts them back. */
   private wordsAway(): () => void {
     const hid: THREE.Object3D[] = [];
-    this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !o.userData['decor']) { o.visible = false; hid.push(o); } });
+    // (the measured ink probe, style-gate-ink.mts --rings, may keep the rings a set lays under its letters as their ground)
+    const rings = !!(globalThis as { __vjInkRings?: boolean }).__vjInkRings;
+    this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !o.userData['decor'] && !(rings && o.userData['ring'])) { o.visible = false; hid.push(o); } });
     return () => hid.forEach((o) => (o.visible = true));
   }
   private shotLayers = new Map<string, ShotLayer>();
@@ -1018,6 +1023,8 @@ export class LyricVjEngine {
         firstVoice,
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
       };
+      // (a world line's inks are checked on the ground each glyph really stands on, world-layout measuredInks)
+      if (this.job.treatment.graphics) rt.groundTones = (times, lyric, boxes) => this.groundTones(times, lyric, boxes);
       if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });
       // a line its world erases (Q1 phase 3b, an approved event only): the erase is its way out, at the approved time
       const wipe = (style.world as { wipe?: { from: number; sec: number } } | undefined)?.wipe;
@@ -1141,6 +1148,9 @@ export class LyricVjEngine {
       const fit = fitToFrame(layer, kick);
       if (style.budget) this.rests.set(cue.id, restSize(layer, undefined, fit));
       this.textRoot.add(fit);
+      // (a world line settles its inks on what each glyph stands on as the frame shows it: world-layout measureInks)
+      const measure = (l: CueLayer, f: THREE.Group) => { if (!l.measureInks || !rt.groundTones) return; f.updateMatrixWorld(true); l.measureInks(rt.groundTones); };
+      measure(layer, fit);
       const rig = rt.style.textCam?.rig;
       if (rig && isTrack(rig.kind)) {
         // the backdrop's copy of the camera calls at the same stops
@@ -1154,6 +1164,7 @@ export class LyricVjEngine {
       if (twin) {
         const f = fitToFrame(twin, kick);
         this.textRoot.add(f);
+        measure(twin, f);
         entry.twin = { layer: twin, fit: f, text: keyOn };
       }
       // rebuilt light type in a dark halo (same timing and layout): a line found over a picture once the song is laid out
@@ -1168,6 +1179,7 @@ export class LyricVjEngine {
         const k = kids.indexOf(entry.fit!);
         entry.fit!.removeFromParent();
         this.textRoot.add(f);
+        measure(l, f);
         kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
         Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, mixed: true });
       };
@@ -1406,7 +1418,7 @@ export class LyricVjEngine {
         const requiredSec = Math.min(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), 0.95 * (rt.exitAt + rt.exitDur - rt.showFrom));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}), ...(layer.inkFixes?.length ? { inkFixes: layer.inkFixes } : {}) }; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };
@@ -2845,6 +2857,44 @@ export class LyricVjEngine {
     const b = this.backdropAt(t, box, true);
     return b && { mean: b.mean, mixed: b.mixed };
   }
+
+  /**
+   * The ground under each glyph box (frame px, y down) of a line laid at `lyric`, as the look draws it at each of `times`
+   * with room made for that line (measured-ink groundTones; the darkest and lightest over the times): what a world line's
+   * inks must read on (runtime CueRuntime groundTones). Undefined without a look.
+   */
+  groundTones(times: number[], lyric: Rect, boxes: (Rect | undefined)[]): Tones[] {
+    const some = boxes.filter((b): b is Rect => !!b);
+    if (!this.job.treatment.graphics || !some.length) return boxes.map(() => undefined);
+    this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
+    // (only the stretch the glyphs cover is read back; a line's twin, built in the other ink, asks the same: kept a while)
+    const m = Math.max(...some.map((b) => b.x1 - b.x0)) * (SWAY_BOX - 1);
+    const [x0, y0] = [Math.max(0, Math.floor(Math.min(...some.map((b) => b.x0)) - m)), Math.max(0, Math.floor(Math.min(...some.map((b) => b.y0)) - m))];
+    const [x1, y1] = [Math.min(W, Math.ceil(Math.max(...some.map((b) => b.x1)) + m)), Math.min(H, Math.ceil(Math.max(...some.map((b) => b.y1)) + m))];
+    if (x1 <= x0 || y1 <= y0) return boxes.map(() => undefined);
+    const reads = times.map((t) => {
+      const key = [t, lyric.x0, lyric.y0, lyric.x1, lyric.y1, x0, y0, x1, y1].map((v) => v.toFixed(2)).join(',');
+      let d = this.toneReads.get(key);
+      if (!d) {
+        const shot = this.shotAt(t).shot;
+        const pf = globalThis as { __vjProbe?: boolean };
+        pf.__vjProbe = true;
+        try {
+          this.probe!.clearRect(0, 0, W, H);
+          drawLook(this.probe!, this.job.treatment.graphics!, sectionClock(this.job.treatment.graphics!.sections, t), { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => avoidAll(ls, lyric));
+        } finally {
+          pf.__vjProbe = false;
+        }
+        d = this.probe!.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+        if (this.toneReads.size > 24) this.toneReads.delete(this.toneReads.keys().next().value!);
+        this.toneReads.set(key, d);
+      }
+      // (a hair past the em box: the frame's sway and kick carry the words a few px off where they were measured)
+      return boxes.map((b) => (b ? groundTones(d!, x1 - x0, { x0: b.x0 - x0, y0: b.y0 - y0, x1: b.x1 - x0, y1: b.y1 - y0 }, SWAY_BOX) : undefined));
+    });
+    return boxes.map((_, i) => mergeTones(reads.map((r) => r[i])));
+  }
+  private toneReads = new Map<string, Uint8ClampedArray>();
 
   /**
    * Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. `asPlayed`

@@ -13,6 +13,7 @@ import { isSungChar, mainIndexes, wordIndex } from '../sung-times';
 import { barsAt, barSplit, beatNear, clamp, crackPath, easeOut, fallAt, feelOf, flutterAt, hashOf, hitSide, Jolt, jolt, joltAt, mix, RAD, rng, strikeAngle, SWING, swingPoses, waveAt } from './signature-motion';
 import { Box, pageUnder, placedBox, Placement, placeOnPage, quietBands, rowPlaces, rowsOnPage } from './signature-place';
 import { pageCutBefore } from './cover';
+import { groundTones, INK_AIM, leastOn, readsOn, type Tones } from '../measured-ink';
 
 export type Ctx = CanvasRenderingContext2D;
 const [W, H] = [1920, 1080];
@@ -94,6 +95,27 @@ export function inkFor(inks: Inks, ground: Ground, min = READS): Inks {
   let ghost = mixHex(ink, ground.mean, 0.5);
   if (contrast(ghost, ground.mean) < 2.5) ghost = mixHex(ink, ground.mean, 0.28);
   const press = contrast(inks.accent, ground.mean) >= 1.5 && inks.accent !== ink ? inks.accent : mixHex(ink, ground.mean, 0.4);
+  return { ...inks, ink, ghost, press, halo };
+}
+/**
+ * inkFor on the ground under each glyph (measured-ink groundTones): of the song's ink and paper, the one that reads best
+ * on the worst of them, moved toward black or white until it reads on all where neither does (the type's ink must read on
+ * every glyph's own ground; a region's mean let an answer line over a card's edge read under 4.5). Ghost and press inks
+ * are set against the worst ground.
+ */
+export function inkOnAll(inks: Inks, grounds: NonNullable<Tones>[], min = INK_AIM): Inks {
+  const least = (c: string) => leastOn(c, grounds);
+  const own = [inks.ink, inks.paper].sort((a, b) => least(b) - least(a))[0];
+  const worst = grounds.flatMap((g) => [g.lo, g.hi]).sort((a, b) => contrast(own, a) - contrast(own, b))[0];
+  const moved = least(own) < min;
+  let ink = moved ? toward(own, worst, min) : own;
+  if (moved && least(ink) < min) ink = ['#000000', '#ffffff'].sort((a, b) => least(b) - least(a))[0];
+  const mixed = grounds.some((g) => contrast(g.lo, g.hi) >= 3);
+  const halo = mixed || moved ? (lum(ink) > 0.35 ? 'rgba(14,12,18,0.85)' : 'rgba(255,250,240,0.9)') : undefined;
+  const ground = grounds.flatMap((g) => [g.lo, g.hi]).sort((a, b) => contrast(ink, a) - contrast(ink, b))[0];
+  let ghost = mixHex(ink, ground, 0.5);
+  if (contrast(ghost, ground) < 2.5) ghost = mixHex(ink, ground, 0.28);
+  const press = contrast(inks.accent, ground) >= 1.5 && inks.accent !== ink ? inks.accent : mixHex(ink, ground, 0.4);
   return { ...inks, ink, ghost, press, halo };
 }
 /** The song's inks under t: the kinetic cut's paper and ink, the colour script's accent, else the style anchor's palette. */
@@ -255,10 +277,12 @@ export function partsOf(text: string, times: number[], word: string): { main: { 
 export type GroundAt = (t: number, x0: number, y0: number, x1: number, y1: number) => Ground | undefined;
 
 /** A character a moment drew on the last frame composed (the measured ink probe): its em box in frame px, its opacity, and whether it is still unsung (its ghost tone, faint by design). */
-export interface SignatureGlyph { ch: string; x0: number; y0: number; x1: number; y1: number; a: number; ghost: boolean }
-/** Set while a frame is composed for the probe: every character drawn goes in. */
+export interface SignatureGlyph { ch: string; x0: number; y0: number; x1: number; y1: number; a: number; ghost: boolean; /** The moment it was drawn for. */ at?: unknown }
+/** Set while a frame is composed: every character drawn goes in. */
 let drawn: SignatureGlyph[] | undefined;
 let unsung = false;
+/** The moment being drawn (its characters are logged under it). */
+let drawing: unknown;
 
 export interface SignatureLayer {
   /** The time the engine renders the frame at t from: t, or the held time while a freeze stops the frame. */
@@ -312,7 +336,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     if (drawn && ch.trim()) {
       const m = c.getTransform();
       const [p, q] = [m.transformPoint({ x: a - size / 2, y: b - size / 2 }), m.transformPoint({ x: a + size / 2, y: b + size / 2 })];
-      drawn.push({ ch, x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y), a: c.globalAlpha, ghost: unsung });
+      drawn.push({ ch, x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y), a: c.globalAlpha, ghost: unsung, at: drawing });
     }
   };
   /** One sung character: ghost tone until its time, then full ink with a short stamp. */
@@ -791,6 +815,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   };
 
   const kit: Kit = { x, job, family, grain, song, glyph, stampIn, shadowed, alive, metric, exitOf, cueOf, nextStart, drawAsides, partsOf, inksAt, boardPaper, mixHex, canvas };
+  // (on a layered output the moments read the look behind them, not the cleared canvas: set per frame from compose)
+  const layeredKit = job.layer === 'text' || job.layer === 'words';
   const isRow = (m: SignatureMoment) => !isMore(m) && m.form === 'shape' && m.variant !== 'chain';
   const built = moments.map((m) => (isMore(m) ? buildMore(kit, m) : m.form === 'strike' ? buildStrike(m) : m.variant === 'chain' ? buildChain(m) : buildRow(m, m.variant as 'wave' | 'fall')));
   // on a story page every other form is moved and scaled as one onto the quiet paper round the picture and its
@@ -816,6 +842,27 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   // colour frame to frame; picked again only where the ground moved from under them (a camera's slide)
   const picked = new Map<Built, Inks>();
   let last: SignatureGlyph[] = [];
+  /** Where each moment's glyphs stand (frame px), learnt as it is drawn. */
+  const boxesOf = new Map<Built, SignatureGlyph[]>();
+  /** The ground under a glyph's box as the frame under the moment has it (the look behind it on a layered output). */
+  const glyphGround = (g: SignatureGlyph, t: number): NonNullable<Tones> | undefined => {
+    const [cx, cy, hw, hh] = [(g.x0 + g.x1) / 2, (g.y0 + g.y1) / 2, ((g.x1 - g.x0) * 0.7) / 2, ((g.y1 - g.y0) * 0.7) / 2];
+    const [x0, y0, x1, y1] = [Math.max(0, Math.floor(cx - hw)), Math.max(0, Math.floor(cy - hh)), Math.min(W, Math.ceil(cx + hw)), Math.min(H, Math.ceil(cy + hh))];
+    if (x1 <= x0 || y1 <= y0) return undefined;
+    if (layered) { const m = behind0?.(t, x0, y0, x1, y1); return m ? { lo: m.mean, hi: m.mean } : undefined; }
+    return groundTones(x.getImageData(x0, y0, x1 - x0, y1 - y0).data, x1 - x0, { x0: 0, y0: 0, x1: x1 - x0, y1: y1 - y0 }, 1);
+  };
+  let behind0: GroundAt | undefined;
+  /** The moment's inks held while they read on every glyph's ground; else picked again on all of them (inkOnAll). */
+  const inksOnGlyphs = (b: Built, grounds: Tones[], regional: () => Inks) => {
+    const gs = grounds.filter((g): g is NonNullable<Tones> => !!g);
+    if (!gs.length) return regional();
+    const held = picked.get(b);
+    if (held && readsOn(held.ink, gs, READS)) return held;
+    const on = inkOnAll(inksAt(job, b.from), gs);
+    picked.set(b, on);
+    return on;
+  };
   /** The lyric layer rendered on its own (transparent): nothing under the moments on this canvas. */
   const layered = job.layer === 'text' || job.layer === 'words';
   const inksOn = (b: Built, ground: Ground) => {
@@ -828,8 +875,11 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   return {
     stageAt: (t) => built.map((b) => b.stageAt?.(t)).find((v) => v !== undefined) ?? t,
     compose(stage, t, text = true, behind) {
-      drawn = (globalThis as { __vjInkProbe?: boolean }).__vjInkProbe ? [] : undefined;
-      last = drawn ?? [];
+      behind0 = behind;
+      kit.under = layeredKit && behind ? behind : undefined;
+      // (every character drawn is logged: where a moment's glyphs stand decides its inks, and the probe reads them)
+      drawn = [];
+      last = drawn;
       const j = joltAt(jolts, t);
       x.setTransform(1, 0, 0, 1, 0, 0);
       // (a lyric layer on its own keeps its alpha: nothing under the frame; else the paper's own colour, if a jolt pulls
@@ -850,16 +900,33 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
         // (a layered output's canvas is cleared under the moment: its inks read the look behind, as the opaque frame's do)
         // (picked once there: the look is drawn again for it, not read off this frame)
-        const on = layered && behind ? picked.get(b) ?? inksOn(b, behind(t, ...region) ?? groundUnder(x, ...region)) : inksOn(b, groundUnder(x, ...region));
-        if (!p) {
+        const regional = () => (layered && behind ? picked.get(b) ?? inksOn(b, behind(t, ...region) ?? groundUnder(x, ...region)) : inksOn(b, groundUnder(x, ...region)));
+        const drawB = (on: Inks) => {
+          drawing = b;
+          if (!p) return b.draw(t, on);
+          x.save();
+          x.translate(p.tx, p.ty);
+          x.scale(p.s, p.s);
           b.draw(t, on);
-          continue;
+          x.restore();
+        };
+        // the inks read on the ground under each of the moment's glyphs, not on its region's mean (an echo's answer line
+        // over a card's edge read 4.64 at best, 2026-11-10): where its glyphs stand is learnt from a dry run of this
+        // frame (its unsung ghosts give the rest), the frame put back after it, once
+        if (!boxesOf.has(b)) {
+          const mark = drawn!.length;
+          const snap = x.getImageData(0, 0, W, H);
+          drawB(regional());
+          const got = drawn!.slice(mark);
+          x.putImageData(snap, 0, 0);
+          drawn!.length = mark;
+          if (got.length) boxesOf.set(b, got);
         }
-        x.save();
-        x.translate(p.tx, p.ty);
-        x.scale(p.s, p.s);
-        b.draw(t, on);
-        x.restore();
+        const boxes = boxesOf.get(b);
+        drawB(boxes ? inksOnGlyphs(b, boxes.map((g) => glyphGround(g, t)), regional) : regional());
+        // (the fullest set of places seen so far is kept)
+        const now = drawn!.filter((g) => g.at === b);
+        if (now.length > (boxes?.length ?? 0)) boxesOf.set(b, now);
       }
       return out;
     },

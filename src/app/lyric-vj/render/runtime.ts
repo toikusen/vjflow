@@ -56,6 +56,12 @@ export interface CueRuntime {
    * it is not the palette's background: a world's hand-painted ground under a line set on the world's paper. The
    * line's key ink reads on each as well. */
   under?: string[];
+  /**
+   * The ground each glyph box stands on as the frame draws it (measured-ink groundTones, read off the look drawn at each
+   * of `times` with the line at `lyric`, frame px y down; the darkest and lightest of the times kept): what a world line's
+   * inks are checked on before it is drawn (world-layout measuredInks). Undefined boxes are not read.
+   */
+  groundTones?: (times: number[], lyric: { x0: number; y0: number; x1: number; y1: number }, boxes: ({ x0: number; y0: number; x1: number; y1: number } | undefined)[]) => ({ lo: string; hi: string } | undefined)[];
 }
 
 /** Per-frame effects templates can request from the post stack. */
@@ -68,7 +74,7 @@ export interface FrameFx {
 }
 
 /** A glyph as drawn on a frame (CueLayer glyphBoxes): its index in the line, em box (frame px, y down), opacity, and whether it is coming or going. */
-export interface GlyphBox { i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean }
+export interface GlyphBox { i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean; /** The ink it was drawn in (before its surface's own texture), when known. */ ink?: string }
 
 export interface CueLayer {
   group: THREE.Group;
@@ -88,6 +94,10 @@ export interface CueLayer {
    * exit is running (the measured ink probe, style-gate-ink.mts, reads each glyph on what is under it on that frame).
    */
   glyphBoxes?(): GlyphBox[];
+  /** The inks the line took on the ground it was measured on (world-layout measuredInks): per pose, base or hold, from → to. */
+  /** Settles the line's inks on the ground each glyph stands on as the frame shows it (world-layout): called once it is fitted. */
+  measureInks?(groundTones: NonNullable<CueRuntime['groundTones']>): void;
+  inkFixes?: { pose: number; kind: 'base' | 'hold'; from: string; to: string; glyphs: number; short?: number }[];
   /** A Q3 scale composition as drawn (world-layout.ts): its event, planned and drawn ratio, whether it fell short. */
   scale?: { eventId: string; planned: number; drawn: number; kind: string; unrealized: boolean; carrier: string; /** px y down: the planned ink box, the declared safe area, the drawn glyphs' em boxes. */ inkBox?: { x0: number; y0: number; x1: number; y1: number }; safe?: { x0: number; y0: number; x1: number; y1: number }; glyphBox?: { x0: number; y0: number; x1: number; y1: number }; inSafe?: boolean; why?: string };
 }

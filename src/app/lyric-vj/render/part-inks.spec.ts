@@ -28,6 +28,21 @@ describe('hold inks per part', () => {
     expect(card.palette.some((slots) => inkChecks(one, slots, slots.plateInk).keyOk && !inkChecks(spec, slots, slots.plateInk).keyOk)).toBe(true);
   });
 
+  it('y2k/strips: the foil and clip colours under the glyphs (tones) count; no hold ink passes that misses one', () => {
+    const spec = SET_SPECS['y2k/strips'];
+    const y2k = STYLE_WORLDS.find((w) => w.id === 'y2k')!;
+    for (const slots of y2k.palette) {
+      const grounds = partGrounds(spec, slots);
+      for (const t of spec.tones!) expect(grounds).toContain(t);
+      const c = inkChecks(spec, slots, slots.plateInk);
+      if (c.keyOk) for (const g of grounds) expect(contrast(c.key, g)).toBeGreaterThanOrEqual(READ_MIN);
+      if (c.settle) for (const g of grounds) expect(contrast(c.settle, g)).toBeGreaterThanOrEqual(READ_MIN);
+    }
+    // a slot name in tones is the scheme's own colour (cel80s/ending's sky middle is its ink2)
+    const cel = STYLE_WORLDS.find((w) => w.id === 'cel80s')!;
+    expect(partGrounds(SET_SPECS['cel80s/ending-l'], cel.palette[0])).toContain(cel.palette[0].ink2);
+  });
+
   it('every row ink reads on the carrier its row stands on, in every scheme of its world (data: rowOn, on)', () => {
     for (const w of STYLE_WORLDS) for (const [id, spec] of Object.entries(SET_SPECS)) {
       if (!spec.rowInk || !id.startsWith(`${w.id}/`)) continue;

@@ -18,6 +18,8 @@ const [W, H] = [1920, 1080];
 /** What signature.ts lends the forms here: its canvas, face, paper and the engine's windows for the moment's lines. */
 export interface Kit {
   x: Ctx;
+  /** On a layered output (the canvas under the moments cleared): the look behind a frame region at t, as the frame has it. */
+  under?: (t: number, x0: number, y0: number, x1: number, y1: number) => { mean: string; mixed: boolean } | undefined;
   job: RenderJob;
   family: string;
   grain: number;
@@ -753,12 +755,16 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
   const smokeLayer = kind === 'smoke' ? k.canvas(W, H) : undefined;
   // the ground the plume climbs over, read where it climbs: one tone over a plain ground; over a ground that is both dark
   // and light (a band slid in behind), a pale body for the dark part and a dark core for the light, so it reads on both
-  const toneOver = (cx: number, base: number, top: number): { body: string; core: string } => {
+  const toneOver = (cx: number, base: number, top: number, t: number): { body: string; core: string } => {
     const m = k.x.getTransform();
     const a = m.transformPoint({ x: Math.max(0, cx - 160), y: Math.max(0, base - top) });
     const b = m.transformPoint({ x: Math.min(W, cx + 160), y: Math.max(1, base) });
     const [x0, y0] = [Math.max(0, Math.round(Math.min(a.x, b.x))), Math.max(0, Math.round(Math.min(a.y, b.y)))];
     const [w, h] = [Math.max(1, Math.round(Math.abs(b.x - a.x))), Math.max(1, Math.round(Math.abs(b.y - a.y)))];
+    // (a layered output's canvas is cleared under the moment: the plume's tone reads the look behind it, never the
+    // transparent pixels, 2026-11-10 phase 4d round 6)
+    const behind = k.under?.(t, x0, y0, x0 + w, y0 + h);
+    if (behind) { const one = smokeTone(behind.mean); return { body: one, core: one }; }
     const d = k.x.getImageData(x0, y0, w, h).data;
     const sums = { all: [0, 0, 0, 0], dark: [0, 0, 0, 0], light: [0, 0, 0, 0] };
     for (let i = 0; i < d.length; i += 4 * 13) {
@@ -851,7 +857,7 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
           if (up <= 0) return;
           const top = Math.min(base - 40, 140 + 420 * up);
           const appear = clamp(up * 2.5);
-          const tone = toneOver(pl.x, base, top);
+          const tone = toneOver(pl.x, base, top, t);
           // each layer one stroke along the whole strand (joints between short strokes bead), faded up its height
           const fadeUp = (peak: number, ink: string) => {
             const g = s.createLinearGradient(0, base, 0, base - top);

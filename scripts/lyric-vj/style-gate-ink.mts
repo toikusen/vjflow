@@ -18,7 +18,9 @@
 // character not yet sung (`unsung`:
 // its ghost tone, faint by design), and one with under 40 ink pixels (`small`). A moment outside the line's readable
 // time is not taken.
-//   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-ink.mts --out out/research/ink/before [--songs nun,snow] [--shots] [--font Huninn] [world ...]
+//   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-ink.mts --out out/research/ink/before [--songs nun,snow] [--shots] [--font Huninn] [--sample 20] [world ...]
+// --sample N: every hold (at its middle, and after it when its ink stays) and every signature line, and the middle of every
+// k-th line in the song's order (k = ⌈lines / N⌉) only: a stratified sample, the same on both sides of a change.
 // (no worlds named: all 45). Writes <out>/<first world…>.json; exits non-zero on any failing glyph.
 import { execSync } from 'node:child_process';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -34,7 +36,7 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './gate-ink-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/ink/gate' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, shots: { type: 'boolean', default: false }, font: { type: 'string' } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string', default: 'out/research/ink/gate' }, songs: { type: 'string', default: 'nun,snow,tsuzuki,choroin,tenmon' }, seed: { type: 'string', default: '0' }, shots: { type: 'boolean', default: false }, font: { type: 'string' }, sample: { type: 'string' } } });
 if (!positionals.length) positionals.push(...FREE_STYLES.map((s) => s.id));
 /** Hold moments, as shares of the hold's own time, and the margins before and after it, s. */
 export const HOLD = { before: 0.15, at: [0.25, 0.5, 0.75], after: 0.15 };
@@ -92,7 +94,14 @@ for (const id of positionals) {
       const b = sig ? undefined : beats.get(c.id);
       const sec = b?.sec ?? 0.5;
       const hold: [number, string][] = b ? [[b.at - HOLD.before, `${b.kind}:before`], ...HOLD.at.map((q): [number, string] => [b.at + sec * q, `${b.kind}:${q * 100}%`]), ...(b.stays ? [[b.at + sec + HOLD.after, `${b.kind}:after`] as [number, string]] : [])] : [];
-      const times = [...base, ...hold].filter(([t]) => t >= c.from && t <= c.to);
+      // (--sample N: every hold and signature moment, the plain reading moments of every k-th line of the song only, k so
+      // that about N lines are read: the same lines on both sides of a change, picked from the song's own line order)
+      const order = (song.cues as { id: string }[]).findIndex((x) => x.id === c.id);
+      const k = a.sample ? Math.max(1, Math.ceil(song.cues.length / Number(a.sample))) : 1;
+      const keepBase = sig || order % k === 0;
+      // (sampled: a line's middle only, and a hold at its middle and, when its ink stays, after it)
+      const sampled = (xs: [number, string][]) => (a.sample ? xs.filter(([, at]) => at === 'base' || /:(50%|after)$/.test(at)) : xs);
+      const times = sampled([...(keepBase ? base : []), ...hold]).filter(([t]) => t >= c.from && t <= c.to);
       const chars = [...c.text.replace(/[\s　]+/g, ' ').trim()];
       for (const [t, at] of times) {
         const reads = await moment(page, t, [sig ? 'signature' : c.id]);
@@ -128,7 +137,7 @@ for (const id of positionals) {
 await browser.close();
 server.close();
 const worlds = Object.fromEntries(Object.entries(per).map(([k, v]) => [k, { moments: v.moments, glyphs: v.glyphs, fails: v.fails, failMoments: v.failMoments, lines: [...v.lines], skip: v.skip, worst: +v.worst.toFixed(2) }]));
-const res = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', seed: Number(a.seed), min: INK_MIN, worlds, fails, signature, fixes };
+const res = { commit: execSync('git rev-parse --short HEAD').toString().trim(), sample: a.sample ? Number(a.sample) : null, scheduled: process.env['VJ_WORLD_EVENTS'] === '1', seed: Number(a.seed), min: INK_MIN, worlds, fails, signature, fixes };
 writeFileSync(join(out, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(res, null, 1));
 console.log(JSON.stringify(Object.fromEntries(Object.entries(worlds).map(([k, v]) => [k, `${v.fails}/${v.glyphs} in ${v.failMoments} moments, worst ${v.worst}`]))));
 process.exitCode = fails.length ? 1 : 0;

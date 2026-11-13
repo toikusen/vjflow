@@ -79,14 +79,79 @@
   - `small`：墨色像素少於 40。
   - 這些都是「進出場或刻意淡化」的畫格，不是讀字的時刻。
 
-## 2. 數字
+## 2. 數字（未完成）
 
-（待補：改前／改後，每個世界的不合格字數）
+### 2.1 怎麼取樣
+
+全密度的探針太慢：機器限制一次只跑一個工作，而且要 `nice -n 19`。在這個條件下，一個世界要 25 分鐘以上，跑完 45 個世界的改前加改後要一天以上。所以改成分層取樣（`--sample 10`），改前和改後用同一套規則：
+
+- 每個 hold：取中點；墨色會留下的 hold，再取結束之後一格。
+- 每一行 signature：取中點。
+- 一般行：依歌曲裡的行序，每 k 行取一行的中點（k = ⌈行數 / 10⌉）。
+- 只跑 choroin 一首歌。
+
+改前有 32 個世界是全密度跑的，用 `compare.py` 依同一套規則抽出同樣的時刻。另外 12 個世界是直接用取樣跑的。
+
+### 2.2 改前（44 個世界，choroin，取樣）
+
+- 有不合格字的世界：28 個，共 1548 個不合格字次。
+- 依不合格字次排序：dark-glitch 355、neon-stage 217、embroidery 149、citypop 137、idol-live 80、isometric 76、spy 70、gothic-lolita 58、riso 57、led-board 56、silk 43、graffiti 42、popart 42、y2k 37、cel80s 24、paper-lantern 21、ink-wash 17、chalkboard 15、file 10、aizome 8、card 8、silent-film 8、silk-cold 8、cyanotype 5、blueprint 2、crayon 1、stained-glass 1、terminal 1。
+- 沒有資料：watercolor 兩次都卡住，被看門狗停掉。
+
+### 2.3 改後（只跑完兩個世界）
+
+| 世界 | 改前 | 改後 | 狀態 |
+|---|---|---|---|
+| y2k | 37 | **0** | 完成 |
+| dark-glitch | 355 | 355 | 完成。機制沒有改到它（見限制） |
+| cel80s | — | — | 原本因 stack overflow 中斷，f049025 修好；重跑時又被看門狗在 45 分鐘停掉 |
+| neon-stage | — | — | 被看門狗在 45 分鐘停掉 |
+| 其餘 40 個世界 | — | — | 沒跑 |
+
+小量驗證（有時間壓力前跑的 t-系列，choroin，非取樣）：
+
+- embroidery 470 → 0；claymation 3142（改前全密度）→ 0。
+- psychedelic、isometric 0。
+- idol-live 1（beat-punch 的邊緣格 3.79）。
+
+### 2.4 指令
+
+```
+seq.sh <worktree> out/research/ink/{before,after}
+SONGS=choroin python3 compare.py before after summary-choroin.json
+```
+
+`seq.sh` 一次跑一個世界，`nice -n 19`，參數是 `--sample 10 --songs choroin`。
 
 ## 3. 三個指名的例子
 
-（待補）
+畫格用 `ink-frames.mts` 抓，存在 `out/research/ink/frames/{before,after}`。
+
+- **cel80s/ending-l，tsuzuki c010，Huninn。**
+  - 這一行低於字級下限，改畫成 stair，所以 hold 檢查根本沒有經過它。
+  - 改前：米白字壓在淡紫天空上，畫面看得到，但探針讀不到這種行。
+  - 改後：鋪上深藍底帶，126.00 / 127.40 / 130.00 秒最差的字分別是 13.19 / 13.78 / 14.16。
+- **y2k/strips，choroin c006，roll，12.91 秒。**
+  - 改後的 y2k 取樣是 0 不合格。
+  - 灰色 roll 被拿掉；字下面鋪了一條淺色底帶，因為最下面的「！」掉出箔條外。
+  - 影片：第 1 段 0:10–0:15。
+- **y2k tenmon c023 beat-punch（4.54，邊界）。** 沒有單獨重量。tenmon 沒有在取樣範圍內。
+- **signature echo（scrapbook snow c043，167.44 秒）。** 逐字中位數 4.64，改前 t8 已經 ≥ 4.5，改後沒有重量。
 
 ## 4. 限制
 
-（待補）
+- **繪製端的量測是估的，閘門量的才是畫面。**
+  - 繪製端在建行時重畫背景來量。實際畫面還有很多它沒有算到的東西：行的漂移、畫面的晃動、鏡頭推拉、別的行讓位。
+  - 所以繪製端多留了邊：每邊 10 px，`INK_AIM` 4.8，材質字再加 0.2。
+  - 最後的保證是閘門，不是繪製端。
+- **色帶是補救，不是設計。** 色帶出現的地方，通常是版型本身有問題：一行字太長、穿過自己的 `clear` 區，例如 y2k 的光碟；或一長句橫跨兩種底色。正確的做法是版型讓開。這次沒有改版型。
+- **環的分類**用前三個字的貼圖判斷，門檻是覆蓋 97 %。
+- **材質字的畫面墨色**是用貼圖模擬 GPU 縮小推算的，沒有讀真正的畫面。
+- **計畫端**只宣告了量測找到、而且頁面固定會畫的兩組顏色（y2k/strips、cel80s/ending 系列）。光碟、雲邊、成員環這類東西，計畫端不知道；繪製端拿掉 hold 墨色時，計畫裡的 hold 仍然在（動作保留，只是不換色）。
+- **閘門的時間**：沒有跑完。改前 44 個世界、改後 2 個世界，都只有 choroin、取樣。既有閘門規則 off/on、指紋、`ng test` 也都沒跑。
+- **建行變慢**：`measureInks` 讓整首、非 live 的 render 初始化變得很慢。y2k 改後的 clip 用 `render.mts` 一般模式跑，超過 300 秒等待逾時，所以改後那一側改用 `--live`。這是產品端的效能風險。
+- **dark-glitch 等世界沒有改善**：改後的讀數和改前一樣。推論：畫面在合成之後還有一層調暗、閃爍（`carrier-settle`、`flicker`），繪製端量的背景不包含這一層。
+- **閘門的讀數**：
+  - 字的讀數 = 3 × 3 格裡最差那一格的中位數。
+  - 比一格的一半還細的線（例如雲邊）壓過筆畫，不一定會被判定不合格。
+  - 低於 0.35 不透明度的淡入淡出畫格不讀。

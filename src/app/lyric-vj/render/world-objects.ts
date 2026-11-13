@@ -73,6 +73,9 @@ function filigree(c: Ctx, x: number, y: number, dx: number, dy: number, size: nu
 
 
 /** Tape torn off a thermal printer: thin paper curling at its ends, lit only by whatever is near. */
+/** How far in from each end the tape's lamp falls off, and from each edge its roll shades it, px: inside the pad round the words. */
+const TAPE_FALLOFF = 64;
+const TAPE_ROLL = 36;
 function tape(c: Ctx, w: number, h: number, s: Slots, seed: number) {
   const n = 24;
   const [left, right] = [tornLine(n, seed, 15), tornLine(n, seed + 3, 15)];
@@ -84,17 +87,21 @@ function tape(c: Ctx, w: number, h: number, s: Slots, seed: number) {
   noShadow(c);
   c.save();
   c.clip();
+  // the lamp falls off toward the tape's ends, only over the margin round the words: the tape set the words on paper
+  // darkened half under their first glyph (dark-glitch choroin c078: 2.52:1 under 「の」, 2026-11-13 ablation; the final
+  // pass moved it by 0.07)
+  const [inL, inR] = [Math.min(0.35, TAPE_FALLOFF / w), Math.min(0.28, TAPE_FALLOFF / w)];
   const lit = c.createLinearGradient(0, 0, w, 0);
   lit.addColorStop(0, 'rgba(0,0,0,0.62)');
-  lit.addColorStop(0.35, 'rgba(0,0,0,0.05)');
-  lit.addColorStop(0.72, 'rgba(0,0,0,0)');
+  lit.addColorStop(inL, 'rgba(0,0,0,0.05)');
+  lit.addColorStop(1 - inR, 'rgba(0,0,0,0)');
   lit.addColorStop(1, 'rgba(0,0,0,0.5)');
   c.fillStyle = lit;
   c.fillRect(0, 0, w, h);
   const roll = c.createLinearGradient(0, 0, 0, h);
   roll.addColorStop(0, 'rgba(0,0,0,0.34)');
-  roll.addColorStop(0.16, 'rgba(0,0,0,0)');
-  roll.addColorStop(0.86, 'rgba(0,0,0,0)');
+  roll.addColorStop(Math.min(0.16, TAPE_ROLL / h), 'rgba(0,0,0,0)');
+  roll.addColorStop(1 - Math.min(0.14, TAPE_ROLL / h), 'rgba(0,0,0,0)');
   roll.addColorStop(1, 'rgba(0,0,0,0.26)');
   c.fillStyle = roll;
   c.fillRect(0, 0, w, h);

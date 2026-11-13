@@ -2531,6 +2531,8 @@ export class LyricVjEngine {
     if (this.job.layer === 'back') this.textRoot.visible = this.echoRoot.visible = false;
     const back = this.carriersOnly ? this.wordsAway() : undefined;
     this.pageGlyphCheck();
+    // (QA ablation, the ink gate: final-pass uniforms held at their resting value by name, __vjFinalOff)
+    for (const k of (globalThis as { __vjFinalOff?: string[] }).__vjFinalOff ?? []) if (this.finalPass.uniforms[k]) this.finalPass.uniforms[k].value = ({ uFlicker: 1, uSweep: -1, uShockR: -1 } as Record<string, number>)[k] ?? 0;
     this.composer.render();
     back?.();
   }

@@ -14,7 +14,7 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './gate-ink-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, world: { type: 'string' }, song: { type: 'string' }, font: { type: 'string' }, seed: { type: 'string', default: '0' } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, world: { type: 'string' }, song: { type: 'string' }, font: { type: 'string' }, seed: { type: 'string', default: '0' }, init: { type: 'string' }, tag: { type: 'string', default: '' } } });
 const out = resolve(a.out!);
 const work = join(out, 'work');
 mkdirSync(work, { recursive: true });
@@ -40,6 +40,8 @@ writeFileSync(file, JSON.stringify({ ...job, live: true }));
 const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
 await page.addInitScript({ path: join(work, 'gate-ink-page.js') });
 await page.addInitScript('window.__vjInkRings = true');
+// (--init: a QA switch set before the page runs, an ablation: window.__vjFinalOff = ['uVignette'])
+if (a.init) await page.addInitScript(a.init);
 await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => {
   const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? '');
   return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort();
@@ -52,12 +54,12 @@ for (const p of positionals) {
   const text = [...((song.cues as { id: string; text: string }[]).find((c) => c.id === cue)?.text ?? '').replace(/[\s　]+/g, ' ').trim()];
   const reads = (await page.evaluate(`window.inkPage.moment(${t}, ${JSON.stringify([cue])})`)) as Read[];
   const url = (await page.evaluate(`window.inkPage.still(${t})`)) as string;
-  writeFileSync(join(out, `${a.world}-${a.song}-${cue}-${Number(t).toFixed(2)}.jpg`), Buffer.from(url.split(',')[1], 'base64'));
+  writeFileSync(join(out, `${a.world}-${a.song}-${cue}-${Number(t).toFixed(2)}${a.tag}.jpg`), Buffer.from(url.split(',')[1], 'base64'));
   const glyphs = reads.map((r) => ({ i: r.i, ch: text[r.i] ?? '', ...(r.skip ? { skip: r.skip } : { low: r.r!.low, median: r.r!.median, ink: r.r!.ink, ground: r.r!.ground }) }));
   const read = glyphs.filter((g) => 'low' in g) as { low: number }[];
   rows.push({ cue, t: Number(t), least: read.length ? Math.min(...read.map((g) => g.low)) : null, glyphs });
   console.log(cue, t, 'least', read.length ? Math.min(...read.map((g) => g.low)) : '-');
 }
-writeFileSync(join(out, `${a.world}-${a.song}.json`), JSON.stringify(rows, null, 1));
+writeFileSync(join(out, `${a.world}-${a.song}${a.tag}.json`), JSON.stringify(rows, null, 1));
 await browser.close();
 server.close();

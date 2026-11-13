@@ -74,8 +74,7 @@ export interface SetSpec {
   /**
    * Colours the set's own page lays under its words that no slot names (y2k/strips' foil runs five stops down each strip
    * and its butterfly clip's pink wings sit under the first glyph; cel80s/ending's dusk sky under its split part): every
-   * ink a hold draws over the words reads on each (hold-room partGrounds). The renderer measures the real ground under each
-   * glyph as well (world-layout measureInks); this is what the plan can know of it.
+   * ink a hold draws over the words reads on each (hold-room partGrounds).
    */
   tones?: (keyof Slots | `#${string}`)[];
   /** What the words stand on when the set's own page draws it (a card, a banner, two banners): the key ink reads on each. */

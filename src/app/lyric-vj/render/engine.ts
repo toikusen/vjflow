@@ -74,14 +74,11 @@ import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
-import { groundTones, INK_AIM, mergeTones, patchTone, readsOn, type Tones } from '../measured-ink';
 import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
 const H = 1080;
-/** A glyph's ground is read this far past its em box each side, px (groundTones): a line's slow drift (up to 7 px each way), the frame's sway and kick move the words. */
-const DRIFT_PX = 10;
 /** Exits drawn over time (a glitch, a blade, falling dominoes, pixels, a shattering pane): given the gap to the next line. */
 const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter', 'fold-close']);
 /**
@@ -1045,7 +1042,6 @@ export class LyricVjEngine {
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
       };
       // (a world line's inks are checked on the ground each glyph really stands on, world-layout measuredInks)
-      if (this.job.treatment.graphics) rt.groundTones = (times, lyric, boxes) => this.groundTones(times, lyric, boxes);
       if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });
       // a line its world erases (Q1 phase 3b, an approved event only): the erase is its way out, at the approved time
       const wipe = (style.world as { wipe?: { from: number; sec: number } } | undefined)?.wipe;
@@ -1169,14 +1165,6 @@ export class LyricVjEngine {
       const fit = fitToFrame(layer, kick);
       if (style.budget) this.rests.set(cue.id, restSize(layer, undefined, fit));
       this.textRoot.add(fit);
-      // (a world line settles its inks on what each glyph stands on as the frame shows it: world-layout measureInks)
-      const measure = (l: CueLayer, f: THREE.Group) => {
-        if (!rt.groundTones) return;
-        f.updateMatrixWorld(true);
-        if (l.measureInks) l.measureInks(rt.groundTones);
-        else this.bandUnread(l, f, rt);
-      };
-      measure(layer, fit);
       const rig = rt.style.textCam?.rig;
       if (rig && isTrack(rig.kind)) {
         // the backdrop's copy of the camera calls at the same stops
@@ -1190,7 +1178,6 @@ export class LyricVjEngine {
       if (twin) {
         const f = fitToFrame(twin, kick);
         this.textRoot.add(f);
-        measure(twin, f);
         entry.twin = { layer: twin, fit: f, text: keyOn };
       }
       // rebuilt light type in a dark halo (same timing and layout): a line found over a picture once the song is laid out
@@ -1205,7 +1192,6 @@ export class LyricVjEngine {
         const k = kids.indexOf(entry.fit!);
         entry.fit!.removeFromParent();
         this.textRoot.add(f);
-        measure(l, f);
         kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
         Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, mixed: true });
       };
@@ -1444,7 +1430,7 @@ export class LyricVjEngine {
         const requiredSec = Math.min(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), 0.95 * (rt.exitAt + rt.exitDur - rt.showFrom));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}), ...(layer.inkFixes?.length ? { inkFixes: layer.inkFixes } : {}) }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {})}; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };
@@ -2883,104 +2869,6 @@ export class LyricVjEngine {
     const b = this.backdropAt(t, box, true);
     return b && { mean: b.mean, mixed: b.mixed };
   }
-
-  /**
-   * A line whose layout reads no ground of its own (a template that is not a world's set: a floored line's stair) is read
-   * here on the ground its glyphs stand on at rest (measured-ink, as world-layout measureInks reads a world's line): where
-   * its type does not read on some of them (cream over a lilac sky), each row's unread stretch stands on a crisp band of a
-   * ground it reads on, shown with the glyphs. The line keeps its ink.
-   */
-  private bandUnread(l: CueLayer, f: THREE.Group, rt: CueRuntime) {
-    if (!this.job.treatment.graphics) return;
-    const [from, to] = l.readable();
-    if (!(to > from)) return;
-    const mid = (from + to) / 2;
-    const seen = l.group.visible;
-    l.group.visible = true;
-    l.update(mid, { flash: 0, hit: 0, shake: 0 });
-    f.updateMatrixWorld(true);
-    const glyphs = meshGlyphs(l.group).filter((g) => g.a >= 0.5);
-    l.group.visible = seen;
-    if (!glyphs.length) return;
-    const box = glyphs.reduce((u, g) => ({ x0: Math.min(u.x0, g.x0), y0: Math.min(u.y0, g.y0), x1: Math.max(u.x1, g.x1), y1: Math.max(u.y1, g.y1) }), { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity });
-    const tones = this.groundTones([from + Math.min(0.5, (to - from) / 3), mid, to - Math.min(0.2, (to - from) / 3)], box, glyphs);
-    const short = glyphs.filter((g, i) => g.ink && !readsOn(g.ink, [tones[i]], INK_AIM));
-    if (!short.length) return;
-    // one band a row: glyphs whose centres lie within half a glyph of each other's height
-    const rows: GlyphBox[][] = [];
-    for (const g of [...short].sort((a, b) => a.y0 + a.y1 - b.y0 - b.y1)) {
-      const row = rows.find((r) => Math.abs((r[0].y0 + r[0].y1) / 2 - (g.y0 + g.y1) / 2) < (g.y1 - g.y0) / 2);
-      if (row) row.push(g);
-      else rows.push([g]);
-    }
-    const bands: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
-    for (const row of rows) {
-      const ink = row[0].ink!;
-      const tone = patchTone(ink, mergeTones(row.map((g) => tones[glyphs.indexOf(g)]))!, [rt.palette.background, rt.palette.text, rt.palette.accent]);
-      // (from the row's first unread glyph to its last, every glyph between them, a hair over their boxes)
-      const xs = glyphs.filter((g) => Math.abs((g.y0 + g.y1) / 2 - (row[0].y0 + row[0].y1) / 2) < (g.y1 - g.y0) / 2 && g.x1 >= Math.min(...row.map((r) => r.x0)) && g.x0 <= Math.max(...row.map((r) => r.x1)));
-      const pad = (row[0].y1 - row[0].y0) * 0.28;
-      const r = { x0: Math.min(...xs.map((g) => g.x0)) - pad, y0: Math.min(...xs.map((g) => g.y0)) - pad, x1: Math.max(...xs.map((g) => g.x1)) + pad, y1: Math.max(...xs.map((g) => g.y1)) + pad };
-      const band = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: tone, transparent: true, depthTest: false, depthWrite: false }));
-      band.renderOrder = -5;
-      Object.assign(band.userData, { decor: true, noVeil: true });
-      // (laid in the line's own group, at rest where the frame shows it)
-      const c = l.group.worldToLocal(new THREE.Vector3((r.x0 + r.x1) / 2 - W / 2, H / 2 - (r.y0 + r.y1) / 2, 0));
-      const s = new THREE.Vector3();
-      l.group.getWorldScale(s);
-      band.position.copy(c);
-      band.scale.set((r.x1 - r.x0) / Math.abs(s.x || 1), (r.y1 - r.y0) / Math.abs(s.y || 1), 1);
-      l.group.add(band);
-      bands.push(band);
-    }
-    // (shown with its glyphs: as see-through as the most opaque of them)
-    const update = l.update.bind(l);
-    l.update = (t, fx) => {
-      update(t, fx);
-      let a = 0;
-      l.group.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.visible && m.material.map && !m.userData['decor']) a = Math.max(a, m.material.opacity ?? 1); });
-      for (const b of bands) b.material.opacity = a;
-    };
-    l.inkFixes = [...(l.inkFixes ?? []), { pose: 0, kind: 'base', from: short[0].ink!, to: `band:${bands.map((b) => `#${b.material.color.getHexString()}`).join(',')}`, glyphs: short.length }];
-  }
-
-  /**
-   * The ground under each glyph box (frame px, y down) of a line laid at `lyric`, as the look draws it at each of `times`
-   * with room made for that line (measured-ink groundTones; the darkest and lightest over the times): what a world line's
-   * inks must read on (runtime CueRuntime groundTones). Undefined without a look.
-   */
-  groundTones(times: number[], lyric: Rect, boxes: (Rect | undefined)[]): Tones[] {
-    const some = boxes.filter((b): b is Rect => !!b);
-    if (!this.job.treatment.graphics || !some.length) return boxes.map(() => undefined);
-    this.probe ??= Object.assign(document.createElement('canvas'), { width: W, height: H }).getContext('2d', { willReadFrequently: true })!;
-    // (only the stretch the glyphs cover is read back; a line's twin, built in the other ink, asks the same: kept a while)
-    const m = DRIFT_PX;
-    const [x0, y0] = [Math.max(0, Math.floor(Math.min(...some.map((b) => b.x0)) - m)), Math.max(0, Math.floor(Math.min(...some.map((b) => b.y0)) - m))];
-    const [x1, y1] = [Math.min(W, Math.ceil(Math.max(...some.map((b) => b.x1)) + m)), Math.min(H, Math.ceil(Math.max(...some.map((b) => b.y1)) + m))];
-    if (x1 <= x0 || y1 <= y0) return boxes.map(() => undefined);
-    const reads = times.map((t) => {
-      const key = [t, lyric.x0, lyric.y0, lyric.x1, lyric.y1, x0, y0, x1, y1].map((v) => v.toFixed(2)).join(',');
-      let d = this.toneReads.get(key);
-      if (!d) {
-        const shot = this.shotAt(t).shot;
-        const pf = globalThis as { __vjProbe?: boolean };
-        pf.__vjProbe = true;
-        try {
-          this.probe!.clearRect(0, 0, W, H);
-          drawLook(this.probe!, this.job.treatment.graphics!, sectionClock(this.job.treatment.graphics!.sections, t), { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => avoidAll(ls, lyric));
-        } finally {
-          pf.__vjProbe = false;
-        }
-        d = this.probe!.getImageData(x0, y0, x1 - x0, y1 - y0).data;
-        if (this.toneReads.size > 24) this.toneReads.delete(this.toneReads.keys().next().value!);
-        this.toneReads.set(key, d);
-      }
-      // (past the em box: the line's drift, the frame's sway and kick carry the words a few px off where they were measured)
-      return boxes.map((b) => (b ? groundTones(d!, x1 - x0, { x0: b.x0 - x0 - DRIFT_PX, y0: b.y0 - y0 - DRIFT_PX, x1: b.x1 - x0 + DRIFT_PX, y1: b.y1 - y0 + DRIFT_PX }, 1) : undefined));
-    });
-    return boxes.map((_, i) => mergeTones(reads.map((r) => r[i])));
-  }
-  private toneReads = new Map<string, Uint8ClampedArray>();
 
   /**
    * Mean colour of the look behind `box` (frame px, centre origin; default the central lyric band) at t. `asPlayed`

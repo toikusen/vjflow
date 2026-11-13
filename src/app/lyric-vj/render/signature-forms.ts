@@ -755,6 +755,7 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
   const smokeLayer = kind === 'smoke' ? k.canvas(W, H) : undefined;
   // the ground the plume climbs over, read where it climbs: one tone over a plain ground; over a ground that is both dark
   // and light (a band slid in behind), a pale body for the dark part and a dark core for the light, so it reads on both
+  const behindTone = new Map<number, string>();
   const toneOver = (cx: number, base: number, top: number, t: number): { body: string; core: string } => {
     const m = k.x.getTransform();
     const a = m.transformPoint({ x: Math.max(0, cx - 160), y: Math.max(0, base - top) });
@@ -763,8 +764,13 @@ function buildRise(k: Kit, m: SignatureMoment): Built {
     const [w, h] = [Math.max(1, Math.round(Math.abs(b.x - a.x))), Math.max(1, Math.round(Math.abs(b.y - a.y)))];
     // (a layered output's canvas is cleared under the moment: the plume's tone reads the look behind it, never the
     // transparent pixels, 2026-11-10 phase 4d round 6)
-    const behind = k.under?.(t, x0, y0, x0 + w, y0 + h);
-    if (behind) { const one = smokeTone(behind.mean); return { body: one, core: one }; }
+    // (read once a plume, not each frame: the look is drawn again to read it)
+    if (k.under) {
+      const key = Math.round(cx);
+      let one = behindTone.get(key);
+      if (!one) { const m = k.under(t, x0, y0, x0 + w, y0 + h); one = m && smokeTone(m.mean); if (one) behindTone.set(key, one); }
+      if (one) return { body: one, core: one };
+    }
     const d = k.x.getImageData(x0, y0, w, h).data;
     const sums = { all: [0, 0, 0, 0], dark: [0, 0, 0, 0], light: [0, 0, 0, 0] };
     for (let i = 0; i < d.length; i += 4 * 13) {

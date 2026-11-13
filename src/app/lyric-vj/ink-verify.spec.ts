@@ -32,6 +32,20 @@ describe('ink gate v2 numbers', () => {
     expect(p.edge!.min).toBe(1);
   });
 
+  it('reads a ground finer than its grain as its mean: an opaque face over 2 px snow is not failed by one speckle', () => {
+    const [w, h] = [12, 12];
+    const id = idOf(1, 0);
+    const [r, g, b] = idRgb(id);
+    // orange face (luminance ≈ 0.25) over dark snow with one light speckle a 4 px period (luminance ≈ the orange's)
+    const off = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) off.set((i % w) % 4 === 0 && Math.floor(i / w) % 4 === 0 ? [140, 138, 143, 255] : [14, 10, 20, 255], i * 4);
+    const on = new Uint8Array(w * h * 4);
+    const mask = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) { on.set([220, 100, 40, 255], i * 4); mask.set([r, g, b, 255], i * 4); }
+    expect(reduceGlyphs(on, off, mask, w, [], 0)[0].status).toBe('fail');
+    expect(reduceGlyphs(on, off, mask, w)[0].status).toBe('pass');
+  });
+
   it('a glyph shown with no core pixel is unverified, not a pass', () => {
     const black = rows([[0, 0, 0, 255]]);
     expect(reduceGlyphs(black, black, rows([[0, 0, 0, 0]]), 1, [idOf(2, 3)])).toEqual([expect.objectContaining({ id: idOf(2, 3), n: 0, status: 'unverified:no-core' })]);

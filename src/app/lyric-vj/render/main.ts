@@ -31,6 +31,8 @@ await loadJobFonts(job);
 await ensureAdvances();
 // a transparent page for the lyric layer
 if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
+// (an opt-in prototype: lines come and go in steps, never see-through, world-layout stepA)
+(globalThis as { __vjCleanReveal?: boolean }).__vjCleanReveal = !!(job.treatment as { cleanReveal?: boolean }).cleanReveal;
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 (window as unknown as { vjEngine: LyricVjEngine }).vjEngine = engine;
 window.vjReady = engine.init();

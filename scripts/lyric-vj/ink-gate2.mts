@@ -23,7 +23,7 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './ink-gate2-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' } } });
+const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'clean-reveal': { type: 'boolean', default: false } } });
 const out = resolve('out/research/ink/gate2', a.run!);
 const work = join(out, 'work');
 mkdirSync(work, { recursive: true });
@@ -43,7 +43,7 @@ const summary: Record<string, unknown> = existsSync(join(out, 'summary.json')) ?
 type Beat = { kind: string; at: number; sec?: number; stays?: boolean };
 for (const spec of a.jobs!.split(',')) {
   const [world, name] = spec.split(':');
-  const file = join(out, `${world}__${name}__s${a.seed}__live__off.jsonl`);
+  const file = join(out, `${world}__${name}__s${a.seed}__live__off${a['clean-reveal'] ? '__clean' : ''}.jsonl`);
   const resume = existsSync(file) ? resumePoint(readFileSync(file, 'utf8').split('\n')) : { done: false as const, after: -1 };
   if (resume.done) { console.log(world, name, 'done already'); continue; }
   const started = Date.now();
@@ -51,7 +51,8 @@ for (const spec of a.jobs!.split(',')) {
   const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8'));
   const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === world)!, seed: Number(a.seed), meaning, ...(a.font ? { font: a.font } : {}) });
   const jobFile = join(work, `${world}-${name}.job.json`);
-  writeFileSync(jobFile, JSON.stringify({ ...job, live: true }));
+  // (--clean-reveal: the opt-in prototype, lines come and go in steps, world-layout stepA)
+  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, ...(a['clean-reveal'] ? { treatment: { ...job.treatment, cleanReveal: true } } : {}) }));
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
@@ -117,9 +118,9 @@ for (const spec of a.jobs!.split(',')) {
   await page.close();
   const done = { kind: 'done' as const, moments, glyphs, fails, unverified: stopped ? { ...unverified, [stopped]: frames.length - moments } : unverified, worst: Number.isFinite(worst) ? +worst.toFixed(3) : NaN, wallSec: Math.round((Date.now() - started) / 1000) };
   if (!stopped) row(done);
-  summary[`${world}:${name}`] = { ...done, complete: !stopped, loadSec: Math.round((ready - started) / 1000), sPerMoment: +((Date.now() - ready) / 1000 / Math.max(1, moments)).toFixed(2) };
+  summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`] = { ...done, complete: !stopped, loadSec: Math.round((ready - started) / 1000), sPerMoment: +((Date.now() - ready) / 1000 / Math.max(1, moments)).toFixed(2) };
   writeFileSync(join(out, 'summary.json'), JSON.stringify(summary, null, 1));
-  console.log(world, name, JSON.stringify(summary[`${world}:${name}`]));
+  console.log(world, name, JSON.stringify(summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`]));
 }
 await browser.close();
 server.close();

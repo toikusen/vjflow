@@ -265,6 +265,12 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
 const RING_UNDER = 0.97;
 /** The worlds whose ground cuts a room of its own material round a line (uncut wood, a crayon bubble, undyed cloth, the lit opening). */
 const ROOM_FOLLOWS = new Set(['woodcut', 'crayon', 'aizome', 'paper-lantern']);
+/**
+ * A glyph's or a block's opacity as drawn. With the opt-in clean reveal (treatment.cleanReveal, a prototype for the owner,
+ * 2026-11-13): never part-way, a glyph is there (at its fade's middle) or not, its move kept, so an entrance or an exit
+ * never shows the words at a lower contrast. Off: as given.
+ */
+const stepA = (a: number) => ((globalThis as { __vjCleanReveal?: boolean }).__vjCleanReveal ? (a >= 0.5 ? 1 : 0) : a);
 /** Builds a line in a world. `slot` stacks it among the lines of a shared shot. */
 function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const wl0 = rt.style.world!;
@@ -659,7 +665,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         body.rotation.z += cam.r;
       }
       shearBody(p.spec.shear);
-      const whole_a = blockPose.a ?? 1;
+      // (opt-in prototype, treatment.cleanReveal: a line comes and goes in steps, never see-through; owner to decide)
+      const whole_a = stepA(blockPose.a ?? 1);
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
       if (carrier) carrier.mesh.material.opacity = whole_a;
       // the line's own carrier settles or opens under the words (the words stay where they are)
@@ -740,9 +747,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         const tone = Math.min(1, (pose.tone ?? 1) * rank);
         if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {
-          m.material.opacity = (pose.a ?? 1) * whole_a * tone * left;
+          m.material.opacity = stepA(pose.a ?? 1) * whole_a * tone * left;
         } else {
-          m.material.opacity = (pose.a ?? 1) * whole_a * left;
+          m.material.opacity = stepA(pose.a ?? 1) * whole_a * left;
           if (baked) m.material.color.copy(dimBaked).lerp(lit, tone);
           else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }

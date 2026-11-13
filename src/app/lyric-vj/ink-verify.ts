@@ -30,12 +30,36 @@ export interface GlyphVerdict {
 }
 
 /**
+ * A ground's texture finer than this many px each way is read as its local mean (a box (2g+1)² wide): an opaque face
+ * hides the 2 px snow under it, and the eye reads the face against the snow's mean round it, not against one speckle
+ * (dark-glitch choroin c059: 1.05:1 on single static speckles under a solid orange face, 2026-11-13 evidence crops).
+ */
+export const GROUND_GRAIN = 2;
+
+/** An RGBA buffer's box mean over (2r+1)² px, each channel (alpha copied). */
+export function boxMean(src: ArrayLike<number>, w: number, h: number, r: number): Uint8ClampedArray {
+  const out = new Uint8ClampedArray(w * h * 4);
+  const sum = new Float64Array((w + 1) * (h + 1));
+  for (let c = 0; c < 3; c++) {
+    sum.fill(0);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) sum[(y + 1) * (w + 1) + x + 1] = src[(y * w + x) * 4 + c] + sum[y * (w + 1) + x + 1] + sum[(y + 1) * (w + 1) + x] - sum[y * (w + 1) + x];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const [x0, y0, x1, y1] = [Math.max(0, x - r), Math.max(0, y - r), Math.min(w, x + r + 1), Math.min(h, y + r + 1)];
+      out[(y * w + x) * 4 + c] = (sum[y1 * (w + 1) + x1] - sum[y0 * (w + 1) + x1] - sum[y1 * (w + 1) + x0] + sum[y0 * (w + 1) + x0]) / ((x1 - x0) * (y1 - y0));
+    }
+  }
+  for (let i = 3; i < out.length; i += 4) out[i] = src[i];
+  return out;
+}
+
+/**
  * Every glyph's verdict from three equal boxes read back from one moment (RGBA rows of width `w`): the final composite
- * with the words, the same without them (controls frozen), and the warped ID mask (rgb: the ID, a: 255 for a core pixel,
- * else mixed). `shown`: IDs drawn on this moment whatever the mask holds (an ID shown with no core pixel is
+ * with the words, the same without them (controls frozen; its texture finer than `grain` px read as its local mean,
+ * GROUND_GRAIN), and the warped ID mask (rgb: the ID, a: 255 for a core pixel, else mixed). `shown`: IDs drawn on this moment whatever the mask holds (an ID shown with no core pixel is
  * unverified:no-core, never a pass).
  */
-export function reduceGlyphs(on: ArrayLike<number>, off: ArrayLike<number>, mask: ArrayLike<number>, w: number, shown: number[] = []): GlyphVerdict[] {
+export function reduceGlyphs(on: ArrayLike<number>, off0: ArrayLike<number>, mask: ArrayLike<number>, w: number, shown: number[] = [], grain = GROUND_GRAIN): GlyphVerdict[] {
+  const off = grain > 0 ? boxMean(off0, w, Math.floor(off0.length / 4 / w), grain) : off0;
   const core = new Map<number, number[]>();
   const at = new Map<number, [number, number, number, number]>();
   const edge = new Map<number, { n: number; min: number }>();

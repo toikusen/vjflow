@@ -19,6 +19,9 @@ import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash,
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
 import { hitAt } from './screen-hit';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { FINAL_WARP_LIB, FINAL_WARP_UV } from './final-warp.glsl';
+import { binarize, flipRows, InkMask } from './ink-mask';
+import { idOf } from '../ink-verify';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -132,6 +135,15 @@ function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
   });
   return out;
 }
+/** The glyph meshes of a line whose layout gives none of its own: shown, textured, not what the words stand on (ink gate). */
+function meshesOf(group: THREE.Object3D): { i: number; mesh: THREE.Mesh }[] {
+  const out: { i: number; mesh: THREE.Mesh }[] = [];
+  group.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy']) out.push({ i: out.length, mesh: m }); });
+  return out;
+}
+/** A uniform's value copied, so a later frame's writes do not reach the copy. */
+const cloneValue = (v: unknown) => (v && typeof (v as { clone?: () => unknown }).clone === 'function' && !(v as THREE.Texture).isTexture ? (v as { clone: () => unknown }).clone() : v);
+
 /** The share of a glyph picture's plane that is the glyph (meshGlyphs). */
 const GLYPH_CORE = 0.62;
 
@@ -433,7 +445,7 @@ export interface CueMetric {
   entranceLost: boolean;
 }
 
-const FINAL_SHADER = {
+export const FINAL_SHADER = {
   uniforms: {
     tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uZoomHit: { value: 0 }, uTileHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uBeams: { value: 0 },
     // section moments (moments.ts)
@@ -453,42 +465,9 @@ const FINAL_SHADER = {
     uniform float uVignette, uVigBase, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     uniform float uBoil, uBoilSeed, uFlicker, uTooth, uPixel, uLift, uHasText, uGlitch, uFade, uScan; uniform sampler2D tText; uniform vec2 uWeave;
     uniform sampler2D tGlass, tCracks; uniform float uGlass;
-    const vec2 RES = vec2(1920.0, 1080.0);
-    const vec3 LUMA = vec3(0.299, 0.587, 0.114);
-    const vec2 PIX = vec2(320.0, 180.0);         // the pixel medium's grid (6 px cells)
-    const vec2 ORIGIN = vec2(0.5, 0.34);            // the horizon in the emotional style's compositions
-    float rnd(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime * 37.0) * 43758.5453); }
-    float h1(float x){ return fract(sin(x * 91.3458) * 47453.5453); }
-    float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    float vnoise(vec2 p){
-      vec2 i = floor(p), f = fract(p);
-      f = f * f * (3.0 - 2.0 * f);
-      return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
-    }
-    float bayer2(vec2 a){ a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
-    float bayer4(vec2 a){ return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+    ${FINAL_WARP_LIB}
     void main(){
-      vec2 uv = vUv + uWeave;                       // gate weave / stop-motion jitter
-      if (uBoil > 0.0) {                            // line boil: coherent ~40 px wobble, redrawn a few times a second
-        vec2 n = vUv * RES / 40.0 + uBoilSeed * 7.31;
-        uv += (vec2(vnoise(n), vnoise(n + 17.3)) - 0.5) * 2.0 * uBoil / RES;
-      }
-      if (uGlitch > 0.0) {                          // broken signal across the whole frame: bands jump sideways
-        float band = floor(vUv.y * 14.0) + floor(uTime * 30.0) * 7.0;
-        float on = step(0.45, h1(band * 1.7));
-        uv.x += (h1(band) - 0.5) * 0.12 * uGlitch * on;
-        uv.y += (h1(band + 3.1) - 0.5) * 0.01 * uGlitch;
-      }
-      vec2 uvText = uv;                             // lyrics are sampled off the pixel grid
-      if (uPixel > 0.0) uv = mix(uv, (floor(uv * PIX) + 0.5) / PIX, uPixel);
-      vec2 q = (uv - ORIGIN) * vec2(1.7778, 1.0);
-      float r = length(q);
-      if (uShockR >= 0.0) {                         // shockwave: a thin ring pushes the image outward as it passes
-        float ring = exp(-pow((r - uShockR * 1.6) / 0.06, 2.0));
-        uv += normalize(q + 1e-5) / vec2(1.7778, 1.0) * ring * 0.028 * uShock;
-      }
-      vec2 d = uv - 0.5;
-      float a = uAberration * (3.0 * uFlash + uShock) + 0.012 * uGlitch; // only on hits, faint on the shockwave: a strong split doubled the drop's type into ghosts
+      ${FINAL_WARP_UV}
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       if (uTileHit > 0.0) c = texture2D(tDiffuse, fract(uv * 3.0)).rgb; // the picture repeated three by three for two frames
       if (uZoomHit > 0.0) {                         // a rush into the frame: the picture smeared along lines from the centre
@@ -689,8 +668,19 @@ export class LyricVjEngine {
     const hid: THREE.Object3D[] = [];
     // (the measured ink probe, style-gate-ink.mts --rings, may keep the rings a set lays under its letters as their ground)
     const rings = !!(globalThis as { __vjInkRings?: boolean }).__vjInkRings;
-    this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !o.userData['decor'] && !(rings && o.userData['ring'])) { o.visible = false; hid.push(o); } });
-    return () => hid.forEach((o) => (o.visible = true));
+    if (!rings) {
+      this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !o.userData['decor']) { o.visible = false; hid.push(o); } });
+      return () => hid.forEach((o) => (o.visible = true));
+    }
+    // (the ink gate keeps what the words stand on: the rings under the letters and the copies behind them, a glyph's own
+    // child among them; so a glyph is taken away by its material, its children left as they are)
+    const off: THREE.Material[] = [];
+    this.textRoot.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (!m.isMesh || !o.visible || o.userData['decor'] || o.userData['ring'] || o.userData['copy']) return;
+      for (const mat of Array.isArray(m.material) ? m.material : [m.material]) if (mat.visible) { mat.visible = false; off.push(mat); }
+    });
+    return () => off.forEach((mat) => (mat.visible = true));
   }
   private shotLayers = new Map<string, ShotLayer>();
   /** After each frame's lines are updated: the signature moments (render/signature.ts) take their lines off the frame; set only when a treatment has moments. */
@@ -2474,7 +2464,8 @@ export class LyricVjEngine {
     const screenHit = hitAt(this.cueLayers.flatMap(({ rt }) => (rt.style.hit ? [{ at: rt.cue.start, hit: rt.style.hit }] : [])), t);
     const needsMask = medium.pixel + medium.tooth > 0 || screenHit.zoom > 0 || screenHit.tile > 0;
     u['uHasText'].value = needsMask ? 1 : 0;
-    if (needsMask) u['tText'].value = this.renderTextMask();
+    // (the ink gate's words-off pass keeps the words-on pass's text mask: ink-mask.ts, frozen controls)
+    if (needsMask && !this.inkFrozen) u['tText'].value = this.renderTextMask();
     this.finalPass.uniforms['uFlash'].value = inScene ? 0 : Math.max(fx.flash, this.glassFlash);
     this.finalPass.uniforms['uHit'].value = inScene ? 0 : fx.hit;
     this.finalPass.uniforms['uZoomHit'].value = inScene ? 0 : screenHit.zoom;
@@ -2493,7 +2484,7 @@ export class LyricVjEngine {
     this.finalPass.uniforms['uSweep'].value = this.motif ? -1 : sweep;
     // chroma ghosts: the lyrics as they were 1/30 and 1/15 s ago, offset and tinted
     const chroma = this.job.treatment.design?.language && LANGUAGES[this.job.treatment.design.language].chroma;
-    if (chroma && this.ghostPass) {
+    if (chroma && this.ghostPass && !this.inkFrozen) {
       const offset = this.textRoot.position.x;
       // a line jumping (pushed up by the next one landing) leaves no ghost: a copy a whole line away is a second line
       // over the new one (チョロイン c061 at 163.4 s), not a misregistered plate; small motion keeps its trail
@@ -2531,6 +2522,9 @@ export class LyricVjEngine {
     if (this.job.layer === 'back') this.textRoot.visible = this.echoRoot.visible = false;
     const back = this.carriersOnly ? this.wordsAway() : undefined;
     this.pageGlyphCheck();
+    // (the ink gate: the words-on pass's controls captured, the words-off pass run on the same ones)
+    if (this.inkCapture) this.inkControls = { uniforms: Object.fromEntries(Object.entries(this.finalPass.uniforms).map(([k, v]) => [k, cloneValue(v.value)])), bloom: this.bloom.strength };
+    if (this.inkFrozen) { for (const [k, v] of Object.entries(this.inkFrozen.uniforms)) this.finalPass.uniforms[k].value = cloneValue(v); this.bloom.strength = this.inkFrozen.bloom; }
     // (QA ablation, the ink gate: final-pass uniforms held at their resting value by name, __vjFinalOff)
     for (const k of (globalThis as { __vjFinalOff?: string[] }).__vjFinalOff ?? []) if (this.finalPass.uniforms[k]) this.finalPass.uniforms[k].value = ({ uFlicker: 1, uSweep: -1, uShockR: -1 } as Record<string, number>)[k] ?? 0;
     this.composer.render();
@@ -2562,6 +2556,73 @@ export class LyricVjEngine {
       if (out.length && tally.fails.length < 400) tally.fails.push(`${at} ${rt.cue.id} balloonHolds: ${out.length} glyph(s) as drawn leave the carrier (${out.map((b) => `${b.x0.toFixed(0)},${b.y0.toFixed(0)}`).slice(0, 3).join(' ')})`);
     }
     g.vjFrameStamp = stamp + 1;
+  }
+
+  /** The ink gate (QA): capture the next render's controls; run renders on these captured ones. */
+  private inkCapture = false;
+  private inkControls?: { uniforms: Record<string, unknown>; bloom: number };
+  private inkFrozen?: { uniforms: Record<string, unknown>; bloom: number };
+  private inkMask?: InkMask;
+
+  /**
+   * QA: every glyph mesh of every line shown, each with its line's slot on this moment (1..) and its index: what the ink
+   * gate draws in IDs (ink-mask.ts). A world line gives its own glyphs; other templates their textured meshes that are not
+   * what the words stand on.
+   */
+  glyphMeshes(): { id: string; slot: number; glyphs: { i: number; mesh: THREE.Mesh }[] }[] {
+    if (!this.textRoot.visible) return [];
+    const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
+    const lines = this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: (l.glyphMeshes ? l.glyphMeshes() : meshesOf(l.group)).filter((g) => shown(g.mesh)) })).filter((x) => x.glyphs.length));
+    // (and every other word the type layer shows: a line's call, a blown-up word's copies, the drop's keyword flash; read
+    // under `other`, so nothing taken away with the words is left out of the masks)
+    const taken = new Set(lines.flatMap((l) => l.glyphs.map((g) => g.mesh)));
+    const other: { i: number; mesh: THREE.Mesh }[] = [];
+    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !taken.has(m) && !m.userData['decor'] && !m.userData['ring'] && !m.userData['copy'] && shown(m)) other.push({ i: other.length, mesh: m }); });
+    return [...lines, ...(other.length ? [{ id: 'other', glyphs: other }] : [])].slice(0, 255).map((l, k) => ({ ...l, slot: k + 1 }));
+  }
+
+  /**
+   * QA, the ink gate (gate v2, docs/research/2026-11-13-ink-table-gate-design.md §1.3): one moment drawn three ways with
+   * the glyphs' coverage made all or nothing: the final composite with the words, the same without them on the words-on
+   * pass's own controls (text mask, chroma trails, every final uniform, the bloom), and the glyphs' IDs through the final
+   * pass's sampling. Returns the three over the glyphs' box grown by `pad`, top row first, and which line each slot is.
+   */
+  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; lines: Record<number, string>; shown: number[] } | undefined> {
+    const gl = this.renderer.getContext();
+    const read = (x0: number, y0: number, w: number, h: number) => { const b = new Uint8Array(w * h * 4); gl.readPixels(x0, H - y0 - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b); return flipRows(b, w, h); };
+    this.showLyrics(true);
+    await this.renderAt(t);
+    const lines = this.glyphMeshes();
+    if (!lines.length) return undefined;
+    const all = lines.flatMap((l) => l.glyphs);
+    all.forEach((g) => binarize(g.mesh.material as THREE.Material, true));
+    try {
+      this.inkCapture = true;
+      await this.renderAt(t);
+      this.inkCapture = false;
+      const meshes = this.glyphMeshes();
+      const b = new THREE.Box3();
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const g of meshes.flatMap((l) => l.glyphs)) { b.setFromObject(g.mesh); if (b.isEmpty()) continue; [x0, y0, x1, y1] = [Math.min(x0, b.min.x + W / 2), Math.min(y0, H / 2 - b.max.y), Math.max(x1, b.max.x + W / 2), Math.max(y1, H / 2 - b.min.y)]; }
+      if (!(x1 > x0)) return undefined;
+      [x0, y0, x1, y1] = [Math.max(0, Math.floor(x0 - pad)), Math.max(0, Math.floor(y0 - pad)), Math.min(W, Math.ceil(x1 + pad)), Math.min(H, Math.ceil(y1 + pad))];
+      const [w, h] = [x1 - x0, y1 - y0];
+      const on = read(x0, y0, w, h);
+      this.inkMask ??= new InkMask();
+      this.inkMask.render(this.renderer, this.textScene, this.camera, meshes.flatMap((l) => l.glyphs.map((g) => ({ mesh: g.mesh, id: idOf(l.slot, g.i) }))), this.finalPass.uniforms as Record<string, { value: unknown }>);
+      const mask = this.inkMask.read(this.renderer, x0, y0, w, h);
+      this.inkFrozen = this.inkControls;
+      this.showLyrics(false, true);
+      (globalThis as { __vjInkRings?: boolean }).__vjInkRings = true;
+      await this.renderAt(t);
+      const off = read(x0, y0, w, h);
+      return { box: [x0, y0, w, h], on, off, mask, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))) };
+    } finally {
+      this.inkCapture = false;
+      this.inkFrozen = undefined;
+      this.showLyrics(true);
+      all.forEach((g) => binarize(g.mesh.material as THREE.Material, false));
+    }
   }
 
   private textMask?: THREE.WebGLRenderTarget;

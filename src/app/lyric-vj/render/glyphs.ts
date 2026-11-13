@@ -417,6 +417,8 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
       const gm = new THREE.Mesh(new THREE.PlaneGeometry(plain.w, plain.h), new THREE.MeshBasicMaterial({ map: plain.texture, color: inkGhost.color, transparent: true, depthTest: false, depthWrite: false }));
       gm.position.set(inkGhost.dx * cs.size, -inkGhost.dy * cs.size, -0.01);
       gm.renderOrder = -1;
+      // (a copy behind the glyph, not a glyph: what the glyph stands on for the ink gate)
+      gm.userData['copy'] = true;
       mesh.add(gm);
       mesh.userData['inkGhost'] = gm;
     }

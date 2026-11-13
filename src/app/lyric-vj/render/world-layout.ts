@@ -370,7 +370,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (a ring that lies under the whole of its letter, a keyline or a band grown round it, is what the letter is read on: the
   // measured ink probe keeps it when it takes the words away, engine wordsAway; a ring laid off the letter, a misprint or a
   // drop shadow, is mostly hidden behind it and is not its ground)
-  underLayers.forEach((layer, L) => { const ground = ringUnder(L); layer.forEach((u) => (u.mesh.userData['ring'] = ground)); });
+  underLayers.forEach((layer, L) => { const ground = ringUnder(L); layer.forEach((u) => Object.assign(u.mesh.userData, ground ? { ring: true } : { copy: true })); });
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
@@ -400,7 +400,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const keyIds = gs.map((g, i) => (g.src !== undefined && g.src >= wl.blow!.from && g.src < wl.blow!.to && g.char.trim() ? i : -1)).filter((i) => i >= 0);
       for (const d of STRESS[kind]) {
         const copies = makeGlyphs(keyIds.map((i) => gs[i].char).join(''), { family, weight, size: tex, even: sets[0].even }, c);
-        copies.forEach((g, k) => { g.mesh.renderOrder = -4; g.mesh.traverse((o) => (o.renderOrder = -4)); g.mesh.visible = false; g.mesh.material.transparent = true; body.add(g.mesh); stressCopies.push({ mesh: g.mesh, i: keyIds[k], d }); });
+        copies.forEach((g, k) => { g.mesh.userData['copy'] = true; g.mesh.renderOrder = -4; g.mesh.traverse((o) => (o.renderOrder = -4)); g.mesh.visible = false; g.mesh.material.transparent = true; body.add(g.mesh); stressCopies.push({ mesh: g.mesh, i: keyIds[k], d }); });
       }
     }
   }
@@ -460,7 +460,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const beatPose = wl.beat ? (wl.repose ?? []).filter((r) => wl.beat!.at >= r.at).length : 0;
   const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(settling ? settleBy[p] ?? inkOn(s) : keyOf(s), false, p) }).texture)) : undefined;
   const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
-  if (ghosts) ghosts.forEach((g) => { g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
+  if (ghosts) ghosts.forEach((g) => { g.mesh.userData['copy'] = true; g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
   const mixed = new THREE.Color();
   const poseAt = (t: number) => { let k = 0; (wl.repose ?? []).forEach((r, i) => { if (t >= r.at) k = i + 1; }); return k; };
   const sec = (x: number, d: number) => (d > 0 ? clamp01(x / d) : 1);
@@ -782,6 +782,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     readable: () => [rt.showFrom + enterDur, rt.exitAt],
     poses: restRects,
     glyphBoxes,
+    glyphMeshes: () => gs.flatMap((g, i) => (g.char.trim() ? [{ i, mesh: g.mesh as THREE.Mesh }] : [])),
     ...(scaling ? { inkRect: () => {
       const bs = inkBoxes();
       return bs.length ? bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) })) : undefined;

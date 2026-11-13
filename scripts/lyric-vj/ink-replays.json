@@ -1,0 +1,8 @@
+[
+  { "world": "cel80s", "song": "tsuzuki", "cue": "c010", "t": 130, "why": "floored stair line, cream on the lilac sky (2.53:1, review 2026-11-12)" },
+  { "world": "y2k", "song": "tenmon", "cue": "c023", "t": 107.41, "why": "beat-punch 4.54:1, borderline" },
+  { "world": "scrapbook", "song": "snow", "cue": "c043", "t": 167.44, "why": "signature echo answer line, 4.64 (4D review)" },
+  { "world": "idol-live", "song": "choroin", "cue": "c027", "t": 62.945, "why": "beat-punch on a member ring, 3.79" },
+  { "world": "y2k", "song": "choroin", "cue": "c006", "t": 12.91, "why": "roll over the clip's pink wings, 3.12:1 (review 2026-11-12)" },
+  { "world": "dark-glitch", "song": "choroin", "cue": "c078", "t": 215.21, "why": "transcript tape's lamp falloff under the first glyph, 2.52 (fixed a41e127)" }
+]

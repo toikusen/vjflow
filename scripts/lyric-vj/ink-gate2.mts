@@ -23,7 +23,10 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './ink-gate2-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'clean-reveal': { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'clean-reveal': { type: 'boolean', default: false }, halo: { type: 'string' } } });
+// (--halo 4,6: the opt-in ink halo, clean px and back-by px, treatment.inkHalo; ruling 2026-11-13 §2)
+const halo = a.halo ? (a.halo.split(',').map(Number) as [number, number]) : undefined;
+const variant = `${a['clean-reveal'] ? '__clean' : ''}${halo ? `__halo${halo.join('-')}` : ''}`;
 const out = resolve('out/research/ink/gate2', a.run!);
 const work = join(out, 'work');
 mkdirSync(work, { recursive: true });
@@ -43,7 +46,7 @@ const summary: Record<string, unknown> = existsSync(join(out, 'summary.json')) ?
 type Beat = { kind: string; at: number; sec?: number; stays?: boolean };
 for (const spec of a.jobs!.split(',')) {
   const [world, name] = spec.split(':');
-  const file = join(out, `${world}__${name}__s${a.seed}__live__off${a['clean-reveal'] ? '__clean' : ''}.jsonl`);
+  const file = join(out, `${world}__${name}__s${a.seed}__live__off${variant}.jsonl`);
   const resume = existsSync(file) ? resumePoint(readFileSync(file, 'utf8').split('\n')) : { done: false as const, after: -1 };
   if (resume.done) { console.log(world, name, 'done already'); continue; }
   const started = Date.now();
@@ -52,7 +55,7 @@ for (const spec of a.jobs!.split(',')) {
   const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === world)!, seed: Number(a.seed), meaning, ...(a.font ? { font: a.font } : {}) });
   const jobFile = join(work, `${world}-${name}.job.json`);
   // (--clean-reveal: the opt-in prototype, lines come and go in steps, world-layout stepA)
-  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, ...(a['clean-reveal'] ? { treatment: { ...job.treatment, cleanReveal: true } } : {}) }));
+  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(a['clean-reveal'] ? { cleanReveal: true } : {}), ...(halo ? { inkHalo: halo } : {}) } }));
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
@@ -112,7 +115,7 @@ for (const spec of a.jobs!.split(',')) {
   for (const [k, f] of frames.entries()) {
     if (a['limit-sec'] && (Date.now() - started) / 1000 > Number(a['limit-sec'])) { stopped = 'timeout'; break; }
     const t = f / fps;
-    const m = (await page.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[]; drift: number; driftAt?: number[]; layer2d: number; hash?: number; lines?: Record<number, string> };
+    const m = (await page.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> };
     // (determinism: the first moment and one in every N drawn again must give the same ink pixels)
     if (m.hash !== undefined && (k === 0 || k % Number(a.determinism) === 0)) {
       const again = (await page.evaluate(`window.inkGate.moment(${t})`)) as { hash?: number };
@@ -125,15 +128,21 @@ for (const spec of a.jobs!.split(',')) {
     for (const r of m.reads) {
       glyphs++;
       const b = beats.get(r.cue);
-      const phase = r.moving ? 'enter' : b && t >= b.at && t <= b.at + (b.sec ?? 0.5) + (b.stays ? 0.3 : 0) ? 'hold' : 'rest';
+      // (its own entrance or exit, else a hold event running, else at rest: ruling 2026-11-13 §3, exits were filed as enters)
+      const phase = r.phase !== 'rest' ? r.phase : b && t >= b.at && t <= b.at + (b.sec ?? 0.5) + (b.stays ? 0.3 : 0) ? 'hold' : 'rest';
       if (r.v.status === 'fail') fails++;
       else if (r.v.status !== 'pass') unverified[r.v.status] = (unverified[r.v.status] ?? 0) + 1;
       if (Number.isFinite(r.v.min)) worst = Math.min(worst, r.v.min);
       // (a passing glyph in short: cue, index, its worst core pixel, its mixed pixels' worst when any are under INK_MIN)
-      out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3), ...(r.v.edge && r.v.edge.min < 4.5 ? [r.v.edge] : [])] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, edge: r.v.edge });
+      // (a failing one in full: its phase, drawn opacity and each multiplier, the worst pair's two ends in frame px with
+      // their roles, the shape gate's findings; the moment's effects are on the row, `fx`)
+      const box = m.box ?? [0, 0, 0, 0];
+      const pair = r.v.pair ? { p: [r.v.pair.p[0] + box[0], r.v.pair.p[1] + box[1], r.v.pair.p[2]], q: [r.v.pair.q[0] + box[0], r.v.pair.q[1] + box[1], r.v.pair.q[2]] } : undefined;
+      const alpha = r.a !== undefined ? { a: +r.a.toFixed(3), ...(r.alpha ? Object.fromEntries(Object.entries(r.alpha).map(([k, v]) => [k, +v.toFixed(3)])) : {}) } : undefined;
+      out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3), ...(r.v.edge && r.v.edge.min < 4.5 ? [r.v.edge] : []), ...(phase !== 'rest' || (r.a ?? 1) < 0.99 ? [{ phase, a: alpha?.a }] : [])] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, pair, alpha, shape: r.v.shape, gap: r.v.gap, edge: r.v.edge });
     }
     if (m.layer2d) unverified['layer-2d'] = (unverified['layer-2d'] ?? 0) + m.layer2d;
-    row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), ...(stopped === 'nondeterministic' ? { nondeterministic: true } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });
+    row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, fx: m.fx, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), ...(stopped === 'nondeterministic' ? { nondeterministic: true } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });
     if (stopped) break;
   }
   await page.close();
@@ -141,9 +150,9 @@ for (const spec of a.jobs!.split(',')) {
   if (!stopped) row(done);
   // (complete: nothing stopped it and every glyph read was decided, §1.6; an unverified glyph is never a zero-fail world)
   const complete = !stopped && Object.values(done.unverified).every((n) => !n);
-  summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`] = { ...done, complete, loadSec: Math.round((ready - started) / 1000), sPerMoment: +((Date.now() - ready) / 1000 / Math.max(1, moments)).toFixed(2) };
+  summary[`${world}:${name}${variant.replaceAll('__', ':')}`] = { ...done, complete, loadSec: Math.round((ready - started) / 1000), sPerMoment: +((Date.now() - ready) / 1000 / Math.max(1, moments)).toFixed(2) };
   writeFileSync(join(out, 'summary.json'), JSON.stringify(summary, null, 1));
-  console.log(world, name, JSON.stringify(summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`]));
+  console.log(world, name, JSON.stringify(summary[`${world}:${name}${variant.replaceAll('__', ':')}`]));
 }
 await browser.close();
 server.close();

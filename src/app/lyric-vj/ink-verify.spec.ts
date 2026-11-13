@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { glyphOfId, idOf, idRgb, lineOfId, offDrift, reduceGlyphs, resumePoint, rgbId } from './ink-verify';
+import { glyphOfId, idOf, idRgb, lineOfId, offDrift, partIdOf, reduceGlyphs, resumePoint, rgbId, type PartRole } from './ink-verify';
 import { INK_MIN } from './measured-ink';
 
 /** RGBA rows from a list of [r, g, b, a] pixels. */
@@ -98,5 +98,97 @@ describe('ink gate v2 numbers', () => {
     expect(resumePoint([meta, m(10), m(42), '{"kind":"mom'])).toEqual({ done: false, after: 42 });
     expect(resumePoint([meta, m(10), JSON.stringify({ kind: 'done' })])).toEqual({ done: true });
     expect(resumePoint([])).toEqual({ done: false, after: -1 });
+  });
+
+  /**
+   * A w × h picture from a painter: each pixel's colour, the glyph whose face it is (core), and the part it is of
+   * ([glyph, role]); returns the words-on box, the mask and the parts mask (line slot 1).
+   */
+  const paint = (w: number, h: number, at: (x: number, y: number) => { rgb: number[]; face?: number; part?: [number, PartRole] }) => {
+    const on = new Uint8Array(w * h * 4);
+    const mask = new Uint8Array(w * h * 4);
+    const parts = new Uint8Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const p = at(x, y);
+      const k = (y * w + x) * 4;
+      on.set([...p.rgb, 255], k);
+      if (p.face !== undefined) mask.set([...idRgb(idOf(1, p.face)), 255], k);
+      if (p.part) parts.set([...idRgb(partIdOf(1, p.part[0], p.part[1])), 255], k);
+    }
+    return { on, mask, parts, off: new Uint8Array(w * h * 4), w };
+  };
+  const [WHITE, BLACK, GREY] = [[255, 255, 255], [0, 0, 0], [120, 120, 120]];
+  // 口: a 10 px square, 2 px strokes, its 6 px counter inside, at (5, 5)
+  const kou = (x: number, y: number, ox = 5, oy = 5) => x >= ox && x < ox + 10 && y >= oy && y < oy + 10 && !(x >= ox + 2 && x < ox + 8 && y >= oy + 2 && y < oy + 8);
+  const counter = (x: number, y: number) => x >= 7 && x < 13 && y >= 7 && y < 13;
+  const verdict = (f: ReturnType<typeof paint>, id = idOf(1, 0)) => reduceGlyphs(f.on, f.off, f.mask, f.w, [], {}, f.parts).find((v) => v.id === id)!;
+
+  describe('reading roles (ruling 2026-11-13 §1)', () => {
+    /** 口 with an extrude `depth` px down-right: white face, grey extrude, on black. */
+    const extruded = (depth: number, declared: boolean) => paint(24, 24, (x, y) => {
+      if (kou(x, y)) return { rgb: WHITE, face: 0, ...(declared ? { part: [0, 'extrude'] as [number, PartRole] } : {}) };
+      for (let d = 1; d <= depth; d++) if (kou(x - d, y - d)) return { rgb: GREY, ...(declared ? { part: [0, 'extrude'] as [number, PartRole] } : { part: [0, 'copy'] as [number, PartRole] }) };
+      return { rgb: BLACK };
+    });
+
+    it('a declared popart extrude merges into the reading glyph: its joint with the face is not read, its outer edge is', () => {
+      const v = verdict(extruded(2, true));
+      expect(v.status).toBe('pass');
+      expect(v.gap).toEqual({ face: 5, glyph: 3 });
+      // the same extrude undeclared is a copy: the face against it (4.4:1) fails
+      const u = verdict(extruded(2, false));
+      expect(u.status).toBe('fail');
+      expect(u.pair!.q[2]).toBe('copy');
+    });
+
+    it("a declared extrude deep enough to fill 口's counter fails the shape gate", () => {
+      const v = verdict(extruded(6, true));
+      expect(v.shape).toContain('counter-closed');
+      expect(v.status).toBe('fail');
+    });
+
+    it("a copy in the face's colour filling 口's counter fails", () => {
+      const v = verdict(paint(24, 24, (x, y) => (kou(x, y) ? { rgb: WHITE, face: 0 } : counter(x, y) ? { rgb: WHITE, part: [0, 'copy'] } : { rgb: BLACK })));
+      expect(v.status).toBe('fail');
+      expect(v.pair!.q[2]).toBe('copy');
+    });
+
+    it('a copy bridging two strokes fails; a declared extrude bridging them fails the shape gate', () => {
+      // 刂-like: two 2 px strokes 4 px apart
+      const stroke = (x: number, y: number) => y >= 4 && y < 18 && ((x >= 6 && x < 8) || (x >= 12 && x < 14));
+      const bridge = (x: number, y: number) => y >= 9 && y < 12 && x >= 8 && x < 12;
+      expect(verdict(paint(20, 22, (x, y) => (stroke(x, y) ? { rgb: WHITE, face: 0 } : bridge(x, y) ? { rgb: WHITE, part: [0, 'copy'] } : { rgb: BLACK }))).status).toBe('fail');
+      const v = verdict(paint(20, 22, (x, y) => (stroke(x, y) ? { rgb: WHITE, face: 0 } : bridge(x, y) ? { rgb: GREY, part: [0, 'extrude'] } : { rgb: BLACK })));
+      expect(v.shape).toContain('bridge');
+      expect(v.status).toBe('fail');
+    });
+
+    it("another glyph's ghost in this glyph's gap fails it", () => {
+      // glyph 1 (口 at 5,5), glyph 0's ghost laid in its counter in the same white
+      const f = paint(24, 24, (x, y) => (kou(x, y) ? { rgb: WHITE, face: 1 } : counter(x, y) && x < 9 ? { rgb: WHITE, part: [0, 'copy'] } : { rgb: BLACK }));
+      const v = verdict(f, idOf(1, 1));
+      expect(v.status).toBe('fail');
+      expect(v.pair!.q[2]).toBe('copy');
+    });
+
+    it('a full outline separating a same-colour ground passes; a gap in it fails', () => {
+      // white 2 px stroke, a 2 px black keyline round it (its outline), white paper beyond
+      const stroke = (x: number, y: number) => x >= 9 && x < 11 && y >= 4 && y < 16;
+      const line = (x: number, y: number) => !stroke(x, y) && x >= 7 && x < 13 && y >= 2 && y < 18;
+      const full = verdict(paint(20, 20, (x, y) => (stroke(x, y) ? { rgb: WHITE, face: 0 } : line(x, y) ? { rgb: BLACK, part: [0, 'outline'] } : { rgb: WHITE })));
+      expect(full.status).toBe('pass');
+      const gap = (x: number, y: number) => y >= 9 && y < 11 && x >= 11;
+      const broken = verdict(paint(20, 20, (x, y) => (stroke(x, y) ? { rgb: WHITE, face: 0 } : line(x, y) && !gap(x, y) ? { rgb: BLACK, part: [0, 'outline'] } : { rgb: WHITE })));
+      expect(broken.status).toBe('fail');
+      expect(broken.pair!.q[2]).toBe('ground');
+    });
+
+    it("a neighbour 2 px away is not a glyph's ground (review 2026-11-13); touching it fails the shape gate", () => {
+      const two = (gapPx: number) => paint(20, 10, (x, y) => (y >= 2 && y < 8 && x >= 4 && x < 8 ? { rgb: WHITE, face: 0 } : y >= 2 && y < 8 && x >= 8 + gapPx && x < 12 + gapPx ? { rgb: WHITE, face: 1 } : { rgb: BLACK }));
+      expect(verdict(two(2)).status).toBe('pass');
+      const v = verdict(two(0));
+      expect(v.shape).toEqual(['joins']);
+      expect(v.status).toBe('fail');
+    });
   });
 });

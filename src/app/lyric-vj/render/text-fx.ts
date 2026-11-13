@@ -1069,6 +1069,9 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
     const glows = its.map((it) => {
       const g = new THREE.Mesh(it.mesh.geometry, new THREE.MeshBasicMaterial({ map: it.mesh.material.map, color: new THREE.Color(1, 1, 1), transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
       g.material.clippingPlanes = band;
+      // (a copy of the glyph, not a glyph: it leaves with the words and is read as interference, ink gate §1)
+      g.userData['copy'] = true;
+      g.userData['part'] = 'copy';
       it.mesh.add(g);
       return g;
     });

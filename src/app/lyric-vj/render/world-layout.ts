@@ -261,6 +261,21 @@ function objectMesh(spec: SetSpec, block: Block, slots: Slots, seed: number, var
   return m;
 }
 
+/**
+ * The extrudes declared part of the reading glyph (ruling 2026-11-13 §1, docs/research/2026-11-13-ink-halo-codex.md): a
+ * world's stress copies of this kind, laid with exactly these STRESS steps, in one of these faces, at a glyph size in
+ * this range (frame px), are merged with their face into the glyph the ink gate reads; any other copy is interference.
+ * Declared here, before any verdict, never added after seeing a fail.
+ * popart: the press's 7-step extrude, as the 2026-11-04 accept shows it; the card names no sizes or faces, so the range is
+ * the blown key word's (blowPose) and the faces the free popart job's, owner to confirm.
+ */
+export const READING_EXTRUDE: { world: string; stress: StressKind; steps: { dx: number; dy: number; s: number; a: number }[]; fonts: string[]; size: [number, number] }[] = [
+  { world: 'popart', stress: 'extrude', steps: Array.from({ length: 7 }, (_, k) => ({ dx: 0.012 * (k + 1), dy: -0.012 * (k + 1), s: 1, a: 1 })), fonts: ['Noto Sans TC', 'Noto Serif JP'], size: [120, 760] },
+];
+/** Whether a world's stress copies are a declared reading extrude (READING_EXTRUDE). */
+export const readingExtrude = (world: string, stress: StressKind, steps: { dx: number; dy: number; s: number; a: number }[], font: string, size: number) =>
+  READING_EXTRUDE.some((d) => d.world === world && d.stress === stress && d.fonts.includes(font) && size >= d.size[0] && size <= d.size[1] && JSON.stringify(d.steps) === JSON.stringify(steps));
+
 /** A ring under at least this share of its letter's ink lies under the letter (a keyline, a band); less, it is laid off it (a misprint, a drop shadow). */
 const RING_UNDER = 0.97;
 /** The worlds whose ground cuts a room of its own material round a line (uncut wood, a crayon bubble, undyed cloth, the lit opening). */
@@ -376,7 +391,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (a ring that lies under the whole of its letter, a keyline or a band grown round it, is what the letter is read on: the
   // measured ink probe keeps it when it takes the words away, engine wordsAway; a ring laid off the letter, a misprint or a
   // drop shadow, is mostly hidden behind it and is not its ground)
-  underLayers.forEach((layer, L) => { const ground = ringUnder(L); layer.forEach((u) => Object.assign(u.mesh.userData, ground ? { ring: true } : { copy: true })); });
+  // (reading roles, ruling 2026-11-13 §1: a ring under the letter is its outline, the reading underlay; one laid off it a copy)
+  underLayers.forEach((layer, L) => { const ground = ringUnder(L); layer.forEach((u) => Object.assign(u.mesh.userData, ground ? { ring: true, part: 'outline' } : { copy: true, part: 'copy' })); });
   const damaged = eats ? mapsOf(true) : undefined;
   const inksBy = sets.map((_, p) => gs.map((g) => new THREE.Color(tintOf(g, p))));
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
@@ -404,9 +420,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     if (kind) {
       const c = stressInk(kind, groundInk, rt.palette.background, slots, keyOf(sets[0]))!;
       const keyIds = gs.map((g, i) => (g.src !== undefined && g.src >= wl.blow!.from && g.src < wl.blow!.to && g.char.trim() ? i : -1)).filter((i) => i >= 0);
+      // (a declared extrude is part of the key's reading glyph; any other stress copy is interference: READING_EXTRUDE)
+      const sizePx = Math.max(0, ...keyIds.map((i) => (blown.sizes?.[i] ?? blown.scale) * tex));
+      const part = readingExtrude(wl0.set.split('/')[0], kind, STRESS[kind], family, sizePx) ? 'extrude' : 'copy';
       for (const d of STRESS[kind]) {
         const copies = makeGlyphs(keyIds.map((i) => gs[i].char).join(''), { family, weight, size: tex, even: sets[0].even }, c);
-        copies.forEach((g, k) => { g.mesh.userData['copy'] = true; g.mesh.renderOrder = -4; g.mesh.traverse((o) => (o.renderOrder = -4)); g.mesh.visible = false; g.mesh.material.transparent = true; body.add(g.mesh); stressCopies.push({ mesh: g.mesh, i: keyIds[k], d }); });
+        copies.forEach((g, k) => { g.mesh.userData['copy'] = true; g.mesh.userData['part'] = part; g.mesh.renderOrder = -4; g.mesh.traverse((o) => (o.renderOrder = -4)); g.mesh.visible = false; g.mesh.material.transparent = true; body.add(g.mesh); stressCopies.push({ mesh: g.mesh, i: keyIds[k], d }); });
       }
     }
   }
@@ -466,7 +485,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const beatPose = wl.beat ? (wl.repose ?? []).filter((r) => wl.beat!.at >= r.at).length : 0;
   const keyMaps = usesKey && baked ? sets.map((s, p) => gs.map((g) => glyphTexture(g.char, { ...style, surface: surfaceOf(settling ? settleBy[p] ?? inkOn(s) : keyOf(s), false, p) }).texture)) : undefined;
   const ghosts = wl.beat && ['echo', 'plate-slip'].includes(wl.beat.kind) ? makeGlyphs(text, { family, weight, size: tex, even: sets[0].even }, keyOf(sets[0])) : undefined;
-  if (ghosts) ghosts.forEach((g) => { g.mesh.userData['copy'] = true; g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
+  if (ghosts) ghosts.forEach((g) => { g.mesh.userData['copy'] = true; g.mesh.userData['part'] = 'copy'; g.mesh.renderOrder = -3; g.mesh.traverse((o) => (o.renderOrder = -3)); g.mesh.visible = false; body.add(g.mesh); });
   const mixed = new THREE.Color();
   const poseAt = (t: number) => { let k = 0; (wl.repose ?? []).forEach((r, i) => { if (t >= r.at) k = i + 1; }); return k; };
   const sec = (x: number, d: number) => (d > 0 ? clamp01(x / d) : 1);
@@ -595,8 +614,10 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
 
   // (a scale composition's glyphs as inked, em boxes in frame px: its glyph pictures carry a wide transparent pad, which
   // a measure of the meshes reads as 50–160 px out of the frame on a composition flush with the safe edge)
-  // (whether each glyph's own entrance or exit is running on the last frame drawn: glyphBoxes)
-  const moving = gs.map(() => false);
+  // (where each glyph is in its own life on the last frame drawn, its entrance or exit running or at rest, and its drawn
+  // opacity's multipliers: glyphBoxes, the ink gate's diagnosis, ruling 2026-11-13 §3)
+  const phase = gs.map((): 'enter' | 'exit' | 'rest' => 'rest');
+  const alphaOf = gs.map(() => ({ pose: 1, block: 1, left: 1, tone: 1 }));
   // (the ink each glyph was drawn in on the last frame: the probe reads that colour as the glyph's, not a copy behind it)
   const drawnInk = gs.map(() => 0);
   const glyphBoxes = () => {
@@ -610,7 +631,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       g.mesh.getWorldScale(ws);
       const half = (Math.abs(ws.y) * tex) / 2;
       const [x, y] = [v.x + 960, 540 - v.y];
-      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: moving[i], ink: `#${drawnInk[i].toString(16).padStart(6, '0')}` }];
+      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: phase[i] !== 'rest', phase: phase[i], alpha: { ...alphaOf[i] }, ink: `#${drawnInk[i].toString(16).padStart(6, '0')}` }];
     });
   };
   const inkBoxes = () => {
@@ -707,12 +728,13 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       gs.forEach((g, i) => {
         const m = g.mesh;
         // a roll call: the name before gives way as the next lands (word-sync.ts until)
-        const left = synced ? givenWay(rt, g, t) : 1;
+        // (the clean reveal steps it too: a name giving way is there or gone, never see-through)
+        const left = stepA(synced ? givenWay(rt, g, t) : 1);
         if (ghosts) ghosts[i].mesh.visible = false;
         if (!p.shown[i] || (synced && !out && t < landAt[i]) || left <= 0) { m.visible = false; return; }
         m.visible = true;
         const qi = synced && !out ? sec(t - landAt[i], glyphIn) : qIn;
-        moving[i] = out || qi < 1;
+        phase[i] = out ? 'exit' : qi < 1 ? 'enter' : 'rest';
         const env: GlyphEnv = { q: out ? qOut : qi, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0 };
         let pose: GlyphPose = (out ? leaving?.glyph?.(env) : qi < 1 ? entering?.glyph?.(env) : undefined) ?? {};
         // a line that locks word by word keeps at it after its entrance has run
@@ -744,7 +766,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         drawnInk[i] = ink.getHex();
         const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }
-        const tone = Math.min(1, (pose.tone ?? 1) * rank);
+        // (the clean reveal steps the tone too: on a sheet it is opacity, else it dims the ink toward its shadow)
+        const tone = stepA(Math.min(1, (pose.tone ?? 1) * rank));
+        alphaOf[i] = { pose: stepA(pose.a ?? 1), block: whole_a, left, tone };
         if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {
           m.material.opacity = stepA(pose.a ?? 1) * whole_a * tone * left;
@@ -790,6 +814,12 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     poses: restRects,
     glyphBoxes,
     glyphMeshes: () => gs.flatMap((g, i) => (g.char.trim() ? [{ i, mesh: g.mesh as THREE.Mesh }] : [])),
+    // (each glyph's parts by reading role: its stress copies, its rings, its echo; the ink gate's parts mask)
+    glyphParts: () => [
+      ...stressCopies.map((c) => ({ i: c.i, mesh: c.mesh as THREE.Mesh, role: c.mesh.userData['part'] as 'extrude' | 'copy' })),
+      ...underLayers.flatMap((layer) => layer.map((u, i) => ({ i, mesh: u.mesh as THREE.Mesh, role: u.mesh.userData['part'] as 'outline' | 'copy' }))),
+      ...(ghosts ?? []).map((g, i) => ({ i, mesh: g.mesh as THREE.Mesh, role: 'copy' as const })),
+    ],
     ...(scaling ? { inkRect: () => {
       const bs = inkBoxes();
       return bs.length ? bs.reduce((u, b) => ({ x0: Math.min(u.x0, b.x0), y0: Math.min(u.y0, b.y0), x1: Math.max(u.x1, b.x1), y1: Math.max(u.y1, b.y1) })) : undefined;

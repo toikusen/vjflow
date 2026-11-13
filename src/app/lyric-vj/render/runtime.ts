@@ -68,7 +68,12 @@ export interface FrameFx {
 }
 
 /** A glyph as drawn on a frame (CueLayer glyphBoxes): its index in the line, em box (frame px, y down), opacity, and whether it is coming or going. */
-export interface GlyphBox { i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean; /** The ink it was drawn in (before its surface's own texture), when known. */ ink?: string }
+export interface GlyphBox {
+  i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean;
+  /** The ink it was drawn in (before its surface's own texture), when known. */ ink?: string;
+  /** Its own entrance or exit running, or at rest (a world line). */ phase?: 'enter' | 'exit' | 'rest';
+  /** Its drawn opacity's multipliers (a world line): its pose's, its block's, a roll call's give-way, its tone (opacity on a sheet, else ink). */ alpha?: { pose: number; block: number; left: number; tone: number };
+}
 
 export interface CueLayer {
   group: THREE.Group;
@@ -90,6 +95,8 @@ export interface CueLayer {
   glyphBoxes?(): GlyphBox[];
   /** Every glyph mesh with its index in the line (the ink gate draws them in their IDs, ink-mask.ts). */
   glyphMeshes?(): { i: number; mesh: THREE.Mesh }[];
+  /** Each glyph's parts by reading role (ink-verify PartRole): a declared extrude, its outline, its copies. */
+  glyphParts?(): { i: number; mesh: THREE.Mesh; role: 'extrude' | 'outline' | 'copy' }[];
   /** The inks the line took on the ground it was measured on (world-layout measuredInks): per pose, base or hold, from → to. */
   /** A Q3 scale composition as drawn (world-layout.ts): its event, planned and drawn ratio, whether it fell short. */
   scale?: { eventId: string; planned: number; drawn: number; kind: string; unrealized: boolean; carrier: string; /** px y down: the planned ink box, the declared safe area, the drawn glyphs' em boxes. */ inkBox?: { x0: number; y0: number; x1: number; y1: number }; safe?: { x0: number; y0: number; x1: number; y1: number }; glyphBox?: { x0: number; y0: number; x1: number; y1: number }; inSafe?: boolean; why?: string };

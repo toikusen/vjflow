@@ -22,9 +22,35 @@ export const FINAL_WARP_LIB = /* glsl */ `
     float bayer4(vec2 a){ return bayer2(0.5 * a) * 0.25 + bayer2(a); }
 `;
 
-/** The start of main(): from vUv it sets uv, uvText, q, r, d and a, exactly as the final pass samples. */
+/**
+ * The ink halo (ruling 2026-11-13 §2, docs/research/2026-11-13-ink-halo-codex.md): round every reading glyph (its face and
+ * its declared extrude, their full geometric support, never shrunk by a fade) the destructive effects are at zero up to
+ * uHaloIn px and come back by uHaloOut px (1920×1080). tHalo holds each pixel's distance to the nearest reading glyph in
+ * px (engine inkHalo, an exact distance up to HALO_REACH). haloKeep is how much of the effects' geometry a pixel keeps:
+ * the least of the halo where the pixel shows (its output footprint) and where each of its samples is read from (its
+ * source footprint: the aberration split, a glitch band's jump, the pixel grid, the shock, a hit's tile or zoom smear).
+ * uHaloOut 0: off, everything kept. Needs uTileHit, uZoomHit, tHalo, uHaloIn, uHaloOut declared before it.
+ */
+export const FINAL_HALO_LIB = /* glsl */ `
+    float haloAt(vec2 p){
+      if (uHaloOut <= 0.0) return 1.0;
+      return clamp((texture2D(tHalo, p).r - uHaloIn) / max(uHaloOut - uHaloIn, 1e-3), 0.0, 1.0);
+    }
+    float haloKeep(vec2 uvC, vec2 uv, vec2 d, float a){
+      if (uHaloOut <= 0.0) return 1.0;
+      float h = min(haloAt(uvC), min(haloAt(uv), min(haloAt(uv + d * a), haloAt(uv - d * a))));
+      if (uTileHit > 0.0) h = min(h, haloAt(fract(uv * 3.0)));
+      if (uZoomHit > 0.0) for (int i = 0; i < 12; i++) h = min(h, haloAt(0.5 + d * (1.0 - 0.26 * uZoomHit * float(i) / 11.0)));
+      return h;
+    }
+`;
+/** How far tHalo measures, px: the widest halo it can hold (uHaloOut at most this). */
+export const HALO_REACH = 12;
+
+/** The start of main(): from vUv it sets uv, uvC, uvText, q, r, d and a, exactly as the final pass samples. */
 export const FINAL_WARP_UV = /* glsl */ `
       vec2 uv = vUv + uWeave;                       // gate weave / stop-motion jitter
+      vec2 uvC = uv;                                // the picture read straight, the halo's (moves with the whole frame only)
       if (uBoil > 0.0) {                            // line boil: coherent ~40 px wobble, redrawn a few times a second
         vec2 n = vUv * RES / 40.0 + uBoilSeed * 7.31;
         uv += (vec2(vnoise(n), vnoise(n + 17.3)) - 0.5) * 2.0 * uBoil / RES;
@@ -50,6 +76,6 @@ export const FINAL_WARP_UV = /* glsl */ `
 /** The effect geometry's version: a hash of the shared chunk (a gate result is read against the version it was made on). */
 export const FX_VERSION = (() => {
   let h = 0x811c9dc5;
-  for (const ch of FINAL_WARP_LIB + FINAL_WARP_UV) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
+  for (const ch of FINAL_WARP_LIB + FINAL_HALO_LIB + FINAL_WARP_UV) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');
 })();

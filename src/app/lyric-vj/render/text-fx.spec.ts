@@ -262,6 +262,8 @@ describe('drawn text effects', () => {
     l.update(1.3, fx);
     expect(glow.material.opacity).toBeGreaterThan(0.5);
     expect(glow.material.clippingPlanes!.length).toBe(2);
+    // (the white copy is a copy, read as interference by the ink gate, never as a glyph of its own: review 2026-11-13)
+    expect([glow.userData['copy'], glow.userData['part']]).toEqual([true, 'copy']);
     l.update(2.3, fx);
     expect(glow.material.opacity).toBe(0);
     const f = withTextFx(layer(), { ...runtime({ emphasis: [{ from: 0, to: 1, method: 'faces' }] }), fonts: { display: 'a', body: 'b', script: 'c' } } as unknown as CueRuntime);

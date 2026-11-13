@@ -3,7 +3,8 @@
 //     0.97 its worst glyph equals the rule worked here on the frame at 1 scaled by 0.97, ±1 %;
 //  2. the same line with the ground under it lifted toward the ink (uLift) fails;
 //  3. frozen controls on a scene whose text mask is not empty (the pixel medium, the mask forced on): without the freeze the
-//     words-off frame differs under the words; with it the field round the words holds still (offDrift ≤ 2).
+//     words-off frame differs under the words; with it the field round the words holds still (offDrift ≤ 2);
+//  4. the ink halo keeps the final pass's grain and the scene's own snow off round the words, and only there.
 //   nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/ink-gate2.test.mts   (exit 1 on a failed check)
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -100,6 +101,47 @@ if (F && N) {
   check(frozen.reads.length > 0 && frozen.drift <= 2, `with the freeze the field round the words holds still (drift ${frozen.drift})`);
 }
 await tooth.close();
+
+// 4: the ink halo (ruling 2026-11-13 §2), 4 px clean and back by 6, on the same dark-glitch line: (a) the final pass's
+// grain stays off round the words: the words-off frame with grain 0.3 equals the one with grain 0 within 3 px of a glyph's
+// core and differs beyond 8 px; (b) the scene's own TV snow is left out round them at its source: with every final effect
+// at rest, the halo changes the words-off ground within 3 px of the glyphs (the snow gone there) and nothing past 8 px
+const haloAt = 153.3;
+const near = (mask: number[], w: number, h: number) => {
+  // (each pixel's Euclidean distance to the nearest core pixel, exact up to 12 px: rows, then columns; else 99)
+  const g = new Float64Array(w * h).fill(99);
+  const core = (i: number) => mask[i * 4 + 3] === 255 && (mask[i * 4] | mask[i * 4 + 1] | mask[i * 4 + 2]) > 0;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let k = -12; k <= 12; k++) { const xx = x + k; if (xx >= 0 && xx < w && core(y * w + xx)) g[y * w + x] = Math.min(g[y * w + x], Math.abs(k)); }
+  const d = new Float64Array(w * h).fill(99);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let k = -12; k <= 12; k++) { const yy = y + k; if (yy >= 0 && yy < h && g[yy * w + x] < 99) d[y * w + x] = Math.min(d[y * w + x], Math.hypot(g[yy * w + x], k)); }
+  return d;
+};
+const offAt = `(async () => { const m = await window.vjEngine.inkMoment(${haloAt}); return m && { off: Array.from(m.off), mask: Array.from(m.mask), w: m.box[2], h: m.box[3] }; })()`;
+type Off = { off: number[]; mask: number[]; w: number; h: number };
+const split = (a: Off, b: Off) => {
+  const d = near(a.mask, a.w, a.h);
+  let [nearDiff, farDiff, nearN] = [0, 0, 0];
+  for (let i = 0; i < a.w * a.h; i++) {
+    const diff = Math.max(...[0, 1, 2].map((c) => Math.abs(a.off[i * 4 + c] - b.off[i * 4 + c])));
+    if (d[i] > 0 && d[i] <= 3) { nearN++; if (diff > 2) nearDiff++; }
+    if (d[i] >= 8 && diff > 2) farDiff++;
+  }
+  return { nearDiff, farDiff, nearN };
+};
+// (the halo as a job asks for it, treatment.inkHalo: the page sets __vjInkHalo from it)
+const haloed = await open('dark-glitch', (j) => void ((j['treatment'] as Record<string, unknown>)['inkHalo'] = [4, 6]), `window.__vjFinalSet = { uGrain: 0.3 };`);
+const G = (await haloed.evaluate(offAt)) as Off;
+await haloed.evaluate(`window.__vjFinalSet = { uGrain: 0 }`);
+const G0 = (await haloed.evaluate(offAt)) as Off;
+const g = split(G, G0);
+check(g.nearN > 0 && g.nearDiff === 0 && g.farDiff > 0, `halo: grain off within 3 px of the glyphs (${g.nearDiff} of ${g.nearN} differ), on past 8 px (${g.farDiff} differ)`);
+await haloed.evaluate(`window.__vjFinalSet = {}; window.__vjFinalOff = ${JSON.stringify(REST)};`);
+const S1 = (await haloed.evaluate(offAt)) as Off;
+await haloed.evaluate(`window.__vjInkHalo = undefined`);
+const S0 = (await haloed.evaluate(offAt)) as Off;
+const sn = split(S1, S0);
+check(sn.nearDiff > 0 && sn.farDiff === 0, `halo at the source: the scene's snow left out within 3 px of the glyphs (${sn.nearDiff} px changed), nothing past 8 px (${sn.farDiff})`);
+await haloed.close();
 await browser.close();
 server.close();
 process.exitCode = fails.length ? 1 : 0;

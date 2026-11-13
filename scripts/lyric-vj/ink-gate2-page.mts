@@ -2,33 +2,38 @@
 // read glyph by glyph off the final composite, with the glyphs' ID masks, on the words-on pass's frozen controls.
 import { DRIFT_MAX, glyphOfId, lineOfId, offDrift, reduceGlyphs, type GlyphVerdict } from '../../src/app/lyric-vj/ink-verify';
 
-type Engine = { inkMoment(t: number, pad?: number): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> };
-const w = window as unknown as { vjEngine: Engine; vjGlyphs(): { id: string; glyphs: { i: number; moving: boolean; a: number }[] }[]; vjFrame(t: number): Promise<unknown>; inkGate: unknown };
+type Engine = { inkMoment(t: number, pad?: number): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; parts?: Uint8Array; fx: Record<string, number>; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> };
+type Alpha = { pose: number; block: number; left: number; tone: number };
+const w = window as unknown as { vjEngine: Engine; vjGlyphs(): { id: string; glyphs: { i: number; moving: boolean; a: number; phase?: 'enter' | 'exit' | 'rest'; alpha?: Alpha }[] }[]; vjFrame(t: number): Promise<unknown>; inkGate: unknown };
 
 /** The neighbourhood a glow, a chroma trail, the aberration split or a word's own copies (an extrude, a misprint: taken away with it) reach round a glyph, px (offDrift). */
 const DRIFT_R = 48;
 
-export type Read = { cue: string; i: number; moving: boolean; v: GlyphVerdict };
+/** A glyph read: its line and index, where it is in its life (its entrance, its exit, at rest), its drawn opacity and its multipliers, its verdict. */
+export type Read = { cue: string; i: number; phase: 'enter' | 'exit' | 'rest'; a?: number; alpha?: Alpha; v: GlyphVerdict };
 /** One moment: every glyph shown, its verdict; the field drift; the 2D layer's characters (signature), unverified. */
-async function moment(t: number): Promise<{ reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string> }> {
+async function moment(t: number): Promise<{ reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> }> {
   // (the composed frame first: a signature moment's characters are drawn on the 2D layer, and are counted, not read)
   await w.vjFrame(t);
   const layer2d = w.vjGlyphs().filter((l) => l.id === 'signature').reduce((n, l) => n + l.glyphs.length, 0);
-  const moving = new Map(w.vjGlyphs().flatMap((l) => l.glyphs.map((g) => [`${l.id}/${g.i}`, g.moving] as const)));
+  const life = new Map(w.vjGlyphs().flatMap((l) => l.glyphs.map((g) => [`${l.id}/${g.i}`, g] as const)));
   const m = await w.vjEngine.inkMoment(t);
   if (!m) return { reads: [], drift: 0, layer2d };
   const [, , bw, bh] = m.box;
   const where: number[] = [];
   const drift = offDrift(m.on, m.off, m.mask, bw, bh, DRIFT_R, where);
-  const reads = reduceGlyphs(m.on, m.off, m.mask, bw, m.shown, m.opacity).map((v): Read => {
+  const reads = reduceGlyphs(m.on, m.off, m.mask, bw, m.shown, m.opacity, m.parts).map((v): Read => {
     const cue = m.lines[lineOfId(v.id)] ?? '?';
     const i = glyphOfId(v.id);
-    return { cue, i, moving: !!moving.get(`${cue}/${i}`), v: drift > DRIFT_MAX && v.status !== 'unverified:no-core' ? { ...v, status: 'unverified:field-drift' } : v };
+    const g = life.get(`${cue}/${i}`);
+    // (a glyph a world line does not phase: moving is its entrance or exit unknown, read as an entrance)
+    const phase = g?.phase ?? (g?.moving ? 'enter' : 'rest');
+    return { cue, i, phase, a: m.opacity[v.id], alpha: g?.alpha, v: drift > DRIFT_MAX && v.status !== 'unverified:no-core' ? { ...v, status: 'unverified:field-drift' } : v };
   });
   // (a hash of both passes over the whole box: the same moment drawn again must give the same, words on and off)
   let hash = 0;
   for (let k = 0; k < m.on.length; k += 4) hash = (Math.imul(hash, 31) + m.on[k] * 65536 + m.on[k + 1] * 256 + m.on[k + 2] + Math.imul(m.off[k] * 65536 + m.off[k + 1] * 256 + m.off[k + 2], 7)) >>> 0;
-  return { reads, drift, driftAt: where.length ? [where[0] + m.box[0], where[1] + m.box[1], where[2], where[3]] : undefined, box: m.box, layer2d, hash, lines: m.lines };
+  return { reads, drift, driftAt: where.length ? [where[0] + m.box[0], where[1] + m.box[1], where[2], where[3]] : undefined, box: m.box, layer2d, hash, lines: m.lines, fx: m.fx };
 }
 /**
  * Evidence for one glyph: the three boxes (words on, words off, mask overlay) cropped round the glyph's core pixels and

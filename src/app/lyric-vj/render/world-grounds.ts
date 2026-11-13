@@ -151,8 +151,16 @@ const vignette = (e: WorldEnv, a: number) => {
 
 // ---- emissive: static, a wall at night, a console, lamps -------------------------------------------------------------
 
+/**
+ * The snow drawn (`drawn`, counted) and whether to leave it out (`skip`): with the ink halo on, the engine draws a
+ * frame's look again without it, and shows that copy round the reading glyphs (engine gfxClean, ruling 2026-11-13 §2).
+ */
+export const SNOW = { skip: false, drawn: 0 };
 /** Analogue snow: one tile of it, thrown down at a new place fifteen times a second. */
 function snow(e: WorldEnv, alpha: number, tone: string, y0 = 0, y1 = H) {
+  SNOW.drawn++;
+  // (QA, the halo comparison's all-effects-off diagnosis: __vjNoSnow)
+  if (SNOW.skip || (globalThis as { __vjNoSnow?: boolean }).__vjNoSnow) return;
   const tile = kept(`snow|${tone}`, 480, 270, (g) => {
     const img = g.createImageData(480, 270);
     const [r, gg, b] = [1, 3, 5].map((i) => parseInt(tone.slice(i, i + 2), 16));

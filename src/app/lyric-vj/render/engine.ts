@@ -19,9 +19,11 @@ import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash,
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
 import { hitAt } from './screen-hit';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { FINAL_WARP_LIB, FINAL_WARP_UV } from './final-warp.glsl';
+import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH } from './final-warp.glsl';
 import { binarize, flipRows, InkMask } from './ink-mask';
-import { idOf } from '../ink-verify';
+import { InkHalo } from './ink-halo';
+import { SNOW } from './world-grounds';
+import { idOf, partIdOf } from '../ink-verify';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -138,8 +140,22 @@ function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
 /** The glyph meshes of a line whose layout gives none of its own: shown, textured, not what the words stand on (ink gate). */
 function meshesOf(group: THREE.Object3D): { i: number; mesh: THREE.Mesh }[] {
   const out: { i: number; mesh: THREE.Mesh }[] = [];
-  group.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy']) out.push({ i: out.length, mesh: m }); });
+  // (what hangs under a glyph, its echo, its shine, its plate copy, is its part, never a glyph of its own: partsUnder)
+  const walk = (o: THREE.Object3D) => {
+    const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+    if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy']) return void out.push({ i: out.length, mesh: m });
+    o.children.forEach(walk);
+  };
+  walk(group);
   return out;
+}
+/** Every textured mesh hanging under these glyphs, by reading role (its `part`, else a copy: interference, ink-verify). */
+function partsUnder(glyphs: { i: number; mesh: THREE.Mesh }[]): { i: number; mesh: THREE.Mesh; role: 'extrude' | 'outline' | 'copy' }[] {
+  return glyphs.flatMap((g) => {
+    const out: { i: number; mesh: THREE.Mesh; role: 'extrude' | 'outline' | 'copy' }[] = [];
+    g.mesh.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (o !== g.mesh && m.isMesh && m.material.map) out.push({ i: g.i, mesh: m, role: (m.userData['part'] as 'extrude' | 'outline' | 'copy') ?? 'copy' }); });
+    return out;
+  });
 }
 /** A uniform's value copied, so a later frame's writes do not reach the copy. */
 const cloneValue = (v: unknown) => (v && typeof (v as { clone?: () => unknown }).clone === 'function' && !(v as THREE.Texture).isTexture ? (v as { clone: () => unknown }).clone() : v);
@@ -458,6 +474,8 @@ export const FINAL_SHADER = {
     uGlitch: { value: 0 }, uFade: { value: 0 },
     // a broken screen (kit.ts glass): the shard map shifts and shades the picture piece by piece, the cracks go on top
     tGlass: { value: null }, tCracks: { value: null }, uGlass: { value: 0 },
+    // the ink halo round the reading glyphs (final-warp.glsl FINAL_HALO_LIB; uHaloOut 0: off)
+    tHalo: { value: null }, uHaloIn: { value: 0 }, uHaloOut: { value: 0 },
   },
   vertexShader: /* glsl */ `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
   fragmentShader: /* glsl */ `
@@ -465,9 +483,13 @@ export const FINAL_SHADER = {
     uniform float uVignette, uVigBase, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     uniform float uBoil, uBoilSeed, uFlicker, uTooth, uPixel, uLift, uHasText, uGlitch, uFade, uScan; uniform sampler2D tText; uniform vec2 uWeave;
     uniform sampler2D tGlass, tCracks; uniform float uGlass;
+    uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut;
     ${FINAL_WARP_LIB}
+    ${FINAL_HALO_LIB}
     void main(){
       ${FINAL_WARP_UV}
+      float hk = haloKeep(uvC, uv, d, a);           // the halo: what of the effects' geometry this pixel keeps
+      float ho = haloAt(uvC);                       // and of their noise, where it shows
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       if (uTileHit > 0.0) c = texture2D(tDiffuse, fract(uv * 3.0)).rgb; // the picture repeated three by three for two frames
       if (uZoomHit > 0.0) {                         // a rush into the frame: the picture smeared along lines from the centre
@@ -476,7 +498,9 @@ export const FINAL_SHADER = {
         c = sum / 12.0;
       }
       // the lyrics come through a hit untouched (the text-only render marks where they are)
-      if ((uZoomHit > 0.0 || uTileHit > 0.0) && uHasText > 0.0) c = mix(c, texture2D(tDiffuse, uv).rgb, smoothstep(0.02, 0.3, texture2D(tText, uv).a));
+      if ((uZoomHit > 0.0 || uTileHit > 0.0) && uHasText > 0.0 && uHaloOut <= 0.0) c = mix(c, texture2D(tDiffuse, uv).rgb, smoothstep(0.02, 0.3, texture2D(tText, uv).a));
+      // round the reading glyphs the picture is read straight: no split, no jump, no grid, no smear (halo)
+      if (uHaloOut > 0.0) c = mix(texture2D(tDiffuse, uvC).rgb, c, hk);
       vec4 cracks = vec4(0.0);
       if (uGlass > 0.0) {                           // broken glass: each shard refracts what is under it a little
         vec3 sh = texture2D(tGlass, vUv).rgb;
@@ -501,7 +525,7 @@ export const FINAL_SHADER = {
         c += uRayColor * band * uBeams * 0.85;
       }
       c *= 1.0 - (uVigBase + uVignette) * dot(d, d) * 1.6; // vignette
-      c += (rnd(vUv * 1000.0) - 0.5) * uGrain;      // film grain
+      c += (rnd(vUv * 1000.0) - 0.5) * uGrain * ho; // film grain
       if (uPaper > 0.0) {                           // static print/paper texture: fibres and soft blotches
         vec2 p = vUv * vec2(1920.0, 1080.0);
         float fib = h1(floor(p.x / 3.0) * 7.0 + floor(p.y * 0.7)) * 0.5 + h1(floor(p.y / 2.0) * 13.0 + floor(p.x * 0.3)) * 0.5;
@@ -511,26 +535,26 @@ export const FINAL_SHADER = {
       vec2 px = vUv * RES;
       float lum = dot(c, LUMA);
       // lyrics (a text-only render, tText) stay crisp under pixel dither and paper tooth
-      float keep = uHasText > 0.0 ? smoothstep(0.05, 0.5, texture2D(tText, uvText).a) : 0.0;
+      float keep = uHasText > 0.0 && uHaloOut <= 0.0 ? smoothstep(0.05, 0.5, texture2D(tText, uvText).a) : 0.0;
       if (uLift > 0.0) {                            // the paper shows through the darks: a warm, fibrous ground
         float fib = h1(floor(px.x / 3.0) * 7.0 + floor(px.y * 0.7)) * 0.5 + vnoise(px / 90.0) * 0.5;
         c += vec3(0.91, 0.86, 0.77) * uLift * (0.6 + 0.8 * fib) * (1.0 - lum);
       }
       if (uTooth > 0.0) {                           // paper tooth: paint skips the grooves of rough paper
         float tn = vnoise(px / 2.5) * 0.6 + h2(floor(px / 2.0)) * 0.4;
-        c *= 1.0 - uTooth * 0.55 * smoothstep(0.62, 0.8, tn) * smoothstep(0.1, 0.6, lum) * (1.0 - 0.8 * keep);
+        c *= 1.0 - uTooth * 0.55 * smoothstep(0.62, 0.8, tn) * smoothstep(0.1, 0.6, lum) * (uHaloOut > 0.0 ? ho : 1.0 - 0.8 * keep);
       }
-      if (uPixel > 0.0) c = mix(c, floor(c * 4.0 + bayer4(floor(uv * PIX))) / 4.0, uPixel);
+      if (uPixel > 0.0) c = mix(c, floor(c * 4.0 + bayer4(floor(uv * PIX))) / 4.0, uPixel * ho);
       if (uPixel > 0.0) c = mix(c, texture2D(tDiffuse, uvText).rgb * (1.0 + 0.45 * uHit), keep * uPixel);
       c *= uFlicker;
-      if (uScan > 0.0) c *= 1.0 - uScan * step(0.5, fract(vUv.y * 360.0)); // a raster: every other line dimmer, whole frame
+      if (uScan > 0.0) c *= 1.0 - uScan * step(0.5, fract(vUv.y * 360.0)) * ho; // a raster: every other line dimmer, whole frame
       if (uSweep >= 0.0) {                          // light sweep: a soft slanted band crossing left to right
         float x = vUv.x + (vUv.y - 0.5) * 0.25;
         c += vec3(0.55, 0.7, 1.0) * 0.5 * exp(-pow((x - (uSweep * 1.6 - 0.3)) / 0.035, 2.0)) * (1.0 - uSweep * 0.5);
       }
       if (uGlitch > 0.0) {                          // block noise, only in the bands that jumped (all over read as a dead TV)
         float gb = floor(vUv.y * 14.0) + floor(uTime * 30.0) * 7.0;
-        c += (rnd(floor(vUv * vec2(48.0, 27.0)) + uTime) - 0.5) * 0.14 * uGlitch * step(0.45, h1(gb * 1.7));
+        c += (rnd(floor(vUv * vec2(48.0, 27.0)) + uTime) - 0.5) * 0.14 * uGlitch * step(0.45, h1(gb * 1.7)) * ho;
       }
       c = mix(c, cracks.rgb, cracks.a * uGlass);   // the cracks themselves over everything, the type included
       // white only at the peak, then an exposure lift that falls away: a plain white mix while it decays is grey fog
@@ -646,6 +670,8 @@ export class LyricVjEngine {
   private sceneTarget?: THREE.WebGLRenderTarget;
   /** The graphic look's canvas, drawn every frame and shown as the background layer. */
   private gfx?: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; mesh: THREE.Mesh };
+  /** The look drawn again without its snow, shown round the reading glyphs (the ink halo at the source layer). */
+  private gfxClean?: { ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; mesh: THREE.Mesh; u: { tHalo: { value: unknown }; uHaloIn: { value: number }; uHaloOut: { value: number } } };
   private dim: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   /** Letterbox bars, closed over quiet spans (the cinema-scope narrowing from the technique library). */
   private bars: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[] = [];
@@ -713,13 +739,16 @@ export class LyricVjEngine {
       this.ghostA = new THREE.WebGLRenderTarget(W, H);
       this.ghostB = new THREE.WebGLRenderTarget(W, H);
       this.ghostPass = new ShaderPass({
-        uniforms: { tDiffuse: { value: null }, tA: { value: this.ghostA.texture }, tB: { value: this.ghostB.texture }, uColA: { value: new THREE.Color() }, uColB: { value: new THREE.Color() } },
+        uniforms: { tDiffuse: { value: null }, tA: { value: this.ghostA.texture }, tB: { value: this.ghostB.texture }, uColA: { value: new THREE.Color() }, uColB: { value: new THREE.Color() }, tHalo: { value: null }, uHaloIn: { value: 0 }, uHaloOut: { value: 0 } },
         vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-        fragmentShader: `uniform sampler2D tDiffuse, tA, tB; uniform vec3 uColA, uColB; varying vec2 vUv;
+        // (the ghosts stay off round the reading glyphs with the ink halo on: final-warp.glsl haloAt)
+        fragmentShader: `uniform sampler2D tDiffuse, tA, tB, tHalo; uniform vec3 uColA, uColB; uniform float uHaloIn, uHaloOut; varying vec2 vUv;
+          float haloAt(vec2 p){ if (uHaloOut <= 0.0) return 1.0; return clamp((texture2D(tHalo, p).r - uHaloIn) / max(uHaloOut - uHaloIn, 1e-3), 0.0, 1.0); }
           void main() {
             vec4 c = texture2D(tDiffuse, vUv);
-            c.rgb = mix(c.rgb, uColB, texture2D(tB, vUv).a * 0.45);
-            c.rgb = mix(c.rgb, uColA, texture2D(tA, vUv).a * 0.55);
+            float ho = haloAt(vUv);
+            c.rgb = mix(c.rgb, uColB, texture2D(tB, vUv).a * 0.45 * ho);
+            c.rgb = mix(c.rgb, uColA, texture2D(tA, vUv).a * 0.55 * ho);
             gl_FragColor = c;
           }`,
       });
@@ -2311,23 +2340,37 @@ export class LyricVjEngine {
         setLineVeil((c, alpha) => this.veilLines(c, t, alpha));
         setBackPush(this.pushAt(t));
       }
-      setLinkContext(this.linkContextAt(this.koma(bt)));
-      try {
-        drawLook(this.gfx.ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
-          const tex = this.images.get(asset ?? shot.asset ?? '');
-          return tex?.image as CanvasImageSource | undefined;
-        }, (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
-      } finally {
-        setLinkContext(undefined);
-      }
-      setLineVeil(undefined); // probes draw the look without it
-      // (a title card takes the frame alone: a lock screen's big clock under it read as one word with the title)
       const scene = this.sceneAt(t);
-      if (scene) this.drawStoryboard(this.gfx.ctx, scene, t, since, i);
-      const lang = this.job.treatment.design?.language;
-      const drop = scene ? undefined : [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
-      // a song's own code layer brings its own peaks; the language's stock move on top of it read as clutter
-      if (lang && drop && !this.ownDrawing(bt)) drawNative(this.gfx.ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
+      const paint = (ctx: CanvasRenderingContext2D) => {
+        setLinkContext(this.linkContextAt(this.koma(bt)));
+        try {
+          drawLook(ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
+            const tex = this.images.get(asset ?? shot.asset ?? '');
+            return tex?.image as CanvasImageSource | undefined;
+          }, (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
+        } finally {
+          setLinkContext(undefined);
+        }
+        // (a title card takes the frame alone: a lock screen's big clock under it read as one word with the title)
+        if (scene) this.drawStoryboard(ctx, scene, t, since, i);
+        const lang = this.job.treatment.design?.language;
+        const drop = scene ? undefined : [...(this.job.treatment.moments ?? [])].reverse().find((m) => (m.kind === 'drop' || m.kind === 'finale') && bt >= m.at);
+        // a song's own code layer brings its own peaks; the language's stock move on top of it read as clutter
+        if (lang && drop && !this.ownDrawing(bt)) drawNative(ctx, lang, bt - drop.at, sectionAt(this.job.treatment.graphics!, bt), { since, pulse: Math.exp(-since * 7), index: i });
+      };
+      SNOW.drawn = 0;
+      paint(this.gfx.ctx);
+      // (the ink halo at the source layer, ruling 2026-11-13 §2: a look that drew TV snow is drawn again without it, and
+      // that copy is shown round the reading glyphs; the final pass's own noise cannot take back what the scene drew)
+      const halo = (globalThis as { __vjInkHalo?: [number, number] }).__vjInkHalo;
+      if (halo && SNOW.drawn > 0) {
+        this.gfxClean ??= this.makeGfxClean();
+        SNOW.skip = true;
+        try { paint(this.gfxClean.ctx); } finally { SNOW.skip = false; }
+        this.gfxClean.tex.needsUpdate = true;
+      }
+      if (this.gfxClean) this.gfxClean.mesh.visible = !!halo && SNOW.drawn > 0;
+      setLineVeil(undefined); // probes draw the look without it
       this.gfx.tex.needsUpdate = true;
       // the look is the whole background: no full-bleed plates, no generic light motes
       for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;
@@ -2465,6 +2508,20 @@ export class LyricVjEngine {
     u['uLift'].value = medium.lift;
     const screenHit = hitAt(this.cueLayers.flatMap(({ rt }) => (rt.style.hit ? [{ at: rt.cue.start, hit: rt.style.hit }] : [])), t);
     // (QA, the ink gate's freeze test: __vjForceTextMask draws the text mask whatever the medium)
+    // the ink halo (opt-in, treatment.inkHalo): measured round the reading glyphs as they stand now; the words-off pass of
+    // the ink gate keeps the words-on pass's (frozen controls), never one measured with the words away
+    const halo = (globalThis as { __vjInkHalo?: [number, number] }).__vjInkHalo;
+    if (!this.inkFrozen) {
+      [u['uHaloIn'].value, u['uHaloOut'].value] = halo ? [halo[0], Math.min(halo[1], HALO_REACH)] : [0, 0];
+      if (halo) {
+        this.halo ??= new InkHalo();
+        this.textRoot.updateMatrixWorld(true);
+        this.halo.render(this.renderer, this.textScene, this.camera, this.readingMeshes());
+        u['tHalo'].value = this.halo.texture;
+      }
+    }
+    if (this.ghostPass) for (const k of ['tHalo', 'uHaloIn', 'uHaloOut']) this.ghostPass.uniforms[k].value = u[k].value;
+    if (this.gfxClean) for (const k of ['tHalo', 'uHaloIn', 'uHaloOut'] as const) this.gfxClean.u[k].value = u[k].value;
     const needsMask = medium.pixel + medium.tooth > 0 || screenHit.zoom > 0 || screenHit.tile > 0 || !!(globalThis as { __vjForceTextMask?: boolean }).__vjForceTextMask;
     u['uHasText'].value = needsMask ? 1 : 0;
     // (the ink gate's words-off pass keeps the words-on pass's text mask: ink-mask.ts, frozen controls)
@@ -2573,24 +2630,57 @@ export class LyricVjEngine {
   private inkControls?: { uniforms: Record<string, unknown>; bloom: number };
   private inkFrozen?: { uniforms: Record<string, unknown>; bloom: number };
   private inkMask?: InkMask;
+  private halo?: InkHalo;
+
+  /** The clean copy of the look (gfxClean): over the look, seen only within the halo round the reading glyphs. */
+  private makeGfxClean(): NonNullable<LyricVjEngine['gfxClean']> {
+    const c = document.createElement('canvas');
+    [c.width, c.height] = [W, H];
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const u = { tHalo: { value: null as unknown }, uHaloIn: { value: 0 }, uHaloOut: { value: 0 } };
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, u);
+      sh.fragmentShader = sh.fragmentShader
+        .replace('void main() {', `uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut;\nvoid main() {`)
+        .replace('#include <alphatest_fragment>', `#include <alphatest_fragment>\n  diffuseColor.a *= uHaloOut > 0.0 ? 1.0 - clamp((texture2D(tHalo, gl_FragCoord.xy / vec2(${W}.0, ${H}.0)).r - uHaloIn) / max(uHaloOut - uHaloIn, 1e-3), 0.0, 1.0) : 0.0;`);
+    };
+    mat.customProgramCacheKey = () => 'gfx-clean';
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), mat);
+    mesh.renderOrder = -0.999; // right over the look, under everything else
+    mesh.position.copy(this.gfx!.mesh.position);
+    this.scene.add(mesh);
+    return { ctx: c.getContext('2d')!, tex, mesh, u };
+  }
+
+  /** The reading glyphs as shown now, their faces and declared extrudes (the ink halo's support). */
+  private readingMeshes(): THREE.Mesh[] {
+    return this.glyphMeshes().flatMap((l) => [...l.glyphs.map((g) => g.mesh), ...l.parts.filter((p) => p.role === 'extrude').map((p) => p.mesh)]);
+  }
 
   /**
    * QA: every glyph mesh of every line shown, each with its line's slot on this moment (1..) and its index: what the ink
    * gate draws in IDs (ink-mask.ts). A world line gives its own glyphs; other templates their textured meshes that are not
    * what the words stand on.
    */
-  glyphMeshes(): { id: string; slot: number; glyphs: { i: number; mesh: THREE.Mesh }[] }[] {
+  glyphMeshes(): { id: string; slot: number; glyphs: { i: number; mesh: THREE.Mesh }[]; parts: { i: number; mesh: THREE.Mesh; role: 'extrude' | 'outline' | 'copy' }[] }[] {
     if (!this.textRoot.visible) return [];
     const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
     // (shown: visible all the way up and drawn at opacity over 0.01, §1.4)
     const drawn = (m: THREE.Mesh) => shown(m) && ((m.material as THREE.Material).opacity ?? 1) > 0.01;
-    const lines = this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: (l.glyphMeshes ? l.glyphMeshes() : meshesOf(l.group)).filter((g) => drawn(g.mesh)) })).filter((x) => x.glyphs.length));
+    // (each line's parts by reading role, ruling 2026-11-13 §1: what its layout names, and whatever hangs under a glyph)
+    const lines = this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => shown(l.group)).map((l) => {
+      const glyphs = (l.glyphMeshes ? l.glyphMeshes() : meshesOf(l.group)).filter((g) => drawn(g.mesh));
+      return { id: rt.cue.id, glyphs, parts: [...(l.glyphParts?.() ?? []), ...partsUnder(glyphs)].filter((p) => drawn(p.mesh)) };
+    }).filter((x) => x.glyphs.length));
     // (and every other word the type layer shows: a line's call, a blown-up word's copies, the drop's keyword flash; read
-    // under `other`, so nothing taken away with the words is left out of the masks)
-    const taken = new Set(lines.flatMap((l) => l.glyphs.map((g) => g.mesh)));
+    // under `other`, so nothing taken away with the words is left out of the masks; what hangs under a glyph is its part)
+    const taken = new Set<THREE.Object3D>(lines.flatMap((l) => [...l.glyphs.map((g) => g.mesh), ...l.parts.map((p) => p.mesh)]));
+    const under = (o: THREE.Object3D | null): boolean => !!o && (taken.has(o) || under(o.parent));
     const other: { i: number; mesh: THREE.Mesh }[] = [];
-    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !taken.has(m) && !m.userData['decor'] && !m.userData['ring'] && !m.userData['copy'] && drawn(m)) other.push({ i: other.length, mesh: m }); });
-    return [...lines, ...(other.length ? [{ id: 'other', glyphs: other }] : [])].slice(0, 255).map((l, k) => ({ ...l, slot: k + 1 }));
+    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !under(m) && !m.userData['decor'] && !m.userData['ring'] && !m.userData['copy'] && drawn(m)) other.push({ i: other.length, mesh: m }); });
+    return [...lines, ...(other.length ? [{ id: 'other', glyphs: other, parts: [] }] : [])].slice(0, 255).map((l, k) => ({ ...l, slot: k + 1 }));
   }
 
   /**
@@ -2599,14 +2689,15 @@ export class LyricVjEngine {
    * pass's own controls (text mask, chroma trails, every final uniform, the bloom), and the glyphs' IDs through the final
    * pass's sampling. Returns the three over the glyphs' box grown by `pad`, top row first, and which line each slot is.
    */
-  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> {
+  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; parts?: Uint8Array; fx: Record<string, number>; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> {
     const gl = this.renderer.getContext();
     const read = (x0: number, y0: number, w: number, h: number) => { const b = new Uint8Array(w * h * 4); gl.readPixels(x0, H - y0 - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b); return flipRows(b, w, h); };
     this.showLyrics(true);
     await this.renderAt(t);
     const lines = this.glyphMeshes();
     if (!lines.length) return undefined;
-    const all = lines.flatMap((l) => l.glyphs);
+    // (a glyph's parts too: the edge of its extrude or keyline is read as drawn, all or nothing like its face)
+    const all = lines.flatMap((l) => [...l.glyphs, ...l.parts]);
     all.forEach((g) => binarize(g.mesh.material as THREE.Material, true));
     try {
       this.inkCapture = true;
@@ -2623,6 +2714,13 @@ export class LyricVjEngine {
       this.inkMask ??= new InkMask();
       this.inkMask.render(this.renderer, this.textScene, this.camera, meshes.flatMap((l) => l.glyphs.map((g) => ({ mesh: g.mesh, id: idOf(l.slot, g.i) }))), this.finalPass.uniforms as Record<string, { value: unknown }>);
       const mask = this.inkMask.read(this.renderer, x0, y0, w, h);
+      // (the parts mask: each glyph's parts by reading role, through the same sampling; ink-verify partIdOf)
+      const partList = meshes.flatMap((l) => l.parts.map((p) => ({ mesh: p.mesh, id: partIdOf(l.slot, p.i, p.role) })));
+      let parts: Uint8Array | undefined;
+      if (partList.length) {
+        this.inkMask.render(this.renderer, this.textScene, this.camera, partList, this.finalPass.uniforms as Record<string, { value: unknown }>);
+        parts = this.inkMask.read(this.renderer, x0, y0, w, h);
+      }
       // (QA, the gate's smoke test: __vjInkNoFreeze runs the words-off pass on its own controls, to show what freezing holds)
       this.inkFrozen = (globalThis as { __vjInkNoFreeze?: boolean }).__vjInkNoFreeze ? undefined : this.inkControls;
       this.showLyrics(false, true);
@@ -2631,7 +2729,10 @@ export class LyricVjEngine {
       const off = read(x0, y0, w, h);
       // (each glyph's drawn opacity, with every group above it: under 1 the ground shows through its ink, ink-verify)
       const opacity = (m: THREE.Mesh) => { let a = (m.material as THREE.Material).opacity ?? 1; for (let o = m.parent; o; o = o.parent) a *= ((o as THREE.Mesh).material as THREE.Material | undefined)?.opacity ?? 1; return a; };
-      return { box: [x0, y0, w, h], on, off, mask, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))), opacity: Object.fromEntries(meshes.flatMap((l) => l.glyphs.map((g) => [idOf(l.slot, g.i), opacity(g.mesh)]))) };
+      // (the effects as the words-on pass drew them: every numeric final control off its resting value, and the bloom)
+      const rest: Record<string, number> = { uFlicker: 1, uSweep: -1, uShockR: -1, uVigBase: 0.55, uAberration: 0.0012 };
+      const fx = Object.fromEntries([...Object.entries(this.inkControls?.uniforms ?? {}).filter(([k, v]) => typeof v === 'number' && v !== (rest[k] ?? 0)).map(([k, v]) => [k, +(v as number).toFixed(4)]), ['bloom', +(this.inkControls?.bloom ?? 0).toFixed(3)]]);
+      return { box: [x0, y0, w, h], on, off, mask, parts, fx, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))), opacity: Object.fromEntries(meshes.flatMap((l) => l.glyphs.map((g) => [idOf(l.slot, g.i), opacity(g.mesh)]))) };
     } finally {
       this.inkCapture = false;
       this.inkFrozen = undefined;

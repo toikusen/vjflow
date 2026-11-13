@@ -419,6 +419,7 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
       gm.renderOrder = -1;
       // (a copy behind the glyph, not a glyph: what the glyph stands on for the ink gate)
       gm.userData['copy'] = true;
+      gm.userData['part'] = 'copy';
       mesh.add(gm);
       mesh.userData['inkGhost'] = gm;
     }

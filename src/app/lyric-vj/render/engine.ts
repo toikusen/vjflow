@@ -2528,7 +2528,8 @@ export class LyricVjEngine {
     if (this.inkCapture) this.inkControls = { uniforms: Object.fromEntries(Object.entries(this.finalPass.uniforms).map(([k, v]) => [k, cloneValue(v.value)])), bloom: this.bloom.strength };
     if (this.inkFrozen) { for (const [k, v] of Object.entries(this.inkFrozen.uniforms)) this.finalPass.uniforms[k].value = cloneValue(v); this.bloom.strength = this.inkFrozen.bloom; }
     // (QA ablation, the ink gate: final-pass uniforms held at their resting value by name, __vjFinalOff)
-    for (const k of (globalThis as { __vjFinalOff?: string[] }).__vjFinalOff ?? []) if (this.finalPass.uniforms[k]) this.finalPass.uniforms[k].value = ({ uFlicker: 1, uSweep: -1, uShockR: -1 } as Record<string, number>)[k] ?? 0;
+    for (const k of (globalThis as { __vjFinalOff?: string[] }).__vjFinalOff ?? []) if (this.finalPass.uniforms[k] && typeof this.finalPass.uniforms[k].value === 'number') this.finalPass.uniforms[k].value = ({ uFlicker: 1, uSweep: -1, uShockR: -1 } as Record<string, number>)[k] ?? 0;
+    for (const [k, v] of Object.entries((globalThis as { __vjFinalSet?: Record<string, number> }).__vjFinalSet ?? {})) if (this.finalPass.uniforms[k]) this.finalPass.uniforms[k].value = v;
     this.composer.render();
     back?.();
   }
@@ -2613,7 +2614,8 @@ export class LyricVjEngine {
       this.inkMask ??= new InkMask();
       this.inkMask.render(this.renderer, this.textScene, this.camera, meshes.flatMap((l) => l.glyphs.map((g) => ({ mesh: g.mesh, id: idOf(l.slot, g.i) }))), this.finalPass.uniforms as Record<string, { value: unknown }>);
       const mask = this.inkMask.read(this.renderer, x0, y0, w, h);
-      this.inkFrozen = this.inkControls;
+      // (QA, the gate's smoke test: __vjInkNoFreeze runs the words-off pass on its own controls, to show what freezing holds)
+      this.inkFrozen = (globalThis as { __vjInkNoFreeze?: boolean }).__vjInkNoFreeze ? undefined : this.inkControls;
       this.showLyrics(false, true);
       (globalThis as { __vjInkRings?: boolean }).__vjInkRings = true;
       await this.renderAt(t);

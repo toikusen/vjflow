@@ -672,12 +672,14 @@ export class LyricVjEngine {
       this.textRoot.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible && !o.userData['decor']) { o.visible = false; hid.push(o); } });
       return () => hid.forEach((o) => (o.visible = true));
     }
-    // (the ink gate keeps what the words stand on: the rings under the letters and the copies behind them, a glyph's own
-    // child among them; so a glyph is taken away by its material, its children left as they are)
+    // (the ink gate keeps what the words stand on, the rings under the letters; a glyph is taken away by its material, so
+    // a ring that is its child stays)
     const off: THREE.Material[] = [];
     this.textRoot.traverse((o) => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh || !o.visible || o.userData['decor'] || o.userData['ring'] || o.userData['copy']) return;
+      // (a copy behind a glyph, an extrude, a misprint, a ghost, goes with the words: it is the word's own look, not a
+      // ground; the glyph's face is read against what is under the whole word, dark-glitch c059 read 1:1 on its own extrude)
+      if (!m.isMesh || !o.visible || o.userData['decor'] || o.userData['ring']) return;
       for (const mat of Array.isArray(m.material) ? m.material : [m.material]) if (mat.visible) { mat.visible = false; off.push(mat); }
     });
     return () => off.forEach((mat) => (mat.visible = true));

@@ -5,8 +5,8 @@ import { DRIFT_MAX, glyphOfId, lineOfId, offDrift, reduceGlyphs, type GlyphVerdi
 type Engine = { inkMoment(t: number, pad?: number): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; lines: Record<number, string>; shown: number[] } | undefined> };
 const w = window as unknown as { vjEngine: Engine; vjGlyphs(): { id: string; glyphs: { i: number; moving: boolean; a: number }[] }[]; vjFrame(t: number): Promise<unknown>; inkGate: unknown };
 
-/** The neighbourhood a glow, a chroma trail or the aberration split reaches round a glyph, px (offDrift). */
-const DRIFT_R = 24;
+/** The neighbourhood a glow, a chroma trail, the aberration split or a word's own copies (an extrude, a misprint: taken away with it) reach round a glyph, px (offDrift). */
+const DRIFT_R = 48;
 
 export type Read = { cue: string; i: number; moving: boolean; v: GlyphVerdict };
 /** One moment: every glyph shown, its verdict; the field drift; the 2D layer's characters (signature), unverified. */

@@ -13,37 +13,66 @@ describe('ink gate v2 numbers', () => {
     expect(idOf(1, 0)).not.toBe(0);
   });
 
-  it('fails a glyph on its single worst core pixel; mixed pixels are listed, never deciding', () => {
+  it('a see-through glyph: each core pixel against the same pixel without the words; mixed pixels listed, never deciding', () => {
     const id = idOf(1, 0);
     const [r, g, b] = idRgb(id);
+    const half = { [id]: 0.5 };
     // three core pixels: white on black (21:1) twice, and one grey pair at about 4.49:1
     const on = rows([[255, 255, 255, 255], [255, 255, 255, 255], [116, 116, 116, 255], [0, 0, 0, 255]]);
     const off = rows([[0, 0, 0, 255], [0, 0, 0, 255], [0, 0, 0, 255], [0, 0, 0, 255]]);
     const mask = rows([[r, g, b, 255], [r, g, b, 255], [r, g, b, 255], [r, g, b, 128]]);
-    const [v] = reduceGlyphs(on, off, mask, 4);
+    const [v] = reduceGlyphs(on, off, mask, 4, [], half);
     expect(v.n).toBe(3);
     expect(v.min).toBeLessThan(INK_MIN);
     expect(v.min).toBeGreaterThan(4.4);
     expect(v.status).toBe('fail');
     expect(v.edge).toEqual({ n: 1, min: 1 });
-    // the same with every core pixel white: passes, the low mixed pixel still listed
-    const [p] = reduceGlyphs(rows([[255, 255, 255, 255], [255, 255, 255, 255], [255, 255, 255, 255], [0, 0, 0, 255]]), off, mask, 4);
+    const [p] = reduceGlyphs(rows([[255, 255, 255, 255], [255, 255, 255, 255], [255, 255, 255, 255], [0, 0, 0, 255]]), off, mask, 4, [], half);
     expect(p.status).toBe('pass');
     expect(p.edge!.min).toBe(1);
   });
 
-  it('reads a ground finer than its grain as its mean: an opaque face over 2 px snow is not failed by one speckle', () => {
-    const [w, h] = [12, 12];
+  /** A w × h frame: `px(x, y)` → [r, g, b] with the words, the glyph's core where `glyph(x, y)`. */
+  const frame = (w: number, h: number, px: (x: number, y: number) => number[], glyph: (x: number, y: number) => boolean) => {
     const id = idOf(1, 0);
     const [r, g, b] = idRgb(id);
-    // orange face (luminance ≈ 0.25) over dark snow with one light speckle a 4 px period (luminance ≈ the orange's)
-    const off = new Uint8Array(w * h * 4);
-    for (let i = 0; i < w * h; i++) off.set((i % w) % 4 === 0 && Math.floor(i / w) % 4 === 0 ? [140, 138, 143, 255] : [14, 10, 20, 255], i * 4);
     const on = new Uint8Array(w * h * 4);
     const mask = new Uint8Array(w * h * 4);
-    for (let i = 0; i < w * h; i++) { on.set([220, 100, 40, 255], i * 4); mask.set([r, g, b, 255], i * 4); }
-    expect(reduceGlyphs(on, off, mask, w, [], 0)[0].status).toBe('fail');
-    expect(reduceGlyphs(on, off, mask, w)[0].status).toBe('pass');
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { on.set([...px(x, y), 255], (y * w + x) * 4); if (glyph(x, y)) mask.set([r, g, b, 255], (y * w + x) * 4); }
+    return { on, mask, id };
+  };
+
+  it('an opaque face is read against what borders it on screen: a 2 px white stroke on a 30 % white halftone fails', () => {
+    const [w, h] = [20, 20];
+    const stroke = (x: number) => x >= 9 && x < 11;
+    // a 2 px dot screen, one dot in three, white on black, round a white stroke
+    const dots = (x: number, y: number) => (Math.floor(x / 2) + Math.floor(y / 2)) % 3 === 0;
+    const { on, mask } = frame(w, h, (x, y) => (stroke(x) || dots(x, y) ? [255, 255, 255] : [0, 0, 0]), (x) => stroke(x));
+    const [v] = reduceGlyphs(on, new Uint8Array(w * h * 4), mask, w);
+    expect(v.status).toBe('fail');
+    expect(v.min).toBeLessThan(1.1);
+    // the same stroke on plain black passes
+    const plain = frame(w, h, (x) => (stroke(x) ? [255, 255, 255] : [0, 0, 0]), (x) => stroke(x));
+    expect(reduceGlyphs(plain.on, new Uint8Array(w * h * 4), plain.mask, w)[0].status).toBe('pass');
+  });
+
+  it("a copy in the stroke's own colour merged into it (an extrude) fails; the ground hidden under the face does not count", () => {
+    const [w, h] = [20, 20];
+    const stroke = (x: number) => x >= 8 && x < 11;
+    // orange stroke, its orange extrude 2 px to the right, black beyond; the words-off ground under the face is speckled
+    const { on, mask } = frame(w, h, (x) => (stroke(x) ? [220, 100, 40] : x >= 11 && x < 13 ? [210, 95, 38] : [0, 0, 0]), (x) => stroke(x));
+    const off = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) off.set(i % 3 ? [10, 10, 10, 255] : [140, 138, 143, 255], i * 4);
+    expect(reduceGlyphs(on, off, mask, w)[0].status).toBe('fail');
+    // without the extrude, the face against black passes, the speckles under it not read
+    const bare = frame(w, h, (x) => (stroke(x) ? [220, 100, 40] : [0, 0, 0]), (x) => stroke(x));
+    expect(reduceGlyphs(bare.on, off, bare.mask, w)[0].status).toBe('pass');
+  });
+
+  it('a glyph with only mixed pixels is unverified (all-mixed), not a pass', () => {
+    const id = idOf(3, 1);
+    const [r, g, b] = idRgb(id);
+    expect(reduceGlyphs(rows([[255, 255, 255, 255]]), rows([[0, 0, 0, 255]]), rows([[r, g, b, 128]]), 1)[0].status).toBe('unverified:all-mixed');
   });
 
   it('a glyph shown with no core pixel is unverified, not a pass', () => {

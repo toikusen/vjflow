@@ -89,17 +89,38 @@ for (const spec of a.jobs!.split(',')) {
   let [moments, glyphs, fails, worst] = [0, 0, 0, Infinity];
   const unverified: Record<string, number> = {};
   let stopped = '';
+  // (a job resumed counts what it already wrote: its moments, fails, unverified glyphs and worst; one that stopped on a
+  // nondeterministic re-draw stays stopped)
+  if (resume.after >= 0) for (const l of readFileSync(file, 'utf8').split('\n')) {
+    let r: { kind?: string; glyphs?: unknown[]; nondeterministic?: boolean };
+    try { r = JSON.parse(l); } catch { continue; }
+    if (r.kind !== 'moment') continue;
+    moments++;
+    if (r.nondeterministic) stopped = 'nondeterministic';
+    for (const g of r.glyphs ?? []) {
+      if (Array.isArray(g)) { glyphs++; worst = Math.min(worst, Number(g[2])); continue; }
+      const o = g as { status: string; min?: number; layer2d?: number };
+      if (o.layer2d) { unverified['layer-2d'] = (unverified['layer-2d'] ?? 0) + o.layer2d; continue; }
+      glyphs++;
+      if (o.status === 'fail') fails++;
+      else if (o.status !== 'pass') unverified[o.status] = (unverified[o.status] ?? 0) + 1;
+      if (Number.isFinite(o.min)) worst = Math.min(worst, o.min!);
+    }
+  }
+  if (stopped) frames.length = 0;
+  let k0 = 0; // (the frames this run read)
   for (const [k, f] of frames.entries()) {
     if (a['limit-sec'] && (Date.now() - started) / 1000 > Number(a['limit-sec'])) { stopped = 'timeout'; break; }
     const t = f / fps;
-    const m = (await page.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[]; drift: number; driftAt?: number[]; layer2d: number; hash?: number };
+    const m = (await page.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[]; drift: number; driftAt?: number[]; layer2d: number; hash?: number; lines?: Record<number, string> };
     // (determinism: the first moment and one in every N drawn again must give the same ink pixels)
     if (m.hash !== undefined && (k === 0 || k % Number(a.determinism) === 0)) {
       const again = (await page.evaluate(`window.inkGate.moment(${t})`)) as { hash?: number };
       if (again.hash !== m.hash) { unverified['nondeterministic'] = (unverified['nondeterministic'] ?? 0) + m.reads.length; stopped = 'nondeterministic'; }
     }
     moments++;
-    const lines: Record<number, string> = {};
+    k0++;
+    const lines: Record<number, string> = m.lines ?? {};
     const out: unknown[] = [];
     for (const r of m.reads) {
       glyphs++;
@@ -108,17 +129,19 @@ for (const spec of a.jobs!.split(',')) {
       if (r.v.status === 'fail') fails++;
       else if (r.v.status !== 'pass') unverified[r.v.status] = (unverified[r.v.status] ?? 0) + 1;
       if (Number.isFinite(r.v.min)) worst = Math.min(worst, r.v.min);
-      // (a passing glyph in short: cue, index, its worst core pixel)
-      out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3)] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, edge: r.v.edge });
+      // (a passing glyph in short: cue, index, its worst core pixel, its mixed pixels' worst when any are under INK_MIN)
+      out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3), ...(r.v.edge && r.v.edge.min < 4.5 ? [r.v.edge] : [])] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, edge: r.v.edge });
     }
     if (m.layer2d) unverified['layer-2d'] = (unverified['layer-2d'] ?? 0) + m.layer2d;
-    row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });
+    row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), ...(stopped === 'nondeterministic' ? { nondeterministic: true } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });
     if (stopped) break;
   }
   await page.close();
-  const done = { kind: 'done' as const, moments, glyphs, fails, unverified: stopped ? { ...unverified, [stopped]: frames.length - moments } : unverified, worst: Number.isFinite(worst) ? +worst.toFixed(3) : NaN, wallSec: Math.round((Date.now() - started) / 1000) };
+  const done = { kind: 'done' as const, moments, glyphs, fails, unverified: stopped ? { ...unverified, [stopped]: Math.max(1, frames.length - k0) } : unverified, worst: Number.isFinite(worst) ? +worst.toFixed(3) : NaN, wallSec: Math.round((Date.now() - started) / 1000) };
   if (!stopped) row(done);
-  summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`] = { ...done, complete: !stopped, loadSec: Math.round((ready - started) / 1000), sPerMoment: +((Date.now() - ready) / 1000 / Math.max(1, moments)).toFixed(2) };
+  // (complete: nothing stopped it and every glyph read was decided, §1.6; an unverified glyph is never a zero-fail world)
+  const complete = !stopped && Object.values(done.unverified).every((n) => !n);
+  summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`] = { ...done, complete, loadSec: Math.round((ready - started) / 1000), sPerMoment: +((Date.now() - ready) / 1000 / Math.max(1, moments)).toFixed(2) };
   writeFileSync(join(out, 'summary.json'), JSON.stringify(summary, null, 1));
   console.log(world, name, JSON.stringify(summary[`${world}:${name}${a['clean-reveal'] ? ':clean' : ''}`]));
 }

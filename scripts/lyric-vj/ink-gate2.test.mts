@@ -1,9 +1,9 @@
 // The ink gate v2's page-side smoke test (docs/research/2026-11-13-ink-table-gate-design.md §1.8), in a real page:
-//  1. analytic: a world line on an empty look with every final effect at rest but uFlicker 0.97: the worst glyph's worst
-//     pixel equals the WCAG ratio of that pixel's two colours at uFlicker 1, both scaled by 0.97 (±1 %);
-//  2. a fail is caught: the same line with the look's darkness lifted to the ink (uLift) reads under 4.5;
-//  3. frozen controls: the field outside the words does not move when the words go (offDrift ≤ 2). (No free world uses a
-//     medium that keeps the words by their text mask, so the run without the freeze, __vjInkNoFreeze, is printed, not held.)
+//  1. a readable line (dark-glitch's light ink on an empty, black look, every final effect at rest) passes; at uFlicker
+//     0.97 its worst glyph equals the rule worked here on the frame at 1 scaled by 0.97, ±1 %;
+//  2. the same line with the ground under it lifted toward the ink (uLift) fails;
+//  3. frozen controls on a scene whose text mask is not empty (the pixel medium, the mask forced on): without the freeze the
+//     words-off frame differs under the words; with it the field round the words holds still (offDrift ≤ 2).
 //   nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/ink-gate2.test.mts   (exit 1 on a failed check)
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -45,41 +45,60 @@ type Read = { cue: string; i: number; v: { status: string; min: number; n: numbe
 const fails: string[] = [];
 const check = (ok: boolean, what: string) => { console.log(ok ? 'ok  ' : 'FAIL', what); if (!ok) fails.push(what); };
 
-// 1–2: a black, empty look; the first glyph read of a line in its middle
+// 1–2: dark-glitch's light ink on an empty look (black): a readable line at rest
 const empty = (j: Record<string, unknown>) => { const tr = j['treatment'] as { graphics?: { sections: { layers: unknown[] }[] } }; for (const s of tr.graphics?.sections ?? []) s.layers = []; };
 const t = 6.2;
 const lum = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
-const flat = await open('xerox', empty, `window.__vjFinalOff = ${JSON.stringify(REST)};`);
-// (the three boxes at uFlicker 1, then the gate's reading at 0.97: its worst glyph's worst pixel must be the WCAG ratio of
-// that pixel's two colours at 1, both scaled by 0.97 the way the final pass scales them, the ground read as its 5 × 5 mean)
-const A = (await flat.evaluate(`(async () => { const m = await window.vjEngine.inkMoment(${t}); return m && { box: m.box, on: Array.from(m.on), off: Array.from(m.off) }; })()`)) as { box: number[]; on: number[]; off: number[] } | null;
-check(!!A, `a line on the empty look at ${t}s`);
+const flat = await open('dark-glitch', empty, `window.__vjFinalOff = ${JSON.stringify(REST)};`);
+const base = (await flat.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[] };
+const read = base.reads.filter((x) => x.v.n > 0);
+check(read.length > 0 && read.every((x) => x.v.status === 'pass'), `a readable line at ${t}s passes (${read.length} glyphs, worst ${Math.min(...read.map((x) => x.v.min)).toFixed(2)})`);
+// (uFlicker 0.97 scales the whole frame in the final pass: the gate's worst glyph must equal the same rule worked here
+// on the frame at 1 with every channel scaled by 0.97, ±1 %)
+const A = (await flat.evaluate(`(async () => { const m = await window.vjEngine.inkMoment(${t}); return m && { w: m.box[2], h: m.box[3], on: Array.from(m.on), mask: Array.from(m.mask) }; })()`)) as { w: number; h: number; on: number[]; mask: number[] } | null;
 if (A) {
+  const Lp = (k: number) => 0.2126 * lum(Math.round(A.on[k] * 0.97)) + 0.7152 * lum(Math.round(A.on[k + 1] * 0.97)) + 0.0722 * lum(Math.round(A.on[k + 2] * 0.97));
+  const own = (i: number) => (A.mask[i * 4] << 16) | (A.mask[i * 4 + 1] << 8) | A.mask[i * 4 + 2];
+  let expect = Infinity;
+  for (let i = 0; i < A.w * A.h; i++) {
+    if (!own(i) || A.mask[i * 4 + 3] < 255) continue;
+    const [x, y] = [i % A.w, Math.floor(i / A.w)];
+    for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+      const [qx, qy] = [x + dx, y + dy];
+      if ((!dx && !dy) || dx * dx + dy * dy > 9 || qx < 0 || qy < 0 || qx >= A.w || qy >= A.h || own(qy * A.w + qx) === own(i)) continue;
+      const [p, q] = [Lp(i * 4), Lp((qy * A.w + qx) * 4)];
+      expect = Math.min(expect, (Math.max(p, q) + 0.05) / (Math.min(p, q) + 0.05));
+    }
+  }
   await flat.evaluate(`window.__vjFinalSet = { uFlicker: 0.97 }`);
-  const r = (await flat.evaluate(`window.inkGate.moment(${t})`)) as { reads: (Read & { v: { minAt: number[] } })[] };
-  const worst = r.reads.filter((x) => x.v.n > 0).sort((p, q) => p.v.min - q.v.min)[0];
-  const [w, h] = [A.box[2], A.box[3]];
-  const [x, y] = worst.v.minAt;
-  const k = (y * w + x) * 4;
-  const mean = (c: number) => { let [s, n] = [0, 0]; for (let yy = Math.max(0, y - 2); yy <= Math.min(h - 1, y + 2); yy++) for (let xx = Math.max(0, x - 2); xx <= Math.min(w - 1, x + 2); xx++) { s += A.off[(yy * w + xx) * 4 + c]; n++; } return s / n; };
-  const Lof = (v: number[]) => 0.2126 * lum(v[0]) + 0.7152 * lum(v[1]) + 0.0722 * lum(v[2]);
-  const [Lon, Loff] = [Lof([0, 1, 2].map((c) => Math.round(A.on[k + c] * 0.97))), Lof([0, 1, 2].map((c) => Math.round(Math.round(mean(c)) * 0.97)))];
-  const expect = (Math.max(Lon, Loff) + 0.05) / (Math.min(Lon, Loff) + 0.05);
-  check(Math.abs(worst.v.min - expect) <= 0.01 * expect + 0.02, `flicker 0.97: worst pixel ${worst.v.min.toFixed(3)} vs analytic ${expect.toFixed(3)}`);
-  await flat.evaluate(`window.__vjFinalSet = { uLift: 1 }`);
+  const r = (await flat.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[] };
+  const got = Math.min(...r.reads.filter((x) => x.v.n > 0).map((x) => x.v.min));
+  check(expect >= 4.5 && Math.abs(got - expect) <= 0.01 * expect, `flicker 0.97: worst ${got.toFixed(3)} vs worked ${expect.toFixed(3)} (a readable pair)`);
+  // the ground under the words lifted toward the ink (the paper's lift on the darks): the same line must now fail
+  await flat.evaluate(`window.__vjFinalSet = { uLift: 1.4 }`);
   const lifted = (await flat.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[] };
-  check(lifted.reads.some((x) => x.v.status === 'fail'), 'the ground lifted to the ink is caught (a fail)');
+  check(lifted.reads.some((x) => x.v.status === 'fail'), `the ground lifted to the ink flips the line to fail (worst ${Math.min(...lifted.reads.filter((x) => x.v.n > 0).map((x) => x.v.min)).toFixed(2)})`);
 }
 await flat.close();
 
-// 3: frozen controls on crayon's paper tooth
-const toothAt = 40;
-const tooth = await open('crayon', () => {}, '');
-const frozen = (await tooth.evaluate(`window.inkGate.moment(${toothAt})`)) as { drift: number; reads: Read[] };
+// 3: frozen controls on a scene whose final pass keeps the words by their text mask: the pixel medium with the mask forced
+// on, a line on no carrier. Without the freeze the words-off pass loses the mask and the dither reaches the ground under
+// the words the words-on pass kept: the two words-off frames differ there; with the freeze, the field holds still.
+const toothAt = 153.3;
+const tooth = await open('dark-glitch', () => {}, `window.__vjForceTextMask = true; window.__vjFinalSet = { uPixel: 1 };`);
+const offOf = `(async () => { const m = await window.vjEngine.inkMoment(${toothAt}); return m && { off: Array.from(m.off), on: Array.from(m.on), mask: Array.from(m.mask), w: m.box[2], h: m.box[3] }; })()`;
+const F = (await tooth.evaluate(offOf)) as { off: number[]; on: number[]; mask: number[]; w: number; h: number } | null;
 await tooth.evaluate('window.__vjInkNoFreeze = true');
-const loose = (await tooth.evaluate(`window.inkGate.moment(${toothAt})`)) as { drift: number };
-check(frozen.reads.length > 0 && frozen.drift <= 2, `crayon ${toothAt}s: field still with the controls frozen (drift ${frozen.drift})`);
-console.log('     without the freeze, drift', loose.drift);
+const N = (await tooth.evaluate(offOf)) as { off: number[] } | null;
+check(!!F && !!N, `a line off any carrier on dark-glitch at ${toothAt}s`);
+if (F && N) {
+  let differ = 0;
+  for (let k = 0; k < F.off.length; k += 4) if (Math.abs(F.off[k] - N.off[k]) + Math.abs(F.off[k + 1] - N.off[k + 1]) + Math.abs(F.off[k + 2] - N.off[k + 2]) > 6) differ++;
+  check(differ > 0, `the frozen text mask holds the words-off ground the words-on pass kept (${differ} px differ without the freeze)`);
+  await tooth.evaluate('window.__vjInkNoFreeze = false');
+  const frozen = (await tooth.evaluate(`window.inkGate.moment(${toothAt})`)) as { drift: number; reads: Read[] };
+  check(frozen.reads.length > 0 && frozen.drift <= 2, `with the freeze the field round the words holds still (drift ${frozen.drift})`);
+}
 await tooth.close();
 await browser.close();
 server.close();

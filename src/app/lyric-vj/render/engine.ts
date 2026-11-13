@@ -2464,10 +2464,17 @@ export class LyricVjEngine {
     u['uPixel'].value = medium.pixel;
     u['uLift'].value = medium.lift;
     const screenHit = hitAt(this.cueLayers.flatMap(({ rt }) => (rt.style.hit ? [{ at: rt.cue.start, hit: rt.style.hit }] : [])), t);
-    const needsMask = medium.pixel + medium.tooth > 0 || screenHit.zoom > 0 || screenHit.tile > 0;
+    // (QA, the ink gate's freeze test: __vjForceTextMask draws the text mask whatever the medium)
+    const needsMask = medium.pixel + medium.tooth > 0 || screenHit.zoom > 0 || screenHit.tile > 0 || !!(globalThis as { __vjForceTextMask?: boolean }).__vjForceTextMask;
     u['uHasText'].value = needsMask ? 1 : 0;
     // (the ink gate's words-off pass keeps the words-on pass's text mask: ink-mask.ts, frozen controls)
-    if (needsMask && !this.inkFrozen) u['tText'].value = this.renderTextMask();
+    if (needsMask && !this.inkFrozen) {
+      // (QA, the gate's smoke test: __vjInkNoFreeze draws a words-off pass's controls from the words-off scene, what the
+      // freeze stands against: the text mask drawn with the words already away)
+      const away = this.carriersOnly && (globalThis as { __vjInkNoFreeze?: boolean }).__vjInkNoFreeze ? this.wordsAway() : undefined;
+      u['tText'].value = this.renderTextMask();
+      away?.();
+    }
     this.finalPass.uniforms['uFlash'].value = inScene ? 0 : Math.max(fx.flash, this.glassFlash);
     this.finalPass.uniforms['uHit'].value = inScene ? 0 : fx.hit;
     this.finalPass.uniforms['uZoomHit'].value = inScene ? 0 : screenHit.zoom;
@@ -2575,12 +2582,14 @@ export class LyricVjEngine {
   glyphMeshes(): { id: string; slot: number; glyphs: { i: number; mesh: THREE.Mesh }[] }[] {
     if (!this.textRoot.visible) return [];
     const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
-    const lines = this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: (l.glyphMeshes ? l.glyphMeshes() : meshesOf(l.group)).filter((g) => shown(g.mesh)) })).filter((x) => x.glyphs.length));
+    // (shown: visible all the way up and drawn at opacity over 0.01, §1.4)
+    const drawn = (m: THREE.Mesh) => shown(m) && ((m.material as THREE.Material).opacity ?? 1) > 0.01;
+    const lines = this.cueLayers.flatMap(({ rt, layer, twin }) => [layer, ...(twin ? [twin.layer] : [])].filter((l) => shown(l.group)).map((l) => ({ id: rt.cue.id, glyphs: (l.glyphMeshes ? l.glyphMeshes() : meshesOf(l.group)).filter((g) => drawn(g.mesh)) })).filter((x) => x.glyphs.length));
     // (and every other word the type layer shows: a line's call, a blown-up word's copies, the drop's keyword flash; read
     // under `other`, so nothing taken away with the words is left out of the masks)
     const taken = new Set(lines.flatMap((l) => l.glyphs.map((g) => g.mesh)));
     const other: { i: number; mesh: THREE.Mesh }[] = [];
-    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !taken.has(m) && !m.userData['decor'] && !m.userData['ring'] && !m.userData['copy'] && shown(m)) other.push({ i: other.length, mesh: m }); });
+    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !taken.has(m) && !m.userData['decor'] && !m.userData['ring'] && !m.userData['copy'] && drawn(m)) other.push({ i: other.length, mesh: m }); });
     return [...lines, ...(other.length ? [{ id: 'other', glyphs: other }] : [])].slice(0, 255).map((l, k) => ({ ...l, slot: k + 1 }));
   }
 
@@ -2590,7 +2599,7 @@ export class LyricVjEngine {
    * pass's own controls (text mask, chroma trails, every final uniform, the bloom), and the glyphs' IDs through the final
    * pass's sampling. Returns the three over the glyphs' box grown by `pad`, top row first, and which line each slot is.
    */
-  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; lines: Record<number, string>; shown: number[] } | undefined> {
+  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> {
     const gl = this.renderer.getContext();
     const read = (x0: number, y0: number, w: number, h: number) => { const b = new Uint8Array(w * h * 4); gl.readPixels(x0, H - y0 - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b); return flipRows(b, w, h); };
     this.showLyrics(true);
@@ -2620,7 +2629,9 @@ export class LyricVjEngine {
       (globalThis as { __vjInkRings?: boolean }).__vjInkRings = true;
       await this.renderAt(t);
       const off = read(x0, y0, w, h);
-      return { box: [x0, y0, w, h], on, off, mask, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))) };
+      // (each glyph's drawn opacity, with every group above it: under 1 the ground shows through its ink, ink-verify)
+      const opacity = (m: THREE.Mesh) => { let a = (m.material as THREE.Material).opacity ?? 1; for (let o = m.parent; o; o = o.parent) a *= ((o as THREE.Mesh).material as THREE.Material | undefined)?.opacity ?? 1; return a; };
+      return { box: [x0, y0, w, h], on, off, mask, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))), opacity: Object.fromEntries(meshes.flatMap((l) => l.glyphs.map((g) => [idOf(l.slot, g.i), opacity(g.mesh)]))) };
     } finally {
       this.inkCapture = false;
       this.inkFrozen = undefined;
@@ -2634,16 +2645,18 @@ export class LyricVjEngine {
   /** The lyrics alone (alpha = coverage), so ink treatments can leave them crisp. */
   private renderTextMask(): THREE.Texture {
     this.textMask ??= new THREE.WebGLRenderTarget(W, H);
-    const shown = this.scene.children.map((o) => o.visible);
-    this.scene.children.forEach((o) => (o.visible = o === this.textRoot));
+    // (the lyrics live in the type scene, textScene, since 0638c72: rendering `this.scene` with all but textRoot hidden drew
+    // an empty mask, so the text-keep path of tooth, pixel and the zoom/tile hits never kept the lyrics; review 2026-11-13)
+    const shown = this.textScene.children.map((o) => o.visible);
+    this.textScene.children.forEach((o) => (o.visible = o === this.textRoot));
     const clear = this.renderer.getClearAlpha();
     this.renderer.setClearAlpha(0);
     this.renderer.setRenderTarget(this.textMask);
     this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
+    this.renderer.render(this.textScene, this.camera);
     this.renderer.setRenderTarget(null);
     this.renderer.setClearAlpha(clear);
-    this.scene.children.forEach((o, i) => (o.visible = shown[i]));
+    this.textScene.children.forEach((o, i) => (o.visible = shown[i]));
     return this.textMask.texture;
   }
 

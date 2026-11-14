@@ -595,6 +595,17 @@ export function motionPad(r: { x0: number; y0: number; x1: number; y1: number },
   return { x0: r.x0 - dx(r.x0), y0: r.y0 - dy(r.y0), x1: r.x1 + dx(r.x1), y1: r.y1 + dy(r.y1) };
 }
 
+/**
+ * The frame fit's scale for a line whose box reaches `ex` × `ey` px from the centre (engine fitToFrame): inside the safe
+ * area at rest and inside the frame as the line moves (motionPad), never above 1. `kick`: a loud section's 5 % kick.
+ */
+export function frameFit(ex: number, ey: number, kick: boolean, w = 1920, h = 1080) {
+  const pad = motionPad({ x0: w / 2 - ex, y0: h / 2 - ey, x1: w / 2 + ex, y1: h / 2 + ey }, kick, w, h);
+  const mx = (pad.x1 - w / 2) / ex;
+  const my = (pad.y1 - h / 2) / ey;
+  return Math.min(1, (w / 2 - 48) / ex, (h / 2 - 40) / ey, w / 2 / (ex * mx), h / 2 / (ey * my));
+}
+
 /** A planned entrance that never plays: the line was meant to enter with motion and lands on a cut instead. */
 export const entranceLost = (planned: Pick<CueStyle, 'enter'>, final: Pick<CueStyle, 'enter'>) => planned.enter !== 'cut' && final.enter === 'cut';
 

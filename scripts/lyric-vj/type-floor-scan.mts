@@ -47,7 +47,7 @@ const getFont = fontCache(resolve('out/font-cache'));
 
 type Read = { set: number; drawn: number; decor: boolean };
 /** A line with any body glyph whose row type is under its floor, at either moment. */
-interface Under { world: string; song: string; seed: number; cue: string; set: string; floor: number; least: number; sizes: number[]; text: string; t: number; plan: string; fit?: number; template?: string }
+interface Under { diag?: unknown; world: string; song: string; seed: number; cue: string; set: string; floor: number; least: number; sizes: number[]; text: string; t: number; plan: string; fit?: number; template?: string }
 const under: Under[] = [];
 const callsUnder: Under[] = [];
 const loUnder: Under[] = [];
@@ -78,16 +78,16 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
     const wl = planOf.get(c.id) ?? {};
     const set = wl.set ?? '';
     const floor = floorOf(set);
-    let least = Infinity, leastAt = 0, sizes: number[] = [];
+    let least = Infinity, leastAt = 0, sizes: number[] = [], diag: unknown = null;
     let callLeast = Infinity;
     for (const t of ending ? [(c.from + c.to) / 2 - 1] : [(c.from + c.to) / 2, c.to - 0.08]) {
-      const r = (await page.evaluate(`window.floorScan.at(${JSON.stringify(c.id)}, ${t})`)) as { line: Read[]; calls: Read[] };
+      const r = (await page.evaluate(`window.floorScan.at(${JSON.stringify(c.id)}, ${t})`)) as { line: Read[]; calls: Read[]; diag: { fit: number; floor: number; framed: boolean }[] };
       const body = r.line.filter((g) => !g.decor);
       glyphs += body.length;
       particle += body.filter((g) => g.set >= floor && g.drawn < floor - 0.5).length;
       decorUnder += r.line.filter((g) => g.decor && g.set < floor - 0.5).length;
       const m = Math.min(...body.map((g) => g.set));
-      if (m < least) [least, leastAt, sizes] = [m, t, [...new Set(body.map((g) => Math.round(g.set)))].sort((x, y) => x - y)];
+      if (m < least) [least, leastAt, sizes, diag] = [m, t, [...new Set(body.map((g) => Math.round(g.set)))].sort((x, y) => x - y), r.diag];
       callLeast = Math.min(callLeast, ...r.calls.map((g) => g.set));
     }
     if (!Number.isFinite(least)) { missing++; continue; }
@@ -97,7 +97,7 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
     byWorldSet[key].lines++;
     leastByWorld[id] = Math.min(leastByWorld[id] ?? Infinity, Math.round(least));
     const plan = [wl.blow && 'blow', wl.scale && 'scale', wl.repose?.length && 'repose', wl.cam && `cam:${wl.cam.kind}`].filter(Boolean).join(',');
-    const row = { world: id, song: name, seed, cue: c.id, set, floor, least: Math.round(least * 10) / 10, sizes, text: c.text, t: +leastAt.toFixed(2), plan, fit: c.fit, template: c.template };
+    const row = { world: id, song: name, seed, cue: c.id, set, floor, least: Math.round(least * 10) / 10, sizes, text: c.text, t: +leastAt.toFixed(2), plan, fit: c.fit, template: c.template, diag };
     // (half a pixel: the frame fit's float scale on a glyph laid at the floor; under: TYPE_FLOOR.lo, loUnder: the set's own lo above it)
     if (least < TYPE_FLOOR.lo - 0.5) { under.push(row); byWorldSet[key].under++; }
     else if (least < floor - 0.5) loUnder.push(row);

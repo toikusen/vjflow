@@ -75,7 +75,7 @@ import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
-import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
+import { songVary, contrast, CueLayer, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, frameFit, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
 import { ALL_LABEL_TEXT } from '../labels';
 
 const W = 1920;
@@ -233,12 +233,7 @@ function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   const ey = Math.max(Math.abs(box.min.y), Math.abs(box.max.y));
   // inside the safe area at rest, and inside the frame as it moves (motionPad: the kick and drift grow the box about
   // the centre, the sway and drift shift it); 行星 c010 and 天文対話 c036 sat in the safe area and swayed off the frame
-  const scaleFor = (ex: number, ey: number, kicked = kick) => {
-    const pad = motionPad({ x0: W / 2 - ex, y0: H / 2 - ey, x1: W / 2 + ex, y1: H / 2 + ey }, kicked);
-    const mx = (pad.x1 - W / 2) / ex;
-    const my = (pad.y1 - H / 2) / ey;
-    return Math.min(1, (W / 2 - 48) / ex, (H / 2 - 40) / ey, W / 2 / (ex * mx), H / 2 / (ey * my));
-  };
+  const scaleFor = (ex: number, ey: number, kicked = kick) => frameFit(ex, ey, kicked);
   let s = scaleFor(ex, ey);
   // (the fit never sets a world line's words under the type floor, render/type-floor.ts: where what they stand on is
   // what the frame cannot hold, the words alone are fitted, their carrier running past the safe edge; silk's slab set
@@ -276,7 +271,8 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D) {
       const em = o.userData['size'] * Math.abs(o.getWorldScale(scale).x);
       const at = o.getWorldPosition(new THREE.Vector3());
       box.expandByPoint(at.clone().addScalar(-em / 2)).expandByPoint(at.addScalar(em / 2));
-      least = Math.min(least, (o.userData['set'] ?? o.userData['size']) * Math.abs(scale.x));
+      // (a glyph as drawn: a particle the typesetter set smaller is lyric too, and held at the floor with the rest)
+      least = Math.min(least, o.userData['size'] * Math.abs(scale.x));
     });
   }
   layer.group.visible = vis;
@@ -1129,9 +1125,11 @@ export class LyricVjEngine {
       let layer = build();
       // the floor on type size: a line that would rest under it takes plain stepped rows, its moves given up for them
       const alone = !styled.some((x, j) => j !== i && x.style.shot === style.shot);
-      // (in a style world, a line laid by a shared template rests at the type floor too, render/type-floor.ts: a stack
-      // line set its words at 73 px among the world's own lines at 84 and up, silk チョロイン c046, 2026-11-12)
-      const floor = design.world && !rt.style.world ? TYPE_FLOOR.lo - 0.5 : REST_FLOOR;
+      // (in a style world every line rests at the type floor, render/type-floor.ts, a world line too: one that no set of its
+      // world holds at the floor, and that the fit cannot hold, is laid as plain stepped rows, as a shared template's line
+      // is (a stack line set its words at 73 px among the world's own lines at 84 and up, silk チョロイン c046; document
+      // c041 rested at 80 px in the only set that took it, 2026-11-12)
+      const floor = design.world ? TYPE_FLOOR.lo - 0.5 : REST_FLOOR;
       if (style.budget && alone && restSize(build(), fitToFrame) < floor) {
         drawn = 'stair';
         rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };

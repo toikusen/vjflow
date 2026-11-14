@@ -8,6 +8,23 @@ import { color, CueLayer, CueRuntime, emphasisOf, glyphMotion, readable, settled
 const W = 1920;
 const TRACK = 6;
 const STAGGER = 0.03;
+/** The least type a stair row is set at, px (never under the type floor, type-floor.ts). */
+export const STAIR_LEAST = 90;
+
+/**
+ * The rows a stair line is set in: two, three for a long line, and one more (the steps closer, to six) while its widest
+ * row would set under STAIR_LEAST px (the frame fit took the type of a 50-character line down to 68 px, under the type
+ * floor, 2026-11-12). `widestOf`: the widest row's advance at 100 px.
+ */
+export function stairRows(text: string, chars: number, widestOf: (rows: string[]) => number): string[] {
+  let rows = chars > 22 ? balancedRows(text, 3) : chars > 6 ? balancedRows(text, 2) : [text];
+  while (rows.length < 6 && (100 * 0.55 * W) / widestOf(rows) < STAIR_LEAST) {
+    const more = balancedRows(text, rows.length + 1);
+    if (more.length <= rows.length) break;
+    rows = more;
+  }
+  return rows;
+}
 
 export const stair: TemplateRenderer = {
   cue(rt: CueRuntime): CueLayer {
@@ -15,10 +32,10 @@ export const stair: TemplateRenderer = {
     const text = rt.cue.text.replace(/[\s　]+/g, ' ');
     // a long line (a rap verse) takes three steps: on two its rows were too wide to set at a readable size
     const chars = [...text.replace(/ /g, '')].length;
-    const rows = chars > 22 ? balancedRows(text, 3) : chars > 6 ? balancedRows(text, 2) : [text];
     const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 100 };
-    const widest = Math.max(...rows.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
-    const size = Math.round(Math.max(90, Math.min(180, (100 * 0.55 * W) / widest)));
+    const widestOf = (rs: string[]) => Math.max(...rs.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
+    const rows = stairRows(text, chars, widestOf);
+    const size = Math.round(Math.max(STAIR_LEAST, Math.min(180, (100 * 0.55 * W) / widestOf(rows))));
     const style: GlyphStyle = { family: rt.fonts.display, weight: 900, size, shadow: true };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
     const right = p['side'] === 'right'; // mirrored: steps descend toward the left
@@ -28,8 +45,8 @@ export const stair: TemplateRenderer = {
     rowGlyphs.forEach((gs, i) => {
       const w = rowWidth(gs, TRACK);
       // row 0 starts 36 % in from its side, each later row steps a quarter frame further in and one line down
-      // (three rows step an eighth: a quarter put the third row off the frame's far side)
-      const edge = -W * 0.36 + i * W * (rows.length > 2 ? 0.12 : 0.25);
+      // (three rows step an eighth, more rows share that same reach: a quarter put the third row off the frame's far side)
+      const edge = -W * 0.36 + i * W * (rows.length > 2 ? 0.24 / (rows.length - 1) : 0.25);
       placeRow(gs, right ? -(edge + w / 2) : edge + w / 2, ((rows.length - 1) / 2 - i) * lineH, TRACK);
     });
     const glyphs: Glyph[] = rowGlyphs.flat();

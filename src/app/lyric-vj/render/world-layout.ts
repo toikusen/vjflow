@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from './glyphs';
 import { nearestWeight } from '../fonts';
-import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
+import { color, CueLayer, CueRuntime, emphasisOf, frameFit, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, FaceLayout, SAFE_X, SAFE_Y, SET_SPECS, SetSpec, shearedSize } from './world-sets';
 import { floorOf, layFloorOf, underFloor } from './type-floor';
@@ -103,7 +103,29 @@ const ROTATED = /[ー〜～…―‐]/;
 const HIDDEN_UPRIGHT = /[、。，．,.]/;
 const LAYER = -5;
 
-interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
+export interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
+
+/**
+ * A pose with its particles held at the type floor as drawn (render/type-floor.ts): the typesetter sets a particle or a
+ * small kana smaller inside its row (typeset.ts), on the picture's own size `tex`, and the row's scale then takes it
+ * under the floor on a row a little over it (7951 particles under 84 px, 2026-11-12). A glyph being read in a row at the
+ * floor or more is lifted to the floor, never past its row's own size. The words round a blown-up key and a scale
+ * composition are rows of their own and held the same way.
+ */
+export function holdParticles(p: Pose, gs: { mesh: { userData: Record<string, unknown> } }[], tex: number): Pose {
+  const floor = layFloorOf({ lo: 0, shear: p.spec.shear });
+  let moved = false;
+  const base = p.sizes ?? gs.map(() => p.scale);
+  const sizes = base.map((rk, i) => {
+    const pic = gs[i].mesh.userData['size'] as number | undefined;
+    if (!p.shown[i] || !pic || pic >= tex) return rk;
+    const row = tex * rk;
+    if (row < floor - 0.5 || pic * rk >= floor - 0.5) return rk;
+    moved = true;
+    return Math.min(Math.max(rk, floor / pic), (rk * tex) / pic);
+  });
+  return moved ? { ...p, sizes } : p;
+}
 
 /** The row (or column) of a block each glyph falls in, matched in order as poseOf matches them. */
 export function rowsOfGlyphs<T extends { char: string }>(gs: T[], block: Pick<Block, 'rows'>): Map<T, number> {
@@ -214,33 +236,48 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   const pre = gs.map((_, i) => i).filter((i) => i < key[0] && shown[i]);
   const post = gs.map((_, i) => i).filter((i) => i > key.at(-1)! && shown[i]);
   const adv = (ids: number[]) => ids.reduce((w, i) => w + gs[i].advance, 0) / tex;
-  const big = Math.min((0.86 * 1920) / Math.max(0.01, adv(key)), 0.44 * 1080, normal * 4.2);
-  if (big < normal * 1.6) return undefined;
+  const big0 = Math.min((0.86 * 1920) / Math.max(0.01, adv(key)), 0.44 * 1080, normal * 4.2);
+  if (big0 < normal * 1.6) return undefined;
   // (the words round the key are lyrics read at rest: never under the type floor, type-floor.ts; where the frame cannot
   // hold them across at the floor the key is not blown up, and the line stands as its set lays it. They were set down to
   // 40 px, 2026-11-12)
   const across = (0.86 * 1920) / Math.max(0.01, adv(pre), adv(post));
   const floor = layFloorOf(spec);
-  const small = Math.max(floor, Math.min(big * 0.3, normal * 0.75, across));
   if (underFloor(across, floor) && (pre.length || post.length)) return undefined;
-  const [preH, postH] = [pre.length ? small * 1.3 : 0, post.length ? small * 1.3 : 0];
-  const h = preH + big + postH;
-  const wk = adv(key) * big;
-  const x = gs.map(() => 0), y = gs.map(() => 0), sizes = gs.map(() => small / tex);
-  const row = (ids: number[], size: number, left: number, cy: number) => { let at = left; for (const i of ids) { const a = (gs[i].advance / tex) * size; x[i] = at + a / 2; y[i] = cy; sizes[i] = size / tex; at += a; } return at - left; };
-  row(key, big, -wk / 2, h / 2 - preH - big / 2);
-  row(pre, small, -wk / 2, h / 2 - small * 0.65);
-  const wp = adv(post) * small;
-  row(post, small, wk / 2 - wp, -h / 2 + small * 0.65);
-  // the words before run right from the key's left edge and the words after left from its right edge: a short key with a
-  // long lead-in ran off the frame (チョロイン c043 on a file sheet), so the pose is centred on everything it holds
-  const [lo, hi] = [Math.min(-wk / 2, wk / 2 - wp), Math.max(wk / 2, -wk / 2 + adv(pre) * small)];
-  const mid = (lo + hi) / 2;
-  if (mid) for (let i = 0; i < x.length; i++) x[i] -= mid;
-  const w = hi - lo;
-  // a space inside the key run (a Latin phrase) is placed but not drawn
-  const block: Block = { rows: [], size: big, w, h, cx: 0, cy: 0 };
-  return { block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
+  // (the engine's frame fit takes a pose its motion carries past the frame in smaller, its words with it, the lead-in
+  // under the floor (fit .88 to .95 at 82 px, 2026-11-12): the key is blown up only as big as the pose then fits at scale
+  // 1 on a loud beat, or not at all)
+  const posed = (big: number): Pose => {
+    const small = Math.max(floor, Math.min(big * 0.3, normal * 0.75, across));
+    const [preH, postH] = [pre.length ? small * 1.3 : 0, post.length ? small * 1.3 : 0];
+    const h = preH + big + postH;
+    const wk = adv(key) * big;
+    const x = gs.map(() => 0), y = gs.map(() => 0), sizes = gs.map(() => small / tex);
+    const row = (ids: number[], size: number, left: number, cy: number) => { let at = left; for (const i of ids) { const a = (gs[i].advance / tex) * size; x[i] = at + a / 2; y[i] = cy; sizes[i] = size / tex; at += a; } return at - left; };
+    row(key, big, -wk / 2, h / 2 - preH - big / 2);
+    row(pre, small, -wk / 2, h / 2 - small * 0.65);
+    const wp = adv(post) * small;
+    row(post, small, wk / 2 - wp, -h / 2 + small * 0.65);
+    // the words before run right from the key's left edge and the words after left from its right edge: a short key with a
+    // long lead-in ran off the frame (チョロイン c043 on a file sheet), so the pose is centred on everything it holds
+    const [lo, hi] = [Math.min(-wk / 2, wk / 2 - wp), Math.max(wk / 2, -wk / 2 + adv(pre) * small)];
+    const mid = (lo + hi) / 2;
+    if (mid) for (let i = 0; i < x.length; i++) x[i] -= mid;
+    const w = hi - lo;
+    // a space inside the key run (a Latin phrase) is placed but not drawn
+    const block: Block = { rows: [], size: big, w, h, cx: 0, cy: 0 };
+    return { block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
+  };
+  let big = big0;
+  for (let i = 0; i < 12; i++) {
+    const p = posed(big);
+    const [sw, sh] = shearedSize(p.block.w, p.block.h, spec.shear);
+    const fit = frameFit(sw / 2, sh / 2, true);
+    if (fit >= 1 - 1e-9) return p;
+    big *= fit * 0.98;
+    if (big < normal * 1.6) return undefined;
+  }
+  return undefined;
 }
 
 /** The copies behind a blown-up key word, by stress: offsets and sizes in shares of its size, and their opacity. */
@@ -361,6 +398,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   if (blown) poses[0] = blown;
   // (a set whose words ride an object keeps it, laid again round the composition: its carrierId stays, no card left empty)
   if (scaling) { const sp = scalePose(gs, scaled!, tex, sets[0]); poses[0] = { ...sp, object: objectMesh(sets[0], sp.block, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }; }
+  poses.forEach((p, i) => (poses[i] = holdParticles(p, gs, tex)));
   const carrier = scaling ? scaleCarrier(scaled!, wl, slots, [...new Set(gs.map((g, i) => (poses[0].shown[i] ? tintOf(g, 0) : '')).filter(Boolean))]) : undefined;
   if (carrier) carrier.mesh.position.x -= poses[0].block.cx, carrier.mesh.position.y -= poses[0].block.cy;
   const body = new THREE.Group();

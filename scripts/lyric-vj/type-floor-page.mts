@@ -24,7 +24,7 @@ function glyphsIn(root: Obj | undefined): Read[] {
   return out;
 }
 
-type Engine = { cueLayers: { rt: { cue: { id: string } }; layer: { group: Obj }; fit?: Obj; twin?: { fit: Obj } }[]; callLayers: { rt: { cue: { id: string } }; group: Obj }[]; updateCues(t: number, fx: { flash: number; hit: number; shake: number }): void };
+type Engine = { cueLayers: { rt: { cue: { id: string } }; layer: { group: Obj; floor?: number; framed?: boolean }; fit?: Obj; twin?: { fit: Obj } }[]; callLayers: { rt: { cue: { id: string } }; group: Obj }[]; updateCues(t: number, fx: { flash: number; hit: number; shake: number }): void };
 const w = window as unknown as { vjEngine: Engine; floorScan: unknown };
 
 /**
@@ -40,6 +40,7 @@ function at(id: string, t: number) {
   const own = e.cueLayers.filter((c) => c.rt.cue.id === id);
   const calls: Read[] = [];
   for (const c of e.callLayers.filter((x) => x.rt.cue.id === id)) c.group.traverse((o: Obj) => { if (o.isMesh && o.userData?.['size']) calls.push({ set: o.userData['set'] ?? o.userData['size'], drawn: o.userData['size'], decor: false }); });
-  return { line: r(own.flatMap((c) => [...glyphsIn(c.fit ?? c.layer.group), ...glyphsIn(c.twin?.fit)])), calls: r(calls) };
+  const diag = own.map((c) => ({ fit: +((c.fit?.scale.x) ?? 1).toFixed(4), floor: c.layer.floor ?? 0, framed: !!c.layer.framed }));
+  return { diag, line: r(own.flatMap((c) => [...glyphsIn(c.fit ?? c.layer.group), ...glyphsIn(c.twin?.fit)])), calls: r(calls) };
 }
 w.floorScan = { at };

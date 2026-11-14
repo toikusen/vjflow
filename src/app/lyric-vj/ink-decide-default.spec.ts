@@ -20,6 +20,19 @@ describe.skipIf(!existsSync(SONG))('M3 is on by default, in the renderer as in t
     expect(LyricVjEngine.inkFx({ ...job, treatment: { ...job.treatment, inkDecide: false } } as unknown as RenderJob)).toBeNull();
   });
 
+  it('c059 and c031, the two lines the default lost against the opt-in run (2026-11-15), take inks that read as drawn', async () => {
+    const { drawnInkOf } = await import('./render/hold-room');
+    const { contrast } = await import('./contrast');
+    for (const [set, id] of [['dark-glitch/overheard', 'violet-hour'], ['dark-glitch/margin', 'ghost-green']] as const) {
+      const slots = STYLE_WORLDS.find((w) => w.id === 'dark-glitch')!.palette.find((s) => s.id === id) as never as Parameters<typeof keyFor>[1];
+      const spec = SET_SPECS[set];
+      const key = keyFor(spec, slots, slots.ink);
+      // (the accent's edge drawn at EDGE_SHARE reads 2.6–3.6:1: the key is one that reads at its drawn edge)
+      expect(contrast(drawnInkOf(spec, slots)(key), slots.ground)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(drawnInkOf(spec, slots)(slots.accent), slots.ground)).toBeLessThan(4.5);
+    }
+  });
+
   it("the renderer's key for c059 (violet-hour's accent, 3.6:1 drawn) is the plan's, and moved", () => {
     const slots = STYLE_WORLDS.find((w) => w.id === 'dark-glitch')!.palette.find((s) => s.id === 'violet-hour') as never as Parameters<typeof keyFor>[1];
     const spec = SET_SPECS['dark-glitch/overheard'];

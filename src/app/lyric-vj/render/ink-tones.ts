@@ -54,6 +54,15 @@ export const drawnGround = (set: string, scheme: string | undefined) => (scheme 
 /** How far a surface darkens a tint at its darkest drawn part (1: not at all; undefined: not read). */
 export const surfaceShare = (kind: string | undefined, core: string | undefined) => (kind ? inkTones()?.surfaces[`${kind}|${(core ?? '').toLowerCase()}`] : undefined);
 
+/**
+ * How far a glyph's edge draws its ink down, any surface: the glyph pictures are not premultiplied, so where a texel
+ * stands next to a clear one the filtered colour runs toward black, and the edge pixels the reading keeps (coverage over
+ * half) show it. Measured 2026-11-15, dark-glitch choroin: a pink key at 0.30 luminance read 0.13 at its worst edge
+ * pixel (c059), a red at 0.30 likewise (c031): 0.43; taken at 0.42.
+ * ponytail: a share in the decision, not the cure; premultiplied glyph pictures remove the fringe, then this is 1.
+ */
+export const EDGE_SHARE = 0.42;
+
 /** An ink as a surface draws it at its darkest: its linear channels scaled so its luminance is `share` of its own. */
 export function darkest(ink: string, share: number | undefined): string {
   if (share === undefined || share >= 1 || !/^#[0-9a-f]{6}$/i.test(ink)) return ink;

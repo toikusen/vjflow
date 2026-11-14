@@ -63,24 +63,33 @@ const MOVE = 0.12;
 export function decideInk(own: string, grounds: string[], fx: FxBox, world: string[] = [], drawn: (ink: string) => string = (x) => x): InkDecision {
   const gs = grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g));
   // (`drawn`: an ink as its surface draws it at its darkest, ink-tones darkest: the ink is judged as it is drawn)
-  const least = (ink: string) => Math.min(Infinity, ...gs.map((g) => minContrast(finalBounds(drawn(ink), fx, true), finalBounds(g, fx, true))));
+  const least = (ink: string) => Math.min(Infinity, ...gs.map((g) => minContrast(inkRange(ink, fx, drawn), finalBounds(g, fx, true))));
   const at = least(own);
   if (!gs.length || at >= INK_AIM) return { ink: own, from: 'own', min: at };
   // (its own hue, lightness moved against the ground it reads worst on, a step at a time)
   let c = own;
   for (let k = 0; k < 6 && least(c) < INK_AIM; k++) {
-    const worst = [...gs].sort((a, b) => least2(drawn(c), a, fx) - least2(drawn(c), b, fx))[0];
+    const worst = [...gs].sort((a, b) => minContrast(inkRange(c, fx, drawn), finalBounds(a, fx, true)) - minContrast(inkRange(c, fx, drawn), finalBounds(b, fx, true)))[0];
     const aim = INK_AIM * (1 + 0.08 * (k + 1)); // (the bounds take more off than a flat contrast: aim higher each step)
     const m = readableHue(c, worst, aim);
     if (!m || m === c) break;
     c = m;
   }
-  if (least(c) >= INK_AIM && inkDistance(own, c) <= MOVE) return { ink: c, from: 'moved', min: least(c) };
+  const near = inkDistance(own, c) <= MOVE;
+  if (least(c) >= INK_AIM && near) return { ink: c, from: 'moved', min: least(c) };
   const best = [...new Set(world.filter((x) => /^#[0-9a-f]{6}$/i.test(x)).map((x) => x.toLowerCase()))].sort((a, b) => least(b) - least(a))[0];
   if (best && least(best) >= INK_AIM) return { ink: best, from: 'world', min: least(best) };
+  // (nothing reaches the aim: the best that reads at all, its own first, then its own hue moved, then the world's; never
+  // its own kept where a short move reads better: the default's wider effects left c059's amber at 4.1 where a move
+  // read, 2026-11-15)
   if (at >= INK_MIN) return { ink: own, from: 'own', min: at };
-  return { ink: own, from: 'none', min: at };
+  const tries: InkDecision[] = [...(near && c !== own ? [{ ink: c, from: 'moved' as const, min: least(c) }] : []), ...(best ? [{ ink: best, from: 'world' as const, min: least(best) }] : [])];
+  const read = tries.filter((x) => x.min >= INK_MIN).sort((x, y) => (x.from === 'moved' ? 0 : 1) - (y.from === 'moved' ? 0 : 1))[0];
+  if (read) return read;
+  const better = tries.sort((x, y) => y.min - x.min)[0];
+  return better && better.min > at ? { ...better, from: 'none' as const } : { ink: own, from: 'none', min: at };
 }
 /** The least an ink reads on every ground through every effect (decideInk's measure). */
-export const leastThrough = (ink: string, grounds: string[], fx: FxBox, drawn: (ink: string) => string = (x) => x) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => least2(drawn(ink), g, fx)));
-const least2 = (ink: string, g: string, fx: FxBox) => minContrast(finalBounds(ink, fx, true), finalBounds(g, fx, true));
+export const leastThrough = (ink: string, grounds: string[], fx: FxBox, drawn: (ink: string) => string = (x) => x) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => minContrast(inkRange(ink, fx, drawn), finalBounds(g, fx, true))));
+/** An ink's range on the final composite as drawn: from its darkest drawn part (`drawn`) to itself at its lightest. */
+const inkRange = (ink: string, fx: FxBox, drawn: (ink: string) => string): [number, number] => [finalBounds(drawn(ink), fx, true)[0], finalBounds(ink, fx, true)[1]];

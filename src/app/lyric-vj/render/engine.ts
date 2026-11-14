@@ -22,6 +22,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH } from './final-warp.glsl';
 import { binarize, flipRows, InkMask } from './ink-mask';
 import { InkHalo } from './ink-halo';
+import { HALO_UNIFORMS, haloCut, setPatch } from './material-patch';
 import { SNOW } from './world-grounds';
 import { idOf, partIdOf } from '../ink-verify';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -1923,6 +1924,9 @@ export class LyricVjEngine {
           mesh.renderOrder = 5000;
           mesh.frustumCulled = false;
           mesh.visible = false;
+          // (a handoff's graphic, not words: never read as a glyph, nor taken away with the words; review 2026-11-14,
+          // dark-glitch's signal patch counted as 82 see-through glyphs at 73.43 s)
+          mesh.userData['decor'] = true;
           this.textRoot.add(mesh);
           this.signals.push({ h, mesh, steps });
         }
@@ -1935,6 +1939,7 @@ export class LyricVjEngine {
         mesh.renderOrder = 5000;
         mesh.frustumCulled = false;
         mesh.visible = false;
+        mesh.userData['decor'] = true;
         this.textRoot.add(mesh);
         this.irises.push({ h, mesh, from: [(box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2], to: [(next.x0 + next.x1) / 2, (next.y0 + next.y1) / 2] });
       }
@@ -1948,6 +1953,7 @@ export class LyricVjEngine {
       mesh.geometry.setIndex(Array.from({ length: n }, (_, k) => { const q = k * 2; return [q, q + 1, q + 2, q + 1, q + 3, q + 2]; }).flat());
       mesh.frustumCulled = false;
       mesh.visible = false;
+      mesh.userData['decor'] = true;
       this.textRoot.add(mesh);
       this.relays.push({ h, path, mesh, width: Math.max(8, a.size * 0.045) });
       c.hand.seam = b.start[0] + W / 2;
@@ -2518,7 +2524,11 @@ export class LyricVjEngine {
         this.textRoot.updateMatrixWorld(true);
         this.halo.render(this.renderer, this.textScene, this.camera, this.readingMeshes());
         u['tHalo'].value = this.halo.texture;
+        // (every copy of the words stays out of the clean zone: material-patch haloCut; a declared extrude is read)
+        this.textRoot.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && o.userData['copy'] && o.userData['part'] !== 'extrude') setPatch(m.material as THREE.Material, 'halo-cut', haloCut); });
       }
+      HALO_UNIFORMS.tHalo.value = u['tHalo'].value as THREE.Texture | null;
+      [HALO_UNIFORMS.uHaloIn.value, HALO_UNIFORMS.uHaloOut.value] = [u['uHaloIn'].value as number, u['uHaloOut'].value as number];
     }
     if (this.ghostPass) for (const k of ['tHalo', 'uHaloIn', 'uHaloOut']) this.ghostPass.uniforms[k].value = u[k].value;
     if (this.gfxClean) for (const k of ['tHalo', 'uHaloIn', 'uHaloOut'] as const) this.gfxClean.u[k].value = u[k].value;

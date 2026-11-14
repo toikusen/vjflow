@@ -1,5 +1,5 @@
 import { contrast } from './contrast';
-import { groundTones, inkFor, INK_MIN, mergeTones, patchTone, readGlyph, readsOn, textCells } from './measured-ink';
+import { groundTones, INK_AIM, inkFor, INK_MIN, lumOf, mergeTones, patchTone, readableTone, readGlyph, readsOn, textCells } from './measured-ink';
 
 /** An RGBA buffer w × h filled by `at(x, y)`. */
 const buffer = (w: number, h: number, at: (x: number, y: number) => [number, number, number]) => {
@@ -70,5 +70,22 @@ describe('measured ink', () => {
     const off = buffer(100, 40, () => [0, 0, 0]);
     const on = buffer(100, 40, (x, y) => ((x >= 10 && x < 30) || (x >= 50 && x < 70)) && y >= 10 && y < 30 ? [255, 255, 255] : [0, 0, 0]);
     expect(textCells(on, off, 100, { x0: 0, y0: 0, x1: 100, y1: 40 })).toEqual([{ x0: 10, y0: 10, x1: 30, y1: 30 }, { x0: 50, y0: 10, x1: 70, y1: 30 }]);
+  });
+
+  it('a dimmed lyric is dimmed only as far as it still reads (dark-glitch c059: the earlier line stepped back to 3.6:1)', () => {
+    // violet-hour's accent on its ground: 5.1:1 undimmed; the step-back tone 0.6 took it to ~3.6:1
+    const [ink, ground] = ['#D9537A', '#0E0A14'];
+    const lum = (c: string) => lumOf(parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16));
+    const reads = (t: number) => (lum(ink) * (0.14 + 0.86 * t) + 0.05) / (lum(ground) + 0.05);
+    expect(reads(0.6)).toBeLessThan(INK_MIN);
+    const t = readableTone(ink, [ground], 0.6);
+    expect(t).toBeGreaterThan(0.6);
+    expect(reads(t)).toBeGreaterThanOrEqual(INK_AIM);
+    expect(reads(t - 0.01)).toBeLessThan(INK_AIM);
+    // a light ink that reads well dimmed keeps its tone; a dark ink on a light ground may dim all it likes
+    expect(readableTone('#ffffff', ['#000000'], 0.6)).toBe(0.6);
+    expect(readableTone('#202020', ['#f0f0f0'], 0.3)).toBe(0.3);
+    // an ink under the aim even undimmed is not dimmed further
+    expect(readableTone('#555555', ['#000000'], 0.5)).toBe(1);
   });
 });

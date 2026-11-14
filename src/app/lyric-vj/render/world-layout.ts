@@ -11,7 +11,8 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
-import { carrierBox, carrierRoom, growRoom, inkChecks, keyFor } from './hold-room';
+import { carrierBox, carrierRoom, carrierSlots, growRoom, inkChecks, keyFor } from './hold-room';
+import { readableTone } from '../measured-ink';
 import { laidSeat, panelSplit, slotSpec } from './seat-geometry';
 export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
@@ -286,6 +287,8 @@ const fading = () => !!(globalThis as { __vjFadeReveal?: boolean }).__vjFadeReve
  * A glyph's or a block's opacity as drawn: the opaque reveal (owner, 2026-11-14, every world): never part-way, a glyph
  * is there (from its fade's middle) or not, its move kept, so an entrance or an exit never shows the words see-through.
  */
+/** Under this share of its size along either axis, a glyph or a line in its own move is not drawn (the opaque reveal). */
+export const READ_SCALE = 0.5;
 export const stepA = (a: number) => (fading() ? a : a >= 0.5 ? 1 : 0);
 /** Builds a line in a world. `slot` stacks it among the lines of a shared shot. */
 function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
@@ -335,6 +338,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // the key reads on what is really under the words: the object's plate, the card or banners a set's page draws, else the
   // background and what the picture puts there (hold-room.ts keyFor)
   const keyOf = (s: SetSpec) => keyFor(s, slots, inkOn(s), seen);
+  // (what each pose's words stand on: its carrier, else the background and what the picture puts there; a dimmed glyph
+  // still reads on all of it, readableTone)
+  const standsOn = (s: SetSpec) => { const on = carrierSlots(s); return on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? [])]; };
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;
@@ -668,6 +674,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       const move = out ? leaving : qIn < 1 ? entering : undefined;
       const blockPose = move?.block?.(out ? qOut : qIn, seed) ?? {};
       const [sx, sy] = [blockPose.sx ?? 1, blockPose.sy ?? 1];
+      // (a line squashed under half its size by its own move is not there: the opaque reveal steps a squash as it steps a
+      // fade; a squelch drew 6 %-high glyphs with no pixel of their own to read, ruling 2026-11-13 §3)
+      const squashed = !!move && !fading() && Math.min(Math.abs(sx), Math.abs(sy)) < READ_SCALE;
       const shift = blockPose.pivot ? (blockPose.pivot * (p.block.w / 2) * (sx - 1)) : 0;
       body.position.set(p.block.cx + firstX + (blockPose.dx ?? 0) - shift, p.block.cy + firstAt + (blockPose.dy ?? 0), 0);
       const bq = beatMove && (!out || stays) && wl.beat ? beatProgress(wl.beat.at, beatSec, t, !!wl.beat.stepped, stays) : undefined;
@@ -688,7 +697,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       }
       shearBody(p.spec.shear);
       // (the opaque reveal: a line comes and goes in steps, never see-through)
-      const whole_a = stepA(blockPose.a ?? 1);
+      const whole_a = squashed ? 0 : stepA(blockPose.a ?? 1);
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
       if (carrier) carrier.mesh.material.opacity = whole_a;
       // the line's own carrier settles or opens under the words (the words stay where they are)
@@ -748,6 +757,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         m.position.set(p.x[i] + (pose.dx ?? 0), p.y[i] + (pose.dy ?? 0) + lift, 0);
         const s = (p.sizes?.[i] ?? p.scale) * (pose.s ?? 1);
         m.scale.set(s * (pose.sx ?? 1), s * (pose.sy ?? 1), 1);
+        // (a glyph its own move squashes under half its size is not there either)
+        const glyphSquashed = (out || qi < 1) && !fading() && Math.min(Math.abs((pose.s ?? 1) * (pose.sx ?? 1)), Math.abs((pose.s ?? 1) * (pose.sy ?? 1))) < READ_SCALE;
         m.rotation.z = (p.turn[i] ? -Math.PI / 2 : 0) + (pose.r ?? 0);
         const gh = ghosts?.[i].mesh;
         if (gh) {
@@ -769,13 +780,15 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }
         // (the tone dims the ink toward its shadow, a colour, never an opacity: on a sheet it was opacity, the words
         // see-through; with the opaque reveal a sheet's words keep their ink)
-        const tone = Math.min(1, (pose.tone ?? 1) * rank);
+        const tone0 = Math.min(1, (pose.tone ?? 1) * rank);
+        // (dimmed only as far as it still reads on what it stands on: a step-back or an unsung word is still a lyric)
+        const tone = fading() || wl.sheet ? tone0 : readableTone(baked ? tintOf(g, k) : `#${drawnInk[i].toString(16).padStart(6, '0')}`, standsOn(sets[k]), tone0, baked ? 0.1 : 0.14);
         alphaOf[i] = { pose: stepA(pose.a ?? 1), block: whole_a, left, tone: wl.sheet && !fading() ? 1 : tone };
         if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {
-          m.material.opacity = stepA(pose.a ?? 1) * whole_a * (fading() ? tone * left : 1);
+          m.material.opacity = glyphSquashed ? 0 : stepA(pose.a ?? 1) * whole_a * (fading() ? tone * left : 1);
         } else {
-          m.material.opacity = stepA(pose.a ?? 1) * whole_a * (fading() ? left : 1);
+          m.material.opacity = glyphSquashed ? 0 : stepA(pose.a ?? 1) * whole_a * (fading() ? left : 1);
           if (baked) m.material.color.copy(dimBaked).lerp(lit, tone);
           else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }

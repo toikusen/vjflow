@@ -4,6 +4,7 @@
 // only where every point the final pass read it from was that glyph. QA only: nothing here runs while a video is made.
 import * as THREE from 'three';
 import { idRgb } from '../ink-verify';
+import { setPatch } from './material-patch';
 import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV } from './final-warp.glsl';
 
 const W = 1920;
@@ -14,16 +15,8 @@ const H = 1080;
  * read with no antialiasing, its material, its real opacity and every effect after it kept). Undone by `on = false`.
  */
 export function binarize(m: THREE.Material, on: boolean) {
-  const u = m.userData as { inkBin?: boolean };
-  if (!!u.inkBin === on) return;
-  u.inkBin = on;
-  m.onBeforeCompile = on
-    ? (shader) => {
-        shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n  diffuseColor.a = step(0.5, diffuseColor.a / max(opacity, 1e-4)) * opacity;');
-      }
-    : () => {};
-  m.customProgramCacheKey = on ? () => 'ink-bin' : () => '';
-  m.needsUpdate = true;
+  // (a patch among others, material-patch: the halo's cut on a copy stays)
+  setPatch(m, 'ink-bin', on ? (shader) => void (shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n  diffuseColor.a = step(0.5, diffuseColor.a / max(opacity, 1e-4)) * opacity;')) : undefined);
 }
 
 /** A glyph's picture drawn as its ID: the picture's own coverage (alpha ≥ 0.5) decides, no tint, no opacity. */

@@ -290,3 +290,26 @@ export function textCells(on: ArrayLike<number>, off: ArrayLike<number>, w: numb
   }
   return cells;
 }
+
+/** An sRGB hex colour's WCAG luminance. */
+const lumHex = (c: string) => lumOf(parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16));
+/**
+ * How far a glyph's tone may dim its ink and still read (ruling 2026-11-13 §3: a tone that dims the ink is no see-through
+ * multiplier, and no lyric is dimmed below reading either): the renderer draws a dimmed glyph in linear light at
+ * `floor + (1 - floor) · tone` of its ink (world-layout: 0.14 for a flat ink, 0.1 for a baked material's tint). Returns
+ * the least tone at or over `tone` at which `ink` reads at `aim` on each of `grounds`, or as well as it reads undimmed
+ * where even that is under `aim`. Pure, so the plan and the renderer get the same.
+ */
+export function readableTone(ink: string, grounds: string[], tone: number, floor = 0.14, aim = INK_AIM): number {
+  if (tone >= 1 || !/^#[0-9a-f]{6}$/i.test(ink)) return tone;
+  const li = lumHex(ink);
+  const gs = grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map(lumHex);
+  const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  const at = (t: number) => li * (floor + (1 - floor) * t);
+  const needs = gs.map((g) => Math.min(aim, ratio(at(1), g)) - 1e-9);
+  const ok = (t: number) => gs.every((g, k) => ratio(at(t), g) >= needs[k]);
+  if (ok(tone)) return tone;
+  // (contrast against each ground is monotone in t only on one side of it: step up to the first tone that reads)
+  for (let t = Math.ceil(tone * 100) / 100; t < 1; t += 0.01) if (ok(t)) return +t.toFixed(2);
+  return 1;
+}

@@ -22,7 +22,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH, haloOf } from './final-warp.glsl';
 import { binarize, flipRows, InkMask } from './ink-mask';
 import { InkHalo } from './ink-halo';
-import type { FxBox } from '../ink-decide';
+import { fxOfFrame, type FxBox } from '../ink-decide';
 import { HALO_UNIFORMS, haloCut, setPatch } from './material-patch';
 import { SNOW } from './world-grounds';
 import { idOf, partIdOf } from '../ink-verify';
@@ -728,23 +728,19 @@ export class LyricVjEngine {
   private gradient: THREE.Texture;
 
   /**
-   * The final effects a world line's inks meet, as decideInk's ranges (ink-decide FxBox), from the job alone: the
-   * medium's flicker, the design's grain, the deepest vignette at a line's reach (d² ≤ 0.15 in the safe area) and the
-   * world frame's raster, the ink halo. Opt-in (treatment.inkDecide, M3), read by world-layout through __vjInkFx.
+   * The final effects a world line's inks are decided through (M3, ink-decide fxOfFrame), from the job's world frame and
+   * its halo: the same numbers the plan has for the world (hold-room WORLD_FX). null: treatment.inkDecide false (QA).
+   * Read by world-layout through __vjInkFx.
    */
-  static inkFx(job: RenderJob): FxBox | undefined {
+  static inkFx(job: RenderJob): FxBox | null | undefined {
     const tr = job.treatment as { inkDecide?: boolean; inkHalo?: [number, number] | false };
-    if (!tr.inkDecide) return undefined;
-    const d = job.treatment.design ?? DEFAULT_DESIGN;
-    const frame = d.world?.frame;
-    const medium = frame ? { ...MEDIA.clean, ...frame, grain: 0 } : MEDIA[d.medium ?? 'clean'];
-    const halo = !!haloOf(tr.inkHalo);
-    const vig = 1.6 * 0.15 * (frame ? frame.vignette : 0.55);
-    return { flicker: medium.flicker, grain: 0.02 + 0.1 * d.grain + medium.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame?.scan ?? 0)), halo };
+    if (tr.inkDecide === false) return null;
+    const frame = job.treatment.design?.world?.frame;
+    return frame ? fxOfFrame(frame, !!haloOf(tr.inkHalo)) : undefined;
   }
 
   constructor(canvas: HTMLCanvasElement, private job: RenderJob) {
-    (globalThis as { __vjInkFx?: FxBox }).__vjInkFx = LyricVjEngine.inkFx(job);
+    (globalThis as { __vjInkFx?: FxBox | null }).__vjInkFx = LyricVjEngine.inkFx(job);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: job.layer === 'text' || job.layer === 'words' });
     this.renderer.setPixelRatio(1);
     this.renderer.localClippingEnabled = true; // handwrite reveals glyphs with clip planes
@@ -2717,7 +2713,7 @@ export class LyricVjEngine {
    * pass's own controls (text mask, chroma trails, every final uniform, the bloom), and the glyphs' IDs through the final
    * pass's sampling. Returns the three over the glyphs' box grown by `pad`, top row first, and which line each slot is.
    */
-  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; parts?: Uint8Array; fx: Record<string, number>; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> {
+  async inkMoment(t: number, pad = 64): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; parts?: Uint8Array; fx: Record<string, number>; others: Record<number, string>; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> {
     const gl = this.renderer.getContext();
     const read = (x0: number, y0: number, w: number, h: number) => { const b = new Uint8Array(w * h * 4); gl.readPixels(x0, H - y0 - h, w, h, gl.RGBA, gl.UNSIGNED_BYTE, b); return flipRows(b, w, h); };
     this.showLyrics(true);
@@ -2760,7 +2756,10 @@ export class LyricVjEngine {
       // (the effects as the words-on pass drew them: every numeric final control off its resting value, and the bloom)
       const rest: Record<string, number> = { uFlicker: 1, uSweep: -1, uShockR: -1, uVigBase: 0.55, uAberration: 0.0012 };
       const fx = Object.fromEntries([...Object.entries(this.inkControls?.uniforms ?? {}).filter(([k, v]) => typeof v === 'number' && v !== (rest[k] ?? 0)).map(([k, v]) => [k, +(v as number).toFixed(4)]), ['bloom', +(this.inkControls?.bloom ?? 0).toFixed(3)]]);
-      return { box: [x0, y0, w, h], on, off, mask, parts, fx, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))), opacity: Object.fromEntries(meshes.flatMap((l) => l.glyphs.map((g) => [idOf(l.slot, g.i), opacity(g.mesh)]))) };
+      // (what each `other` mesh is, for the report: its ancestors' names and userData keys, its picture's name)
+      const what = (m: THREE.Object3D) => { const p: string[] = []; for (let o: THREE.Object3D | null = m; o && o !== this.textRoot; o = o.parent) p.push(`${o.type}${o.name ? `:${o.name}` : ''}${Object.keys(o.userData).length ? `{${Object.keys(o.userData).join(',')}}` : ''}`); return `${p.join('<')} map:${((m as THREE.Mesh).material as THREE.MeshBasicMaterial).map?.name ?? ''}`; };
+      const others = Object.fromEntries(meshes.filter((l) => l.id === 'other').flatMap((l) => l.glyphs.map((g) => [idOf(l.slot, g.i), what(g.mesh)])));
+      return { box: [x0, y0, w, h], on, off, mask, parts, fx, others, lines: Object.fromEntries(meshes.map((l) => [l.slot, l.id])), shown: meshes.flatMap((l) => l.glyphs.map((g) => idOf(l.slot, g.i))), opacity: Object.fromEntries(meshes.flatMap((l) => l.glyphs.map((g) => [idOf(l.slot, g.i), opacity(g.mesh)]))) };
     } finally {
       this.inkCapture = false;
       this.inkFrozen = undefined;

@@ -8,6 +8,8 @@ import { GROW, OPEN, SETTLE } from './world-beats';
 import type { Slots } from './world-objects';
 import type { Block, SetSpec } from './world-sets';
 import { gapOf, LINE_CLEAR, toPx } from './carrier-fit';
+import { decideInk, type FxBox } from '../ink-decide';
+import { SET_SPECS } from './world-sets';
 
 /** Every ink a line is read in reads at least this on what is under it (WCAG AA). */
 export const READ_MIN = 4.5;
@@ -107,7 +109,28 @@ export function settleInk(base: string, candidates: (string | undefined)[], grou
 export const swapReads = (base: string, key: string, back: string | undefined, under: string[] = []) => !!back && [base, key, back].every((c) => /^#[0-9a-f]{6}$/i.test(c)) && contrast(key, back) >= READ_MIN && contrast(base, back) >= READ_MIN && key.toLowerCase() !== base.toLowerCase() && under.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).every((g) => contrast(key, g) >= READ_MIN);
 
 /** What the renderer sees under a line that the plan does not: the background it is shown on, what the picture puts under it, the song's accent. */
-export interface Seen { background?: string; under?: string[]; accent?: string }
+export interface Seen {
+  background?: string; under?: string[]; accent?: string;
+  /** The final effects the inks are decided through (M3, ink-decide); undefined: the set's world's; null: not decided. */
+  fx?: FxBox | null;
+}
+
+/** Each world's final effects (style-worlds registers them from each frame stack: ink-decide fxOfFrame). */
+export const WORLD_FX: Record<string, FxBox> = {};
+let specWorld: Map<SetSpec, string> | undefined;
+/** The final effects a set's inks are decided through: the caller's (`seen.fx`), else its world's; none for a set no world names. */
+export const inkFxOf = (spec: SetSpec, seen: Seen = {}): FxBox | undefined => (seen.fx === null ? undefined : seen.fx ?? WORLD_FX[(specWorld ??= new Map(Object.entries(SET_SPECS).map(([k, v]) => [v, k.split('/')[0]]))).get(spec) ?? '']);
+/** What a set's words stand on: its carrier, else the background and what the picture puts there. */
+export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] => { const on = carrierSlots(spec); return on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? [])]; };
+const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
+/**
+ * A set's body ink as decided (M3, ink-decide decideInk): the one ink the plan reads every check on and the renderer draws,
+ * through the world's final effects, on what the words stand on. Idempotent: a decided ink decides to itself.
+ */
+export function bodyInk(spec: SetSpec, slots: Slots, body: string, seen: Seen = {}): string {
+  const fx = inkFxOf(spec, seen);
+  return fx && hex(body) ? decideInk(body, standsOn(spec, slots, seen), fx, worldInks(slots)).ink : body;
+}
 const hex = (c?: string): c is string => !!c && /^#[0-9a-f]{6}$/i.test(c);
 /** The slots a set's words stand on when it draws (or its page draws) a carrier under them; undefined off a carrier. */
 /**
@@ -151,14 +174,19 @@ export function keyFor(spec: SetSpec, slots: Slots, body: string, seen: Seen = {
   // (off a carrier, the key reads on the background and on what the picture really puts under the line; it stays apart
   // from the body ink: a key pushed to read until it was the body's black marked nothing, brutalist's red on 世界のつづき)
   const grounds = on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? [])];
-  return keyInk(spec.key ? slots[spec.key] : accent, [slots.accent, slots.ink2, accent], body, grounds, on && (spec.object || spec.on) ? READ_ON_CARRIER : READ_MIN);
+  const key = keyInk(spec.key ? slots[spec.key] : accent, [slots.accent, slots.ink2, accent], body, grounds, on && (spec.object || spec.on) ? READ_ON_CARRIER : READ_MIN);
+  // (decided as the body is: through the world's final effects, M3)
+  const fx = inkFxOf(spec, seen);
+  return fx && hex(key) ? decideInk(key, standsOn(spec, slots, seen), fx, worldInks(slots)).ink : key;
 }
 /**
  * What a line on this set may do with its inks, worked out the same by the plan (palette only) and the renderer (with
  * what it sees): a key-ink pulse (keyOk), a phrase swap (swapOk), and the second ink a whole line settles into (settle).
  * Each new ink reads at READ_MIN on every ground under every part of the words (partGrounds).
  */
-export function inkChecks(spec: SetSpec, slots: Slots, body: string, seen: Seen = {}) {
+export function inkChecks(spec: SetSpec, slots: Slots, body0: string, seen: Seen = {}) {
+  // (the body as decided, M3: the plan and the renderer read their checks on the ink that is drawn)
+  const body = bodyInk(spec, slots, body0, seen);
   const grounds = partGrounds(spec, slots, seen);
   const key = keyFor(spec, slots, body, seen);
   const back = [seen.background ?? slots.ground, slots.plate, slots.ground].filter(hex).sort((x, y) => contrast(body, y) - contrast(body, x))[0];

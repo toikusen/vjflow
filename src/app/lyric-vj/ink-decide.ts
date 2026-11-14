@@ -34,6 +34,16 @@ export function finalBounds(hex: string, fx: FxBox, rim = false): [number, numbe
 /** The least contrast an ink in [i0, i1] can show on a ground in [g0, g1] (overlapping ranges can meet: 1). */
 export const minContrast = ([i0, i1]: [number, number], [g0, g1]: [number, number]) => (i0 > g1 ? (i0 + 0.05) / (g1 + 0.05) : g0 > i1 ? (g0 + 0.05) / (i1 + 0.05) : 1);
 
+/**
+ * The final effects a world's lines meet, from its frame stack alone (the same numbers the plan and the renderer have):
+ * its flicker, the deepest vignette at a line's reach (d² ≤ 0.15 in the safe area) and, with no halo, its raster; the
+ * design grain (free-plan sets it from the stack). `halo`: the ink halo is on (every job, INK_HALO).
+ */
+export function fxOfFrame(frame: { flicker: number; vignette: number; scan: number; grain: number }, halo = true): FxBox {
+  const vig = 1.6 * 0.15 * frame.vignette;
+  return { flicker: frame.flicker, grain: 0.02 + 0.1 * frame.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame.scan)), halo };
+}
+
 /** What decideInk chose: the ink, where it came from, and the least it reads on every ground through every effect. */
 export interface InkDecision { ink: string; from: 'own' | 'moved' | 'world' | 'none'; min: number }
 

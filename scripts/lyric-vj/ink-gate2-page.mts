@@ -2,7 +2,7 @@
 // read glyph by glyph off the final composite, with the glyphs' ID masks, on the words-on pass's frozen controls.
 import { DRIFT_MAX, glyphOfId, lineOfId, offDrift, reduceGlyphs, type GlyphVerdict } from '../../src/app/lyric-vj/ink-verify';
 
-type Engine = { inkMoment(t: number, pad?: number): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; parts?: Uint8Array; fx: Record<string, number>; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> };
+type Engine = { inkMoment(t: number, pad?: number): Promise<{ box: [number, number, number, number]; on: Uint8Array; off: Uint8Array; mask: Uint8Array; parts?: Uint8Array; fx: Record<string, number>; others: Record<number, string>; lines: Record<number, string>; shown: number[]; opacity: Record<number, number> } | undefined> };
 type Alpha = { pose: number; block: number; left: number; tone: number };
 const w = window as unknown as { vjEngine: Engine; vjGlyphs(): { id: string; glyphs: { i: number; moving: boolean; a: number; phase?: 'enter' | 'exit' | 'rest'; alpha?: Alpha }[] }[]; vjFrame(t: number): Promise<unknown>; inkGate: unknown };
 
@@ -10,7 +10,7 @@ const w = window as unknown as { vjEngine: Engine; vjGlyphs(): { id: string; gly
 const DRIFT_R = 48;
 
 /** A glyph read: its line and index, where it is in its life (its entrance, its exit, at rest), its drawn opacity and its multipliers, its verdict. */
-export type Read = { cue: string; i: number; phase: 'enter' | 'exit' | 'rest'; a?: number; alpha?: Alpha; v: GlyphVerdict };
+export type Read = { cue: string; i: number; phase: 'enter' | 'exit' | 'rest'; a?: number; alpha?: Alpha; what?: string; v: GlyphVerdict };
 /** One moment: every glyph shown, its verdict; the field drift; the 2D layer's characters (signature), unverified. */
 async function moment(t: number): Promise<{ reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> }> {
   // (the composed frame first: a signature moment's characters are drawn on the 2D layer, and are counted, not read)
@@ -28,7 +28,7 @@ async function moment(t: number): Promise<{ reads: Read[]; drift: number; driftA
     const g = life.get(`${cue}/${i}`);
     // (a glyph a world line does not phase: moving is its entrance or exit unknown, read as an entrance)
     const phase = g?.phase ?? (g?.moving ? 'enter' : 'rest');
-    return { cue, i, phase, a: m.opacity[v.id], alpha: g?.alpha, v: drift > DRIFT_MAX && v.status !== 'unverified:no-core' ? { ...v, status: 'unverified:field-drift' } : v };
+    return { cue, i, phase, a: m.opacity[v.id], alpha: g?.alpha, ...(m.others[v.id] ? { what: m.others[v.id] } : {}), v: drift > DRIFT_MAX && v.status !== 'unverified:no-core' ? { ...v, status: 'unverified:field-drift' } : v };
   });
   // (a hash of both passes over the whole box: the same moment drawn again must give the same, words on and off)
   let hash = 0;

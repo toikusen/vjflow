@@ -23,12 +23,12 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './ink-gate2-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'fade-reveal': { type: 'boolean', default: false }, halo: { type: 'string' }, decide: { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'fade-reveal': { type: 'boolean', default: false }, halo: { type: 'string' }, 'no-decide': { type: 'boolean', default: false } } });
 // (--halo 8,12 | off: another ink halo than the default (INK_HALO 4,6), or none; treatment.inkHalo)
 const halo = a.halo === 'off' ? (false as const) : a.halo ? (a.halo.split(',').map(Number) as [number, number]) : undefined;
 // (--fade-reveal: the fades as they were before the opaque reveal, QA __vjFadeReveal, for the before/after count)
-// (--decide: M3's analytic ink decision, treatment.inkDecide)
-const variant = `${a.decide ? '__decide' : ''}${a['fade-reveal'] ? '__fade' : ''}${halo === false ? '__nohalo' : halo ? `__halo${halo.join('-')}` : ''}`;
+// (--no-decide: without M3's ink decision, the default since 2026-11-15, treatment.inkDecide false)
+const variant = `${a['no-decide'] ? '__nodecide' : ''}${a['fade-reveal'] ? '__fade' : ''}${halo === false ? '__nohalo' : halo ? `__halo${halo.join('-')}` : ''}`;
 const out = resolve('out/research/ink/gate2', a.run!);
 const work = join(out, 'work');
 mkdirSync(work, { recursive: true });
@@ -56,7 +56,7 @@ for (const spec of a.jobs!.split(',')) {
   const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8'));
   const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === world)!, seed: Number(a.seed), meaning, ...(a.font ? { font: a.font } : {}) });
   const jobFile = join(work, `${world}-${name}.job.json`);
-  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(halo !== undefined ? { inkHalo: halo } : {}), ...(a.decide ? { inkDecide: true } : {}) } }));
+  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(halo !== undefined ? { inkHalo: halo } : {}), ...(a['no-decide'] ? { inkDecide: false } : {}) } }));
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
   if (a['fade-reveal']) await page.addInitScript('window.__vjFadeReveal = true');
@@ -141,7 +141,7 @@ for (const spec of a.jobs!.split(',')) {
       const box = m.box ?? [0, 0, 0, 0];
       const pair = r.v.pair ? { p: [r.v.pair.p[0] + box[0], r.v.pair.p[1] + box[1], r.v.pair.p[2]], q: [r.v.pair.q[0] + box[0], r.v.pair.q[1] + box[1], r.v.pair.q[2]] } : undefined;
       const alpha = r.a !== undefined ? { a: +r.a.toFixed(3), ...(r.alpha ? Object.fromEntries(Object.entries(r.alpha).map(([k, v]) => [k, +v.toFixed(3)])) : {}) } : undefined;
-      out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3), ...(r.v.edge && r.v.edge.min < 4.5 ? [r.v.edge] : []), ...(phase !== 'rest' || (r.a ?? 1) < 0.99 ? [{ phase, a: alpha?.a }] : [])] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, pair, alpha, shape: r.v.shape, gap: r.v.gap, edge: r.v.edge });
+      out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3), ...(r.v.edge && r.v.edge.min < 4.5 ? [r.v.edge] : []), ...(phase !== 'rest' || (r.a ?? 1) < 0.99 ? [{ phase, a: alpha?.a }] : [])] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, pair, alpha, ...(r.what ? { what: r.what } : {}), shape: r.v.shape, gap: r.v.gap, edge: r.v.edge });
     }
     if (m.layer2d) unverified['layer-2d'] = (unverified['layer-2d'] ?? 0) + m.layer2d;
     row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, fx: m.fx, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), ...(stopped === 'nondeterministic' ? { nondeterministic: true } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });

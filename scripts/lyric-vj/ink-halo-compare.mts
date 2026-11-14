@@ -34,8 +34,8 @@ const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === a.world)
 const REST = ['uVignette', 'uVigBase', 'uFade', 'uGrain', 'uPaper', 'uBoil', 'uLift', 'uTooth', 'uPixel', 'uScan', 'uGlitch', 'uAberration', 'uFlash', 'uHit', 'uZoomHit', 'uTileHit', 'uRays', 'uBeams', 'uShock', 'uSweep', 'uShockR', 'uGlass', 'uFlicker'];
 const WAYS: { id: string; halo?: [number, number] | false; init?: string }[] = [
   { id: 'A-now', halo: false },
-  { id: 'B-halo4+2', halo: [4, 6] },
-  { id: 'C-halo8+4', halo: [8, 12] },
+  { id: 'B-halo4-2', halo: [4, 6] },
+  { id: 'C-halo8-4', halo: [8, 12] },
   { id: 'D-effects-off', halo: false, init: `window.__vjFinalOff = ${JSON.stringify(REST)}; window.__vjNoSnow = true;` },
 ];
 /** Each pixel's distance to the nearest glyph pixel of the mask (exact, separable, rows then columns). */

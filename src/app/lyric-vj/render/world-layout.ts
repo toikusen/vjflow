@@ -11,9 +11,9 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
-import { carrierBox, carrierRoom, carrierSlots, growRoom, inkChecks, keyFor } from './hold-room';
+import { bodyInk, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
 import { readableTone } from '../measured-ink';
-import { decideInk, type FxBox } from '../ink-decide';
+import type { FxBox } from '../ink-decide';
 import { laidSeat, panelSplit, slotSpec } from './seat-geometry';
 export { stressInk };
 import { CamRoom, worldCam } from './world-cam';
@@ -331,25 +331,22 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // the key reads against what is really under the words: the object's plate, the card or banners a set's page draws
   // (a set inked for the plate stands on one), else the ground (pink key letters sat on a white hint card at 2:1)
   // what the renderer sees under a line that the plan does not (hold-room.ts Seen)
-  const seen = { background: rt.palette.background, under: rt.under, accent: rt.palette.accent };
+  // (fx: the final effects its inks are decided through, the engine's from the job's world frame, M3; null: not decided)
+  const seen = { background: rt.palette.background, under: rt.under, accent: rt.palette.accent, fx: (globalThis as { __vjInkFx?: FxBox | null }).__vjInkFx };
   // (what each pose's words stand on: its carrier, else the background and what the picture puts there; a dimmed glyph
   // still reads on all of it, readableTone)
-  const standsOn = (s: SetSpec) => { const on = carrierSlots(s); return on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? [])]; };
+  const standsOn = (s: SetSpec) => standsOnOf(s, slots, seen);
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
   const inkOn0 = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
-  // (M3, opt-in treatment.inkDecide: each pose's ink as decideInk takes it, on what the pose stands on through the final
-  // effects the job meets; its own first, a small move, then the world's: one ink a pose, never chased frame by frame)
-  const inkFx = (globalThis as { __vjInkFx?: FxBox }).__vjInkFx;
-  const worldInks = [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
+  // (M3: each pose's ink as decided, the one the plan read its checks on: hold-room bodyInk; one ink a pose)
   const decided = new Map<SetSpec, string>();
-  const inkOn = (s: SetSpec) => (inkFx ? decided.get(s) ?? (decided.set(s, decideInk(inkOn0(s), standsOn(s), inkFx, worldInks).ink), decided.get(s)!) : inkOn0(s));
+  const inkOn = (s: SetSpec) => decided.get(s) ?? (decided.set(s, bodyInk(s, slots, inkOn0(s), seen)), decided.get(s)!);
   const words = inkOn(sets[0]);
   const baked = !!(wl.surface || sets.some((s) => s.surface));
   // the key reads on what is really under the words: the object's plate, the card or banners a set's page draws, else the
   // background and what the picture puts there (hold-room.ts keyFor)
-  const keyOf0 = (s: SetSpec) => keyFor(s, slots, inkOn(s), seen);
   const keys = new Map<SetSpec, string>();
-  const keyOf = (s: SetSpec) => (inkFx ? keys.get(s) ?? (keys.set(s, decideInk(keyOf0(s), standsOn(s), inkFx, worldInks).ink), keys.get(s)!) : keyOf0(s));
+  const keyOf = (s: SetSpec) => keys.get(s) ?? (keys.set(s, keyFor(s, slots, inkOn(s), seen)), keys.get(s)!);
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;

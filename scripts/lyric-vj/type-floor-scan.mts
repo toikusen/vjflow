@@ -49,6 +49,7 @@ type Read = { set: number; drawn: number; decor: boolean };
 /** A line with any body glyph whose row type is under its floor, at either moment. */
 interface Under { diag?: unknown; rest?: number; floored?: boolean; world: string; song: string; seed: number; cue: string; set: string; floor: number; least: number; sizes: number[]; text: string; t: number; plan: string; fit?: number; template?: string }
 const under: Under[] = [];
+const particleRows: unknown[] = [];
 const callsUnder: Under[] = [];
 const loUnder: Under[] = [];
 const byWorldSet: Record<string, { lines: number; under: number }> = {};
@@ -89,7 +90,10 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
       const r = (await page.evaluate(`window.floorScan.at(${JSON.stringify(c.id)}, ${t})`)) as { line: Read[]; calls: Read[]; diag: { fit: number; floor: number; framed: boolean }[] };
       const body = r.line.filter((g) => !g.decor);
       glyphs += body.length;
-      particle += body.filter((g) => g.set >= floor && g.drawn < floor - 0.5).length;
+      // (the product's floor, not the set's own lo: a particle in a row at 110 that is drawn at 89 is a set's taste, counted in loUnder)
+      const small = body.filter((g) => g.set >= TYPE_FLOOR.lo && g.drawn < TYPE_FLOOR.lo - 0.5);
+      particle += small.length;
+      if (small.length) particleRows.push({ world: id, song: name, seed, cue: c.id, set: wl.set ?? '', template: c.template, t, rows: [...new Set(small.map((g) => `${Math.round(g.set)}>${Math.round(g.drawn)}`))].join(' '), diag: r.diag });
       decorUnder += r.line.filter((g) => g.decor && g.set < floor - 0.5).length;
       const m = Math.min(...body.map((g) => g.set));
       if (m < least) [least, leastAt, sizes, diag] = [m, t, [...new Set(body.map((g) => Math.round(g.set)))].sort((x, y) => x - y), r.diag];
@@ -136,7 +140,7 @@ const out = {
   floor: TYPE_FLOOR.lo, under: under.length, loUnder: loUnder.length, callsUnder: callsUnder.length,
   particleUnderFloor: particle, decorUnderFloor: decorUnder, extras, leastByWorld,
   byWorldSet: Object.fromEntries(Object.entries(byWorldSet).filter(([, v]) => v.under).sort()),
-  lines_under: under, lo_under: loUnder, calls_under: callsUnder,
+  lines_under: under, lo_under: loUnder, calls_under: callsUnder, particle_rows: particleRows,
 };
 if (a.out) writeFileSync(a.out, JSON.stringify(out, null, 1));
-console.log(JSON.stringify({ ...out, lines_under: undefined, lo_under: undefined, calls_under: undefined }, null, 1));
+console.log(JSON.stringify({ ...out, lines_under: undefined, lo_under: undefined, calls_under: undefined, particle_rows: undefined }, null, 1));

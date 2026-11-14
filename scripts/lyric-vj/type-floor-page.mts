@@ -24,7 +24,7 @@ function glyphsIn(root: Obj | undefined): Read[] {
   return out;
 }
 
-type Engine = { cueLayers: { rt: { cue: { id: string } }; layer: { group: Obj; floor?: number; framed?: boolean }; fit?: Obj; twin?: { fit: Obj } }[]; callLayers: { rt: { cue: { id: string } }; group: Obj }[]; updateCues(t: number, fx: { flash: number; hit: number; shake: number }): void };
+type Engine = { cueLayers: { rt: { cue: { id: string } }; hold?: number; layer: { group: Obj; floor?: number; framed?: boolean }; fit?: Obj; twin?: { fit: Obj } }[]; callLayers: { rt: { cue: { id: string } }; group: Obj }[]; updateCues(t: number, fx: { flash: number; hit: number; shake: number }): void };
 const w = window as unknown as { vjEngine: Engine; floorScan: unknown };
 
 /**
@@ -52,8 +52,10 @@ function at(id: string, t: number) {
       o.getWorldPosition(at);
       wx = Math.max(wx, Math.abs(at.x) / fs + em); wy = Math.max(wy, Math.abs(at.y) / fs + em);
     });
+    let [nm, ns] = [0, 0];
+    c.layer.group.traverse((o: Obj) => { if (o.userData?.['size']) { ns++; if (o.isMesh) nm++; } });
     const bb = new THREE.Box3().setFromObject(c.layer.group);
-    return { fit: +fs.toFixed(4), floor: c.layer.floor ?? 0, framed: !!c.layer.framed, wx: Math.round(wx), wy: Math.round(wy), bx: Math.round(Math.max(Math.abs(bb.min.x), Math.abs(bb.max.x)) / fs), by: Math.round(Math.max(Math.abs(bb.min.y), Math.abs(bb.max.y)) / fs) };
+    return { nm, ns, hold: c.hold, fit: +fs.toFixed(4), floor: c.layer.floor ?? 0, framed: !!c.layer.framed, wx: Math.round(wx), wy: Math.round(wy), bx: Math.round(Math.max(Math.abs(bb.min.x), Math.abs(bb.max.x)) / fs), by: Math.round(Math.max(Math.abs(bb.min.y), Math.abs(bb.max.y)) / fs) };
   });
   return { diag, line: r(own.flatMap((c) => [...glyphsIn(c.fit ?? c.layer.group), ...glyphsIn(c.twin?.fit)])), calls: r(calls) };
 }

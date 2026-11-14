@@ -261,7 +261,8 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D) {
   const box = new THREE.Box3();
   const scale = new THREE.Vector3();
   let least = Infinity;
-  for (const k of [0.5, 0.95]) {
+  // (the whole reading, not two moments of it: a line's glyphs swell as it is read, silk チョロイン c078 rested at 83 px at its start and 87 at its end)
+  for (const k of [0.04, 0.25, 0.5, 0.75, 0.95]) {
     measureAtRest(() => layer.update(from + (end - from) * k, { flash: 0, hit: 0, shake: 0 }));
     parent.updateMatrixWorld(true);
     layer.group.traverse((o) => {
@@ -839,6 +840,8 @@ export class LyricVjEngine {
   async init() {
     const { treatment, cues } = this.job;
     const design = treatment.design ?? DEFAULT_DESIGN;
+    // (a style world's job: its lines carry a world layout (cue.world) or its design names one; the type floor binds every line of it)
+    const inWorld = !!design.world || treatment.cues.some((c) => !!(c as { world?: unknown }).world);
     const fonts = (this.fonts = resolveFonts({ ...this.job.fonts, family: this.job.fonts?.family ?? design.font }));
     setKanaScale(design.kanaScale);
     this.accentFont = design.accentFont;
@@ -1145,7 +1148,7 @@ export class LyricVjEngine {
       // world holds at the floor, and that the fit cannot hold, is laid as plain stepped rows, as a shared template's line
       // is (a stack line set its words at 73 px among the world's own lines at 84 and up, silk チョロイン c046; document
       // c041 rested at 80 px in the only set that took it, 2026-11-12)
-      const floor = design.world ? TYPE_FLOOR.lo - 0.5 : REST_FLOOR;
+      const floor = inWorld ? TYPE_FLOOR.lo - 0.5 : REST_FLOOR;
       if (style.budget && alone && restSize(build(), fitToFrame) < floor) {
         drawn = 'stair';
         rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };
@@ -1214,7 +1217,7 @@ export class LyricVjEngine {
       }
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
-      const hold = design.world && !layer.framed ? holdScale(layer, fit, TYPE_FLOOR.lo) : undefined;
+      const hold = inWorld && !layer.framed ? holdScale(layer, fit, TYPE_FLOOR.lo) : undefined;
       const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, hold, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
       if (twin) {
         const f = fitToFrame(twin, kick);
@@ -1234,7 +1237,7 @@ export class LyricVjEngine {
         entry.fit!.removeFromParent();
         this.textRoot.add(f);
         kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
-        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: design.world && !l.framed ? holdScale(l, f, TYPE_FLOOR.lo) : undefined, mixed: true });
+        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: inWorld && !l.framed ? holdScale(l, f, TYPE_FLOOR.lo) : undefined, mixed: true });
       };
       if (live) this.cueLayers.splice(this.cueLayers.findIndex((c) => c.index! > i) >>> 0, 0, entry);
       else this.cueLayers.push(entry);

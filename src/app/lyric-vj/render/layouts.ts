@@ -57,6 +57,8 @@ export const stack: TemplateRenderer = {
     glyphs.forEach((g, i) => ((g.index = i), group.add(g.mesh)));
     tint(rt, glyphs);
     const blockH = rows.length * lineH;
+    // (the smallest glyph picture the line holds, a particle the typesetter set at 0.78 included: it is what steps back no smaller than the floor)
+    const leastPic = Math.min(size, ...glyphs.map((g) => (g.mesh.userData['size'] as number | undefined) ?? size));
     const tilt = (k % 2 ? 1 : -1) * 0.025;
     return {
       group,
@@ -70,7 +72,7 @@ export const stack: TemplateRenderer = {
         // (while it is still read, the line before steps back no smaller than the type floor, render/type-floor.ts; pushed
         // up by the extra half height it keeps: a 96 px line at 70 % read at 67 px, 2026-11-12)
         const still = n <= 1;
-        const scale = still ? heldScale(shrunk, size) : shrunk;
+        const scale = still ? heldScale(shrunk, leastPic) : shrunk;
         const lift = (pair ? Math.min(1, n) * H * 0.4 : n * blockH * 0.78) + (scale - shrunk) * blockH * 0.5;
         // the line before stays at full strength, only smaller: dimmed it mixed into mid-tone grounds and could not be read
         const dim = pair ? (n <= 1 ? 1 : clamp01(2 - n)) : n > 0 ? Math.max(0.28, 1 - 0.32 * n) : 1;

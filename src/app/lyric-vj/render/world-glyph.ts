@@ -51,8 +51,22 @@ function inner(m: OffscreenCanvas, px: number, cut = 150) {
   return t;
 }
 
-/** Scanning dropouts and missing patches: what static takes out of a character. Under a fifth of its ink, never a whole stroke. */
-function eat(g: CanvasRenderingContext2D, w: number, h: number, size: number, seed: number) {
+/** The share of a character's ink eating may take at most; past it the character is kept whole (a thin mark: ︕ left nothing). */
+export const EAT_MOST = 0.35;
+/** A canvas's ink: the sum of its alpha. */
+const inkOf = (g: CanvasRenderingContext2D, w: number, h: number) => { const d = g.getImageData(0, 0, w, h).data; let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i]; return n; };
+/**
+ * Scanning dropouts and missing patches: what static takes out of a character. Under a fifth of its ink, never a whole
+ * stroke; a mark so thin the bands would take more than EAT_MOST of it is left whole (dark-glitch choroin c074 ︕ was
+ * shown with no pixel of its own, 2026-11-14 gate: no-core).
+ */
+export function eat(g: CanvasRenderingContext2D, w: number, h: number, size: number, seed: number) {
+  const before = inkOf(g, w, h);
+  const keep = g.getImageData(0, 0, w, h);
+  eatBands(g, w, h, size, seed);
+  if (inkOf(g, w, h) < before * (1 - EAT_MOST)) g.putImageData(keep, 0, 0);
+}
+function eatBands(g: CanvasRenderingContext2D, w: number, h: number, size: number, seed: number) {
   g.save();
   g.globalCompositeOperation = 'destination-out';
   const band = Math.max(2, size * 0.022);

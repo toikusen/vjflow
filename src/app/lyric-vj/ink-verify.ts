@@ -160,7 +160,7 @@ export function reduceGlyphs(on: ArrayLike<number>, off: ArrayLike<number>, mask
     if (a?.pair) v.pair = a.pair;
     if (a?.edge) v.edge = { n: a.edge.n, min: +a.edge.min.toFixed(3) };
     if (a?.any) {
-      const s = shapeOf(id, reader, owner, w, h);
+      const s = shapeOf(id, reader, owner, w, h, core);
       if (s.bad.length) v.shape = s.bad;
       if (s.gap) v.gap = s.gap;
       if (s.bad.length && (status === 'pass' || status === 'unverified:all-mixed')) status = v.status = 'fail';
@@ -178,19 +178,22 @@ export function reduceGlyphs(on: ArrayLike<number>, off: ArrayLike<number>, mask
  * ponytail: the face as drawn stands in for the approved reference mask; a reference drawn at the smallest delivery size
  * per font is the upgrade when one is declared.
  */
-export function shapeOf(id: number, reader: Int32Array, owner: Int32Array, w: number, h: number): { bad: string[]; gap?: { face: number; glyph: number } } {
+export function shapeOf(id: number, reader: Int32Array, owner: Int32Array, w: number, h: number, core?: Uint8Array): { bad: string[]; gap?: { face: number; glyph: number } } {
   let [x0, y0, x1, y1] = [w, h, -1, -1];
   for (let i = 0; i < w * h; i++) if (reader[i] === id) { const [x, y] = [i % w, Math.floor(i / w)]; [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)]; }
   if (x1 < 0) return { bad: [] };
   const bad: string[] = [];
   let joins = false;
   for (let y = y0; y <= y1 && !joins; y++) for (let x = x0; x <= x1 && !joins; x++) {
-    if (reader[y * w + x] !== id) continue;
+    // (a touch is ink to ink: a face's mixed pixel is where the final pass's samples disagree, two glyphs 1–2 px apart
+    // under the aberration split share a mixed seam without touching; review 2026-11-15, 113 joins)
+    if (reader[y * w + x] !== id || (core && owner[y * w + x] === id && !core[y * w + x])) continue;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const [qx, qy] = [x + dx, y + dy];
       if (qx < 0 || qy < 0 || qx >= w || qy >= h) continue;
-      const o = reader[qy * w + qx];
-      if (o && o !== id) { joins = true; break; }
+      const q = qy * w + qx;
+      const o = reader[q];
+      if (o && o !== id && !(core && owner[q] === o && !core[q])) { joins = true; break; }
     }
   }
   if (joins) bad.push('joins');

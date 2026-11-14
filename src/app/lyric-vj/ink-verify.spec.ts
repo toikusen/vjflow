@@ -189,6 +189,10 @@ describe('ink gate v2 numbers', () => {
       const v = verdict(two(0));
       expect(v.shape).toEqual(['joins']);
       expect(v.status).toBe('fail');
+      // (the edge columns mixed, as the aberration split leaves two glyphs 1–2 px apart: a shared seam, not a touch)
+      const seam = two(0);
+      for (let y = 0; y < 10; y++) for (const x of [7, 8]) seam.mask[(y * 20 + x) * 4 + 3] = 128;
+      expect(verdict(seam).shape).toBeUndefined();
     });
   });
 });

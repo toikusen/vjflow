@@ -29,3 +29,25 @@ describe('one ink decision for the plan and the renderer (M3, Codex: plan and re
     expect(keyFor(spec, slots, slots.ink, { fx: null })).not.toBe(undefined);
   });
 });
+
+describe("a hold's new ink reads through the effects, or the hold keeps the line's ink (M3, Codex: drop the swap)", () => {
+  it('no key pulse, swap or settle ink that cannot read through the world effects', async () => {
+    const { inkChecks: checks } = await import('./render/hold-room');
+    const { leastThrough } = await import('./ink-decide');
+    const { STYLE_WORLDS: worlds } = await import('./style-worlds');
+    const { SET_SPECS: specs } = await import('./render/world-sets');
+    const { WORLD_FX: fx, partGrounds } = await import('./render/hold-room');
+    let checked = 0;
+    for (const w of worlds) for (const scheme of w.palette) for (const part of w.layouts.lines) {
+      const spec = specs[part.set];
+      if (!spec) continue;
+      const slots = scheme as never as Parameters<typeof checks>[1];
+      const c = checks(spec, slots, slots.ink);
+      const grounds = partGrounds(spec, slots);
+      checked++;
+      if (c.keyOk) expect(leastThrough(c.key, grounds, fx[w.id])).toBeGreaterThanOrEqual(4.5);
+      if (c.settle) expect(leastThrough(c.settle, grounds, fx[w.id])).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(checked).toBeGreaterThan(50);
+  });
+});

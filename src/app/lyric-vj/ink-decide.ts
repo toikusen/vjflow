@@ -75,4 +75,6 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
   if (at >= INK_MIN) return { ink: own, from: 'own', min: at };
   return { ink: own, from: 'none', min: at };
 }
+/** The least an ink reads on every ground through every effect (decideInk's measure). */
+export const leastThrough = (ink: string, grounds: string[], fx: FxBox) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => least2(ink, g, fx)));
 const least2 = (ink: string, g: string, fx: FxBox) => minContrast(finalBounds(ink, fx, true), finalBounds(g, fx, true));

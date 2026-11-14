@@ -1,7 +1,10 @@
 // The type floor after the frame fit, the typesetter and the stair template (2026-11-12 residual: blown lines, particles, stair).
 import { describe, expect, it } from 'vitest';
+import * as THREE from 'three';
 import type { Glyph } from './glyphs';
+import { liftToFloor } from './engine';
 import { frameFit } from './runtime';
+import { GROW } from './world-beats';
 import { stairRows, STAIR_LEAST } from './stair';
 import { holdMultiple, TYPE_FLOOR } from './type-floor';
 import { blowPose, holdParticles, type Pose } from './world-layout';
@@ -25,7 +28,7 @@ describe('a blown-up key is blown only as big as its pose fits at scale 1 (frame
         const p = blowPose(glyphs(text, 200), from, to, normal, 200, spec);
         if (!p) continue;
         const [w, h] = shearedSize(p.block.w, p.block.h, p.spec.shear);
-        expect(frameFit(w / 2, h / 2, true), `${text} ${normal}`).toBeGreaterThanOrEqual(1 - 1e-9);
+        expect(frameFit((w / 2) * GROW.want, (h / 2) * GROW.want, true), `${text} ${normal}`).toBeGreaterThanOrEqual(1 - 1e-9);
         for (const [i, s] of p.sizes!.entries()) if (i < from || i >= to) expect(s * 200, `${text} ${normal}`).toBeGreaterThanOrEqual(TYPE_FLOOR.lo - 0.5);
       }
   });
@@ -80,5 +83,36 @@ describe('the hold on a line\'s fit while it plays (holdMultiple)', () => {
     expect(holdMultiple(78, 84, 600, 300)).toBeCloseTo(84 / 78);
     expect(holdMultiple(78, 84, 930, 300)).toBeCloseTo((960 - 24) / 930);
     expect(holdMultiple(78, 84, 930, 300)).toBeLessThan(84 / 78);
+  });
+});
+
+describe('the last word on size (liftToFloor, after every scale a frame puts on the words)', () => {
+  const line = (sizes: number[], x = 0) => {
+    const fit = new THREE.Group();
+    const group = new THREE.Group();
+    fit.add(group);
+    sizes.forEach((size, i) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial());
+      m.userData['size'] = size;
+      m.position.set(x + i * 100, 0, 0);
+      group.add(m);
+    });
+    return { fit, layer: { group } as never };
+  };
+  it('lifts a fit that left the smallest glyph at 78 px to the floor', () => {
+    const { fit, layer } = line([120, 130]);
+    fit.scale.setScalar(0.65);
+    liftToFloor(layer, fit, 84);
+    expect(120 * fit.scale.x).toBeGreaterThanOrEqual(84 - 1e-6);
+  });
+  it('never lifts past the frame edge, and leaves a line already at the floor alone', () => {
+    const wide = line([120, 120], 880);
+    wide.fit.scale.setScalar(0.65);
+    liftToFloor(wide.layer, wide.fit, 84);
+    expect(Math.abs(wide.fit.scale.x * (880 + 100) + 120 * wide.fit.scale.x / 2)).toBeLessThanOrEqual(960 - 24 + 1e-6);
+    const ok = line([100]);
+    ok.fit.scale.setScalar(0.9);
+    liftToFloor(ok.layer, ok.fit, 84);
+    expect(ok.fit.scale.x).toBe(0.9);
   });
 });

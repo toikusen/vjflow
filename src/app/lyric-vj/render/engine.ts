@@ -252,8 +252,11 @@ function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
   return fit;
 }
 
+/** Where in a line's reading its words are measured, shares of it: dense, a blown-up key and its swell change the words' size between any two (led-board c021, crayon c007, 2026-11-12). */
+const READING_STOPS = [0.02, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 0.995];
+
 /** A line's words at rest (its middle and near the end of its reading), at the fit's scale 1: their em boxes' bound and least row type. */
-function restingWords(layer: CueLayer, parent: THREE.Object3D) {
+function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false) {
   const [from, to] = layer.readable();
   const end = Number.isFinite(to) ? to : from + 1;
   const vis = layer.group.visible;
@@ -262,8 +265,11 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D) {
   const scale = new THREE.Vector3();
   let least = Infinity;
   // (the whole reading, not two moments of it: a line's glyphs swell as it is read, silk チョロイン c078 rested at 83 px at its start and 87 at its end)
-  for (const k of [0.04, 0.25, 0.5, 0.75, 0.95]) {
-    measureAtRest(() => layer.update(from + (end - from) * k, { flash: 0, hit: 0, shake: 0 }));
+  for (const k of READING_STOPS) {
+    // (`playing`: as the line moves, not as it rests: led-board's blown-up lines were set 5 to 9 % smaller early in their reading than at rest)
+    const draw = () => layer.update(from + (end - from) * k, { flash: 0, hit: 0, shake: 0 });
+    if (playing) draw();
+    else measureAtRest(draw);
     parent.updateMatrixWorld(true);
     layer.group.traverse((o) => {
       if (!(o as THREE.Mesh).isMesh || !o.userData['size']) return;
@@ -289,11 +295,36 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D) {
  * line with no words to read. Measured with the fit already set.
  */
 function holdScale(layer: CueLayer, fit: THREE.Group, floor: number): number | undefined {
-  const words = restingWords(layer, fit);
+  const words = restingWords(layer, fit, true);
   if (!Number.isFinite(words.least) || words.least <= 0) return undefined;
   const wx = Math.max(Math.abs(words.box.min.x), Math.abs(words.box.max.x));
   const wy = Math.max(Math.abs(words.box.min.y), Math.abs(words.box.max.y));
   return fit.scale.x * holdMultiple(words.least, floor, wx, wy, CAM_EDGE);
+}
+
+/**
+ * Lifts a fit group's scale, after the line has been updated for this frame, so its words (as drawn, particles too) rest at
+ * `floor` px: never past the frame's edge (CAM_EDGE), never smaller. The scale is read from the glyphs themselves, so it
+ * holds whatever else scaled them.
+ */
+export function liftToFloor(layer: CueLayer, fit: THREE.Group, floor: number) {
+  fit.updateMatrixWorld(true);
+  const scale = new THREE.Vector3(), at = new THREE.Vector3();
+  let [least, wx, wy] = [Infinity, 0, 0];
+  layer.group.traverse((o) => {
+    if (!(o as THREE.Mesh).isMesh || !o.userData['size']) return;
+    for (let p: THREE.Object3D | null = o; p && p !== fit; p = p.parent) if (!p.visible || p.userData['decor']) return;
+    const em = o.userData['size'] * Math.abs(o.getWorldScale(scale).x);
+    o.getWorldPosition(at);
+    least = Math.min(least, em);
+    wx = Math.max(wx, Math.abs(at.x) + em / 2);
+    wy = Math.max(wy, Math.abs(at.y) + em / 2);
+  });
+  if (!Number.isFinite(least) || least >= floor) return;
+  const m = holdMultiple(least, floor, wx, wy, CAM_EDGE);
+  if (m <= 1) return;
+  fit.scale.multiplyScalar(m);
+  fit.updateMatrixWorld(true);
 }
 
 /** Where a laid-out line's phrases stand and the whole line's box, frame px from the centre: what a tracking camera calls at. */
@@ -1217,7 +1248,7 @@ export class LyricVjEngine {
       }
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
-      const hold = inWorld && !layer.framed ? holdScale(layer, fit, TYPE_FLOOR.lo) : undefined;
+      const hold = inWorld && !layer.framed ? (holdScale(layer, fit, TYPE_FLOOR.lo) ?? 0) : undefined;
       const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, hold, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
       if (twin) {
         const f = fitToFrame(twin, kick);
@@ -1237,7 +1268,7 @@ export class LyricVjEngine {
         entry.fit!.removeFromParent();
         this.textRoot.add(f);
         kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
-        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: inWorld && !l.framed ? holdScale(l, f, TYPE_FLOOR.lo) : undefined, mixed: true });
+        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: inWorld && !l.framed ? (holdScale(l, f, TYPE_FLOOR.lo) ?? 0) : undefined, mixed: true });
       };
       if (live) this.cueLayers.splice(this.cueLayers.findIndex((c) => c.index! > i) >>> 0, 0, entry);
       else this.cueLayers.push(entry);
@@ -2085,6 +2116,9 @@ export class LyricVjEngine {
       main.group.visible = on && light;
       if (twin) twin.layer.group.visible = on && !light;
       if (on) layer.update(this.koma(t), fx);
+      // (the last word on size: whatever scale the fit, the camera, the drift, a beat or a pose put on the words, the words as
+      // drawn this frame are never under the type floor, so far as the frame's edge lets them be lifted, render/type-floor.ts)
+      if (on && entry.hold !== undefined) liftToFloor(layer, !twin || light ? fit! : twin.fit, TYPE_FLOOR.lo);
     }
     for (const { rt, group, units, dropped } of this.callLayers) {
       const k = this.koma(t);

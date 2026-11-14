@@ -272,7 +272,8 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   for (let i = 0; i < 12; i++) {
     const p = posed(big);
     const [sw, sh] = shearedSize(p.block.w, p.block.h, spec.shear);
-    const fit = frameFit(sw / 2, sh / 2, true);
+    // (and swollen by the line's own grow beat, GROW.want: led-board's pose that fit at rest reached 1027 px from the centre and took the frame fit to 0.90)
+    const fit = frameFit((sw / 2) * GROW.want, (sh / 2) * GROW.want, true);
     if (fit >= 1 - 1e-9) return p;
     big *= fit * 0.98;
     if (big < normal * 1.6) return undefined;

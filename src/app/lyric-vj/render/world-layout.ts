@@ -280,12 +280,13 @@ export const readingExtrude = (world: string, stress: StressKind, steps: { dx: n
 const RING_UNDER = 0.97;
 /** The worlds whose ground cuts a room of its own material round a line (uncut wood, a crayon bubble, undyed cloth, the lit opening). */
 const ROOM_FOLLOWS = new Set(['woodcut', 'crayon', 'aizome', 'paper-lantern']);
+/** QA only (the reveal timing comparison, reveal-timing.mts): __vjFadeReveal draws the fades as they were before 2026-11-14. */
+const fading = () => !!(globalThis as { __vjFadeReveal?: boolean }).__vjFadeReveal;
 /**
- * A glyph's or a block's opacity as drawn. With the opt-in clean reveal (treatment.cleanReveal, a prototype for the owner,
- * 2026-11-13): never part-way, a glyph is there (at its fade's middle) or not, its move kept, so an entrance or an exit
- * never shows the words at a lower contrast. Off: as given.
+ * A glyph's or a block's opacity as drawn: the opaque reveal (owner, 2026-11-14, every world): never part-way, a glyph
+ * is there (from its fade's middle) or not, its move kept, so an entrance or an exit never shows the words see-through.
  */
-const stepA = (a: number) => ((globalThis as { __vjCleanReveal?: boolean }).__vjCleanReveal ? (a >= 0.5 ? 1 : 0) : a);
+export const stepA = (a: number) => (fading() ? a : a >= 0.5 ? 1 : 0);
 /** Builds a line in a world. `slot` stacks it among the lines of a shared shot. */
 function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const wl0 = rt.style.world!;
@@ -686,7 +687,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         body.rotation.z += cam.r;
       }
       shearBody(p.spec.shear);
-      // (opt-in prototype, treatment.cleanReveal: a line comes and goes in steps, never see-through; owner to decide)
+      // (the opaque reveal: a line comes and goes in steps, never see-through)
       const whole_a = stepA(blockPose.a ?? 1);
       poses.forEach((q, i) => { if (q.object) { q.object.visible = i === k; q.object.material.opacity = whole_a; } });
       if (carrier) carrier.mesh.material.opacity = whole_a;
@@ -728,7 +729,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       gs.forEach((g, i) => {
         const m = g.mesh;
         // a roll call: the name before gives way as the next lands (word-sync.ts until)
-        // (the clean reveal steps it too: a name giving way is there or gone, never see-through)
+        // (the opaque reveal: a name giving way is there, until its give-way's middle, or gone; never a see-through multiplier)
         const left = stepA(synced ? givenWay(rt, g, t) : 1);
         if (ghosts) ghosts[i].mesh.visible = false;
         if (!p.shown[i] || (synced && !out && t < landAt[i]) || left <= 0) { m.visible = false; return; }
@@ -766,14 +767,15 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         drawnInk[i] = ink.getHex();
         const map = keyed && keyMaps && pose.key! >= 0.5 ? keyMaps[k][i] : (pose.eaten && damaged ? damaged : whole)[k][i];
         if (m.material.map !== map) { m.material.map = map; m.material.needsUpdate = true; }
-        // (the clean reveal steps the tone too: on a sheet it is opacity, else it dims the ink toward its shadow)
-        const tone = stepA(Math.min(1, (pose.tone ?? 1) * rank));
-        alphaOf[i] = { pose: stepA(pose.a ?? 1), block: whole_a, left, tone };
+        // (the tone dims the ink toward its shadow, a colour, never an opacity: on a sheet it was opacity, the words
+        // see-through; with the opaque reveal a sheet's words keep their ink)
+        const tone = Math.min(1, (pose.tone ?? 1) * rank);
+        alphaOf[i] = { pose: stepA(pose.a ?? 1), block: whole_a, left, tone: wl.sheet && !fading() ? 1 : tone };
         if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {
-          m.material.opacity = stepA(pose.a ?? 1) * whole_a * tone * left;
+          m.material.opacity = stepA(pose.a ?? 1) * whole_a * (fading() ? tone * left : 1);
         } else {
-          m.material.opacity = stepA(pose.a ?? 1) * whole_a * left;
+          m.material.opacity = stepA(pose.a ?? 1) * whole_a * (fading() ? left : 1);
           if (baked) m.material.color.copy(dimBaked).lerp(lit, tone);
           else m.material.color.copy(ink).multiplyScalar(0.14).lerp(ink, tone);
         }

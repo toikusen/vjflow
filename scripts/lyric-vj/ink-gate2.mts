@@ -23,10 +23,11 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './ink-gate2-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'clean-reveal': { type: 'boolean', default: false }, halo: { type: 'string' } } });
+const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'fade-reveal': { type: 'boolean', default: false }, halo: { type: 'string' } } });
 // (--halo 4,6: the opt-in ink halo, clean px and back-by px, treatment.inkHalo; ruling 2026-11-13 §2)
 const halo = a.halo ? (a.halo.split(',').map(Number) as [number, number]) : undefined;
-const variant = `${a['clean-reveal'] ? '__clean' : ''}${halo ? `__halo${halo.join('-')}` : ''}`;
+// (--fade-reveal: the fades as they were before the opaque reveal, QA __vjFadeReveal, for the before/after count)
+const variant = `${a['fade-reveal'] ? '__fade' : ''}${halo ? `__halo${halo.join('-')}` : ''}`;
 const out = resolve('out/research/ink/gate2', a.run!);
 const work = join(out, 'work');
 mkdirSync(work, { recursive: true });
@@ -54,10 +55,10 @@ for (const spec of a.jobs!.split(',')) {
   const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${name}/meaning.json`, 'utf8'));
   const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === world)!, seed: Number(a.seed), meaning, ...(a.font ? { font: a.font } : {}) });
   const jobFile = join(work, `${world}-${name}.job.json`);
-  // (--clean-reveal: the opt-in prototype, lines come and go in steps, world-layout stepA)
-  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(a['clean-reveal'] ? { cleanReveal: true } : {}), ...(halo ? { inkHalo: halo } : {}) } }));
+  writeFileSync(jobFile, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(halo ? { inkHalo: halo } : {}) } }));
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
+  if (a['fade-reveal']) await page.addInitScript('window.__vjFadeReveal = true');
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
   await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, jobFile)}`);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 600000 });

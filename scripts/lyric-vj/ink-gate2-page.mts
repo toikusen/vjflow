@@ -12,7 +12,7 @@ const DRIFT_R = 48;
 /** A glyph read: its line and index, where it is in its life (its entrance, its exit, at rest), its drawn opacity and its multipliers, its verdict. */
 export type Read = { cue: string; i: number; phase: 'enter' | 'exit' | 'rest'; a?: number; alpha?: Alpha; what?: string; v: GlyphVerdict };
 /** One moment: every glyph shown, its verdict; the field drift; the 2D layer's characters (signature), unverified. */
-async function moment(t: number): Promise<{ reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> }> {
+async function moment(t: number): Promise<{ extrudePx?: number; reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> }> {
   // (the composed frame first: a signature moment's characters are drawn on the 2D layer, and are counted, not read)
   await w.vjFrame(t);
   const layer2d = w.vjGlyphs().filter((l) => l.id === 'signature').reduce((n, l) => n + l.glyphs.length, 0);
@@ -33,7 +33,10 @@ async function moment(t: number): Promise<{ reads: Read[]; drift: number; driftA
   // (a hash of both passes over the whole box: the same moment drawn again must give the same, words on and off)
   let hash = 0;
   for (let k = 0; k < m.on.length; k += 4) hash = (Math.imul(hash, 31) + m.on[k] * 65536 + m.on[k + 1] * 256 + m.on[k + 2] + Math.imul(m.off[k] * 65536 + m.off[k + 1] * 256 + m.off[k + 2], 7)) >>> 0;
-  return { reads, drift, driftAt: where.length ? [where[0] + m.box[0], where[1] + m.box[1], where[2], where[3]] : undefined, box: m.box, layer2d, hash, lines: m.lines, fx: m.fx };
+  // (how many pixels of a declared extrude the parts mask holds: where a reading extrude is on screen)
+  let extrudePx = 0;
+  if (m.parts) for (let k = 0; k < m.parts.length; k += 4) if (((m.parts[k + 1] >> 4) & 15) === 1) extrudePx++;
+  return { extrudePx, reads, drift, driftAt: where.length ? [where[0] + m.box[0], where[1] + m.box[1], where[2], where[3]] : undefined, box: m.box, layer2d, hash, lines: m.lines, fx: m.fx };
 }
 /**
  * Evidence for one glyph: the three boxes (words on, words off, mask overlay) cropped round the glyph's core pixels and

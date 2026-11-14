@@ -117,7 +117,7 @@ for (const spec of a.jobs!.split(',')) {
   for (const [k, f] of frames.entries()) {
     if (a['limit-sec'] && (Date.now() - started) / 1000 > Number(a['limit-sec'])) { stopped = 'timeout'; break; }
     const t = f / fps;
-    const m = (await page.evaluate(`window.inkGate.moment(${t})`)) as { reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> };
+    const m = (await page.evaluate(`window.inkGate.moment(${t})`)) as { extrudePx?: number; reads: Read[]; drift: number; driftAt?: number[]; box?: [number, number, number, number]; layer2d: number; hash?: number; lines?: Record<number, string>; fx?: Record<string, number> };
     // (determinism: the first moment and one in every N drawn again must give the same ink pixels)
     if (m.hash !== undefined && (k === 0 || k % Number(a.determinism) === 0)) {
       const again = (await page.evaluate(`window.inkGate.moment(${t})`)) as { hash?: number };
@@ -144,7 +144,7 @@ for (const spec of a.jobs!.split(',')) {
       out.push(r.v.status === 'pass' ? [r.cue, r.i, +r.v.min.toFixed(3), ...(r.v.edge && r.v.edge.min < 4.5 ? [r.v.edge] : []), ...(phase !== 'rest' || (r.a ?? 1) < 0.99 ? [{ phase, a: alpha?.a }] : [])] : { cue: r.cue, i: r.i, phase, status: r.v.status, min: r.v.min, p01: r.v.p01, median: r.v.median, n: r.v.n, minAt: r.v.minAt, pair, alpha, ...(r.what ? { what: r.what } : {}), shape: r.v.shape, gap: r.v.gap, edge: r.v.edge });
     }
     if (m.layer2d) unverified['layer-2d'] = (unverified['layer-2d'] ?? 0) + m.layer2d;
-    row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, fx: m.fx, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), ...(stopped === 'nondeterministic' ? { nondeterministic: true } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });
+    row({ kind: 'moment', t: +t.toFixed(4), frame: f, lines, ...(m.extrudePx ? { extrudePx: m.extrudePx } : {}), fx: m.fx, offDrift: m.drift, ...(m.driftAt ? { driftAt: m.driftAt } : {}), ...(stopped === 'nondeterministic' ? { nondeterministic: true } : {}), glyphs: m.layer2d ? [...out, { layer2d: m.layer2d, status: 'unverified:layer-2d' }] : out });
     if (stopped) break;
   }
   await page.close();

@@ -11,6 +11,20 @@ const STAGGER = 0.03;
 /** The least type a stair row is set at, px (never under the type floor, type-floor.ts). */
 export const STAIR_LEAST = 90;
 
+/** A run cut into `n` even rows at its characters, a mark staying with the character before it (a line with too few phrase breaks to take more rows). */
+function evenRows(text: string, n: number): string[] {
+  const cs = [...text.replace(/[\s　]+/g, ' ').trim()];
+  const out: string[] = [];
+  let at = 0;
+  for (let k = 1; k <= n; k++) {
+    let end = k === n ? cs.length : Math.round((cs.length * k) / n);
+    while (end < cs.length && /[\s\p{P}\p{S}ーぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ～〜]/u.test(cs[end])) end++;
+    if (end > at) out.push(cs.slice(at, end).join('').trim());
+    at = end;
+  }
+  return out.filter(Boolean);
+}
+
 /**
  * The rows a stair line is set in: two, three for a long line, and one more (the steps closer, to six) while its widest
  * row would set under STAIR_LEAST px (the frame fit took the type of a 50-character line down to 68 px, under the type
@@ -19,9 +33,11 @@ export const STAIR_LEAST = 90;
 export function stairRows(text: string, chars: number, widestOf: (rows: string[]) => number): string[] {
   let rows = chars > 22 ? balancedRows(text, 3) : chars > 6 ? balancedRows(text, 2) : [text];
   while (rows.length < 6 && (100 * 0.55 * W) / widestOf(rows) < STAIR_LEAST) {
-    const more = balancedRows(text, rows.length + 1);
-    if (more.length <= rows.length) break;
-    rows = more;
+    const n = rows.length + 1;
+    const more = balancedRows(text, n);
+    const next = more.length >= n ? more : evenRows(text, n);
+    if (next.length <= rows.length) break;
+    rows = next;
   }
   return rows;
 }

@@ -23,8 +23,8 @@ export const floorOf = (spec: { lo: number }) => Math.max(spec.lo, TYPE_FLOOR.lo
  */
 export const shearGain = (shear?: readonly number[]) => (shear ? Math.min(1, Math.hypot(shear[0], shear[1]), Math.hypot(shear[2], shear[3])) : 1);
 
-/** The type a block may be laid at in a set before its shear, so that its drawn size is never under the floor (floorOf, shearGain). */
-export const layFloorOf = (spec: { lo: number; shear?: readonly number[] }) => Math.max(spec.lo, TYPE_FLOOR.lo / shearGain(spec.shear));
+/** The type a block may be laid at in a set before its shear, so that its drawn size is never under the floor (floorOf, shearGain), a whole pixel: a block is laid at whole px, and 98.8 px laid is 98. */
+export const layFloorOf = (spec: { lo: number; shear?: readonly number[] }) => Math.max(spec.lo, Math.ceil(TYPE_FLOOR.lo / shearGain(spec.shear) - 1e-9));
 
 /** Whether `size` px is under `floor` (the half-pixel slack of a rounded size kept). */
 export const underFloor = (size: number, floor: number = TYPE_FLOOR.lo) => size < floor - SLACK;

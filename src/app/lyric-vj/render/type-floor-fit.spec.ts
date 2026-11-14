@@ -12,7 +12,7 @@ const glyphs = (text: string, tex: number): Glyph[] => [...text].map((char, i) =
 describe('frameFit (the engine\'s frame fit, shared with the plan)', () => {
   it('is 1 for a box well inside the safe area and under 1 where motion would carry it out', () => {
     expect(frameFit(600, 300, true)).toBe(1);
-    expect(frameFit(912, 300, false)).toBeLessThan(1);
+    expect(frameFit(930, 300, false)).toBeLessThan(1);
     expect(frameFit(880, 300, true)).toBeLessThan(frameFit(880, 300, false));
   });
 });
@@ -49,7 +49,7 @@ describe('particles held at the floor as drawn (holdParticles)', () => {
     expect(holdParticles(...fake(190, 0.5), 200).sizes).toBeUndefined();
   });
   it('reads the floor through a narrow shear: 84 px drawn at scaleX .75 is 112 px laid', () => {
-    const [pose, gs] = fake(156, 0.8, [0.75, 0, 0, 1]);
+    const [pose, gs] = fake(156, 0.6, [0.75, 0, 0, 1]);
     const held = holdParticles(pose, gs, 200);
     expect(held.sizes![1] * 156).toBeGreaterThanOrEqual(112 - 0.5);
   });

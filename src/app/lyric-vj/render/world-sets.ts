@@ -14,7 +14,7 @@ import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
 import { phase4Seats } from './world-p4-seats';
 import { bandFit as fitOnBands, type Band } from './carrier-fit';
-import { layFloorOf, leastOf, shearGain, TYPE_FLOOR, underFloor } from './type-floor';
+import { layFloorOf, leastOf, TYPE_FLOOR, underFloor } from './type-floor';
 
 const W = 1920;
 const H = 1080;
@@ -390,7 +390,7 @@ function bandedBlock(text: string, given: SetSpec, measure: Measure): Block {
   return { ...kept, bandMiss: true };
 }
 
-function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = TYPE_FLOOR.lo / shearGain(given.shear)): Block {
+function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = layFloorOf({ lo: 0, shear: given.shear })): Block {
   const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, floorLo) };
   const split = splitBlock(text, spec, measure, floorLo);
   if (split) return split;

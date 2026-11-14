@@ -22,6 +22,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH } from './final-warp.glsl';
 import { binarize, flipRows, InkMask } from './ink-mask';
 import { InkHalo } from './ink-halo';
+import type { FxBox } from '../ink-decide';
 import { HALO_UNIFORMS, haloCut, setPatch } from './material-patch';
 import { SNOW } from './world-grounds';
 import { idOf, partIdOf } from '../ink-verify';
@@ -726,7 +727,24 @@ export class LyricVjEngine {
   private frameCache = new Map<string, THREE.Texture>();
   private gradient: THREE.Texture;
 
+  /**
+   * The final effects a world line's inks meet, as decideInk's ranges (ink-decide FxBox), from the job alone: the
+   * medium's flicker, the design's grain, the deepest vignette at a line's reach (d² ≤ 0.15 in the safe area) and the
+   * world frame's raster, the ink halo. Opt-in (treatment.inkDecide, M3), read by world-layout through __vjInkFx.
+   */
+  static inkFx(job: RenderJob): FxBox | undefined {
+    const tr = job.treatment as { inkDecide?: boolean; inkHalo?: [number, number] };
+    if (!tr.inkDecide) return undefined;
+    const d = job.treatment.design ?? DEFAULT_DESIGN;
+    const frame = d.world?.frame;
+    const medium = frame ? { ...MEDIA.clean, ...frame, grain: 0 } : MEDIA[d.medium ?? 'clean'];
+    const halo = !!tr.inkHalo;
+    const vig = 1.6 * 0.15 * (frame ? frame.vignette : 0.55);
+    return { flicker: medium.flicker, grain: 0.02 + 0.1 * d.grain + medium.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame?.scan ?? 0)), halo };
+  }
+
   constructor(canvas: HTMLCanvasElement, private job: RenderJob) {
+    (globalThis as { __vjInkFx?: FxBox }).__vjInkFx = LyricVjEngine.inkFx(job);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: job.layer === 'text' || job.layer === 'words' });
     this.renderer.setPixelRatio(1);
     this.renderer.localClippingEnabled = true; // handwrite reveals glyphs with clip planes

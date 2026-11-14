@@ -86,7 +86,8 @@ await flat.close();
 // on, a line on no carrier. Without the freeze the words-off pass loses the mask and the dither reaches the ground under
 // the words the words-on pass kept: the two words-off frames differ there; with the freeze, the field holds still.
 const toothAt = 153.3;
-const tooth = await open('dark-glitch', () => {}, `window.__vjForceTextMask = true; window.__vjFinalSet = { uPixel: 1 };`);
+// (with no halo: the text mask is what keeps the words then; the halo, check 4, keeps them by distance instead)
+const tooth = await open('dark-glitch', (j) => void ((j['treatment'] as Record<string, unknown>)['inkHalo'] = false), `window.__vjForceTextMask = true; window.__vjFinalSet = { uPixel: 1 };`);
 const offOf = `(async () => { const m = await window.vjEngine.inkMoment(${toothAt}); return m && { off: Array.from(m.off), on: Array.from(m.on), mask: Array.from(m.mask), w: m.box[2], h: m.box[3] }; })()`;
 const F = (await tooth.evaluate(offOf)) as { off: number[]; on: number[]; mask: number[]; w: number; h: number } | null;
 await tooth.evaluate('window.__vjInkNoFreeze = true');
@@ -128,8 +129,8 @@ const split = (a: Off, b: Off) => {
   }
   return { nearDiff, farDiff, nearN };
 };
-// (the halo as a job asks for it, treatment.inkHalo: the page sets __vjInkHalo from it)
-const haloed = await open('dark-glitch', (j) => void ((j['treatment'] as Record<string, unknown>)['inkHalo'] = [4, 6]), `window.__vjFinalSet = { uGrain: 0.3 };`);
+// (the halo every job gets, INK_HALO 4,6: the page sets __vjInkHalo)
+const haloed = await open('dark-glitch', () => {}, `window.__vjFinalSet = { uGrain: 0.3 };`);
 const G = (await haloed.evaluate(offAt)) as Off;
 await haloed.evaluate(`window.__vjFinalSet = { uGrain: 0 }`);
 const G0 = (await haloed.evaluate(offAt)) as Off;

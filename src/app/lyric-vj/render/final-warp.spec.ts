@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, FX_VERSION } from './final-warp.glsl';
+import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, FX_VERSION, haloOf, INK_HALO } from './final-warp.glsl';
 import { MASK_WARP } from './ink-mask';
 import { FINAL_SHADER } from './engine';
 
@@ -22,6 +22,13 @@ describe('one sampling geometry for the picture and the ink mask', () => {
     expect(FINAL_SHADER.fragmentShader).toContain('haloKeep(uvC, uv, d, a)');
     // (every noise of the final pass is weighed by the halo where it shows)
     for (const fx of ['uGrain * ho', 'uPixel * ho', 'uGlitch * step(0.45, h1(gb * 1.7)) * ho', 'fract(vUv.y * 360.0)) * ho']) expect(FINAL_SHADER.fragmentShader).toContain(fx);
+  });
+
+  it('every job gets the 4 + 2 px halo unless it asks for another or none (owner 2026-11-14)', () => {
+    expect(INK_HALO).toEqual([4, 6]);
+    expect(haloOf(undefined)).toEqual([4, 6]);
+    expect(haloOf([8, 12])).toEqual([8, 12]);
+    expect(haloOf(false)).toBeUndefined();
   });
 
   it('versions the effect geometry by the chunk', () => {

@@ -44,6 +44,13 @@ export const FINAL_HALO_LIB = /* glsl */ `
       return h;
     }
 `;
+/**
+ * The ink halo every job gets (owner 2026-11-14, docs/design-bar/cards/2026-11-14-ink-halo-4-2-pass.md): 4 px clean,
+ * back by 6. A job may ask for another (treatment.inkHalo, QA: 8,12) or none (false).
+ */
+export const INK_HALO: [number, number] = [4, 6];
+/** The halo a job's treatment asks for: its own, none (`false`), else INK_HALO. */
+export const haloOf = (inkHalo: [number, number] | false | undefined): [number, number] | undefined => (inkHalo === false ? undefined : inkHalo ?? INK_HALO);
 /** How far tHalo measures, px: the widest halo it can hold (uHaloOut at most this). */
 export const HALO_REACH = 12;
 

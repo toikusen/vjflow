@@ -32,11 +32,11 @@ const song = JSON.parse(readFileSync(`out/db/${IDS[a.song!]}/song.json`, 'utf8')
 const meaning = JSON.parse(readFileSync(`out/research/instant/plans/${a.song}/meaning.json`, 'utf8'));
 const { job } = freeJob(song, { style: FREE_STYLES.find((s) => s.id === a.world)!, seed: Number(a.seed), meaning });
 const REST = ['uVignette', 'uVigBase', 'uFade', 'uGrain', 'uPaper', 'uBoil', 'uLift', 'uTooth', 'uPixel', 'uScan', 'uGlitch', 'uAberration', 'uFlash', 'uHit', 'uZoomHit', 'uTileHit', 'uRays', 'uBeams', 'uShock', 'uSweep', 'uShockR', 'uGlass', 'uFlicker'];
-const WAYS: { id: string; halo?: [number, number]; init?: string }[] = [
-  { id: 'A-now' },
+const WAYS: { id: string; halo?: [number, number] | false; init?: string }[] = [
+  { id: 'A-now', halo: false },
   { id: 'B-halo4+2', halo: [4, 6] },
   { id: 'C-halo8+4', halo: [8, 12] },
-  { id: 'D-effects-off', init: `window.__vjFinalOff = ${JSON.stringify(REST)}; window.__vjNoSnow = true;` },
+  { id: 'D-effects-off', halo: false, init: `window.__vjFinalOff = ${JSON.stringify(REST)}; window.__vjNoSnow = true;` },
 ];
 /** Each pixel's distance to the nearest glyph pixel of the mask (exact, separable, rows then columns). */
 const edt = (mask: number[], w: number, h: number) => {
@@ -56,7 +56,7 @@ const edt = (mask: number[], w: number, h: number) => {
 const report: Record<string, unknown> = {};
 for (const way of WAYS) {
   const file = join(work, `${way.id}.job.json`);
-  writeFileSync(file, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(way.halo ? { inkHalo: way.halo } : {}) } }));
+  writeFileSync(file, JSON.stringify({ ...job, live: true, treatment: { ...job.treatment, ...(way.halo !== undefined ? { inkHalo: way.halo } : {}) } }));
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
   if (way.init) await page.addInitScript(way.init);
@@ -76,7 +76,7 @@ for (const way of WAYS) {
     writeFileSync(join(out, `${a.world}-${a.song}-${ts}-${way.id}-words.png`), Buffer.from(raw.png.split(',')[1], 'base64'));
     const [, , bw, bh] = raw.box;
     const d = edt(raw.mask, bw, bh);
-    const [clean, ramp] = way.halo ?? [0, 0];
+    const [clean, ramp] = way.halo || [0, 0];
     let [cleanPx, rampPx] = [0, 0];
     for (let i = 0; i < bw * bh; i++) { if (d[i] > 0 && d[i] <= clean) cleanPx++; else if (d[i] > clean && d[i] <= ramp) rampPx++; }
     const fails = m.reads.filter((r) => r.v.status !== 'pass').map((r) => ({ cue: r.cue, i: r.i, phase: r.phase, status: r.v.status, min: +r.v.min.toFixed(2), shape: r.v.shape, p: r.v.pair && [r.v.pair.p[0] + m.box![0], r.v.pair.p[1] + m.box![1], r.v.pair.p[2]], q: r.v.pair && [r.v.pair.q[0] + m.box![0], r.v.pair.q[1] + m.box![1], r.v.pair.q[2]] }));

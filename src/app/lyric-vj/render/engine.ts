@@ -19,7 +19,7 @@ import { Handoff, handoffProgress, inPose, Keep, openingAt, outPose, pageSquash,
 import { P as AnchorPoint, relayBetween, RelayPath, relaySpan, relayStrip } from './handoff-anchor';
 import { hitAt } from './screen-hit';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
-import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH } from './final-warp.glsl';
+import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH, haloOf } from './final-warp.glsl';
 import { binarize, flipRows, InkMask } from './ink-mask';
 import { InkHalo } from './ink-halo';
 import type { FxBox } from '../ink-decide';
@@ -733,12 +733,12 @@ export class LyricVjEngine {
    * world frame's raster, the ink halo. Opt-in (treatment.inkDecide, M3), read by world-layout through __vjInkFx.
    */
   static inkFx(job: RenderJob): FxBox | undefined {
-    const tr = job.treatment as { inkDecide?: boolean; inkHalo?: [number, number] };
+    const tr = job.treatment as { inkDecide?: boolean; inkHalo?: [number, number] | false };
     if (!tr.inkDecide) return undefined;
     const d = job.treatment.design ?? DEFAULT_DESIGN;
     const frame = d.world?.frame;
     const medium = frame ? { ...MEDIA.clean, ...frame, grain: 0 } : MEDIA[d.medium ?? 'clean'];
-    const halo = !!tr.inkHalo;
+    const halo = !!haloOf(tr.inkHalo);
     const vig = 1.6 * 0.15 * (frame ? frame.vignette : 0.55);
     return { flicker: medium.flicker, grain: 0.02 + 0.1 * d.grain + medium.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame?.scan ?? 0)), halo };
   }
@@ -2532,7 +2532,7 @@ export class LyricVjEngine {
     u['uLift'].value = medium.lift;
     const screenHit = hitAt(this.cueLayers.flatMap(({ rt }) => (rt.style.hit ? [{ at: rt.cue.start, hit: rt.style.hit }] : [])), t);
     // (QA, the ink gate's freeze test: __vjForceTextMask draws the text mask whatever the medium)
-    // the ink halo (opt-in, treatment.inkHalo): measured round the reading glyphs as they stand now; the words-off pass of
+    // the ink halo (every job, main.ts haloOf): measured round the reading glyphs as they stand now; the words-off pass of
     // the ink gate keeps the words-on pass's (frozen controls), never one measured with the words away
     const halo = (globalThis as { __vjInkHalo?: [number, number] }).__vjInkHalo;
     if (!this.inkFrozen) {

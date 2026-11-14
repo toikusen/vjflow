@@ -155,3 +155,42 @@ SONGS=choroin python3 compare.py before after summary-choroin.json
   - 字的讀數 = 3 × 3 格裡最差那一格的中位數。
   - 比一格的一半還細的線（例如雲邊）壓過筆畫，不一定會被判定不合格。
   - 低於 0.35 不透明度的淡入淡出畫格不讀。
+
+## 2026-11-14: reading roles, opaque reveal, ink halo (ruling 2, docs/research/2026-11-13-ink-halo-codex.md)
+
+Commits 9c727b1 (reading roles, shape gate, diagnostics, opt-in halo) and 31571f6 (opaque reveal by default).
+
+dark-glitch × choroin, `--frames all` (out/research/ink/gate2/q1-halo-all), 6436 moments, 108 488 glyph-frames:
+
+| run | fails | no-core | field-drift | enter / exit / rest / hold |
+|---|---|---|---|---|
+| fades (QA `--fade-reveal`) | 11 341 | 175 | 0 | 1708 / 1732 / 7320 / 581 |
+| opaque reveal | 10 339 | 135 | 0 | 1612 / 826 / 7320 / 581 |
+| opaque reveal + halo 4,6 | 6 585 | 135 | 0 | 815 / 675 / 4887 / 208 |
+
+Every run is `complete: false`, because of its no-core glyphs.
+
+The 6 585 left with the halo, by what the worst pixel was read against:
+- ground 4 469 (3 756 of them with the ink lighter than the ground; c059 1 960, c002 368, c031 351). All are within the
+  clean zone, so this is the ink's own colour against the ground: M3 territory.
+- copy 2 034 (c045 522, c059 490, c013 351): the undeclared extrude and the ghosts next to the face.
+- off 82: all `other` meshes at opacity 0.21 at 73.43 s. These are non-world word meshes the opaque reveal does not
+  reach.
+- shape `joins`: 125.
+
+By worst ratio: under 1.5, 711; 1.5–3, 1 931; 3–4, 3 038; 4–4.5, 905.
+
+No-core 135 (out/research/ink/halo/nocore-135.json): all mid-move (exit 102, enter 33), mostly c013 32, c061 26, c035 20,
+c078 19, c074 16.
+推論: the glyph is shown but drawn wholly outside the frame or behind its move's clip plane, so the mask has no pixel of
+it. Not yet traced.
+
+Reveal timing (reveal-timing.mts, 78 lines):
+- no line becomes whole and opaque later than with the fades;
+- the first visible frame is 1 frame later on 5 lines (c031, c042, c059, c064, c075).
+
+Halo comparison for the owner:
+- ~/Desktop/vj/output/字色可讀_2026-11-12/v4 (dark-glitch 146–156 s, popart 82–92 s; now, 4+2, 8+4).
+- The four-way stills (ink-halo-compare.mts) stopped after the `now` pass: the halo page did not get ready within 600 s
+  while the type-floor scan ran. To retry on an idle machine.
+- The popart window shows no extrude blow.

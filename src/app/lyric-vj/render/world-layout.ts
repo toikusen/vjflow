@@ -7,7 +7,7 @@ import { nearestWeight } from '../fonts';
 import { color, CueLayer, CueRuntime, emphasisOf, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
 import { Block, blockOf, FaceLayout, SAFE_X, SAFE_Y, SET_SPECS, SetSpec, shearedSize } from './world-sets';
-import { floorOf, underFloor } from './type-floor';
+import { floorOf, layFloorOf, underFloor } from './type-floor';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS, type WorldMove } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
@@ -220,7 +220,7 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   // hold them across at the floor the key is not blown up, and the line stands as its set lays it. They were set down to
   // 40 px, 2026-11-12)
   const across = (0.86 * 1920) / Math.max(0.01, adv(pre), adv(post));
-  const floor = floorOf(spec);
+  const floor = layFloorOf(spec);
   const small = Math.max(floor, Math.min(big * 0.3, normal * 0.75, across));
   if (underFloor(across, floor) && (pre.length || post.length)) return undefined;
   const [preH, postH] = [pre.length ? small * 1.3 : 0, post.length ? small * 1.3 : 0];

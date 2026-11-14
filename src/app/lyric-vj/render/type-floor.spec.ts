@@ -1,7 +1,7 @@
 // The type floor at every place a world line's size is decided (render/type-floor.ts, docs/research/2026-11-12-type-floor.md).
 import { describe, expect, it } from 'vitest';
 import type { Glyph } from './glyphs';
-import { fitAtFloor, floorOf, heldScale, leastOf, TYPE_FLOOR, underFloor } from './type-floor';
+import { fitAtFloor, floorOf, heldScale, layFloorOf, leastOf, shearGain, TYPE_FLOOR, underFloor } from './type-floor';
 import { blowPose } from './world-layout';
 import { blockOf, SET_SPECS, type SetSpec } from './world-sets';
 import { slotSpec } from './seat-geometry';
@@ -59,7 +59,7 @@ describe('a set never lays a line under the floor unmarked (blockOf: split parts
           for (const text of LONG) {
             const spec: SetSpec = slotSpec(given, slot);
             const b = blockOf(text, spec, em);
-            if (!b.floorMiss) expect(leastOf(b), `${id} ${slot?.k ?? '-'} ${text}`).toBeGreaterThanOrEqual(floorOf(spec) - 0.5);
+            if (!b.floorMiss) expect(leastOf(b), `${id} ${slot?.k ?? '-'} ${text}`).toBeGreaterThanOrEqual(layFloorOf(spec) - 0.5);
           }
     } finally {
       setWordSafe(false);
@@ -69,7 +69,7 @@ describe('a set never lays a line under the floor unmarked (blockOf: split parts
     for (const [id, text] of [['xerox/blown-r', LONG[0]], ['screentone/shout', LONG[1]], ['notebook/dotted', LONG[2]], ['brutalist/headline', LONG[4]]] as const) {
       const b = blockOf(text, SET_SPECS[id], em);
       if (b.floorMiss) continue;
-      expect(leastOf(b), id).toBeGreaterThanOrEqual(floorOf(SET_SPECS[id]) - 0.5);
+      expect(leastOf(b), id).toBeGreaterThanOrEqual(layFloorOf(SET_SPECS[id]) - 0.5);
     }
   });
   it('marks a column too long for the frame at the floor instead of setting it small (the frame fit)', () => {
@@ -88,6 +88,41 @@ describe('a set never lays a line under the floor unmarked (blockOf: split parts
   });
 });
 
+describe('the floor as drawn: through the set\'s shear', () => {
+  it('reads the shorter axis of the map, never above 1', () => {
+    expect(shearGain(undefined)).toBe(1);
+    expect(shearGain([0.75, 0, 0, 1])).toBeCloseTo(0.75);
+    expect(shearGain([0.85, 0, 0, 1])).toBeCloseTo(0.85);
+    expect(shearGain([1, 0, Math.tan((-9 * Math.PI) / 180), 1])).toBe(1);
+    expect(shearGain([Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0, 1])).toBeCloseTo(1);
+    expect(shearGain([1.3, 0, 0, 1.3])).toBe(1);
+  });
+  it('lays a narrow set at the floor over its gain: 84 px drawn is 112 px laid at 0.75', () => {
+    expect(layFloorOf({ lo: 70, shear: [0.75, 0, 0, 1] })).toBeCloseTo(112);
+    expect(layFloorOf({ lo: 130, shear: [0.75, 0, 0, 1] })).toBe(130);
+    expect(layFloorOf({ lo: 70 })).toBe(TYPE_FLOOR.lo);
+  });
+  it('every art-deco set (narrow face, narrow column), every slot: drawn at the floor, or marked floorMiss (63 and 82 px on the frame before)', () => {
+    setWordSafe(true);
+    try {
+      for (const [id, given] of Object.entries(SET_SPECS).filter(([k]) => k.startsWith('art-deco/')))
+        for (const slot of [undefined, { k: 0, of: 2 }])
+          for (const text of LONG) {
+            const spec = slotSpec(given, slot);
+            const b = blockOf(text, spec, em);
+            if (!b.floorMiss) expect(leastOf(b) * shearGain(spec.shear), `${id} ${slot?.k ?? '-'} ${text}`).toBeGreaterThanOrEqual(TYPE_FLOOR.lo - 0.5);
+          }
+    } finally {
+      setWordSafe(false);
+    }
+  }, 60000);
+  it('a pillar of a short phrase stays unmarked and is laid taller than the floor over its gain', () => {
+    const b = blockOf('風生水起', SET_SPECS['art-deco/pillars'], em);
+    expect(b.floorMiss).toBeUndefined();
+    expect(b.size * 0.85).toBeGreaterThanOrEqual(TYPE_FLOOR.lo - 0.5);
+  });
+});
+
 describe('the words round a blown-up word (blowPose)', () => {
   const glyphs = (text: string, tex: number): Glyph[] => [...text].map((char, i) => ({ char, advance: tex, x: 0, y: 0, index: i, src: i }) as unknown as Glyph);
   it('stand at the floor at least, or the word is not blown up', () => {
@@ -97,7 +132,7 @@ describe('the words round a blown-up word (blowPose)', () => {
         const p = blowPose(glyphs(text, 200), from, to, normal, 200, spec);
         if (!p) continue;
         const small = p.sizes!.filter((_, i) => i < from || i >= to).map((s) => s * 200);
-        for (const s of small) expect(s, `${text} ${normal}`).toBeGreaterThanOrEqual(floorOf(spec) - 0.5);
+        for (const s of small) expect(s, `${text} ${normal}`).toBeGreaterThanOrEqual(layFloorOf(spec) - 0.5);
       }
     }
   });

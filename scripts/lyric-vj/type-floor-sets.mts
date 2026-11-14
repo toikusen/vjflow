@@ -3,13 +3,15 @@
 // could hold the line at the type floor (render/world-sets blockOf on the composer's wide measure, as lineplan-core seatMissed reads it).
 //   npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-sets.mts --before /path/to/checkout [--seeds 0,1,2] [--on] [--out f.json]
 import { readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 const { values: a } = parseArgs({ options: { before: { type: 'string' }, seeds: { type: 'string', default: '0,1,2' }, on: { type: 'boolean', default: false }, out: { type: 'string', default: '' } } });
 const load = async (root: string) => ({
   freeJob: (await import(`${root}/src/app/lyric-vj/free-plan.ts`)).freeJob,
   styles: (await import(`${root}/src/app/lyric-vj/free-styles.ts`)).OFFERED_STYLES,
 });
-const B = await load(a.before!);
+// (a relative path is the caller's: resolved against the working directory, not against this script)
+const B = await load(resolve(a.before!));
 const A = await load(process.cwd());
 const { blockOf, SET_SPECS } = await import(`${process.cwd()}/src/app/lyric-vj/render/world-sets.ts`);
 const { setWordSafe } = await import(`${process.cwd()}/src/app/lyric-vj/phrases.ts`);

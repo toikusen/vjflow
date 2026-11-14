@@ -14,7 +14,7 @@ import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
 import { phase4Seats } from './world-p4-seats';
 import { bandFit as fitOnBands, type Band } from './carrier-fit';
-import { floorOf, leastOf, TYPE_FLOOR, underFloor } from './type-floor';
+import { layFloorOf, leastOf, shearGain, TYPE_FLOOR, underFloor } from './type-floor';
 
 const W = 1920;
 const H = 1080;
@@ -328,7 +328,7 @@ export { TYPE_FLOOR };
  */
 export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   const first = bandedBlock(text, given, measure);
-  const floor = floorOf(given);
+  const floor = layFloorOf(given);
   if (!underFloor(leastOf(first), floor)) return first;
   const whole: SetSpec = given.split ? { ...given, split: undefined } : given;
   const tries = [...(given.split ? [whole] : []), ...(!given.wrap && !given.vertical && given.rows[1] > 1 ? [{ ...whole, wrap: true }] : [])];
@@ -356,7 +356,7 @@ function bandedBlock(text: string, given: SetSpec, measure: Measure): Block {
   // (the line is set smaller inside its own carrier down to the least type a line may take, the set's `lo` or the product's
   // floor (TYPE_FLOOR.lo, never set small) whichever is larger, then wrapped at its characters, before another set is
   // taken: a set with no room past the floor is no reason to lift a line off its carrier onto a busier page)
-  const floor = floorOf(given);
+  const floor = layFloorOf(given);
   // (each part that misses its band is set smaller on its own: the hero by the set's width and height, a split line's
   // small part by its container's width; a part that fits keeps its size)
   const shrink = (spec: SetSpec) => {
@@ -390,7 +390,7 @@ function bandedBlock(text: string, given: SetSpec, measure: Measure): Block {
   return { ...kept, bandMiss: true };
 }
 
-function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = TYPE_FLOOR.lo): Block {
+function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = TYPE_FLOOR.lo / shearGain(given.shear)): Block {
   const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, floorLo) };
   const split = splitBlock(text, spec, measure, floorLo);
   if (split) return split;

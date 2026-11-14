@@ -16,6 +16,16 @@ const SLACK = 0.5;
 /** The least type a line may take in a set: the set's own `lo` or the product's floor, whichever is larger. */
 export const floorOf = (spec: { lo: number }) => Math.max(spec.lo, TYPE_FLOOR.lo);
 
+/**
+ * The share of a row's type size a set's shear leaves on screen: the shorter of the map's two axes (a face drawn narrow,
+ * scaleX .75, a column .85), never above 1 (a lean or a turn keeps the size). The scan and the engine's fit read a glyph
+ * as drawn, so a set laid at 84 px before a narrow shear is 63 px on the frame.
+ */
+export const shearGain = (shear?: readonly number[]) => (shear ? Math.min(1, Math.hypot(shear[0], shear[1]), Math.hypot(shear[2], shear[3])) : 1);
+
+/** The type a block may be laid at in a set before its shear, so that its drawn size is never under the floor (floorOf, shearGain). */
+export const layFloorOf = (spec: { lo: number; shear?: readonly number[] }) => Math.max(spec.lo, TYPE_FLOOR.lo / shearGain(spec.shear));
+
 /** Whether `size` px is under `floor` (the half-pixel slack of a rounded size kept). */
 export const underFloor = (size: number, floor: number = TYPE_FLOOR.lo) => size < floor - SLACK;
 

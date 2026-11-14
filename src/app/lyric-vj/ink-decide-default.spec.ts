@@ -20,16 +20,19 @@ describe.skipIf(!existsSync(SONG))('M3 is on by default, in the renderer as in t
     expect(LyricVjEngine.inkFx({ ...job, treatment: { ...job.treatment, inkDecide: false } } as unknown as RenderJob)).toBeNull();
   });
 
-  it('c059 and c031, the two lines the default lost against the opt-in run (2026-11-15), take inks that read as drawn', async () => {
+  it('c059 and c031 keep a key of their own hue, moved to read as drawn (premultiplied edges; 2026-11-15)', async () => {
     const { drawnInkOf } = await import('./render/hold-room');
     const { contrast } = await import('./contrast');
     for (const [set, id] of [['dark-glitch/overheard', 'violet-hour'], ['dark-glitch/margin', 'ghost-green']] as const) {
       const slots = STYLE_WORLDS.find((w) => w.id === 'dark-glitch')!.palette.find((s) => s.id === id) as never as Parameters<typeof keyFor>[1];
       const spec = SET_SPECS[set];
       const key = keyFor(spec, slots, slots.ink);
-      // (the accent's edge drawn at EDGE_SHARE reads 2.6–3.6:1: the key is one that reads at its drawn edge)
-      expect(contrast(drawnInkOf(spec, slots)(key), slots.ground)).toBeGreaterThanOrEqual(4.5);
-      expect(contrast(drawnInkOf(spec, slots)(slots.accent), slots.ground)).toBeLessThan(4.5);
+      expect(contrast(drawnInkOf(spec, slots)(key), slots.ground)).toBeGreaterThanOrEqual(4.8);
+      // (an accent, not the body's cream: with the fringe gone the decision no longer has to drain it)
+      expect(key.toLowerCase()).not.toBe(slots.ink.toLowerCase());
+      // (QA: the straight-alpha edge, 0.42, would drain it)
+      (globalThis as { __vjEdgeShare?: number }).__vjEdgeShare = 0.42;
+      try { expect(keyFor(spec, slots, slots.ink).toLowerCase()).toBe(slots.ink.toLowerCase()); } finally { delete (globalThis as { __vjEdgeShare?: number }).__vjEdgeShare; }
     }
   });
 

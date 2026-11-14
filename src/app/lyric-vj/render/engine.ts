@@ -24,7 +24,7 @@ import { binarize, flipRows, InkMask } from './ink-mask';
 import { InkHalo } from './ink-halo';
 import { fxOfFrame, type FxBox } from '../ink-decide';
 import { STYLE_WORLDS } from '../style-worlds';
-import { HALO_UNIFORMS, haloCut, setPatch } from './material-patch';
+import { HALO_UNIFORMS, haloCut, matchGlyphPicture, setPatch } from './material-patch';
 import { SNOW } from './world-grounds';
 import { idOf, partIdOf } from '../ink-verify';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -2602,6 +2602,9 @@ export class LyricVjEngine {
       (this.ghostPass.uniforms['uColA'].value as THREE.Color).set(chroma[0]);
       (this.ghostPass.uniforms['uColB'].value as THREE.Color).set(chroma[1]);
     }
+    // (every material showing a glyph picture reads it premultiplied: material-patch matchGlyphPicture; a material made
+    // anywhere with a glyph's map, a copy, a shine, a twin, is matched here)
+    for (const root of [this.textScene, this.scene]) root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.material) matchGlyphPicture(m.material); });
     if (this.job.layer === 'text' || this.job.layer === 'words') {
       // the lyrics alone on transparency (their own colour treatment; grain and grading belong to the back layer)
       this.renderer.setRenderTarget(null);

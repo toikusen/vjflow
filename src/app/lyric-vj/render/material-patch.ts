@@ -34,3 +34,28 @@ export const haloCut: Patch = (shader) => {
     .replace('void main() {', 'uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut;\nvoid main() {')
     .replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n  if (uHaloOut > 0.0) diffuseColor.a *= clamp((texture2D(tHalo, gl_FragCoord.xy / vec2(1920.0, 1080.0)).r - uHaloIn) / max(uHaloOut - uHaloIn, 1e-3), 0.0, 1.0);');
 };
+
+/**
+ * Glyph pictures are uploaded premultiplied and undecoded (glyphs.ts premultGlyph): filtering then mixes a stroke's
+ * edge texel with a clear neighbour as ink × coverage, never toward black, and the shader takes the ink back out
+ * (÷ alpha) and decodes it from sRGB. Straight alpha ran an edge toward black: a light ink on a dark ground drew its
+ * kept edge pixels at about 0.43 of its luminance (2026-11-15).
+ */
+export const unpremultiply: Patch = (shader) => {
+  shader.fragmentShader = shader.fragmentShader.replace(
+    '#include <map_fragment>',
+    `#ifdef USE_MAP
+  vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+  sampledDiffuseColor.rgb = sampledDiffuseColor.a > 0.0 ? sRGBTransferEOTF( vec4( sampledDiffuseColor.rgb / sampledDiffuseColor.a, 1.0 ) ).rgb : vec3( 0.0 );
+  diffuseColor *= sampledDiffuseColor;
+#endif`,
+  );
+};
+
+/** A material showing a premultiplied glyph picture gets `unpremultiply` (once; idempotent). */
+export function matchGlyphPicture(m: THREE.Material | THREE.Material[]) {
+  for (const x of Array.isArray(m) ? m : [m]) {
+    const map = (x as THREE.MeshBasicMaterial).map;
+    if (map?.userData['premult'] && !(x as THREE.ShaderMaterial).isShaderMaterial) setPatch(x, 'unpremultiply', unpremultiply);
+  }
+}

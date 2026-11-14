@@ -1,6 +1,7 @@
 // Glyph planes: every character is its own mesh so templates can animate per character (AE-style).
 // Textures are drawn at 2× with Canvas2D and cached per (char, font, size, style).
 import * as THREE from 'three';
+import { matchGlyphPicture } from './material-patch';
 import { nearestWeight } from '../fonts';
 import { typeset } from '../typeset';
 import { dotPitch, exteriorOf } from './glyph-state';
@@ -59,6 +60,18 @@ export interface Piece {
   y: number;
   w: number;
   h: number;
+}
+/**
+ * A glyph picture uploaded premultiplied and undecoded, read back by its material (material-patch unpremultiply): a
+ * stroke's edge filters as ink × coverage instead of running toward black.
+ */
+export function premultGlyph<T extends THREE.Texture>(tex: T): T {
+  // (QA, the before/after crops: __vjStraightGlyphs keeps the old straight-alpha upload)
+  if ((globalThis as { __vjStraightGlyphs?: boolean }).__vjStraightGlyphs) { tex.colorSpace = THREE.SRGBColorSpace; return tex; }
+  tex.premultiplyAlpha = true;
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.userData['premult'] = true;
+  return tex;
 }
 const cache = new Map<string, { texture: THREE.CanvasTexture; w: number; h: number; advance: number; pieces?: Piece[] }>();
 /** Live use: the oldest glyph pictures past `max` let go, none that a line up is showing (a later line draws them again). */
@@ -215,8 +228,7 @@ function texture(char: string, s: GlyphStyle) {
     if (finish && finish !== 'extrude') applyFinish(ctx, finish, w, h, s.size, char);
     if (s.surface) applySurface(canvas, ctx, s.surface, char, s.size, SS);
   }
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const tex = premultGlyph(new THREE.CanvasTexture(canvas));
   tex.anisotropy = 4;
   const entry: { texture: THREE.CanvasTexture; w: number; h: number; advance: number; pieces?: Piece[] } = { texture: tex, w, h, advance };
   if (piecesOn) entry.pieces = piecesOf(canvas, w, h);
@@ -396,6 +408,7 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
     const cs = f !== 1 ? { ...s, size: Math.round(s.size * f), embolden: s.embolden && s.embolden * f } : s;
     const t = texture(char, cs);
     const mat = new THREE.MeshBasicMaterial({ map: t.texture, color, transparent: true, depthTest: false, depthWrite: false });
+    matchGlyphPicture(mat);
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(t.w, t.h), mat);
     mesh.userData['size'] = cs.size;
     if (t.pieces && t.pieces.length > 1) {
@@ -403,6 +416,7 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
       mesh.geometry.setDrawRange(0, 0);
       mesh.userData['pieces'] = t.pieces.map((p, i) => {
         const pm = new THREE.Mesh(new THREE.PlaneGeometry(p.w, p.h), new THREE.MeshBasicMaterial({ map: p.texture, color, transparent: true, depthTest: false, depthWrite: false }));
+        matchGlyphPicture(pm.material);
         pm.position.set(p.x, p.y, 0);
         const a = Math.atan2(p.y, p.x) + (hash(index, i) - 0.5) * 1.2;
         pm.userData['home'] = [p.x, p.y];
@@ -415,6 +429,7 @@ export function makeGlyphs(text: string, s: GlyphStyle, color: THREE.ColorRepres
       // the plate copy has no halo: only the glyph shape, in the second ink, behind the type
       const plain = texture(char, { ...cs, shadow: false });
       const gm = new THREE.Mesh(new THREE.PlaneGeometry(plain.w, plain.h), new THREE.MeshBasicMaterial({ map: plain.texture, color: inkGhost.color, transparent: true, depthTest: false, depthWrite: false }));
+      matchGlyphPicture(gm.material);
       gm.position.set(inkGhost.dx * cs.size, -inkGhost.dy * cs.size, -0.01);
       gm.renderOrder = -1;
       // (a copy behind the glyph, not a glyph: what the glyph stands on for the ink gate)
@@ -561,8 +576,7 @@ function piecesOf(canvas: HTMLCanvasElement, w: number, h: number): Piece[] {
         out.data[di] = img[si]; out.data[di + 1] = img[si + 1]; out.data[di + 2] = img[si + 2]; out.data[di + 3] = img[si + 3];
       }
     pctx.putImageData(out, 0, 0);
-    const tex = new THREE.CanvasTexture(pc);
-    tex.colorSpace = THREE.SRGBColorSpace;
+    const tex = premultGlyph(new THREE.CanvasTexture(pc));
     // canvas px are SS × design px; texture y runs down, scene y up
     pieces.push({ texture: tex, x: (px0 + pw / 2) / SS - w / 2, y: h / 2 - (py0 + ph / 2) / SS, w: pw / SS, h: ph / SS });
   }

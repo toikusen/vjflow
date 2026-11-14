@@ -10,7 +10,7 @@ import type { Block, SetSpec } from './world-sets';
 import { gapOf, LINE_CLEAR, toPx } from './carrier-fit';
 import { decideInk, leastThrough, type FxBox } from '../ink-decide';
 import { SET_SPECS } from './world-sets';
-import { darkest, drawnGround, EDGE_SHARE, surfaceShare } from './ink-tones';
+import { darkest, drawnGround, edgeShare, surfaceShare } from './ink-tones';
 
 /** Every ink a line is read in reads at least this on what is under it (WCAG AA). */
 export const READ_MIN = 4.5;
@@ -134,8 +134,8 @@ export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots
   const m = WORLD_SURFACE[world];
   const kind = spec.surface ?? m?.kind;
   const core = spec.core ? slots[spec.core] : m ? slots[m.core] : undefined;
-  // (the deeper of the surface's own darkening and the edge's, EDGE_SHARE: the worst pixel the reading keeps)
-  const share = Math.min(surfaceShare(kind, core) ?? 1, EDGE_SHARE);
+  // (the deeper of the surface's own darkening and the edge's, edgeShare: 1 with premultiplied glyph pictures)
+  const share = Math.min(surfaceShare(kind, core) ?? 1, edgeShare());
   return (ink: string) => darkest(ink, share);
 };
 /** What a set's words stand on: its carrier, else the background and what the picture puts there. */

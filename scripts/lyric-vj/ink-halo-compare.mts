@@ -4,7 +4,7 @@
 // frame (PNG), the words' box at full size (PNG), and the gate's numbers: worst glyph, the failing glyphs with their worst
 // pair's two ends, and the protected area (px of the box within the halo's clean and ramp distances of a glyph's mask).
 //   nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/ink-halo-compare.mts --out DIR --world dark-glitch --song choroin 153.3 120.5
-import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -61,6 +61,9 @@ for (const way of WAYS) {
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
   if (way.init) await page.addInitScript(way.init);
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
+  // (what the page says, for a page that never gets ready: the halo pass stalled once on a busy machine)
+  page.on('console', (m) => appendFileSync(join(out, `${way.id}.console.log`), `${m.type()} ${m.text()}\n`));
+  page.on('pageerror', (e) => appendFileSync(join(out, `${way.id}.console.log`), `pageerror ${e.message}\n`));
   await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, file)}`);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 600000 });
   for (const ts of positionals) {

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Glyph } from './glyphs';
 import { frameFit } from './runtime';
 import { stairRows, STAIR_LEAST } from './stair';
-import { TYPE_FLOOR } from './type-floor';
+import { holdMultiple, TYPE_FLOOR } from './type-floor';
 import { blowPose, holdParticles, type Pose } from './world-layout';
 import { SET_SPECS, shearedSize } from './world-sets';
 
@@ -68,5 +68,17 @@ describe('stair rows never set the type under the least size (a 50-character lin
     expect(stairRows('あいう えおか', 6, widest).length).toBeLessThanOrEqual(2);
     const text = 'あいうえおか きくけこさし すせそたちつ';
     expect(stairRows(text, 18, widest).length).toBeLessThanOrEqual(3);
+  });
+});
+
+describe('the hold on a line\'s fit while it plays (holdMultiple)', () => {
+  it('lets a camera zoom out only until the words rest at the floor', () => {
+    expect(holdMultiple(100, 84, 600, 300)).toBeCloseTo(0.84);
+    expect(holdMultiple(86, 84, 600, 300)).toBeCloseTo(84 / 86);
+  });
+  it('lifts a fit that left the words under the floor, but not past the frame edge', () => {
+    expect(holdMultiple(78, 84, 600, 300)).toBeCloseTo(84 / 78);
+    expect(holdMultiple(78, 84, 930, 300)).toBeCloseTo((960 - 24) / 930);
+    expect(holdMultiple(78, 84, 930, 300)).toBeLessThan(84 / 78);
   });
 });

@@ -8,7 +8,8 @@ import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
 import { clearOf } from './world-sets';
-import { fitAtFloor, TYPE_FLOOR } from './type-floor';
+import { fitAtFloor, holdMultiple, TYPE_FLOOR } from './type-floor';
+import { CAM_EDGE } from './world-cam';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
@@ -277,6 +278,21 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D) {
   }
   layer.group.visible = vis;
   return { box, least };
+}
+
+/**
+ * The least scale a line's fit group may take while it plays, so its words never rest under the type floor as drawn:
+ * whatever the line's own camera or the drift puts on the fit (render/type-floor.ts; a text camera's zoom-out took silk
+ * チョロイン c078 from 85 to 83 px and a spy build-cut line from 87 to 80, 2026-11-12). The scale at which its words
+ * (as drawn, particles too) stand at `floor` px, no further than the frame's edge (CAM_EDGE) allows; undefined for a
+ * line with no words to read. Measured with the fit already set.
+ */
+function holdScale(layer: CueLayer, fit: THREE.Group, floor: number): number | undefined {
+  const words = restingWords(layer, fit);
+  if (!Number.isFinite(words.least) || words.least <= 0) return undefined;
+  const wx = Math.max(Math.abs(words.box.min.x), Math.abs(words.box.max.x));
+  const wy = Math.max(Math.abs(words.box.min.y), Math.abs(words.box.max.y));
+  return fit.scale.x * holdMultiple(words.least, floor, wx, wy, CAM_EDGE);
 }
 
 /** Where a laid-out line's phrases stand and the whole line's box, frame px from the centre: what a tracking camera calls at. */
@@ -715,7 +731,7 @@ export class LyricVjEngine {
   private shotLayers = new Map<string, ShotLayer>();
   /** After each frame's lines are updated: the signature moments (render/signature.ts) take their lines off the frame; set only when a treatment has moments. */
   onCues?: (cues: unknown[], calls: unknown[], t: number) => void;
-  private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
+  private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; hold?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
   private relays: { h: Handoff; path: RelayPath; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; width: number }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
   private callLayers: CallLayer[] = [];
@@ -1198,7 +1214,8 @@ export class LyricVjEngine {
       }
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
-      const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
+      const hold = design.world && !layer.framed ? holdScale(layer, fit, TYPE_FLOOR.lo) : undefined;
+      const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, hold, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
       if (twin) {
         const f = fitToFrame(twin, kick);
         this.textRoot.add(f);
@@ -1217,7 +1234,7 @@ export class LyricVjEngine {
         entry.fit!.removeFromParent();
         this.textRoot.add(f);
         kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
-        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, mixed: true });
+        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: design.world && !l.framed ? holdScale(l, f, TYPE_FLOOR.lo) : undefined, mixed: true });
       };
       if (live) this.cueLayers.splice(this.cueLayers.findIndex((c) => c.index! > i) >>> 0, 0, entry);
       else this.cueLayers.push(entry);
@@ -2036,7 +2053,8 @@ export class LyricVjEngine {
           const moved = hand && hand.h.kind === 'push' ? inPose(hand.h, t) : { x: 0, y: 0 };
           const left = handOut && t > handOut.h.from ? outPose(handOut.h, t, handOut.seam, handOut.side) : { x: 0, y: 0 };
           f.position.set(drift[0] * e + c.x + moved.x + left.x, drift[1] * e + c.y + moved.y + left.y, 0);
-          f.scale.setScalar(fitScale * (1 + 0.012 * e) * c.scale);
+          // (never under the type floor as drawn: the camera's zoom-out and the drift's growth stop where the words rest at it)
+          f.scale.setScalar(Math.max(fitScale * (1 + 0.012 * e) * c.scale, entry.hold ?? 0));
           f.rotation.z = c.rot;
           // a page takes the line it carries with it, narrowing about the seam
           if (handOut?.h.kind === 'page' && t > handOut.h.from) {

@@ -47,7 +47,7 @@ const getFont = fontCache(resolve('out/font-cache'));
 
 type Read = { set: number; drawn: number; decor: boolean };
 /** A line with any body glyph whose row type is under its floor, at either moment. */
-interface Under { diag?: unknown; world: string; song: string; seed: number; cue: string; set: string; floor: number; least: number; sizes: number[]; text: string; t: number; plan: string; fit?: number; template?: string }
+interface Under { diag?: unknown; rest?: number; floored?: boolean; world: string; song: string; seed: number; cue: string; set: string; floor: number; least: number; sizes: number[]; text: string; t: number; plan: string; fit?: number; template?: string }
 const under: Under[] = [];
 const callsUnder: Under[] = [];
 const loUnder: Under[] = [];
@@ -72,7 +72,7 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
   });
   await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, file)}`);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 200000 });
-  const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, fit: (c as { fitScale?: number }).fitScale ?? 1, template: (c as { template?: string }).template ?? '' })));
+  const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, fit: (c as { fitScale?: number }).fitScale ?? 1, template: (c as { template?: string }).template ?? '', rest: (c as { restSize?: number }).restSize, floored: (c as { floored?: boolean }).floored })));
   for (const c of cues) {
     const ending = c === cues.at(-1);
     const wl = planOf.get(c.id) ?? {};
@@ -80,6 +80,11 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
     const floor = floorOf(set);
     let least = Infinity, leastAt = 0, sizes: number[] = [], diag: unknown = null;
     let callLeast = Infinity;
+    if (process.env['TRACE_CUE'] === `${id}:${c.id}`) for (let k = 0; k <= 12; k++) {
+      const t = c.from + ((c.to - c.from) * k) / 12;
+      const r = (await page.evaluate(`window.floorScan.at(${JSON.stringify(c.id)}, ${t})`)) as { line: Read[]; diag: unknown };
+      console.log('trace', c.id, t.toFixed(2), JSON.stringify(r.diag), Math.min(...r.line.filter((g) => !g.decor).map((g) => g.set)).toFixed(1), 'from', c.from.toFixed(2), 'to', c.to.toFixed(2));
+    }
     for (const t of ending ? [(c.from + c.to) / 2 - 1] : [(c.from + c.to) / 2, c.to - 0.08]) {
       const r = (await page.evaluate(`window.floorScan.at(${JSON.stringify(c.id)}, ${t})`)) as { line: Read[]; calls: Read[]; diag: { fit: number; floor: number; framed: boolean }[] };
       const body = r.line.filter((g) => !g.decor);
@@ -97,7 +102,7 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
     byWorldSet[key].lines++;
     leastByWorld[id] = Math.min(leastByWorld[id] ?? Infinity, Math.round(least));
     const plan = [wl.blow && 'blow', wl.scale && 'scale', wl.repose?.length && 'repose', wl.cam && `cam:${wl.cam.kind}`].filter(Boolean).join(',');
-    const row = { world: id, song: name, seed, cue: c.id, set, floor, least: Math.round(least * 10) / 10, sizes, text: c.text, t: +leastAt.toFixed(2), plan, fit: c.fit, template: c.template, diag };
+    const row = { world: id, song: name, seed, cue: c.id, set, floor, least: Math.round(least * 10) / 10, sizes, text: c.text, t: +leastAt.toFixed(2), plan, fit: c.fit, template: c.template, rest: c.rest, floored: c.floored, diag };
     // (half a pixel: the frame fit's float scale on a glyph laid at the floor; under: TYPE_FLOOR.lo, loUnder: the set's own lo above it)
     if (least < TYPE_FLOOR.lo - 0.5) { under.push(row); byWorldSet[key].under++; }
     else if (least < floor - 0.5) loUnder.push(row);

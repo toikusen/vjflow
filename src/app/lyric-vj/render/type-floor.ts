@@ -44,3 +44,11 @@ export const heldScale = (scale: number, size: number, floor: number = TYPE_FLOO
  * words stand on may then run past the safe edge; the words never leave the frame.
  */
 export const fitAtFloor = (whole: number, least: number, floor: number, words: number) => (underFloor(least * whole, floor) ? Math.min(heldScale(whole, least, floor), Math.max(whole, words)) : whole);
+
+/**
+ * By how much a line's fit may be multiplied while it plays so its words (`least` px as drawn, em boxes reaching `wx` and
+ * `wy` px from the frame's centre) rest at the floor, no further than `edge` px short of the frame's edge: under 1 the
+ * zoom-out left to a camera, over 1 the lift a fit that left the words small needs (engine holdScale).
+ */
+export const holdMultiple = (least: number, floor: number, wx: number, wy: number, edge = 24, w = 1920, h = 1080) =>
+  Math.min(floor / least, (w / 2 - edge) / Math.max(1, wx), (h / 2 - edge) / Math.max(1, wy));

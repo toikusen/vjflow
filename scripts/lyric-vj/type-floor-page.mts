@@ -40,7 +40,21 @@ function at(id: string, t: number) {
   const own = e.cueLayers.filter((c) => c.rt.cue.id === id);
   const calls: Read[] = [];
   for (const c of e.callLayers.filter((x) => x.rt.cue.id === id)) c.group.traverse((o: Obj) => { if (o.isMesh && o.userData?.['size']) calls.push({ set: o.userData['set'] ?? o.userData['size'], drawn: o.userData['size'], decor: false }); });
-  const diag = own.map((c) => ({ fit: +((c.fit?.scale.x) ?? 1).toFixed(4), floor: c.layer.floor ?? 0, framed: !!c.layer.framed }));
+  const diag = own.map((c) => {
+    const fs = c.fit?.scale.x ?? 1;
+    // the words' em boxes (decor and hidden skipped) at fit scale 1, px from the frame centre, and the whole layer's box
+    let [wx, wy] = [0, 0];
+    const sc = new THREE.Vector3(), at = new THREE.Vector3();
+    (c.fit ?? c.layer.group).updateMatrixWorld(true);
+    c.layer.group.traverse((o: Obj) => {
+      if (!o.isMesh || !o.userData?.['size'] || !visible(o) || decorOf(o, c.layer.group)) return;
+      const em = (o.userData['size'] * Math.abs(o.getWorldScale(sc).x)) / 2 / fs;
+      o.getWorldPosition(at);
+      wx = Math.max(wx, Math.abs(at.x) / fs + em); wy = Math.max(wy, Math.abs(at.y) / fs + em);
+    });
+    const bb = new THREE.Box3().setFromObject(c.layer.group);
+    return { fit: +fs.toFixed(4), floor: c.layer.floor ?? 0, framed: !!c.layer.framed, wx: Math.round(wx), wy: Math.round(wy), bx: Math.round(Math.max(Math.abs(bb.min.x), Math.abs(bb.max.x)) / fs), by: Math.round(Math.max(Math.abs(bb.min.y), Math.abs(bb.max.y)) / fs) };
+  });
   return { diag, line: r(own.flatMap((c) => [...glyphsIn(c.fit ?? c.layer.group), ...glyphsIn(c.twin?.fit)])), calls: r(calls) };
 }
 w.floorScan = { at };

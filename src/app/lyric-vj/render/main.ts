@@ -3,6 +3,9 @@ import { LyricVjEngine, RenderJob } from './engine';
 import { haloOf } from './final-warp.glsl';
 import { loadJobFonts } from './job-fonts';
 import { ensureAdvances } from './layout-measure';
+import { ensureInkTones } from './ink-tones';
+import { glyphTexture } from './glyphs';
+import { surfaceKey } from './world-glyph';
 import { isSignature, signatureCues, signatureIds, signatureLayer, signatureWindows } from './signature';
 import { miniMomentLayer, miniMomentsOf } from './mini-moment';
 
@@ -30,6 +33,7 @@ const job: RenderJob = await (await fetch(new URLSearchParams(location.search).g
 await loadJobFonts(job);
 // (the plan's advance table, loaded once so anything measuring a seat in the page measures as the plan did)
 await ensureAdvances();
+await ensureInkTones();
 // a transparent page for the lyric layer
 if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
 // (the ink halo, every job: the destructive effects stay off round the reading glyphs; treatment.inkHalo another or false)
@@ -79,6 +83,25 @@ window.vjSceneQa = () =>
     return c.getImageData(0, 0, 1920, 1080);
   });
 window.vjMotionQa = (everyFrame) => engine.motionQa(everyFrame);
+// (QA, the tone table's generator, ink-tones.mts: how far a surface draws a tint down at its darkest part: the 5th
+// percentile luminance of its inked pixels over the tint's own, the least of the characters given)
+(window as unknown as { vjSurfaceShare: (kind: string, tint: string, core: string, family: string, chars: string) => number }).vjSurfaceShare = (kind, tint, core, family, chars) => {
+  const lin = (v: number) => (v <= 10.0164 ? v / 3294.6 : ((v / 255 + 0.055) / 1.055) ** 2.4);
+  const lum = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  const own = lum(...([1, 3, 5].map((i) => parseInt(tint.slice(i, i + 2), 16)) as [number, number, number]));
+  let least = 1;
+  for (const ch of chars) {
+    const { texture } = glyphTexture(ch, { family, weight: 700, size: 160, surface: surfaceKey({ kind: kind as never, tint, core, eaten: false }) });
+    const img = texture.image as HTMLCanvasElement;
+    const d = img.getContext('2d')!.getImageData(0, 0, img.width, img.height).data;
+    const ls: number[] = [];
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] >= 128) ls.push(lum(d[i], d[i + 1], d[i + 2]));
+    if (!ls.length) continue;
+    ls.sort((x, y) => x - y);
+    least = Math.min(least, ls[Math.floor(ls.length * 0.05)] / Math.max(own, 1e-6));
+  }
+  return least;
+};
 await window.vjReady;
 const t = new URLSearchParams(location.search).get('t');
 if (t) await engine.renderAt(Number(t));

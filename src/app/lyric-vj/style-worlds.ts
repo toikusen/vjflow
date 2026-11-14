@@ -1,7 +1,7 @@
 // The worlds. Batch 2's live in style-worlds-hand.ts. Batch 1 (2026-11-01): dark-glitch, neon-stage, terminal, led-board, ink-wash, silent-film, stained-glass,
 // gothic-lolita; and the six print styles the free tier opened with, moved into the same structure.
 import type { FrameStack, LinePart, Scheme, StyleWorld } from './style-world';
-import { WORLD_FX } from './render/hold-room';
+import { WORLD_FX, WORLD_SURFACE } from './render/hold-room';
 import { fxOfFrame } from './ink-decide';
 import type { Level } from './lineplan-core';
 import type { TextCamKind } from './render/text-cam';
@@ -354,5 +354,5 @@ const spy = print({ id: 'spy', name: '諜報片頭', language: 'spy-titles', wha
 
 export const STYLE_WORLDS: StyleWorld[] = [silk, silkCold, riso, FILE_WORLD, spy, CARD_WORLD, dark, neon, terminal, led, ink, film, GLASS_WORLD, gothic, ...HAND_WORLDS, ...LOUD_WORLDS, ...B4_WORLDS, ...B4B_WORLDS, DOCUMENT_WORLD, ...B5_WORLDS, ...B5B_WORLDS];
 // (each world's final effects, for its inks to be decided through on the plan and in the renderer alike: M3)
-for (const w of STYLE_WORLDS) WORLD_FX[w.id] = fxOfFrame(w.frameStack);
+for (const w of STYLE_WORLDS) [WORLD_FX[w.id], WORLD_SURFACE[w.id]] = [fxOfFrame(w.frameStack), { kind: w.material.surface, core: w.material.core }];
 export const worldById = (id: string) => STYLE_WORLDS.find((w) => w.id === id);

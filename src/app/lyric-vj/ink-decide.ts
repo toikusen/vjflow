@@ -55,15 +55,16 @@ const MOVE = 0.12;
  * never chased frame by frame; its own first, then a small lightness move, then the world's inks). The pick aims at
  * INK_AIM; `from: 'none'` when nothing reaches INK_MIN (the caller keeps `own` and the gate reports the line).
  */
-export function decideInk(own: string, grounds: string[], fx: FxBox, world: string[] = []): InkDecision {
+export function decideInk(own: string, grounds: string[], fx: FxBox, world: string[] = [], drawn: (ink: string) => string = (x) => x): InkDecision {
   const gs = grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g));
-  const least = (ink: string) => Math.min(Infinity, ...gs.map((g) => minContrast(finalBounds(ink, fx, true), finalBounds(g, fx, true))));
+  // (`drawn`: an ink as its surface draws it at its darkest, ink-tones darkest: the ink is judged as it is drawn)
+  const least = (ink: string) => Math.min(Infinity, ...gs.map((g) => minContrast(finalBounds(drawn(ink), fx, true), finalBounds(g, fx, true))));
   const at = least(own);
   if (!gs.length || at >= INK_AIM) return { ink: own, from: 'own', min: at };
   // (its own hue, lightness moved against the ground it reads worst on, a step at a time)
   let c = own;
   for (let k = 0; k < 6 && least(c) < INK_AIM; k++) {
-    const worst = [...gs].sort((a, b) => least2(c, a, fx) - least2(c, b, fx))[0];
+    const worst = [...gs].sort((a, b) => least2(drawn(c), a, fx) - least2(drawn(c), b, fx))[0];
     const aim = INK_AIM * (1 + 0.08 * (k + 1)); // (the bounds take more off than a flat contrast: aim higher each step)
     const m = readableHue(c, worst, aim);
     if (!m || m === c) break;
@@ -76,5 +77,5 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
   return { ink: own, from: 'none', min: at };
 }
 /** The least an ink reads on every ground through every effect (decideInk's measure). */
-export const leastThrough = (ink: string, grounds: string[], fx: FxBox) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => least2(ink, g, fx)));
+export const leastThrough = (ink: string, grounds: string[], fx: FxBox, drawn: (ink: string) => string = (x) => x) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => least2(drawn(ink), g, fx)));
 const least2 = (ink: string, g: string, fx: FxBox) => minContrast(finalBounds(ink, fx, true), finalBounds(g, fx, true));

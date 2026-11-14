@@ -35,6 +35,7 @@ import type { LineScale } from './render/scale-pose';
 import { liftRoom } from './render/line-moment';
 import type { ScalePlan } from './scale-policy';
 import { ensureAdvances } from './render/layout-measure';
+import { ensureInkTones } from './render/ink-tones';
 import type { MomentPlan } from './moment-policy';
 
 /** Layouts typeplan.mts gives a side setting (typehelp.mts SIDED). */
@@ -404,7 +405,7 @@ export function withoutEchoes(song: SongTimeline): SongTimeline {
  * Where a free job starts in the browser: freeJob is synchronous, and a scheduled world measures its seats on the
  * advance table (render/layout-measure.ts), which the browser loads on first use. Await it once before freeJob.
  */
-export const freeJobReady = (): Promise<void> => ensureAdvances();
+export const freeJobReady = (): Promise<void> => Promise.all([ensureAdvances(), ensureInkTones()]).then(() => undefined);
 
 export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const song = withoutEchoes(song0);

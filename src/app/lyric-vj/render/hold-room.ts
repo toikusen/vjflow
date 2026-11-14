@@ -10,6 +10,7 @@ import type { Block, SetSpec } from './world-sets';
 import { gapOf, LINE_CLEAR, toPx } from './carrier-fit';
 import { decideInk, leastThrough, type FxBox } from '../ink-decide';
 import { SET_SPECS } from './world-sets';
+import { darkest, drawnGround, surfaceShare } from './ink-tones';
 
 /** Every ink a line is read in reads at least this on what is under it (WCAG AA). */
 export const READ_MIN = 4.5;
@@ -117,14 +118,32 @@ export interface Seen {
 
 /** Each world's final effects (style-worlds registers them from each frame stack: ink-decide fxOfFrame). */
 export const WORLD_FX: Record<string, FxBox> = {};
-let specWorld: Map<SetSpec, string> | undefined;
+/** Each world's glyph material (style-worlds registers it): its surface kind and the slot its core is drawn in. */
+export const WORLD_SURFACE: Record<string, { kind?: string; core: keyof Slots }> = {};
+let specSet: Map<object, string> | undefined;
+/** A set's id in SET_SPECS (`world/set`); '' for one built on the fly. */
+export const setIdOf = (spec: object) => (specSet ??= new Map(Object.entries(SET_SPECS).map(([k, v]) => [v as object, k]))).get(spec) ?? '';
+const worldOfSet = (spec: object) => setIdOf(spec).split('/')[0];
 /** The final effects a set's inks are decided through: the caller's (`seen.fx`), else its world's; none for a set no world names. */
-export const inkFxOf = (spec: SetSpec, seen: Seen = {}): FxBox | undefined => (seen.fx === null ? undefined : seen.fx ?? WORLD_FX[(specWorld ??= new Map(Object.entries(SET_SPECS).map(([k, v]) => [v, k.split('/')[0]]))).get(spec) ?? '']);
+export const inkFxOf = (spec: SetSpec, seen: Seen = {}): FxBox | undefined => (seen.fx === null ? undefined : seen.fx ?? WORLD_FX[worldOfSet(spec)]);
+/**
+ * An ink as the set's glyph material draws it at its darkest (M4, ink-tones surfaces): the set's own surface, else its
+ * world's, with its core slot; unread surfaces draw the ink as it is.
+ */
+export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots, world = worldOfSet(spec)) => {
+  const m = WORLD_SURFACE[world];
+  const kind = spec.surface ?? m?.kind;
+  const core = spec.core ? slots[spec.core] : m ? slots[m.core] : undefined;
+  const share = surfaceShare(kind, core);
+  return (ink: string) => darkest(ink, share);
+};
 /** What a set's words stand on: its carrier, else the background and what the picture puts there. */
 // (one list for the plan and the renderer, review 2026-11-15: a world line stands on its world's ground, the page's paper
 // is the scheme's ground (free-plan composerTreatment); the renderer's palette background differed from it on 2672 of 3419
 // lines of choroin's 45 worlds and is not what is drawn there)
-export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, _seen: Seen = {}): string[] => { const on = carrierSlots(spec); return on ? on.map((k) => slots[k]) : [slots.ground]; };
+// (and what the page really draws there, where the tone table read it: a tape's darkened margin, a halftone; M4)
+export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, _seen: Seen = {}): string[] => { const on = carrierSlots(spec); return [...(on ? on.map((k) => slots[k]) : [slots.ground]), ...drawnTones(spec, slots)]; };
+const drawnTones = (spec: object, slots: Slots) => { const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
 const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
 /**
  * A set's body ink as decided (M3, ink-decide decideInk): the one ink the plan reads every check on and the renderer draws,
@@ -132,7 +151,7 @@ const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slo
  */
 export function bodyInk(spec: SetSpec, slots: Slots, body: string, seen: Seen = {}): string {
   const fx = inkFxOf(spec, seen);
-  return fx && hex(body) ? decideInk(body, standsOn(spec, slots, seen), fx, worldInks(slots)).ink : body;
+  return fx && hex(body) ? decideInk(body, standsOn(spec, slots, seen), fx, worldInks(slots), drawnInkOf(spec, slots)).ink : body;
 }
 const hex = (c?: string): c is string => !!c && /^#[0-9a-f]{6}$/i.test(c);
 /** The slots a set's words stand on when it draws (or its page draws) a carrier under them; undefined off a carrier. */
@@ -150,7 +169,7 @@ export const carrierSlots = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  */
 export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] {
   const on = carrierSlots(spec);
-  return (on ? on.map((k) => slots[k]) : [slots.ground, slots.plate]).filter(hex);
+  return [...(on ? on.map((k) => slots[k]) : [slots.ground, slots.plate]), ...drawnTones(spec, slots)].filter(hex);
 }
 /**
  * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red
@@ -180,7 +199,7 @@ export function keyFor(spec: SetSpec, slots: Slots, body: string, seen: Seen = {
   const key = keyInk(spec.key ? slots[spec.key] : accent, [slots.accent, slots.ink2, accent], body, grounds, on && (spec.object || spec.on) ? READ_ON_CARRIER : READ_MIN);
   // (decided as the body is: through the world's final effects, M3)
   const fx = inkFxOf(spec, seen);
-  return fx && hex(key) ? decideInk(key, standsOn(spec, slots, seen), fx, worldInks(slots)).ink : key;
+  return fx && hex(key) ? decideInk(key, standsOn(spec, slots, seen), fx, worldInks(slots), drawnInkOf(spec, slots)).ink : key;
 }
 /**
  * What a line on this set may do with its inks, worked out the same by the plan (palette only) and the renderer (with
@@ -196,7 +215,7 @@ export function inkChecks(spec: SetSpec, slots: Slots, body0: string, seen: Seen
   // (a hold's new ink reads through the world's final effects too, M3; one that cannot is not drawn: the hold keeps the
   // line's ink, a decorative change dropped rather than a band added, Codex 2026-11-13)
   const fx = inkFxOf(spec, seen);
-  const through = (c: string | undefined) => !c || !fx || leastThrough(c, grounds, fx) >= READ_MIN;
+  const through = (c: string | undefined) => !c || !fx || leastThrough(c, grounds, fx, drawnInkOf(spec, slots)) >= READ_MIN;
   const reads = (c: string) => hex(c) && grounds.every((g) => contrast(c, g) >= READ_MIN) && through(c);
   const settle = settleInk(body, [spec.plain ? undefined : key, slots.ink2, slots.accent, slots.plateInk, slots.ink].filter((c) => !c || through(c)), grounds);
   return {

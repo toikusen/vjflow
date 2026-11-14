@@ -11,7 +11,7 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
-import { bodyInk, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
+import { bodyInk, drawnInkOf, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
 import { readableTone } from '../measured-ink';
 import type { FxBox } from '../ink-decide';
 import { laidSeat, panelSplit, slotSpec } from './seat-geometry';
@@ -336,6 +336,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (what each pose's words stand on: its carrier, else the background and what the picture puts there; a dimmed glyph
   // still reads on all of it, readableTone)
   const standsOn = (s: SetSpec) => standsOnOf(s, slots, seen);
+  const drawnBy = sets.map((s) => drawnInkOf(s, slots, wl0.set.split('/')[0]));
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
   const inkOn0 = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
   // (M3: each pose's ink as decided, the one the plan read its checks on: hold-room bodyInk; one ink a pose)
@@ -788,7 +789,8 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         // see-through; with the opaque reveal a sheet's words keep their ink)
         const tone0 = Math.min(1, (pose.tone ?? 1) * rank);
         // (dimmed only as far as it still reads on what it stands on: a step-back or an unsung word is still a lyric)
-        const tone = fading() || wl.sheet ? tone0 : readableTone(baked ? tintOf(g, k) : `#${drawnInk[i].toString(16).padStart(6, '0')}`, standsOn(sets[k]), tone0, baked ? 0.1 : 0.14);
+        // (the ink as its material draws it at its darkest, where the tone table read the material: M4)
+        const tone = fading() || wl.sheet ? tone0 : readableTone(drawnBy[k](baked ? tintOf(g, k) : `#${drawnInk[i].toString(16).padStart(6, '0')}`), standsOn(sets[k]), tone0, baked ? 0.1 : 0.14);
         alphaOf[i] = { pose: stepA(pose.a ?? 1), block: whole_a, left, tone: wl.sheet && !fading() ? 1 : tone };
         if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {

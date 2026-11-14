@@ -40,9 +40,14 @@ export const minContrast = ([i0, i1]: [number, number], [g0, g1]: [number, numbe
  * design grain (free-plan sets it from the stack). `halo`: the ink halo is on (every job, INK_HALO).
  */
 export function fxOfFrame(frame: { flicker: number; vignette: number; scan: number; grain: number }, halo = true): FxBox {
-  const vig = 1.6 * 0.15 * frame.vignette;
+  // (the vignette's base is the frame's where a job carries it, else the engine's own 0.55: the deeper of the two, so a
+  // decision holds on either; a free job carries none, 2026-11-15)
+  const vig = 1.6 * 0.15 * Math.max(frame.vignette, VIG_BASE);
   return { flicker: frame.flicker, grain: 0.02 + 0.1 * frame.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame.scan)), halo };
 }
+
+/** The final pass's vignette base when a job's design names no world frame (engine: uVigBase). */
+export const VIG_BASE = 0.55;
 
 /** What decideInk chose: the ink, where it came from, and the least it reads on every ground through every effect. */
 export interface InkDecision { ink: string; from: 'own' | 'moved' | 'world' | 'none'; min: number }

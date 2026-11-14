@@ -23,6 +23,7 @@ import { FINAL_HALO_LIB, FINAL_WARP_LIB, FINAL_WARP_UV, HALO_REACH, haloOf } fro
 import { binarize, flipRows, InkMask } from './ink-mask';
 import { InkHalo } from './ink-halo';
 import { fxOfFrame, type FxBox } from '../ink-decide';
+import { STYLE_WORLDS } from '../style-worlds';
 import { HALO_UNIFORMS, haloCut, setPatch } from './material-patch';
 import { SNOW } from './world-grounds';
 import { idOf, partIdOf } from '../ink-verify';
@@ -735,7 +736,10 @@ export class LyricVjEngine {
   static inkFx(job: RenderJob): FxBox | null | undefined {
     const tr = job.treatment as { inkDecide?: boolean; inkHalo?: [number, number] | false };
     if (tr.inkDecide === false) return null;
-    const frame = job.treatment.design?.world?.frame;
+    // (the world from its design, else from its world lines' sets: a free job's design names no world, and the default
+    // fell through to a registry the render bundle never filled: M3 was off on every free job, 2026-11-15)
+    const id = job.treatment.design?.world?.id ?? (job.treatment.cues as { world?: { set?: string } }[]).find((c) => c.world?.set)?.world?.set?.split('/')[0];
+    const frame = job.treatment.design?.world?.frame ?? STYLE_WORLDS.find((w) => w.id === id)?.frameStack;
     return frame ? fxOfFrame(frame, !!haloOf(tr.inkHalo)) : undefined;
   }
 

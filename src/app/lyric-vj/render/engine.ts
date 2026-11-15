@@ -1260,12 +1260,8 @@ export class LyricVjEngine {
       const span = rt.exitAt + rt.exitDur - rt.showFrom;
       const kick = Array.from({ length: Math.ceil(span / 0.25) + 1 }, (_, k) => rt.showFrom + k * 0.25).some((x) => fxAt(x, treatment.moments ?? [], treatment.arc ?? []).level >= KICK_LEVEL);
       let fit = fitToFrame(layer, kick);
-      // (a blown-up key the frame cannot hold with the words round it at the floor gives way: the line stands as its set lays
-      // it, as when blowPose finds no room; led-board and silk-cold lines rested at 80 px under a key that took the fit to 0.93)
-      if (inWorld && !layer.framed && rt.style.world?.blow && holdShort(layer, fit.scale.x, (t) => this.koma(t), kick)) {
-        rt.style = { ...rt.style, world: { ...rt.style.world, blow: undefined } };
-        this.blowDropped.add(cue.id);
-        // (both builds of a line in two inks, the twin too, laid again without the blow)
+      // (the line laid again after a change to how it is drawn: both builds of a line in two inks, the twin too)
+      const rebuild = () => {
         if (inks) {
           const inked = (text: string, ground: string) => {
             backdrop = ground;
@@ -1280,6 +1276,24 @@ export class LyricVjEngine {
           layer.group.visible = false;
         } else layer = build();
         fit = fitToFrame(layer, kick);
+      };
+      const cannotHold = () => holdShort(layer, fit.scale.x, (t) => this.koma(t), kick);
+      if (inWorld && !layer.framed) {
+        // (a blown-up key the frame cannot hold with the words round it at the floor gives way: the line stands as its set lays
+        // it, as when blowPose finds no room; led-board and silk-cold lines rested at 80 px under a key that took the fit to 0.93)
+        if (rt.style.world?.blow && cannotHold()) {
+          rt.style = { ...rt.style, world: { ...rt.style.world, blow: undefined } };
+          this.blowDropped.add(cue.id);
+          rebuild();
+        }
+        // (a line the frame cannot hold at the floor through all its motion, whatever its set: plain stepped rows take it, as a
+        // shared template's line is; gothic-lolita c048 rested at 81 px, too wide at 84 for the kick, 2026-11-14)
+        if (alone && cannotHold()) {
+          drawn = 'stair';
+          rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };
+          this.floored.add(cue.id);
+          rebuild();
+        }
       }
       if (style.budget) this.rests.set(cue.id, restSize(layer, undefined, fit));
       this.textRoot.add(fit);

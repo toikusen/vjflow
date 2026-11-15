@@ -2752,7 +2752,7 @@ export class LyricVjEngine {
       // (the parts mask: each glyph's parts by reading role, through the same sampling; ink-verify partIdOf)
       const partList = [
         ...meshes.flatMap((l) => l.parts.map((p) => ({ mesh: p.mesh, id: partIdOf(l.slot, p.i, p.role) }))),
-        ...meshes.flatMap((l) => l.glyphs.flatMap((g) => { const d = declared(g.mesh); return d?.role === 'outline' ? [{ mesh: g.mesh, id: partIdOf(l.slot, g.i, 'outline'), split: { tint: d.tint, part: d.colour, keep: 'part' as const } }] : []; })),
+        ...meshes.flatMap((l) => l.glyphs.flatMap((g) => { const d = declared(g.mesh); return d && d.role !== 'ground' ? [{ mesh: g.mesh, id: partIdOf(l.slot, g.i, d.role), split: { tint: d.tint, part: d.colour, keep: 'part' as const } }] : []; })),
       ];
       let parts: Uint8Array | undefined;
       if (partList.length) {

@@ -141,6 +141,15 @@ describe('ink gate v2 numbers', () => {
       expect(u.pair!.q[2]).toBe('copy');
     });
 
+    it('an extrude part not drawn visibly (the same as the frame without the words) is ground: the face is read against it', () => {
+      // a light face, its "pressed edge" in the ground's own tone: the edge merges nothing, the face reads on the ground
+      const f = paint(24, 24, (x, y) => (kou(x, y) ? { rgb: WHITE, face: 0 } : kou(x - 2, y - 2) ? { rgb: BLACK, part: [0, 'extrude'] } : { rgb: BLACK }));
+      expect(verdict(f).status).toBe('pass');
+      // a face in the ground's tone is not rescued by an invisible edge either
+      const g = paint(24, 24, (x, y) => (kou(x, y) ? { rgb: [10, 10, 10], face: 0 } : kou(x - 2, y - 2) ? { rgb: BLACK, part: [0, 'extrude'] } : { rgb: BLACK }));
+      expect(verdict(g).status).toBe('fail');
+    });
+
     it("a declared extrude deep enough to fill 口's counter fails the shape gate", () => {
       const v = verdict(extruded(6, true));
       expect(v.shape).toContain('counter-closed');

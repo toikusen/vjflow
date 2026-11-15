@@ -57,6 +57,8 @@ export interface GlyphVerdict {
 
 /** How far round an opaque face its visible surroundings are read, px (the face against what borders it on screen). */
 export const RIM = 3;
+/** An extrude pixel differs from the frame without the words by at least this ratio to be drawn visibly (else ground). */
+export const EXTRUDE_SHOWS = 1.1;
 /** At or over this drawn opacity a glyph's face hides what is under it: it is read against its visible surroundings. */
 export const OPAQUE = 0.99;
 
@@ -90,9 +92,13 @@ export function reduceGlyphs(on: ArrayLike<number>, off: ArrayLike<number>, mask
     const role = pid ? partRole(pid) : undefined;
     if (role) [pOwner[i], pRole[i]] = [partBase(pid), ROLES.indexOf(role) + 1];
   }
-  // (the reading glyph a pixel belongs to: a face, or a declared extrude showing outside every face)
+  // (the reading glyph a pixel belongs to: a face, or a declared extrude showing outside every face; an extrude pixel not
+  // drawn visibly, the same as the frame without the words (a pressed edge in the paper's own tone), is ground: the face
+  // is read against it, nothing is merged)
+  const L0 = (a: ArrayLike<number>, k: number) => lumOf(a[k], a[k + 1], a[k + 2]);
+  const shows = (i: number) => { const [p, q] = [L0(on, i * 4), L0(off, i * 4)]; return (Math.max(p, q) + 0.05) / (Math.min(p, q) + 0.05) >= EXTRUDE_SHOWS; };
   const reader = new Int32Array(N);
-  for (let i = 0; i < N; i++) reader[i] = owner[i] || (pRole[i] === 1 ? pOwner[i] : 0);
+  for (let i = 0; i < N; i++) reader[i] = owner[i] || (pRole[i] === 1 && shows(i) ? pOwner[i] : 0);
   const L = (a: ArrayLike<number>, k: number) => lumOf(a[k], a[k + 1], a[k + 2]);
   const ratio = (x: number, y: number) => (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
   // the rim, each offset with the pixels between it and the centre (an outline on the way blocks what lies beyond it)

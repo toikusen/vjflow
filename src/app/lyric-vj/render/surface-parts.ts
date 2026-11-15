@@ -2,22 +2,26 @@
 // 2026-11-15): declared per material here, never inferred from the colours a picture happens to hold. A part is
 // - 'outline': a keyline the face is read against (it reads ≥ 4.5 against the face per pixel, and where it breaks the face
 //   is read against what shows through: the gate's own outline rule, ink-verify reduceGlyphs);
-// - 'ground': a part that separates nothing (a pressed edge or a shadow in the paper's own tone): not the face, read as
-//   the ground the face stands on.
+// - 'extrude': a part that is the letter's own shape (a pressed edge, a shadow, a dark body light wraps round): merged
+//   into the reading glyph as a declared extrude is (its joint with the face not read, its outer edge read, the shape
+//   gate on counters and joins); where it is not drawn visibly (the same as the frame without the words: a pressed edge
+//   in the paper's own tone) it is ground, and the face is read against it;
+// - 'ground': a part that separates nothing: not the face, read as the ground the face stands on.
 // A texel is a part where it is nearer the part's colour than the ink (isPartTexel); everything else is face.
 import { parseSurface } from './world-glyph';
 
-export type SurfacePartRole = 'outline' | 'ground';
+export type SurfacePartRole = 'outline' | 'extrude' | 'ground';
 /** Per surface kind: which colour of its key is a part, and its role. */
 export const SURFACE_PARTS: Record<string, { from: 'core'; role: SurfacePartRole }[]> = {
-  // gothic-lolita: leaf on a tooled ground, its pressed edge drawn in the core, the ground's own colour
-  gilt: [{ from: 'core', role: 'ground' }],
-  // paper-lantern: a dark shape between two lit layers, light wrapping round it: the shape is the letter's keyline
-  silhouette: [{ from: 'core', role: 'outline' }],
+  // gothic-lolita: leaf on a tooled ground, its pressed edge below it drawn in the core (the ground's colour): dark on a
+  // cream leaf it is the letter's own depth; on the dark ground it is not drawn visibly
+  gilt: [{ from: 'core', role: 'extrude' }],
+  // paper-lantern: a dark shape between two lit layers, light wrapping round it: the letter's body, blurred
+  silhouette: [{ from: 'core', role: 'extrude' }],
   // chiyogami: the pressed shadow on the paper below the print
-  foil: [{ from: 'core', role: 'ground' }],
-  // papercut: the sheet's own edge shadowing a hole's upper left
-  'cut-hole': [{ from: 'core', role: 'ground' }],
+  foil: [{ from: 'core', role: 'extrude' }],
+  // papercut: the sheet's own edge shadowing a hole's upper left, inside the letter
+  'cut-hole': [{ from: 'core', role: 'extrude' }],
 };
 
 /** A glyph picture's declared part from its surface key (`kind|tint|core|eaten`), if its material declares one. */

@@ -35,6 +35,8 @@ for (const world of positionals) {
   let at: { t: number; crop: [number, number, number, number] } | undefined;
   for (const straight of [true, false]) {
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+    // (tsx names the helpers of any function it serialises into the page: give the page the name helper)
+    await page.addInitScript('globalThis.__name = (f) => f');
     if (straight) await page.addInitScript('window.__vjStraightGlyphs = true');
     await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
     await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, file)}`);
@@ -55,6 +57,7 @@ for (const world of positionals) {
     await page.close();
   }
   const pair = await browser.newPage();
+  await pair.addInitScript('globalThis.__name = (f) => f');
   // (a string, not a function: tsx names the helpers of a serialised function, and the page has no __name)
   const both = (await pair.evaluate(`(async ([p, q]) => {
     const load = (s) => new Promise((r) => { const i = new Image(); i.onload = () => r(i); i.src = s; });

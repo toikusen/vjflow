@@ -1,7 +1,7 @@
 // The type floor at every place a world line's size is decided (render/type-floor.ts, docs/research/2026-11-12-type-floor.md).
 import { describe, expect, it } from 'vitest';
 import type { Glyph } from './glyphs';
-import { fitAtFloor, floorOf, heldScale, layFloorOf, leastOf, shearGain, TYPE_FLOOR, underFloor } from './type-floor';
+import { fitAtFloor, floorOf, heldScale, layFloorOf, leastOf, MIN_CONDENSE, shearGain, TYPE_FLOOR, underFloor } from './type-floor';
 import { blowPose } from './world-layout';
 import { blockOf, SET_SPECS, type SetSpec } from './world-sets';
 import { slotSpec } from './seat-geometry';
@@ -118,6 +118,15 @@ describe('the floor as drawn: through the set\'s shear (type size is the em heig
       setWordSafe(false);
     }
   }, 60000);
+});
+
+describe('condensing is only by an approved face (size is the em height)', () => {
+  it('no set draws its face narrower than MIN_CONDENSE, the narrowest whose strokes were checked on the drawn glyph', () => {
+    for (const [id, spec] of Object.entries(SET_SPECS)) {
+      if (!spec.shear) continue;
+      expect(Math.hypot(spec.shear[0], spec.shear[1]), id).toBeGreaterThanOrEqual(MIN_CONDENSE - 1e-9);
+    }
+  });
 });
 
 describe('the words round a blown-up word (blowPose)', () => {

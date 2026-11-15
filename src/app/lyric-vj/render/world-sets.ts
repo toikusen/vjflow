@@ -74,6 +74,8 @@ export interface SetSpec {
   rowOn?: (keyof Slots)[];
   /** What the words stand on when the set's own page draws it (a card, a banner, two banners): the key ink reads on each. */
   on?: (keyof Slots)[];
+  /** Literal colours the page paints under the words that no scheme slot names (isometric's coral and teal walls): the ink logic (hold-room groundsUnder, keyFor) reads on these too. */
+  groundHex?: string[];
   /** The slot the key words start from, when not the accent (an accent banner under the words). */
   key?: keyof Slots;
   /** A run with no break of its own is cut into even rows at its characters, as a printer wraps at its paper's width; a line

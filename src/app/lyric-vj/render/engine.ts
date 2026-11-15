@@ -8,7 +8,7 @@ import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
 import { clearOf } from './world-sets';
-import { fitAtFloor, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
+import { fitAtFloor, holdFalls, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
 import { CAM_EDGE } from './world-cam';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
@@ -218,8 +218,9 @@ function restSize(layer: CueLayer, wrap?: (l: CueLayer, kick: boolean) => THREE.
   layer.group.traverse((o) => {
     let p: THREE.Object3D | null = o;
     for (; p && p !== layer.group; p = p.parent) if (!p.visible || p.userData['decor']) return;
-    // (a glyph's type size is its em height: a face drawn narrow by its set's shear is condensed, not set small)
-    if (o.userData['size']) least = Math.min(least, o.userData['size'] * Math.abs(o.getWorldScale(scale).y));
+    // (a glyph's type size is its em, the larger of its two axes: a face drawn narrow by its set's shear is condensed, and a character
+    // rolling or flipping is squashed for a moment, neither is set small)
+    if (o.userData['size']) { o.getWorldScale(scale); least = Math.min(least, o.userData['size'] * Math.max(Math.abs(scale.x), Math.abs(scale.y))); }
   });
   layer.group.visible = vis;
   return least;
@@ -257,7 +258,7 @@ function fitToFrame(layer: CueLayer, kick: boolean): THREE.Group {
 const READING_STOPS = [0.02, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98, 0.995];
 
 /** A line's words at rest (its middle and near the end of its reading), at the fit's scale 1: their em boxes' bound and least row type. */
-function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false) {
+function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false, clock: (t: number) => number = (t) => t) {
   const [from, to] = layer.readable();
   const end = Number.isFinite(to) ? to : from + 1;
   const vis = layer.group.visible;
@@ -265,12 +266,7 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false) 
   const box = new THREE.Box3();
   const scale = new THREE.Vector3();
   let least = Infinity;
-  // (the whole reading, not two moments of it: a line's glyphs swell as it is read, silk チョロイン c078 rested at 83 px at its start and 87 at its end)
-  for (const k of READING_STOPS) {
-    // (`playing`: as the line moves, not as it rests: led-board's blown-up lines were set 5 to 9 % smaller early in their reading than at rest)
-    const draw = () => layer.update(from + (end - from) * k, { flash: 0, hit: 0, shake: 0 });
-    if (playing) draw();
-    else measureAtRest(draw);
+  const read = (boxes: boolean, sizes: boolean) => {
     parent.updateMatrixWorld(true);
     layer.group.traverse((o) => {
       if (!(o as THREE.Mesh).isMesh || !o.userData['size']) return;
@@ -278,12 +274,30 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false) 
       // (each glyph's em box, not its picture: a glyph's picture carries a wide transparent pad, and the pad alone pushed
       // a line flush on the safe edge under the fit)
       o.getWorldScale(scale);
-      const half = new THREE.Vector3((o.userData['size'] * Math.abs(scale.x)) / 2, (o.userData['size'] * Math.abs(scale.y)) / 2, 0);
-      const at = o.getWorldPosition(new THREE.Vector3());
-      box.expandByPoint(at.clone().sub(half)).expandByPoint(at.add(half));
-      // (a glyph as drawn: a particle the typesetter set smaller is lyric too, and held at the floor with the rest; its type size is its em height)
-      least = Math.min(least, o.userData['size'] * Math.abs(scale.y));
+      if (boxes) {
+        const half = new THREE.Vector3((o.userData['size'] * Math.abs(scale.x)) / 2, (o.userData['size'] * Math.abs(scale.y)) / 2, 0);
+        const at = o.getWorldPosition(new THREE.Vector3());
+        box.expandByPoint(at.clone().sub(half)).expandByPoint(at.add(half));
+      }
+      // (a glyph as drawn: a particle the typesetter set smaller is lyric too, and held at the floor with the rest; its type size is its em)
+      if (sizes) least = Math.min(least, o.userData['size'] * Math.max(Math.abs(scale.x), Math.abs(scale.y)));
     });
+  };
+  // (the whole reading, not two moments of it: a line's glyphs swell as it is read, silk チョロイン c078 rested at 83 px at its
+  // start and 87 at its end. Where the words stand is read at rest at a few stops: a line still sliding in a few hundredths
+  // into its reading would put the box off the frame)
+  for (const k of READING_STOPS) {
+    measureAtRest(() => layer.update(clock(from + (end - from) * k), { flash: 0, hit: 0, shake: 0 }));
+    read(true, !playing);
+  }
+  // (how big they are, as played, every thirtieth of a second: a glyph that hops or breathes dips under the floor between
+  // two coarse stops, gothic-lolita c048 at 79 px between stops that read 84)
+  if (playing) {
+    const n = Math.min(240, Math.max(13, Math.ceil((end - from) * 30)));
+    for (let i = 0; i <= n; i++) {
+      layer.update(clock(from + ((end - from) * i) / n), { flash: 0, hit: 0, shake: 0 });
+      read(false, true);
+    }
   }
   layer.group.visible = vis;
   return { box, least };
@@ -296,12 +310,21 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false) 
  * (as drawn, particles too) stand at `floor` px, no further than the frame's edge (CAM_EDGE) allows; undefined for a
  * line with no words to read. Measured with the fit already set.
  */
-function holdScale(layer: CueLayer, fit: THREE.Group, floor: number): number | undefined {
-  const words = restingWords(layer, fit, true);
+function holdScale(layer: CueLayer, fit: THREE.Group, floor: number, clock?: (t: number) => number): number | undefined {
+  const words = restingWords(layer, fit, true, clock);
   if (!Number.isFinite(words.least) || words.least <= 0) return undefined;
   const wx = Math.max(Math.abs(words.box.min.x), Math.abs(words.box.max.x));
   const wy = Math.max(Math.abs(words.box.min.y), Math.abs(words.box.max.y));
   return fit.scale.x * holdMultiple(words.least, floor, wx, wy, CAM_EDGE);
+}
+
+/** Whether the hold (holdScale) cannot bring a line's words to the type floor inside the frame. */
+function holdShort(layer: CueLayer, fit: THREE.Group, clock: (t: number) => number): boolean {
+  const words = restingWords(layer, fit, true, clock);
+  if (!Number.isFinite(words.least)) return false;
+  const wx = Math.max(Math.abs(words.box.min.x), Math.abs(words.box.max.x));
+  const wy = Math.max(Math.abs(words.box.min.y), Math.abs(words.box.max.y));
+  return holdFalls(words.least, TYPE_FLOOR.lo, wx, wy, CAM_EDGE);
 }
 
 /** Where a laid-out line's phrases stand and the whole line's box, frame px from the centre: what a tracking camera calls at. */
@@ -1213,7 +1236,27 @@ export class LyricVjEngine {
       // the kick (kickAt) moves the line only where the section is loud enough: its fit and its room count it there
       const span = rt.exitAt + rt.exitDur - rt.showFrom;
       const kick = Array.from({ length: Math.ceil(span / 0.25) + 1 }, (_, k) => rt.showFrom + k * 0.25).some((x) => fxAt(x, treatment.moments ?? [], treatment.arc ?? []).level >= KICK_LEVEL);
-      const fit = fitToFrame(layer, kick);
+      let fit = fitToFrame(layer, kick);
+      // (a blown-up key the frame cannot hold with the words round it at the floor gives way: the line stands as its set lays
+      // it, as when blowPose finds no room; led-board and silk-cold lines rested at 80 px under a key that took the fit to 0.93)
+      if (inWorld && !layer.framed && rt.style.world?.blow && holdShort(layer, fit, (t) => this.koma(t))) {
+        rt.style = { ...rt.style, world: { ...rt.style.world, blow: undefined } };
+        // (both builds of a line in two inks, the twin too, laid again without the blow)
+        if (inks) {
+          const inked = (text: string, ground: string) => {
+            backdrop = ground;
+            rt.palette = { ...this.cuePalette(cue.start + 0.3, ground), text };
+            colour(false);
+            return build();
+          };
+          layer = inked(inks.ink, inks.paper);
+          twin = inked(inks.paper, inks.ink);
+          twin.group.visible = false;
+          setInkGhost(null);
+          layer.group.visible = false;
+        } else layer = build();
+        fit = fitToFrame(layer, kick);
+      }
       if (style.budget) this.rests.set(cue.id, restSize(layer, undefined, fit));
       this.textRoot.add(fit);
       const rig = rt.style.textCam?.rig;
@@ -1225,7 +1268,7 @@ export class LyricVjEngine {
       }
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
-      const hold = inWorld && !layer.framed ? (holdScale(layer, fit, TYPE_FLOOR.lo) ?? 0) : undefined;
+      const hold = inWorld && !layer.framed ? (holdScale(layer, fit, TYPE_FLOOR.lo, (t) => this.koma(t)) ?? 0) : undefined;
       const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, hold, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
       if (twin) {
         const f = fitToFrame(twin, kick);
@@ -1245,7 +1288,7 @@ export class LyricVjEngine {
         entry.fit!.removeFromParent();
         this.textRoot.add(f);
         kids.splice(k, 0, kids.pop()!); // drawn in the same order as before
-        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: inWorld && !l.framed ? (holdScale(l, f, TYPE_FLOOR.lo) ?? 0) : undefined, mixed: true });
+        Object.assign(entry, { layer: l, fit: f, fitScale: f.scale.x, hold: inWorld && !l.framed ? (holdScale(l, f, TYPE_FLOOR.lo, (t) => this.koma(t)) ?? 0) : undefined, mixed: true });
       };
       if (live) this.cueLayers.splice(this.cueLayers.findIndex((c) => c.index! > i) >>> 0, 0, entry);
       else this.cueLayers.push(entry);

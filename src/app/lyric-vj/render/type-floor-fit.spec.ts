@@ -4,7 +4,7 @@ import type { Glyph } from './glyphs';
 import { frameFit } from './runtime';
 import { GROW } from './world-beats';
 import { stairRows, STAIR_LEAST } from './stair';
-import { holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
+import { holdFalls, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
 import { blowPose, holdParticles, type Pose } from './world-layout';
 import { SET_SPECS, shearedSize } from './world-sets';
 
@@ -102,5 +102,14 @@ describe('a line is never resized while it is sung (playScale)', () => {
     let flips = 0;
     for (let i = 2; i < noisy.length; i++) if ((noisy[i] - noisy[i - 1]) * (noisy[i - 1] - noisy[i - 2]) < -1e-12) flips++;
     expect(flips).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('a blown-up key the frame cannot hold gives way (holdFalls)', () => {
+  it('is false where the hold reaches the floor inside the frame, and true where the frame\'s edge stops it short', () => {
+    expect(holdFalls(90, 84, 600, 300)).toBe(false);
+    expect(holdFalls(78, 84, 600, 300)).toBe(false);
+    expect(holdFalls(78, 84, 930, 300)).toBe(true);
+    expect(holdFalls(66, 84, 700, 520)).toBe(true);
   });
 });

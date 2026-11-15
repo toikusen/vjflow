@@ -122,9 +122,9 @@ export const carrierSlots = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  * Every ground under a set's words: its carrier, else the background, what the picture puts there, and the plate and
  * ground colours the page may lay under the words where nothing measured it (terminal's windows, silk's bands).
  */
-export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] {
+export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'groundHex'>, slots: Slots, seen: Seen = {}): string[] {
   const on = carrierSlots(spec);
-  return (on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? []), slots.plate, slots.ground]).filter(hex);
+  return [...(on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? []), slots.plate, slots.ground]), ...(spec.groundHex ?? [])].filter(hex);
 }
 /**
  * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red
@@ -133,7 +133,7 @@ export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  * every one. (A split line's small part is not taken to stand on the ground: popart's tail part sits in a white burst of
  * its own, frame-checked 2026-11-12; a split part on a carrier of another colour would need its own `rowOn`-like slot.)
  */
-export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn'>, slots: Slots, seen: Seen = {}): string[] {
+export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn' | 'groundHex'>, slots: Slots, seen: Seen = {}): string[] {
   const own = groundsUnder(spec, slots, seen);
   const rows = (spec.rowOn ?? []).map((k) => slots[k]);
   return [...new Set([...own, ...rows].filter(hex))];
@@ -148,7 +148,7 @@ export function keyFor(spec: SetSpec, slots: Slots, body: string, seen: Seen = {
   const accent = seen.accent ?? slots.accent;
   // (off a carrier, the key reads on the background and on what the picture really puts under the line; it stays apart
   // from the body ink: a key pushed to read until it was the body's black marked nothing, brutalist's red on 世界のつづき)
-  const grounds = on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? [])];
+  const grounds = [...(on ? on.map((k) => slots[k]) : [seen.background ?? slots.ground, ...(seen.under ?? [])]), ...(spec.groundHex ?? [])];
   return keyInk(spec.key ? slots[spec.key] : accent, [slots.accent, slots.ink2, accent], body, grounds, on && (spec.object || spec.on) ? READ_ON_CARRIER : READ_MIN);
 }
 /**

@@ -60,3 +60,14 @@ export const holdMultiple = (least: number, floor: number, wx: number, wy: numbe
  * and never moves a line itself: a constant while it stops it, the natural scale otherwise.
  */
 export const playScale = (natural: number, hold = 0) => Math.max(natural, hold);
+
+/**
+ * The most a set's face may be condensed by its shear (the horizontal axis of the map): art-deco's scaleX .75 is the
+ * narrowest approved ("so no two strokes close up", world-b5-sets DECO_NARROW). Size is the em height; a face drawn narrower
+ * than this would be a size the stroke checks never saw, so a set may condense only down to it.
+ */
+export const MIN_CONDENSE = 0.75;
+
+/** Whether the hold cannot bring a line's words (`least` px as drawn at the fit) to the floor within the frame (holdMultiple): the line is laid again without what makes it wide. */
+export const holdFalls = (least: number, floor: number, wx: number, wy: number, edge = 24) =>
+  underFloor(least * Math.max(1, holdMultiple(least, floor, wx, wy, edge)), floor);

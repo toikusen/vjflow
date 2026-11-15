@@ -154,7 +154,8 @@ export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots
 // is the scheme's ground (free-plan composerTreatment); the renderer's palette background differed from it on 2672 of 3419
 // lines of choroin's 45 worlds and is not what is drawn there)
 // (and what the page really draws there, where the tone table read it: a tape's darkened margin, a halftone; M4)
-export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] => { const on = carrierSlots(spec); return [...(on ? on.map((k) => slots[k]) : [slots.ground]), ...drawnTones(spec, slots, seen)]; };
+// (and the colours the set's page lays under its words that no slot names, groundHex: isometric's corner walls; type floor)
+export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'groundHex'>, slots: Slots, seen: Seen = {}): string[] => { const on = carrierSlots(spec); return [...(on ? on.map((k) => slots[k]) : [slots.ground]), ...(spec.groundHex ?? []), ...drawnTones(spec, slots, seen)]; };
 // (a carried set's words stand on their carrier: its tone is its slot's, proven analytically; the page round it is not
 // under them. The sampled box ran past a moving tape onto the black page, and every dark ink then had to read on both:
 // 31 915 fails, 2026-11-15)
@@ -184,11 +185,12 @@ export const carrierSlots = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  * Every ground under a set's words: its carrier, else the background, what the picture puts there, and the plate and
  * ground colours the page may lay under the words where nothing measured it (terminal's windows, silk's bands).
  */
-export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] {
+export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'groundHex'>, slots: Slots, seen: Seen = {}): string[] {
   const on = carrierSlots(spec);
   // (and what the renderer sees the picture put there, `seen.under`: a hold's new ink is checked on it too, so the
-  // renderer can only be stricter than the plan and drop a hold, never draw one that does not read)
-  return [...(on ? on.map((k) => slots[k]) : [slots.ground, ...(seen.under ?? []), slots.plate]), ...drawnTones(spec, slots, seen)].filter(hex);
+  // renderer can only be stricter than the plan and drop a hold, never draw one that does not read; and the colours a
+  // set's page lays under its words that no slot names, groundHex: isometric's corner walls, type floor)
+  return [...(on ? on.map((k) => slots[k]) : [slots.ground, ...(seen.under ?? []), slots.plate]), ...(spec.groundHex ?? []), ...drawnTones(spec, slots, seen)].filter(hex);
 }
 /**
  * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red
@@ -197,7 +199,7 @@ export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  * every one, and on each colour the page lays there that no slot names (`tones`). (A split line's small part is not taken to stand on the ground: popart's tail part sits in a white burst of
  * its own, frame-checked 2026-11-12; a split part on a carrier of another colour would need its own `rowOn`-like slot.)
  */
-export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn' | 'tones'>, slots: Slots, seen: Seen = {}): string[] {
+export function partGrounds(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under' | 'rowOn' | 'tones' | 'groundHex'>, slots: Slots, seen: Seen = {}): string[] {
   const own = groundsUnder(spec, slots, seen);
   const rows = (spec.rowOn ?? []).map((k) => slots[k]);
   // (and every colour the set's page lays under the words that no slot names: SetSpec tones, 2026-11-12)

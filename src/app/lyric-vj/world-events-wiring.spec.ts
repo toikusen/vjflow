@@ -144,8 +144,9 @@ describe('the wiring', () => {
     // (phase 3b: the receipt's own tear and feed, never a camera, never a seat change of the scheduler's own)
     expect(WORLD_COMPOSITIONS['document'].kinds).toEqual(['page-handoff']);
     expect(Object.values(WORLD_COMPOSITIONS['document'].materials!).every((m) => m.family === 'page-handoff' && m.seat === 'same')).toBe(true);
-    // nothing is taken over by default (2026-11-09 review): only an explicit opt-in schedules them
-    for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.enabled).toBeFalsy();
+    // nothing is taken over by default (2026-11-09 review) but the worlds the owner accepted: popart and midcentury
+    // (2026-11-12, Codex pairs D.3); every other world only on an explicit opt-in
+    for (const [id, c] of Object.entries(WORLD_COMPOSITIONS)) expect(!!c.enabled, id).toBe(id === 'popart' || id === 'midcentury');
     // (no move is left pending: each bounded move now has a renderer and is laid only as an approved event)
     for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.pending ?? {}).toEqual({});
     for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.allowedAt['camera-reframe'] ?? ['section']).toEqual(['section']);
@@ -527,13 +528,18 @@ describe.skipIf(!existsSync('out/db/yt_5i50aTB7JFo/song.json'))('phase 3a round 
     const style = FREE_STYLES.find((s) => s.id === 'art-deco')!;
     const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
     const table = f.treatment.worldEvents!;
-    expect(table.holdMoves?.some((m) => m.lineId === 'c014' && m.to !== null)).toBe(true);
     expect(table.warnings.filter((w) => /partly overlaps|final check/.test(w.reason))).toEqual([]);
     const cue = (f.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!;
-    expect(cue.world!.beat!.at).toBe(table.holdMoves!.find((m) => m.lineId === 'c014')!.to);
+    // (since the type floor, 2026-11-12, c015 takes the pillars and no relay runs into the marquee: c014 grows at the
+    // beat that overlapped before, with nothing to overlap; a hold still moved is drawn at its new beat)
+    const moved = table.holdMoves?.find((m) => m.lineId === 'c014');
+    if (moved) expect(cue.world!.beat!.at).toBe(moved.to);
+    else expect(verifyWorldEvents(f.job, style.world, table).some((w) => /partly overlaps/.test(w.reason))).toBe(false);
     // tampered back: the overlap is a final-check failure the gate and the measurement exit on
-    const job = structuredClone(f.job);
-    (job.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!.world!.beat!.at = 68.081;
-    expect(verifyWorldEvents(job, style.world, table).some((w) => /partly overlaps/.test(w.reason))).toBe(true);
+    if (moved) {
+      const job = structuredClone(f.job);
+      (job.treatment.cues as { cueId: string; world?: { beat?: { at: number } } }[]).find((c) => c.cueId === 'c014')!.world!.beat!.at = 68.081;
+      expect(verifyWorldEvents(job, style.world, table).some((w) => /partly overlaps/.test(w.reason))).toBe(true);
+    }
   });
 });

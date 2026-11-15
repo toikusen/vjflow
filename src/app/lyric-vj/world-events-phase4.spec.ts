@@ -24,7 +24,8 @@ describe('phase 4: the first five worlds declared from the ruling', () => {
   it('riso, silk, file, card and spy are declared in the ruling\'s families, all off by default, with the old five', () => {
     // (popart and midcentury follow them, phase 4d: world-events-phase4d.spec.ts)
     expect(Object.keys(WORLD_COMPOSITIONS).slice(0, 10)).toEqual(['blueprint', 'chalkboard', 'document', 'notebook', 'art-deco', ...NEW]);
-    for (const c of Object.values(WORLD_COMPOSITIONS)) expect(c.enabled).toBeFalsy();
+    // (popart and midcentury are the only enabled ones, 2026-11-12: world-events-phase4d.spec.ts)
+    for (const [id, c] of Object.entries(WORLD_COMPOSITIONS)) expect(!!c.enabled, id).toBe(id === 'popart' || id === 'midcentury');
     for (const id of NEW) expect(compositionsOf(id)!.enabled, id).toBe(false);
     expect(compositionsOf('riso')!.moves).toEqual({ 'layout-seat': 'paper-seat', 'page-handoff': 'sheet-handoff' });
     expect(compositionsOf('silk')!.moves).toEqual({ 'layout-seat': 'poster-seat', 'page-handoff': 'sheet-handoff' });

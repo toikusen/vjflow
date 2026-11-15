@@ -5,6 +5,7 @@
 import { balancedRows } from '../phrases';
 import type { Slots } from './world-objects';
 import type { Block, Measure, SetSpec } from './world-sets';
+import { underFloor } from './type-floor';
 
 export interface SplitSpec {
   /** Which part is set small: the line's first phrase (over the hero) or its last (under it, or away from it). */
@@ -111,23 +112,30 @@ export function splitBlock(text: string, spec: SetSpec, measure: Measure, floor:
     ss = Math.min(ss, Math.floor(room / sEm));
     // (a part its container can hold only under the product's floor is not set small: the line is laid out whole,
     // TYPE_FLOOR.lo, 9120f50 never set small; choroin c074's small part came out at 72 px, phase 4d round 6)
-    if (ss < floor) return undefined;
+    if (underFloor(ss, floor)) return undefined;
   }
   // two sizes that are not clearly two (a long hero already at the floor) read as a mistake: the line is laid out whole
   if (ss > size * 0.85 && k < 0.9) return undefined;
   const hEm = em(pick.rows, spec.track);
   // the frame wins over the floor: a split line too big for the frame is set smaller, both parts together
-  const fit = (f: number) => {
-    const [hs, s2] = [Math.floor(size * f), Math.floor(ss * f)];
+  // (the small part goes no smaller than the floor, type-floor.ts: the hero gives up what the frame takes past that.
+  // xerox's blown-r set all four rows at 76 px, brutalist's headline its small part at 83, phase 4d round 6)
+  const fit = (fh: number, fs = fh) => {
+    const [hs, s2] = [Math.floor(size * fh), Math.max(Math.min(ss, floor), Math.floor(ss * fs))];
     const [hw, hh, sw, sh] = [hEm * hs, pick.rows.length * hs * spec.lead, sEm * s2, smallRows.length * s2 * spec.lead];
     return { hs, s2, hw, hh, sw, sh };
   };
-  let g = fit(1);
-  const over = sp.at
+  const overOf = (g: ReturnType<typeof fit>) => sp.at
     ? Math.max(g.hw / ((sp.wide ?? spec.share) * W), g.sw / (W - 2 * SAFE_X), 1)
     : Math.max(Math.max(g.hw, g.sw) / (W - 2 * SAFE_X), (g.hh + g.sh) / (H - 2 * SAFE_Y), 1);
+  let g = fit(1);
+  const over = overOf(g);
   if (over > 1) g = fit(1 / over);
+  // (a small part held at the floor leaves the hero to give the rest: set smaller again until both are in the frame)
+  for (let f = 1 / over; overOf(g) > 1 + 1e-9 && f > 0.2; f *= 0.98) g = fit(f * 0.98, 1 / over);
   [size, ss] = [g.hs, g.s2];
+  // (where even that leaves a part under the floor, or out of the frame, the line is laid out whole)
+  if (underFloor(Math.min(size, ss), floor) || overOf(g) > 1 + 1e-9) return undefined;
   const rowsOrdered = smallFirst ? [...smallRows, ...pick.rows] : [...pick.rows, ...smallRows];
   const smallIdx = smallRows.map((_, i) => (smallFirst ? i : pick.rows.length + i));
   const flush = (spec.flush ?? 0) as -1 | 0 | 1;
@@ -178,8 +186,9 @@ function columnsApart(hero: string, small: string, smallFirst: boolean, spec: Se
   const top = clampTo(H / 2 - spec.at[1] * H, H / 2 - SAFE_Y);
   const over = Math.max(1, (Math.max(len(hero) * size, len(small) * ss) * step) / (top + H / 2 - SAFE_Y));
   [size, ss] = [Math.floor(size / over), Math.floor(ss / over)];
-  // a column that would go under the floor is not split: the line is laid out whole
-  if (ss < floor) return undefined;
+  // a column that would go under the floor is not split, the hero's no more than the small part's (screentone's shout
+  // set its hero column at 64 px under a small part at 94): the line is laid out whole
+  if (underFloor(Math.min(size, ss), floor)) return undefined;
   const [hh, sh] = [len(hero) * size * step, len(small) * ss * step];
   // (a column runs down from the set's top; one too long for that is raised until its foot is in the frame)
   const hTop = Math.min(H / 2 - SAFE_Y, Math.max(top, -H / 2 + SAFE_Y + hh));

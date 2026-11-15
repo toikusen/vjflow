@@ -86,6 +86,10 @@ export interface CueLayer {
   readable(): [number, number];
   /** Laid out in frame px from edge to edge (lyric lanes): neither fitted into the safe area nor drifted. */
   framed?: boolean;
+  /** The least type its words may rest at, px (render/type-floor.ts floorOf of a world line's set): the frame fit keeps it. */
+  floor?: number;
+  /** A world line's blown-up key: drawn, or refused because the frame has no pose for it (the line stands as its set lays it). */
+  blow?: 'drawn' | 'refused';
   /** Where the line stands and for how long, when it knows better than a measure of its meshes (a world line that changes set). */
   poses?(): { from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }[];
   /** Where the words are inked now, frame px y down, when it differs from a measure of their meshes (a scale composition: glyph em boxes, not the pictures' transparent pad). */
@@ -602,18 +606,7 @@ export function fitReading(rt: CueRuntime, measure: (r: CueRuntime) => [number, 
   return to - from >= need - 0.05 ? kept : fix;
 }
 
-/**
- * A line's measured (rest) rectangle grown by how far the type layer's own motion can carry it while it plays, so the
- * objects that make room for it clear it in every frame: the kick's 5 % scale (loud sections only) and the drift's
- * 1.2 % growth, both about the frame centre, the sway (13 / 6 px), the drift (14 / 8 px), the kick's 10 px jump and
- * the 2.5 px wave. Worst case and fixed, so it never moves with when the box was measured. Frame px, y down.
- */
-export function motionPad(r: { x0: number; y0: number; x1: number; y1: number }, kick: boolean, w = 1920, h = 1080) {
-  const grow = (kick ? 1.05 : 1) * 1.012 - 1;
-  const dx = (x: number) => Math.abs(x - w / 2) * grow + 13 + 14 + 2.5;
-  const dy = (y: number) => Math.abs(y - h / 2) * grow + 6 + 8 + 2.5 + (kick ? 10 : 0);
-  return { x0: r.x0 - dx(r.x0), y0: r.y0 - dy(r.y0), x1: r.x1 + dx(r.x1), y1: r.y1 + dy(r.y1) };
-}
+export { frameFit, motionPad, motionRoom } from './motion-pad';
 
 /** A planned entrance that never plays: the line was meant to enter with motion and lands on a cut instead. */
 export const entranceLost = (planned: Pick<CueStyle, 'enter'>, final: Pick<CueStyle, 'enter'>) => planned.enter !== 'cut' && final.enter === 'cut';

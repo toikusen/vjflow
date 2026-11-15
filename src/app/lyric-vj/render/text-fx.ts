@@ -1101,6 +1101,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   return {
     group: layer.group,
     framed: layer.framed,
+    floor: layer.floor,
     // a drawn entrance is readable once the last character to start it has finished it (same timing as drawn)
     readable: () => {
       const [a, b] = layer.readable();

@@ -8,7 +8,7 @@ import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
 import { clearOf } from './world-sets';
-import { fitAtFloor, holdFalls, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
+import { type CamPose, fitAtFloor, holdFalls, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
@@ -337,16 +337,16 @@ function playedWords(layer: CueLayer, fitScale: number, clock: (t: number) => nu
  * (holdMultiple, `kick`: the line's loud section); undefined for a line with no words to read. A function of the line
  * alone (its glyphs over its reading and its fit scale), so every segment of a render, a seek and a live build read the same.
  */
-export function holdScale(layer: CueLayer, fitScale: number, floor: number, clock: (t: number) => number, kick: boolean): number | undefined {
+export function holdScale(layer: CueLayer, fitScale: number, floor: number, clock: (t: number) => number, kick: boolean, poses?: readonly CamPose[]): number | undefined {
   const w = playedWords(layer, fitScale, clock);
   if (!Number.isFinite(w.least) || w.least <= 0) return undefined;
-  return fitScale * holdMultiple(w.least, floor, w.wx, w.wy, kick);
+  return fitScale * holdMultiple(w.least, floor, w.wx, w.wy, kick, poses);
 }
 
 /** Whether the hold (holdScale) cannot bring a line's words to its floor inside the frame. */
-function holdShort(layer: CueLayer, fitScale: number, clock: (t: number) => number, kick: boolean): boolean {
+function holdShort(layer: CueLayer, fitScale: number, clock: (t: number) => number, kick: boolean, floor: number, poses?: readonly CamPose[]): boolean {
   const w = playedWords(layer, fitScale, clock);
-  return Number.isFinite(w.least) && holdFalls(w.least, Math.max(layer.floor ?? 0, TYPE_FLOOR.lo), w.wx, w.wy, kick);
+  return Number.isFinite(w.least) && holdFalls(w.least, floor, w.wx, w.wy, kick, poses);
 }
 
 /** Where a laid-out line's phrases stand and the whole line's box, frame px from the centre: what a tracking camera calls at. */
@@ -785,7 +785,7 @@ export class LyricVjEngine {
   private shotLayers = new Map<string, ShotLayer>();
   /** After each frame's lines are updated: the signature moments (render/signature.ts) take their lines off the frame; set only when a treatment has moments. */
   onCues?: (cues: unknown[], calls: unknown[], t: number) => void;
-  private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; hold?: number; holds?: boolean; kick?: boolean; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
+  private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; hold?: number; holds?: boolean; kick?: boolean; need?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
   private relays: { h: Handoff; path: RelayPath; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; width: number }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
   private callLayers: CallLayer[] = [];
@@ -1277,24 +1277,39 @@ export class LyricVjEngine {
         } else layer = build();
         fit = fitToFrame(layer, kick);
       };
-      const cannotHold = () => holdShort(layer, fit.scale.x, (t) => this.koma(t), kick);
+      // (the floor this line must rest at, from the set it was planned in: kept when it falls back to plain rows, which carry no set)
+      const floorNeed = Math.max(layer.floor ?? 0, TYPE_FLOOR.lo);
+      // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
+      const ang = hash(i, 41) * Math.PI * 2;
+      const driftOf = (l: CueLayer): [number, number] | undefined => (l.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8]);
+      // (the line's own camera and drift over its whole play span, the poses the hold keeps the words in the frame through)
+      const cannotHold = () => holdShort(layer, fit.scale.x, (t) => this.koma(t), kick, floorNeed, this.camPoses({ rt, drift: driftOf(layer) }));
+      const planned = !!rt.style.world?.blow;
+      let blowReason: string | undefined;
       if (inWorld && !layer.framed) {
         // (a blown-up key the frame cannot hold with the words round it at the floor gives way: the line stands as its set lays
         // it, as when blowPose finds no room; led-board and silk-cold lines rested at 80 px under a key that took the fit to 0.93)
         if (rt.style.world?.blow && cannotHold()) {
           rt.style = { ...rt.style, world: { ...rt.style.world, blow: undefined } };
-          this.blowDropped.add(cue.id);
+          blowReason = 'frame';
           rebuild();
         }
         // (a line the frame cannot hold at the floor through all its motion, whatever its set: plain stepped rows take it, as a
-        // shared template's line is; gothic-lolita c048 rested at 81 px, too wide at 84 for the kick, 2026-11-14)
+        // shared template's line is, set no smaller than the set it came from asked; gothic-lolita c048 rested at 81 px, too wide
+        // at 84 for the kick, 2026-11-14)
         if (alone && cannotHold()) {
           drawn = 'stair';
           rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };
+          rt.params = { ...rt.params, floor: floorNeed };
           this.floored.add(cue.id);
+          if (planned && !blowReason) blowReason = 'stair';
           rebuild();
+          // (the last resort is checked too: six rows at the least size may still not stand in the frame)
+          if (cannotHold()) this.floorMissed.add(cue.id);
         }
       }
+      if (planned && !blowReason && layer.blow === 'refused') blowReason = 'pose';
+      if (blowReason) this.blowDropped.set(cue.id, blowReason);
       if (style.budget) this.rests.set(cue.id, restSize(layer, undefined, fit));
       this.textRoot.add(fit);
       const rig = rt.style.textCam?.rig;
@@ -1304,11 +1319,8 @@ export class LyricVjEngine {
         Object.assign(rig, stops);
         for (const l of (treatment.graphics?.sections.flatMap((x) => x.layers) ?? []) as { rig?: CameraRig }[]) if (l.rig?.from === rig.from) Object.assign(l.rig, stops);
       }
-      // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
-      const ang = hash(i, 41) * Math.PI * 2;
-      // (the hold is read when the line first plays, not here: its camera room, hand-offs and timing are settled by then)
       const holds = inWorld && !layer.framed;
-      const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, holds, kick, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
+      const entry: (typeof this.cueLayers)[number] = { index: i, rt, layer, fit, fitScale: fit.scale.x, holds, kick, need: floorNeed, drift: layer.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8], mixed };
       if (twin) {
         const f = fitToFrame(twin, kick);
         this.textRoot.add(f);
@@ -1566,7 +1578,7 @@ export class LyricVjEngine {
         const requiredSec = Math.min(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), 0.95 * (rt.exitAt + rt.exitDur - rt.showFrom));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };
@@ -1793,14 +1805,44 @@ export class LyricVjEngine {
   private rests = new Map<string, number>();
   private floored = new Set<string>();
   /** Lines whose blown-up key was dropped because the frame cannot hold the words round it at the floor (metrics, the scan and the gate count them). */
-  private blowDropped = new Set<string>();
+  private blowDropped = new Map<string, string>();
+  /** Lines the last resort could not hold at the floor in the frame either (metrics, the scan and the gate count them). */
+  private floorMissed = new Set<string>();
   private signals: { h: Handoff; mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; steps: THREE.Texture[] }[] = [];
   private irises: { h: Handoff; mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; from: [number, number]; to: [number, number] }[] = [];
   private fines: { id: string; layer: FineLayer; from: number; to: number; rt: CueRuntime }[] = [];
+  /**
+   * Where a line's fit group stands at t apart from its fit: the line's own camera (a text camera, or the camera it shares with the
+   * backdrop), a hand-off's push or exit, and the drift, as the frame draws them (updateCues) and as the hold reads them
+   * (settleHold): one place, so the two never differ.
+   */
+  private frameAt(entry: Pick<(typeof this.cueLayers)[number], 'rt' | 'drift' | 'hand' | 'handOut'>, t: number) {
+    const { rt, drift, hand, handOut } = entry;
+    const k = clamp01((t - rt.showFrom) / Math.max(0.5, rt.exitAt + rt.exitDur - rt.showFrom));
+    const e = 0.5 - 0.5 * Math.cos(Math.PI * k);
+    // a line given its own camera takes it on top of the drift
+    const cam = rt.style.textCam;
+    const c = cam?.rig ? rigAt(cam.rig, t) : cam ? { ...textCamAt(cam, e), lay: 0 } : { x: 0, y: 0, scale: 1, rot: 0, lay: 0 };
+    const moved = hand && hand.h.kind === 'push' ? inPose(hand.h, t) : { x: 0, y: 0 };
+    const left = handOut && t > handOut.h.from ? outPose(handOut.h, t, handOut.seam, handOut.side) : { x: 0, y: 0 };
+    return { e, c, x: (drift?.[0] ?? 0) * e + c.x + moved.x + left.x, y: (drift?.[1] ?? 0) * e + c.y + moved.y + left.y };
+  }
+
+  /** The line's camera and drift at every frame of its play span (frameAt), as poses for the hold. */
+  private camPoses(entry: Pick<(typeof this.cueLayers)[number], 'rt' | 'drift' | 'hand' | 'handOut'>): CamPose[] {
+    const { rt } = entry;
+    const span = rt.exitAt + rt.exitDur - rt.showFrom;
+    const n = Math.max(2, Math.ceil(span * 30));
+    return Array.from({ length: n + 1 }, (_, i) => {
+      const f = this.frameAt(entry, rt.showFrom + (span * i) / n);
+      return { x: f.x, y: f.y, rot: f.c.rot };
+    });
+  }
+
   /** The line's hold (holdScale), once its layout is final: from the line alone, never from the frame it happens to be read in. */
   private settleHold(entry: (typeof this.cueLayers)[number]) {
     if (!entry.holds || !entry.fit || entry.fitScale === undefined) return;
-    entry.hold = holdScale(entry.layer, entry.fitScale, Math.max(entry.layer.floor ?? 0, TYPE_FLOOR.lo) + 0.6, (t) => this.koma(t), !!entry.kick) ?? 0;
+    entry.hold = holdScale(entry.layer, entry.fitScale, (entry.need ?? Math.max(entry.layer.floor ?? 0, TYPE_FLOOR.lo)) + 0.6, (t) => this.koma(t), !!entry.kick, this.camPoses(entry)) ?? 0;
   }
 
   private layFine({ rt, layer }: (typeof this.cueLayers)[number]) {
@@ -2147,15 +2189,9 @@ export class LyricVjEngine {
       const { rt, layer: main, fit, fitScale, drift, twin, hand, handOut } = entry;
       this.openLine(entry, t);
       if (fit && drift && fitScale !== undefined) {
-        const k = clamp01((t - rt.showFrom) / Math.max(0.5, rt.exitAt + rt.exitDur - rt.showFrom));
-        const e = 0.5 - 0.5 * Math.cos(Math.PI * k);
+        const { e, c, x, y } = this.frameAt(entry, t);
         for (const f of twin ? [fit, twin.fit] : [fit]) {
-          // a line given its own camera takes it on top of the drift
-          const cam = rt.style.textCam;
-          const c = cam?.rig ? rigAt(cam.rig, t) : cam ? { ...textCamAt(cam, e), lay: 0 } : { x: 0, y: 0, scale: 1, rot: 0, lay: 0 };
-          const moved = hand && hand.h.kind === 'push' ? inPose(hand.h, t) : { x: 0, y: 0 };
-          const left = handOut && t > handOut.h.from ? outPose(handOut.h, t, handOut.seam, handOut.side) : { x: 0, y: 0 };
-          f.position.set(drift[0] * e + c.x + moved.x + left.x, drift[1] * e + c.y + moved.y + left.y, 0);
+          f.position.set(x, y, 0);
           // (never under the type floor as drawn: the camera's zoom-out and the drift's growth stop where the words rest at it)
           f.scale.setScalar(playScale(fitScale * (1 + 0.012 * e) * c.scale, entry.hold));
           f.rotation.z = c.rot;

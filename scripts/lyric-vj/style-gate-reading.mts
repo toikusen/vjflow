@@ -72,7 +72,7 @@ let turnsRead = 0;
 /** Camera moves a taken-over world dropped because they collided with a switch the song keeps (resolved, for the record). */
 const camDrops: string[] = [];
 /** A page-carried composition's page as the gate's frames drew it (render/page-layout.ts): checked, re-laid, fallen back whole, turned over, carrier covered, glyphs checked. */
-let blowDropped = 0;
+const blowDropped: Record<string, number> = {};
 const pageCounts = { frames: 0, relaid: 0, pageFallbackFrames: 0, pageTurnFrames: 0, carrierCoveredFrames: 0, glyphFrames: 0 };
 const fill: number[] = [];
 let checked = 0;
@@ -105,8 +105,8 @@ for (const id of positionals) {
     });
     await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, resolve(work))}/render.html?job=/${relative(ROOT, resolve(file))}`);
     await page.waitForSelector('body[data-ready="1"]', { timeout: 200000 });
-    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, template: (c as { template?: string }).template, blowDropped: !!(c as { blowDropped?: boolean }).blowDropped })));
-    blowDropped += cues.filter((c) => c.blowDropped).length;
+    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, template: (c as { template?: string }).template, blowDropped: (c as { blowDropped?: string }).blowDropped })));
+    for (const c of cues) if (c.blowDropped) blowDropped[c.blowDropped] = (blowDropped[c.blowDropped] ?? 0) + 1;
     for (const c of cues) {
       // the video's own ending fade takes the last line with it, in every style
       const ending = c === cues.at(-1);

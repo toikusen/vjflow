@@ -177,3 +177,38 @@ describe('the hold is a function of the line alone (holdScale, in its own space)
     expect((layer as unknown as { group: THREE.Group }).group.parent).toBe(parent);
   });
 });
+
+describe('the hold keeps the words in the frame through the line\'s own camera (holdRoom with poses)', () => {
+  it('leaves less room when the camera slides or leans the line, and none is gained from poses at rest', () => {
+    const rest = [{ x: 0, y: 0, rot: 0 }];
+    const slide = [{ x: -36, y: 0, rot: 0 }, { x: 36, y: 0, rot: 0 }];
+    const lean = [{ x: 0, y: 0, rot: 0.045 }];
+    expect(holdRoom(800, 300, false, slide)).toBeLessThan(holdRoom(800, 300, false, rest));
+    expect(holdRoom(800, 300, false, lean)).toBeLessThan(holdRoom(800, 300, false, rest));
+  });
+  it('a box scaled by the room stays in the frame at every pose, rotated corners included', () => {
+    const poses = [{ x: 36, y: -16, rot: 0.045 }, { x: -36, y: 16, rot: -0.03 }, { x: 0, y: 0, rot: 0.09 }];
+    for (const kick of [false, true]) {
+      const m = holdRoom(850, 280, kick, poses);
+      for (const p of poses)
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+          const [px, py] = [sx * 850 * m, sy * 280 * m];
+          const [x, y] = [px * Math.cos(p.rot) - py * Math.sin(p.rot) + p.x, px * Math.sin(p.rot) + py * Math.cos(p.rot) + p.y];
+          const grow = (kick ? 1.05 : 1) * 1.012;
+          expect(Math.abs(x) * grow + 15.5).toBeLessThanOrEqual(960 + 1e-6);
+          expect(Math.abs(y) * grow + 8.5 + (kick ? 10 : 0)).toBeLessThanOrEqual(540 + 1e-6);
+        }
+    }
+  });
+});
+
+describe('a fallback to stair keeps the floor the set asked for (stairRows)', () => {
+  const widest = (rows: string[]) => Math.max(...rows.map((r) => [...r].length * 100));
+  it('cuts one more row (to six) while the widest row would set under the set\'s floor, not only under 90', () => {
+    const text = 'あいうえおかきくけこ さしすせそたちつてと なにぬねのはひふへほ まみむめもやゆよらり';
+    const at90 = stairRows(text, [...text.replace(/ /g, '')].length, widest, 90);
+    const at110 = stairRows(text, [...text.replace(/ /g, '')].length, widest, 110);
+    expect(at110.length).toBeGreaterThanOrEqual(at90.length);
+    expect((100 * 0.55 * 1920) / widest(at110)).toBeGreaterThanOrEqual(110 - 1e-6);
+  });
+});

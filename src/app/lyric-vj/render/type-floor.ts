@@ -48,16 +48,33 @@ export const heldScale = (scale: number, size: number, floor: number = TYPE_FLOO
  */
 export const fitAtFloor = (whole: number, least: number, floor: number, words: number) => (underFloor(least * whole, floor) ? Math.min(heldScale(whole, least, floor), Math.max(whole, words)) : whole);
 
+/** Where a line's fit group stands at a moment, apart from its fit scale: its own camera and drift (px, rotation in radians). */
+export interface CamPose { x: number; y: number; rot: number }
+
 /**
  * The most a line's fit may be multiplied while it plays: its words (em boxes reaching `wx` and `wy` px from the frame's
- * centre at the current fit) stay inside the frame at the worst of the stacked motion (motionPad: drift, sway, camera, the
- * kick's 5 % from the centre), found by bisection.
+ * centre at the current fit) stay inside the frame through the stacked motion, found by bisection. With the line's own camera
+ * and drift as `poses` (the engine samples them over its play span), the box's corners are carried through every pose,
+ * rotation included, then through the type layer's kick (5 % from the centre, 10 px) and sway; without them, the generic
+ * worst case of motionPad.
  */
-export const holdRoom = (wx: number, wy: number, kick: boolean) => {
+export const holdRoom = (wx: number, wy: number, kick: boolean, poses?: readonly CamPose[]) => {
+  const fits = (m: number) =>
+    poses?.length
+      ? poses.every((p) => {
+          const [c, s] = [Math.cos(p.rot), Math.sin(p.rot)];
+          const grow = (kick ? 1.05 : 1) * 1.012;
+          return ([[-1, -1], [1, -1], [-1, 1], [1, 1]] as const).every(([sx, sy]) => {
+            const [px, py] = [sx * wx * m, sy * wy * m];
+            const [x, y] = [px * c - py * s + p.x, px * s + py * c + p.y];
+            return Math.abs(x) * grow + 13 + 2.5 <= 960 && Math.abs(y) * grow + 6 + 2.5 + (kick ? 10 : 0) <= 540;
+          });
+        })
+      : motionRoom(wx * m, wy * m, kick) >= 1;
   let [lo, hi] = [0.25, 4];
   for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
-    if (motionRoom(wx * mid, wy * mid, kick) >= 1) lo = mid;
+    if (fits(mid)) lo = mid;
     else hi = mid;
   }
   return lo;
@@ -68,11 +85,11 @@ export const holdRoom = (wx: number, wy: number, kick: boolean) => {
  * `wy` px from the frame's centre) rest at the floor, no further than the frame holds them through all their motion
  * (holdRoom): under 1 the zoom-out left to a camera, over 1 the lift a fit that left the words small needs.
  */
-export const holdMultiple = (least: number, floor: number, wx: number, wy: number, kick = true) => Math.min(floor / least, holdRoom(wx, wy, kick));
+export const holdMultiple = (least: number, floor: number, wx: number, wy: number, kick = true, poses?: readonly CamPose[]) => Math.min(floor / least, holdRoom(wx, wy, kick, poses));
 
 /** Whether the hold cannot bring a line's words (`least` px as drawn at the fit) to the floor within the frame (holdMultiple): the line is laid again without what makes it wide. */
-export const holdFalls = (least: number, floor: number, wx: number, wy: number, kick = true) =>
-  underFloor(least * Math.max(1, holdMultiple(least, floor, wx, wy, kick)), floor);
+export const holdFalls = (least: number, floor: number, wx: number, wy: number, kick = true, poses?: readonly CamPose[]) =>
+  underFloor(least * Math.max(1, holdMultiple(least, floor, wx, wy, kick, poses)), floor);
 
 /**
  * The scale a line's fit group takes in a frame: what the fit, the drift and the line's camera give (`natural`), held at

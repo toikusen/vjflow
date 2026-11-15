@@ -319,7 +319,24 @@ const driftEdge = (frame: number) => (frame > 600 ? SAFE_X : SAFE_Y);
 /** The worlds whose ground cuts a room of its own material round a line (uncut wood, a crayon bubble, undyed cloth, the lit opening). */
 const ROOM_FOLLOWS = new Set(['woodcut', 'crayon', 'aizome', 'paper-lantern']);
 /** Builds a line in a world. `slot` stacks it among the lines of a shared shot. */
+class BlowRefused extends Error {}
+
+/**
+ * Builds a line in a world. A blown-up key the frame has no pose for (blowPose finds no room for the words round it at the
+ * floor) is not half done: the line is laid again from its set as planned, with its carrier, its ink and its layout, and
+ * reports `blow: 'refused'` (the set's object, tilt, column and stair were taken off before the pose was known, and the
+ * carrier vanished while the ink chosen for it stayed, 2026-11-14 review).
+ */
 function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
+  try {
+    return buildOnce(rt, slot, true);
+  } catch (e) {
+    if (!(e instanceof BlowRefused)) throw e;
+    return { ...buildOnce(rt, slot, false), blow: 'refused' };
+  }
+}
+
+function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: boolean): CueLayer {
   const wl0 = rt.style.world!;
   const text = rt.cue.text.replace(/[\s　]+/g, ' ').trim();
   const seed = Math.abs(Math.floor(hashOf(rt.cue.start, 43) * 1000) + (rt.song ?? 0));
@@ -333,7 +350,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (a set laid into its page on an object of its own keeps it: a blown-up word would lose the balloon or card it is written on)
   // (nor a set whose rows each stand on a carrier of their own: a blown-up word would leave a card with nothing on it)
   // (nor one inked for a card its page draws round it: a blown-up word broke out of idol-live's ticket and gameshow's hint card)
-  const blowing = !wl0.scale && !!wl0.blow && slot.of === 1 && !(sets[0].fixed && (sets[0].object || sets[0].ink === 'plateInk')) && !sets[0].keepRows;
+  const blowing = blowOk && !wl0.scale && !!wl0.blow && slot.of === 1 && !(sets[0].fixed && (sets[0].object || sets[0].ink === 'plateInk')) && !sets[0].keepRows;
   if (blowing) sets[0] = { ...sets[0], object: undefined, tilt: 0, vertical: false, stair: 0 };
   // an even set gives every character (a quote, a space) a whole cell, so it is measured that way (poseOf)
   const measureOf = (s: SetSpec) => { const st: GlyphStyle = { family, weight: 700, size: 100, even: s.even }; return s.even ? (x: string) => [...x].length * 100 : (x: string) => [...x].reduce((w, c) => w + advanceOf(c, st), 0); };
@@ -403,6 +420,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   const poses: Pose[] = blocks.map((b, i) => ({ ...poseOf(gs, b, sets[i], tex), object: objectMesh(sets[i], b, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }));
   // the key word blown up: the line's first pose, on the ground (its object, if any, stays off), stressed in the world's way
   const blown = blowing ? blowPose(gs, wl.blow!.from, wl.blow!.to, blocks[0].size, tex, sets[0]) : undefined;
+  if (blowing && !blown) throw new BlowRefused();
   if (blown) poses[0] = blown;
   // (a set whose words ride an object keeps it, laid again round the composition: its carrierId stays, no card left empty)
   if (scaling) { const sp = scalePose(gs, scaled!, tex, sets[0]); poses[0] = { ...sp, object: objectMesh(sets[0], sp.block, slots, seed, Math.abs(Math.floor(rt.song ?? 0)) % 3) }; }
@@ -634,6 +652,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   };
   return {
     group,
+    ...(blown ? { blow: 'drawn' as const } : {}),
     // (a set laid into its page's composition is placed inside the safe area by its numbers: it is neither refitted nor drifted)
     framed: slot.of === 1 && sets.every((s) => s.fixed),
     // (the frame fit keeps the words at their set's floor, engine fitToFrame)

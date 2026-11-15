@@ -30,9 +30,9 @@ function evenRows(text: string, n: number): string[] {
  * row would set under STAIR_LEAST px (the frame fit took the type of a 50-character line down to 68 px, under the type
  * floor, 2026-11-12). `widestOf`: the widest row's advance at 100 px.
  */
-export function stairRows(text: string, chars: number, widestOf: (rows: string[]) => number): string[] {
+export function stairRows(text: string, chars: number, widestOf: (rows: string[]) => number, least = STAIR_LEAST): string[] {
   let rows = chars > 22 ? balancedRows(text, 3) : chars > 6 ? balancedRows(text, 2) : [text];
-  while (rows.length < 6 && (100 * 0.55 * W) / widestOf(rows) < STAIR_LEAST) {
+  while (rows.length < 6 && (100 * 0.55 * W) / widestOf(rows) < least) {
     const n = rows.length + 1;
     const more = balancedRows(text, n);
     const next = more.length >= n ? more : evenRows(text, n);
@@ -50,8 +50,10 @@ export const stair: TemplateRenderer = {
     const chars = [...text.replace(/ /g, '')].length;
     const probe: GlyphStyle = { family: rt.fonts.display, weight: 900, size: 100 };
     const widestOf = (rs: string[]) => Math.max(...rs.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
-    const rows = stairRows(text, chars, widestOf);
-    const size = Math.round(Math.max(STAIR_LEAST, Math.min(180, (100 * 0.55 * W) / widestOf(rows))));
+    // (the least type the line must rest at: the floor of the set it was taken from, when it falls back to stair from one)
+    const least = Math.max(STAIR_LEAST, Number(p['floor']) || 0);
+    const rows = stairRows(text, chars, widestOf, least);
+    const size = Math.round(Math.max(least, Math.min(180, (100 * 0.55 * W) / widestOf(rows))));
     const style: GlyphStyle = { family: rt.fonts.display, weight: 900, size, shadow: true };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);
     const right = p['side'] === 'right'; // mirrored: steps descend toward the left

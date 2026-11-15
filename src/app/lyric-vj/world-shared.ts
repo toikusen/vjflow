@@ -417,13 +417,16 @@ export const WORLD_COMPOSITIONS: Record<string, WorldCompositions> = {
   // (seatsDiffer). comic-handoff: the page's own Q4 edge relay (WORLD_LINKS print). protectedRegion none: the panels and
   // the title tag are each page's own graphics (a balloon seat's `clear` keeps it off the other panel), the balloon and
   // the caption are drawn round the words and move with them
-  popart: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.popart], carrierRole: 'object', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'balloon-seat', 'page-handoff': 'comic-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
+  // popart and midcentury are enabled (2026-11-12, Codex 2026-11-10 pairs D.3): the owner accepted their v8 clips
+  // (design-bar cards 2026-11-10-no-inline-default-and-bands-pass, 2026-11-10-popart-tail-pass); the scheduler takes them
+  // over in the default product (docs/research/2026-11-12-deco-grow-and-enable.md)
+  popart: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.popart], carrierRole: 'object', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'balloon-seat', 'page-handoff': 'comic-handoff' }, pageSeats: true, protectedRegion: [], enabled: true },
   // poster-seat: along cut / dusk / planes / sleeve, their main and secondary phrases, white space and colour-plane roles:
   // the words never leave the plane they are read on (the cut and sleeve bars are printed at fixed places, so they take
   // no seat; the dusk line has its sheet's other reading area, low right). A plain colour change is no cut.
   // sleeve-handoff: the sleeve's own Q4 edge relay (WORLD_LINKS print). protectedRegion none: the Bass column, the atomic
   // shapes and the small print are each page's own graphics, kept clear by its sets' `clear`
-  midcentury: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.midcentury], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-seat', 'page-handoff': 'sleeve-handoff' }, pageSeats: true, protectedRegion: [], enabled: false },
+  midcentury: { kinds: ['layout-seat', 'page-handoff'], seats: [...P4_SEATS.midcentury], carrierRole: 'page', allowedAt: { 'layout-seat': ['section', 'line'], 'page-handoff': ['section', 'line'] }, duration: { 'layout-seat': 0 }, curve: { 'layout-seat': 'cut', 'page-handoff': 'page-link' }, moves: { 'layout-seat': 'poster-seat', 'page-handoff': 'sleeve-handoff' }, pageSeats: true, protectedRegion: [], enabled: true },
 };
 
 /** Each same-page seat (render/world-sets `samePage`) and the set whose page it is on. */

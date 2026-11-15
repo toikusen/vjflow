@@ -386,6 +386,12 @@ export interface FreeOptions {
    * hold candidates per seat and commits none. Off by default (VJ_JOINT=1 does the same); no effect unless scheduled.
    */
   jointHolds?: boolean;
+  /**
+   * Experiment knob (Codex 2026-11-10 pairs A, the single-variable art-deco pair): the world takes no `line-grow` hold;
+   * every other rule picks among the rest as it would (a line that grew may take another kind or keep). Off by default
+   * (VJ_NO_LINE_GROW=1 does the same): unset, the plan is byte-identical to before.
+   */
+  noLineGrow?: boolean;
 }
 
 /** A song to a render job: about a millisecond of rules, then the engine. */
@@ -416,7 +422,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const world = o.style?.world;
   const start = world ? schemeFor(world, song.title, meaning.palette, seed ?? 0) : 0;
   const paletteId = world ? world.palette[start].id : rerollPalette(song.title, meaning.palette, calm, seed);
-  // (the scheduler takes a declared world over only when asked: no world is enabled by default, Q1 is not accepted yet)
+  // (the scheduler takes a declared world over only when asked or enabled: popart and midcentury are, world-shared.ts)
   const asked = o.worldEvents === true || (o.worldEvents !== false && (!!(world && compositionsOf(world.id)?.enabled) || (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.['VJ_WORLD_EVENTS'] === '1'));
   const scheduled = !!world && asked && !!compositionsOf(world.id);
   // (Q3 / Q5 phase 2: only when asked, only on a world that declares the capability)
@@ -424,8 +430,10 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const scaleOn = !!world && !!scaleOf(world.id) && (o.scaleContrast ?? env('VJ_SCALE'));
   const momentsOn = !!world && !!momentsCapOf(world.id) && (o.meaningMoments ?? env('VJ_MOMENTS'));
   const joint = scheduled && (o.jointHolds ?? env('VJ_JOINT'));
+  const pool = world && poolOf(world, RECIPES, start);
+  const noGrow = !!pool && (o.noLineGrow ?? env('VJ_NO_LINE_GROW'));
   const font = o.font ?? (o.style ? styleFont(o.style, song.cues.map((c) => c.text).join(''), calm) : calm ? 'Noto Serif TC' : 'Chiron Hei HK');
-  const { plan: composed0, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...poolOf(world, RECIPES, start), scheduled, ...(asked ? { stillLines: true } : {}), ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
+  const { plan: composed0, shots } = composePlan(song as never, { ...meaning, palette: paletteId }, calm, { reroll: seed, ...(world ? { world: { ...pool!, ...(noGrow ? { holds: { ...pool!.holds, 'line-grow': 0 } } : {}), scheduled, ...(asked ? { stillLines: true } : {}), ...(scheduled ? { faces: { family: font, accent: validAccent(world.type.latin) } } : {}), ...(scaleOn ? { scaled: true } : {}), ...(joint ? { joint: true } : {}) } } : {}) });
   const palette = o.style ? STYLE_PALETTES[paletteId] : PALETTES[paletteId];
   const base = composerBase(o.base ?? FREE_BASE(), composed0, shots, palette, seed) as unknown as TreatmentV3;
   // a moment is its lines' whole treatment: their small tier and screen hit come off (scripts/lyric-vj/moments.mts withMoments)

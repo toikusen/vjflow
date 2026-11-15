@@ -61,7 +61,13 @@
 
 r5 的 22 行與 11 個助詞已全部對應到原因並修正：量測改為兩軸取大、保持改讀「播放中」的字級與位置（每 1/30 秒）、twin 版本跟著重排、保持邊界 8 px 並瞄準 +0.6 px。針對性掃描（受影響的 15 個世界，全部 5 首 × 3 種子，off）結果：gameshow、idol-live、y2k、phone、scrapbook、claymation、art-deco 共 13 個世界 0 行、0 個助詞；silk-cold、gothic-lolita、chiyogami、chalkboard、papercut、led-board、silk、dark-glitch、spy 共 9 個世界 0 行、0 個助詞（最後一輪 gothic-lolita、chiyogami、chalkboard 兩個種子：2214 行，0 行、0 助詞）。
 
-**最終的全掃描（off 與 on 各一次，約 70 分鐘一次）在送審前才跑一次，本文件寫成時還沒有，所以全部 45 世界的最終殘留數字是「針對性 0，全掃描待跑」，不是已證明的 0。** 全掃描與完整 gate 的指令見最後一節。
+**審查後的最後一版（aa3cbb9）**：針對性掃描（16 個先前有殘留的世界，5 首 × 3 種子，off，11808 行）低於 84 px 的行 0、助詞 0；`floorMissed` 0；放大字放棄 97 行（frame 47、blowPose 無空間 50、stair 0）。三個世界的 gate（isometric、scrapbook、cel80s）加三個抽樣世界（silk-cold、dark-glitch、notebook）：規則回歸 0、fails 0、contract 0。完整 `ng test`：149 個檔、1826 個測試通過。全部 45 世界的單次 off 全掃描（`out/research/type-floor/final4/after-off.json`）依擁有者縮小後的範圍只跑一次；on 模式與 45 世界完整 gate 不跑，這是已知的未驗證範圍。
+
+審查後新增的規則：
+- 保持（hold）在「只屬於這一行自己的空間」讀（`inOwnSpace`），不受前一幀的 kick、sway、漂移與鏡頭影響；每一行在版面定案後讀一次（`settleHold`），分段渲染、跳轉、live 結果相同。
+- 保持的邊界是整段播放中的最壞情況：鏡頭（slide、rise、lean、rig、換行推移）與漂移的每一幀姿態（含旋轉後的方框四角），再疊 kick 與 sway（`holdRoom`）。
+- 一行任何 set 都放不下時改用 stair，並帶著原本 set 要求的字級（`rt.params.floor`），最後仍放不下記為 `floorMissed`。
+- 放大字被 blowPose 拒絕時，整行從原本的 set 重建（載體、墨色、版面都保留）。放棄放大的原因（frame、pose、stair）逐行記錄，在 metrics、掃描與 gate 都有計數。
 
 仍存在的設計取捨：
 - document / feed c041 這種任何 set 都放不下的句子，現在由 stair 後備接手（世界裡每一行都套用）；art-deco 在 em 高定義下不再是殘留。

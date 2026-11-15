@@ -52,6 +52,7 @@ const under: Under[] = [];
 const particleRows: unknown[] = [];
 const blowReasons: Record<string, number> = {};
 let floorMissedLines = 0;
+const floorMissedRows: unknown[] = [];
 const callsUnder: Under[] = [];
 const loUnder: Under[] = [];
 const byWorldSet: Record<string, { lines: number; under: number }> = {};
@@ -105,6 +106,7 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
     }
     if (!Number.isFinite(least)) { missing++; continue; }
     lines++;
+    if ((c as { floorMissed?: boolean }).floorMissed) floorMissedRows.push({ world: id, song: name, seed, cue: c.id, template: c.template, set, leastDrawn: Math.round(least * 10) / 10, text: c.text.slice(0, 20) });
     const key = `${id} ${set || '(no set)'}`;
     byWorldSet[key] ??= { lines: 0, under: 0 };
     byWorldSet[key].lines++;
@@ -144,7 +146,7 @@ const out = {
   floor: TYPE_FLOOR.lo, blowDropped: blowReasons, floorMissed: floorMissedLines, under: under.length, loUnder: loUnder.length, callsUnder: callsUnder.length,
   particleUnderFloor: particle, decorUnderFloor: decorUnder, extras, leastByWorld,
   byWorldSet: Object.fromEntries(Object.entries(byWorldSet).filter(([, v]) => v.under).sort()),
-  lines_under: under, lo_under: loUnder, calls_under: callsUnder, particle_rows: particleRows,
+  lines_under: under, lo_under: loUnder, calls_under: callsUnder, particle_rows: particleRows, floor_missed_rows: floorMissedRows,
 };
 if (a.out) writeFileSync(a.out, JSON.stringify(out, null, 1));
-console.log(JSON.stringify({ ...out, lines_under: undefined, lo_under: undefined, calls_under: undefined, particle_rows: undefined }, null, 1));
+console.log(JSON.stringify({ ...out, lines_under: undefined, lo_under: undefined, calls_under: undefined, particle_rows: undefined, floor_missed_rows: undefined }, null, 1));

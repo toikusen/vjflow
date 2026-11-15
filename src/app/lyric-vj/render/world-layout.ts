@@ -790,7 +790,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
         const tone0 = Math.min(1, (pose.tone ?? 1) * rank);
         // (dimmed only as far as it still reads on what it stands on: a step-back or an unsung word is still a lyric)
         // (the ink as its material draws it at its darkest, where the tone table read the material: M4)
-        const tone = fading() || wl.sheet ? tone0 : readableTone(drawnBy[k](baked ? tintOf(g, k) : `#${drawnInk[i].toString(16).padStart(6, '0')}`), standsOn(sets[k]), tone0, baked ? 0.1 : 0.14);
+        const tone = fading() || wl.sheet ? tone0 : readableTone(drawnBy[k](baked ? tintOf(g, k) : `#${drawnInk[i].toString(16).padStart(6, '0')}`)[0], standsOn(sets[k]), tone0, baked ? 0.1 : 0.14);
         alphaOf[i] = { pose: stepA(pose.a ?? 1), block: whole_a, left, tone: wl.sheet && !fading() ? 1 : tone };
         if (!baked && wl.sheet) m.material.color.copy(ink);
         if (wl.sheet) {

@@ -16,8 +16,11 @@ export interface ToneTable {
   built: string;
   /** `${set}|${scheme id}` → the drawn ground's darkest and lightest tones under the set's words, and how many reads. */
   grounds: Record<string, { lo: string; hi: string; n: number }>;
-  /** `${surface kind}|${core colour}` → the drawn darkest part's luminance as a share of its tint's (≤ 1). */
-  surfaces: Record<string, number>;
+  /**
+   * `${surface kind}|${core colour}` → the luminance of the face's drawn darkest and lightest parts (5th and 95th
+   * percentile of its ink texels, declared parts left out) as shares of its tint's: a satin's highlights, a seam, a scan.
+   */
+  surfaces: Record<string, { lo: number; hi: number } | number>;
 }
 
 const FILE = 'src/app/lyric-vj/render/ink-tones.json';
@@ -51,8 +54,11 @@ export const setInkTones = (t: ToneTable | null | undefined) => void (table = t)
 /** The drawn ground under a set's words on a scheme, its darkest and lightest tones; undefined where nothing was read. */
 export const drawnGround = (set: string, scheme: string | undefined) => (scheme ? inkTones()?.grounds[`${set}|${scheme}`] : undefined);
 
-/** How far a surface darkens a tint at its darkest drawn part (1: not at all; undefined: not read). */
-export const surfaceShare = (kind: string | undefined, core: string | undefined) => (kind ? inkTones()?.surfaces[`${kind}|${(core ?? '').toLowerCase()}`] : undefined);
+/** How far a surface draws a tint down and up at its darkest and lightest parts (1: not at all; undefined: not read). */
+export const surfaceShare = (kind: string | undefined, core: string | undefined): { lo: number; hi: number } | undefined => {
+  const s = kind ? inkTones()?.surfaces[`${kind}|${(core ?? '').toLowerCase()}`] : undefined;
+  return s === undefined ? undefined : typeof s === 'number' ? { lo: s, hi: 1 } : s;
+};
 
 /**
  * How far a glyph's edge draws its ink down, any surface: 1 since the glyph pictures are premultiplied (glyphs.ts
@@ -63,10 +69,10 @@ export const EDGE_SHARE = 1;
 /** The edge share in force: EDGE_SHARE, or a QA probe's (__vjEdgeShare). */
 export const edgeShare = () => (globalThis as { __vjEdgeShare?: number }).__vjEdgeShare ?? EDGE_SHARE;
 
-/** An ink as a surface draws it at its darkest: its linear channels scaled so its luminance is `share` of its own. */
+/** An ink as a surface draws it at one of its parts: its linear channels scaled so its luminance is `share` of its own (capped at white). */
 export function darkest(ink: string, share: number | undefined): string {
-  if (share === undefined || share >= 1 || !/^#[0-9a-f]{6}$/i.test(ink)) return ink;
+  if (share === undefined || share === 1 || !/^#[0-9a-f]{6}$/i.test(ink)) return ink;
   const lin = (v: number) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
   const enc = (v: number) => (v <= 0.0031308 ? v * 12.92 : 1.055 * v ** (1 / 2.4) - 0.055);
-  return `#${[1, 3, 5].map((i) => Math.round(enc(lin(parseInt(ink.slice(i, i + 2), 16) / 255) * Math.max(0, share)) * 255).toString(16).padStart(2, '0')).join('')}`;
+  return `#${[1, 3, 5].map((i) => Math.round(enc(Math.min(1, lin(parseInt(ink.slice(i, i + 2), 16) / 255) * Math.max(0, share))) * 255).toString(16).padStart(2, '0')).join('')}`;
 }

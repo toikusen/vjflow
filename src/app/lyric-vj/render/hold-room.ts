@@ -135,8 +135,9 @@ export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots
   const kind = spec.surface ?? m?.kind;
   const core = spec.core ? slots[spec.core] : m ? slots[m.core] : undefined;
   // (the deeper of the surface's own darkening and the edge's, edgeShare: 1 with premultiplied glyph pictures)
-  const share = Math.min(surfaceShare(kind, core) ?? 1, edgeShare());
-  return (ink: string) => darkest(ink, share);
+  const s = surfaceShare(kind, core);
+  const [lo, hi] = [Math.min(s?.lo ?? 1, edgeShare()), s?.hi ?? 1];
+  return (ink: string) => [darkest(ink, lo), darkest(ink, hi)];
 };
 /** What a set's words stand on: its carrier, else the background and what the picture puts there. */
 // (one list for the plan and the renderer, review 2026-11-15: a world line stands on its world's ground, the page's paper

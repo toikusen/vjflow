@@ -27,7 +27,7 @@ describe.skipIf(!existsSync(SONG))('M3 is on by default, in the renderer as in t
       const slots = STYLE_WORLDS.find((w) => w.id === 'dark-glitch')!.palette.find((s) => s.id === id) as never as Parameters<typeof keyFor>[1];
       const spec = SET_SPECS[set];
       const key = keyFor(spec, slots, slots.ink);
-      expect(contrast(drawnInkOf(spec, slots)(key), slots.ground)).toBeGreaterThanOrEqual(4.8);
+      for (const d of drawnInkOf(spec, slots)(key)) expect(contrast(d, slots.ground)).toBeGreaterThanOrEqual(4.8);
       // (an accent, not the body's cream: with the fringe gone the decision no longer has to drain it)
       expect(key.toLowerCase()).not.toBe(slots.ink.toLowerCase());
       // (QA: the straight-alpha edge, 0.42, would drain it)

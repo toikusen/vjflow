@@ -65,9 +65,12 @@ for (const world of a.worlds!.split(',')) {
         for (const scheme of sw.palette as unknown as Record<string, string>[]) {
           const core = scheme[sw.material.core];
           const tints = [scheme['ink'], scheme['plateInk'], scheme['plate'], scheme['accent'], scheme['ink2']].filter((c) => /^#[0-9a-f]{6}$/i.test(c ?? ''));
-          let least = 1;
-          for (const tint of tints) least = Math.min(least, (await page.evaluate(([k, t, c, f]) => (window as unknown as { vjSurfaceShare: (...x: string[]) => number }).vjSurfaceShare(k, t, c, f, '永國あア！の'), [sw.material.surface!, tint, core, job.fonts?.family ?? ''])) as number);
-          table.surfaces[`${sw.material.surface}|${core.toLowerCase()}`] = +least.toFixed(3);
+          let [lo, hi] = [1, 1];
+          for (const tint of tints) {
+            const s = (await page.evaluate(([k, t, c, f]) => (window as unknown as { vjSurfaceShare: (...x: string[]) => { lo: number; hi: number } }).vjSurfaceShare(k, t, c, f, '永國あア！の'), [sw.material.surface!, tint, core, job.fonts?.family ?? ''])) as { lo: number; hi: number };
+            [lo, hi] = [Math.min(lo, s.lo), Math.max(hi, s.hi)];
+          }
+          table.surfaces[`${sw.material.surface}|${core.toLowerCase()}`] = { lo, hi };
         }
       }
       const cues = new Map(((job.treatment.cues as Cue[]) ?? []).filter((c) => c.world).map((c) => [c.cueId, c.world!]));

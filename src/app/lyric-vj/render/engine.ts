@@ -8,7 +8,7 @@ import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
 import { clearOf } from './world-sets';
-import { type CamPose, fitAtFloor, holdFalls, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
+import { type CamPose, fitAtFloor, holdFalls, holdMultiple, playScale, readingTimes, TYPE_FLOOR } from './type-floor';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
 import { indexPull, lyricBand, memoryCard, paperFeed, phrasePanels } from './carrier-family';
@@ -1202,12 +1202,18 @@ export class LyricVjEngine {
       // is (a stack line set its words at 73 px among the world's own lines at 84 and up, silk チョロイン c046; document
       // c041 rested at 80 px in the only set that took it, 2026-11-12)
       const probe = build();
-      const floor = inWorld ? Math.max(probe.floor ?? 0, TYPE_FLOOR.lo) - 0.5 : REST_FLOOR;
+      // (the floor this line must rest at, from the set it was planned in: kept whichever way it falls back to plain rows, which carry no set)
+      const floorNeed = Math.max(probe.floor ?? 0, TYPE_FLOOR.lo);
+      const planned = !!rt.style.world?.blow;
+      let blowReason: string | undefined;
+      const floor = inWorld ? floorNeed - 0.5 : REST_FLOOR;
       if (style.budget && alone && restSize(probe, fitToFrame) < floor) {
         drawn = 'stair';
         rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };
+        rt.params = { ...rt.params, floor: floorNeed };
         layer = build();
         this.floored.add(cue.id);
+        if (planned) blowReason = 'stair';
       }
       // a line not up long enough to read holds into the free time after it, or lands and leaves at once (the
       // templates read their timing when built, so the line is built again with the new timing)
@@ -1277,19 +1283,15 @@ export class LyricVjEngine {
         } else layer = build();
         fit = fitToFrame(layer, kick);
       };
-      // (the floor this line must rest at, from the set it was planned in: kept when it falls back to plain rows, which carry no set)
-      const floorNeed = Math.max(layer.floor ?? 0, TYPE_FLOOR.lo);
       // a held line drifts slowly one way and grows a little, so type never sits frozen (each line its own direction)
       const ang = hash(i, 41) * Math.PI * 2;
       const driftOf = (l: CueLayer): [number, number] | undefined => (l.framed ? undefined : [Math.cos(ang) * 14, Math.sin(ang) * 8]);
       // (the line's own camera and drift over its whole play span, the poses the hold keeps the words in the frame through)
-      const cannotHold = () => holdShort(layer, fit.scale.x, (t) => this.koma(t), kick, floorNeed, this.camPoses({ rt, drift: driftOf(layer) }));
-      const planned = !!rt.style.world?.blow;
-      let blowReason: string | undefined;
+      const cannotHold = () => holdShort(layer, fit.scale.x, (t) => this.koma(t), kick, floorNeed, this.camPoses({ rt, drift: driftOf(layer) }, layer.readable()));
       if (inWorld && !layer.framed) {
         // (a blown-up key the frame cannot hold with the words round it at the floor gives way: the line stands as its set lays
         // it, as when blowPose finds no room; led-board and silk-cold lines rested at 80 px under a key that took the fit to 0.93)
-        if (rt.style.world?.blow && cannotHold()) {
+        if (rt.style.world?.blow && !blowReason && cannotHold()) {
           rt.style = { ...rt.style, world: { ...rt.style.world, blow: undefined } };
           blowReason = 'frame';
           rebuild();
@@ -1828,13 +1830,14 @@ export class LyricVjEngine {
     return { e, c, x: (drift?.[0] ?? 0) * e + c.x + moved.x + left.x, y: (drift?.[1] ?? 0) * e + c.y + moved.y + left.y };
   }
 
-  /** The line's camera and drift at every frame of its play span (frameAt), as poses for the hold. */
-  private camPoses(entry: Pick<(typeof this.cueLayers)[number], 'rt' | 'drift' | 'hand' | 'handOut'>): CamPose[] {
-    const { rt } = entry;
-    const span = rt.exitAt + rt.exitDur - rt.showFrom;
-    const n = Math.max(2, Math.ceil(span * 30));
-    return Array.from({ length: n + 1 }, (_, i) => {
-      const f = this.frameAt(entry, rt.showFrom + (span * i) / n);
+  /**
+   * The line's camera and drift at every frame of its reading (frameAt), as poses for the hold. Only the reading, when the words
+   * stand on the screen: a hand-off pushes the line up to 1920 px off it while it enters and leaves, which would take the
+   * whole room from the hold (holdRoom's floor) and leave the line unprotected while it is read.
+   */
+  private camPoses(entry: Pick<(typeof this.cueLayers)[number], 'rt' | 'drift' | 'hand' | 'handOut'>, reading: readonly [number, number]): CamPose[] {
+    return readingTimes(reading, entry.rt.exitAt).map((t) => {
+      const f = this.frameAt(entry, t);
       return { x: f.x, y: f.y, rot: f.c.rot };
     });
   }
@@ -1842,7 +1845,7 @@ export class LyricVjEngine {
   /** The line's hold (holdScale), once its layout is final: from the line alone, never from the frame it happens to be read in. */
   private settleHold(entry: (typeof this.cueLayers)[number]) {
     if (!entry.holds || !entry.fit || entry.fitScale === undefined) return;
-    entry.hold = holdScale(entry.layer, entry.fitScale, (entry.need ?? Math.max(entry.layer.floor ?? 0, TYPE_FLOOR.lo)) + 0.6, (t) => this.koma(t), !!entry.kick, this.camPoses(entry)) ?? 0;
+    entry.hold = holdScale(entry.layer, entry.fitScale, (entry.need ?? Math.max(entry.layer.floor ?? 0, TYPE_FLOOR.lo)) + 0.6, (t) => this.koma(t), !!entry.kick, this.camPoses(entry, entry.layer.readable())) ?? 0;
   }
 
   private layFine({ rt, layer }: (typeof this.cueLayers)[number]) {

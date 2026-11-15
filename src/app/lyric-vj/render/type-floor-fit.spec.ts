@@ -4,7 +4,7 @@ import type { Glyph } from './glyphs';
 import { frameFit } from './runtime';
 import { GROW } from './world-beats';
 import { stairRows, STAIR_LEAST } from './stair';
-import { holdFalls, holdMultiple, holdRoom, playScale, TYPE_FLOOR } from './type-floor';
+import { holdFalls, holdMultiple, holdRoom, playScale, readingTimes, TYPE_FLOOR } from './type-floor';
 import { motionPad } from './motion-pad';
 import { holdScale } from './engine';
 import * as THREE from 'three';
@@ -210,5 +210,20 @@ describe('a fallback to stair keeps the floor the set asked for (stairRows)', ()
     const at110 = stairRows(text, [...text.replace(/ /g, '')].length, widest, 110);
     expect(at110.length).toBeGreaterThanOrEqual(at90.length);
     expect((100 * 0.55 * 1920) / widest(at110)).toBeGreaterThanOrEqual(110 - 1e-6);
+  });
+});
+
+describe('the hold is read over the reading, not the hand-off that brings the line in (readingTimes)', () => {
+  it('samples only the reading, 30 a second, ends included, and closes an open reading at the line\'s end', () => {
+    const t = readingTimes([10, 12], 20);
+    expect(t[0]).toBe(10);
+    expect(t.at(-1)).toBe(12);
+    expect(t.length).toBe(61);
+    expect(readingTimes([10, Infinity], 11).at(-1)).toBe(11);
+  });
+  it('a hand-off pose off the screen takes all the room (the floor of the bisection), so it must stay out of the poses', () => {
+    const entering = [{ x: 1920, y: 0, rot: 0 }, { x: 0, y: 0, rot: 0 }];
+    expect(holdRoom(800, 300, false, entering)).toBeLessThanOrEqual(0.2501);
+    expect(holdRoom(800, 300, false, [{ x: 0, y: 0, rot: 0 }])).toBeGreaterThan(1);
   });
 });

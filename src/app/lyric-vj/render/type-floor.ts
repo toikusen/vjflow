@@ -104,3 +104,12 @@ export const playScale = (natural: number, hold = 0) => Math.max(natural, hold);
  * than this would be a size the stroke checks never saw, so a set may condense only down to it.
  */
 export const MIN_CONDENSE = 0.75;
+
+/** The moments a line's reading is sampled at, 30 a second, ends included (`end` when the reading is open-ended): only its reading, never its entering and leaving. */
+export const readingTimes = (reading: readonly [number, number], end: number) => {
+  const [from, to] = reading;
+  const last = Number.isFinite(to) ? to : end;
+  const span = Math.max(0, last - from);
+  const n = Math.max(2, Math.ceil(span * 30));
+  return Array.from({ length: n + 1 }, (_, i) => from + (span * i) / n);
+};

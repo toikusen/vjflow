@@ -88,21 +88,23 @@ describe('a set never lays a line under the floor unmarked (blockOf: split parts
   });
 });
 
-describe('the floor as drawn: through the set\'s shear', () => {
-  it('reads the shorter axis of the map, never above 1', () => {
+describe('the floor as drawn: through the set\'s shear (type size is the em height)', () => {
+  it('reads the vertical axis of the map, never above 1: a narrow face is condensed, not small', () => {
     expect(shearGain(undefined)).toBe(1);
-    expect(shearGain([0.75, 0, 0, 1])).toBeCloseTo(0.75);
-    expect(shearGain([0.85, 0, 0, 1])).toBeCloseTo(0.85);
+    expect(shearGain([0.75, 0, 0, 1])).toBe(1);
+    expect(shearGain([0.85, 0, 0, 1])).toBe(1);
     expect(shearGain([1, 0, Math.tan((-9 * Math.PI) / 180), 1])).toBe(1);
-    expect(shearGain([Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0, 1])).toBeCloseTo(1);
+    expect(shearGain([Math.cos(Math.PI / 6), Math.sin(Math.PI / 6), 0, 1])).toBe(1);
+    expect(shearGain([1, 0, 0, 0.8])).toBeCloseTo(0.8);
     expect(shearGain([1.3, 0, 0, 1.3])).toBe(1);
   });
-  it('lays a narrow set at the floor over its gain: 84 px drawn is 112 px laid at 0.75', () => {
-    expect(layFloorOf({ lo: 70, shear: [0.75, 0, 0, 1] })).toBeCloseTo(112);
-    expect(layFloorOf({ lo: 130, shear: [0.75, 0, 0, 1] })).toBe(130);
+  it('lays a set that squashes its height at the floor over its gain, in whole pixels', () => {
+    expect(layFloorOf({ lo: 70, shear: [1, 0, 0, 0.8] })).toBe(105);
+    expect(layFloorOf({ lo: 130, shear: [1, 0, 0, 0.8] })).toBe(130);
+    expect(layFloorOf({ lo: 70, shear: [0.75, 0, 0, 1] })).toBe(TYPE_FLOOR.lo);
     expect(layFloorOf({ lo: 70 })).toBe(TYPE_FLOOR.lo);
   });
-  it('every art-deco set (narrow face, narrow column), every slot: drawn at the floor, or marked floorMiss (63 and 82 px on the frame before)', () => {
+  it('every art-deco set, every slot: at the floor as an em height, or marked floorMiss', () => {
     setWordSafe(true);
     try {
       for (const [id, given] of Object.entries(SET_SPECS).filter(([k]) => k.startsWith('art-deco/')))
@@ -116,11 +118,6 @@ describe('the floor as drawn: through the set\'s shear', () => {
       setWordSafe(false);
     }
   }, 60000);
-  it('a pillar of a short phrase stays unmarked and is laid taller than the floor over its gain', () => {
-    const b = blockOf('風生水起', SET_SPECS['art-deco/pillars'], em);
-    expect(b.floorMiss).toBeUndefined();
-    expect(b.size * 0.85).toBeGreaterThanOrEqual(TYPE_FLOOR.lo - 0.5);
-  });
 });
 
 describe('the words round a blown-up word (blowPose)', () => {

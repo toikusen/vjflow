@@ -18,7 +18,7 @@ function glyphsIn(root: Obj | undefined): Read[] {
   const out: Read[] = [];
   root.traverse((o: Obj) => {
     if (!o.isMesh || !o.userData?.['size'] || !visible(o)) return;
-    const s = Math.abs(o.getWorldScale(v).x);
+    const s = Math.abs(o.getWorldScale(v).y);
     out.push({ set: (o.userData['set'] ?? o.userData['size']) * s, drawn: o.userData['size'] * s, decor: decorOf(o, root) });
   });
   return out;

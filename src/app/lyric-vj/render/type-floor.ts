@@ -17,11 +17,12 @@ const SLACK = 0.5;
 export const floorOf = (spec: { lo: number }) => Math.max(spec.lo, TYPE_FLOOR.lo);
 
 /**
- * The share of a row's type size a set's shear leaves on screen: the shorter of the map's two axes (a face drawn narrow,
- * scaleX .75, a column .85), never above 1 (a lean or a turn keeps the size). The scan and the engine's fit read a glyph
- * as drawn, so a set laid at 84 px before a narrow shear is 63 px on the frame.
+ * The share of a row's type size a set's shear leaves on screen. A type size is the em height: a face drawn narrow by
+ * its set's shear (art-deco's scaleX .75) is condensed, not set small, so only the map's vertical axis counts; a lean, a
+ * turn or a wider face keep the size (never above 1). Measuring the squeezed width instead took art-deco's panels off every
+ * line (its small part cannot stand at 112 px laid) for type that stood 112 px tall (2026-11-14 decision, see the doc).
  */
-export const shearGain = (shear?: readonly number[]) => (shear ? Math.min(1, Math.hypot(shear[0], shear[1]), Math.hypot(shear[2], shear[3])) : 1);
+export const shearGain = (shear?: readonly number[]) => (shear ? Math.min(1, Math.hypot(shear[2], shear[3])) : 1);
 
 /** The type a block may be laid at in a set before its shear, so that its drawn size is never under the floor (floorOf, shearGain), a whole pixel: a block is laid at whole px, and 98.8 px laid is 98. */
 export const layFloorOf = (spec: { lo: number; shear?: readonly number[] }) => Math.max(spec.lo, Math.ceil(TYPE_FLOOR.lo / shearGain(spec.shear) - 1e-9));
@@ -52,3 +53,10 @@ export const fitAtFloor = (whole: number, least: number, floor: number, words: n
  */
 export const holdMultiple = (least: number, floor: number, wx: number, wy: number, edge = 24, w = 1920, h = 1080) =>
   Math.min(floor / least, (w / 2 - edge) / Math.max(1, wx), (h / 2 - edge) / Math.max(1, wy));
+
+/**
+ * The scale a line's fit group takes in a frame: what the fit, the drift and the line's camera give (`natural`), held at
+ * `hold` (engine holdScale: one number a line, read over its whole reading), so the hold only ever stops a zoom-out
+ * and never moves a line itself: a constant while it stops it, the natural scale otherwise.
+ */
+export const playScale = (natural: number, hold = 0) => Math.max(natural, hold);

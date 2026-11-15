@@ -8,7 +8,7 @@ import { contrastSplit } from './contrast-split';
 import { lyricCarrier } from './lyric-carrier';
 import { worldPair, worldSet } from './world-layout';
 import { clearOf } from './world-sets';
-import { fitAtFloor, holdMultiple, TYPE_FLOOR } from './type-floor';
+import { fitAtFloor, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
 import { CAM_EDGE } from './world-cam';
 import { balanceLine, cornerAnchor, counterweightLayout, dotDisplay, crossAnchor, editorial, frameFeed, lightboxEntry, notePanel, panelRoute, phraseGrid, turnBox } from './line-layouts';
 import { phraseSpans } from './line-space';
@@ -218,7 +218,8 @@ function restSize(layer: CueLayer, wrap?: (l: CueLayer, kick: boolean) => THREE.
   layer.group.traverse((o) => {
     let p: THREE.Object3D | null = o;
     for (; p && p !== layer.group; p = p.parent) if (!p.visible || p.userData['decor']) return;
-    if (o.userData['size']) least = Math.min(least, o.userData['size'] * o.getWorldScale(scale).x);
+    // (a glyph's type size is its em height: a face drawn narrow by its set's shear is condensed, not set small)
+    if (o.userData['size']) least = Math.min(least, o.userData['size'] * Math.abs(o.getWorldScale(scale).y));
   });
   layer.group.visible = vis;
   return least;
@@ -276,11 +277,12 @@ function restingWords(layer: CueLayer, parent: THREE.Object3D, playing = false) 
       for (let p: THREE.Object3D | null = o; p && p !== parent; p = p.parent) if (!p.visible || p.userData['decor']) return;
       // (each glyph's em box, not its picture: a glyph's picture carries a wide transparent pad, and the pad alone pushed
       // a line flush on the safe edge under the fit)
-      const em = o.userData['size'] * Math.abs(o.getWorldScale(scale).x);
+      o.getWorldScale(scale);
+      const half = new THREE.Vector3((o.userData['size'] * Math.abs(scale.x)) / 2, (o.userData['size'] * Math.abs(scale.y)) / 2, 0);
       const at = o.getWorldPosition(new THREE.Vector3());
-      box.expandByPoint(at.clone().addScalar(-em / 2)).expandByPoint(at.addScalar(em / 2));
-      // (a glyph as drawn: a particle the typesetter set smaller is lyric too, and held at the floor with the rest)
-      least = Math.min(least, o.userData['size'] * Math.abs(scale.x));
+      box.expandByPoint(at.clone().sub(half)).expandByPoint(at.add(half));
+      // (a glyph as drawn: a particle the typesetter set smaller is lyric too, and held at the floor with the rest; its type size is its em height)
+      least = Math.min(least, o.userData['size'] * Math.abs(scale.y));
     });
   }
   layer.group.visible = vis;
@@ -300,31 +302,6 @@ function holdScale(layer: CueLayer, fit: THREE.Group, floor: number): number | u
   const wx = Math.max(Math.abs(words.box.min.x), Math.abs(words.box.max.x));
   const wy = Math.max(Math.abs(words.box.min.y), Math.abs(words.box.max.y));
   return fit.scale.x * holdMultiple(words.least, floor, wx, wy, CAM_EDGE);
-}
-
-/**
- * Lifts a fit group's scale, after the line has been updated for this frame, so its words (as drawn, particles too) rest at
- * `floor` px: never past the frame's edge (CAM_EDGE), never smaller. The scale is read from the glyphs themselves, so it
- * holds whatever else scaled them.
- */
-export function liftToFloor(layer: CueLayer, fit: THREE.Group, floor: number) {
-  fit.updateMatrixWorld(true);
-  const scale = new THREE.Vector3(), at = new THREE.Vector3();
-  let [least, wx, wy] = [Infinity, 0, 0];
-  layer.group.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh || !o.userData['size']) return;
-    for (let p: THREE.Object3D | null = o; p && p !== fit; p = p.parent) if (!p.visible || p.userData['decor']) return;
-    const em = o.userData['size'] * Math.abs(o.getWorldScale(scale).x);
-    o.getWorldPosition(at);
-    least = Math.min(least, em);
-    wx = Math.max(wx, Math.abs(at.x) + em / 2);
-    wy = Math.max(wy, Math.abs(at.y) + em / 2);
-  });
-  if (!Number.isFinite(least) || least >= floor) return;
-  const m = holdMultiple(least, floor, wx, wy, CAM_EDGE);
-  if (m <= 1) return;
-  fit.scale.multiplyScalar(m);
-  fit.updateMatrixWorld(true);
 }
 
 /** Where a laid-out line's phrases stand and the whole line's box, frame px from the centre: what a tracking camera calls at. */
@@ -2088,7 +2065,7 @@ export class LyricVjEngine {
           const left = handOut && t > handOut.h.from ? outPose(handOut.h, t, handOut.seam, handOut.side) : { x: 0, y: 0 };
           f.position.set(drift[0] * e + c.x + moved.x + left.x, drift[1] * e + c.y + moved.y + left.y, 0);
           // (never under the type floor as drawn: the camera's zoom-out and the drift's growth stop where the words rest at it)
-          f.scale.setScalar(Math.max(fitScale * (1 + 0.012 * e) * c.scale, entry.hold ?? 0));
+          f.scale.setScalar(playScale(fitScale * (1 + 0.012 * e) * c.scale, entry.hold));
           f.rotation.z = c.rot;
           // a page takes the line it carries with it, narrowing about the seam
           if (handOut?.h.kind === 'page' && t > handOut.h.from) {
@@ -2116,9 +2093,6 @@ export class LyricVjEngine {
       main.group.visible = on && light;
       if (twin) twin.layer.group.visible = on && !light;
       if (on) layer.update(this.koma(t), fx);
-      // (the last word on size: whatever scale the fit, the camera, the drift, a beat or a pose put on the words, the words as
-      // drawn this frame are never under the type floor, so far as the frame's edge lets them be lifted, render/type-floor.ts)
-      if (on && entry.hold !== undefined) liftToFloor(layer, !twin || light ? fit! : twin.fit, TYPE_FLOOR.lo);
     }
     for (const { rt, group, units, dropped } of this.callLayers) {
       const k = this.koma(t);

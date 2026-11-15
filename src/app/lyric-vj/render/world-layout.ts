@@ -247,7 +247,7 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   // (the engine's frame fit takes a pose its motion carries past the frame in smaller, its words with it, the lead-in
   // under the floor (fit .88 to .95 at 82 px, 2026-11-12): the key is blown up only as big as the pose then fits at scale
   // 1 on a loud beat, or not at all)
-  const posed = (big: number): Pose => {
+  const posed = (big: number): Pose & { reach?: { x: number; y: number } } => {
     const small = Math.max(floor, Math.min(big * 0.3, normal * 0.75, across));
     const [preH, postH] = [pre.length ? small * 1.3 : 0, post.length ? small * 1.3 : 0];
     const h = preH + big + postH;
@@ -264,14 +264,21 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
     const mid = (lo + hi) / 2;
     if (mid) for (let i = 0; i < x.length; i++) x[i] -= mid;
     const w = hi - lo;
+    // (the extent as the engine's fit measures it: each glyph's em box, a glyph's own size round its centre, not the advances alone)
+    const em = (i: number) => sizes[i] * tex;
+    const ids = gs.map((_, i) => i).filter((i) => shown[i]);
+    const reach = {
+      x: Math.max(...ids.map((i) => Math.abs(x[i]) + em(i) / 2)),
+      y: Math.max(...ids.map((i) => Math.abs(y[i]) + em(i) / 2)),
+    };
     // a space inside the key run (a Latin phrase) is placed but not drawn
     const block: Block = { rows: [], size: big, w, h, cx: 0, cy: 0 };
-    return { block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
+    return { reach, block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
   };
   let big = big0;
   for (let i = 0; i < 12; i++) {
     const p = posed(big);
-    const [sw, sh] = shearedSize(p.block.w, p.block.h, spec.shear);
+    const [sw, sh] = shearedSize(p.reach!.x * 2, p.reach!.y * 2, spec.shear);
     // (and swollen by the line's own grow beat, GROW.want: led-board's pose that fit at rest reached 1027 px from the centre and took the frame fit to 0.90)
     const fit = frameFit((sw / 2) * GROW.want, (sh / 2) * GROW.want, true);
     if (fit >= 1 - 1e-9) return p;

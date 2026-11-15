@@ -121,9 +121,9 @@ export function splitRows(b: Block, spec: SetSpec, measure: Measure): { main: Pa
     if (r.v) return undefined;
     const cs = [...t];
     const ts = typeset(t, true);
-    // (the least glyph as the engine weighs it at rest: its size through the row's scale and the set's shear, a hair
+    // (the least glyph as the engine weighs it at rest: its size through the row's scale and the set's vertical shear (em height), a hair
     // under for the glyph size's rounding)
-    const rest = Math.min(...cs.flatMap((ch, k) => (ch.trim() ? [r.size * sx * Math.min(1, sizes[from + k] ?? 1)] : []))) - 0.5;
+    const rest = Math.min(...cs.flatMap((ch, k) => (ch.trim() ? [r.size * shearGain(spec.shear) * Math.min(1, sizes[from + k] ?? 1)] : []))) - 0.5;
     // (the glyph's size is rounded to whole px: a hair more than its scale)
     const grow = ts.map((x) => (x.scale > 1 ? x.scale + 0.01 : 1));
     const w = (cs.reduce((a, ch, k) => a + (measure(ch) / 100) * grow[k] + (k ? ts[k].gapBefore : 0), 0) + Math.max(0, cs.length - 1) * r.track) * r.size;

@@ -1,12 +1,10 @@
 // The type floor after the frame fit, the typesetter and the stair template (2026-11-12 residual: blown lines, particles, stair).
 import { describe, expect, it } from 'vitest';
-import * as THREE from 'three';
 import type { Glyph } from './glyphs';
-import { liftToFloor } from './engine';
 import { frameFit } from './runtime';
 import { GROW } from './world-beats';
 import { stairRows, STAIR_LEAST } from './stair';
-import { holdMultiple, TYPE_FLOOR } from './type-floor';
+import { holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
 import { blowPose, holdParticles, type Pose } from './world-layout';
 import { SET_SPECS, shearedSize } from './world-sets';
 
@@ -51,8 +49,8 @@ describe('particles held at the floor as drawn (holdParticles)', () => {
     expect(holdParticles(...fake(156, 0.4), 200).sizes).toBeUndefined();
     expect(holdParticles(...fake(190, 0.5), 200).sizes).toBeUndefined();
   });
-  it('reads the floor through a narrow shear: 84 px drawn at scaleX .75 is 112 px laid', () => {
-    const [pose, gs] = fake(156, 0.6, [0.75, 0, 0, 1]);
+  it('reads the floor through a squashed height: 84 px drawn at scaleY .75 is 112 px laid', () => {
+    const [pose, gs] = fake(156, 0.6, [1, 0, 0, 0.75]);
     const held = holdParticles(pose, gs, 200);
     expect(held.sizes![1] * 156).toBeGreaterThanOrEqual(112 - 0.5);
   });
@@ -86,33 +84,23 @@ describe('the hold on a line\'s fit while it plays (holdMultiple)', () => {
   });
 });
 
-describe('the last word on size (liftToFloor, after every scale a frame puts on the words)', () => {
-  const line = (sizes: number[], x = 0) => {
-    const fit = new THREE.Group();
-    const group = new THREE.Group();
-    fit.add(group);
-    sizes.forEach((size, i) => {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial());
-      m.userData['size'] = size;
-      m.position.set(x + i * 100, 0, 0);
-      group.add(m);
-    });
-    return { fit, layer: { group } as never };
-  };
-  it('lifts a fit that left the smallest glyph at 78 px to the floor', () => {
-    const { fit, layer } = line([120, 130]);
-    fit.scale.setScalar(0.65);
-    liftToFloor(layer, fit, 84);
-    expect(120 * fit.scale.x).toBeGreaterThanOrEqual(84 - 1e-6);
+describe('a line is never resized while it is sung (playScale)', () => {
+  const frames = (natural: (k: number) => number, hold: number) => Array.from({ length: 60 }, (_, k) => playScale(natural(k / 59), hold));
+  it('is constant while the hold stops a camera zoom-out, then the natural scale', () => {
+    const out = frames((k) => 0.93 + 0.07 * k, 0.97);
+    const clamped = out.filter((x) => x === 0.97);
+    expect(clamped.length).toBeGreaterThan(10);
+    expect(out.slice(0, clamped.length).every((x) => x === 0.97)).toBe(true);
+    for (let i = 1; i < out.length; i++) expect(out[i]).toBeGreaterThanOrEqual(out[i - 1]);
   });
-  it('never lifts past the frame edge, and leaves a line already at the floor alone', () => {
-    const wide = line([120, 120], 880);
-    wide.fit.scale.setScalar(0.65);
-    liftToFloor(wide.layer, wide.fit, 84);
-    expect(Math.abs(wide.fit.scale.x * (880 + 100) + 120 * wide.fit.scale.x / 2)).toBeLessThanOrEqual(960 - 24 + 1e-6);
-    const ok = line([100]);
-    ok.fit.scale.setScalar(0.9);
-    liftToFloor(ok.layer, ok.fit, 84);
-    expect(ok.fit.scale.x).toBe(0.9);
+  it('adds no motion of its own: a line that never dips under its hold plays its natural scale exactly', () => {
+    const natural = (k: number) => 1 + 0.012 * (0.5 - 0.5 * Math.cos(Math.PI * k));
+    expect(frames(natural, 0.9)).toEqual(Array.from({ length: 60 }, (_, k) => natural(k / 59)));
+  });
+  it('never changes direction where the natural scale does not (no jitter from the hold)', () => {
+    const noisy = frames((k) => 0.95 + 0.04 * k + 0.0001 * Math.sin(k * 40), 0.96);
+    let flips = 0;
+    for (let i = 2; i < noisy.length; i++) if ((noisy[i] - noisy[i - 1]) * (noisy[i - 1] - noisy[i - 2]) < -1e-12) flips++;
+    expect(flips).toBeLessThanOrEqual(2);
   });
 });

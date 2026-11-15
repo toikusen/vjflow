@@ -2710,8 +2710,11 @@ export class LyricVjEngine {
     // under `other`, so nothing taken away with the words is left out of the masks; what hangs under a glyph is its part)
     const taken = new Set<THREE.Object3D>(lines.flatMap((l) => [...l.glyphs.map((g) => g.mesh), ...l.parts.map((p) => p.mesh)]));
     const under = (o: THREE.Object3D | null): boolean => !!o && (taken.has(o) || under(o.parent));
+    // (decor anywhere above it: a fine tier's small phrase, a set piece's printed words: not a reading line, owner rule
+    // that background words are never the reading; review 2026-11-15, counted as see-through "other" glyphs)
+    const decor = (o: THREE.Object3D | null): boolean => !!o && o !== this.textRoot && (!!o.userData['decor'] || decor(o.parent));
     const other: { i: number; mesh: THREE.Mesh }[] = [];
-    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !under(m) && !m.userData['decor'] && !m.userData['ring'] && !m.userData['copy'] && drawn(m)) other.push({ i: other.length, mesh: m }); });
+    this.textRoot.traverse((o) => { const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; if (m.isMesh && m.material.map && !under(m) && !decor(m) && !m.userData['ring'] && !m.userData['copy'] && drawn(m)) other.push({ i: other.length, mesh: m }); });
     return [...lines, ...(other.length ? [{ id: 'other', glyphs: other, parts: [] }] : [])].slice(0, 255).map((l, k) => ({ ...l, slot: k + 1 }));
   }
 

@@ -23,7 +23,9 @@ import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
 const { values: a } = parseArgs({ options: { worlds: { type: 'string' }, songs: { type: 'string', default: 'choroin,nun' }, seeds: { type: 'string', default: '0' }, step: { type: 'string', default: '4' } } });
-const FILE = 'src/app/lyric-vj/render/ink-tones.json';
+// (a table made here is a candidate: out/research/ink/tones/candidate.json; entries are shipped into the render's table
+// by hand, world by world, after their sample gate and the owner's look check)
+const FILE = process.env['INK_TONES_OUT'] ?? 'out/research/ink/tones/candidate.json';
 const work = resolve('out/research/ink/tones/work');
 mkdirSync(work, { recursive: true });
 await esbuild.build({ entryPoints: ['src/app/lyric-vj/render/main.ts'], bundle: true, format: 'esm', target: 'es2022', outfile: join(work, 'render.js'), logLevel: 'warning' });

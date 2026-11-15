@@ -28,10 +28,17 @@ async function read(t: number, ids: string[]): Promise<{ id: string; lo: string;
     if (!where.length) return [];
     w.vjLyrics(false, true);
     const off = pixels(await w.vjFrame(t));
+    // (a carrier's own drawn pixels: where the frame with the carriers differs from the frame without them; its bounding
+    // rect also held the page round a tape, dark-glitch 2026-11-15)
+    const bare = where.some((x) => x.carried) ? (w.vjLyrics(false, false), pixels(await w.vjFrame(t))) : undefined;
     return where.flatMap(({ id, r, carried }) => {
       const ls: [number, number][] = [];
       const step = Math.max(1, Math.floor(Math.min(r.x1 - r.x0, r.y1 - r.y0) / 120));
-      for (let y = r.y0; y < r.y1; y += step) for (let x = r.x0; x < r.x1; x += step) { const k = (y * W + x) * 4; ls.push([lum(off[k], off[k + 1], off[k + 2]), k]); }
+      for (let y = r.y0; y < r.y1; y += step) for (let x = r.x0; x < r.x1; x += step) {
+        const k = (y * W + x) * 4;
+        if (carried && bare && Math.max(Math.abs(off[k] - bare[k]), Math.abs(off[k + 1] - bare[k + 1]), Math.abs(off[k + 2] - bare[k + 2])) <= 16) continue;
+        ls.push([lum(off[k], off[k + 1], off[k + 2]), k]);
+      }
       if (ls.length < 20) return [];
       ls.sort((p, q) => p[0] - q[0]);
       const [a, z] = [ls[Math.floor(ls.length * 0.01)][1], ls[Math.floor(ls.length * 0.99)][1]];

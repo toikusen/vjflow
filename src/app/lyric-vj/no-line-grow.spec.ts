@@ -21,9 +21,11 @@ const withoutHolds = (job: unknown) => {
 };
 const kindsOf = (job: { treatment: { cues: unknown[] } }) => (job.treatment.cues as Row[]).map((c) => (c.world?.['beat'] as { kind?: string } | undefined)?.kind ?? null);
 
-describe.skipIf(!existsSync(SNOW) || !existsSync(MEANING))('noLineGrow knob', () => {
-  const song = JSON.parse(readFileSync(SNOW, 'utf8'));
-  const meaning = JSON.parse(readFileSync(MEANING, 'utf8'));
+const HAS_DATA = existsSync(SNOW) && existsSync(MEANING);
+describe.skipIf(!HAS_DATA)('noLineGrow knob', () => {
+  // (skipIf still runs this body: read only when the uncommitted out/ data is there)
+  const song = HAS_DATA ? JSON.parse(readFileSync(SNOW, 'utf8')) : null;
+  const meaning = HAS_DATA ? JSON.parse(readFileSync(MEANING, 'utf8')) : null;
   const style = FREE_STYLES.find((s) => s.id === 'art-deco')!;
 
   it('unset or false: byte for byte the default job, which grows lines', () => {

@@ -3,6 +3,8 @@
 // step would set it smaller (a frame fit, a split part's container, the words round a blown-up word), the line is laid
 // again instead: whole rather than split, wrapped in the set's own rows, and past those a mark the composer reads to take
 // another set (Block.floorMiss). No three.js here: the composer plans with the same numbers the renderer draws with.
+import { motionRoom } from './motion-pad';
+
 
 /**
  * The type every set may reach and the least it sets, px at 1080p: a set's own numbers below these left a short line
@@ -47,12 +49,30 @@ export const heldScale = (scale: number, size: number, floor: number = TYPE_FLOO
 export const fitAtFloor = (whole: number, least: number, floor: number, words: number) => (underFloor(least * whole, floor) ? Math.min(heldScale(whole, least, floor), Math.max(whole, words)) : whole);
 
 /**
- * By how much a line's fit may be multiplied while it plays so its words (`least` px as drawn, em boxes reaching `wx` and
- * `wy` px from the frame's centre) rest at the floor, no further than `edge` px short of the frame's edge: under 1 the
- * zoom-out left to a camera, over 1 the lift a fit that left the words small needs (engine holdScale).
+ * The most a line's fit may be multiplied while it plays: its words (em boxes reaching `wx` and `wy` px from the frame's
+ * centre at the current fit) stay inside the frame at the worst of the stacked motion (motionPad: drift, sway, camera, the
+ * kick's 5 % from the centre), found by bisection.
  */
-export const holdMultiple = (least: number, floor: number, wx: number, wy: number, edge = 24, w = 1920, h = 1080) =>
-  Math.min(floor / least, (w / 2 - edge) / Math.max(1, wx), (h / 2 - edge) / Math.max(1, wy));
+export const holdRoom = (wx: number, wy: number, kick: boolean) => {
+  let [lo, hi] = [0.25, 4];
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (motionRoom(wx * mid, wy * mid, kick) >= 1) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+};
+
+/**
+ * By how much a line's fit may be multiplied while it plays so its words (`least` px as drawn, em boxes reaching `wx` and
+ * `wy` px from the frame's centre) rest at the floor, no further than the frame holds them through all their motion
+ * (holdRoom): under 1 the zoom-out left to a camera, over 1 the lift a fit that left the words small needs.
+ */
+export const holdMultiple = (least: number, floor: number, wx: number, wy: number, kick = true) => Math.min(floor / least, holdRoom(wx, wy, kick));
+
+/** Whether the hold cannot bring a line's words (`least` px as drawn at the fit) to the floor within the frame (holdMultiple): the line is laid again without what makes it wide. */
+export const holdFalls = (least: number, floor: number, wx: number, wy: number, kick = true) =>
+  underFloor(least * Math.max(1, holdMultiple(least, floor, wx, wy, kick)), floor);
 
 /**
  * The scale a line's fit group takes in a frame: what the fit, the drift and the line's camera give (`natural`), held at
@@ -67,10 +87,3 @@ export const playScale = (natural: number, hold = 0) => Math.max(natural, hold);
  * than this would be a size the stroke checks never saw, so a set may condense only down to it.
  */
 export const MIN_CONDENSE = 0.75;
-
-/** Whether the hold cannot bring a line's words (`least` px as drawn at the fit) to the floor within the frame (holdMultiple): the line is laid again without what makes it wide. */
-export const holdFalls = (least: number, floor: number, wx: number, wy: number, edge = 24) =>
-  underFloor(least * Math.max(1, holdMultiple(least, floor, wx, wy, edge)), floor);
-
-/** How near the frame's edge the hold may carry a line's words, px at 1080p: the words stay in the frame, the safe margin is spent before the floor is (a one-row line's glyph boxes run 2 % past its advances). */
-export const HOLD_EDGE = 8;

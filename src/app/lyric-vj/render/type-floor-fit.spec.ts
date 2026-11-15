@@ -4,7 +4,10 @@ import type { Glyph } from './glyphs';
 import { frameFit } from './runtime';
 import { GROW } from './world-beats';
 import { stairRows, STAIR_LEAST } from './stair';
-import { holdFalls, holdMultiple, playScale, TYPE_FLOOR } from './type-floor';
+import { holdFalls, holdMultiple, holdRoom, playScale, TYPE_FLOOR } from './type-floor';
+import { motionPad } from './motion-pad';
+import { holdScale } from './engine';
+import * as THREE from 'three';
 import { blowPose, holdParticles, type Pose } from './world-layout';
 import { SET_SPECS, shearedSize } from './world-sets';
 
@@ -79,7 +82,7 @@ describe('the hold on a line\'s fit while it plays (holdMultiple)', () => {
   });
   it('lifts a fit that left the words under the floor, but not past the frame edge', () => {
     expect(holdMultiple(78, 84, 600, 300)).toBeCloseTo(84 / 78);
-    expect(holdMultiple(78, 84, 930, 300)).toBeCloseTo((960 - 24) / 930);
+    expect(holdMultiple(78, 84, 930, 300)).toBeCloseTo(holdRoom(930, 300, true), 6);
     expect(holdMultiple(78, 84, 930, 300)).toBeLessThan(84 / 78);
   });
 });
@@ -111,5 +114,66 @@ describe('a blown-up key the frame cannot hold gives way (holdFalls)', () => {
     expect(holdFalls(78, 84, 600, 300)).toBe(false);
     expect(holdFalls(78, 84, 930, 300)).toBe(true);
     expect(holdFalls(66, 84, 700, 520)).toBe(true);
+  });
+});
+
+describe('the hold keeps the words in the frame through all their motion (holdRoom)', () => {
+  it('at the worst of drift, sway and the kick, a box scaled by the room stays inside the frame', () => {
+    for (const kick of [false, true])
+      for (const [wx, wy] of [[600, 300], [930, 300], [700, 520], [900, 500]] as const) {
+        const m = holdRoom(wx, wy, kick);
+        const r = motionPad({ x0: 960 - wx * m, y0: 540 - wy * m, x1: 960 + wx * m, y1: 540 + wy * m }, kick);
+        expect(r.x0, `${wx} ${kick}`).toBeGreaterThanOrEqual(-1e-6);
+        expect(r.x1).toBeLessThanOrEqual(1920 + 1e-6);
+        expect(r.y0).toBeGreaterThanOrEqual(-1e-6);
+        expect(r.y1).toBeLessThanOrEqual(1080 + 1e-6);
+      }
+  });
+  it('is smaller with the kick (it grows the box from the centre and jumps it)', () => {
+    expect(holdRoom(800, 400, true)).toBeLessThan(holdRoom(800, 400, false));
+  });
+});
+
+describe('the hold is a function of the line alone (holdScale, in its own space)', () => {
+  /** A line of three glyphs that swell over their reading, 70 px at the start, 84 at the end, drawn at scale 1. */
+  const fake = () => {
+    const group = new THREE.Group();
+    const glyphs = [0, 1, 2].map((i) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), new THREE.MeshBasicMaterial());
+      m.userData['size'] = 100;
+      m.position.set((i - 1) * 150, 0, 0);
+      group.add(m);
+      return m;
+    });
+    return { group, floor: 84, readable: () => [0, 2] as [number, number], update: (t: number) => glyphs.forEach((g) => g.scale.setScalar(0.7 + 0.14 * Math.min(1, t / 2))) } as never;
+  };
+  const read = (layer: never, parent: THREE.Object3D) => {
+    parent.add((layer as { group: THREE.Group }).group);
+    return holdScale(layer, 0.9, 84.6, (t) => t, true);
+  };
+  it('reads the same under a neutral parent, under a kicked and swayed type layer, and after a seek', () => {
+    const neutral = read(fake(), new THREE.Group());
+    const kicked = new THREE.Group();
+    kicked.scale.setScalar(1.05);
+    kicked.position.set(13, 16, 0);
+    kicked.rotation.z = 0.03;
+    const fit = new THREE.Group();
+    fit.position.set(14, 8, 0);
+    fit.scale.setScalar(0.93);
+    fit.rotation.z = 0.02;
+    kicked.add(fit);
+    const swayed = read(fake(), fit);
+    expect(neutral).toBeDefined();
+    expect(swayed).toBe(neutral);
+    const seeked = fake();
+    (seeked as unknown as { update: (t: number) => void }).update(1.7);
+    expect(read(seeked, new THREE.Group())).toBe(neutral);
+  });
+  it('lifts the fit so the smallest glyph reads at the floor, and puts the line back where it was', () => {
+    const layer = fake();
+    const parent = new THREE.Group();
+    const h = read(layer, parent)!;
+    expect(70 * 0.9 * (h / 0.9)).toBeGreaterThanOrEqual(84.6 - 1e-6);
+    expect((layer as unknown as { group: THREE.Group }).group.parent).toBe(parent);
   });
 });

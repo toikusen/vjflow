@@ -50,6 +50,7 @@ type Read = { set: number; drawn: number; decor: boolean };
 interface Under { diag?: unknown; rest?: number; floored?: boolean; world: string; song: string; seed: number; cue: string; set: string; floor: number; least: number; sizes: number[]; text: string; t: number; plan: string; fit?: number; template?: string }
 const under: Under[] = [];
 const particleRows: unknown[] = [];
+let blowDroppedLines = 0;
 const callsUnder: Under[] = [];
 const loUnder: Under[] = [];
 const byWorldSet: Record<string, { lines: number; under: number }> = {};
@@ -73,7 +74,8 @@ async function scanJob(id: string, style: unknown, name: string, song: unknown, 
   });
   await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, file)}`);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 200000 });
-  const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, fit: (c as { fitScale?: number }).fitScale ?? 1, template: (c as { template?: string }).template ?? '', rest: (c as { restSize?: number }).restSize, floored: (c as { floored?: boolean }).floored })));
+  const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, fit: (c as { fitScale?: number }).fitScale ?? 1, template: (c as { template?: string }).template ?? '', rest: (c as { restSize?: number }).restSize, floored: (c as { floored?: boolean }).floored, blowDropped: !!(c as { blowDropped?: boolean }).blowDropped })));
+  blowDroppedLines += cues.filter((c) => c.blowDropped).length;
   for (const c of cues) {
     const ending = c === cues.at(-1);
     const wl = planOf.get(c.id) ?? {};
@@ -137,7 +139,7 @@ const commit = execSync(`git -C ${CODE} rev-parse --short HEAD`).toString().trim
 const dirty = execSync(`git -C ${CODE} status --porcelain src`).toString().trim().split('\n').filter(Boolean);
 const out = {
   commit, dirty, scheduler: a.on ? 'on' : 'off', seeds: a.seeds, songs: a.songs, worlds: worlds.length, lines, glyphs, missing,
-  floor: TYPE_FLOOR.lo, under: under.length, loUnder: loUnder.length, callsUnder: callsUnder.length,
+  floor: TYPE_FLOOR.lo, blowDropped: blowDroppedLines, under: under.length, loUnder: loUnder.length, callsUnder: callsUnder.length,
   particleUnderFloor: particle, decorUnderFloor: decorUnder, extras, leastByWorld,
   byWorldSet: Object.fromEntries(Object.entries(byWorldSet).filter(([, v]) => v.under).sort()),
   lines_under: under, lo_under: loUnder, calls_under: callsUnder, particle_rows: particleRows,

@@ -55,18 +55,19 @@ for (const world of positionals) {
     await page.close();
   }
   const pair = await browser.newPage();
-  const both = (await pair.evaluate(async ([p, q]) => {
-    const load = (s: string) => new Promise<HTMLImageElement>((r) => { const i = new Image(); i.onload = () => r(i); i.src = s; });
+  // (a string, not a function: tsx names the helpers of a serialised function, and the page has no __name)
+  const both = (await pair.evaluate(`(async ([p, q]) => {
+    const load = (s) => new Promise((r) => { const i = new Image(); i.onload = () => r(i); i.src = s; });
     const [i, j] = [await load(p), await load(q)];
     const c = document.createElement('canvas');
-    [c.width, c.height] = [i.width, i.height * 2 + 6];
-    const g = c.getContext('2d')!;
+    c.width = i.width; c.height = i.height * 2 + 6;
+    const g = c.getContext('2d');
     g.fillStyle = '#888';
     g.fillRect(0, 0, c.width, c.height);
     g.drawImage(i, 0, 0);
     g.drawImage(j, 0, i.height + 6);
     return c.toDataURL('image/png');
-  }, shots)) as string;
+  })(${JSON.stringify(shots)})`)) as string;
   await pair.close();
   writeFileSync(join(out, `${world}_上改前_下改後.png`), Buffer.from(both.split(',')[1], 'base64'));
   console.log(world, at);

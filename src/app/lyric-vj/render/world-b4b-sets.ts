@@ -7,6 +7,8 @@ import type { SetSpec } from './world-sets';
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };
 const [C30, S30] = [Math.cos(Math.PI / 6), 0.5];
 /** An isometric wall facing left (its words run down and right) and one facing right (they run up and right). */
+/** The faces a corner room's words stand on, as world-b4-iso paints them: the coral wall in shade, the deep teal wall mid. */
+export const CORNER_WALLS = ['#B8432F', '#1E6F66'];
 export const ISO_L: [number, number, number, number] = [C30, S30, 0, 1];
 export const ISO_R: [number, number, number, number] = [C30, -S30, 0, 1];
 /** The anime title's lean, 9° (board: skewX(-9)). */
@@ -30,8 +32,8 @@ export const B4B_SETS: Record<string, SetSpec> = {
   'isometric/stairs': { ...base, at: [0.42, 0.72], ax: 0, ay: 0, share: 0.44, tall: 0.15, hi: 150, rows: [1, 2], lead: 1.14, track: 0.04, shear: ISO_R, ink: 'plateInk', on: ['plate'], keepRows: true, clear: [[0.7, 0.06, 0.86, 0.66], [0.66, 0.62, 0.78, 0.88], [0.14, 0.64, 0.25, 0.83]], fixed: true },
   'isometric/terrace': { ...base, at: [0.31, 0.48], ax: 0, ay: 0, share: 0.42, tall: 0.3, hi: 132, rows: [1, 2], lead: 1.5, track: 0.04, flush: -1, shear: ISO_L, ink: 'plateInk', on: ['plate'], keepRows: true, clear: [[0.5, 0.07, 0.9, 0.88]], fixed: true },
   'isometric/blocks': { ...base, at: [0.5, 0.5], ax: 0, ay: 0, share: 0.86, tall: 0.86, hi: 170, rows: [1, 2], lead: 1.2, track: 0.48, even: true, drop: 0.48, shear: ISO_L, ink: 'plateInk', on: ['plate'], keepRows: true, fixed: true },
-  'isometric/corner': { ...base, at: [0.648, 0.36], ax: 0, ay: 0, share: 0.32, tall: 0.24, hi: 140, rows: [1, 2], lead: 1.2, track: 0.02, flush: -1, shear: ISO_L, ink: 'ink2', key: 'ink2', on: ['plateInk'], keepRows: true, clear: [[0.4, 0.4, 0.6, 0.66]], fixed: true },
-  'isometric/corner-l': { ...base, at: [0.345, 0.36], ax: 0, ay: 0, share: 0.32, tall: 0.24, hi: 140, rows: [1, 2], lead: 1.2, track: 0.02, flush: -1, shear: ISO_R, ink: 'ink2', key: 'ink2', on: ['plateInk'], keepRows: true, clear: [[0.4, 0.4, 0.6, 0.66]], fixed: true },
+  'isometric/corner': { ...base, at: [0.648, 0.36], ax: 0, ay: 0, share: 0.32, tall: 0.24, hi: 140, rows: [1, 2], lead: 1.2, track: 0.02, flush: -1, shear: ISO_L, ink: 'ink2', key: 'ink2', on: ['plateInk'], groundHex: CORNER_WALLS, keepRows: true, clear: [[0.4, 0.4, 0.6, 0.66]], fixed: true },
+  'isometric/corner-l': { ...base, at: [0.345, 0.36], ax: 0, ay: 0, share: 0.32, tall: 0.24, hi: 140, rows: [1, 2], lead: 1.2, track: 0.02, flush: -1, shear: ISO_R, ink: 'ink2', key: 'ink2', on: ['plateInk'], groundHex: CORNER_WALLS, keepRows: true, clear: [[0.4, 0.4, 0.6, 0.66]], fixed: true },
   // cel80s (board a–d): the title card over the speed streaks, its last phrase in yellow under it; a white subtitle in the
   // dusk; the eyecatch, one word in the sunset bands; the ending's two columns down the dark panel
   'cel80s/title': { ...base, split: { small: 'tail', scale: 0.85, track: 0.14, ink: 'accent' }, at: [0.42, 0.43], ax: 0, ay: 0, share: 0.64, tall: 0.46, hi: 200, rows: [1, 2], lead: 1.2, track: 0.02, shear: ITALIC, under: CEL_RINGS, key: 'ink', clear: [[0.83, 0.12, 0.98, 0.28], [0.76, 0.76, 0.86, 0.88]], fixed: true },

@@ -5,6 +5,7 @@
 import { typeset } from '../typeset';
 import { layoutMeasure, ruleAdvance } from './layout-measure';
 import { REST_FLOOR } from './reading-window';
+import { leastOf, shearGain } from './type-floor';
 import { DECO_PANELS } from './world-b5-sets';
 import { blockOf, SET_SPECS, shearedSize, type Block, type Measure, type SetSpec } from './world-sets';
 
@@ -31,6 +32,8 @@ export interface LaidSeat {
   boxPx: FracBox;
   /** The type size, px at 1080p (a split line's: its larger part's). */
   size: number;
+  /** The least type any part of it is set at, px at 1080p (render/type-floor.ts leastOf). */
+  least: number;
   rows: number;
   vertical: boolean;
   /** The page graphics the words keep off, frame fractions. */
@@ -89,6 +92,7 @@ export function laidSeat(text: string, set: string | SetSpec, o: { slot?: { k: n
     box: { x0: r3(x0 / 1920), y0: r3(y0 / 1080), x1: r3(x1 / 1920), y1: r3(y1 / 1080) },
     boxPx: { x0, y0, x1, y1 },
     size: Math.round(size),
+    least: Math.round(leastOf(b) * shearGain(spec.shear)),
     rows: b.lines?.length ?? b.rows.length,
     vertical: !!spec.vertical,
     protect: (spec.clear ?? []).map(([a, c, d, e]) => ({ x0: a, y0: c, x1: d, y1: e })),
@@ -117,9 +121,9 @@ export function splitRows(b: Block, spec: SetSpec, measure: Measure): { main: Pa
     if (r.v) return undefined;
     const cs = [...t];
     const ts = typeset(t, true);
-    // (the least glyph as the engine weighs it at rest: its size through the row's scale and the set's shear, a hair
+    // (the least glyph as the engine weighs it at rest: its size through the row's scale and the set's vertical shear (em height), a hair
     // under for the glyph size's rounding)
-    const rest = Math.min(...cs.flatMap((ch, k) => (ch.trim() ? [r.size * sx * Math.min(1, sizes[from + k] ?? 1)] : []))) - 0.5;
+    const rest = Math.min(...cs.flatMap((ch, k) => (ch.trim() ? [r.size * shearGain(spec.shear) * Math.min(1, sizes[from + k] ?? 1)] : []))) - 0.5;
     // (the glyph's size is rounded to whole px: a hair more than its scale)
     const grow = ts.map((x) => (x.scale > 1 ? x.scale + 0.01 : 1));
     const w = (cs.reduce((a, ch, k) => a + (measure(ch) / 100) * grow[k] + (k ? ts[k].gapBefore : 0), 0) + Math.max(0, cs.length - 1) * r.track) * r.size;

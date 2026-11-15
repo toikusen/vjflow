@@ -71,7 +71,8 @@ describe('style batch 5: embroidery, screentone, art-deco, notebook', () => {
           const [bw, bh] = shearedSize(b.w, b.h, spec.shear);
           expect(Math.abs(b.cx) + bw / 2, `${l.set} ${text}`).toBeLessThanOrEqual(960);
           expect(Math.abs(b.cy) + bh / 2, `${l.set} ${text}`).toBeLessThanOrEqual(540);
-          expect(b.size, `${l.set} ${text}`).toBeGreaterThanOrEqual(84);
+          // (a line no layout of the set holds at the floor is marked floorMiss and left to the composer, which takes another set)
+          if (!b.floorMiss) expect(b.size, `${l.set} ${text}`).toBeGreaterThanOrEqual(84);
         }
   });
   it('declare their large graphics so calls keep off them', () => {

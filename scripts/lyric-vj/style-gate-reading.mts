@@ -72,6 +72,7 @@ let turnsRead = 0;
 /** Camera moves a taken-over world dropped because they collided with a switch the song keeps (resolved, for the record). */
 const camDrops: string[] = [];
 /** A page-carried composition's page as the gate's frames drew it (render/page-layout.ts): checked, re-laid, fallen back whole, turned over, carrier covered, glyphs checked. */
+const blowDropped: Record<string, number> = {};
 const pageCounts = { frames: 0, relaid: 0, pageFallbackFrames: 0, pageTurnFrames: 0, carrierCoveredFrames: 0, glyphFrames: 0 };
 const fill: number[] = [];
 let checked = 0;
@@ -104,7 +105,8 @@ for (const id of positionals) {
     });
     await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, resolve(work))}/render.html?job=/${relative(ROOT, resolve(file))}`);
     await page.waitForSelector('body[data-ready="1"]', { timeout: 200000 });
-    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, template: (c as { template?: string }).template })));
+    const cues = await page.evaluate(() => window.vjMetrics().cues.map((c) => ({ id: c.id, from: c.readableFrom, to: c.readableTo, text: c.text, template: (c as { template?: string }).template, blowDropped: (c as { blowDropped?: string }).blowDropped })));
+    for (const c of cues) if (c.blowDropped) blowDropped[c.blowDropped] = (blowDropped[c.blowDropped] ?? 0) + 1;
     for (const c of cues) {
       // the video's own ending fade takes the last line with it, in every style
       const ending = c === cues.at(-1);
@@ -164,7 +166,7 @@ await browser.close();
 server.close();
 if (a.shots) writeFileSync(join(a.shots, `${positionals.join('-').slice(0, 40)}.index.json`), JSON.stringify(shots, null, 1));
 const sorted = [...fill].sort((x, y) => x - y);
-const out = { commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, pageChecks: pageCounts, contract, turnsRead, turns, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
+const out = { blowDropped, commit: execSync('git rev-parse --short HEAD').toString().trim(), scheduled: process.env['VJ_WORLD_EVENTS'] === '1', checked, pageChecks: pageCounts, contract, turnsRead, turns, camDrops, fails, fillMedian: +sorted[Math.floor(sorted.length / 2)].toFixed(3), fillP10: +sorted[Math.floor(sorted.length * 0.1)].toFixed(3), rules: counts, ruleMoments: moments };
 writeFileSync(join(a.out!, `${positionals.join('-').slice(0, 40)}.json`), JSON.stringify(out, null, 1));
 console.log(JSON.stringify({ ...out, fails: out.fails.length, contract: contract.length, turns: turns.length, ruleMoments: moments.length }), out.fails.slice(0, 6));
 if (turns.length) console.log('turn faults', turns.length, turns.slice(0, 10));

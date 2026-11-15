@@ -314,7 +314,8 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
 // (the --q1 fingerprint, default-hash.mts, on the same disk caches: a9a9027's (hash-4c/base-q1-seed0.json) until the pairs
 // rules, which change the scheduled job on purpose (B: no reseat inside a line; C: motivated ink-swaps), so the pin moved to
 // that commit's, hash-pairs/c-q1.json)
-const BASE_Q1 = 'out/research/q1-1109/hash-pairs/c-q1.json';
+// (the type floor, 2026-11-12, moves the pin again: a set that cannot hold a line at the floor gives way, type-floor/fp/after-q1.json)
+const BASE_Q1 = 'out/research/type-floor/fp/after-q1.json';
 describe.skipIf(!have || !existsSync(BASE_Q1))('phase 4c: joint off is the job before it', () => {
   it('scheduler on, joint off: byte for byte the pinned --q1 job; joint asked on a world the scheduler does not take: the default job', () => {
     const rows = JSON.parse(readFileSync(BASE_Q1, 'utf8')).rows as Record<string, string>;

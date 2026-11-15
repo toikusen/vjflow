@@ -1,3 +1,4 @@
+import { keyFor } from './render/hold-room';
 import { describe, expect, it } from 'vitest';
 import { contrast } from './contrast';
 import { FREE_STYLES, HELD_WORLDS } from './free-styles';
@@ -48,6 +49,21 @@ describe('style batch 4: cyanotype, isometric, cel80s', () => {
     // cyanotype's key words (pale blue) and cel80s's yellow phrase still read on their grounds
     for (const s of B4B_WORLDS[0].palette) expect(contrast(s.accent, s.ground), s.id).toBeGreaterThanOrEqual(4.5);
     for (const s of B4B_WORLDS[2].palette) expect(contrast(s.accent, s.ground), s.id).toBeGreaterThanOrEqual(4.5);
+  });
+  it('read in a corner room: the body ink and the key ink hold 4.5:1 on both walls in every scheme (11 moments read coral on red and teal, 2026-11-14)', () => {
+    const iso = B4B_WORLDS[1];
+    for (const id of ['isometric/corner', 'isometric/corner-l']) {
+      const spec = SET_SPECS[id];
+      for (const s of iso.palette) {
+        const slots = { ground: s.ground, ink: s.ink, ink2: s.ink2, accent: s.accent, plate: s.plate, plateInk: s.plateInk, faint: s.faint };
+        const body = slots[spec.ink as keyof typeof slots];
+        const key = keyFor(spec, slots, body);
+        for (const wall of spec.groundHex!) {
+          expect(contrast(body, wall), `${id} ${s.id} body on ${wall}`).toBeGreaterThanOrEqual(4.5);
+          expect(contrast(key, wall), `${id} ${s.id} key ${key} on ${wall}`).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
   });
   it('keep a sheared wall of words whole in the frame, however long the line', () => {
     for (const id of ['isometric/stairs', 'isometric/terrace', 'isometric/blocks', 'isometric/corner', 'isometric/corner-l', 'cel80s/title', 'cel80s/eyecatch']) {

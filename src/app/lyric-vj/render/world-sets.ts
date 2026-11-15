@@ -14,6 +14,7 @@ import type { SurfaceKind } from './world-glyph';
 import { RowBox, splitBlock, SplitSpec } from './world-split';
 import { phase4Seats } from './world-p4-seats';
 import { bandFit as fitOnBands, type Band } from './carrier-fit';
+import { layFloorOf, leastOf, TYPE_FLOOR, underFloor } from './type-floor';
 
 const W = 1920;
 const H = 1080;
@@ -73,6 +74,8 @@ export interface SetSpec {
   rowOn?: (keyof Slots)[];
   /** What the words stand on when the set's own page draws it (a card, a banner, two banners): the key ink reads on each. */
   on?: (keyof Slots)[];
+  /** Literal colours the page paints under the words that no scheme slot names (isometric's coral and teal walls): the ink logic (hold-room groundsUnder, keyFor) reads on these too. */
+  groundHex?: string[];
   /** The slot the key words start from, when not the accent (an accent banner under the words). */
   key?: keyof Slots;
   /** A run with no break of its own is cut into even rows at its characters, as a printer wraps at its paper's width; a line
@@ -158,6 +161,8 @@ export interface Block {
   hero?: { cx: number; cy: number; w: number; h: number };
   /** A line on bands (SetSpec.bands) that does not fit them even at the type floor: the composer takes another set. */
   bandMiss?: boolean;
+  /** A line no layout of its set holds at the type floor (type-floor.ts): drawn at its largest least type, the composer takes another set. */
+  floorMiss?: boolean;
 }
 
 const base = { lead: 1.16, track: 0.02, rows: [1, 3] as [number, number], lo: 70 };
@@ -314,14 +319,32 @@ Object.assign(SET_SPECS, phase4Seats(SET_SPECS));
 /** Width of a string at size 100, in px. */
 export type Measure = (s: string) => number;
 
-/**
- * The type every set may reach and the least it sets, px at 1080p: a set's own numbers below these left a short line
- * small in a corner of an empty frame (2026-11-04 audit: silk-cold, ink-wash, file, dark-glitch). A set may ask for more.
- */
-export const TYPE_FLOOR = { hi: 150, lo: 84 };
+// (the type floor and its one rule live in type-floor.ts; re-exported here, where the sets and the plan have always read it)
+export { TYPE_FLOOR };
 
-/** The rows and size a line takes in a set: the biggest type the set allows, in as few rows as keep it near that. */
+/**
+ * The rows and size a line takes in a set: the biggest type the set allows, in as few rows as keep it near that. Never
+ * under the type floor (type-floor.ts floorOf): a line some step would set smaller is laid again, whole rather than split,
+ * then wrapped in the set's own rows; one no layout of the set holds at the floor is marked `floorMiss` (the composer
+ * takes another set, lineplan-core seatMissed), and keeps the layout with the largest least type.
+ */
 export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
+  const first = bandedBlock(text, given, measure);
+  const floor = layFloorOf(given);
+  if (!underFloor(leastOf(first), floor)) return first;
+  const whole: SetSpec = given.split ? { ...given, split: undefined } : given;
+  const tries = [...(given.split ? [whole] : []), ...(!given.wrap && !given.vertical && given.rows[1] > 1 ? [{ ...whole, wrap: true }] : [])];
+  let best = first;
+  for (const s of tries) {
+    const b = bandedBlock(text, s, measure);
+    if (!underFloor(leastOf(b), floor) && !b.bandMiss) return b;
+    if (leastOf(b) > leastOf(best)) best = b;
+  }
+  return { ...best, floorMiss: true };
+}
+
+/** A line in a set as laid before the floor's re-lay: the set's own layout, fitted on its bands when it has them. */
+function bandedBlock(text: string, given: SetSpec, measure: Measure): Block {
   const first = layBlock(text, given, measure);
   if (!given.bands?.length) return first;
   // (a line in a shared shot is moved off its set's place by its slot, as world-layout lays it (firstAt): fitted where it is drawn)
@@ -335,7 +358,7 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   // (the line is set smaller inside its own carrier down to the least type a line may take, the set's `lo` or the product's
   // floor (TYPE_FLOOR.lo, never set small) whichever is larger, then wrapped at its characters, before another set is
   // taken: a set with no room past the floor is no reason to lift a line off its carrier onto a busier page)
-  const floor = Math.max(given.lo, TYPE_FLOOR.lo);
+  const floor = layFloorOf(given);
   // (each part that misses its band is set smaller on its own: the hero by the set's width and height, a split line's
   // small part by its container's width; a part that fits keeps its size)
   const shrink = (spec: SetSpec) => {
@@ -369,7 +392,7 @@ export function blockOf(text: string, given: SetSpec, measure: Measure): Block {
   return { ...kept, bandMiss: true };
 }
 
-function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = TYPE_FLOOR.lo): Block {
+function layBlock(text: string, given: SetSpec, measure: Measure, floorLo = layFloorOf({ lo: 0, shear: given.shear })): Block {
   const spec = { ...given, hi: Math.max(given.hi, TYPE_FLOOR.hi), lo: Math.max(given.lo, floorLo) };
   const split = splitBlock(text, spec, measure, floorLo);
   if (split) return split;

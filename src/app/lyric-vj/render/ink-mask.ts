@@ -19,13 +19,23 @@ export function binarize(m: THREE.Material, on: boolean) {
   setPatch(m, 'ink-bin', on ? (shader) => void (shader.fragmentShader = shader.fragmentShader.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n  diffuseColor.a = step(0.5, diffuseColor.a / max(opacity, 1e-4)) * opacity;')) : undefined);
 }
 
+/**
+ * How a glyph picture with a declared part (surface-parts) is split: `keep` 'face' draws only its ink texels, 'part' only
+ * the part's; a texel is the part where it is nearer the part's colour than the ink (surface-parts isPartTexel).
+ */
+export interface Split { tint: string; part: string; keep: 'face' | 'part' }
+const vec = (c: string) => new THREE.Vector3(...[1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255));
+
 /** A glyph's picture drawn as its ID: the picture's own coverage (alpha ≥ 0.5) decides, no tint, no opacity. */
-export function idMaterial(src: THREE.MeshBasicMaterial, id: number): THREE.ShaderMaterial {
+export function idMaterial(src: THREE.MeshBasicMaterial, id: number, split?: Split): THREE.ShaderMaterial {
   const [r, g, b] = idRgb(id);
   const map = src.map;
   map?.updateMatrix();
   return new THREE.ShaderMaterial({
-    uniforms: { map: { value: map }, uvT: { value: map ? map.matrix.clone() : new THREE.Matrix3() }, idc: { value: new THREE.Vector3(r / 255, g / 255, b / 255) }, shownOp: { value: (src.opacity ?? 1) > 0 ? 1 : 0 } },
+    uniforms: {
+      map: { value: map }, uvT: { value: map ? map.matrix.clone() : new THREE.Matrix3() }, idc: { value: new THREE.Vector3(r / 255, g / 255, b / 255) }, shownOp: { value: (src.opacity ?? 1) > 0 ? 1 : 0 },
+      uSplit: { value: split ? (split.keep === 'face' ? 1 : 2) : 0 }, uTint: { value: vec(split?.tint ?? '#000000') }, uPart: { value: vec(split?.part ?? '#000000') }, uPremult: { value: map?.userData['premult'] ? 1 : 0 },
+    },
     vertexShader: /* glsl */ `
       #include <clipping_planes_pars_vertex>
       uniform mat3 uvT; varying vec2 vUv;
@@ -34,11 +44,17 @@ export function idMaterial(src: THREE.MeshBasicMaterial, id: number): THREE.Shad
       }`,
     fragmentShader: /* glsl */ `
       #include <clipping_planes_pars_fragment>
-      uniform sampler2D map; uniform vec3 idc; uniform float shownOp; varying vec2 vUv;
+      uniform sampler2D map; uniform vec3 idc, uTint, uPart; uniform float shownOp, uSplit, uPremult; varying vec2 vUv;
       void main(){
       #include <clipping_planes_fragment>
-        float a = texture2D(map, vUv).a * shownOp;
+        vec4 t = texture2D(map, vUv);
+        float a = t.a * shownOp;
         if (a < 0.5) discard;
+        if (uSplit > 0.0) {                       // a declared part: nearer its colour than the ink (surface-parts isPartTexel)
+          vec3 c = uPremult > 0.0 ? t.rgb / max(t.a, 1e-4) : t.rgb;
+          bool part = dot(c - uPart, c - uPart) < dot(c - uTint, c - uTint);
+          if ((uSplit < 1.5) == part) discard;
+        }
         gl_FragColor = vec4(idc, 1.0);
       }`,
     clipping: true,
@@ -108,8 +124,9 @@ export const MASK_WARP = {
  * (alpha ≥ 0.5) decides, no tint, no opacity (a glyph shown at any opacity is drawn whole). Every material and visibility
  * is put back. (A mesh a drawn one hangs under, a glyph under its echo or shine, is drawn as nothing, not hidden.)
  */
-export function drawIds(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, glyphs: { mesh: THREE.Mesh; id: number }[], into: THREE.WebGLRenderTarget) {
+export function drawIds(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, glyphs: { mesh: THREE.Mesh; id: number; split?: Split }[], into: THREE.WebGLRenderTarget) {
   const keep = new Map(glyphs.map((g) => [g.mesh, g.id]));
+  const splits = new Map(glyphs.map((g) => [g.mesh, g.split]));
   const hidden: THREE.Object3D[] = [];
   const swapped: [THREE.Mesh, THREE.Material | THREE.Material[]][] = [];
   const above = new Set<THREE.Object3D>();
@@ -121,7 +138,7 @@ export function drawIds(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camer
     if (id === undefined && above.has(o) && m.isMesh) { swapped.push([m, m.material]); m.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false }); return; }
     if (id === undefined) { if (o.visible) { o.visible = false; hidden.push(o); } return; }
     swapped.push([m, m.material]);
-    m.material = idMaterial(m.material as THREE.MeshBasicMaterial, id);
+    m.material = idMaterial(m.material as THREE.MeshBasicMaterial, id, splits.get(m));
   });
   const [target, clear, alpha, cs] = [renderer.getRenderTarget(), renderer.getClearColor(new THREE.Color()), renderer.getClearAlpha(), renderer.outputColorSpace];
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -156,7 +173,7 @@ export class InkMask {
    * the final pass's own uniforms have it (`finals`): the warped mask is left in `warped`. Every material and visibility
    * is put back.
    */
-  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, glyphs: { mesh: THREE.Mesh; id: number }[], finals: Record<string, { value: unknown }>) {
+  render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, glyphs: { mesh: THREE.Mesh; id: number; split?: Split }[], finals: Record<string, { value: unknown }>) {
     drawIds(renderer, scene, camera, glyphs, this.idTarget);
     const [target, clear, alpha, auto, cs] = [renderer.getRenderTarget(), renderer.getClearColor(new THREE.Color()), renderer.getClearAlpha(), renderer.autoClear, renderer.outputColorSpace];
     renderer.outputColorSpace = THREE.LinearSRGBColorSpace;

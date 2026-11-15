@@ -230,6 +230,8 @@ function texture(char: string, s: GlyphStyle) {
   }
   const tex = premultGlyph(new THREE.CanvasTexture(canvas));
   tex.anisotropy = 4;
+  // (the material the picture is made of: the ink gate reads its declared parts, surface-parts)
+  if (s.surface) tex.userData['surface'] = s.surface;
   const entry: { texture: THREE.CanvasTexture; w: number; h: number; advance: number; pieces?: Piece[] } = { texture: tex, w, h, advance };
   if (piecesOn) entry.pieces = piecesOf(canvas, w, h);
   cache.set(key, entry);

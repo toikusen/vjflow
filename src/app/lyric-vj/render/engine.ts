@@ -25,6 +25,7 @@ import { InkHalo } from './ink-halo';
 import { fxOfFrame, type FxBox } from '../ink-decide';
 import { STYLE_WORLDS } from '../style-worlds';
 import { HALO_UNIFORMS, haloCut, matchGlyphPicture, setPatch } from './material-patch';
+import { partOf } from './surface-parts';
 import { SNOW } from './world-grounds';
 import { idOf, partIdOf } from '../ink-verify';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -2743,10 +2744,16 @@ export class LyricVjEngine {
       const [w, h] = [x1 - x0, y1 - y0];
       const on = read(x0, y0, w, h);
       this.inkMask ??= new InkMask();
-      this.inkMask.render(this.renderer, this.textScene, this.camera, meshes.flatMap((l) => l.glyphs.map((g) => ({ mesh: g.mesh, id: idOf(l.slot, g.i) }))), this.finalPass.uniforms as Record<string, { value: unknown }>);
+      // (a glyph picture whose material declares a part (surface-parts): the face is its ink texels only; an outline part
+      // goes to the parts mask as the glyph's outline, a ground part is read as the ground)
+      const declared = (m: THREE.Mesh) => partOf(((m.material as THREE.MeshBasicMaterial).map?.userData['surface']) as string | undefined);
+      this.inkMask.render(this.renderer, this.textScene, this.camera, meshes.flatMap((l) => l.glyphs.map((g) => { const d = declared(g.mesh); return { mesh: g.mesh, id: idOf(l.slot, g.i), ...(d ? { split: { tint: d.tint, part: d.colour, keep: 'face' as const } } : {}) }; })), this.finalPass.uniforms as Record<string, { value: unknown }>);
       const mask = this.inkMask.read(this.renderer, x0, y0, w, h);
       // (the parts mask: each glyph's parts by reading role, through the same sampling; ink-verify partIdOf)
-      const partList = meshes.flatMap((l) => l.parts.map((p) => ({ mesh: p.mesh, id: partIdOf(l.slot, p.i, p.role) })));
+      const partList = [
+        ...meshes.flatMap((l) => l.parts.map((p) => ({ mesh: p.mesh, id: partIdOf(l.slot, p.i, p.role) }))),
+        ...meshes.flatMap((l) => l.glyphs.flatMap((g) => { const d = declared(g.mesh); return d?.role === 'outline' ? [{ mesh: g.mesh, id: partIdOf(l.slot, g.i, 'outline'), split: { tint: d.tint, part: d.colour, keep: 'part' as const } }] : []; })),
+      ];
       let parts: Uint8Array | undefined;
       if (partList.length) {
         this.inkMask.render(this.renderer, this.textScene, this.camera, partList, this.finalPass.uniforms as Record<string, { value: unknown }>);

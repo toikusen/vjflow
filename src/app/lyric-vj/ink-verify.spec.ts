@@ -183,6 +183,15 @@ describe('ink gate v2 numbers', () => {
       expect(broken.pair!.q[2]).toBe('ground');
     });
 
+    it('a declared outline in the ground\'s own tone separates nothing: the face reads against it and fails (guard 2026-11-15)', () => {
+      // a light face, a "keyline" at the paper's own light tone round it, the paper: no reading rescued
+      const stroke = (x: number, y: number) => x >= 9 && x < 11 && y >= 4 && y < 16;
+      const line = (x: number, y: number) => !stroke(x, y) && x >= 7 && x < 13 && y >= 2 && y < 18;
+      const v = verdict(paint(20, 20, (x, y) => (stroke(x, y) ? { rgb: [235, 230, 220], face: 0 } : line(x, y) ? { rgb: [228, 222, 210], part: [0, 'outline'] } : { rgb: [228, 222, 210] })));
+      expect(v.status).toBe('fail');
+      expect(v.pair!.q[2]).toBe('outline');
+    });
+
     it("a neighbour 2 px away is not a glyph's ground (review 2026-11-13); touching it fails the shape gate", () => {
       const two = (gapPx: number) => paint(20, 10, (x, y) => (y >= 2 && y < 8 && x >= 4 && x < 8 ? { rgb: WHITE, face: 0 } : y >= 2 && y < 8 && x >= 8 + gapPx && x < 12 + gapPx ? { rgb: WHITE, face: 1 } : { rgb: BLACK }));
       expect(verdict(two(2)).status).toBe('pass');

@@ -72,6 +72,7 @@ export interface GlyphBox {
   i: number; x0: number; y0: number; x1: number; y1: number; a: number; moving: boolean;
   /** The ink it was drawn in (before its surface's own texture), when known. */ ink?: string;
   /** Its own entrance or exit running, or at rest (a world line). */ phase?: 'enter' | 'exit' | 'rest';
+  /** The carrier it stands on as drawn, frame px y down (a world line on an object). */ on?: { x0: number; y0: number; x1: number; y1: number };
   /** Its drawn opacity's multipliers (a world line): its pose's, its block's, a roll call's give-way, its tone (opacity on a sheet, else ink). */ alpha?: { pose: number; block: number; left: number; tone: number };
 }
 

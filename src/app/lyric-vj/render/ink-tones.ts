@@ -16,8 +16,10 @@ export interface ToneTable {
   built: string;
   /** Every ground was read with its line at rest (on its carrier, if it has one): a carried set's entry may be read. */
   restOnly?: boolean;
-  /** Every ground was read within the reading rim of its glyphs (not their em boxes). */
-  rim?: boolean;
+  /** The worlds whose entries are shipped (each improved its sample gate and regressed nothing, 2026-11-15). */
+  shipped?: string[];
+  /** Every ground was read inside its line's carrier as drawn, or under its glyphs' boxes off a carrier. */
+  inside?: boolean;
   /** `${set}|${scheme id}` → the drawn ground's darkest and lightest tones under the set's words, and how many reads. */
   grounds: Record<string, { lo: string; hi: string; n: number }>;
   /**
@@ -46,6 +48,8 @@ const nodeFs = () => (globalThis as { process?: { getBuiltinModule?: (id: string
 
 /** The table, when one was made on these effects (node reads it on demand; a page after ensureInkTones). */
 export function inkTones(): ToneTable | undefined {
+  // (QA, the before/after crops: __vjNoInkTones reads no table)
+  if ((globalThis as { __vjNoInkTones?: boolean }).__vjNoInkTones) return undefined;
   if (table === undefined) {
     const fs = nodeFs();
     table = fs && fs.existsSync(FILE) ? (JSON.parse(fs.readFileSync(FILE, 'utf8')) as ToneTable) : null;

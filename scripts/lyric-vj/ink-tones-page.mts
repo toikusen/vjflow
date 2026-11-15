@@ -1,48 +1,41 @@
-// The tone table generator's page side (ink-tones.mts): one moment, each world line at rest, the ground right round its
-// glyphs as the gate reads it: the pixels within RIM px of where the words are drawn (the words-on frame differs from
-// the words-off frame there), read in the words-off frame with the final pass at rest; their 10th and 90th percentile (a decision input: the gate stays per pixel).
-// (A glyph's em box ran past a tape onto the page; the rim is what the reading stands on, 2026-11-15.)
+// The tone table generator's page side (ink-tones.mts): one moment, each world line at rest, the ground it stands on
+// with the words off and the final pass at rest: inside its carrier's drawn rect (inset a little) where it stands on one,
+// else under its glyphs' boxes; the worst tones there (1st and 99th percentile of the pixels' luminance, not a mean).
 const REST = ['uVignette', 'uVigBase', 'uFade', 'uGrain', 'uPaper', 'uBoil', 'uLift', 'uTooth', 'uPixel', 'uScan', 'uGlitch', 'uAberration', 'uFlash', 'uHit', 'uZoomHit', 'uTileHit', 'uRays', 'uBeams', 'uShock', 'uSweep', 'uShockR', 'uGlass', 'uFlicker'];
-const RIM = 3;
-type G = { id: string; glyphs: { x0: number; y0: number; x1: number; y1: number; a: number; phase?: string }[] }[];
+type Box = { x0: number; y0: number; x1: number; y1: number };
+type G = { id: string; glyphs: (Box & { a: number; phase?: string; on?: Box })[] }[];
 const w = window as unknown as { vjFrame(t: number): Promise<HTMLCanvasElement>; vjGlyphs(): G; vjLyrics(on: boolean, carriers?: boolean): void; __vjFinalOff?: string[]; inkTonesPage: unknown };
 
 const pixels = (stage: HTMLCanvasElement) => { const c = new OffscreenCanvas(stage.width, stage.height); const g = c.getContext('2d')!; g.drawImage(stage, 0, 0); return g.getImageData(0, 0, stage.width, stage.height).data; };
 const hex = (r: number, g: number, b: number) => `#${[r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 const lum = (r: number, g: number, b: number) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
 
-async function read(t: number, ids: string[]): Promise<{ id: string; lo: string; hi: string }[]> {
+async function read(t: number, ids: string[]): Promise<{ id: string; lo: string; hi: string; carried: boolean }[]> {
   w.__vjFinalOff = REST;
   try {
     const stage = await w.vjFrame(t);
-    const boxes = w.vjGlyphs().filter((l) => ids.includes(l.id)).map((l) => {
+    const [W, H] = [stage.width, stage.height];
+    const where = w.vjGlyphs().filter((l) => ids.includes(l.id)).flatMap((l) => {
       const gs = l.glyphs.filter((g) => g.a > 0.01);
-      // (a line read at rest only: coming or going it may stand off its carrier, a tape still rolling in over the page)
-      if (!gs.length || gs.some((g) => g.phase && g.phase !== 'rest')) return undefined;
-      return { id: l.id, x0: Math.max(0, Math.floor(Math.min(...gs.map((g) => g.x0)))), y0: Math.max(0, Math.floor(Math.min(...gs.map((g) => g.y0)))), x1: Math.min(stage.width, Math.ceil(Math.max(...gs.map((g) => g.x1)))), y1: Math.min(stage.height, Math.ceil(Math.max(...gs.map((g) => g.y1)))) };
-    }).filter((x): x is NonNullable<typeof x> => !!x && x.x1 > x.x0 && x.y1 > x.y0);
-    if (!boxes.length) return [];
-    const on = pixels(stage);
+      // (a line read at rest only: coming or going it may stand off its carrier)
+      if (!gs.length || gs.some((g) => g.phase && g.phase !== 'rest')) return [];
+      const on = gs.find((g) => g.on)?.on;
+      // (inside its carrier, inset a tenth of each side: a carrier's picture carries its own shadow and margin round it)
+      const box = on ? { x0: on.x0 + (on.x1 - on.x0) * 0.1, y0: on.y0 + (on.y1 - on.y0) * 0.1, x1: on.x1 - (on.x1 - on.x0) * 0.1, y1: on.y1 - (on.y1 - on.y0) * 0.1 } : { x0: Math.min(...gs.map((g) => g.x0)), y0: Math.min(...gs.map((g) => g.y0)), x1: Math.max(...gs.map((g) => g.x1)), y1: Math.max(...gs.map((g) => g.y1)) };
+      const r = { x0: Math.max(0, Math.floor(box.x0)), y0: Math.max(0, Math.floor(box.y0)), x1: Math.min(W, Math.ceil(box.x1)), y1: Math.min(H, Math.ceil(box.y1)) };
+      return r.x1 > r.x0 && r.y1 > r.y0 ? [{ id: l.id, r, carried: !!on }] : [];
+    });
+    if (!where.length) return [];
     w.vjLyrics(false, true);
     const off = pixels(await w.vjFrame(t));
-    const W = stage.width;
-    return boxes.flatMap((b) => {
-      const [bw, bh] = [b.x1 - b.x0, b.y1 - b.y0];
-      const ink = new Uint8Array(bw * bh);
-      for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const k = ((y + b.y0) * W + x + b.x0) * 4; ink[y * bw + x] = Math.max(Math.abs(on[k] - off[k]), Math.abs(on[k + 1] - off[k + 1]), Math.abs(on[k + 2] - off[k + 2])) > 24 ? 1 : 0; }
+    return where.flatMap(({ id, r, carried }) => {
       const ls: [number, number][] = [];
-      for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) {
-        if (ink[y * bw + x]) continue;
-        let near = false;
-        for (let dy = -RIM; dy <= RIM && !near; dy++) for (let dx = -RIM; dx <= RIM && !near; dx++) { const [qx, qy] = [x + dx, y + dy]; if (qx >= 0 && qy >= 0 && qx < bw && qy < bh && dx * dx + dy * dy <= RIM * RIM && ink[qy * bw + qx]) near = true; }
-        if (!near) continue;
-        const k = ((y + b.y0) * W + x + b.x0) * 4;
-        ls.push([lum(off[k], off[k + 1], off[k + 2]), k]);
-      }
+      const step = Math.max(1, Math.floor(Math.min(r.x1 - r.x0, r.y1 - r.y0) / 120));
+      for (let y = r.y0; y < r.y1; y += step) for (let x = r.x0; x < r.x1; x += step) { const k = (y * W + x) * 4; ls.push([lum(off[k], off[k + 1], off[k + 2]), k]); }
       if (ls.length < 20) return [];
       ls.sort((p, q) => p[0] - q[0]);
-      const [a, z] = [ls[Math.floor(ls.length * 0.1)][1], ls[Math.floor(ls.length * 0.9)][1]];
-      return [{ id: b.id, lo: hex(off[a], off[a + 1], off[a + 2]), hi: hex(off[z], off[z + 1], off[z + 2]) }];
+      const [a, z] = [ls[Math.floor(ls.length * 0.01)][1], ls[Math.floor(ls.length * 0.99)][1]];
+      return [{ id, lo: hex(off[a], off[a + 1], off[a + 2]), hi: hex(off[z], off[z + 1], off[z + 2]), carried }];
     });
   } finally {
     w.__vjFinalOff = undefined;

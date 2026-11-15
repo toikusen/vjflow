@@ -1,1 +1,443 @@
-{"v": 1, "fx": "", "commit": "", "built": "", "grounds": {}, "surfaces": {}}
+{
+ "v": 1,
+ "fx": "3ba28bfb",
+ "commit": "5cc4b6b",
+ "built": "2026-11-15T10:46:46.947Z",
+ "restOnly": true,
+ "inside": true,
+ "grounds": {
+  "embroidery/columns|linen-brick": {
+   "lo": "#c6c0b3",
+   "hi": "#fdf5e5",
+   "n": 111
+  },
+  "embroidery/hoop-r|linen-brick": {
+   "lo": "#c5c0b3",
+   "hi": "#fef6e6",
+   "n": 127
+  },
+  "embroidery/night|linen-brick": {
+   "lo": "#1f2c4a",
+   "hi": "#d7af77",
+   "n": 88
+  },
+  "embroidery/hoop|linen-brick": {
+   "lo": "#c6c0b4",
+   "hi": "#fdf5e6",
+   "n": 56
+  },
+  "embroidery/night|linen-umber": {
+   "lo": "#262b42",
+   "hi": "#313854",
+   "n": 141
+  },
+  "embroidery/columns|linen-umber": {
+   "lo": "#c4beaf",
+   "hi": "#fbf2df",
+   "n": 152
+  },
+  "embroidery/hoop-r|linen-umber": {
+   "lo": "#c4bdae",
+   "hi": "#fcf3e0",
+   "n": 149
+  },
+  "embroidery/hoop|linen-umber": {
+   "lo": "#5c3a2a",
+   "hi": "#faf2df",
+   "n": 79
+  },
+  "embroidery/columns|night-navy": {
+   "lo": "#c4beaf",
+   "hi": "#fbf2e0",
+   "n": 112
+  },
+  "embroidery/hoop-r|night-navy": {
+   "lo": "#c4bdaf",
+   "hi": "#fbf3e0",
+   "n": 119
+  },
+  "embroidery/hoop|night-navy": {
+   "lo": "#c4bdae",
+   "hi": "#fbf3e0",
+   "n": 72
+  },
+  "embroidery/night|night-navy": {
+   "lo": "#1b2030",
+   "hi": "#d4ab73",
+   "n": 118
+  },
+  "embroidery/sampler|night-slate": {
+   "lo": "#232a36",
+   "hi": "#f4f2ec",
+   "n": 6
+  },
+  "embroidery/hoop-r|night-slate": {
+   "lo": "#c0bcb2",
+   "hi": "#f7f1e5",
+   "n": 190
+  },
+  "embroidery/hoop|night-slate": {
+   "lo": "#232a36",
+   "hi": "#f7f1e5",
+   "n": 217
+  },
+  "embroidery/hoop|linen-pine": {
+   "lo": "#c3bcad",
+   "hi": "#fbf3e0",
+   "n": 256
+  },
+  "embroidery/night|night-slate": {
+   "lo": "#1c2941",
+   "hi": "#b38650",
+   "n": 80
+  },
+  "embroidery/columns|night-slate": {
+   "lo": "#bfbbb1",
+   "hi": "#f5f0e3",
+   "n": 59
+  },
+  "embroidery/hoop-r|linen-pine": {
+   "lo": "#c3bcad",
+   "hi": "#fbf3e0",
+   "n": 96
+  },
+  "embroidery/night|linen-pine": {
+   "lo": "#1f2d4a",
+   "hi": "#28395f",
+   "n": 157
+  },
+  "embroidery/night|linen-olive": {
+   "lo": "#233044",
+   "hi": "#2c3d56",
+   "n": 13
+  },
+  "embroidery/hoop|linen-olive": {
+   "lo": "#c5c0b3",
+   "hi": "#fcf5e5",
+   "n": 20
+  },
+  "gothic-lolita/spread-left|oxblood": {
+   "lo": "#0e0504",
+   "hi": "#ebdcc2",
+   "n": 351
+  },
+  "gothic-lolita/spread-right|oxblood": {
+   "lo": "#100604",
+   "hi": "#ebdcc2",
+   "n": 319
+  },
+  "gothic-lolita/title-leaf|oxblood": {
+   "lo": "#0d0503",
+   "hi": "#805424",
+   "n": 105
+  },
+  "gothic-lolita/page|oxblood": {
+   "lo": "#e7d8be",
+   "hi": "#ebdcc2",
+   "n": 85
+  },
+  "gothic-lolita/cameo|oxblood": {
+   "lo": "#12080c",
+   "hi": "#f3e3c0",
+   "n": 17
+  },
+  "gothic-lolita/title-leaf|nightshade": {
+   "lo": "#050508",
+   "hi": "#514b46",
+   "n": 42
+  },
+  "gothic-lolita/cameo|nightshade": {
+   "lo": "#070505",
+   "hi": "#e6dee6",
+   "n": 26
+  },
+  "gothic-lolita/spread-left|nightshade": {
+   "lo": "#bab3ba",
+   "hi": "#e6dee6",
+   "n": 171
+  },
+  "gothic-lolita/spread-right|nightshade": {
+   "lo": "#07060b",
+   "hi": "#e6dee6",
+   "n": 87
+  },
+  "gothic-lolita/page|nightshade": {
+   "lo": "#e3dbe2",
+   "hi": "#e6dee6",
+   "n": 89
+  },
+  "gothic-lolita/cameo|plum-gilt": {
+   "lo": "#0d0506",
+   "hi": "#f2e9e9",
+   "n": 53
+  },
+  "gothic-lolita/spread-right|plum-gilt": {
+   "lo": "#0d0506",
+   "hi": "#eadfe8",
+   "n": 92
+  },
+  "gothic-lolita/spread-left|plum-gilt": {
+   "lo": "#0b0405",
+   "hi": "#eadfe8",
+   "n": 188
+  },
+  "gothic-lolita/title-leaf|plum-gilt": {
+   "lo": "#0a0405",
+   "hi": "#6b4b31",
+   "n": 103
+  },
+  "gothic-lolita/page|plum-gilt": {
+   "lo": "#e8dde6",
+   "hi": "#eadfe8",
+   "n": 17
+  },
+  "gothic-lolita/title-leaf|bottle-green": {
+   "lo": "#050804",
+   "hi": "#67482f",
+   "n": 71
+  },
+  "gothic-lolita/spread-left|bottle-green": {
+   "lo": "#bdbaa9",
+   "hi": "#e8e4d0",
+   "n": 217
+  },
+  "gothic-lolita/spread-right|bottle-green": {
+   "lo": "#070c09",
+   "hi": "#e8e4d0",
+   "n": 124
+  },
+  "gothic-lolita/page|bottle-green": {
+   "lo": "#e5e1cd",
+   "hi": "#e8e4d0",
+   "n": 62
+  },
+  "gothic-lolita/page|black-rose": {
+   "lo": "#171314",
+   "hi": "#171314",
+   "n": 27
+  },
+  "gothic-lolita/spread-right|black-rose": {
+   "lo": "#050505",
+   "hi": "#403134",
+   "n": 80
+  },
+  "gothic-lolita/spread-left|black-rose": {
+   "lo": "#131010",
+   "hi": "#181414",
+   "n": 65
+  },
+  "gothic-lolita/title-leaf|black-rose": {
+   "lo": "#070606",
+   "hi": "#0a0909",
+   "n": 46
+  },
+  "paper-lantern/plate|ember-night": {
+   "lo": "#977253",
+   "hi": "#ffe3b0",
+   "n": 260
+  },
+  "paper-lantern/high|ember-night": {
+   "lo": "#160b1c",
+   "hi": "#ffdea6",
+   "n": 337
+  },
+  "paper-lantern/call|ember-night": {
+   "lo": "#8e6b4e",
+   "hi": "#ffc67f",
+   "n": 21
+  },
+  "paper-lantern/window|ember-night": {
+   "lo": "#fadfad",
+   "hi": "#ffe3b0",
+   "n": 67
+  },
+  "paper-lantern/heart|ember-night": {
+   "lo": "#977151",
+   "hi": "#ffdea6",
+   "n": 103
+  },
+  "paper-lantern/high|moon-indigo": {
+   "lo": "#9f8e79",
+   "hi": "#feedc7",
+   "n": 97
+  },
+  "paper-lantern/plate|moon-indigo": {
+   "lo": "#ddd0b3",
+   "hi": "#fff0ce",
+   "n": 170
+  },
+  "paper-lantern/heart|moon-indigo": {
+   "lo": "#968674",
+   "hi": "#feedc7",
+   "n": 38
+  },
+  "paper-lantern/window|moon-indigo": {
+   "lo": "#faecca",
+   "hi": "#fff0ce",
+   "n": 35
+  },
+  "paper-lantern/call|moon-indigo": {
+   "lo": "#fad9a0",
+   "hi": "#fcddaa",
+   "n": 42
+  },
+  "paper-lantern/offset-right|moon-indigo": {
+   "lo": "#fad9a0",
+   "hi": "#fcddaa",
+   "n": 20
+  },
+  "paper-lantern/window|rose-dusk": {
+   "lo": "#f9e6d8",
+   "hi": "#ffebdd",
+   "n": 88
+  },
+  "paper-lantern/call|rose-dusk": {
+   "lo": "#deada2",
+   "hi": "#ffe6d6",
+   "n": 28
+  },
+  "paper-lantern/plate|rose-dusk": {
+   "lo": "#decdc1",
+   "hi": "#ffebdd",
+   "n": 110
+  },
+  "paper-lantern/high|rose-dusk": {
+   "lo": "#945465",
+   "hi": "#ffe6d6",
+   "n": 175
+  },
+  "paper-lantern/call|tea-morning": {
+   "lo": "#c3ab8f",
+   "hi": "#fffaec",
+   "n": 23
+  },
+  "paper-lantern/plate|tea-morning": {
+   "lo": "#dcd8ce",
+   "hi": "#fffbef",
+   "n": 183
+  },
+  "paper-lantern/window|tea-morning": {
+   "lo": "#bea78b",
+   "hi": "#fffbef",
+   "n": 119
+  },
+  "paper-lantern/high|tea-morning": {
+   "lo": "#f8e8ce",
+   "hi": "#fffaec",
+   "n": 112
+  },
+  "paper-lantern/heart|tea-morning": {
+   "lo": "#ffefd2",
+   "hi": "#fff5e0",
+   "n": 30
+  },
+  "paper-lantern/plate|sea-lamp": {
+   "lo": "#ddd5c2",
+   "hi": "#fff6e0",
+   "n": 41
+  },
+  "paper-lantern/offset|rose-dusk": {
+   "lo": "#ffc9b9",
+   "hi": "#ffe6d6",
+   "n": 36
+  },
+  "paper-lantern/heart|rose-dusk": {
+   "lo": "#ffcbb9",
+   "hi": "#ffe6d6",
+   "n": 18
+  },
+  "paper-lantern/heart|sea-lamp": {
+   "lo": "#8b8f7c",
+   "hi": "#fff3d9",
+   "n": 32
+  },
+  "paper-lantern/offset|sea-lamp": {
+   "lo": "#ffe4b7",
+   "hi": "#ffe5bb",
+   "n": 14
+  },
+  "paper-lantern/high|sea-lamp": {
+   "lo": "#8b8e7b",
+   "hi": "#fff3d9",
+   "n": 80
+  },
+  "paper-lantern/window|sea-lamp": {
+   "lo": "#ffe2b6",
+   "hi": "#fff6e0",
+   "n": 46
+  },
+  "paper-lantern/offset|ember-night": {
+   "lo": "#7f5f49",
+   "hi": "#ffdea6",
+   "n": 75
+  },
+  "paper-lantern/offset|moon-indigo": {
+   "lo": "#fcdaa5",
+   "hi": "#feedc7",
+   "n": 13
+  }
+ },
+ "surfaces": {
+  "satin|#26365a": {
+   "black": 0.737,
+   "white": 0.267
+  },
+  "satin|#2a3a52": {
+   "black": 0.737,
+   "white": 0.267
+  },
+  "satin|#2e3550": {
+   "black": 0.741,
+   "white": 0.267
+  },
+  "satin|#22324f": {
+   "black": 0.762,
+   "white": 0.267
+  },
+  "gilt|#160a0e": {
+   "black": 0.255,
+   "white": 0.031
+  },
+  "gilt|#0e0c16": {
+   "black": 0.255,
+   "white": 0.031
+  },
+  "gilt|#150a18": {
+   "black": 0.255,
+   "white": 0.039
+  },
+  "gilt|#0a120e": {
+   "black": 0.255,
+   "white": 0.027
+  },
+  "gilt|#0a0909": {
+   "black": 0.255,
+   "white": 0.016
+  },
+  "silhouette|#ffe3b0": {
+   "black": 0,
+   "white": 0
+  },
+  "silhouette|#fff0ce": {
+   "black": 0,
+   "white": 0
+  },
+  "silhouette|#ffebdd": {
+   "black": 0,
+   "white": 0
+  },
+  "silhouette|#fffbef": {
+   "black": 0,
+   "white": 0
+  },
+  "silhouette|#fff6e0": {
+   "black": 0,
+   "white": 0
+  }
+ },
+ "shipped": [
+  "embroidery",
+  "gothic-lolita",
+  "paper-lantern"
+ ]
+}

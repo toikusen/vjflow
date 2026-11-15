@@ -13,7 +13,7 @@ import { FREE_STYLES } from '../../src/app/lyric-vj/free-styles';
 import { fontCache } from './font-cache.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, song: { type: 'string', default: 'choroin' }, cue: { type: 'string', default: '8' } } });
+const { values: a, positionals } = parseArgs({ allowPositionals: true, options: { out: { type: 'string' }, song: { type: 'string', default: 'choroin' }, cue: { type: 'string', default: '8' }, before: { type: 'string', default: 'window.__vjStraightGlyphs = true' } } });
 const out = resolve(a.out!);
 const work = join(out, 'work');
 mkdirSync(work, { recursive: true });
@@ -37,7 +37,8 @@ for (const world of positionals) {
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     // (tsx names the helpers of any function it serialises into the page: give the page the name helper)
     await page.addInitScript('globalThis.__name = (f) => f');
-    if (straight) await page.addInitScript('window.__vjStraightGlyphs = true');
+    // (the "before": what --before sets, the old upload by default)
+    if (straight) await page.addInitScript(a.before!);
     await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
     await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, file)}`);
     await page.waitForSelector('body[data-ready="1"]', { timeout: 600000 });

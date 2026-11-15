@@ -23,7 +23,7 @@ import { fontCache } from './font-cache.mts';
 import type { Read } from './ink-gate2-page.mts';
 
 const IDS: Record<string, string> = { nun: 'yt_w_fCuUR3lEs', snow: 'yt_5i50aTB7JFo', tsuzuki: 'yt_b3GCfyNKeLs', choroin: 'yt_hCCskTJwvuc', tenmon: 'yt_iwYXfOhcsYI' };
-const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'fade-reveal': { type: 'boolean', default: false }, halo: { type: 'string' }, 'no-decide': { type: 'boolean', default: false } } });
+const { values: a } = parseArgs({ options: { run: { type: 'string' }, jobs: { type: 'string' }, frames: { type: 'string', default: 'sample:10' }, seed: { type: 'string', default: '0' }, font: { type: 'string' }, 'limit-sec': { type: 'string' }, determinism: { type: 'string', default: '50' }, 'fade-reveal': { type: 'boolean', default: false }, halo: { type: 'string' }, 'no-decide': { type: 'boolean', default: false }, init: { type: 'string' } } });
 // (--halo 8,12 | off: another ink halo than the default (INK_HALO 4,6), or none; treatment.inkHalo)
 const halo = a.halo === 'off' ? (false as const) : a.halo ? (a.halo.split(',').map(Number) as [number, number]) : undefined;
 // (--fade-reveal: the fades as they were before the opaque reveal, QA __vjFadeReveal, for the before/after count)
@@ -60,6 +60,8 @@ for (const spec of a.jobs!.split(',')) {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   await page.addInitScript({ path: join(work, 'ink-gate2-page.js') });
   if (a['fade-reveal']) await page.addInitScript('window.__vjFadeReveal = true');
+  // (--init: a QA hook for a before/after count, e.g. window.__vjMaterialAsIs = true)
+  if (a.init) await page.addInitScript(a.init);
   await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type, headers: { 'access-control-allow-origin': '*' } }) : route.abort(); });
   await page.goto(`http://127.0.0.1:${(server.address() as { port: number }).port}/${relative(ROOT, work)}/render.html?job=/${relative(ROOT, jobFile)}`);
   await page.waitForSelector('body[data-ready="1"]', { timeout: 600000 });

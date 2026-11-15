@@ -150,7 +150,7 @@ export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>,
 // 31 915 fails, 2026-11-15)
 // (a table read with every line at rest, restOnly, reads a carried set's carrier as the words stand on it: a hoop's
 // linen drawn at 0.51 where its slot says 0.79, embroidery)
-const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots) => { if (carrierSlots(spec) && !(inkTones()?.restOnly && inkTones()?.rim)) return []; const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
+const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots) => { if (carrierSlots(spec) && !(inkTones()?.restOnly && inkTones()?.inside)) return []; const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
 const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
 /**
  * A set's body ink as decided (M3, ink-decide decideInk): the one ink the plan reads every check on and the renderer draws,

@@ -351,7 +351,10 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;
-  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten }) : undefined; };
+  // (with the ground the pose's words are drawn on, the one the ink reads worst on: the material keeps its face readable
+  // there, world-glyph keepReadable)
+  const groundOf = (p: number, tint: string) => standsOn(sets[p]).filter((g) => /^#[0-9a-f]{6}$/i.test(g)).sort((a, b) => contrast(tint, a) - contrast(tint, b))[0];
+  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten, on: /^#[0-9a-f]{6}$/i.test(tint) ? groundOf(p, tint) : undefined }) : undefined; };
   const weight = nearestWeight(family, sets[0].weight ?? wl.weight ?? 700);
   const style: GlyphStyle = { family, weight, size: tex, even: sets[0].even, surface: surfaceOf(words) };
   const gs = makeGlyphs(text, style, baked ? 'white' : color(words));
@@ -638,6 +641,9 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
     const v = new THREE.Vector3();
     const ws = new THREE.Vector3();
     const seen = (o: THREE.Object3D | null): boolean => !o || (o.visible && seen(o.parent));
+    // (the carrier the words stand on as drawn now, frame px y down: the tone table reads inside it, ink-tones-page)
+    const carried = [...poses.map((q) => q.object), carrier?.mesh].find((o) => o && seen(o));
+    const on = carried ? (() => { const b = new THREE.Box3().setFromObject(carried); return b.isEmpty() ? undefined : { x0: b.min.x + 960, y0: 540 - b.max.y, x1: b.max.x + 960, y1: 540 - b.min.y }; })() : undefined;
     return gs.flatMap((g, i) => {
       if (!g.char.trim() || !seen(g.mesh) || g.mesh.material.opacity <= 0.01) return [];
       g.mesh.updateWorldMatrix(true, false);
@@ -645,7 +651,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
       g.mesh.getWorldScale(ws);
       const half = (Math.abs(ws.y) * tex) / 2;
       const [x, y] = [v.x + 960, 540 - v.y];
-      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: phase[i] !== 'rest', phase: phase[i], alpha: { ...alphaOf[i] }, ink: `#${drawnInk[i].toString(16).padStart(6, '0')}` }];
+      return [{ i, x0: x - half, y0: y - half, x1: x + half, y1: y + half, a: g.mesh.material.opacity, moving: phase[i] !== 'rest', phase: phase[i], alpha: { ...alphaOf[i] }, ink: `#${drawnInk[i].toString(16).padStart(6, '0')}`, ...(on ? { on } : {}) }];
     });
   };
   const inkBoxes = () => {

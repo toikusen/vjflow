@@ -4,9 +4,10 @@
 
 export type SurfaceKind = 'bitmap' | 'tube' | 'phosphor' | 'lamp' | 'brush' | 'silver' | 'lead' | 'gilt' | 'tape' | HandSurface | LoudSurface | B4Surface | DocSurface | B4bSurface | B5Surface | B5bSurface;
 
-export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten: boolean }
-export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}`;
-export const parseSurface = (k: string): Surface => { const [kind, tint, core, eaten] = k.split('|'); return { kind: kind as SurfaceKind, tint, core, eaten: eaten === '1' }; };
+/** `on`: the ground the glyph is drawn on, when known: the material keeps its face readable on it (keepReadable). */
+export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten: boolean; on?: string }
+export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}${s.on ? `|${s.on}` : ''}`;
+export const parseSurface = (k: string): Surface => { const [kind, tint, core, eaten, on] = k.split('|'); return { kind: kind as SurfaceKind, tint, core, eaten: eaten === '1', ...(on ? { on } : {}) }; };
 
 import { lampCells } from './lamp-cells';
 import { handSurface, HandSurface, isHandSurface } from './world-glyph-hand';
@@ -77,7 +78,60 @@ function eatBands(g: CanvasRenderingContext2D, w: number, h: number, size: numbe
 }
 
 /** Rewrites the white character on `canvas` (w × h design px, scale SS) as the surface. */
+/**
+ * Applies a surface, then holds it to one rule (2026-11-15, the materials' own reading): with the ground it is drawn on
+ * known, every drawn texel of the face reads at READ_AIM on it, and every drawn texel of a declared part (surface-parts:
+ * a pressed edge, a dark body's blurred rim) either reads at READ_AIM or is not drawn. A texel that does not read is moved
+ * the least it takes toward the face's own ink (a satin's highlight, a gilt's light band), a part's toward its own
+ * colour (a rim kept crisp); a part texel that still does not read is cleared (the rim's blur narrowed). The look moves
+ * only where the reading needs it.
+ */
 export function applySurface(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, key: string, char: string, size: number, ss: number) {
+  applySurfaceAs(canvas, ctx, key, char, size, ss);
+  const s = parseSurface(key);
+  // (QA, the before/after crops: __vjMaterialAsIs draws the material as it was)
+  if (s.on && !(globalThis as { __vjMaterialAsIs?: boolean }).__vjMaterialAsIs) keepReadable(ctx, canvas.width, canvas.height, s);
+}
+
+/** The contrast a material's drawn texel keeps on its ground (over READ_MIN by what the frame takes off it). */
+export const READ_AIM = 4.8;
+const lin = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+const lumRgb = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+const rgbHex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+/** The texels of a drawn surface held to READ_AIM on `s.on` (applySurface). Exported for its spec. */
+export function keepReadable(ctx: CanvasRenderingContext2D, w: number, h: number, s: Surface) {
+  if (!/^#[0-9a-f]{6}$/i.test(s.on ?? '') || !/^#[0-9a-f]{6}$/i.test(s.tint)) return;
+  const lg = lumRgb(...(rgbHex(s.on!) as [number, number, number]));
+  const tint = rgbHex(s.tint);
+  // (a declared part: its texels are the ones nearer its colour than the ink, as the gate splits them)
+  const part = partColourOf(s);
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  let changed = false;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 128) continue;
+    const c = [d[i], d[i + 1], d[i + 2]];
+    if (ratio(lumRgb(c[0], c[1], c[2]), lg) >= READ_AIM) continue;
+    const isPart = part && (c[0] - part[0]) ** 2 + (c[1] - part[1]) ** 2 + (c[2] - part[2]) ** 2 < (c[0] - tint[0]) ** 2 + (c[1] - tint[1]) ** 2 + (c[2] - tint[2]) ** 2;
+    const to = isPart ? part! : tint;
+    // (the least mix toward its own colour that reads; its own colour must read itself, else the decision's job)
+    let done = false;
+    for (let k = 0.05; k <= 1.0001; k += 0.05) {
+      const m = c.map((v, j) => Math.round(v + (to[j] - v) * k));
+      if (ratio(lumRgb(m[0], m[1], m[2]), lg) >= READ_AIM) { d.set(m, i); done = true; break; }
+    }
+    if (!done && isPart) d[i + 3] = 0;
+    changed = true;
+  }
+  if (changed) ctx.putImageData(img, 0, 0);
+}
+/** A surface's declared part colour (surface-parts SURFACE_PARTS: the core where its material declares one). */
+const partColourOf = (s: Surface) => (DECLARED_PART_KINDS.has(s.kind) && /^#[0-9a-f]{6}$/i.test(s.core) ? rgbHex(s.core) : undefined);
+/** The kinds that declare their core as a part (kept in step with surface-parts SURFACE_PARTS by its spec). */
+export const DECLARED_PART_KINDS = new Set<string>(['gilt', 'silhouette', 'foil', 'cut-hole']);
+
+function applySurfaceAs(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, key: string, char: string, size: number, ss: number) {
   const s = parseSurface(key);
   const seed = charSeed(char);
   const [cw, ch] = [canvas.width, canvas.height];

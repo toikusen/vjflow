@@ -9,7 +9,7 @@ import { stair } from './stair';
 import { Block, blockOf, FaceLayout, SET_SPECS, SetSpec, shearedSize } from './world-sets';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS, type WorldMove } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
-import { SurfaceKind, surfaceKey } from './world-glyph';
+import { fxKey, SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
 import { bodyInk, drawnInkOf, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
 import { readableTone } from '../measured-ink';
@@ -300,7 +300,10 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (lines sharing a shot split the set: rows stack in its height, but columns stand side by side in its width, read
   // right to left; halving a column's height set a shared vertical sign at a third of its size)
   const specOf = (id: string): SetSpec => slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot);
-  const sets = [wl0.set, ...(wl0.repose ?? []).map((r) => r.set)].map(specOf);
+  // (each pose's set id, kept: a seat split, a blow or a scale lays a copy of its spec, and the ink decision reads its
+  // world's tone entries and material by the id, never by the spec object; Codex review 2026-11-16 P1)
+  const setIds = [wl0.set, ...(wl0.repose ?? []).map((r) => r.set)];
+  const sets = setIds.map(specOf);
   // a line whose key word is blown up stands on the ground: its set's object stays off for its first pose
   // (a column line's blown-up word is set across: the big word reads in a row, and so does the small rest)
   // (a set laid into its page on an object of its own keeps it: a blown-up word would lose the balloon or card it is written on)
@@ -332,29 +335,33 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (a set inked for the plate stands on one), else the ground (pink key letters sat on a white hint card at 2:1)
   // what the renderer sees under a line that the plan does not (hold-room.ts Seen)
   // (fx: the final effects its inks are decided through, the engine's from the job's world frame, M3; null: not decided)
-  const seen = { background: rt.palette.background, under: rt.under, accent: rt.palette.accent, fx: (globalThis as { __vjInkFx?: FxBox | null }).__vjInkFx };
+  // (fx: this engine's own, through the cue's runtime: never a global another engine may have set, Codex P2)
+  const seen = { background: rt.palette.background, under: rt.under, accent: rt.palette.accent, fx: rt.inkFx };
   // (what each pose's words stand on: its carrier, else the background and what the picture puts there; a dimmed glyph
   // still reads on all of it, readableTone)
-  const standsOn = (s: SetSpec) => standsOnOf(s, slots, seen);
-  const drawnBy = sets.map((s) => drawnInkOf(s, slots, wl0.set.split('/')[0]));
+  const seenFor = (s: SetSpec) => ({ ...seen, set: setIds[sets.indexOf(s)] ?? setIds[0], world: wl0.set.split('/')[0] });
+  const standsOn = (s: SetSpec) => standsOnOf(s, slots, seenFor(s));
+  const drawnBy = sets.map((s) => drawnInkOf(s, slots, wl0.set.split('/')[0], seenFor(s).set));
   // the words take the colour of what they stand on, and a line that moves off its object takes the ground's colour
   const inkOn0 = (s: SetSpec) => (s.ink ? slots[s.ink] : s.object ? objectInk(s.object, slots) : wl.fixedInk ? slots.ink : rt.palette.text);
   // (M3: each pose's ink as decided, the one the plan read its checks on: hold-room bodyInk; one ink a pose)
   const decided = new Map<SetSpec, string>();
-  const inkOn = (s: SetSpec) => decided.get(s) ?? (decided.set(s, bodyInk(s, slots, inkOn0(s), seen)), decided.get(s)!);
+  const inkOn = (s: SetSpec) => decided.get(s) ?? (decided.set(s, bodyInk(s, slots, inkOn0(s), seenFor(s))), decided.get(s)!);
   const words = inkOn(sets[0]);
   const baked = !!(wl.surface || sets.some((s) => s.surface));
   // the key reads on what is really under the words: the object's plate, the card or banners a set's page draws, else the
   // background and what the picture puts there (hold-room.ts keyFor)
   const keys = new Map<SetSpec, string>();
-  const keyOf = (s: SetSpec) => keys.get(s) ?? (keys.set(s, keyFor(s, slots, inkOn(s), seen)), keys.get(s)!);
+  const keyOf = (s: SetSpec) => keys.get(s) ?? (keys.set(s, keyFor(s, slots, inkOn(s), seenFor(s))), keys.get(s)!);
   // a key phrase that is most of the line marks nothing: the whole line in the accent is only a louder line
   const keySpan = [...rt.cue.text].filter((_, i) => emphasisOf(rt, i) === 'color').length;
   const marks = keySpan > 0 && keySpan <= 0.6 * [...text.replace(/\s/g, '')].length;
   // (with the ground the pose's words are drawn on, the one the ink reads worst on: the material keeps its face readable
   // there, world-glyph keepReadable)
-  const groundOf = (p: number, tint: string) => standsOn(sets[p]).filter((g) => /^#[0-9a-f]{6}$/i.test(g)).sort((a, b) => contrast(tint, a) - contrast(tint, b))[0];
-  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten, on: /^#[0-9a-f]{6}$/i.test(tint) ? groundOf(p, tint) : undefined }) : undefined; };
+  // (every ground the pose's words stand on and the engine's final effects: the material keeps its face readable on all
+  // of them after the effects, world-glyph keepReadable)
+  const groundsOf = (p: number) => [...new Set(standsOn(sets[p]).filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => g.toLowerCase()))].join('+');
+  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten, ...(/^#[0-9a-f]{6}$/i.test(tint) && groundsOf(p) ? { on: groundsOf(p), fx: fxKey(rt.inkFx) } : {}) }) : undefined; };
   const weight = nearestWeight(family, sets[0].weight ?? wl.weight ?? 700);
   const style: GlyphStyle = { family, weight, size: tex, even: sets[0].even, surface: surfaceOf(words) };
   const gs = makeGlyphs(text, style, baked ? 'white' : color(words));
@@ -486,7 +493,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // what each set's words may do with their inks (hold-room.ts inkChecks, the plan's own test): every new ink, a passing
   // key run's too, reads at 4.5:1 on every ground under the words (a key run at 3:1 on silk's top-slab read low, 大雪
   // c028, 2026-11-09 review; a phrase swapped on the palette's ground came out low on silk's edge-bleed band)
-  const inks = sets.map((s) => inkChecks(s, slots, inkOn(s), seen));
+  const inks = sets.map((s) => inkChecks(s, slots, inkOn(s), seenFor(s)));
   const settleBy = inks.map((x) => x.settle);
   const settling = wl.beat?.kind === 'line-ink-settle';
   const keyCols = sets.map((s, p) => new THREE.Color(settling ? settleBy[p] ?? inkOn(s) : keyOf(s)));

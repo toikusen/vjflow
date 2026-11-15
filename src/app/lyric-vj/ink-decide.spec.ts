@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideInk, finalBounds, FX_NONE, minContrast, type FxBox } from './ink-decide';
+import { decideInk, finalBounds, FX_NONE, minContrast, pairLeast, type FxBox } from './ink-decide';
 import { contrast } from './contrast';
 import { INK_AIM, INK_MIN, lumOf } from './measured-ink';
 import { inkDistance } from './render/key-ink';
@@ -50,8 +50,10 @@ describe('M3 analytic ink decision', () => {
     expect(contrast(k.ink, '#0E0A14')).toBeGreaterThan(contrast('#D9537A', '#0E0A14'));
     // ink2 (2.9:1) is too far from reading for a small move: the world's ink that reads best
     expect(decideInk('#6A4C93', ['#0E0A14'], fx, ['#6A4C93', '#DCCFEA', '#D9537A'])).toMatchObject({ ink: '#dccfea', from: 'world' });
-    // nothing reads: kept, and said so
-    expect(decideInk('#777777', ['#808080'], fx, ['#7a7a7a'])).toMatchObject({ ink: '#777777', from: 'none' });
+    // nothing reads: said so; the colour that reads best in reach is taken, never a worse one
+    const none = decideInk('#777777', ['#808080'], fx, ['#7a7a7a']);
+    expect(none.from).toBe('none');
+    expect(none.min).toBeGreaterThanOrEqual(pairLeast('#777777', '#808080', fx));
     // the same inputs, the same answer
     expect(decideInk('#D9537A', ['#0E0A14'], fx)).toEqual(k);
   });

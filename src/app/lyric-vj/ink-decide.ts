@@ -13,8 +13,10 @@ import { contrast } from './contrast';
  * and the ink halo (grain and the other noise are off round a reading glyph: then grain does not reach the ink's own
  * rim, ruling 2026-11-13 §2).
  */
-export interface FxBox { flicker: number; vignette: number; grain: number; halo: boolean }
+export interface FxBox { flicker: number; vignette: number; grain: number; halo: boolean; /** The paper texture's strength (uPaper): fibres darken a pixel by up to PAPER_DEPTH × it, pixel by pixel. */ paper?: number }
 export const FX_NONE: FxBox = { flicker: 0, vignette: 0, grain: 0, halo: false };
+/** How far the final pass's paper texture darkens a pixel at most, per unit of uPaper (FINAL_SHADER: 0.07 fibre + 0.05 blot). */
+export const PAPER_DEPTH = 0.12;
 
 const ch = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255);
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
@@ -40,11 +42,11 @@ export const minContrast = ([i0, i1]: [number, number], [g0, g1]: [number, numbe
  * its flicker, the deepest vignette at a line's reach (d² ≤ 0.15 in the safe area) and, with no halo, its raster; the
  * design grain (free-plan sets it from the stack). `halo`: the ink halo is on (every job, INK_HALO).
  */
-export function fxOfFrame(frame: { flicker: number; vignette: number; scan: number; grain: number }, halo = true): FxBox {
+export function fxOfFrame(frame: { flicker: number; vignette: number; scan: number; grain: number; paper?: number }, halo = true): FxBox {
   // (the vignette's base is the frame's where a job carries it, else the engine's own 0.55: the deeper of the two, so a
   // decision holds on either; a free job carries none, 2026-11-15)
   const vig = 1.6 * 0.15 * Math.max(frame.vignette, VIG_BASE);
-  return { flicker: frame.flicker, grain: 0.02 + 0.1 * frame.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame.scan)), halo };
+  return { flicker: frame.flicker, grain: 0.02 + 0.1 * frame.grain, vignette: 1 - (1 - vig) * (1 - (halo ? 0 : frame.scan)), halo, ...(frame.paper ? { paper: frame.paper } : {}) };
 }
 
 /** The final pass's vignette base when a job's design names no world frame (engine: uVigBase). */
@@ -86,7 +88,11 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
   // its own kept where a short move reads better: the default's wider effects left c059's amber at 4.1 where a move
   // read, 2026-11-15)
   if (at >= INK_MIN) return { ink: own, from: 'own', min: at };
-  const tries: InkDecision[] = [...(near && c !== own ? [{ ink: c, from: 'moved' as const, min: least(c) }] : []), ...(best ? [{ ink: best, from: 'world' as const, min: least(best) }] : [])];
+  // (and its own hue taken to the end of its lightness, black or white, where that is a short move: a near-black ink one
+  // step from black on a mid ground, spy's red plate, 2026-11-16)
+  const toward = (pole: string) => { let best = own; for (let k = 0.05; k <= 1.0001; k += 0.05) { const m = `#${[1, 3, 5].map((i) => Math.round(parseInt(own.slice(i, i + 2), 16) * (1 - k) + parseInt(pole.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('')}`; if (inkDistance(own, m) > MOVE) break; best = m; } return best; };
+  const poles = [toward('#000000'), toward('#ffffff')].filter((x) => x !== own && x !== c);
+  const tries: InkDecision[] = [...(near && c !== own ? [{ ink: c, from: 'moved' as const, min: least(c) }] : []), ...poles.map((x) => ({ ink: x, from: 'moved' as const, min: least(x) })), ...(best ? [{ ink: best, from: 'world' as const, min: least(best) }] : [])];
   const read = tries.filter((x) => x.min >= INK_MIN).sort((x, y) => (x.from === 'moved' ? 0 : 1) - (y.from === 'moved' ? 0 : 1))[0];
   if (read) return read;
   const better = tries.sort((x, y) => y.min - x.min)[0];
@@ -104,12 +110,16 @@ export const leastThrough = (ink: string, grounds: string[], fx: FxBox, drawn: (
 export function pairLeast(ink: string, ground: string, fx: FxBox, drawn: (ink: string) => string[] = (x) => [x]): number {
   const g = fx.halo ? 0 : fx.grain / 2;
   const at = (c: string, k: number, d: number) => { const v = ch(c).map((x) => clamp(x * k + d)); return lumOf(...(v.map((x) => Math.round(x * 255)) as [number, number, number])); };
+  // (the paper's fibres darken each pixel apart, not the pair together: the ink or the ground by up to PAPER_DEPTH × paper;
+  // left out, a black ink on spy's red plate read 4.8 where the gate drew 4.3, 2026-11-16)
+  const p = 1 - PAPER_DEPTH * (fx.paper ?? 0);
   let least = Infinity;
   for (const k of [(1 - fx.vignette) * (1 - fx.flicker), 1 + fx.flicker])
     for (const c of new Set([ink, ...drawn(ink)]))
-      for (const d of g ? [-g, g] : [0]) {
-        const [li, lg] = [at(c, k, d), at(ground, k, -d)];
-        least = Math.min(least, (Math.max(li, lg) + 0.05) / (Math.min(li, lg) + 0.05));
-      }
+      for (const d of g ? [-g, g] : [0])
+        for (const [pi, pg] of p < 1 ? [[1, p], [p, 1]] : [[1, 1]]) {
+          const [li, lg] = [at(c, k * pi, d), at(ground, k * pg, -d)];
+          least = Math.min(least, (Math.max(li, lg) + 0.05) / (Math.min(li, lg) + 0.05));
+        }
   return least;
 }

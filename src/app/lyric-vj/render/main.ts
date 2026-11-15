@@ -1,6 +1,5 @@
 // Render page entry (bundled by scripts/lyric-vj/render.mts): exposes ready / renderAt / metrics to the driver.
 import { LyricVjEngine, RenderJob } from './engine';
-import { haloOf } from './final-warp.glsl';
 import { loadJobFonts } from './job-fonts';
 import { ensureAdvances } from './layout-measure';
 import { ensureInkTones } from './ink-tones';
@@ -37,8 +36,6 @@ await ensureAdvances();
 await ensureInkTones();
 // a transparent page for the lyric layer
 if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
-// (the ink halo, every job: the destructive effects stay off round the reading glyphs; treatment.inkHalo another or false)
-(globalThis as { __vjInkHalo?: [number, number] }).__vjInkHalo = haloOf((job.treatment as { inkHalo?: [number, number] | false }).inkHalo);
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 (window as unknown as { vjEngine: LyricVjEngine }).vjEngine = engine;
 window.vjReady = engine.init();

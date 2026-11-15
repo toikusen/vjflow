@@ -732,7 +732,7 @@ export class LyricVjEngine {
   /**
    * The final effects a world line's inks are decided through (M3, ink-decide fxOfFrame), from the job's world frame and
    * its halo: the same numbers the plan has for the world (hold-room WORLD_FX). null: treatment.inkDecide false (QA).
-   * Read by world-layout through __vjInkFx.
+   * Read by world-layout through each cue's runtime (rt.inkFx).
    */
   static inkFx(job: RenderJob): FxBox | null | undefined {
     const tr = job.treatment as { inkDecide?: boolean; inkHalo?: [number, number] | false };
@@ -744,8 +744,23 @@ export class LyricVjEngine {
     return frame ? fxOfFrame(frame, !!haloOf(tr.inkHalo)) : undefined;
   }
 
+  /** The ink halo a job draws (INK_HALO unless its treatment names another or false): one per engine, player and export alike. */
+  static inkHaloOf(job: Pick<RenderJob, 'treatment'>): [number, number] | undefined {
+    return haloOf((job.treatment as { inkHalo?: [number, number] | false }).inkHalo);
+  }
+
+  /** This engine's ink halo and the effects its inks are decided through, from its own job (Codex review 2026-11-16 P1/P2). */
+  private readonly inkHaloSpec: [number, number] | undefined;
+  private readonly inkFxBox: FxBox | null | undefined;
+  /** The halo drawn now: the job's, or a QA probe's override (__vjInkHaloQA: [clean, back] or false). */
+  private haloNow(): [number, number] | undefined {
+    const qa = (globalThis as { __vjInkHaloQA?: [number, number] | false }).__vjInkHaloQA;
+    return qa === undefined ? this.inkHaloSpec : qa || undefined;
+  }
+
   constructor(canvas: HTMLCanvasElement, private job: RenderJob) {
-    (globalThis as { __vjInkFx?: FxBox | null }).__vjInkFx = LyricVjEngine.inkFx(job);
+    this.inkHaloSpec = LyricVjEngine.inkHaloOf(job);
+    this.inkFxBox = LyricVjEngine.inkFx(job);
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, alpha: job.layer === 'text' || job.layer === 'words' });
     this.renderer.setPixelRatio(1);
     this.renderer.localClippingEnabled = true; // handwrite reveals glyphs with clip planes
@@ -1062,6 +1077,7 @@ export class LyricVjEngine {
       // a quick entrance comes in on the whole line at once
       const together = entrance === 'whole' && adjust.includes('fast-short');
       const rt: CueRuntime = {
+        inkFx: this.inkFxBox,
         cue, style: paced, shot, params: shot.params, palette: this.paletteAt(cue.start + 0.3), // a colour stop set on the drop beat can sit a few ms after the line's start
         // an English line is set in the paired Latin face (fonts.ts lineFace: the plan's reading of the same choice)
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
@@ -2387,7 +2403,7 @@ export class LyricVjEngine {
       paint(this.gfx.ctx);
       // (the ink halo at the source layer, ruling 2026-11-13 §2: a look that drew TV snow is drawn again without it, and
       // that copy is shown round the reading glyphs; the final pass's own noise cannot take back what the scene drew)
-      const halo = (globalThis as { __vjInkHalo?: [number, number] }).__vjInkHalo;
+      const halo = this.haloNow();
       if (halo && SNOW.drawn > 0) {
         this.gfxClean ??= this.makeGfxClean();
         SNOW.skip = true;
@@ -2533,15 +2549,17 @@ export class LyricVjEngine {
     u['uLift'].value = medium.lift;
     const screenHit = hitAt(this.cueLayers.flatMap(({ rt }) => (rt.style.hit ? [{ at: rt.cue.start, hit: rt.style.hit }] : [])), t);
     // (QA, the ink gate's freeze test: __vjForceTextMask draws the text mask whatever the medium)
-    // the ink halo (every job, main.ts haloOf): measured round the reading glyphs as they stand now; the words-off pass of
+    // the ink halo (every job: this engine's, haloNow): measured round the reading glyphs as they stand now; the words-off pass of
     // the ink gate keeps the words-on pass's (frozen controls), never one measured with the words away
-    const halo = (globalThis as { __vjInkHalo?: [number, number] }).__vjInkHalo;
+    const halo = this.haloNow();
     if (!this.inkFrozen) {
       [u['uHaloIn'].value, u['uHaloOut'].value] = halo ? [halo[0], Math.min(halo[1], HALO_REACH)] : [0, 0];
-      if (halo) {
+      // (no reading glyph on the frame: nothing to keep the effects off, and no pass drawn)
+      const reading = halo ? (this.textRoot.updateMatrixWorld(true), this.readingMeshes()) : [];
+      if (halo && !reading.length) [u['uHaloIn'].value, u['uHaloOut'].value] = [0, 0];
+      if (halo && reading.length) {
         this.halo ??= new InkHalo();
-        this.textRoot.updateMatrixWorld(true);
-        this.halo.render(this.renderer, this.textScene, this.camera, this.readingMeshes());
+        this.halo.render(this.renderer, this.textScene, this.camera, reading);
         u['tHalo'].value = this.halo.texture;
         // (every copy of the words stays out of the clean zone: material-patch haloCut; a declared extrude is read)
         this.textRoot.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && o.userData['copy'] && o.userData['part'] !== 'extrude') setPatch(m.material as THREE.Material, 'halo-cut', haloCut); });

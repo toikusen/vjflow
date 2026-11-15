@@ -114,6 +114,9 @@ export interface Seen {
   background?: string; under?: string[]; accent?: string;
   /** The final effects the inks are decided through (M3, ink-decide); undefined: the set's world's; null: not decided. */
   fx?: FxBox | null;
+  /** The set's id and its world, when the spec is a copy (a seat split, a blow, a scale): tone entries and the material are read by them. */
+  set?: string;
+  world?: string;
 }
 
 /** Each world's final effects (style-worlds registers them from each frame stack: ink-decide fxOfFrame). */
@@ -123,14 +126,14 @@ export const WORLD_SURFACE: Record<string, { kind?: string; core: keyof Slots }>
 let specSet: Map<object, string> | undefined;
 /** A set's id in SET_SPECS (`world/set`); '' for one built on the fly. */
 export const setIdOf = (spec: object) => (specSet ??= new Map(Object.entries(SET_SPECS).map(([k, v]) => [v as object, k]))).get(spec) ?? '';
-const worldOfSet = (spec: object) => setIdOf(spec).split('/')[0];
+const worldOfSet = (spec: object, seen: Seen = {}) => seen.world ?? (setIdOf(spec) || seen.set || '').split('/')[0];
 /** The final effects a set's inks are decided through: the caller's (`seen.fx`), else its world's; none for a set no world names. */
-export const inkFxOf = (spec: SetSpec, seen: Seen = {}): FxBox | undefined => (seen.fx === null ? undefined : seen.fx ?? WORLD_FX[worldOfSet(spec)]);
+export const inkFxOf = (spec: SetSpec, seen: Seen = {}): FxBox | undefined => (seen.fx === null ? undefined : seen.fx ?? WORLD_FX[worldOfSet(spec, seen)]);
 /**
  * An ink as the set's glyph material draws it at its darkest (M4, ink-tones surfaces): the set's own surface, else its
  * world's, with its core slot; unread surfaces draw the ink as it is.
  */
-export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots, world = worldOfSet(spec)) => {
+export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots, world = worldOfSet(spec), _set?: string) => {
   const m = WORLD_SURFACE[world];
   const kind = spec.surface ?? m?.kind;
   const core = spec.core ? slots[spec.core] : m ? slots[m.core] : undefined;
@@ -144,13 +147,13 @@ export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots
 // is the scheme's ground (free-plan composerTreatment); the renderer's palette background differed from it on 2672 of 3419
 // lines of choroin's 45 worlds and is not what is drawn there)
 // (and what the page really draws there, where the tone table read it: a tape's darkened margin, a halftone; M4)
-export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, _seen: Seen = {}): string[] => { const on = carrierSlots(spec); return [...(on ? on.map((k) => slots[k]) : [slots.ground]), ...drawnTones(spec, slots)]; };
+export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] => { const on = carrierSlots(spec); return [...(on ? on.map((k) => slots[k]) : [slots.ground]), ...drawnTones(spec, slots, seen)]; };
 // (a carried set's words stand on their carrier: its tone is its slot's, proven analytically; the page round it is not
 // under them. The sampled box ran past a moving tape onto the black page, and every dark ink then had to read on both:
 // 31 915 fails, 2026-11-15)
 // (a table read with every line at rest, restOnly, reads a carried set's carrier as the words stand on it: a hoop's
 // linen drawn at 0.51 where its slot says 0.79, embroidery)
-const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots) => { if (carrierSlots(spec) && !(inkTones()?.restOnly && inkTones()?.inside)) return []; const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
+const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}) => { if (carrierSlots(spec) && !(inkTones()?.restOnly && inkTones()?.inside)) return []; const d = drawnGround(setIdOf(spec) || seen.set || '', (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
 const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
 /**
  * A set's body ink as decided (M3, ink-decide decideInk): the one ink the plan reads every check on and the renderer draws,
@@ -158,7 +161,7 @@ const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slo
  */
 export function bodyInk(spec: SetSpec, slots: Slots, body: string, seen: Seen = {}): string {
   const fx = inkFxOf(spec, seen);
-  return fx && hex(body) ? decideInk(body, standsOn(spec, slots, seen), fx, worldInks(slots), drawnInkOf(spec, slots)).ink : body;
+  return fx && hex(body) ? decideInk(body, standsOn(spec, slots, seen), fx, worldInks(slots), drawnInkOf(spec, slots, worldOfSet(spec, seen))).ink : body;
 }
 const hex = (c?: string): c is string => !!c && /^#[0-9a-f]{6}$/i.test(c);
 /** The slots a set's words stand on when it draws (or its page draws) a carrier under them; undefined off a carrier. */
@@ -178,7 +181,7 @@ export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
   const on = carrierSlots(spec);
   // (and what the renderer sees the picture put there, `seen.under`: a hold's new ink is checked on it too, so the
   // renderer can only be stricter than the plan and drop a hold, never draw one that does not read)
-  return [...(on ? on.map((k) => slots[k]) : [slots.ground, ...(seen.under ?? []), slots.plate]), ...drawnTones(spec, slots)].filter(hex);
+  return [...(on ? on.map((k) => slots[k]) : [slots.ground, ...(seen.under ?? []), slots.plate]), ...drawnTones(spec, slots, seen)].filter(hex);
 }
 /**
  * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red
@@ -208,7 +211,7 @@ export function keyFor(spec: SetSpec, slots: Slots, body: string, seen: Seen = {
   const key = keyInk(spec.key ? slots[spec.key] : accent, [slots.accent, slots.ink2, accent], body, grounds, on && (spec.object || spec.on) ? READ_ON_CARRIER : READ_MIN);
   // (decided as the body is: through the world's final effects, M3)
   const fx = inkFxOf(spec, seen);
-  return fx && hex(key) ? decideInk(key, standsOn(spec, slots, seen), fx, worldInks(slots), drawnInkOf(spec, slots)).ink : key;
+  return fx && hex(key) ? decideInk(key, standsOn(spec, slots, seen), fx, worldInks(slots), drawnInkOf(spec, slots, worldOfSet(spec, seen))).ink : key;
 }
 /**
  * What a line on this set may do with its inks, worked out the same by the plan (palette only) and the renderer (with
@@ -224,7 +227,7 @@ export function inkChecks(spec: SetSpec, slots: Slots, body0: string, seen: Seen
   // (a hold's new ink reads through the world's final effects too, M3; one that cannot is not drawn: the hold keeps the
   // line's ink, a decorative change dropped rather than a band added, Codex 2026-11-13)
   const fx = inkFxOf(spec, seen);
-  const through = (c: string | undefined) => !c || !fx || leastThrough(c, grounds, fx, drawnInkOf(spec, slots)) >= READ_MIN;
+  const through = (c: string | undefined) => !c || !fx || leastThrough(c, grounds, fx, drawnInkOf(spec, slots, worldOfSet(spec, seen))) >= READ_MIN;
   const reads = (c: string) => hex(c) && grounds.every((g) => contrast(c, g) >= READ_MIN) && through(c);
   const settle = settleInk(body, [spec.plain ? undefined : key, slots.ink2, slots.accent, slots.plateInk, slots.ink].filter((c) => !c || through(c)), grounds);
   return {

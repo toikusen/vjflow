@@ -129,7 +129,7 @@ const split = (a: Off, b: Off) => {
   }
   return { nearDiff, farDiff, nearN };
 };
-// (the halo every job gets, INK_HALO 4,6: the page sets __vjInkHalo)
+// (the halo every job gets, INK_HALO 4,6: each engine takes it from its own job)
 const haloed = await open('dark-glitch', () => {}, `window.__vjFinalSet = { uGrain: 0.3 };`);
 const G = (await haloed.evaluate(offAt)) as Off;
 await haloed.evaluate(`window.__vjFinalSet = { uGrain: 0 }`);
@@ -138,7 +138,7 @@ const g = split(G, G0);
 check(g.nearN > 0 && g.nearDiff === 0 && g.farDiff > 0, `halo: grain off within 3 px of the glyphs (${g.nearDiff} of ${g.nearN} differ), on past 8 px (${g.farDiff} differ)`);
 await haloed.evaluate(`window.__vjFinalSet = {}; window.__vjFinalOff = ${JSON.stringify(REST)};`);
 const S1 = (await haloed.evaluate(offAt)) as Off;
-await haloed.evaluate(`window.__vjInkHalo = undefined`);
+await haloed.evaluate(`window.__vjInkHaloQA = false`);
 const S0 = (await haloed.evaluate(offAt)) as Off;
 const sn = split(S1, S0);
 check(sn.nearDiff > 0 && sn.farDiff === 0, `halo at the source: the scene's snow left out within 3 px of the glyphs (${sn.nearDiff} px changed), nothing past 8 px (${sn.farDiff})`);

@@ -124,6 +124,31 @@ export const MASK_WARP = {
  * (alpha ≥ 0.5) decides, no tint, no opacity (a glyph shown at any opacity is drawn whole). Every material and visibility
  * is put back. (A mesh a drawn one hangs under, a glyph under its echo or shine, is drawn as nothing, not hidden.)
  */
+/** Drawn as nothing (a mesh a drawn part hangs under). */
+const NOTHING = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false });
+const idCache = new WeakMap<THREE.Material, Map<string, THREE.ShaderMaterial>>();
+/**
+ * An ID material for a source material, kept and brought up to date (its picture, the picture's transform, whether it is
+ * shown, its clip planes), not made and thrown away each frame (Codex review 2026-11-16 P2).
+ */
+function idMaterialOf(src: THREE.MeshBasicMaterial, id: number, split?: Split): THREE.ShaderMaterial {
+  const key = `${id}|${split ? `${split.keep}${split.tint}${split.part}` : ''}`;
+  let byKey = idCache.get(src);
+  if (!byKey) idCache.set(src, (byKey = new Map()));
+  let m = byKey.get(key);
+  if (!m) { m = idMaterial(src, id, split); byKey.set(key, m); return m; }
+  const u = m.uniforms;
+  const map = src.map;
+  map?.updateMatrix();
+  u['map'].value = map;
+  (u['uvT'].value as THREE.Matrix3).copy(map ? map.matrix : new THREE.Matrix3());
+  u['shownOp'].value = (src.opacity ?? 1) > 0 ? 1 : 0;
+  u['uPremult'].value = map?.userData['premult'] ? 1 : 0;
+  m.clippingPlanes = src.clippingPlanes;
+  m.side = src.side;
+  return m;
+}
+
 export function drawIds(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, glyphs: { mesh: THREE.Mesh; id: number; split?: Split }[], into: THREE.WebGLRenderTarget) {
   const keep = new Map(glyphs.map((g) => [g.mesh, g.id]));
   const splits = new Map(glyphs.map((g) => [g.mesh, g.split]));
@@ -135,10 +160,10 @@ export function drawIds(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camer
     const m = o as THREE.Mesh;
     if (!m.isMesh && !(o as THREE.Points).isPoints && !(o as THREE.Line).isLine && !(o as THREE.Sprite).isSprite) return;
     const id = keep.get(m);
-    if (id === undefined && above.has(o) && m.isMesh) { swapped.push([m, m.material]); m.material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, depthTest: false }); return; }
+    if (id === undefined && above.has(o) && m.isMesh) { swapped.push([m, m.material]); m.material = NOTHING; return; }
     if (id === undefined) { if (o.visible) { o.visible = false; hidden.push(o); } return; }
     swapped.push([m, m.material]);
-    m.material = idMaterial(m.material as THREE.MeshBasicMaterial, id, splits.get(m));
+    m.material = idMaterialOf(m.material as THREE.MeshBasicMaterial, id, splits.get(m));
   });
   const [target, clear, alpha, cs] = [renderer.getRenderTarget(), renderer.getClearColor(new THREE.Color()), renderer.getClearAlpha(), renderer.outputColorSpace];
   renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
@@ -146,7 +171,8 @@ export function drawIds(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camer
   renderer.setClearColor(0x000000, 0);
   renderer.clear();
   renderer.render(scene, camera);
-  for (const [m, mat] of swapped) { (m.material as THREE.Material).dispose(); m.material = mat; }
+  // (the ID materials are kept for the next frame, one a source material, ID and split: the halo draws this every frame)
+  for (const [m, mat] of swapped) m.material = mat;
   hidden.forEach((o) => (o.visible = true));
   renderer.setRenderTarget(target);
   renderer.setClearColor(clear, alpha);

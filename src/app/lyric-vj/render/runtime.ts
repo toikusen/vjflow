@@ -1,3 +1,4 @@
+import type { FxBox } from '../ink-decide';
 // What a template gets per cue, and the motion shared by templates (entrances, exits, emphasis, accents).
 import * as THREE from 'three';
 import { ARRIVAL_SEC } from './arrival';
@@ -16,6 +17,8 @@ export { LEAD } from './show-time'; // shown a little before the voice so it is 
 export const EXIT_SEC = 0.28;
 
 export interface CueRuntime {
+  /** The final effects this engine decides its world lines' inks through (engine inkFx; null: not decided). */
+  inkFx?: FxBox | null;
   cue: TimelineCue;
   style: CueStyle;
   shot: Shot;

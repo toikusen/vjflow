@@ -4,12 +4,16 @@
 
 export type SurfaceKind = 'bitmap' | 'tube' | 'phosphor' | 'lamp' | 'brush' | 'silver' | 'lead' | 'gilt' | 'tape' | HandSurface | LoudSurface | B4Surface | DocSurface | B4bSurface | B5Surface | B5bSurface;
 
-/** `on`: the ground the glyph is drawn on, when known: the material keeps its face readable on it (keepReadable). */
-export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten: boolean; on?: string }
-export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}${s.on ? `|${s.on}` : ''}`;
-export const parseSurface = (k: string): Surface => { const [kind, tint, core, eaten, on] = k.split('|'); return { kind: kind as SurfaceKind, tint, core, eaten: eaten === '1', ...(on ? { on } : {}) }; };
+/**
+ * `on`: the grounds the glyph is drawn on (joined by '+'), `fx`: the final effects the reading meets (fxKey), when known:
+ * the material keeps its face readable on them (keepReadable).
+ */
+export interface Surface { kind: SurfaceKind; tint: string; core: string; eaten: boolean; on?: string; fx?: string }
+export const surfaceKey = (s: Surface) => `${s.kind}|${s.tint}|${s.core}|${s.eaten ? 1 : 0}${s.on ? `|${s.on}${s.fx ? `|${s.fx}` : ''}` : ''}`;
+export const parseSurface = (k: string): Surface => { const [kind, tint, core, eaten, on, fx] = k.split('|'); return { kind: kind as SurfaceKind, tint, core, eaten: eaten === '1', ...(on ? { on } : {}), ...(fx ? { fx } : {}) }; };
 
 import { lampCells } from './lamp-cells';
+import { FX_NONE, pairLeast, type FxBox } from '../ink-decide';
 import { handSurface, HandSurface, isHandSurface } from './world-glyph-hand';
 import { isLoudSurface, loudSurface, LoudSurface } from './world-glyph-loud';
 import { b4Surface, B4Surface, isB4Surface } from './world-glyph-b4';
@@ -101,31 +105,47 @@ const rgbHex = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 1
 const ratio = (a: number, b: number) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 /** The texels of a drawn surface held to READ_AIM on `s.on` (applySurface). Exported for its spec. */
 export function keepReadable(ctx: CanvasRenderingContext2D, w: number, h: number, s: Surface) {
-  if (!/^#[0-9a-f]{6}$/i.test(s.on ?? '') || !/^#[0-9a-f]{6}$/i.test(s.tint)) return;
-  const lg = lumRgb(...(rgbHex(s.on!) as [number, number, number]));
+  // (every real ground the words stand on, `on` joined by '+', and the final effects the reading meets, `fx`: a texel is
+  // judged after them, at INK_MIN, as the gate reads it; Codex review 2026-11-16 P1: the raw ground let a grey that read
+  // 4.8 raw read 4.0 through dark-glitch's effects)
+  const grounds = (s.on ?? '').split('+').filter((g) => /^#[0-9a-f]{6}$/i.test(g));
+  if (!grounds.length || !/^#[0-9a-f]{6}$/i.test(s.tint)) return;
+  const fx = fxOfKey(s.fx);
   const tint = rgbHex(s.tint);
   // (a declared part: its texels are the ones nearer its colour than the ink, as the gate splits them)
   const part = partColourOf(s);
   const img = ctx.getImageData(0, 0, w, h);
   const d = img.data;
+  const memo = new Map<number, boolean>();
+  const reads = (c: number[]) => {
+    const key = (c[0] << 16) | (c[1] << 8) | c[2];
+    let r = memo.get(key);
+    if (r === undefined) { const hx = `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`; r = grounds.every((g) => pairLeast(hx, g, fx) >= READ_FLOOR); memo.set(key, r); }
+    return r;
+  };
   let changed = false;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] < 128) continue;
     const c = [d[i], d[i + 1], d[i + 2]];
-    if (ratio(lumRgb(c[0], c[1], c[2]), lg) >= READ_AIM) continue;
+    if (reads(c)) continue;
     const isPart = part && (c[0] - part[0]) ** 2 + (c[1] - part[1]) ** 2 + (c[2] - part[2]) ** 2 < (c[0] - tint[0]) ** 2 + (c[1] - tint[1]) ** 2 + (c[2] - tint[2]) ** 2;
     const to = isPart ? part! : tint;
     // (the least mix toward its own colour that reads; its own colour must read itself, else the decision's job)
     let done = false;
     for (let k = 0.05; k <= 1.0001; k += 0.05) {
       const m = c.map((v, j) => Math.round(v + (to[j] - v) * k));
-      if (ratio(lumRgb(m[0], m[1], m[2]), lg) >= READ_AIM) { d.set(m, i); done = true; break; }
+      if (reads(m)) { d.set(m, i); done = true; break; }
     }
     if (!done && isPart) d[i + 3] = 0;
     changed = true;
   }
   if (changed) ctx.putImageData(img, 0, 0);
 }
+/** A fixed texel reads at least this on every ground after the final effects (the gate's INK_MIN). */
+export const READ_FLOOR = 4.5;
+/** The final effects in a surface key: `flicker,vignette,grain,halo,paper` (fxKey), none when absent. */
+export const fxKey = (fx: FxBox | null | undefined) => (fx ? [fx.flicker, fx.vignette, fx.grain, fx.halo ? 1 : 0, fx.paper ?? 0].map((v) => +(+v).toFixed(4)).join(',') : undefined);
+const fxOfKey = (k: string | undefined): FxBox => { if (!k) return FX_NONE; const [flicker, vignette, grain, halo, paper] = k.split(',').map(Number); return { flicker, vignette, grain, halo: halo === 1, ...(paper ? { paper } : {}) }; };
 /** A surface's declared part colour (surface-parts SURFACE_PARTS: the core where its material declares one). */
 const partColourOf = (s: Surface) => (DECLARED_PART_KINDS.has(s.kind) && /^#[0-9a-f]{6}$/i.test(s.core) ? rgbHex(s.core) : undefined);
 /** The kinds that declare their core as a part (kept in step with surface-parts SURFACE_PARTS by its spec). */

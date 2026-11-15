@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DECLARED_PART_KINDS, keepReadable, READ_AIM } from './world-glyph';
+import { DECLARED_PART_KINDS, fxKey, keepReadable, READ_FLOOR } from './world-glyph';
+import { pairLeast } from '../ink-decide';
 import { SURFACE_PARTS } from './surface-parts';
 import { contrast } from '../contrast';
 
@@ -16,7 +17,7 @@ describe("a material keeps its face readable on the ground it is drawn on (one r
     const { ctx, d } = fake([[0x1c, 0x28, 0x50, 255], [0x60, 0x69, 0x85, 255], [0x10, 0x10, 0x10, 0]]);
     keepReadable(ctx, 3, 1, { kind: 'satin', tint: '#1c2850', core: '#26365a', eaten: false, on: '#c5bfb0' });
     expect(hex(d, 0)).toBe('#1c2850');
-    expect(contrast(hex(d, 1), '#c5bfb0')).toBeGreaterThanOrEqual(READ_AIM);
+    expect(contrast(hex(d, 1), '#c5bfb0')).toBeGreaterThanOrEqual(READ_FLOOR);
     expect(contrast(hex(d, 1), '#1c2850')).toBeGreaterThan(1.05); // (still a highlight, not flattened)
   });
 
@@ -24,8 +25,15 @@ describe("a material keeps its face readable on the ground it is drawn on (one r
     // paper-lantern: dark body #2a1d14 round a light face on lit paper #ffe3b0: a rim texel blended to near the paper
     const { ctx, d } = fake([[0xf0, 0xd8, 0xa8, 255], [0x60, 0x50, 0x40, 255]]);
     keepReadable(ctx, 2, 1, { kind: 'silhouette', tint: '#2a1d14', core: '#2a1d14', eaten: false, on: '#ffe3b0' });
-    expect(contrast(hex(d, 0), '#ffe3b0')).toBeGreaterThanOrEqual(READ_AIM);
-    expect(contrast(hex(d, 1), '#ffe3b0')).toBeGreaterThanOrEqual(READ_AIM);
+    expect(contrast(hex(d, 0), '#ffe3b0')).toBeGreaterThanOrEqual(READ_FLOOR);
+    expect(contrast(hex(d, 1), '#ffe3b0')).toBeGreaterThanOrEqual(READ_FLOOR);
+  });
+
+  it('judges a texel after the final effects, on every ground (Codex 2026-11-16: #787878 read 4.0 through dark-glitch\'s)', () => {
+    const fx = { flicker: 0.02, grain: 0.07, vignette: 0.132, halo: true };
+    const { ctx, d } = fake([[0x78, 0x78, 0x78, 255]]);
+    keepReadable(ctx, 1, 1, { kind: 'tape', tint: '#dccfea', core: '#6a4c93', eaten: false, on: '#000000+#0e0a14', fx: fxKey(fx) });
+    for (const g of ['#000000', '#0e0a14']) expect(pairLeast(hex(d, 0), g, fx)).toBeGreaterThanOrEqual(READ_FLOOR);
   });
 
   it('with no ground known it draws as it did', () => {

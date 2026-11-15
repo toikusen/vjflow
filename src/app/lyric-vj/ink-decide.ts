@@ -5,6 +5,7 @@
 // Pure and DOM-free: the plan and the renderer call it on the same inputs and get the same answer.
 import { INK_AIM, INK_MIN, lumOf } from './measured-ink';
 import { inkDistance, readableHue } from './render/key-ink';
+import { contrast } from './contrast';
 
 /**
  * The final pass's effects a line meets over its time on screen, as ranges (FINAL_SHADER): exposure flicker ± share,
@@ -70,7 +71,9 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
   let c = own;
   for (let k = 0; k < 6 && least(c) < INK_AIM; k++) {
     const worst = [...gs].sort((a, b) => pairLeast(c, a, fx, drawn) - pairLeast(c, b, fx, drawn))[0];
-    const aim = INK_AIM * (1 + 0.08 * (k + 1)); // (the bounds take more off than a flat contrast: aim higher each step)
+    // (the flat contrast to aim at: what this ink reads flat, raised by the share the effects and its surface take off it
+    // as drawn, plus a step: a flat contrast already over the aim is no reason to stop, embroidery's satin highlights)
+    const aim = Math.min(21, Math.max(INK_AIM, contrast(c, worst) * (INK_AIM / Math.max(1, pairLeast(c, worst, fx, drawn)))) * (1 + 0.04 * (k + 1)));
     const m = readableHue(c, worst, aim);
     if (!m || m === c) break;
     c = m;

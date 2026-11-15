@@ -14,13 +14,18 @@ export interface ToneTable {
   fx: string;
   commit: string;
   built: string;
+  /** Every ground was read with its line at rest (on its carrier, if it has one): a carried set's entry may be read. */
+  restOnly?: boolean;
+  /** Every ground was read within the reading rim of its glyphs (not their em boxes). */
+  rim?: boolean;
   /** `${set}|${scheme id}` → the drawn ground's darkest and lightest tones under the set's words, and how many reads. */
   grounds: Record<string, { lo: string; hi: string; n: number }>;
   /**
-   * `${surface kind}|${core colour}` → the luminance of the face's drawn darkest and lightest parts (5th and 95th
-   * percentile of its ink texels, declared parts left out) as shares of its tint's: a satin's highlights, a seam, a scan.
+   * `${surface kind}|${core colour}` → how far the face's drawn darkest and lightest parts move its tint toward black and
+   * toward white (sRGB mix fractions: `black` read on a white tint's 5th percentile, `white` on a black tint's 95th, the
+   * declared parts left out): a satin's shading and highlights, a gilt's bands, a seam.
    */
-  surfaces: Record<string, { lo: number; hi: number } | number>;
+  surfaces: Record<string, { black: number; white: number }>;
 }
 
 const FILE = 'src/app/lyric-vj/render/ink-tones.json';
@@ -54,11 +59,13 @@ export const setInkTones = (t: ToneTable | null | undefined) => void (table = t)
 /** The drawn ground under a set's words on a scheme, its darkest and lightest tones; undefined where nothing was read. */
 export const drawnGround = (set: string, scheme: string | undefined) => (scheme ? inkTones()?.grounds[`${set}|${scheme}`] : undefined);
 
-/** How far a surface draws a tint down and up at its darkest and lightest parts (1: not at all; undefined: not read). */
-export const surfaceShare = (kind: string | undefined, core: string | undefined): { lo: number; hi: number } | undefined => {
+/** How far a surface moves a tint toward black and toward white at its darkest and lightest parts (undefined: not read). */
+export const surfaceShare = (kind: string | undefined, core: string | undefined): { black: number; white: number } | undefined => {
   const s = kind ? inkTones()?.surfaces[`${kind}|${(core ?? '').toLowerCase()}`] : undefined;
-  return s === undefined ? undefined : typeof s === 'number' ? { lo: s, hi: 1 } : s;
+  return s && typeof s === 'object' && 'black' in s ? s : undefined;
 };
+/** An ink mixed toward a colour by `k` (sRGB, as a canvas paints a shade or a highlight). */
+export const mixToward = (ink: string, to: string, k: number) => (!/^#[0-9a-f]{6}$/i.test(ink) || !k ? ink : `#${[1, 3, 5].map((i) => Math.round(parseInt(ink.slice(i, i + 2), 16) * (1 - k) + parseInt(to.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('')}`);
 
 /**
  * How far a glyph's edge draws its ink down, any surface: 1 since the glyph pictures are premultiplied (glyphs.ts

@@ -16,7 +16,7 @@ import { chromium } from 'playwright';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
 import { FREE_STYLES } from '../../src/app/lyric-vj/free-styles';
 import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
-import { mergeTones } from '../../src/app/lyric-vj/measured-ink';
+// (page side: the ground within the reading rim of each line at rest, ink-tones-page.mts)
 import { FX_VERSION } from '../../src/app/lyric-vj/render/final-warp.glsl';
 import type { ToneTable } from '../../src/app/lyric-vj/render/ink-tones';
 import { fontCache } from './font-cache.mts';
@@ -35,7 +35,8 @@ await new Promise((r) => server.once('listening', r));
 const browser = await chromium.launch({ channel: 'chromium', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
 const getFont = fontCache(resolve('out/font-cache'));
 const old = existsSync(FILE) ? (JSON.parse(readFileSync(FILE, 'utf8')) as ToneTable) : undefined;
-const table: ToneTable = old && old.fx === FX_VERSION ? old : { v: 1, fx: FX_VERSION, commit: '', built: '', grounds: {}, surfaces: {} };
+// (restOnly: every ground read with its line at rest, so a carried set's entry is its carrier as the words stand on it)
+const table: ToneTable = old && old.fx === FX_VERSION && old.restOnly && old.rim ? old : { v: 1, fx: FX_VERSION, commit: '', built: '', restOnly: true, rim: true, grounds: {}, surfaces: {} };
 const open = async (job: unknown, name: string) => {
   // (no '+' or space in a job file name: the page reads the job's URL as a query)
   const file = join(work, `${name.replace(/[^a-z0-9-]/gi, '_')}.job.json`);
@@ -64,13 +65,10 @@ for (const world of a.worlds!.split(',')) {
         surfaced = true;
         for (const scheme of sw.palette as unknown as Record<string, string>[]) {
           const core = scheme[sw.material.core];
-          const tints = [scheme['ink'], scheme['plateInk'], scheme['plate'], scheme['accent'], scheme['ink2']].filter((c) => /^#[0-9a-f]{6}$/i.test(c ?? ''));
-          let [lo, hi] = [1, 1];
-          for (const tint of tints) {
-            const s = (await page.evaluate(([k, t, c, f]) => (window as unknown as { vjSurfaceShare: (...x: string[]) => { lo: number; hi: number } }).vjSurfaceShare(k, t, c, f, '永國あア！の'), [sw.material.surface!, tint, core, job.fonts?.family ?? ''])) as { lo: number; hi: number };
-            [lo, hi] = [Math.min(lo, s.lo), Math.max(hi, s.hi)];
-          }
-          table.surfaces[`${sw.material.surface}|${core.toLowerCase()}`] = { lo, hi };
+          // (toward black: a white tint's darkest parts; toward white: a black tint's lightest)
+          const share = (t: string) => page.evaluate(([k, t2, c, f]) => (window as unknown as { vjSurfaceShare: (...x: string[]) => { lo: number; hi: number } }).vjSurfaceShare(k, t2, c, f, '永國あア！の'), [sw.material.surface!, t, core, job.fonts?.family ?? '']) as Promise<{ lo: number; hi: number }>;
+          const [w, b] = [await share('#ffffff'), await share('#000000')];
+          table.surfaces[`${sw.material.surface}|${core.toLowerCase()}`] = { black: +(1 - w.lo).toFixed(3), white: +b.hi.toFixed(3) };
         }
       }
       const cues = new Map(((job.treatment.cues as Cue[]) ?? []).filter((c) => c.world).map((c) => [c.cueId, c.world!]));
@@ -90,7 +88,11 @@ for (const world of a.worlds!.split(',')) {
       }
       await page.close();
     }
-  for (const [key, rs] of reads) { const was = table.grounds[key]; const m = mergeTones([...rs, ...(was ? [was] : [])])!; table.grounds[key] = { lo: m.lo, hi: m.hi, n: rs.length + (was?.n ?? 0) }; }
+  // (across the moments, the 10th percentile of their darkest tones and the 90th of their lightest: a moment its carrier is
+  // not yet under the words, a tape rolling in, is one read in many, not the ground; the gate stays per pixel)
+  const lumHex = (c: string) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(parseInt(c.slice(1, 3), 16)) + 0.7152 * f(parseInt(c.slice(3, 5), 16)) + 0.0722 * f(parseInt(c.slice(5, 7), 16)); };
+  const pick = (cs: string[], q: number) => [...cs].sort((x, y) => lumHex(x) - lumHex(y))[Math.min(cs.length - 1, Math.floor(cs.length * q))];
+  for (const [key, rs] of reads) { const was = table.grounds[key]; const all = [...rs, ...(was ? [was] : [])]; table.grounds[key] = { lo: pick(all.map((r) => r.lo), 0.1), hi: pick(all.map((r) => r.hi), 0.9), n: rs.length + (was?.n ?? 0) }; }
   table.commit = execSync('git rev-parse --short HEAD').toString().trim();
   table.built = new Date().toISOString();
   writeFileSync(FILE, JSON.stringify(table, null, 1));

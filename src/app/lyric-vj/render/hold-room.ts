@@ -10,7 +10,7 @@ import type { Block, SetSpec } from './world-sets';
 import { gapOf, LINE_CLEAR, toPx } from './carrier-fit';
 import { decideInk, leastThrough, type FxBox } from '../ink-decide';
 import { SET_SPECS } from './world-sets';
-import { darkest, drawnGround, edgeShare, surfaceShare } from './ink-tones';
+import { darkest, drawnGround, edgeShare, inkTones, mixToward, surfaceShare } from './ink-tones';
 
 /** Every ink a line is read in reads at least this on what is under it (WCAG AA). */
 export const READ_MIN = 4.5;
@@ -136,8 +136,8 @@ export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots
   const core = spec.core ? slots[spec.core] : m ? slots[m.core] : undefined;
   // (the deeper of the surface's own darkening and the edge's, edgeShare: 1 with premultiplied glyph pictures)
   const s = surfaceShare(kind, core);
-  const [lo, hi] = [Math.min(s?.lo ?? 1, edgeShare()), s?.hi ?? 1];
-  return (ink: string) => [darkest(ink, lo), darkest(ink, hi)];
+  const edge = edgeShare();
+  return (ink: string) => [darkest(mixToward(ink, '#000000', s?.black ?? 0), edge), mixToward(ink, '#ffffff', s?.white ?? 0)];
 };
 /** What a set's words stand on: its carrier, else the background and what the picture puts there. */
 // (one list for the plan and the renderer, review 2026-11-15: a world line stands on its world's ground, the page's paper
@@ -148,7 +148,9 @@ export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>,
 // (a carried set's words stand on their carrier: its tone is its slot's, proven analytically; the page round it is not
 // under them. The sampled box ran past a moving tape onto the black page, and every dark ink then had to read on both:
 // 31 915 fails, 2026-11-15)
-const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots) => { if (carrierSlots(spec)) return []; const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
+// (a table read with every line at rest, restOnly, reads a carried set's carrier as the words stand on it: a hoop's
+// linen drawn at 0.51 where its slot says 0.79, embroidery)
+const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots) => { if (carrierSlots(spec) && !(inkTones()?.restOnly && inkTones()?.rim)) return []; const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
 const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
 /**
  * A set's body ink as decided (M3, ink-decide decideInk): the one ink the plan reads every check on and the renderer draws,

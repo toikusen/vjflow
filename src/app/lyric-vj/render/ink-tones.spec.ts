@@ -20,10 +20,10 @@ describe('the sampled tone table (M4)', () => {
   it('is read only on the effects it was made on; a missing entry reads nothing', () => {
     setInkTones(table({ fx: 'other', grounds: { 'x|y': { lo: '#000000', hi: '#111111', n: 1 } } }));
     expect(inkTones()).toBeUndefined();
-    setInkTones(table({ grounds: { 'x|y': { lo: '#000000', hi: '#111111', n: 1 } }, surfaces: { 'tape|#6a4c93': 0.7 } }));
+    setInkTones(table({ grounds: { 'x|y': { lo: '#000000', hi: '#111111', n: 1 } }, surfaces: { 'tape|#6a4c93': { black: 0.3, white: 0.1 } } }));
     expect(drawnGround('x', 'y')).toEqual({ lo: '#000000', hi: '#111111', n: 1 });
     expect(drawnGround('x', 'z')).toBeUndefined();
-    expect(surfaceShare('tape', '#6A4C93')).toEqual({ lo: 0.7, hi: 1 });
+    expect(surfaceShare('tape', '#6A4C93')).toEqual({ black: 0.3, white: 0.1 });
   });
 
   it("a set's words stand on what the page really draws there too (off a carrier), and its ink is decided on it", () => {

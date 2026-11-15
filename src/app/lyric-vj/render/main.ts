@@ -87,6 +87,7 @@ window.vjMotionQa = (everyFrame) => engine.motionQa(everyFrame);
 // (QA, the tone table's generator, ink-tones.mts: how far a surface draws a tint down at its darkest part: the 5th
 // percentile luminance of its inked pixels over the tint's own, the least of the characters given)
 (window as unknown as { vjSurfaceShare: (kind: string, tint: string, core: string, family: string, chars: string) => { lo: number; hi: number } }).vjSurfaceShare = (kind, tint, core, family, chars) => {
+  // (lo, hi: the face texels' 5th and 95th percentile, each channel's mean, 0..1 sRGB)
   const lin = (v: number) => (v <= 10.0164 ? v / 3294.6 : ((v / 255 + 0.055) / 1.055) ** 2.4);
   const lum = (r: number, g: number, b: number) => 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
   const own = lum(...([1, 3, 5].map((i) => parseInt(tint.slice(i, i + 2), 16)) as [number, number, number]));
@@ -98,12 +99,12 @@ window.vjMotionQa = (everyFrame) => engine.motionQa(everyFrame);
     const img = texture.image as HTMLCanvasElement;
     const d = img.getContext('2d')!.getImageData(0, 0, img.width, img.height).data;
     const ls: number[] = [];
-    for (let i = 0; i < d.length; i += 4) if (d[i + 3] >= 128 && !(part && isPartTexel([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255], part.tint, part.colour))) ls.push(lum(d[i], d[i + 1], d[i + 2]));
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] >= 128 && !(part && isPartTexel([d[i] / 255, d[i + 1] / 255, d[i + 2] / 255], part.tint, part.colour))) ls.push((d[i] + d[i + 1] + d[i + 2]) / 765);
     if (!ls.length) continue;
     ls.sort((x, y) => x - y);
-    lo = Math.min(lo, ls[Math.floor(ls.length * 0.05)] / Math.max(own, 1e-6));
-    hi = Math.max(hi, ls[Math.floor(ls.length * 0.95)] / Math.max(own, 1e-6));
+    [lo, hi] = [Math.min(lo, ls[Math.floor(ls.length * 0.05)]), Math.max(hi === 1 ? 0 : hi, ls[Math.floor(ls.length * 0.95)])];
   }
+  void own;
   return { lo: +lo.toFixed(3), hi: +hi.toFixed(3) };
 };
 await window.vjReady;

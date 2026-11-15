@@ -144,7 +144,10 @@ export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots
 // lines of choroin's 45 worlds and is not what is drawn there)
 // (and what the page really draws there, where the tone table read it: a tape's darkened margin, a halftone; M4)
 export const standsOn = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, _seen: Seen = {}): string[] => { const on = carrierSlots(spec); return [...(on ? on.map((k) => slots[k]) : [slots.ground]), ...drawnTones(spec, slots)]; };
-const drawnTones = (spec: object, slots: Slots) => { const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
+// (a carried set's words stand on their carrier: its tone is its slot's, proven analytically; the page round it is not
+// under them. The sampled box ran past a moving tape onto the black page, and every dark ink then had to read on both:
+// 31 915 fails, 2026-11-15)
+const drawnTones = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots) => { if (carrierSlots(spec)) return []; const d = drawnGround(setIdOf(spec), (slots as { id?: string }).id); return d ? [d.lo, d.hi] : []; };
 const worldInks = (slots: Slots) => [slots.ink, slots.plateInk, slots.plate, slots.accent, slots.ink2];
 /**
  * A set's body ink as decided (M3, ink-decide decideInk): the one ink the plan reads every check on and the renderer draws,
@@ -170,7 +173,9 @@ export const carrierSlots = (spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'unde
  */
 export function groundsUnder(spec: Pick<SetSpec, 'on' | 'object' | 'ink' | 'under'>, slots: Slots, seen: Seen = {}): string[] {
   const on = carrierSlots(spec);
-  return [...(on ? on.map((k) => slots[k]) : [slots.ground, slots.plate]), ...drawnTones(spec, slots)].filter(hex);
+  // (and what the renderer sees the picture put there, `seen.under`: a hold's new ink is checked on it too, so the
+  // renderer can only be stricter than the plan and drop a hold, never draw one that does not read)
+  return [...(on ? on.map((k) => slots[k]) : [slots.ground, ...(seen.under ?? []), slots.plate]), ...drawnTones(spec, slots)].filter(hex);
 }
 /**
  * Every ground each part of a line stands on, the parts together (review 2026-11-10: card/pair's second row is on the red

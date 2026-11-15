@@ -63,13 +63,13 @@ const MOVE = 0.12;
 export function decideInk(own: string, grounds: string[], fx: FxBox, world: string[] = [], drawn: (ink: string) => string = (x) => x): InkDecision {
   const gs = grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g));
   // (`drawn`: an ink as its surface draws it at its darkest, ink-tones darkest: the ink is judged as it is drawn)
-  const least = (ink: string) => Math.min(Infinity, ...gs.map((g) => minContrast(inkRange(ink, fx, drawn), finalBounds(g, fx, true))));
+  const least = (ink: string) => Math.min(Infinity, ...gs.map((g) => pairLeast(ink, g, fx, drawn)));
   const at = least(own);
   if (!gs.length || at >= INK_AIM) return { ink: own, from: 'own', min: at };
   // (its own hue, lightness moved against the ground it reads worst on, a step at a time)
   let c = own;
   for (let k = 0; k < 6 && least(c) < INK_AIM; k++) {
-    const worst = [...gs].sort((a, b) => minContrast(inkRange(c, fx, drawn), finalBounds(a, fx, true)) - minContrast(inkRange(c, fx, drawn), finalBounds(b, fx, true)))[0];
+    const worst = [...gs].sort((a, b) => pairLeast(c, a, fx, drawn) - pairLeast(c, b, fx, drawn))[0];
     const aim = INK_AIM * (1 + 0.08 * (k + 1)); // (the bounds take more off than a flat contrast: aim higher each step)
     const m = readableHue(c, worst, aim);
     if (!m || m === c) break;
@@ -90,6 +90,23 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
   return better && better.min > at ? { ...better, from: 'none' as const } : { ink: own, from: 'none', min: at };
 }
 /** The least an ink reads on every ground through every effect (decideInk's measure). */
-export const leastThrough = (ink: string, grounds: string[], fx: FxBox, drawn: (ink: string) => string = (x) => x) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => minContrast(inkRange(ink, fx, drawn), finalBounds(g, fx, true))));
-/** An ink's range on the final composite as drawn: from its darkest drawn part (`drawn`) to itself at its lightest. */
-const inkRange = (ink: string, fx: FxBox, drawn: (ink: string) => string): [number, number] => [finalBounds(drawn(ink), fx, true)[0], finalBounds(ink, fx, true)[1]];
+export const leastThrough = (ink: string, grounds: string[], fx: FxBox, drawn: (ink: string) => string = (x) => x) => Math.min(Infinity, ...grounds.filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => pairLeast(ink, g, fx, drawn)));
+/**
+ * The least an ink reads on a ground it stands right by, through the final pass: the vignette and the flicker are one
+ * factor over both (the same pixel's neighbourhood: the glyph and the ground beside it within a few px), each end of
+ * its range taken; grain adds apart to each, against the pair, except within the halo (none at a glyph's rim). The ink
+ * is taken at its darkest drawn part and at itself (`drawn`). (Taking the two apart, as finalBounds' ranges do, read a
+ * file's red key on its cream plate at 4.0 where every pixel reads 5.3: 2026-11-15.)
+ */
+export function pairLeast(ink: string, ground: string, fx: FxBox, drawn: (ink: string) => string = (x) => x): number {
+  const g = fx.halo ? 0 : fx.grain / 2;
+  const at = (c: string, k: number, d: number) => { const v = ch(c).map((x) => clamp(x * k + d)); return lumOf(...(v.map((x) => Math.round(x * 255)) as [number, number, number])); };
+  let least = Infinity;
+  for (const k of [(1 - fx.vignette) * (1 - fx.flicker), 1 + fx.flicker])
+    for (const c of new Set([ink, drawn(ink)]))
+      for (const d of g ? [-g, g] : [0]) {
+        const [li, lg] = [at(c, k, d), at(ground, k, -d)];
+        least = Math.min(least, (Math.max(li, lg) + 0.05) / (Math.min(li, lg) + 0.05));
+      }
+  return least;
+}

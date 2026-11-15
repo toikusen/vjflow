@@ -26,14 +26,17 @@ describe('the sampled tone table (M4)', () => {
     expect(surfaceShare('tape', '#6A4C93')).toBe(0.7);
   });
 
-  it("a set's words stand on what the page really draws there too, and its ink is decided on it as drawn", () => {
-    const spec = SET_SPECS['dark-glitch/tape'];
+  it("a set's words stand on what the page really draws there too (off a carrier), and its ink is decided on it", () => {
     const slots = { id: 'amber-dial', ground: '#110C08', ink: '#E6CFA0', ink2: '#8A5A2C', accent: '#D9622A', plate: '#C7B287', plateInk: '#1C130A', faint: '#3A2A18' } as never as Parameters<typeof standsOn>[1];
+    const spec = SET_SPECS['dark-glitch/overheard'];
     const flat = standsOn(spec, slots);
-    // the tape's margin as drawn: far darker than its plate slot
-    setInkTones(table({ grounds: { 'dark-glitch/tape|amber-dial': { lo: '#8f7f60', hi: '#c7b287', n: 40 } } }));
-    expect(standsOn(spec, slots)).toEqual([...flat, '#8f7f60', '#c7b287']);
-    const ink = bodyInk(spec, slots, slots.plateInk);
-    expect(contrast(ink, '#8f7f60')).toBeGreaterThanOrEqual(4.5);
+    // a lit band the page lays under the words, read as drawn
+    setInkTones(table({ grounds: { 'dark-glitch/overheard|amber-dial': { lo: '#0c0805', hi: '#6a5a40', n: 40 } } }));
+    expect(standsOn(spec, slots)).toEqual([...flat, '#0c0805', '#6a5a40']);
+    expect(contrast(bodyInk(spec, slots, slots.ink), '#6a5a40')).toBeGreaterThanOrEqual(4.5);
+    // a carried set stands on its carrier: the page round a moving tape is not under its words (31 915 fails, 2026-11-15)
+    const tape = SET_SPECS['dark-glitch/tape'];
+    setInkTones(table({ grounds: { 'dark-glitch/tape|amber-dial': { lo: '#0f0a07', hi: '#c6b186', n: 214 } } }));
+    expect(standsOn(tape, slots)).toEqual([slots.plate]);
   });
 });

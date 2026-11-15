@@ -201,7 +201,14 @@ describe.skipIf(!have)('pairs C on 雙截棍 (file, the world the owner called �
     const f = freeJob(song, { style, seed: 0, meaning, worldEvents: true });
     const sorted = (cues: DrawnCue[]) => cues.map((c) => ({ c, s: song.cues.find((x: { id: string }) => x.id === c.cueId) })).filter((x) => x.s).sort((a, b) => a.s.start - b.s.start).map((x) => x.c);
     const tamper = (edit: (cues: DrawnCue[]) => void) => { const j = structuredClone(f.job); edit(sorted(j.treatment.cues as DrawnCue[])); return holdSequenceChecks(j).map((w) => w.reason); };
-    const k = sorted(f.job.treatment.cues as DrawnCue[]).findIndex((c, i, xs) => c.world?.beat && i > 0 && xs[i - 1].world?.beat);
+    let k = sorted(f.job.treatment.cues as DrawnCue[]).findIndex((c, i, xs) => c.world?.beat && i > 0 && xs[i - 1].world?.beat);
+    // (the plan may hold no two events in a row (holds whose new ink cannot read through the world's effects are dropped,
+    // 2026-11-15): lay one on the line before a held one, the check's own fixture)
+    if (k < 1) {
+      const cs = sorted(f.job.treatment.cues as DrawnCue[]);
+      k = cs.findIndex((c, i) => c.world?.beat && i > 0 && cs[i - 1].world);
+      cs[k - 1].world!.beat = structuredClone(cs[k].world!.beat);
+    }
     const swap = sorted(f.job.treatment.cues as DrawnCue[]).findIndex((c) => c.world?.beat?.kind === 'ink-swap');
     expect(k).toBeGreaterThan(0);
     expect(swap).toBeGreaterThanOrEqual(0);

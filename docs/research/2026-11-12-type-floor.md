@@ -16,7 +16,7 @@
 - calls 由 78 px 改 84 px；stack 退後的行與 typeset particle 不低於下限；world job 的共用 template 行在 84 px 以下改用分段列。
 - 新增 `type-floor-scan.mts`（每個歌詞字形的實際繪製大小）、`type-floor-sets.mts`（哪些行改了 set 與原因）。
 
-## 掃描：改前 vs 改後
+## 掃描：改前 vs 第一版改後（aeb4550，歷史數字，最終見下）
 
 範圍：45 個 offered worlds × 5 首歌 × seeds 0,1,2，33210 行。`under` 指任一內文字形在該行兩個取樣時刻低於其下限。
 
@@ -31,22 +31,56 @@
 
 「on」是 composition scheduler 開啟（`--on`）。改後 off 的 391 行：art-deco 271（pillars 91、arch 82、marquee 55、marquee-low 42、plaque 1，多數最小字 81 至 83 px，最差 63），其餘 21 個 world 合計 120 行（最小 67.6 px，其中 93 行在 80 px 以上）。各 world 最小字改前至改後（off）：silk 57→83、silk-cold 52→78、file 53→84、screentone 44→84、embroidery 52→84、xerox 53→84、cyanotype 54→84、notebook 53→84、art-deco 56→63、riso 59→68、spy 66→69。
 
-## 殘留
+## 規則的定義（2026-11-14 定案）
 
-- document / feed c041：80 px，沒有任何 set 能容納該句。
-- world camera moments（`plan: cam:*`）：鏡頭縮放後的 frame fit 仍有 1 至 3 px 的差（例如 silk/top-slab 83 px）。
-- art-deco 的 pillars / arch / marquee 系列在整句重排後仍落在 81 至 83 px，這是量測到的事實，本次沒有改程式去處理（任務限制）。
-- 部分 template 行（riso `stair`，67.6 至 73 px，fit 0.81）。
-- particle 3919：這是 typeset 在列內的粒子比例，與主字級分開報告。
+- 字級是 em 高：一個字形在畫面上的字級，取它兩個軸向縮放中較大的那個（`max(|scale.x|, |scale.y|)` 乘 `userData.size`）。art-deco 的窄體（scaleX .75）是壓扁的字體，不是縮小的字；滾動、翻轉中的字短暫壓扁也不算縮小。`shearGain` 只讀 shear 的垂直軸。
+- 若改成計入被壓扁的寬度，art-deco 的小半邊要排在 112 px 才算數，放不下，結果是 art-deco 的 poster-panel 版型在 taimei 一行都排不出（11 行變 0），4a/4c 的測試與 pin 也一起壞。這是量過的事實，所以不採用。
+- 壓扁只能用核准的字體：`MIN_CONDENSE = 0.75`（art-deco 目前最窄、已檢查過筆畫不會黏在一起）。`type-floor.spec.ts` 檢查每個 set 的 shear 橫軸不得小於它，所以任何更窄的壓扁都得先重新跑「筆畫在畫出來的字形上不合併、不低於筆畫下限」的檢查才能放行。
+- 內文歌詞字形一律受規則約束，包含助詞與小假名（particle）。裝飾用的複製品（`userData.decor`：放大字的 stress 副本、carrier 的 keyline 層）不是被閱讀的字，不計入；這個分類寫在 `render/type-floor-page.mts`、`engine.ts` 的 `restingWords` 與 `type-floor-scan.mts`。
+
+## 每一步怎麼守住（最終）
+
+- 版面：`layFloorOf`（set 的 lo 與 84 / shearGain 取大，無條件進位到整數 px）、`blockOf` 重排、`splitBlock`、composer 的 `seatMissed`，以及 `blowPose`（放大字只放到「姿態連同 line-grow 的 1.12 倍、每個字的 em 框」在重拍上放得進畫面；放不下就不放大）。
+- 助詞：`holdParticles` 把排在已達下限的列裡、被排版器縮小的助詞或小假名，提升到畫出來的下限（不超過該列字級）。stack 往後退時以該行最小的字形為準。
+- 引擎：`holdScale` 在一行第一次播放時，以每 1/30 秒讀它整段閱讀時間「實際播放」的字級與位置，算出一個常數（`playScale(natural, hold)` 只擋住鏡頭或漂移造成的縮小，不自己動）；瞄準下限加 0.6 px，邊界 `HOLD_EDGE` = 8 px。擋不住的放大字（`holdFalls`）整個放棄放大，連另一種墨色的版本（twin）一起重排；世界裡每一行都套用 stair 後備（`inWorld`，以 cue.world 判定）。stair 在最寬一列低於 90 px 時多切一列（至六列）。
+- 單幀硬抬（`liftToFloor`）試過後移除：它會讓正在唱的行逐幀變大小，進場動畫也會被撐大。
+
+## 殘留與歷程
+
+全掃描（45 世界 × 5 首 × 3 種子，33210 行）各版本低於 84 px 的行數（off，on 相差不到 2%）：
+
+| 版本 | 行 | 助詞 | 說明 |
+|---|---|---|---|
+| ffee2a7（改前）| 2557 | 7951 | calls 3105 處 78 px |
+| aeb4550 | 391 | 3919 | 前一輪報告 |
+| r2 | 113 | 351 | 版面算法加入 shear 增益等 |
+| r3 | 3 | 3 | 放大字與動態保持 |
+| r4 | 0 | 0 | 當時以壓扁寬度計 art-deco 並有逐幀硬抬 |
+| r5 | 22 | 11 | 改為 em 高、移除硬抬後：framed 世界在播放中被「滾動壓扁」讀小、放大字與鏡頭行的常數保持不足 |
+| 定案版（針對性掃描）| 0 | 0 | 見下 |
+
+r5 的 22 行與 11 個助詞已全部對應到原因並修正：量測改為兩軸取大、保持改讀「播放中」的字級與位置（每 1/30 秒）、twin 版本跟著重排、保持邊界 8 px 並瞄準 +0.6 px。針對性掃描（受影響的 15 個世界，全部 5 首 × 3 種子，off）結果：gameshow、idol-live、y2k、phone、scrapbook、claymation、art-deco 共 13 個世界 0 行、0 個助詞；silk-cold、gothic-lolita、chiyogami、chalkboard、papercut、led-board、silk、dark-glitch、spy 共 9 個世界 0 行、0 個助詞（最後一輪 gothic-lolita、chiyogami、chalkboard 兩個種子：2214 行，0 行、0 助詞）。
+
+**最終的全掃描（off 與 on 各一次，約 70 分鐘一次）在送審前才跑一次，本文件寫成時還沒有，所以全部 45 世界的最終殘留數字是「針對性 0，全掃描待跑」，不是已證明的 0。** 全掃描與完整 gate 的指令見最後一節。
+
+仍存在的設計取捨：
+- document / feed c041 這種任何 set 都放不下的句子，現在由 stair 後備接手（世界裡每一行都套用）；art-deco 在 em 高定義下不再是殘留。
+- 保持要把字抬到下限時，整行會比自然的 fit 略大（最多幾 %），並不超出畫面邊 8 px；超出就放棄放大或改 stair。
+- 一行以一個常數保持，不是逐幀調整：該行本來的漂移、鏡頭與 line-grow 照常運動，保持只擋住縮到下限以下。
 
 ## Gate
 
-`style-gate-reading.mts`，45 worlds × 5 首 × 489 個檢查點，baseline `scripts/lyric-vj/style-gate-rules.baseline.json`，off 與 on（`VJ_WORLD_EVENTS=1`）各一次。
+`style-gate-reading.mts`，45 worlds × 5 首 × 489 個檢查點，baseline `scripts/lyric-vj/style-gate-rules.baseline.json`。
 
-- fails 0、contract 0、turns 0、camDrops 0；checked 22005；fillMedian 0.149（on 0.148）。
-- 規則回歸 2 項（兩次相同）：`isometric: low 11/489 (was 0/489)`、`cel80s: plate 33/489 (was 20/489)`。這兩項是 gate 報的回歸，未處理。
-- 已接受項：ukiyoe low 1、chiyogami cross 39（on 40）、scrapbook cross 114、watercolor plate 41、midcentury plate 173（on 175）。
-- 與 baseline 比有變動的規則計數共 54 項（off 與 on 同為 54）。增加的：file.cross 4→5（on 6）、spy.cross 0→1、spy.low 2→3、dark-glitch.plate 2→3、dark-glitch.low 5→8（on 7）、neon-stage.clip 0→1、ink-wash.small 0→1、ink-wash.low 0→2、gothic-lolita.plate 1→3、gothic-lolita.small 0→1、paper-lantern.low 0→4、chiyogami.cross 34→39（on 40）、chiyogami.low 0→1、woodcut.cross 0→4、aizome.low 1→2、crayon.low 0→1、popart.cross 0→1、idol-live.small 0→1、brutalist.small 0→1、blueprint.small 0→1、cyanotype.plate 50→51、isometric.plate 7→9、isometric.low 0→11、cel80s.plate 20→33、screentone.cross 4→6、watercolor.plate 40→41、midcentury.plate 167→173（on 175）、art-deco.small 2→1（on 3）、aizome.cross（僅 on，0→1）。減少的：silk.low 1→0、silk-cold.low 5→0、riso.small 3→2、riso.low 4→0、file.clip 1→0、dark-glitch.small 1→0、terminal.plate 1→0、ink-wash.cross 1→0、stained-glass.low 2→1、ukiyoe.low 3→1、papercut.plate 5→4、papercut.low 1→0、woodcut.plate 8→7、chalkboard.low 6→1、y2k.clip 1→0、psychedelic.cross 6→3、psychedelic.low 5→1、citypop.clip 1→0、citypop.low 2→0、phone.clip 1→0、cyanotype.cross 6→0、cyanotype.low 2→1、embroidery.plate 2→0、embroidery.low 1→0、scrapbook.cross 141→114。
+- 第一輪（aeb4550，off 與 on）：fails 0、contract 0、camDrops 0；規則回歸 2 項：`isometric: low 11/489`、`cel80s: plate 33/489 (was 20)`。
+- r4（形狀已改）：回歸只剩 `isometric: low 11/489`（cel80s 已回到基線）。
+- r5：`scrapbook: carrier-overflow 2/489`（scrapbook choroin c012）。
+- 定案版（isometric、scrapbook、cel80s 三個世界，5 首）：回歸 0 項，fails 0，contract 0：isometric low 0/489、scrapbook carrier-overflow 0/489、cel80s plate 在基線內。完整 45 世界的 gate 與全掃描一起，送審前跑一次。
+
+原因與修法：
+- isometric low：這 11 個時刻是被下限重排從 terrace 換到 `isometric/corner`、`corner-l` 的行。那兩個 set 宣告「字站在 plateInk（深藍）上」，但頁面實際畫的是珊瑚紅與深青的牆；共用的墨色邏輯（`keyFor`）因此把關鍵字的墨色挑成「在深藍上夠亮」的淺珊瑚，印在紅牆與青牆上只有約 2.5–3:1。修法不是改墨色，而是讓宣告說實話：`SetSpec.groundHex` 記下頁面實際鋪的牆色（`CORNER_WALLS`），`groundsUnder`、`partGrounds`、`keyFor`（plan 與 renderer 共用的墨色邏輯）都讀它，於是關鍵字墨色在兩面牆上都夠 4.5:1，不夠就退回內文墨色。`style-worlds-b4b.spec.ts` 鎖住：所有配色下，corner 兩個 set 的內文墨與關鍵字墨在兩面牆上都 ≥ 4.5。
+- scrapbook carrier-overflow：兩個時刻（choroin c012）是 r5 的保持把「播放中尚未到位的位置」算進方框造成的，改為讀播放中的位置後消失。
+- cel80s plate：r4 起已在基線內。
 
 ## Line set 變動（type-floor-sets）
 
@@ -69,27 +103,30 @@ off：33345 行中 4299 行換了 set（改前已有 915 行放不下）；on：
 
 ## 測試
 
-`npx ng test --watch=false`：Test Files 148 passed (148)；Tests 1801 passed (1801)。（jsdom 的 canvas `getContext` 警告為既有雜訊。）
+`npx ng test --watch=false`（定案版）：Test Files 149 passed (149)；Tests 1819 passed (1819)。`tsc -p tsconfig.app.json` 與 `tsc -p tsconfig.spec.json` 無錯誤。新增 `render/type-floor-fit.spec.ts` 與 `type-floor.spec.ts`、`style-worlds-b4b.spec.ts`、`style-worlds-b5.spec.ts` 的案例（frameFit、blowPose 在 line-grow 下放得進畫面、holdParticles、stairRows、holdMultiple、holdFalls、playScale 不逐幀改變行的大小、MIN_CONDENSE、corner 牆上的墨色）。
 
 ## 限制
 
-- 掃描讀的是每行可讀時間內的兩個時刻（中間與結束前 0.08 s），不是逐幀。
-- 5 首歌 × 3 個 seed 為樣本，不是全部歌曲。
+- 掃描讀的是每行可讀時間內的兩個時刻（中間與結束前 0.08 s），不是逐幀；保持本身讀的是每 1/30 秒。
+- 5 首歌 × 3 個種子為樣本，不是全部歌曲；最終全掃描與完整 gate 在送審前跑一次，此前只有針對性證據。
 - 只量字形大小，不判斷版面好不好看；換 set 的行在觀感上是否更好，仍需人看。
 - `lines_under` 的量測以 render page 內 `userData.set` 為 row type；`--code` 的改前端依賴那一行。
+- composer 沒有另外加「墨色讀不到就不是合法座位」的過濾：墨色邏輯是以各 set 宣告的底色為準，宣告不實（isometric corner）會讓 plan 與畫面不一致，所以修的是宣告。一般性的座位墨色過濾若要做，需要先讓所有 set 的底色宣告都可信（目前有 21 個 set 在某些配色下，內文墨對它宣告的底色低於 4.5，多半是頁面自己鋪了另一塊底）。
 
 ## 指令
 
 ```
 cd /Users/seitumbp2025/vjflow.worktrees/q3-scale-policy
-nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-scan.mts --jobs 1 --out out/research/type-floor/after-off.json
-nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-scan.mts --jobs 1 --on --out out/research/type-floor/after-on.json
-nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-scan.mts --jobs 1 --on --code ../type-floor-base --out out/research/type-floor/before-on.json
-nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/type-floor/gate-off --baseline scripts/lyric-vj/style-gate-rules.baseline.json <45 worlds>
-VJ_WORLD_EVENTS=1 nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/type-floor/gate-on --baseline scripts/lyric-vj/style-gate-rules.baseline.json <45 worlds>
+# 全掃描（約 70 分鐘一次）
+nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-scan.mts --jobs 1 --out out/research/type-floor/final/after-off.json
+nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-scan.mts --jobs 1 --on --out out/research/type-floor/final/after-on.json
+# 針對性掃描（可指定世界）
+nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-scan.mts --jobs 1 --out out/research/type-floor/r6/aff-off.json gameshow idol-live ...
+# gate
+nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/style-gate-reading.mts --out out/research/type-floor/r6/gate --baseline scripts/lyric-vj/style-gate-rules.baseline.json isometric scrapbook cel80s
+# 改前改後的 line set
 nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/type-floor-sets.mts --before /Users/seitumbp2025/vjflow.worktrees/type-floor-base [--on] --out out/research/type-floor/sets-{off,on}.json
-nice -n 19 npx tsx --tsconfig tsconfig.json scripts/lyric-vj/measure-world-events.mts --seeds 0,1,2 --out out/research/type-floor/we-after.json
 nice -n 19 npx ng test --watch=false
 ```
 
-改前的 before-off 掃描（ffee2a7）為先前已跑完的 `before-off.json`。`type-floor-sets.mts` 的 `--before` 必須用絕對路徑（相對路徑會被解成 `scripts/` 底下而失敗）。
+`type-floor-sets.mts --before` 現在以工作目錄解析相對路徑。

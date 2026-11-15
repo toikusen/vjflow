@@ -71,3 +71,6 @@ export const MIN_CONDENSE = 0.75;
 /** Whether the hold cannot bring a line's words (`least` px as drawn at the fit) to the floor within the frame (holdMultiple): the line is laid again without what makes it wide. */
 export const holdFalls = (least: number, floor: number, wx: number, wy: number, edge = 24) =>
   underFloor(least * Math.max(1, holdMultiple(least, floor, wx, wy, edge)), floor);
+
+/** How near the frame's edge the hold may carry a line's words, px at 1080p: the words stay in the frame, the safe margin is spent before the floor is (a one-row line's glyph boxes run 2 % past its advances). */
+export const HOLD_EDGE = 8;

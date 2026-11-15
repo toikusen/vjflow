@@ -131,10 +131,15 @@ const idCache = new WeakMap<THREE.Material, Map<string, THREE.ShaderMaterial>>()
  * An ID material for a source material, kept and brought up to date (its picture, the picture's transform, whether it is
  * shown, its clip planes), not made and thrown away each frame (Codex review 2026-11-16 P2).
  */
-function idMaterialOf(src: THREE.MeshBasicMaterial, id: number, split?: Split): THREE.ShaderMaterial {
+export function idMaterialOf(src: THREE.MeshBasicMaterial, id: number, split?: Split): THREE.ShaderMaterial {
   const key = `${id}|${split ? `${split.keep}${split.tint}${split.part}` : ''}`;
   let byKey = idCache.get(src);
-  if (!byKey) idCache.set(src, (byKey = new Map()));
+  if (!byKey) {
+    idCache.set(src, (byKey = new Map()));
+    // (released with its source: three's program cache holds a material until it is disposed; Codex 2026-11-16 P2)
+    const kept = byKey;
+    src.addEventListener('dispose', () => { kept.forEach((m) => m.dispose()); kept.clear(); idCache.delete(src); });
+  }
   let m = byKey.get(key);
   if (!m) { m = idMaterial(src, id, split); byKey.set(key, m); return m; }
   const u = m.uniforms;

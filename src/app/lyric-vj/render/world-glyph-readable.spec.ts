@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DECLARED_PART_KINDS, fxKey, keepReadable, READ_FLOOR } from './world-glyph';
+import { DECLARED_PART_KINDS, fxKey, fxOfKey, keepReadable, READ_FLOOR } from './world-glyph';
+import { SURFACE_GLOW, withGlow } from './hold-room';
+import { SET_SPECS } from './world-sets';
+import '../style-worlds';
 import { pairLeast } from '../ink-decide';
 import { SURFACE_PARTS } from './surface-parts';
 import { contrast } from '../contrast';
@@ -34,6 +37,17 @@ describe("a material keeps its face readable on the ground it is drawn on (one r
     const { ctx, d } = fake([[0x78, 0x78, 0x78, 255]]);
     keepReadable(ctx, 1, 1, { kind: 'tape', tint: '#dccfea', core: '#6a4c93', eaten: false, on: '#000000+#0e0a14', fx: fxKey(fx) });
     for (const g of ['#000000', '#0e0a14']) expect(pairLeast(hex(d, 0), g, fx)).toBeGreaterThanOrEqual(READ_FLOOR);
+  });
+
+  it("a tube's texel is fixed under the same effects box as its ink decision, its glow included (Codex 2026-11-16)", () => {
+    const fx = withGlow({ flicker: 0.012, grain: 0.034, vignette: 0.132, halo: true }, SET_SPECS['neon-stage/corner-sign'], 'neon-stage');
+    expect(fx.glow).toBe(SURFACE_GLOW['tube']);
+    // the key carries every field back
+    expect(fxOfKey(fxKey(fx))).toEqual(fx);
+    // a grey texel on the wall: fixed until it reads with the glow lifting the wall, not only without it
+    const { ctx, d } = fake([[0x78, 0x78, 0x78, 255]]);
+    keepReadable(ctx, 1, 1, { kind: 'tube', tint: '#ffffff', core: '#ffffff', eaten: false, on: '#080a12', fx: fxKey(fx) });
+    expect(pairLeast(hex(d, 0), '#080a12', fx)).toBeGreaterThanOrEqual(READ_FLOOR);
   });
 
   it('with no ground known it draws as it did', () => {

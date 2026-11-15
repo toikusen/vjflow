@@ -11,7 +11,7 @@ import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { fxKey, SurfaceKind, surfaceKey } from './world-glyph';
 import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
-import { bodyInk, drawnInkOf, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
+import { bodyInk, drawnInkOf, withGlow, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
 import { readableTone } from '../measured-ink';
 import type { FxBox } from '../ink-decide';
 import { laidSeat, panelSplit, slotSpec } from './seat-geometry';
@@ -361,7 +361,7 @@ function build(rt: CueRuntime, slot: { k: number; of: number }): CueLayer {
   // (every ground the pose's words stand on and the engine's final effects: the material keeps its face readable on all
   // of them after the effects, world-glyph keepReadable)
   const groundsOf = (p: number) => [...new Set(standsOn(sets[p]).filter((g) => /^#[0-9a-f]{6}$/i.test(g)).map((g) => g.toLowerCase()))].join('+');
-  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten, ...(/^#[0-9a-f]{6}$/i.test(tint) && groundsOf(p) ? { on: groundsOf(p), fx: fxKey(rt.inkFx) } : {}) }) : undefined; };
+  const surfaceOf = (tint: string, eaten = false, p = 0) => { const kind = sets[p].surface ?? wl.surface; const core = sets[p].core ? slots[sets[p].core!] : wl.core ?? slots.ink2; return kind ? surfaceKey({ kind, tint, core, eaten, ...(/^#[0-9a-f]{6}$/i.test(tint) && groundsOf(p) ? { on: groundsOf(p), fx: fxKey(rt.inkFx ? withGlow(rt.inkFx, sets[p], wl0.set.split('/')[0]) : rt.inkFx) } : {}) }) : undefined; };
   const weight = nearestWeight(family, sets[0].weight ?? wl.weight ?? 700);
   const style: GlyphStyle = { family, weight, size: tex, even: sets[0].even, surface: surfaceOf(words) };
   const gs = makeGlyphs(text, style, baked ? 'white' : color(words));

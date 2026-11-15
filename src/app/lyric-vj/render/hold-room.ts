@@ -139,7 +139,7 @@ export const inkFxOf = (spec: SetSpec, seen: Seen = {}): FxBox | undefined => (s
  */
 export const SURFACE_GLOW: Record<string, number> = { tube: 0.12 };
 /** The effects a set's inks are decided through, with its material's glow (SURFACE_GLOW). */
-const withGlow = (fx: FxBox, spec: Pick<SetSpec, 'surface'>, world: string): FxBox => { const g = SURFACE_GLOW[spec.surface ?? WORLD_SURFACE[world]?.kind ?? '']; return g ? { ...fx, glow: g } : fx; };
+export const withGlow = (fx: FxBox, spec: Pick<SetSpec, 'surface'>, world: string): FxBox => { const g = SURFACE_GLOW[spec.surface ?? WORLD_SURFACE[world]?.kind ?? '']; return g ? { ...fx, glow: g } : fx; };
 export const drawnInkOf = (spec: Pick<SetSpec, 'surface' | 'core'>, slots: Slots, world = worldOfSet(spec), _set?: string) => {
   const m = WORLD_SURFACE[world];
   const kind = spec.surface ?? m?.kind;

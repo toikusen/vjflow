@@ -143,9 +143,10 @@ export function keepReadable(ctx: CanvasRenderingContext2D, w: number, h: number
 }
 /** A fixed texel reads at least this on every ground after the final effects (the gate's INK_MIN). */
 export const READ_FLOOR = 4.5;
-/** The final effects in a surface key: `flicker,vignette,grain,halo,paper` (fxKey), none when absent. */
-export const fxKey = (fx: FxBox | null | undefined) => (fx ? [fx.flicker, fx.vignette, fx.grain, fx.halo ? 1 : 0, fx.paper ?? 0].map((v) => +(+v).toFixed(4)).join(',') : undefined);
-const fxOfKey = (k: string | undefined): FxBox => { if (!k) return FX_NONE; const [flicker, vignette, grain, halo, paper] = k.split(',').map(Number); return { flicker, vignette, grain, halo: halo === 1, ...(paper ? { paper } : {}) }; };
+/** The final effects in a surface key: `flicker,vignette,grain,halo,paper,glow` (fxKey), none when absent. */
+export const fxKey = (fx: FxBox | null | undefined) => (fx ? [fx.flicker, fx.vignette, fx.grain, fx.halo ? 1 : 0, fx.paper ?? 0, fx.glow ?? 0].map((v) => +(+v).toFixed(4)).join(',') : undefined);
+/** A surface key's effects back as the box decideInk read (every field: the material's glow too; Codex 2026-11-16). */
+export const fxOfKey = (k: string | undefined): FxBox => { if (!k) return FX_NONE; const [flicker, vignette, grain, halo, paper, glow] = k.split(',').map(Number); return { flicker, vignette, grain, halo: halo === 1, ...(paper ? { paper } : {}), ...(glow ? { glow } : {}) }; };
 /** A surface's declared part colour (surface-parts SURFACE_PARTS: the core where its material declares one). */
 const partColourOf = (s: Surface) => (DECLARED_PART_KINDS.has(s.kind) && /^#[0-9a-f]{6}$/i.test(s.core) ? rgbHex(s.core) : undefined);
 /** The kinds that declare their core as a part (kept in step with surface-parts SURFACE_PARTS by its spec). */

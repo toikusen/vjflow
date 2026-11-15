@@ -13,7 +13,11 @@ import { contrast } from './contrast';
  * and the ink halo (grain and the other noise are off round a reading glyph: then grain does not reach the ink's own
  * rim, ruling 2026-11-13 §2).
  */
-export interface FxBox { flicker: number; vignette: number; grain: number; halo: boolean; /** The paper texture's strength (uPaper): fibres darken a pixel by up to PAPER_DEPTH × it, pixel by pixel. */ paper?: number }
+export interface FxBox {
+  flicker: number; vignette: number; grain: number; halo: boolean;
+  /** The paper texture's strength (uPaper): fibres darken a pixel by up to PAPER_DEPTH × it, pixel by pixel. */ paper?: number;
+  /** A glowing material's own light on the ground round the face, as a share of the way from the ground to the ink (linear luminance): a tube's. */ glow?: number;
+}
 export const FX_NONE: FxBox = { flicker: 0, vignette: 0, grain: 0, halo: false };
 /** How far the final pass's paper texture darkens a pixel at most, per unit of uPaper (FINAL_SHADER: 0.07 fibre + 0.05 blot). */
 export const PAPER_DEPTH = 0.12;
@@ -75,7 +79,14 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
     const worst = [...gs].sort((a, b) => pairLeast(c, a, fx, drawn) - pairLeast(c, b, fx, drawn))[0];
     // (the flat contrast to aim at: what this ink reads flat, raised by the share the effects and its surface take off it
     // as drawn, plus a step: a flat contrast already over the aim is no reason to stop, embroidery's satin highlights)
-    const aim = Math.min(21, Math.max(INK_AIM, contrast(c, worst) * (INK_AIM / Math.max(1, pairLeast(c, worst, fx, drawn)))) * (1 + 0.04 * (k + 1)));
+    // (and never short of the step it took before (INK_AIM raised 8 % a step): a glowing tube's ink must clear the light
+    // its own glow lays round it, which no bound here models; the smaller step left neon-stage's pink at 5.1 analytic,
+    // 3.9 as drawn, 2026-11-16)
+    // (the drawn reading's own aim only where the ink's material shades it (a satin, a gilt: `drawn` differs from the ink);
+    // elsewhere the flat step: a minimal move to an analytic 5:1 put brutalist's red key and neon-stage's pink where the
+    // drawn page reads 3.9, where the flat step had kept the world's cream, 2026-11-16)
+    const shaded = drawn(c).some((x) => x.toLowerCase() !== c.toLowerCase());
+    const aim = Math.min(21, Math.max(INK_AIM * (1 + 0.08 * (k + 1)), shaded ? contrast(c, worst) * (INK_AIM / Math.max(1, pairLeast(c, worst, fx, drawn))) * (1 + 0.04 * (k + 1)) : 0));
     const m = readableHue(c, worst, aim);
     if (!m || m === c) break;
     c = m;
@@ -93,7 +104,10 @@ export function decideInk(own: string, grounds: string[], fx: FxBox, world: stri
   const toward = (pole: string) => { let best = own; for (let k = 0.05; k <= 1.0001; k += 0.05) { const m = `#${[1, 3, 5].map((i) => Math.round(parseInt(own.slice(i, i + 2), 16) * (1 - k) + parseInt(pole.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('')}`; if (inkDistance(own, m) > MOVE) break; best = m; } return best; };
   const poles = [toward('#000000'), toward('#ffffff')].filter((x) => x !== own && x !== c);
   const tries: InkDecision[] = [...(near && c !== own ? [{ ink: c, from: 'moved' as const, min: least(c) }] : []), ...poles.map((x) => ({ ink: x, from: 'moved' as const, min: least(x) })), ...(best ? [{ ink: best, from: 'world' as const, min: least(best) }] : [])];
-  const read = tries.filter((x) => x.min >= INK_MIN).sort((x, y) => (x.from === 'moved' ? 0 : 1) - (y.from === 'moved' ? 0 : 1))[0];
+  // (the pole only where nothing else reads: a red key run to the end of its lightness at 4.6 analytic took the place of
+  // the world's cream that read, brutalist c001, 2026-11-16)
+  const reads = (xs: InkDecision[]) => xs.filter((x) => x.min >= INK_MIN).sort((x, y) => (x.from === 'moved' ? 0 : 1) - (y.from === 'moved' ? 0 : 1))[0];
+  const read = reads(tries.filter((x) => !poles.includes(x.ink))) ?? reads(tries);
   if (read) return read;
   const better = tries.sort((x, y) => y.min - x.min)[0];
   return better && better.min > at ? { ...better, from: 'none' as const } : { ink: own, from: 'none', min: at };
@@ -118,7 +132,10 @@ export function pairLeast(ink: string, ground: string, fx: FxBox, drawn: (ink: s
     for (const c of new Set([ink, ...drawn(ink)]))
       for (const d of g ? [-g, g] : [0])
         for (const [pi, pg] of p < 1 ? [[1, p], [p, 1]] : [[1, 1]]) {
-          const [li, lg] = [at(c, k * pi, d), at(ground, k * pg, -d)];
+          const li = at(c, k * pi, d);
+          const lg0 = at(ground, k * pg, -d);
+          // (the glow lays the ink's own light on the ground beside it: a lit wall)
+          const lg = fx.glow && li > lg0 ? lg0 + fx.glow * (li - lg0) : lg0;
           least = Math.min(least, (Math.max(li, lg) + 0.05) / (Math.min(li, lg) + 0.05));
         }
   return least;

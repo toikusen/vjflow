@@ -141,10 +141,11 @@ cuts.forEach((c, i) => runStartOf.push(i && cuts[i - 1].shot === c.shot ? runSta
 function kitLayer(i: number, s: SubjectShot, g: KLayer): Sec['layers'] {
   const x = s.side === 'left' ? -0.45 : s.side === 'right' ? 0.45 : 0;
   const ink2 = (g['sheetInks'] as { ink2?: string } | undefined)?.ink2 ?? (g['accent'] as string);
+  // (no full-width band: one ran under the lyric and took its contrast, review g)
   const pick = i % 3;
   if (pick === 0) return [{ kind: 'blob', x, y: 0.15, r: 0.42, color: ink2, breathe: 0.02, blend: 'multiply', opacity: 0.55, ghosts: [{ dx: 3, dy: 2, color: g['accent'] as string }] } as never];
-  if (pick === 1) return [{ kind: 'bands', colors: [g['accent'] as string, ink2], from: 0.62, to: 0.86, blend: 'multiply', opacity: 0.5 } as never];
-  return [{ kind: 'pattern', type: 'halftone', color: ink2, scale: 14, angle: 15 + (i % 4) * 30, blend: 'multiply', opacity: 0.35 } as never];
+  if (pick === 1) return [{ kind: 'blob', x: x * 0.8, y: -0.35, r: 0.55, color: g['accent'] as string, breathe: 0.015, blend: 'multiply', opacity: 0.4, ghosts: [{ dx: -3, dy: 2, color: ink2 }] } as never];
+  return [{ kind: 'pattern', type: 'halftone', color: ink2, scale: 22, angle: 15 + (i % 4) * 30, blend: 'multiply', opacity: 0.5 } as never];
 }
 const made: Sec[] = cuts.map((c, i) => {
   const s = byId.get(c.shot)!;

@@ -170,11 +170,11 @@ const takePageChecks = async (page: Page) => {
   await page.evaluate(() => { delete (globalThis as { vjPageChecks?: unknown }).vjPageChecks; });
 };
 // code-layer sprite draws kept off a read lyric (cover.ts watchClear): the drawing put a prop under a line; written into
-// metrics.json `keepClear` (draws, of them cut out or faded only)
-const keepClear = { draws: 0, cut: 0, faded: 0 };
+// metrics.json `keepClear` (draws, of them cut out or faded only; moved: draws a shot's move took off the line instead)
+const keepClear = { draws: 0, cut: 0, faded: 0, moved: 0 };
 const takeKeepClear = async (page: Page) => {
   const c = await page.evaluate(() => { const g = globalThis as { vjKeepClear?: typeof keepClear }; const x = g.vjKeepClear; delete g.vjKeepClear; return x; });
-  for (const k of ['draws', 'cut', 'faded'] as const) keepClear[k] += c?.[k] ?? 0;
+  for (const k of ['draws', 'cut', 'faded', 'moved'] as const) keepClear[k] += c?.[k] ?? 0;
 };
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
@@ -275,7 +275,7 @@ try {
     writeFileSync(join(out, 'scene-qa.json'), JSON.stringify(sceneQa, null, 1));
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws ? { keepClear } : {}) }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws || keepClear.moved ? { keepClear } : {}) }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     // a storyboard that fails its check on the finished frames is not rendered: no half-made output
@@ -376,7 +376,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws ? { keepClear } : {}) }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws || keepClear.moved ? { keepClear } : {}) }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

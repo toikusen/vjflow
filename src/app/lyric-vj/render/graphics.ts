@@ -3,7 +3,7 @@
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
 import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
-import { clearAlpha, clearStrength, CLEAR_FROM, CoverCrop, coverOf, keepClear, watchClear, watchCover } from './cover';
+import { clearAlpha, clearStrength, CLEAR_FROM, clearTally, CoverCrop, coverOf, keepClear, watchClear, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
 import { burstBox, drawGlassCrack, drawKit, glassOf, glassPieces, KIT_KINDS, kitPattern, KitLayer, KitPattern, PHONE_MX, PHONE_MY, phoneBox } from './kit';
@@ -372,14 +372,34 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   const start = l.lyric && (l.lyricWeight ?? 1) > CLEAR_FROM ? ctx.getTransform?.() : undefined;
   const base = start?.inverse?.();
   const lyric = base ? l.lyric : undefined;
+  // a sprite the drawing put under a line read in this shot is moved into the room the shot leaves (fitClear: its foot
+  // kept, slid, shrunk only if needed), decided once a shot from the drawing itself run at the shot's reading times
+  // (codePlan), and eased in and out with the line's box: the cut-out below is left for what has no room at all
+  const p0 = performance.now();
+  const plan = l.lyric && lines.length && origin ? codePlan(fn, l, cam, lines, origin, t - age, image) : undefined;
+  // (made once a shot: not the frame's own cost)
+  const planMs = performance.now() - p0;
+  const ease = plan?.moves.size ? planEase(plan.spans, t) : 0;
+  const seen = new Map<string, number>();
+  const moved = (pic: CanvasImageSource, x: number, y: number, w: number, h: number): [number, number, number, number] => {
+    const id = ids.get(pic);
+    if (!id || !plan) return [x, y, w, h];
+    const n = seen.get(id) ?? 0;
+    seen.set(id, n + 1);
+    const mv = plan.moves.get(`${id}#${n}`);
+    if (!mv || ease <= 0) return [x, y, w, h];
+    return moveRect(x, y, w, h, mv, ease);
+  };
   // soft motion inside a sprite (sails, branches, cloth, water); its mesh pieces skip the cover watch, its box counts
   let warping = false;
   const warp = (pic: CanvasImageSource | null, x: number, y: number, w: number, h: number, zones: WarpZone[], seed = 0) => {
     if (!pic) return;
+    const orig: [number, number, number, number] = [x, y, w, h];
+    [x, y, w, h] = moved(pic, x, y, w, h);
     recordBox(pic, x, y, w, h);
     warping = true;
     try {
-      clear(pic, x, y, w, h, () => drawWarped(ctx, pic as CanvasImageSource & { width: number; height: number }, x, y, w, h, Array.isArray(zones) ? zones : [], t, seed, 10));
+      clear(pic, x, y, w, h, () => drawWarped(ctx, pic as CanvasImageSource & { width: number; height: number }, x, y, w, h, Array.isArray(zones) ? zones : [], t, seed, 10), undefined, orig);
     } finally {
       warping = false;
     }
@@ -405,15 +425,19 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   // (cover.ts keepClear): the drawing is the director's, but no picture of it covers the words. Was it only watched,
   // 世界のつづき's bottle drifted across 「信じられる？」 and its lighthouse across い, on record and on screen
   // (gliding from one line's place to the next, the box in between guards neither: both places are, fade only)
-  const clear = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number, draw: () => void, crop?: CoverCrop) => {
+  // (`orig`: where the drawing put it, when the shot's plan moved it: a move that left it clear is counted as solved)
+  const clear = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number, draw: () => void, crop?: CoverCrop, orig?: [number, number, number, number]) => {
     const id = ids.get(pic);
     if (!lyric || !base || !start || !id) return draw();
     const box = l.guard ?? lyric;
-    const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
+    const sized = pic as CanvasImageSource & { width: number; height: number };
+    const [share, inside] = coverOf(sized, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
     const strength = clearStrength(l.lyricWeight ?? 1);
     const alpha = ctx.globalAlpha;
     // (counted and logged: the drawing placed it under a read line; codelayer.mts hands it back to be placed in the room)
-    if (keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard) && alpha > 0) watchClear(`${id}@${cam.index}`, id, inside, t, `shot ${cam.index}`, strength >= 1 && !l.guard);
+    if (keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard)) {
+      if (alpha > 0) watchClear(`${id}@${cam.index}`, id, inside, t, `shot ${cam.index}`, strength >= 1 && !l.guard);
+    } else if (orig && strength > 0 && alpha > 0 && coverOf(sized, base.multiply(ctx.getTransform()), ...orig, box, crop)[0] > 0) clearTally().moved++;
     // what still shows over the box (faded only, never cut: the box gliding in or between two places) stays on record,
     // at the strength (and layer alpha) it is drawn; a cut-out draws nothing there
     const shown = alpha * (1 - Math.min(1, strength) * (1 - clearAlpha(inside)));
@@ -421,16 +445,18 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   };
   // every drawImage while the drawing runs: a sprite copied onto the drawing's own canvas (tinted, made solid) passes
   // its name to that canvas when the canvas is about the sprite's size; a sprite drawn on the frame is measured
-  if ((lyric || track) && proto)
+  if ((l.lyric || track) && proto)
     proto.drawImage = function (this: CanvasRenderingContext2D, pic: CanvasImageSource, ...a: number[]) {
       const id = ids.get(pic);
       if (id && !warping && this === ctx && (a.length === 2 || a.length === 4 || a.length === 8)) {
         const sized = pic as CanvasImageSource & { width: number; height: number };
-        const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
+        const orig = (a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height]) as [number, number, number, number];
+        const [dx, dy, dw, dh] = moved(pic, ...orig);
         recordBox(pic, dx, dy, dw, dh);
         // (a sheet's cell: what is measured is the part drawn)
         const crop = a.length === 8 ? { sx: a[0], sy: a[1], sw: a[2], sh: a[3] } : undefined;
-        clear(pic, dx, dy, dw, dh, () => (plain as (...x: unknown[]) => void).call(this, pic, ...a), crop);
+        const args = a.length === 8 ? [...a.slice(0, 4), dx, dy, dw, dh] : [dx, dy, dw, dh];
+        clear(pic, dx, dy, dw, dh, () => (plain as (...x: unknown[]) => void).call(this, pic, ...args), crop, orig);
         return;
       } else if (id && this !== ctx && this.canvas) {
         const src = pic as CanvasImageSource & { width: number; height: number };
@@ -458,7 +484,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     report(`runtime: ${(e as Error).message}`);
   }
   ctx.restore();
-  if ((lyric || track) && proto && plain) proto.drawImage = plain;
+  if ((l.lyric || track) && proto && plain) proto.drawImage = plain;
   if (track) console.error(`code layer: track ${t.toFixed(3)} ${cam.index} ${boxes.join(';')}`);
   if (sceneIds.size) {
     const key = `scene-use ${cam.index} ${[...sceneIds].sort().join(',')}`;
@@ -467,7 +493,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
       console.error(`code layer: ${key}`);
     }
   }
-  const ms = performance.now() - t0;
+  const ms = performance.now() - t0 - planMs;
   if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
 }
 
@@ -489,6 +515,204 @@ export function fitRect(ctx: CanvasRenderingContext2D, origin: DOMMatrix | undef
   const [fx, fy] = pt(toFrame, x + w / 2, y + h);
   const [ax, ay] = pt(toFrame.inverse(), fx + (got.box.x0 + got.box.x1) / 2 - (box.x0 + box.x1) / 2, fy + got.box.y1 - box.y1);
   return [ax - (w * got.s) / 2, ay - h * got.s, w * got.s, h * got.s];
+}
+
+/**
+ * A sprite's move for one shot: its foot's offset and its scale, in the drawing's own units where the sprite is drawn
+ * (so it rides the shot's camera with the thing it belongs to: a frame-px offset pushed a lighthouse off the frame's
+ * foot as the camera pushed in).
+ */
+export type CodeMove = { dx: number; dy: number; s: number };
+const smooth01 = (x: number) => {
+  const k = Math.min(1, Math.max(0, x));
+  return k * k * (3 - 2 * k);
+};
+
+/** A draw rect moved `e` (0..1) of the way by a shot's move: its foot (bottom centre) offset, its size scaled. */
+export function moveRect(x: number, y: number, w: number, h: number, mv: CodeMove, e: number): [number, number, number, number] {
+  const [ax, ay] = [x + w / 2 + mv.dx * e, y + h + mv.dy * e];
+  const s = 1 + (mv.s - 1) * e;
+  return [ax - (w * s) / 2, ay - h * s, w * s, h * s];
+}
+
+/** A plain 2D matrix for the plan's dry runs (the same fields and the methods a drawing uses of a DOMMatrix). */
+class Mat {
+  constructor(public a = 1, public b = 0, public c = 0, public d = 1, public e = 0, public f = 0) {}
+  static of(m: { a: number; b: number; c: number; d: number; e: number; f: number }) {
+    return new Mat(m.a, m.b, m.c, m.d, m.e, m.f);
+  }
+  multiply(o: { a: number; b: number; c: number; d: number; e: number; f: number }) {
+    return new Mat(this.a * o.a + this.c * o.b, this.b * o.a + this.d * o.b, this.a * o.c + this.c * o.d, this.b * o.c + this.d * o.d, this.a * o.e + this.c * o.f + this.e, this.b * o.e + this.d * o.f + this.f);
+  }
+  inverse() {
+    const det = this.a * this.d - this.b * this.c || 1e-9;
+    return new Mat(this.d / det, -this.b / det, -this.c / det, this.a / det, (this.c * this.f - this.d * this.e) / det, (this.b * this.e - this.a * this.f) / det);
+  }
+  translate(x = 0, y = 0) {
+    return this.multiply(new Mat(1, 0, 0, 1, x, y));
+  }
+  scale(x = 1, y = x) {
+    return this.multiply(new Mat(x, 0, 0, y, 0, 0));
+  }
+  rotate(deg = 0) {
+    const r = (deg * Math.PI) / 180;
+    return this.multiply(new Mat(Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0));
+  }
+  transformPoint(p: { x?: number; y?: number }) {
+    const [x, y] = [p.x ?? 0, p.y ?? 0];
+    return { x: this.a * x + this.c * y + this.e, y: this.b * x + this.d * y + this.f, z: 0, w: 1 };
+  }
+}
+
+/**
+ * A context that draws nothing: it keeps the transform the drawing builds and hands every drawImage to `rec` (the
+ * transform at that draw and the draw's arguments). Anything else the drawing calls is a no-op.
+ */
+function dryContext(start: Mat, rec: (pic: CanvasImageSource, m: Mat, a: number[]) => void): CanvasRenderingContext2D {
+  let m = start;
+  const stack: Mat[] = [];
+  const props: Record<string | symbol, unknown> = { globalAlpha: 1, canvas: { width: W, height: H } };
+  const grad = () => ({ addColorStop: () => undefined });
+  const own: Record<string, (...a: never[]) => unknown> = {
+    save: () => stack.push(m),
+    restore: () => (m = stack.pop() ?? m),
+    getTransform: () => Mat.of(m),
+    setTransform: (...a: unknown[]) => (m = typeof a[0] === 'number' ? new Mat(...(a as number[])) : a[0] ? Mat.of(a[0] as Mat) : new Mat()),
+    resetTransform: () => (m = new Mat()),
+    transform: (...a: number[]) => (m = m.multiply(new Mat(...a))),
+    translate: (x: number, y: number) => (m = m.multiply(new Mat(1, 0, 0, 1, x, y))),
+    scale: (x: number, y: number) => (m = m.multiply(new Mat(x, 0, 0, y ?? x, 0, 0))),
+    rotate: (r: number) => (m = m.multiply(new Mat(Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0))),
+    drawImage: (pic: CanvasImageSource, ...a: number[]) => rec(pic, m, a),
+    measureText: () => ({ width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 0 }),
+    createLinearGradient: grad, createRadialGradient: grad, createConicGradient: grad,
+    createPattern: () => null,
+    getImageData: (_x: number, _y: number, w: number, h: number) => ({ width: w, height: h, data: new Uint8ClampedArray(Math.max(1, w * h) * 4) }),
+    isPointInPath: () => false, isPointInStroke: () => false, getLineDash: () => [],
+  };
+  const noop = () => undefined;
+  return new Proxy({}, {
+    get: (_, k) => (typeof k === 'string' && k in own ? own[k] : k in props ? props[k] : typeof k === 'string' ? noop : undefined),
+    set: (_, k, v) => ((props[k] = v), true),
+  }) as CanvasRenderingContext2D;
+}
+
+/** How long a line must be up in a shot (s) for the shot's plan to make room for it. */
+const PLAN_OVERLAP = 0.4;
+/** A move that would shrink a sprite below this is no move: it reads as a speck, the keep-clear takes it instead. */
+const PLAN_MIN_SCALE = 0.5;
+/** A shot's plan: each sprite's move, and the stretches its lines are up (merged across short gaps). */
+export type CodePlan = { moves: Map<string, CodeMove>; spans: [number, number][] };
+/** How long a move takes to come in or go out (s), as a line's box comes up or leaves. */
+const PLAN_GLIDE = 0.4;
+/**
+ * How far into its move a sprite is at t: 0 off the plan's lines, 1 while one is up, eased over PLAN_GLIDE as they
+ * come and go. From t and the plan only (any seek); lines a short gap apart count as one stretch, so it does not dip
+ * between them (the line's own box weight did, and the move jumped with it).
+ */
+export const planEase = (spans: [number, number][], t: number) => smooth01(Math.max(0, ...spans.map(([a, b]) => Math.min((t - a) / PLAN_GLIDE, (b - t) / PLAN_GLIDE))));
+/** Per lines (a section's) and shot: the plan, made once. */
+let plans = new WeakMap<object, WeakMap<CodeDraw, Map<string, CodePlan>>>();
+/** For tests: forget the shots' plans. */
+export const resetCodePlans = () => (plans = new WeakMap());
+
+/**
+ * A shot's plan: the drawing run dry at the times its lines are read in the shot (each line's box as f.lyric, fully up),
+ * each sprite draw (by id and its order among that id's draws in a frame) measured on the frame; one that reaches into
+ * the line read then (its deepest reach over the samples) gets the move fitClear finds into the shot's room. None for
+ * a sprite with no room: the keep-clear stays. The same at any seek: it depends only on the shot and its lines.
+ */
+function codePlan(fn: CodeDraw, l: { src: string; cuts?: number[]; lines?: LineBox[] }, cam: CodeCam, lines: LineBox[], origin: DOMMatrix, ageOff: number, image: (asset?: string) => CanvasImageSource | undefined): CodePlan {
+  // (per drawing too: one section's lines may be drawn over by more than one)
+  const key = `${cam.index}`;
+  const byLines = plans.get(l.lines ?? lines) ?? (plans.set(l.lines ?? lines, new WeakMap()), plans.get(l.lines ?? lines)!);
+  const per = byLines.get(fn) ?? (byLines.set(fn, new Map()), byLines.get(fn)!);
+  const hit = per.get(key);
+  if (hit) return hit;
+  const moves = new Map<string, CodeMove>();
+  const out: CodePlan = { moves, spans: [] };
+  per.set(key, out);
+  // (a line shown only in the glide before or after a cut is not this shot's: it would leave the shot no room)
+  const on = lines.filter((r) => Math.min(cam.end, r.to) - Math.max(cam.start, r.from) > PLAN_OVERLAP);
+  // (the side strips beside the lines however narrow: a slim thing may stand there whole; the scale decides)
+  const [lx, rx] = [Math.min(...on.map((r) => r.x0)) - 40, Math.max(...on.map((r) => r.x1)) + 40];
+  const strips = [...(lx > 0 ? [{ x0: 0, y0: 0, x1: lx, y1: H }] : []), ...(rx < W ? [{ x0: rx, y0: 0, x1: W, y1: H }] : [])];
+  const rooms = [...roomsOf(on, cam.start, cam.end).filter((r) => r.y0 > 0 || r.y1 < H), ...strips];
+  // (a line already up when the shot cuts in, or still up when it cuts out, has its move whole at the cut: the cut
+  // carries the change, nothing glides on screen after it)
+  const span = (r: LineBox): [number, number] => [r.from <= cam.start + 0.01 ? cam.start - PLAN_GLIDE : r.from, r.to >= cam.end - 0.01 ? cam.end + PLAN_GLIDE : r.to];
+  for (const [a, b] of on.map(span).sort((x, y) => x[0] - y[0])) {
+    const last = out.spans[out.spans.length - 1];
+    if (last && a - last[1] <= 2 * PLAN_GLIDE) last[1] = Math.max(last[1], b);
+    else out.spans.push([a, b]);
+  }
+  if (!on.length) return out;
+  const start = Mat.of(origin);
+  const toFrame = start.inverse();
+  // (a sample past the box's 0.4 s glide, the middle, and the end of the line's part of the shot)
+  const samples = on.flatMap((r) => {
+    const [a, b] = [Math.max(cam.start, r.from), Math.min(cam.end, r.to)];
+    return [a + Math.min(0.45, (b - a) / 2), (a + b) / 2, b - 0.05].map((x) => ({ x, r }));
+  });
+  // every sample of every sprite draw: its local rect, its frame box, the transform, and the line read then
+  type Seen = { rect: [number, number, number, number]; box: Rect; m: Mat; r: LineBox };
+  const seenAt = new Map<string, Seen[]>();
+  for (const { x, r } of samples) {
+    const seen = new Map<string, number>();
+    const rec = (pic: CanvasImageSource, m: Mat, a: number[]) => {
+      const id = ids.get(pic);
+      if (!id || !(a.length === 2 || a.length === 4 || a.length === 8)) return;
+      const sized = pic as CanvasImageSource & { width: number; height: number };
+      const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
+      const n = seen.get(id) ?? 0;
+      seen.set(id, n + 1);
+      const f = toFrame.multiply(m);
+      const pts = [[dx, dy], [dx + dw, dy], [dx, dy + dh], [dx + dw, dy + dh]].map(([px, py]) => [f.a * px + f.c * py + f.e, f.b * px + f.d * py + f.f]);
+      const box = { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
+      const k = `${id}#${n}`;
+      seenAt.set(k, [...(seenAt.get(k) ?? []), { rect: [dx, dy, dw, dh], box, m: f, r }]);
+    };
+    const dry = dryContext(start, rec);
+    const img = (id: string) => {
+      const p = image(`spr:${id}`) ?? null;
+      if (p) ids.set(p, id);
+      return p;
+    };
+    const warp = (pic: CanvasImageSource | null, wx: number, wy: number, ww: number, wh: number) => pic && dry.drawImage(pic, wx, wy, ww, wh);
+    try {
+      fn(dry, { w: W, h: H, t: x, age: x - ageOff, beat: { since: 0, pulse: 0, index: 0 } as Beat, lyric: r, lyricWeight: 1, cam: camAt(l.cuts ?? [], x), lines, room: (from = cam.start, to = cam.end) => roomsOf(lines, from, to), fit: (fx, fy, fw, fh, from = cam.start, to = cam.end) => fitRect(dry, start as unknown as DOMMatrix, roomsOf(lines, from, to), fx, fy, fw, fh), hash, img, scene: (id) => image(id) ?? null, particles: () => undefined, warp, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
+    } catch {
+      /* a drawing that throws dry gets no plan here; the frame itself reports it */
+    }
+  }
+  const hits = (b: Rect, r: LineBox) => (Math.max(0, Math.min(b.x1, r.x1 + 24) - Math.max(b.x0, r.x0 - 24)) * Math.max(0, Math.min(b.y1, r.y1 + 24) - Math.max(b.y0, r.y0 - 24))) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
+  const frameBox = (m: Mat, [x, y, w, h]: [number, number, number, number]) => {
+    const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([px, py]) => [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f]);
+    return { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
+  };
+  const offFrame = (b: Rect) => 1 - (Math.max(0, Math.min(b.x1, W) - Math.max(b.x0, 0)) * Math.max(0, Math.min(b.y1, H) - Math.max(b.y0, 0))) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
+  for (const [k, all] of seenAt) {
+    if (!all.some((x) => hits(x.box, x.r) > 0)) continue;
+    // one move for the whole shot: each sample's own fit (a thing standing below the lines is never lifted over them
+    // into the sky: only rooms reaching down to its foot), taken back into the sprite's own units, is tried at every
+    // sample; the one that keeps it clearest of the lines and on the frame wins (a camera push moved a lighthouse fitted
+    // at one moment off the frame's foot at another)
+    const tries = all.flatMap(({ box, m }) =>
+      rooms.filter((r) => r.y1 >= box.y1 - 1).flatMap((room) => {
+        const got = fitClear(box, [room]);
+        if (!got || got.s < PLAN_MIN_SCALE) return [];
+        const [fdx, fdy] = [(got.box.x0 + got.box.x1) / 2 - (box.x0 + box.x1) / 2, got.box.y1 - box.y1];
+        const inv = m.inverse();
+        return [{ mv: { dx: inv.a * fdx + inv.c * fdy, dy: inv.b * fdx + inv.d * fdy, s: got.s }, far: Math.hypot(fdx, fdy) / H }];
+      }),
+    );
+    // (worst over the shot of what still reaches the line and what the move takes off the frame beyond the drawing's own
+    // framing, then the size lost and the way moved)
+    const score = ({ mv, far }: { mv: CodeMove; far: number }) => Math.max(...all.map((x) => { const b = frameBox(x.m, moveRect(...x.rect, mv, 1)); return 2 * hits(b, x.r) + Math.max(0, offFrame(b) - offFrame(x.box)); })) + (1 - mv.s) + 0.2 * far;
+    const best = tries.map((x) => ({ mv: x.mv, v: score(x) })).reduce<{ mv: CodeMove; v: number } | undefined>((a, b) => (!a || b.v < a.v ? b : a), undefined);
+    if (best) moves.set(k, best.mv);
+  }
+  return out;
 }
 
 /** A mask picture filled with one colour, made once per picture and colour. */

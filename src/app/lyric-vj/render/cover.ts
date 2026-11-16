@@ -125,8 +125,8 @@ export function keepClear(ctx: CanvasRenderingContext2D, frame: DOMMatrix, box: 
 }
 
 /** The page's tally of sprite draws kept off a read lyric (keepClear reaching into the box): render.mts adds it to metrics.json. */
-export interface ClearTally { draws: number; cut: number; faded: number }
-export const clearTally = (): ClearTally => ((globalThis as { vjKeepClear?: ClearTally }).vjKeepClear ??= { draws: 0, cut: 0, faded: 0 });
+export interface ClearTally { draws: number; cut: number; faded: number; /** Draws a shot's move took off the line, nothing cut. */ moved: number }
+export const clearTally = (): ClearTally => ((globalThis as { vjKeepClear?: ClearTally }).vjKeepClear ??= { draws: 0, cut: 0, faded: 0, moved: 0 });
 const clearWorst = new Map<string, number>();
 /** How much more of a picture must be inside the box before the same picture at the same place is reported again. */
 const CLEAR_STEP = 0.1;

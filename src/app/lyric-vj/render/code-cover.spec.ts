@@ -143,7 +143,7 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
     console.error = (x: string) => logged.push(x);
     try {
       frame([900, 520, 200]);
-      expect(clearTally()).toEqual({ draws: 2, cut: 2, faded: 0 });
+      expect(clearTally()).toEqual({ draws: 2, cut: 2, faded: 0, moved: 0 });
       expect(logged.filter((x) => x.startsWith('code layer: lyric kept clear: bottle 100% inside the lyric box, cut out and faded at 1.0 s (shot 0)'))).toHaveLength(1);
       // the same picture at the same place is reported once more only when more of it is inside
       frame([900]);
@@ -160,9 +160,9 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
     const placed = frame([], 1, src, { lines } as never);
     expect(placed).toEqual([{ x: 900, alpha: 1, holed: false }]);
     expect(clearTally().draws).toBe(0);
-    // the same draw without f.fit is cut out of the words
-    expect(frame([900], 1, undefined, { lines } as never)).toEqual([]);
-    expect(clearTally().draws).toBe(1);
+    // the same draw without f.fit is moved there by the engine (code-place.spec.ts): nothing cut either
+    expect(frame([900], 1, undefined, { lines } as never)).toEqual([{ x: 900, alpha: 1, holed: false }]);
+    expect(clearTally()).toMatchObject({ draws: 0, moved: 1 });
   });
 
   it("measures a sprite sheet's drawn cell, not the whole sheet", () => {

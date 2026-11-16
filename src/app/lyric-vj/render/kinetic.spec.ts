@@ -166,13 +166,17 @@ describe('the song\'s thread', () => {
   it('moves a prop under the lines into the room that changes it least, on its own foot', () => {
     const lines = [{ from: 0, to: 9, x0: 140, y0: 400, x1: 1640, y1: 700 }];
     const rooms = roomsOf(lines, 0, 9);
-    // a lighthouse 360 × 700 standing at the foot of the frame, its tower up through the lines: it stays on its foot and
+    // a lighthouse 360 × 500 standing near the foot of the frame, its tower up through the lines: it keeps its foot and
     // shrinks into the floor under them rather than flying to the sky above them
-    const got = fitClear({ x0: 820, y0: 330, x1: 1180, y1: 1030 }, rooms)!;
+    const got = fitClear({ x0: 820, y0: 530, x1: 1180, y1: 1030 }, rooms)!;
     expect(got.box.y1).toBeCloseTo(1030);
-    expect(got.box.y0).toBeGreaterThanOrEqual(740 + 24 - 1e-6);
+    expect(got.box.y0).toBeCloseTo(764);
     expect((got.box.x0 + got.box.x1) / 2).toBeCloseTo(1000);
-    expect(got.s).toBeCloseTo((1030 - 764) / 700);
+    expect(got.s).toBeCloseTo((1030 - 764) / 500);
+    // a taller one would keep its foot only as a speck (under FOOT_MIN_SCALE): it steps forward to the floor, bigger
+    const tall = fitClear({ x0: 820, y0: 330, x1: 1180, y1: 1030 }, rooms)!;
+    expect(tall.box.y1).toBeCloseTo(1080);
+    expect(tall.s).toBeCloseTo((1080 - 764) / 700);
     // a prop already in a room is left as it is
     expect(fitClear({ x0: 100, y0: 800, x1: 300, y1: 1000 }, rooms)).toEqual({ box: { x0: 100, y0: 800, x1: 300, y1: 1000 }, s: 1, cost: 0 });
     expect(fitClear({ x0: 100, y0: 800, x1: 300, y1: 1000 }, [])).toBeUndefined();

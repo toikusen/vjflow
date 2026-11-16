@@ -829,6 +829,9 @@ export function fitInRoom(room: [number, number], w: number, fx: number, pad = 2
   return { s, x: Math.min(room[1] - pad - half, Math.max(room[0] + pad + half, fx)) };
 }
 
+/** fitClear keeps a prop's foot unless that shrinks it under this; then it steps down to the room's floor. */
+export const FOOT_MIN_SCALE = 0.5;
+
 /** A line's reading box over the stretch it is up (frame px, song s): what a director's drawing composes around. */
 export type LineBox = { from: number; to: number; x0: number; y0: number; x1: number; y1: number };
 
@@ -864,13 +867,18 @@ export function fitClear(box: CoverRect, rooms: CoverRect[], pad = 24): { box: C
     // (a foot already inside the room's height stays where it is: only what stands above it must fit)
     const foot = box.y1 >= r.y0 + ey0 && box.y1 <= r.y1 - ey1 ? box.y1 : r.y1 - ey1;
     const s = Math.min(1, (r.x1 - r.x0 - ex0 - ex1) / bw, (foot - r.y0 - ey0) / bh);
-    if (s <= 0) return undefined;
-    const [w, h] = [bw * s, bh * s];
-    const cx = clamp((box.x0 + box.x1) / 2, r.x0 + ex0 + w / 2, r.x1 - ex1 - w / 2);
-    // (on the floor of a room that reaches the frame's foot, or anywhere in one that does not: kept by its foot)
-    const y1 = clamp(box.y1, r.y0 + ey0 + h, r.y1 - ey1);
-    const out = { x0: cx - w / 2, y0: y1 - h, x1: cx + w / 2, y1 };
-    return { box: out, s, cost: 1 - s + Math.hypot(cx - (box.x0 + box.x1) / 2, y1 - box.y1) / H };
+    const place = (s: number) => {
+      const [w, h] = [bw * s, bh * s];
+      const cx = clamp((box.x0 + box.x1) / 2, r.x0 + ex0 + w / 2, r.x1 - ex1 - w / 2);
+      // (on the floor of a room that reaches the frame's foot, or anywhere in one that does not: kept by its foot)
+      const y1 = clamp(box.y1, r.y0 + ey0 + h, r.y1 - ey1);
+      return { box: { x0: cx - w / 2, y0: y1 - h, x1: cx + w / 2, y1 }, s, cost: 1 - s + Math.hypot(cx - (box.x0 + box.x1) / 2, y1 - box.y1) / H };
+    };
+    // its foot kept; only where that would leave it under half its size, stepped down to the room's floor where it
+    // stands bigger (a lighthouse just under the lines comes forward onto the sea rather than shrinking to a speck)
+    const full = Math.min(1, (r.x1 - r.x0 - ex0 - ex1) / bw, (r.y1 - r.y0 - ey0 - ey1) / bh);
+    if (full <= 0) return undefined;
+    return s >= FOOT_MIN_SCALE || full <= s ? place(Math.max(s, 0)) : place(full);
   });
   return fits.reduce<{ box: CoverRect; s: number; cost: number } | undefined>((a, b) => (b && (!a || b.cost < a.cost) ? b : a), undefined);
 }

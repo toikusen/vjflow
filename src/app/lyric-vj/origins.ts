@@ -240,6 +240,7 @@ export const ORIGINS: Record<string, Origin> = {
   'enter:strips': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #39 blinds', own: false },
   'motion:loop-noise': { videos: 0, risk: 'medium', from: 'AE expression guide wiggle-loop / wiggle-octaves (concept only)', own: false },
   'motion:velocity-settle': { videos: 0, risk: 'medium', from: 'AE expression guide phys-inertia (concept only)', own: false },
+  'motion:velocity-bank': { videos: 0, risk: 'medium', from: 'AE expression guide phys-velocity (concept only)', own: false },
   'emph:scale': { videos: 65, risk: 'low' },
   'emph:color': { videos: 22, risk: 'low' },
   'emph:glow': { videos: 25, risk: 'low' },

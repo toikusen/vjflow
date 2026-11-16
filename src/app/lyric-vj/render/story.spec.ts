@@ -198,3 +198,25 @@ describe('prop drift and landing', () => {
     expect(xAt(0.8, 1)).toBeCloseTo(0.6, 9);
   });
 });
+
+describe('velocity banking (props lean with their own speed)', () => {
+  const sprite = (items: StoryItem[], t: number) => storyLayers(items, t).find((l) => l.kind === 'sprite') as { rot: number; x: number } | undefined;
+  it('a flying prop leans into its travel, either way, and stands up as it lands', () => {
+    for (const from of ['left', 'right'] as const) {
+      const fly: StoryItem = { kind: 'fly', prop: 'bird', motion: 'sit', at: 1, dur: 1.2, from, x: 0, y: 0, size: 0.2 };
+      const mid = sprite([fly], 1.5)!;
+      // (left: travelling right leans right, clockwise; from the right the other way)
+      expect(Math.sign(mid.rot)).toBe(from === 'left' ? 1 : -1);
+      expect(Math.abs(mid.rot)).toBeLessThan(0.45);
+      // no jump at the landing: the lean is gone by the time it is at rest
+      expect(Math.abs(sprite([fly], 2.19)!.rot - sprite([fly], 2.21)!.rot)).toBeLessThan(0.02);
+    }
+  });
+
+  it('a journey leans while it moves fast and is upright when it slows into its stops', () => {
+    const j: StoryItem = { kind: 'journey', prop: 'car', motion: 'still', from: 0, to: 4, pts: [[-0.8, 0], [0.8, 0]], size: 0.2 };
+    expect(sprite([j], 2)!.rot).toBeGreaterThan(0.05);
+    expect(Math.abs(sprite([j], 3.99)!.rot)).toBeLessThan(0.01);
+    expect(Math.abs(sprite([j], 0.01)!.rot)).toBeLessThan(0.01);
+  });
+});

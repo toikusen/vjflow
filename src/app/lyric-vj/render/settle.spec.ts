@@ -32,3 +32,15 @@ describe('velocity-aware settle', () => {
     expect(speedShare(660, 600)).toBeCloseTo(1.1);
   });
 });
+
+describe('a carrier dashing out leans with its speed', () => {
+  it('is level through reading and leans into the dash as it leaves', async () => {
+    const { leaving } = await import('./carrier-shape');
+    const m = { landSec: 0.5, exitAt: 3, exitDur: 0.4, exit: 'dash', show: 1 };
+    const rest = { x: 0, y: 0, rot: 0, alpha: 1, open: 1, scale: 1 };
+    expect(leaving(rest, 2.9, m, 1).rot).toBe(0);
+    // (y is up: leaning right, into a dash to the right, is a clockwise, negative turn)
+    expect(leaving(rest, 3.3, m, 1).rot).toBeLessThan(-0.05);
+    expect(leaving(rest, 3.3, m, -1).rot).toBeGreaterThan(0.05);
+  });
+});

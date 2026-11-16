@@ -5,6 +5,7 @@
 // Mined from 30 story-arc analyses (out_story/candidates.md): A bookend, B+C hero state arc, D cards, E fly, F thread,
 // I pop.
 import type { Rgb } from './graphics';
+import { bankTilt, velocityAt } from './bank';
 import { loopNoise } from './loop-noise';
 import { arrivalSpeed, backOut, overshootFor } from './settle';
 
@@ -171,6 +172,21 @@ export function along(pts: Pt[], u: number): Pt {
  */
 export const flyOvershoot = (distance: number, dur: number) => overshootFor(arrivalSpeed(distance, dur), 0.8, 0.9, 1.2);
 
+/** The speed, look units a second, at which a moving prop leans three quarters of the way (bank.ts). */
+const BANK_FULL = 1.4;
+/**
+ * A moving prop's turn from its own velocity: it leans into its horizontal travel and pitches with its climb, both as
+ * far as it is fast, so it is upright when it slows to rest (a lean set by direction alone stayed on to the landing,
+ * then jumped). y is up here; the turn is the drawing's, clockwise on screen.
+ */
+function lean(path: (t: number) => Pt, t: number): number {
+  const [vx, vy] = velocityAt(path, t);
+  const speed = Math.hypot(vx, vy);
+  if (speed < 1e-4) return 0;
+  // (the nose follows the climb on the side it travels to: up is anticlockwise going right, clockwise going left)
+  return bankTilt(vx, BANK_FULL) - (vx < 0 ? -1 : 1) * 0.25 * Math.atan2(vy, Math.abs(vx)) * Math.min(1, speed / BANK_FULL);
+}
+
 /** Where a fly starts: just off the frame on its side, level with (or above) where it lands. */
 const entry = (from: 'left' | 'right' | 'top' | 'bottom', x: number, y: number): Pt =>
   from === 'left' ? [-1.35, y + 0.3] : from === 'right' ? [1.35, y + 0.3] : from === 'top' ? [x - 0.4, 1.4] : [x - 0.4, -1.4];
@@ -224,16 +240,17 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const path = (u: number): Pt => (u <= 1 ? bez(p0, c, p1, u) : bez(p1, [lerp(p1[0], p2[0], 0.5), p1[1] - 0.15], p2, u - 1));
         // a landing carries on past its place by as much as it came in fast (the curve's own run on), and is back at
         // rest exactly at the end of its flight
-        const u = it.through ? Math.min(2, k) : backOut(k, flyOvershoot(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), it.dur));
+        const shoot = flyOvershoot(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), it.dur);
+        const uAt = (tt: number) => { const kk = Math.max(0, (tt - it.at) / it.dur); return it.through ? Math.min(2, kk) : backOut(kk, shoot); };
+        const u = uAt(t);
         const here = path(u);
-        const ahead = path(Math.min(2, u + 0.02));
         // the trail: the last stretch of the path, dotted behind the prop
         const trail = it.trail && k < (it.through ? 2 : 1.6) ? { color: it.trail, pts: Array.from({ length: 24 }, (_, i) => path(Math.max(0, u - 0.6 + (0.6 * i) / 23))) } : undefined;
         const leave = it.until !== undefined && !it.through ? 1 - clamp01((t - it.until) / 0.5) : 1;
         const flying = k < 1 || it.through;
         const motion = it.motion ?? 'flutter';
-        // in flight: banked along the path, wings beating fast; landed: the prop's own rest movement
-        const m = flying ? { dx: 0, dy: 0, rot: Math.atan2(-(ahead[1] - here[1]), ahead[0] - here[0]) * 0.25, sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
+        // in flight: leaning with its own speed, wings beating fast; landed: the prop's own rest movement
+        const m = flying ? { dx: 0, dy: 0, rot: lean((tt) => path(uAt(tt)), t), sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
         out.push({ ref: `fly#${n}:${it.prop}`, kind: 'sprite', pass: flying, asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
         return;
       }
@@ -259,11 +276,11 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
       case 'journey': {
         const end = it.until ?? it.to + 3;
         if (t < it.from || t > end + 0.5 || it.pts.length < 2) return;
-        const u = easeInOut(clamp01((t - it.from) / Math.max(0.5, it.to - it.from)));
+        const uAt = (tt: number) => easeInOut(clamp01((tt - it.from) / Math.max(0.5, it.to - it.from)));
+        const u = uAt(t);
         const here = along(it.pts, u);
-        const ahead = along(it.pts, Math.min(1, u + 0.01));
         const moving = t < it.to;
-        const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: Math.atan2(ahead[1] - here[1], Math.abs(ahead[0] - here[0]) + 1e-6) * 0.2, sx: 1 } : idle(it.motion ?? 'sit', t, n);
+        const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: lean((tt) => along(it.pts, uAt(tt)), t), sx: 1 } : idle(it.motion ?? 'sit', t, n);
         const trail = it.trail && t < it.to + 1.5 ? { color: it.trail, pts: Array.from({ length: 28 }, (_, i) => along(it.pts, Math.max(0, u - 0.35 + (0.35 * i) / 27))) } : undefined;
         const opacity = Math.min(1, (t - it.from) / 0.4) * (1 - clamp01((t - end) / 0.5));
         out.push({ ref: `journey#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: moving, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity, trail });

@@ -49,6 +49,7 @@ const EXTRA: Record<string, string> = {
   'doc:ticket': '文件感：票券（打孔虛線、目的地、SEAT 座位號）',
   'motion:loop-noise': '道具和背景閒置時沿著無縫循環的平滑雜訊漂移（不是固定節拍的正弦搖擺）',
   'motion:velocity-settle': '道具和字卡落定時衝過頭的幅度跟著到達速度變大變小，落定前停穩',
+  'motion:velocity-bank': '移動中的道具和字卡隨自己的速度往前傾，慢下來就站直（讀歌詞時字不傾斜）',
 };
 // each move's variants are techniques of their own (a mahjong tile is not a keycap)
 for (const [id, m] of Object.entries(MORE)) m.styles?.forEach((x, i) => i && (EXTRA[`fx:${id}#${i}`] = `${m.help.split('：')[0]}的變化：${x}`));
@@ -84,6 +85,7 @@ const KNOWN: Record<string, { from: string; own: boolean }> = {
   'enter:strips': { from: 'claude-animated-text (pound0423, MIT) #39 blinds', own: false },
   'motion:loop-noise': { from: 'AE expression guide wiggle-loop / wiggle-octaves (concept only)', own: false },
   'motion:velocity-settle': { from: 'AE expression guide phys-inertia (concept only)', own: false },
+  'motion:velocity-bank': { from: 'AE expression guide phys-velocity (concept only)', own: false },
   ...Object.fromEntries(['device:print-duo', ...['wall', 'ring', 'tunnel', 'bars', 'stack', 'split', 'rays', 'boxes', 'grid', 'dots'].map((x) => `fx:${x}`)].map((x) => [x, { from: YUNON, own: false }])),
 };
 

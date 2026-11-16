@@ -302,3 +302,91 @@ describe('drawn text effects', () => {
     expect(glyphs[0].scale.y).toBeCloseTo(1);
   });
 });
+
+describe('tracking-out and the sung fill', () => {
+  const gap = (gs: THREE.Mesh[]) => gs[1].position.x - gs[0].position.x;
+
+  it('track: the spacing opens evenly about the line centre over its life, never before it shows', async () => {
+    const { l, glyphs } = await wrapped({ idle: 'track' });
+    l.update(1, fx);
+    expect(gap(glyphs)).toBeCloseTo(50);
+    l.update(2, fx);
+    const mid = gap(glyphs);
+    l.update(2.99, fx);
+    const late = gap(glyphs);
+    expect(mid).toBeGreaterThan(50);
+    expect(late).toBeGreaterThan(mid);
+    // bounded, and even: both gaps the same, the middle character where it was
+    expect(late).toBeLessThanOrEqual(50 * (1 + 0.22) + 1e-6);
+    expect(glyphs[2].position.x - glyphs[1].position.x).toBeCloseTo(late);
+    expect(glyphs[1].position.x).toBeCloseTo(50);
+  });
+
+  it('track: measured at rest the line stands at its widest, so the fit holds the open line', async () => {
+    const { measureAtRest } = await import('./runtime');
+    const { l, glyphs } = await wrapped({ idle: 'track' });
+    l.update(3.2, fx);
+    const widest = gap(glyphs);
+    measureAtRest(() => l.update(1.2, fx));
+    expect(gap(glyphs)).toBeCloseTo(widest);
+  });
+
+  it('track: a column opens top to bottom', async () => {
+    const l0 = layer();
+    const gs = l0.group.children as THREE.Mesh[];
+    const update = l0.update;
+    l0.update = (t, f) => (update(t, f), gs.forEach((g, i) => g.position.set(0, -i * 50, 0)));
+    const l = withTextFx(l0, runtime({ idle: 'track' }));
+    l.update(2.9, fx);
+    expect(gs[0].position.y - gs[1].position.y).toBeGreaterThan(55);
+    expect(gs.every((g) => g.position.x === 0)).toBe(true);
+  });
+
+  it('fill: the line reads whole in its own ink; its own picture takes a key ink left to right as each character is sung', async () => {
+    const rt = { ...runtime({ idle: 'fill' }), cue: { text: TEXT, start: 1, end: 3, charTimed: true, charStarts: [1.2, 1.6, 2.4] }, palette: { accent: '#ff0000', background: '#ffffff', text: '#222222' } } as unknown as CueRuntime;
+    const l0 = layer();
+    (l0.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[]).forEach((m) => m.material.color.set('#222222'));
+    const l = withTextFx(l0, rt);
+    const glyphs = l.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
+    const fill = (i: number) => glyphs[i].userData['fill'] as { uFillEdge: { value: number }; uFillAxis: { value: number }; uFillInk: { value: THREE.Color } };
+    // one picture per character, no copy laid over it (a copy is cut out of the reading glyph's clean zone)
+    expect(glyphs.every((g) => g.children.length === 0)).toBe(true);
+    expect(glyphs.every((g) => g.material.customProgramCacheKey().includes('sung-fill'))).toBe(true);
+    l.update(1.1, fx);
+    // nothing waits pale: every character is at full ink before any is sung, and none is filled yet
+    expect(glyphs.map((g) => g.material.opacity)).toEqual([1, 1, 1]);
+    expect([0, 1, 2].map((i) => fill(i).uFillEdge.value)).toEqual([-1, -1, -1]);
+    // half way through the first character's time (1.2 → 1.6): filled to the middle of its picture, the rest not begun
+    l.update(1.4, fx);
+    expect(fill(0).uFillAxis.value).toBe(0);
+    expect(fill(0).uFillEdge.value).toBeCloseTo(0.5);
+    expect(fill(1).uFillEdge.value).toBe(-1);
+    expect(glyphs.map((g) => g.material.opacity)).toEqual([1, 1, 1]);
+    // a quarter: a quarter of the 30 px advance across the 30 px picture
+    l.update(1.3, fx);
+    expect(fill(0).uFillEdge.value).toBeCloseTo(0.25);
+    // the second is whole by the third's sung time
+    l.update(2.4, fx);
+    expect(fill(1).uFillEdge.value).toBe(2);
+    expect(fill(2).uFillEdge.value).toBe(-1);
+    // the fill ink reads on the paper and stands apart from the body ink
+    const { contrast } = await import('../contrast');
+    expect(contrast(`#${fill(0).uFillInk.value.getHexString()}`, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(fill(0).uFillInk.value.getHexString()).not.toBe('222222');
+  });
+
+  it('fill: a column fills from the top down; a karaoke entrance takes no fill', async () => {
+    const l0 = layer();
+    const gs = l0.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
+    const update = l0.update;
+    l0.update = (t, f) => (update(t, f), gs.forEach((g, i) => g.position.set(0, -i * 50, 0)));
+    const l = withTextFx(l0, { ...runtime({ idle: 'fill' }), cue: { text: TEXT, start: 1, end: 3, charTimed: true, charStarts: [1.2, 1.6, 2.4] } } as unknown as CueRuntime);
+    l.update(1.3, fx);
+    const u = gs[0].userData['fill'] as { uFillEdge: { value: number }; uFillAxis: { value: number } };
+    expect(u.uFillAxis.value).toBe(1);
+    // a quarter of the 40 px em down the 40 px picture
+    expect(u.uFillEdge.value).toBeCloseTo(0.25);
+    const k = withTextFx(layer(), runtime({ enter: 'karaoke', idle: 'fill' }));
+    expect((k.group.children as THREE.Mesh[]).every((g) => !g.userData['fill'])).toBe(true);
+  });
+});

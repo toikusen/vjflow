@@ -15,7 +15,10 @@ import { phraseSpans } from './line-space';
 import { outlineMesh, rectMesh, shadowMesh } from './lyric-carrier';
 import { breathLine, crumbPose, nodePhase, nodeSize, ovalStroke, relayAt, ECHO_WAYS, echoPose, focusShare, foldPhase, gravityPose, poreField, pushFocus, radialShift, railAhead, railPose, slatClose, stripShare, strokeLeft, waveShift, waveThin } from './line-exit';
 import { mixHex, mottle, ovalFit, roughEdge, tornLine } from './material';
-import { CueLayer, CueRuntime, DRAWN, enterSec, FrameFx, readable, revealAt, songVary, sungAt } from './runtime';
+import { atRest, CueLayer, CueRuntime, DRAWN, enterSec, FrameFx, readable, revealAt, songVary, sungAt } from './runtime';
+import { runsDown, trackOpen, trackReach, trackShifts } from './line-track';
+import { fillInk, fillShare, fillSpans } from './sung-fill';
+import { FillUniforms, setPatch, sungFill } from './material-patch';
 
 type GlyphMesh = THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
 interface Item {
@@ -33,7 +36,7 @@ const DRAWN_EXIT = new Set(['glitch', 'slash', 'scramble', 'split', 'pixel', 'sh
  * (build-cut) leaves its glyphs' own flag on, and a box drawn for them stood as an empty dark bar (spy チョロイン c029).
  */
 const shownMesh = (m: THREE.Object3D) => m.visible && m.parent?.visible !== false;
-const NEEDS_FX = (s: CueStyle) => !!s.relay || !!s.oval || s.idle === 'reflection-rest' || !!s.breath || !!s.icon || DRAWN_ENTER.has(s.enter) || DRAWN_EXIT.has(s.exit) || s.exit === 'rail-leave' || s.exit === 'gravity-pass' || !!s.trail || !!s.inkState || !!s.emphasis?.some((e) => ['hollow', 'face', 'mark', 'symbol', 'liquid', 'strike', 'box', 'hold', 'revise', 'echo', 'weight', 'shine', 'faces'].includes(e.method));
+const NEEDS_FX = (s: CueStyle) => !!s.relay || !!s.oval || s.idle === 'reflection-rest' || s.idle === 'track' || s.idle === 'fill' || !!s.breath || !!s.icon || DRAWN_ENTER.has(s.enter) || DRAWN_EXIT.has(s.exit) || s.exit === 'rail-leave' || s.exit === 'gravity-pass' || !!s.trail || !!s.inkState || !!s.emphasis?.some((e) => ['hollow', 'face', 'mark', 'symbol', 'liquid', 'strike', 'box', 'hold', 'revise', 'echo', 'weight', 'shine', 'faces'].includes(e.method));
 /** What a decoding line flickers through before each character settles. */
 const SCRAMBLE = [...'#%&@$?!*+=<>/01ア゙ヲｦﾘ※◆▲■□'];
 
@@ -1087,6 +1090,32 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       return { it, own: { map: it.mesh.material.map as THREE.Texture, geo: it.mesh.geometry }, pics: families.map((family) => { const t = glyphTexture(it.glyph.char, { ...it.style, family }); return { map: t.texture, geo: new THREE.PlaneGeometry(t.w, t.h) }; }) };
     });
 
+  // track: the line's spacing opens about its centre over its life (line-track.ts), in reading order
+  const tracking = rt.style.idle === 'track';
+  const trackReachNow = trackReach(v('track.reach', 0, 1));
+  const inOrder = [...items].sort((a, b) => (a.glyph.src ?? a.glyph.index) - (b.glyph.src ?? b.glyph.index));
+  // fill: a key-ink copy of each glyph, uncovered over it as the character is sung (sung-fill.ts); the line itself
+  // keeps its full ink all along (a karaoke entrance lights its own characters, so it takes no fill)
+  const filling = rt.style.idle === 'fill' && enter !== 'karaoke';
+  const fillInks = new Map<string, THREE.Color>();
+  const fillInkOf = (body: THREE.Color) => {
+    const hex = `#${body.getHexString()}`;
+    if (!fillInks.has(hex)) fillInks.set(hex, new THREE.Color(fillInk(rt.palette.accent, [rt.palette.glow, rt.palette.line].filter((c): c is string => !!c), hex, [rt.palette.background, ...(rt.under ?? [])].filter((g): g is string => !!g))));
+    return fillInks.get(hex)!;
+  };
+  const sungOrder = filling ? [...new Set(inOrder.filter((it) => it.glyph.src !== undefined).map((it) => it.glyph.src!))] : [];
+  const firstOf = new Map(sungOrder.map((src) => [src, inOrder.find((it) => it.glyph.src === src)!]));
+  const spanOf = new Map(fillSpans(sungOrder.map((src) => sungAt(firstOf.get(src)!)), (rt.cue as { end?: number }).end ?? rt.exitAt).map((sp, i) => [sungOrder[i], sp]));
+  // (drawn in the glyph's own material, material-patch.ts sungFill: still one reading glyph, never a copy over it)
+  const fills = filling
+    ? inOrder.filter((it) => spanOf.has(it.glyph.src!)).map((it) => {
+        const u: FillUniforms = { uFillEdge: { value: -1 }, uFillAxis: { value: 0 }, uFillInk: { value: fillInkOf(it.mesh.material.color) } };
+        setPatch(it.mesh.material, 'sung-fill', sungFill(u));
+        it.mesh.userData['fill'] = u;
+        return { it, u, span: spanOf.get(it.glyph.src!)! };
+      })
+    : [];
+
   const held = new Map<GlyphMesh, number>();
   const base = new Map<GlyphMesh, { p: THREE.Vector3; s: THREE.Vector3; r: number; o: number }>();
   // where a glyph is in the layer's own frame (templates nest rows in groups of their own) and how big it is there
@@ -1128,6 +1157,20 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       layer.update(t, fx);
       for (const it of items) base.set(it.mesh, { p: it.mesh.position.clone(), s: it.mesh.scale.clone(), r: it.mesh.rotation.z, o: it.mesh.material.opacity });
       layer.group.updateMatrixWorld(true);
+      if (tracking) {
+        // measured at rest it stands at its widest, so the frame fit and the room made for it hold the open line
+        const at = inOrder.map((it) => layer.group.worldToLocal(it.mesh.getWorldPosition(new THREE.Vector3())));
+        const down = runsDown(at);
+        const shifts = trackShifts(at.map((p) => (down ? p.y : p.x)), trackReachNow, trackOpen(t, rt.showFrom, rt.exitAt, atRest()));
+        inOrder.forEach((it, j) => {
+          if (!it.mesh.parent || !shifts[j]) return;
+          const to = at[j].clone();
+          if (down) to.y += shifts[j];
+          else to.x += shifts[j];
+          it.mesh.position.copy(it.mesh.parent.worldToLocal(layer.group.localToWorld(to)));
+        });
+        layer.group.updateMatrixWorld(true);
+      }
       // corner-land: the layer as a whole, paper and all, is swung about a point near one corner of its block
       if (enter === 'corner-land' && layer.group.parent) {
         const k = (t - rt.showFrom) / (ARRIVAL_SEC['corner-land'] * rt.pace);
@@ -2378,6 +2421,22 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
             tw.material.opacity = o;
           }
         }
+      }
+
+      if (fills.length) {
+        layer.group.updateMatrixWorld(true);
+        const world = fills.map((f) => f.it.mesh.getWorldPosition(new THREE.Vector3()));
+        const down = runsDown(world);
+        fills.forEach(({ it, u, span }) => {
+          const share = fillShare(t, span);
+          u.uFillAxis.value = down ? 1 : 0;
+          if (share <= 0 || share >= 1) return void (u.uFillEdge.value = share <= 0 ? -1 : 2);
+          // across the character's em (a row: its advance; a column: its size), as a share of its picture, which
+          // carries a transparent pad round the em; the picture may change under it (weight, faces): read it now
+          const g = it.mesh.geometry.parameters;
+          const [em, pic] = down ? [it.style.size, g.height] : [it.glyph.advance || it.style.size, g.width];
+          u.uFillEdge.value = 0.5 + (em * (share - 0.5)) / Math.max(1e-6, pic);
+        });
       }
 
       if (rt.style.trail) {

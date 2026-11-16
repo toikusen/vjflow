@@ -160,3 +160,32 @@ describe('storyEvents', () => {
   });
 });
 
+
+describe('prop drift and landing', () => {
+  it('a drifting hero wanders on loopable noise: the same pose a loop later, no steady beat', async () => {
+    const { DRIFT_LOOP } = await import('./story');
+    const items: StoryItem[] = [{ kind: 'hero', prop: 'horse', motion: 'drift', x: 0, y: 0, size: 0.3, states: [{ at: 0, state: 'show' }] }];
+    const pose = (t: number) => storyLayers(items, t)[0] as { x: number; y: number; rot: number };
+    for (const t of [3, 7.7, 15]) {
+      expect(pose(t + DRIFT_LOOP).x).toBeCloseTo(pose(t).x, 9);
+      expect(pose(t + DRIFT_LOOP).rot).toBeCloseTo(pose(t).rot, 9);
+    }
+    // within its old reach (0.015 across, 0.02 up and down)
+    const xs = Array.from({ length: 240 }, (_, i) => pose(1 + i / 10).x);
+    expect(Math.max(...xs.map(Math.abs))).toBeLessThanOrEqual(0.015);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.005);
+  });
+
+  it('a fly lands past its point by as much as it came in fast, and is at rest when its flight ends', async () => {
+    const { flyOvershoot } = await import('./story');
+    expect(flyOvershoot(1, 2)).toBe(0);
+    expect(flyOvershoot(2, 1)).toBeGreaterThan(flyOvershoot(2, 1.5));
+    expect(flyOvershoot(20, 0.1)).toBe(1.2);
+    const fly = (dur: number): StoryItem[] => [{ kind: 'fly', prop: 'plane', motion: 'still', at: 0, dur, from: 'left', x: 0.6, y: 0, size: 0.2, until: 20 }];
+    const xAt = (dur: number, k: number) => (storyLayers(fly(dur), k * dur)[0] as { x: number }).x;
+    const past = (dur: number) => Math.max(...Array.from({ length: 100 }, (_, i) => xAt(dur, i / 100))) - 0.6;
+    expect(past(0.8)).toBeGreaterThan(0.01);
+    expect(past(4)).toBeLessThanOrEqual(1e-9);
+    expect(xAt(0.8, 1)).toBeCloseTo(0.6, 9);
+  });
+});

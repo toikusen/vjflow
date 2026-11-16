@@ -137,6 +137,21 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
     }
   });
 
+  it('marks the draws it kept clear on the QA track line, so a repair round can count them frame by frame', () => {
+    const logged: string[] = [];
+    const err = console.error;
+    console.error = (x: string) => logged.push(x);
+    const g = globalThis as { __vjTrack?: boolean };
+    g.__vjTrack = true;
+    try {
+      frame([900, 200]);
+      expect(logged.filter((x) => x.startsWith('code layer: track'))).toEqual(['code layer: track 1.000 0 bottle:900,450,100,100,1.00,k;bottle:200,450,100,100,1.00']);
+    } finally {
+      delete g.__vjTrack;
+      console.error = err;
+    }
+  });
+
   it('counts and reports every sprite it had to keep clear: the drawing is sent back to place it in the room', () => {
     const logged: string[] = [];
     const err = console.error;

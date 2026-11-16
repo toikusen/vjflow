@@ -366,6 +366,13 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   // props there in the first place, so the keep-clear below seldom has to cut one out
   const lines = (l.lines ?? []).map((r) => ({ ...r, from: r.from - (l.shift ?? 0), to: r.to - (l.shift ?? 0) }));
   const room = (from = cam.start, to = cam.end) => roomsOf(lines, from, to);
+  // QA renders (--track) also log each shot's lines and the room they leave, once a shot: a repair round
+  // (scripts/lyric-vj/repair.mts) tells the director where a cut-out prop may go
+  if ((globalThis as { __vjTrack?: boolean }).__vjTrack && !(globalThis as { __vjProbe?: boolean }).__vjProbe && lines.length) {
+    const r = (x: number) => Math.round(x);
+    const on = lines.filter((x) => Math.min(cam.end, x.to) - Math.max(cam.start, x.from) > 0).map((x) => ({ from: +x.from.toFixed(2), to: +x.to.toFixed(2), x0: r(x.x0), y0: r(x.y0), x1: r(x.x1), y1: r(x.y1) }));
+    report(`room ${cam.index} ${JSON.stringify({ from: +cam.start.toFixed(2), to: Number.isFinite(cam.end) ? +cam.end.toFixed(2) : null, lines: on, rooms: room().map((x) => ({ x0: r(x.x0), y0: r(x.y0), x1: r(x.x1), y1: r(x.y1) })) })}`);
+  }
   const origin = ctx.getTransform?.();
   const fit = (x: number, y: number, w: number, h: number, from = cam.start, to = cam.end): [number, number, number, number] => fitRect(ctx, origin, room(from, to), x, y, w, h);
   // while the lyric is fully up, watch the sprite draws for ones that hide it (a check the director must pass)
@@ -436,6 +443,8 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     const alpha = ctx.globalAlpha;
     // (counted and logged: the drawing placed it under a read line; codelayer.mts hands it back to be placed in the room)
     if (keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard)) {
+      // (on the track line too, as a sixth field: the repair round counts the draws it had to keep clear per frame)
+      if (frame && boxes.length && boxes[boxes.length - 1].startsWith(`${id}:`) && alpha > 0) boxes[boxes.length - 1] += ',k';
       if (alpha > 0) watchClear(`${id}@${cam.index}`, id, inside, t, `shot ${cam.index}`, strength >= 1 && !l.guard);
     } else if (orig && strength > 0 && alpha > 0 && coverOf(sized, base.multiply(ctx.getTransform()), ...orig, box, crop)[0] > 0) clearTally().moved++;
     // what still shows over the box (faded only, never cut: the box gliding in or between two places) stays on record,

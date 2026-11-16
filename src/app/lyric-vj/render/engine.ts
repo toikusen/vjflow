@@ -102,8 +102,8 @@ const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter', 'fo
  * Frame-px boxes of the glyphs on screen in a line's group (visible and not faded out), their opacity, and for a whole
  * glyph texture the affine that lays the texture where the letter is drawn, tilt and all (a letter on an arc).
  */
-function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean })[] {
-  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean })[] = [];
+function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean; ink?: string })[] {
+  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean; ink?: string })[] = [];
   const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
   if (!shown(group)) return out;
@@ -115,7 +115,7 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
     const map = m.material.map;
     const whole = map && map.repeat.x === 1 && map.repeat.y === 1 && !map.offset.x && !map.offset.y;
     if (b.isEmpty()) return;
-    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1, ...(m.userData['preview'] ? { preview: true } : {}) };
+    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1, ...(m.userData['preview'] ? { preview: true, ink: `#${m.material.color.getHexString()}` } : {}) };
     const pos = m.geometry.getAttribute('position');
     const img = whole ? (map.image as CanvasImageSource & { width: number; height: number }) : undefined;
     if (!img || !pos || pos.count !== 4 || !img.width) return void out.push(box);
@@ -1861,14 +1861,15 @@ export class LyricVjEngine {
       if (w < 2 || h < 2) continue;
       this.veilMask ??= new OffscreenCanvas(W, H).getContext('2d')!;
       const mask = this.veilMask;
-      shape.save();
-      shape.clearRect(x0, y0, w, h);
       // the line's letters once into a mask, then the mask stamped over a solid disc of radius R (dilate.ts): twelve
       // stamps of each letter on a ring of R left scallops between them round thin strokes, a blotchy ring. A
-      // sing-along's preview row (not the line sung) takes a thin keyline of its own
+      // sing-along's preview row (not the line sung, in an ink of its own) takes a thin keyline in the ink it is not in
+      const text = twin.text[light ? 0 : 1];
       for (const [preview, reach] of [[false, R], [true, Math.min(R, 4)]] as const) {
         const own = boxes.filter((b) => !!b.preview === preview);
         if (!own.length) continue;
+        shape.save();
+        shape.clearRect(x0, y0, w, h);
         mask.clearRect(x0, y0, w, h);
         for (const b of own) {
           // only what has a letter's own shape gets a keyline: a cut-up glyph, a repeating wave (a held vowel's ～), a
@@ -1882,20 +1883,19 @@ export class LyricVjEngine {
         }
         mask.globalAlpha = 1;
         for (const [dx, dy] of discOffsets(reach)) shape.drawImage(mask.canvas, x0, y0, w, h, x0 + dx, y0 + dy, w, h);
+        shape.globalCompositeOperation = 'source-in';
+        // the ink the letters are not in (a language's own type ink can put both builds in the same colour)
+        const ink = preview ? (own.find((b) => b.ink)?.ink ?? text) : text;
+        shape.fillStyle = contrast(ink, inks.ink) > contrast(ink, inks.paper) ? inks.ink : inks.paper;
+        shape.fillRect(x0, y0, w, h);
+        shape.restore();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // frame px, under the cut's camera move
+        // a line still being handed in has no keyline yet: its letters are only partly out
+        ctx.globalAlpha = alpha * clamp01((t - (hand ? hand.h.to : rt.showFrom)) / 0.25) * clamp01((end - t) / 0.25);
+        ctx.drawImage(shape.canvas, x0, y0, w, h, x0, y0, w, h);
+        ctx.restore();
       }
-      shape.globalAlpha = 1;
-      shape.globalCompositeOperation = 'source-in';
-      // the ink the letters are not in (a language's own type ink can put both builds in the same colour)
-      const text = twin.text[light ? 0 : 1];
-      shape.fillStyle = contrast(text, inks.ink) > contrast(text, inks.paper) ? inks.ink : inks.paper;
-      shape.fillRect(x0, y0, w, h);
-      shape.restore();
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // frame px, under the cut's camera move
-      // a line still being handed in has no keyline yet: its letters are only partly out
-      ctx.globalAlpha = alpha * clamp01((t - (hand ? hand.h.to : rt.showFrom)) / 0.25) * clamp01((end - t) / 0.25);
-      ctx.drawImage(shape.canvas, x0, y0, w, h, x0, y0, w, h);
-      ctx.restore();
     }
   }
   private veilShape?: OffscreenCanvasRenderingContext2D;

@@ -829,6 +829,52 @@ export function fitInRoom(room: [number, number], w: number, fx: number, pad = 2
   return { s, x: Math.min(room[1] - pad - half, Math.max(room[0] + pad + half, fx)) };
 }
 
+/** A line's reading box over the stretch it is up (frame px, song s): what a director's drawing composes around. */
+export type LineBox = { from: number; to: number; x0: number; y0: number; x1: number; y1: number };
+
+/**
+ * The frame's room clear of every line read over [from, to] (frame px): the free side bands (freeBand) as full-height
+ * rects and the free heights above and below them (freeRows' bands, each kept only when it can hold a figure). The whole
+ * frame when no line is up; empty when the lines leave no room.
+ */
+export function roomsOf(lines: LineBox[], from: number, to: number, margin = 40): CoverRect[] {
+  const on = lines.filter((r) => Math.min(to, r.to) - Math.max(from, r.from) > 0);
+  if (!on.length) return [{ x0: 0, y0: 0, x1: W, y1: H }];
+  const sides = (['left', 'right'] as const).flatMap((s) => {
+    const b = freeBand(on, from, to, s, margin);
+    return b ? [{ x0: b[0], y0: 0, x1: b[1], y1: H }] : [];
+  });
+  const above = { x0: 0, y0: 0, x1: W, y1: Math.min(...on.map((r) => r.y0)) - margin };
+  const below = { x0: 0, y0: Math.max(...on.map((r) => r.y1)) + margin, x1: W, y1: H };
+  return [...sides, ...[above, below].filter((r) => r.y1 - r.y0 >= H * ROWS_MIN)];
+}
+
+/**
+ * A prop's frame box moved into the room that changes it least (rooms from roomsOf): shrunk to fit (never grown) and
+ * slid in, standing on its own foot (bottom kept where it can be; a room above the lines takes it from the top).
+ * `cost` is how much it changed (scale lost plus the move, in frame heights): 0 when it already stood in a room.
+ * Undefined when there is no room at all (the keep-clear stays the last resort).
+ */
+export function fitClear(box: CoverRect, rooms: CoverRect[], pad = 24): { box: CoverRect; s: number; cost: number } | undefined {
+  const [bw, bh] = [Math.max(1, box.x1 - box.x0), Math.max(1, box.y1 - box.y0)];
+  const clamp = (v: number, lo: number, hi: number) => (lo > hi ? (lo + hi) / 2 : Math.min(hi, Math.max(lo, v)));
+  const fits = rooms.map((r) => {
+    const [ex0, ex1] = [r.x0 > 0 ? pad : 0, r.x1 < W ? pad : 0];
+    const [ey0, ey1] = [r.y0 > 0 ? pad : 0, r.y1 < H ? pad : 0];
+    // (a foot already inside the room's height stays where it is: only what stands above it must fit)
+    const foot = box.y1 >= r.y0 + ey0 && box.y1 <= r.y1 - ey1 ? box.y1 : r.y1 - ey1;
+    const s = Math.min(1, (r.x1 - r.x0 - ex0 - ex1) / bw, (foot - r.y0 - ey0) / bh);
+    if (s <= 0) return undefined;
+    const [w, h] = [bw * s, bh * s];
+    const cx = clamp((box.x0 + box.x1) / 2, r.x0 + ex0 + w / 2, r.x1 - ex1 - w / 2);
+    // (on the floor of a room that reaches the frame's foot, or anywhere in one that does not: kept by its foot)
+    const y1 = clamp(box.y1, r.y0 + ey0 + h, r.y1 - ey1);
+    const out = { x0: cx - w / 2, y0: y1 - h, x1: cx + w / 2, y1 };
+    return { box: out, s, cost: 1 - s + Math.hypot(cx - (box.x0 + box.x1) / 2, y1 - box.y1) / H };
+  });
+  return fits.reduce<{ box: CoverRect; s: number; cost: number } | undefined>((a, b) => (b && (!a || b.cost < a.cost) ? b : a), undefined);
+}
+
 /**
  * Blueprint labels (the 大字報 MVs' document feel): a figure name top left over a ruled line, the line count bottom
  * right, a revision tag top right; small mono type that types itself in as the cut lands.

@@ -124,8 +124,40 @@ export function keepClear(ctx: CanvasRenderingContext2D, frame: DOMMatrix, box: 
   return true;
 }
 
+/** The page's tally of sprite draws kept off a read lyric (keepClear reaching into the box): render.mts adds it to metrics.json. */
+export interface ClearTally { draws: number; cut: number; faded: number }
+export const clearTally = (): ClearTally => ((globalThis as { vjKeepClear?: ClearTally }).vjKeepClear ??= { draws: 0, cut: 0, faded: 0 });
+const clearWorst = new Map<string, number>();
+/** How much more of a picture must be inside the box before the same picture at the same place is reported again. */
+const CLEAR_STEP = 0.1;
+
+/**
+ * Records a sprite draw that keepClear had to keep off the lyric (`cut`: the box clipped out and faded; else faded only).
+ * Each one is counted; the log gets a `code layer: lyric kept clear:` line once per picture and place, and again when more
+ * of it is inside. keepClear is the last resort: a prop the drawing placed under a line vanishes while it is read
+ * (世界のつづき's lighthouse under 「信じられるかい？」), so codelayer.mts hands these lines back to the director to place it
+ * in the shot's room (f.room / f.fit). Returns the line it reported, or undefined.
+ */
+export function watchClear(key: string, id: string, inside: number, t: number, where: string, cut: boolean, log: (line: string) => void = (x) => console.error(x)): string | undefined {
+  if ((globalThis as { __vjProbe?: boolean }).__vjProbe) return undefined;
+  const tally = clearTally();
+  tally.draws++;
+  if (cut) tally.cut++;
+  else tally.faded++;
+  const seen = clearWorst.get(key);
+  if (seen !== undefined && inside < seen + CLEAR_STEP) return undefined;
+  clearWorst.set(key, inside);
+  const line = `code layer: lyric kept clear: ${id} ${Math.round(inside * 100)}% inside the lyric box, ${cut ? 'cut out and faded' : 'faded'} at ${t.toFixed(1)} s (${where})`;
+  log(line);
+  return line;
+}
+
 /** For tests: forget what was reported. */
-export const resetCover = () => worst.clear();
+export const resetCover = () => {
+  worst.clear();
+  clearWorst.clear();
+  delete (globalThis as { vjKeepClear?: ClearTally }).vjKeepClear;
+};
 
 /**
  * When a line laid on a page shows: with the page's cut when that falls inside the line's lead, else as planned.

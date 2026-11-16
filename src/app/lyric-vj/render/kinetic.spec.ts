@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitInRoom, freeBand, freeRows, PROP_MIN_H, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitClear, fitInRoom, freeBand, freeRows, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -151,6 +151,31 @@ describe('the song\'s thread', () => {
     expect(s).toBeCloseTo(832 / 1400);
     expect(x - (1400 * s) / 2).toBeGreaterThanOrEqual(1040 + 24 - 1e-6);
     expect(fitInRoom([1040, 1920], 300, 1498)).toEqual({ s: 1, x: 1498 });
+  });
+
+  it("finds a drawing's room per shot: the side bands and the heights above and below the lines read over it", () => {
+    // two lines on the right half (世界のつづき 81–88 s is a stanza like this): the left band, and the floor under them
+    const lines = [{ from: 81, to: 84, x0: 870, y0: 400, x1: 1640, y1: 520 }, { from: 84, to: 88, x0: 1000, y0: 560, x1: 1700, y1: 700 }];
+    expect(roomsOf(lines, 81, 88)).toEqual([{ x0: 0, y0: 0, x1: 830, y1: 1080 }, { x0: 0, y0: 0, x1: 1920, y1: 360 }, { x0: 0, y0: 740, x1: 1920, y1: 1080 }]);
+    // no line over the shot: the whole frame
+    expect(roomsOf(lines, 90, 92)).toEqual([{ x0: 0, y0: 0, x1: 1920, y1: 1080 }]);
+    // a full-frame line leaves nothing
+    expect(roomsOf([{ from: 0, to: 9, x0: 0, y0: 0, x1: 1920, y1: 1080 }], 0, 9)).toEqual([]);
+  });
+
+  it('moves a prop under the lines into the room that changes it least, on its own foot', () => {
+    const lines = [{ from: 0, to: 9, x0: 140, y0: 400, x1: 1640, y1: 700 }];
+    const rooms = roomsOf(lines, 0, 9);
+    // a lighthouse 360 × 700 standing at the foot of the frame, its tower up through the lines: it stays on its foot and
+    // shrinks into the floor under them rather than flying to the sky above them
+    const got = fitClear({ x0: 820, y0: 330, x1: 1180, y1: 1030 }, rooms)!;
+    expect(got.box.y1).toBeCloseTo(1030);
+    expect(got.box.y0).toBeGreaterThanOrEqual(740 + 24 - 1e-6);
+    expect((got.box.x0 + got.box.x1) / 2).toBeCloseTo(1000);
+    expect(got.s).toBeCloseTo((1030 - 764) / 700);
+    // a prop already in a room is left as it is
+    expect(fitClear({ x0: 100, y0: 800, x1: 300, y1: 1000 }, rooms)).toEqual({ box: { x0: 100, y0: 800, x1: 300, y1: 1000 }, s: 1, cost: 0 });
+    expect(fitClear({ x0: 100, y0: 800, x1: 300, y1: 1000 }, [])).toBeUndefined();
   });
 
   const stub = (calls: string[]) =>

@@ -3,12 +3,12 @@
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
 import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
-import { clearAlpha, clearStrength, CLEAR_FROM, CoverCrop, coverOf, keepClear, watchCover } from './cover';
+import { clearAlpha, clearStrength, CLEAR_FROM, CoverCrop, coverOf, keepClear, watchClear, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
 import { burstBox, drawGlassCrack, drawKit, glassOf, glassPieces, KIT_KINDS, kitPattern, KitLayer, KitPattern, PHONE_MX, PHONE_MY, phoneBox } from './kit';
 import { drawWarped, WarpZone } from './warp';
-import { drawKinetic, KineticLayer, lineVeil, setLineVeil } from './kinetic';
+import { drawKinetic, fitClear, KineticLayer, LineBox, lineVeil, roomsOf, setLineVeil } from './kinetic';
 
 export type Rgb = string;
 
@@ -91,7 +91,7 @@ export type Layer = Base &
     | KineticLayer
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
     // shift: a drawing reused later in the song (a repeated chorus) sees the time it was written for
-    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect }
+    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect; /** Every line read over its section, filled by the engine (layRooms): the drawing's f.lines, f.room, f.fit. */ lines?: LineBox[] }
     // story components' per-frame layers (story.ts), never written by the director directly
     | StoryLayer
   );
@@ -324,7 +324,7 @@ function drawLayers(ctx: CanvasRenderingContext2D, layers: Layer[], sec: LookSec
 /** The camera shot a code layer is in: shots are cut at `cuts` (song seconds), synced with the lyric layouts. */
 export interface CodeCam { index: number; start: number; end: number; progress: number; count: number }
 /** f.img(id): a sprite from the song's library (designed by the image model, keyed), null when it is missing. */
-type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; hash: typeof hash; img: (id: string) => CanvasImageSource | null; scene: (id: string) => CanvasImageSource | null; particles: (opts: Omit<ParticleLayer, 'kind'>) => void; warp: (img: CanvasImageSource | null, x: number, y: number, w: number, h: number, zones: WarpZone[], seed?: number) => void; cache: Record<string, unknown> }) => void;
+type CodeDraw = (ctx: CanvasRenderingContext2D, f: { w: number; h: number; t: number; age: number; beat: Beat; lyric: Rect | null; lyricWeight: number; cam: CodeCam; lines: LineBox[]; room: (from?: number, to?: number) => Rect[]; fit: (x: number, y: number, w: number, h: number, from?: number, to?: number) => [number, number, number, number]; hash: typeof hash; img: (id: string) => CanvasImageSource | null; scene: (id: string) => CanvasImageSource | null; particles: (opts: Omit<ParticleLayer, 'kind'>) => void; warp: (img: CanvasImageSource | null, x: number, y: number, w: number, h: number, zones: WarpZone[], seed?: number) => void; cache: Record<string, unknown> }) => void;
 
 /** The shot at t among cut times (sorted); before the first cut is shot 0. */
 export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
@@ -348,7 +348,7 @@ const covered = new Set<string>();
 const ids = new Map<CanvasImageSource, string>();
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect; lines?: LineBox[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   t -= l.shift ?? 0;
   let fn = compiled.get(l.src);
   if (!fn) {
@@ -362,6 +362,12 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   }
   const t0 = performance.now();
   const cam = camAt(l.cuts ?? [], t);
+  // where the lines are read (in the drawing's own time) and the room they leave each shot: the drawing composes its
+  // props there in the first place, so the keep-clear below seldom has to cut one out
+  const lines = (l.lines ?? []).map((r) => ({ ...r, from: r.from - (l.shift ?? 0), to: r.to - (l.shift ?? 0) }));
+  const room = (from = cam.start, to = cam.end) => roomsOf(lines, from, to);
+  const origin = ctx.getTransform?.();
+  const fit = (x: number, y: number, w: number, h: number, from = cam.start, to = cam.end): [number, number, number, number] => fitRect(ctx, origin, room(from, to), x, y, w, h);
   // while the lyric is fully up, watch the sprite draws for ones that hide it (a check the director must pass)
   const start = l.lyric && (l.lyricWeight ?? 1) > CLEAR_FROM ? ctx.getTransform?.() : undefined;
   const base = start?.inverse?.();
@@ -406,7 +412,8 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
     const strength = clearStrength(l.lyricWeight ?? 1);
     const alpha = ctx.globalAlpha;
-    keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard);
+    // (counted and logged: the drawing placed it under a read line; codelayer.mts hands it back to be placed in the room)
+    if (keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard) && alpha > 0) watchClear(`${id}@${cam.index}`, id, inside, t, `shot ${cam.index}`, strength >= 1 && !l.guard);
     // what still shows over the box (faded only, never cut: the box gliding in or between two places) stays on record,
     // at the strength (and layer alpha) it is drawn; a cut-out draws nothing there
     const shown = alpha * (1 - Math.min(1, strength) * (1 - clearAlpha(inside)));
@@ -446,7 +453,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   };
   ctx.save();
   try {
-    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam, hash, img, scene, particles: (opts: Omit<ParticleLayer, 'kind'>) => particles(ctx, { kind: 'particles', ...opts }, t), warp, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
+    fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam, lines, room, fit, hash, img, scene, particles: (opts: Omit<ParticleLayer, 'kind'>) => particles(ctx, { kind: 'particles', ...opts }, t), warp, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
   } catch (e) {
     report(`runtime: ${(e as Error).message}`);
   }
@@ -462,6 +469,26 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   }
   const ms = performance.now() - t0;
   if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
+}
+
+/**
+ * f.fit: a rect in the drawing's current coordinates (its camera applied) moved into the room the lines leave the shot
+ * (kinetic.ts fitClear), returned in the same coordinates; as it is when the shot has no line or no room. `origin` is
+ * the canvas transform of frame px (the layer's start).
+ */
+export function fitRect(ctx: CanvasRenderingContext2D, origin: DOMMatrix | undefined, rooms: Rect[], x: number, y: number, w: number, h: number): [number, number, number, number] {
+  const now = ctx.getTransform?.();
+  const toFrame = origin && now ? origin.inverse().multiply(now) : undefined;
+  if (!toFrame || !rooms.length || !(w > 0 && h > 0)) return [x, y, w, h];
+  const pt = (m: DOMMatrix, px: number, py: number) => [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f];
+  const corners = [pt(toFrame, x, y), pt(toFrame, x + w, y), pt(toFrame, x, y + h), pt(toFrame, x + w, y + h)];
+  const box = { x0: Math.min(...corners.map((c) => c[0])), y0: Math.min(...corners.map((c) => c[1])), x1: Math.max(...corners.map((c) => c[0])), y1: Math.max(...corners.map((c) => c[1])) };
+  const got = fitClear(box, rooms);
+  if (!got) return [x, y, w, h];
+  // the rect's foot (bottom centre) follows the box's foot; the size scales with it
+  const [fx, fy] = pt(toFrame, x + w / 2, y + h);
+  const [ax, ay] = pt(toFrame.inverse(), fx + (got.box.x0 + got.box.x1) / 2 - (box.x0 + box.x1) / 2, fy + got.box.y1 - box.y1);
+  return [ax - (w * got.s) / 2, ay - h * got.s, w * got.s, h * got.s];
 }
 
 /** A mask picture filled with one colour, made once per picture and colour. */

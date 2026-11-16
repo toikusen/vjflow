@@ -3,7 +3,7 @@
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
 import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
-import { clearStrength, CLEAR_FROM, coverOf, keepClear } from './cover';
+import { clearAlpha, clearStrength, CLEAR_FROM, CoverCrop, coverOf, keepClear, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
 import { burstBox, drawGlassCrack, drawKit, glassOf, glassPieces, KIT_KINDS, kitPattern, KitLayer, KitPattern, PHONE_MX, PHONE_MY, phoneBox } from './kit';
@@ -91,7 +91,7 @@ export type Layer = Base &
     | KineticLayer
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
     // shift: a drawing reused later in the song (a repeated chorus) sees the time it was written for
-    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number }
+    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect }
     // story components' per-frame layers (story.ts), never written by the director directly
     | StoryLayer
   );
@@ -348,7 +348,7 @@ const covered = new Set<string>();
 const ids = new Map<CanvasImageSource, string>();
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   t -= l.shift ?? 0;
   let fn = compiled.get(l.src);
   if (!fn) {
@@ -398,11 +398,18 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   // a sprite reaching into the lyric box while the line is read is drawn without the box and faded as it moves in
   // (cover.ts keepClear): the drawing is the director's, but no picture of it covers the words. Was it only watched,
   // 世界のつづき's bottle drifted across 「信じられる？」 and its lighthouse across い, on record and on screen
-  const clear = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number, draw: () => void) => {
+  // (gliding from one line's place to the next, the box in between guards neither: both places are, fade only)
+  const clear = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number, draw: () => void, crop?: CoverCrop) => {
     const id = ids.get(pic);
     if (!lyric || !base || !start || !id) return draw();
-    const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, lyric);
-    keepClear(ctx, start, lyric, share, inside, draw, W, H, clearStrength(l.lyricWeight ?? 1));
+    const box = l.guard ?? lyric;
+    const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
+    const strength = clearStrength(l.lyricWeight ?? 1);
+    keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard);
+    // what still shows over the box (faded only, never cut: the box gliding in or between two places) stays on record,
+    // at the strength it is drawn; a cut-out draws nothing there
+    const shown = 1 - Math.min(1, strength) * (1 - clearAlpha(inside));
+    if ((strength < 1 || l.guard) && shown > 0) watchCover(`${id}@${cam.index}`, id, share * shown, inside, t, `shot ${cam.index}`);
   };
   // every drawImage while the drawing runs: a sprite copied onto the drawing's own canvas (tinted, made solid) passes
   // its name to that canvas when the canvas is about the sprite's size; a sprite drawn on the frame is measured
@@ -413,7 +420,9 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
         const sized = pic as CanvasImageSource & { width: number; height: number };
         const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
         recordBox(pic, dx, dy, dw, dh);
-        clear(pic, dx, dy, dw, dh, () => (plain as (...x: unknown[]) => void).call(this, pic, ...a));
+        // (a sheet's cell: what is measured is the part drawn)
+        const crop = a.length === 8 ? { sx: a[0], sy: a[1], sw: a[2], sh: a[3] } : undefined;
+        clear(pic, dx, dy, dw, dh, () => (plain as (...x: unknown[]) => void).call(this, pic, ...a), crop);
         return;
       } else if (id && this !== ctx && this.canvas) {
         const src = pic as CanvasImageSource & { width: number; height: number };
@@ -2977,7 +2986,8 @@ export function blendLayer(a: Layer, b: Layer, k: number): Layer {
   if (a.kind === 'code' && b.kind === 'code') {
     const ra = a.lyric;
     const rb = b.lyric;
-    if (ra && rb) return { ...b, lyric: { x0: ra.x0 + (rb.x0 - ra.x0) * k, y0: ra.y0 + (rb.y0 - ra.y0) * k, x1: ra.x1 + (rb.x1 - ra.x1) * k, y1: ra.y1 + (rb.y1 - ra.y1) * k }, lyricWeight: 1 };
+    // (its sprites are kept off both places while it glides, by fading only: the box in between guards neither line)
+    if (ra && rb) return { ...b, lyric: { x0: ra.x0 + (rb.x0 - ra.x0) * k, y0: ra.y0 + (rb.y0 - ra.y0) * k, x1: ra.x1 + (rb.x1 - ra.x1) * k, y1: ra.y1 + (rb.y1 - ra.y1) * k }, lyricWeight: 1, guard: { x0: Math.min(ra.x0, rb.x0), y0: Math.min(ra.y0, rb.y0), x1: Math.max(ra.x1, rb.x1), y1: Math.max(ra.y1, rb.y1) } };
     if (rb) return { ...b, lyricWeight: k };
     if (ra) return { ...b, lyric: ra, lyricWeight: 1 - k };
     return b;

@@ -7,27 +7,33 @@
 export interface CoverRect { x0: number; y0: number; x1: number; y1: number }
 
 const COVER_GRID = 24;
-const masks = new Map<CanvasImageSource, Uint8Array>();
-function maskOf(img: CanvasImageSource & { width: number; height: number }) {
-  let m = masks.get(img);
+/** A part of a picture drawn on its own (drawImage's source rectangle: one cell of a sprite sheet), px. */
+export interface CoverCrop { sx: number; sy: number; sw: number; sh: number }
+const masks = new Map<CanvasImageSource, Map<string, Uint8Array>>();
+/** The opaque cells of the picture, or of the part of it that is drawn (`crop`): a sheet's other cells are not on screen. */
+function maskOf(img: CanvasImageSource & { width: number; height: number }, crop?: CoverCrop) {
+  const { sx, sy, sw, sh } = crop ?? { sx: 0, sy: 0, sw: img.width, sh: img.height };
+  const key = `${sx},${sy},${sw},${sh}`;
+  const per = masks.get(img) ?? (masks.set(img, new Map()), masks.get(img)!);
+  let m = per.get(key);
   if (m) return m;
   m = new Uint8Array(COVER_GRID * COVER_GRID);
   try {
     const c = new OffscreenCanvas(COVER_GRID, COVER_GRID);
     const x = c.getContext('2d')!;
-    x.drawImage(img, 0, 0, COVER_GRID, COVER_GRID);
+    x.drawImage(img, sx, sy, sw, sh, 0, 0, COVER_GRID, COVER_GRID);
     const d = x.getImageData(0, 0, COVER_GRID, COVER_GRID).data;
     for (let i = 0; i < m.length; i++) m[i] = d[i * 4 + 3] > 128 ? 1 : 0;
   } catch {
     m.fill(1);
   }
-  masks.set(img, m);
+  per.set(key, m);
   return m;
 }
 
 /** Shares of the lyric box hidden by one picture draw, and of the picture inside the box (dest box in its transform). */
-export function coverOf(img: CanvasImageSource & { width: number; height: number }, m: DOMMatrix, dx: number, dy: number, dw: number, dh: number, r: CoverRect) {
-  const mask = maskOf(img);
+export function coverOf(img: CanvasImageSource & { width: number; height: number }, m: DOMMatrix, dx: number, dy: number, dw: number, dh: number, r: CoverRect, crop?: CoverCrop) {
+  const mask = maskOf(img, crop);
   const cell = (Math.abs(m.a * m.d - m.b * m.c) * dw * dh) / (COVER_GRID * COVER_GRID);
   let hidden = 0;
   let solid = 0;
@@ -88,12 +94,13 @@ export const clearStrength = (weight: number) => Math.min(1, Math.max(0, (weight
 
 /**
  * Draws one picture of a director's own drawing so it never covers the lyric while the line is read (`strength` 1;
- * under 1, the box gliding in, it is only faded that much, not cut): `hidden` and
+ * under 1, the box gliding in, it is only faded that much, not cut; `cut` false: faded only, as while the box glides
+ * from one line's place to the next's and `box` is both): `hidden` and
  * `inside` are coverOf's shares for this draw. A picture clear of the box is drawn as it is; one reaching into it is
  * drawn without the box (`frame` is the canvas transform of frame px, the box is in frame px) and faded by clearAlpha.
  * Returns whether anything of it reached into the box.
  */
-export function keepClear(ctx: CanvasRenderingContext2D, frame: DOMMatrix, box: CoverRect, hidden: number, inside: number, draw: () => void, w = 1920, h = 1080, strength = 1): boolean {
+export function keepClear(ctx: CanvasRenderingContext2D, frame: DOMMatrix, box: CoverRect, hidden: number, inside: number, draw: () => void, w = 1920, h = 1080, strength = 1, cut = true): boolean {
   if (hidden <= 0 || strength <= 0) return draw(), false;
   // (while the line's box glides in, the fade comes in with it: a prop never blinks out as a line comes up)
   const alpha = 1 - Math.min(1, strength) * (1 - clearAlpha(inside));
@@ -101,13 +108,14 @@ export function keepClear(ctx: CanvasRenderingContext2D, frame: DOMMatrix, box: 
   ctx.save();
   try {
     ctx.globalAlpha *= alpha;
-    if (strength < 1) return draw(), true;
+    if (strength < 1 || !cut) return draw(), true;
+    // (its own path: the drawing's current path, which save/restore does not keep, is left as the drawing built it)
     const now = ctx.getTransform();
     ctx.setTransform(frame);
-    ctx.beginPath();
-    ctx.rect(0, 0, w, h);
-    ctx.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
-    ctx.clip('evenodd');
+    const hole = new Path2D();
+    hole.rect(0, 0, w, h);
+    hole.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    ctx.clip(hole, 'evenodd');
     ctx.setTransform(now);
     draw();
   } finally {

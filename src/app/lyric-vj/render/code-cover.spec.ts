@@ -16,17 +16,29 @@ class M {
 
 /** What reached the frame: each sprite draw, the alpha it was drawn at, and whether the lyric box was clipped out of it. */
 type Drawn = { x: number; alpha: number; holed: boolean };
+/** The path ops the drawing's own stroke() would draw (what it built since its last beginPath). */
+const stroked: string[][] = [];
+
+/** jsdom has no Path2D: a stand-in that counts its rectangles. */
+class P2 {
+  rects = 0;
+  rect() {
+    this.rects++;
+  }
+}
 
 /** A canvas context on the 2D context's prototype (drawCode watches drawImage there; jsdom has none, so one is lent), recording each draw. */
 function frameCtx(drawn: Drawn[]) {
-  const g = globalThis as { CanvasRenderingContext2D?: { prototype: object } };
+  const g = globalThis as { CanvasRenderingContext2D?: { prototype: object }; Path2D?: unknown };
   const lent = !g.CanvasRenderingContext2D;
   if (lent) g.CanvasRenderingContext2D = class {} as never;
+  const lentPath = !g.Path2D;
+  if (lentPath) g.Path2D = P2;
   const proto = g.CanvasRenderingContext2D!.prototype as { drawImage?: unknown };
   const own = proto.drawImage;
   const stack: { alpha: number; holed: boolean; m: M }[] = [];
   let state = { alpha: 1, holed: false, m: new M() };
-  let rects = 0;
+  let path: string[] = [];
   proto.drawImage = function (this: { globalAlpha: number }, _pic: unknown, x: number) {
     drawn.push({ x, alpha: state.alpha, holed: state.holed });
   };
@@ -39,13 +51,16 @@ function frameCtx(drawn: Drawn[]) {
     restore: () => (state = stack.pop() ?? state),
     getTransform: () => state.m,
     setTransform: (m: M) => (state.m = m),
-    beginPath: () => (rects = 0),
-    rect: () => rects++,
-    clip: (rule: string) => (state.holed ||= rule === 'evenodd' && rects === 2),
-    clearRect: noop, fillRect: noop, translate: noop, scale: noop, rotate: noop, fill: noop, stroke: noop, moveTo: noop, lineTo: noop, arc: noop,
+    beginPath: () => (path = []),
+    rect: () => path.push('rect'),
+    moveTo: () => path.push('moveTo'),
+    lineTo: () => path.push('lineTo'),
+    stroke: () => stroked.push([...path]),
+    clip: (a: P2 | string, b?: string) => (state.holed ||= a instanceof P2 ? b === 'evenodd' && a.rects === 2 : a === 'evenodd' && path.filter((x) => x === 'rect').length === 2),
+    clearRect: noop, fillRect: noop, translate: noop, scale: noop, rotate: noop, fill: noop, arc: noop,
     canvas: { width: 1920, height: 1080 },
   });
-  return { ctx: ctx as CanvasRenderingContext2D, restore: () => (lent ? delete g.CanvasRenderingContext2D : (proto.drawImage = own)) };
+  return { ctx: ctx as CanvasRenderingContext2D, restore: () => (lentPath && delete g.Path2D, lent ? delete g.CanvasRenderingContext2D : (proto.drawImage = own)) };
 }
 
 describe('a code layer keeps its sprites off the lyric while it is read', () => {
@@ -54,15 +69,14 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
   afterEach(() => undo?.());
 
   /** One frame of a code layer that draws the sprite `bottle` (100 px square) at each x, the lyric box 600–1300 × 400–600. */
-  const frame = (xs: number[], weight = 1) => {
+  const lyric = { x0: 600, y0: 400, x1: 1300, y1: 600 };
+  const frame = (xs: number[], weight = 1, src0?: string, more: Partial<{ guard: object; lyric: object }> = {}, pic: object = { width: 100, height: 100 }) => {
     const drawn: Drawn[] = [];
     const { ctx, restore } = frameCtx(drawn);
     undo = restore;
-    const src = `const b = f.img('bottle'); for (const x of ${JSON.stringify(xs)}) ctx.drawImage(b, x, 450, 100, 100);`;
+    const src = src0 ?? `const b = f.img('bottle'); for (const x of ${JSON.stringify(xs)}) ctx.drawImage(b, x, 450, 100, 100);`;
     const look = { sections: [{ start: 0, layers: [{ kind: 'code', src }] }] } as unknown as GraphicsLook;
-    const pic = { width: 100, height: 100 } as unknown as CanvasImageSource;
-    const lyric = { x0: 600, y0: 400, x1: 1300, y1: 600 };
-    drawLook(ctx, look, 1, { since: 0, pulse: 0, index: 0 } as never, (a) => (a === 'spr:bottle' ? pic : undefined), (ls: Layer[]) => ls.map((l) => ({ ...l, lyric, lyricWeight: weight }) as Layer));
+    drawLook(ctx, look, 1, { since: 0, pulse: 0, index: 0 } as never, (a) => (a === 'spr:bottle' ? (pic as CanvasImageSource) : undefined), (ls: Layer[]) => ls.map((l) => ({ ...l, lyric, lyricWeight: weight, ...more }) as Layer));
     return drawn;
   };
 
@@ -87,5 +101,44 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
 
   it('fades evenly to nothing as more of the picture moves in', () => {
     expect([clearAlpha(0), clearAlpha(CLEAR_FADE / 2), clearAlpha(CLEAR_FADE), clearAlpha(1)]).toEqual([1, 0.5, 0, 0]);
+  });
+
+  it("keeps the drawing's own path: the cut-out never replaces what the drawing will stroke next", () => {
+    stroked.length = 0;
+    frame([], 1, "const b = f.img('bottle'); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(50, 50); ctx.drawImage(b, 520, 450, 100, 100); ctx.stroke();");
+    expect(stroked).toEqual([['moveTo', 'lineTo']]);
+  });
+
+  it('while the box glides from one line to the next, both places are kept clear, by fading only', async () => {
+    const { blendLayer } = await import('./graphics');
+    const from = { x0: 0, y0: 0, x1: 100, y1: 50 }, to = { x0: 1000, y0: 0, x1: 1100, y1: 50 };
+    const mid = blendLayer({ kind: 'code', src: '', lyric: from } as Layer, { kind: 'code', src: '', lyric: to } as Layer, 0.5) as { guard?: object };
+    expect(mid.guard).toEqual({ x0: 0, y0: 0, x1: 1100, y1: 50 });
+    // a sprite on the incoming line's place (900 wide of the in-between box at 600–1300 here is the guard's)
+    const [on] = frame([1400], 1, undefined, { lyric: { x0: 600, y0: 400, x1: 1300, y1: 600 }, guard: { x0: 600, y0: 400, x1: 1600, y1: 600 } });
+    expect(on).toBeUndefined();
+    const [edge] = frame([520], 1, undefined, { guard: { x0: 600, y0: 400, x1: 1600, y1: 600 } });
+    expect(edge.holed).toBe(false);
+    expect(edge.alpha).toBeCloseTo(clearAlpha(5 / 24));
+  });
+
+  it("measures a sprite sheet's drawn cell, not the whole sheet", () => {
+    // a 200 × 100 sheet: its left cell clear, its right cell opaque; the right cell is drawn on the words
+    const g = globalThis as { OffscreenCanvas?: unknown };
+    const lent = !g.OffscreenCanvas;
+    let sx = 0;
+    if (lent)
+      g.OffscreenCanvas = class {
+        getContext() {
+          return { drawImage: (_i: unknown, x: number) => (sx = x), getImageData: (_x: number, _y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4).fill(sx >= 100 ? 255 : 0) }) };
+        }
+      };
+    try {
+      const sheet = { width: 200, height: 100 };
+      const drawn = frame([], 1, "const s = f.img('bottle'); ctx.drawImage(s, 100, 0, 100, 100, 900, 450, 100, 100);", {}, sheet);
+      expect(drawn).toEqual([]);
+    } finally {
+      if (lent) delete g.OffscreenCanvas;
+    }
   });
 });

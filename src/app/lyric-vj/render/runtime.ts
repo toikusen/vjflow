@@ -146,6 +146,8 @@ export interface TemplateRenderer {
  * box (a 4 px wave swing moved 雙截棍's prop to the other side of the frame).
  */
 let restPose = false;
+/** Whether the line is being measured at rest (measureAtRest): a motion whose widest pose must be measured (tracking-out) shows it. */
+export const atRest = () => restPose;
 export function measureAtRest<T>(f: () => T): T {
   restPose = true;
   try {
@@ -398,6 +400,9 @@ export function glyphMotion(rt: CueRuntime, g: Glyph, n: number, t: number, stag
       case 'side-light':
       case 'reflection-rest':
       case 'breath-rule':
+      // (tracking-out and the sung fill are drawn over the template by text-fx.ts: the glyphs themselves hold still)
+      case 'track':
+      case 'fill':
         break;
       case 'drift': // the line slides slowly up and right while it is held
         dx += since * 6 * v('idle.drift', 0.6, 1);

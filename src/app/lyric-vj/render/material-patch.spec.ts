@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { binarize } from './ink-mask';
-import { HALO_UNIFORMS, haloCut, setPatch } from './material-patch';
+import { HALO_UNIFORMS, haloCut, setPatch, sungFill, unpremultiply } from './material-patch';
 
 const compile = (m: THREE.Material) => {
   const shader = { uniforms: {} as Record<string, unknown>, fragmentShader: 'uniform float opacity;\nvoid main() {\n#include <alphatest_fragment>\n}', vertexShader: '' };
@@ -35,5 +35,19 @@ describe('material patches', () => {
     setPatch(m, 'halo-cut', haloCut);
     expect(m.version).toBe(v);
     expect(compile(m).fragmentShader.split('texture2D(tHalo').length).toBe(2);
+  });
+
+  it('the sung fill colours the glyph itself up to its edge, before the picture is applied, and keeps unpremultiply working', () => {
+    const m = new THREE.MeshBasicMaterial();
+    const u = { uFillEdge: { value: 0.3 }, uFillDir: { value: new THREE.Vector2(1, 0) }, uFillInk: { value: new THREE.Color('#ff0000') }, uFillOrigin: { value: new THREE.Vector2() }, uFillSize: { value: new THREE.Vector2(30, 40) } };
+    setPatch(m, 'sung-fill', sungFill(u));
+    setPatch(m, 'unpremultiply', unpremultiply);
+    const shader = { uniforms: {} as Record<string, unknown>, fragmentShader: 'uniform float opacity;\nvoid main() {\n#include <map_fragment>\n#include <alphatest_fragment>\n}', vertexShader: '' };
+    m.onBeforeCompile(shader as unknown as THREE.WebGLProgramParametersWithUniforms, undefined as unknown as THREE.WebGLRenderer);
+    expect(shader.uniforms['uFillEdge']).toBe(u.uFillEdge);
+    expect(shader.fragmentShader).toContain('mix(diffuseColor.rgb, uFillInk');
+    // the fill mixes the ink in first, the (unpremultiplied) picture multiplies it after
+    expect(shader.fragmentShader.indexOf('uFillInk, 1.0')).toBeLessThan(shader.fragmentShader.indexOf('sampledDiffuseColor'));
+    expect(m.customProgramCacheKey()).toBe('sung-fill+unpremultiply');
   });
 });

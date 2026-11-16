@@ -1,6 +1,7 @@
 // How each carrier arrives. All of it is pure numbers of time, and every move has reached its rest pose exactly at the
 // end of its entrance, so reading sees paper that is not moving. No three.js here: the composer's tests read these too.
 import { easeOutCurve, PaperMotion, PaperPose, leaving } from './carrier-shape';
+import { arrivalSpeed, speedShare } from './settle';
 
 /** Seconds of each carrier entrance, before a short line's pace. */
 export const CARRIER_SEC = { 'tether-drop': 0.62, 'paper-feed': 0.6, 'fold-open': 0.52, 'card-land': 0.46, 'card-develop': 0.68, 'index-lift': 0.66, 'band-stick': 0.44, 'panel-flip': 0.54, 'box-turn': 0.5, 'frame-advance': 0.46, 'frame-dive': 0.62, 'balance-seat': 0.72, 'display-feed': 0.66, 'frame-run': 0.62 } as const;
@@ -13,12 +14,21 @@ const inOut = (x: number) => { const q = clamp01(x); return q < 0.5 ? 2 * q * q 
 /** The share of the entrance the hanging card spends falling; the rest it swings on its strap. */
 const FALL = 0.42;
 
-/** The hanging card at t: it falls with its strap, then swings about the hanging point, damped to exactly nothing by landSec. */
+/** The hanging card's swing, rad, when it falls at its unpaced speed (1300 px in FALL of the tether-drop's time). */
+const HANG_SWING = 0.12;
+const HANG_SPEED = 1300 / (FALL * CARRIER_SEC['tether-drop']);
+
+/**
+ * The hanging card at t: it falls with its strap, then swings about the hanging point, damped to exactly nothing by
+ * landSec. The swing is as big as the fall was fast (settle.ts): a short line's quicker drop swings harder, a longer
+ * fall too, within 0.6–1.3 times its tuned size.
+ */
 export function hangPose(t: number, m: PaperMotion, dir: number, reach = 1300): PaperPose {
   const k = (t - m.show) / m.landSec;
   const fall = clamp01(k / FALL);
   const u = clamp01((k - FALL) / (1 - FALL));
-  const swing = k >= 1 ? 0 : dir * 0.12 * Math.exp(-2.6 * u) * Math.cos(u * Math.PI * 3.5) * (1 - u);
+  const amp = HANG_SWING * speedShare(arrivalSpeed(reach, FALL * m.landSec), HANG_SPEED);
+  const swing = k >= 1 ? 0 : dir * amp * Math.exp(-2.6 * u) * Math.cos(u * Math.PI * 3.5) * (1 - u);
   return leaving({ x: 0, y: k >= FALL ? 0 : reach * (1 - fall) ** 2, rot: swing, alpha: t >= m.show ? 1 : 0, open: 1, scale: 1 }, t, m, dir);
 }
 

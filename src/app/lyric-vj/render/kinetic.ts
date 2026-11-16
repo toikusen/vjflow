@@ -743,7 +743,8 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       const corner = (l.under || speck) && l.fx !== 'grid' ? cornerPlace(w, h, l.under ? fit.s : 1, !!l.flip, l.over ?? []) : undefined;
       const rs = corner ? corner.s : rowsAt ? rowsAt.s : fit.s;
       const y = corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
-      ctx.translate(corner ? corner.x : cx, y);
+      // a figure on its ground ellipse stands a little above the frame's foot, so its feet and the ellipse stay inside
+      ctx.translate(corner ? corner.x : cx, y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(rock * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);

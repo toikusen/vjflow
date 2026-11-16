@@ -78,20 +78,26 @@ ${lines}
 招牌爆點：${lang.native}
 道具畫法（給生圖模型的英文）：${lang.props?.style ?? ''}
 適合：${lang.suits}
-風格世界的程式底（ground id，每個 cut-out 鏡頭選一個；quiet 給沒唱的段）：${grounds.join(', ')}；安靜底：${world.grounds.quiet.join(', ')}
+風格世界的程式底（ground id，每一句（line）選一個，跟著段落與故事走，不是跟著鏡頭；quiet 給沒唱的段）：${grounds.join(', ')}；安靜底：${world.grounds.quiet.join(', ')}
+${lang.scenes === false ? '這個風格不印滿版場景（整張場景會把風格洗掉）：scene 鏡頭會以風格的照片窗（inset 或 circle、tint 成墨色、multiply）印在紙上，不會滿版；所以 scene 鏡頭要選在小窗裡也讀得出來的地方（一條地平線、一道階梯），不要靠細節。' : ''}
 風格世界自己的字動作：進場 ${world.motion.enters.join('/')}，退場 ${world.motion.exits.join('/')}，停留 ${world.motion.holds.join('/')}；轉場 ${world.transitions.own.join('/')}；爆點 ${world.peak.loud}（慢：${world.peak.calm}）
 配色方案（scheme id: 說明）：${world.palette.map((p) => `${p.id}: ${p.what}`).join('；')}
 
 ## 主角（subject）
 從歌詞決定主角是什麼：person 人、object 物件、animal 動物、phenomenon 自然現象（風、夕陽、雨）。不一定要是人：上一版畫高中生騎單車，人物一致性和手腳是最大的弱點；LYKY 那首用物件當主角成功過。非人類主角影片模型也比較穩。但要是歌詞真的在講人、以人才說得通，就選人，並用構圖把手腳藏掉。alternatives 寫你考慮過但沒選的主角和原因。
+features：列出分鏡會用到的主角部位或配件（例如「空的後貨架」「車鈴」「把手上的緞帶」），英文，3–6 項。每一個候選設計都必須包含全部 features（候選只換造型與配色，不換零件），否則使用者挑了某個候選，分鏡就做不出來。不要選天生帶文字的部位（車牌、停車證、標籤）：生圖會印出字。
+主角的墨色在整段裡固定（同一套去背圖用到底）：招牌爆點「留到最後才印的那一色」只能是底和字的強調色，不能是主角身上的墨；而且留色最多一個段落，任何時候紙上都要有兩個墨在疊（單墨超過一段就不像孔版了）。
 
 ## 構圖規則（來自參考片 ゆのん「カルキュレイト」的分析，和上一版的檢討）
 1. 絕大多數鏡頭是「主角去背（cutout）疊在程式畫的風格底上」：主角單獨生成在素色底、去背、以風格的墨色印在程式底上；很多鏡頭主角要小（高度 0.25–0.45）站在大片程式空間裡，字才有位置。只有少數（2–3 個）鏡頭是整張場景（scene）：開場、爆點，而且要有「真的需要一個地方」的理由。
 2. VIDEO 鏡頭是 8 秒的生成片段，只用最乾淨的 0.3–1.5 秒（最長 3 秒）；長的停留用定格加剪輯鏡頭。動作要「收得住」：遠景／側面／俯視／剪影才准大動作（走、轉、騎、落），中景只准小幅（抬頭、轉身、呼吸、風吹），特寫只准眨眼、閉眼、微微側頭。禁止：走向鏡頭、手伸向鏡頭、握持物特寫、對嘴、生成片裡的鏡頭運動（運鏡都由我們的渲染器加）。
 3. 手腳要藏：胸上景、背影、剪影、手插口袋、手在畫面外；物件主角沒有這個問題。
 4. 鏡頭數：這段 ${(to - from).toFixed(0)} 秒約 10–16 個不同鏡頭，每個會重複用 2–5 次；主歌停留長、副歌短，實際切點由程式依這首的拍點與能量決定（你只給 lines：每句依序用哪些鏡頭，和可選的 beats 建議）。副歌不要只在 2–3 張圖之間來回閃。
-5. 字永遠放在主角沒有的那一側（side 是主角那側；center 只給主角極小或極大、字壓不到的鏡頭）。上一版最大的抱怨是字壓在臉上。
+5. 字永遠放在主角沒有的那一側（side 是主角那側；center 只給主角極小（height ≤ 0.3）或字壓不到的鏡頭）。同一句裡的所有鏡頭，主角必須在同一側（字在整句被讀的時候不能跳邊）；換句才可以換側。特寫 height ≤ 0.6，遠景 0.2–0.4。上一版最大的抱怨是字壓在臉上。
 6. 轉場：用風格自己的轉場與「先印第一版再疊第二版」的方式切鏡頭，不要每切都硬切、也不要每切都用同一招。
+7. 故事順序要成立：主角一旦離開畫面（騎走、消失），後面的句子不能又切回它停在原地的鏡頭，除非那句的意思就是回來；結尾狀態要和最後一句一致。
+8. 上一版成片檢討裡的具體失敗，不要再犯：俯視角的單車糾成一團（不畫俯視的複雜物件）；「剪影」畫成一塊黑形狀、零件缺失（剪影要用主角本體去背後由程式印成單墨，不另外畫剪影）；同一張圖連播兩次位置重置；副歌全是等長 2 拍切像節拍器；1 拍快切只在 3 張圖間來回閃。
+9. beats 只在這句需要和程式規則不同時才填（程式依段落能量定：主歌約 4 拍、副歌約 2 拍、長音可長）：一個數字（整句），或一個陣列（依序每個鏡頭一個）；不要每句都填同一個數字。
 
 ## 我們的動態字與程式圖形（只在歌詞意義合的地方用）
 排版 template：
@@ -104,8 +110,9 @@ ${help(EXIT_HELP)}
 ${help(IDLE_HELP)}
 強調 emphasis：
 ${help(EMPH_HELP)}
-程式畫的動態圖形 fx（鏡頭底下或主角周圍的程式圖形；大多數鏡頭 fx 留空，只有這句的意思真的需要時才用，一段最多 2–3 次）：
+程式畫的動態圖形 fx（一句底下或主角周圍的程式圖形，填在 lines 上；大多數句子 fx 留空，只有這句的意思真的需要時才用，整段最多 2–3 句）：
 ${help(FX_HELP)}
+強調 emphasis 一定要指定 word（這句歌詞裡實際唱到的那個詞）；idle 用 fill 時字已經照唱的時間填色，不要再加 color 強調（兩者會互相抵銷），要強調就換別的 emphasis。排版要避開主角：scatter 不配滿版 scene 或特寫；ribbon 會橫越整個畫面，只配主角極小的鏡頭；handwrite 不配特寫。
 
 ## 候選主角設計（candidates）
 給 4–6 個候選，使用者會挑一個。每個都是同一個主角概念的不同設計（造型、服裝或形狀、在這風格的 2–3 色墨裡的配色重點、年齡感或材質感）；歌詞允許時也可以有不同主角選擇（例如一個候選是人、一個是物件）。idea 用繁體中文一句話（≤30 字）說設計想法；look 是給生圖模型的英文描述（具體：形狀、服裝、配件、哪些部位用哪個墨色、表情或姿態的氣質），不要寫風格說明（程式會加）；scheme 填上面的配色方案 id。
@@ -115,13 +122,13 @@ sameness 寫：這個腳本裡哪些東西是你覺得「換一首歌也會這�
 
 只回傳一個 JSON 物件，不要任何說明文字。格式：
 {
- "subject": {"kind": "person|object|animal|phenomenon", "what": "英文，主角是什麼", "why": "繁中，為什麼", "alternatives": "繁中"},
+ "subject": {"kind": "person|object|animal|phenomenon", "what": "英文，主角是什麼", "why": "繁中，為什麼", "alternatives": "繁中", "features": ["English part or accessory every candidate must show"]},
  "story": "繁中，這段的故事 2–4 句（主角在這段裡發生什麼事）",
  "world": "繁中，程式底怎麼跟著故事走（哪一段用哪個 ground、墨色什麼時候換）",
  "peak": "繁中，爆點在哪一句、畫面怎麼做（用風格的招牌爆點）",
- "shots": [{"id": "S01", "kind": "still|video", "frame": "cutout|scene", "cues": ["c001"], "size": "wide|medium|close", "subject": "英文，姿勢或動作（video 寫會動的是什麼、鏡頭鎖定）", "place": "scene 鏡頭才填：英文，地方；加一句為什麼需要真的地方", "ground": "cutout 鏡頭填 ground id", "fx": "fx id 或空字串", "fxWhy": "繁中，為什麼這句要這個 fx（空字串＝不用）", "side": "left|right|center", "height": 0.35, "camera": "static|push|pan|parallax", "step": false, "why": "繁中，這個鏡頭對應歌詞的什麼"}],
- "lines": [{"cue": "c001", "shots": ["S01", "S02"], "beats": 4}],
- "text": [{"cue": "c001", "template": "template id", "enter": "enter id", "exit": "exit id", "idle": "idle id", "emphasis": "emphasis id 或空字串（只在有詞要強調時）", "why": "繁中，為什麼這句用這組"}],
+ "shots": [{"id": "S01", "kind": "still|video", "frame": "cutout|scene", "size": "wide|medium|close", "subject": "英文，姿勢或動作（video 寫會動的是什麼、鏡頭鎖定）", "place": "scene 鏡頭才填：英文，地方；加一句為什麼需要真的地方", "side": "left|right|center", "height": 0.35, "camera": "static|push|pan|parallax", "step": false, "why": "繁中，這個鏡頭對應歌詞的什麼"}],
+ "lines": [{"cue": "c001", "shots": ["S01", "S02"], "beats": 4, "ground": "ground id", "fx": "fx id 或空字串", "fxWhy": "繁中，為什麼這句要這個 fx（空字串＝不用）"}],
+ "text": [{"cue": "c001", "template": "template id", "enter": "enter id", "exit": "exit id", "idle": "idle id", "emphasis": "emphasis id 或空字串（只在有詞要強調時）", "word": "被強調的那個詞（歌詞裡的原文），沒有就空字串", "why": "繁中，為什麼這句用這組"}],
  "candidates": [{"letter": "A", "idea": "繁中一句", "look": "English", "scheme": "scheme id"}],
  "sameness": "繁中"
 }`;
@@ -149,7 +156,7 @@ if (a.stage === 'script' || a.stage === 'all') {
     }
     if (!made) throw new Error('script: no usable answer after three tries');
     const kept = cleanScript(made, {
-      cues: cues.map((c) => c.id),
+      cues: cues.map((c) => ({ id: c.id, text: c.text })),
       grounds: [...Object.values(world.grounds.levels).flat(), ...world.grounds.quiet],
       fx: Object.keys(FX_HELP),
       templates: Object.keys(TEMPLATES),
@@ -164,12 +171,12 @@ if (a.stage === 'script' || a.stage === 'all') {
   const s = JSON.parse(readFileSync(scriptFile, 'utf8')) as SubjectScript;
   const md = [
     `# ${song.title} ${from}–${to} s — ${lang.name} subject script`, '',
-    `**Subject** (${s.subject.kind}): ${s.subject.what}`, `- why: ${s.subject.why}`, `- alternatives: ${s.subject.alternatives}`, '',
+    `**Subject** (${s.subject.kind}): ${s.subject.what}`, `- features: ${s.subject.features.join('; ')}`, `- why: ${s.subject.why}`, `- alternatives: ${s.subject.alternatives}`, '',
     `**Story**: ${s.story}`, '', `**World**: ${s.world}`, '', `**Peak**: ${s.peak}`, '',
-    '| id | kind | frame | size | side | h | ground | fx | subject | why |', '|---|---|---|---|---|---|---|---|---|---|',
-    ...s.shots.map((x) => `| ${x.id} | ${x.kind.toUpperCase()} | ${x.frame} | ${x.size} | ${x.side} | ${x.height} | ${x.ground ?? ''} | ${x.fx}${x.fxWhy ? ` (${x.fxWhy})` : ''} | ${x.subject}${x.place ? ` — ${x.place}` : ''} | ${x.why} |`), '',
-    '| cue | shots | beats | template | enter | exit | idle | emphasis | why |', '|---|---|---|---|---|---|---|---|---|',
-    ...s.lines.map((l) => { const t = s.text.find((x) => x.cue === l.cue); const c = cues.find((x) => x.id === l.cue); return `| ${l.cue} ${c?.text ?? ''} | ${l.shots.join(' ')} | ${l.beats ?? ''} | ${t?.template ?? ''} | ${t?.enter ?? ''} | ${t?.exit ?? ''} | ${t?.idle ?? ''} | ${t?.emphasis ?? ''} | ${t?.why ?? ''} |`; }), '',
+    '| id | kind | frame | size | side | h | camera | subject | why |', '|---|---|---|---|---|---|---|---|---|',
+    ...s.shots.map((x) => `| ${x.id} | ${x.kind.toUpperCase()} | ${x.frame} | ${x.size} | ${x.side} | ${x.height} | ${x.kind === 'video' ? (x.step ? 'step' : 'clip') : x.camera} | ${x.subject}${x.place ? ` — ${x.place}` : ''} | ${x.why} |`), '',
+    '| cue | shots | beats | ground | fx | template | enter | exit | idle | emphasis | why |', '|---|---|---|---|---|---|---|---|---|---|---|',
+    ...s.lines.map((l) => { const t = s.text.find((x) => x.cue === l.cue); const c = cues.find((x) => x.id === l.cue); return `| ${l.cue} ${c?.text ?? ''} | ${l.shots.join(' ')} | ${l.beats ?? ''} | ${l.ground} | ${l.fx}${l.fxWhy ? ` (${l.fxWhy})` : ''} | ${t?.template ?? ''} | ${t?.enter ?? ''} | ${t?.exit ?? ''} | ${t?.idle ?? ''} | ${t?.emphasis ? `${t.emphasis} ${t.word}` : ''} | ${t?.why ?? ''} |`; }), '',
     '## Candidates', ...s.candidates.map((c) => `- **${c.letter}** (${c.scheme}): ${c.idea} — ${c.look}`), '',
     `**Sameness risk**: ${s.sameness}`,
   ].join('\n');
@@ -182,7 +189,9 @@ async function drawSheet(c: Candidate) {
   const file = join(out, 'sheets', `${c.letter}.jpg`);
   if (existsSync(file)) return;
   const scheme = world.palette.find((p) => p.id === c.scheme) ?? world.palette[0];
-  const text = `Subject reference sheet for a ${lang.name} music video, printed as a ${a.language} print. ${lang.props?.style ?? ''} Inks: ${scheme.what} — use only ink ${scheme.ink}, ink ${scheme.accent} and their overprint, on bare paper ${scheme.paper}; no other colours, no black outlines, no gradients.\nSubject: ${c.look}\nDraw this same subject four times side by side on the bare paper, clearly separated and not overlapping, all the same size: front view, three-quarter view, side profile facing left, back view. Then, at the right, one larger close-up of its most characteristic detail (the face or head if it has one, otherwise its key part). The same design, proportions and ink placement in every view. Plain bare paper around every figure: no ground, no shadow on the ground, no scene, no frame, no panel borders, no text, no letters, no labels, no logo.`;
+  const s = JSON.parse(readFileSync(scriptFile, 'utf8')) as SubjectScript;
+  const must = s.subject.features.length ? ` It must show every one of these parts clearly in the views where they are visible: ${s.subject.features.join('; ')}.` : '';
+  const text = `Subject reference sheet for a ${lang.name} music video, printed as a ${a.language} print. ${lang.props?.style ?? ''} Inks: ${scheme.what} — use only ink ${scheme.ink}, ink ${scheme.accent} and their overprint, on bare paper ${scheme.ground}; no other colours, no black outlines, no gradients.\nSubject: ${c.look}${must}\nDraw this same subject four times side by side on the bare paper, clearly separated and not overlapping, all the same size: front view, three-quarter view, side profile facing left, back view. Then, at the right, one larger close-up of its most characteristic detail (the face or head if it has one, otherwise its key part). The same design, proportions and ink placement in every view. Plain bare paper around every figure: no ground, no shadow on the ground, no scene, no frame, no panel borders, no text, no letters, no labels, no logo.`;
   writeFileSync(file.replace(/\.jpg$/, '.txt'), text);
   for (const f of [join(homedir(), '.config/vjflow/gemini.env')]) if (existsSync(f)) for (const line of readFileSync(f, 'utf8').split('\n')) { const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; }
   const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });

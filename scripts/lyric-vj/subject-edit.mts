@@ -117,7 +117,8 @@ const made: Sec[] = cuts.map((c, i) => {
     const panels = held(c.cue) && firstOfLine && s.size !== 'wide';
     layers.push({ ...layer, sprite: ga.sprite, shadow: s.size !== 'close' && !panels, ...(panels ? { fx: 'grid' } : {}) } as never);
     // the director's move for the line, over the ground, with the line's own words
-    if (l.fx && !panels) layers.push({ kind: 'kinetic', fx: l.fx, bare: true, words: [cueOf(c.cue).text], ink: ground['ink'], paper: ground['paper'], accent: ground['accent'], seed: i + 11, side: s.side, size: s.height, flip: false, bpm: ground['bpm'], song: ground['song'], mood: ground['mood'], at: c.start, len: +(c.end - c.start).toFixed(3) } as never);
+    // (the move's own words would double the sung line, which the lyric layout draws: it gets none)
+    if (l.fx && !panels) layers.push({ kind: 'kinetic', fx: l.fx, bare: true, words: [], ink: ground['ink'], paper: ground['paper'], accent: ground['accent'], seed: i + 11, side: s.side, size: s.height, flip: false, bpm: ground['bpm'], song: ground['song'], mood: ground['mood'], at: c.start, len: +(c.end - c.start).toFixed(3) } as never);
   }
   return { start: +c.start.toFixed(3), layers } as Sec;
 });
@@ -125,6 +126,8 @@ g.sections = [...base.graphics!.sections.filter((s) => s.start < from - 1e-6), .
 
 // ---- the lines: the world's layouts on the side the subject leaves free, the director's motions and emphasis ----
 const inWindow = new Set(song.cues.filter((c) => c.start < to && c.end > from).map((c) => c.id));
+/** The share of its set's measure a line keeps beside a subject (world-layout compact): short lines give up more, a long line keeps most of its size to stay readable. */
+const compactFor = (text: string) => { const n = [...text.replace(/\s/g, '')].length; return +Math.min(0.85, Math.max(0.68, 0.68 + (n - 10) * 0.012)).toFixed(3); };
 const setFor = (side: SubjectShot['side']) => (side === 'left' ? 'riso/drop-right' : side === 'right' ? 'riso/offset-stair' : 'riso/tilted');
 const worldSets = new Set(world.layouts.lines.map((x) => x.set));
 t.cues = t.cues.map((cue) => {
@@ -136,7 +139,13 @@ t.cues = t.cues.map((cue) => {
   const next = { ...cue } as typeof cue & { world?: Record<string, unknown> };
   if (w) {
     const set = setFor(firstShot.side);
-    next.world = { ...w, ...(worldSets.has(set) ? { set } : {}) };
+    // the line keeps a share of its set's measure and stays put, so the subject beside it has the rest of the frame;
+    // the world's own blown-up word goes when the director named the line's emphasis himself
+    next.world = { ...w, ...(worldSets.has(set) ? { set } : {}), compact: compactFor(cueOf(cue.cueId).text), drift: [0, 0], swell: 0 };
+    // the world's own blown-up word and scale composition (one word flush on the frame edge) take the frame the
+    // subject needs; the director's emphasis is the line's emphasis here
+    delete next.world['blow'];
+    delete next.world['scale'];
     if (tx) {
       if (world.motion.enters.includes(tx.enter)) next.world['enter'] = tx.enter;
       if (world.motion.exits.includes(tx.exit)) next.world['exit'] = tx.exit;

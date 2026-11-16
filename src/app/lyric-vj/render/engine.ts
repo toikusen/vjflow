@@ -1570,6 +1570,10 @@ export class LyricVjEngine {
     if (treatment.graphics) {
       const secs = treatment.graphics.sections;
       const rects = this.lyricRects.map((r) => ({ from: r.from, to: r.to, x0: r.rest.x0, x1: r.rest.x1 }));
+      // a line that only brushes a cut (its last frames of fading out as the cut lands) does not decide the room: a
+      // figure stood faded in a corner for a whole cut because the line before was still going out
+      const brush = (from: number, to: number) => Math.min(0.35, 0.25 * (to - from));
+      const onCut = <T extends { from: number; to: number }>(xs: T[], from: number, to: number) => xs.filter((r) => Math.min(to, r.to) - Math.max(from, r.from) > brush(from, to));
       secs.forEach((sec, i) => {
         // (a line built on its own touches only the cuts it runs over)
         if ((secs[i + 1]?.start ?? Infinity) < span[0] || sec.start > span[1]) return;
@@ -1596,23 +1600,26 @@ export class LyricVjEngine {
             if (rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) l.room = (way && freeBand(rects, sec.start, until, way)) || [0, 0];
             continue;
           }
-          const side = oppositeSide(rects, sec.start, until);
+          const seen = onCut(rects, sec.start, until);
+          const side = oppositeSide(seen, sec.start, until);
           if (side) Object.assign(l, { side, flip: side === 'left' });
           // the lines' boxes over the cut: a prop sent to a corner takes the one they leave clear
           if (l.sprite) l.over = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
-          const room = side && l.sprite ? freeBand(rects, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
+          const room = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
           if (room) l.room = room;
           // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
           // stands behind them faded (sweet timer's carriage, wand and moon sat on its lines; dropping it instead left
           // プラトニックチョロイン a minute without pictures)
           // (centred lines with a band free above or below them first: the line director centres most lines, and every
           // prop of 世界のつづき's picture tier went behind its words, 2026-11-02)
-          else if (l.sprite && rects.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
-            const rows = freeRows(this.lyricRects.map((r) => ({ from: r.from, to: r.to, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until);
+          else if (l.sprite && seen.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
+            const rows = freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until);
             if (rows) l.rows = rows;
             else l.under = true;
           }
+          // (the floor plan of every sprite cut under --track: which lines it saw and where it was sent)
+          if (l.sprite && this.job.track) console.error(`code layer: track rooms ${l.sprite} @${sec.start.toFixed(2)} side ${side ?? '-'} room ${l.room ? l.room.map(Math.round).join('-') : '-'} rows ${l.rows ? l.rows.map(Math.round).join('-') : '-'} under ${!!l.under} lines ${this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => `${r.id ?? '?'}[${Math.round(r.rest.x0)},${Math.round(r.rest.y0)}-${Math.round(r.rest.x1)},${Math.round(r.rest.y1)}]`).join(' ')}`);
         }
       });
     }

@@ -62,6 +62,8 @@ export interface WorldLine {
   /** How far the block travels while it is up, px, and how much it grows, a share. */
   drift?: [number, number];
   swell?: number;
+  /** The line set at this share of its set's measure (type size, width, height), leaving the rest of the frame to a picture beside it (the subject tier). */
+  compact?: number;
   /** The key word blown up and the rest of the line set small round it (gap 3): its characters, and how it is stressed. */
   blow?: { from: number; to: number; stress: StressKind };
   /**
@@ -371,7 +373,9 @@ function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: bool
   const family = rt.fonts.display;
   // (lines sharing a shot split the set: rows stack in its height, but columns stand side by side in its width, read
   // right to left; halving a column's height set a shared vertical sign at a third of its size)
-  const specOf = (id: string): SetSpec => slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot);
+  // (a compact line keeps a share of its set's measure: a subject standing beside it needs the rest of the frame)
+  const k = wl0.compact && wl0.compact > 0 && wl0.compact < 1 ? wl0.compact : 1;
+  const specOf = (id: string): SetSpec => { const sp = slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot); return k < 1 ? { ...sp, hi: sp.hi * k, share: sp.share * k, tall: sp.tall * k, ...(sp.lo ? { lo: Math.min(sp.lo, sp.hi * k) } : {}) } : sp; };
   // (each pose's set id, kept: a seat split, a blow or a scale lays a copy of its spec, and the ink decision reads its
   // world's tone entries and material by the id, never by the spec object; Codex review 2026-11-16 P1)
   const setIds = [wl0.set, ...(wl0.repose ?? []).map((r) => r.set)];

@@ -224,7 +224,7 @@ export const LOOPS: Record<string, Move> = {
   cardstack: {
     help: '卡片疊放：幾張卡片從畫面外一張張飛來疊上，最上面那張寫著詞，下面的微微錯開（收集、回憶一張張、清單）',
     draw: (e) => {
-      const { ctx, W, H } = e, n = Math.max(3, Math.min(5, e.count ?? kn(e, 'cardstack.n'))), w = W * 0.3, h = H * 0.42;
+      const { ctx, W, H } = e, n = Math.max(3, Math.min(kn(e, 'cardstack.n'), e.count ?? Infinity)), w = W * 0.3, h = H * 0.42;
       for (let i = 0; i < n; i++) {
         const k = back((e.age - i * 0.16) / 0.45);
         if (k <= 0) continue;
@@ -299,7 +299,7 @@ export const LOOPS: Record<string, Move> = {
   route: {
     help: '地圖路線：幾個地標針依序落下，路線從起點畫到終點，小點沿路線前進，每站標上詞（旅程、出發、從這裡到那裡）',
     draw: (e) => {
-      const { ctx, W, H } = e, n = Math.max(2, Math.min(4, e.count ?? kn(e, 'route.n')));
+      const { ctx, W, H } = e, n = Math.max(2, Math.min(kn(e, 'route.n'), e.count ?? Infinity));
       const pts = Array.from({ length: n }, (_, i) => [W * (0.18 + (0.64 * i) / (n - 1)), H * (0.62 - 0.22 * Math.sin(i * 1.7 + e.seed))] as const);
       // the dashed road, drawn up to where the traveller is
       const k = clamp((e.age - n * 0.18) / 1.6), total = n - 1, upTo = k * total;

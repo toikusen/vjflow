@@ -28,6 +28,9 @@ import { EMPH_HELP, ENTER_HELP, EXIT_HELP, FX_HELP, IDLE_HELP, TEMPLATES } from 
 const { values: a } = parseArgs({
   options: {
     song: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, language: { type: 'string', default: 'risograph' }, out: { type: 'string' }, fixed: { type: 'string' },
+    // the buyer's direction for this run (who the protagonist is, what to keep), and an earlier script whose shots
+    // (stills, clips) exist and may be reused by id
+    note: { type: 'string' }, reuse: { type: 'string' },
     stage: { type: 'string', default: 'all' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3-pro-image' },
   },
 });
@@ -45,6 +48,7 @@ if (!lang) throw new Error(`unknown language ${a.language}`);
 const world = STYLE_WORLDS.find((w) => w.language === a.language);
 if (!world) throw new Error(`no style world for ${a.language}`);
 const fixed: FixedMember[] = a.fixed ? JSON.parse(readFileSync(a.fixed, 'utf8')) : [];
+const reuse: SubjectScript | undefined = a.reuse ? JSON.parse(readFileSync(a.reuse, 'utf8')) : undefined;
 
 type Cue = { id: string; start: number; end: number; text: string };
 type Song = { title: string; tempo: number; beats: number[]; downbeats: number[]; cues: Cue[]; sections: { start: number; end: number; energy: number; type: string }[] };
@@ -68,9 +72,12 @@ function prompt(): string {
   const decided = fixed.length
     ? `已經定案的演員（使用者挑過 sheet，不可改、不出候選，cast 裡原樣列出，id 照用）：\n${fixed.map((f) => `- ${f.id}（${f.kind}）：${f.what}；role：${f.role}；features：${f.features.join('; ')}；配色 ${f.scheme}；look：${f.look}`).join('\n')}\n你要決定的是：還要加哪些演員和道具（依歌詞和故事，沒有上限）。不加也可以——那就 candidates 給空陣列，alternatives 用三行說清楚為什麼這首不需要第二個主角。加的每個 main 演員都要有 role、features、why，並出 3–4 個候選設計；prop 直接給 look。`
     : `從歌詞和故事決定演員與道具（沒有上限）；每個都要有 role、features、why。不一定要是人：上一版畫高中生騎單車，人物一致性和手腳是最大的弱點；LYKY 那首用物件當主角成功過。非人類主角影片模型也比較穩。但要是歌詞真的在講人、以人才說得通，就選人，並用構圖把手腳藏掉。每個演員出 4–6 個候選設計。`;
+  const owner = a.note ? `\n## 使用者的指示（最高優先，照做）\n${a.note}\n` : '';
+  const existing = reuse ? `\n## 已有的素材（上一版畫好的鏡頭；合用的就沿用同一個 id 和同一段描述，不要改寫，程式會直接拿既有的圖和影片；不合用的就不要列，新的鏡頭用新的 id 從 S${String(reuse.shots.length + 1).padStart(2, '0')} 起）\n${reuse.shots.map((x) => `${x.id} ${x.kind.toUpperCase()} ${x.frame} cast ${x.cast.join('+')} ${x.size} side ${x.side} h ${x.height}: ${x.subject}`).join('\n')}\n` : '';
   return `你是這支歌詞 MV 的導演。這首歌〈${song.title}〉的 ${from}–${to} 秒要做成「主角影像 + 我們自己的動態字體與程式繪製世界」的版本，風格固定為「${lang.name}」（${a.language}）。
 使用者看完上一版（每格都是 AI 整張場景、字只是排在旁邊、沒有轉場、沒有字體動態、沒有程式畫的圖）的評價是「還可以」。這一版要把我們整套系統用滿：風格自己的動態字體（進場、退場、停留、強調）、轉場、程式畫的底與圖形，全部依歌詞意義挑，不要展示、不要關鍵字觸發。
 
+${owner}${existing}
 ## 這首歌（視窗內的句子，時間、拍數、段落、段落能量 0–1）
 速度 ${felt.tempo.toFixed(1)} bpm（一拍 ${beat.toFixed(3)} 秒）
 ${lines}
@@ -129,7 +136,7 @@ ${help(FX_HELP)}
 ## 避免每首歌長得一樣
 sameness 寫：這個腳本裡哪些東西是你覺得「換一首歌也會這樣做」的固定做法，提醒我們之後變成規則時要小心。
 
-只回傳一個 JSON 物件，不要任何說明文字。格式：
+只回傳一個 JSON 物件，不要任何說明文字。每個 why／fxWhy／role 只寫一句（≤40 字），不要長篇；整個 JSON 控制在能一次回完的長度。格式：
 {
  "cast": [{"id": "bike", "kind": "person|object|animal|phenomenon", "tier": "main|prop", "what": "英文，這個演員是什麼", "look": "prop 的英文畫法；main 留空", "role": "繁中，在歌裡代表什麼", "features": ["English part or accessory every candidate must show"], "why": "繁中，為什麼"}],
  "alternatives": "繁中（沒加新演員時：三行為什麼）",
@@ -154,7 +161,7 @@ if (a.stage === 'script' || a.stage === 'all') {
     writeFileSync(join(out, 'script_prompt.md'), text);
     let made: SubjectScript | undefined;
     for (let k = 0; k < 3 && !made; k++) {
-      const msg = await streamed({ model: a.model!, max_tokens: 32000, messages: [{ role: 'user', content: text }], output_config: { effort: 'high' } } as Anthropic.Beta.Messages.MessageStreamParams);
+      const msg = await streamed({ model: a.model!, max_tokens: 64000, messages: [{ role: 'user', content: text }], output_config: { effort: 'high' } } as Anthropic.Beta.Messages.MessageStreamParams);
       const [pin, pout] = PRICES[a.model!] ?? [5, 25];
       charge(`script try ${k + 1}`, (msg.usage.input_tokens * pin + msg.usage.output_tokens * pout) / 1e6, a.model!);
       const body = msg.content.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('');

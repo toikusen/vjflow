@@ -73,6 +73,8 @@ export interface KineticLayer {
   flash?: 'black' | 'white' | 'invert';
   /** How the character is printed: two-ink duotone (default), line art drawn on, or a halftone dot screen. */
   print?: 'duo' | 'line' | 'halftone';
+  /** A printed ground ellipse under the character's feet, so a cut-out stands on a graphic ground instead of floating. */
+  shadow?: boolean;
   /** The song's tempo (the ecg move beats with it). */
   bpm?: number;
   /** No lyric is sung over this cut: its words are only texture (faint, outlined). */
@@ -295,6 +297,8 @@ function drawThread(ctx: CanvasRenderingContext2D, t: NonNullable<KineticLayer['
   ctx.restore();
 }
 
+/** The print cache key of a sprite picture: a clip frame (engine.ts tags each with its index) is its own entry. */
+export const spriteKey = (id: string, pic: CanvasImageSource) => { const k = (pic as { frameKey?: number }).frameKey; return k === undefined ? id : `${id}#${k}`; };
 /** The sprite in two inks: dark parts in ink, light parts in paper, alpha kept (a full-colour drawing would break the print). */
 const tinted = new Map<string, CanvasImageSource>();
 function duotone(pic: CanvasImageSource & { width: number; height: number }, key: string, ink: Rgb, paper: Rgb): CanvasImageSource {
@@ -427,8 +431,10 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // the character printed in the cut's inks, sized and placed before the move (some moves print it themselves)
   const pic = l.sprite ? (image(`spr:${l.sprite}`) as (CanvasImageSource & { width: number; height: number }) | undefined) : undefined;
   const size = l.size ?? 0.85;
-  const look = pic && pic.width ? (l.print === 'line' ? lineArt(pic, l.sprite!, ink)?.[lineStage(age)] : l.print === 'halftone' ? halftone(pic, l.sprite!, ink, paper) : undefined) : undefined;
-  const printed = pic && pic.width ? { img: look ?? duotone(pic, l.sprite!, ink, paper), night: () => duotone(pic, l.sprite!, paper, ink), w: (pic.width / pic.height) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2 } : undefined;
+  // a sprite clip's frames each carry a frame key (engine.ts picture): each is printed and cached on its own
+  const sk = pic ? spriteKey(l.sprite!, pic) : '';
+  const look = pic && pic.width ? (l.print === 'line' ? lineArt(pic, sk, ink)?.[lineStage(age)] : l.print === 'halftone' ? halftone(pic, sk, ink, paper) : undefined) : undefined;
+  const printed = pic && pic.width ? { img: look ?? duotone(pic, sk, ink, paper), night: () => duotone(pic, sk, paper, ink), w: (pic.width / pic.height) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2 } : undefined;
   let own = false;
   switch (l.fx) {
     case 'wall': {
@@ -677,6 +683,16 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);
       if (corner && !corner.clear) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;
+      // the ground under the feet: a flat ink ellipse (a cut-out over a graphic ground floated without one)
+      if (l.shadow) {
+        ctx.save();
+        ctx.globalAlpha *= 0.22;
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.ellipse(0, (h / 2) * s - h * s * 0.01, w * s * 0.42, Math.max(6, h * s * 0.035), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
       // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
       if (frame && l.lyric && l.sprite) {

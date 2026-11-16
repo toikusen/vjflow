@@ -23,7 +23,8 @@ export interface CastMember {
   fixed?: boolean;
 }
 /** A decided member as the brief gets it: its look, scheme and the sheet the buyer picked. */
-export interface FixedMember extends CastMember { scheme: string; sheet: string }
+/** `refs`: single-view crops of the sheet for drawing shots (a whole sheet as reference made the model copy the sheet). */
+export interface FixedMember extends CastMember { scheme: string; sheet: string; refs?: string[] }
 
 export interface SubjectShot {
   id: string;
@@ -38,6 +39,8 @@ export interface SubjectShot {
   subject: string;
   /** For a scene shot: the place, and why a real place is needed here. */
   place?: string;
+  /** A correction for the drawing after a failed try (what the picture must or must not have), appended to its prompt. */
+  note?: string;
   /** The side the subjects take; the lyric goes on the other. */
   side: 'left' | 'right' | 'center';
   /** The subjects' height as a share of the frame. */

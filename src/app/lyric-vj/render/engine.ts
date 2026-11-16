@@ -1,5 +1,6 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
+import { clipFrame } from './sprite-clip';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { textCamAt } from './text-cam';
@@ -477,7 +478,12 @@ export interface AssetSource {
   kind: 'image' | 'video';
   /** image: picture URL; video: URL of the first-frame image (used after the clip runs out). */
   url: string;
-  frames?: { pattern: string; count: number; fps: number };
+  /**
+   * A frame sequence. A plate streams it over its run. A sprite (`spr:` id) keeps every frame in memory and plays it
+   * on its own clock from `start` (song seconds, default 0) — independent of the cuts drawn under it — holding the last
+   * frame, or looping when `loop` is set.
+   */
+  frames?: { pattern: string; count: number; fps: number; start?: number; loop?: boolean };
 }
 
 export interface RenderJob {
@@ -835,6 +841,8 @@ export class LyricVjEngine {
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
   private callLayers: CallLayer[] = [];
   private images = new Map<string, THREE.Texture>();
+  /** Sprite clips (AssetSource.frames on a `spr:` asset): every frame as a bitmap, each tagged with its index. */
+  private clips = new Map<string, { frames: ImageBitmap[]; fps: number; start: number; loop: boolean }>();
   /** Each shot's lines as they show (chat attachments are pushed up by the messages after them). */
   private shotLines = new Map<string, { text: string; at: number }[]>();
   /** The storyboard's scenes (scene.ts): drawn by their parts, their lines never built as caption layers. */
@@ -981,6 +989,18 @@ export class LyricVjEngine {
     const loader = new THREE.TextureLoader();
     await Promise.all(
       Object.entries(this.job.assets).map(async ([id, a]) => {
+        if (a.frames && id.startsWith('spr:')) {
+          const frames = await Promise.all(Array.from({ length: a.frames.count }, async (_, i) => {
+            const bmp = await createImageBitmap(await (await fetch(a.frames!.pattern.replace('%05d', String(i + 1).padStart(5, '0')))).blob());
+            (bmp as { frameKey?: number }).frameKey = i;
+            return bmp;
+          }));
+          this.clips.set(id, { frames, fps: a.frames.fps, start: a.frames.start ?? 0, loop: !!a.frames.loop });
+          const tex = new THREE.Texture(frames[0]);
+          tex.needsUpdate = true;
+          this.images.set(id, tex);
+          return;
+        }
         const tex = await loader.loadAsync(a.url);
         tex.colorSpace = THREE.SRGBColorSpace;
         this.images.set(id, tex);
@@ -1727,6 +1747,13 @@ export class LyricVjEngine {
    * Plate frames for a shot at time t. A clip shorter than its run plays slower (down to half speed, adjacent frames
    * blended), then holds its last frame: it never restarts or falls back to the first-frame still.
    */
+  /** The picture of an asset at song time t: a sprite clip's frame on its own clock (its run goes on under the cuts), else the image. */
+  private picture(asset: string, t: number): CanvasImageSource | undefined {
+    const c = this.clips.get(asset);
+    if (!c) return this.images.get(asset)?.image as CanvasImageSource | undefined;
+    return c.frames[clipFrame({ count: c.frames.length, fps: c.fps, start: c.start, loop: c.loop }, t)];
+  }
+
   private async plateTexture(shot: Shot, t: number): Promise<{ tex: THREE.Texture; next?: THREE.Texture; mix: number }> {
     const a = shot.asset ? this.job.assets[shot.asset] : undefined;
     if (!a) return { tex: this.gradient, mix: 0 };
@@ -2600,10 +2627,7 @@ export class LyricVjEngine {
       const paint = (ctx: CanvasRenderingContext2D) => {
         setLinkContext(this.linkContextAt(this.koma(bt)));
         try {
-          drawLook(ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => {
-            const tex = this.images.get(asset ?? shot.asset ?? '');
-            return tex?.image as CanvasImageSource | undefined;
-          }, (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
+          drawLook(ctx, this.job.treatment.graphics!, this.koma(bt), { since, pulse: Math.exp(-since * 7), index: i }, (asset) => this.picture(asset ?? shot.asset ?? '', t), (ls) => this.makeRoom(shot.template === 'title-card' ? ls.filter((l) => !(l.kind === 'app' && l.type === 'lock')) : ls, bt), t); // the code layer moves on real time (bt is stepped by the medium and koma)
         } finally {
           setLinkContext(undefined);
         }
@@ -3291,7 +3315,7 @@ export class LyricVjEngine {
       const pf = globalThis as { __vjProbe?: boolean };
       pf.__vjProbe = true; // a probe, not a frame (see backdropAt)
       try {
-        drawLook(ctx, this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t), { since: 1, pulse: 0, index: 0 }, (a) => this.images.get(a ?? asset ?? '')?.image as CanvasImageSource | undefined);
+        drawLook(ctx, this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t), { since: 1, pulse: 0, index: 0 }, (a) => this.picture(a ?? asset ?? '', t));
       } finally {
         pf.__vjProbe = false;
       }
@@ -3348,7 +3372,7 @@ export class LyricVjEngine {
     const [kept, gliding] = [this.placedProps.length, this.propsGliding];
     let placed: Layer[] = [];
     try {
-      drawLook(this.probe, this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t), { since: 1, pulse: 0, index: 0 }, (asset) => this.images.get(asset ?? shot.asset ?? '')?.image as CanvasImageSource | undefined, (ls) => (asPlayed ? (placed = this.makeRoom(ls, t)) : lyric ? avoidAll(ls, lyric) : ls));
+      drawLook(this.probe, this.job.treatment.graphics, sectionClock(this.job.treatment.graphics.sections, t), { since: 1, pulse: 0, index: 0 }, (asset) => this.picture(asset ?? shot.asset ?? '', t), (ls) => (asPlayed ? (placed = this.makeRoom(ls, t)) : lyric ? avoidAll(ls, lyric) : ls));
     } finally {
       pf.__vjProbe = false;
       // makeRoom logs what it placed for the motion QA: a probe is not a frame

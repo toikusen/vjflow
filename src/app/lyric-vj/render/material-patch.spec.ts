@@ -39,7 +39,7 @@ describe('material patches', () => {
 
   it('the sung fill colours the glyph itself up to its edge, before the picture is applied, and keeps unpremultiply working', () => {
     const m = new THREE.MeshBasicMaterial();
-    const u = { uFillEdge: { value: 0.3 }, uFillAxis: { value: 0 }, uFillInk: { value: new THREE.Color('#ff0000') } };
+    const u = { uFillEdge: { value: 0.3 }, uFillDir: { value: new THREE.Vector2(1, 0) }, uFillInk: { value: new THREE.Color('#ff0000') }, uFillOrigin: { value: new THREE.Vector2() }, uFillSize: { value: new THREE.Vector2(30, 40) } };
     setPatch(m, 'sung-fill', sungFill(u));
     setPatch(m, 'unpremultiply', unpremultiply);
     const shader = { uniforms: {} as Record<string, unknown>, fragmentShader: 'uniform float opacity;\nvoid main() {\n#include <map_fragment>\n#include <alphatest_fragment>\n}', vertexShader: '' };

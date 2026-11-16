@@ -3,7 +3,6 @@
 // (material-patch.ts sungFill: no copy over the glyph). Nothing waits pale: the unsung text keeps its full ink, so no row reads as a line left behind. Pure numbers.
 // Idea after claude-animated-text #41 "kara" (pound / POUND0423, MIT); the code here is our own, and it runs on the
 // song's own sung times instead of a fixed rate.
-import { keyInk } from './key-ink';
 
 /** The longest the last character's fill may take, s (a held vowel fills while it is held, not to the end of a long gap). */
 export const FILL_TAIL = 1.2;
@@ -31,9 +30,15 @@ export function fillShare(t: number, span: [number, number]): number {
 }
 
 /**
- * The fill's ink: the accent, or another of the pool, moved until it reads 4.5:1 on every ground under the line and
- * stands visibly apart from the body ink (key-ink.ts keyInk), so both the filled and the unfilled part read.
+ * The fill's run in a glyph's own frame: the screen direction (left to right on a row, top to bottom down a column)
+ * carried into the glyph (`local`, any length; a Latin glyph turned a quarter in a vertical run gets its own x), made
+ * unit, and the glyph's extent along it: its advance across its own x, its em across its own y.
  */
-export function fillInk(accent: string, pool: string[], body: string, grounds: string[]): string {
-  return keyInk(accent, pool, body, grounds, 4.5);
+export function fillAxis(local: { x: number; y: number }, advance: number, size: number): { dir: [number, number]; extent: number } {
+  const n = Math.hypot(local.x, local.y) || 1;
+  const [x, y] = [local.x / n, local.y / n];
+  return { dir: [x, y], extent: Math.abs(x) * advance + Math.abs(y) * size };
 }
+
+/** Px along the run from the glyph's centre that the fill has reached at `share` of the glyph: none before, all after. */
+export const fillEdge = (share: number, extent: number) => (share <= 0 ? -1e6 : share >= 1 ? 1e6 : extent * (share - 0.5));

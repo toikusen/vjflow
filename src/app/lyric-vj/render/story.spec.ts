@@ -176,6 +176,15 @@ describe('prop drift and landing', () => {
     expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.005);
   });
 
+  it('a hanging hero loops whole: its swing and its gust come back together every DRIFT_LOOP s, no jump at the seam', async () => {
+    const { DRIFT_LOOP } = await import('./story');
+    for (const n of [0, 1, 4]) {
+      const items: StoryItem[] = [...Array.from({ length: n }, () => ({ kind: 'pop', prop: 'x', at: -99, dur: 0, x: 0, y: 0, size: 0.1 }) as StoryItem), { kind: 'hero', prop: 'lamp', motion: 'hang', x: 0, y: 0, size: 0.3, states: [{ at: 0, state: 'show' }] }];
+      const rot = (t: number) => (storyLayers(items, t).at(-1) as { rot: number }).rot;
+      for (const t of [3, 10.4, 20]) expect(rot(t + DRIFT_LOOP)).toBeCloseTo(rot(t), 9);
+    }
+  });
+
   it('a fly lands past its point by as much as it came in fast, and is at rest when its flight ends', async () => {
     const { flyOvershoot } = await import('./story');
     expect(flyOvershoot(1, 2)).toBe(0);

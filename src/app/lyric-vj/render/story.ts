@@ -68,6 +68,8 @@ const lastIndex = <T>(xs: T[], f: (x: T, i: number) => boolean) => {
 const bez = (p0: Pt, c: Pt, p1: Pt, k: number): Pt => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
 /** The loop of a prop's drift and gusts, s: long enough that its return is never seen as a beat. */
 export const DRIFT_LOOP = 24;
+/** The hanging prop's pendulum swings per DRIFT_LOOP (about 1.8 rad/s, its old pace). */
+const HANG_TURNS = 7;
 /**
  * A prop's movement at rest: offsets in look units, rotation in radians, horizontal scale (wing beats). Smooth and
  * periodic, every prop on its own phase (n). A drifting prop and a hanging prop's gust wander on loopable noise
@@ -78,7 +80,8 @@ function idle(motion: Motion, t: number, n: number): { dx: number; dy: number; r
   switch (motion) {
     case 'hang':
       // a pendulum stirred by a breeze: a slow swing with a slower gust over it
-      return { dx: 0, dy: 0, rot: 0.09 * Math.sin(t * 1.9 + p) + 0.05 * loopNoise(t, DRIFT_LOOP, n * 7 + 1), sx: 1 };
+      // (the swing makes whole turns in the drift's loop, 7 in 24 s, so the whole motion loops with the noise)
+      return { dx: 0, dy: 0, rot: 0.09 * Math.sin(((Math.PI * 2 * HANG_TURNS) / DRIFT_LOOP) * t + p) + 0.05 * loopNoise(t, DRIFT_LOOP, n * 7 + 1), sx: 1 };
     case 'flutter': {
       // rests with wings open, and every few seconds beats them a few times while it shifts a little
       const burst = Math.max(0, Math.sin(t * 0.9 + p) - 0.55) / 0.45;

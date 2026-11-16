@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contrast } from '../contrast';
-import { inkDistance, KEY_APART } from './key-ink';
-import { FILL_MIN, FILL_TAIL, fillInk, fillShare, fillSpans } from './sung-fill';
+import { FILL_MIN, FILL_TAIL, fillAxis, fillEdge, fillShare, fillSpans } from './sung-fill';
 
 describe('sung fill', () => {
   it('runs each character from its own sung time to the next one, the last to the line end or a held tail', () => {
@@ -21,12 +19,18 @@ describe('sung fill', () => {
     expect(fillShare(2, [1, 2])).toBe(1);
   });
 
-  it('takes an ink that reads 4.5:1 on every ground and stands apart from the body ink', () => {
-    for (const [accent, body, grounds] of [['#ffd23f', '#222222', ['#ffffff']], ['#3a3a8c', '#f5efe4', ['#101820', '#2a2a3a']], ['#222222', '#222222', ['#f5efe4']]] as [string, string, string[]][]) {
-      // (an accent that is the body ink already takes the palette's next colour)
-      const ink = fillInk(accent, ['#c0392b'], body, grounds);
-      for (const g of grounds) expect(contrast(ink, g)).toBeGreaterThanOrEqual(4.5);
-      expect(inkDistance(ink, body)).toBeGreaterThanOrEqual(KEY_APART);
-    }
+  it('carries the screen run into a glyph\'s own frame: advance across its own x, em across its own y', () => {
+    expect(fillAxis({ x: 2, y: 0 }, 30, 40)).toEqual({ dir: [1, 0], extent: 30 });
+    expect(fillAxis({ x: 0, y: -1 }, 30, 40)).toEqual({ dir: [0, -1], extent: 40 });
+    // a Latin glyph turned −90° in a column: down the screen is its own +x, along its advance
+    const turned = fillAxis({ x: 1, y: 1e-16 }, 30, 40);
+    expect(turned.dir[0]).toBeCloseTo(1);
+    expect(turned.extent).toBeCloseTo(30);
+  });
+
+  it('places the edge from the glyph centre: nothing before, all after', () => {
+    expect(fillEdge(0, 30)).toBeLessThan(-1000);
+    expect(fillEdge(0.25, 30)).toBeCloseTo(-7.5);
+    expect(fillEdge(1, 30)).toBeGreaterThan(1000);
   });
 });

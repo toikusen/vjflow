@@ -17,7 +17,8 @@ import { breathLine, crumbPose, nodePhase, nodeSize, ovalStroke, relayAt, ECHO_W
 import { mixHex, mottle, ovalFit, roughEdge, tornLine } from './material';
 import { atRest, CueLayer, CueRuntime, DRAWN, enterSec, FrameFx, readable, revealAt, songVary, sungAt } from './runtime';
 import { runsDown, trackOpen, trackReach, trackShifts } from './line-track';
-import { fillInk, fillShare, fillSpans } from './sung-fill';
+import { fillAxis, fillEdge, fillShare, fillSpans } from './sung-fill';
+import { keyInk } from './key-ink';
 import { FillUniforms, setPatch, sungFill } from './material-patch';
 
 type GlyphMesh = THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
@@ -1094,13 +1095,13 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   const tracking = rt.style.idle === 'track';
   const trackReachNow = trackReach(v('track.reach', 0, 1));
   const inOrder = [...items].sort((a, b) => (a.glyph.src ?? a.glyph.index) - (b.glyph.src ?? b.glyph.index));
-  // fill: a key-ink copy of each glyph, uncovered over it as the character is sung (sung-fill.ts); the line itself
-  // keeps its full ink all along (a karaoke entrance lights its own characters, so it takes no fill)
+  // fill: each glyph takes a key ink as the character is sung (sung-fill.ts); the line itself keeps its full ink all
+  // along (a karaoke entrance lights its own characters, so it takes no fill)
   const filling = rt.style.idle === 'fill' && enter !== 'karaoke';
   const fillInks = new Map<string, THREE.Color>();
   const fillInkOf = (body: THREE.Color) => {
     const hex = `#${body.getHexString()}`;
-    if (!fillInks.has(hex)) fillInks.set(hex, new THREE.Color(fillInk(rt.palette.accent, [rt.palette.glow, rt.palette.line].filter((c): c is string => !!c), hex, [rt.palette.background, ...(rt.under ?? [])].filter((g): g is string => !!g))));
+    if (!fillInks.has(hex)) fillInks.set(hex, new THREE.Color(keyInk(rt.palette.accent, [rt.palette.glow, rt.palette.line].filter((c): c is string => !!c), hex, [rt.palette.background, ...(rt.under ?? [])].filter((g): g is string => !!g), 4.5)));
     return fillInks.get(hex)!;
   };
   const sungOrder = filling ? [...new Set(inOrder.filter((it) => it.glyph.src !== undefined).map((it) => it.glyph.src!))] : [];
@@ -1109,10 +1110,17 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   // (drawn in the glyph's own material, material-patch.ts sungFill: still one reading glyph, never a copy over it)
   const fills = filling
     ? inOrder.filter((it) => spanOf.has(it.glyph.src!)).map((it) => {
-        const u: FillUniforms = { uFillEdge: { value: -1 }, uFillAxis: { value: 0 }, uFillInk: { value: fillInkOf(it.mesh.material.color) } };
-        setPatch(it.mesh.material, 'sung-fill', sungFill(u));
-        it.mesh.userData['fill'] = u;
-        return { it, u, span: spanOf.get(it.glyph.src!)! };
+        const shared = { uFillDir: { value: new THREE.Vector2(1, 0) }, uFillEdge: { value: -1e6 }, uFillInk: { value: fillInkOf(it.mesh.material.color) } };
+        // the glyph, and the strokes that draw it when it is split into pieces (the glyph itself then draws nothing):
+        // every picture of the character carries the fill, each placed in the glyph's frame
+        const pieces = (it.mesh.userData['pieces'] as GlyphMesh[] | undefined) ?? [];
+        const parts = [it.mesh, ...pieces].map((m) => {
+          const u: FillUniforms = { ...shared, uFillOrigin: { value: new THREE.Vector2() }, uFillSize: { value: new THREE.Vector2() } };
+          setPatch(m.material, 'sung-fill', sungFill(u));
+          m.userData['fill'] = u;
+          return { m, u, home: (m.userData['home'] as [number, number] | undefined) ?? [0, 0] };
+        });
+        return { it, shared, parts, span: spanOf.get(it.glyph.src!)! };
       })
     : [];
 
@@ -2426,16 +2434,17 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
       if (fills.length) {
         layer.group.updateMatrixWorld(true);
         const world = fills.map((f) => f.it.mesh.getWorldPosition(new THREE.Vector3()));
-        const down = runsDown(world);
-        fills.forEach(({ it, u, span }) => {
-          const share = fillShare(t, span);
-          u.uFillAxis.value = down ? 1 : 0;
-          if (share <= 0 || share >= 1) return void (u.uFillEdge.value = share <= 0 ? -1 : 2);
-          // across the character's em (a row: its advance; a column: its size), as a share of its picture, which
-          // carries a transparent pad round the em; the picture may change under it (weight, faces): read it now
-          const g = it.mesh.geometry.parameters;
-          const [em, pic] = down ? [it.style.size, g.height] : [it.glyph.advance || it.style.size, g.width];
-          u.uFillEdge.value = 0.5 + (em * (share - 0.5)) / Math.max(1e-6, pic);
+        // the screen's way of reading (down a column, else across), carried into each glyph's own frame: a glyph
+        // turned in its run (Latin a quarter turn in a vertical line) fills down the screen all the same
+        const screen = runsDown(world) ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(1, 0, 0);
+        const inv = new THREE.Matrix4();
+        fills.forEach(({ it, shared, parts, span }) => {
+          const local = screen.clone().transformDirection(inv.copy(it.mesh.matrixWorld).invert());
+          const { dir, extent } = fillAxis(local, it.glyph.advance || it.style.size, it.style.size);
+          shared.uFillDir.value.set(dir[0], dir[1]);
+          shared.uFillEdge.value = fillEdge(fillShare(t, span), extent);
+          // (each picture as it is now: weight and faces swap the glyph's picture under it)
+          for (const { m, u, home } of parts) u.uFillOrigin.value.set(home[0], home[1]), u.uFillSize.value.set(m.geometry.parameters.width, m.geometry.parameters.height);
         });
       }
 

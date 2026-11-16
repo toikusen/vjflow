@@ -342,51 +342,86 @@ describe('tracking-out and the sung fill', () => {
     expect(gs.every((g) => g.position.x === 0)).toBe(true);
   });
 
+  /** A glyph's fill uniforms as the sungFill shader reads them (material-patch.ts FillUniforms). */
+  type FillUniforms = { uFillDir: { value: THREE.Vector2 }; uFillEdge: { value: number }; uFillInk: { value: THREE.Color }; uFillOrigin: { value: THREE.Vector2 }; uFillSize: { value: THREE.Vector2 } };
+  /** Whether the point (u, v) of this mesh's picture is drawn in the fill ink now (the sungFill shader's own test). */
+  const filled = (m: THREE.Object3D, u: number, v: number) => {
+    const f = m.userData['fill'] as FillUniforms | undefined;
+    if (!f?.uFillDir) return false;
+    const [x, y] = [f.uFillOrigin.value.x + (u - 0.5) * f.uFillSize.value.x, f.uFillOrigin.value.y + (v - 0.5) * f.uFillSize.value.y];
+    return x * f.uFillDir.value.x + y * f.uFillDir.value.y < f.uFillEdge.value;
+  };
+  const timed = (style: Partial<CueStyle>) => ({ ...runtime(style), cue: { text: TEXT, start: 1, end: 3, charTimed: true, charStarts: [1.2, 1.6, 2.4] }, palette: { accent: '#ff0000', background: '#ffffff', text: '#222222' } }) as unknown as CueRuntime;
+  /** The test layer with each glyph's place reset after the template's own (a column, a turned glyph). */
+  const placed = (at: (g: THREE.Mesh, i: number) => void) => {
+    const l0 = layer();
+    const gs = l0.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
+    const update = l0.update;
+    l0.update = (t, f) => (update(t, f), gs.forEach(at));
+    return { l0, gs };
+  };
+
   it('fill: the line reads whole in its own ink; its own picture takes a key ink left to right as each character is sung', async () => {
-    const rt = { ...runtime({ idle: 'fill' }), cue: { text: TEXT, start: 1, end: 3, charTimed: true, charStarts: [1.2, 1.6, 2.4] }, palette: { accent: '#ff0000', background: '#ffffff', text: '#222222' } } as unknown as CueRuntime;
     const l0 = layer();
     (l0.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[]).forEach((m) => m.material.color.set('#222222'));
-    const l = withTextFx(l0, rt);
+    const l = withTextFx(l0, timed({ idle: 'fill' }));
     const glyphs = l.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
-    const fill = (i: number) => glyphs[i].userData['fill'] as { uFillEdge: { value: number }; uFillAxis: { value: number }; uFillInk: { value: THREE.Color } };
     // one picture per character, no copy laid over it (a copy is cut out of the reading glyph's clean zone)
     expect(glyphs.every((g) => g.children.length === 0)).toBe(true);
     expect(glyphs.every((g) => g.material.customProgramCacheKey().includes('sung-fill'))).toBe(true);
     l.update(1.1, fx);
     // nothing waits pale: every character is at full ink before any is sung, and none is filled yet
     expect(glyphs.map((g) => g.material.opacity)).toEqual([1, 1, 1]);
-    expect([0, 1, 2].map((i) => fill(i).uFillEdge.value)).toEqual([-1, -1, -1]);
-    // half way through the first character's time (1.2 → 1.6): filled to the middle of its picture, the rest not begun
-    l.update(1.4, fx);
-    expect(fill(0).uFillAxis.value).toBe(0);
-    expect(fill(0).uFillEdge.value).toBeCloseTo(0.5);
-    expect(fill(1).uFillEdge.value).toBe(-1);
-    expect(glyphs.map((g) => g.material.opacity)).toEqual([1, 1, 1]);
-    // a quarter: a quarter of the 30 px advance across the 30 px picture
+    expect(glyphs.some((g) => filled(g, 0.01, 0.5))).toBe(false);
+    // a quarter through the first character's time (1.2 → 1.6): its left quarter of the 30 px advance, nothing more
     l.update(1.3, fx);
-    expect(fill(0).uFillEdge.value).toBeCloseTo(0.25);
-    // the second is whole by the third's sung time
+    expect([filled(glyphs[0], 0.2, 0.5), filled(glyphs[0], 0.3, 0.5), filled(glyphs[1], 0.01, 0.5)]).toEqual([true, false, false]);
+    expect(glyphs.map((g) => g.material.opacity)).toEqual([1, 1, 1]);
+    // the second is whole by the third's sung time, the third not begun
     l.update(2.4, fx);
-    expect(fill(1).uFillEdge.value).toBe(2);
-    expect(fill(2).uFillEdge.value).toBe(-1);
+    expect([filled(glyphs[1], 0.99, 0.5), filled(glyphs[2], 0.01, 0.5)]).toEqual([true, false]);
     // the fill ink reads on the paper and stands apart from the body ink
     const { contrast } = await import('../contrast');
-    expect(contrast(`#${fill(0).uFillInk.value.getHexString()}`, '#ffffff')).toBeGreaterThanOrEqual(4.5);
-    expect(fill(0).uFillInk.value.getHexString()).not.toBe('222222');
+    const ink = (glyphs[0].userData['fill'] as FillUniforms).uFillInk.value.getHexString();
+    expect(contrast(`#${ink}`, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(ink).not.toBe('222222');
   });
 
   it('fill: a column fills from the top down; a karaoke entrance takes no fill', async () => {
-    const l0 = layer();
-    const gs = l0.group.children as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>[];
-    const update = l0.update;
-    l0.update = (t, f) => (update(t, f), gs.forEach((g, i) => g.position.set(0, -i * 50, 0)));
-    const l = withTextFx(l0, { ...runtime({ idle: 'fill' }), cue: { text: TEXT, start: 1, end: 3, charTimed: true, charStarts: [1.2, 1.6, 2.4] } } as unknown as CueRuntime);
+    const { l0, gs } = placed((g, i) => g.position.set(0, -i * 50, 0));
+    const l = withTextFx(l0, timed({ idle: 'fill' }));
     l.update(1.3, fx);
-    const u = gs[0].userData['fill'] as { uFillEdge: { value: number }; uFillAxis: { value: number } };
-    expect(u.uFillAxis.value).toBe(1);
-    // a quarter of the 40 px em down the 40 px picture
-    expect(u.uFillEdge.value).toBeCloseTo(0.25);
+    // a quarter of the 40 px em, from the top (v = 1 is the picture's top)
+    expect([filled(gs[0], 0.5, 0.8), filled(gs[0], 0.5, 0.7), filled(gs[0], 0.01, 0.5)]).toEqual([true, false, false]);
     const k = withTextFx(layer(), runtime({ enter: 'karaoke', idle: 'fill' }));
     expect((k.group.children as THREE.Mesh[]).every((g) => !g.userData['fill'])).toBe(true);
+  });
+
+  it('fill: a glyph turned a quarter in a vertical run (Latin) still fills down the screen, across its own advance', async () => {
+    // turned −90°: the glyph's own +x runs down the screen, its own +y to the right
+    const { l0, gs } = placed((g, i) => (g.position.set(0, -i * 50, 0), (g.rotation.z = -Math.PI / 2)));
+    const l = withTextFx(l0, timed({ idle: 'fill' }));
+    l.update(1.3, fx);
+    // its top on screen is its own left: a quarter of its 30 px advance there is filled, its screen-right side is not
+    expect([filled(gs[0], 0.2, 0.5), filled(gs[0], 0.3, 0.5), filled(gs[0], 0.5, 0.95)]).toEqual([true, false, false]);
+  });
+
+  it('fill: a glyph split into strokes (pieces) fills through every piece, each placed in the glyph', async () => {
+    const l0 = layer();
+    const g0 = l0.group.children[0] as THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+    // two strokes, left and right halves of the 30 px glyph; the glyph itself draws nothing
+    const pieces = [-7.5, 7.5].map((x) => {
+      const pm = new THREE.Mesh(new THREE.PlaneGeometry(15, 40), new THREE.MeshBasicMaterial({ map: new THREE.Texture(), transparent: true }));
+      pm.position.set(x, 0, 0);
+      pm.userData['home'] = [x, 0];
+      g0.add(pm);
+      return pm;
+    });
+    g0.userData['pieces'] = pieces;
+    const l = withTextFx(l0, timed({ idle: 'fill' }));
+    expect(pieces.every((p) => p.material.customProgramCacheKey().includes('sung-fill'))).toBe(true);
+    l.update(1.3, fx);
+    // the fill edge at −7.5 px: the left stroke's left half, the right stroke not at all
+    expect([filled(pieces[0], 0.4, 0.5), filled(pieces[0], 0.6, 0.5), filled(pieces[1], 0.01, 0.5)]).toEqual([true, false, false]);
   });
 });

@@ -151,6 +151,9 @@ describe('the sing-along option opens its templates', () => {
     const { validateTreatment } = await import('./treatment');
     const { TEMPLATES } = await import('./templates');
     expect(validateTreatment(sing(false), song, { start: 20, end: 36 }, TEMPLATES).errors.join('\n')).toMatch(/跟唱/);
-    expect(validateTreatment(sing(true), song, { start: 20, end: 36 }, TEMPLATES).errors.join('\n')).not.toMatch(/跟唱/);
+    const ok = validateTreatment(sing(true), song, { start: 20, end: 36 }, TEMPLATES);
+    expect(ok.errors.join('\n')).not.toMatch(/跟唱/);
+    // the option survives validation (the engine reads it from the checked treatment)
+    expect(ok.treatment.design?.singAlong).toBe(true);
   });
 });

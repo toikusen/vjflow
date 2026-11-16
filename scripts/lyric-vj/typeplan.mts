@@ -592,7 +592,7 @@ export function buildCuts(p: Plan) {
   const missing: string[] = [];
   let removed = 0;
   let last = '';
-  let shown = { sprite: '', side: '', since: 0 };
+  let shown = { sprite: '', side: '', since: 0, place: '' };
   // round moves past their share of the song are swapped for the director's other moves (capRound)
   const order = shots.flatMap((s) => [...(p.shots.find((x) => x.shot === s.id)?.cuts ?? [])].sort((x, y) => x.beat - y.beat).map((c) => ({ c, shot: s.id })));
   const shotIds = order.map((o) => o.shot);
@@ -692,8 +692,9 @@ export function buildCuts(p: Plan) {
       const tookPicture = !!c.sprite && !sprite && !DIAGRAM_FX.has(fx) && sameSpot(shown, c.sprite, side) && !board?.items.some((x) => x.sprite === c.sprite);
       if (tookPicture) removed++;
       // the same character in the same spot carries on across the cut: its own clock, no pop on every background cut
-      if (layer.sprite) layer.subjectAt = subjectSince(shown, layer.sprite, side, at);
-      shown = { sprite: layer.sprite ?? '', side, since: layer.subjectAt ?? at };
+      const place = `${size.toFixed(3)}|${fx === 'grid' ? 'grid' : 'one'}`;
+      if (layer.sprite) layer.subjectAt = subjectSince(shown, layer.sprite, side, at, place);
+      shown = { sprite: layer.sprite ?? '', side, since: layer.subjectAt ?? at, place };
       if (c.dark) layer.dark = true;
       if (c.yields) layer.yields = true;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];

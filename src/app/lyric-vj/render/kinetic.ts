@@ -47,6 +47,8 @@ export interface KineticLayer {
    * in the same spot, so it keeps its own clock across the background's cuts and does not pop in again on each one.
    */
   subjectAt?: number;
+  /** The plan's own subjectAt, before the cuts were placed (carrySubjects). */
+  subjectPlan?: number;
   /** The lyric box on the frame while a line is up, and how much of it is up (graphics.ts attaches both): the character is measured against it. */
   lyric?: CoverRect;
   lyricWeight?: number;
@@ -344,10 +346,40 @@ export function subjectPose(subjectAt: number | undefined, clock: number, now: n
 
 /**
  * When the character of a cut at `at` came up: the time the last cut's came up when it is the same one in the same
- * spot (it carries on), else `at`. `last` is the cut before (no sprite: '').
+ * spot and placed the same way (`place`: its size and whether the move repeats it in a grid), else `at`. `last` is
+ * the cut before (no sprite: '').
  */
-export const subjectSince = (last: { sprite: string; side: string; since: number }, sprite: string | undefined, side: string, at: number) =>
-  sprite && last.sprite === sprite && last.side === side ? last.since : at;
+ /**
+ * Where a cut puts its character, as one key: the same sprite on the same side at the same size, placed the same way
+ * (a grid of copies, the room the lines leave, the rows above or below them, the corner under them). Only a character
+ * placed the same carries on across a cut; one that changes size or place comes up again (with its pop).
+ */
+export const placementKey = (l: KineticLayer) =>
+  [l.sprite ?? '', l.side ?? '', (l.size ?? 0.85).toFixed(3), l.fx === 'grid' ? 'grid' : 'one', l.room?.map((x) => Math.round(x)).join('-') ?? '', l.rows?.map((x) => Math.round(x)).join('-') ?? '', l.under ? 'under' : ''].join('|');
+
+/**
+ * The subject clocks of a song's cuts, in order, as placed: a cut keeps the clock the plan carried over (subjectAt)
+ * only when its character stands as the cut before's did (placementKey); otherwise its character comes up anew at the
+ * cut. Idempotent: the plan's own carry is kept in subjectPlan.
+ */
+export function carrySubjects(layers: KineticLayer[]): void {
+  let prev: { key: string; since: number } | undefined;
+  for (const l of layers) {
+    if (!l.sprite) {
+      prev = undefined;
+      continue;
+    }
+    const at = l.at ?? 0;
+    l.subjectPlan ??= l.subjectAt;
+    const key = placementKey(l);
+    const carries = l.subjectPlan !== undefined && l.subjectPlan < at - 1e-6 && prev?.key === key;
+    l.subjectAt = carries ? prev!.since : at;
+    prev = { key, since: l.subjectAt };
+  }
+}
+
+export const subjectSince = (last: { sprite: string; side: string; since: number; place?: string }, sprite: string | undefined, side: string, at: number, place = '') =>
+  sprite && last.sprite === sprite && last.side === side && (last.place ?? '') === place ? last.since : at;
 
 export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, clock: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, now = (l.at ?? 0) + clock) {
   const age = camTime(l.cam, clock);

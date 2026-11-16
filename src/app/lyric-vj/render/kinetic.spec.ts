@@ -269,3 +269,17 @@ describe('subject clock (the character carries on across background cuts)', () =
     expect(subjectSince({ sprite: 'dog', side: 'left', since: 9.6 }, 'cat', 'left', 10)).toBe(10);
   });
 });
+
+describe('subject clock follows the placement', () => {
+  it('carries on only where the character is placed the same; a change of size, room or grid pops it again', async () => {
+    const { carrySubjects, subjectSince } = await import('./kinetic');
+    const cut = (at: number, over: Partial<KineticLayer> = {}): KineticLayer => ({ kind: 'kinetic', fx: 'wall', words: [], ink: '#000', paper: '#fff', accent: '#f00', sprite: 'cat', side: 'left', size: 0.85, at, subjectAt: 10, ...over });
+    const ls = [cut(10), cut(11), cut(12, { size: 1.2 }), cut(13, { size: 1.2 }), cut(14, { size: 1.2, room: [0, 600] }), cut(15, { size: 1.2, room: [0, 600], fx: 'grid' })];
+    carrySubjects(ls);
+    expect(ls.map((l) => l.subjectAt)).toEqual([10, 10, 12, 12, 14, 15]);
+    // again (a line built later lays the rooms again): the same
+    carrySubjects(ls);
+    expect(ls.map((l) => l.subjectAt)).toEqual([10, 10, 12, 12, 14, 15]);
+    expect(subjectSince({ sprite: 'cat', side: 'left', since: 9.6, place: '0.850|one' }, 'cat', 'left', 10, '1.200|one')).toBe(10);
+  });
+});

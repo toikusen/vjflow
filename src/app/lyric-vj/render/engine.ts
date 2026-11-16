@@ -65,7 +65,7 @@ import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { freeBand, freeRows, oppositeSide, setBackPush, setLineVeil } from './kinetic';
+import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -1609,6 +1609,8 @@ export class LyricVjEngine {
           }
         }
       });
+      // a character carries on across a cut only where it stands as before (size, side, room, rows: kinetic.ts)
+      carrySubjects(secs.flatMap((s) => s.layers.filter((l) => l.kind === 'kinetic') as KineticLayer[]));
     }
   }
 

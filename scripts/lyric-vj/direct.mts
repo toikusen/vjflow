@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { timingGate } from '../../src/app/lyric-vj/timing-qa';
-import { TEMPLATES, templateOffered } from '../../src/app/lyric-vj/templates';
+import { optedIn, TEMPLATES, templateOffered } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, SYMBOLS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { attachmentErrors, checkStyle, STYLES, templatesFor } from '../../src/app/lyric-vj/styles';
@@ -101,7 +101,9 @@ const note = a.note?.trim() || undefined;
 if (!allowedLanguages.length) { console.error('沒有可選的設計語言：--proven 與 --candidates 都是空的（管理者把全部下架了？）'); process.exit(2); }
 // the templates the schema offers: a chosen language's own valid set (the style's list and the language's agree), else
 // the union over the languages on offer — the per-language check below still holds the pairing (a schema cannot)
-const templateChoices = [...new Set((picked ? [picked] : allowedLanguages).flatMap((k) => templatesFor(style, LANGUAGES[k])))].filter((id) => Object.hasOwn(TEMPLATES, id) && offered(id));
+// (plus the opt-in templates the buyer's options open: no style lists them, so the schema and checkStyle take them
+// from the option, or the director could never pick what the catalogue offers)
+const templateChoices = [...new Set([...(picked ? [picked] : allowedLanguages).flatMap((k) => templatesFor(style, LANGUAGES[k])), ...optedIn({ singAlong: !!a['sing-along'] })])].filter((id) => Object.hasOwn(TEMPLATES, id) && offered(id));
 if (!templateChoices.length) { console.error(`沒有可用的模板：風格「${style.name}」與設計語言 ${(picked ? [picked] : allowedLanguages).join('、')} 沒有交集`); process.exit(2); }
 
 // ---- schema (structured output): only vocabulary the engine has
@@ -540,7 +542,7 @@ ${sys.variety ? `- 每首的差異（必須做）：${sys.variety.rule}\n${(() =
     if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
     if (msg.stop_reason === 'max_tokens') throw new Error('設計輸出超過長度上限（graphics 段落太多）');
     const out2 = JSON.parse(text);
-    base.design = { ...out2.design, signature: signatureFromDirector(out2.design.signature), language };
+    base.design = { ...out2.design, signature: signatureFromDirector(out2.design.signature), language, ...(a['sing-along'] ? { singAlong: true } : {}) };
     base.motif = sys.motif ? out2.motif : undefined;
     // transitions only where the music changes section (analysed structure)
     base.graphics = validateLook(toLook(out2.graphics) as never, base.assets.map((x) => x.id), win.start, song.sections?.map((x) => x.start)).look;
@@ -635,6 +637,8 @@ for (let attempt = 0; attempt < 3; attempt++) {
     const pairs = sh.params as unknown as { key: string; value: string }[];
     sh.params = Object.fromEntries(pairs.map((x) => [x.key, coerce(x.value)]));
   }
+  // the buyer's sing-along option rides on the treatment: validation and the renderer let its templates through
+  if (a['sing-along']) draft.design = { ...draft.design, singAlong: true } as TreatmentV3['design'];
   writeFileSync(join(out, `draft_${attempt}.json`), JSON.stringify(draft, null, 1));
   result = validateTreatment(draft, song, win, TEMPLATES);
   // a short answer that leaves lines unstyled must be sent back, not silently filled with defaults

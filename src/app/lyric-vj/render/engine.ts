@@ -83,6 +83,7 @@ import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { scroll, singalong } from './sing-along';
+import { missingOptIn } from '../templates';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
 import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, frameFit, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
@@ -1051,6 +1052,8 @@ export class LyricVjEngine {
       const stop = colorAt(design.colorScript, spec.start + 0.5);
       this.customScenes.push(new CustomScene(spec, { W, H, start: spec.start, end: spec.end, palette: { shadow: stop.shadow, highlight: stop.highlight, accent: stop.accent }, beats: this.job.beats, beatStrength: this.job.beatStrength ?? [], hash }));
     }
+    // a sing-along template without the buyer's option (a hand-edited or stale plan) is set as a plain stack instead
+    for (const shot of treatment.shots) if (missingOptIn(shot.template, design)) Object.assign(shot, { template: 'stack', params: {} });
     // 'auto' placement: the lyrics go to the third of the frame where the background is calmest at that shot
     for (const shot of treatment.shots)
       for (const [k, v] of Object.entries(shot.params)) if (v === 'auto') shot.params[k] = this.calmSide(shot, k);

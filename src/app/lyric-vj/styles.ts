@@ -1,5 +1,6 @@
 // Style presets: the fixed design rules of a style. The director only works inside them (which line gets which
 // template, emphasis, accents, camera, and the song-specific scenery/palette). Derived from what the user approved.
+import { optedIn } from './templates';
 import { type DesignLanguage, LANGUAGES, type LanguageId } from './languages';
 import { MOVING_FORMS, motifStateAt } from './motif';
 import { analyzeStructure, chorusSpans, sameLines, TitleCards, titleGaps, wantedTitleGaps } from './structure';
@@ -79,7 +80,8 @@ export function checkStyle(t: TreatmentV3, style: StylePreset, song: SongTimelin
   // a chosen design language brings its own templates and its own picture rules: the style's list left out the phone's
   // chat, notify and input, and the two checks sent 天文対話 back and forth until it failed
   const lang = LANGUAGES[((t as { language?: string }).language ?? t.design?.language) as LanguageId];
-  const templates = templatesFor(style, lang);
+  // (and the sing-along modes the buyer asked for: no style lists them, the buyer's option opens them)
+  const templates = [...templatesFor(style, lang), ...optedIn({ singAlong: !!t.design?.singAlong })];
   for (const s of t.shots) {
     if (!templates.includes(s.template)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 不屬於${lang ? `設計語言「${lang.name}」${lang.layout ? '' : `在風格「${style.name}」裡`}` : `風格「${style.name}」`}（可用：${templates.join('、')}）`);
     if (!s.asset && !(lang?.photos === false || lang?.photos === 'attached')) errors.push(`鏡頭 ${s.id} 沒有素材；這個風格每個鏡頭都要有素材`);

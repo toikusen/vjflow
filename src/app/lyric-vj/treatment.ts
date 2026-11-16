@@ -1,5 +1,6 @@
 // Treatment v3: the director owns presentation only. Lyric text and timing come from the SongTimeline and are
 // never read from the treatment; this module validates a treatment and repairs what it safely can.
+import { missingOptIn } from './templates';
 import type { SignatureMoment } from './signature-moments';
 import type { MiniMoment } from './mini-moments';
 import type { WorldEventTable } from './world-events';
@@ -271,6 +272,8 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
       errors.push(`鏡頭 ${s.id} 使用未知模板 ${s.template}`);
       return;
     }
+    // the sing-along modes are the buyer's option only: a treatment that never asked for them cannot carry them
+    if (missingOptIn(s.template, input.design)) errors.push(`鏡頭 ${s.id} 的模板 ${s.template} 是跟唱模式，客人沒有選跟唱不能用`);
     s.params = repairParams(s.id, s.params ?? {}, spec, errors, fixes);
     if (s.asset && !assetIds.has(s.asset)) errors.push(`鏡頭 ${s.id} 引用不存在的素材 ${s.asset}`);
     if (s.clipStart !== undefined && !(s.clipStart >= 0 && s.clipStart < 8)) errors.push(`鏡頭 ${s.id} 的 clipStart 必須在 0–8 秒之間`);

@@ -60,6 +60,8 @@ export interface Design {
   composer?: boolean;
   /** A style world's id, its design language and its whole-frame stack (style-world.ts): the free tier's path. */
   world?: { id: string; language: string; frame: FrameStack };
+  /** The buyer asked for the sing-along modes (templates.ts OPT_IN_TEMPLATES): only then may a shot use them. */
+  singAlong?: boolean;
   /** One-click reroll: which version of the song (knobs and paper turn with it). */
   reroll?: number;
   /** The paid line director on a paid design: the composer's word breaks and sheet, but the song's language keeps its keyline; no colour ghosts. */

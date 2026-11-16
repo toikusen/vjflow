@@ -487,3 +487,9 @@ export function templateOffered(id: string, buyer: { sub?: boolean; singAlong?: 
   const need = (OPT_IN_TEMPLATES as Record<string, 'sub' | 'singAlong'>)[id];
   return !need || !!buyer[need];
 }
+
+/** The opt-in templates the buyer's options open, to be offered beside a style's own (lanes stays the style's call). */
+export const optedIn = (buyer: { sub?: boolean; singAlong?: boolean }): string[] => (buyer.singAlong ? ['singalong', 'scroll'] : []);
+
+/** Whether a shot's template needs a buyer option the treatment does not carry (singalong / scroll without singAlong). */
+export const missingOptIn = (template: string, design: { singAlong?: boolean } | undefined) => (template === 'singalong' || template === 'scroll') && !design?.singAlong;

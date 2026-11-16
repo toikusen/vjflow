@@ -135,3 +135,22 @@ describe('phone input fields', () => {
     expect(checkStyle(t, STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).not.toMatch(/唱得太快/);
   });
 });
+
+describe('the sing-along option opens its templates', () => {
+  const sing = (singAlong: boolean) => {
+    const t = base();
+    t.shots[1] = { ...t.shots[1], template: 'singalong' };
+    if (singAlong) t.design = { singAlong: true } as TreatmentV3['design'];
+    return t;
+  };
+  it('a style that does not list them takes them when the buyer asked for them, and only then', () => {
+    expect(checkStyle(sing(true), STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).not.toMatch(/singalong/);
+    expect(checkStyle(sing(false), STYLES['emotional'], song, { start: 20, end: 36 }).join('\n')).toMatch(/singalong/);
+  });
+  it('validateTreatment refuses a sing-along shot the buyer never asked for', async () => {
+    const { validateTreatment } = await import('./treatment');
+    const { TEMPLATES } = await import('./templates');
+    expect(validateTreatment(sing(false), song, { start: 20, end: 36 }, TEMPLATES).errors.join('\n')).toMatch(/跟唱/);
+    expect(validateTreatment(sing(true), song, { start: 20, end: 36 }, TEMPLATES).errors.join('\n')).not.toMatch(/跟唱/);
+  });
+});

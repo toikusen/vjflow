@@ -2622,8 +2622,11 @@ export class LyricVjEngine {
       if (this.gfxClean) this.gfxClean.mesh.visible = !!halo && SNOW.drawn > 0;
       setLineVeil(undefined); // probes draw the look without it
       this.gfx.tex.needsUpdate = true;
-      // the look is the whole background: no full-bleed plates, no generic light motes
-      for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;
+      // the look is the whole background: no full-bleed plates, no generic light motes — unless the cut is bare (no
+      // paper of its own) and the shot brings a plate: then the plate is the background the bare cut is laid over
+      // (the character video tier: stills and clip frames under quiet kinetic cuts, charvideo.mts)
+      const bareOverPlate = !!shot.asset && sectionAt(this.job.treatment.graphics!, bt).layers.every((l) => l.kind === 'kinetic' && l.bare);
+      if (!bareOverPlate) for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;
       this.motes.visible = false;
     }
     const dimTarget = (shot.params['dim'] as number) ?? 0.3;

@@ -85,6 +85,11 @@ export interface Design {
   medium?: MediumId;
   /** Where the song happens and how its frame is built (signature.ts); older treatments have none = as drawn. */
   signature?: Signature;
+  /**
+   * Shots may cut on any beat, not only on downbeats and line starts, and may be as short as MIN_SHOT_BEAT_CUT (the
+   * character video tier cuts its clips on the song's beat grid; char-cuts.ts).
+   */
+  beatCuts?: boolean;
 }
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -119,7 +124,7 @@ export function validateDesign(d: Design | undefined, win: Window): { design: De
   if (!stops.length) stops.push({ ...DEFAULT_DESIGN.colorScript[0], start: win.start });
   if (stops[0].start > win.start) stops.unshift({ ...stops[0], start: win.start });
   return {
-    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined, language: d.language && d.language in LANGUAGES ? d.language : undefined, ...(d.signature !== undefined ? { signature: structuredClone(d.signature) } : {}), ...(d.composer ? { composer: true } : {}), ...(d.reroll !== undefined ? { reroll: d.reroll } : {}), ...(d.lineDirect ? { lineDirect: true } : {}) }, fixes),
+    design: fitSystem({ font, accentFont, kanaScale: clamp(d.kanaScale, 0.5, 1), grain: clamp(d.grain, 0, 1), paper: clamp(d.paper, 0, 1), colorScript: stops, peak: d.peak in PEAK_STYLES ? d.peak : 'rays', medium: d.medium && d.medium in MEDIA ? d.medium : 'clean', techniques: d.techniques?.filter((x) => x in TECHNIQUES), system: d.system && d.system in SYSTEMS ? d.system : undefined, language: d.language && d.language in LANGUAGES ? d.language : undefined, ...(d.signature !== undefined ? { signature: structuredClone(d.signature) } : {}), ...(d.composer ? { composer: true } : {}), ...(d.reroll !== undefined ? { reroll: d.reroll } : {}), ...(d.lineDirect ? { lineDirect: true } : {}), ...(d.beatCuts ? { beatCuts: true } : {}) }, fixes),
     fixes,
   };
 }

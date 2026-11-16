@@ -1726,9 +1726,11 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         }
       }
 
+      // a line assembled from masked strips (band-in, strips) is whole only once they are home: its echoes wait for it
+      const assembled = bandIn ? rt.showFrom + (strips ? DRAWN.strips.sec : DRAWN.bandIn.sec) * rt.pace : -Infinity;
       for (const { it, copies } of echoes) {
         const m = it.mesh;
-        const from = startOf(rt, it.glyph, n) + 0.05;
+        const from = Math.max(startOf(rt, it.glyph, n) + 0.05, assembled);
         // fans out as the word lands, then breathes in and out a little while it is held
         const out = easeOutCubic((t - from) / 0.4) * (0.75 + 0.25 * Math.sin((t - from) * 2.6));
         copies.forEach((o, j) => {

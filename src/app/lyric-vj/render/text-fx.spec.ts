@@ -78,6 +78,15 @@ describe('drawn text effects', () => {
     expect(glyphs[0].material.opacity).toBe(1);
   });
 
+  it('strips: an echo waits until the strips are home (no copies of a line not yet assembled)', async () => {
+    const { l, glyphs } = await wrapped({ enter: 'strips', emphasis: [{ from: 0, to: 3, method: 'echo' }] });
+    const echoes = () => glyphs[0].children.filter((c) => c.visible && ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity > 0 && !((c as THREE.Mesh).material as THREE.MeshBasicMaterial).clippingPlanes?.length) as THREE.Mesh[];
+    l.update(1.2, fx);
+    expect(echoes().length).toBe(0);
+    l.update(2.2, fx);
+    expect(echoes().length).toBeGreaterThan(0);
+  });
+
   it('flip turns in from edge-on; stretch springs back to its own shape', async () => {
     const flip = await wrapped({ enter: 'flip' });
     flip.l.update(1.02, fx);

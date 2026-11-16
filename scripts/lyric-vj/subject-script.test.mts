@@ -14,16 +14,18 @@ const vocab: ScriptVocabulary = {
   emphases: ['color', 'hollow'],
   schemes: ['riso-cobalt', 'riso-pink'],
 };
+const bike = { id: 'bike', kind: 'object' as const, tier: 'main' as const, what: 'a bicycle', look: '', role: 'the I', features: ['empty rear carrier'], why: '' };
 const shot = (id: string, over: Partial<SubjectScript['shots'][number]> = {}): SubjectScript['shots'][number] => ({
-  id, kind: 'still', frame: 'cutout', size: 'wide', subject: 'a bicycle', side: 'left', height: 0.4, camera: 'push', step: false, why: '', ...over,
+  id, kind: 'still', frame: 'cutout', cast: ['bike'], size: 'wide', subject: 'a bicycle', side: 'left', height: 0.4, camera: 'push', step: false, why: '', ...over,
 });
 const line = (cue: string, shots: string[], over: Partial<SubjectScript['lines'][number]> = {}): SubjectScript['lines'][number] => ({ cue, shots, ground: 'overprint', fx: '', fxWhy: '', ...over });
+const cand = (over: Partial<SubjectScript['candidates'][number]> = {}): SubjectScript['candidates'][number] => ({ for: 'bike', letter: 'Z', idea: '', look: '', scheme: 'riso-pink', together: '', ...over });
 const script = (over: Partial<SubjectScript> = {}): SubjectScript => ({
-  subject: { kind: 'object', what: 'a bicycle', why: '', alternatives: '', features: ['empty rear carrier'] }, story: '', world: '', peak: '',
+  cast: [bike], alternatives: '', tradeoffs: '', story: '', world: '', peak: '',
   shots: [shot('S01'), shot('S02')],
   lines: [line('c001', ['S01']), line('c002', ['S02'])],
   text: [{ cue: 'c001', template: 'vertical', enter: 'drum-feed', exit: 'drum-out', idle: 'fill', emphasis: 'hollow', word: '夕方', why: '' }],
-  candidates: [{ letter: 'A', idea: '', look: '', scheme: 'riso-pink' }],
+  candidates: [cand()],
   sameness: '', ...over,
 });
 
@@ -64,10 +66,40 @@ test('a line whose shots are all unknown is an error: the edit would show nothin
   assert.throws(() => cleanScript(script({ lines: [line('c001', ['S01']), line('c002', ['S77'])] }), vocab), /c002 has no shots/);
 });
 
-test('candidates are lettered in order, capped, and given a scheme the language has', () => {
-  const many = Array.from({ length: 8 }, (_, i) => ({ letter: 'Z', idea: `${i}`, look: '', scheme: i ? 'riso-cobalt' : 'neon' }));
+test('candidates are lettered in order per member, capped, and given a scheme the language has', () => {
+  const many = Array.from({ length: 8 }, (_, i) => cand({ idea: `${i}`, scheme: i ? 'riso-cobalt' : 'neon' }));
   const s = cleanScript(script({ candidates: many }), vocab);
   assert.equal(s.candidates.length, MAX_CANDIDATES);
   assert.deepEqual(s.candidates.map((c) => c.letter), ['A', 'B', 'C', 'D', 'E', 'F']);
   assert.equal(s.candidates[0].scheme, 'riso-cobalt');
+});
+
+test('cast: a decided member keeps its own fields and comes first; props need a look, main members candidates; unknown members leave the shots', () => {
+  const warned: string[] = [];
+  const fixedBike = { ...bike, what: 'the picked bicycle', features: ['scuffed frame', 'empty rear carrier'], look: 'look D', scheme: 'riso-cobalt', sheet: 'D.jpg' };
+  const rider = { id: 'rider', kind: 'person' as const, tier: 'main' as const, what: 'a schoolboy', look: '', role: 'the one who rides', features: ['uniform'], why: 'the lyric rides' };
+  const s = cleanScript(script({
+    cast: [rider, { ...bike, what: 'redrawn by the director', role: 'my role for it', features: ['other'] }, { ...rider, id: 'cat' }, { ...rider, id: 'sun', tier: 'prop' }, { ...rider, id: 'leaf', tier: 'prop', look: 'a leaf' }],
+    shots: [shot('S01', { cast: ['rider', 'bike'] }), shot('S02', { cast: ['ghost'] }), shot('S03', { cast: ['bike', 'leaf'] })],
+    lines: [line('c001', ['S01']), line('c002', ['S03'])],
+    candidates: [cand({ for: 'rider', scheme: 'riso-cobalt' }), cand({ for: 'rider' }), cand({ for: 'bike' }), cand({ for: 'leaf' })],
+  }), { ...vocab, fixed: [fixedBike] }, (m) => warned.push(m));
+  assert.deepEqual(s.cast.map((m) => [m.id, m.tier, !!m.fixed]), [['bike', 'main', true], ['rider', 'main', false], ['cat', 'main', false], ['sun', 'prop', false], ['leaf', 'prop', false]]);
+  assert.deepEqual([s.cast[0].what, s.cast[0].look, s.cast[0].features, s.cast[0].role], ['the picked bicycle', 'look D', ['scuffed frame', 'empty rear carrier'], 'my role for it']);
+  assert.deepEqual(s.shots[1].cast, []);
+  assert.deepEqual(s.shots[2].cast, ['bike', 'leaf']);
+  assert.deepEqual(s.candidates.map((c) => [c.for, c.letter]), [['rider', 'A'], ['rider', 'B']]);
+  assert.ok(warned.some((m) => /prop sun has no look/.test(m)));
+  assert.ok(warned.some((m) => /main member cat has no candidates/.test(m)));
+  assert.ok(warned.some((m) => /S02: unknown cast member ghost/.test(m)));
+  assert.ok(warned.some((m) => /S02: a cut-out with nobody/.test(m)));
+  assert.ok(warned.some((m) => /candidate for bike: not an undecided/.test(m)));
+  assert.ok(warned.some((m) => /candidate for leaf: not an undecided/.test(m)));
+});
+
+test('cast: a decided member missing from the answer is put back', () => {
+  const fixedBike = { ...bike, look: 'look D', scheme: 'riso-cobalt', sheet: 'D.jpg' };
+  const s = cleanScript(script({ cast: [], candidates: [] }), { ...vocab, fixed: [fixedBike] });
+  assert.deepEqual(s.cast.map((m) => m.id), ['bike']);
+  assert.equal(s.candidates.length, 0);
 });

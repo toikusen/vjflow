@@ -71,8 +71,8 @@ export interface KineticLayer {
   yields?: boolean;
   /** A two-frame hit as the cut lands: black, white or the whole frame inverted. */
   flash?: 'black' | 'white' | 'invert';
-  /** How the character is printed: two-ink duotone (default), line art drawn on, or a halftone dot screen. */
-  print?: 'duo' | 'line' | 'halftone';
+  /** How the character is printed: two-ink duotone (default), line art drawn on, a halftone dot screen, or as drawn (`own`: a cut-out already printed in the language's inks keeps them). */
+  print?: 'duo' | 'line' | 'halftone' | 'own';
   /** A printed ground ellipse under the character's feet, so a cut-out stands on a graphic ground instead of floating. */
   shadow?: boolean;
   /** The song's tempo (the ecg move beats with it). */
@@ -155,7 +155,7 @@ export function readsDark(ctx: CanvasRenderingContext2D, a: Rgb, b: Rgb): boolea
 
 /** Moves that fill the frame with words: under a sung line they are kept faint. */
 const PAGE_FX = new Set(['wall', 'marquee', 'ascii', 'tunnel', 'corridor', 'lens']);
-export const KINETIC_PRINTS = ['duo', 'line', 'halftone'] as const;
+export const KINETIC_PRINTS = ['duo', 'line', 'halftone', 'own'] as const;
 /**
  * What document the video is, when it is one: a blueprint (FIG. and a ruler, LINE n / total), a film slate (SCENE,
  * TAKE, a clapper stripe), a case file (CASE No., a CONFIDENTIAL box, page n / total), a notebook page (No. and DATE
@@ -434,7 +434,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // a sprite clip's frames each carry a frame key (engine.ts picture): each is printed and cached on its own
   const sk = pic ? spriteKey(l.sprite!, pic) : '';
   const look = pic && pic.width ? (l.print === 'line' ? lineArt(pic, sk, ink)?.[lineStage(age)] : l.print === 'halftone' ? halftone(pic, sk, ink, paper) : undefined) : undefined;
-  const printed = pic && pic.width ? { img: look ?? duotone(pic, sk, ink, paper), night: () => duotone(pic, sk, paper, ink), w: (pic.width / pic.height) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2 } : undefined;
+  const printed = pic && pic.width ? { img: look ?? (l.print === 'own' ? pic : duotone(pic, sk, ink, paper)), night: () => duotone(pic, sk, paper, ink), w: (pic.width / pic.height) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2 } : undefined;
   let own = false;
   switch (l.fx) {
     case 'wall': {

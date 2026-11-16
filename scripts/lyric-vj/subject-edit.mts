@@ -40,7 +40,8 @@ const lines: CutPlanLine[] = script.lines.map((l) => {
   return { cue: l.cue, start: Math.max(from, c.start), end: Math.min(to, c.end), shots: l.shots, ...(beats ? { beats } : {}) };
 });
 lines[lines.length - 1].end = to;
-const minCut = Math.max(0.3, 0.95 * 60 / (song.tempo || 120));
+// no cut under a beat and a half: a 0.48 s showing of a shot between two others read as a flash (review e)
+const minCut = Math.max(0.3, 1.5 * 60 / (song.tempo || 120));
 const cuts = cutGrid(song.beats, lines, { energyAt: energyReader(song.energy, song.energyFps), minCut });
 
 // ---- assets: a cut-out per still shot, a sprite clip per run of a video shot (its clock starts with the run), a scene picture ----
@@ -89,11 +90,18 @@ const t: TreatmentV3 = structuredClone(base);
 const g = t.graphics!;
 type Sec = (typeof g.sections)[number];
 type KLayer = Record<string, unknown> & { kind: 'kinetic'; fx: string };
+// the decided cast was drawn in one scheme: the window's grounds and lines keep it (the world plan rotates schemes by
+// part, and a magenta part printed cobalt cut-outs into a stranger's inks, review e)
+const schemeId = (JSON.parse(readFileSync(join(out, 'fixed.json'), 'utf8')) as { scheme?: string }[]).find((f) => f.scheme)?.scheme;
+const scheme = world.palette.find((p) => p.id === schemeId) ?? world.palette[0];
+const withScheme = <T extends Record<string, unknown>>(x: T): T => ({ ...x, ...(x['slots'] ? { slots: scheme } : {}), ...(x['sheetInks'] ? { sheetInks: scheme } : {}), ...('ink' in x ? { ink: scheme.ink, paper: scheme.ground, accent: scheme.accent } : {}), ...('core' in x ? { core: scheme.ink2 } : {}) });
 const groundAt = (time: number): KLayer => {
   const sec = [...base.graphics!.sections].filter((s) => s.start <= time + 1e-6).at(-1) ?? base.graphics!.sections[0];
   const k = sec.layers.find((l) => l.kind === 'kinetic') as KLayer | undefined;
   if (!k) throw new Error(`no world layer at ${time}`);
-  return structuredClone(k);
+  const g = withScheme(structuredClone(k));
+  if (g['world']) g['world'] = withScheme(g['world'] as Record<string, unknown>);
+  return g;
 };
 const lineOf = (cue: string) => script.lines.find((l) => l.cue === cue)!;
 const textOf = (cue: string) => script.text.find((x) => x.cue === cue);
@@ -115,10 +123,12 @@ const made: Sec[] = cuts.map((c, i) => {
   } else {
     // a held vowel (the director's hold emphasis) on the line's first cut: one still composition of the same picture repeated in panels, not more cuts
     const panels = held(c.cue) && firstOfLine && s.size !== 'wide';
-    layers.push({ ...layer, sprite: ga.sprite, shadow: s.size !== 'close' && !panels, ...(panels ? { fx: 'grid' } : {}) } as never);
-    // the director's move for the line, over the ground, with the line's own words
+    // the cut-out keeps the inks it was drawn in (print own): a duotone print lost the vermilion ribbon, skirt and lamp
+    layers.push({ ...layer, sprite: ga.sprite, print: 'own', shadow: s.size !== 'close' && !panels, ...(panels ? { fx: 'grid' } : {}) } as never);
+    // the director's move for the line, over the ground; a window frames a close shot only (it cut a wide two-member
+    // shot down to a corner, review e)
     // (the move's own words would double the sung line, which the lyric layout draws: it gets none)
-    if (l.fx && !panels) layers.push({ kind: 'kinetic', fx: l.fx, bare: true, words: [], ink: ground['ink'], paper: ground['paper'], accent: ground['accent'], seed: i + 11, side: s.side, size: s.height, flip: false, bpm: ground['bpm'], song: ground['song'], mood: ground['mood'], at: c.start, len: +(c.end - c.start).toFixed(3) } as never);
+    if (l.fx && !panels && !(l.fx === 'window' && s.size !== 'close')) layers.push({ kind: 'kinetic', fx: l.fx, bare: true, words: [], ink: ground['ink'], paper: ground['paper'], accent: ground['accent'], seed: i + 11, side: s.side, size: s.height, flip: false, bpm: ground['bpm'], song: ground['song'], mood: ground['mood'], at: c.start, len: +(c.end - c.start).toFixed(3) } as never);
   }
   return { start: +c.start.toFixed(3), layers } as Sec;
 });
@@ -139,6 +149,7 @@ t.cues = t.cues.map((cue) => {
   const next = { ...cue } as typeof cue & { world?: Record<string, unknown> };
   if (w) {
     const set = setFor(firstShot.side);
+    Object.assign(w, withScheme(w as Record<string, unknown>));
     // the line keeps a share of its set's measure and stays put, so the subject beside it has the rest of the frame;
     // the world's own blown-up word goes when the director named the line's emphasis himself
     next.world = { ...w, ...(worldSets.has(set) ? { set } : {}), compact: compactFor(cueOf(cue.cueId).text), drift: [0, 0], swell: 0 };

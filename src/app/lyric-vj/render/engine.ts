@@ -82,7 +82,7 @@ import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
-import { scroll, singalong } from './sing-along';
+import { PREVIEW_GAP, scroll, singalong } from './sing-along';
 import { discOffsets } from './dilate';
 import { missingOptIn } from '../templates';
 import { boxInsideOutline } from './page-layout';
@@ -231,6 +231,15 @@ function placesWhileRead(layer: CueLayer, parent: THREE.Object3D, cuts: number[]
   });
   layer.group.visible = vis;
   return out;
+}
+
+/** Where a sing-along's preview row stands (world px, measured at rest), if the line has one. */
+function previewBox(layer: CueLayer): THREE.Box3 | undefined {
+  const box = new THREE.Box3();
+  layer.update(layer.readable()[0] + 0.01, { flash: 0, hit: 0, shake: 0 });
+  layer.group.updateMatrixWorld(true);
+  layer.group.traverse((o) => void ((o as THREE.Mesh).isMesh && o.userData['preview'] && o.visible && ((o as THREE.Mesh).material as THREE.Material).opacity > 0.01 && box.expandByObject(o)));
+  return box.isEmpty() ? undefined : box;
 }
 
 /** The box of what the layer shows now, in world (frame) px with every transform above it applied. */
@@ -1192,7 +1201,9 @@ export class LyricVjEngine {
         return nextShow;
       })();
       // (a world's shared shot is gone before the next line shows, however late its own line runs)
-      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : persist ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
+      // (a sing-along line stays until the next one shows only while that one follows soon: its preview waits there)
+      const held = !!persist && (persist !== 'preview' || (!!next && next.start - cue.end <= PREVIEW_GAP));
+      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
@@ -1290,6 +1301,15 @@ export class LyricVjEngine {
       let drawn = shot.template;
       const build = (r = rt) => inFrame(withTextFx(RENDERERS[drawn].cue({ ...r, style: templateStyle(r.style) }), r));
       let layer = build();
+      // a sing-along's preview row reads on what is under it there (measured where it stands), not on the line's ground
+      const pv = previewBox(layer);
+      if (pv) {
+        const m = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), pv);
+        if (m) {
+          rt.previewGrounds = [m.mean, ...(m.grounds ?? [])];
+          layer = build();
+        }
+      }
       // the floor on type size: a line that would rest under it takes plain stepped rows, its moves given up for them
       const alone = !styled.some((x, j) => j !== i && x.style.shot === style.shot);
       // (in a style world every line rests at the type floor, render/type-floor.ts, a world line too: one that no set of its

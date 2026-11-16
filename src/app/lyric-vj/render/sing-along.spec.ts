@@ -105,3 +105,33 @@ describe('the preview is not the line', () => {
     expect(meshGlyphs(l.group).length).toBe([...'風から聞いた歌'].length);
   });
 });
+
+describe('sing-along continuity', () => {
+  it('a previewed line comes up from the preview in place, at full strength, and grows to its size before it is read', async () => {
+    const { GROW_SEC, PREVIEW_SCALE } = await import('./sing-along');
+    expect(singalong.persist).toBe('preview');
+    const l = singalong.cue(rt());
+    l.update(10.001, fx);
+    const s = sung(meshes(l.group));
+    expect(s.every((m) => m.material.opacity === 1)).toBe(true);
+    expect((s[0] as unknown as { scale: { x: number } }).scale.x).toBeCloseTo(PREVIEW_SCALE, 2);
+    expect(l.readable()[0]).toBeCloseTo(10 + GROW_SEC);
+    l.update(10 + GROW_SEC, fx);
+    expect((s[0] as unknown as { scale: { x: number } }).scale.x).toBeCloseTo(1, 3);
+  });
+
+  it('scroll: the line before leaves from its own size, shrinking, never popping back at the preview size', () => {
+    expect(scroll.persist).toBe('preview');
+    const l = scroll.cue(rt());
+    l.update(10.001, fx);
+    const gone = preview(meshes(l.group)).filter((m) => m.material.opacity > 0.5) as unknown as { scale: { x: number } }[];
+    expect(gone.length).toBeGreaterThan(0);
+    expect(gone[0].scale.x).toBeGreaterThan(0.98);
+  });
+
+  it('the preview reads on what is under its own row, not only on the palette', () => {
+    const ink = previewInk({ palette: { text: '#f4efe6', background: '#1d1b22' }, previewGrounds: ['#e8e0d0'] } as never);
+    expect(Math.min(contrast(ink, '#1d1b22'), contrast(ink, '#e8e0d0'))).toBeGreaterThan(contrast('#f4efe6', '#e8e0d0'));
+    expect(contrast(ink, '#e8e0d0')).toBeGreaterThanOrEqual(3);
+  });
+});

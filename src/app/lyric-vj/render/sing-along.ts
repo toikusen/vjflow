@@ -6,7 +6,7 @@
 // line is left behind: the line before only scrolls away. A preview shows only when the next line follows soon.
 import * as THREE from 'three';
 import { clamp01, easeOutCubic, Glyph, GlyphStyle, makeGlyphs, placeRow, rowWidth } from './glyphs';
-import { color, CueLayer, CueRuntime, FrameFx, glyphMotion, readable, tagSource, TemplateRenderer } from './runtime';
+import { color, contrast, CueLayer, CueRuntime, FrameFx, glyphMotion, readable, tagSource, TemplateRenderer } from './runtime';
 
 const W = 1920;
 const H = 1080;
@@ -23,8 +23,25 @@ const oneLine = (s: string) => s.replace(/[\s　]+/g, ' ').trim();
 /** The type size that keeps a row of `text` within `share` of the frame width, at most `max` px. */
 export const rowSize = (text: string, share: number, max: number) => Math.round(Math.min(max, (W * share) / Math.max(1, [...text].length) / 0.98));
 
-/** The preview's ink: the line's own ink, or the nearest that reads at 4.5:1 on the ground. */
-export const previewInk = (rt: Pick<CueRuntime, 'palette'>) => readable(rt.palette.text, rt.palette.background, 4.5);
+/**
+ * The preview's ink: the line's own ink if it reads at 4.5:1 on every ground under the preview's row (the palette's and
+ * what was measured there, previewGrounds), else the candidate that reads best on all of them.
+ */
+export function previewInk(rt: Pick<CueRuntime, 'palette' | 'previewGrounds'>): string {
+  const grounds = [rt.palette.background, ...(rt.previewGrounds ?? [])];
+  const worst = (ink: string) => Math.min(...grounds.map((g) => contrast(ink, g)));
+  if (worst(rt.palette.text) >= 4.5) return rt.palette.text;
+  const tries = [...grounds.map((g) => readable(rt.palette.text, g, 4.5)), '#ffffff', '#111111'];
+  return tries.reduce((best, x) => (worst(x) > worst(best) ? x : best), tries[0]);
+}
+
+/** Whether this line was previewed by the line before (so it comes up from the preview, not from nothing). */
+export const previewed = (rt: Pick<CueRuntime, 'prevText' | 'prevEnd' | 'cue'>) => !!rt.prevText && rt.prevEnd !== undefined && rt.cue.start - rt.prevEnd <= PREVIEW_GAP;
+
+/** The preview's size against the line's own: the only thing that sets it apart (same weight, so it grows into the line). */
+export const PREVIEW_SCALE = 0.82;
+/** How long a previewed line takes to grow from the preview's size to its own, s × pace: before it is read. */
+export const GROW_SEC = 0.3;
 
 /** The next line to preview, if it follows soon enough. */
 export const previewOf = (rt: Pick<CueRuntime, 'nextText' | 'nextStart' | 'cue'>) =>
@@ -43,6 +60,7 @@ export const sungShare = (t: number, start: number, end: number) => clamp01((t -
 
 /** Two rows, upper left and lower right: even lines of the song in the upper one, odd in the lower. */
 export const singalong: TemplateRenderer = {
+  persist: 'preview',
   cue(rt: CueRuntime): CueLayer {
     const text = oneLine(rt.cue.text);
     const next = previewOf(rt);
@@ -54,35 +72,43 @@ export const singalong: TemplateRenderer = {
     const glyphs = glyphRow(text, { family: rt.fonts.display, weight: 900, size, shadow: false }, rt.palette.text, mine.x, mine.y);
     tagSource(glyphs, rt.cue.text, 0);
     glyphs.forEach((g) => group.add(g.mesh));
-    // the preview is the next line where it will be sung, smaller and lighter, never dimmed (no tagSource: not this line)
-    const preview = next ? glyphRow(next, { family: rt.fonts.display, weight: 700, size: Math.round(rowSize(next, 0.62, 96) * 0.82) }, previewInk(rt), other.x, other.y, true) : [];
+    // the preview is the next line where it will be sung, the same type a little smaller, never dimmed
+    const preview = next ? glyphRow(next, { family: rt.fonts.display, weight: 900, size: Math.round(rowSize(next, 0.62, 96) * PREVIEW_SCALE) }, previewInk(rt), other.x, other.y, true) : [];
     preview.forEach((g) => (g.mesh.position.set(g.x, g.y, 0), group.add(g.mesh)));
     // the underline: the accent that reads on the ground, drawn on from the line's left edge as it is sung
     const width = rowWidth(glyphs, TRACK);
     const bar = new THREE.Mesh(new THREE.PlaneGeometry(1, Math.max(6, size * 0.08)), new THREE.MeshBasicMaterial({ color: color(readable(rt.palette.accent, rt.palette.background, 3), 1), transparent: true, depthTest: false, depthWrite: false }));
     bar.userData['decor'] = true;
     group.add(bar);
-    const exitRt: CueRuntime = { ...rt, style: { ...rt.style, enter: 'fade' } };
+    // a previewed line is already up: it grows from the preview's size in place, at full strength (no fade, no flash)
+    const grows = previewed(rt);
+    const inRt: CueRuntime = { ...rt, style: { ...rt.style, enter: grows ? 'cut' : 'fade' } };
+    const grow = GROW_SEC * rt.pace;
+    const from = new THREE.Color(previewInk(rt));
+    const own = new THREE.Color(rt.palette.text);
     const n = glyphs.length;
     return {
       group,
       update(t: number, _fx: FrameFx) {
+        const k = grows ? easeOutCubic(clamp01((t - rt.showFrom) / grow)) : 1;
+        const s = PREVIEW_SCALE + (1 - PREVIEW_SCALE) * k;
         for (const g of glyphs) {
-          const m = glyphMotion(exitRt, g, n, t, 0);
-          g.mesh.position.set(g.x + m.dx, g.y + m.dy, 0);
-          g.mesh.scale.setScalar(m.scale);
+          const m = glyphMotion(inRt, g, n, t, 0);
+          g.mesh.position.set(mine.x + (g.x - mine.x) * s + m.dx, g.y + m.dy, 0);
+          g.mesh.scale.setScalar(m.scale * s);
+          if (grows) g.mesh.material.color.copy(from).lerp(own, k);
           g.mesh.material.opacity = m.opacity;
         }
         const up = glyphs[0]?.mesh.material.opacity ?? 0;
-        // the preview goes when this layer does (the next line then comes up in the same place)
+        // the preview stays until this layer goes, which is when the next line shows (persist 'preview')
         const end = rt.exitAt + rt.exitDur;
         for (const g of preview) g.mesh.material.opacity = t >= rt.showFrom && t < end ? 1 : 0;
-        const k = sungShare(t, rt.cue.start, rt.cue.end);
-        bar.scale.x = Math.max(1e-3, width * k);
-        bar.position.set(mine.x - width / 2 + (width * k) / 2, mine.y - size * 0.68, 0);
+        const kk = sungShare(t, rt.cue.start, rt.cue.end);
+        bar.scale.x = Math.max(1e-3, width * kk);
+        bar.position.set(mine.x - width / 2 + (width * kk) / 2, mine.y - size * 0.68, 0);
         bar.material.opacity = up;
       },
-      readable: () => [rt.showFrom + 0.3, rt.exitAt],
+      readable: () => [rt.showFrom + (grows ? grow : 0.3), rt.exitAt],
       framed: true,
     };
   },
@@ -90,6 +116,7 @@ export const singalong: TemplateRenderer = {
 
 /** The sung line centred and large, the next one below it; the column scrolls up a row as each line comes. */
 export const scroll: TemplateRenderer = {
+  persist: 'preview',
   cue(rt: CueRuntime): CueLayer {
     const text = oneLine(rt.cue.text);
     const next = previewOf(rt);
@@ -102,28 +129,35 @@ export const scroll: TemplateRenderer = {
     const glyphs = glyphRow(text, { family: rt.fonts.display, weight: 900, size, shadow: false }, ink, 0, 0);
     tagSource(glyphs, rt.cue.text, 0);
     glyphs.forEach((g) => group.add(g.mesh));
-    const below = next ? glyphRow(next, { family: rt.fonts.display, weight: 700, size: small(next) }, previewInk(rt), 0, -step, true) : [];
-    const gone = before ? glyphRow(before, { family: rt.fonts.display, weight: 700, size: small(before) }, previewInk(rt), 0, 0, true) : [];
+    const below = next ? glyphRow(next, { family: rt.fonts.display, weight: 900, size: small(next) }, previewInk(rt), 0, -step, true) : [];
+    // the line before, as it was sung (its own size and ink), shrinking as it scrolls away
+    const gone = before ? glyphRow(before, { family: rt.fonts.display, weight: 900, size: rowSize(before, 0.8, 110) }, ink, 0, 0, true) : [];
     [...below, ...gone].forEach((g) => group.add(g.mesh));
     const scrollSec = SCROLL_SEC * rt.pace;
     const lands = rt.showFrom + scrollSec;
+    const from = new THREE.Color(previewInk(rt));
+    const own = new THREE.Color(ink);
+    const grows = previewed(rt);
     return {
       group,
       update(t: number, _fx: FrameFx) {
         const k = easeOutCubic(clamp01((t - rt.showFrom) / scrollSec));
         const shown = t >= rt.showFrom && t < rt.exitAt + rt.exitDur;
-        // the sung line rises from the preview's row to the centre, growing to its size; with no line just before it
-        // fades up as it rises
+        // the sung line rises from the preview's row to the centre, growing to its size and taking its ink; with no
+        // preview before it, it fades up as it rises
         const grow = 0.6 + 0.4 * k;
         for (const g of glyphs) {
           const m = glyphMotion({ ...rt, style: { ...rt.style, enter: 'cut' } }, g, glyphs.length, t, 0);
           g.mesh.position.set(g.x * grow + m.dx, -step * (1 - k) + g.y + m.dy, 0);
           g.mesh.scale.setScalar(grow * m.scale);
-          g.mesh.material.opacity = shown ? (before ? 1 : k) * m.opacity : 0;
+          if (grows) g.mesh.material.color.copy(from).lerp(own, k);
+          g.mesh.material.opacity = shown ? (grows ? 1 : k) * m.opacity : 0;
         }
-        // the line before scrolls up off its place and is gone by the time this one has landed
+        // the line before scrolls up from where it stood, from its own size down, and is gone once this one has landed
+        const shrink = 1 - 0.4 * k;
         for (const g of gone) {
-          g.mesh.position.set(g.x, g.y + step * k, 0);
+          g.mesh.position.set(g.x * shrink, g.y + step * k, 0);
+          g.mesh.scale.setScalar(shrink);
           g.mesh.material.opacity = shown ? 1 - k : 0;
         }
         for (const g of below) {

@@ -57,6 +57,8 @@ export interface CueRuntime {
   prevEnd?: number;
   nextText?: string;
   nextStart?: number;
+  /** The colours measured under a sing-along's preview row (where it stands, not where the line sung does). */
+  previewGrounds?: string[];
   /** The song's seed: a drawn effect's look (how many shards, how hard they fly) is its own in each song. */
   song?: number;
   /** The song's tempo (a held line's heartbeat thumps with it). */
@@ -142,7 +144,8 @@ export interface TemplateRenderer {
   /** The shot layer shows for the whole shot, not only around its lines (title cards have none). */
   standalone?: boolean;
   /** Lines stay up past their own time: until the shot ends ('shot'), or until the line after next shows ('next'). */
-  persist?: 'shot' | 'next';
+  /** 'preview' (sing-along): a line whose next one follows within PREVIEW_GAP stays up until that one shows. */
+  persist?: 'shot' | 'next' | 'preview';
 }
 
 /** Strength of the most recent accent at time t (exponential decay after each hit). */

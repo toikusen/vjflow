@@ -2468,30 +2468,61 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   // so a seek, a scrub back and a skipped frame show the same trail as playback (the export equals the preview)
   const step = out.update;
   const inv = new THREE.Matrix4();
-  const poseOf = () => {
+  const tmpV = [new THREE.Vector3(), new THREE.Vector3()];
+  type Pose = { m: Float32Array; o: Float32Array; seen: Uint8Array };
+  const n2 = items.length;
+  /** Where each glyph is at a time, by the template alone (its move: the drawn effects are not run for a ghost). */
+  const posed = new Map<string, Pose>();
+  const spare: Pose[] = [];
+  const poseAt = (tp: number, write?: Pose): Pose => {
+    const p = write ?? spare.pop() ?? { m: new Float32Array(16 * n2), o: new Float32Array(n2), seen: new Uint8Array(n2) };
     layer.group.updateMatrixWorld(true);
     inv.copy(layer.group.matrixWorld).invert();
-    return new Map(items.map((it) => [it.mesh, { m: new THREE.Matrix4().multiplyMatrices(inv, it.mesh.matrixWorld), o: it.mesh.material.opacity, seen: it.mesh.visible }]));
+    items.forEach((it, j) => {
+      tmpM.multiplyMatrices(inv, it.mesh.matrixWorld).toArray(p.m, 16 * j);
+      p.o[j] = it.mesh.material.opacity;
+      p.seen[j] = it.mesh.visible ? 1 : 0;
+    });
+    return p;
   };
+  const tmpM = new THREE.Matrix4();
+  const past = (tp: number): Pose => {
+    const key = String(Math.round(tp * 2400));
+    const hit = posed.get(key);
+    if (hit) return hit;
+    // the template's own frame at tp, from the same start a frame has (text-fx restores what the template set)
+    for (const [m, b] of base) (m.position.copy(b.p), m.scale.copy(b.s), (m.rotation.z = b.r), (m.material.opacity = b.o));
+    layer.update(tp, { flash: 0, hit: 0, shake: 0 });
+    const p = poseAt(tp);
+    posed.set(key, p);
+    // a few frames back is all a trail needs: the oldest go back to the pool (pure in time, so reuse is safe)
+    while (posed.size > 12) {
+      const [k0, v0] = posed.entries().next().value!;
+      posed.delete(k0);
+      spare.push(v0);
+    }
+    return p;
+  };
+  const nowPose: Pose = { m: new Float32Array(16 * n2), o: new Float32Array(n2), seen: new Uint8Array(n2) };
   out.update = (t, fx) => {
-    const was = TRAIL.map((k) => (step(t - k / TRAIL_FPS, { flash: 0, hit: 0, shake: 0 }), poseOf()));
+    const was = TRAIL.map((k) => past(t - k / TRAIL_FPS));
     step(t, fx);
-    const now = poseOf();
-    for (const it of items) {
+    const now = poseAt(t, nowPose);
+    items.forEach((it, j) => {
       const m = it.mesh;
-      const at = now.get(m)!;
       ghosts.get(m)!.forEach((g, i) => {
-        const w = was[i].get(m)!;
+        const w = was[i];
         g.geometry = m.geometry;
         g.material.map = m.material.map;
         // a still glyph has no trail (its copies would only thicken it), nor one that was not up yet
-        const moved = new THREE.Vector3().setFromMatrixPosition(w.m).distanceTo(new THREE.Vector3().setFromMatrixPosition(at.m));
-        g.visible = w.seen && w.o > 0 && m.visible && moved > it.style.size * 0.06;
-        g.matrix.copy(w.m);
+        tmpV[0].set(w.m[16 * j + 12], w.m[16 * j + 13], w.m[16 * j + 14]);
+        tmpV[1].set(now.m[16 * j + 12], now.m[16 * j + 13], now.m[16 * j + 14]);
+        g.visible = !!w.seen[j] && w.o[j] > 0 && m.visible && tmpV[0].distanceTo(tmpV[1]) > it.style.size * 0.06;
+        g.matrix.fromArray(w.m, 16 * j);
         g.matrixWorldNeedsUpdate = true;
-        g.material.opacity = Math.min(w.o, m.material.opacity + 0.3) * [0.45, 0.28, 0.14][i];
+        g.material.opacity = Math.min(w.o[j], m.material.opacity + 0.3) * [0.45, 0.28, 0.14][i];
       });
-    }
+    });
   };
   return out;
 }

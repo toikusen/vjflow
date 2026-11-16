@@ -48,3 +48,18 @@ describe('seek order: a frame is a function of its time', () => {
     }
   });
 });
+
+describe('trail cost', () => {
+  it('reads past poses off the template alone, once per time: about two template frames a played frame, not four', () => {
+    const base = layer();
+    let calls = 0;
+    const own = base.update;
+    base.update = (t, f) => (calls++, own(t, f));
+    const l = withTextFx(base, runtime({ trail: true, enter: 'decode' }));
+    for (let k = 0; k < 20; k++) l.update(1 + k / 30, fx);
+    calls = 0;
+    // once playing, each frame needs one past pose it has not seen (3 frames back) and its own
+    for (let k = 20; k < 40; k++) l.update(1 + k / 30, fx);
+    expect(calls).toBeLessThanOrEqual(20 * 2);
+  });
+});

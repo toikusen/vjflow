@@ -169,6 +169,13 @@ const takePageChecks = async (page: Page) => {
   pageChecks.fails.push(...c.fails);
   await page.evaluate(() => { delete (globalThis as { vjPageChecks?: unknown }).vjPageChecks; });
 };
+// code-layer sprite draws kept off a read lyric (cover.ts watchClear): the drawing put a prop under a line; written into
+// metrics.json `keepClear` (draws, of them cut out or faded only; moved: draws a shot's move took off the line instead)
+const keepClear = { draws: 0, cut: 0, faded: 0, moved: 0 };
+const takeKeepClear = async (page: Page) => {
+  const c = await page.evaluate(() => { const g = globalThis as { vjKeepClear?: typeof keepClear }; const x = g.vjKeepClear; delete g.vjKeepClear; return x; });
+  for (const k of ['draws', 'cut', 'faded', 'moved'] as const) keepClear[k] += c?.[k] ?? 0;
+};
 async function openPage(): Promise<Page> {
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   // Google Fonts from the disk cache shared by every worktree (out/ is shared; font-cache.mts). A miss with no network
@@ -187,7 +194,7 @@ async function openPage(): Promise<Page> {
   // of the code layer's reports a layer that failed to compile, threw, or drew nothing is a fault; its diagnostics
   // (lyric cover shares, slow frames, camera tracks, scene use) stay in the log, judged by their own rules (make.sh's
   // hides > 40 %)
-  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|track |scene-use )/.test(m.text()) ? console.error(m.text()) : fault(m.text())));
+  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|lyric kept clear:|track |scene-use )/.test(m.text()) ? console.error(m.text()) : fault(m.text())));
   // a busy machine (several songs at once) can miss the ready timeout: one more try with longer patience before the
   // song fails (three style tests started together all timed out, then rendered fine one by one)
   for (let attempt = 0; ; attempt++) {
@@ -225,6 +232,7 @@ try {
     }
     // a pre-render check (no full render needed): lines too short to read, lines left over an instrumental
     await takePageChecks(page);
+    await takeKeepClear(page);
     const m = await page.evaluate(() => window.vjMetrics());
     // the storyboard's texts measured on frames drawn as played: size, what shows of them, contrast, time up
     const sceneQa = await page.evaluate(() => window.vjSceneQa());
@@ -267,7 +275,7 @@ try {
     writeFileSync(join(out, 'scene-qa.json'), JSON.stringify(sceneQa, null, 1));
     writeFileSync(join(out, 'check.json'), JSON.stringify(check, null, 1));
     // per line: planned and drawn entrance, why it changed, readable and required seconds (to re-check any line)
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}) }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws || keepClear.moved ? { keepClear } : {}) }, null, 1));
     console.log('stills written to', out, JSON.stringify(check));
   } else {
     // a storyboard that fails its check on the finished frames is not rendered: no half-made output
@@ -329,6 +337,7 @@ try {
         ff.stdin.end();
         await new Promise((r, j) => ff.on('close', (c) => (c ? j(new Error(`ffmpeg ${c}`)) : r(null))));
         await takePageChecks(page);
+        await takeKeepClear(page);
         await page.close();
         return file;
       }
@@ -367,7 +376,7 @@ try {
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,
     };
-    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}) }, null, 1));
+    writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws || keepClear.moved ? { keepClear } : {}) }, null, 1));
     status.outputs(outputs);
     status.stage('render', {
       state: 'done', done: total,

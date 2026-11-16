@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clearAlpha, CLEAR_FADE, resetCover } from './cover';
+import { clearAlpha, CLEAR_FADE, clearTally, resetCover } from './cover';
 import { drawLook, GraphicsLook, Layer } from './graphics';
 
 /** A 2D-matrix stand-in (jsdom has no DOMMatrix): only what drawCode and coverOf use. */
@@ -131,10 +131,38 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
       expect(logged).toEqual([]);
       resetCover();
       frame([900], 0.675);
-      expect(logged.length).toBe(1);
+      expect(logged.filter((x) => x.includes('lyric covered'))).toHaveLength(1);
     } finally {
       console.error = err;
     }
+  });
+
+  it('counts and reports every sprite it had to keep clear: the drawing is sent back to place it in the room', () => {
+    const logged: string[] = [];
+    const err = console.error;
+    console.error = (x: string) => logged.push(x);
+    try {
+      frame([900, 520, 200]);
+      expect(clearTally()).toEqual({ draws: 2, cut: 2, faded: 0, moved: 0 });
+      expect(logged.filter((x) => x.startsWith('code layer: lyric kept clear: bottle 100% inside the lyric box, cut out and faded at 1.0 s (shot 0)'))).toHaveLength(1);
+      // the same picture at the same place is reported once more only when more of it is inside
+      frame([900]);
+      expect(logged.filter((x) => x.includes('lyric kept clear'))).toHaveLength(1);
+      expect(clearTally().draws).toBe(3);
+    } finally {
+      console.error = err;
+    }
+  });
+
+  it('gives the drawing the room the lines leave its shot: a prop placed with f.fit is never kept clear', () => {
+    const lines = [{ from: 0, to: 9, ...lyric }];
+    const src = "const b = f.img('bottle'); const [x, y, w, h] = f.fit(900, 450, 100, 100); ctx.drawImage(b, x, y, w, h); f.cache.room = f.room(); f.cache.lines = f.lines.length;";
+    const placed = frame([], 1, src, { lines } as never);
+    expect(placed).toEqual([{ x: 900, alpha: 1, holed: false }]);
+    expect(clearTally().draws).toBe(0);
+    // the same draw without f.fit is moved there by the engine (code-place.spec.ts): nothing cut either
+    expect(frame([900], 1, undefined, { lines } as never)).toEqual([{ x: 900, alpha: 1, holed: false }]);
+    expect(clearTally()).toMatchObject({ draws: 0, moved: 1 });
   });
 
   it("measures a sprite sheet's drawn cell, not the whole sheet", () => {

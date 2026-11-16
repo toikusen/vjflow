@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { freeJob } from './free-plan';
 import { FREE_STYLES } from './free-styles';
 import { meaningGaps, type Meaning } from './lineplan-core';
+import type { SongTimeline } from './timeline';
 
 describe('meaningGaps', () => {
   it('names each field the reading was never asked for', () => {
@@ -18,6 +19,26 @@ describe('meaningGaps', () => {
     expect(meaningGaps({ palette: 'tea', parts: [], keys: [], moments: [] })).toEqual([]);
     expect(meaningGaps(undefined)).toEqual([]);
     expect(meaningGaps(null)).toEqual([]);
+  });
+});
+
+describe('freeJob with a stale reading (self-contained song)', () => {
+  const lines = ['冬天的雪落在橋邊', '我們走過黃昏的街', '回憶像楓葉凋落', '說不出口的再見', '三年後的今天', '三年後的大雪'];
+  const cues = lines.map((text, i) => ({ id: `c${String(i + 1).padStart(3, '0')}`, start: 2 + i * 4, end: 5.5 + i * 4, text, charStarts: [...text].map((_, j) => 2 + i * 4 + j * 0.3) }));
+  const song = { title: 'A - B', duration: 30, tempo: 100, beats: Array.from({ length: 50 }, (_, i) => i * 0.6), downbeats: Array.from({ length: 13 }, (_, i) => i * 2.4), sections: [{ type: 'verse', start: 0, end: 14 }, { type: 'chorus', start: 14, end: 30 }], energy: [], energyFps: 1, cues, audio: { mix: '' } } as unknown as SongTimeline;
+  const stale = { palette: 'frost', ground: 'grain', reading: '', parts: [{ from: 'c001', tension: 0.4, fx: [], what: 'x' }], keys: [{ cue: 'c003', phrase: '楓葉凋落' }] } as Meaning;
+
+  it('draws it exactly as a reading that judged no moment, wiring off and on, and reports the gap', () => {
+    for (const id of ['riso', 'notebook']) {
+      for (const o of [{}, { scaleContrast: true, meaningMoments: true, worldEvents: true }]) {
+        const style = FREE_STYLES.find((s) => s.id === id)!;
+        const a = freeJob(song, { style, seed: 0, meaning: stale, ...o });
+        const b = freeJob(song, { style, seed: 0, meaning: { ...stale, moments: [] }, ...o });
+        expect(JSON.stringify(a.job)).toBe(JSON.stringify(b.job));
+        expect(a.meaningGaps).toEqual(['moments']);
+        expect(b.meaningGaps).toBeUndefined();
+      }
+    }
   });
 });
 

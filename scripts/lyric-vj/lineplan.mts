@@ -30,10 +30,10 @@ const valid = (m: Meaning | undefined): Meaning | undefined => {
 let got: { meaning?: Meaning; usd: number } = { usd: 0 };
 const cached = join(out, 'meaning.json');
 if (existsSync(cached)) got.meaning = JSON.parse(readFileSync(cached, 'utf8'));
+else try { got = await read(); } catch (e) { console.log(`reading failed, rules only: ${e}`); }
 // (a cache hit is used as stored, never re-asked: one older than a field the policies read is said, not refreshed)
 const gaps = existsSync(cached) ? meaningGaps(got.meaning) : [];
 if (gaps.length) console.warn(`lineplan: WARN stale reading ${cached}: no ${gaps.join(', ')} (written before the prompt asked); used as stored, so the free key / moment policies get no candidate from it. Re-read: scripts/lyric-vj/meaning-reread.mts`);
-else try { got = await read(); } catch (e) { console.log(`reading failed, rules only: ${e}`); }
 if (a['verify-meaning'] && !existsSync(cached) && valid(got.meaning)) {
   try {
     const v = await verifyCandidates(song, valid(got.meaning)!);

@@ -656,7 +656,8 @@ async function repairRound(src: string, cutList: number[], from: number, to: num
       view: (code, stills, out) => renderTreatment(build(code), stills, out),
       ask: async (text, images) => {
         // (over the budget the round stops with what it has; the run itself goes on to its final review)
-        if (overBudget(0.9)) throw new Error(`budget $${a.budget} reached`);
+        // (a repair turn is small: three measured at $0.23–0.30; the drawing's 0.9 reserve refused it under any lower --budget)
+        if (overBudget(0.35)) throw new Error(`budget $${a.budget} reached`);
         convo.push({ role: 'user', content: [{ type: 'text', text }, ...images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } }))] });
         const msg = await streamed({ model: a.model!, max_tokens: 64000, system: SYSTEM, messages: convo, output_config: { effort: 'medium', format: { type: 'json_schema', schema: EDIT_SCHEMA } } } as Anthropic.Messages.MessageStreamParams);
         usage.input += msg.usage.input_tokens + 1.25 * (msg.usage.cache_creation_input_tokens ?? 0) + 0.1 * (msg.usage.cache_read_input_tokens ?? 0);

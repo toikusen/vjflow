@@ -71,6 +71,51 @@ export function watchCover(key: string, id: string, share: number, inside: numbe
   return line;
 }
 
+/** The share of a picture inside the lyric box at which it has faded out wholly (keepClear). */
+export const CLEAR_FADE = 0.3;
+/**
+ * How strongly a picture that reaches into the lyric box is still drawn: whole when none of it is inside, fading as more
+ * of it moves in, gone from CLEAR_FADE of it on. What is inside the box is never drawn at all (keepClear clips it out),
+ * so a prop that drifts onto the line fades away over it instead of standing cut off on it.
+ */
+export const clearAlpha = (inside: number) => 1 - Math.min(1, Math.max(0, inside / CLEAR_FADE));
+
+/** The line's weight (its box gliding in, 0..1) from which its box is kept clear, and from which it is kept wholly. */
+export const CLEAR_FROM = 0.5;
+export const CLEAR_FULL = 0.85;
+/** How strongly the box is kept clear at the line's weight: none under CLEAR_FROM, wholly from CLEAR_FULL. */
+export const clearStrength = (weight: number) => Math.min(1, Math.max(0, (weight - CLEAR_FROM) / (CLEAR_FULL - CLEAR_FROM)));
+
+/**
+ * Draws one picture of a director's own drawing so it never covers the lyric while the line is read (`strength` 1;
+ * under 1, the box gliding in, it is only faded that much, not cut): `hidden` and
+ * `inside` are coverOf's shares for this draw. A picture clear of the box is drawn as it is; one reaching into it is
+ * drawn without the box (`frame` is the canvas transform of frame px, the box is in frame px) and faded by clearAlpha.
+ * Returns whether anything of it reached into the box.
+ */
+export function keepClear(ctx: CanvasRenderingContext2D, frame: DOMMatrix, box: CoverRect, hidden: number, inside: number, draw: () => void, w = 1920, h = 1080, strength = 1): boolean {
+  if (hidden <= 0 || strength <= 0) return draw(), false;
+  // (while the line's box glides in, the fade comes in with it: a prop never blinks out as a line comes up)
+  const alpha = 1 - Math.min(1, strength) * (1 - clearAlpha(inside));
+  if (alpha <= 0) return true;
+  ctx.save();
+  try {
+    ctx.globalAlpha *= alpha;
+    if (strength < 1) return draw(), true;
+    const now = ctx.getTransform();
+    ctx.setTransform(frame);
+    ctx.beginPath();
+    ctx.rect(0, 0, w, h);
+    ctx.rect(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+    ctx.clip('evenodd');
+    ctx.setTransform(now);
+    draw();
+  } finally {
+    ctx.restore();
+  }
+  return true;
+}
+
 /** For tests: forget what was reported. */
 export const resetCover = () => worst.clear();
 

@@ -3,7 +3,7 @@
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
 import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
-import { coverOf, watchCover } from './cover';
+import { clearStrength, CLEAR_FROM, coverOf, keepClear } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
 import { burstBox, drawGlassCrack, drawKit, glassOf, glassPieces, KIT_KINDS, kitPattern, KitLayer, KitPattern, PHONE_MX, PHONE_MY, phoneBox } from './kit';
@@ -363,17 +363,17 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   const t0 = performance.now();
   const cam = camAt(l.cuts ?? [], t);
   // while the lyric is fully up, watch the sprite draws for ones that hide it (a check the director must pass)
-  const base = l.lyric && (l.lyricWeight ?? 1) > 0.85 ? ctx.getTransform?.()?.inverse?.() : undefined;
+  const start = l.lyric && (l.lyricWeight ?? 1) > CLEAR_FROM ? ctx.getTransform?.() : undefined;
+  const base = start?.inverse?.();
   const lyric = base ? l.lyric : undefined;
   // soft motion inside a sprite (sails, branches, cloth, water); its mesh pieces skip the cover watch, its box counts
   let warping = false;
   const warp = (pic: CanvasImageSource | null, x: number, y: number, w: number, h: number, zones: WarpZone[], seed = 0) => {
     if (!pic) return;
-    recordCover(pic, x, y, w, h);
     recordBox(pic, x, y, w, h);
     warping = true;
     try {
-      drawWarped(ctx, pic as CanvasImageSource & { width: number; height: number }, x, y, w, h, Array.isArray(zones) ? zones : [], t, seed, 10);
+      clear(pic, x, y, w, h, () => drawWarped(ctx, pic as CanvasImageSource & { width: number; height: number }, x, y, w, h, Array.isArray(zones) ? zones : [], t, seed, 10));
     } finally {
       warping = false;
     }
@@ -395,11 +395,14 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     const [x0, y0] = [Math.min(...xs), Math.min(...ys)];
     boxes.push(`${id}:${Math.round(x0)},${Math.round(y0)},${Math.round(Math.max(...xs) - x0)},${Math.round(Math.max(...ys) - y0)},${ctx.globalAlpha.toFixed(2)}`);
   };
-  const recordCover = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number) => {
+  // a sprite reaching into the lyric box while the line is read is drawn without the box and faded as it moves in
+  // (cover.ts keepClear): the drawing is the director's, but no picture of it covers the words. Was it only watched,
+  // 世界のつづき's bottle drifted across 「信じられる？」 and its lighthouse across い, on record and on screen
+  const clear = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number, draw: () => void) => {
     const id = ids.get(pic);
-    if (!lyric || !base || !id) return;
+    if (!lyric || !base || !start || !id) return draw();
     const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, lyric);
-    watchCover(`${id}@${cam.index}`, id, share, inside, t, `shot ${cam.index}`);
+    keepClear(ctx, start, lyric, share, inside, draw, W, H, clearStrength(l.lyricWeight ?? 1));
   };
   // every drawImage while the drawing runs: a sprite copied onto the drawing's own canvas (tinted, made solid) passes
   // its name to that canvas when the canvas is about the sprite's size; a sprite drawn on the frame is measured
@@ -409,8 +412,9 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
       if (id && !warping && this === ctx && (a.length === 2 || a.length === 4 || a.length === 8)) {
         const sized = pic as CanvasImageSource & { width: number; height: number };
         const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
-        recordCover(pic, dx, dy, dw, dh);
         recordBox(pic, dx, dy, dw, dh);
+        clear(pic, dx, dy, dw, dh, () => (plain as (...x: unknown[]) => void).call(this, pic, ...a));
+        return;
       } else if (id && this !== ctx && this.canvas) {
         const src = pic as CanvasImageSource & { width: number; height: number };
         const c = this.canvas;

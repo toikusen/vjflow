@@ -3081,6 +3081,9 @@ export interface Rect {
 
 const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
+/** How far a follower's string may stretch when it makes room, as a share of its length at rest. */
+export const TETHER_STRETCH = 1.6;
+
 /** Whether a follower's string, from its leader to a follower centred at (cx, cy) frame px, runs through `r`. */
 export function tetherCrosses(l: Layer, cx: number, cy: number, r: Rect): boolean {
   const tt = (l as { tether?: Tether }).tether;
@@ -3154,13 +3157,30 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = [], 
   // a follower's string is part of it: a place where the string runs through the words is no place for it either
   const strung = (q: Rect) => [guard, ...keeps].some((g) => tetherCrosses(l, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, g));
   if (!overlaps(r, guard) && !keeps.some((k) => overlaps(r, k)) && !strung(r)) return l;
+  // a follower stays by its leader: a place may stretch its string to at most TETHER_STRETCH times its length at
+  // rest and keeps it on the leader's side of the frame; where none is free it fades with its string where it is
+  // (as a passing prop does), never flung across the frame on a long string
+  const tt = (l as { tether?: Tether }).tether;
+  const lead = tt && { x: W / 2 + tt.from[0] * (W / 2), y: H / 2 - tt.from[1] * (H / 2) };
+  const restLen = lead ? Math.hypot((r.x0 + r.x1) / 2 - lead.x, (r.y0 + r.y1) / 2 - lead.y) : 0;
+  const near = (q: Rect) => {
+    if (!lead) return true;
+    const [cx, cy] = [(q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2];
+    const side = Math.abs(lead.x - W / 2) < W / 6 || Math.sign(cx - W / 2) === Math.sign(lead.x - W / 2);
+    return side && Math.hypot(cx - lead.x, cy - lead.y) <= TETHER_STRETCH * Math.max(restLen, l.kind === 'sprite' ? l.size * H : 0);
+  };
+  const fadeBehind = (s: Layer) => {
+    const cover = Math.max(...[guard, ...keeps].map((g) => (Math.max(0, Math.min(r.x1, g.x1) - Math.max(r.x0, g.x0)) * Math.max(0, Math.min(r.y1, g.y1) - Math.max(r.y0, g.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0))));
+    // (a corner over a word fades it as much as a pass prop wholly behind the line: any overlap reads as covering)
+    return { ...s, opacity: (s.opacity ?? 1) * (1 - 0.65 * Math.min(1, 4 * Math.max(cover, strung(r) ? 0.25 : 0))) } as Layer;
+  };
   if (l.kind === 'sprite' && l.pass) {
     // a prop on its way (an orbit, a journey, a float) passes behind the line, fading by how much it covers it:
     // pushed aside every frame it would jump about
     const cover = (Math.max(0, Math.min(r.x1, guard.x1) - Math.max(r.x0, guard.x0)) * Math.max(0, Math.min(r.y1, guard.y1) - Math.max(r.y0, guard.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0));
     return { ...l, opacity: (l.opacity ?? 1) * (1 - 0.65 * Math.min(1, cover)) };
   }
-  const clash = (q: Rect) => overlaps(q, guard) || keeps.some((k) => overlaps(q, k)) || strung(q) || others.some((o) => overlaps(q, o));
+  const clash = (q: Rect) => overlaps(q, guard) || keeps.some((k) => overlaps(q, k)) || strung(q) || !near(q) || others.some((o) => overlaps(q, o));
   const w = r.x1 - r.x0;
   const h = r.y1 - r.y0;
   // a window or a phone must land inside its own margins, or the draw clamps it back over the line
@@ -3193,6 +3213,7 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = [], 
   // a picture or letters (a photo inset, a stamp, a seal, a numeral) behind the words is what makes them hard to read
   // (チョロイン c003: blue type over a blue stage photo); a flat shape (a blob, a disc) may stay behind them by design
   const busy = l.kind === 'photo' || l.kind === 'stamp' || l.kind === 'seal' || l.kind === 'numeral';
+  if (tt) return fadeBehind(l);
   if (story || busy) {
     // no room next to the line: the object crosses to the far side or another free spot (nearest first) rather than
     // fading behind the line (落ちた風鈴 dimmed to a ghost beside the vertical lyrics)

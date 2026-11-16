@@ -405,3 +405,32 @@ describe('other words up besides the line are kept clear on their own', () => {
     expect(k.keep).toEqual([preview]);
   });
 });
+
+describe('a follower stays by its leader when it makes room', () => {
+  const lyrics = { x0: 300, y0: 640, x1: 1700, y1: 780 };
+  const kiteAt = (x: number, y: number, from: [number, number]) => ({ kind: 'sprite', ref: 'follow#1:kite', asset: 'spr:kite', x, y, size: 0.12, tether: { ref: 'journey#0:ship', from, color: '#000', width: 3 } }) as unknown as Layer;
+  it('a place stretches its string no more than TETHER_STRETCH and keeps the leader\'s side', async () => {
+    const { avoid, layerRect, TETHER_STRETCH } = await import('./graphics');
+    const from: [number, number] = [0.85, -0.85];
+    const kite = kiteAt(0.62, -0.35, from);
+    const moved = avoid(kite, lyrics) as unknown as { x: number; y: number; opacity?: number };
+    const lead = [960 + from[0] * 960, 540 - from[1] * 540];
+    const r0 = layerRect(kite)!;
+    const rest = Math.hypot((r0.x0 + r0.x1) / 2 - lead[0], (r0.y0 + r0.y1) / 2 - lead[1]);
+    const [cx, cy] = [960 + moved.x * 960, 540 - moved.y * 540];
+    expect(Math.hypot(cx - lead[0], cy - lead[1])).toBeLessThanOrEqual(TETHER_STRETCH * rest + 1);
+    expect(cx).toBeGreaterThan(960);
+  });
+  it('with no such place it fades where it is, string and all, instead of being flung away', async () => {
+    const { avoid } = await import('./graphics');
+    // the words fill the band the kite and its ship share: no near place is free
+    const kite = kiteAt(0.62, -0.35, [0.85, -0.85]);
+    const out = avoid(kite, { x0: 0, y0: 560, x1: 1920, y1: 1080 }) as unknown as { x: number; y: number; opacity?: number };
+    expect([out.x, out.y]).toEqual([0.62, -0.35]);
+    expect(out.opacity).toBeLessThan(1);
+    expect(out.opacity).toBeGreaterThan(0);
+    // a corner over a word fades as far as a passing prop wholly behind the line
+    const edge = avoid(kiteAt(0.62, -0.35, [0.85, -0.85]), { x0: 0, y0: 560, x1: 1500, y1: 700 }, 24, [], []) as unknown as { opacity?: number; x: number };
+    if (edge.x === 0.62) expect(edge.opacity).toBeLessThanOrEqual(0.36);
+  });
+});

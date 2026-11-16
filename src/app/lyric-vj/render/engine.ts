@@ -3264,8 +3264,9 @@ export class LyricVjEngine {
     const LOOK = 2 * STEPS - 1;
     // a prop flying along its path is placed frame by frame: room made where it was at one time of the stretch is not
     // where it is later (a feather of 春泥棒 grazed c008)
-    // (and a follower: it moves with its leader all the time)
-    const flying = (l: Layer) => /^(fly|follow)#/.test((l as { ref?: string }).ref ?? '');
+    // (a follower is not: placed per frame it flipped between a free place and fading behind the words as its leader
+    // moved; decided once a stretch it glides, and keeps its offset by the leader as it moves)
+    const flying = (l: Layer) => ((l as { ref?: string }).ref ?? '').startsWith('fly#');
     const sample = (j: number, each: boolean) => {
       const x = t - (GLIDE * j) / (STEPS - 1);
       const d = each ? x : decide(x);

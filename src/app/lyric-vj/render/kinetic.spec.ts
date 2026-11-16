@@ -254,3 +254,18 @@ describe('a hushed move over a backdrop (line director)', () => {
     expect(paint(layer(false))).not.toContain('drawImage:9');
   });
 });
+
+describe('subject clock (the character carries on across background cuts)', () => {
+  it('pops in once when it comes up and holds through later cuts in the same spot', async () => {
+    const { subjectPose, subjectSince } = await import('./kinetic');
+    // a fresh character pops in on its cut
+    expect(subjectPose(undefined, 0.02, 10.02).pop).toBeGreaterThan(1.03);
+    // the same one on the next cut, 0.4 s on: no pop, no rock, the cut landing does not restart it
+    const carried = subjectPose(9.6, 0.02, 10.02);
+    expect(carried.pop).toBeCloseTo(1, 3);
+    expect(Math.abs(carried.rock)).toBeLessThan(0.01);
+    expect(subjectSince({ sprite: 'cat', side: 'left', since: 9.6 }, 'cat', 'left', 10)).toBe(9.6);
+    expect(subjectSince({ sprite: 'cat', side: 'left', since: 9.6 }, 'cat', 'right', 10)).toBe(10);
+    expect(subjectSince({ sprite: 'dog', side: 'left', since: 9.6 }, 'cat', 'left', 10)).toBe(10);
+  });
+});

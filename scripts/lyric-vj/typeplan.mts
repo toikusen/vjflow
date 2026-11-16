@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { NEEDS_ART, DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_FX, KINETIC_PRINTS, KineticLayer, THREAD_MARKS, ThreadMark } from '../../src/app/lyric-vj/render/kinetic';
+import { NEEDS_ART, DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_FX, KINETIC_PRINTS, KineticLayer, subjectSince, THREAD_MARKS, ThreadMark } from '../../src/app/lyric-vj/render/kinetic';
 import { TRANSITION_KINDS, transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { LOOPS, QUIET_LOOPS } from '../../src/app/lyric-vj/render/kinetic-loops';
 import { GLYPH_FINISHES } from '../../src/app/lyric-vj/design';
@@ -592,7 +592,7 @@ export function buildCuts(p: Plan) {
   const missing: string[] = [];
   let removed = 0;
   let last = '';
-  let shown = { sprite: '', side: '' };
+  let shown = { sprite: '', side: '', since: 0 };
   // round moves past their share of the song are swapped for the director's other moves (capRound)
   const order = shots.flatMap((s) => [...(p.shots.find((x) => x.shot === s.id)?.cuts ?? [])].sort((x, y) => x.beat - y.beat).map((c) => ({ c, shot: s.id })));
   const shotIds = order.map((o) => o.shot);
@@ -691,7 +691,9 @@ export function buildCuts(p: Plan) {
       // the picture the strip took would have been drawn (not a diagram, not across the frame, not on the board)
       const tookPicture = !!c.sprite && !sprite && !DIAGRAM_FX.has(fx) && sameSpot(shown, c.sprite, side) && !board?.items.some((x) => x.sprite === c.sprite);
       if (tookPicture) removed++;
-      shown = { sprite: layer.sprite ?? '', side };
+      // the same character in the same spot carries on across the cut: its own clock, no pop on every background cut
+      if (layer.sprite) layer.subjectAt = subjectSince(shown, layer.sprite, side, at);
+      shown = { sprite: layer.sprite ?? '', side, since: layer.subjectAt ?? at };
       if (c.dark) layer.dark = true;
       if (c.yields) layer.yields = true;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];

@@ -42,6 +42,11 @@ export interface KineticLayer {
   accent: Rgb;
   /** A cut-out from the sprite library (id without `spr:`), printed in ink and paper. */
   sprite?: string;
+  /**
+   * When this character came up where it stands (song s): earlier than the cut when it carries on from the cuts before
+   * in the same spot, so it keeps its own clock across the background's cuts and does not pop in again on each one.
+   */
+  subjectAt?: number;
   /** The lyric box on the frame while a line is up, and how much of it is up (graphics.ts attaches both): the character is measured against it. */
   lyric?: CoverRect;
   lyricWeight?: number;
@@ -327,6 +332,22 @@ const rgb = (h: Rgb) => {
 };
 
 /** Draws one kinetic cut. */
+
+/**
+ * The cut's character on its own clock (subjectAt): it pops in and rocks to rest once when it comes up, then holds
+ * while the backgrounds cut under it. Without subjectAt the cut is its clock (`clock`, s since the cut landed).
+ */
+export function subjectPose(subjectAt: number | undefined, clock: number, now: number, age = clock): { pop: number; rock: number } {
+  const [grow, since] = subjectAt === undefined ? [age, clock] : [Math.max(0, now - subjectAt), Math.max(0, now - subjectAt)];
+  return { pop: 1 + (1 - ease(grow / 0.18)) * 0.06, rock: 0.05 * Math.exp(-5 * since) * Math.sin(13 * since) };
+}
+
+/**
+ * When the character of a cut at `at` came up: the time the last cut's came up when it is the same one in the same
+ * spot (it carries on), else `at`. `last` is the cut before (no sprite: '').
+ */
+export const subjectSince = (last: { sprite: string; side: string; since: number }, sprite: string | undefined, side: string, at: number) =>
+  sprite && last.sprite === sprite && last.side === side ? last.since : at;
 
 export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, clock: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, now = (l.at ?? 0) + clock) {
   const age = camTime(l.cam, clock);
@@ -653,7 +674,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // the character, printed in the cut's inks: it pops in, then holds still until the next cut
   if (printed && !own) {
     const { img: art, w, h } = printed;
-    const pop = 1 + (1 - k) * 0.06;
+    const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
     const cols = l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
     // the floor plan: one character shrinks and slides into the room the lyric leaves it (feet kept on the floor)
     const fit = l.fx !== 'grid' && l.room && l.room[1] > l.room[0] ? fitInRoom(l.room, w, fx) : { s: 1, x: fx };
@@ -673,7 +694,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       const y = corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
       ctx.translate(corner ? corner.x : cx, y);
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
-      ctx.rotate(0.05 * Math.exp(-5 * clock) * Math.sin(13 * clock) * (seed % 2 ? 1 : -1));
+      ctx.rotate(rock * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);
       if (corner && !corner.clear) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;

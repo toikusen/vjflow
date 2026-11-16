@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { timingGate } from '../../src/app/lyric-vj/timing-qa';
-import { TEMPLATES } from '../../src/app/lyric-vj/templates';
+import { optedIn, TEMPLATES, templateOffered } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, SYMBOLS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { attachmentErrors, checkStyle, STYLES, templatesFor } from '../../src/app/lyric-vj/styles';
@@ -59,6 +59,7 @@ const { values: a } = parseArgs({
     candidates: { type: 'string' }, // comma ids: candidate languages the director may also pick (without --language)
     previous: { type: 'string' }, // treatment.json of the previous concept: quoted to the director as 上一版
     note: { type: 'string' }, // the person's note on the previous concept: with --previous this is an adjustment, without a note a redo
+    'sing-along': { type: 'boolean', default: false }, // the buyer's sing-along option: offers the singalong and scroll templates (off by default)
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -69,9 +70,10 @@ if (!process.env['ANTHROPIC_API_KEY'] && existsSync(env)) {
   }
 }
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
-// lanes carries a translation in its bottom bar: offered only when the buyer supplied one (cue.sub), never by default
+// lanes carries a translation in its bottom bar: offered only when the buyer supplied one (cue.sub), never by default;
+// the sing-along modes only when the buyer asked for them (--sing-along)
 const hasSub = song.cues.some((c) => !!(c as { sub?: string }).sub?.trim());
-const offered = (id: string) => id !== 'scene' && (id !== 'lanes' || hasSub);
+const offered = (id: string) => templateOffered(id, { sub: hasSub, singAlong: !!a['sing-along'] });
 const style = STYLES[a['style-id']!];
 if (!style) throw new Error(`未知風格 ${a['style-id']}`);
 // Chinese lyrics need Traditional Chinese faces (Japanese ones draw other glyph forms or miss characters)
@@ -99,7 +101,9 @@ const note = a.note?.trim() || undefined;
 if (!allowedLanguages.length) { console.error('沒有可選的設計語言：--proven 與 --candidates 都是空的（管理者把全部下架了？）'); process.exit(2); }
 // the templates the schema offers: a chosen language's own valid set (the style's list and the language's agree), else
 // the union over the languages on offer — the per-language check below still holds the pairing (a schema cannot)
-const templateChoices = [...new Set((picked ? [picked] : allowedLanguages).flatMap((k) => templatesFor(style, LANGUAGES[k])))].filter((id) => Object.hasOwn(TEMPLATES, id) && offered(id));
+// (plus the opt-in templates the buyer's options open: no style lists them, so the schema and checkStyle take them
+// from the option, or the director could never pick what the catalogue offers)
+const templateChoices = [...new Set([...(picked ? [picked] : allowedLanguages).flatMap((k) => templatesFor(style, LANGUAGES[k])), ...optedIn({ singAlong: !!a['sing-along'] })])].filter((id) => Object.hasOwn(TEMPLATES, id) && offered(id));
 if (!templateChoices.length) { console.error(`沒有可用的模板：風格「${style.name}」與設計語言 ${(picked ? [picked] : allowedLanguages).join('、')} 沒有交集`); process.exit(2); }
 
 // ---- schema (structured output): only vocabulary the engine has
@@ -140,12 +144,12 @@ const STORY_SCHEMA = {
       properties: { id: { type: 'string', description: '英文小寫加點，例 furin.glass' }, what: { type: 'string', description: '英文的具體外觀描述（形狀、顏色、方向），給生圖模型' }, hero: { type: 'boolean', description: '貫穿全曲的主角物件' } } } },
     items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['kind', 'why', 'prop', 'motion', 'x', 'y', 'size', 'params'],
       properties: {
-        kind: { type: 'string', enum: ['hero', 'fly', 'pop', 'cards', 'thread', 'orbit', 'journey', 'morph', 'chapter', 'float'] },
+        kind: { type: 'string', enum: ['hero', 'fly', 'pop', 'cards', 'thread', 'orbit', 'journey', 'morph', 'chapter', 'float', 'follow'] },
         why: { type: 'string', description: '對應哪句歌詞或哪個段落、為什麼這樣演' },
         prop: { type: 'string', description: '物件 id（cards、thread、morph、chapter、float 填空字串）' },
         motion: { type: 'string', enum: ['hang', 'flutter', 'roll', 'sit', 'drift', 'still', ''] },
         x: { type: 'number' }, y: { type: 'number' }, size: { type: 'number', description: '物件高度佔畫面高的比例 0.1–0.5（cards、thread 填 0）' },
-        params: { type: 'array', description: '其他參數 key/value：states（hero，"秒:狀態;秒:狀態"）、glow、at、dur、until、side、trail、through、from、to、every、style、texts（用 | 分隔）、props（用 , 分隔）、color、ink、a（"x,y"）、b、bend、loop、cut、width、r、period、tilt、pts（"x,y;x,y"）、steps（"秒:物件id;秒:物件id"）、text', items: { type: 'object', additionalProperties: false, required: ['key', 'value'], properties: { key: { type: 'string' }, value: { type: 'string' } } } },
+        params: { type: 'array', description: '其他參數 key/value：states（hero，"秒:狀態;秒:狀態"）、glow、at、dur、until、side、trail、through、from、to、every、style、texts（用 | 分隔）、props（用 , 分隔）、color、ink、a（"x,y"）、b、bend、loop、cut、width、r、period、tilt、pts（"x,y;x,y"）、steps（"秒:物件id;秒:物件id"）、text、after（follow 跟的物件 id）、string（follow 的線色）、stiff', items: { type: 'object', additionalProperties: false, required: ['key', 'value'], properties: { key: { type: 'string' }, value: { type: 'string' } } } },
       } } },
   },
 };
@@ -160,6 +164,7 @@ const STORY_RULES = `故事（story）：程式已經做好幾種演出，你只
 - morph：一個形狀依序變成下一個（steps 例 "60:cube.box;75:star.gold;90:heart.red"，每個時間對準歌詞唱到那個東西），until 秒消失。給歌詞裡一連串有關聯的物件或象徵的轉變。一首最多 1 組，2–4 個形狀，props 每個都要列。
 - chapter：章節字卡，at 秒從左邊滑進、dur 秒後離開，text 是 16 字以內的短標（例「第一章 夏」「01 出発」），color 卡色、ink 字色。只給歌曲有明確段落敘事（時間、季節、地點轉換）的時候，放在段落開頭，一首最多 5 張、不要每段都放。
 - float：幾個物件（props 用逗號列 2–5 個）在畫面裡失重般慢慢漂、慢慢轉，from 到 to 秒。給宇宙、夢、無重力、記憶碎片飄散的段落（間奏或安靜段最好）。一首最多 1 組。
+- follow：一個物件像綁在彈簧上一樣跟著另一個會動的物件（after 填它的物件 id，那個物件要用 fly、journey、pop、orbit 或 hero 出現），慢半拍跟上、停下時晃一下才停；x、y 是相對那個物件的位置（例 -0.2,0.4 是左上方）。string 填色碼就會畫一條線連著（氣球、風箏）；stiff 0.5–2，越大跟得越緊。只在歌詞裡一個東西真的跟著另一個（牽著的氣球、追著人的風箏、跟在腳邊的小狗、拖在船後的浮標），一首最多 2 個。
 - motion 物件的動法要合它的本性：hang 吊著的（風鈴、燈籠）像鐘擺晃；flutter 只給有翅膀的昆蟲和鳥（偶爾拍翅）；葉子、花瓣、紙片這類飄落的東西用 drift；roll 會滾的（球、殼）滾進來；sit 放在地上的落下後停住；drift 漂浮的慢慢飄；still 招牌、建築這類本來就不動的完全不動。不要亂跳亂閃。
 - 位置：歌詞大多在畫面中央，物件放在上緣、下緣或左右兩側（|y| ≥ 0.4 或 |x| ≥ 0.6），size 0.15–0.45；顏色要和背景有對比（淺色玻璃不要放淺色底上）。
 - props 列出上面用到的每一個物件；what 用英文具體描述外觀，不要人物、不要文字。
@@ -537,7 +542,7 @@ ${sys.variety ? `- 每首的差異（必須做）：${sys.variety.rule}\n${(() =
     if (msg.stop_reason === 'refusal' || !text) throw new Error(`沒有產出設計（${msg.stop_reason}）`);
     if (msg.stop_reason === 'max_tokens') throw new Error('設計輸出超過長度上限（graphics 段落太多）');
     const out2 = JSON.parse(text);
-    base.design = { ...out2.design, signature: signatureFromDirector(out2.design.signature), language };
+    base.design = { ...out2.design, signature: signatureFromDirector(out2.design.signature), language, ...(a['sing-along'] ? { singAlong: true } : {}) };
     base.motif = sys.motif ? out2.motif : undefined;
     // transitions only where the music changes section (analysed structure)
     base.graphics = validateLook(toLook(out2.graphics) as never, base.assets.map((x) => x.id), win.start, song.sections?.map((x) => x.start)).look;
@@ -632,6 +637,8 @@ for (let attempt = 0; attempt < 3; attempt++) {
     const pairs = sh.params as unknown as { key: string; value: string }[];
     sh.params = Object.fromEntries(pairs.map((x) => [x.key, coerce(x.value)]));
   }
+  // the buyer's sing-along option rides on the treatment: validation and the renderer let its templates through
+  if (a['sing-along']) draft.design = { ...draft.design, singAlong: true } as TreatmentV3['design'];
   writeFileSync(join(out, `draft_${attempt}.json`), JSON.stringify(draft, null, 1));
   result = validateTreatment(draft, song, win, TEMPLATES);
   // a short answer that leaves lines unstyled must be sent back, not silently filled with defaults

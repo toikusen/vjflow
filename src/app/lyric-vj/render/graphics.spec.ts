@@ -372,3 +372,65 @@ describe('bandShow', () => {
     expect(bandShow(4).alpha).toBe(0);
   });
 });
+
+describe('a follower makes room with its string', () => {
+  it('moves clear of the words so neither it nor its string crosses them, and the string ends on its placed leader', async () => {
+    const { avoid, tetherCrosses } = await import('./graphics');
+    const { resolveTethers } = await import('./story');
+    const lyrics = { x0: 560, y0: 600, x1: 1720, y1: 760 };
+    // a kite planned on the line, its leader (a ship) below it
+    const kite = { kind: 'sprite', ref: 'follow#1:kite', asset: 'spr:kite', x: -0.1, y: -0.3, size: 0.14, tether: { ref: 'journey#0:ship', from: [0, -0.75], color: '#000', width: 3 } } as unknown as Layer;
+    const moved = avoid(kite, lyrics) as unknown as { x: number; y: number; opacity?: number };
+    expect(moved).not.toBe(kite);
+    const [cx, cy] = [960 + moved.x * 960, 540 - moved.y * 540];
+    const g = { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 };
+    expect((moved.opacity ?? 1) === 0 || !tetherCrosses(moved as unknown as Layer, cx, cy, g)).toBe(true);
+    // the string's far end is wherever its leader was placed
+    const ship = { kind: 'sprite', ref: 'journey#0:ship', asset: 'spr:ship', x: 0.3, y: -0.8, size: 0.2 } as unknown as Layer;
+    const [, k] = resolveTethers([ship, moved as unknown as Layer]) as unknown as [unknown, { tether: { from: number[] } }];
+    expect(k.tether.from).toEqual([0.3, -0.8]);
+  });
+});
+
+describe('other words up besides the line are kept clear on their own', () => {
+  it('a prop over only the preview row moves; a move and a drawing are handed the row as its own box', async () => {
+    const { avoid, avoidAll, layerRect } = await import('./graphics');
+    const lyrics = { x0: 200, y0: 300, x1: 900, y1: 420 };
+    const preview = { x0: 1100, y0: 700, x1: 1800, y1: 780 };
+    const kite = { kind: 'sprite', ref: 'follow#1:kite', asset: 'spr:kite', x: 0.6, y: -0.37, size: 0.12 } as unknown as Layer;
+    expect(avoid(kite, lyrics)).toBe(kite);
+    const r = layerRect(avoid(kite, lyrics, 24, [], [preview]))!;
+    expect(r.x1 <= preview.x0 - 24 || r.x0 >= preview.x1 + 24 || r.y1 <= preview.y0 - 24 || r.y0 >= preview.y1 + 24).toBe(true);
+    const [k] = avoidAll([{ kind: 'kinetic', fx: 'field' } as unknown as Layer], lyrics, [preview]) as unknown as { keep?: object[] }[];
+    expect(k.keep).toEqual([preview]);
+  });
+});
+
+describe('a follower stays by its leader when it makes room', () => {
+  const lyrics = { x0: 300, y0: 640, x1: 1700, y1: 780 };
+  const kiteAt = (x: number, y: number, from: [number, number]) => ({ kind: 'sprite', ref: 'follow#1:kite', asset: 'spr:kite', x, y, size: 0.12, tether: { ref: 'journey#0:ship', from, color: '#000', width: 3 } }) as unknown as Layer;
+  it('a place stretches its string no more than TETHER_STRETCH and keeps the leader\'s side', async () => {
+    const { avoid, layerRect, TETHER_STRETCH } = await import('./graphics');
+    const from: [number, number] = [0.85, -0.85];
+    const kite = kiteAt(0.62, -0.35, from);
+    const moved = avoid(kite, lyrics) as unknown as { x: number; y: number; opacity?: number };
+    const lead = [960 + from[0] * 960, 540 - from[1] * 540];
+    const r0 = layerRect(kite)!;
+    const rest = Math.hypot((r0.x0 + r0.x1) / 2 - lead[0], (r0.y0 + r0.y1) / 2 - lead[1]);
+    const [cx, cy] = [960 + moved.x * 960, 540 - moved.y * 540];
+    expect(Math.hypot(cx - lead[0], cy - lead[1])).toBeLessThanOrEqual(TETHER_STRETCH * rest + 1);
+    expect(cx).toBeGreaterThan(960);
+  });
+  it('with no such place it fades where it is, string and all, instead of being flung away', async () => {
+    const { avoid } = await import('./graphics');
+    // the words fill the band the kite and its ship share: no near place is free
+    const kite = kiteAt(0.62, -0.35, [0.85, -0.85]);
+    const out = avoid(kite, { x0: 0, y0: 560, x1: 1920, y1: 1080 }) as unknown as { x: number; y: number; opacity?: number };
+    expect([out.x, out.y]).toEqual([0.62, -0.35]);
+    expect(out.opacity).toBeLessThan(1);
+    expect(out.opacity).toBeGreaterThan(0);
+    // a corner over a word fades as far as a passing prop wholly behind the line
+    const edge = avoid(kiteAt(0.62, -0.35, [0.85, -0.85]), { x0: 0, y0: 560, x1: 1500, y1: 700 }, 24, [], []) as unknown as { opacity?: number; x: number };
+    if (edge.x === 0.62) expect(edge.opacity).toBeLessThanOrEqual(0.36);
+  });
+});

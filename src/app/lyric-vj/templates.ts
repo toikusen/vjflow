@@ -76,6 +76,20 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
       bar: { type: 'number', min: 100, max: 220, default: 150, description: '黑邊高度（像素）' },
     },
   },
+  singalong: {
+    id: 'singalong',
+    description: '跟唱兩行：一行在左上、一行在右下輪流唱，唱的那行下面有一條底線照唱的進度畫過去，另一行先放下一句（較小、但一樣清楚）。只在客人選了跟唱模式時才會出現在選項裡，適合 KTV、合唱、要讓觀眾跟著唱的段落。',
+    defaultEnter: 'fade',
+    defaultExit: 'cut',
+    params: {},
+  },
+  scroll: {
+    id: 'scroll',
+    description: '歌詞捲動：唱的那句在畫面正中央、放大、強調色，下一句小字在下面；換句時整列往上捲一行。只在客人選了跟唱模式時才會出現在選項裡，適合整段跟唱、歌詞本身就是主角的段落。',
+    defaultEnter: 'cut',
+    defaultExit: 'cut',
+    params: {},
+  },
   vertical: {
     id: 'vertical',
     description: '直排：日文縱書，句子依詞切成 1–3 欄、由右往左讀，每欄起點逐欄下移；強調範圍的字較大、用強調色。適合抒情句、副歌前的鋪陳、需要留白的畫面。英文多的句子不要用直排。',
@@ -459,3 +473,23 @@ export const TEMPLATES: Record<string, TemplateSpec> = {
     },
   },
 };
+
+/** Templates only a buyer's option opens: lanes needs their translation, the sing-along modes their opt-in. */
+export const OPT_IN_TEMPLATES = { lanes: 'sub', singalong: 'singAlong', scroll: 'singAlong' } as const;
+
+/**
+ * Whether a template is offered to the director: never the scene, and an opt-in one only when the buyer gave what it
+ * needs (a translation for lanes; the sing-along option for singalong and scroll). The director never picks these on
+ * its own.
+ */
+export function templateOffered(id: string, buyer: { sub?: boolean; singAlong?: boolean }): boolean {
+  if (id === 'scene') return false;
+  const need = (OPT_IN_TEMPLATES as Record<string, 'sub' | 'singAlong'>)[id];
+  return !need || !!buyer[need];
+}
+
+/** The opt-in templates the buyer's options open, to be offered beside a style's own (lanes stays the style's call). */
+export const optedIn = (buyer: { sub?: boolean; singAlong?: boolean }): string[] => (buyer.singAlong ? ['singalong', 'scroll'] : []);
+
+/** Whether a shot's template needs a buyer option the treatment does not carry (singalong / scroll without singAlong). */
+export const missingOptIn = (template: string, design: { singAlong?: boolean } | undefined) => (template === 'singalong' || template === 'scroll') && !design?.singAlong;

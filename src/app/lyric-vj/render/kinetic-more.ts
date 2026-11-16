@@ -10,6 +10,8 @@ const H = 1080;
 const TAU = Math.PI * 2;
 export { kn, vary } from './knobs';
 import { kn, vary } from './knobs';
+import type { CoverRect } from './cover';
+import { controlPoint, nearGain, outside, rectInDraw } from './proximity';
 const hash = (a: number, b = 0) => {
   const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
   return s - Math.floor(s);
@@ -58,6 +60,10 @@ export interface Env {
   room?: [number, number];
   /** How many different words the cut has: a move that labels its parts has no more parts than that. */
   count?: number;
+  /** The lyric box on the frame while a line is up (frame px, y down): a move that must keep off it reads it. */
+  lyric?: CoverRect;
+  /** Other words up besides the line (a sing-along's preview row), each kept clear on its own. */
+  keep?: CoverRect[];
 }
 /** A move's parts, one per word: as many as the knob asks but never more than the cut's own words (a loop labelled 思念 twice). */
 const parts = (e: Env, key: string, least = 2) => Math.max(least, Math.min(kn(e, key), e.count ?? Infinity));
@@ -2133,6 +2139,47 @@ Object.assign(MORE, {
       ctx.strokeStyle = e.ink;
       ctx.lineWidth = 6;
       ctx.stroke();
+    },
+  },
+  field: {
+    help: '靠近才有反應：滿版的小點（或短線、十字）靜靜排著，一個看不見的光點慢慢在畫面裡移動，經過的地方記號變大、變亮、被推開，走了就恢復（尋找、靠近、經過、手電筒、有人走過、被看見）',
+    styles: ['小點變大', '短線被推開', '十字發亮'],
+    draw: (e) => {
+      const { ctx, W, H } = e, cell = kn(e, 'field.cell'), reach = kn(e, 'field.reach'), speed = kn(e, 'field.speed');
+      const [px, py] = controlPoint(e.age, e.seed, W, H, speed);
+      // nothing in the lyric box or its margin reacts or is drawn there (in the coordinates the camera draws in now)
+      const keep = [e.lyric, ...(e.keep ?? [])].map((r) => rectInDraw(ctx, r));
+      const pad = Math.max(36, cell * 0.8);
+      for (let y = cell / 2, row = 0; y < H; y += cell, row++)
+        for (let x = row % 2 ? cell : cell / 2; x < W; x += cell) {
+          if (!keep.every((k) => outside(x, y, k, pad))) continue;
+          const g = nearGain(x - px, y - py, reach) * e.k;
+          const d = Math.hypot(x - px, y - py) || 1;
+          // pushed away from the point, never by more than a fifth of a cell (it cannot reach the kept margin)
+          const [ux, uy] = [((x - px) / d) * cell * 0.2 * g, ((y - py) / d) * cell * 0.2 * g];
+          ctx.globalAlpha = 0.18 + 0.62 * g;
+          ctx.fillStyle = g > 0.5 ? e.accent : e.ink;
+          ctx.strokeStyle = ctx.fillStyle;
+          if (e.style === 1) {
+            // short dashes, turned to point away from the light
+            const a = Math.atan2(y - py, x - px) * g + (1 - g) * 0.6;
+            const len = cell * (0.22 + 0.3 * g);
+            ctx.lineWidth = 3 + 3 * g;
+            ctx.beginPath();
+            ctx.moveTo(x + ux - Math.cos(a) * len, y + uy - Math.sin(a) * len);
+            ctx.lineTo(x + ux + Math.cos(a) * len, y + uy + Math.sin(a) * len);
+            ctx.stroke();
+          } else if (e.style === 2) {
+            const s = cell * (0.12 + 0.16 * g), w = 2 + 4 * g;
+            ctx.fillRect(x + ux - s, y + uy - w / 2, s * 2, w);
+            ctx.fillRect(x + ux - w / 2, y + uy - s, w, s * 2);
+          } else {
+            ctx.beginPath();
+            ctx.arc(x + ux, y + uy, cell * (0.08 + 0.26 * g), 0, TAU);
+            ctx.fill();
+          }
+        }
+      ctx.globalAlpha = 1;
     },
   },
   glide: {

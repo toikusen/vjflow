@@ -2,7 +2,7 @@
 // framed photos, frames, rings, sparkles, sunbursts, tape bands, shapes. The database's designer VJs are mostly
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
-import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
+import { drawStory, resolveTethers, StoryItem, StoryLayer, storyLayers, storyRect, Tether, tetherPts } from './story';
 import { clearAlpha, clearStrength, CLEAR_FROM, clearTally, CoverCrop, coverOf, keepClear, watchClear, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
@@ -91,7 +91,7 @@ export type Layer = Base &
     | KineticLayer
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
     // shift: a drawing reused later in the song (a repeated chorus) sees the time it was written for
-    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect; /** Every line read over its section, filled by the engine (layRooms): the drawing's f.lines, f.room, f.fit. */ lines?: LineBox[] }
+    | { kind: 'code'; src: string; lyric?: Rect; /** Other words up besides the line (a sing-along's preview row): each kept clear on its own. */ keep?: Rect[]; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect; /** Every line read over its section, filled by the engine (layRooms): the drawing's f.lines, f.room, f.fit. */ lines?: LineBox[] }
     // story components' per-frame layers (story.ts), never written by the director directly
     | StoryLayer
   );
@@ -153,7 +153,8 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   const sec = sectionAt(look, t);
   // the story's layers make room for the lyrics together with the section's, but are drawn over any transition
   const story = storyLayers(look.story ?? [], t) as Layer[];
-  const all = adjust([...sec.layers, ...story]);
+  // (a follower's string ends where its leader was placed)
+  const all = resolveTethers(adjust([...sec.layers, ...story]));
   const own = all.slice(0, sec.layers.length);
   const tr = sec.transition;
   const i = look.sections.indexOf(sec);
@@ -338,6 +339,8 @@ export function camAt(cuts: number[], t: number, end = Infinity): CodeCam {
 const compiled = new Map<string, CodeDraw>();
 /** Per drawing, kept across frames: textures and noise it builds once (deterministic content, so frame order is free). */
 const caches = new Map<string, Record<string, unknown>>();
+/** The QA track's dry runs keep their own (what a drawing caches from a context that draws nothing must not reach a frame). */
+const dryCaches = new Map<string, Record<string, unknown>>();
 const reported = new Set<string>();
 /** Reports a code layer's failure or slowness once per message (the render's console, read by codelayer.mts). */
 const report = (msg: string) => reported.has(msg) || (reported.add(msg), console.error(`code layer: ${msg}`));
@@ -348,7 +351,7 @@ const covered = new Set<string>();
 const ids = new Map<CanvasImageSource, string>();
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect; lines?: LineBox[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; keep?: Rect[]; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect; lines?: LineBox[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   t -= l.shift ?? 0;
   let fn = compiled.get(l.src);
   if (!fn) {
@@ -366,6 +369,13 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   // props there in the first place, so the keep-clear below seldom has to cut one out
   const lines = (l.lines ?? []).map((r) => ({ ...r, from: r.from - (l.shift ?? 0), to: r.to - (l.shift ?? 0) }));
   const room = (from = cam.start, to = cam.end) => roomsOf(lines, from, to);
+  // QA renders (--track) also log each shot's lines and the room they leave, once a shot: a repair round
+  // (scripts/lyric-vj/repair.mts) tells the director where a cut-out prop may go
+  if ((globalThis as { __vjTrack?: boolean }).__vjTrack && !(globalThis as { __vjProbe?: boolean }).__vjProbe && lines.length) {
+    const r = (x: number) => Math.round(x);
+    const on = lines.filter((x) => Math.min(cam.end, x.to) - Math.max(cam.start, x.from) > 0).map((x) => ({ from: +x.from.toFixed(2), to: +x.to.toFixed(2), x0: r(x.x0), y0: r(x.y0), x1: r(x.x1), y1: r(x.y1) }));
+    report(`room ${cam.index} ${JSON.stringify({ from: +cam.start.toFixed(2), to: Number.isFinite(cam.end) ? +cam.end.toFixed(2) : null, lines: on, rooms: room().map((x) => ({ x0: r(x.x0), y0: r(x.y0), x1: r(x.x1), y1: r(x.y1) })) })}`);
+  }
   const origin = ctx.getTransform?.();
   const fit = (x: number, y: number, w: number, h: number, from = cam.start, to = cam.end): [number, number, number, number] => fitRect(ctx, origin, room(from, to), x, y, w, h);
   // while the lyric is fully up, watch the sprite draws for ones that hide it (a check the director must pass)
@@ -411,15 +421,21 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
   const track = !!(globalThis as { __vjTrack?: boolean }).__vjTrack && !(globalThis as { __vjProbe?: boolean }).__vjProbe && !!proto;
   const frame = track ? ctx.getTransform?.()?.inverse?.() : undefined;
   const boxes: string[] = [];
+  // (with what each sprite stands on, from a dry run of this frame: a repair round checks a moved prop took its base along)
+  let bases: Map<string, { box: Rect; n: number }> | undefined;
+  const drawnOf = new Map<string, number>();
   const recordBox = (pic: CanvasImageSource, dx: number, dy: number, dw: number, dh: number) => {
     const id = ids.get(pic);
     if (!frame || !id) return;
+    const n = drawnOf.get(id) ?? 0;
+    drawnOf.set(id, n + 1);
+    const b = bases?.get(`${id}#${n}`);
     const m = frame.multiply(ctx.getTransform());
     const pts = [[dx, dy], [dx + dw, dy], [dx, dy + dh], [dx + dw, dy + dh]].map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]);
     const xs = pts.map((p) => p[0]);
     const ys = pts.map((p) => p[1]);
     const [x0, y0] = [Math.min(...xs), Math.min(...ys)];
-    boxes.push(`${id}:${Math.round(x0)},${Math.round(y0)},${Math.round(Math.max(...xs) - x0)},${Math.round(Math.max(...ys) - y0)},${ctx.globalAlpha.toFixed(2)}`);
+    boxes.push(`${id}:${Math.round(x0)},${Math.round(y0)},${Math.round(Math.max(...xs) - x0)},${Math.round(Math.max(...ys) - y0)},${ctx.globalAlpha.toFixed(2)}${b ? `,b${[b.box.x0, b.box.y0, b.box.x1, b.box.y1].map(Math.round).join('/')}/${b.n}` : ''}`);
   };
   // a sprite reaching into the lyric box while the line is read is drawn without the box and faded as it moves in
   // (cover.ts keepClear): the drawing is the director's, but no picture of it covers the words. Was it only watched,
@@ -431,11 +447,21 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     if (!lyric || !base || !start || !id) return draw();
     const box = l.guard ?? lyric;
     const sized = pic as CanvasImageSource & { width: number; height: number };
+    // other words up besides the line (a sing-along's preview row) are kept clear too, each box on its own
+    for (const k of l.keep ?? []) {
+      const inner = draw;
+      draw = () => {
+        const [s, i] = coverOf(sized, base.multiply(ctx.getTransform()), dx, dy, dw, dh, k, crop);
+        if (!keepClear(ctx, start, k, s, i, inner, W, H, clearStrength(l.lyricWeight ?? 1), true)) inner();
+      };
+    }
     const [share, inside] = coverOf(sized, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
     const strength = clearStrength(l.lyricWeight ?? 1);
     const alpha = ctx.globalAlpha;
     // (counted and logged: the drawing placed it under a read line; codelayer.mts hands it back to be placed in the room)
     if (keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard)) {
+      // (on the track line too, as a sixth field: the repair round counts the draws it had to keep clear per frame)
+      if (frame && boxes.length && boxes[boxes.length - 1].startsWith(`${id}:`) && alpha > 0) boxes[boxes.length - 1] += ',k';
       if (alpha > 0) watchClear(`${id}@${cam.index}`, id, inside, t, `shot ${cam.index}`, strength >= 1 && !l.guard);
     } else if (orig && strength > 0 && alpha > 0 && coverOf(sized, base.multiply(ctx.getTransform()), ...orig, box, crop)[0] > 0) clearTally().moved++;
     // what still shows over the box (faded only, never cut: the box gliding in or between two places) stays on record,
@@ -477,6 +503,15 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     if (x) ids.set(x, id);
     return x;
   };
+  // (a QA cost, not the frame's: kept out of the slow check)
+  let trackMs = 0;
+  if (track && origin) {
+    const d0 = performance.now();
+    const start = Mat.of(origin);
+    const { drawn, painted } = dryFrame(fn, start, (dry) => ({ w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam, lines, room, fit: (x, y, w, h, from = cam.start, to = cam.end) => fitRect(dry, origin, room(from, to), x, y, w, h), hash, img, scene: (id) => image(id) ?? null, particles: () => undefined, warp: (pic, wx, wy, ww, wh) => void (pic && dry.drawImage(pic, wx, wy, ww, wh)), cache: dryCaches.get(l.src) ?? (dryCaches.set(l.src, {}), dryCaches.get(l.src)!) }));
+    bases = new Map(drawn.flatMap((d) => { const b = baseDrawnWith(d, painted); return b ? [[d.k, b] as [string, { box: Rect; n: number }]] : []; }));
+    trackMs = performance.now() - d0;
+  }
   ctx.save();
   try {
     fn(ctx, { w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam, lines, room, fit, hash, img, scene, particles: (opts: Omit<ParticleLayer, 'kind'>) => particles(ctx, { kind: 'particles', ...opts }, t), warp, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
@@ -493,7 +528,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
       console.error(`code layer: ${key}`);
     }
   }
-  const ms = performance.now() - t0 - planMs;
+  const ms = performance.now() - t0 - planMs - trackMs;
   if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
 }
 
@@ -653,6 +688,74 @@ let plans = new WeakMap<object, WeakMap<CodeDraw, Map<string, CodePlan>>>();
 /** For tests: forget the shots' plans. */
 export const resetCodePlans = () => (plans = new WeakMap());
 
+/** One sprite draw seen in a dry run: `id#n` (its order among that id's draws), its frame box, local rect and transform. */
+type DryDraw = { k: string; id: string; box: Rect; rect: [number, number, number, number]; m: Mat; seq: number };
+/** Something else a dry run painted (frame box), with the sprite it is when it is one, in drawing order. */
+type DryPaint = { box: Rect; id?: string; seq: number };
+type DryArgs = Parameters<CodeDraw>[1];
+/**
+ * The drawing run once on a context that draws nothing: each sprite draw and what else it paints (frame boxes, a
+ * sprite's with its id). `args` makes the drawing's f for the dry context (its own f.fit and f.warp).
+ */
+function dryFrame(fn: CodeDraw, start: Mat, args: (dry: CanvasRenderingContext2D) => DryArgs): { drawn: DryDraw[]; painted: DryPaint[] } {
+  const toFrame = start.inverse();
+  const seen = new Map<string, number>();
+  const painted: DryPaint[] = [];
+  let seq = 0;
+  const drawn: DryDraw[] = [];
+  const frameBox = (m: Mat, [x, y, w, h]: [number, number, number, number]) => {
+    const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([px, py]) => [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f]);
+    return { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
+  };
+  const rec = (pic: CanvasImageSource, m: Mat, a: number[]) => {
+    const id = ids.get(pic);
+    if (!(a.length === 2 || a.length === 4 || a.length === 8)) return;
+    const sized = pic as CanvasImageSource & { width: number; height: number };
+    const rect = (a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height]) as [number, number, number, number];
+    const f = toFrame.multiply(m);
+    const box = frameBox(f, rect);
+    if (!id) return void painted.push({ box, seq: seq++ });
+    const n = seen.get(id) ?? 0;
+    seen.set(id, n + 1);
+    drawn.push({ k: `${id}#${n}`, id, box, rect, m: f, seq });
+    painted.push({ box, id, seq: seq++ });
+  };
+  const dry = dryContext(start, rec, (b) => painted.push({ box: frameBox(toFrame, [b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0]), seq: seq++ }));
+  try {
+    fn(dry, args(dry));
+  } catch {
+    /* a drawing that throws dry: what it drew before stays; the frame itself reports it */
+  }
+  return { drawn, painted };
+}
+
+/**
+ * What a sprite stands on (frame px): everything else the drawing paints within BASE_REACH of its foot (a rock, an
+ * island, its shadow, another sprite holding it), as one box; undefined when nothing does. Frame-wide bands (the sea,
+ * the sky) are ground for everything, not a base.
+ */
+export function baseOf(box: Rect, id: string, painted: { box: Rect; id?: string }[]): Rect | undefined {
+  const [fx, fy] = [(box.x0 + box.x1) / 2, box.y1];
+  const under = painted.filter((p) => p.id !== id && p.box.x1 - p.box.x0 < 0.6 * W && p.box.y1 - p.box.y0 < 0.6 * H && fx > p.box.x0 - BASE_REACH && fx < p.box.x1 + BASE_REACH && fy > p.box.y0 - BASE_REACH && fy < p.box.y1 + BASE_REACH);
+  if (!under.length) return undefined;
+  return { x0: Math.min(...under.map((p) => p.box.x0)), y0: Math.min(...under.map((p) => p.box.y0)), x1: Math.max(...under.map((p) => p.box.x1)), y1: Math.max(...under.map((p) => p.box.y1)) };
+}
+
+/** How many paints before a sprite's draw may still be its base (a rock in two washes, its shadow). */
+const BASE_LEAD = 6;
+/**
+ * The base drawn with a sprite (frame px): what the drawing paints under its foot (baseOf) in the few paints just
+ * before it, after the sprite drawn before it, as one box, and how many paints it is (a rock in two washes and its
+ * outline, the sprite's shadow). Painted with it, it belongs to it: a glow on the water or a wave that happens to pass
+ * its foot is drawn elsewhere in the code and is not its base. A sprite moved without its rock keeps only its shadow.
+ */
+export function baseDrawnWith(d: DryDraw, painted: DryPaint[]): { box: Rect; n: number } | undefined {
+  const prev = Math.max(-1, ...painted.filter((p) => p.id && p.seq < d.seq).map((p) => p.seq));
+  const near = painted.filter((p) => !p.id && p.seq > prev && p.seq < d.seq && p.seq >= d.seq - BASE_LEAD && baseOf(d.box, d.id, [p]));
+  const box = baseOf(d.box, d.id, near);
+  return box && { box, n: near.length };
+}
+
 /**
  * A shot's plan: the drawing run dry at the times its lines are read in the shot (each line's box as f.lyric, fully up),
  * each sprite draw (by id and its order among that id's draws in a frame) measured on the frame; one that reaches into
@@ -700,49 +803,16 @@ function codePlan(fn: CodeDraw, l: { src: string; cuts?: number[]; lines?: LineB
   const seenAt = new Map<string, Seen[]>();
   const based = new Set<string>();
   for (const { x, r } of samples) {
-    const seen = new Map<string, number>();
-    // what else the drawing paints this sample (frame px), with the sprite drawn there, if any: a sprite's base
-    const painted: { box: Rect; id?: string }[] = [];
-    const drawnNow: { k: string; box: Rect }[] = [];
-    const rec = (pic: CanvasImageSource, m: Mat, a: number[]) => {
-      const id = ids.get(pic);
-      if (!(a.length === 2 || a.length === 4 || a.length === 8)) return;
-      const sized = pic as CanvasImageSource & { width: number; height: number };
-      const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
-      if (!id) {
-        painted.push({ box: frameBox(toFrame.multiply(m), [dx, dy, dw, dh] as [number, number, number, number]) });
-        return;
-      }
-      const n = seen.get(id) ?? 0;
-      seen.set(id, n + 1);
-      const f = toFrame.multiply(m);
-      const pts = [[dx, dy], [dx + dw, dy], [dx, dy + dh], [dx + dw, dy + dh]].map(([px, py]) => [f.a * px + f.c * py + f.e, f.b * px + f.d * py + f.f]);
-      const box = { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
-      const k = `${id}#${n}`;
-      painted.push({ box, id });
-      drawnNow.push({ k, box });
-      seenAt.set(k, [...(seenAt.get(k) ?? []), { rect: [dx, dy, dw, dh], box, m: f, r }]);
-    };
-    const dry = dryContext(start, rec, (b) => painted.push({ box: frameBox(toFrame, [b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0]) }));
     const img = (id: string) => {
       const p = image(`spr:${id}`) ?? null;
       if (p) ids.set(p, id);
       return p;
     };
-    const warp = (pic: CanvasImageSource | null, wx: number, wy: number, ww: number, wh: number) => pic && dry.drawImage(pic, wx, wy, ww, wh);
-    try {
-      fn(dry, { w: W, h: H, t: x, age: x - ageOff, beat: { since: 0, pulse: 0, index: 0 } as Beat, lyric: r, lyricWeight: 1, cam: camAt(l.cuts ?? [], x), lines, room: (from = cam.start, to = cam.end) => roomsOf(lines, from, to), fit: (fx, fy, fw, fh, from = cam.start, to = cam.end) => fitRect(dry, start as unknown as DOMMatrix, roomsOf(lines, from, to), fx, fy, fw, fh), hash, img, scene: (id) => image(id) ?? null, particles: () => undefined, warp, cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) });
-    } catch {
-      /* a drawing that throws dry gets no plan here; the frame itself reports it */
-    }
-    // a sprite standing on something the drawing paints for it (a rock, an island, its shadow, another sprite holding its
-    // foot) is not moved: moved alone it leaves its base empty in the sea (世界のつづき's lighthouse). Frame-wide bands
-    // (the sea, the sky) are ground for everything, not a base
-    for (const { k, box } of drawnNow) {
-      const [fx, fy] = [(box.x0 + box.x1) / 2, box.y1];
-      const id = k.slice(0, k.lastIndexOf('#'));
-      if (painted.some((p) => p.id !== id && p.box.x1 - p.box.x0 < 0.6 * W && p.box.y1 - p.box.y0 < 0.6 * H && fx > p.box.x0 - BASE_REACH && fx < p.box.x1 + BASE_REACH && fy > p.box.y0 - BASE_REACH && fy < p.box.y1 + BASE_REACH)) based.add(k);
-    }
+    const { drawn, painted } = dryFrame(fn, start, (dry) => ({ w: W, h: H, t: x, age: x - ageOff, beat: { since: 0, pulse: 0, index: 0 } as Beat, lyric: r, lyricWeight: 1, cam: camAt(l.cuts ?? [], x), lines, room: (from = cam.start, to = cam.end) => roomsOf(lines, from, to), fit: (fx, fy, fw, fh, from = cam.start, to = cam.end) => fitRect(dry, start as unknown as DOMMatrix, roomsOf(lines, from, to), fx, fy, fw, fh), hash, img, scene: (id) => image(id) ?? null, particles: () => undefined, warp: (pic, wx, wy, ww, wh) => void (pic && dry.drawImage(pic, wx, wy, ww, wh)), cache: caches.get(l.src) ?? (caches.set(l.src, {}), caches.get(l.src)!) }));
+    for (const d of drawn) seenAt.set(d.k, [...(seenAt.get(d.k) ?? []), { rect: d.rect, box: d.box, m: d.m, r }]);
+    // a sprite standing on something the drawing paints for it is not moved: moved alone it leaves its base empty in the
+    // sea (世界のつづき's lighthouse)
+    for (const d of drawn) if (baseOf(d.box, d.id, painted)) based.add(d.k);
   }
   const hits = (b: Rect, r: LineBox) => (Math.max(0, Math.min(b.x1, r.x1 + 24) - Math.max(b.x0, r.x0 - 24)) * Math.max(0, Math.min(b.y1, r.y1 + 24) - Math.max(b.y0, r.y0 - 24))) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
   const offFrame = (b: Rect) => 1 - (Math.max(0, Math.min(b.x1, W) - Math.max(b.x0, 0)) * Math.max(0, Math.min(b.y1, H) - Math.max(b.y0, 0))) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
@@ -3072,6 +3142,19 @@ export interface Rect {
 
 const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
+/** How far a follower's string may stretch when it makes room, as a share of its length at rest. */
+export const TETHER_STRETCH = 1.6;
+
+/** Whether a follower's string, from its leader to a follower centred at (cx, cy) frame px, runs through `r`. */
+export function tetherCrosses(l: Layer, cx: number, cy: number, r: Rect): boolean {
+  const tt = (l as { tether?: Tether }).tether;
+  if (!tt) return false;
+  return tetherPts(tt.from, [(cx - W / 2) / (W / 2), (H / 2 - cy) / (H / 2)]).some(([x, y]) => {
+    const [px, py] = [W / 2 + x * (W / 2), H / 2 - y * (H / 2)];
+    return px > r.x0 && px < r.x1 && py > r.y0 && py < r.y1;
+  });
+}
+
 /** The frame area a movable layer covers (photos that are not full frame, blobs, stamps, seals, numerals). */
 export function layerRect(l: Layer): Rect | undefined {
   const cx = (x?: number) => W / 2 + (x ?? 0) * W / 2;
@@ -3126,18 +3209,39 @@ export function layerRect(l: Layer): Rect | undefined {
  * slide sideways to the roomier side, slide up or down, shrink to 75 % and 55 % at each place. Returns the layer
  * unchanged when it does not overlap or cannot be placed (the type's knockout handles the rest).
  */
-export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []): Layer {
+export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = [], keep: Rect[] = []): Layer {
   const r = layerRect(l);
   if (!r || l.fixed) return l;
   const guard = { x0: lyrics.x0 - margin, y0: lyrics.y0 - margin, x1: lyrics.x1 + margin, y1: lyrics.y1 + margin };
-  if (!overlaps(r, guard)) return l;
+  // other words up besides the line (a sing-along's preview row): kept clear each on its own, never merged with it
+  const keeps = keep.map((k) => ({ x0: k.x0 - margin, y0: k.y0 - margin, x1: k.x1 + margin, y1: k.y1 + margin }));
+  // a follower's string is part of it: a place where the string runs through the words is no place for it either
+  const strung = (q: Rect) => [guard, ...keeps].some((g) => tetherCrosses(l, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, g));
+  if (!overlaps(r, guard) && !keeps.some((k) => overlaps(r, k)) && !strung(r)) return l;
+  // a follower stays by its leader: a place may stretch its string to at most TETHER_STRETCH times its length at
+  // rest and keeps it on the leader's side of the frame; where none is free it fades with its string where it is
+  // (as a passing prop does), never flung across the frame on a long string
+  const tt = (l as { tether?: Tether }).tether;
+  const lead = tt && { x: W / 2 + tt.from[0] * (W / 2), y: H / 2 - tt.from[1] * (H / 2) };
+  const restLen = lead ? Math.hypot((r.x0 + r.x1) / 2 - lead.x, (r.y0 + r.y1) / 2 - lead.y) : 0;
+  const near = (q: Rect) => {
+    if (!lead) return true;
+    const [cx, cy] = [(q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2];
+    const side = Math.abs(lead.x - W / 2) < W / 6 || Math.sign(cx - W / 2) === Math.sign(lead.x - W / 2);
+    return side && Math.hypot(cx - lead.x, cy - lead.y) <= TETHER_STRETCH * Math.max(restLen, l.kind === 'sprite' ? l.size * H : 0);
+  };
+  const fadeBehind = (s: Layer) => {
+    const cover = Math.max(...[guard, ...keeps].map((g) => (Math.max(0, Math.min(r.x1, g.x1) - Math.max(r.x0, g.x0)) * Math.max(0, Math.min(r.y1, g.y1) - Math.max(r.y0, g.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0))));
+    // (a corner over a word fades it as much as a pass prop wholly behind the line: any overlap reads as covering)
+    return { ...s, opacity: (s.opacity ?? 1) * (1 - 0.65 * Math.min(1, 4 * Math.max(cover, strung(r) ? 0.25 : 0))) } as Layer;
+  };
   if (l.kind === 'sprite' && l.pass) {
     // a prop on its way (an orbit, a journey, a float) passes behind the line, fading by how much it covers it:
     // pushed aside every frame it would jump about
     const cover = (Math.max(0, Math.min(r.x1, guard.x1) - Math.max(r.x0, guard.x0)) * Math.max(0, Math.min(r.y1, guard.y1) - Math.max(r.y0, guard.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0));
     return { ...l, opacity: (l.opacity ?? 1) * (1 - 0.65 * Math.min(1, cover)) };
   }
-  const clash = (q: Rect) => overlaps(q, guard) || others.some((o) => overlaps(q, o));
+  const clash = (q: Rect) => overlaps(q, guard) || keeps.some((k) => overlaps(q, k)) || strung(q) || !near(q) || others.some((o) => overlaps(q, o));
   const w = r.x1 - r.x0;
   const h = r.y1 - r.y0;
   // a window or a phone must land inside its own margins, or the draw clamps it back over the line
@@ -3170,6 +3274,7 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
   // a picture or letters (a photo inset, a stamp, a seal, a numeral) behind the words is what makes them hard to read
   // (チョロイン c003: blue type over a blue stage photo); a flat shape (a blob, a disc) may stay behind them by design
   const busy = l.kind === 'photo' || l.kind === 'stamp' || l.kind === 'seal' || l.kind === 'numeral';
+  if (tt) return fadeBehind(l);
   if (story || busy) {
     // no room next to the line: the object crosses to the far side or another free spot (nearest first) rather than
     // fading behind the line (落ちた風鈴 dimmed to a ghost beside the vertical lyrics)
@@ -3391,11 +3496,13 @@ export function measurable(placed: Layer[], planned: Layer[], age: number, zone:
 /** Backdrop shapes that are only decoration (a sun disc, scattered shapes, rays, leaves): squeezed, they fade. */
 const DECOR = new Set(['blob', 'shapes', 'sunburst', 'botanical']);
 
-export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
-  // objects already clear of the lyrics stay where they are and are obstacles for the ones that must move
+export function avoidAll(layers: Layer[], lyrics: Rect, keep: Rect[] = []): Layer[] {
+  // objects already clear of the lyrics (and of any other words up: `keep`, each its own box) stay where they are and
+  // are obstacles for the ones that must move
   const clear = (l: Layer) => {
     const r = layerRect(l);
-    return !r || !overlaps(r, { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 });
+    const gs = [lyrics, ...keep].map((x) => ({ x0: x.x0 - 24, y0: x.y0 - 24, x1: x.x1 + 24, y1: x.y1 + 24 }));
+    return !r || gs.every((g) => !overlaps(r, g) && !tetherCrosses(l, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, g));
   };
   const isStory = (l: Layer) => l.kind === 'sprite' || l.kind === 'card' || l.kind === 'thread';
   const placed = layers.flatMap((l, i) => (clear(l) && layerRect(l) ? [{ i, r: layerRect(l)!, story: isStory(l) }] : []));
@@ -3409,13 +3516,13 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
       const l = layers[i];
       // the lyric box reaches the layers that watch their pictures against it (drawCode's sprites, a kinetic cut's character)
       if (l.kind === 'code' || l.kind === 'kinetic') {
-        out[i] = { ...l, lyric: lyrics };
+        out[i] = { ...l, lyric: lyrics, ...(keep.length ? { keep } : {}) };
         return;
       }
       if (!only(i) || clear(l)) return;
       // a story prop is drawn over the backdrop, so only the lyrics and the other story objects are in its way (a
       // background disc next to the line pushed 落ちた風鈴 under the lyrics)
-      out[i] = avoid(l, lyrics, 24, taken.filter((p) => !isStory(l) || p.story).map((p) => p.r));
+      out[i] = avoid(l, lyrics, 24, taken.filter((p) => !isStory(l) || p.story).map((p) => p.r), keep);
       // a backdrop shape squeezed to a corner at a fraction of its size reads as a stray dot (三年後的大雪's sun went
       // to a dark disc by the lyric's end): it fades instead; story props keep their place-finding
       const was = layerRect(l), now = layerRect(out[i]);

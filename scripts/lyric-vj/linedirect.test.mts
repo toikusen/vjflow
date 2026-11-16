@@ -151,7 +151,7 @@ assert.ok(JSON.stringify(directionSchema()).length < 4000, 'the schema stays sma
 // the paid director's own lists stay as they were
 const lists = readFileSync('src/app/lyric-vj/treatment.ts', 'utf8');
 assert.ok(lists.includes("export const ENTER_KINDS: EnterKind[] = ['pop', 'slam'"));
-assert.equal(ENTER_KINDS.length, 28);
+assert.equal(ENTER_KINDS.length, 29);
 assert.equal(EXIT_KINDS.length, 18);
 assert.equal(IDLE_KINDS.length, 11);
 assert.equal(Object.keys(TEMPLATES).length, 15);

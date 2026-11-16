@@ -51,6 +51,14 @@ export interface CueRuntime {
   firstVoice?: 'me' | 'them';
   /** This line's place among the lines of its shot (0 = first). */
   order?: number;
+  /** This line's place among all the song's lines, and its neighbours' text and times (the sing-along modes). */
+  songOrder?: number;
+  prevText?: string;
+  prevEnd?: number;
+  nextText?: string;
+  nextStart?: number;
+  /** The colours measured under a sing-along's preview row (where it stands, not where the line sung does). */
+  previewGrounds?: string[];
   /** The song's seed: a drawn effect's look (how many shards, how hard they fly) is its own in each song. */
   song?: number;
   /** The song's tempo (a held line's heartbeat thumps with it). */
@@ -136,7 +144,8 @@ export interface TemplateRenderer {
   /** The shot layer shows for the whole shot, not only around its lines (title cards have none). */
   standalone?: boolean;
   /** Lines stay up past their own time: until the shot ends ('shot'), or until the line after next shows ('next'). */
-  persist?: 'shot' | 'next';
+  /** 'preview' (sing-along): a line whose next one follows within PREVIEW_GAP stays up until that one shows. */
+  persist?: 'shot' | 'next' | 'preview';
 }
 
 /** Strength of the most recent accent at time t (exponential decay after each hit). */
@@ -553,7 +562,7 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
 export type PaceAdjust = 'fast-cut' | 'fast-short' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-short' | 'read-cut';
 
 /** Entrances too slow for a line sung faster than it reads (pop and fade are quick enough to keep). */
-const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'settle', 'flicker', 'band-in', 'matrix-light', 'cell-land', 'reply-land', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', ...(Object.keys(ARRIVAL_SEC) as EnterKind[])]);
+const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'strips', 'settle', 'flicker', 'band-in', 'matrix-light', 'cell-land', 'reply-land', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', ...(Object.keys(ARRIVAL_SEC) as EnterKind[])]);
 /** The quick entrance closest in feel: impacts pop, the rest fade. */
 const SHORT_ENTER = (e: EnterKind): EnterKind => (e === 'slam' || e === 'flap' || e === 'slot' ? 'pop' : 'fade');
 

@@ -49,6 +49,10 @@ const EXTRA: Record<string, string> = {
   'doc:ticket': '文件感：票券（打孔虛線、目的地、SEAT 座位號）',
   'motion:loop-noise': '道具和背景閒置時沿著無縫循環的平滑雜訊漂移（不是固定節拍的正弦搖擺）',
   'motion:velocity-settle': '道具和字卡落定時衝過頭的幅度跟著到達速度變大變小，落定前停穩',
+  'motion:velocity-bank': '移動中的道具和字卡隨自己的速度往前傾，慢下來就站直（讀歌詞時字不傾斜）',
+  'story:follow': '一個道具像綁在彈簧上跟著另一個會動的道具，慢半拍、停下時晃一下（氣球、風箏、跟在腳邊）',
+  'layout:singalong': '跟唱兩行：左上右下輪流唱，唱的那行有進度底線，另一行先放下一句（客人選跟唱才有）',
+  'layout:scroll': '歌詞捲動：唱的那句置中放大，下一句在下面，換句時整列上捲一行（客人選跟唱才有）',
 };
 // each move's variants are techniques of their own (a mahjong tile is not a keycap)
 for (const [id, m] of Object.entries(MORE)) m.styles?.forEach((x, i) => i && (EXTRA[`fx:${id}#${i}`] = `${m.help.split('：')[0]}的變化：${x}`));
@@ -81,8 +85,14 @@ const KNOWN: Record<string, { from: string; own: boolean }> = {
   // learned 2026-11-16 from outside references (ideas only; our own code)
   'idle:track': { from: 'claude-animated-text (pound0423, MIT) #30 track', own: false },
   'idle:fill': { from: 'claude-animated-text (pound0423, MIT) #41 kara', own: false },
+  'enter:strips': { from: 'claude-animated-text (pound0423, MIT) #39 blinds', own: false },
   'motion:loop-noise': { from: 'AE expression guide wiggle-loop / wiggle-octaves (concept only)', own: false },
   'motion:velocity-settle': { from: 'AE expression guide phys-inertia (concept only)', own: false },
+  'motion:velocity-bank': { from: 'AE expression guide phys-velocity (concept only)', own: false },
+  'story:follow': { from: 'AE expression guide layer-elastic-follow (concept only)', own: false },
+  'layout:singalong': { from: 'claude-animated-text (pound0423, MIT) #43 dual', own: false },
+  'layout:scroll': { from: 'claude-animated-text (pound0423, MIT) #46 lyrics', own: false },
+  ...Object.fromEntries(['fx:field', 'fx:field#1', 'fx:field#2'].map((x) => [x, { from: 'AE expression guide layer-distance (concept only)', own: false }])),
   ...Object.fromEntries(['device:print-duo', ...['wall', 'ring', 'tunnel', 'bars', 'stack', 'split', 'rays', 'boxes', 'grid', 'dots'].map((x) => `fx:${x}`)].map((x) => [x, { from: YUNON, own: false }])),
 };
 

@@ -83,10 +83,10 @@ export const TUNABLE = ['meteor.n', 'stars.n', 'rain.n', 'sparkle.n', 'fireworks
 /** Templates a plain entrance can stand on: no paper, no shape of their own. */
 const OPEN_TEMPLATES = new Set(['stair', 'stack', 'punch', 'quote', 'vertical', 'couplet', 'handwrite']);
 /** Plain entrances, with the fragments, junk symbols and scattered pieces left out. */
-const OPEN_ENTERS = new Set(['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'focus', 'rise', 'dash', 'drop', 'zoom', 'spread', 'settle', 'squash', 'windup', 'flip', 'slice', 'flicker', 'rip', 'snapin']);
+const OPEN_ENTERS = new Set(['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'focus', 'rise', 'dash', 'drop', 'zoom', 'spread', 'settle', 'squash', 'windup', 'flip', 'slice', 'strips', 'flicker', 'rip', 'snapin']);
 const OPEN_IDLES = new Set(['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump', 'track', 'fill']);
 /** The plain moves a song felt rather than shouted does without. */
-const LOUD_ENTERS = new Set(['slam', 'zoom', 'dash', 'squash', 'windup', 'rip', 'snapin', 'flicker']);
+const LOUD_ENTERS = new Set(['slam', 'zoom', 'dash', 'squash', 'windup', 'rip', 'snapin', 'flicker', 'strips']);
 const LOUD_IDLES = new Set(['shake', 'thump', 'hop', 'boil']);
 const LOUD_EXITS = new Set(['burst', 'slash', 'shatter', 'zoom', 'dash']);
 /** Layouts that cut a line into pieces as it is sung. */

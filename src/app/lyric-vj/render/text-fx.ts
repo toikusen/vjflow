@@ -8,7 +8,7 @@ import { CueStyle, Emphasis, SymbolName } from '../treatment';
 import { SIGN_PATHS } from './signs';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, GlyphStyle, glyphTexture, hash, inkShare, clearGlyphCache } from './glyphs';
 import { stepScale, ARRIVAL_SEC, cornerPose, curveKind, curvePoint, doorPhase, doorSeam, isArrival, markShare, seatPhase, trainDelay, waveEdge, waveRise } from './arrival';
-import { bandEdges, bandOffset, slatEdges, slatTurn } from './band-clip';
+import { bandEdges, bandOffset, slatEdges, slatTurn, stripEdges, stripSlide } from './band-clip';
 import { cutPieces } from './beat-cut';
 import { GRAIN_PITCH, grainStep, lightRows, litShare, pressDepth, softDepth, stateFor, UNLIT } from './glyph-state';
 import { phraseSpans } from './line-space';
@@ -29,7 +29,7 @@ interface Item {
 }
 
 /** Entrances drawn here over a plain cut: the template only places the glyphs. */
-const DRAWN_ENTER = new Set<string>(['ink', 'flap', 'slot', 'focus', 'rise', 'decode', 'slice', 'rip', 'flip', 'stretch', 'shuffle', 'squash', 'windup', 'karaoke', 'band-in', 'matrix-light', ...Object.keys(ARRIVAL_SEC)]);
+const DRAWN_ENTER = new Set<string>(['ink', 'flap', 'slot', 'focus', 'rise', 'decode', 'slice', 'rip', 'flip', 'stretch', 'shuffle', 'squash', 'windup', 'karaoke', 'strips', 'band-in', 'matrix-light', ...Object.keys(ARRIVAL_SEC)]);
 /** Exits drawn here over a plain fade. */
 const DRAWN_EXIT = new Set(['glitch', 'slash', 'scramble', 'split', 'pixel', 'shatter', 'collapse', 'band-out', 'slat-close', 'line-fold', 'echo-travel', 'radial-leave', 'glyph-shed', 'wave-dissolve', 'pore-out', 'focus-out', 'node-fold']);
 /**
@@ -48,7 +48,7 @@ export function templateStyle(s: CueStyle): CueStyle {
 
 /** When glyph g (in cue-text order) starts its entrance: as sung for a word reveal, else a short stagger. */
 const startOf = (rt: CueRuntime, g: Glyph, n: number) =>
-  rt.style.enter === 'band-in' || rt.style.enter === 'matrix-light' || isArrival(rt.style.enter) ? rt.showFrom : rt.style.reveal === 'sung' ? sungAt(rt, g) : rt.style.reveal === 'word' ? revealAt(rt, (g.src ?? g.index) / Math.max(1, n - 1)) : rt.showFrom + (g.src ?? g.index) * 0.035 * rt.pace;
+  rt.style.enter === 'band-in' || rt.style.enter === 'strips' || rt.style.enter === 'matrix-light' || isArrival(rt.style.enter) ? rt.showFrom : rt.style.reveal === 'sung' ? sungAt(rt, g) : rt.style.reveal === 'word' ? revealAt(rt, (g.src ?? g.index) / Math.max(1, n - 1)) : rt.showFrom + (g.src ?? g.index) * 0.035 * rt.pace;
 
 /** A glyph's picture as a screen of round dots of this pitch, each as big as the ink it stands for (cached per picture and pitch). */
 const grains = new Map<string, THREE.Texture>();
@@ -533,6 +533,8 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   }
   const inks = new Map(items.map((it) => [it.mesh, it.mesh.material.color.clone()]));
   const noisy = new Set<GlyphMesh>();
+  /** The glyphs a scramble exit has broken into signs (given back their own picture when scrubbed before it). */
+  const broke = new Set<GlyphMesh>();
   const show = (m: GlyphMesh, pic: { map: THREE.Texture | null; geo: THREE.PlaneGeometry }) => {
     if (m.material.map === pic.map) return;
     m.material.map = pic.map as THREE.Texture;
@@ -561,10 +563,13 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
     it.mesh.add(tw);
     return tw;
   };
-  const bandIn = enter === 'band-in';
-  const blockWeights = bandIn ? cutPieces(rt.cue.text.trim()).map((p) => [...p.text].length) : [];
+  // strips: the same masks, cut into five to seven equal rows sliding home from alternate sides, top to bottom
+  const strips = enter === 'strips';
+  const stripN = strips ? Math.round(v('strips.n', 5, 7.49)) : 0;
+  const bandIn = enter === 'band-in' || strips;
+  const blockWeights = enter === 'band-in' ? cutPieces(rt.cue.text.trim()).map((p) => [...p.text].length) : [];
   const bandCount = bandEdges(blockWeights).length - 1;
-  const bandPlanes = bandIn ? Array.from({ length: Math.max(bandCount, 3) }, () => [new THREE.Plane(), new THREE.Plane()]) : [];
+  const bandPlanes = bandIn ? Array.from({ length: Math.max(bandCount, 3, stripN) }, () => [new THREE.Plane(), new THREE.Plane()]) : [];
   const bandTwins = new Map(bandIn ? items.map((it) => [it.mesh, bandPlanes.map((p) => twinOf(it, p))]) : []);
   // matrix-light: the unlit line waits; a copy above a falling edge lights it row by row
   const lightPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -925,9 +930,9 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   let splitting = false;
   // trail: faint copies where each glyph was a few frames ago (only while it moves)
   const TRAIL = [3, 6, 10];
+  /** The frame rate TRAIL counts in (the export's). */
+  const TRAIL_FPS = 30;
   const ghosts = new Map<GlyphMesh, GlyphMesh[]>();
-  const past = new Map<GlyphMesh, { m: THREE.Matrix4; o: number }[]>();
-  let lastT = -1;
   if (rt.style.trail)
     for (const it of items) {
       ghosts.set(
@@ -940,7 +945,6 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           return g;
         }),
       );
-      past.set(it.mesh, []);
     }
   // hold: a wavering line runs on from the word's last character while the vowel is held
   const holds = (rt.style.emphasis ?? []).filter((e) => e.method === 'hold').map((e) => {
@@ -1135,7 +1139,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
     const g = layer.group.getWorldScale(new THREE.Vector3());
     return { x: p.x, y: p.y, s: tmpS.y / (g.y || 1) };
   };
-  return {
+  const out: CueLayer = {
     group: layer.group,
     framed: layer.framed,
     floor: layer.floor,
@@ -1304,14 +1308,14 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         }
 
       if (bandIn) {
-        const k = (t - rt.showFrom) / (DRAWN.bandIn.sec * rt.pace);
+        const k = (t - rt.showFrom) / ((strips ? DRAWN.strips.sec : DRAWN.bandIn.sec) * rt.pace);
         const on = t >= rt.showFrom && k < 1;
         for (const list of bandTwins.values()) for (const tw of list) tw.visible = false;
         if (on) {
           const b = blockNow();
-          // a wide single row is cut between its phrases, a block across its rows
-          const wide = b.x1 - b.x0 > 2.4 * (b.y1 - b.y0);
-          const edges = wide ? bandEdges(blockWeights) : bandEdges([1, 1 + v('band.mid', 0.2, 0.9), v('band.low', 0.7, 1.2)]);
+          // a wide single row is cut between its phrases, a block across its rows (strips always across)
+          const wide = !strips && b.x1 - b.x0 > 2.4 * (b.y1 - b.y0);
+          const edges = strips ? stripEdges(stripN) : wide ? bandEdges(blockWeights) : bandEdges([1, 1 + v('band.mid', 0.2, 0.9), v('band.low', 0.7, 1.2)]);
           const count = Math.min(edges.length - 1, bandPlanes.length);
           const span: [number, number] = wide ? [b.x0, b.x1] : [b.y1, b.y0];
           // the strips reach just past the block so nothing is shaved off its edge
@@ -1327,7 +1331,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
               hi.set(new THREE.Vector3(0, 1, 0), -at(edges[i + 1]));
             }
           }
-          const reach = wide ? (b.y1 - b.y0) * 1.5 : Math.min(760, (b.x1 - b.x0) * 0.6);
+          const reach = wide ? (b.y1 - b.y0) * 1.5 : strips ? Math.min(1100, Math.max(360, (b.x1 - b.x0) * 0.8)) : Math.min(760, (b.x1 - b.x0) * 0.6);
           for (const it of items) {
             const list = bandTwins.get(it.mesh)!;
             const o = it.mesh.material.opacity;
@@ -1335,7 +1339,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
             list.forEach((tw, i) => {
               tw.visible = i < count;
               if (!tw.visible) return;
-              const off = (bandOffset(i, count, k, first) * reach) / parent;
+              const off = ((strips ? stripSlide(i, count, k, first, 0.35) : bandOffset(i, count, k, first)) * reach) / parent;
               tw.position.set(wide ? 0 : off, wide ? off : 0, 0);
               tw.material.opacity = o;
             });
@@ -1577,9 +1581,11 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           const k = kOf(it, enter === 'rip' ? DRAWN.rip.sec : DRAWN.slice.sec);
           const h = halves.get(m)!;
           if (k < 0) m.material.opacity = 0;
-          const off = it.style.size * 1.4 * v('slice.far', 0.7, 1.6) * (1 - easeOutCubic(clamp01(k)));
-          m.position.x -= off;
-          h.tw.position.set((2 * off) / (m.scale.x || 1), 0, 0);
+          // two strips, no lag (band-clip stripSlide): the upper half from the left, the lower from the right
+          const reach = it.style.size * 1.4 * v('slice.far', 0.7, 1.6);
+          const [up, low] = [stripSlide(0, 2, clamp01(k), -1) * reach, stripSlide(1, 2, clamp01(k), -1) * reach];
+          m.position.x += up;
+          h.tw.position.set((low - up) / (m.scale.x || 1), 0, 0);
           m.updateMatrixWorld(true);
           const y = m.getWorldPosition(new THREE.Vector3()).y;
           h.top.set(new THREE.Vector3(0, 1, 0), -y);
@@ -1720,9 +1726,11 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         }
       }
 
+      // a line assembled from masked strips (band-in, strips) is whole only once they are home: its echoes wait for it
+      const assembled = bandIn ? rt.showFrom + (strips ? DRAWN.strips.sec : DRAWN.bandIn.sec) * rt.pace : -Infinity;
       for (const { it, copies } of echoes) {
         const m = it.mesh;
-        const from = startOf(rt, it.glyph, n) + 0.05;
+        const from = Math.max(startOf(rt, it.glyph, n) + 0.05, assembled);
         // fans out as the word lands, then breathes in and out a little while it is held
         const out = easeOutCubic((t - from) / 0.4) * (0.75 + 0.25 * Math.sin((t - from) * 2.6));
         copies.forEach((o, j) => {
@@ -1885,15 +1893,20 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         fx.shake = Math.max(fx.shake, 0.15 * (1 - q));
       }
 
-      if (rt.style.exit === 'scramble' && exiting)
+      if (rt.style.exit === 'scramble')
         for (const it of items) {
           const m = it.mesh;
           // each character breaks into flickering signs in turn, then the noise fades out
           const from = rt.exitAt + it.glyph.index * Math.min(0.03, rt.exitDur / Math.max(1, n) / 2);
-          if (t < from) continue;
+          if (!exiting || t < from) {
+            // scrubbed back before it broke: its own picture and ink again (a frame is a function of its time)
+            if (broke.delete(m)) show(m, home.get(m)!), m.material.color.copy(inks.get(m)!);
+            continue;
+          }
           const fs = noise.get(m)!;
           show(m, fs[Math.floor((t - from) / DRAWN.decode.fold) % fs.length]);
           m.material.color.copy(accent);
+          broke.add(m);
           m.material.opacity = (held.get(m) ?? 1) * (1 - easeInCubic(q));
         }
 
@@ -2448,31 +2461,68 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         });
       }
 
-      if (rt.style.trail) {
-        if (t < lastT || t - lastT > 0.2) for (const h of past.values()) h.length = 0;
-        lastT = t;
-        layer.group.updateMatrixWorld(true);
-        const inv = layer.group.matrixWorld.clone().invert();
-        for (const it of items) {
-          const m = it.mesh;
-          const h = past.get(m)!;
-          const now = new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld);
-          ghosts.get(m)!.forEach((g, i) => {
-            const was = h[TRAIL[i] - 1];
-            g.geometry = m.geometry;
-            g.material.map = m.material.map;
-            // a still glyph has no trail (its copies would only thicken it)
-            const moved = was ? new THREE.Vector3().setFromMatrixPosition(was.m).distanceTo(new THREE.Vector3().setFromMatrixPosition(now)) : 0;
-            g.visible = !!was && m.visible && moved > it.style.size * 0.06;
-            if (!was) return;
-            g.matrix.copy(was.m);
-            g.matrixWorldNeedsUpdate = true;
-            g.material.opacity = Math.min(was.o, m.material.opacity + 0.3) * [0.45, 0.28, 0.14][i];
-          });
-          h.unshift({ m: now, o: m.material.opacity });
-          h.length = Math.min(h.length, TRAIL[TRAIL.length - 1]);
-        }
-      }
     },
   };
+  if (!rt.style.trail) return out;
+  // trail: where each glyph was TRAIL frames ago is the line drawn at that earlier time, not a record of frames seen,
+  // so a seek, a scrub back and a skipped frame show the same trail as playback (the export equals the preview)
+  const step = out.update;
+  const inv = new THREE.Matrix4();
+  const tmpV = [new THREE.Vector3(), new THREE.Vector3()];
+  type Pose = { m: Float32Array; o: Float32Array; seen: Uint8Array };
+  const n2 = items.length;
+  /** Where each glyph is at a time, by the template alone (its move: the drawn effects are not run for a ghost). */
+  const posed = new Map<string, Pose>();
+  const spare: Pose[] = [];
+  const poseAt = (tp: number, write?: Pose): Pose => {
+    const p = write ?? spare.pop() ?? { m: new Float32Array(16 * n2), o: new Float32Array(n2), seen: new Uint8Array(n2) };
+    layer.group.updateMatrixWorld(true);
+    inv.copy(layer.group.matrixWorld).invert();
+    items.forEach((it, j) => {
+      tmpM.multiplyMatrices(inv, it.mesh.matrixWorld).toArray(p.m, 16 * j);
+      p.o[j] = it.mesh.material.opacity;
+      p.seen[j] = it.mesh.visible ? 1 : 0;
+    });
+    return p;
+  };
+  const tmpM = new THREE.Matrix4();
+  const past = (tp: number): Pose => {
+    const key = String(Math.round(tp * 2400));
+    const hit = posed.get(key);
+    if (hit) return hit;
+    // the template's own frame at tp, from the same start a frame has (text-fx restores what the template set)
+    for (const [m, b] of base) (m.position.copy(b.p), m.scale.copy(b.s), (m.rotation.z = b.r), (m.material.opacity = b.o));
+    layer.update(tp, { flash: 0, hit: 0, shake: 0 });
+    const p = poseAt(tp);
+    posed.set(key, p);
+    // a few frames back is all a trail needs: the oldest go back to the pool (pure in time, so reuse is safe)
+    while (posed.size > 12) {
+      const [k0, v0] = posed.entries().next().value!;
+      posed.delete(k0);
+      spare.push(v0);
+    }
+    return p;
+  };
+  const nowPose: Pose = { m: new Float32Array(16 * n2), o: new Float32Array(n2), seen: new Uint8Array(n2) };
+  out.update = (t, fx) => {
+    const was = TRAIL.map((k) => past(t - k / TRAIL_FPS));
+    step(t, fx);
+    const now = poseAt(t, nowPose);
+    items.forEach((it, j) => {
+      const m = it.mesh;
+      ghosts.get(m)!.forEach((g, i) => {
+        const w = was[i];
+        g.geometry = m.geometry;
+        g.material.map = m.material.map;
+        // a still glyph has no trail (its copies would only thicken it), nor one that was not up yet
+        tmpV[0].set(w.m[16 * j + 12], w.m[16 * j + 13], w.m[16 * j + 14]);
+        tmpV[1].set(now.m[16 * j + 12], now.m[16 * j + 13], now.m[16 * j + 14]);
+        g.visible = !!w.seen[j] && w.o[j] > 0 && m.visible && tmpV[0].distanceTo(tmpV[1]) > it.style.size * 0.06;
+        g.matrix.fromArray(w.m, 16 * j);
+        g.matrixWorldNeedsUpdate = true;
+        g.material.opacity = Math.min(w.o[j], m.material.opacity + 0.3) * [0.45, 0.28, 0.14][i];
+      });
+    });
+  };
+  return out;
 }

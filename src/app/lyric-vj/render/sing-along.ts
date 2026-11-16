@@ -30,9 +30,11 @@ export const previewInk = (rt: Pick<CueRuntime, 'palette'>) => readable(rt.palet
 export const previewOf = (rt: Pick<CueRuntime, 'nextText' | 'nextStart' | 'cue'>) =>
   rt.nextText && rt.nextStart !== undefined && rt.nextStart - rt.cue.end <= PREVIEW_GAP ? oneLine(rt.nextText) : '';
 
-const glyphRow = (text: string, style: GlyphStyle, ink: string, cx: number, y: number) => {
+const glyphRow = (text: string, style: GlyphStyle, ink: string, cx: number, y: number, preview = false) => {
   const gs = makeGlyphs(text, style, color(ink, 1), TRACK);
   placeRow(gs, cx, y, TRACK);
+  // a preview (or a line scrolling away) is not the line sung: the lyric box, the cover and ink checks leave it out
+  if (preview) gs.forEach((g) => (g.mesh.userData['preview'] = true));
   return gs;
 };
 
@@ -53,7 +55,7 @@ export const singalong: TemplateRenderer = {
     tagSource(glyphs, rt.cue.text, 0);
     glyphs.forEach((g) => group.add(g.mesh));
     // the preview is the next line where it will be sung, smaller and lighter, never dimmed (no tagSource: not this line)
-    const preview = next ? glyphRow(next, { family: rt.fonts.display, weight: 700, size: Math.round(rowSize(next, 0.62, 96) * 0.82) }, previewInk(rt), other.x, other.y) : [];
+    const preview = next ? glyphRow(next, { family: rt.fonts.display, weight: 700, size: Math.round(rowSize(next, 0.62, 96) * 0.82) }, previewInk(rt), other.x, other.y, true) : [];
     preview.forEach((g) => (g.mesh.position.set(g.x, g.y, 0), group.add(g.mesh)));
     // the underline: the accent that reads on the ground, drawn on from the line's left edge as it is sung
     const width = rowWidth(glyphs, TRACK);
@@ -100,8 +102,8 @@ export const scroll: TemplateRenderer = {
     const glyphs = glyphRow(text, { family: rt.fonts.display, weight: 900, size, shadow: false }, ink, 0, 0);
     tagSource(glyphs, rt.cue.text, 0);
     glyphs.forEach((g) => group.add(g.mesh));
-    const below = next ? glyphRow(next, { family: rt.fonts.display, weight: 700, size: small(next) }, previewInk(rt), 0, -step) : [];
-    const gone = before ? glyphRow(before, { family: rt.fonts.display, weight: 700, size: small(before) }, previewInk(rt), 0, 0) : [];
+    const below = next ? glyphRow(next, { family: rt.fonts.display, weight: 700, size: small(next) }, previewInk(rt), 0, -step, true) : [];
+    const gone = before ? glyphRow(before, { family: rt.fonts.display, weight: 700, size: small(before) }, previewInk(rt), 0, 0, true) : [];
     [...below, ...gone].forEach((g) => group.add(g.mesh));
     const scrollSec = SCROLL_SEC * rt.pace;
     const lands = rt.showFrom + scrollSec;

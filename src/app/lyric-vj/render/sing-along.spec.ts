@@ -92,3 +92,16 @@ describe('sing-along lines carry no handoff', () => {
     expect(NO_HANDOFF.has('singalong') && NO_HANDOFF.has('scroll')).toBe(true);
   });
 });
+
+describe('the preview is not the line', () => {
+  it('stays out of the lyric box and the line\'s glyphs (it is not what is sung)', async () => {
+    const { meshGlyphs, shownBox } = await import('./engine');
+    const l = singalong.cue(rt({ songOrder: 4 }));
+    l.update(11, fx);
+    l.group.updateMatrixWorld(true);
+    const box = shownBox(l);
+    // the sung row is upper left (y > 0 in the group); the preview row, lower right, is outside the box
+    expect(box.min.y).toBeGreaterThan(0);
+    expect(meshGlyphs(l.group).length).toBe([...'風から聞いた歌'].length);
+  });
+});

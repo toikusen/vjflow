@@ -101,8 +101,8 @@ const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter', 'fo
  * Frame-px boxes of the glyphs on screen in a line's group (visible and not faded out), their opacity, and for a whole
  * glyph texture the affine that lays the texture where the letter is drawn, tilt and all (a letter on an arc).
  */
-function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number] })[] {
-  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number] })[] = [];
+function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean })[] {
+  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean })[] = [];
   const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
   if (!shown(group)) return out;
@@ -114,7 +114,7 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
     const map = m.material.map;
     const whole = map && map.repeat.x === 1 && map.repeat.y === 1 && !map.offset.x && !map.offset.y;
     if (b.isEmpty()) return;
-    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1 };
+    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1, ...(m.userData['preview'] ? { preview: true } : {}) };
     const pos = m.geometry.getAttribute('position');
     const img = whole ? (map.image as CanvasImageSource & { width: number; height: number }) : undefined;
     if (!img || !pos || pos.count !== 4 || !img.width) return void out.push(box);
@@ -131,12 +131,13 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
  * every shown, textured, opaque-enough mesh that is not what the words stand on, its picture's centre (the picture pads
  * the glyph a third of its size each side: GLYPH_CORE of it is the glyph), its opacity and colour (QA: the probe gate).
  */
-function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
+export function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
   const out: GlyphBox[] = [];
   const b = new THREE.Box3();
   group.traverseVisible((o) => {
     const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-    if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor']) return;
+    // (a sing-along's preview of the next line is not this line: sing-along.ts)
+    if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor'] || m.userData['preview']) return;
     b.setFromObject(m);
     if (b.isEmpty()) return;
     const [cx, cy, hw, hh] = [(b.min.x + b.max.x) / 2 + W / 2, H / 2 - (b.min.y + b.max.y) / 2, ((b.max.x - b.min.x) * GLYPH_CORE) / 2, ((b.max.y - b.min.y) * GLYPH_CORE) / 2];
@@ -150,7 +151,7 @@ function meshesOf(group: THREE.Object3D): { i: number; mesh: THREE.Mesh }[] {
   // (what hangs under a glyph, its echo, its shine, its plate copy, is its part, never a glyph of its own: partsUnder)
   const walk = (o: THREE.Object3D) => {
     const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-    if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy']) return void out.push({ i: out.length, mesh: m });
+    if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy'] && !m.userData['preview']) return void out.push({ i: out.length, mesh: m });
     o.children.forEach(walk);
   };
   walk(group);
@@ -232,15 +233,16 @@ function placesWhileRead(layer: CueLayer, parent: THREE.Object3D, cuts: number[]
 }
 
 /** The box of what the layer shows now, in world (frame) px with every transform above it applied. */
-function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
+export function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
   // only what is showing at that moment (beat-cut keeps its other pieces hidden)
   const box = new THREE.Box3();
   // decor (array's tiled words) is not the lyric: it may fill the frame on purpose
-  const shown = (o: THREE.Object3D): boolean => o === layer.group || (o.visible && !o.userData['decor'] && (!o.parent || shown(o.parent)));
+  // (nor is a sing-along's preview of the next line: the lyric box is this line's own)
+  const shown = (o: THREE.Object3D): boolean => o === layer.group || (o.visible && !o.userData['decor'] && !o.userData['preview'] && (!o.parent || shown(o.parent)));
   layer.group.traverse((o) => {
     // inkOnly (the motion check): what can be seen, not pieces waiting at zero opacity
     const faint = inkOnly && ((o as THREE.Mesh).material as THREE.Material | undefined)?.opacity !== undefined && ((o as THREE.Mesh).material as THREE.Material).opacity <= 0.01;
-    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible && !faint) box.expandByObject(o);
+    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible && !faint && !o.userData['preview']) box.expandByObject(o);
     // a part of the line that blinks (a caret) is in the frame whether or not it is lit when measured: one cut off by the frame's edge (terminal 是誰在練太極, 2026-11-04)
     else if (!inkOnly && (o as THREE.Mesh).isMesh && o.userData['inFrame'] && o.parent && shown(o.parent)) { const v = o.visible; o.visible = true; box.expandByObject(o); o.visible = v; }
   });

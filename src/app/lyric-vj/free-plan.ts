@@ -4,7 +4,7 @@
 // same treatment as those scripts on the five test songs.
 import { TITLE_OPENING_SEC } from './render/world-title';
 import { FreeStyle, STYLE_PALETTES, styleFont } from './free-styles';
-import { composePlan, composerBase, Cue, fallbackParts, Meaning, PALETTES, RECIPES, rerollPalette } from './lineplan-core';
+import { composePlan, composerBase, Cue, fallbackParts, Meaning, meaningGaps, PALETTES, RECIPES, rerollPalette, type MeaningGap } from './lineplan-core';
 import { poolOf, schemeFor, type StyleWorld } from './style-world';
 import { isWorldGround, WORLD_INS, type WorldItem } from './render/world-grounds';
 import { WORLD_CAM_SEC } from './render/world-cam';
@@ -324,7 +324,7 @@ export function validMeaning(m: Meaning | undefined, cues: Cue[]): Meaning | und
   const parts = m.parts.filter((p) => at(p.from) >= 0).sort((x, y) => at(x.from) - at(y.from)).map((p) => ({ ...p, tension: Math.min(1, Math.max(0, p.tension)) }));
   if (!parts.length) return undefined;
   parts[0].from = cues[0].id;
-  return { ...m, parts, keys: m.keys.filter((k) => cues.find((c) => c.id === k.cue)?.text.includes(k.phrase)), moments: (m.moments ?? []).filter((x) => x && Array.isArray(x.cues) && x.cues.every((id) => at(id) >= 0)) };
+  return { ...m, parts, keys: (m.keys ?? []).filter((k) => cues.find((c) => c.id === k.cue)?.text.includes(k.phrase)), moments: (m.moments ?? []).filter((x) => x && Array.isArray(x.cues) && x.cues.every((id) => at(id) >= 0)) };
 }
 
 /** A free video's signature moments at most (the paid director's are three). */
@@ -417,6 +417,8 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const song = withoutEchoes(song0);
   const cues = song.cues as Cue[];
   const calm = isCalm(cues);
+  // (a reading older than the fields the policies read is used as stored, its gaps reported, never re-asked: $0)
+  const gaps = meaningGaps(o.meaning);
   const meaning: Meaning = validMeaning(o.meaning, cues) ?? { palette: calm ? 'frost' : 'tea', ground: 'grain', reading: '', parts: fallbackParts(cues, song.sections as never, calm), keys: [] };
   // a style is a version of its own: it always goes through the reroll's leanings
   const seed = o.style ? (o.seed ?? 0) : o.seed;
@@ -457,7 +459,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const composed = seenColours(composed0, drafted.job);
   const first = composed === composed0 ? drafted : jobOf(composed);
   const policyOn = scaleOn || momentsOn;
-  if (!world || (o.worldEvents === false && !policyOn)) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment };
+  if (!world || (o.worldEvents === false && !policyOn)) return { job: first.job, plan: composed, palette: paletteId, calm, treatment: first.treatment, ...gapsOf(gaps) };
   // the song's one composition plan (world-events.ts, Q1 phase 2): scheduled on the job as the renderer will set it, then
   // written into the plan (its seats and the switches inside lines) and drawn; a world with no capability keeps its plan
   const input = fromJob(first.job, song, world, { seed: seed ?? 0, off: !scheduled, ...(joint ? { joint: true } : {}) });
@@ -512,7 +514,7 @@ export function freeJob(song0: SongTimeline, o: FreeOptions = {}) {
   const table: WorldEventTable = { events: events.events, holds: events.holds, warnings: [...events.warnings, ...checked], rejected: events.rejected.length, source: scheduled ? 'declared' : 'declared-off', ...(events.holdMoves ? { holdMoves: events.holdMoves } : {}), ...(events.camDrops ? { camDrops: events.camDrops } : {}), ...(events.policy ? { policy: events.policy } : {}), ...(events.outcomes ? { outcomes: events.outcomes } : {}) };
   job.treatment.worldEvents = table;
   treatment.worldEvents = table;
-  return { job, plan, palette: paletteId, calm, treatment, ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))], unrealizable: q3?.unrealizable ?? [] } as FreePolicy } : {}) };
+  return { job, plan, palette: paletteId, calm, treatment, ...gapsOf(gaps), ...(policyOn ? { policy: { scale: q3?.plan, moments: q5?.plan, decisions: events.policy ?? [], refused: [...(drawnMoments?.refused ?? []), ...(q5?.noRoom ?? []).map((x) => ({ id: x.meaningRef, why: x.why }))], unrealizable: q3?.unrealizable ?? [] } as FreePolicy } : {}) };
 }
 
 /**
@@ -570,6 +572,9 @@ const withLineMoments = <P,>(plan: P, moments: Map<string, LineMoment>): P => {
 };
 
 /** What Q3 / Q5 planned and the scheduler made of it (measurement only; the treatment carries the decisions). */
+/** The result's stale-reading metric: present only when the stored reading lacks a field (lineplan-core meaningGaps). */
+const gapsOf = (gaps: MeaningGap[]): { meaningGaps?: MeaningGap[] } => (gaps.length ? { meaningGaps: gaps } : {});
+
 export interface FreePolicy { scale?: ScalePlan; moments?: MomentPlan; decisions: NonNullable<WorldEventTable['policy']>; refused: { id: string; why: string }[]; /** Q3 seats not offered: their composition misses 1.6× on the shaped measure. */ unrealizable: { id: string; why: string }[] }
 
 /**

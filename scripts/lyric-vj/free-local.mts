@@ -5,6 +5,7 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { meaningGaps } from './lineplan-core.mts';
 
 const { values: a } = parseArgs({ options: { port: { type: 'string', default: '4331' } } });
 const DB = 'out/db';
@@ -25,7 +26,12 @@ createServer((req, res) => {
   if (what === 'songs') return json(res, list());
   if (!id || !existsSync(songFile(id))) return void res.writeHead(404).end();
   const song = JSON.parse(readFileSync(songFile(id), 'utf8'));
-  if (what === 'song') return json(res, { song, meaning: existsSync(readingOf(id)) ? JSON.parse(readFileSync(readingOf(id), 'utf8')) : undefined });
+  if (what === 'song') {
+    const meaning = existsSync(readingOf(id)) ? JSON.parse(readFileSync(readingOf(id), 'utf8')) : undefined;
+    const gaps = meaningGaps(meaning);
+    if (gaps.length) console.warn(`free-local: WARN stale reading ${readingOf(id)}: no ${gaps.join(', ')}; served as stored`);
+    return json(res, { song, meaning });
+  }
   if (what !== 'audio') return void res.writeHead(404).end();
   const file = song.audio.mix as string;
   const size = statSync(file).size;

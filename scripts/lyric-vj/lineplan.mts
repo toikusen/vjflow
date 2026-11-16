@@ -7,7 +7,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { composePlan, composerBase, Cue, fallbackParts, Meaning, PALETTES } from './lineplan-core.mts';
+import { composePlan, composerBase, Cue, fallbackParts, Meaning, meaningGaps, PALETTES } from './lineplan-core.mts';
 import { isCalmSong, loadAnthropicEnv, readMeaning, verifyCandidates } from './meaning-read.mts';
 
 const { values: a } = parseArgs({ options: { song: { type: 'string' }, base: { type: 'string' }, out: { type: 'string' }, 'no-reading': { type: 'boolean', default: false }, 'verify-meaning': { type: 'boolean', default: false } } });
@@ -25,11 +25,14 @@ const valid = (m: Meaning | undefined): Meaning | undefined => {
   const parts = m.parts.filter((p) => at(p.from) >= 0).sort((x, y) => at(x.from) - at(y.from)).map((p) => ({ ...p, tension: Math.min(1, Math.max(0, p.tension)), fx: p.fx }));
   if (!parts.length) return undefined;
   parts[0].from = cues[0].id;
-  return { ...m, parts, keys: m.keys.filter((k) => cues.find((c) => c.id === k.cue)?.text.includes(k.phrase)), moments: (m.moments ?? []).filter((x) => x.cues.every((id) => at(id) >= 0)) };
+  return { ...m, parts, keys: (m.keys ?? []).filter((k) => cues.find((c) => c.id === k.cue)?.text.includes(k.phrase)), moments: (m.moments ?? []).filter((x) => x.cues.every((id) => at(id) >= 0)) };
 };
 let got: { meaning?: Meaning; usd: number } = { usd: 0 };
 const cached = join(out, 'meaning.json');
 if (existsSync(cached)) got.meaning = JSON.parse(readFileSync(cached, 'utf8'));
+// (a cache hit is used as stored, never re-asked: one older than a field the policies read is said, not refreshed)
+const gaps = existsSync(cached) ? meaningGaps(got.meaning) : [];
+if (gaps.length) console.warn(`lineplan: WARN stale reading ${cached}: no ${gaps.join(', ')} (written before the prompt asked); used as stored, so the free key / moment policies get no candidate from it. Re-read: scripts/lyric-vj/meaning-reread.mts`);
 else try { got = await read(); } catch (e) { console.log(`reading failed, rules only: ${e}`); }
 if (a['verify-meaning'] && !existsSync(cached) && valid(got.meaning)) {
   try {

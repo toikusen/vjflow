@@ -62,6 +62,20 @@ export interface Meaning {
   moments?: MomentAsk[];
 }
 
+/** A field a stored reading was never asked for: the cache predates it (moments from e7cdcba, 2026-11-04). */
+export type MeaningGap = 'keys' | 'moments';
+
+/**
+ * The fields a stored reading lacks because it was written before the prompt asked for them. An empty list is an
+ * answer (the reading judged none); an absent field was never asked, so the Q3 key / Q5 moment policies get no
+ * candidate from it until the song is read again. No reading at all is not a gap (the free flow works without one).
+ */
+export function meaningGaps(m: unknown): MeaningGap[] {
+  if (!m || typeof m !== 'object') return [];
+  const has = (k: MeaningGap) => Array.isArray((m as Record<string, unknown>)[k]);
+  return (['keys', 'moments'] as const).filter((k) => !has(k));
+}
+
 // When a device fits: the words that give it a reason. Short, plain lists on purpose; a line that does not say this keeps
 // the ordinary recipes.
 /** Saying who one is, or owning up to something: a line worth a name tag. */

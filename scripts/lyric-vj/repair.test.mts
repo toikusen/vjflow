@@ -32,13 +32,71 @@ test('an out-of-scope edit is rejected and leaves the code as it was', () => {
   assert.equal(added.applied, 0);
   assert.match(added.errs[0], /seagull\.standing/);
   // an edit far from every named prop (a rewrite of the scene elsewhere in the code)
-  const far = `paintSea();${'x();'.repeat(1000)}\n${SRC}`;
+  const far = `function day(){paintSea();}\nfunction night(){${SRC}}`;
   const away = scopedEdits(far, [{ find: 'paintSea();', replace: 'paintNewScene();' }], ['lighthouse.white_red'], KNOWN);
   assert.equal(away.applied, 0);
-  assert.match(away.errs[0], /太遠/);
+  assert.match(away.errs[0], /超出這一輪能改的範圍/);
   // the named prop dropped instead of moved
   const gone = scopedEdits(SRC, [{ find: "A('lighthouse.white_red',3600,1045,1,{sh:1});", replace: '' }], ['lighthouse.white_red'], KNOWN);
   assert.equal(gone.applied, 0);
+});
+
+// the shape of 世界のつづき's drawing: a registry of every prop, one helper that draws them all, a scene that calls it
+const SCENE = [
+  "const DIM={'boat.small':[516,359],'lighthouse.white_red':[376,727]};",
+  'function A(id,x,y,s){const d=DIM[id];ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.drawImage(f.img(id),-d[0]/2,-d[1],d[0],d[1]);ctx.restore()}',
+  'function night(){',
+  "  drawAt(2000,980,'boat.small');",
+  "  A('boat.small',2000,980,.5);",
+  "  MUL();blob(3600,1035,280);SO();A('lighthouse.white_red',3600,1045,1);",
+  '}',
+  'function day(){paintSea();}',
+].join('\n');
+const ONE = ['lighthouse.white_red'];
+
+test('scope: anchors come from the code as it was, so an edit cannot plant an id to reach further', () => {
+  // the first edit, in scope, plants the lighthouse's id in a comment; the second reaches for day() through it
+  const r = scopedEdits(SCENE, [
+    { find: "MUL();blob(3600,1035,280);", replace: "MUL();blob(3600,1035,280);/*'lighthouse.white_red'*/" },
+    { find: 'function day(){paintSea();}', replace: "function day(){/*'lighthouse.white_red'*/paintNewScene();}" },
+  ], ONE, KNOWN);
+  assert.equal(r.applied, 0, r.errs.join('\n'));
+  assert.ok(r.errs.some((e) => e.includes('多寫了一次')), r.errs.join('\n'));
+  assert.ok(r.errs.some((e) => e.includes('超出這一輪能改的範圍')), r.errs.join('\n'));
+  assert.equal(r.src, SCENE);
+});
+
+test('scope: the registry naming every prop and the helper drawing them all are not reachable', () => {
+  const reg = scopedEdits(SCENE, [{ find: "'lighthouse.white_red':[376,727]", replace: "'lighthouse.white_red':[188,363]" }], ONE, KNOWN);
+  assert.equal(reg.applied, 0);
+  const helper = scopedEdits(SCENE, [{ find: 'ctx.scale(s,s);ctx.drawImage', replace: 'ctx.scale(s*.5,s*.5);ctx.drawImage' }], ONE, KNOWN);
+  assert.equal(helper.applied, 0);
+  assert.equal(helper.src, SCENE);
+});
+
+test("scope: another prop's whole statement is fenced off, a wrapper passing its id included", () => {
+  // a wrapper call naming the boat, its arguments changed
+  const wrap = scopedEdits(SCENE, [{ find: "drawAt(2000,980,'boat.small');", replace: "drawAt(2600,980,'boat.small');" }], ONE, KNOWN);
+  assert.equal(wrap.applied, 0);
+  assert.match(wrap.errs[0], /boat\.small/);
+  // a transform slipped in front of the boat's draw, its own text kept verbatim
+  const before = scopedEdits(SCENE, [{ find: "A('boat.small',2000,980,.5);", replace: "ctx.translate(600,0);A('boat.small',2000,980,.5);" }], ONE, KNOWN);
+  assert.equal(before.applied, 0);
+  assert.match(before.errs[0], /boat\.small/);
+  // the lighthouse and its rock, in the same block: applied
+  const ok = scopedEdits(SCENE, [{ find: "MUL();blob(3600,1035,280);SO();A('lighthouse.white_red',3600,1045,1);", replace: "ctx.save();if(f.cam.index===14){ctx.translate(3600,1045);ctx.scale(.5,.5);ctx.translate(-3600,-1045)}MUL();blob(3600,1035,280);SO();A('lighthouse.white_red',3600,1045,1);ctx.restore();" }], ONE, KNOWN);
+  assert.deepEqual(ok.errs, []);
+  assert.equal(ok.applied, 1);
+});
+
+test('scope: only accepted edits count toward the size cap', () => {
+  const big = `${'x'.repeat(3990)}`;
+  const r = scopedEdits(SCENE, [
+    { find: 'function day(){paintSea();}', replace: `function day(){${big}}` },
+    { find: 'MUL();blob(3600,1035,280);', replace: 'MUL();blob(3300,1035,280);' },
+  ], ONE, KNOWN);
+  assert.equal(r.applied, 1, r.errs.join('\n'));
+  assert.match(r.src, /blob\(3300/);
 });
 
 test('only the drawing changes in the treatment', () => {
@@ -113,7 +171,7 @@ test('a lighthouse moved and shrunk with its rock passes, its draws no longer ke
   assert.deepEqual(r.errs, []);
   assert.equal(r.keptBefore, 1);
   assert.equal(r.kept, 0);
-  assert.equal(r.offBase, 0);
+  assert.equal(r.unseen, 0);
 });
 
 test('the base must follow its sprite: a lighthouse moved off its rock is rejected', () => {
@@ -138,10 +196,29 @@ test('a repair that changes anything else is rejected', () => {
   assert.ok(redrawn.errs.some((e) => e.includes('畫面卻變了')), redrawn.errs.join('\n'));
   // the named prop taken off the frame, and the named prop gone from its shot
   const off = { x: 1800, y: 700, w: 200, h: 300 };
-  const out = checkRepair([{ ...before(84.3, 14), after: frame(84.3, 14, off, false, 300, { x: 1900, y: 1000, w: 400 }), b: picture(off, { x: 1900, y: 1000, w: 400 }) }], named, 0.1);
+  const out = checkRepair([{ before: frame(84.3, 14, LH, false, 300, ROCK0), a: picture(LH, ROCK0), after: frame(84.3, 14, off, false, 300, { x: 1900, y: 1000, w: 400 }), b: picture(off, { x: 1900, y: 1000, w: 400 }) }], named, 0.1);
   assert.ok(out.errs.some((e) => e.includes('移出畫面')), out.errs.join('\n'));
   const gone = checkRepair([{ ...before(84.3, 14), after: frame(84.3, 14, undefined, false), b: picture(undefined, { x: 1400, y: 900, w: 400 }) }], named, 0.1);
   assert.ok(gone.errs.some((e) => e.includes('不見了')), gone.errs.join('\n'));
+});
+
+test('a prop retiring off the frame while it is faded out or was kept clear there is not taken off the frame', () => {
+  const off = { x: 1800, y: 700, w: 200, h: 300 };
+  const faded: Frame = { t: 84.3, shot: 14, drawn: [{ id: 'lighthouse.white_red', ...off, a: 0, kept: false, base: rockBox({ x: 1900, y: 1000, w: 400 }), baseN: 4 }, { id: 'boat.small', x: 300, y: 900, w: 120, h: 60, a: 1, kept: false }] };
+  // faded to nothing on its way out
+  const r = checkRepair([{ before: frame(84.3, 14, LH, false, 300, ROCK0), a: picture(LH, ROCK0), after: faded, b: picture(undefined, { x: 1900, y: 1000, w: 400 }) }], named, 0.1);
+  assert.ok(!r.errs.some((e) => e.includes('移出畫面')), r.errs.join('\n'));
+  // at a sample where the old drawing had it cut out of the line anyway
+  const cut = checkRepair([{ ...before(84.3, 14), after: frame(84.3, 14, off, false, 300, { x: 1900, y: 1000, w: 400 }), b: picture(off, { x: 1900, y: 1000, w: 400 }) }], named, 0.1);
+  assert.ok(!cut.errs.some((e) => e.includes('移出畫面')), cut.errs.join('\n'));
+  // (shot 13's sample was not kept clear before: leaving the frame there is still a fault)
+  const r13 = checkRepair([{ before: frame(80, 14, LH, false, 300, ROCK0), a: picture(LH, ROCK0), after: frame(80, 14, off, false, 300, { x: 1900, y: 1000, w: 400 }), b: picture(off, { x: 1900, y: 1000, w: 400 }) }], named, 0.1);
+  assert.ok(r13.errs.some((e) => e.includes('移出畫面')), r13.errs.join('\n'));
+});
+
+test('a sample without its pictures fails the repair instead of passing unseen', () => {
+  const r = checkRepair([{ ...before(80, 13), after: frame(80, 13, LH, false, 300, ROCK0) }], named, 0.1);
+  assert.ok(r.errs.some((e) => e.includes('沒有畫面')), r.errs.join('\n'));
 });
 
 test('psnr measures what it says', () => {

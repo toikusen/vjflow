@@ -11,12 +11,12 @@
 // - a repair that fails goes back once with what failed; a repair that passes but still has draws kept clear is kept
 //   only if it has fewer
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export type Rect = { x0: number; y0: number; x1: number; y1: number };
 /** One `code layer: lyric kept clear:` finding. */
-export type Kept = { id: string; inside: number; t: number; shot: number; cut: boolean };
+export type Kept = { id: string; t: number; shot: number; cut: boolean };
 /** A named prop: the shots (camera cuts) it was kept clear in and when. */
 export type Named = { id: string; shots: number[]; times: number[] };
 /** A shot's lines and the room they leave (graphics.ts logs it in --track renders), frame px. */
@@ -34,7 +34,7 @@ export type Pic = { w: number; h: number; px: Uint8Array };
 /** Parses the kept-clear findings (anywhere in a line: a render's progress shares its lines). */
 export function parseKept(log: string): Kept[] {
   const re = /code layer: lyric kept clear: (\S+) (\d+)% inside the lyric box, (cut out and faded|faded) at ([\d.]+) s \(shot (\d+)\)/g;
-  return [...log.matchAll(re)].map((m) => ({ id: m[1], inside: Number(m[2]) / 100, cut: m[3] !== 'faded', t: Number(m[4]), shot: Number(m[5]) }));
+  return [...log.matchAll(re)].map((m) => ({ id: m[1], cut: m[3] !== 'faded', t: Number(m[4]), shot: Number(m[5]) }));
 }
 
 /** The props to repair: kept-clear findings inside [from, to], by prop. */
@@ -55,7 +55,7 @@ export function parseRooms(log: string): Map<number, Room> {
     try {
       out.set(Number(m[1]), { shot: Number(m[1]), ...JSON.parse(m[2]) });
     } catch {
-      /* a line cut by the progress output: the shot has no room on record */
+      /* a malformed line: the shot has no room on record, the prompt says so */
     }
   }
   return out;
@@ -80,64 +80,131 @@ export function parseFrames(log: string, times: number[]): Frame[] {
   return [...out.values()].sort((p, q) => p.t - q.t);
 }
 
+/** A bracket pair of the code and the pair it sits in (-1: the code's top level). */
+type Pair = { open: number; close: number; ch: '(' | '[' | '{'; parent: number };
+/**
+ * The drawing's code as bracket pairs (strings, templates and comments skipped; regular expressions are not, which a
+ * drawing seldom uses), enough to tell a prop's statement, its block and the helpers defined in it apart.
+ */
+export function codeMap(src: string) {
+  const pairs: Pair[] = [];
+  const stack: number[] = [];
+  const close: Record<string, Pair['ch']> = { ')': '(', ']': '[', '}': '{' };
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') i = src.indexOf('\n', i) < 0 ? src.length : src.indexOf('\n', i);
+    else if (c === '/' && src[i + 1] === '*') i = src.indexOf('*/', i + 2) < 0 ? src.length : src.indexOf('*/', i + 2) + 1;
+    else if (c === "'" || c === '"' || c === '`') {
+      for (i++; i < src.length && src[i] !== c; i++) if (src[i] === '\\') i++;
+    } else if (c === '(' || c === '[' || c === '{') {
+      pairs.push({ open: i, close: src.length, ch: c, parent: stack.length ? stack[stack.length - 1] : -1 });
+      stack.push(pairs.length - 1);
+    } else if (c in close && stack.length && pairs[stack[stack.length - 1]].ch === close[c]) pairs[stack.pop()!].close = i;
+  }
+  const kids = new Map<number, Pair[]>();
+  for (const q of pairs) kids.set(q.parent, [...(kids.get(q.parent) ?? []), q]);
+  const root: Pair = { open: -1, close: src.length, ch: '{', parent: -2 };
+  const at = (k: number) => (k < 0 ? root : pairs[k]);
+  /** The innermost pair round position p, of the given kinds (the whole code when none). */
+  const around = (p: number, kinds = '([{'): Pair => {
+    let best = -1;
+    for (const [k, q] of pairs.entries()) if (q.open < p && q.close > p && kinds.includes(q.ch) && (best < 0 || q.open > pairs[best].open)) best = k;
+    return at(best);
+  };
+  const indexOf = (b: Pair) => (b === root ? -1 : pairs.indexOf(b));
+  /** Where a block's statements end: `;` at its own depth, or a nested `{…}` not followed by else, catch, a call… */
+  const ends = (b: Pair) => {
+    const own = (kids.get(indexOf(b)) ?? []).sort((x, y) => x.open - y.open);
+    const out: number[] = [];
+    let k = 0;
+    for (let i = b.open + 1; i < b.close; i++) {
+      if (k < own.length && own[k].open === i) {
+        const q = own[k++];
+        i = q.close;
+        if (q.ch === '{' && !/^\s*(else|catch|finally|while|\)|,|\.|;|\[|\(|\?|:|\|\||&&)/.test(src.slice(q.close + 1, q.close + 12))) out.push(i);
+        continue;
+      }
+      if (src[i] === ';') out.push(i);
+    }
+    return out;
+  };
+  const endsOf = new Map<Pair, number[]>();
+  /** The statement round position p in the block it sits in: [start, end) of the code. */
+  const statement = (p: number): [number, number] => {
+    const b = around(p, '{');
+    const e = endsOf.get(b) ?? (endsOf.set(b, ends(b)), endsOf.get(b)!);
+    return [Math.max(b.open, ...e.filter((x) => x < p)) + 1, Math.min(b.close, ...e.filter((x) => x >= p).map((x) => x + 1))];
+  };
+  /**
+   * The named functions the code defines (`function f(…){…}`, `const f = (…) => {…}`): [header, end of body]. Callbacks
+   * written inline (a forEach's arrow) belong to the statement they are in.
+   */
+  const helpers: [number, number][] = [];
+  for (const m of src.matchAll(/function\s+[\w$]+\s*\(|(?:const|let|var)\s+[\w$]+\s*=\s*(?:\([^()]*\)|[\w$]+)\s*=>\s*\{/g)) {
+    let body = m.index! + m[0].length - 1;
+    if (m[0].startsWith('function')) {
+      const params = pairs.find((q) => q.ch === '(' && q.open === body);
+      body = params ? src.indexOf('{', params.close) : -1;
+    }
+    const q = pairs.find((x) => x.ch === '{' && x.open === body);
+    if (q) helpers.push([m.index!, q.close + 1]);
+  }
+  return { around, statement, helpers };
+}
+
 const lit = (id: string) => new RegExp(`(['"\`])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\1`, 'g');
 const count = (s: string, id: string) => (s.match(lit(id)) ?? []).length;
-/** The statement a prop's id stands in, from the id on (to the next `;`, `}` or line end): what must survive an edit. */
-const callsOf = (s: string, id: string) => [...s.matchAll(lit(id))].map((m) => s.slice(m.index!, m.index! + Math.max(1, s.slice(m.index!).search(/[;}\n]/))));
 
-/** How far (characters) from a named prop's id in the code an edit may start or end. */
-export const REACH = 1500;
 /** How much of the code (characters changed) one repair may touch. */
 export const MAX_CHANGED = 4000;
 
 /**
- * Applies a repair's edits under its scope: each find must occur once, start and end within REACH of a named prop's id,
- * keep every other prop's id and the statement it stands in verbatim, and bring in no prop the code did not draw; and
- * the whole repair changes at most MAX_CHANGED characters. Edits that break a rule are not applied and come back as errors.
- * `known`: every prop id the song may draw (its sprite library).
+ * Applies a repair's edits under its scope, all against the code as it was (positions and anchors from the original,
+ * so one edit cannot widen the next one's reach). A named prop is anchored where its id is passed to a call (not a
+ * registry's key); an edit may change only the blocks such a call stands in, and in them:
+ * - no statement that names another prop (its draw, a wrapper passing its id, a registry listing it), nor a named
+ *   function defined there that draws no named prop (a shared helper such as the one every prop is drawn with)
+ * - no prop brought in, and the named props' ids neither dropped nor added (a moved draw keeps its one call)
+ * - at most MAX_CHANGED characters in all, counting accepted edits only
+ * Edits that break a rule are not applied and come back as errors; the rest are. `known`: every prop id the song may
+ * draw (its sprite library).
  */
 export function scopedEdits(src: string, edits: Edit[], named: string[], known: string[]): { src: string; errs: string[]; applied: number } {
+  const map = codeMap(src);
   const errs: string[] = [];
-  let out = src;
-  let changed = 0;
-  let applied = 0;
   const others = known.filter((id) => !named.includes(id));
+  const anchors = named.flatMap((id) => [...src.matchAll(lit(id))].map((m) => m.index!).filter((p) => map.around(p + 1).ch === '(' && !/^\s*:/.test(src.slice(p + id.length + 2))));
+  const blocks = anchors.map((p) => map.around(p, '{'));
+  const fenced = others.flatMap((id) => [...src.matchAll(lit(id))].map((m) => ({ id, span: map.statement(m.index!) })));
+  const helpers = map.helpers.filter(([h0, h1]) => !anchors.some((p) => p > h0 && p < h1));
+  const taken: { at: number; end: number; e: Edit }[] = [];
+  let changed = 0;
   for (const [k, e] of edits.entries()) {
     const tag = `第 ${k + 1} 個修改（${e.find.slice(0, 60)}…）`;
-    const n = e.find ? out.split(e.find).length - 1 : 0;
+    const n = e.find ? src.split(e.find).length - 1 : 0;
     if (n !== 1) {
       errs.push(`${tag}：find ${n === 0 ? '在目前程式裡找不到' : `出現了 ${n} 次`}`);
       continue;
     }
-    const at = out.indexOf(e.find);
-    const anchors = named.flatMap((id) => [...out.matchAll(lit(id))].map((m) => m.index!));
-    if (!anchors.some((p) => Math.abs(p - at) <= REACH && Math.abs(p - (at + e.find.length)) <= REACH)) {
-      errs.push(`${tag}：離指名的素材（${named.join('、')}）太遠，超出這一輪能改的範圍`);
-      continue;
+    const at = src.indexOf(e.find);
+    const end = at + e.find.length;
+    const over = ([a, b]: [number, number]) => at < b && end > a;
+    if (taken.some((x) => over([x.at, x.end]))) errs.push(`${tag}：和前面的修改重疊`);
+    else if (!blocks.some((b) => at > b.open && end <= b.close)) errs.push(`${tag}：不在指名素材（${named.join('、')}）所在的那一段程式裡，超出這一輪能改的範圍`);
+    else if (fenced.some((x) => over(x.span))) errs.push(`${tag}：改到了沒有指名的素材 ${[...new Set(fenced.filter((x) => over(x.span)).map((x) => x.id))].join('、')} 的那一句（它們要原樣保留）`);
+    else if (helpers.some(over)) errs.push(`${tag}：改到了共用的函式定義（其他素材也用它畫）`);
+    else if (others.some((id) => count(e.replace, id))) errs.push(`${tag}：加了新的素材 ${others.filter((id) => count(e.replace, id)).join('、')}`);
+    else if (named.some((id) => count(e.find, id) > count(e.replace, id))) errs.push(`${tag}：把指名的素材拿掉了：只能移動、縮放或改時間，不能刪掉`);
+    else if (named.some((id) => count(e.find, id) < count(e.replace, id))) errs.push(`${tag}：多寫了一次指名素材的 id：用同一個呼叫移動它（包在 ctx.save/translate/scale/restore 裡），不要複製它`);
+    else if (changed + Math.max(e.find.length, e.replace.length) > MAX_CHANGED) errs.push(`${tag}：這一輪改動超過 ${MAX_CHANGED} 字，修補只能是小幅修改`);
+    else {
+      changed += Math.max(e.find.length, e.replace.length);
+      taken.push({ at, end, e });
     }
-    const touched = others.filter((id) => count(e.find, id) !== count(e.replace, id) || callsOf(e.find, id).some((c) => !e.replace.includes(c)));
-    if (touched.length) {
-      errs.push(`${tag}：改到了沒有指名的素材 ${touched.join('、')}（它們的那一句要原樣保留）`);
-      continue;
-    }
-    const added = others.filter((id) => count(e.replace, id) > 0 && count(out, id) === 0);
-    if (added.length) {
-      errs.push(`${tag}：加了新的素材 ${added.join('、')}`);
-      continue;
-    }
-    if (named.some((id) => count(e.find, id) > count(e.replace, id))) {
-      errs.push(`${tag}：把指名的素材拿掉了：只能移動、縮放或改時間，不能刪掉`);
-      continue;
-    }
-    changed += Math.max(e.find.length, e.replace.length);
-    if (changed > MAX_CHANGED) {
-      errs.push(`${tag}：這一輪改動超過 ${MAX_CHANGED} 字，修補只能是小幅修改`);
-      continue;
-    }
-    out = out.replace(e.find, () => e.replace);
-    applied++;
   }
-  return { src: out, errs, applied };
+  let out = src;
+  for (const x of [...taken].sort((p, q) => q.at - p.at)) out = out.slice(0, x.at) + x.e.replace + out.slice(x.end);
+  return { src: out, errs, applied: taken.length };
 }
 
 /** The treatment with its drawing's code replaced (every code layer that ran `from`); nothing else of it changes. */
@@ -166,10 +233,16 @@ export function psnrOutside(a: Pic, b: Pic, allow: Rect[] = []): number {
   return 10 * Math.log10((255 * 255) / (se / n));
 }
 
-/** Shots without a named prop: as good as the same picture. */
-export const SAME_DB = 45;
-/** Named shots outside the named props' places: the same picture but for faint light the props carry (a beam). */
-export const NEAR_DB = 30;
+/**
+ * Shots without a named prop: the same picture. The same code rendered twice came out bit-identical at all 126 samples
+ * of 世界のつづき 68–88 s (A/A, PSNR ∞), so any visible change there is the repair's; 60 dB leaves room for another GPU.
+ */
+export const SAME_DB = 60;
+/**
+ * Named shots outside the named props' places: the same picture but for faint light the props carry (a lighthouse's
+ * beam). A/A is ∞; in-scope repairs measured 39.5–43.1 dB there, a redrawn scene ~15.
+ */
+export const NEAR_DB = 35;
 /** The share of a prop that may cross the frame's edge where the drawing had it whole. */
 const EDGE = 0.03;
 const offShare = (d: Drawn, W: number, H: number) => 1 - (Math.max(0, Math.min(d.x + d.w, W) - Math.max(d.x, 0)) * Math.max(0, Math.min(d.y + d.h, H) - Math.max(d.y, 0))) / Math.max(1, d.w * d.h);
@@ -184,11 +257,11 @@ export type Sample = { before: Frame; after?: Frame; a?: Pic; b?: Pic };
  * named prop must still be drawn in each shot it was in, still stand on all of the base it was drawn with (as many of
  * those paints under its foot: one moved off its rock keeps only its shadow) and stay on the frame.
  */
-export function checkRepair(samples: Sample[], named: Named[], scale: number, W = 1920, H = 1080): { errs: string[]; kept: number; keptBefore: number; worstSame: number; worstNear: number; offBase: number } {
+export function checkRepair(samples: Sample[], named: Named[], scale: number, W = 1920, H = 1080): { errs: string[]; kept: number; keptBefore: number; worstSame: number; worstNear: number; unseen: number } {
   const ids = new Set(named.map((n) => n.id));
   const shots = new Set(named.flatMap((n) => n.shots));
   const errs = new Set<string>();
-  let [kept, keptBefore, worstSame, worstNear, offBase] = [0, 0, Infinity, Infinity, 0];
+  let [kept, keptBefore, worstSame, worstNear, unseen] = [0, 0, Infinity, Infinity, 0];
   const seenIn = new Map<string, { before: boolean; after: boolean }>();
   for (const s of samples) {
     const at = `${s.before.t.toFixed(2)} 秒（鏡頭 ${s.before.shot}）`;
@@ -196,7 +269,7 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
     const mine = shots.has(s.before.shot);
     if (mine) keptBefore += s.before.drawn.filter((d) => ids.has(d.id) && d.kept).length;
     if (!s.after) {
-      errs.add(`${at}：新版沒有畫出這一格`);
+      unseen++;
       continue;
     }
     if (mine) kept += s.after.drawn.filter((d) => ids.has(d.id) && d.kept).length;
@@ -220,14 +293,19 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
       const big = (xs: Drawn[]) => xs.reduce<Drawn | undefined>((m, d) => (!m || d.w * d.h > m.w * m.h ? d : m), undefined);
       const [b0, a0] = [big(bs), big(as)];
       if (!b0 || !a0) continue;
-      if (offShare(b0, W, H) <= EDGE && offShare(a0, W, H) > EDGE) errs.add(`${at}：${n.id} 被移出畫面（${Math.round(offShare(a0, W, H) * 100)}% 在框外）`);
+      // (retiring through the edge is an exit, not a move off the frame: faded out by then, or cut out of the line at
+      // that moment in the old drawing anyway)
+      if (offShare(b0, W, H) <= EDGE && offShare(a0, W, H) > EDGE && a0.a > 0.02 && !b0.kept) errs.add(`${at}：${n.id} 被移出畫面（${Math.round(offShare(a0, W, H) * 100)}% 在框外）`);
       // what it stood on goes with it: every paint of its base still under its foot
       if ((b0.baseN ?? 0) > (a0.baseN ?? 0)) {
-        offBase++;
         errs.add(`${at}：${n.id} 離開了它站的地方（和它一起畫的底座有 ${b0.baseN} 筆在它腳下，現在只剩 ${a0.baseN ?? 0} 筆：底座要和它一起移動、縮放）`);
       }
     }
-    if (!s.a || !s.b) continue;
+    // a sample whose pictures are missing is not passed unseen
+    if (!s.a || !s.b) {
+      unseen++;
+      continue;
+    }
     if (!shots.has(s.before.shot)) {
       const v = psnrOutside(s.a, s.b);
       worstSame = Math.min(worstSame, v);
@@ -240,7 +318,8 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
     if (v < NEAR_DB) errs.add(`${at}：指名素材以外的畫面也變了（PSNR ${v.toFixed(1)} dB）：只能動指名的素材和它的底座`);
   }
   for (const [k, v] of seenIn) if (v.before && !v.after) errs.add(`${k.replace('@', ' 在鏡頭 ')} 不見了：只能移動、縮放或改時間，不能拿掉`);
-  return { errs: [...errs], kept, keptBefore, worstSame, worstNear, offBase };
+  if (unseen) errs.add(`有 ${unseen} 個取樣時間沒有畫面（渲染失敗），無法確認，不採用`);
+  return { errs: [...errs], kept, keptBefore, worstSame, worstNear, unseen };
 }
 
 /** A still as an RGB picture `w` px wide (ffmpeg), for the comparisons. */
@@ -271,32 +350,13 @@ export function repairPrompt(src: string, named: Named[], rooms: Map<number, Roo
 2. 新舊兩版在同樣的時間點逐格渲染比對：沒有指名素材的鏡頭畫面要完全相同；有指名素材的鏡頭，除了指名素材和它底座、影子附近以外要相同；其他素材的位置大小要完全相同。所以修改要用 f.cam.index 限定在下面列出的鏡頭裡，其他鏡頭走原本的程式。
 3. 素材要帶著它的底座一起動：移動後它腳下的東西（岩石、影子）要跟著它，不能讓燈塔站在海上、留下空的岩石。做法：把底座、素材、影子、光束包在同一個 ctx.save(); ctx.translate(dx, dy); ctx.scale(s, s)（以腳底為中心）…; ctx.restore() 裡，或讓它們共用同一組新座標。
 4. 素材要留在畫面裡（不能被移出框外），而且每個列出的鏡頭裡都還看得到它。
-5. 目標：歌詞閱讀時素材完全不進歌詞框。位置放進歌詞留下的空位（畫面像素 1920×1080，下面列出）；空位不夠時可以縮小（但保持看得清楚），或改時間（歌詞出現前離開、歌詞結束後再回來，進出要有動畫）。你的程式在鏡頭變換之下畫，畫面座標和你的世界座標不同：可以用 f.fit(x, y, w, h)——給素材在目前座標的矩形，回傳移進這個鏡頭空位後的矩形 [x, y, w, h]——用新舊矩形腳底的差當整組的位移、寬度比當縮放。
+5. 目標：歌詞閱讀時素材完全不進歌詞框。位置放進歌詞留下的空位（畫面像素 1920×1080，下面列出）；空位不夠時可以縮小（但保持看得清楚），或改時間（歌詞出現前離開、歌詞結束後再回來，進出要有動畫：在畫面裡淡出淡入或縮小放大；從畫面邊緣出去時要在出框前淡到透明，否則算被移出畫面）。你的程式在鏡頭變換之下畫，畫面座標和你的世界座標不同：可以用 f.fit(x, y, w, h)——給素材在目前座標的矩形，回傳移進這個鏡頭空位後的矩形 [x, y, w, h]——用新舊矩形腳底的差當整組的位移、寬度比當縮放。
 
 要修的素材（框是畫面像素 x0,y0,x1,y1）：
 ${list}
 
 目前的程式：
 ${src}`;
-}
-
-/** Writes a contact sheet of stills (ffmpeg, 3 a row, 640 px each). */
-export function sheet(files: string[], out: string) {
-  if (!files.length) return;
-  mkdirSync(join(out, '..'), { recursive: true });
-  const rows: string[] = [];
-  for (let i = 0; i < files.length; i += 3) rows.push(files.slice(i, i + 3).map((_, k) => `[${i + k}]scale=640:-1[s${i + k}]`).join(';'));
-  const per = (i: number) => files.slice(i, i + 3).map((_, k) => `[s${i + k}]`).join('');
-  const lines = Array.from({ length: Math.ceil(files.length / 3) }, (_, r) => {
-    const n = Math.min(3, files.length - r * 3);
-    const pad = n < 3 ? `${per(r * 3)}${Array.from({ length: 3 - n }, (_, k) => `[e${r}_${k}]`).join('')}` : per(r * 3);
-    const blanks = n < 3 ? Array.from({ length: 3 - n }, (_, k) => `color=c=black:s=640x360:d=1[e${r}_${k}];`).join('') : '';
-    return `${blanks}${pad}hstack=3[r${r}]`;
-  });
-  const n = lines.length;
-  const graph = `${rows.join(';')};${lines.join(';')}${n > 1 ? `;${Array.from({ length: n }, (_, r) => `[r${r}]`).join('')}vstack=${n}[o]` : ''}`;
-  execFileSync('ffmpeg', ['-v', 'error', '-y', ...files.flatMap((f) => ['-i', f]), '-filter_complex', graph, '-map', n > 1 ? '[o]' : '[r0]', '-frames:v', '1', '-q:v', '3', out]);
-  writeFileSync(`${out}.txt`, files.join('\n'));
 }
 
 /** What the repair round needs from its caller: renders of a drawing's code and the director's turn. */
@@ -309,7 +369,7 @@ export type RepairIO = {
   ask: (text: string, images: string[]) => Promise<{ idea: string; edits: Edit[] }>;
   log?: (line: string) => void;
 };
-export type RepairResult = { src: string; named: Named[]; keptBefore: number; kept: number; attempts: { errs: string[]; kept?: number; idea: string }[]; accepted: boolean; times: number[]; viewTimes: number[] };
+export type RepairResult = { src: string; named: Named[]; keptBefore: number; kept: number; attempts: { errs: string[]; kept?: number; idea: string }[]; accepted: boolean };
 
 /** The sample times: every 0.25 s through the window (off the cuts), and the middle of every other shot of the song. */
 export function sampleTimes(cuts: number[], from: number, to: number, end: number): number[] {
@@ -336,17 +396,16 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
   const before = parseFrames(bLog, times);
   const rooms = parseRooms(bLog);
   // the named props: drawn kept clear at a sample inside the window
-  const kept: Kept[] = before.filter((f) => f.t >= o.from && f.t <= o.to).flatMap((f) => f.drawn.filter((d) => d.kept).map((d) => ({ id: d.id, inside: 0, t: f.t, shot: f.shot, cut: true })));
+  const kept: Kept[] = before.filter((f) => f.t >= o.from && f.t <= o.to).flatMap((f) => f.drawn.filter((d) => d.kept).map((d) => ({ id: d.id, t: f.t, shot: f.shot, cut: true })));
   const named = namedOf(kept);
   // (counted over every sample, as checkRepair counts the new drawing's)
   const all = before.filter((f) => named.some((x) => x.shots.includes(f.shot))).reduce((n, f) => n + f.drawn.filter((d) => d.kept && named.some((x) => x.id === d.id)).length, 0);
-  const result: RepairResult = { src: o.src, named, keptBefore: all, kept: all, attempts: [], accepted: false, times, viewTimes: [] };
+  const result: RepairResult = { src: o.src, named, keptBefore: all, kept: all, attempts: [], accepted: false };
   say(`repair: ${before.length}/${times.length} samples, ${kept.length} kept-clear draws: ${named.map((n) => `${n.id} (shots ${n.shots.join(',')})`).join('; ') || 'none'}`);
   if (!named.length) return result;
   const bPics = pics(bDir, before);
   // what the director sees: a frame where each named prop is cut, per shot (at most 6)
   const viewTimes = [...new Set(named.flatMap((n) => n.shots.map((s) => { const ts = n.times.filter((t) => before.find((f) => f.t === t)?.shot === s); return ts[Math.floor(ts.length / 2)]; })))].filter((t) => t !== undefined).sort((a, b) => a - b).slice(0, 6);
-  result.viewTimes = viewTimes;
   const jpgs = async (src: string, dir: string) => {
     await o.io.view(src, viewTimes, dir);
     return viewTimes.flatMap((t) => {
@@ -367,7 +426,15 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
   const lead = `以下截圖（歌詞已疊上）依序是 ${viewTimes.map((t) => t.toFixed(2)).join('、')} 秒。`;
   text = `${text}\n\n${lead}`;
   for (let k = 1; k <= (o.attempts ?? 2); k++) {
-    const r = await o.io.ask(text, images);
+    // (a failed turn — an API error, an empty reply, the budget — ends the round with the best repair so far)
+    let r: Awaited<ReturnType<RepairIO['ask']>>;
+    try {
+      r = await o.io.ask(text, images);
+    } catch (e) {
+      say(`repair ${k}: director turn failed (${(e as Error).message.slice(0, 120)}), stopping with the best so far`);
+      result.attempts.push({ errs: [`導演回覆失敗：${(e as Error).message.slice(0, 120)}`], idea: '' });
+      break;
+    }
     const scoped = scopedEdits(cur, r.edits, ids, o.known);
     const attempt: RepairResult['attempts'][number] = { errs: [...scoped.errs], idea: r.idea };
     result.attempts.push(attempt);
@@ -385,7 +452,7 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
     const check = checkRepair(before.map((f) => ({ before: f, after: after.find((g) => g.t === f.t), a: bPics.get(f.t), b: aPics.get(f.t) })), named, 480 / 1920);
     attempt.errs.push(...check.errs);
     attempt.kept = check.kept;
-    say(`repair ${k}: kept clear ${check.keptBefore} -> ${check.kept}; worst PSNR untouched ${check.worstSame.toFixed(1)} dB, named shots outside props ${check.worstNear.toFixed(1)} dB; off its base at ${check.offBase} samples; ${check.errs.length ? `rejected: ${check.errs.slice(0, 6).join(' | ')}` : 'in scope'}`);
+    say(`repair ${k}: kept clear ${check.keptBefore} -> ${check.kept}; worst PSNR untouched ${check.worstSame.toFixed(1)} dB, named shots outside props ${check.worstNear.toFixed(1)} dB; ${check.unseen} samples unseen; ${check.errs.length ? `rejected: ${check.errs.slice(0, 6).join(' | ')}` : 'in scope'}`);
     writeFileSync(join(aDir, 'check.json'), JSON.stringify({ ...check, worstSame: String(check.worstSame), worstNear: String(check.worstNear) }, null, 1));
     if (check.errs.length) {
       text = `這次的修改沒有通過檢查，已經退回（目前程式維持上一版）：\n${check.errs.slice(0, 12).map((x) => `- ${x}`).join('\n')}\n請對目前程式重新給 edits。`;
@@ -393,12 +460,16 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
       text += `\n以下是被退回那一版的截圖（${viewTimes.map((t) => t.toFixed(2)).join('、')} 秒）。`;
       continue;
     }
-    // in scope: kept, the best so far when fewer of its draws are kept clear
-    if (check.kept < result.kept) Object.assign(result, { src: scoped.src, kept: check.kept, accepted: true });
+    // in scope: kept, the best so far when fewer of its draws are kept clear; one that did not help is dropped, and the
+    // director is told which code its next edits apply to
+    const better = check.kept < result.kept;
+    if (better) Object.assign(result, { src: scoped.src, kept: check.kept, accepted: true });
     cur = result.src;
     if (!check.kept) break;
     const still = after.filter((f) => named.some((x) => x.shots.includes(f.shot)) && f.drawn.some((d) => ids.includes(d.id) && d.kept)).map((f) => `${f.t.toFixed(2)} 秒（鏡頭 ${f.shot}）：${f.drawn.filter((d) => ids.includes(d.id) && d.kept).map((d) => `${d.id} 在 ${Math.round(d.x)},${Math.round(d.y)},${Math.round(d.x + d.w)},${Math.round(d.y + d.h)}`).join('、')}`);
-    text = `這次的修改通過了範圍檢查並保留了（目前程式＝套用後的版本），但還有 ${check.kept} 格被挖空：\n${still.slice(0, 16).join('\n')}\n請對目前程式再給 edits，把這些也移開。`;
+    text = better
+      ? `這次的修改通過了範圍檢查並保留了（目前程式＝套用你這次 edits 之後的版本），但還有 ${check.kept} 格被挖空：\n${still.slice(0, 16).join('\n')}\n請對目前程式再給 edits，把這些也移開。`
+      : `這次的修改通過了範圍檢查，但被挖空的格數沒有減少（${result.kept} → ${check.kept}），所以沒有保留：目前程式維持你這次修改之前的版本，下一次的 edits 要對那一版寫。還被挖空的：\n${still.slice(0, 16).join('\n')}`;
     images = await jpgs(scoped.src, join(o.work, `view_${k}`));
     text += `\n以下是目前版本的截圖（${viewTimes.map((t) => t.toFixed(2)).join('、')} 秒）。`;
   }

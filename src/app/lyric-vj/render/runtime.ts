@@ -51,6 +51,12 @@ export interface CueRuntime {
   firstVoice?: 'me' | 'them';
   /** This line's place among the lines of its shot (0 = first). */
   order?: number;
+  /** This line's place among all the song's lines, and its neighbours' text and times (the sing-along modes). */
+  songOrder?: number;
+  prevText?: string;
+  prevEnd?: number;
+  nextText?: string;
+  nextStart?: number;
   /** The song's seed: a drawn effect's look (how many shards, how hard they fly) is its own in each song. */
   song?: number;
   /** The song's tempo (a held line's heartbeat thumps with it). */

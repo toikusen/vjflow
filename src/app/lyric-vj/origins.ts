@@ -242,6 +242,8 @@ export const ORIGINS: Record<string, Origin> = {
   'motion:velocity-settle': { videos: 0, risk: 'medium', from: 'AE expression guide phys-inertia (concept only)', own: false },
   'motion:velocity-bank': { videos: 0, risk: 'medium', from: 'AE expression guide phys-velocity (concept only)', own: false },
   'story:follow': { videos: 0, risk: 'medium', from: 'AE expression guide layer-elastic-follow (concept only)', own: false },
+  'layout:singalong': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #43 dual', own: false },
+  'layout:scroll': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #46 lyrics', own: false },
   'fx:field': { videos: 0, risk: 'medium', from: 'AE expression guide layer-distance (concept only)', own: false },
   'fx:field#1': { videos: 0, risk: 'medium', from: 'AE expression guide layer-distance (concept only)', own: false },
   'fx:field#2': { videos: 0, risk: 'medium', from: 'AE expression guide layer-distance (concept only)', own: false },

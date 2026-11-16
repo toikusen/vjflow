@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { timingGate } from '../../src/app/lyric-vj/timing-qa';
-import { TEMPLATES } from '../../src/app/lyric-vj/templates';
+import { TEMPLATES, templateOffered } from '../../src/app/lyric-vj/templates';
 import { SongTimeline } from '../../src/app/lyric-vj/timeline';
 import { CAMERAS, cuesIn, EMPHASIS_METHODS, ENTER_KINDS, EXIT_KINDS, SYMBOLS, TRANSITIONS, ParamValue, TreatmentV3, validateTreatment } from '../../src/app/lyric-vj/treatment';
 import { attachmentErrors, checkStyle, STYLES, templatesFor } from '../../src/app/lyric-vj/styles';
@@ -59,6 +59,7 @@ const { values: a } = parseArgs({
     candidates: { type: 'string' }, // comma ids: candidate languages the director may also pick (without --language)
     previous: { type: 'string' }, // treatment.json of the previous concept: quoted to the director as 上一版
     note: { type: 'string' }, // the person's note on the previous concept: with --previous this is an adjustment, without a note a redo
+    'sing-along': { type: 'boolean', default: false }, // the buyer's sing-along option: offers the singalong and scroll templates (off by default)
   },
 });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
@@ -69,9 +70,10 @@ if (!process.env['ANTHROPIC_API_KEY'] && existsSync(env)) {
   }
 }
 const song: SongTimeline = JSON.parse(readFileSync(a.song!, 'utf8'));
-// lanes carries a translation in its bottom bar: offered only when the buyer supplied one (cue.sub), never by default
+// lanes carries a translation in its bottom bar: offered only when the buyer supplied one (cue.sub), never by default;
+// the sing-along modes only when the buyer asked for them (--sing-along)
 const hasSub = song.cues.some((c) => !!(c as { sub?: string }).sub?.trim());
-const offered = (id: string) => id !== 'scene' && (id !== 'lanes' || hasSub);
+const offered = (id: string) => templateOffered(id, { sub: hasSub, singAlong: !!a['sing-along'] });
 const style = STYLES[a['style-id']!];
 if (!style) throw new Error(`未知風格 ${a['style-id']}`);
 // Chinese lyrics need Traditional Chinese faces (Japanese ones draw other glyph forms or miss characters)

@@ -82,6 +82,7 @@ import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
+import { scroll, singalong } from './sing-along';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
 import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, frameFit, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
@@ -471,7 +472,7 @@ function irisMap() {
   return (irisTex.map = new THREE.CanvasTexture(cv));
 }
 
-const RENDERERS: Record<string, TemplateRenderer> = { 'world-set': worldSet, 'world-pair': worldPair, 'build-cut': buildCut, punch, 'paper-feed': paperFeed, 'memory-card': memoryCard, 'index-pull': indexPull, 'lyric-band': lyricBand, 'phrase-panels': phrasePanels, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel, chat, notify, input, lanes, 'lyric-carrier': lyricCarrier, 'contrast-split': contrastSplit, editorial, 'corner-anchor': cornerAnchor, 'cross-anchor': crossAnchor, 'note-panel': notePanel, 'phrase-grid': phraseGrid, 'balance-line': balanceLine, 'dot-display': dotDisplay, 'turn-box': turnBox, 'frame-feed': frameFeed, 'lightbox-entry': lightboxEntry, counterweight: counterweightLayout, 'panel-route': panelRoute, 'reply-thread': replyThread };
+const RENDERERS: Record<string, TemplateRenderer> = { 'world-set': worldSet, 'world-pair': worldPair, 'build-cut': buildCut, punch, 'paper-feed': paperFeed, 'memory-card': memoryCard, 'index-pull': indexPull, 'lyric-band': lyricBand, 'phrase-panels': phrasePanels, 'frame-split': frameSplit, typewriter, vertical, scatter, singalong, scroll, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel, chat, notify, input, lanes, 'lyric-carrier': lyricCarrier, 'contrast-split': contrastSplit, editorial, 'corner-anchor': cornerAnchor, 'cross-anchor': crossAnchor, 'note-panel': notePanel, 'phrase-grid': phraseGrid, 'balance-line': balanceLine, 'dot-display': dotDisplay, 'turn-box': turnBox, 'frame-feed': frameFeed, 'lightbox-entry': lightboxEntry, counterweight: counterweightLayout, 'panel-route': panelRoute, 'reply-thread': replyThread };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -1214,6 +1215,11 @@ export class LyricVjEngine {
         shotText,
         firstVoice,
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
+        songOrder: i,
+        prevText: styled[i - 1]?.cue.text,
+        prevEnd: styled[i - 1]?.cue.end,
+        nextText: styled[i + 1]?.cue.text,
+        nextStart: styled[i + 1]?.cue.start,
       };
       // (a world line's inks are checked on the ground each glyph really stands on, world-layout measuredInks)
       if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });

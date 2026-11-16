@@ -14,3 +14,13 @@ describe('keyline disc', () => {
     }
   });
 });
+
+describe('keyline reach', () => {
+  it('stays inside the halo the final pass measures, so its grain is kept off the whole ring', async () => {
+    const { keyReach, keyRingClear } = await import('./dilate');
+    const { HALO_REACH } = await import('./final-warp.glsl');
+    for (const weak of [2, 4.4, 4.5, 21]) expect(keyRingClear(keyReach(weak)) + 1).toBeLessThanOrEqual(HALO_REACH);
+    // still wider where neither ink stands off the ground
+    expect(keyReach(3)).toBeGreaterThan(keyReach(7));
+  });
+});

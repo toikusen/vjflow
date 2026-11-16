@@ -83,7 +83,7 @@ import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { PREVIEW_GAP, scroll, singalong } from './sing-along';
-import { discOffsets } from './dilate';
+import { discOffsets, keyReach, keyRingClear } from './dilate';
 import { missingOptIn } from '../templates';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
@@ -594,7 +594,7 @@ export interface CueMetric {
 
 export const FINAL_SHADER = {
   uniforms: {
-    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uZoomHit: { value: 0 }, uTileHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uBeams: { value: 0 },
+    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uZoomHit: { value: 0 }, uTileHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uKeyRing: { value: 0 }, uBeams: { value: 0 },
     // section moments (moments.ts)
     uVignette: { value: 0 }, uVigBase: { value: 0.55 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
     uRayColor: { value: new THREE.Color(1, 1, 1) },
@@ -614,13 +614,15 @@ export const FINAL_SHADER = {
     uniform float uVignette, uVigBase, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     uniform float uBoil, uBoilSeed, uFlicker, uTooth, uPixel, uLift, uHasText, uGlitch, uFade, uScan; uniform sampler2D tText; uniform vec2 uWeave;
     uniform sampler2D tGlass, tCracks; uniform float uGlass;
-    uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut;
+    uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut, uKeyRing;
     ${FINAL_WARP_LIB}
     ${FINAL_HALO_LIB}
     void main(){
       ${FINAL_WARP_UV}
       float hk = haloKeep(uvC, uv, d, a);           // the halo: what of the effects' geometry this pixel keeps
       float ho = haloAt(uvC);                       // and of their noise, where it shows
+      // (and none on a kinetic line's keyline ring: grain over it broke its edge, veilLines keyRing)
+      if (uKeyRing > 0.0 && uHaloOut > 0.0) ho = min(ho, smoothstep(uKeyRing, uKeyRing + 1.0, texture2D(tHalo, uvC).r));
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       if (uTileHit > 0.0) c = texture2D(tDiffuse, fract(uv * 3.0)).rgb; // the picture repeated three by three for two frames
       if (uZoomHit > 0.0) {                         // a rush into the frame: the picture smeared along lines from the centre
@@ -1862,7 +1864,9 @@ export class LyricVjEngine {
       // a tight keyline in the type's own ground round each letter's shape, grown by R px: the move is cut cleanly
       // where it crosses a letter (a frosted blur under each letter read as a smudge)
       // twice as wide where neither ink stands off the ground (thin mincho in navy on a mid violet sky, indigo)
-      const R = (this.weak.get(rt.cue.id) ?? 21) < 4.5 ? 14 : 7;
+      const R = keyReach(this.weak.get(rt.cue.id) ?? 21);
+      // the final pass keeps its grain off the ring (uKeyRing): its edge stays clean
+      this.keyRing = Math.max(this.keyRing, keyRingClear(R));
       const x0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.x0)) - R));
       const y0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.y0)) - R));
       const [w, h] = [Math.min(W, Math.ceil(Math.max(...boxes.map((b) => b.x1)) + R)) - x0, Math.min(H, Math.ceil(Math.max(...boxes.map((b) => b.y1)) + R)) - y0];
@@ -1907,6 +1911,8 @@ export class LyricVjEngine {
     }
   }
   private veilShape?: OffscreenCanvasRenderingContext2D;
+  /** The widest keyline drawn this frame (veilLines), px round the letters the final pass keeps its noise off. */
+  private keyRing = 0;
   /** The letters of the line being keyed, before they are grown into its keyline (veilLines). */
   private veilMask?: OffscreenCanvasRenderingContext2D;
   /** The build each kinetic line shows this frame, picked by the veil (veilLines). */
@@ -2608,6 +2614,7 @@ export class LyricVjEngine {
   /** The time of the frame being drawn (page checks name it). */
   private renderedAt = 0;
   async renderAt(t: number) {
+    this.keyRing = 0;
     this.renderedAt = t;
     this.keepLines(t);
     this.placedProps = [];
@@ -2664,6 +2671,7 @@ export class LyricVjEngine {
         // the type laid out for this frame first: the veil under it follows where its letters are now
         this.updateCues(t, fx, this.flashes.find((f) => t >= f.at && t < f.at + FLASH_SEC)?.cueId);
         this.textRoot.updateMatrixWorld(true);
+        this.keyRing = 0;
         setLineVeil((c, alpha) => this.veilLines(c, t, alpha));
         setBackPush(this.pushAt(t));
       }
@@ -2840,6 +2848,7 @@ export class LyricVjEngine {
     const halo = this.haloNow();
     if (!this.inkFrozen) {
       [u['uHaloIn'].value, u['uHaloOut'].value] = halo ? [halo[0], Math.min(halo[1], HALO_REACH)] : [0, 0];
+      u['uKeyRing'].value = halo ? Math.min(this.keyRing, HALO_REACH - 0.5) : 0;
       // (no reading glyph on the frame: nothing to keep the effects off, and no pass drawn)
       const reading = halo ? (this.textRoot.updateMatrixWorld(true), this.readingMeshes()) : [];
       if (halo && !reading.length) [u['uHaloIn'].value, u['uHaloOut'].value] = [0, 0];

@@ -15,3 +15,14 @@ export function discOffsets(R: number, gap = 3): [number, number][] {
   }
   return out;
 }
+
+/**
+ * A kinetic line's keyline reach, px: the ring only has to hold the letters' edge on the ink they are not in (that pair
+ * is what reads at 4.5:1, at any width past the anti-aliased edge and the final pass's colour split), a little wider
+ * where neither ink stands off the ground. Both stay inside the halo the final pass measures (HALO_REACH 12 px), so
+ * its grain and paper tooth are kept off the whole ring (uKeyRing) and its edge stays clean. Was 7 / 14: past the
+ * measured reach the grain broke a wide, soft cream ring (世界のつづき 82.5 s).
+ */
+export const keyReach = (weakContrast: number) => (weakContrast < 4.5 ? 8 : 5);
+/** How far round the letters the final pass keeps its noise off for a keyline of reach R (its anti-aliased edge too). */
+export const keyRingClear = (R: number) => R + 1.5;

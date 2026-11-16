@@ -85,3 +85,10 @@ describe('sing-along modes', () => {
     expect(others.filter((m) => m.position.y < -1).every((m) => m.material.opacity === 1)).toBe(true);
   });
 });
+
+describe('sing-along lines carry no handoff', () => {
+  it('nothing carries words from line to line on a sing-along shot (its rows are fixed places)', async () => {
+    const { NO_HANDOFF } = await import('./line-shows');
+    expect(NO_HANDOFF.has('singalong') && NO_HANDOFF.has('scroll')).toBe(true);
+  });
+});

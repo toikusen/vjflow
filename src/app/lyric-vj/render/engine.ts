@@ -75,7 +75,7 @@ import { apertureAt, gravityPose, isLineExit, LINE_EXIT_SEC, pushFocus, radialSh
 import { FineLayer, fineLayer } from './fine-tier';
 import { freeZone } from './board';
 import { DIAGRAM_FX } from './kinetic-more';
-import { storyEvents, storyLayers } from './story';
+import { firstSeen, storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, FONTS, isLatinLine, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
@@ -1027,8 +1027,10 @@ export class LyricVjEngine {
         if (!('prop' in it)) return it;
         const tone = this.spriteTone(`spr:${it.prop}`);
         // where and when it is first fully seen (a moving prop: where its journey ends, an orbit: its centre)
-        const at = it.kind === 'hero' ? it.states[0]?.at ?? 0 : it.kind === 'fly' ? it.at + it.dur : it.kind === 'pop' ? it.at + 0.5 : it.kind === 'journey' ? it.to : it.from + 0.5;
-        const [x, y] = it.kind === 'journey' ? it.pts[it.pts.length - 1] : [it.x, it.y];
+        const seen = it.kind === 'follow' ? firstSeen(cards, cards.indexOf(it), Math.max(0, ...storyEvents(cards)) + 5) : undefined;
+        if (it.kind === 'follow' && !seen) return it;
+        const at = seen ? seen.t + 0.5 : it.kind === 'hero' ? it.states[0]?.at ?? 0 : it.kind === 'fly' ? it.at + it.dur : it.kind === 'pop' ? it.at + 0.5 : it.kind === 'journey' ? it.to : it.kind === 'follow' ? 0 : it.from + 0.5;
+        const [x, y] = seen ? [seen.x, seen.y] : it.kind === 'journey' ? it.pts[it.pts.length - 1] : [it.x, it.y];
         const [hw, hh] = [(it.size * H * (it.aspect ?? 1)) / 2, (it.size * H) / 2];
         const box = new THREE.Box3(new THREE.Vector3(x * (W / 2) - hw, y * (H / 2) - hh, 0), new THREE.Vector3(x * (W / 2) + hw, y * (H / 2) + hh, 0));
         const ground = this.backdropAt(at, box)?.mean;

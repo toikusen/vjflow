@@ -44,3 +44,15 @@ describe('a carrier dashing out leans with its speed', () => {
     expect(leaving(rest, 3.3, m, -1).rot).toBeGreaterThan(0.05);
   });
 });
+
+describe('elastic follow arithmetic', () => {
+  it('sums to one (at rest on its target) and overshoots a step', async () => {
+    const { elasticFollow, springTaps } = await import('./follow');
+    expect(springTaps().reduce((a, x) => a + x.w, 0)).toBeCloseTo(1, 9);
+    const step = (t: number): [number, number] => [t < 1 ? 0 : 1, 0];
+    const xs = Array.from({ length: 60 }, (_, i) => elasticFollow(step, 1 + i / 30)![0]);
+    expect(Math.max(...xs)).toBeGreaterThan(1.02);
+    expect(xs[59]).toBeCloseTo(1, 2);
+    expect(elasticFollow(step, 1.3)).toEqual(elasticFollow(step, 1.3));
+  });
+});

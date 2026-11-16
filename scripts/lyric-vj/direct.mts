@@ -140,12 +140,12 @@ const STORY_SCHEMA = {
       properties: { id: { type: 'string', description: '英文小寫加點，例 furin.glass' }, what: { type: 'string', description: '英文的具體外觀描述（形狀、顏色、方向），給生圖模型' }, hero: { type: 'boolean', description: '貫穿全曲的主角物件' } } } },
     items: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['kind', 'why', 'prop', 'motion', 'x', 'y', 'size', 'params'],
       properties: {
-        kind: { type: 'string', enum: ['hero', 'fly', 'pop', 'cards', 'thread', 'orbit', 'journey', 'morph', 'chapter', 'float'] },
+        kind: { type: 'string', enum: ['hero', 'fly', 'pop', 'cards', 'thread', 'orbit', 'journey', 'morph', 'chapter', 'float', 'follow'] },
         why: { type: 'string', description: '對應哪句歌詞或哪個段落、為什麼這樣演' },
         prop: { type: 'string', description: '物件 id（cards、thread、morph、chapter、float 填空字串）' },
         motion: { type: 'string', enum: ['hang', 'flutter', 'roll', 'sit', 'drift', 'still', ''] },
         x: { type: 'number' }, y: { type: 'number' }, size: { type: 'number', description: '物件高度佔畫面高的比例 0.1–0.5（cards、thread 填 0）' },
-        params: { type: 'array', description: '其他參數 key/value：states（hero，"秒:狀態;秒:狀態"）、glow、at、dur、until、side、trail、through、from、to、every、style、texts（用 | 分隔）、props（用 , 分隔）、color、ink、a（"x,y"）、b、bend、loop、cut、width、r、period、tilt、pts（"x,y;x,y"）、steps（"秒:物件id;秒:物件id"）、text', items: { type: 'object', additionalProperties: false, required: ['key', 'value'], properties: { key: { type: 'string' }, value: { type: 'string' } } } },
+        params: { type: 'array', description: '其他參數 key/value：states（hero，"秒:狀態;秒:狀態"）、glow、at、dur、until、side、trail、through、from、to、every、style、texts（用 | 分隔）、props（用 , 分隔）、color、ink、a（"x,y"）、b、bend、loop、cut、width、r、period、tilt、pts（"x,y;x,y"）、steps（"秒:物件id;秒:物件id"）、text、after（follow 跟的物件 id）、string（follow 的線色）、stiff', items: { type: 'object', additionalProperties: false, required: ['key', 'value'], properties: { key: { type: 'string' }, value: { type: 'string' } } } },
       } } },
   },
 };
@@ -160,6 +160,7 @@ const STORY_RULES = `故事（story）：程式已經做好幾種演出，你只
 - morph：一個形狀依序變成下一個（steps 例 "60:cube.box;75:star.gold;90:heart.red"，每個時間對準歌詞唱到那個東西），until 秒消失。給歌詞裡一連串有關聯的物件或象徵的轉變。一首最多 1 組，2–4 個形狀，props 每個都要列。
 - chapter：章節字卡，at 秒從左邊滑進、dur 秒後離開，text 是 16 字以內的短標（例「第一章 夏」「01 出発」），color 卡色、ink 字色。只給歌曲有明確段落敘事（時間、季節、地點轉換）的時候，放在段落開頭，一首最多 5 張、不要每段都放。
 - float：幾個物件（props 用逗號列 2–5 個）在畫面裡失重般慢慢漂、慢慢轉，from 到 to 秒。給宇宙、夢、無重力、記憶碎片飄散的段落（間奏或安靜段最好）。一首最多 1 組。
+- follow：一個物件像綁在彈簧上一樣跟著另一個會動的物件（after 填它的物件 id，那個物件要用 fly、journey、pop、orbit 或 hero 出現），慢半拍跟上、停下時晃一下才停；x、y 是相對那個物件的位置（例 -0.2,0.4 是左上方）。string 填色碼就會畫一條線連著（氣球、風箏）；stiff 0.5–2，越大跟得越緊。只在歌詞裡一個東西真的跟著另一個（牽著的氣球、追著人的風箏、跟在腳邊的小狗、拖在船後的浮標），一首最多 2 個。
 - motion 物件的動法要合它的本性：hang 吊著的（風鈴、燈籠）像鐘擺晃；flutter 只給有翅膀的昆蟲和鳥（偶爾拍翅）；葉子、花瓣、紙片這類飄落的東西用 drift；roll 會滾的（球、殼）滾進來；sit 放在地上的落下後停住；drift 漂浮的慢慢飄；still 招牌、建築這類本來就不動的完全不動。不要亂跳亂閃。
 - 位置：歌詞大多在畫面中央，物件放在上緣、下緣或左右兩側（|y| ≥ 0.4 或 |x| ≥ 0.6），size 0.15–0.45；顏色要和背景有對比（淺色玻璃不要放淺色底上）。
 - props 列出上面用到的每一個物件；what 用英文具體描述外觀，不要人物、不要文字。

@@ -220,3 +220,46 @@ describe('velocity banking (props lean with their own speed)', () => {
     expect(Math.abs(sprite([j], 0.01)!.rot)).toBeLessThan(0.01);
   });
 });
+
+describe('elastic follow (a prop trailing another on a spring)', () => {
+  const lead: StoryItem = { kind: 'journey', prop: 'kid', motion: 'still', from: 0, to: 3, pts: [[-0.8, -0.6], [0.8, -0.6]], size: 0.3 };
+  const kite: StoryItem = { kind: 'follow', prop: 'kite', after: 'kid', x: -0.2, y: 0.5, size: 0.2, string: '#ffffff' };
+  const at = (t: number) => {
+    const ls = storyLayers([lead, kite], t);
+    const [k, f] = ['journey', 'follow'].map((r) => ls.find((l) => l.ref?.startsWith(r)) as { x: number; y: number; rot?: number; opacity?: number });
+    return { k, f, string: ls.find((l) => l.kind === 'thread') };
+  };
+
+  it('lags behind its leader while it moves, comes in after it stops, then settles at its offset', () => {
+    const mid = at(1.5);
+    expect(mid.f.x).toBeLessThan(mid.k.x - 0.2);
+    // the leader has stopped; the follower is still coming in (its overshoot on a sudden stop: settle.spec)
+    expect(at(3.05).f.x).toBeLessThan(0.6 - 0.002);
+    const rest = at(5);
+    expect(rest.f.x).toBeCloseTo(0.6, 2);
+    expect(rest.f.y).toBeCloseTo(-0.1, 2);
+  });
+
+  it('is a function of time alone and hangs on a string from its leader', () => {
+    expect(at(2.2)).toEqual(at(2.2));
+    expect(at(2.2).string).toBeDefined();
+  });
+
+  it('shows only while its leader is up', () => {
+    expect(at(-0.5).f).toBeUndefined();
+  });
+});
+
+describe('validateStory keeps a follower only with its leader', () => {
+  it('drops a follow whose leader is not in the story', async () => {
+    const { validateStory } = await import('./story');
+    const plan = { props: [{ id: 'kid', what: '', hero: false }, { id: 'kite', what: '', hero: false }], items: [
+      { kind: 'journey', prop: 'kid', from: 1, to: 4, pts: [[-0.8, -0.6], [0.8, -0.6]], size: 0.3 },
+      { kind: 'follow', prop: 'kite', after: 'kid', x: -0.2, y: 0.5, size: 0.2 },
+      { kind: 'follow', prop: 'kite', after: 'nobody', x: 0, y: 0.5, size: 0.2 },
+    ] } as never;
+    const { items, fixes } = validateStory(plan, 60);
+    expect(items.filter((x) => x.kind === 'follow').length).toBe(1);
+    expect(fixes.some((f) => f.includes('nobody'))).toBe(true);
+  });
+});

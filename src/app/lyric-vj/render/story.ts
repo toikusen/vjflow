@@ -6,6 +6,7 @@
 // I pop.
 import type { Rgb } from './graphics';
 import { bankTilt, velocityAt } from './bank';
+import { elasticFollow } from './follow';
 import { loopNoise } from './loop-noise';
 import { arrivalSpeed, backOut, overshootFor } from './settle';
 
@@ -44,7 +45,12 @@ export type StoryItem =
   /** A chapter card: a short label ("第一章 夏") slides in at a section start and leaves after `dur`. */
   | { kind: 'chapter'; at: number; dur: number; text: string; x: number; y: number; color: Rgb; ink: Rgb }
   /** Weightless props drifting and slowly turning across the frame from `from` to `to`. */
-  | { kind: 'float'; props: string[]; aspects?: Record<string, number>; from: number; to: number; size: number };
+  | { kind: 'float'; props: string[]; aspects?: Record<string, number>; from: number; to: number; size: number }
+  /**
+   * A prop that trails another (`after`, the leading item's prop) on a spring, at offset (x, y) from it, for as long as
+   * the leader is up: a kite after a child, a balloon on a string (`string`: the string's colour), a pet at heel.
+   */
+  | { kind: 'follow'; prop: string; aspect?: number; lift?: Rgb; after: string; x: number; y: number; size: number; string?: Rgb; stiff?: number };
 
 /** The per-frame layers story items become (drawn by drawStory). Sizes are fractions of the frame height. */
 /** `ref` names the story item a layer comes from, unique per item (`pop#7:horse`; QA reports only, drawing ignores it). */
@@ -211,6 +217,9 @@ export function storyEvents(items: StoryItem[]): number[] {
         return [it.at, it.at + it.dur];
       case 'morph':
         return [...it.steps.map((s) => s.at), it.until];
+      case 'follow':
+        // it comes and goes with its leader, whose own times are listed
+        return [];
       default:
         return [it.from, it.to];
     }
@@ -219,7 +228,30 @@ export function storyEvents(items: StoryItem[]): number[] {
 
 export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
   const out: StoryLayer[] = [];
-  items.forEach((it, n) => {
+  items.forEach((it, n) => itemLayers(items, it, n, t, out));
+  return out;
+}
+
+/** When and where item n is first up, looked for every quarter second up to `until` s (a follower has no times of its own). */
+export function firstSeen(items: StoryItem[], n: number, until: number): { t: number; x: number; y: number } | undefined {
+  for (let t = 0; t <= until; t += 0.25) {
+    const p = spriteAt(items, n, t);
+    if (p) return { t, x: p[0], y: p[1] };
+  }
+  return undefined;
+}
+
+/** Where item n's (first) sprite stands at t, or undefined while it is not up. */
+function spriteAt(items: StoryItem[], n: number, t: number): Pt | undefined {
+  const ls: StoryLayer[] = [];
+  itemLayers(items, items[n], n, t, ls);
+  const s = ls.find((l) => l.kind === 'sprite');
+  return s && s.kind === 'sprite' && (s.opacity ?? 1) > 0 ? [s.x, s.y] : undefined;
+}
+
+/** The layers of story item n at t (pure). */
+function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out: StoryLayer[]): void {
+  {
     switch (it.kind) {
       case 'hero': {
         const h = heroAt(it.states, t);
@@ -375,9 +407,28 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         }
         return;
       }
+      case 'follow': {
+        const lead = items.findIndex((x) => x !== it && x.kind !== 'follow' && 'prop' in x && x.prop === it.after);
+        if (lead < 0) return;
+        const goal = (tt: number): Pt | undefined => { const p = spriteAt(items, lead, tt); return p && [p[0] + it.x, p[1] + it.y]; };
+        const here = elasticFollow(goal, t, it.stiff ?? 1);
+        if (!here) return;
+        const leader = spriteAt(items, lead, t)!;
+        const ls: StoryLayer[] = [];
+        itemLayers(items, items[lead], lead, t, ls);
+        const fade = ls.find((l) => l.kind === 'sprite')?.opacity ?? 1;
+        // a string from the leader to the follower, sagging a little as it hangs
+        if (it.string) {
+          const sag: Pt = [(leader[0] + here[0]) / 2, (leader[1] + here[1]) / 2 - 0.06];
+          out.push({ kind: 'thread', pts: Array.from({ length: 17 }, (_, i) => bez(leader, sag, here, i / 16)), color: it.string, width: 3, opacity: fade });
+        }
+        // it leans with its own speed like any moving prop (bank.ts)
+        const rot = lean((tt) => elasticFollow(goal, tt, it.stiff ?? 1) ?? here, t);
+        out.push({ ref: `follow#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: true, x: here[0], y: here[1], size: it.size, rot, opacity: fade });
+        return;
+      }
     }
-  });
-  return out;
+  }
 }
 
 /** The on-screen box of a story layer in pixels (for making room for the lyrics), if it has one. */
@@ -576,7 +627,7 @@ export interface StoryPlan {
 }
 
 // a song has one thread: one hero, a few flights and pops, at most two card piles and one thread line
-const MAX: Record<StoryItem['kind'], number> = { hero: 1, fly: 3, pop: 4, cards: 2, thread: 1, orbit: 1, journey: 1, morph: 1, chapter: 5, float: 1 };
+const MAX: Record<StoryItem['kind'], number> = { hero: 1, fly: 3, pop: 4, cards: 2, thread: 1, orbit: 1, journey: 1, morph: 1, chapter: 5, float: 1, follow: 2 };
 const MOTIONS: Motion[] = ['hang', 'flutter', 'roll', 'sit', 'drift', 'still'];
 
 /**
@@ -645,13 +696,20 @@ export function validateStory(plan: StoryPlan | undefined, duration: number): { 
       if (!it.props.length) continue;
     }
     if (it.kind === 'hero' && !it.states.length) continue;
+    // a follower needs a leader with a prop of its own (checked below, once every item is in)
+    if (it.kind === 'follow') {
+      it.after = String(it.after ?? '').trim();
+      it.stiff = Math.max(0.5, Math.min(2, Number(it.stiff) || 1));
+    }
     delete it.why;
     count[it.kind] = (count[it.kind] ?? 0) + 1;
     items.push(it);
   }
-  return { items, fixes };
+  const leads = new Set(items.flatMap((x) => (x.kind !== 'follow' && 'prop' in x ? [x.prop] : [])));
+  const kept = items.filter((x) => x.kind !== 'follow' || leads.has(x.after) || void fixes.push(`故事元件 follow 跟隨的 ${x.after} 沒有出現，移除`));
+  return { items: kept, fixes };
 }
 
 const first = (it: StoryItem) =>
-  it.kind === 'hero' ? Math.min(...(it.states ?? []).map((s) => s.at), Infinity) : it.kind === 'morph' ? Math.min(...(it.steps ?? []).map((s) => s.at), Infinity) : it.kind === 'fly' || it.kind === 'pop' || it.kind === 'chapter' ? it.at : it.from;
+  it.kind === 'hero' ? Math.min(...(it.states ?? []).map((s) => s.at), Infinity) : it.kind === 'morph' ? Math.min(...(it.steps ?? []).map((s) => s.at), Infinity) : it.kind === 'fly' || it.kind === 'pop' || it.kind === 'chapter' ? it.at : it.kind === 'follow' ? Infinity : it.from;
 

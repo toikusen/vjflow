@@ -533,6 +533,8 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   }
   const inks = new Map(items.map((it) => [it.mesh, it.mesh.material.color.clone()]));
   const noisy = new Set<GlyphMesh>();
+  /** The glyphs a scramble exit has broken into signs (given back their own picture when scrubbed before it). */
+  const broke = new Set<GlyphMesh>();
   const show = (m: GlyphMesh, pic: { map: THREE.Texture | null; geo: THREE.PlaneGeometry }) => {
     if (m.material.map === pic.map) return;
     m.material.map = pic.map as THREE.Texture;
@@ -925,9 +927,9 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
   let splitting = false;
   // trail: faint copies where each glyph was a few frames ago (only while it moves)
   const TRAIL = [3, 6, 10];
+  /** The frame rate TRAIL counts in (the export's). */
+  const TRAIL_FPS = 30;
   const ghosts = new Map<GlyphMesh, GlyphMesh[]>();
-  const past = new Map<GlyphMesh, { m: THREE.Matrix4; o: number }[]>();
-  let lastT = -1;
   if (rt.style.trail)
     for (const it of items) {
       ghosts.set(
@@ -940,7 +942,6 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           return g;
         }),
       );
-      past.set(it.mesh, []);
     }
   // hold: a wavering line runs on from the word's last character while the vowel is held
   const holds = (rt.style.emphasis ?? []).filter((e) => e.method === 'hold').map((e) => {
@@ -1135,7 +1136,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
     const g = layer.group.getWorldScale(new THREE.Vector3());
     return { x: p.x, y: p.y, s: tmpS.y / (g.y || 1) };
   };
-  return {
+  const out: CueLayer = {
     group: layer.group,
     framed: layer.framed,
     floor: layer.floor,
@@ -1885,15 +1886,20 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         fx.shake = Math.max(fx.shake, 0.15 * (1 - q));
       }
 
-      if (rt.style.exit === 'scramble' && exiting)
+      if (rt.style.exit === 'scramble')
         for (const it of items) {
           const m = it.mesh;
           // each character breaks into flickering signs in turn, then the noise fades out
           const from = rt.exitAt + it.glyph.index * Math.min(0.03, rt.exitDur / Math.max(1, n) / 2);
-          if (t < from) continue;
+          if (!exiting || t < from) {
+            // scrubbed back before it broke: its own picture and ink again (a frame is a function of its time)
+            if (broke.delete(m)) show(m, home.get(m)!), m.material.color.copy(inks.get(m)!);
+            continue;
+          }
           const fs = noise.get(m)!;
           show(m, fs[Math.floor((t - from) / DRAWN.decode.fold) % fs.length]);
           m.material.color.copy(accent);
+          broke.add(m);
           m.material.opacity = (held.get(m) ?? 1) * (1 - easeInCubic(q));
         }
 
@@ -2448,31 +2454,37 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         });
       }
 
-      if (rt.style.trail) {
-        if (t < lastT || t - lastT > 0.2) for (const h of past.values()) h.length = 0;
-        lastT = t;
-        layer.group.updateMatrixWorld(true);
-        const inv = layer.group.matrixWorld.clone().invert();
-        for (const it of items) {
-          const m = it.mesh;
-          const h = past.get(m)!;
-          const now = new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld);
-          ghosts.get(m)!.forEach((g, i) => {
-            const was = h[TRAIL[i] - 1];
-            g.geometry = m.geometry;
-            g.material.map = m.material.map;
-            // a still glyph has no trail (its copies would only thicken it)
-            const moved = was ? new THREE.Vector3().setFromMatrixPosition(was.m).distanceTo(new THREE.Vector3().setFromMatrixPosition(now)) : 0;
-            g.visible = !!was && m.visible && moved > it.style.size * 0.06;
-            if (!was) return;
-            g.matrix.copy(was.m);
-            g.matrixWorldNeedsUpdate = true;
-            g.material.opacity = Math.min(was.o, m.material.opacity + 0.3) * [0.45, 0.28, 0.14][i];
-          });
-          h.unshift({ m: now, o: m.material.opacity });
-          h.length = Math.min(h.length, TRAIL[TRAIL.length - 1]);
-        }
-      }
     },
   };
+  if (!rt.style.trail) return out;
+  // trail: where each glyph was TRAIL frames ago is the line drawn at that earlier time, not a record of frames seen,
+  // so a seek, a scrub back and a skipped frame show the same trail as playback (the export equals the preview)
+  const step = out.update;
+  const inv = new THREE.Matrix4();
+  const poseOf = () => {
+    layer.group.updateMatrixWorld(true);
+    inv.copy(layer.group.matrixWorld).invert();
+    return new Map(items.map((it) => [it.mesh, { m: new THREE.Matrix4().multiplyMatrices(inv, it.mesh.matrixWorld), o: it.mesh.material.opacity, seen: it.mesh.visible }]));
+  };
+  out.update = (t, fx) => {
+    const was = TRAIL.map((k) => (step(t - k / TRAIL_FPS, { flash: 0, hit: 0, shake: 0 }), poseOf()));
+    step(t, fx);
+    const now = poseOf();
+    for (const it of items) {
+      const m = it.mesh;
+      const at = now.get(m)!;
+      ghosts.get(m)!.forEach((g, i) => {
+        const w = was[i].get(m)!;
+        g.geometry = m.geometry;
+        g.material.map = m.material.map;
+        // a still glyph has no trail (its copies would only thicken it), nor one that was not up yet
+        const moved = new THREE.Vector3().setFromMatrixPosition(w.m).distanceTo(new THREE.Vector3().setFromMatrixPosition(at.m));
+        g.visible = w.seen && w.o > 0 && m.visible && moved > it.style.size * 0.06;
+        g.matrix.copy(w.m);
+        g.matrixWorldNeedsUpdate = true;
+        g.material.opacity = Math.min(w.o, m.material.opacity + 0.3) * [0.45, 0.28, 0.14][i];
+      });
+    }
+  };
+  return out;
 }

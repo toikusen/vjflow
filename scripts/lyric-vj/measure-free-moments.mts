@@ -12,6 +12,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { freeJob } from '../../src/app/lyric-vj/free-plan';
+import { meaningGaps } from '../../src/app/lyric-vj/lineplan-core';
 import { OFFERED_STYLES } from '../../src/app/lyric-vj/free-styles';
 import { momentCapsOf } from '../../src/app/lyric-vj/moment-caps-draft';
 import { MOMENT_FLOORS, rankMoments } from '../../src/app/lyric-vj/moment-policy';
@@ -70,7 +71,7 @@ function phase2() {
   const bySong = Object.fromEntries(songs.map((s) => {
     const of = rows.filter((r) => r.song === s.song);
     const tally = of.flatMap((r) => r.perCandidate).reduce<Record<string, number>>((m, c) => { const k = c.outcome === 'floor' ? `floor:${(c as { floor?: string }).floor}` : c.outcome; m[k] = (m[k] ?? 0) + 1; return m; }, {});
-    return [s.song, { meaning: s.path, sha256: s.sha256, candidates: s.meaning.moments?.length ?? 0, worlds: of.length, worldsWithMoment: of.filter((r) => r.realizedMoments >= 1).length, realizedTotal: of.reduce((n, r) => n + r.realizedMoments, 0), maxPerWorld: Math.max(...of.map((r) => r.realizedMoments)), outcomes: tally }];
+    return [s.song, { meaning: s.path, sha256: s.sha256, staleFields: meaningGaps(s.meaning), candidates: s.meaning.moments?.length ?? 0, worlds: of.length, worldsWithMoment: of.filter((r) => r.realizedMoments >= 1).length, realizedTotal: of.reduce((n, r) => n + r.realizedMoments, 0), maxPerWorld: Math.max(...of.map((r) => r.realizedMoments)), outcomes: tally }];
   }));
   // no key, no cache: the free flow with no reading at all
   const bare = songs.map((s) => {
@@ -118,7 +119,7 @@ const rows = songs.flatMap((s) => styles.map((style) => {
 const bySong = Object.fromEntries(songs.map((s) => {
   const of = rows.filter((r) => r.song === s.song);
   const reasons = of.reduce<Record<string, number>>((m, r) => (r.realizedMoments ? m : { ...m, [r.reason ?? 'none']: (m[r.reason ?? 'none'] ?? 0) + 1 }), {});
-  return [s.song, { meaning: s.path, sha256: s.sha256, candidates: s.candidates, today: s.today, worlds: of.length, worldsWithMoment: of.filter((r) => r.realizedMoments >= 1).length, policyEliminated: sum(of.map((r) => r.eliminated)), zeroReasons: reasons }];
+  return [s.song, { meaning: s.path, sha256: s.sha256, staleFields: meaningGaps(s.meaning), candidates: s.candidates, today: s.today, worlds: of.length, worldsWithMoment: of.filter((r) => r.realizedMoments >= 1).length, policyEliminated: sum(of.map((r) => r.eliminated)), zeroReasons: reasons }];
 }));
 const reach = Object.values(bySong).filter((x) => x.worldsWithMoment >= 36).length;
 const report = {

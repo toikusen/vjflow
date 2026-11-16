@@ -32,7 +32,7 @@ export type LineIdle = 'climb' | 'ink-state' | 'tether-settle' | 'balance-rest' 
 export const LINE_ENTERS: LineEnter[] = ['scale-steps', 'frame-run', 'balance-seat', 'display-feed', 'edge-light', 'box-turn', 'frame-advance', 'frame-dive', 'rip', 'snapin', 'band-in', 'matrix-light', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', 'cell-land', 'reply-land', 'curve-arrive', 'panel-open', 'phrase-mark', 'wave-reveal', 'corner-land', 'outline-seat', 'slat-face', 'grain-resolve'];
 export const LINE_EXITS: LineExit[] = ['collapse', 'fold-close', 'band-out', 'slat-close', 'line-fold', 'tile-scatter', 'echo-travel', 'radial-leave', 'glyph-shed', 'wave-dissolve', 'pore-out', 'focus-out', 'rail-leave', 'gravity-pass', 'box-turn', 'frame-advance', 'display-off', 'node-fold'];
 export const LINE_IDLES: LineIdle[] = ['climb', 'ink-state', 'tether-settle', 'balance-rest', 'side-light', 'reflection-rest', 'breath-rule', 'frame-lights'];
-export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise' | 'dash' | 'drop' | 'zoom' | 'gather' | 'spin' | 'prelight' | 'spread' | 'swing' | 'decode' | 'slice' | 'flip' | 'stretch' | 'shuffle' | 'settle' | 'flicker' | 'squash' | 'windup' | 'karaoke' | LineEnter;
+export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise' | 'dash' | 'drop' | 'zoom' | 'gather' | 'spin' | 'prelight' | 'spread' | 'swing' | 'decode' | 'slice' | 'flip' | 'stretch' | 'shuffle' | 'settle' | 'flicker' | 'squash' | 'windup' | 'karaoke' | 'strips' | LineEnter;
 export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash' | 'drop' | 'shrink' | 'dash' | 'dust' | 'spin' | 'zoom' | 'melt' | 'scramble' | 'split' | 'domino' | 'pixel' | 'shatter' | LineExit;
 /**
  * How a landed line moves while it is held (unset: a slight per-character wave). track: its letter spacing opens slowly
@@ -53,7 +53,7 @@ export type EmphasisMethod = 'scale' | 'color' | 'glow' | 'shake' | 'hollow' | '
 export type SymbolName = 'heart' | 'star' | 'sparkle' | 'note' | 'flame' | 'drop' | 'bolt' | 'exclaim' | 'question' | 'swirl' | 'flower';
 export const SYMBOLS: SymbolName[] = ['heart', 'star', 'sparkle', 'note', 'flame', 'drop', 'bolt', 'exclaim', 'question', 'swirl', 'flower'];
 
-export const ENTER_KINDS: EnterKind[] = ['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'flap', 'slot', 'focus', 'rise', 'dash', 'drop', 'zoom', 'gather', 'spin', 'prelight', 'spread', 'swing', 'decode', 'slice', 'flip', 'stretch', 'shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke'];
+export const ENTER_KINDS: EnterKind[] = ['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'flap', 'slot', 'focus', 'rise', 'dash', 'drop', 'zoom', 'gather', 'spin', 'prelight', 'spread', 'swing', 'decode', 'slice', 'flip', 'stretch', 'shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke', 'strips'];
 export const EXIT_KINDS: ExitKind[] = ['burst', 'fade', 'rise', 'cut', 'glitch', 'slash', 'drop', 'shrink', 'dash', 'dust', 'spin', 'zoom', 'melt', 'scramble', 'split', 'domino', 'pixel', 'shatter'];
 export const CAMERAS: Camera[] = ['static', 'push', 'pan', 'parallax'];
 export const TRANSITIONS: TransitionIn[] = ['cut', 'flash', 'wipe', 'dissolve', 'glitch'];

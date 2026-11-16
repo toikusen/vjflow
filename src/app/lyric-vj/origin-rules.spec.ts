@@ -14,6 +14,7 @@ describe('technique origins', () => {
   it('tags what was learned from outside references with its source', () => {
     expect(ORIGINS['idle:track'].from).toContain('claude-animated-text (pound0423, MIT) #30');
     expect(ORIGINS['idle:fill'].from).toContain('#41');
+    expect(ORIGINS['enter:strips'].from).toContain('#39');
     expect(['motion:loop-noise', 'motion:velocity-settle'].every((id) => ORIGINS[id].from?.includes('concept only'))).toBe(true);
   });
 

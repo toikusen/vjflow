@@ -237,6 +237,7 @@ export const ORIGINS: Record<string, Origin> = {
   // matched against the 535 videos, so `videos` is 0 until then)
   'idle:track': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #30 track', own: false },
   'idle:fill': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #41 kara', own: false },
+  'enter:strips': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #39 blinds', own: false },
   'motion:loop-noise': { videos: 0, risk: 'medium', from: 'AE expression guide wiggle-loop / wiggle-octaves (concept only)', own: false },
   'motion:velocity-settle': { videos: 0, risk: 'medium', from: 'AE expression guide phys-inertia (concept only)', own: false },
   'emph:scale': { videos: 65, risk: 'low' },

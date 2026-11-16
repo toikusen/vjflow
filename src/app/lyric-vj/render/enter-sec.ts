@@ -36,6 +36,8 @@ export const DRAWN = {
   windup: { sec: 0.85 },
   /** The whole line waits faint while a ball hops from character to character as each is sung (kittenjam 卡拉OK小球). */
   karaoke: { sec: 0.25 },
+  /** The line cut into equal horizontal strips sliding home from alternate sides, top to bottom (claude-animated-text #39 idea). */
+  strips: { sec: 0.5 },
   /** A few wide strips of the line slide home inside their own masks (band-clip.ts). */
   bandIn: { sec: 0.42 },
   /** The line waits unlit and its rows light from the top (glyph-state.ts). */
@@ -50,7 +52,7 @@ export function enterSec(enter: EnterKind, pace: number): number {
     cut: 0, fade: 0, slam: PACED_SEC, pop: PACED_SEC, wipe: 0.21,
     ink: DRAWN.ink.fillFrom + DRAWN.ink.fill, flap: DRAWN.flap.fold * DRAWN.flap.faces, slot: DRAWN.slot.reel + DRAWN.slot.land, rise: DRAWN.rise.sec, focus: DRAWN.focus.sec,
     decode: DRAWN.decode.fold * DRAWN.decode.faces, slice: DRAWN.slice.sec, rip: DRAWN.rip.sec, snapin: SNAPIN_SEC, flip: DRAWN.flip.sec, stretch: DRAWN.stretch.sec,
-    shuffle: DRAWN.shuffle.sec, squash: DRAWN.squash.sec, windup: DRAWN.windup.sec, karaoke: DRAWN.karaoke.sec, 'band-in': DRAWN.bandIn.sec, 'matrix-light': DRAWN.matrixLight.sec, 'cell-land': DRAWN.cellLand.sec, 'reply-land': DRAWN.replyLand.sec, ...CARRIER_SEC, ...ARRIVAL_SEC, 'soft-float': SOFT_FLOAT_SEC, settle: PACED_SEC * MOTION_SEC.settle, flicker: PACED_SEC * MOTION_SEC.flicker,
+    shuffle: DRAWN.shuffle.sec, squash: DRAWN.squash.sec, windup: DRAWN.windup.sec, karaoke: DRAWN.karaoke.sec, strips: DRAWN.strips.sec, 'band-in': DRAWN.bandIn.sec, 'matrix-light': DRAWN.matrixLight.sec, 'cell-land': DRAWN.cellLand.sec, 'reply-land': DRAWN.replyLand.sec, ...CARRIER_SEC, ...ARRIVAL_SEC, 'soft-float': SOFT_FLOAT_SEC, settle: PACED_SEC * MOTION_SEC.settle, flicker: PACED_SEC * MOTION_SEC.flicker,
     dash: PACED_SEC * MOTION_SEC.dash, drop: PACED_SEC * MOTION_SEC.drop, zoom: PACED_SEC * MOTION_SEC.zoom, gather: PACED_SEC * MOTION_SEC.gather, spin: PACED_SEC * MOTION_SEC.spin, prelight: PACED_SEC, spread: PACED_SEC * MOTION_SEC.spread, swing: PACED_SEC * MOTION_SEC.swing,
   };
   return enter === 'fade' ? FADE_SEC : paced[enter] * pace;

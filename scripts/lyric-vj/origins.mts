@@ -81,6 +81,7 @@ const KNOWN: Record<string, { from: string; own: boolean }> = {
   // learned 2026-11-16 from outside references (ideas only; our own code)
   'idle:track': { from: 'claude-animated-text (pound0423, MIT) #30 track', own: false },
   'idle:fill': { from: 'claude-animated-text (pound0423, MIT) #41 kara', own: false },
+  'enter:strips': { from: 'claude-animated-text (pound0423, MIT) #39 blinds', own: false },
   'motion:loop-noise': { from: 'AE expression guide wiggle-loop / wiggle-octaves (concept only)', own: false },
   'motion:velocity-settle': { from: 'AE expression guide phys-inertia (concept only)', own: false },
   ...Object.fromEntries(['device:print-duo', ...['wall', 'ring', 'tunnel', 'bars', 'stack', 'split', 'rays', 'boxes', 'grid', 'dots'].map((x) => `fx:${x}`)].map((x) => [x, { from: YUNON, own: false }])),

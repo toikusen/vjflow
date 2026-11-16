@@ -553,7 +553,7 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
 export type PaceAdjust = 'fast-cut' | 'fast-short' | 'fast-line' | 'tight-line' | 'read-hold' | 'read-short' | 'read-cut';
 
 /** Entrances too slow for a line sung faster than it reads (pop and fade are quick enough to keep). */
-const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'settle', 'flicker', 'band-in', 'matrix-light', 'cell-land', 'reply-land', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', ...(Object.keys(ARRIVAL_SEC) as EnterKind[])]);
+const SLOW_ENTERS = new Set<EnterKind>(['ink', 'slam', 'wipe', 'flap', 'slot', 'focus', 'rise', 'shuffle', 'squash', 'windup', 'karaoke', 'strips', 'settle', 'flicker', 'band-in', 'matrix-light', 'cell-land', 'reply-land', 'tether-drop', 'paper-feed', 'fold-open', 'card-land', 'card-develop', 'index-lift', 'band-stick', 'panel-flip', 'soft-float', ...(Object.keys(ARRIVAL_SEC) as EnterKind[])]);
 /** The quick entrance closest in feel: impacts pop, the rest fade. */
 const SHORT_ENTER = (e: EnterKind): EnterKind => (e === 'slam' || e === 'flap' || e === 'slot' ? 'pop' : 'fade');
 

@@ -209,7 +209,7 @@ console.log(`lyric density: ${perSec.toFixed(1)} chars/s${wordy ? '' : ' (no pag
 const WORDED: Record<string, number> = { hang: 1, bubble: 1, tiles: 1, flap: 1, chat: 1, strike: 1, morse: 1, beforeafter: 1, measure: 1, loop: 3, layers: 3 };
 // learned 2026-10-21 (kittenjam, Motion Prompt #121–144): named to the director so they are weighed, not missed
 const NEW_FX = ['cube', 'drum', 'tape', 'corridor', 'confetti', 'warp', 'flow', 'synth', 'bokeh', 'ridges', 'shapes', 'lens', 'layers', 'panels', 'path', 'goo', 'morph', 'glide'];
-const [NEW_ENTERS, NEW_EXITS, NEW_IDLES, NEW_EMPH] = [['shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke'], ['domino', 'pixel', 'shatter'], ['boil', 'hop', 'thump', 'track', 'fill'], ['echo', 'weight', 'shine', 'faces']];
+const [NEW_ENTERS, NEW_EXITS, NEW_IDLES, NEW_EMPH] = [['shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke', 'strips'], ['domino', 'pixel', 'shatter'], ['boil', 'hop', 'thump', 'track', 'fill'], ['echo', 'weight', 'shine', 'faces']];
 const MOVES = KINETIC_FX.filter((x) => (sprites.length || !NEEDS_ART.has(x)) && (wordy || !DENSE.has(x)) && !(calm && LOUD.has(x)) && !RETIRED.has(x) && (a.showcase || !UNTRIED.has(x)));
 // the visual direction is decided first, in a call of its own (the plan's schema with it compiled past the API's
 // grammar limit, and the direction is what the cuts are then laid against)

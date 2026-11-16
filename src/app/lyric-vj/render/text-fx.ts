@@ -8,7 +8,7 @@ import { CueStyle, Emphasis, SymbolName } from '../treatment';
 import { SIGN_PATHS } from './signs';
 import { clamp01, easeInCubic, easeOutBack, easeOutCubic, Glyph, GlyphStyle, glyphTexture, hash, inkShare, clearGlyphCache } from './glyphs';
 import { stepScale, ARRIVAL_SEC, cornerPose, curveKind, curvePoint, doorPhase, doorSeam, isArrival, markShare, seatPhase, trainDelay, waveEdge, waveRise } from './arrival';
-import { bandEdges, bandOffset, slatEdges, slatTurn } from './band-clip';
+import { bandEdges, bandOffset, slatEdges, slatTurn, stripEdges, stripSlide } from './band-clip';
 import { cutPieces } from './beat-cut';
 import { GRAIN_PITCH, grainStep, lightRows, litShare, pressDepth, softDepth, stateFor, UNLIT } from './glyph-state';
 import { phraseSpans } from './line-space';
@@ -29,7 +29,7 @@ interface Item {
 }
 
 /** Entrances drawn here over a plain cut: the template only places the glyphs. */
-const DRAWN_ENTER = new Set<string>(['ink', 'flap', 'slot', 'focus', 'rise', 'decode', 'slice', 'rip', 'flip', 'stretch', 'shuffle', 'squash', 'windup', 'karaoke', 'band-in', 'matrix-light', ...Object.keys(ARRIVAL_SEC)]);
+const DRAWN_ENTER = new Set<string>(['ink', 'flap', 'slot', 'focus', 'rise', 'decode', 'slice', 'rip', 'flip', 'stretch', 'shuffle', 'squash', 'windup', 'karaoke', 'strips', 'band-in', 'matrix-light', ...Object.keys(ARRIVAL_SEC)]);
 /** Exits drawn here over a plain fade. */
 const DRAWN_EXIT = new Set(['glitch', 'slash', 'scramble', 'split', 'pixel', 'shatter', 'collapse', 'band-out', 'slat-close', 'line-fold', 'echo-travel', 'radial-leave', 'glyph-shed', 'wave-dissolve', 'pore-out', 'focus-out', 'node-fold']);
 /**
@@ -48,7 +48,7 @@ export function templateStyle(s: CueStyle): CueStyle {
 
 /** When glyph g (in cue-text order) starts its entrance: as sung for a word reveal, else a short stagger. */
 const startOf = (rt: CueRuntime, g: Glyph, n: number) =>
-  rt.style.enter === 'band-in' || rt.style.enter === 'matrix-light' || isArrival(rt.style.enter) ? rt.showFrom : rt.style.reveal === 'sung' ? sungAt(rt, g) : rt.style.reveal === 'word' ? revealAt(rt, (g.src ?? g.index) / Math.max(1, n - 1)) : rt.showFrom + (g.src ?? g.index) * 0.035 * rt.pace;
+  rt.style.enter === 'band-in' || rt.style.enter === 'strips' || rt.style.enter === 'matrix-light' || isArrival(rt.style.enter) ? rt.showFrom : rt.style.reveal === 'sung' ? sungAt(rt, g) : rt.style.reveal === 'word' ? revealAt(rt, (g.src ?? g.index) / Math.max(1, n - 1)) : rt.showFrom + (g.src ?? g.index) * 0.035 * rt.pace;
 
 /** A glyph's picture as a screen of round dots of this pitch, each as big as the ink it stands for (cached per picture and pitch). */
 const grains = new Map<string, THREE.Texture>();
@@ -563,10 +563,13 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
     it.mesh.add(tw);
     return tw;
   };
-  const bandIn = enter === 'band-in';
-  const blockWeights = bandIn ? cutPieces(rt.cue.text.trim()).map((p) => [...p.text].length) : [];
+  // strips: the same masks, cut into five to seven equal rows sliding home from alternate sides, top to bottom
+  const strips = enter === 'strips';
+  const stripN = strips ? Math.round(v('strips.n', 5, 7.49)) : 0;
+  const bandIn = enter === 'band-in' || strips;
+  const blockWeights = enter === 'band-in' ? cutPieces(rt.cue.text.trim()).map((p) => [...p.text].length) : [];
   const bandCount = bandEdges(blockWeights).length - 1;
-  const bandPlanes = bandIn ? Array.from({ length: Math.max(bandCount, 3) }, () => [new THREE.Plane(), new THREE.Plane()]) : [];
+  const bandPlanes = bandIn ? Array.from({ length: Math.max(bandCount, 3, stripN) }, () => [new THREE.Plane(), new THREE.Plane()]) : [];
   const bandTwins = new Map(bandIn ? items.map((it) => [it.mesh, bandPlanes.map((p) => twinOf(it, p))]) : []);
   // matrix-light: the unlit line waits; a copy above a falling edge lights it row by row
   const lightPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -1305,14 +1308,14 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
         }
 
       if (bandIn) {
-        const k = (t - rt.showFrom) / (DRAWN.bandIn.sec * rt.pace);
+        const k = (t - rt.showFrom) / ((strips ? DRAWN.strips.sec : DRAWN.bandIn.sec) * rt.pace);
         const on = t >= rt.showFrom && k < 1;
         for (const list of bandTwins.values()) for (const tw of list) tw.visible = false;
         if (on) {
           const b = blockNow();
-          // a wide single row is cut between its phrases, a block across its rows
-          const wide = b.x1 - b.x0 > 2.4 * (b.y1 - b.y0);
-          const edges = wide ? bandEdges(blockWeights) : bandEdges([1, 1 + v('band.mid', 0.2, 0.9), v('band.low', 0.7, 1.2)]);
+          // a wide single row is cut between its phrases, a block across its rows (strips always across)
+          const wide = !strips && b.x1 - b.x0 > 2.4 * (b.y1 - b.y0);
+          const edges = strips ? stripEdges(stripN) : wide ? bandEdges(blockWeights) : bandEdges([1, 1 + v('band.mid', 0.2, 0.9), v('band.low', 0.7, 1.2)]);
           const count = Math.min(edges.length - 1, bandPlanes.length);
           const span: [number, number] = wide ? [b.x0, b.x1] : [b.y1, b.y0];
           // the strips reach just past the block so nothing is shaved off its edge
@@ -1328,7 +1331,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
               hi.set(new THREE.Vector3(0, 1, 0), -at(edges[i + 1]));
             }
           }
-          const reach = wide ? (b.y1 - b.y0) * 1.5 : Math.min(760, (b.x1 - b.x0) * 0.6);
+          const reach = wide ? (b.y1 - b.y0) * 1.5 : strips ? Math.min(1100, Math.max(360, (b.x1 - b.x0) * 0.8)) : Math.min(760, (b.x1 - b.x0) * 0.6);
           for (const it of items) {
             const list = bandTwins.get(it.mesh)!;
             const o = it.mesh.material.opacity;
@@ -1336,7 +1339,7 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
             list.forEach((tw, i) => {
               tw.visible = i < count;
               if (!tw.visible) return;
-              const off = (bandOffset(i, count, k, first) * reach) / parent;
+              const off = ((strips ? stripSlide(i, count, k, first, 0.35) : bandOffset(i, count, k, first)) * reach) / parent;
               tw.position.set(wide ? 0 : off, wide ? off : 0, 0);
               tw.material.opacity = o;
             });
@@ -1578,9 +1581,11 @@ export function withTextFx(layer: CueLayer, rt: CueRuntime): CueLayer {
           const k = kOf(it, enter === 'rip' ? DRAWN.rip.sec : DRAWN.slice.sec);
           const h = halves.get(m)!;
           if (k < 0) m.material.opacity = 0;
-          const off = it.style.size * 1.4 * v('slice.far', 0.7, 1.6) * (1 - easeOutCubic(clamp01(k)));
-          m.position.x -= off;
-          h.tw.position.set((2 * off) / (m.scale.x || 1), 0, 0);
+          // two strips, no lag (band-clip stripSlide): the upper half from the left, the lower from the right
+          const reach = it.style.size * 1.4 * v('slice.far', 0.7, 1.6);
+          const [up, low] = [stripSlide(0, 2, clamp01(k), -1) * reach, stripSlide(1, 2, clamp01(k), -1) * reach];
+          m.position.x += up;
+          h.tw.position.set((low - up) / (m.scale.x || 1), 0, 0);
           m.updateMatrixWorld(true);
           const y = m.getWorldPosition(new THREE.Vector3()).y;
           h.top.set(new THREE.Vector3(0, 1, 0), -y);

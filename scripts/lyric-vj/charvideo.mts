@@ -30,6 +30,8 @@ export interface PlanShot {
   at?: number;
   /** Nobody in the frame (an object or place insert): the character sheet is not a reference. */
   nobody?: boolean;
+  /** Other shots whose stills are passed as extra references (a front view drawn to match an approved profile). */
+  refs?: string[];
   /** Video shots: what moves (the raw camera is always locked). */
   motion?: string;
   /** Big-motion clips are step-printed (10 fps held to 30) so missing in-betweens read as style. */
@@ -154,8 +156,16 @@ async function clip(file: string, prompt: string, first: string) {
   console.log(`video ${file} (${Math.round((Date.now() - began) / 1000)} s)`);
 }
 
-/** Lyric templates that draw furniture of their own across the frame, and the plain template that takes their place over a picture. */
-const FURNISHED: Record<string, string> = { couplet: 'stack' };
+/**
+ * The lyric layout on the side the plan keeps clear of the character: a sided base layout keeps its kind and takes the
+ * side; a centred one (stack, quiet, couplet: its rule line would cross the picture) becomes the stepped layout there.
+ * Lines over a face were the first thing a reviewer of the first render saw.
+ */
+function sidedTemplate(template: string, params: Record<string, unknown>, side: 'left' | 'right'): { template: string; params: Record<string, never> } {
+  if (template === 'vertical') return { template, params: { ...params, position: side } as Record<string, never> };
+  if (template === 'stair') return { template, params: { ...params, side } as Record<string, never> };
+  return { template: 'stair', params: { side, dim: 0 } as Record<string, never> };
+}
 const sheet = join(out, 'sheet.jpg');
 const stillOf = (s: PlanShot) => join(out, 'stills', `${s.id}.jpg`);
 const clipOf = (s: PlanShot) => join(out, 'clips', `${s.id}.mp4`);
@@ -184,7 +194,9 @@ if (stage === 'stills' || stage === 'all') {
     if (!s.still) continue;
     const quiet = `The ${s.side} third of the frame stays simple and uncluttered (plain sky or a flat surface, no detail, no figure) so lyrics can be set there.`;
     const who = s.nobody ? 'Nobody is in this frame: no people, no faces, no hands.' : `The character is exactly the one in the reference sheet: ${plan.character}. Same face, hair and clothes as the sheet. Hands are out of frame, hidden, or in silhouette; never spread fingers near the camera.`;
-    await draw(stillOf(s), `One frame of an illustrated music video. Style: ${plan.style}; match the drawing technique of the reference sheet. ${who}\nShot: ${s.still}\n${quiet} A single continuous full-bleed 16:9 picture, painted edge to edge. ${plan.negative}.`, s.nobody ? [sheet] : [sheet]);
+    const refs = (s.refs ?? []).map((id) => join(out, 'stills', `${id}.jpg`)).filter(existsSync);
+    const same = refs.length ? ' The later reference images show the same person: keep exactly that face shape, age and features.' : '';
+    await draw(stillOf(s), `One frame of an illustrated music video. Style: ${plan.style}; match the drawing technique of the reference sheet. ${who}${same}\nShot: ${s.still}\n${quiet} A single continuous full-bleed 16:9 picture, painted edge to edge. ${plan.negative}.`, [sheet, ...refs]);
   }
 }
 
@@ -221,7 +233,7 @@ function frozen(s: PlanShot): string {
 }
 
 if (stage === 'edit' || stage === 'all') {
-  const song = JSON.parse(readFileSync(plan.song, 'utf8')) as { beats: number[]; energy: number[]; energyFps: number; cues: { id: string; start: number; end: number; text: string }[] };
+  const song = JSON.parse(readFileSync(plan.song, 'utf8')) as { tempo?: number; beats: number[]; energy: number[]; energyFps: number; cues: { id: string; start: number; end: number; text: string }[] };
   const base = JSON.parse(readFileSync(plan.base, 'utf8')) as TreatmentV3;
   const [from, to] = plan.window;
   const byId = new Map(plan.shots.map((s) => [s.id, s]));
@@ -232,7 +244,9 @@ if (stage === 'edit' || stage === 'all') {
     return { cue: l.cue, start: Math.max(from, l.from ?? cue.start), end: Math.min(to, l.to ?? cue.end), shots: l.shots, ...(l.beats ? { beats: l.beats } : {}) };
   });
   lines[lines.length - 1].end = to;
-  const cuts = cutGrid(song.beats, lines, { energyAt: energyReader(song.energy, song.energyFps), minCut: 0.3 });
+  // no cut shorter than a beat (a leftover under it joins the cut before): a 0.33 s stub read as a slip
+  const minCut = Math.max(0.3, 0.95 * 60 / (song.tempo || 120));
+  const cuts = cutGrid(song.beats, lines, { energyAt: energyReader(song.energy, song.energyFps), minCut });
 
   // assets: a still per still shot, frames per clip use; a cut continuing the shot before keeps its asset (the run goes on)
   const assets: Record<string, { kind: 'image' | 'video'; url: string; frames?: { pattern: string; count: number; fps: number } }> = {};
@@ -268,9 +282,7 @@ if (stage === 'edit' || stage === 'all') {
     const asset = assetOf(c, prev);
     prev = { shot: c.shot, asset };
     const b = baseShotAt(cueStart(c.cue));
-    // a lyric template that draws its own furniture (couplet's rule line) would cross the picture: the lines alone
-    const template = FURNISHED[b.template] ?? b.template;
-    return { id: `cv${String(i + 1).padStart(3, '0')}`, start: c.start, end: c.end, template, params: template === b.template ? { ...b.params } : { dim: 0 }, asset, camera: s.kind === 'still' ? (s.camera ?? 'push') : 'static', transitionIn: 'cut' as const };
+    return { id: `cv${String(i + 1).padStart(3, '0')}`, start: c.start, end: c.end, ...sidedTemplate(b.template, b.params, s.side), asset, camera: s.kind === 'still' ? (s.camera ?? 'push') : 'static', transitionIn: 'cut' as const };
   });
   // the window's own treatment: the base plan's shots and line styles outside it are left out (a render of the window
   // rejects styles for lines it does not hold, and a shot squeezed to its start)
@@ -279,7 +291,9 @@ if (stage === 'edit' || stage === 'all') {
   const inWindow = new Set(song.cues.filter((c) => c.start < to && c.end > from).map((c) => c.id));
   t.cues = base.cues.filter((c) => inWindow.has(c.cueId));
   t.assets = [...base.assets, ...specs];
-  t.design = { ...t.design!, beatCuts: true, ...(plan.medium ? { medium: plan.medium as never } : {}) };
+  // quiet type: the print's offset ghost behind the lines read as an RGB split over the pictures (a digital cover this
+  // world gives no reason for)
+  t.design = { ...t.design!, beatCuts: true, quiet: true, ...(plan.medium ? { medium: plan.medium as never } : {}) };
   // the base plan's cuts inside the window are quieted: no paper, no words, no sprite; the pictures carry the frame
   if (t.graphics) {
     t.graphics.sections = t.graphics.sections.map((sec) => {

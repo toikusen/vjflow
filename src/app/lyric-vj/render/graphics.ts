@@ -494,10 +494,14 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     if (x) ids.set(x, id);
     return x;
   };
+  // (a QA cost, not the frame's: kept out of the slow check)
+  let trackMs = 0;
   if (track && origin) {
+    const d0 = performance.now();
     const start = Mat.of(origin);
     const { drawn, painted } = dryFrame(fn, start, (dry) => ({ w: W, h: H, t, age, beat, lyric: l.lyric ?? null, lyricWeight: l.lyric ? (l.lyricWeight ?? 1) : 0, cam, lines, room, fit: (x, y, w, h, from = cam.start, to = cam.end) => fitRect(dry, origin, room(from, to), x, y, w, h), hash, img, scene: (id) => image(id) ?? null, particles: () => undefined, warp: (pic, wx, wy, ww, wh) => void (pic && dry.drawImage(pic, wx, wy, ww, wh)), cache: dryCaches.get(l.src) ?? (dryCaches.set(l.src, {}), dryCaches.get(l.src)!) }));
     bases = new Map(drawn.flatMap((d) => { const b = baseDrawnWith(d, painted); return b ? [[d.k, b] as [string, { box: Rect; n: number }]] : []; }));
+    trackMs = performance.now() - d0;
   }
   ctx.save();
   try {
@@ -515,7 +519,7 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
       console.error(`code layer: ${key}`);
     }
   }
-  const ms = performance.now() - t0 - planMs;
+  const ms = performance.now() - t0 - planMs - trackMs;
   if (ms > 25) report(`slow: ${Math.round(ms / 5) * 5} ms`);
 }
 

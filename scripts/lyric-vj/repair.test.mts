@@ -185,6 +185,16 @@ test('the base must follow its sprite: a lighthouse moved off its rock is reject
   assert.deepEqual(s.errs, []);
 });
 
+test('a base paint lost at one sample of a shot (a ripple the drawing skips near a line) is not a prop off its base', () => {
+  const moved = { x: 1500, y: 700, w: 100, h: 300 };
+  const rock = { x: 1550, y: 1000, w: 200 };
+  const at = (t: number, withRock: boolean) => ({ before: frame(t, 14, LH, false, 300, ROCK0), a: picture(LH, ROCK0), after: frame(t, 14, moved, false, 300, withRock ? rock : undefined), b: picture(moved, withRock ? rock : undefined) });
+  const once = checkRepair([at(84, true), at(84.25, false), ...[84.5, 84.75, 85, 85.25, 85.5, 85.75, 86, 86.25].map((t) => at(t, true))], named, 0.1);
+  assert.ok(!once.errs.some((e) => e.includes('離開了它站的地方')), once.errs.join('\n'));
+  const often = checkRepair([at(84, false), at(84.25, false), at(84.5, false), ...[84.75, 85, 85.25, 85.5, 85.75, 86, 86.25].map((t) => at(t, true))], named, 0.1);
+  assert.ok(often.errs.some((e) => e.includes('離開了它站的地方')), often.errs.join('\n'));
+});
+
 test('a repair that changes anything else is rejected', () => {
   // another prop moved
   const boat = checkRepair([{ ...before(84.3, 14), after: frame(84.3, 14, LH, false, 600, ROCK0), b: picture(LH, ROCK0, 600) }], named, 0.1);

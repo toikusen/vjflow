@@ -243,6 +243,8 @@ export const SAME_DB = 60;
  * beam). A/A is ∞; in-scope repairs measured 39.5–43.1 dB there, a redrawn scene ~15.
  */
 export const NEAR_DB = 35;
+/** The share of a prop's samples in a shot that may stand on fewer of its base's paints than before (see checkRepair). */
+export const BASE_LOST = 0.2;
 /** The share of a prop that may cross the frame's edge where the drawing had it whole. */
 const EDGE = 0.03;
 const offShare = (d: Drawn, W: number, H: number) => 1 - (Math.max(0, Math.min(d.x + d.w, W) - Math.max(d.x, 0)) * Math.max(0, Math.min(d.y + d.h, H) - Math.max(d.y, 0))) / Math.max(1, d.w * d.h);
@@ -263,6 +265,8 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
   const errs = new Set<string>();
   let [kept, keptBefore, worstSame, worstNear, unseen] = [0, 0, Infinity, Infinity, 0];
   const seenIn = new Map<string, { before: boolean; after: boolean }>();
+  // per prop and shot: the samples where it stood on fewer of the paints drawn with it than before
+  const stance = new Map<string, { n: number; lost: string[] }>();
   for (const s of samples) {
     const at = `${s.before.t.toFixed(2)} 秒（鏡頭 ${s.before.shot}）`;
     // (counted in the named shots only: the same prop kept clear elsewhere in the song is not this repair's)
@@ -297,9 +301,9 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
       // that moment in the old drawing anyway)
       if (offShare(b0, W, H) <= EDGE && offShare(a0, W, H) > EDGE && a0.a > 0.02 && !b0.kept) errs.add(`${at}：${n.id} 被移出畫面（${Math.round(offShare(a0, W, H) * 100)}% 在框外）`);
       // what it stood on goes with it: every paint of its base still under its foot
-      if ((b0.baseN ?? 0) > (a0.baseN ?? 0)) {
-        errs.add(`${at}：${n.id} 離開了它站的地方（和它一起畫的底座有 ${b0.baseN} 筆在它腳下，現在只剩 ${a0.baseN ?? 0} 筆：底座要和它一起移動、縮放）`);
-      }
+      const st = stance.get(k) ?? (stance.set(k, { n: 0, lost: [] }), stance.get(k)!);
+      st.n++;
+      if ((b0.baseN ?? 0) > (a0.baseN ?? 0)) st.lost.push(`${s.before.t.toFixed(2)} 秒（${b0.baseN} → ${a0.baseN ?? 0} 筆）`);
     }
     // a sample whose pictures are missing is not passed unseen
     if (!s.a || !s.b) {
@@ -318,6 +322,9 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
     if (v < NEAR_DB) errs.add(`${at}：指名素材以外的畫面也變了（PSNR ${v.toFixed(1)} dB）：只能動指名的素材和它的底座`);
   }
   for (const [k, v] of seenIn) if (v.before && !v.after) errs.add(`${k.replace('@', ' 在鏡頭 ')} 不見了：只能移動、縮放或改時間，不能拿掉`);
+  // (a prop off its base reads so through the shot: a lighthouse moved without its rock lost it at every sample; a
+  // paint that comes and goes with it — a ripple ring the drawing skips near a line — is lost at one or two)
+  for (const [k, v] of stance) if (v.lost.length > BASE_LOST * v.n) errs.add(`${k.replace('@', ' 在鏡頭 ')} 離開了它站的地方：和它一起畫的底座沒有跟著它（${v.lost.slice(0, 4).join('、')}${v.lost.length > 4 ? ` 等 ${v.lost.length} 格` : ''}）：底座要和它一起移動、縮放`);
   if (unseen) errs.add(`有 ${unseen} 個取樣時間沒有畫面（渲染失敗），無法確認，不採用`);
   return { errs: [...errs], kept, keptBefore, worstSame, worstNear, unseen };
 }

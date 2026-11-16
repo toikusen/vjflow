@@ -372,3 +372,22 @@ describe('bandShow', () => {
     expect(bandShow(4).alpha).toBe(0);
   });
 });
+
+describe('a follower makes room with its string', () => {
+  it('moves clear of the words so neither it nor its string crosses them, and the string ends on its placed leader', async () => {
+    const { avoid, tetherCrosses } = await import('./graphics');
+    const { resolveTethers } = await import('./story');
+    const lyrics = { x0: 560, y0: 600, x1: 1720, y1: 760 };
+    // a kite planned on the line, its leader (a ship) below it
+    const kite = { kind: 'sprite', ref: 'follow#1:kite', asset: 'spr:kite', x: -0.1, y: -0.3, size: 0.14, tether: { ref: 'journey#0:ship', from: [0, -0.75], color: '#000', width: 3 } } as unknown as Layer;
+    const moved = avoid(kite, lyrics) as unknown as { x: number; y: number; opacity?: number };
+    expect(moved).not.toBe(kite);
+    const [cx, cy] = [960 + moved.x * 960, 540 - moved.y * 540];
+    const g = { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 };
+    expect((moved.opacity ?? 1) === 0 || !tetherCrosses(moved as unknown as Layer, cx, cy, g)).toBe(true);
+    // the string's far end is wherever its leader was placed
+    const ship = { kind: 'sprite', ref: 'journey#0:ship', asset: 'spr:ship', x: 0.3, y: -0.8, size: 0.2 } as unknown as Layer;
+    const [, k] = resolveTethers([ship, moved as unknown as Layer]) as unknown as [unknown, { tether: { from: number[] } }];
+    expect(k.tether.from).toEqual([0.3, -0.8]);
+  });
+});

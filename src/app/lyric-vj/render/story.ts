@@ -57,10 +57,17 @@ export type StoryItem =
 /** `key`: content that matters now (a hero at a turn of its story, a card about the line being sung): it is placed
  * before the rest when the frame is crowded and does not leave for want of room (graphics.ts avoidAll). */
 export type StoryLayer = { ref?: string; key?: boolean } & (
-  | { kind: 'sprite'; asset: string; aspect?: number; lift?: Rgb; pass?: boolean; x: number; y: number; size: number; rot?: number; sx?: number; pivot?: 'top'; opacity?: number; crack?: number; shatter?: number; seed?: number; glow?: Rgb; trail?: { color: Rgb; pts: Pt[] } }
+  | { kind: 'sprite'; asset: string; aspect?: number; lift?: Rgb; pass?: boolean; x: number; y: number; size: number; rot?: number; sx?: number; pivot?: 'top'; opacity?: number; crack?: number; shatter?: number; seed?: number; glow?: Rgb; trail?: { color: Rgb; pts: Pt[] }; tether?: Tether }
   | { kind: 'thread'; pts: Pt[]; color: Rgb; width: number; opacity?: number }
   | { kind: 'card'; style: 'bubble' | 'note' | 'polaroid' | 'chapter'; text: string; asset?: string; x: number; y: number; w: number; h: number; rot: number; scale: number; color: Rgb; ink: Rgb; opacity?: number }
 );
+
+/**
+ * A string from a follower to its leader, part of the follower's own layer, so wherever the follower is placed (made room
+ * for, faded) the string goes with it: `ref` names the leader's layer, whose placed position the string's far end takes
+ * at drawing (resolveTethers); `from` is where the leader was planned.
+ */
+export interface Tether { ref: string; from: Pt; color: Rgb; width: number }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOut = (k: number) => 1 - (1 - clamp01(k)) ** 3;
@@ -228,9 +235,16 @@ export function storyEvents(items: StoryItem[]): number[] {
 
 export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
   const out: StoryLayer[] = [];
-  items.forEach((it, n) => itemLayers(items, it, n, t, out));
+  const memo: Memo = new Map();
+  items.forEach((it, n) => itemLayers(items, it, n, t, out, false, memo));
   return out;
 }
+
+/** How many times a leader's place was worked out (QA of the follower's cost: about 73 a frame, each without trail). */
+export const followStats = { evals: 0 };
+
+/** Where a leader stood at the times a frame asks about (a follower's spring and lean share most of them). */
+type Memo = Map<string, Pt | undefined>;
 
 /** When and where item n is first up, looked for every quarter second up to `until` s (a follower has no times of its own). */
 export function firstSeen(items: StoryItem[], n: number, until: number): { t: number; x: number; y: number } | undefined {
@@ -242,15 +256,21 @@ export function firstSeen(items: StoryItem[], n: number, until: number): { t: nu
 }
 
 /** Where item n's (first) sprite stands at t, or undefined while it is not up. */
-function spriteAt(items: StoryItem[], n: number, t: number): Pt | undefined {
+function spriteAt(items: StoryItem[], n: number, t: number, memo?: Memo): Pt | undefined {
+  const key = `${n}@${t.toFixed(5)}`;
+  if (memo?.has(key)) return memo.get(key);
+  // (lite: the position only, no trail or lean, which a follower's spring asks for dozens of times a frame)
   const ls: StoryLayer[] = [];
-  itemLayers(items, items[n], n, t, ls);
+  followStats.evals++;
+  itemLayers(items, items[n], n, t, ls, true);
   const s = ls.find((l) => l.kind === 'sprite');
-  return s && s.kind === 'sprite' && (s.opacity ?? 1) > 0 ? [s.x, s.y] : undefined;
+  const p: Pt | undefined = s && s.kind === 'sprite' && (s.opacity ?? 1) > 0 ? [s.x, s.y] : undefined;
+  memo?.set(key, p);
+  return p;
 }
 
 /** The layers of story item n at t (pure). */
-function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out: StoryLayer[]): void {
+function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out: StoryLayer[], lite = false, memo?: Memo): void {
   {
     switch (it.kind) {
       case 'hero': {
@@ -277,12 +297,12 @@ function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out
         const u = uAt(t);
         const here = path(u);
         // the trail: the last stretch of the path, dotted behind the prop
-        const trail = it.trail && k < (it.through ? 2 : 1.6) ? { color: it.trail, pts: Array.from({ length: 24 }, (_, i) => path(Math.max(0, u - 0.6 + (0.6 * i) / 23))) } : undefined;
+        const trail = !lite && it.trail && k < (it.through ? 2 : 1.6) ? { color: it.trail, pts: Array.from({ length: 24 }, (_, i) => path(Math.max(0, u - 0.6 + (0.6 * i) / 23))) } : undefined;
         const leave = it.until !== undefined && !it.through ? 1 - clamp01((t - it.until) / 0.5) : 1;
         const flying = k < 1 || it.through;
         const motion = it.motion ?? 'flutter';
         // in flight: leaning with its own speed, wings beating fast; landed: the prop's own rest movement
-        const m = flying ? { dx: 0, dy: 0, rot: lean((tt) => path(uAt(tt)), t), sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
+        const m = flying ? { dx: 0, dy: 0, rot: lite ? 0 : lean((tt) => path(uAt(tt)), t), sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
         out.push({ ref: `fly#${n}:${it.prop}`, kind: 'sprite', pass: flying, asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
         return;
       }
@@ -312,8 +332,8 @@ function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out
         const u = uAt(t);
         const here = along(it.pts, u);
         const moving = t < it.to;
-        const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: lean((tt) => along(it.pts, uAt(tt)), t), sx: 1 } : idle(it.motion ?? 'sit', t, n);
-        const trail = it.trail && t < it.to + 1.5 ? { color: it.trail, pts: Array.from({ length: 28 }, (_, i) => along(it.pts, Math.max(0, u - 0.35 + (0.35 * i) / 27))) } : undefined;
+        const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: lite ? 0 : lean((tt) => along(it.pts, uAt(tt)), t), sx: 1 } : idle(it.motion ?? 'sit', t, n);
+        const trail = !lite && it.trail && t < it.to + 1.5 ? { color: it.trail, pts: Array.from({ length: 28 }, (_, i) => along(it.pts, Math.max(0, u - 0.35 + (0.35 * i) / 27))) } : undefined;
         const opacity = Math.min(1, (t - it.from) / 0.4) * (1 - clamp01((t - end) / 0.5));
         out.push({ ref: `journey#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: moving, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity, trail });
         return;
@@ -410,21 +430,21 @@ function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out
       case 'follow': {
         const lead = items.findIndex((x) => x !== it && x.kind !== 'follow' && 'prop' in x && x.prop === it.after);
         if (lead < 0) return;
-        const goal = (tt: number): Pt | undefined => { const p = spriteAt(items, lead, tt); return p && [p[0] + it.x, p[1] + it.y]; };
+        const m: Memo = memo ?? new Map();
+        const goal = (tt: number): Pt | undefined => { const p = spriteAt(items, lead, tt, m); return p && [p[0] + it.x, p[1] + it.y]; };
         const here = elasticFollow(goal, t, it.stiff ?? 1);
         if (!here) return;
-        const leader = spriteAt(items, lead, t)!;
+        const leader = spriteAt(items, lead, t, m)!;
         const ls: StoryLayer[] = [];
-        itemLayers(items, items[lead], lead, t, ls);
-        const fade = ls.find((l) => l.kind === 'sprite')?.opacity ?? 1;
-        // a string from the leader to the follower, sagging a little as it hangs
-        if (it.string) {
-          const sag: Pt = [(leader[0] + here[0]) / 2, (leader[1] + here[1]) / 2 - 0.06];
-          out.push({ kind: 'thread', pts: Array.from({ length: 17 }, (_, i) => bez(leader, sag, here, i / 16)), color: it.string, width: 3, opacity: fade });
-        }
+        itemLayers(items, items[lead], lead, t, ls, true);
+        const head = ls.find((l) => l.kind === 'sprite');
+        const fade = head?.opacity ?? 1;
         // it leans with its own speed like any moving prop (bank.ts)
-        const rot = lean((tt) => elasticFollow(goal, tt, it.stiff ?? 1) ?? here, t);
-        out.push({ ref: `follow#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: true, x: here[0], y: here[1], size: it.size, rot, opacity: fade });
+        const rot = lite ? 0 : lean((tt) => elasticFollow(goal, tt, it.stiff ?? 1) ?? here, t);
+        // the string is the follower's own (it is placed, faded and made room for with it, never left behind); the
+        // follower is not a passing prop: it keeps its place by the leader, so making room moves it clear of the words
+        const tether = it.string && head?.ref ? { ref: head.ref, from: leader, color: it.string, width: 3 } : undefined;
+        out.push({ ref: `follow#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0], y: here[1], size: it.size, rot, opacity: fade, ...(tether ? { tether } : {}) });
         return;
       }
     }
@@ -439,6 +459,34 @@ export function storyRect(l: StoryLayer): { x0: number; y0: number; x1: number; 
   // a sprite's box uses its picture's aspect (width / height, from the library); without it, a square
   const [w, h] = l.kind === 'card' ? [l.w * W * l.scale, l.h * H * l.scale] : [l.size * H * (l.aspect ?? 1), l.size * H];
   return { x0: px - w / 2, y0: py - h / 2, x1: px + w / 2, y1: py + h / 2 };
+}
+
+/** The string's points from the leader to the follower, sagging a little as it hangs (story units). */
+export const tetherPts = (from: Pt, to: Pt): Pt[] => {
+  const sag: Pt = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 - 0.06];
+  return Array.from({ length: 17 }, (_, i) => bez(from, sag, to, i / 16));
+};
+
+function drawTether(ctx: CanvasRenderingContext2D, tt: Tether, to: Pt, opacity: number) {
+  ctx.save();
+  ctx.globalAlpha *= opacity;
+  ctx.strokeStyle = tt.color;
+  ctx.lineWidth = tt.width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  tetherPts(tt.from, to).forEach(([x, y], i) => (i ? ctx.lineTo(W / 2 + x * (W / 2), H / 2 - y * (H / 2)) : ctx.moveTo(W / 2 + x * (W / 2), H / 2 - y * (H / 2))));
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Each string's far end where its leader was placed (made room for, glided): the string and its leader never part. */
+export function resolveTethers<L extends { kind: string; ref?: string }>(layers: L[]): L[] {
+  const at = new Map(layers.flatMap((l) => (l.kind === 'sprite' && l.ref ? [[l.ref, l as unknown as { x: number; y: number }]] : [])));
+  return layers.map((l) => {
+    const s = l as unknown as { kind: string; tether?: Tether };
+    const lead = s.kind === 'sprite' && s.tether ? at.get(s.tether.ref) : undefined;
+    return lead ? ({ ...l, tether: { ...s.tether!, from: [lead.x, lead.y] as Pt } } as L) : l;
+  });
 }
 
 /** Draws one story layer. `image` returns a loaded sprite or scene by asset id. */
@@ -462,6 +510,7 @@ export function drawStory(ctx: CanvasRenderingContext2D, l: StoryLayer, image: (
   if (!img || !img.width) return;
   const h = l.size * H;
   const w = (h * img.width) / img.height;
+  if (l.tether) drawTether(ctx, l.tether, [l.x, l.y], l.opacity ?? 1);
   if (l.trail) {
     // a dotted trail behind a flying prop, thinning toward its tail
     ctx.save();

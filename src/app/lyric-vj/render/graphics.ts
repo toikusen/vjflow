@@ -2,7 +2,7 @@
 // framed photos, frames, rings, sparkles, sunbursts, tape bands, shapes. The database's designer VJs are mostly
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
-import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
+import { drawStory, resolveTethers, StoryItem, StoryLayer, storyLayers, storyRect, Tether, tetherPts } from './story';
 import { clearAlpha, clearStrength, CLEAR_FROM, clearTally, CoverCrop, coverOf, keepClear, watchClear, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
@@ -153,7 +153,8 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   const sec = sectionAt(look, t);
   // the story's layers make room for the lyrics together with the section's, but are drawn over any transition
   const story = storyLayers(look.story ?? [], t) as Layer[];
-  const all = adjust([...sec.layers, ...story]);
+  // (a follower's string ends where its leader was placed)
+  const all = resolveTethers(adjust([...sec.layers, ...story]));
   const own = all.slice(0, sec.layers.length);
   const tr = sec.transition;
   const i = look.sections.indexOf(sec);
@@ -3072,6 +3073,16 @@ export interface Rect {
 
 const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
+/** Whether a follower's string, from its leader to a follower centred at (cx, cy) frame px, runs through `r`. */
+export function tetherCrosses(l: Layer, cx: number, cy: number, r: Rect): boolean {
+  const tt = (l as { tether?: Tether }).tether;
+  if (!tt) return false;
+  return tetherPts(tt.from, [(cx - W / 2) / (W / 2), (H / 2 - cy) / (H / 2)]).some(([x, y]) => {
+    const [px, py] = [W / 2 + x * (W / 2), H / 2 - y * (H / 2)];
+    return px > r.x0 && px < r.x1 && py > r.y0 && py < r.y1;
+  });
+}
+
 /** The frame area a movable layer covers (photos that are not full frame, blobs, stamps, seals, numerals). */
 export function layerRect(l: Layer): Rect | undefined {
   const cx = (x?: number) => W / 2 + (x ?? 0) * W / 2;
@@ -3130,14 +3141,16 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
   const r = layerRect(l);
   if (!r || l.fixed) return l;
   const guard = { x0: lyrics.x0 - margin, y0: lyrics.y0 - margin, x1: lyrics.x1 + margin, y1: lyrics.y1 + margin };
-  if (!overlaps(r, guard)) return l;
+  // a follower's string is part of it: a place where the string runs through the words is no place for it either
+  const strung = (q: Rect) => tetherCrosses(l, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, guard);
+  if (!overlaps(r, guard) && !strung(r)) return l;
   if (l.kind === 'sprite' && l.pass) {
     // a prop on its way (an orbit, a journey, a float) passes behind the line, fading by how much it covers it:
     // pushed aside every frame it would jump about
     const cover = (Math.max(0, Math.min(r.x1, guard.x1) - Math.max(r.x0, guard.x0)) * Math.max(0, Math.min(r.y1, guard.y1) - Math.max(r.y0, guard.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0));
     return { ...l, opacity: (l.opacity ?? 1) * (1 - 0.65 * Math.min(1, cover)) };
   }
-  const clash = (q: Rect) => overlaps(q, guard) || others.some((o) => overlaps(q, o));
+  const clash = (q: Rect) => overlaps(q, guard) || strung(q) || others.some((o) => overlaps(q, o));
   const w = r.x1 - r.x0;
   const h = r.y1 - r.y0;
   // a window or a phone must land inside its own margins, or the draw clamps it back over the line
@@ -3395,7 +3408,8 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
   // objects already clear of the lyrics stay where they are and are obstacles for the ones that must move
   const clear = (l: Layer) => {
     const r = layerRect(l);
-    return !r || !overlaps(r, { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 });
+    const g = { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 };
+    return !r || (!overlaps(r, g) && !tetherCrosses(l, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, g));
   };
   const isStory = (l: Layer) => l.kind === 'sprite' || l.kind === 'card' || l.kind === 'thread';
   const placed = layers.flatMap((l, i) => (clear(l) && layerRect(l) ? [{ i, r: layerRect(l)!, story: isStory(l) }] : []));

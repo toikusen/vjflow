@@ -40,7 +40,11 @@ export function elasticFollow(target: (t: number) => readonly [number, number] |
     y += w * p[1];
     sum += w;
   }
-  // too little of the spring's past is there (the target has only just come): stand on it
-  if (sum < 0.25) return [...target(t)!] as [number, number];
-  return [x / sum, y / sum];
+  // little of the spring's past is there yet (the target has only just come): from standing on it to the spring's mean,
+  // smoothly, as more of the past comes in (a cut-over at a share jumped some 65 px a tenth of a second in)
+  const now = target(t)!;
+  if (sum <= 1e-6) return [now[0], now[1]];
+  const k = Math.min(1, Math.max(0, sum / 0.6));
+  const w = k * k * (3 - 2 * k);
+  return [now[0] + (x / sum - now[0]) * w, now[1] + (y / sum - now[1]) * w];
 }

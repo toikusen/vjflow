@@ -227,7 +227,7 @@ describe('elastic follow (a prop trailing another on a spring)', () => {
   const at = (t: number) => {
     const ls = storyLayers([lead, kite], t);
     const [k, f] = ['journey', 'follow'].map((r) => ls.find((l) => l.ref?.startsWith(r)) as { x: number; y: number; rot?: number; opacity?: number });
-    return { k, f, string: ls.find((l) => l.kind === 'thread') };
+    return { k, f, string: (ls.find((l) => l.ref?.startsWith('follow')) as { tether?: { ref: string; from: [number, number] } } | undefined)?.tether, threads: ls.filter((l) => l.kind === 'thread').length };
   };
 
   it('lags behind its leader while it moves, comes in after it stops, then settles at its offset', () => {
@@ -242,7 +242,11 @@ describe('elastic follow (a prop trailing another on a spring)', () => {
 
   it('is a function of time alone and hangs on a string from its leader', () => {
     expect(at(2.2)).toEqual(at(2.2));
-    expect(at(2.2).string).toBeDefined();
+    // the string is the follower's own, from its leader's place: never a separate layer that could be left behind
+    const s = at(2.2);
+    expect(s.threads).toBe(0);
+    expect(s.string!.ref.startsWith('journey#0')).toBe(true);
+    expect(s.string!.from[0]).toBeCloseTo(s.k.x, 6);
   });
 
   it('shows only while its leader is up', () => {
@@ -261,5 +265,31 @@ describe('validateStory keeps a follower only with its leader', () => {
     const { items, fixes } = validateStory(plan, 60);
     expect(items.filter((x) => x.kind === 'follow').length).toBe(1);
     expect(fixes.some((f) => f.includes('nobody'))).toBe(true);
+  });
+});
+
+describe('elastic follow comes in smoothly', () => {
+  it('never jumps as the spring fills with its leader\'s past (frame to frame no further than the leader moves)', () => {
+    const lead: StoryItem = { kind: 'journey', prop: 'kid', motion: 'still', from: 1, to: 3, pts: [[-0.9, -0.6], [0.9, -0.6]], size: 0.3 };
+    const kite: StoryItem = { kind: 'follow', prop: 'kite', after: 'kid', x: -0.2, y: 0.5, size: 0.2 };
+    const pos = (t: number) => storyLayers([lead, kite], t).find((l) => l.ref?.startsWith('follow')) as { x: number } | undefined;
+    const lx = (t: number) => (storyLayers([lead], t)[0] as { x: number }).x;
+    for (let t = 1.0 + 1 / 60; t < 1.6; t += 1 / 60) {
+      const [a, b] = [pos(t - 1 / 60), pos(t)];
+      if (!a || !b) continue;
+      expect(Math.abs(b.x - a.x)).toBeLessThanOrEqual(Math.abs(lx(t) - lx(t - 1 / 60)) * 1.2);
+    }
+  });
+});
+
+describe('elastic follow cost', () => {
+  it('works out its leader\'s place once per time a frame needs, without the leader\'s trail', async () => {
+    const { followStats } = await import('./story');
+    const lead: StoryItem = { kind: 'journey', prop: 'kid', motion: 'still', from: 0, to: 4, pts: [[-0.9, -0.6], [0.9, -0.6]], size: 0.3, trail: '#ffffff' };
+    const kite: StoryItem = { kind: 'follow', prop: 'kite', after: 'kid', x: -0.2, y: 0.5, size: 0.2 };
+    followStats.evals = 0;
+    storyLayers([lead, kite], 2);
+    // 36 spring taps, the lean's two sides sharing theirs (37), the leader now: no more
+    expect(followStats.evals).toBeLessThanOrEqual(75);
   });
 });

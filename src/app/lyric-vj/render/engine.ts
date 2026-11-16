@@ -750,6 +750,11 @@ export class LyricVjEngine {
   /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
   private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string }[] = [];
   /**
+   * Other words up besides the lines (a sing-along's preview row), frame px: out of the lyric box (its ground is not
+   * the line's, the guard reads only the line) but kept clear on their own by props, a move's marks and a drawing.
+   */
+  private keepOut: { from: number; to: number; rect: Rect; id: string }[] = [];
+  /**
    * While a linked page move runs (world-handoff.ts linkGrounds), where the last line's words and the next line's are
    * read, and when in the move they switch: the page edges keep their margin from them (motion-transition.ts linkLayout).
    */
@@ -1466,6 +1471,8 @@ export class LyricVjEngine {
         // where the line sits on screen, so background objects can make room for it
         // beat-cut throws its phrases all over the frame before the line settles: the whole frame is the line's
         const b = settledBox(layer, fit, true);
+        const pv = previewBox(layer);
+        if (pv) this.keepOut.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: pv.min.x + W / 2, y0: H / 2 - pv.max.y, x1: pv.max.x + W / 2, y1: H / 2 - pv.min.y } });
         if (layer.poses) for (const p of layer.poses()) this.lyricRects.push({ id: rt.cue.id, from: p.from, to: p.to, rect: p.rect, rest: p.rect });
         else if (shot.template === 'beat-cut') this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H }, rest: { x0: 0, y0: 0, x1: W, y1: H } });
         else if (!b.isEmpty()) {
@@ -1606,7 +1613,8 @@ export class LyricVjEngine {
           // a director's drawing sees every line read over its section, to place its props clear of them (f.room, f.fit)
           if (l.kind === 'code') {
             const until = secs[i + 1]?.start ?? Infinity;
-            l.lines = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rest.x0, y0: r.rest.y0, x1: r.rest.x1, y1: r.rest.y1 }));
+            // (a sing-along's preview row too: the drawing composes clear of it)
+            l.lines = [...this.lyricRects.map((r) => ({ ...r, rect: r.rest })), ...this.keepOut].filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
             continue;
           }
           if (l.kind !== 'kinetic') continue;
@@ -2473,6 +2481,7 @@ export class LyricVjEngine {
     lz.built.add(i);
     setWordSafe(true);
     this.lyricRects = this.lyricRects.filter((r) => r.id !== lz.styled[i].cue.id && r.id !== `${lz.styled[i].cue.id}:call`);
+    this.keepOut = this.keepOut.filter((r) => r.id !== lz.styled[i].cue.id);
     // a line is measured on the frame, not on the type layer as this moment's sway and kick have left it
     const held = { x: this.textRoot.position.x, y: this.textRoot.position.y, s: this.textRoot.scale.x };
     this.textRoot.position.set(0, 0, 0);
@@ -3202,8 +3211,9 @@ export class LyricVjEngine {
       // a card about a line up (its text in the line: 「嘘つき！」 on c062) is key content: it stays before the others
       const sung = lines.map((r) => bare(this.cueLayers.find((c) => c.rt.cue.id === r.id)?.rt.cue.text ?? '')).join('|');
       const layers = layers0.map((l) => (l.kind === 'card' && !l.key && bare(l.text) && sung.includes(bare(l.text)) ? ({ ...l, key: true } as Layer) : l));
-      const wide = avoidAll(layers, moving);
-      const tight = avoidAll(layers, rest);
+      const keep = this.keepOut.filter((r) => x >= r.from && x <= r.to).map((r) => r.rect);
+      const wide = avoidAll(layers, moving, keep);
+      const tight = avoidAll(layers, rest, keep);
       return wide.map((l, i) => {
         const r = l.kind === 'code' ? undefined : layerRect(l);
         return r && r.x0 < moving.x1 && moving.x0 < r.x1 && r.y0 < moving.y1 && moving.y0 < r.y1 ? tight[i] : l;

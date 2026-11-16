@@ -62,6 +62,8 @@ export interface Env {
   count?: number;
   /** The lyric box on the frame while a line is up (frame px, y down): a move that must keep off it reads it. */
   lyric?: CoverRect;
+  /** Other words up besides the line (a sing-along's preview row), each kept clear on its own. */
+  keep?: CoverRect[];
 }
 /** A move's parts, one per word: as many as the knob asks but never more than the cut's own words (a loop labelled 思念 twice). */
 const parts = (e: Env, key: string, least = 2) => Math.max(least, Math.min(kn(e, key), e.count ?? Infinity));
@@ -2146,11 +2148,11 @@ Object.assign(MORE, {
       const { ctx, W, H } = e, cell = kn(e, 'field.cell'), reach = kn(e, 'field.reach'), speed = kn(e, 'field.speed');
       const [px, py] = controlPoint(e.age, e.seed, W, H, speed);
       // nothing in the lyric box or its margin reacts or is drawn there (in the coordinates the camera draws in now)
-      const keep = rectInDraw(ctx, e.lyric);
+      const keep = [e.lyric, ...(e.keep ?? [])].map((r) => rectInDraw(ctx, r));
       const pad = Math.max(36, cell * 0.8);
       for (let y = cell / 2, row = 0; y < H; y += cell, row++)
         for (let x = row % 2 ? cell : cell / 2; x < W; x += cell) {
-          if (!outside(x, y, keep, pad)) continue;
+          if (!keep.every((k) => outside(x, y, k, pad))) continue;
           const g = nearGain(x - px, y - py, reach) * e.k;
           const d = Math.hypot(x - px, y - py) || 1;
           // pushed away from the point, never by more than a fifth of a cell (it cannot reach the kept margin)

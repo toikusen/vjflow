@@ -53,6 +53,8 @@ export interface KineticLayer {
   subjectPlan?: number;
   /** The lyric box on the frame while a line is up, and how much of it is up (graphics.ts attaches both): the character is measured against it. */
   lyric?: CoverRect;
+  /** Other words up besides the line (a sing-along's preview row), each kept clear on its own. */
+  keep?: CoverRect[];
   lyricWeight?: number;
   /** Where the character stands; the lyric goes on the other side. */
   side?: 'left' | 'right' | 'center';
@@ -693,7 +695,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
         break;
       }
       const move = MORE[l.fx];
-      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, lyric: l.lyric, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
+      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, lyric: l.lyric, keep: l.keep, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
       own = drawMove(move, env, l.flow);
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;

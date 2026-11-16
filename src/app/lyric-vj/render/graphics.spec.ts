@@ -391,3 +391,17 @@ describe('a follower makes room with its string', () => {
     expect(k.tether.from).toEqual([0.3, -0.8]);
   });
 });
+
+describe('other words up besides the line are kept clear on their own', () => {
+  it('a prop over only the preview row moves; a move and a drawing are handed the row as its own box', async () => {
+    const { avoid, avoidAll, layerRect } = await import('./graphics');
+    const lyrics = { x0: 200, y0: 300, x1: 900, y1: 420 };
+    const preview = { x0: 1100, y0: 700, x1: 1800, y1: 780 };
+    const kite = { kind: 'sprite', ref: 'follow#1:kite', asset: 'spr:kite', x: 0.6, y: -0.37, size: 0.12 } as unknown as Layer;
+    expect(avoid(kite, lyrics)).toBe(kite);
+    const r = layerRect(avoid(kite, lyrics, 24, [], [preview]))!;
+    expect(r.x1 <= preview.x0 - 24 || r.x0 >= preview.x1 + 24 || r.y1 <= preview.y0 - 24 || r.y0 >= preview.y1 + 24).toBe(true);
+    const [k] = avoidAll([{ kind: 'kinetic', fx: 'field' } as unknown as Layer], lyrics, [preview]) as unknown as { keep?: object[] }[];
+    expect(k.keep).toEqual([preview]);
+  });
+});

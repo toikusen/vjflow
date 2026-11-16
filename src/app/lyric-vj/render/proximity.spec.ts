@@ -44,4 +44,18 @@ describe('proximity response', () => {
         expect(at.filter(([x, y]) => x > r.x0 - 20 && x < r.x1 + 20 && y > r.y0 - 20 && y < r.y1 + 20)).toEqual([]);
       }
   });
+
+  it('field: nothing is drawn on other words up either (a preview row), each kept on its own', () => {
+    const r = { x0: 200, y0: 200, x1: 700, y1: 300 };
+    const pv = { x0: 1100, y0: 700, x1: 1800, y1: 800 };
+    const at: [number, number][] = [];
+    const ctx = new Proxy({} as CanvasRenderingContext2D, {
+      get: (_, k) => (k === 'getTransform' ? () => undefined : k === 'arc' ? (x: number, y: number) => void at.push([x, y]) : () => undefined),
+      set: () => true,
+    });
+    MORE['field'].draw({ ctx, age: 3, k: 1, pulse: 0, since: 0, bpm: 120, ink: '#111111', paper: '#eeeeee', accent: '#dd3322', word: () => '光', txt: () => undefined, cx: 1400, seed: 5, W: 1920, H: 1080, style: 0, song: 3, lyric: r, keep: [pv] });
+    expect(at.filter(([x, y]) => x > pv.x0 - 20 && x < pv.x1 + 20 && y > pv.y0 - 20 && y < pv.y1 + 20)).toEqual([]);
+    expect(at.length).toBeGreaterThan(50);
+  });
 });
+

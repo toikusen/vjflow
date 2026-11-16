@@ -25,9 +25,15 @@ def key_one(im):
     # a still narrower than the clip comes back pillarboxed in pure black: that black is no part of the figure
     alpha = np.where(np.maximum(np.maximum(r, g), b) < 16, 0, alpha)
     mask = alpha > 0.5
-    rim = mask & ~ndimage.binary_erosion(mask, iterations=3)
+    # despill everywhere inside the figure, not only its rim: a wheel's spokes kept green screen between them (a
+    # print in two inks has no green of its own; a palette with green would need the rim-only rule back)
     rgb = im.copy()
-    rgb[..., 1] = np.where(rim & (green > 0), np.maximum(r, b), g)
+    rgb[..., 1] = np.where(mask & (green > 0), np.maximum(r, b), g)
+    # cyan streaks the video model paints between spinning spokes: no ink of a two-ink print is cyan, so a green-and-
+    # blue pixel that is not the print's own blue (blue well over green) loses its green toward the red-blue mean
+    g2 = rgb[..., 1]
+    cyan = mask & (g2 > r + 40) & (g2 > b - 20)
+    rgb[..., 1] = np.where(cyan, np.minimum(g2, (r + b) // 2), g2)
     labels, n = ndimage.label(ndimage.binary_closing(mask, iterations=6))
     if n == 0:
         return rgb, alpha * 0, None

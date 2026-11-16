@@ -15,6 +15,7 @@ describe('technique origins', () => {
     expect(ORIGINS['idle:track'].from).toContain('claude-animated-text (pound0423, MIT) #30');
     expect(ORIGINS['idle:fill'].from).toContain('#41');
     expect(ORIGINS['enter:strips'].from).toContain('#39');
+    expect(ORIGINS['fx:field'].from).toContain('layer-distance');
     expect(['motion:loop-noise', 'motion:velocity-settle', 'motion:velocity-bank', 'story:follow'].every((id) => ORIGINS[id].from?.includes('concept only'))).toBe(true);
   });
 

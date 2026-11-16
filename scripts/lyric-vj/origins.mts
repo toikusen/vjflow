@@ -88,6 +88,7 @@ const KNOWN: Record<string, { from: string; own: boolean }> = {
   'motion:velocity-settle': { from: 'AE expression guide phys-inertia (concept only)', own: false },
   'motion:velocity-bank': { from: 'AE expression guide phys-velocity (concept only)', own: false },
   'story:follow': { from: 'AE expression guide layer-elastic-follow (concept only)', own: false },
+  ...Object.fromEntries(['fx:field', 'fx:field#1', 'fx:field#2'].map((x) => [x, { from: 'AE expression guide layer-distance (concept only)', own: false }])),
   ...Object.fromEntries(['device:print-duo', ...['wall', 'ring', 'tunnel', 'bars', 'stack', 'split', 'rays', 'boxes', 'grid', 'dots'].map((x) => `fx:${x}`)].map((x) => [x, { from: YUNON, own: false }])),
 };
 

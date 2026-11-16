@@ -629,7 +629,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
         break;
       }
       const move = MORE[l.fx];
-      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
+      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, lyric: l.lyric, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
       own = drawMove(move, env, l.flow);
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;

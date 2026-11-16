@@ -47,6 +47,8 @@ export interface KineticLayer {
    * in the same spot, so it keeps its own clock across the background's cuts and does not pop in again on each one.
    */
   subjectAt?: number;
+  /** A bare cut's ink, decided once from what is under it at its own start (engine inksAtStart): true prints it dark. */
+  inkDark?: boolean;
   /** The plan's own subjectAt, before the cuts were placed (carrySubjects). */
   subjectPlan?: number;
   /** The lyric box on the frame while a line is up, and how much of it is up (graphics.ts attaches both): the character is measured against it. */
@@ -132,6 +134,12 @@ export interface KineticLayer {
 }
 /** Moves whose words are meant to be read (a title card, a chapter card). */
 const cardInk = new WeakMap<KineticLayer, boolean>();
+/**
+ * While on, a bare layer drawn without its ink decided decides it from what is under it now (the engine turns it on
+ * to draw each bare cut once at its own start: inksAtStart). Off, an undecided layer falls back to its first frame.
+ */
+let decidingInk = false;
+export const setDecidingInk = (on: boolean) => void (decidingInk = on);
 
 const lum = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 const hexLum = (c: Rgb) => {
@@ -390,8 +398,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // notes and the line-art props drawn in the song's dark ink vanished on 終わりじゃない's black album pages (2026-10-30),
   // so every move decides, not only the cards. Decided once a layer, from its first frame (re-deciding every frame
   // flickered as the picture under it moved)
-  if (l.bare && !cardInk.has(l)) cardInk.set(l, readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper));
-  const dark = cardInk.get(l) ?? l.dark;
+  // (decided at the cut's own start by the engine, inkDark: a first frame seen depended on where playback or a probe
+  // first came in, so a seek and the export could print the same cut in opposite inks)
+  if (l.bare && l.inkDark === undefined && decidingInk) l.inkDark = readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper);
+  if (l.bare && l.inkDark === undefined && !cardInk.has(l)) cardInk.set(l, readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper));
+  const dark = l.bare ? (l.inkDark ?? cardInk.get(l) ?? l.dark) : l.dark;
   const paper = dark ? l.ink : l.paper;
   const ink = dark ? l.paper : l.ink;
   const seed = l.seed ?? 1;

@@ -65,7 +65,7 @@ import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setLineVeil } from './kinetic';
+import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -1007,6 +1007,7 @@ export class LyricVjEngine {
       const script = callTimes(cues).map(({ text, at }) => ({ text, at }));
       for (const sec of treatment.graphics.sections) for (const l of sec.layers) if (l.kind === 'led' && l.calls) l.script = script;
     }
+    this.inksAtStart();
     if (treatment.graphics?.story) {
       const pic = (prop: string) => this.images.get(`spr:${prop}`)?.image as { width: number; height: number } | undefined;
       const aspect = (prop: string) => pic(prop)!.width / pic(prop)!.height;
@@ -1575,6 +1576,20 @@ export class LyricVjEngine {
       group.visible = false;
       this.textRoot.add(group);
       this.flashes.push({ at: m.at, glyphs, group, cueId: hit.cue.id });
+    }
+  }
+
+  /**
+   * Each bare kinetic cut's ink, decided from what is under it at its own start, before anything else draws the look
+   * (a probe for a line's colour, a seek): the same in the export and the preview at any seek (kinetic.ts inkDark).
+   */
+  private inksAtStart() {
+    const secs = this.job.treatment.graphics?.sections ?? [];
+    setDecidingInk(true);
+    try {
+      for (const sec of secs) if (sec.layers.some((l) => l.kind === 'kinetic' && (l as KineticLayer).bare && (l as KineticLayer).inkDark === undefined)) this.backdropAt(sec.start + 1 / 120);
+    } finally {
+      setDecidingInk(false);
     }
   }
 

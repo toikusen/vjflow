@@ -137,7 +137,7 @@ g.sections = [...base.graphics!.sections.filter((s) => s.start < from - 1e-6), .
 // ---- the lines: the world's layouts on the side the subject leaves free, the director's motions and emphasis ----
 const inWindow = new Set(song.cues.filter((c) => c.start < to && c.end > from).map((c) => c.id));
 /** The share of its set's measure a line keeps beside a subject (world-layout compact): short lines give up more, a long line keeps most of its size to stay readable. */
-const compactFor = (text: string) => { const n = [...text.replace(/\s/g, '')].length; return +Math.min(0.85, Math.max(0.68, 0.68 + (n - 10) * 0.012)).toFixed(3); };
+const compactFor = (text: string) => { const n = [...text.replace(/\s/g, '')].length; return n >= 20 ? 1 : +Math.min(0.85, Math.max(0.68, 0.68 + (n - 10) * 0.012)).toFixed(3); };
 const setFor = (side: SubjectShot['side']) => (side === 'left' ? 'riso/drop-right' : side === 'right' ? 'riso/offset-stair' : 'riso/tilted');
 const worldSets = new Set(world.layouts.lines.map((x) => x.set));
 t.cues = t.cues.map((cue) => {

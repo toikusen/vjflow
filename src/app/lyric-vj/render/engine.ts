@@ -83,6 +83,7 @@ import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
 import { scroll, singalong } from './sing-along';
+import { discOffsets } from './dilate';
 import { missingOptIn } from '../templates';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
@@ -1821,20 +1822,29 @@ export class LyricVjEngine {
       const y0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.y0)) - R));
       const [w, h] = [Math.min(W, Math.ceil(Math.max(...boxes.map((b) => b.x1)) + R)) - x0, Math.min(H, Math.ceil(Math.max(...boxes.map((b) => b.y1)) + R)) - y0];
       if (w < 2 || h < 2) continue;
+      this.veilMask ??= new OffscreenCanvas(W, H).getContext('2d')!;
+      const mask = this.veilMask;
       shape.save();
       shape.clearRect(x0, y0, w, h);
-      for (const b of boxes) {
-        // only what has a letter's own shape gets a keyline: a cut-up glyph, a repeating wave (a held vowel's ～), a
-        // mark took a rounded box, a smudge of ground behind it
-        if (!b.img || !b.at) continue;
-        shape.globalAlpha = b.a;
-        // the texture where the letter is, tilted with it (an arc's letters had upright keylines, a blur round them)
-        for (let k = 0; k < 12; k++) {
-          const a = (k / 12) * Math.PI * 2;
-          shape.setTransform(b.at[0], b.at[1], b.at[2], b.at[3], b.at[4] + Math.cos(a) * R, b.at[5] + Math.sin(a) * R);
-          shape.drawImage(b.img, 0, 0);
+      // the line's letters once into a mask, then the mask stamped over a solid disc of radius R (dilate.ts): twelve
+      // stamps of each letter on a ring of R left scallops between them round thin strokes, a blotchy ring. A
+      // sing-along's preview row (not the line sung) takes a thin keyline of its own
+      for (const [preview, reach] of [[false, R], [true, Math.min(R, 4)]] as const) {
+        const own = boxes.filter((b) => !!b.preview === preview);
+        if (!own.length) continue;
+        mask.clearRect(x0, y0, w, h);
+        for (const b of own) {
+          // only what has a letter's own shape gets a keyline: a cut-up glyph, a repeating wave (a held vowel's ～), a
+          // mark took a rounded box, a smudge of ground behind it
+          if (!b.img || !b.at) continue;
+          mask.globalAlpha = b.a;
+          // the texture where the letter is, tilted with it (an arc's letters had upright keylines, a blur round them)
+          mask.setTransform(b.at[0], b.at[1], b.at[2], b.at[3], b.at[4], b.at[5]);
+          mask.drawImage(b.img, 0, 0);
+          mask.setTransform(1, 0, 0, 1, 0, 0);
         }
-        shape.setTransform(1, 0, 0, 1, 0, 0);
+        mask.globalAlpha = 1;
+        for (const [dx, dy] of discOffsets(reach)) shape.drawImage(mask.canvas, x0, y0, w, h, x0 + dx, y0 + dy, w, h);
       }
       shape.globalAlpha = 1;
       shape.globalCompositeOperation = 'source-in';
@@ -1852,6 +1862,8 @@ export class LyricVjEngine {
     }
   }
   private veilShape?: OffscreenCanvasRenderingContext2D;
+  /** The letters of the line being keyed, before they are grown into its keyline (veilLines). */
+  private veilMask?: OffscreenCanvasRenderingContext2D;
   /** The build each kinetic line shows this frame, picked by the veil (veilLines). */
   private lit: { t: number; by: Map<string, boolean> } = { t: NaN, by: new Map() };
 

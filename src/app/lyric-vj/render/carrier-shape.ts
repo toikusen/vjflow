@@ -1,3 +1,4 @@
+import { bankTilt } from './bank';
 // The paper a line is set on. Coordinates, pivot and reading area all come from one box, so anything built on a carrier
 // (a tag, a hanging card, a fold) shares them. Pure numbers: the mesh is in lyric-carrier.ts. y is up, the box's centre is 0, 0.
 
@@ -127,6 +128,13 @@ export function paperPose(t: number, m: PaperMotion, dir: number): PaperPose {
   return leaving({ x: 0, y: 0, rot: k >= 1 ? 0 : dir * 0.16 * (1 - e) ** 2, alpha: t >= m.show ? 1 : 0, open: k >= 1 ? 1 : e, scale: 1 }, t, m, dir);
 }
 
+/** The dash exit's speed at t, px/s: the derivative of 1500 × easeIn over its duration. */
+const dashSpeed = (t: number, m: PaperMotion) => {
+  const d = Math.max(0.05, m.exitDur);
+  const x = Math.min(1, Math.max(0, (t - m.exitAt) / d));
+  return x >= 1 ? 0 : (1500 * 3 * x * x) / d;
+};
+
 /** The exit on top of a pose: the paper goes whole, and only from exitAt on. */
 export function leaving(rest: PaperPose, t: number, m: PaperMotion, dir: number): PaperPose {
   if (t <= m.exitAt) return rest;
@@ -135,7 +143,9 @@ export function leaving(rest: PaperPose, t: number, m: PaperMotion, dir: number)
   if (m.exit === 'cut') return { ...rest, alpha: 0 };
   if (m.exit === 'rise') return { ...rest, y: 90 * q, alpha: 1 - q };
   if (m.exit === 'drop') return { ...rest, y: -520 * q, rot: dir * 0.2 * q };
-  if (m.exit === 'dash') return { ...rest, x: dir * 1500 * q };
+  // dashing out it leans into its own speed (bank.ts; y is up here, so leaning right is a negative turn), only now
+  // that the line has been read
+  if (m.exit === 'dash') return { ...rest, x: dir * 1500 * q, rot: rest.rot - bankTilt(dir * dashSpeed(t, m), 2400) };
   if (m.exit === 'shrink') return { ...rest, scale: 1 - 0.3 * q, alpha: 1 - q };
   return { ...rest, alpha: 1 - q };
 }

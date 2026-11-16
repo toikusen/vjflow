@@ -5,6 +5,8 @@
 // Mined from 30 story-arc analyses (out_story/candidates.md): A bookend, B+C hero state arc, D cards, E fly, F thread,
 // I pop.
 import type { Rgb } from './graphics';
+import { bankTilt, velocityAt } from './bank';
+import { elasticFollow } from './follow';
 import { loopNoise } from './loop-noise';
 import { arrivalSpeed, backOut, overshootFor } from './settle';
 
@@ -43,17 +45,29 @@ export type StoryItem =
   /** A chapter card: a short label ("第一章 夏") slides in at a section start and leaves after `dur`. */
   | { kind: 'chapter'; at: number; dur: number; text: string; x: number; y: number; color: Rgb; ink: Rgb }
   /** Weightless props drifting and slowly turning across the frame from `from` to `to`. */
-  | { kind: 'float'; props: string[]; aspects?: Record<string, number>; from: number; to: number; size: number };
+  | { kind: 'float'; props: string[]; aspects?: Record<string, number>; from: number; to: number; size: number }
+  /**
+   * A prop that trails another (`after`, the leading item's prop) on a spring, at offset (x, y) from it, for as long as
+   * the leader is up: a kite after a child, a balloon on a string (`string`: the string's colour), a pet at heel.
+   */
+  | { kind: 'follow'; prop: string; aspect?: number; lift?: Rgb; after: string; x: number; y: number; size: number; string?: Rgb; stiff?: number };
 
 /** The per-frame layers story items become (drawn by drawStory). Sizes are fractions of the frame height. */
 /** `ref` names the story item a layer comes from, unique per item (`pop#7:horse`; QA reports only, drawing ignores it). */
 /** `key`: content that matters now (a hero at a turn of its story, a card about the line being sung): it is placed
  * before the rest when the frame is crowded and does not leave for want of room (graphics.ts avoidAll). */
 export type StoryLayer = { ref?: string; key?: boolean } & (
-  | { kind: 'sprite'; asset: string; aspect?: number; lift?: Rgb; pass?: boolean; x: number; y: number; size: number; rot?: number; sx?: number; pivot?: 'top'; opacity?: number; crack?: number; shatter?: number; seed?: number; glow?: Rgb; trail?: { color: Rgb; pts: Pt[] } }
+  | { kind: 'sprite'; asset: string; aspect?: number; lift?: Rgb; pass?: boolean; x: number; y: number; size: number; rot?: number; sx?: number; pivot?: 'top'; opacity?: number; crack?: number; shatter?: number; seed?: number; glow?: Rgb; trail?: { color: Rgb; pts: Pt[] }; tether?: Tether }
   | { kind: 'thread'; pts: Pt[]; color: Rgb; width: number; opacity?: number }
   | { kind: 'card'; style: 'bubble' | 'note' | 'polaroid' | 'chapter'; text: string; asset?: string; x: number; y: number; w: number; h: number; rot: number; scale: number; color: Rgb; ink: Rgb; opacity?: number }
 );
+
+/**
+ * A string from a follower to its leader, part of the follower's own layer, so wherever the follower is placed (made room
+ * for, faded) the string goes with it: `ref` names the leader's layer, whose placed position the string's far end takes
+ * at drawing (resolveTethers); `from` is where the leader was planned.
+ */
+export interface Tether { ref: string; from: Pt; color: Rgb; width: number }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const easeOut = (k: number) => 1 - (1 - clamp01(k)) ** 3;
@@ -171,6 +185,21 @@ export function along(pts: Pt[], u: number): Pt {
  */
 export const flyOvershoot = (distance: number, dur: number) => overshootFor(arrivalSpeed(distance, dur), 0.8, 0.9, 1.2);
 
+/** The speed, look units a second, at which a moving prop leans three quarters of the way (bank.ts). */
+const BANK_FULL = 1.4;
+/**
+ * A moving prop's turn from its own velocity: it leans into its horizontal travel and pitches with its climb, both as
+ * far as it is fast, so it is upright when it slows to rest (a lean set by direction alone stayed on to the landing,
+ * then jumped). y is up here; the turn is the drawing's, clockwise on screen.
+ */
+function lean(path: (t: number) => Pt, t: number): number {
+  const [vx, vy] = velocityAt(path, t);
+  const speed = Math.hypot(vx, vy);
+  if (speed < 1e-4) return 0;
+  // (the nose follows the climb on the side it travels to: up is anticlockwise going right, clockwise going left)
+  return bankTilt(vx, BANK_FULL) - (vx < 0 ? -1 : 1) * 0.25 * Math.atan2(vy, Math.abs(vx)) * Math.min(1, speed / BANK_FULL);
+}
+
 /** Where a fly starts: just off the frame on its side, level with (or above) where it lands. */
 const entry = (from: 'left' | 'right' | 'top' | 'bottom', x: number, y: number): Pt =>
   from === 'left' ? [-1.35, y + 0.3] : from === 'right' ? [1.35, y + 0.3] : from === 'top' ? [x - 0.4, 1.4] : [x - 0.4, -1.4];
@@ -195,6 +224,9 @@ export function storyEvents(items: StoryItem[]): number[] {
         return [it.at, it.at + it.dur];
       case 'morph':
         return [...it.steps.map((s) => s.at), it.until];
+      case 'follow':
+        // it comes and goes with its leader, whose own times are listed
+        return [];
       default:
         return [it.from, it.to];
     }
@@ -203,7 +235,43 @@ export function storyEvents(items: StoryItem[]): number[] {
 
 export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
   const out: StoryLayer[] = [];
-  items.forEach((it, n) => {
+  const memo: Memo = new Map();
+  items.forEach((it, n) => itemLayers(items, it, n, t, out, false, memo));
+  return out;
+}
+
+/** How many times a leader's place was worked out (QA of the follower's cost: about 73 a frame, each without trail). */
+export const followStats = { evals: 0 };
+
+/** Where a leader stood at the times a frame asks about (a follower's spring and lean share most of them). */
+type Memo = Map<string, Pt | undefined>;
+
+/** When and where item n is first up, looked for every quarter second up to `until` s (a follower has no times of its own). */
+export function firstSeen(items: StoryItem[], n: number, until: number): { t: number; x: number; y: number } | undefined {
+  for (let t = 0; t <= until; t += 0.25) {
+    const p = spriteAt(items, n, t);
+    if (p) return { t, x: p[0], y: p[1] };
+  }
+  return undefined;
+}
+
+/** Where item n's (first) sprite stands at t, or undefined while it is not up. */
+function spriteAt(items: StoryItem[], n: number, t: number, memo?: Memo): Pt | undefined {
+  const key = `${n}@${t.toFixed(5)}`;
+  if (memo?.has(key)) return memo.get(key);
+  // (lite: the position only, no trail or lean, which a follower's spring asks for dozens of times a frame)
+  const ls: StoryLayer[] = [];
+  followStats.evals++;
+  itemLayers(items, items[n], n, t, ls, true);
+  const s = ls.find((l) => l.kind === 'sprite');
+  const p: Pt | undefined = s && s.kind === 'sprite' && (s.opacity ?? 1) > 0 ? [s.x, s.y] : undefined;
+  memo?.set(key, p);
+  return p;
+}
+
+/** The layers of story item n at t (pure). */
+function itemLayers(items: StoryItem[], it: StoryItem, n: number, t: number, out: StoryLayer[], lite = false, memo?: Memo): void {
+  {
     switch (it.kind) {
       case 'hero': {
         const h = heroAt(it.states, t);
@@ -224,16 +292,17 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const path = (u: number): Pt => (u <= 1 ? bez(p0, c, p1, u) : bez(p1, [lerp(p1[0], p2[0], 0.5), p1[1] - 0.15], p2, u - 1));
         // a landing carries on past its place by as much as it came in fast (the curve's own run on), and is back at
         // rest exactly at the end of its flight
-        const u = it.through ? Math.min(2, k) : backOut(k, flyOvershoot(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), it.dur));
+        const shoot = flyOvershoot(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), it.dur);
+        const uAt = (tt: number) => { const kk = Math.max(0, (tt - it.at) / it.dur); return it.through ? Math.min(2, kk) : backOut(kk, shoot); };
+        const u = uAt(t);
         const here = path(u);
-        const ahead = path(Math.min(2, u + 0.02));
         // the trail: the last stretch of the path, dotted behind the prop
-        const trail = it.trail && k < (it.through ? 2 : 1.6) ? { color: it.trail, pts: Array.from({ length: 24 }, (_, i) => path(Math.max(0, u - 0.6 + (0.6 * i) / 23))) } : undefined;
+        const trail = !lite && it.trail && k < (it.through ? 2 : 1.6) ? { color: it.trail, pts: Array.from({ length: 24 }, (_, i) => path(Math.max(0, u - 0.6 + (0.6 * i) / 23))) } : undefined;
         const leave = it.until !== undefined && !it.through ? 1 - clamp01((t - it.until) / 0.5) : 1;
         const flying = k < 1 || it.through;
         const motion = it.motion ?? 'flutter';
-        // in flight: banked along the path, wings beating fast; landed: the prop's own rest movement
-        const m = flying ? { dx: 0, dy: 0, rot: Math.atan2(-(ahead[1] - here[1]), ahead[0] - here[0]) * 0.25, sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
+        // in flight: leaning with its own speed, wings beating fast; landed: the prop's own rest movement
+        const m = flying ? { dx: 0, dy: 0, rot: lite ? 0 : lean((tt) => path(uAt(tt)), t), sx: motion === 'flutter' ? 0.55 + 0.45 * Math.abs(Math.cos(t * 18)) : 1 } : idle(motion, t, n);
         out.push({ ref: `fly#${n}:${it.prop}`, kind: 'sprite', pass: flying, asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity: leave, trail });
         return;
       }
@@ -259,12 +328,12 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
       case 'journey': {
         const end = it.until ?? it.to + 3;
         if (t < it.from || t > end + 0.5 || it.pts.length < 2) return;
-        const u = easeInOut(clamp01((t - it.from) / Math.max(0.5, it.to - it.from)));
+        const uAt = (tt: number) => easeInOut(clamp01((tt - it.from) / Math.max(0.5, it.to - it.from)));
+        const u = uAt(t);
         const here = along(it.pts, u);
-        const ahead = along(it.pts, Math.min(1, u + 0.01));
         const moving = t < it.to;
-        const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: Math.atan2(ahead[1] - here[1], Math.abs(ahead[0] - here[0]) + 1e-6) * 0.2, sx: 1 } : idle(it.motion ?? 'sit', t, n);
-        const trail = it.trail && t < it.to + 1.5 ? { color: it.trail, pts: Array.from({ length: 28 }, (_, i) => along(it.pts, Math.max(0, u - 0.35 + (0.35 * i) / 27))) } : undefined;
+        const m = moving ? { dx: 0, dy: 0.01 * Math.sin(t * 6), rot: lite ? 0 : lean((tt) => along(it.pts, uAt(tt)), t), sx: 1 } : idle(it.motion ?? 'sit', t, n);
+        const trail = !lite && it.trail && t < it.to + 1.5 ? { color: it.trail, pts: Array.from({ length: 28 }, (_, i) => along(it.pts, Math.max(0, u - 0.35 + (0.35 * i) / 27))) } : undefined;
         const opacity = Math.min(1, (t - it.from) / 0.4) * (1 - clamp01((t - end) / 0.5));
         out.push({ ref: `journey#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, pass: moving, x: here[0] + m.dx, y: here[1] + m.dy, size: it.size, rot: m.rot, sx: m.sx, opacity, trail });
         return;
@@ -358,9 +427,28 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         }
         return;
       }
+      case 'follow': {
+        const lead = items.findIndex((x) => x !== it && x.kind !== 'follow' && 'prop' in x && x.prop === it.after);
+        if (lead < 0) return;
+        const m: Memo = memo ?? new Map();
+        const goal = (tt: number): Pt | undefined => { const p = spriteAt(items, lead, tt, m); return p && [p[0] + it.x, p[1] + it.y]; };
+        const here = elasticFollow(goal, t, it.stiff ?? 1);
+        if (!here) return;
+        const leader = spriteAt(items, lead, t, m)!;
+        const ls: StoryLayer[] = [];
+        itemLayers(items, items[lead], lead, t, ls, true);
+        const head = ls.find((l) => l.kind === 'sprite');
+        const fade = head?.opacity ?? 1;
+        // it leans with its own speed like any moving prop (bank.ts)
+        const rot = lite ? 0 : lean((tt) => elasticFollow(goal, tt, it.stiff ?? 1) ?? here, t);
+        // the string is the follower's own (it is placed, faded and made room for with it, never left behind); the
+        // follower is not a passing prop: it keeps its place by the leader, so making room moves it clear of the words
+        const tether = it.string && head?.ref ? { ref: head.ref, from: leader, color: it.string, width: 3 } : undefined;
+        out.push({ ref: `follow#${n}:${it.prop}`, kind: 'sprite', asset: `spr:${it.prop}`, aspect: it.aspect, lift: it.lift, x: here[0], y: here[1], size: it.size, rot, opacity: fade, ...(tether ? { tether } : {}) });
+        return;
+      }
     }
-  });
-  return out;
+  }
 }
 
 /** The on-screen box of a story layer in pixels (for making room for the lyrics), if it has one. */
@@ -371,6 +459,34 @@ export function storyRect(l: StoryLayer): { x0: number; y0: number; x1: number; 
   // a sprite's box uses its picture's aspect (width / height, from the library); without it, a square
   const [w, h] = l.kind === 'card' ? [l.w * W * l.scale, l.h * H * l.scale] : [l.size * H * (l.aspect ?? 1), l.size * H];
   return { x0: px - w / 2, y0: py - h / 2, x1: px + w / 2, y1: py + h / 2 };
+}
+
+/** The string's points from the leader to the follower, sagging a little as it hangs (story units). */
+export const tetherPts = (from: Pt, to: Pt): Pt[] => {
+  const sag: Pt = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2 - 0.06];
+  return Array.from({ length: 17 }, (_, i) => bez(from, sag, to, i / 16));
+};
+
+function drawTether(ctx: CanvasRenderingContext2D, tt: Tether, to: Pt, opacity: number) {
+  ctx.save();
+  ctx.globalAlpha *= opacity;
+  ctx.strokeStyle = tt.color;
+  ctx.lineWidth = tt.width;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  tetherPts(tt.from, to).forEach(([x, y], i) => (i ? ctx.lineTo(W / 2 + x * (W / 2), H / 2 - y * (H / 2)) : ctx.moveTo(W / 2 + x * (W / 2), H / 2 - y * (H / 2))));
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Each string's far end where its leader was placed (made room for, glided): the string and its leader never part. */
+export function resolveTethers<L extends { kind: string; ref?: string }>(layers: L[]): L[] {
+  const at = new Map(layers.flatMap((l) => (l.kind === 'sprite' && l.ref ? [[l.ref, l as unknown as { x: number; y: number }]] : [])));
+  return layers.map((l) => {
+    const s = l as unknown as { kind: string; tether?: Tether };
+    const lead = s.kind === 'sprite' && s.tether ? at.get(s.tether.ref) : undefined;
+    return lead ? ({ ...l, tether: { ...s.tether!, from: [lead.x, lead.y] as Pt } } as L) : l;
+  });
 }
 
 /** Draws one story layer. `image` returns a loaded sprite or scene by asset id. */
@@ -394,6 +510,7 @@ export function drawStory(ctx: CanvasRenderingContext2D, l: StoryLayer, image: (
   if (!img || !img.width) return;
   const h = l.size * H;
   const w = (h * img.width) / img.height;
+  if (l.tether) drawTether(ctx, l.tether, [l.x, l.y], l.opacity ?? 1);
   if (l.trail) {
     // a dotted trail behind a flying prop, thinning toward its tail
     ctx.save();
@@ -559,7 +676,7 @@ export interface StoryPlan {
 }
 
 // a song has one thread: one hero, a few flights and pops, at most two card piles and one thread line
-const MAX: Record<StoryItem['kind'], number> = { hero: 1, fly: 3, pop: 4, cards: 2, thread: 1, orbit: 1, journey: 1, morph: 1, chapter: 5, float: 1 };
+const MAX: Record<StoryItem['kind'], number> = { hero: 1, fly: 3, pop: 4, cards: 2, thread: 1, orbit: 1, journey: 1, morph: 1, chapter: 5, float: 1, follow: 2 };
 const MOTIONS: Motion[] = ['hang', 'flutter', 'roll', 'sit', 'drift', 'still'];
 
 /**
@@ -628,13 +745,20 @@ export function validateStory(plan: StoryPlan | undefined, duration: number): { 
       if (!it.props.length) continue;
     }
     if (it.kind === 'hero' && !it.states.length) continue;
+    // a follower needs a leader with a prop of its own (checked below, once every item is in)
+    if (it.kind === 'follow') {
+      it.after = String(it.after ?? '').trim();
+      it.stiff = Math.max(0.5, Math.min(2, Number(it.stiff) || 1));
+    }
     delete it.why;
     count[it.kind] = (count[it.kind] ?? 0) + 1;
     items.push(it);
   }
-  return { items, fixes };
+  const leads = new Set(items.flatMap((x) => (x.kind !== 'follow' && 'prop' in x ? [x.prop] : [])));
+  const kept = items.filter((x) => x.kind !== 'follow' || leads.has(x.after) || void fixes.push(`故事元件 follow 跟隨的 ${x.after} 沒有出現，移除`));
+  return { items: kept, fixes };
 }
 
 const first = (it: StoryItem) =>
-  it.kind === 'hero' ? Math.min(...(it.states ?? []).map((s) => s.at), Infinity) : it.kind === 'morph' ? Math.min(...(it.steps ?? []).map((s) => s.at), Infinity) : it.kind === 'fly' || it.kind === 'pop' || it.kind === 'chapter' ? it.at : it.from;
+  it.kind === 'hero' ? Math.min(...(it.states ?? []).map((s) => s.at), Infinity) : it.kind === 'morph' ? Math.min(...(it.steps ?? []).map((s) => s.at), Infinity) : it.kind === 'fly' || it.kind === 'pop' || it.kind === 'chapter' ? it.at : it.kind === 'follow' ? Infinity : it.from;
 

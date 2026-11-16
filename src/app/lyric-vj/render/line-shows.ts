@@ -24,7 +24,7 @@ export function horizontalPunct<T extends { text: string }>(c: T): T {
 /** A thread sends each line as its own message, on the first sung syllable. */
 export const threadShot = (s?: { template: string }) => s?.template === 'chat' || s?.template === 'reply-thread';
 /** Laid out in frame px or sending from a fixed place: nothing can carry them across a handoff. */
-export const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
+export const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'singalong', 'scroll', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
 
 /** The page handoffs a treatment's one event plan approved (world-events.ts), by the line handed into; undefined without a plan. */
 export const approvedOf = (t: { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }) => (t.worldEvents ? new Set(t.worldEvents.events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds[e.lineIds.length - 1])) : undefined);

@@ -42,8 +42,19 @@ export interface KineticLayer {
   accent: Rgb;
   /** A cut-out from the sprite library (id without `spr:`), printed in ink and paper. */
   sprite?: string;
+  /**
+   * When this character came up where it stands (song s): earlier than the cut when it carries on from the cuts before
+   * in the same spot, so it keeps its own clock across the background's cuts and does not pop in again on each one.
+   */
+  subjectAt?: number;
+  /** A bare cut's ink, decided once from what is under it at its own start (engine inksAtStart): true prints it dark. */
+  inkDark?: boolean;
+  /** The plan's own subjectAt, before the cuts were placed (carrySubjects). */
+  subjectPlan?: number;
   /** The lyric box on the frame while a line is up, and how much of it is up (graphics.ts attaches both): the character is measured against it. */
   lyric?: CoverRect;
+  /** Other words up besides the line (a sing-along's preview row), each kept clear on its own. */
+  keep?: CoverRect[];
   lyricWeight?: number;
   /** Where the character stands; the lyric goes on the other side. */
   side?: 'left' | 'right' | 'center';
@@ -125,6 +136,12 @@ export interface KineticLayer {
 }
 /** Moves whose words are meant to be read (a title card, a chapter card). */
 const cardInk = new WeakMap<KineticLayer, boolean>();
+/**
+ * While on, a bare layer drawn without its ink decided decides it from what is under it now (the engine turns it on
+ * to draw each bare cut once at its own start: inksAtStart). Off, an undecided layer falls back to its first frame.
+ */
+let decidingInk = false;
+export const setDecidingInk = (on: boolean) => void (decidingInk = on);
 
 const lum = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
 const hexLum = (c: Rgb) => {
@@ -328,6 +345,52 @@ const rgb = (h: Rgb) => {
 
 /** Draws one kinetic cut. */
 
+/**
+ * The cut's character on its own clock (subjectAt): it pops in and rocks to rest once when it comes up, then holds
+ * while the backgrounds cut under it. Without subjectAt the cut is its clock (`clock`, s since the cut landed).
+ */
+export function subjectPose(subjectAt: number | undefined, clock: number, now: number, age = clock): { pop: number; rock: number } {
+  const [grow, since] = subjectAt === undefined ? [age, clock] : [Math.max(0, now - subjectAt), Math.max(0, now - subjectAt)];
+  return { pop: 1 + (1 - ease(grow / 0.18)) * 0.06, rock: 0.05 * Math.exp(-5 * since) * Math.sin(13 * since) };
+}
+
+/**
+ * When the character of a cut at `at` came up: the time the last cut's came up when it is the same one in the same
+ * spot and placed the same way (`place`: its size and whether the move repeats it in a grid), else `at`. `last` is
+ * the cut before (no sprite: '').
+ */
+ /**
+ * Where a cut puts its character, as one key: the same sprite on the same side at the same size, placed the same way
+ * (a grid of copies, the room the lines leave, the rows above or below them, the corner under them). Only a character
+ * placed the same carries on across a cut; one that changes size or place comes up again (with its pop).
+ */
+export const placementKey = (l: KineticLayer) =>
+  [l.sprite ?? '', l.side ?? '', (l.size ?? 0.85).toFixed(3), l.fx === 'grid' ? 'grid' : 'one', l.room?.map((x) => Math.round(x)).join('-') ?? '', l.rows?.map((x) => Math.round(x)).join('-') ?? '', l.under ? 'under' : ''].join('|');
+
+/**
+ * The subject clocks of a song's cuts, in order, as placed: a cut keeps the clock the plan carried over (subjectAt)
+ * only when its character stands as the cut before's did (placementKey); otherwise its character comes up anew at the
+ * cut. Idempotent: the plan's own carry is kept in subjectPlan.
+ */
+export function carrySubjects(layers: KineticLayer[]): void {
+  let prev: { key: string; since: number } | undefined;
+  for (const l of layers) {
+    if (!l.sprite) {
+      prev = undefined;
+      continue;
+    }
+    const at = l.at ?? 0;
+    l.subjectPlan ??= l.subjectAt;
+    const key = placementKey(l);
+    const carries = l.subjectPlan !== undefined && l.subjectPlan < at - 1e-6 && prev?.key === key;
+    l.subjectAt = carries ? prev!.since : at;
+    prev = { key, since: l.subjectAt };
+  }
+}
+
+export const subjectSince = (last: { sprite: string; side: string; since: number; place?: string }, sprite: string | undefined, side: string, at: number, place = '') =>
+  sprite && last.sprite === sprite && last.side === side && (last.place ?? '') === place ? last.since : at;
+
 export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, clock: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined, now = (l.at ?? 0) + clock) {
   const age = camTime(l.cam, clock);
   // the frame's coordinates, for measuring the character against the lyric box while the line is fully up
@@ -337,8 +400,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // notes and the line-art props drawn in the song's dark ink vanished on 終わりじゃない's black album pages (2026-10-30),
   // so every move decides, not only the cards. Decided once a layer, from its first frame (re-deciding every frame
   // flickered as the picture under it moved)
-  if (l.bare && !cardInk.has(l)) cardInk.set(l, readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper));
-  const dark = cardInk.get(l) ?? l.dark;
+  // (decided at the cut's own start by the engine, inkDark: a first frame seen depended on where playback or a probe
+  // first came in, so a seek and the export could print the same cut in opposite inks)
+  if (l.bare && l.inkDark === undefined && decidingInk) l.inkDark = readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper);
+  if (l.bare && l.inkDark === undefined && !cardInk.has(l)) cardInk.set(l, readsDark(ctx, l.ink, l.paper) === hexLum(l.ink) > hexLum(l.paper));
+  const dark = l.bare ? (l.inkDark ?? cardInk.get(l) ?? l.dark) : l.dark;
   const paper = dark ? l.ink : l.paper;
   const ink = dark ? l.paper : l.ink;
   const seed = l.seed ?? 1;
@@ -629,7 +695,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
         break;
       }
       const move = MORE[l.fx];
-      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
+      const env: Env = { ctx, age, k, pulse: beat.pulse, since: beat.since ?? 0, bpm: l.bpm ?? 120, ink, paper, accent: l.accent, word, txt, cx: fx, seed, art: printed, W, H, style: l.style ?? 0, at: l.at, len: l.len, label: l.label, song: l.song, mood: l.mood, tune: l.tune, room: l.room, lyric: l.lyric, keep: l.keep, count: new Set(l.words.filter((w) => w.trim() && w !== '・')).size || undefined };
       own = drawMove(move, env, l.flow);
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 0;
@@ -653,7 +719,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // the character, printed in the cut's inks: it pops in, then holds still until the next cut
   if (printed && !own) {
     const { img: art, w, h } = printed;
-    const pop = 1 + (1 - k) * 0.06;
+    const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
     const cols = l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
     // the floor plan: one character shrinks and slides into the room the lyric leaves it (feet kept on the floor)
     const fit = l.fx !== 'grid' && l.room && l.room[1] > l.room[0] ? fitInRoom(l.room, w, fx) : { s: 1, x: fx };
@@ -673,7 +739,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       const y = corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
       ctx.translate(corner ? corner.x : cx, y);
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
-      ctx.rotate(0.05 * Math.exp(-5 * clock) * Math.sin(13 * clock) * (seed % 2 ? 1 : -1));
+      ctx.rotate(rock * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);
       if (corner && !corner.clear) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;

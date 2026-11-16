@@ -2,7 +2,7 @@
 // framed photos, frames, rings, sparkles, sunbursts, tape bands, shapes. The database's designer VJs are mostly
 // these over flat colour, not a full-bleed picture; a song's look is a stack of them per section, drawn in Canvas2D
 // every frame (deterministic in t) and composited as the background layer under the lyrics.
-import { drawStory, StoryItem, StoryLayer, storyLayers, storyRect } from './story';
+import { drawStory, resolveTethers, StoryItem, StoryLayer, storyLayers, storyRect, Tether, tetherPts } from './story';
 import { clearAlpha, clearStrength, CLEAR_FROM, clearTally, CoverCrop, coverOf, keepClear, watchClear, watchCover } from './cover';
 import { revealMask, SectionTransition, transitionAccent, TRANSITION_SEC } from './transition';
 import { drawMotionTransition, isMotion } from './motion-transition';
@@ -91,7 +91,7 @@ export type Layer = Base &
     | KineticLayer
     // a song's own drawing, written by the director (scripts/lyric-vj/codelayer.mts); `lyric` is filled at draw time
     // shift: a drawing reused later in the song (a repeated chorus) sees the time it was written for
-    | { kind: 'code'; src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect; /** Every line read over its section, filled by the engine (layRooms): the drawing's f.lines, f.room, f.fit. */ lines?: LineBox[] }
+    | { kind: 'code'; src: string; lyric?: Rect; /** Other words up besides the line (a sing-along's preview row): each kept clear on its own. */ keep?: Rect[]; lyricWeight?: number; cuts?: number[]; shift?: number; /** While its lyric box glides between two lines' places: both places, kept clear by fading only. */ guard?: Rect; /** Every line read over its section, filled by the engine (layRooms): the drawing's f.lines, f.room, f.fit. */ lines?: LineBox[] }
     // story components' per-frame layers (story.ts), never written by the director directly
     | StoryLayer
   );
@@ -153,7 +153,8 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   const sec = sectionAt(look, t);
   // the story's layers make room for the lyrics together with the section's, but are drawn over any transition
   const story = storyLayers(look.story ?? [], t) as Layer[];
-  const all = adjust([...sec.layers, ...story]);
+  // (a follower's string ends where its leader was placed)
+  const all = resolveTethers(adjust([...sec.layers, ...story]));
   const own = all.slice(0, sec.layers.length);
   const tr = sec.transition;
   const i = look.sections.indexOf(sec);
@@ -350,7 +351,7 @@ const covered = new Set<string>();
 const ids = new Map<CanvasImageSource, string>();
 
 /** Runs a director-written layer; a broken one draws nothing instead of breaking the frame. */
-function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect; lines?: LineBox[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
+function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect; keep?: Rect[]; lyricWeight?: number; cuts?: number[]; shift?: number; guard?: Rect; lines?: LineBox[] }, t: number, age: number, beat: Beat, image: (asset?: string) => CanvasImageSource | undefined) {
   t -= l.shift ?? 0;
   let fn = compiled.get(l.src);
   if (!fn) {
@@ -446,6 +447,14 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     if (!lyric || !base || !start || !id) return draw();
     const box = l.guard ?? lyric;
     const sized = pic as CanvasImageSource & { width: number; height: number };
+    // other words up besides the line (a sing-along's preview row) are kept clear too, each box on its own
+    for (const k of l.keep ?? []) {
+      const inner = draw;
+      draw = () => {
+        const [s, i] = coverOf(sized, base.multiply(ctx.getTransform()), dx, dy, dw, dh, k, crop);
+        if (!keepClear(ctx, start, k, s, i, inner, W, H, clearStrength(l.lyricWeight ?? 1), true)) inner();
+      };
+    }
     const [share, inside] = coverOf(sized, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
     const strength = clearStrength(l.lyricWeight ?? 1);
     const alpha = ctx.globalAlpha;
@@ -3133,6 +3142,19 @@ export interface Rect {
 
 const overlaps = (a: Rect, b: Rect) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
+/** How far a follower's string may stretch when it makes room, as a share of its length at rest. */
+export const TETHER_STRETCH = 1.6;
+
+/** Whether a follower's string, from its leader to a follower centred at (cx, cy) frame px, runs through `r`. */
+export function tetherCrosses(l: Layer, cx: number, cy: number, r: Rect): boolean {
+  const tt = (l as { tether?: Tether }).tether;
+  if (!tt) return false;
+  return tetherPts(tt.from, [(cx - W / 2) / (W / 2), (H / 2 - cy) / (H / 2)]).some(([x, y]) => {
+    const [px, py] = [W / 2 + x * (W / 2), H / 2 - y * (H / 2)];
+    return px > r.x0 && px < r.x1 && py > r.y0 && py < r.y1;
+  });
+}
+
 /** The frame area a movable layer covers (photos that are not full frame, blobs, stamps, seals, numerals). */
 export function layerRect(l: Layer): Rect | undefined {
   const cx = (x?: number) => W / 2 + (x ?? 0) * W / 2;
@@ -3187,18 +3209,39 @@ export function layerRect(l: Layer): Rect | undefined {
  * slide sideways to the roomier side, slide up or down, shrink to 75 % and 55 % at each place. Returns the layer
  * unchanged when it does not overlap or cannot be placed (the type's knockout handles the rest).
  */
-export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []): Layer {
+export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = [], keep: Rect[] = []): Layer {
   const r = layerRect(l);
   if (!r || l.fixed) return l;
   const guard = { x0: lyrics.x0 - margin, y0: lyrics.y0 - margin, x1: lyrics.x1 + margin, y1: lyrics.y1 + margin };
-  if (!overlaps(r, guard)) return l;
+  // other words up besides the line (a sing-along's preview row): kept clear each on its own, never merged with it
+  const keeps = keep.map((k) => ({ x0: k.x0 - margin, y0: k.y0 - margin, x1: k.x1 + margin, y1: k.y1 + margin }));
+  // a follower's string is part of it: a place where the string runs through the words is no place for it either
+  const strung = (q: Rect) => [guard, ...keeps].some((g) => tetherCrosses(l, (q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2, g));
+  if (!overlaps(r, guard) && !keeps.some((k) => overlaps(r, k)) && !strung(r)) return l;
+  // a follower stays by its leader: a place may stretch its string to at most TETHER_STRETCH times its length at
+  // rest and keeps it on the leader's side of the frame; where none is free it fades with its string where it is
+  // (as a passing prop does), never flung across the frame on a long string
+  const tt = (l as { tether?: Tether }).tether;
+  const lead = tt && { x: W / 2 + tt.from[0] * (W / 2), y: H / 2 - tt.from[1] * (H / 2) };
+  const restLen = lead ? Math.hypot((r.x0 + r.x1) / 2 - lead.x, (r.y0 + r.y1) / 2 - lead.y) : 0;
+  const near = (q: Rect) => {
+    if (!lead) return true;
+    const [cx, cy] = [(q.x0 + q.x1) / 2, (q.y0 + q.y1) / 2];
+    const side = Math.abs(lead.x - W / 2) < W / 6 || Math.sign(cx - W / 2) === Math.sign(lead.x - W / 2);
+    return side && Math.hypot(cx - lead.x, cy - lead.y) <= TETHER_STRETCH * Math.max(restLen, l.kind === 'sprite' ? l.size * H : 0);
+  };
+  const fadeBehind = (s: Layer) => {
+    const cover = Math.max(...[guard, ...keeps].map((g) => (Math.max(0, Math.min(r.x1, g.x1) - Math.max(r.x0, g.x0)) * Math.max(0, Math.min(r.y1, g.y1) - Math.max(r.y0, g.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0))));
+    // (a corner over a word fades it as much as a pass prop wholly behind the line: any overlap reads as covering)
+    return { ...s, opacity: (s.opacity ?? 1) * (1 - 0.65 * Math.min(1, 4 * Math.max(cover, strung(r) ? 0.25 : 0))) } as Layer;
+  };
   if (l.kind === 'sprite' && l.pass) {
     // a prop on its way (an orbit, a journey, a float) passes behind the line, fading by how much it covers it:
     // pushed aside every frame it would jump about
     const cover = (Math.max(0, Math.min(r.x1, guard.x1) - Math.max(r.x0, guard.x0)) * Math.max(0, Math.min(r.y1, guard.y1) - Math.max(r.y0, guard.y0))) / Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0));
     return { ...l, opacity: (l.opacity ?? 1) * (1 - 0.65 * Math.min(1, cover)) };
   }
-  const clash = (q: Rect) => overlaps(q, guard) || others.some((o) => overlaps(q, o));
+  const clash = (q: Rect) => overlaps(q, guard) || keeps.some((k) => overlaps(q, k)) || strung(q) || !near(q) || others.some((o) => overlaps(q, o));
   const w = r.x1 - r.x0;
   const h = r.y1 - r.y0;
   // a window or a phone must land inside its own margins, or the draw clamps it back over the line
@@ -3231,6 +3274,7 @@ export function avoid(l: Layer, lyrics: Rect, margin = 24, others: Rect[] = []):
   // a picture or letters (a photo inset, a stamp, a seal, a numeral) behind the words is what makes them hard to read
   // (チョロイン c003: blue type over a blue stage photo); a flat shape (a blob, a disc) may stay behind them by design
   const busy = l.kind === 'photo' || l.kind === 'stamp' || l.kind === 'seal' || l.kind === 'numeral';
+  if (tt) return fadeBehind(l);
   if (story || busy) {
     // no room next to the line: the object crosses to the far side or another free spot (nearest first) rather than
     // fading behind the line (落ちた風鈴 dimmed to a ghost beside the vertical lyrics)
@@ -3452,11 +3496,13 @@ export function measurable(placed: Layer[], planned: Layer[], age: number, zone:
 /** Backdrop shapes that are only decoration (a sun disc, scattered shapes, rays, leaves): squeezed, they fade. */
 const DECOR = new Set(['blob', 'shapes', 'sunburst', 'botanical']);
 
-export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
-  // objects already clear of the lyrics stay where they are and are obstacles for the ones that must move
+export function avoidAll(layers: Layer[], lyrics: Rect, keep: Rect[] = []): Layer[] {
+  // objects already clear of the lyrics (and of any other words up: `keep`, each its own box) stay where they are and
+  // are obstacles for the ones that must move
   const clear = (l: Layer) => {
     const r = layerRect(l);
-    return !r || !overlaps(r, { x0: lyrics.x0 - 24, y0: lyrics.y0 - 24, x1: lyrics.x1 + 24, y1: lyrics.y1 + 24 });
+    const gs = [lyrics, ...keep].map((x) => ({ x0: x.x0 - 24, y0: x.y0 - 24, x1: x.x1 + 24, y1: x.y1 + 24 }));
+    return !r || gs.every((g) => !overlaps(r, g) && !tetherCrosses(l, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, g));
   };
   const isStory = (l: Layer) => l.kind === 'sprite' || l.kind === 'card' || l.kind === 'thread';
   const placed = layers.flatMap((l, i) => (clear(l) && layerRect(l) ? [{ i, r: layerRect(l)!, story: isStory(l) }] : []));
@@ -3470,13 +3516,13 @@ export function avoidAll(layers: Layer[], lyrics: Rect): Layer[] {
       const l = layers[i];
       // the lyric box reaches the layers that watch their pictures against it (drawCode's sprites, a kinetic cut's character)
       if (l.kind === 'code' || l.kind === 'kinetic') {
-        out[i] = { ...l, lyric: lyrics };
+        out[i] = { ...l, lyric: lyrics, ...(keep.length ? { keep } : {}) };
         return;
       }
       if (!only(i) || clear(l)) return;
       // a story prop is drawn over the backdrop, so only the lyrics and the other story objects are in its way (a
       // background disc next to the line pushed 落ちた風鈴 under the lyrics)
-      out[i] = avoid(l, lyrics, 24, taken.filter((p) => !isStory(l) || p.story).map((p) => p.r));
+      out[i] = avoid(l, lyrics, 24, taken.filter((p) => !isStory(l) || p.story).map((p) => p.r), keep);
       // a backdrop shape squeezed to a corner at a fraction of its size reads as a stray dot (三年後的大雪's sun went
       // to a dark disc by the lyric's end): it fades instead; story props keep their place-finding
       const was = layerRect(l), now = layerRect(out[i]);

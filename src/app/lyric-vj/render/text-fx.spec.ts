@@ -64,6 +64,29 @@ describe('drawn text effects', () => {
     expect(twin.position.x).toBeCloseTo(0);
   });
 
+  it('strips: the line comes in as alternating horizontal strips and is whole, uncut, once it has landed', async () => {
+    const { l, glyphs } = await wrapped({ enter: 'strips' });
+    l.update(1.05, fx);
+    const twins = glyphs[0].children.filter((c) => (c as THREE.Mesh).isMesh && c.visible) as THREE.Mesh[];
+    expect(twins.length).toBeGreaterThanOrEqual(5);
+    expect(glyphs[0].material.opacity).toBe(0);
+    const sides = twins.map((c) => Math.sign(c.position.x));
+    expect(sides.slice(0, 4)).toEqual([sides[0], -sides[0], sides[0], -sides[0]]);
+    expect(l.readable()[0]).toBeGreaterThanOrEqual(1 + 0.5);
+    l.update(1.6, fx);
+    expect(glyphs[0].children.filter((c) => c.visible).length).toBe(0);
+    expect(glyphs[0].material.opacity).toBe(1);
+  });
+
+  it('strips: an echo waits until the strips are home (no copies of a line not yet assembled)', async () => {
+    const { l, glyphs } = await wrapped({ enter: 'strips', emphasis: [{ from: 0, to: 3, method: 'echo' }] });
+    const echoes = () => glyphs[0].children.filter((c) => c.visible && ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity > 0 && !((c as THREE.Mesh).material as THREE.MeshBasicMaterial).clippingPlanes?.length) as THREE.Mesh[];
+    l.update(1.2, fx);
+    expect(echoes().length).toBe(0);
+    l.update(2.2, fx);
+    expect(echoes().length).toBeGreaterThan(0);
+  });
+
   it('flip turns in from edge-on; stretch springs back to its own shape', async () => {
     const flip = await wrapped({ enter: 'flip' });
     flip.l.update(1.02, fx);

@@ -65,7 +65,7 @@ import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { freeBand, freeRows, oppositeSide, setBackPush, setLineVeil } from './kinetic';
+import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -75,13 +75,16 @@ import { apertureAt, gravityPose, isLineExit, LINE_EXIT_SEC, pushFocus, radialSh
 import { FineLayer, fineLayer } from './fine-tier';
 import { freeZone } from './board';
 import { DIAGRAM_FX } from './kinetic-more';
-import { storyEvents, storyLayers } from './story';
+import { firstSeen, storyEvents, storyLayers } from './story';
 import type { Palette } from '../treatment';
 import { contrastFace, DEFAULT_FONTS, FontChoice, FONTS, isLatinLine, nearestWeight, readingLatin, resolveFonts } from '../fonts';
 import { scatter } from './scatter';
 import { typewriter } from './typewriter';
 import { vertical } from './vertical';
 import { lanes } from './lanes';
+import { PREVIEW_GAP, scroll, singalong } from './sing-along';
+import { discOffsets, keyReach, keyRingClear } from './dilate';
+import { missingOptIn } from '../templates';
 import { boxInsideOutline } from './page-layout';
 import { pageTally, type PageDrawn, type PageTally } from './world-b5-screentone';
 import { songVary, contrast, CueLayer, GlyphBox, guardLine, poorShare, CueRuntime, entranceLost, EXIT_SEC, FrameFx, fitReading, frameFit, measureAtRest, motionPad, paceStyle, PaceAdjust, readable as readableOn, readingSec, ShotLayer, TemplateRenderer } from './runtime';
@@ -99,8 +102,8 @@ const LONG_EXITS = new Set(['glitch', 'slash', 'domino', 'pixel', 'shatter', 'fo
  * Frame-px boxes of the glyphs on screen in a line's group (visible and not faded out), their opacity, and for a whole
  * glyph texture the affine that lays the texture where the letter is drawn, tilt and all (a letter on an arc).
  */
-function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number] })[] {
-  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number] })[] = [];
+function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean; ink?: string })[] {
+  const out: (Rect & { a: number; img?: CanvasImageSource; at?: [number, number, number, number, number, number]; preview?: boolean; ink?: string })[] = [];
   const v = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
   const shown = (o: THREE.Object3D | null): boolean => !o || (o.visible && shown(o.parent));
   if (!shown(group)) return out;
@@ -112,7 +115,7 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
     const map = m.material.map;
     const whole = map && map.repeat.x === 1 && map.repeat.y === 1 && !map.offset.x && !map.offset.y;
     if (b.isEmpty()) return;
-    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1 };
+    const box = { x0: b.min.x + W / 2, y0: H / 2 - b.max.y, x1: b.max.x + W / 2, y1: H / 2 - b.min.y, a: m.material.opacity ?? 1, ...(m.userData['preview'] ? { preview: true, ink: `#${m.material.color.getHexString()}` } : {}) };
     const pos = m.geometry.getAttribute('position');
     const img = whole ? (map.image as CanvasImageSource & { width: number; height: number }) : undefined;
     if (!img || !pos || pos.count !== 4 || !img.width) return void out.push(box);
@@ -129,12 +132,13 @@ function glyphBoxes(group: THREE.Object3D): (Rect & { a: number; img?: CanvasIma
  * every shown, textured, opaque-enough mesh that is not what the words stand on, its picture's centre (the picture pads
  * the glyph a third of its size each side: GLYPH_CORE of it is the glyph), its opacity and colour (QA: the probe gate).
  */
-function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
+export function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
   const out: GlyphBox[] = [];
   const b = new THREE.Box3();
   group.traverseVisible((o) => {
     const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-    if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor']) return;
+    // (a sing-along's preview of the next line is not this line: sing-along.ts)
+    if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor'] || m.userData['preview']) return;
     b.setFromObject(m);
     if (b.isEmpty()) return;
     const [cx, cy, hw, hh] = [(b.min.x + b.max.x) / 2 + W / 2, H / 2 - (b.min.y + b.max.y) / 2, ((b.max.x - b.min.x) * GLYPH_CORE) / 2, ((b.max.y - b.min.y) * GLYPH_CORE) / 2];
@@ -148,7 +152,7 @@ function meshesOf(group: THREE.Object3D): { i: number; mesh: THREE.Mesh }[] {
   // (what hangs under a glyph, its echo, its shine, its plate copy, is its part, never a glyph of its own: partsUnder)
   const walk = (o: THREE.Object3D) => {
     const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
-    if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy']) return void out.push({ i: out.length, mesh: m });
+    if (m.isMesh && m.material.map && !m.userData['decor'] && !m.userData['ring'] && !m.userData['noVeil'] && !m.userData['copy'] && !m.userData['preview']) return void out.push({ i: out.length, mesh: m });
     o.children.forEach(walk);
   };
   walk(group);
@@ -229,16 +233,26 @@ function placesWhileRead(layer: CueLayer, parent: THREE.Object3D, cuts: number[]
   return out;
 }
 
+/** Where a sing-along's preview row stands (world px, measured at rest), if the line has one. */
+function previewBox(layer: CueLayer): THREE.Box3 | undefined {
+  const box = new THREE.Box3();
+  layer.update(layer.readable()[0] + 0.01, { flash: 0, hit: 0, shake: 0 });
+  layer.group.updateMatrixWorld(true);
+  layer.group.traverse((o) => void ((o as THREE.Mesh).isMesh && o.userData['preview'] && o.visible && ((o as THREE.Mesh).material as THREE.Material).opacity > 0.01 && box.expandByObject(o)));
+  return box.isEmpty() ? undefined : box;
+}
+
 /** The box of what the layer shows now, in world (frame) px with every transform above it applied. */
-function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
+export function shownBox(layer: CueLayer, inkOnly = false): THREE.Box3 {
   // only what is showing at that moment (beat-cut keeps its other pieces hidden)
   const box = new THREE.Box3();
   // decor (array's tiled words) is not the lyric: it may fill the frame on purpose
-  const shown = (o: THREE.Object3D): boolean => o === layer.group || (o.visible && !o.userData['decor'] && (!o.parent || shown(o.parent)));
+  // (nor is a sing-along's preview of the next line: the lyric box is this line's own)
+  const shown = (o: THREE.Object3D): boolean => o === layer.group || (o.visible && !o.userData['decor'] && !o.userData['preview'] && (!o.parent || shown(o.parent)));
   layer.group.traverse((o) => {
     // inkOnly (the motion check): what can be seen, not pieces waiting at zero opacity
     const faint = inkOnly && ((o as THREE.Mesh).material as THREE.Material | undefined)?.opacity !== undefined && ((o as THREE.Mesh).material as THREE.Material).opacity <= 0.01;
-    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible && !faint) box.expandByObject(o);
+    if ((o as THREE.Mesh).isMesh && o.parent && shown(o.parent) && o.visible && !faint && !o.userData['preview']) box.expandByObject(o);
     // a part of the line that blinks (a caret) is in the frame whether or not it is lit when measured: one cut off by the frame's edge (terminal 是誰在練太極, 2026-11-04)
     else if (!inkOnly && (o as THREE.Mesh).isMesh && o.userData['inFrame'] && o.parent && shown(o.parent)) { const v = o.visible; o.visible = true; box.expandByObject(o); o.visible = v; }
   });
@@ -471,7 +485,7 @@ function irisMap() {
   return (irisTex.map = new THREE.CanvasTexture(cv));
 }
 
-const RENDERERS: Record<string, TemplateRenderer> = { 'world-set': worldSet, 'world-pair': worldPair, 'build-cut': buildCut, punch, 'paper-feed': paperFeed, 'memory-card': memoryCard, 'index-pull': indexPull, 'lyric-band': lyricBand, 'phrase-panels': phrasePanels, 'frame-split': frameSplit, typewriter, vertical, scatter, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel, chat, notify, input, lanes, 'lyric-carrier': lyricCarrier, 'contrast-split': contrastSplit, editorial, 'corner-anchor': cornerAnchor, 'cross-anchor': crossAnchor, 'note-panel': notePanel, 'phrase-grid': phraseGrid, 'balance-line': balanceLine, 'dot-display': dotDisplay, 'turn-box': turnBox, 'frame-feed': frameFeed, 'lightbox-entry': lightboxEntry, counterweight: counterweightLayout, 'panel-route': panelRoute, 'reply-thread': replyThread };
+const RENDERERS: Record<string, TemplateRenderer> = { 'world-set': worldSet, 'world-pair': worldPair, 'build-cut': buildCut, punch, 'paper-feed': paperFeed, 'memory-card': memoryCard, 'index-pull': indexPull, 'lyric-band': lyricBand, 'phrase-panels': phrasePanels, 'frame-split': frameSplit, typewriter, vertical, scatter, singalong, scroll, handwrite, 'title-card': titleCard, 'beat-cut': beatCut, quiet, stair, stack, array, couplet, quote, orbit, ribbon, tunnel, chat, notify, input, lanes, 'lyric-carrier': lyricCarrier, 'contrast-split': contrastSplit, editorial, 'corner-anchor': cornerAnchor, 'cross-anchor': crossAnchor, 'note-panel': notePanel, 'phrase-grid': phraseGrid, 'balance-line': balanceLine, 'dot-display': dotDisplay, 'turn-box': turnBox, 'frame-feed': frameFeed, 'lightbox-entry': lightboxEntry, counterweight: counterweightLayout, 'panel-route': panelRoute, 'reply-thread': replyThread };
 
 export interface AssetSource {
   kind: 'image' | 'video';
@@ -580,7 +594,7 @@ export interface CueMetric {
 
 export const FINAL_SHADER = {
   uniforms: {
-    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uZoomHit: { value: 0 }, uTileHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uBeams: { value: 0 },
+    tDiffuse: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uHit: { value: 0 }, uZoomHit: { value: 0 }, uTileHit: { value: 0 }, uSweep: { value: -1 }, uAberration: { value: 0.0012 }, uGrain: { value: 0.05 }, uPaper: { value: 0 }, uKeyRing: { value: 0 }, uBeams: { value: 0 },
     // section moments (moments.ts)
     uVignette: { value: 0 }, uVigBase: { value: 0.55 }, uRays: { value: 0 }, uShockR: { value: -1 }, uShock: { value: 0 },
     uRayColor: { value: new THREE.Color(1, 1, 1) },
@@ -600,13 +614,15 @@ export const FINAL_SHADER = {
     uniform float uVignette, uVigBase, uRays, uShockR, uShock; uniform vec3 uRayColor; varying vec2 vUv;
     uniform float uBoil, uBoilSeed, uFlicker, uTooth, uPixel, uLift, uHasText, uGlitch, uFade, uScan; uniform sampler2D tText; uniform vec2 uWeave;
     uniform sampler2D tGlass, tCracks; uniform float uGlass;
-    uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut;
+    uniform sampler2D tHalo; uniform float uHaloIn, uHaloOut, uKeyRing;
     ${FINAL_WARP_LIB}
     ${FINAL_HALO_LIB}
     void main(){
       ${FINAL_WARP_UV}
       float hk = haloKeep(uvC, uv, d, a);           // the halo: what of the effects' geometry this pixel keeps
       float ho = haloAt(uvC);                       // and of their noise, where it shows
+      // (and none on a kinetic line's keyline ring: grain over it broke its edge, veilLines keyRing)
+      if (uKeyRing > 0.0 && uHaloOut > 0.0) ho = min(ho, smoothstep(uKeyRing, uKeyRing + 1.0, texture2D(tHalo, uvC).r));
       vec3 c = vec3(texture2D(tDiffuse, uv + d * a).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv - d * a).b);
       if (uTileHit > 0.0) c = texture2D(tDiffuse, fract(uv * 3.0)).rgb; // the picture repeated three by three for two frames
       if (uZoomHit > 0.0) {                         // a rush into the frame: the picture smeared along lines from the centre
@@ -735,6 +751,11 @@ export class LyricVjEngine {
   private probe?: CanvasRenderingContext2D;
   /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
   private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string }[] = [];
+  /**
+   * Other words up besides the lines (a sing-along's preview row), frame px: out of the lyric box (its ground is not
+   * the line's, the guard reads only the line) but kept clear on their own by props, a move's marks and a drawing.
+   */
+  private keepOut: { from: number; to: number; rect: Rect; id: string }[] = [];
   /**
    * While a linked page move runs (world-handoff.ts linkGrounds), where the last line's words and the next line's are
    * read, and when in the move they switch: the page edges keep their margin from them (motion-transition.ts linkLayout).
@@ -993,6 +1014,7 @@ export class LyricVjEngine {
       const script = callTimes(cues).map(({ text, at }) => ({ text, at }));
       for (const sec of treatment.graphics.sections) for (const l of sec.layers) if (l.kind === 'led' && l.calls) l.script = script;
     }
+    this.inksAtStart();
     if (treatment.graphics?.story) {
       const pic = (prop: string) => this.images.get(`spr:${prop}`)?.image as { width: number; height: number } | undefined;
       const aspect = (prop: string) => pic(prop)!.width / pic(prop)!.height;
@@ -1027,8 +1049,10 @@ export class LyricVjEngine {
         if (!('prop' in it)) return it;
         const tone = this.spriteTone(`spr:${it.prop}`);
         // where and when it is first fully seen (a moving prop: where its journey ends, an orbit: its centre)
-        const at = it.kind === 'hero' ? it.states[0]?.at ?? 0 : it.kind === 'fly' ? it.at + it.dur : it.kind === 'pop' ? it.at + 0.5 : it.kind === 'journey' ? it.to : it.from + 0.5;
-        const [x, y] = it.kind === 'journey' ? it.pts[it.pts.length - 1] : [it.x, it.y];
+        const seen = it.kind === 'follow' ? firstSeen(cards, cards.indexOf(it), Math.max(0, ...storyEvents(cards)) + 5) : undefined;
+        if (it.kind === 'follow' && !seen) return it;
+        const at = seen ? seen.t + 0.5 : it.kind === 'hero' ? it.states[0]?.at ?? 0 : it.kind === 'fly' ? it.at + it.dur : it.kind === 'pop' ? it.at + 0.5 : it.kind === 'journey' ? it.to : it.kind === 'follow' ? 0 : it.from + 0.5;
+        const [x, y] = seen ? [seen.x, seen.y] : it.kind === 'journey' ? it.pts[it.pts.length - 1] : [it.x, it.y];
         const [hw, hh] = [(it.size * H * (it.aspect ?? 1)) / 2, (it.size * H) / 2];
         const box = new THREE.Box3(new THREE.Vector3(x * (W / 2) - hw, y * (H / 2) - hh, 0), new THREE.Vector3(x * (W / 2) + hw, y * (H / 2) + hh, 0));
         const ground = this.backdropAt(at, box)?.mean;
@@ -1048,6 +1072,8 @@ export class LyricVjEngine {
       const stop = colorAt(design.colorScript, spec.start + 0.5);
       this.customScenes.push(new CustomScene(spec, { W, H, start: spec.start, end: spec.end, palette: { shadow: stop.shadow, highlight: stop.highlight, accent: stop.accent }, beats: this.job.beats, beatStrength: this.job.beatStrength ?? [], hash }));
     }
+    // a sing-along template without the buyer's option (a hand-edited or stale plan) is set as a plain stack instead
+    for (const shot of treatment.shots) if (missingOptIn(shot.template, design)) Object.assign(shot, { template: 'stack', params: {} });
     // 'auto' placement: the lyrics go to the third of the frame where the background is calmest at that shot
     for (const shot of treatment.shots)
       for (const [k, v] of Object.entries(shot.params)) if (v === 'auto') shot.params[k] = this.calmSide(shot, k);
@@ -1183,7 +1209,9 @@ export class LyricVjEngine {
         return nextShow;
       })();
       // (a world's shared shot is gone before the next line shows, however late its own line runs)
-      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : persist ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
+      // (a sing-along line stays until the next one shows only while that one follows soon: its preview waits there)
+      const held = !!persist && (persist !== 'preview' || (!!next && next.start - cue.end <= PREVIEW_GAP));
+      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
@@ -1212,6 +1240,11 @@ export class LyricVjEngine {
         shotText,
         firstVoice,
         order: styled.slice(0, i).filter((x) => x.style.shot === style.shot).length,
+        songOrder: i,
+        prevText: styled[i - 1]?.cue.text,
+        prevEnd: styled[i - 1]?.cue.end,
+        nextText: styled[i + 1]?.cue.text,
+        nextStart: styled[i + 1]?.cue.start,
       };
       // (a world line's inks are checked on the ground each glyph really stands on, world-layout measuredInks)
       if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });
@@ -1276,6 +1309,15 @@ export class LyricVjEngine {
       let drawn = shot.template;
       const build = (r = rt) => inFrame(withTextFx(RENDERERS[drawn].cue({ ...r, style: templateStyle(r.style) }), r));
       let layer = build();
+      // a sing-along's preview row reads on what is under it there (measured where it stands), not on the line's ground
+      const pv = previewBox(layer);
+      if (pv) {
+        const m = this.backdropAt(cue.start + Math.min(1, (cue.end - cue.start) / 2), pv);
+        if (m) {
+          rt.previewGrounds = [m.mean, ...(m.grounds ?? [])];
+          layer = build();
+        }
+      }
       // the floor on type size: a line that would rest under it takes plain stepped rows, its moves given up for them
       const alone = !styled.some((x, j) => j !== i && x.style.shot === style.shot);
       // (in a style world every line rests at the type floor, render/type-floor.ts, a world line too: one that no set of its
@@ -1431,6 +1473,8 @@ export class LyricVjEngine {
         // where the line sits on screen, so background objects can make room for it
         // beat-cut throws its phrases all over the frame before the line settles: the whole frame is the line's
         const b = settledBox(layer, fit, true);
+        const pv = previewBox(layer);
+        if (pv) this.keepOut.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: pv.min.x + W / 2, y0: H / 2 - pv.max.y, x1: pv.max.x + W / 2, y1: H / 2 - pv.min.y } });
         if (layer.poses) for (const p of layer.poses()) this.lyricRects.push({ id: rt.cue.id, from: p.from, to: p.to, rect: p.rect, rest: p.rect });
         else if (shot.template === 'beat-cut') this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H }, rest: { x0: 0, y0: 0, x1: W, y1: H } });
         else if (!b.isEmpty()) {
@@ -1544,6 +1588,20 @@ export class LyricVjEngine {
     }
   }
 
+  /**
+   * Each bare kinetic cut's ink, decided from what is under it at its own start, before anything else draws the look
+   * (a probe for a line's colour, a seek): the same in the export and the preview at any seek (kinetic.ts inkDark).
+   */
+  private inksAtStart() {
+    const secs = this.job.treatment.graphics?.sections ?? [];
+    setDecidingInk(true);
+    try {
+      for (const sec of secs) if (sec.layers.some((l) => l.kind === 'kinetic' && (l as KineticLayer).bare && (l as KineticLayer).inkDark === undefined)) this.backdropAt(sec.start + 1 / 120);
+    } finally {
+      setDecidingInk(false);
+    }
+  }
+
   /** The room the lines leave each kinetic cut under them, for what it draws of its own. */
   private layRooms(span: [number, number] = [-Infinity, Infinity]) {
     const treatment = this.job.treatment;
@@ -1557,7 +1615,8 @@ export class LyricVjEngine {
           // a director's drawing sees every line read over its section, to place its props clear of them (f.room, f.fit)
           if (l.kind === 'code') {
             const until = secs[i + 1]?.start ?? Infinity;
-            l.lines = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rest.x0, y0: r.rest.y0, x1: r.rest.x1, y1: r.rest.y1 }));
+            // (a sing-along's preview row too: the drawing composes clear of it)
+            l.lines = [...this.lyricRects.map((r) => ({ ...r, rect: r.rest })), ...this.keepOut].filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
             continue;
           }
           if (l.kind !== 'kinetic') continue;
@@ -1595,6 +1654,8 @@ export class LyricVjEngine {
           }
         }
       });
+      // a character carries on across a cut only where it stands as before (size, side, room, rows: kinetic.ts)
+      carrySubjects(secs.flatMap((s) => s.layers.filter((l) => l.kind === 'kinetic') as KineticLayer[]));
     }
   }
 
@@ -1803,42 +1864,57 @@ export class LyricVjEngine {
       // a tight keyline in the type's own ground round each letter's shape, grown by R px: the move is cut cleanly
       // where it crosses a letter (a frosted blur under each letter read as a smudge)
       // twice as wide where neither ink stands off the ground (thin mincho in navy on a mid violet sky, indigo)
-      const R = (this.weak.get(rt.cue.id) ?? 21) < 4.5 ? 14 : 7;
+      const R = keyReach(this.weak.get(rt.cue.id) ?? 21);
+      // the final pass keeps its grain off the ring (uKeyRing): its edge stays clean
+      this.keyRing = Math.max(this.keyRing, keyRingClear(R));
       const x0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.x0)) - R));
       const y0 = Math.max(0, Math.floor(Math.min(...boxes.map((b) => b.y0)) - R));
       const [w, h] = [Math.min(W, Math.ceil(Math.max(...boxes.map((b) => b.x1)) + R)) - x0, Math.min(H, Math.ceil(Math.max(...boxes.map((b) => b.y1)) + R)) - y0];
       if (w < 2 || h < 2) continue;
-      shape.save();
-      shape.clearRect(x0, y0, w, h);
-      for (const b of boxes) {
-        // only what has a letter's own shape gets a keyline: a cut-up glyph, a repeating wave (a held vowel's ～), a
-        // mark took a rounded box, a smudge of ground behind it
-        if (!b.img || !b.at) continue;
-        shape.globalAlpha = b.a;
-        // the texture where the letter is, tilted with it (an arc's letters had upright keylines, a blur round them)
-        for (let k = 0; k < 12; k++) {
-          const a = (k / 12) * Math.PI * 2;
-          shape.setTransform(b.at[0], b.at[1], b.at[2], b.at[3], b.at[4] + Math.cos(a) * R, b.at[5] + Math.sin(a) * R);
-          shape.drawImage(b.img, 0, 0);
-        }
-        shape.setTransform(1, 0, 0, 1, 0, 0);
-      }
-      shape.globalAlpha = 1;
-      shape.globalCompositeOperation = 'source-in';
-      // the ink the letters are not in (a language's own type ink can put both builds in the same colour)
+      this.veilMask ??= new OffscreenCanvas(W, H).getContext('2d')!;
+      const mask = this.veilMask;
+      // the line's letters once into a mask, then the mask stamped over a solid disc of radius R (dilate.ts): twelve
+      // stamps of each letter on a ring of R left scallops between them round thin strokes, a blotchy ring. A
+      // sing-along's preview row (not the line sung, in an ink of its own) takes a thin keyline in the ink it is not in
       const text = twin.text[light ? 0 : 1];
-      shape.fillStyle = contrast(text, inks.ink) > contrast(text, inks.paper) ? inks.ink : inks.paper;
-      shape.fillRect(x0, y0, w, h);
-      shape.restore();
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0); // frame px, under the cut's camera move
-      // a line still being handed in has no keyline yet: its letters are only partly out
-      ctx.globalAlpha = alpha * clamp01((t - (hand ? hand.h.to : rt.showFrom)) / 0.25) * clamp01((end - t) / 0.25);
-      ctx.drawImage(shape.canvas, x0, y0, w, h, x0, y0, w, h);
-      ctx.restore();
+      for (const [preview, reach] of [[false, R], [true, Math.min(R, 4)]] as const) {
+        const own = boxes.filter((b) => !!b.preview === preview);
+        if (!own.length) continue;
+        shape.save();
+        shape.clearRect(x0, y0, w, h);
+        mask.clearRect(x0, y0, w, h);
+        for (const b of own) {
+          // only what has a letter's own shape gets a keyline: a cut-up glyph, a repeating wave (a held vowel's ～), a
+          // mark took a rounded box, a smudge of ground behind it
+          if (!b.img || !b.at) continue;
+          mask.globalAlpha = b.a;
+          // the texture where the letter is, tilted with it (an arc's letters had upright keylines, a blur round them)
+          mask.setTransform(b.at[0], b.at[1], b.at[2], b.at[3], b.at[4], b.at[5]);
+          mask.drawImage(b.img, 0, 0);
+          mask.setTransform(1, 0, 0, 1, 0, 0);
+        }
+        mask.globalAlpha = 1;
+        for (const [dx, dy] of discOffsets(reach)) shape.drawImage(mask.canvas, x0, y0, w, h, x0 + dx, y0 + dy, w, h);
+        shape.globalCompositeOperation = 'source-in';
+        // the ink the letters are not in (a language's own type ink can put both builds in the same colour)
+        const ink = preview ? (own.find((b) => b.ink)?.ink ?? text) : text;
+        shape.fillStyle = contrast(ink, inks.ink) > contrast(ink, inks.paper) ? inks.ink : inks.paper;
+        shape.fillRect(x0, y0, w, h);
+        shape.restore();
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // frame px, under the cut's camera move
+        // a line still being handed in has no keyline yet: its letters are only partly out
+        ctx.globalAlpha = alpha * clamp01((t - (hand ? hand.h.to : rt.showFrom)) / 0.25) * clamp01((end - t) / 0.25);
+        ctx.drawImage(shape.canvas, x0, y0, w, h, x0, y0, w, h);
+        ctx.restore();
+      }
     }
   }
   private veilShape?: OffscreenCanvasRenderingContext2D;
+  /** The widest keyline drawn this frame (veilLines), px round the letters the final pass keeps its noise off. */
+  private keyRing = 0;
+  /** The letters of the line being keyed, before they are grown into its keyline (veilLines). */
+  private veilMask?: OffscreenCanvasRenderingContext2D;
   /** The build each kinetic line shows this frame, picked by the veil (veilLines). */
   private lit: { t: number; by: Map<string, boolean> } = { t: NaN, by: new Map() };
 
@@ -2411,6 +2487,7 @@ export class LyricVjEngine {
     lz.built.add(i);
     setWordSafe(true);
     this.lyricRects = this.lyricRects.filter((r) => r.id !== lz.styled[i].cue.id && r.id !== `${lz.styled[i].cue.id}:call`);
+    this.keepOut = this.keepOut.filter((r) => r.id !== lz.styled[i].cue.id);
     // a line is measured on the frame, not on the type layer as this moment's sway and kick have left it
     const held = { x: this.textRoot.position.x, y: this.textRoot.position.y, s: this.textRoot.scale.x };
     this.textRoot.position.set(0, 0, 0);
@@ -2537,6 +2614,7 @@ export class LyricVjEngine {
   /** The time of the frame being drawn (page checks name it). */
   private renderedAt = 0;
   async renderAt(t: number) {
+    this.keyRing = 0;
     this.renderedAt = t;
     this.keepLines(t);
     this.placedProps = [];
@@ -2593,6 +2671,7 @@ export class LyricVjEngine {
         // the type laid out for this frame first: the veil under it follows where its letters are now
         this.updateCues(t, fx, this.flashes.find((f) => t >= f.at && t < f.at + FLASH_SEC)?.cueId);
         this.textRoot.updateMatrixWorld(true);
+        this.keyRing = 0;
         setLineVeil((c, alpha) => this.veilLines(c, t, alpha));
         setBackPush(this.pushAt(t));
       }
@@ -2769,6 +2848,7 @@ export class LyricVjEngine {
     const halo = this.haloNow();
     if (!this.inkFrozen) {
       [u['uHaloIn'].value, u['uHaloOut'].value] = halo ? [halo[0], Math.min(halo[1], HALO_REACH)] : [0, 0];
+      u['uKeyRing'].value = halo ? Math.min(this.keyRing, HALO_REACH - 0.5) : 0;
       // (no reading glyph on the frame: nothing to keep the effects off, and no pass drawn)
       const reading = halo ? (this.textRoot.updateMatrixWorld(true), this.readingMeshes()) : [];
       if (halo && !reading.length) [u['uHaloIn'].value, u['uHaloOut'].value] = [0, 0];
@@ -3140,8 +3220,9 @@ export class LyricVjEngine {
       // a card about a line up (its text in the line: 「嘘つき！」 on c062) is key content: it stays before the others
       const sung = lines.map((r) => bare(this.cueLayers.find((c) => c.rt.cue.id === r.id)?.rt.cue.text ?? '')).join('|');
       const layers = layers0.map((l) => (l.kind === 'card' && !l.key && bare(l.text) && sung.includes(bare(l.text)) ? ({ ...l, key: true } as Layer) : l));
-      const wide = avoidAll(layers, moving);
-      const tight = avoidAll(layers, rest);
+      const keep = this.keepOut.filter((r) => x >= r.from && x <= r.to).map((r) => r.rect);
+      const wide = avoidAll(layers, moving, keep);
+      const tight = avoidAll(layers, rest, keep);
       return wide.map((l, i) => {
         const r = l.kind === 'code' ? undefined : layerRect(l);
         return r && r.x0 < moving.x1 && moving.x0 < r.x1 && r.y0 < moving.y1 && moving.y0 < r.y1 ? tight[i] : l;
@@ -3183,6 +3264,8 @@ export class LyricVjEngine {
     const LOOK = 2 * STEPS - 1;
     // a prop flying along its path is placed frame by frame: room made where it was at one time of the stretch is not
     // where it is later (a feather of 春泥棒 grazed c008)
+    // (a follower is not: placed per frame it flipped between a free place and fading behind the words as its leader
+    // moved; decided once a stretch it glides, and keeps its offset by the leader as it moves)
     const flying = (l: Layer) => ((l as { ref?: string }).ref ?? '').startsWith('fly#');
     const sample = (j: number, each: boolean) => {
       const x = t - (GLIDE * j) / (STEPS - 1);

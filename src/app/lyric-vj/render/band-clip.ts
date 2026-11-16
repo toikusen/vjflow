@@ -54,3 +54,17 @@ export function slatTurn(i: number, n: number, k: number, fromLeft: boolean, fro
   const d = n < 2 ? 0 : 0.42 * ((fromLeft ? i : n - 1 - i) / (n - 1));
   return from * (1 - easeOut((k - d) / (1 - d)));
 }
+
+/** Edges of n equal strips across a block, 0..1, the last exactly 1. */
+export const stripEdges = (n: number): number[] => Array.from({ length: n + 1 }, (_, i) => (i === n ? 1 : i / n));
+
+/**
+ * How far strip i of n (in order down the block) still has to slide at entrance progress k (0..1), as a share of its
+ * reach, signed by side: the strips alternate sides from `first`, each starts `lag` of the entrance after the first
+ * (the last at `lag`), and every one is home exactly from k = 1. Two strips with no lag is the two-half slice.
+ */
+export function stripSlide(i: number, n: number, k: number, first = 1, lag = 0): number {
+  if (k >= 1) return 0;
+  const d = n < 2 ? 0 : (lag * i) / (n - 1);
+  return (i % 2 === 0 ? first : -first) * (1 - easeOut((k - d) / (1 - d)));
+}

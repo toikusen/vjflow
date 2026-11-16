@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { NEEDS_ART, DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_FX, KINETIC_PRINTS, KineticLayer, THREAD_MARKS, ThreadMark } from '../../src/app/lyric-vj/render/kinetic';
+import { NEEDS_ART, DOC_KINDS, GROUNDS, KINETIC_CAMS, KINETIC_FLASHES, KINETIC_FX, KINETIC_PRINTS, KineticLayer, subjectSince, THREAD_MARKS, ThreadMark } from '../../src/app/lyric-vj/render/kinetic';
 import { TRANSITION_KINDS, transitionGuide } from '../../src/app/lyric-vj/render/transition';
 import { LOOPS, QUIET_LOOPS } from '../../src/app/lyric-vj/render/kinetic-loops';
 import { GLYPH_FINISHES } from '../../src/app/lyric-vj/design';
@@ -208,8 +208,8 @@ console.log(`lyric density: ${perSec.toFixed(1)} chars/s${wordy ? '' : ' (no pag
 // words than parts they hang empty boxes (an orange tag on a thread in 三年後的大雪's intro) or say a word twice
 const WORDED: Record<string, number> = { hang: 1, bubble: 1, tiles: 1, flap: 1, chat: 1, strike: 1, morse: 1, beforeafter: 1, measure: 1, loop: 3, layers: 3 };
 // learned 2026-10-21 (kittenjam, Motion Prompt #121–144): named to the director so they are weighed, not missed
-const NEW_FX = ['cube', 'drum', 'tape', 'corridor', 'confetti', 'warp', 'flow', 'synth', 'bokeh', 'ridges', 'shapes', 'lens', 'layers', 'panels', 'path', 'goo', 'morph', 'glide'];
-const [NEW_ENTERS, NEW_EXITS, NEW_IDLES, NEW_EMPH] = [['shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke'], ['domino', 'pixel', 'shatter'], ['boil', 'hop', 'thump', 'track', 'fill'], ['echo', 'weight', 'shine', 'faces']];
+const NEW_FX = ['cube', 'drum', 'tape', 'corridor', 'confetti', 'warp', 'flow', 'synth', 'bokeh', 'ridges', 'shapes', 'lens', 'layers', 'panels', 'path', 'goo', 'morph', 'glide', 'field'];
+const [NEW_ENTERS, NEW_EXITS, NEW_IDLES, NEW_EMPH] = [['shuffle', 'settle', 'flicker', 'squash', 'windup', 'karaoke', 'strips'], ['domino', 'pixel', 'shatter'], ['boil', 'hop', 'thump', 'track', 'fill'], ['echo', 'weight', 'shine', 'faces']];
 const MOVES = KINETIC_FX.filter((x) => (sprites.length || !NEEDS_ART.has(x)) && (wordy || !DENSE.has(x)) && !(calm && LOUD.has(x)) && !RETIRED.has(x) && (a.showcase || !UNTRIED.has(x)));
 // the visual direction is decided first, in a call of its own (the plan's schema with it compiled past the API's
 // grammar limit, and the direction is what the cuts are then laid against)
@@ -592,7 +592,7 @@ export function buildCuts(p: Plan) {
   const missing: string[] = [];
   let removed = 0;
   let last = '';
-  let shown = { sprite: '', side: '' };
+  let shown = { sprite: '', side: '', since: 0, place: '' };
   // round moves past their share of the song are swapped for the director's other moves (capRound)
   const order = shots.flatMap((s) => [...(p.shots.find((x) => x.shot === s.id)?.cuts ?? [])].sort((x, y) => x.beat - y.beat).map((c) => ({ c, shot: s.id })));
   const shotIds = order.map((o) => o.shot);
@@ -691,7 +691,10 @@ export function buildCuts(p: Plan) {
       // the picture the strip took would have been drawn (not a diagram, not across the frame, not on the board)
       const tookPicture = !!c.sprite && !sprite && !DIAGRAM_FX.has(fx) && sameSpot(shown, c.sprite, side) && !board?.items.some((x) => x.sprite === c.sprite);
       if (tookPicture) removed++;
-      shown = { sprite: layer.sprite ?? '', side };
+      // the same character in the same spot carries on across the cut: its own clock, no pop on every background cut
+      const place = `${size.toFixed(3)}|${fx === 'grid' ? 'grid' : 'one'}`;
+      if (layer.sprite) layer.subjectAt = subjectSince(shown, layer.sprite, side, at, place);
+      shown = { sprite: layer.sprite ?? '', side, since: layer.subjectAt ?? at, place };
       if (c.dark) layer.dark = true;
       if (c.yields) layer.yields = true;
       if (c.mark) layer.mark = c.mark as KineticLayer['mark'];

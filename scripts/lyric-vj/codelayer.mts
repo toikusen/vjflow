@@ -94,6 +94,9 @@ const RULES = `
 - f.t：歌曲秒數；f.age：本段開始後的秒數；f.w、f.h：1920、1080。
 - f.beat：{ since: 距上一拍秒數, pulse: 1→0 衰減的打拍力道, index: 第幾拍 }。BPM 和段落、高潮時間在下面的資料裡，可以直接寫死在程式裡。
 - f.lyric：此刻歌詞在畫面上的矩形 {x0,y0,x1,y1}（像素），沒有歌詞時是 null。歌詞會畫在你上面。f.lyric 換句時會在 0.4 秒內滑到新位置；f.lyricWeight 是 0→1 的讓位權重（歌詞出現時漸增、離開時漸減），讓位的位移和縮放一律乘上它。
+- f.lines：這段每一句歌詞閱讀時的矩形 [{ from, to, x0, y0, x1, y1 }]（秒、像素），先看字在哪裡再構圖。
+- f.room(from?, to?)：這個鏡頭（預設 f.cam.start→f.cam.end）裡所有歌詞都避開的空位，是像素矩形的陣列（左右的整條直帶、字上方或下方的整條橫帶；沒有歌詞時是整個畫面；字佔滿時是空陣列）。主角和會動的物件放在這些空位裡。
+- f.fit(x, y, w, h)：把你要畫的素材矩形（目前座標，已套用你的鏡頭）移進這個鏡頭的空位：腳站的地方盡量不動、必要時縮小，回傳 [x, y, w, h]，直接拿去 ctx.drawImage(img, x, y, w, h)。同一個鏡頭裡空位固定，所以不會跳；給它這個物件在這個鏡頭裡的位置。
 - f.cam：此刻的鏡頭 { index, start, end, progress 0→1, count }。鏡頭在 cuts 的時間點硬切（index 0 是第一個切點之前），切點和歌詞版型換版同步。
 - f.hash(a, b)：決定性雜訊 [0,1)。
 - f.cache：跨格保留的物件，用來存只算一次的離屏畫布或雜訊圖（例如 f.cache.paper ??= 建立紙紋()）。
@@ -128,7 +131,7 @@ const RULES = `
 17-12. 物件要屬於畫面，不是貼紙：同一時間畫面上最多 3 個素材；每個素材要有物理上的位置（放在地面、桌面、水面、掛在東西上，大小符合場景的透視和遠近），不要漂在空中、不要沒有理由地上下晃；兩個素材不能疊在一起。素材出現和離開都要有動畫（從畫外進來、落下、長出、淡入），不能一格之內冒出、消失、瞬移或突然變大變小——系統會逐格量測，違反就是必須修的錯誤。
 17-13. 少而有關聯：全片的素材圍繞一個故事物件（它貫穿全片），配角只在歌詞真的提到時出現；不要每個場景都塞新的道具。
 17-14. 間奏留白呼吸：資料裡的 interludes（超過 4 秒沒有歌詞）背景降成低能量——極慢的推鏡或漂移、明暗緩慢呼吸、少量環境微動（光、雲、水、粒子），不要在間奏塞新的事件或新道具；歌詞回來前一兩拍再把能量帶回來。片尾最後一句唱完後讓畫面慢慢減速，程式會自動淡出到黑。
-17-10. 歌詞不能被素材蓋住：歌詞完整出現時，素材的不透明部分不能壓進 f.lyric 的矩形（系統會量測，蓋住超過 8% 就是必須修的錯誤）。用構圖、取景和 f.lyricWeight 讓位，不要把素材塞到歌詞後面。
+17-10. 歌詞不能被素材蓋住：歌詞完整出現時，素材的不透明部分不能壓進 f.lyric 的矩形（系統會量測，蓋住超過 8% 就是必須修的錯誤）。壓進去的素材會被系統挖空並淡掉（記錄成 lyric kept clear，也是必須修的錯誤：故事物件在最重要的那句消失）。每個鏡頭先用 f.room() 看歌詞留下的空位，把主角和故事物件放在那裡（或用 f.fit 畫），物件的移動路線也不能穿過歌詞；不要把素材塞到歌詞後面。
 17-11. 構圖是分區，不是閃躲：每個鏡頭先決定歌詞區和畫面區（例如直排歌詞在右三分之一，主角大浪佔左邊三分之二並被畫框大膽裁切；橫排歌詞在上方留白，主角物件佔下半部）。主角物件要大（畫面面積 25–60%），可以出框；配角少而小、有主從。不要為了避開歌詞把所有物件縮小推到角落，留下一片空的底色——那比壓到歌詞更糟。歌詞換位置時，主角跟著換邊或換景別。
 17-15. 場景有一個光源（燭火、夕陽、路燈、窗光、螢幕）：先決定它在哪裡，再讓整個畫面服從它——地面和牆上有它照出的光暈（'lighter' 疊淡色徑向漸層，可以隨時間呼吸或閃動）、每個物件的影子朝遠離光源的方向拉長（柔邊，用 ctx.filter blur 只畫在影子上）、靠近光源的物件被照亮一點（同一張圖用 'lighter' 低透明度再疊一次）。光源的變化就是事件（燭火熄滅、夕陽沉下、路燈亮起）。
 17-16. 物件放在一個有透視的承載面上（桌面、地面、斑馬線、水面）：畫出它的後緣和朝觀眾延伸的紋理線（木紋、地磚、斑馬線往消失點收），物件分前、中、後排，越前面越大、越低，前排的物件可以壓住後排的一部分（遮擋＝景深）；不要把物件排成同一條水平線。躺著的東西要真的躺平（花、筆、照片轉成接近水平），不要用尖端立在桌上。
@@ -487,6 +490,8 @@ async function test(r: Reply, round: number) {
   const problems = [...new Set(lines.filter((l) => /code layer:|page error:/.test(l) && !l.includes('scene-use') && !l.includes('code layer: track')))];
   // props that jump, pop, swell or sit on each other inside a shot (the user's complaints on sweet timer)
   problems.push(...cont.hard.slice(0, 20).map((x) => `物件不連續：${x}`));
+  // a prop the renderer had to cut out of a read line (cover.ts watchClear): it vanished there, so it must be placed
+  if (problems.some((x) => x.includes('lyric kept clear:'))) problems.push('上面 lyric kept clear 的素材在歌詞閱讀時壓進了歌詞框，被系統挖空淡掉（觀眾看到它消失）：在那個鏡頭用 f.room() 的空位重新安排它的位置和移動路線，或改用 f.fit(x, y, w, h) 畫它。');
   // a render that failed (a slow network while the page loaded its fonts) is tried once more; a still that is still
   // missing is left out rather than ending the run
   const stillOf = (x: number) => join(dir, `still_${x.toFixed(2)}.png`);

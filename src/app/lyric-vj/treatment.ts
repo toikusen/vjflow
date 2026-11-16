@@ -34,9 +34,13 @@ export const LINE_EXITS: LineExit[] = ['collapse', 'fold-close', 'band-out', 'sl
 export const LINE_IDLES: LineIdle[] = ['climb', 'ink-state', 'tether-settle', 'balance-rest', 'side-light', 'reflection-rest', 'breath-rule', 'frame-lights'];
 export type EnterKind = 'pop' | 'slam' | 'wipe' | 'fade' | 'cut' | 'ink' | 'flap' | 'slot' | 'focus' | 'rise' | 'dash' | 'drop' | 'zoom' | 'gather' | 'spin' | 'prelight' | 'spread' | 'swing' | 'decode' | 'slice' | 'flip' | 'stretch' | 'shuffle' | 'settle' | 'flicker' | 'squash' | 'windup' | 'karaoke' | LineEnter;
 export type ExitKind = 'burst' | 'fade' | 'rise' | 'cut' | 'glitch' | 'slash' | 'drop' | 'shrink' | 'dash' | 'dust' | 'spin' | 'zoom' | 'melt' | 'scramble' | 'split' | 'domino' | 'pixel' | 'shatter' | LineExit;
-/** How a landed line moves while it is held (unset: a slight per-character wave). */
-export type IdleKind = 'still' | 'drift' | 'push' | 'wave' | 'float' | 'shake' | 'boil' | 'hop' | 'thump' | LineIdle;
-export const IDLE_KINDS: IdleKind[] = ['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump'];
+/**
+ * How a landed line moves while it is held (unset: a slight per-character wave). track: its letter spacing opens slowly
+ * about its centre over its life (render/line-track.ts); fill: it holds still while a key-ink copy is uncovered over it
+ * as it is sung (render/sung-fill.ts).
+ */
+export type IdleKind = 'still' | 'drift' | 'push' | 'wave' | 'float' | 'shake' | 'boil' | 'hop' | 'thump' | 'track' | 'fill' | LineIdle;
+export const IDLE_KINDS: IdleKind[] = ['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump', 'track', 'fill'];
 export type Camera = 'static' | 'push' | 'pan' | 'parallax';
 export type TransitionIn = 'cut' | 'flash' | 'wipe' | 'dissolve' | 'glitch';
 // strike: a brush line struck through the word half a beat after it lands; box: a solid block behind it; hold: a

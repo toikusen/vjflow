@@ -5,6 +5,8 @@
 // Mined from 30 story-arc analyses (out_story/candidates.md): A bookend, B+C hero state arc, D cards, E fly, F thread,
 // I pop.
 import type { Rgb } from './graphics';
+import { loopNoise } from './loop-noise';
+import { arrivalSpeed, backOut, overshootFor } from './settle';
 
 const W = 1920;
 const H = 1080;
@@ -64,23 +66,29 @@ const lastIndex = <T>(xs: T[], f: (x: T, i: number) => boolean) => {
   return -1;
 };
 const bez = (p0: Pt, c: Pt, p1: Pt, k: number): Pt => [lerp(lerp(p0[0], c[0], k), lerp(c[0], p1[0], k), k), lerp(lerp(p0[1], c[1], k), lerp(c[1], p1[1], k), k)];
+/** The loop of a prop's drift and gusts, s: long enough that its return is never seen as a beat. */
+export const DRIFT_LOOP = 24;
+/** The hanging prop's pendulum swings per DRIFT_LOOP (about 1.8 rad/s, its old pace). */
+const HANG_TURNS = 7;
 /**
  * A prop's movement at rest: offsets in look units, rotation in radians, horizontal scale (wing beats). Smooth and
- * periodic, every prop on its own phase (n).
+ * periodic, every prop on its own phase (n). A drifting prop and a hanging prop's gust wander on loopable noise
+ * (loop-noise.ts) rather than a sine, so their motion never shows a steady beat and still loops every DRIFT_LOOP s.
  */
 function idle(motion: Motion, t: number, n: number): { dx: number; dy: number; rot: number; sx: number } {
   const p = n * 1.7;
   switch (motion) {
     case 'hang':
       // a pendulum stirred by a breeze: a slow swing with a slower gust over it
-      return { dx: 0, dy: 0, rot: 0.09 * Math.sin(t * 1.9 + p) + 0.05 * Math.sin(t * 0.55 + p), sx: 1 };
+      // (the swing makes whole turns in the drift's loop, 7 in 24 s, so the whole motion loops with the noise)
+      return { dx: 0, dy: 0, rot: 0.09 * Math.sin(((Math.PI * 2 * HANG_TURNS) / DRIFT_LOOP) * t + p) + 0.05 * loopNoise(t, DRIFT_LOOP, n * 7 + 1), sx: 1 };
     case 'flutter': {
       // rests with wings open, and every few seconds beats them a few times while it shifts a little
       const burst = Math.max(0, Math.sin(t * 0.9 + p) - 0.55) / 0.45;
       return { dx: 0.01 * Math.sin(t * 0.7 + p), dy: 0.012 * Math.sin(t * 1.1 + p) + burst * 0.02, rot: 0.04 * Math.sin(t * 0.8 + p), sx: 1 - burst * 0.55 * Math.abs(Math.sin(t * 16)) };
     }
     case 'drift':
-      return { dx: 0.015 * Math.sin(t * 0.4 + p), dy: 0.02 * Math.sin(t * 0.6 + p), rot: 0.03 * Math.sin(t * 0.5 + p), sx: 1 };
+      return { dx: 0.015 * loopNoise(t, DRIFT_LOOP, n * 7 + 2), dy: 0.02 * loopNoise(t, DRIFT_LOOP, n * 7 + 3), rot: 0.03 * loopNoise(t, DRIFT_LOOP, n * 7 + 4), sx: 1 };
     case 'still':
       return { dx: 0, dy: 0, rot: 0, sx: 1 };
     default:
@@ -157,6 +165,12 @@ export function along(pts: Pt[], u: number): Pt {
   return pts[0];
 }
 
+/**
+ * A flying prop's overshoot on landing (settle.ts backOut): none at or under 0.8 look units a second, then growing with
+ * its speed, never past 1.2 (about 5 % of its path).
+ */
+export const flyOvershoot = (distance: number, dur: number) => overshootFor(arrivalSpeed(distance, dur), 0.8, 0.9, 1.2);
+
 /** Where a fly starts: just off the frame on its side, level with (or above) where it lands. */
 const entry = (from: 'left' | 'right' | 'top' | 'bottom', x: number, y: number): Pt =>
   from === 'left' ? [-1.35, y + 0.3] : from === 'right' ? [1.35, y + 0.3] : from === 'top' ? [x - 0.4, 1.4] : [x - 0.4, -1.4];
@@ -208,7 +222,9 @@ export function storyLayers(items: StoryItem[], t: number): StoryLayer[] {
         const p2: Pt = [it.x + (it.x - p0[0]) * 0.9, it.y + 0.25];
         const k = (t - it.at) / it.dur;
         const path = (u: number): Pt => (u <= 1 ? bez(p0, c, p1, u) : bez(p1, [lerp(p1[0], p2[0], 0.5), p1[1] - 0.15], p2, u - 1));
-        const u = it.through ? Math.min(2, k) : easeOut(k);
+        // a landing carries on past its place by as much as it came in fast (the curve's own run on), and is back at
+        // rest exactly at the end of its flight
+        const u = it.through ? Math.min(2, k) : backOut(k, flyOvershoot(Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), it.dur));
         const here = path(u);
         const ahead = path(Math.min(2, u + 0.02));
         // the trail: the last stretch of the path, dotted behind the prop

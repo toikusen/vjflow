@@ -59,3 +59,39 @@ export function matchGlyphPicture(m: THREE.Material | THREE.Material[]) {
     if (map?.userData['premult'] && !(x as THREE.ShaderMaterial).isShaderMaterial) setPatch(x, 'unpremultiply', unpremultiply);
   }
 }
+
+/**
+ * A glyph's sung fill (render/sung-fill.ts), in the glyph's own px (its centre 0, y up): the direction the fill runs
+ * there and how far along it the fill has reached, shared by the glyph and its pieces; and where this mesh's picture
+ * lies in that frame (a piece of a glyph split into strokes sits off its centre).
+ */
+export interface FillUniforms {
+  /** Unit direction of the fill in the glyph's own frame (what is the screen's left to right, or top to bottom). */
+  uFillDir: { value: THREE.Vector2 };
+  /** Px along uFillDir from the glyph's centre: what lies before it is filled. */
+  uFillEdge: { value: number };
+  uFillInk: { value: THREE.Color };
+  /** This picture's centre and size in the glyph's frame, px. */
+  uFillOrigin: { value: THREE.Vector2 };
+  uFillSize: { value: THREE.Vector2 };
+}
+
+/**
+ * The sung fill drawn in the glyph's own material, not on a copy laid over it: the glyph takes the fill ink up to the
+ * edge and keeps its own ink past it, one picture with one outline (a copy is interference to the ink halo and is cut
+ * out of the reading glyph's clean zone). The edge is soft over about a pixel so it never stair-steps.
+ */
+export const sungFill = (u: FillUniforms): Patch => (shader) => {
+  Object.assign(shader.uniforms, u);
+  shader.fragmentShader = shader.fragmentShader
+    .replace('void main() {', 'uniform float uFillEdge; uniform vec2 uFillDir, uFillOrigin, uFillSize; uniform vec3 uFillInk;\nvoid main() {')
+    .replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+  float fillAlong = dot(uFillOrigin + (vMapUv - 0.5) * uFillSize, uFillDir);
+  float fillSoft = max(fwidth(fillAlong), 1e-3);
+  diffuseColor.rgb = mix(diffuseColor.rgb, uFillInk, 1.0 - smoothstep(uFillEdge - fillSoft, uFillEdge + fillSoft, fillAlong));
+#endif
+#include <map_fragment>`,
+    );
+};

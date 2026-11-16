@@ -1554,6 +1554,12 @@ export class LyricVjEngine {
         // (a line built on its own touches only the cuts it runs over)
         if ((secs[i + 1]?.start ?? Infinity) < span[0] || sec.start > span[1]) return;
         for (const l of sec.layers as Layer[]) {
+          // a director's drawing sees every line read over its section, to place its props clear of them (f.room, f.fit)
+          if (l.kind === 'code') {
+            const until = secs[i + 1]?.start ?? Infinity;
+            l.lines = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rest.x0, y0: r.rest.y0, x1: r.rest.x1, y1: r.rest.y1 }));
+            continue;
+          }
           if (l.kind !== 'kinetic') continue;
           const until = secs[i + 1]?.start ?? Infinity;
           // a board lays its pieces where this cut's lines leave the most room (board.ts)

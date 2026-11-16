@@ -84,7 +84,7 @@ export const TUNABLE = ['meteor.n', 'stars.n', 'rain.n', 'sparkle.n', 'fireworks
 const OPEN_TEMPLATES = new Set(['stair', 'stack', 'punch', 'quote', 'vertical', 'couplet', 'handwrite']);
 /** Plain entrances, with the fragments, junk symbols and scattered pieces left out. */
 const OPEN_ENTERS = new Set(['pop', 'slam', 'wipe', 'fade', 'cut', 'ink', 'focus', 'rise', 'dash', 'drop', 'zoom', 'spread', 'settle', 'squash', 'windup', 'flip', 'slice', 'flicker', 'rip', 'snapin']);
-const OPEN_IDLES = new Set(['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump']);
+const OPEN_IDLES = new Set(['still', 'drift', 'push', 'wave', 'float', 'shake', 'boil', 'hop', 'thump', 'track', 'fill']);
 /** The plain moves a song felt rather than shouted does without. */
 const LOUD_ENTERS = new Set(['slam', 'zoom', 'dash', 'squash', 'windup', 'rip', 'snapin', 'flicker']);
 const LOUD_IDLES = new Set(['shake', 'thump', 'hop', 'boil']);
@@ -361,7 +361,7 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
       if (spare < (r.spare ?? 0)) return void whole(`needs ${r.spare}s beyond reading, the line has ${spare.toFixed(2)}s`);
       if (SPLIT_LAYOUTS.has(r.template) !== (l.cut === 'split')) return void whole(`cut says ${l.cut}, layout says otherwise`);
       if (c.calm && (!fitsCalm(r) || LOUD_ENTERS.has(r.enter) || LOUD_IDLES.has(r.idle))) return void whole('too loud for a song felt rather than shouted');
-      if (beat?.payoff && !['still', 'drift', 'float', 'tether-settle', 'balance-rest', 'side-light', 'ink-state', 'reflection-rest', 'frame-lights'].includes(r.idle)) return void whole('a payoff line stays up long and still');
+      if (beat?.payoff && !['still', 'drift', 'float', 'track', 'fill', 'tether-settle', 'balance-rest', 'side-light', 'ink-state', 'reflection-rest', 'frame-lights'].includes(r.idle)) return void whole('a payoff line stays up long and still');
       // a device the words do not name needs the director to quote what gives it its reason
       if (r.fit && !r.fit.test(cue.text) && !(l.evidence && (cue.text.includes(l.evidence) || c.partWhat(cue.id).includes(l.evidence)))) return void whole('a device with no quoted evidence from the line or its part');
       if (r.fit && (count('distinct') >= caps.distinct || count(r.id) >= caps.device)) return void whole('this song has spent its distinctive devices');

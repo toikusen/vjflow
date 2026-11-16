@@ -233,6 +233,12 @@ export const ORIGINS: Record<string, Origin> = {
   'idle:boil': { videos: 29, risk: 'low' },
   'idle:hop': { videos: 0, risk: 'low' },
   'idle:thump': { videos: 24, risk: 'low' },
+  // (added by hand 2026-11-16 before the next audit run, which recounts them: learned from outside references, not yet
+  // matched against the 535 videos, so `videos` is 0 until then)
+  'idle:track': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #30 track', own: false },
+  'idle:fill': { videos: 0, risk: 'medium', from: 'claude-animated-text (pound0423, MIT) #41 kara', own: false },
+  'motion:loop-noise': { videos: 0, risk: 'medium', from: 'AE expression guide wiggle-loop / wiggle-octaves (concept only)', own: false },
+  'motion:velocity-settle': { videos: 0, risk: 'medium', from: 'AE expression guide phys-inertia (concept only)', own: false },
   'emph:scale': { videos: 65, risk: 'low' },
   'emph:color': { videos: 22, risk: 'low' },
   'emph:glow': { videos: 25, risk: 'low' },

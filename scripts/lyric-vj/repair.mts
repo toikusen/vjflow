@@ -6,8 +6,8 @@
 //   another prop's draw (scopedEdits)
 // - the new drawing is rendered at the same times as the old one (background layer, sprite boxes tracked): every other
 //   prop must stand where it stood, the shots without a named prop must come out the same (PSNR), the named shots must
-//   be the same outside the named props' places, each named prop must keep its footing (the band round its foot looks
-//   the same: a lighthouse moved off its rock fails), stay drawn and stay on the frame (checkRepair)
+//   be the same outside the named props' places, each named prop must take its base along (what the drawing paints
+//   under its foot, logged per draw: a lighthouse moved off its rock fails), stay drawn and stay on the frame (checkRepair)
 // - a repair that fails goes back once with what failed; a repair that passes but still has draws kept clear is kept
 //   only if it has fewer
 import { execFileSync } from 'node:child_process';
@@ -21,8 +21,11 @@ export type Kept = { id: string; inside: number; t: number; shot: number; cut: b
 export type Named = { id: string; shots: number[]; times: number[] };
 /** A shot's lines and the room they leave (graphics.ts logs it in --track renders), frame px. */
 export type Room = { shot: number; from: number; to: number | null; lines: (Rect & { from: number; to: number })[]; rooms: Rect[] };
-/** One sprite draw on a tracked frame (frame px); `kept`: the keep-clear cut or faded it. */
-export type Drawn = { id: string; x: number; y: number; w: number; h: number; a: number; kept: boolean };
+/**
+ * One sprite draw on a tracked frame (frame px); `kept`: the keep-clear cut or faded it; `base`: what the drawing paints
+ * under its foot along with it (graphics.ts baseDrawnWith), and `baseN` how many paints that is.
+ */
+export type Drawn = { id: string; x: number; y: number; w: number; h: number; a: number; kept: boolean; base?: Rect; baseN?: number };
 export type Frame = { t: number; shot: number; drawn: Drawn[] };
 export type Edit = { find: string; replace: string };
 /** An RGB picture (rgb24 rows). */
@@ -69,7 +72,8 @@ export function parseFrames(log: string, times: number[]): Frame[] {
       const [id, rest] = [b.slice(0, b.lastIndexOf(':')), b.slice(b.lastIndexOf(':') + 1)];
       const f = rest.split(',');
       const [x, y, w, h, a] = f.slice(0, 5).map(Number);
-      return { id, x, y, w, h, a, kept: f[5] === 'k' };
+      const bb = f.slice(5).find((x) => x.startsWith('b'))?.slice(1).split('/').map(Number);
+      return { id, x, y, w, h, a, kept: f.slice(5).includes('k'), ...(bb?.length === 5 ? { base: { x0: bb[0], y0: bb[1], x1: bb[2], y1: bb[3] }, baseN: bb[4] } : {}) };
     });
     out.set(key, { t: Number(key), shot: Number(m[2]), drawn });
   }
@@ -162,41 +166,10 @@ export function psnrOutside(a: Pic, b: Pic, allow: Rect[] = []): number {
   return 10 * Math.log10((255 * 255) / (se / n));
 }
 
-/** The band round a prop's foot (picture px): a little of the prop and what it stands on, either side of it. */
-const footBand = (r: Rect): Rect => {
-  const [w, h] = [r.x1 - r.x0, r.y1 - r.y0];
-  return { x0: r.x0 - 0.3 * w, y0: r.y1 - 0.12 * h, x1: r.x1 + 0.3 * w, y1: r.y1 + 0.12 * h };
-};
-const FOOT_GRID: [number, number] = [32, 8];
-/**
- * How different the ground round a prop's foot looks after its move (mean absolute difference, 0–255): the band round
- * its foot in `a` (box `ra`) against the band round its foot in `b` (box `rb`), sampled on the same grid relative to
- * the box, so a prop moved and scaled with its rock reads near 0 and one moved off it reads high. Cells off either
- * picture are skipped; undefined when none is left.
- */
-export function footing(a: Pic, ra: Rect, b: Pic, rb: Rect): number | undefined {
-  const [fa, fb] = [footBand(ra), footBand(rb)];
-  let sum = 0;
-  let n = 0;
-  for (let j = 0; j < FOOT_GRID[1]; j++)
-    for (let i = 0; i < FOOT_GRID[0]; i++) {
-      const [u, v] = [(i + 0.5) / FOOT_GRID[0], (j + 0.5) / FOOT_GRID[1]];
-      const [xa, ya] = [Math.floor(fa.x0 + u * (fa.x1 - fa.x0)), Math.floor(fa.y0 + v * (fa.y1 - fa.y0))];
-      const [xb, yb] = [Math.floor(fb.x0 + u * (fb.x1 - fb.x0)), Math.floor(fb.y0 + v * (fb.y1 - fb.y0))];
-      if (xa < 0 || ya < 0 || xa >= a.w || ya >= a.h || xb < 0 || yb < 0 || xb >= b.w || yb >= b.h) continue;
-      const [ia, ib] = [(ya * a.w + xa) * 3, (yb * b.w + xb) * 3];
-      for (let c = 0; c < 3; c++) sum += Math.abs(a.px[ia + c] - b.px[ib + c]);
-      n += 3;
-    }
-  return n ? sum / n : undefined;
-}
-
 /** Shots without a named prop: as good as the same picture. */
 export const SAME_DB = 45;
 /** Named shots outside the named props' places: the same picture but for faint light the props carry (a beam). */
 export const NEAR_DB = 30;
-/** The most the ground round a prop's foot may change when it moves (footing): 世界のつづき's lighthouse moved with its rock read 9.8, moved off it 23–25. */
-export const FOOT_MAX = 16;
 /** The share of a prop that may cross the frame's edge where the drawing had it whole. */
 const EDGE = 0.03;
 const offShare = (d: Drawn, W: number, H: number) => 1 - (Math.max(0, Math.min(d.x + d.w, W) - Math.max(d.x, 0)) * Math.max(0, Math.min(d.y + d.h, H) - Math.max(d.y, 0))) / Math.max(1, d.w * d.h);
@@ -208,22 +181,25 @@ export type Sample = { before: Frame; after?: Frame; a?: Pic; b?: Pic };
  * What the new drawing broke (in words for the director; empty: the repair keeps to its scope), and how many draws of
  * the named props are still kept clear. Every other prop must stand where it stood (2 px, alpha 0.02); shots without a
  * named prop must be the same picture (SAME_DB), named shots the same outside the named props' places (NEAR_DB); each
- * named prop must still be drawn in each shot it was in, keep its footing (FOOT_MAX) and stay on the frame.
+ * named prop must still be drawn in each shot it was in, still stand on all of the base it was drawn with (as many of
+ * those paints under its foot: one moved off its rock keeps only its shadow) and stay on the frame.
  */
-export function checkRepair(samples: Sample[], named: Named[], scale: number, W = 1920, H = 1080): { errs: string[]; kept: number; keptBefore: number; worstSame: number; worstNear: number; worstFoot: number } {
+export function checkRepair(samples: Sample[], named: Named[], scale: number, W = 1920, H = 1080): { errs: string[]; kept: number; keptBefore: number; worstSame: number; worstNear: number; offBase: number } {
   const ids = new Set(named.map((n) => n.id));
   const shots = new Set(named.flatMap((n) => n.shots));
   const errs = new Set<string>();
-  let [kept, keptBefore, worstSame, worstNear, worstFoot] = [0, 0, Infinity, Infinity, 0];
+  let [kept, keptBefore, worstSame, worstNear, offBase] = [0, 0, Infinity, Infinity, 0];
   const seenIn = new Map<string, { before: boolean; after: boolean }>();
   for (const s of samples) {
     const at = `${s.before.t.toFixed(2)} 秒（鏡頭 ${s.before.shot}）`;
-    keptBefore += s.before.drawn.filter((d) => ids.has(d.id) && d.kept).length;
+    // (counted in the named shots only: the same prop kept clear elsewhere in the song is not this repair's)
+    const mine = shots.has(s.before.shot);
+    if (mine) keptBefore += s.before.drawn.filter((d) => ids.has(d.id) && d.kept).length;
     if (!s.after) {
       errs.add(`${at}：新版沒有畫出這一格`);
       continue;
     }
-    kept += s.after.drawn.filter((d) => ids.has(d.id) && d.kept).length;
+    if (mine) kept += s.after.drawn.filter((d) => ids.has(d.id) && d.kept).length;
     // every other prop where it was
     const rest = (f: Frame) => f.drawn.filter((d) => !ids.has(d.id)).map((d) => `${d.id}@${Math.round(d.x / 2)},${Math.round(d.y / 2)},${Math.round(d.w / 2)},${Math.round(d.h / 2)},${(d.a * 50).toFixed(0)}`).sort();
     const [p, q] = [rest(s.before), rest(s.after)];
@@ -245,13 +221,10 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
       const [b0, a0] = [big(bs), big(as)];
       if (!b0 || !a0) continue;
       if (offShare(b0, W, H) <= EDGE && offShare(a0, W, H) > EDGE) errs.add(`${at}：${n.id} 被移出畫面（${Math.round(offShare(a0, W, H) * 100)}% 在框外）`);
-      if (s.a && s.b && (Math.abs(a0.x - b0.x) > 2 || Math.abs(a0.y + a0.h - (b0.y + b0.h)) > 2 || Math.abs(a0.w - b0.w) > 2)) {
-        const sc = (r: Rect) => ({ x0: r.x0 * scale, y0: r.y0 * scale, x1: r.x1 * scale, y1: r.y1 * scale });
-        const f = footing(s.a, sc(boxOf(b0)), s.b, sc(boxOf(a0)));
-        if (f !== undefined) {
-          worstFoot = Math.max(worstFoot, f);
-          if (f > FOOT_MAX) errs.add(`${at}：${n.id} 離開了它站的地方（腳下的底座、影子沒有跟著它移動，差異 ${f.toFixed(0)}）`);
-        }
+      // what it stood on goes with it: every paint of its base still under its foot
+      if ((b0.baseN ?? 0) > (a0.baseN ?? 0)) {
+        offBase++;
+        errs.add(`${at}：${n.id} 離開了它站的地方（和它一起畫的底座有 ${b0.baseN} 筆在它腳下，現在只剩 ${a0.baseN ?? 0} 筆：底座要和它一起移動、縮放）`);
       }
     }
     if (!s.a || !s.b) continue;
@@ -261,13 +234,13 @@ export function checkRepair(samples: Sample[], named: Named[], scale: number, W 
       if (v < SAME_DB) errs.add(`${at}：這個鏡頭沒有指名的素材，畫面卻變了（PSNR ${v.toFixed(1)} dB）`);
       continue;
     }
-    const allow = [...s.before.drawn, ...s.after.drawn].filter((d) => ids.has(d.id)).map(placeOf).map((r) => ({ x0: r.x0 * scale, y0: r.y0 * scale, x1: r.x1 * scale, y1: r.y1 * scale }));
+    const allow = [...s.before.drawn, ...s.after.drawn].filter((d) => ids.has(d.id)).flatMap((d) => [placeOf(d), ...(d.base ? [d.base] : [])]).map((r) => ({ x0: r.x0 * scale, y0: r.y0 * scale, x1: r.x1 * scale, y1: r.y1 * scale }));
     const v = psnrOutside(s.a, s.b, allow);
     worstNear = Math.min(worstNear, v);
     if (v < NEAR_DB) errs.add(`${at}：指名素材以外的畫面也變了（PSNR ${v.toFixed(1)} dB）：只能動指名的素材和它的底座`);
   }
   for (const [k, v] of seenIn) if (v.before && !v.after) errs.add(`${k.replace('@', ' 在鏡頭 ')} 不見了：只能移動、縮放或改時間，不能拿掉`);
-  return { errs: [...errs], kept, keptBefore, worstSame, worstNear, worstFoot };
+  return { errs: [...errs], kept, keptBefore, worstSame, worstNear, offBase };
 }
 
 /** A still as an RGB picture `w` px wide (ffmpeg), for the comparisons. */
@@ -366,7 +339,7 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
   const kept: Kept[] = before.filter((f) => f.t >= o.from && f.t <= o.to).flatMap((f) => f.drawn.filter((d) => d.kept).map((d) => ({ id: d.id, inside: 0, t: f.t, shot: f.shot, cut: true })));
   const named = namedOf(kept);
   // (counted over every sample, as checkRepair counts the new drawing's)
-  const all = before.reduce((n, f) => n + f.drawn.filter((d) => d.kept && named.some((x) => x.id === d.id)).length, 0);
+  const all = before.filter((f) => named.some((x) => x.shots.includes(f.shot))).reduce((n, f) => n + f.drawn.filter((d) => d.kept && named.some((x) => x.id === d.id)).length, 0);
   const result: RepairResult = { src: o.src, named, keptBefore: all, kept: all, attempts: [], accepted: false, times, viewTimes: [] };
   say(`repair: ${before.length}/${times.length} samples, ${kept.length} kept-clear draws: ${named.map((n) => `${n.id} (shots ${n.shots.join(',')})`).join('; ') || 'none'}`);
   if (!named.length) return result;
@@ -412,7 +385,7 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
     const check = checkRepair(before.map((f) => ({ before: f, after: after.find((g) => g.t === f.t), a: bPics.get(f.t), b: aPics.get(f.t) })), named, 480 / 1920);
     attempt.errs.push(...check.errs);
     attempt.kept = check.kept;
-    say(`repair ${k}: kept clear ${check.keptBefore} -> ${check.kept}; worst PSNR untouched ${check.worstSame.toFixed(1)} dB, named shots outside props ${check.worstNear.toFixed(1)} dB; worst footing ${check.worstFoot.toFixed(1)}; ${check.errs.length ? `rejected: ${check.errs.slice(0, 6).join(' | ')}` : 'in scope'}`);
+    say(`repair ${k}: kept clear ${check.keptBefore} -> ${check.kept}; worst PSNR untouched ${check.worstSame.toFixed(1)} dB, named shots outside props ${check.worstNear.toFixed(1)} dB; off its base at ${check.offBase} samples; ${check.errs.length ? `rejected: ${check.errs.slice(0, 6).join(' | ')}` : 'in scope'}`);
     writeFileSync(join(aDir, 'check.json'), JSON.stringify({ ...check, worstSame: String(check.worstSame), worstNear: String(check.worstNear) }, null, 1));
     if (check.errs.length) {
       text = `這次的修改沒有通過檢查，已經退回（目前程式維持上一版）：\n${check.errs.slice(0, 12).map((x) => `- ${x}`).join('\n')}\n請對目前程式重新給 edits。`;
@@ -424,7 +397,7 @@ export async function runRepair(o: { src: string; known: string[]; cuts: number[
     if (check.kept < result.kept) Object.assign(result, { src: scoped.src, kept: check.kept, accepted: true });
     cur = result.src;
     if (!check.kept) break;
-    const still = after.filter((f) => f.drawn.some((d) => ids.includes(d.id) && d.kept)).map((f) => `${f.t.toFixed(2)} 秒（鏡頭 ${f.shot}）：${f.drawn.filter((d) => ids.includes(d.id) && d.kept).map((d) => `${d.id} 在 ${Math.round(d.x)},${Math.round(d.y)},${Math.round(d.x + d.w)},${Math.round(d.y + d.h)}`).join('、')}`);
+    const still = after.filter((f) => named.some((x) => x.shots.includes(f.shot)) && f.drawn.some((d) => ids.includes(d.id) && d.kept)).map((f) => `${f.t.toFixed(2)} 秒（鏡頭 ${f.shot}）：${f.drawn.filter((d) => ids.includes(d.id) && d.kept).map((d) => `${d.id} 在 ${Math.round(d.x)},${Math.round(d.y)},${Math.round(d.x + d.w)},${Math.round(d.y + d.h)}`).join('、')}`);
     text = `這次的修改通過了範圍檢查並保留了（目前程式＝套用後的版本），但還有 ${check.kept} 格被挖空：\n${still.slice(0, 16).join('\n')}\n請對目前程式再給 edits，把這些也移開。`;
     images = await jpgs(scoped.src, join(o.work, `view_${k}`));
     text += `\n以下是目前版本的截圖（${viewTimes.map((t) => t.toFixed(2)).join('、')} 秒）。`;

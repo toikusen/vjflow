@@ -122,6 +122,21 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
     expect(edge.alpha).toBeCloseTo(clearAlpha(5 / 24));
   });
 
+  it('records a faded-only cover at the strength it shows, layer alpha included', () => {
+    const logged: string[] = [];
+    const err = console.error;
+    console.error = (x: string) => logged.push(x);
+    try {
+      frame([900], 0.675, "const b = f.img('bottle'); ctx.globalAlpha = 0; ctx.drawImage(b, 900, 450, 100, 100);");
+      expect(logged).toEqual([]);
+      resetCover();
+      frame([900], 0.675);
+      expect(logged.length).toBe(1);
+    } finally {
+      console.error = err;
+    }
+  });
+
   it("measures a sprite sheet's drawn cell, not the whole sheet", () => {
     // a 200 × 100 sheet: its left cell clear, its right cell opaque; the right cell is drawn on the words
     const g = globalThis as { OffscreenCanvas?: unknown };

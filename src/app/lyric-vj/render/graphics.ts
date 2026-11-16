@@ -405,10 +405,11 @@ function drawCode(ctx: CanvasRenderingContext2D, l: { src: string; lyric?: Rect;
     const box = l.guard ?? lyric;
     const [share, inside] = coverOf(pic as CanvasImageSource & { width: number; height: number }, base.multiply(ctx.getTransform()), dx, dy, dw, dh, box, crop);
     const strength = clearStrength(l.lyricWeight ?? 1);
+    const alpha = ctx.globalAlpha;
     keepClear(ctx, start, box, share, inside, draw, W, H, strength, !l.guard);
     // what still shows over the box (faded only, never cut: the box gliding in or between two places) stays on record,
-    // at the strength it is drawn; a cut-out draws nothing there
-    const shown = 1 - Math.min(1, strength) * (1 - clearAlpha(inside));
+    // at the strength (and layer alpha) it is drawn; a cut-out draws nothing there
+    const shown = alpha * (1 - Math.min(1, strength) * (1 - clearAlpha(inside)));
     if ((strength < 1 || l.guard) && shown > 0) watchCover(`${id}@${cam.index}`, id, share * shown, inside, t, `shot ${cam.index}`);
   };
   // every drawImage while the drawing runs: a sprite copied onto the drawing's own canvas (tinted, made solid) passes

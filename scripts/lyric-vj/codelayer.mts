@@ -11,6 +11,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { continuity, parseTrack } from '../../src/app/lyric-vj/continuity';
 import { LANGUAGES, LanguageId } from '../../src/app/lyric-vj/languages';
+import { parseKept, runRepair, withSrc } from './repair.mts';
 
 const { values: a } = parseArgs({ options: { song: { type: 'string' }, dir: { type: 'string' }, out: { type: 'string' }, model: { type: 'string', default: 'claude-opus-5-5' },
   // the viewers and checkers that look at stills (blind viewer, states judge, cast check): half the director's price
@@ -30,7 +31,14 @@ const { values: a } = parseArgs({ options: { song: { type: 'string' }, dir: { ty
   // the song's characters as already drawn (songplan.mts): extra state drawings keep these people identical
   'cast-ref': { type: 'string' },
   // a hard cap on this run's API spend (USD): the next request is not sent once it is reached
-  budget: { type: 'string' } } });
+  budget: { type: 'string' },
+  // repair only: the drawing already in --dir's treatment keeps everything but the props it had kept clear of the lyric,
+  // which the director may move, resize or retime (repair.mts); --window a,b limits it to that part of the song
+  repair: { type: 'boolean', default: false }, window: { type: 'string' },
+  // director turns a repair round may take
+  'repair-attempts': { type: 'string', default: '2' },
+  // --repair: keep the repair round's renders (before, after_<k>, view_*) for a look instead of sweeping them
+  'keep-renders': { type: 'boolean', default: false } } });
 const env = join(homedir(), '.config/vjflow/anthropic.env');
 for (const line of existsSync(env) ? readFileSync(env, 'utf8').split('\n') : []) {
   const m = line.match(/^([A-Z_]+)=(.*)$/);
@@ -41,6 +49,9 @@ const work = join(out, 'codelayer');
 mkdirSync(work, { recursive: true });
 const song = JSON.parse(readFileSync(a.song!, 'utf8'));
 const base = JSON.parse(readFileSync(join(a.dir!, 'treatment.json'), 'utf8'));
+// the drawing as it was (--repair keeps it, and the treatment around it, byte for byte but for the repaired props)
+const original = structuredClone(base);
+const drawn = (base.graphics.sections as { layers: { kind: string; src?: string; cuts?: number[] }[] }[]).flatMap((s) => s.layers).find((l) => l.kind === 'code');
 // a rerun replaces the previous drawing
 for (const s of base.graphics.sections) s.layers = s.layers.filter((l: { kind: string }) => l.kind !== 'code');
 const sections: { start: number; layers: { kind: string }[]; text?: string }[] = base.graphics.sections;
@@ -216,9 +227,11 @@ const checked = (u: Anthropic.Messages.Usage) => void (checkUSD += (u.input_toke
  */
 /** What a stop keeps (the states stage sets it to its best version so far). */
 let onStop: () => void = () => {};
+/** Whether a request reserving `reserve` USD could take the run past --budget. */
+const overBudget = (reserve: number) => !!a.budget && (usage.input * 4 + usage.output * 20) / 1e6 + imageUSD + checkUSD + reserve > Number(a.budget);
 function guard(reserve: number) {
   const spent = (usage.input * 4 + usage.output * 20) / 1e6 + imageUSD + checkUSD;
-  if (!a.budget || spent + reserve <= Number(a.budget)) return;
+  if (!overBudget(reserve)) return;
   console.log(`##STEP 再問一次可能超過花費上限 $${a.budget}（已花 $${spent.toFixed(2)}），停止`);
   console.log(`stopped: budget $${a.budget} (spent $${spent.toFixed(3)}, next call reserved $${reserve})`);
   onStop();
@@ -435,6 +448,9 @@ type Review = { verdict: string; score: number; issues: { shot: number; problem:
 /** Deletes the rounds' continuity, jump, transition and ghost renders; the drawing and review stills stay. */
 function sweepChecks() {
   for (const d of existsSync(work) ? readdirSync(work) : []) if (/^(track|jump|trans|ghost)_r\d+$/.test(d)) rmSync(join(work, d), { recursive: true, force: true });
+  // the repair round's renders (repair.mts: before, after_<k>, view_*), ~130 stills each
+  const rep = join(work, 'repair');
+  for (const d of existsSync(rep) ? readdirSync(rep) : []) if (/^(before|after_\d+|view_.+)$/.test(d)) rmSync(join(rep, d), { recursive: true, force: true });
 }
 
 async function test(r: Reply, round: number) {
@@ -490,8 +506,9 @@ async function test(r: Reply, round: number) {
   const problems = [...new Set(lines.filter((l) => /code layer:|page error:/.test(l) && !l.includes('scene-use') && !l.includes('code layer: track')))];
   // props that jump, pop, swell or sit on each other inside a shot (the user's complaints on sweet timer)
   problems.push(...cont.hard.slice(0, 20).map((x) => `物件不連續：${x}`));
-  // a prop the renderer had to cut out of a read line (cover.ts watchClear): it vanished there, so it must be placed
-  if (problems.some((x) => x.includes('lyric kept clear:'))) problems.push('上面 lyric kept clear 的素材在歌詞閱讀時壓進了歌詞框，被系統挖空淡掉（觀眾看到它消失）：在那個鏡頭用 f.room() 的空位重新安排它的位置和移動路線，或改用 f.fit(x, y, w, h) 畫它。');
+  // a prop the renderer had to cut out of a read line (cover.ts watchClear) is not a problem for the revisions: sent back
+  // as one, the director rebuilt the whole window around it (世界のつづき 68–88 s); the repair round after the rounds
+  // moves only that prop (repair.mts)
   // a render that failed (a slow network while the page loaded its fonts) is tried once more; a still that is still
   // missing is left out rather than ending the run
   const stillOf = (x: number) => join(dir, `still_${x.toFixed(2)}.png`);
@@ -594,6 +611,63 @@ async function verify(rv: Review, images: string[], strips: string[]): Promise<R
   const kept = rv.issues.filter((_, i) => keep.has(i));
   console.log(`verify: kept ${kept.length}/${rv.issues.length} review issues`);
   return { ...rv, issues: kept.length ? kept : rv.issues.slice(0, 3) };
+}
+
+/** A problem line about a prop the renderer kept clear of a read line: the repair round's, not a revision's. */
+const KEPT = /lyric kept clear:/;
+
+/** Renders a treatment (written to `<dir>/treatment.json`) at the stills into `dir`; both log streams. */
+async function renderTreatment(t: object, stills: number[], dir: string, extra: string[] = []): Promise<string> {
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, 'treatment.json');
+  writeFileSync(file, JSON.stringify(t));
+  const once = (at: number[]) => new Promise<string>((resolve) => {
+    const p = spawn('nice', ['-n', '19', 'npx', 'tsx', 'scripts/lyric-vj/render.mts', '--song', a.song!, '--treatment', file, ...(existsSync(pics) ? ['--assets', pics] : []), '--start', String(W0), '--end', String(W1), '--stills', at.map((x) => x.toFixed(2)).join(','), '--out', dir, ...extra]);
+    let log = '';
+    p.stdout.on('data', (d) => (log += d));
+    p.stderr.on('data', (d) => (log += d));
+    p.on('close', () => resolve(log));
+    p.on('error', (e) => resolve(`${log}\n${e.message}`));
+  });
+  // a still the render left out or cut short (as test()'s renders): one more try; what is still missing fails the
+  // repair's checks (repair.mts: unseen samples)
+  let log = await once(stills);
+  const missing = stills.filter((x) => { const f = join(dir, `still_${x.toFixed(2)}.png`); return !existsSync(f) || statSync(f).size < 2000; });
+  if (missing.length) log += `\n${await once(missing)}`;
+  writeFileSync(join(dir, 'render.log'), log);
+  return log;
+}
+
+/**
+ * The repair round (repair.mts): the director may only move, resize or retime the props kept clear over [from, to] (and
+ * what is drawn with them), in its own short conversation, at most --repair-attempts turns under the run's budget;
+ * `build` makes the treatment around a version of the code.
+ */
+async function repairRound(src: string, cutList: number[], from: number, to: number, build: (src: string) => object, dir: string) {
+  step('素材壓到歌詞：修補回合（只移動被挖空的素材和它的底座，其他不動）');
+  const convo: Anthropic.Messages.MessageParam[] = [];
+  const known = [...new Set([...sprites.map((x) => x.id), ...Object.keys(existsSync(pics) ? JSON.parse(readFileSync(pics, 'utf8')) : {}).filter((k) => k.startsWith('spr:')).map((k) => k.slice(4))])];
+  // without the song's prop list the rule that other props stay as drawn would hold nothing
+  if (!known.length) throw new Error('修補回合需要這首歌的素材清單（--sprites 或 assets 裡的 spr: 素材）');
+  return runRepair({
+    src, known, cuts: cutList, from, to, end: W1, work: dir, attempts: Number(a['repair-attempts']),
+    io: {
+      track: (code, stills, out) => renderTreatment(build(code), stills, out, ['--layer', 'back', '--track']),
+      view: (code, stills, out) => renderTreatment(build(code), stills, out),
+      ask: async (text, images) => {
+        // (over the budget the round stops with what it has; the run itself goes on to its final review)
+        if (overBudget(0.9)) throw new Error(`budget $${a.budget} reached`);
+        convo.push({ role: 'user', content: [{ type: 'text', text }, ...images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } }))] });
+        const msg = await streamed({ model: a.model!, max_tokens: 64000, system: SYSTEM, messages: convo, output_config: { effort: 'medium', format: { type: 'json_schema', schema: EDIT_SCHEMA } } } as Anthropic.Messages.MessageStreamParams);
+        usage.input += msg.usage.input_tokens + 1.25 * (msg.usage.cache_creation_input_tokens ?? 0) + 0.1 * (msg.usage.cache_read_input_tokens ?? 0);
+        usage.output += msg.usage.output_tokens;
+        console.log(`repair call: in ${msg.usage.input_tokens} out ${msg.usage.output_tokens} $${((msg.usage.input_tokens * 4 + msg.usage.output_tokens * 20) / 1e6).toFixed(3)}`);
+        convo.push({ role: 'assistant', content: msg.content as Anthropic.Messages.ContentBlockParam[] });
+        const e = JSON.parse(msg.content.find((b) => b.type === 'text')?.text || '{"idea":"","edits":[]}') as Edit;
+        return { idea: e.idea, edits: e.edits ?? [] };
+      },
+    },
+  });
 }
 
 const began = Date.now();
@@ -930,6 +1004,20 @@ async function stateStage(st: States): Promise<never> {
   process.exit(0);
 }
 
+// --repair: only the repair round, on the drawing already in --dir; its treatment comes out the same but for the code
+if (a.repair) {
+  if (!drawn?.src) throw new Error('--repair 需要 --dir 的 treatment.json 裡已經有專屬圖層（kind code）');
+  const [from, to] = a.window ? a.window.split(',').map(Number) : [W0, W1];
+  const res = await repairRound(drawn.src, drawn.cuts ?? cuts, from, to, (src) => withSrc(original, drawn.src!, src), join(work, 'repair'));
+  const usd = (usage.input * 4 + usage.output * 20) / 1e6;
+  const summary = { ...res, src: undefined, changed: res.src !== drawn.src, ...usage, costUSD: +usd.toFixed(4), seconds: Math.round((Date.now() - began) / 1000) };
+  writeFileSync(join(out, 'repair.json'), JSON.stringify(summary, null, 1));
+  writeFileSync(join(out, 'treatment.json'), JSON.stringify(withSrc(original, drawn.src, res.src)));
+  console.log(`repair: ${res.accepted ? 'accepted' : 'nothing accepted'}; kept clear ${res.keptBefore} -> ${res.kept} at the samples; ${res.attempts.length} director turns; $${usd.toFixed(4)}`);
+  if (!a['keep-renders']) sweepChecks();
+  process.exit(0);
+}
+
 // a run that failed part-way resumes from its last finished round (same design, props, scenes and notes)
 const runKey = JSON.stringify([base.concept, base.design, sprites.map((x) => x.id), scenes.map((x) => x.id), notes ?? '', baseline?.idea ?? '']);
 const savedFile = join(work, 'progress.json');
@@ -988,6 +1076,8 @@ for (let round = firstRound; round <= 3; round++) {
   const r = await test(reply, round);
   last = r;
   console.log(`round ${round}: ${r.problems.length ? r.problems.join(' | ') : 'no errors'}; weak shots: ${r.weak.length}`);
+  // the props kept clear of the lyric go to the repair round after the rounds, not to the revisions
+  const fix = r.problems.filter((x) => !KEPT.test(x));
   if (round === 3) break;
   // one independent review, in the first round only: later rounds fix what the program measures, not taste
   let reviewText = '';
@@ -997,21 +1087,43 @@ for (let round = firstRound; round <= 3; round++) {
     writeFileSync(join(work, `review_r${round}.json`), JSON.stringify({ ...rv, weak: r.weak }, null, 1));
     console.log(`review ${round}: ${rv.score} — ${rv.verdict} (${rv.issues.length} issues)`);
     reviewText = `\n\n獨立審片的意見（沒有參與製作的人）：${rv.verdict}\n${rv.issues.map((x) => `- 鏡頭 ${x.shot}：${x.problem} → ${x.fix}`).join('\n')}\n逐條判斷審片意見（同意就改，不同意可以不改）。`;
-  } else if (!r.problems.length) break;
+  } else if (!fix.length) break;
   messages.push({
     role: 'user',
     content: [
-      { type: 'text', text: `${r.problems.length ? `程式量測到的問題（必須全部修好）：\n${r.problems.join('\n')}\n\n` : '程式量測沒有問題。\n\n'}量測（只看背景）可能偏空或偏靜的鏡頭：${r.weak.length ? r.weak.join('；') : '無'}${reviewText}\n\n以下是成品截圖（歌詞已疊上），時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。${baseline ? '物件的細緻度和設計感不能比基準差。' : ''}用 edits 修改程式：每個 find 是目前程式裡原樣只出現一次的一段，replace 是改好的內容；沒有要改就給空的 edits。` },
+      { type: 'text', text: `${fix.length ? `程式量測到的問題（必須全部修好）：\n${fix.join('\n')}\n\n` : '程式量測沒有問題。\n\n'}量測（只看背景）可能偏空或偏靜的鏡頭：${r.weak.length ? r.weak.join('；') : '無'}${reviewText}\n\n以下是成品截圖（歌詞已疊上），時間依序為 ${times.join('、')} 秒，分別是鏡頭 ${picks.join('、')}。${baseline ? '物件的細緻度和設計感不能比基準差。' : ''}用 edits 修改程式：每個 find 是目前程式裡原樣只出現一次的一段，replace 是改好的內容；沒有要改就給空的 edits。` },
       ...r.images.map((data) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: 'image/jpeg' as const, data } })),
     ],
   });
   step(`第 ${round} 輪：導演修改（只改有問題的地方）`);
   const next = await revise(reply);
-  if (next.src === reply.src && JSON.stringify(next.sections) === JSON.stringify(reply.sections) && !r.problems.length) break;
+  if (next.src === reply.src && JSON.stringify(next.sections) === JSON.stringify(reply.sections) && !fix.length) break;
   reply = next;
   console.log('revised:', reply.idea);
   save(reply, round + 1, story);
 }
+// props still kept clear of the lyric: a repair round moves only them (and what they stand on), the rest stays as drawn
+if (last && last.problems.some((x) => KEPT.test(x))) {
+  const kept = parseKept(last.problems.join('\n'));
+  const marks = [W0, ...cuts, W1];
+  const shots = [...new Set(kept.map((k) => k.shot))];
+  const [from, to] = [Math.min(...shots.map((i) => marks[i])), Math.max(...shots.map((i) => marks[i + 1] ?? W1))];
+  const cur = reply;
+  // (a repair that fails — a render, the API — leaves the drawing as the rounds made it: the run still gets its review)
+  try {
+    const res = await repairRound(cur.src, cuts, from, to, (src) => apply({ ...cur, src }), join(work, 'repair'));
+    if (res.accepted) {
+      reply = { ...reply, src: res.src };
+      // (resumed, round 3 runs again on the repaired drawing: a later round would skip the rounds and leave no test)
+      save(reply, 3, story);
+      last = await test(reply, 5);
+    }
+  } catch (e) {
+    console.log(`repair round failed: ${(e as Error).message}`);
+  }
+}
+// (a resume past the rounds has not tested the drawing yet)
+last ??= await test(reply, firstRound);
 // the quality gate: a fresh review of the finished drawing; below PASS the director gets one more round on its notes,
 // and if it is still below, the run fails rather than hand a paying user something unusable
 step('最終品質審查');

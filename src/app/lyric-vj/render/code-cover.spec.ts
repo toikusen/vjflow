@@ -137,6 +137,31 @@ describe('a code layer keeps its sprites off the lyric while it is read', () => 
     }
   });
 
+  it('marks the draws it kept clear on the QA track line, so a repair round can count them frame by frame', () => {
+    const logged: string[] = [];
+    const err = console.error;
+    console.error = (x: string) => logged.push(x);
+    const g = globalThis as { __vjTrack?: boolean };
+    g.__vjTrack = true;
+    try {
+      frame([900, 200]);
+      expect(logged.filter((x) => x.startsWith('code layer: track'))).toEqual(['code layer: track 1.000 0 bottle:900,450,100,100,1.00,k;bottle:200,450,100,100,1.00']);
+      // with what each one stands on: a rock painted under the first one's foot, nothing under the second's
+      logged.length = 0;
+      resetCover();
+      frame([], 1, "ctx.beginPath(); ctx.arc(950, 550, 120, 0, 6.3); ctx.fill(); const b = f.img('bottle'); ctx.drawImage(b, 900, 450, 100, 100); ctx.drawImage(b, 200, 100, 100, 100);");
+      expect(logged.filter((x) => x.startsWith('code layer: track'))).toEqual(['code layer: track 1.000 0 bottle:900,450,100,100,1.00,b830/430/1070/670/1,k;bottle:200,100,100,100,1.00']);
+      // painted under its foot but before another sprite's draw: drawn with that one, not its base
+      logged.length = 0;
+      resetCover();
+      frame([], 1, "ctx.beginPath(); ctx.arc(950, 550, 120, 0, 6.3); ctx.fill(); const b = f.img('bottle'); ctx.drawImage(b, 200, 100, 100, 100); ctx.drawImage(b, 900, 450, 100, 100);");
+      expect(logged.filter((x) => x.startsWith('code layer: track'))).toEqual(['code layer: track 1.000 0 bottle:200,100,100,100,1.00;bottle:900,450,100,100,1.00,k']);
+    } finally {
+      delete g.__vjTrack;
+      console.error = err;
+    }
+  });
+
   it('counts and reports every sprite it had to keep clear: the drawing is sent back to place it in the room', () => {
     const logged: string[] = [];
     const err = console.error;

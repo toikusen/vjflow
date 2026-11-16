@@ -194,7 +194,7 @@ async function openPage(): Promise<Page> {
   // of the code layer's reports a layer that failed to compile, threw, or drew nothing is a fault; its diagnostics
   // (lyric cover shares, slow frames, camera tracks, scene use) stay in the log, judged by their own rules (make.sh's
   // hides > 40 %)
-  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|lyric kept clear:|track |scene-use )/.test(m.text()) ? console.error(m.text()) : fault(m.text())));
+  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|lyric kept clear:|track |scene-use |room )/.test(m.text()) ? console.error(m.text()) : fault(m.text())));
   // a busy machine (several songs at once) can miss the ready timeout: one more try with longer patience before the
   // song fails (three style tests started together all timed out, then rendered fine one by one)
   for (let attempt = 0; ; attempt++) {

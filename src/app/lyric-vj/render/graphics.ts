@@ -568,9 +568,28 @@ class Mat {
  * A context that draws nothing: it keeps the transform the drawing builds and hands every drawImage to `rec` (the
  * transform at that draw and the draw's arguments). Anything else the drawing calls is a no-op.
  */
-function dryContext(start: Mat, rec: (pic: CanvasImageSource, m: Mat, a: number[]) => void): CanvasRenderingContext2D {
+function dryContext(start: Mat, rec: (pic: CanvasImageSource, m: Mat, a: number[]) => void, paint: (box: Rect) => void = () => undefined): CanvasRenderingContext2D {
   let m = start;
   const stack: Mat[] = [];
+  // the current path's bounds (canvas px): what a fill or stroke paints, reported to `paint`
+  let path: Rect | undefined;
+  const add = (x: number, y: number, r = 0) => {
+    for (const [px, py] of [[x - r, y - r], [x + r, y - r], [x - r, y + r], [x + r, y + r]]) {
+      const [X, Y] = [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f];
+      path = path ? { x0: Math.min(path.x0, X), y0: Math.min(path.y0, Y), x1: Math.max(path.x1, X), y1: Math.max(path.y1, Y) } : { x0: X, y0: Y, x1: X, y1: Y };
+    }
+  };
+  const box = (x: number, y: number, w: number, h: number) => {
+    const keep = path;
+    path = undefined;
+    add(x, y);
+    add(x + w, y + h);
+    add(x + w, y);
+    add(x, y + h);
+    const b = path!;
+    path = keep;
+    return b;
+  };
   const props: Record<string | symbol, unknown> = { globalAlpha: 1, canvas: { width: W, height: H } };
   const grad = () => ({ addColorStop: () => undefined });
   const own: Record<string, (...a: never[]) => unknown> = {
@@ -584,6 +603,20 @@ function dryContext(start: Mat, rec: (pic: CanvasImageSource, m: Mat, a: number[
     scale: (x: number, y: number) => (m = m.multiply(new Mat(x, 0, 0, y ?? x, 0, 0))),
     rotate: (r: number) => (m = m.multiply(new Mat(Math.cos(r), Math.sin(r), -Math.sin(r), Math.cos(r), 0, 0))),
     drawImage: (pic: CanvasImageSource, ...a: number[]) => rec(pic, m, a),
+    beginPath: () => (path = undefined),
+    moveTo: (x: number, y: number) => add(x, y),
+    lineTo: (x: number, y: number) => add(x, y),
+    quadraticCurveTo: (cx: number, cy: number, x: number, y: number) => (add(cx, cy), add(x, y)),
+    bezierCurveTo: (ax: number, ay: number, bx: number, by: number, x: number, y: number) => (add(ax, ay), add(bx, by), add(x, y)),
+    arc: (x: number, y: number, r: number) => add(x, y, Math.abs(r)),
+    arcTo: (ax: number, ay: number, x: number, y: number) => (add(ax, ay), add(x, y)),
+    ellipse: (x: number, y: number, rx: number, ry: number) => add(x, y, Math.max(Math.abs(rx), Math.abs(ry))),
+    rect: (x: number, y: number, w: number, h: number) => (add(x, y), add(x + w, y + h), add(x + w, y), add(x, y + h)),
+    roundRect: (x: number, y: number, w: number, h: number) => (add(x, y), add(x + w, y + h), add(x + w, y), add(x, y + h)),
+    fill: (...a: unknown[]) => void (!a.length || typeof a[0] === 'string' ? path && paint(path) : undefined),
+    stroke: (...a: unknown[]) => void (!a.length && path && paint(path)),
+    fillRect: (x: number, y: number, w: number, h: number) => paint(box(x, y, w, h)),
+    strokeRect: (x: number, y: number, w: number, h: number) => paint(box(x, y, w, h)),
     measureText: () => ({ width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0, actualBoundingBoxLeft: 0, actualBoundingBoxRight: 0 }),
     createLinearGradient: grad, createRadialGradient: grad, createConicGradient: grad,
     createPattern: () => null,
@@ -597,6 +630,10 @@ function dryContext(start: Mat, rec: (pic: CanvasImageSource, m: Mat, a: number[
   }) as CanvasRenderingContext2D;
 }
 
+/** How near (frame px) something painted must come to a sprite's foot to be its base (codePlan: then it is not moved). */
+const BASE_REACH = 24;
+/** The share of a moved sprite that may cross the frame's edge. */
+const EDGE_SLACK = 0.03;
 /** How long a line must be up in a shot (s) for the shot's plan to make room for it. */
 const PLAN_OVERLAP = 0.4;
 /** A move that would shrink a sprite below this is no move: it reads as a speck, the keep-clear takes it instead. */
@@ -654,25 +691,39 @@ function codePlan(fn: CodeDraw, l: { src: string; cuts?: number[]; lines?: LineB
     const [a, b] = [Math.max(cam.start, r.from), Math.min(cam.end, r.to)];
     return [a + Math.min(0.45, (b - a) / 2), (a + b) / 2, b - 0.05].map((x) => ({ x, r }));
   });
+  const frameBox = (m: Mat, [x, y, w, h]: [number, number, number, number]) => {
+    const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([px, py]) => [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f]);
+    return { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
+  };
   // every sample of every sprite draw: its local rect, its frame box, the transform, and the line read then
   type Seen = { rect: [number, number, number, number]; box: Rect; m: Mat; r: LineBox };
   const seenAt = new Map<string, Seen[]>();
+  const based = new Set<string>();
   for (const { x, r } of samples) {
     const seen = new Map<string, number>();
+    // what else the drawing paints this sample (frame px), with the sprite drawn there, if any: a sprite's base
+    const painted: { box: Rect; id?: string }[] = [];
+    const drawnNow: { k: string; box: Rect }[] = [];
     const rec = (pic: CanvasImageSource, m: Mat, a: number[]) => {
       const id = ids.get(pic);
-      if (!id || !(a.length === 2 || a.length === 4 || a.length === 8)) return;
+      if (!(a.length === 2 || a.length === 4 || a.length === 8)) return;
       const sized = pic as CanvasImageSource & { width: number; height: number };
       const [dx, dy, dw, dh] = a.length === 8 ? a.slice(4) : a.length === 4 ? a : [a[0], a[1], sized.width, sized.height];
+      if (!id) {
+        painted.push({ box: frameBox(toFrame.multiply(m), [dx, dy, dw, dh] as [number, number, number, number]) });
+        return;
+      }
       const n = seen.get(id) ?? 0;
       seen.set(id, n + 1);
       const f = toFrame.multiply(m);
       const pts = [[dx, dy], [dx + dw, dy], [dx, dy + dh], [dx + dw, dy + dh]].map(([px, py]) => [f.a * px + f.c * py + f.e, f.b * px + f.d * py + f.f]);
       const box = { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
       const k = `${id}#${n}`;
+      painted.push({ box, id });
+      drawnNow.push({ k, box });
       seenAt.set(k, [...(seenAt.get(k) ?? []), { rect: [dx, dy, dw, dh], box, m: f, r }]);
     };
-    const dry = dryContext(start, rec);
+    const dry = dryContext(start, rec, (b) => painted.push({ box: frameBox(toFrame, [b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0]) }));
     const img = (id: string) => {
       const p = image(`spr:${id}`) ?? null;
       if (p) ids.set(p, id);
@@ -684,15 +735,19 @@ function codePlan(fn: CodeDraw, l: { src: string; cuts?: number[]; lines?: LineB
     } catch {
       /* a drawing that throws dry gets no plan here; the frame itself reports it */
     }
+    // a sprite standing on something the drawing paints for it (a rock, an island, its shadow, another sprite holding its
+    // foot) is not moved: moved alone it leaves its base empty in the sea (世界のつづき's lighthouse). Frame-wide bands
+    // (the sea, the sky) are ground for everything, not a base
+    for (const { k, box } of drawnNow) {
+      const [fx, fy] = [(box.x0 + box.x1) / 2, box.y1];
+      const id = k.slice(0, k.lastIndexOf('#'));
+      if (painted.some((p) => p.id !== id && p.box.x1 - p.box.x0 < 0.6 * W && p.box.y1 - p.box.y0 < 0.6 * H && fx > p.box.x0 - BASE_REACH && fx < p.box.x1 + BASE_REACH && fy > p.box.y0 - BASE_REACH && fy < p.box.y1 + BASE_REACH)) based.add(k);
+    }
   }
   const hits = (b: Rect, r: LineBox) => (Math.max(0, Math.min(b.x1, r.x1 + 24) - Math.max(b.x0, r.x0 - 24)) * Math.max(0, Math.min(b.y1, r.y1 + 24) - Math.max(b.y0, r.y0 - 24))) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
-  const frameBox = (m: Mat, [x, y, w, h]: [number, number, number, number]) => {
-    const pts = [[x, y], [x + w, y], [x, y + h], [x + w, y + h]].map(([px, py]) => [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f]);
-    return { x0: Math.min(...pts.map((p) => p[0])), y0: Math.min(...pts.map((p) => p[1])), x1: Math.max(...pts.map((p) => p[0])), y1: Math.max(...pts.map((p) => p[1])) };
-  };
   const offFrame = (b: Rect) => 1 - (Math.max(0, Math.min(b.x1, W) - Math.max(b.x0, 0)) * Math.max(0, Math.min(b.y1, H) - Math.max(b.y0, 0))) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
   for (const [k, all] of seenAt) {
-    if (!all.some((x) => hits(x.box, x.r) > 0)) continue;
+    if (based.has(k) || !all.some((x) => hits(x.box, x.r) > 0)) continue;
     // one move for the whole shot: each sample's own fit (a thing standing below the lines is never lifted over them
     // into the sky: only rooms reaching down to its foot), taken back into the sprite's own units, is tried at every
     // sample; the one that keeps it clearest of the lines and on the frame wins (a camera push moved a lighthouse fitted
@@ -709,7 +764,9 @@ function codePlan(fn: CodeDraw, l: { src: string; cuts?: number[]; lines?: LineB
     // (worst over the shot of what still reaches the line and what the move takes off the frame beyond the drawing's own
     // framing, then the size lost and the way moved)
     const score = ({ mv, far }: { mv: CodeMove; far: number }) => Math.max(...all.map((x) => { const b = frameBox(x.m, moveRect(...x.rect, mv, 1)); return 2 * hits(b, x.r) + Math.max(0, offFrame(b) - offFrame(x.box)); })) + (1 - mv.s) + 0.2 * far;
-    const best = tries.map((x) => ({ mv: x.mv, v: score(x) })).reduce<{ mv: CodeMove; v: number } | undefined>((a, b) => (!a || b.v < a.v ? b : a), undefined);
+    // a move never takes it partly off the frame where the drawing had it inside (EDGE_SLACK of it may cross)
+    const inFrame = ({ mv }: { mv: CodeMove }) => all.every((x) => offFrame(x.box) > EDGE_SLACK || offFrame(frameBox(x.m, moveRect(...x.rect, mv, 1))) <= EDGE_SLACK);
+    const best = tries.filter(inFrame).map((x) => ({ mv: x.mv, v: score(x) })).reduce<{ mv: CodeMove; v: number } | undefined>((a, b) => (!a || b.v < a.v ? b : a), undefined);
     if (best) moves.set(k, best.mv);
   }
   return out;

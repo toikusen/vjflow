@@ -42,7 +42,7 @@ function frameCtx(drawn: Drawn[]) {
     setTransform: (m: M) => (state.m = m),
     translate: (x: number, y: number) => (state.m = state.m.multiply(new M(1, 0, 0, 1, x, y))),
     clip: () => (state.holed = true),
-    beginPath: noop, rect: noop, moveTo: noop, lineTo: noop, stroke: noop, clearRect: noop, fillRect: noop, scale: noop, rotate: noop, fill: noop, arc: noop,
+    beginPath: noop, rect: noop, moveTo: noop, lineTo: noop, stroke: noop, clearRect: noop, fillRect: noop, scale: noop, rotate: noop, fill: noop, arc: noop, ellipse: noop,
     canvas: { width: 1920, height: 1080 },
   });
   return { ctx: ctx as CanvasRenderingContext2D, restore: () => (lentPath && delete g.Path2D, lent ? delete g.CanvasRenderingContext2D : (proto.drawImage = own)) };
@@ -120,6 +120,30 @@ describe('a code layer moves a sprite that would enter a read line into the room
       expect(step(ds[i], ds[i - 1])).toBeLessThanOrEqual(0.2 * total + 1e-6);
       expect(ds[i].y + ds[i].h).toBeCloseTo(1000);
     }
+  });
+
+  it('never moves a sprite partly off the frame at any time of the shot', () => {
+    // lines down the whole middle; a sprite drifting right toward the frame's edge: a move fitted early pushes it off
+    const tall = { x0: 260, y0: 0, x1: 1660, y1: 1080 };
+    const src = "const b = f.img('tower'); ctx.drawImage(b, 1300 + 60 * f.t, 500, 200, 500);";
+    for (const t of [0.5, 2, 3.5, 4.5, 6]) {
+      const [d] = frame(t, { src, lyric: tall, lines: [{ from: 0, to: 9, ...tall }] });
+      if (!d) continue;
+      const orig = 1300 + 60 * t;
+      // where the drawing had it inside the frame, a move keeps it inside (3 % of it may cross the edge)
+      if (orig + 200 <= 1920) expect(d.x + d.w, `t ${t}`).toBeLessThanOrEqual(1920 + 0.03 * d.w + 1e-6);
+      expect(d.x, `t ${t}`).toBeGreaterThanOrEqual(-0.03 * d.w - 1e-6);
+    }
+  });
+
+  it('never moves a sprite off the thing it stands on: a base painted under its foot keeps it there (cut instead)', () => {
+    const src = "ctx.fillStyle = '#777'; ctx.beginPath(); ctx.ellipse(900, 1000, 140, 30, 0, 0, Math.PI * 2); ctx.fill(); " + tower;
+    const [d] = frame(2, { src });
+    expect(d).toMatchObject({ x: 800, y: 500, w: 200, h: 500, holed: true });
+    expect(clearTally()).toMatchObject({ moved: 0 });
+    // a frame-wide band under it (the sea) is not a base: it still moves
+    const sea = "ctx.fillStyle = '#579'; ctx.fillRect(0, 700, 1920, 380); " + tower;
+    expect(frame(2, { src: sea })[0].holed).toBe(false);
   });
 
   it('falls back to the cut when the lines leave no room', () => {

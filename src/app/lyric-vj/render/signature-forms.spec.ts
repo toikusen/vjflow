@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from '../contrast';
-import { groundUnder, holdsInks, inkFor, Inks, READS, windowGround, windowTimes } from './signature';
-import { isMore, riseKindOf, rowBreak, SMOKE_READS, smokeTone } from './signature-forms';
+import { echoInk, groundUnder, holdsInks, inkFor, Inks, READS, windowGround, windowTimes } from './signature';
+import { ECHO_BLUR, ECHO_WEIGHT, echoPlan, echoPresence, isMore, riseKindOf, rowBreak, SMOKE_READS, smokeTone } from './signature-forms';
 import type { SignatureMoment } from '../signature-moments';
 
 const inks = (ink: string, paper: string, accent = '#ff0000'): Inks => ({ ink, paper, accent, board: '#ffffff', boardInk: '#000000', ghost: '#888888', press: '#ff0000', core: '#ffffff' });
@@ -98,6 +98,45 @@ describe('a moment\'s inks are decided from its whole reading window, not from t
   it('samples the window evenly, a few times a second, its ends included', () => {
     expect(windowTimes(10, 12)).toEqual([10, 10.5, 11, 11.5, 11.95]);
     expect(windowTimes(0, 100).length).toBeLessThanOrEqual(24);
+  });
+});
+
+describe('an echo reads as a memory under the sung line, never as the line being sung (run5 110 s)', () => {
+  // 「ああこんなにも君は僕を夢中にさせてたって思い出すよ」 sung over two rows at 104 px, its echo c006 under it
+  const at = { mainSize: 104, mainBottom: 600, n: 26, firstSung: 105.8, wordTime: 110.24, mainExit: 117.3, nextStart: 118.16 };
+  it('is half the line\'s size or a little more, set apart below it, in a lighter weight', () => {
+    const e = echoPlan(at);
+    expect(e.size / at.mainSize).toBeGreaterThanOrEqual(0.5 * 1700 / 26 / 104 > 0.5 ? 0.5 : 0);
+    expect(e.size / at.mainSize).toBeLessThanOrEqual(0.6);
+    expect(e.y - e.size / 2 - at.mainBottom).toBeGreaterThanOrEqual(0.3 * at.mainSize);
+    expect(echoPlan({ ...at, n: 10 }).size / at.mainSize).toBeGreaterThanOrEqual(0.5);
+    expect(ECHO_WEIGHT).toBeLessThan(900);
+    expect(ECHO_BLUR).toBeGreaterThan(0);
+    expect(ECHO_BLUR).toBeLessThanOrEqual(0.06);
+  });
+  it('comes up only after the line\'s first sung character and is gone before the line leaves or the next one comes', () => {
+    const e = echoPlan(at);
+    expect(e.from).toBeGreaterThan(at.firstSung);
+    expect(e.to).toBeLessThanOrEqual(Math.min(at.mainExit, at.nextStart));
+    expect(echoPresence(at.firstSung, e)).toBe(0);
+    expect(echoPresence(e.from + 0.05, e)).toBeLessThan(echoPresence(e.from + 1, e));
+    expect(echoPresence(e.to, e)).toBe(0);
+    expect(echoPresence(at.nextStart + 0.1, e)).toBe(0);
+    // (a next line that starts before the main one leaves cuts it short)
+    expect(echoPlan({ ...at, nextStart: 114 }).to).toBeLessThanOrEqual(114);
+  });
+  it('is inked at 3:1 or more on every part of its ground, well under the sung line\'s ink', () => {
+    const ground = { mean: '#e2b9a6', mixed: false, tiles: ['#efe6d8', '#d86f9c', '#c8454a', '#df8a68'] };
+    const ink = '#0b1020';
+    const e = echoInk(ink, ground);
+    const worst = (c: string) => Math.min(...[ground.mean, ...ground.tiles].map((g) => contrast(c, g)));
+    expect(worst(e)).toBeGreaterThanOrEqual(3);
+    expect(worst(e)).toBeLessThan(worst(ink));
+    expect(contrast(e, ground.mean)).toBeLessThan(contrast(ink, ground.mean));
+    // (on a plain ground it goes as far as halfway to the paper, at 3:1 or more)
+    const plain = { mean: '#f5efe4', mixed: false, tiles: ['#f5efe4'] };
+    expect(contrast(echoInk(ink, plain), plain.mean)).toBeLessThan(contrast(ink, plain.mean) * 0.6);
+    expect(contrast(echoInk(ink, plain), plain.mean)).toBeGreaterThanOrEqual(3);
   });
 });
 

@@ -50,7 +50,7 @@ const lum = (c: string) => { const [r, g, b] = hex(c).map((v) => (v <= 0.03928 ?
 const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 export const mixHex = (a: string, b: string, k: number) => '#' + hex(a).map((v, i) => Math.round(mix(v, hex(b)[i], k) * 255).toString(16).padStart(2, '0')).join('');
 
-export interface Inks { ink: string; paper: string; accent: string; board: string; boardInk: string; ghost: string; press: string; core: string; /** A keyline round the type where no one ink reads on the ground under it. */ halo?: string }
+export interface Inks { ink: string; paper: string; accent: string; board: string; boardInk: string; ghost: string; press: string; core: string; /** A keyline round the type where no one ink reads on the ground under it. */ halo?: string; /** An echo's ink (echoInk): a memory, not the sung line. */ echo?: string }
 
 /** What is under a moment's text: the mean colour, and whether both dark and light are there in any quantity. */
 export interface Ground {
@@ -105,6 +105,22 @@ export function windowTimes(from: number, to: number): number[] {
   out.push(+end.toFixed(3));
   return out;
 }
+/** The least an echo (an earlier line shown again as a memory) reads at on any part of its ground. */
+export const ECHO_READS = 3;
+/**
+ * An echo's ink: the line's ink taken toward the ground as far as ECHO_READS on every part of it allows (at most
+ * two thirds of the way), so the memory stays decipherable and well under the sung line; the ink itself where even that
+ * cannot hold 3:1 (its keyline then carries it).
+ */
+export function echoInk(ink: string, ground: Ground): string {
+  let best = ink;
+  for (let k = 0.05; k <= 0.6601; k += 0.05) {
+    const m = mixHex(ink, ground.mean, k);
+    if (worstOn(m, ground) < ECHO_READS) break;
+    best = m;
+  }
+  return best;
+}
 /** The least contrast of a colour on any part of the ground (its mean when it was not read in parts). */
 export const worstOn = (c: string, ground: Ground) => Math.min(contrast(c, ground.mean), ...(ground.tiles ?? []).map((t) => contrast(c, t)));
 /** The colour moved toward black or white (whichever the ground is not) until it reads on the ground at `min`. */
@@ -135,7 +151,7 @@ export function inkFor(inks: Inks, ground: Ground, min = READS): Inks {
   let ghost = mixHex(ink, ground.mean, 0.5);
   if (contrast(ghost, ground.mean) < 2.5) ghost = mixHex(ink, ground.mean, 0.28);
   const press = contrast(inks.accent, ground.mean) >= 1.5 && inks.accent !== ink ? inks.accent : mixHex(ink, ground.mean, 0.4);
-  return { ...inks, ink, ghost, press, halo };
+  return { ...inks, ink, ghost, press, halo, echo: echoInk(ink, ground) };
 }
 /**
  * Whether a moment's inks, picked as it came up, still read on the ground under it now: keylined, on its mean at 3:1;
@@ -338,8 +354,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   const song = job.cues.length * 7 + Math.round(job.window.end);
 
   /** A character in `fill`; with `halo`, a thin keyline of it round the strokes first, so the type reads on a mixed ground. */
-  const glyph = (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press = 0, pressInk = '', halo = '') => {
-    c.font = `900 ${size}px "${family}"`;
+  const glyph = (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press = 0, pressInk = '', halo = '', weight = 900) => {
+    c.font = `${weight} ${size}px "${family}"`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     if (halo) {

@@ -24,7 +24,7 @@ export interface Kit {
   family: string;
   grain: number;
   song: number;
-  glyph: (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press?: number, pressInk?: string, halo?: string) => void;
+  glyph: (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press?: number, pressInk?: string, halo?: string, weight?: number) => void;
   stampIn: (c: Ctx, ch: string, a: number, b: number, size: number, at: number, t: number, ink: string, ghost: string | null, press?: number, pressInk?: string, kick?: number, halo?: string) => void;
   shadowed: (draw: () => void, blur?: number, dy?: number) => void;
   alive: (id: string, t: number) => number;
@@ -1056,7 +1056,35 @@ function buildFreeze(k: Kit, m: SignatureMoment): Built {
 }
 
 // ---- echo ----
-/** The answering line, and under it the earlier line it answers, faint, its shared word under this one's, surfacing as the shared word is sung. */
+/** An echo's size against the sung line's: clearly subordinate. */
+export const ECHO_SCALE = 0.55;
+/** An echo's weight (the sung line is set at 900). */
+export const ECHO_WEIGHT = 500;
+/** An echo's blur, a share of its size (about 1.5 px at 36 px): soft, still decipherable. */
+export const ECHO_BLUR = 0.04;
+/** An echo's plan: its size, its row's middle (frame px) below the sung line, and when it is up (song s). */
+export interface EchoPlan { size: number; y: number; from: number; to: number }
+/**
+ * Where and when an echo stands: ECHO_SCALE of the sung line (smaller only when the earlier line would not fit the
+ * width), a gap of a third of the line's size or more below its last row; up only after the line's first sung character
+ * (and from its shared word), gone before the line leaves and before the next line comes. An echo is a memory, never
+ * read as the line being sung (owner, 2026-11-17: run5's echo at 110 s sat as big as the line, in the line's ink).
+ */
+export function echoPlan(a: { mainSize: number; mainBottom: number; n: number; firstSung: number; wordTime: number; mainExit: number; nextStart: number }): EchoPlan {
+  const size = Math.min(a.mainSize * ECHO_SCALE, 1700 / Math.max(1, a.n * 1.04));
+  const gap = Math.max(24, a.mainSize * 0.35);
+  const y = Math.min(a.mainBottom + gap + size / 2, H - 24 - size / 2);
+  const from = Math.max(a.firstSung + 0.25, a.wordTime - 0.1);
+  const to = Math.min(a.mainExit, a.nextStart) - 0.05;
+  return { size, y, from, to: Math.max(from, to) };
+}
+/** How much of an echo is up at t (0..1): it fades in over half a second from its start and out over its last 0.3 s. */
+export function echoPresence(t: number, e: EchoPlan): number {
+  if (t <= e.from || t >= e.to) return 0;
+  return Math.min(1, (t - e.from) / 0.5, (e.to - t) / 0.3);
+}
+
+/** The answering line, and under it the earlier line it answers as a memory: smaller, lighter, set apart, faded in after the line has begun. */
 function buildEcho(k: Kit, m: SignatureMoment): Built {
   const passes = passesOf(k, m, 140, 1450);
   const earlier = k.cueOf(m.cues[0]);
@@ -1064,14 +1092,16 @@ function buildEcho(k: Kit, m: SignatureMoment): Built {
   const Y = 470;
   const layOld = (p: Pass) => {
     const n = old.length;
-    const size = Math.max(56, Math.min(p.size * 1.05, 1700 / Math.max(1, n)));
+    const first = Math.min(...p.main.map((c) => c.at).filter((x) => Number.isFinite(x)));
+    const e = echoPlan({ mainSize: p.size, mainBottom: Y + Math.max(...p.ys) + p.size / 2, n, firstSung: first, wordTime: p.wordTime, mainExit: p.exit().at, nextStart: k.nextStart(p.id) });
+    const size = e.size;
     const w0 = wordIndex(earlier.text, m.word);
     const oi = Math.max(0, old.findIndex((c) => c.src === w0));
     const wi = Math.max(0, p.parts.wordAt);
     let x0 = p.xs[wi] - oi * size * 1.04;
     x0 = Math.min(W - 110 - size / 2 - (n - 1) * size * 1.04, Math.max(110 + size / 2, x0));
     const wordLen = [...m.word].length;
-    return { size, xs: old.map((_, i) => x0 + i * size * 1.04), y: Y + Math.max(...p.ys) + p.size * 0.78 + size * 0.62, isWord: (i: number) => i >= oi && i < oi + wordLen, oi };
+    return { size, e, xs: old.map((_, i) => x0 + i * size * 1.04), y: e.y, isWord: (i: number) => i >= oi && i < oi + wordLen, oi };
   };
   const olds = passes.map(layOld);
   return {
@@ -1083,21 +1113,22 @@ function buildEcho(k: Kit, m: SignatureMoment): Built {
       const x = k.x;
       const hold = k.alive(p.id, t);
       k.drawAsides(p.parts.asides, t, inks, p.exit().at);
-      // the earlier line surfaces from its shared word outward
-      old.forEach((c, i) => {
-        if (/\s/.test(c.ch)) return;
-        const e = t - (p.wordTime - 0.1 + Math.abs(i - o.oi) * 0.035);
-        if (e < 0) return;
-        const up = easeOut(e / 0.5);
-        const a = up * hold * (o.isWord(i) ? 0.62 : 0.34);
-        const ink = o.isWord(i) ? inks.accent : inks.ink;
-        x.save();
-        for (const [dx, k2] of [[-2, 0.5], [2, 0.5], [0, 1]] as const) {
-          x.globalAlpha = a * k2;
-          k.glyph(x, c.ch, o.xs[i] + dx, o.y + 24 * (1 - up), o.size, ink, 0, '', inks.halo);
-        }
-        x.restore();
-      });
+      // the earlier line as a memory: its own ink at 3:1 (echoInk), lighter and smaller, a soft trail behind it
+      const up = echoPresence(t, o.e);
+      if (up > 0) {
+        old.forEach((c, i) => {
+          if (/\s/.test(c.ch)) return;
+          const ink = inks.echo ?? inks.ghost;
+          x.save();
+          // (out of focus, a memory: a slight blur, deterministic per size — never the sung line's crisp print)
+          x.filter = `blur(${(o.size * ECHO_BLUR).toFixed(2)}px)`;
+          for (const [dx, dy, a] of [[o.size * 0.07, o.size * 0.05, 0.3], [0, 0, 1]] as const) {
+            x.globalAlpha = up * a;
+            k.glyph(x, c.ch, o.xs[i] + dx, o.y + dy + 10 * (1 - up), o.size, ink, 0, '', '', ECHO_WEIGHT);
+          }
+          x.restore();
+        });
+      }
       x.save();
       x.globalAlpha = hold;
       stampRow(k, x, p, t, inks, Y);

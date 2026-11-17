@@ -9,6 +9,7 @@ import { isLineMotion } from './motion-transition';
 import { pullPictures } from './picture-lead';
 import { readingSec, setTogether } from './reading-window';
 import { foldRepeats } from './repeats';
+import { mustShare } from './sung-tail';
 import { enterSec as lineEnterSec } from './enter-sec';
 import { lastSungOf, leadOf, showTime } from './show-time';
 import { linkGrounds } from './world-handoff';
@@ -27,6 +28,9 @@ export const threadShot = (s?: { template: string }) => s?.template === 'chat' |
 export const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'singalong', 'scroll', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
 
 /** The page handoffs a treatment's one event plan approved (world-events.ts), by the line handed into; undefined without a plan. */
+/** The most characters two lines set together to share the frame may have (two rows a viewer still reads). */
+export const SHARE_CHARS = 40;
+
 export const approvedOf = (t: { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }) => (t.worldEvents ? new Set(t.worldEvents.events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds[e.lineIds.length - 1])) : undefined);
 
 /**
@@ -56,11 +60,16 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     const inChat = threadShot(shotOf(styled[i].style.shot));
     // the composer's pair of lines in one shot is that same idea with each keeping its own line
     // (the composer plans these itself, as pairs, so a recipe is chosen knowing the line's real length)
-    if (inChat || styled[i].style.budget || !setTogether(a, b) || repeats.has(a.id) || repeats.has(b.id)) continue;
+    // (and two whose handover cannot be clean — same start, a duet's overlap, the next sung before this one may leave —
+    // share the frame in their own rows rather than one hiding the other, sung-tail.ts mustShare)
+    const ns = styled[i + 1].style;
+    const onset = ns.reveal === 'sung' && ns.sung?.length === [...b.text].length ? ns.sung[0] : (b.charStarts?.[0] ?? b.start);
+    const share = mustShare(a, b, onset) && [...`${a.text}${b.text}`.replace(/\s/g, '')].length <= SHARE_CHARS;
+    if (inChat || styled[i].style.budget || !(setTogether(a, b) || share) || repeats.has(a.id) || repeats.has(b.id)) continue;
     const aLen = [...a.text].length;
     styled[i] = {
       style: { ...styled[i].style, rows: [aLen + 1], reveal: 'word' },
-      cue: { ...a, text: `${a.text} ${b.text}`, end: b.end, charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
+      cue: { ...a, text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
     };
     styled.splice(i + 1, 1);
   }

@@ -37,17 +37,55 @@ export function showByOnset(waited: number, planned: number, onset: number): num
   return Math.max(planned, Math.min(waited, onset));
 }
 
+import { READ_FLOOR } from './reading-window';
+export { READ_FLOOR };
+/** A timed line's exit begins at least this long after its last sung character (never on it). */
+export const MIN_TAIL = 0.1;
+/** The lead a line's exit ends before the next line shows (world-handoff EXIT_LEAD). */
+const LEAD = 0.02;
+
+/**
+ * The earliest a line may begin to leave: READ_FLOOR after it shows, and MIN_TAIL past its last sung character; a line
+ * with no character times may blink out over the last moment of its stated end (nothing says a word is still sung).
+ */
+export function exitFloor(cue: { start: number; end: number; charStarts?: number[] }, show: number, lead = LEAD): number {
+  const sung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] + MIN_TAIL : cue.end - EXIT_MIN - lead;
+  return Math.max(show + READ_FLOOR, sung);
+}
+/** Whether a line leaving no earlier than `floor` can be gone (a blink) before a line sung from `onset` shows. */
+export const handsOver = (floor: number, onset: number, lead = LEAD) => onset >= floor + EXIT_MIN + lead - 1e-9;
+/**
+ * Two lines whose handover cannot be clean — the next sung before this one may leave (same start, a duet's overlap, a
+ * rap line sung into the last syllable) — are shown together in their own rows (line-shows.ts), never one hidden.
+ */
+export function mustShare(a: { start: number; end: number; text: string; charStarts?: number[] }, b: { start: number; end?: number; text?: string; charStarts?: number[] }, onset = b.charStarts?.[0] ?? b.start): boolean {
+  return !handsOver(exitFloor(a, a.start), onset);
+}
+
 /**
  * This line's exit and the next line's show on one seat: the wait the tail asks (nextShowAfter), capped at the next
- * line's sung onset (showByOnset). Where the cap bites, this line is gone before the next one shows — its exit ends
- * `lead` before the show, shortened down to a blink and started earlier if it must: the tail gives way to the onset,
- * never two lines lit on one seat (opus review of 0f350f5). Layouts that seat two lines apart do not ask this.
+ * line's sung onset (showByOnset). Where the cap bites (`capped`), this line is gone before the next shows — its exit
+ * ends `lead` before it, shortened and started earlier down to a blink, but never before `floor` (exitFloor). Where even
+ * that cannot be (`overlap`: lines that should have been set together and could not), both stay lit — the line is
+ * never cut before it is read — and the engine logs it. Layouts that seat two lines apart do not ask this.
  */
-export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number): { show: number; exitAt: number; exitDur: number } {
+export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number, floor: number): { show: number; exitAt: number; exitDur: number; capped: boolean; overlap: boolean } {
   const w = nextShowAfter(exitFrom, exitSec, plannedShow, lead);
   const show = showByOnset(w.show, plannedShow, onset);
-  if (show >= w.show - 1e-9) return { show: w.show, exitAt: exitFrom, exitDur: w.exitDur };
+  if (show >= w.show - 1e-9) return { show: w.show, exitAt: exitFrom, exitDur: w.exitDur, capped: false, overlap: false };
   const end = show - lead;
-  if (exitFrom + EXIT_MIN <= end) return { show, exitAt: exitFrom, exitDur: Math.min(Math.max(exitSec, EXIT_MIN), end - exitFrom) };
-  return { show, exitAt: end - EXIT_MIN, exitDur: EXIT_MIN };
+  if (exitFrom + EXIT_MIN <= end) return { show, exitAt: exitFrom, exitDur: Math.min(Math.max(exitSec, EXIT_MIN), end - exitFrom), capped: true, overlap: false };
+  if (end - EXIT_MIN >= floor - 1e-9) return { show, exitAt: end - EXIT_MIN, exitDur: EXIT_MIN, capped: true, overlap: false };
+  return { show, exitAt: Math.max(floor, exitFrom), exitDur: w.exitDur, capped: true, overlap: true };
+}
+
+/**
+ * The render's sung-tail metric: a line tagged 'kept' that began to leave inside its tail fails, and so do two lines
+ * left lit together on one seat (settleExit overlaps); a 'capped' line gave its tail to the next line's onset on
+ * purpose (its reason in tailWhy) and passes. `waits` are the lines that showed late so the one before kept its tail.
+ */
+export function sungTailCheck(cues: { id: string; text: string; lastSung: number; exitAt?: number; tail?: string; tailWhy?: string }[], waits: { id: string; sec: number }[] = [], overlaps: { id: string; next: string; from: number; to: number }[] = []) {
+  const failing = cues.filter((c) => c.tail === 'kept' && c.exitAt !== undefined && c.exitAt < c.lastSung + SUNG_TAIL - 0.034).map((c) => ({ id: c.id, text: c.text, lastSung: c.lastSung, exitAt: c.exitAt }));
+  const capped = cues.filter((c) => c.tail === 'capped').map((c) => ({ id: c.id, why: c.tailWhy ?? '' }));
+  return { ok: !failing.length && !overlaps.length, failing, overlaps, capped, waits };
 }

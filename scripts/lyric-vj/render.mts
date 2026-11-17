@@ -11,7 +11,7 @@ import { lockFile } from './lock.mts';
 import { fontCache } from './font-cache.mts';
 import { parseArgs } from 'node:util';
 import { endAtVoice, silentTail, timingGate } from '../../src/app/lyric-vj/timing-qa';
-import { SUNG_TAIL } from '../../src/app/lyric-vj/render/sung-tail';
+import { sungTailCheck } from '../../src/app/lyric-vj/render/sung-tail';
 import { coverFatal } from '../../src/app/lyric-vj/render/cover-fatal';
 import { frameStats, visualIssues, type FrameStats } from '../../src/app/lyric-vj/visual-qa';
 import { keyPhrases, splitSongTitle } from '../../src/app/lyric-vj/structure';
@@ -169,11 +169,6 @@ const fault = (msg: string) => { rendererErrors.add(msg); console.error(msg); };
 const subjectCovers = new Set<string>();
 // (what keepClear left of a subject over a read line, on any tier: logged; fatal only with --cover-fatal)
 const subjectLeft = new Set<string>();
-/** Every line kept its sung tail: an exit no earlier than lastSung + SUNG_TAIL (a frame's slack), lines its layout keeps up left out. */
-const sungTailCheck = (cues: { id: string; text: string; lastSung: number; exitAt?: number; tail?: string }[], waits: { id: string; sec: number }[] = []) => {
-  const failing = cues.filter((c) => c.tail === 'kept' && c.exitAt !== undefined && c.exitAt < c.lastSung + SUNG_TAIL - 0.034).map((c) => ({ id: c.id, text: c.text, lastSung: c.lastSung, exitAt: c.exitAt }));
-  return { ok: !failing.length, failing, waits };
-};
 // a page-carried scale composition's page checked on every frame drawn (render/page-layout.ts verifyPage, engine.ts
 // pageGlyphCheck): each page's tally added up, written into metrics.json `pageChecks`
 const pageChecks = { frames: 0, relaid: 0, glyphFrames: 0, pageFallbackFrames: 0, pageTurnFrames: 0, carrierCoveredFrames: 0, fails: [] as string[] };
@@ -389,7 +384,7 @@ try {
       readable: { ok: m.cues.every((c) => c.ok), failing: m.cues.filter((c) => !c.ok) },
       // no line starts leaving before its last sung character has had its tail (sung-tail.ts): the lines that did, and
       // the lines that showed late so the one before could keep its tail
-      sungTail: sungTailCheck(m.cues, m.waits),
+      sungTail: sungTailCheck(m.cues, m.waits, (m as { overlaps?: { id: string; next: string; from: number; to: number }[] }).overlaps),
       accents: { count: m.accents.length, maxErrorFrames: Math.max(0, ...accentErrFrames), ok: accentErrFrames.every((e) => e <= 1) },
       audioOffsetMs: offsetMs, audioOk: offsetMs === undefined || offsetMs <= 15,
       fixes: checked.fixes,

@@ -28,8 +28,8 @@ export const threadShot = (s?: { template: string }) => s?.template === 'chat' |
 export const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'singalong', 'scroll', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
 
 /** The page handoffs a treatment's one event plan approved (world-events.ts), by the line handed into; undefined without a plan. */
-/** The most characters two lines set together to share the frame may have (two rows a viewer still reads). */
-export const SHARE_CHARS = 40;
+/** The most characters two lines set together to share the frame may have: two rows of 24, set smaller, still read. */
+export const SHARE_CHARS = 48;
 
 export const approvedOf = (t: { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }) => (t.worldEvents ? new Set(t.worldEvents.events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds[e.lineIds.length - 1])) : undefined);
 
@@ -53,6 +53,7 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
   const { lines: styled, repeats } = foldRepeats<ShownLine>(sorted, (x) => !!threadShot(shotOf(x.style.shot)));
   // two lines sung back to back faster than either can be read are set together as one two-row line: the first
   // stays up while the second is sung (word reveal follows the voice across both)
+  const joined = new Set<number>();
   for (let i = 0; i + 1 < styled.length; i++) {
     const a = styled[i].cue;
     const b = styled[i + 1].cue;
@@ -64,14 +65,18 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     // share the frame in their own rows rather than one hiding the other, sung-tail.ts mustShare)
     const ns = styled[i + 1].style;
     const onset = ns.reveal === 'sung' && ns.sung?.length === [...b.text].length ? ns.sung[0] : (b.charStarts?.[0] ?? b.start);
-    const share = mustShare(a, b, onset) && [...`${a.text}${b.text}`.replace(/\s/g, '')].length <= SHARE_CHARS;
+    // (a Latin letter counts half: two of them take the width of one kana or han)
+    const share = mustShare(a, b, onset) && [...`${a.text}${b.text}`.replace(/\s/g, '')].reduce((n, ch) => n + (/[\x21-\x7e]/.test(ch) ? 0.5 : 1), 0) <= SHARE_CHARS;
+    // (a composer line is paired by the composer itself, planPairs, mustShare included: its world events name its lines)
     if (inChat || styled[i].style.budget || !(setTogether(a, b) || share) || repeats.has(a.id) || repeats.has(b.id)) continue;
     const aLen = [...a.text].length;
     styled[i] = {
-      style: { ...styled[i].style, rows: [aLen + 1], reveal: 'word' },
+      style: { ...styled[i].style, rows: joined.has(i) ? [...(styled[i].style.rows ?? []), aLen + 1] : [aLen + 1], reveal: 'word' },
       cue: { ...a, text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
     };
     styled.splice(i + 1, 1);
+    // (a shared line is checked again against the one after it: a duet's third voice comes into the same frame)
+    if (share) { joined.add(i); i--; }
   }
   // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
   const lead = leadOf(tempo);

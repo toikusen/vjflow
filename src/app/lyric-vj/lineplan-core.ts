@@ -30,6 +30,7 @@ import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import { fineShown } from './render/fine-shown';
+import { mustShare } from './render/sung-tail';
 import type { MomentAsk } from './signature-moments';
 import { closingLine } from './song-parts';
 
@@ -599,9 +600,16 @@ export function planPairs(cues: Cue[], beats: Map<string, LineBeat>, hands: Map<
     const [a, b, c] = [cues[i], cues[i + 1], cues[i + 2]];
     const forced = force?.get(a.id);
     // two lines sung too fast to read apart share a shot whatever they say: the older stays up while the next is sung
-    if (!forced && !forcedLine(a, b) && setTogether(a, b) && norm(a.text) !== norm(b.text)) {
-      out.set(a.id, { kind: 'list', also: [b.id] });
-      i += 1;
+    // (and two whose handover cannot be clean — same start, a duet's overlap, the next sung before this one may leave:
+    // sung-tail.ts mustShare — each in its own seat of one shot, never one hiding the other)
+    if (!forced && !forcedLine(a, b) && (setTogether(a, b) || mustShare(a, b)) && norm(a.text) !== norm(b.text)) {
+      // (a third voice still sung into: the line of the two sung latest shares with it too, three seats at most)
+      const group = [b];
+      const latest = () => [a, ...group].reduce((x, y) => ((y.charStarts?.at(-1) ?? y.end) > (x.charStarts?.at(-1) ?? x.end) ? y : x));
+      const c3 = cues[i + 2];
+      if (c3 && !forcedLine(b, c3) && mustShare(latest(), c3) && norm(b.text) !== norm(c3.text)) group.push(c3);
+      out.set(a.id, { kind: 'list', also: group.map((x) => x.id) });
+      i += group.length;
       last = i;
       continue;
     }
@@ -1455,7 +1463,8 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   if (closing !== undefined) for (const [id, p] of pairs) if ([id, ...p.also].includes(closing)) pairs.delete(id);
   const leaderOf = new Map([...pairs].flatMap(([id, p]) => p.also.map((x) => [x, id] as const)));
   // a pair is one shot, running as far as its last line
-  const leaders = cues.filter((c) => !leaderOf.has(c.id)).map((c) => ({ ...c, end: cues.find((x) => x.id === pairs.get(c.id)?.also.at(-1))?.end ?? c.end }));
+  // (a shared shot lasts as long as any of its lines is sung: a duet's first voice may outlast the second)
+  const leaders = cues.filter((c) => !leaderOf.has(c.id)).map((c) => ({ ...c, end: Math.max(c.end, ...(pairs.get(c.id)?.also ?? []).map((id) => cues.find((x) => x.id === id)?.end ?? c.end)) }));
   const shots = shotsOf(leaders, song.duration, (c) => { const h = hands.get(c.id); return h && h.kind !== 'relay' ? h.from : c.start; });
   const handNear = (id: string) => { const i = cues.findIndex((x) => x.id === id); return hands.has(id) || hands.has(cues[i + 1]?.id ?? ''); };
   const deviceCap = Math.max(2, Math.ceil(cues.length * DEVICE_SHARE));

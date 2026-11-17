@@ -33,6 +33,12 @@ describe('readFix', () => {
     expect(f.style).toMatchObject({ reveal: 'line', enter: 'cut', exit: 'cut' });
     expect(f.exitAt).toBeCloseTo(12.32);
   });
+  it('never cuts a line out past its limit when it already leaves at the limit (timing audit: c011 ran 0.04 s into c012)', () => {
+    const late = { ...line, exitAt: 12.38, exitDur: 0.08 } as CueRuntime;
+    const f = readFix(late, [11, 12], 2, 12.4)!;
+    expect(f.exitAt + f.exitDur).toBeLessThanOrEqual(12.4 + 1e-9);
+    expect(f.exitAt).toBeGreaterThanOrEqual(12.38);
+  });
 });
 
 describe('paceStyle', () => {

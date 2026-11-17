@@ -39,8 +39,8 @@ export function showByOnset(waited: number, planned: number, onset: number): num
 
 import { READ_FLOOR } from './reading-window';
 export { READ_FLOOR };
-/** A timed line's exit begins at least this long after its last sung character (never on it). */
-export const MIN_TAIL = 0.1;
+/** A timed line's exit begins at least this long after its last sung character (a frame and a little: never on it). */
+export const MIN_TAIL = 0.04;
 /** The lead a line's exit ends before the next line shows (world-handoff EXIT_LEAD). */
 const LEAD = 0.02;
 
@@ -48,18 +48,20 @@ const LEAD = 0.02;
  * The earliest a line may begin to leave: READ_FLOOR after it shows, and MIN_TAIL past its last sung character; a line
  * with no character times may blink out over the last moment of its stated end (nothing says a word is still sung).
  */
-export function exitFloor(cue: { start: number; end: number; charStarts?: number[] }, show: number, lead = LEAD): number {
-  const sung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] + MIN_TAIL : cue.end - EXIT_MIN - lead;
+export function exitFloor(cue: { start: number; end: number; charStarts?: number[] }, show: number, lead = LEAD, tail = MIN_TAIL): number {
+  const sung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] + tail : cue.end - EXIT_MIN - lead;
   return Math.max(show + READ_FLOOR, sung);
 }
-/** Whether a line leaving no earlier than `floor` can be gone (a blink) before a line sung from `onset` shows. */
-export const handsOver = (floor: number, onset: number, lead = LEAD) => onset >= floor + EXIT_MIN + lead - 1e-9;
+/** Whether a line leaving no earlier than `floor` can be gone (cut, at the least) before a line sung from `onset` shows. */
+export const handsOver = (floor: number, onset: number, lead = LEAD) => onset >= floor + lead - 1e-9;
 /**
  * Two lines whose handover cannot be clean — the next sung before this one may leave (same start, a duet's overlap, a
  * rap line sung into the last syllable) — are shown together in their own rows (line-shows.ts), never one hidden.
  */
 export function mustShare(a: { start: number; end: number; text: string; charStarts?: number[] }, b: { start: number; end?: number; text?: string; charStarts?: number[] }, onset = b.charStarts?.[0] ?? b.start): boolean {
-  return !handsOver(exitFloor(a, a.start), onset);
+  // (sung before this one's floor: no handover at all; between the floor and a lead past it, settleExit cuts this one as
+  // the next shows, its lead given up)
+  return onset < exitFloor(a, a.start) - 1e-9;
 }
 
 /**
@@ -69,14 +71,22 @@ export function mustShare(a: { start: number; end: number; text: string; charSta
  * that cannot be (`overlap`: lines that should have been set together and could not), both stay lit — the line is
  * never cut before it is read — and the engine logs it. Layouts that seat two lines apart do not ask this.
  */
-export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number, floor: number): { show: number; exitAt: number; exitDur: number; capped: boolean; overlap: boolean } {
+export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number, floor: number, hard = floor): { show: number; exitAt: number; exitDur: number; capped: boolean; overlap: boolean } {
   const w = nextShowAfter(exitFrom, exitSec, plannedShow, lead);
   const show = showByOnset(w.show, plannedShow, onset);
   if (show >= w.show - 1e-9) return { show: w.show, exitAt: exitFrom, exitDur: w.exitDur, capped: false, overlap: false };
   const end = show - lead;
   if (exitFrom + EXIT_MIN <= end) return { show, exitAt: exitFrom, exitDur: Math.min(Math.max(exitSec, EXIT_MIN), end - exitFrom), capped: true, overlap: false };
   if (end - EXIT_MIN >= floor - 1e-9) return { show, exitAt: end - EXIT_MIN, exitDur: EXIT_MIN, capped: true, overlap: false };
-  return { show, exitAt: Math.max(floor, exitFrom), exitDur: w.exitDur, capped: true, overlap: true };
+  // (no room for a blink past the floor: a cut, as late as the floor allows — gone as the next shows, its lead given up
+  // where it must be)
+  if (end >= floor - 1e-9) return { show, exitAt: floor, exitDur: Math.max(0, end - floor), capped: true, overlap: false };
+  if (floor <= show + 1e-9) return { show, exitAt: Math.min(floor, show - 0.001), exitDur: Math.max(0.001, show - floor), capped: true, overlap: false };
+  // (past the preferred floor but not the hard one — its last character sung, its reading floor met: cut as the next
+  // shows, a sung-through line's last syllable rung no longer than the voice gives it)
+  if (hard <= show - 0.001) return { show, exitAt: show - 0.001, exitDur: 0.001, capped: true, overlap: false };
+  // (the next is sung before this one's floor: both lit, as briefly as the floor allows — a fault, logged)
+  return { show, exitAt: floor, exitDur: EXIT_MIN, capped: true, overlap: true };
 }
 
 /**

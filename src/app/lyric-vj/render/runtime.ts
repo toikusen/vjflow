@@ -553,7 +553,9 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
   // the composer's lines get every frame: its reading is what the time goes to, so even the blink out comes off the exit
   const cutOut = rt.style.budget ? 1 / 30 : 0.08;
   // rushed: templates that set a line in pieces (scatter, stair rows, typing) put them all up at once
-  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: Math.max(rt.exitAt, limit - cutOut), exitDur: cutOut, rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
+  // (the cut is out by the limit: a line already leaving at it is cut there, never run into the next line's show)
+  const at = Math.max(rt.exitAt, limit - cutOut);
+  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: at, exitDur: Math.max(0.001, Math.min(cutOut, limit - at)), rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
 }
 
 /**

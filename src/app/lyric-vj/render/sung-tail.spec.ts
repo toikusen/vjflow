@@ -75,17 +75,33 @@ describe('settleExit: the next line shows by its onset; one seat shows one line;
     expect(s.exitAt + s.exitDur).toBeLessThanOrEqual(s.show - lead + 1e-9);
     expect(s).toMatchObject({ capped: true, overlap: false });
   });
-  it('fast rap: A sung to 10.05, B planned 10.0 from 10.1 — A never exits before its last character; the two overlap, flagged', () => {
+  it('fast rap: A sung to 10.05, B planned 10.0 from 10.1 — A never exits before its last character, and is cut as B shows', () => {
     const floor = exitFloor({ start: 9, end: 10.1, charStarts: [9, 10.05] }, 8.9);
     const s = settleExit(exitAfterSung(9.9, 10.05), 0.28, 10.0, 10.1, lead, floor);
     expect(s.exitAt).toBeGreaterThan(10.05);
     expect(s.show).toBeCloseTo(10.1, 6);
-    expect(s.overlap).toBe(true);
+    expect(s.exitAt + s.exitDur).toBeLessThanOrEqual(s.show + 1e-9);
+    expect(s.overlap).toBe(false);
+  });
+  it('a next line sung before this one\'s floor (an unshared duet): both lit as briefly as the floor allows, flagged', () => {
+    const floor = exitFloor({ start: 9, end: 10.5, charStarts: [9, 10.4] }, 8.9);
+    const s = settleExit(exitAfterSung(9.9, 10.4), 0.28, 10.0, 10.1, lead, floor);
+    expect(s).toMatchObject({ exitAt: floor, overlap: true });
   });
   it('is the plain wait where the onset leaves room: the tail kept, nothing capped', () => {
     const s = settleExit(22.64, 0.28, 22.44, 23.1, lead, 22.5);
     const w = nextShowAfter(22.64, 0.28, 22.44, lead);
     expect(s).toEqual({ show: w.show, exitAt: 22.64, exitDur: w.exitDur, capped: false, overlap: false });
+  });
+});
+
+describe('settleExit with a hard floor: a line sung straight into the next is cut as it shows, never two lit', () => {
+  it('A\'s last character 0.02 s before B\'s first: A is up through its last character and gone as B shows', () => {
+    const cue = { start: 123.78, end: 125.64, charStarts: [123.78, 125.62] };
+    const s = settleExit(125.92, 0.28, 125.44, 125.64, 0.02, exitFloor(cue, 123.58), exitFloor(cue, 123.58, 0.02, 0));
+    expect(s.overlap).toBe(false);
+    expect(s.exitAt).toBeGreaterThanOrEqual(125.62);
+    expect(s.exitAt + s.exitDur).toBeLessThanOrEqual(125.64 + 1e-9);
   });
 });
 

@@ -31,6 +31,8 @@ export interface CueRuntime {
   exitDur: number;
   /** Whether the sung tail held the exit (sung-tail.ts): 'exempt' for a line its layout keeps up for the next. */
   tail?: 'kept' | 'exempt' | 'capped';
+  /** The earliest the line may begin to leave (sung-tail.ts exitFloor): its last character read, a glimpse after it shows. */
+  floor?: number;
   tailWhy?: string;
   /** Absolute times of the beats this cue hits. */
   accentTimes: number[];
@@ -543,6 +545,9 @@ export { inkDistance, KEY_APART, keyInk, readable, readableHue } from './key-ink
  * at once (no word-by-word reveal, no drawn entrance) and leaves on a cut at `limit`. Undefined when it reads already.
  * Applies to every template and effect alike: it works from the readable window the built layer reports.
  */
+/** The lead a reading limit keeps before the next line shows (engine.ts: next show − 0.02). */
+export const LIMIT_LEAD = 0.02;
+
 export function readFix(rt: CueRuntime, readable: [number, number], required: number, limit: number): Pick<CueRuntime, 'style' | 'exitAt' | 'exitDur' | 'rushed' | 'adjust'> | undefined {
   let short = required - (readable[1] - readable[0]);
   if (short <= 0.05) return undefined;
@@ -554,8 +559,10 @@ export function readFix(rt: CueRuntime, readable: [number, number], required: nu
   const cutOut = rt.style.budget ? 1 / 30 : 0.08;
   // rushed: templates that set a line in pieces (scatter, stair rows, typing) put them all up at once
   // (the cut is out by the limit: a line already leaving at it is cut there, never run into the next line's show)
-  const at = Math.max(rt.exitAt, limit - cutOut);
-  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: at, exitDur: Math.max(0.001, Math.min(cutOut, limit - at)), rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
+  // (and no earlier than the line's floor, its last character read, where the limit leaves room: sung-tail.ts exitFloor)
+  // (the limit keeps a lead before the next show; the floor may take that lead, never the show itself: settleExit)
+  const at = Math.max(rt.exitAt, limit - cutOut, Math.min(rt.floor ?? -Infinity, limit + LIMIT_LEAD - 0.001));
+  return { style: { ...rt.style, reveal: 'line', enter: 'cut', exit: 'cut' }, exitAt: at, exitDur: Math.max(0.001, Math.min(cutOut, (at > limit ? limit + LIMIT_LEAD : limit) - at)), rushed: true, adjust: [...(rt.adjust ?? []), 'read-cut'] };
 }
 
 /**

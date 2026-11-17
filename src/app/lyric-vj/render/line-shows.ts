@@ -9,7 +9,7 @@ import { isLineMotion } from './motion-transition';
 import { pullPictures } from './picture-lead';
 import { readingSec, setTogether } from './reading-window';
 import { foldRepeats } from './repeats';
-import { mustShare } from './sung-tail';
+import { exitFloor, mustShare, PLAN_TAIL } from './sung-tail';
 import { enterSec as lineEnterSec } from './enter-sec';
 import { lastSungOf, leadOf, showTime } from './show-time';
 import { linkGrounds } from './world-handoff';
@@ -28,9 +28,6 @@ export const threadShot = (s?: { template: string }) => s?.template === 'chat' |
 export const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'singalong', 'scroll', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
 
 /** The page handoffs a treatment's one event plan approved (world-events.ts), by the line handed into; undefined without a plan. */
-/** The most characters two lines set together to share the frame may have: two rows of 24, set smaller, still read. */
-export const SHARE_CHARS = 48;
-
 export const approvedOf = (t: { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }) => (t.worldEvents ? new Set(t.worldEvents.events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds[e.lineIds.length - 1])) : undefined);
 
 /**
@@ -39,7 +36,13 @@ export const approvedOf = (t: { worldEvents?: { events: { kind: string; fixed?: 
  * really got, a shot's first cut pulled to its line, then the world's linked page moves laid on `sections`, only those
  * `approved` names when it is given (Q1: the scheduler's table; a boundary it did not approve keeps its plain cut).
  */
-export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics?: { sections: Section[] } }, cues: TimelineCue[], tempo: number | undefined, sections: Section[] = treatment.graphics?.sections ?? [], approved?: Set<string>) {
+/**
+ * `tail`: the last character's reading time two lines are judged on (sung-tail.ts): the composer's PLAN_TAIL by default,
+ * as the planner and the world-event scheduler see the lines; the engine asks MIN_TAIL of a plan no world event names.
+ * `seats`: whether a template seats each of its shot's lines apart (the engine's persisting layouts); one that does not
+ * shows one line at a time, so two of its lines are not seated by sharing the shot.
+ */
+export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics?: { sections: Section[] } }, cues: TimelineCue[], tempo: number | undefined, sections: Section[] = treatment.graphics?.sections ?? [], approved?: Set<string>, tail = PLAN_TAIL, seats: (template: string) => boolean = () => true) {
   const all = treatment.cues
     .map((style) => ({ style, cue: horizontalPunct(cues.find((c) => c.id === style.cueId)!) }))
     .filter((x) => x.cue)
@@ -54,6 +57,7 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
   // two lines sung back to back faster than either can be read are set together as one two-row line: the first
   // stays up while the second is sung (word reveal follows the voice across both)
   const joined = new Set<number>();
+  const size = new Map<number, number>();
   for (let i = 0; i + 1 < styled.length; i++) {
     const a = styled[i].cue;
     const b = styled[i + 1].cue;
@@ -66,19 +70,27 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     const ns = styled[i + 1].style;
     const onset = ns.reveal === 'sung' && ns.sung?.length === [...b.text].length ? ns.sung[0] : (b.charStarts?.[0] ?? b.start);
     // (a Latin letter counts half: two of them take the width of one kana or han)
-    const share = mustShare(a, b, onset) && [...`${a.text}${b.text}`.replace(/\s/g, '')].reduce((n, ch) => n + (/[\x21-\x7e]/.test(ch) ? 0.5 : 1), 0) <= SHARE_CHARS;
+    // (however long the two: set together their rows are fitted to the frame, under the type floor in plain stepped rows —
+    // never two lines lit on one seat, opus review)
+    const share = mustShare(a, b, onset, tail);
     // (a composer line is paired by the composer itself, planPairs, mustShare included; a plan saved before that rule is
     // set together here — unless world events name its lines, whose table is the plan's)
+    // (and never a pair the plan already seated in one shot — stack, couplet, world-pair: each line has its own seat; a
+    // composer pair planned by planPairs stands so; a plan saved before that rule left them in two shots)
     const named = !!(treatment as { worldEvents?: unknown }).worldEvents;
-    if (inChat || (styled[i].style.budget && !(share && !named)) || !(setTogether(a, b) || share) || repeats.has(a.id) || repeats.has(b.id)) continue;
+    const seated = styled[i].style.shot === styled[i + 1].style.shot && seats(shotOf(styled[i].style.shot)?.template ?? '');
+    // (nor any line a world event names: its table is the plan's)
+    const shared = share && !seated && !named;
+    if (inChat || (styled[i].style.budget && !shared) || !(setTogether(a, b) || shared) || repeats.has(a.id) || repeats.has(b.id)) continue;
     const aLen = [...a.text].length;
     styled[i] = {
       style: { ...styled[i].style, rows: joined.has(i) ? [...(styled[i].style.rows ?? []), aLen + 1] : [aLen + 1], reveal: 'word' },
       cue: { ...a, text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
     };
     styled.splice(i + 1, 1);
-    // (a shared line is checked again against the one after it: a duet's third voice comes into the same frame)
-    if (share) { joined.add(i); i--; }
+    // (a shared line is checked again against the one after it: a duet's third voice comes into the same frame — three
+    // voices at most, as the composer pairs them)
+    if (shared) { joined.add(i); size.set(i, (size.get(i) ?? 1) + 1); if ((size.get(i) ?? 1) < 3) i--; }
   }
   // slow songs show each line a little before the voice (breathing timing); fast songs stay on the beat
   const lead = leadOf(tempo);
@@ -101,7 +113,13 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     const layout = (s: { shot: string }) => shotOf(s.shot)?.template ?? '';
     const paceOf = (c: TimelineCue) => Math.min(1, Math.max(0.35, (c.end - c.start) / 2));
     const read = !!prev && h.from - showAt[i - 1] >= lineEnterSec(prev.style.enter, paceOf(prev.cue)) + readingSec(prev.cue.text, prev.cue.start, prev.cue.end) - 0.05 && (showAt[i + 1] ?? Infinity) - h.to >= readingSec(cue.text, cue.start, cue.end) - 0.05;
-    if (!read || NO_HANDOFF.has(layout(style)) || NO_HANDOFF.has(layout(prev.style))) {
+    // (nor where it takes the line going out off before its floor — its last character read: sung-tail.ts exitFloor)
+    // (at the composer's tail, PLAN_TAIL: the world-event scheduler plans its page handoffs on that, sung-tail.ts)
+    const floorKept = !!prev && (h.kind === 'relay' ? h.from : h.to) >= exitFloor(prev.cue, showAt[i - 1], undefined, tail) - 1e-9;
+    // (nor where it brings the line in after its first sung character: a relay shows it part way through)
+    const firstSung = style.reveal === 'sung' && style.sung?.length === [...cue.text].length ? style.sung[0] : (cue.charStarts?.[0] ?? cue.start);
+    const onTime = (h.kind === 'relay' ? h.from + 0.4 * (h.to - h.from) : h.from) <= firstSung + 1e-9;
+    if (!read || !floorKept || !onTime || NO_HANDOFF.has(layout(style)) || NO_HANDOFF.has(layout(prev.style))) {
       styled[i] = { cue, style: { ...style, handoff: undefined } };
       // the picture stays with the line: a backdrop pushed off under a line that stays put reads as a mistake
       const sec = sections.find((s) => s.transition && isLineMotion(s.transition.kind) && Math.abs(s.start - h.from) < 0.06);

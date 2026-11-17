@@ -1,7 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
-import { exitAfterSung, exitFloor, settleExit } from './sung-tail';
+import { exitAfterSung, exitFloor, MIN_TAIL, PLAN_TAIL, settleExit } from './sung-tail';
 import { requiredReading } from './reading-window';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -1187,7 +1187,10 @@ export class LyricVjEngine {
     // which lines show and when, the handoffs that run, the pictures pulled to their lines and the linked page moves
     // laid on the world's sections: one computation, shared with the plan (line-shows.ts); with the song's one event plan
     // (Q1, world-events.ts) only the page handoffs that plan approved are laid
-    const { styled, repeats, shouts, showAt } = lineShows(treatment, cues, this.job.tempo, treatment.graphics?.sections, approvedOf(treatment));
+    // (a plan no world event names is judged at the engine's own tail: its last characters read one character's time)
+    const tail = (treatment as { worldEvents?: unknown }).worldEvents ? PLAN_TAIL : MIN_TAIL;
+    const floorOf = (c: typeof cues[number], show: number) => exitFloor(c, show, EXIT_LEAD, tail);
+    const { styled, repeats, shouts, showAt } = lineShows(treatment, cues, this.job.tempo, treatment.graphics?.sections, approvedOf(treatment), tail, (t) => !!RENDERERS[t]?.persist && RENDERERS[t]?.persist !== 'preview');
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
@@ -1265,7 +1268,8 @@ export class LyricVjEngine {
         // a composer line is gone before the next one's shot shows it
         if (style.budget && next && styled[i + 1].style.shot !== style.shot) return shows[i + 1];
         const other = styled.findIndex((x, j) => j > i && x.style.shot !== style.shot);
-        const shotOver = Math.min(shot.end, other >= 0 ? shows[other] : Infinity);
+        // (a held line stays past its shot's planned end up to its floor where the next shot's line leaves it room)
+        const shotOver = Math.min(persist ? Math.max(shot.end, floorOf(cue, showAt[i]) + EXIT_LEAD) : shot.end, other >= 0 ? shows[other] : Infinity);
         if (persist === 'shot') return shotOver;
         if (persist === 'next') return Math.min(shotOver, later[1] ?? Infinity);
         return nextShow;
@@ -1273,8 +1277,9 @@ export class LyricVjEngine {
       // (a world's shared shot is gone before the next line shows, however late its own line runs)
       // (a sing-along line stays until the next one shows only while that one follows soon: its preview waits there)
       const held = !!persist && (persist !== 'preview' || (!!next && next.start - cue.end <= PREVIEW_GAP));
-      // (a held line leaves no earlier than its floor where the line after it leaves it that time: exitFloor)
-      const exitAt0 = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD, Math.min(exitFloor(cue, showAt[i]), leaveBy - EXIT_LEAD)) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
+      // (a held line leaves no earlier than its floor where the line after it leaves it that time: exitFloor; and is gone as
+      // the line that takes its place shows, never past it — it stayed to its cue's end, 0.2 s into the next shot's line)
+      const exitAt0 = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(Math.min(Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD), leaveBy - EXIT_LEAD), Math.min(floorOf(cue, showAt[i]), leaveBy - 0.001)) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
       // (a line never starts leaving on its last sung character: the sung tail; where the next line would show before the
       // tail and a blink of exit are over, the next line waits — never an early exit, sung-tail.ts)
       // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
@@ -1290,18 +1295,21 @@ export class LyricVjEngine {
       const ns = styled[i + 1];
       const onset = !ns ? Infinity : ns.style.reveal === 'sung' && ns.style.sung?.length === [...ns.cue.text].length ? ns.style.sung[0] : (ns.cue.charStarts?.[0] ?? ns.cue.start);
       // (never before its floor: its last sung character rung, a glimpse after it shows — opus review)
-      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, exitFloor(cue, showAt[i]), exitFloor(cue, showAt[i], EXIT_LEAD, 0)) : undefined;
+      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, floorOf(cue, showAt[i])) : undefined;
       if (settle && held && persist !== 'preview') {
         // (a held line leaves as the line that takes its place shows: that line waits, up to its own sung onset, for this
         // one's floor — a stack line was cut before its last character, the timing audit)
         const other = styled.findIndex((x, j) => j > i && x.style.shot !== style.shot);
         const by = persist === 'next' && laterIdx[1] !== undefined && (other < 0 || plannedShow[laterIdx[1]] < plannedShow[other]) ? laterIdx[1] : other;
-        const fl = exitFloor(cue, showAt[i]);
+        const fl = floorOf(cue, showAt[i]);
         if (by >= 0 && showAt[by] < fl + EXIT_LEAD) {
           const nb = styled[by];
           const on = nb.style.reveal === 'sung' && nb.style.sung?.length === [...nb.cue.text].length ? nb.style.sung[0] : (nb.cue.charStarts?.[0] ?? nb.cue.start);
           const sh = Math.max(showAt[by], Math.min(fl + EXIT_LEAD, on));
           if (sh > showAt[by] + 1e-6) { this.waits.push({ id: nb.cue.id, sec: +(sh - showAt[by]).toFixed(3) }); showAt[by] = sh; }
+          // (the incoming line sung before this one's floor, and not set together with it (line-shows.ts sets such a pair
+          // together where it can): a fault, logged, and the readable gate fails both)
+          if (on < fl + EXIT_LEAD - 1e-6) this.overlaps.push({ id: cue.id, next: nb.cue.id, from: +on.toFixed(3), to: +fl.toFixed(3) });
         }
         return;
       }
@@ -1331,7 +1339,9 @@ export class LyricVjEngine {
         exitAt: waited ? waited.exitAt : exitFrom,
         // (the settled exit keeps its own length — a cut stays a cut (0.08 s on a cut ran into the next line's show), a
         // capped exit down to a cut: never past the next line's show)
-        exitDur: waited ? Math.max(0.001, waited.exitDur) : Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - exitFrom - 0.02)),
+        // (and never past the line that takes its place: the 0.08 s floor ran a held line 0.06 s into the next shot's line)
+        exitDur: waited ? Math.max(0.001, waited.exitDur) : Math.max(0.001, Math.min(Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - exitFrom - 0.02)), (persist ? leaveBy : next ? showAt[i + 1] : Infinity) - exitFrom)),
+        floor: floorOf(cue, showAt[i]),
         tail: !tailKept ? 'exempt' : waited?.capped ? 'capped' : 'kept',
         ...(waited?.capped ? { tailWhy: `gives way to ${next!.id}'s sung onset` } : {}),
         accentTimes: [...(style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined), ...(repeats.get(cue.id) ?? [])].sort((a, b) => a - b),
@@ -1458,7 +1468,9 @@ export class LyricVjEngine {
         const kept = gateMotion({ enter: Math.max(0, from - rt.showFrom), exit: rt.exitDur, extra: 0 }, limit - rt.showFrom, need);
         if (!kept.exit) {
           // (a cut in its last frame, as readFix cuts a composer line: 0.08 s took a fast line off before its last character)
-          Object.assign(rt, { style: { ...rt.style, exit: 'cut' as const }, exitAt: limit - 1 / 30, exitDur: 1 / 30 });
+          // (no earlier than the line's floor where the limit leaves room for it)
+          const cutAt = Math.max(limit - 1 / 30, Math.min(rt.floor ?? -Infinity, limit + 0.019));
+          Object.assign(rt, { style: { ...rt.style, exit: 'cut' as const }, exitAt: cutAt, exitDur: Math.max(0.001, Math.min(1 / 30, (cutAt > limit ? limit + 0.02 : limit) - cutAt)) });
           layer = build();
         }
       }

@@ -30,7 +30,7 @@ import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import { fineShown } from './render/fine-shown';
-import { mustShare } from './render/sung-tail';
+import { mustShare, PLAN_TAIL } from './render/sung-tail';
 import type { MomentAsk } from './signature-moments';
 import { closingLine } from './song-parts';
 
@@ -602,12 +602,12 @@ export function planPairs(cues: Cue[], beats: Map<string, LineBeat>, hands: Map<
     // two lines sung too fast to read apart share a shot whatever they say: the older stays up while the next is sung
     // (and two whose handover cannot be clean — same start, a duet's overlap, the next sung before this one may leave:
     // sung-tail.ts mustShare — each in its own seat of one shot, never one hiding the other)
-    if (!forced && !forcedLine(a, b) && (setTogether(a, b) || mustShare(a, b)) && norm(a.text) !== norm(b.text)) {
+    if (!forced && !forcedLine(a, b) && (setTogether(a, b) || mustShare(a, b, undefined, PLAN_TAIL)) && norm(a.text) !== norm(b.text)) {
       // (a third voice still sung into: the line of the two sung latest shares with it too, three seats at most)
       const group = [b];
       const latest = () => [a, ...group].reduce((x, y) => ((y.charStarts?.at(-1) ?? y.end) > (x.charStarts?.at(-1) ?? x.end) ? y : x));
       const c3 = cues[i + 2];
-      if (c3 && !forcedLine(b, c3) && mustShare(latest(), c3) && norm(b.text) !== norm(c3.text)) group.push(c3);
+      if (c3 && !forcedLine(b, c3) && mustShare(latest(), c3, undefined, PLAN_TAIL) && norm(b.text) !== norm(c3.text)) group.push(c3);
       out.set(a.id, { kind: 'list', also: group.map((x) => x.id) });
       i += group.length;
       last = i;

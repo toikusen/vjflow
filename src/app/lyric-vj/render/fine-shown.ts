@@ -9,7 +9,9 @@ import type { FineTier } from '../treatment';
  */
 export function fineShown(fine: FineTier, sung: string): FineTier {
   if (!fine.text) return fine;
-  const bare = (s: string) => s.replace(/[\s・、。，,.!?！？「」『』…〜～ー-]/g, '');
+  // (the real words: width folded (NFKC) and katakana read as hiragana; a long vowel is part of the word — 「ビール」
+  // is not in 「ビルの窓」 — only spaces and punctuation are dropped)
+  const bare = (s: string) => s.normalize('NFKC').replace(/[\u30a1-\u30f6]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60)).replace(/[\s・、。，,.!?！？「」『』…]/g, '');
   const own = fine.kind !== 'note' && !!bare(fine.text) && bare(sung).includes(bare(fine.text));
   return own ? fine : { kind: 'rule', text: '' };
 }

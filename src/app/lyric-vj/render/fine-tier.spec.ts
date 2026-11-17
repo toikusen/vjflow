@@ -20,6 +20,12 @@ describe('fineShown: no unsung words beside a sung line', () => {
     expect(fineShown({ kind: 'title', text: '思い出す' }, sung)).toEqual({ kind: 'title', text: '思い出す' });
     expect(fineShown({ kind: 'key', text: '君 僕' }, '君と僕')).toEqual({ kind: 'rule', text: '' });
   });
+  it('matches the real words: a long vowel is part of the word, width and katakana/hiragana are not', () => {
+    expect(fineShown({ kind: 'title', text: 'ビール' }, 'ビルの窓')).toEqual({ kind: 'rule', text: '' });
+    expect(fineShown({ kind: 'title', text: 'ビール' }, '冷えたびーるを')).toEqual({ kind: 'title', text: 'ビール' });
+    expect(fineShown({ kind: 'title', text: 'ＡＢＣ' }, 'abc と歌う')).toEqual({ kind: 'rule', text: '' });
+    expect(fineShown({ kind: 'title', text: 'ＡＢＣ' }, 'ABC と歌う')).toEqual({ kind: 'title', text: 'ＡＢＣ' });
+  });
   it('keeps a bare hairline as it is', () => {
     expect(fineShown({ kind: 'rule', text: '' }, sung)).toEqual({ kind: 'rule', text: '' });
   });

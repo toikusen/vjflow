@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverFatal, coverLeft, coverReport, cropOf, drawKinetic, resetSubjectCovers, SUBJECT_COVER_ALPHA, watchSubjectCover } from './kinetic';
+import { coverFatal, coverLeft, coverReport, cropOf, SEAT_GRAZE, drawKinetic, resetSubjectCovers, SUBJECT_COVER_ALPHA, watchSubjectCover } from './kinetic';
 import { alphaBounds, clipEnvelope } from './sprite-clip';
 
 describe('a subject is seated by its whole motion envelope and the cut\'s camera', () => {
@@ -72,10 +72,16 @@ describe('a subject cover is what is left of it after keepClear (Codex review: g
 
 describe('the seat error is the cover before keepClear, on a seated cut (opus review: the check could never fire)', () => {
   it('reports a seated cut\'s whole reach into a read line, even where keepClear cuts it all away', () => {
-    expect(coverReport(0.12, coverLeft(0.12, 0.3, 1, 1), true)).toEqual({ seat: 0.12, left: 0 });
+    expect(coverReport(0.12, coverLeft(0.12, 0.3, 1, 1), true, 0.3)).toEqual({ seat: 0.12, left: 0 });
+  });
+  it('lets a seated graze pass: under SEAT_GRAZE of the lyric box and of the subject (an edge of its envelope)', () => {
+    expect(SEAT_GRAZE).toBe(0.03);
+    expect(coverReport(0.005, 0, true, 0.01)).toEqual({ seat: 0, left: 0 });
+    expect(coverReport(0.005, 0, true, 0.05)).toEqual({ seat: 0.005, left: 0 });
+    expect(coverReport(0.04, 0, true, 0.01)).toEqual({ seat: 0.04, left: 0 });
   });
   it('logs only what is left over on any other cut', () => {
-    expect(coverReport(0.12, 0, false)).toEqual({ seat: 0, left: 0 });
-    expect(coverReport(0.12, 0.12, false)).toEqual({ seat: 0, left: 0.12 });
+    expect(coverReport(0.12, 0, false, 0.3)).toEqual({ seat: 0, left: 0 });
+    expect(coverReport(0.12, 0.12, false, 0.3)).toEqual({ seat: 0, left: 0.12 });
   });
 });

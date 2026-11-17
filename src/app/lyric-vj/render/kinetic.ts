@@ -850,7 +850,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
           // (what is left over the words once keepClear has cut or faded it, not what reached in before)
           // (a seated cut — the video stage's — reports its reach before keepClear: the seat's error, fatal in render.mts;
           // any other only what keepClear leaves, logged)
-          const rep = coverReport(share, coverLeft(share, inside, strength, ctx.globalAlpha), !!l.seated);
+          const rep = coverReport(share, coverLeft(share, inside, strength, ctx.globalAlpha), !!l.seated, inside);
           if (reading && frame && (l.until === undefined || now < l.until - 1e-3)) {
             if (rep.seat > 0 && ctx.globalAlpha >= SUBJECT_COVER_ALPHA) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, rep.seat, now);
             if (rep.left > 0) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}:left`, l.sprite, rep.left, now, undefined, 'subject left over');
@@ -1035,8 +1035,15 @@ export function coverLeft(share: number, inside: number, strength: number, alpha
   return faded >= SUBJECT_COVER_ALPHA ? share : 0;
 }
 export { coverFatal } from './cover-fatal';
-/** A cut's subject over a read line: on a seated cut its whole reach (the seat's error), else what keepClear left. */
-export const coverReport = (share: number, left: number, seated: boolean) => ({ seat: seated ? Math.max(0, share) : 0, left: seated ? 0 : left });
+/**
+ * How far a seated subject may graze a read line's box before it is the seat's error: 3 % of the box and 3 % of the
+ * subject. Its motion envelope's edge brushes a box by a fraction of a percent (anti-aliased limbs, a wheel's swing),
+ * which keepClear cuts unseen; past 3 % either way it is a glyph's corner or more — tighter than the code layer's report
+ * floors (8 %, or 1.5 % when most of a picture is in the box, cover.ts covers), as the video stage's seats promise room.
+ */
+export const SEAT_GRAZE = 0.03;
+/** A cut's subject over a read line: on a seated cut its whole reach past SEAT_GRAZE (the seat's error), else what keepClear left. */
+export const coverReport = (share: number, left: number, seated: boolean, inside: number) => ({ seat: seated && (share > SEAT_GRAZE || inside > SEAT_GRAZE) ? Math.max(0, share) : 0, left: seated ? 0 : left });
 /** For tests: forget what was reported. */
 export const resetSubjectCovers = () => subjectCovers.clear();
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planStretches, shotAt, type StretchScript } from './stretch-plan';
+import { planStretches, realiseStretches, shotAt, type StretchPlan, type StretchScript } from './stretch-plan';
 
 // 黄昏サイクル (run5): the outro ran every cut-out of the script in turn, a montage of thirty seconds
 const lines = [
@@ -64,5 +64,31 @@ describe('planStretches: an unsung stretch is a planned sequence, not the script
     expect(shotAt(plan, 255)).toBe('S34');
     expect(shotAt(plan, outro.start + (outro.end - outro.start) * outro.shares[0] + 0.01)).toBe('S34');
     expect(shotAt(plan, 50)).toBeUndefined();
+  });
+});
+
+describe('realiseStretches: a stretch\'s planned changes are real cuts', () => {
+  const outro: StretchPlan = { kind: 'outro', start: 227.5, end: 257.5, shots: ['S17', 'S34'], shares: [0.35, 0.65], why: '', by: 'rule' };
+  const beats = Array.from({ length: 200 }, (_, i) => 200 + i * 0.5);
+  it('adds a cut at a change no section starts near, on the beat, and moves the change there', () => {
+    // one section over the whole outro: the change to S34 at 238 s had nothing to land on
+    const { plans, cuts } = realiseStretches([outro], [226.77], beats);
+    expect(cuts).toEqual([238]);
+    expect(shotAt(plans, 237.9)).toBe('S17');
+    expect(shotAt(plans, 238)).toBe('S34');
+  });
+  it('lands a change on a section that starts near it instead of adding one', () => {
+    const { plans, cuts } = realiseStretches([outro], [226.77, 237.62], beats);
+    expect(cuts).toEqual([]);
+    expect(shotAt(plans, 237.61)).toBe('S17');
+    expect(shotAt(plans, 237.62)).toBe('S34');
+  });
+});
+
+describe('planStretches with no lines at all (an instrumental-only plan)', () => {
+  it('takes the script\'s opening cut-out, and its closing one, for the one stretch', () => {
+    const shots = [{ id: 'S16' }, { id: 'S17' }, { id: 'S20' }, { id: 'S34' }];
+    const [only] = planStretches({ lines: [], shots }, [], [{ start: 0, end: 180, kind: 'intro' }], isCutOut);
+    expect(only.shots).toEqual(['S17', 'S34']);
   });
 });

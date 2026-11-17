@@ -15,7 +15,7 @@ import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
 import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spread';
 import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
-import { planStretches, shotAt } from '../../src/app/lyric-vj/stretch-plan';
+import { planStretches, realiseStretches, shotAt } from '../../src/app/lyric-vj/stretch-plan';
 
 const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
   // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
@@ -44,7 +44,7 @@ if (scheme) {
   }
   for (const c of t.cues as (Record<string, unknown> & { world?: Record<string, unknown> })[]) if (c.world) c.world = withScheme(c.world);
 }
-const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { duration?: number; cues: { id: string; start: number; end: number; text?: string }[] }) : undefined;
+const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { duration?: number; beats?: number[]; cues: { id: string; start: number; end: number; text?: string }[] }) : undefined;
 // the stretches nobody sings (intro, interludes, outro): a planned sequence each — the director's (script.stretches)
 // or by rule (stretch-plan.ts) — held on the director's own cuts, never every shot of the script in turn (run5's outro
 // was a thirty-second montage of all of them, 2026-11-17)
@@ -54,7 +54,7 @@ const windowsOf = (sg: NonNullable<typeof song>) => {
   const first = Math.min(...sg.cues.map((c) => c.start));
   return first > 0.5 && !ws.some((w) => w.kind === 'intro') ? [{ start: 0, end: first, kind: 'intro' as const }, ...ws] : ws;
 };
-const stretches = song ? planStretches(script, song.cues, windowsOf(song), (id) => shots.get(id)?.frame !== 'scene' && !!assets[`spr:${id}`]) : [];
+let stretches = song ? planStretches(script, song.cues, windowsOf(song), (id) => shots.get(id)?.frame !== 'scene' && !!assets[`spr:${id}`]) : [];
 const inStretch = (time: number) => stretches.some((w) => time >= w.start - 1e-3 && time < w.end);
 for (const w of stretches) console.log(`stretch ${w.kind} ${w.start.toFixed(2)}-${w.end.toFixed(2)} (${w.by}): ${w.shots.map((x, i) => `${x} ${Math.round(w.shares[i] * 100)}%`).join(' → ')} — ${w.why}`);
 // a line beside a subject keeps a share of its set's measure (world-layout compact): short lines give up more, a long
@@ -95,6 +95,18 @@ if (song) {
     }
   });
   secs.splice(0, secs.length, ...out.sort((x, y) => x.start - y.start));
+  // a stretch's planned changes are real cuts: each lands on a section starting near it, else a cut is added on the
+  // beat, a copy of the section it falls in (its ground and camera kept) — one section over a 30 s outro showed its
+  // first shot throughout and never the closing image (Codex review)
+  const real = realiseStretches(stretches, secs.map((x) => x.start), song.beats ?? []);
+  stretches = real.plans;
+  for (const at of real.cuts) {
+    const i = secs.findLastIndex((x) => x.start <= at);
+    if (i < 0) continue;
+    const sec = secs[i];
+    const layers = (JSON.parse(JSON.stringify(sec.layers)) as KLayer[]).filter((l) => l.kind === 'kinetic').map((l) => { const c: KLayer = { ...l, at, seed: Number(l['seed'] ?? 0) + 77 }; delete c.sprite; delete c.subjectAt; return c; });
+    secs.splice(i + 1, 0, { ...JSON.parse(JSON.stringify({ ...sec, layers: [] })), start: at, layers } as never);
+  }
 }
 // the subject layer: the picture tier binds a prop to a cut here and there; a subject video keeps its cast in view,
 // so a cut the plan left without one takes the script's shot for its line (the line's shots in order, cycling), and

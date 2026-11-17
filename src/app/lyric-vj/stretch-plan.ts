@@ -38,7 +38,7 @@ const uniq = (xs: string[]) => xs.filter((x, i) => xs.indexOf(x) === i);
  *   the end on the larger share (the slow ending).
  */
 export function planStretches(
-  script: { lines: { cue: string; shots: string[] }[]; stretches?: StretchScript[] },
+  script: { lines: { cue: string; shots: string[] }[]; stretches?: StretchScript[]; shots?: { id: string }[] },
   cues: { id: string; start: number; end: number }[],
   windows: UnsungWindow[],
   isCutOut: (id: string) => boolean,
@@ -49,6 +49,12 @@ export function planStretches(
     const own = (script.stretches ?? []).filter((s) => s.kind === w.kind).sort((a, b) => Math.abs(a.at - w.start) - Math.abs(b.at - w.start))[0];
     const ownShots = own ? uniq(own.shots.filter(isCutOut)).slice(0, STRETCH_SHOTS) : [];
     if (own && ownShots.length && (w.kind !== 'interlude' || (own.at >= w.start - 2 && own.at < w.end))) return { ...w, shots: ownShots, shares: sharesOf(ownShots.length), why: own.why, by: 'director' as const };
+    // (no line at all — an instrumental-only plan: the script's opening cut-out, then its closing one)
+    if (!sorted.length) {
+      const all = [...script.lines.flatMap((l) => l.shots), ...(script.shots ?? []).map((x) => x.id)].filter(isCutOut);
+      const shots = uniq([all[0], all.at(-1)].filter((x): x is string => !!x));
+      return { ...w, shots, shares: shots.length === 2 ? [0.35, 0.65] : sharesOf(shots.length), why: 'no line to follow: the script\'s opening shot, then its closing one', by: 'rule' as const };
+    }
     const before = sorted.filter((c) => c.end <= w.start + 1e-3).at(-1);
     const after = sorted.find((c) => c.start >= w.end - 1e-3);
     const first = shotsOf(sorted[0]?.id)[0];
@@ -89,4 +95,31 @@ export function shotAt(plans: StretchPlan[], t: number): string | undefined {
     if (k < acc - 1e-9) return p.shots[i];
   }
   return p.shots.at(-1);
+}
+
+/**
+ * A stretch's planned changes made real cuts: a change lands on a section that starts within `near` s of it, else a cut
+ * is added there on the nearest beat; the plan's shares are moved to where the changes land. `starts` are the
+ * sections' starts. A 30 s outro on one section showed its first shot throughout and never its closing image.
+ */
+export function realiseStretches(plans: StretchPlan[], starts: number[], beats: number[], near = 0.6): { plans: StretchPlan[]; cuts: number[] } {
+  const cuts: number[] = [];
+  const out = plans.map((p) => {
+    if (p.shots.length < 2) return p;
+    const len = p.end - p.start;
+    let acc = 0;
+    const at = p.shares.slice(0, -1).map((share) => {
+      acc += share;
+      const want = p.start + acc * len;
+      const hit = starts.filter((x) => Math.abs(x - want) <= near).sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
+      if (hit !== undefined) return hit;
+      const beat = beats.filter((b) => b > p.start + 0.5 && b < p.end - 0.5).sort((a, b) => Math.abs(a - want) - Math.abs(b - want))[0];
+      const t = +(beat !== undefined && Math.abs(beat - want) <= near ? beat : want).toFixed(3);
+      cuts.push(t);
+      return t;
+    });
+    const bounds = [p.start, ...at, p.end];
+    return { ...p, shares: bounds.slice(1).map((b, i) => (b - bounds[i]) / len) };
+  });
+  return { plans: out, cuts };
 }

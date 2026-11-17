@@ -47,6 +47,17 @@ write('same-start-noev', planned('yt_iwYXfOhcsYI', 'tenmon', same, false));
   }
   write('held-late', { ...j, cues });
 }
+// a nested duet: a first voice sung on past the whole of the second (天文対話, its saved plan; set together, the merged
+// character times are not in order — the first voice's last is the latest)
+{
+  const j = load('out/research/lineplan/review/songs/tenmon/render/job.json');
+  const cues = j.cues.map((c) => ({ ...c }));
+  for (const id of ['c020', 'c031']) {
+    const i = cues.findIndex((c) => c.id === id), n = cues[i + 1];
+    cues[i] = sungTo(cues[i], +(n.end + 0.3).toFixed(3), +(n.end + 0.35).toFixed(3));
+  }
+  write('nested-duet', { ...j, cues });
+}
 // a duet over 48 characters: チョロイン's c041 (27) still sung 0.5 s into c042 (27), its saved plan
 {
   const j = load('out/research/linedirect/yt_hCCskTJwvuc/full2/job.json');

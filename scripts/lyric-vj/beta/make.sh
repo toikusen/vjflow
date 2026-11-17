@@ -123,8 +123,9 @@ hold=()
 [ "$rc" = 10 ] && hold+=("$(grep '^quality: ' "$w/quality-$tier.log" | sed 's/^quality: //' | paste -sd '；' -)")
 [ "$tier" = hybrid ] && grep -q 'key shot kept' "$w/cut.log" && hold+=('有一張關鍵畫面要看')
 # a figure hiding much of a lyric holds the video for the admin. Tokyo Drift v2, which the user accepted, peaked at
-# 35 % (render.mts logs "lyric covered … hides N%"); the 40 % line is that plus a margin, not a measured taste line
-worst=$(grep -oE 'hides [0-9]+%' "$w/render-$tier.log" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || true)
+# 35 %; the 40 % line is that plus a margin, not a measured taste line. Only what is left over the words after keepClear
+# counts ("subject left over: … hides N.N%", as render.mts counts it): a figure cut off its words hides nothing
+worst=$(grep -oE 'subject left over: .* hides [0-9]+(\.[0-9]+)?%' "$w/render-$tier.log" 2>/dev/null | grep -oE 'hides [0-9]+' | grep -oE '[0-9]+' | sort -n | tail -1 || true)
 [ -n "$worst" ] && [ "$worst" -gt 40 ] && hold+=("有歌詞被遮住 ${worst}%")
 if [ ${#hold[@]} -gt 0 ]; then
   # (the separator in its own variable: bash 3.2 misparses a multibyte character inside ${…:+…})

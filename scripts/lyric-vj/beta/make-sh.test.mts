@@ -25,8 +25,10 @@ function tree(o: { tier?: 'none' | 'img' | 'hybrid'; plan?: boolean; concept?: {
     'if [[ "$2" == *render.mts ]]; then',
     '  while [ $# -gt 0 ]; do [ "$1" = --out ] && out=$2; shift; done',
     '  mkdir -p "$out"; echo fresh > "$out/lyric-vj_vocal_0-10s.mp4"; echo "{}" > "$out/metrics.json"',
-    // its log (make.sh redirects the render\'s output there): HIDES names a lyric-cover share
-    '  [ -n "$HIDES" ] && echo "code layer: lyric covered: p1 hides ${HIDES}% of the lyric box"',
+    // its log (make.sh redirects the render\'s output there): HIDES names what keepClear left of a subject over a read
+    // line (after the clear), REACH what reached in before it (keepClear cut it away)
+    '  [ -n "$HIDES" ] && echo "code layer: subject left over: p1 hides ${HIDES}.0% of the lyric box at 3.00 s"',
+    '  [ -n "$REACH" ] && echo "code layer: lyric covered: p1 hides ${REACH}% of the lyric box (90% of it inside) at 3.0 s (cut 3.0)"',
     'fi',
     // the delivery gate: QUALITY_HOLD names the fault, else the video passes
     'if [[ "$2" == *quality.mts ]]; then',
@@ -121,6 +123,13 @@ test('make.sh: the delivery gate runs on the finished file and its plan check; a
   assert.match(gate, /--video \S+\/runs\/m1\/video\.mp4 --metrics \S+\/noimg\/video\/metrics\.json --plan-check \S+\/noimg\/plan-check\.json --expected-sec 10\.00 --fps 30 --report \S+\/runs\/m1\/quality\.json/);
   // the video is made (the admin can watch it) even though it is held
   assert.equal(readFileSync(join(t.run, 'video.mp4'), 'utf8'), 'fresh\n');
+});
+
+test('make.sh: a figure keepClear cut off the words does not hold the video; what it left over them does', () => {
+  assert.equal(tree().make({ REACH: '55' }).status, 0, 'a grid film whose figure was cut off its words passes');
+  const held = tree().make({ HIDES: '45' });
+  assert.equal(held.status, 10);
+  assert.match(held.stdout, /有歌詞被遮住 45%/);
 });
 
 test('make.sh hybrid: the gate reads the plan check from noimg/, where the hybrid plan ran', () => {

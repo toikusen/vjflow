@@ -77,7 +77,7 @@ const HAN = /[一-鿿]/g;
 const LATIN = /[A-Za-z]/g;
 
 /**
- * The language the lyrics are written in, by their script (the same rule the director's songScript uses): kana makes
+ * The language the lyrics are written in, by their script (kana, hangul, han or Latin by count): kana makes
  * Japanese, Korean letters Korean, Chinese characters Chinese, anything else English. Empty text answers ''.
  */
 export function guessLanguage(text: string): SongLanguage | '' {

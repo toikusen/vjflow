@@ -641,9 +641,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       if (l.panels?.length) {
         // a grid of shots is printed on the sheet: paper panels parted by ink rules that slide in one by one (an
         // accent flood under the words took their contrast, a faint ink panel read as grey)
+        // (the rules part the figures only: they start under the band the words are seated in, never across a line)
+        const top = H * (1 - PANEL_H) - H * 0.04;
         for (let i = 1; i < cols; i++) {
           ctx.fillStyle = ink;
-          ctx.fillRect((i * W) / cols - 4, (1 - k) * H * (i % 2 ? 1 : -1), 8, H);
+          ctx.fillRect((i * W) / cols - 4, top + (1 - k) * (H - top) * (i % 2 ? 1 : -1), 8, H - top);
         }
         break;
       }

@@ -97,6 +97,13 @@ if (song) {
     used.set(line.cue, n + 1);
     const shot = shots.get(line.shots[n % line.shots.length]);
     if (!shot) continue;
+    // (a line with a blown-up word keeps its cast large under it: a scene in a small window beside the big word left
+    // the frame empty, v4 review)
+    if (shot.frame === 'scene' && (t.cues as { cueId: string; world?: { blow?: unknown } }[]).find((x) => x.cueId === line.cue)?.world?.blow) {
+      const alt = line.shots.find((id) => shots.get(id)?.frame !== 'scene' && assets[`spr:${id}`]);
+      if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); filled += 1; }
+      continue;
+    }
     if (shot.frame === 'scene') {
       const sq = resolve(a.clips!, '..', 'stills', `${shot.id}_sq.jpg`);
       if (!existsSync(sq)) continue;
@@ -161,8 +168,9 @@ if (song) {
     for (const sec of mine) {
       const k = kOf(sec)!;
       const sh = shots.get(base(k.sprite)!);
-      if (seat !== 'top') k['side'] = seat === 'left' ? 'right' : 'left';
-      if (sh) k['size'] = Math.max(Number(k['size'] ?? 0), SUBJECT_H[sh.size] ?? 0.6);
+      // (under a top seat the figure stands in the middle of the rows, not in their corner; a grid keeps its panels)
+      k['side'] = seat === 'top' ? (k['fx'] === 'grid' ? k['side'] : 'center') : seat === 'left' ? 'right' : 'left';
+      if (sh) k['size'] = Math.max(Number(k['size'] ?? 0), (SUBJECT_H[sh.size] ?? 0.6) + (seat === 'top' && sh.size === 'wide' ? 0.08 : 0));
     }
   }
 }

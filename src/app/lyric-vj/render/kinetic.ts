@@ -146,6 +146,8 @@ export interface KineticLayer {
    * (UNDER_ALPHA), instead of leaving the cut (dropping it emptied a minute of プラトニックチョロイン).
    */
   under?: boolean;
+  /** The song time the character comes up at, after a line going out over the cut's start was read (seatSubject). */
+  waitFor?: number;
   /** The boxes (frame px) of the lines sung over a prop's cut: a prop sent to a corner takes one clear of them (layRooms). */
   over?: [number, number, number, number][];
   /** What stays through the cut's part of the song (board.ts): evidence filling a board, a place's standing things. */
@@ -407,8 +409,8 @@ export function carrySubjects(layers: KineticLayer[]): void {
     const at = l.at ?? 0;
     l.subjectPlan ??= l.subjectAt;
     const key = placementKey(l);
-    const carries = l.subjectPlan !== undefined && l.subjectPlan < at - 1e-6 && prev?.key === key;
-    l.subjectAt = carries ? prev!.since : at;
+    const carries = l.subjectPlan !== undefined && l.subjectPlan < at - 1e-6 && prev?.key === key && l.waitFor === undefined;
+    l.subjectAt = carries ? prev!.since : Math.max(at, l.waitFor ?? at);
     prev = { key, since: l.subjectAt };
   }
 }
@@ -761,7 +763,8 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // sank into a dark figure)
   veil?.(ctx, 1);
   // the character, printed in the cut's inks: it pops in, then holds still until the next cut
-  if (printed && !own) {
+  // (a character waiting for a line going out comes up once it has been read: seatSubject)
+  if (printed && !own && !(l.waitFor !== undefined && now < l.waitFor - 1e-6)) {
     const { img: art, w, h } = printed;
     const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
 
@@ -1045,6 +1048,54 @@ export function pickRoom(band: [number, number], rows: [number, number], w: numb
   const bottom = floor ? H : rows[1] - 16;
   const sRows = Math.min(1, (bottom - top) / Math.max(1, h));
   return sRows * h >= H * PROP_MIN_H && sRows > sBand * 1.17 ? 'rows' : 'band';
+}
+
+/** The height (share of the frame) a subject is kept to where any legal room allows it. */
+export const SUBJECT_MIN_H = 0.45;
+/** The most a subject waits (s, and a fifth of its cut) for a line going out to be read before it comes up. */
+export const WAIT_MAX = 0.6;
+export type SeatLine = { from: number; to: number; strong?: number; x0: number; y0: number; x1: number; y1: number };
+export type Seat = { side?: 'left' | 'right'; room?: [number, number]; rows?: [number, number]; under?: boolean; waitFor?: number; height: number };
+
+/**
+ * Where a cut's subject (w×h px at its planned size) stands among the lines `seen` over [from, to]: the legal room —
+ * clear of every line — that holds it largest: either side band (the side away from the lines' weight first), the rows
+ * above or below them, or a bottom corner they leave clear (`under`); a side band beats the rows and the corner unless
+ * they hold it a sixth larger (a figure does not wander from cut to cut). With no legal room it stands in the corner,
+ * faded behind the words (`under`). When that leaves it under SUBJECT_MIN_H of the frame and a line going out is still
+ * read over the cut's first moments (WAIT_MAX), the subject waits for it (`waitFor`) and is seated by the lines that
+ * stay, where that holds it a sixth larger: two lines up at once put 黄昏サイクル's cyclist in the corner at a fifth
+ * of the frame for four seconds (12–16 s, run5).
+ */
+export function seatSubject(seen: SeatLine[], from: number, to: number, w: number, h: number): Seat {
+  const seat = (lines: SeatLine[]): Seat => {
+    if (!lines.length) return { height: h };
+    const away = oppositeSide(lines, from, to);
+    const sides = away ? [away, away === 'left' ? ('right' as const) : ('left' as const)] : (['left', 'right'] as const);
+    const options: (Seat & { score: number })[] = [];
+    for (const side of sides) {
+      const room = freeBand(lines, from, to, side);
+      if (room) { const height = h * fitInRoom(room, w, 0).s; options.push({ side, room, height, score: height * 1.17 }); }
+    }
+    const rows = freeRows(lines, from, to);
+    const atRows = rows && rowsPlace(rows, h, 1);
+    if (rows && atRows) options.push({ ...(away ? { side: away } : {}), rows, height: h * atRows.s, score: h * atRows.s });
+    const corner = cornerPlace(w, h, 1, away === 'left', lines.map((r) => [r.x0, r.y0, r.x1, r.y1] as [number, number, number, number]));
+    if (corner.clear) options.push({ side: corner.left ? 'left' : 'right', under: true, height: h * corner.s, score: h * corner.s });
+    const best = options.reduce<(typeof options)[number] | undefined>((a, b) => (!a || b.score > a.score ? b : a), undefined);
+    if (!best) return { ...(away ? { side: away } : {}), under: true, height: h * corner.s };
+    const { score, ...chosen } = best;
+    void score;
+    return chosen;
+  };
+  const plain = seat(seen);
+  if (plain.height >= H * SUBJECT_MIN_H) return plain;
+  const wait = from + Math.min(WAIT_MAX, 0.2 * (to - from));
+  const going = seen.filter((r) => r.from < from - 1e-3 && (r.strong ?? r.to) <= wait);
+  if (!going.length) return plain;
+  const after = seat(seen.filter((r) => !going.includes(r)));
+  // (it comes up once the line has gone, or at the wait's end while the line is still fading out)
+  return after.height > plain.height * 1.17 ? { ...after, waitFor: Math.max(...going.map((r) => Math.min(r.to, Math.max(r.strong ?? r.to, wait)))) } : plain;
 }
 
 export function fitInRoom(room: [number, number], w: number, fx: number, pad = 24): { s: number; x: number } {

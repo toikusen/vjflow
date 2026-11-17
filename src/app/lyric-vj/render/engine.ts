@@ -67,7 +67,7 @@ import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil, pickRoom } from './kinetic';
+import { carrySubjects, freeBand, KineticLayer, oppositeSide, seatSubject, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -1733,27 +1733,26 @@ export class LyricVjEngine {
           // (each with its times, for the draw: the subject is measured and kept clear by each line's own box at rest — the
           // box it is seated by; the motion-padded box cut a strip out of a figure as a blown-up line glided in, kinetic.ts)
           if (l.sprite) l.boxes = allRects.filter((r) => Math.min(until + 1, r.to) - Math.max(sec.start - 1, r.from) > 0).map((r) => ({ from: r.from, to: r.to, strong: r.strong ?? r.to, x0: r.rest.x0, y0: r.rest.y0, x1: r.rest.x1, y1: r.rest.y1 }));
-          // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
-          const band = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
-          // the side band or the rows above or below the lines: whichever lets the figure stand larger (under a blown-up
-          // word the band is a sliver and the figure went to a corner at a third of its size; the rows held it whole)
-          const pic0 = l.sprite ? (this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined) : undefined;
-          const pic = pic0?.width && pic0.height ? { width: pic0.width * (crop ? crop[2] - crop[0] : 1), height: pic0.height * (crop ? crop[3] - crop[1] : 1) } : undefined;
-          const rowsToo = band && pic?.width && pic.height ? freeRows(onCut(allRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until) : undefined;
-          const room = rowsToo && pickRoom(band!, rowsToo, (pic!.width! / pic!.height!) * H * (l.size ?? 0.85), H * (l.size ?? 0.85)) === 'rows' ? undefined : band;
-          if (room) l.room = room;
-          // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
-          // stands behind them faded (sweet timer's carriage, wand and moon sat on its lines; dropping it instead left
-          // プラトニックチョロイン a minute without pictures)
-          // (centred lines with a band free above or below them first: the line director centres most lines, and every
-          // prop of 世界のつづき's picture tier went behind its words, 2026-11-02)
-          else if (l.sprite && seen.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
-            const rows = freeRows(onCut(allRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until);
-            if (rows) l.rows = rows;
-            else l.under = true;
+          // the floor plan: the legal room that holds the figure largest — a side band, the rows above or below the
+          // lines, a corner they leave clear — and a line going out over the cut's first moments waited out when that
+          // holds it larger (kinetic.ts seatSubject; a 1.7 close-up reached under the lines, a cyclist went to the corner
+          // under two lines up at once). With no room it stands behind the lines faded (sweet timer's carriage, wand and
+          // moon sat on its lines; dropping it instead left プラトニックチョロイン a minute without pictures)
+          if (l.sprite) {
+            delete l.room; delete l.rows; delete l.under; delete l.waitFor;
+            const pic0 = this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined;
+            const pic = pic0?.width && pic0.height ? { width: pic0.width * (crop ? crop[2] - crop[0] : 1), height: pic0.height * (crop ? crop[3] - crop[1] : 1) } : { width: 1, height: 1 };
+            const fh = H * (l.size ?? 0.85);
+            const boxes = onCut(allRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, x0: r.rest.x0, y0: r.rest.y0, x1: r.rest.x1, y1: r.rest.y1 })), sec.start, until);
+            const seat = seatSubject(boxes, sec.start, until, (pic.width / pic.height) * fh, fh);
+            if (seat.side) Object.assign(l, { side: seat.side, flip: seat.side === 'left' });
+            if (seat.room) l.room = seat.room;
+            if (seat.rows) l.rows = seat.rows;
+            if (seat.under) l.under = true;
+            if (seat.waitFor !== undefined) l.waitFor = seat.waitFor;
           }
           // (the floor plan of every sprite cut under --track: which lines it saw and where it was sent)
-          if (l.sprite && this.job.track) console.error(`code layer: track rooms ${l.sprite} @${sec.start.toFixed(2)} side ${side ?? '-'} room ${l.room ? l.room.map(Math.round).join('-') : '-'} rows ${l.rows ? l.rows.map(Math.round).join('-') : '-'} under ${!!l.under} lines ${allRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => `${r.id ?? '?'}[${Math.round(r.rest.x0)},${Math.round(r.rest.y0)}-${Math.round(r.rest.x1)},${Math.round(r.rest.y1)}]`).join(' ')}`);
+          if (l.sprite && this.job.track) console.error(`code layer: track rooms ${l.sprite} @${sec.start.toFixed(2)} side ${l.side ?? '-'}${l.waitFor !== undefined ? ` wait ${l.waitFor.toFixed(2)}` : ''} room ${l.room ? l.room.map(Math.round).join('-') : '-'} rows ${l.rows ? l.rows.map(Math.round).join('-') : '-'} under ${!!l.under} lines ${allRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => `${r.id ?? '?'}[${Math.round(r.rest.x0)},${Math.round(r.rest.y0)}-${Math.round(r.rest.x1)},${Math.round(r.rest.y1)}]`).join(' ')}`);
         }
       });
       // a character carries on across a cut only where it stands as before (size, side, room, rows: kinetic.ts)

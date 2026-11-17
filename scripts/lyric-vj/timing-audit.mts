@@ -11,7 +11,8 @@
 //      but where the plan seats them apart (one shot whose layout holds the earlier: stack, couplet, world-pair) or a
 //      handoff carries one into the next;
 //  (3) no line vanishes: it shows before it leaves, and is up READ_FLOOR at least;
-//  (4) the readable gate agrees: a line failing (1)–(3) is not ok in the engine's metrics.
+//  (4) the readable gate agrees: a line failing (1)–(3) is not ok in the engine's metrics;
+//  (5) no readable glyph of a line set together (two voices) is under REST_FLOOR at rest, just before it leaves.
 // A frame (1/30 s) of slack throughout. Exit 1 on any fault or a job that does not load.
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -20,28 +21,32 @@ import { parseArgs } from 'node:util';
 import * as esbuild from 'esbuild';
 import { chromium } from 'playwright';
 import { fontCache } from './font-cache.mts';
+import { namedLines } from '../../src/app/lyric-vj/render/world-named';
 
 /** The least a line is up (reading-window.ts READ_FLOOR), and an untimed line's blink at its end (EXIT_MIN + lead). */
 const READ_FLOOR = 0.4, UNTIMED_BLINK = 0.1, FRAME = 1 / 30;
+/** The least type a line rests at (reading-window.ts REST_FLOOR, px on the 1080 frame). */
+const REST_FLOOR = 52;
 /**
  * The last sung character is read at least one character's time (sung-tail.ts MIN_TAIL: 12 a second); on a plan whose
- * lines a world event names, the composer's PLAN_TAIL (a frame and a little), the tail it paired and scheduled them on.
+ * line a world event acts on, the composer's PLAN_TAIL (a frame and a little), the tail it paired and scheduled them on.
  */
 const LAST_CHAR = 1 / 12, LAST_CHAR_PLANNED = 0.04;
 /** Jobs known not to load in the page (linebox-audit.mts KNOWN_UNLOADABLE): skipped, never counted as a pass. */
 const KNOWN_UNLOADABLE: Record<string, string> = { 'out/research/style-refs/phone/job.json': 'all 32 of its assets were deleted (404)' };
 
-export interface TimedLine { id: string; text: string; start: number; end: number; charStarts?: number[]; showFrom: number; exitAt: number; exitDur: number; tail: string; ok: boolean; how?: string; shot?: string; hand?: boolean; shout?: boolean }
+export interface TimedLine { id: string; text: string; start: number; end: number; charStarts?: number[]; showFrom: number; exitAt: number; exitDur: number; tail: string; ok: boolean; how?: string; rest?: number; shot?: string; hand?: boolean; shout?: boolean }
 
 /** The faults of one job's settled timetable (invariants 1–4 above), lines in show order. */
-export function timingFaults(lines: TimedLine[], lastChar = LAST_CHAR): string[] {
+export function timingFaults(lines: TimedLine[], lastCharOf: (id: string) => number = () => LAST_CHAR): string[] {
   const out: string[] = [];
   const bad = new Set<string>();
   const sorted = [...lines].sort((a, b) => a.showFrom - b.showFrom);
   for (const l of sorted) {
     const timed = !!l.charStarts?.length;
-    const first = timed ? l.charStarts![0] : l.start;
-    const last = timed ? l.charStarts![l.charStarts!.length - 1] + lastChar : l.end - UNTIMED_BLINK;
+    const first = timed ? Math.min(...l.charStarts!) : l.start;
+    // (the latest sung character: a duet set together lists its voices one after the other, not in time)
+    const last = timed ? Math.max(...l.charStarts!) + lastCharOf(l.id) : l.end - UNTIMED_BLINK;
     const gone = l.exitAt + l.exitDur;
     if (l.showFrom > first + 1e-3) { out.push(`(1) ${l.id} shows at ${l.showFrom.toFixed(2)}, after its first sung character ${first.toFixed(2)}「${l.text}」`); bad.add(l.id); }
     if (l.exitAt < Math.max(last, l.showFrom + READ_FLOOR) - 1e-3) { out.push(`(1) ${l.id} leaves at ${l.exitAt.toFixed(2)}, before ${last >= l.showFrom + READ_FLOOR ? `its last sung character ${last.toFixed(2)}` : `its reading floor ${(l.showFrom + READ_FLOOR).toFixed(2)}`}「${l.text}」 (${l.how ?? ''})`); bad.add(l.id); }
@@ -76,7 +81,7 @@ if (process.argv[1]?.endsWith('timing-audit.mts')) {
   await new Promise((r) => server.once('listening', r));
   const browser = await chromium.launch({ channel: 'chromium', args: ['--force-device-scale-factor=1', '--ignore-gpu-blocklist'] });
   const getFont = fontCache(resolve('out/font-cache'));
-  let faults = 0, failedJobs = 0, loadFailed = 0, lineCount = 0;
+  let faults = 0, failedJobs = 0, loadFailed = 0, lineCount = 0, smallOther = 0;
   const byRule = new Map<string, number>();
   for (const jobFile of jobFiles) {
     const rel = relative(ROOT, jobFile);
@@ -101,7 +106,7 @@ if (process.argv[1]?.endsWith('timing-audit.mts')) {
         const lz = e.lazy;
         if (lz) lz.styled.forEach((x, i) => { if (!lz.built.has(i)) { lz.built.add(i); lz.build(x, i); } });
         const ok = new Map(window.vjMetrics().cues.map((c) => [c.id, c.ok]));
-        return e.cueLayers.map(({ rt }) => ({ id: rt.cue.id, text: rt.cue.text, start: rt.cue.start, end: rt.cue.end, charStarts: rt.cue.charStarts, showFrom: rt.showFrom, exitAt: rt.exitAt, exitDur: rt.exitDur, tail: rt.tail ?? 'exempt', ok: ok.get(rt.cue.id) ?? true, shot: rt.style.shot, hand: !!rt.style.handoff, shout: !!rt.style.shout, how: [rt.shot.template, rt.style.exit, rt.tail, ...(rt.adjust ?? []), rt.style.handoff?.kind ?? '', e.lazy ? 'live' : ''].filter(Boolean).join('/') }));
+        return e.cueLayers.map(({ rt }) => ({ id: rt.cue.id, text: rt.cue.text, start: rt.cue.start, end: rt.cue.end, charStarts: rt.cue.charStarts, showFrom: rt.showFrom, exitAt: rt.exitAt, exitDur: rt.exitDur, tail: rt.tail ?? 'exempt', ok: ok.get(rt.cue.id) ?? true, rest: e.rests?.get(rt.cue.id), shot: rt.style.shot, hand: !!rt.style.handoff, shout: !!rt.style.shout, how: [rt.shot.template, rt.style.exit, rt.tail, ...(rt.adjust ?? []), rt.style.handoff?.kind ?? '', e.lazy ? 'live' : ''].filter(Boolean).join('/') }));
       })()`)) as TimedLine[];
     } catch (e) {
       const known = KNOWN_UNLOADABLE[rel];
@@ -110,17 +115,38 @@ if (process.argv[1]?.endsWith('timing-audit.mts')) {
       await page.close();
       continue;
     }
+    // (5) no readable glyph of a line under REST_FLOOR at rest (a duet set together fitted to the frame
+    // went to 49 px): the em box of every glyph drawn at a readable opacity
+    // (on lines set together — two voices in one line, its text not the cue's own — the merge's own rule; other lines' sizes
+    // are their templates', counted apart: docs/backlog/timing-2026-11-17.md)
+    const small: string[] = [];
+    const own = new Map((JSON.parse(readFileSync(jobFile, 'utf8')) as { cues: { id: string; text: string }[] }).cues.map((c) => [c.id, c.text]));
+    for (const l of lines) {
+      // (at rest: just before it leaves, every word revealed and settled — a word popping in is not yet read)
+      const t = +Math.max(l.showFrom + 0.3, Math.min(l.exitAt, l.end + 0.3) - 0.1).toFixed(3);
+      const g = (await page.evaluate(`window.vjFrame(${t}).then(() => (window.vjGlyphs().find((x) => x.id === ${JSON.stringify(l.id)})?.glyphs ?? []).filter((x) => x.a >= 0.5 && !x.preview).map((x) => x.y1 - x.y0))`)) as number[];
+      // (the engine's own rest size where it keeps one — restSize, the size the type floor is held to; small kana set at the
+      // design's kana scale are below it by design — else the tallest glyph drawn)
+      const least = l.rest ?? (g.length ? Math.max(...g) : Infinity);
+      if (least >= REST_FLOOR - 1) continue;
+      // (set together: its text runs past its own cue's — a second voice appended)
+      if (own.get(l.id) === undefined || [...l.text.replace(/\s/g, '')].length <= [...own.get(l.id)!.replace(/\s/g, '')].length + 1) { smallOther++; continue; }
+      small.push(`(5) ${l.id} reads at ${Math.round(least)} px at ${t.toFixed(2)} s, under REST_FLOOR ${REST_FLOOR} (${l.how ?? ''})「${l.text}」`);
+    }
+    if (process.env['TA_DEBUG']) console.log('debug-page', JSON.stringify(await page.evaluate(`(() => { const e = window.vjEngine; return ${JSON.stringify(process.env['TA_DEBUG'].split(','))}.map((id) => { const c = e.cueLayers.find((x) => x.rt.cue.id === id); return c && { id, floored: e.floored.has(id), voices: c.rt.cue.voices, fit: c.fitScale, params: c.rt.params && c.rt.params.floor }; }); })()`)));
     await page.close();
     lineCount += lines.length;
     if (process.env['TA_DEBUG']) for (const id of process.env['TA_DEBUG'].split(',')) console.log('debug', JSON.stringify(lines.find((l) => l.id === id)));
-    const f = timingFaults(lines, (JSON.parse(readFileSync(jobFile, 'utf8')) as { treatment?: { worldEvents?: unknown } }).treatment?.worldEvents ? LAST_CHAR_PLANNED : LAST_CHAR);
+    // (per line: a line a world event acts on is read at the composer's tail, world-named.ts)
+    const named = namedLines((JSON.parse(readFileSync(jobFile, 'utf8')) as { treatment: { worldEvents?: unknown } }).treatment);
+    const f = [...timingFaults(lines, (id) => (named.has(id) ? LAST_CHAR_PLANNED : LAST_CHAR)), ...small];
     for (const x of f) byRule.set(x.slice(0, 3), (byRule.get(x.slice(0, 3)) ?? 0) + 1);
     console.log(`${f.length ? 'FAIL' : 'ok  '} ${rel}: ${lines.length} lines${f.length ? `, ${f.length} faults` : ''}`);
     for (const x of f.slice(0, 6)) console.log(`     ${x}`);
     faults += f.length;
     if (f.length) failedJobs++;
   }
-  console.log(`timing audit: ${jobFiles.length} jobs, ${lineCount} lines, ${loadFailed} failed to load, ${failedJobs} with faults, ${faults} faults (${[...byRule].map(([k, v]) => `${k} ${v}`).join(', ') || 'none'})`);
+  console.log(`timing audit: ${jobFiles.length} jobs, ${lineCount} lines, ${loadFailed} failed to load, ${failedJobs} with faults, ${faults} faults (${[...byRule].map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}); ${smallOther} unmerged lines under REST_FLOOR (backlog)`);
   await browser.close();
   server.close();
   process.exit(faults || loadFailed ? 1 : 0);

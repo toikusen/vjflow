@@ -1,7 +1,7 @@
 // npx tsx --test scripts/lyric-vj/beta/quality.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Probe, releaseFindings } from './quality.mts';
+import { Probe, releaseFindings, storyNote, storyRecord } from './quality.mts';
 
 const good: Probe = { streams: [{ codec_type: 'video', width: 1920, height: 1080, r_frame_rate: '30/1' }, { codec_type: 'audio' }], duration: 258.22 };
 const metrics = { readable: { ok: true, failing: [] }, rendererErrors: [] };
@@ -65,4 +65,14 @@ test('the file itself: unreadable or a missing stream makes it undeliverable; wr
   assert.deepEqual(findings({ metrics, planCheck: plan, probe: good, expectedSec: NaN }), ['歌長無法判讀（NaN）']);
   // half a second of slack: a range ends on a frame and AAC adds priming
   assert.deepEqual(findings({ metrics, planCheck: plan, probe: { ...good, duration: 258.45 }, expectedSec: 258 }), []);
+});
+
+test('a story job puts its figures\' brushes with the lines on record: keep-clear counts and the worst cover', () => {
+  const log = 'frame 0\ncode layer: lyric covered: he_a hides 9% of the lyric box (42% of it inside) at 5.1 s (shot 0)\ncode layer: lyric covered: he_b hides 37% of the lyric box (90% of it inside) at 13.2 s (shot 0)\n';
+  const r = storyRecord({ ...metrics, keepClear: { draws: 12, cut: 10, faded: 2, moved: 3 } }, log);
+  assert.deepEqual(r, { cut: 10, faded: 2, moved: 3, worstCover: 37, covers: 2 });
+  assert.match(storyNote(r), /裁掉 10 次.*最多 37%/);
+  // a render where nothing reached a line writes no keepClear at all: zeros, not a failure
+  assert.deepEqual(storyRecord(metrics, ''), { cut: 0, faded: 0, moved: 0, worstCover: 0, covers: 0 });
+  assert.deepEqual(storyRecord(undefined, 'garbage'), { cut: 0, faded: 0, moved: 0, worstCover: 0, covers: 0 });
 });

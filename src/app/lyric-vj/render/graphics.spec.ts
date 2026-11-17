@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { drawLook, drawTransition, GraphicsLook, Layer, measurable, sectionAt } from './graphics';
+import { drawLook, drawTransition, GraphicsLook, Layer, lingerAfter, measurable, sectionAt } from './graphics';
 import { lineVeil, setLineVeil } from './kinetic';
 
 const look: GraphicsLook = {
@@ -432,5 +432,12 @@ describe('a follower stays by its leader when it makes room', () => {
     // a corner over a word fades as far as a passing prop wholly behind the line
     const edge = avoid(kiteAt(0.62, -0.35, [0.85, -0.85]), { x0: 0, y0: 560, x1: 1500, y1: 700 }, 24, [], []) as unknown as { opacity?: number; x: number };
     if (edge.x === 0.62) expect(edge.opacity).toBeLessThanOrEqual(0.36);
+  });
+
+  it('lingerAfter: a section stays on screen through the next one\'s transition (its own dur, else the kind\'s), not past a cut', () => {
+    expect(lingerAfter({ transition: { kind: 'warp', dur: 0.7 } as never })).toBe(0.7);
+    expect(lingerAfter({ transition: { kind: 'iris' } as never })).toBeGreaterThan(0);
+    expect(lingerAfter({})).toBe(0);
+    expect(lingerAfter(undefined)).toBe(0);
   });
 });

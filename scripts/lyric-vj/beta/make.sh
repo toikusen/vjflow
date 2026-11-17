@@ -114,7 +114,9 @@ cp "$(ls "$tr/video/"lyric-vj_vocal_0-*.mp4 | head -1)" "$out.tmp" && mv "$out.t
 # Every hold reason is collected first (the admin sees the whole list), then one exit. The hybrid tier's cut/ carries
 # no plan-check: its plan ran in noimg/ (line/final with the line director)
 pc=$tr/plan-check.json; [ "$tier" = hybrid ] && pc=${tp:-$w/noimg}/plan-check.json
-rc=0; npx tsx scripts/lyric-vj/beta/quality.mts --video "$out" --metrics "$tr/video/metrics.json" --plan-check "$pc" --expected-sec "$end" --fps 30 --report "$w/quality.json" | tee "$w/quality-$tier.log" || rc=$?
+# (a story job also puts its figures' brushes with the lines on record: keep-clear counts and the worst cover)
+sl=(); [ "$tier" = hybrid ] && sl=(--render-log "$w/render-$tier.log")
+rc=0; npx tsx scripts/lyric-vj/beta/quality.mts --video "$out" --metrics "$tr/video/metrics.json" --plan-check "$pc" --expected-sec "$end" --fps 30 ${sl[@]+"${sl[@]}"} --report "$w/quality.json" | tee "$w/quality-$tier.log" || rc=$?
 # a fault a fresh render may mend (a renderer error, a file that is not a video): the render is thrown away and the job
 # fails, which the queue runs once more by itself (resumed up to the render); a second such failure stays failed, unpaid
 if [ "$rc" = 20 ]; then echo '##PHASE 成品有渲染錯誤，整段重做'; rm -rf "$tr/video" "$out"; exit 1; fi

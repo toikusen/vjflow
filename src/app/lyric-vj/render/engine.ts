@@ -64,7 +64,7 @@ import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
-import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, lingerAfter, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
 import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
@@ -139,7 +139,10 @@ export function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
     const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
     // (a sing-along's preview of the next line is not this line: sing-along.ts)
     if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor'] || m.userData['preview']) return;
-    b.setFromObject(m);
+    // (the glyph's own picture, not what hangs under it: setFromObject took in a stack line's trailing echo, a glyph
+    // 2700 px wide, linebox-audit.mts)
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    b.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld);
     if (b.isEmpty()) return;
     const [cx, cy, hw, hh] = [(b.min.x + b.max.x) / 2 + W / 2, H / 2 - (b.min.y + b.max.y) / 2, ((b.max.x - b.min.x) * GLYPH_CORE) / 2, ((b.max.y - b.min.y) * GLYPH_CORE) / 2];
     out.push({ i: out.length, x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh, a: m.material.opacity ?? 1, moving: false, ink: `#${m.material.color.getHexString()}` });
@@ -232,6 +235,47 @@ function placesWhileRead(layer: CueLayer, parent: THREE.Object3D, cuts: number[]
   layer.group.visible = vis;
   return out;
 }
+
+/** How often a line's drawn glyphs are sampled over a box's stretch (s), and the most samples a stretch takes. */
+const INK_STEP = 0.05;
+const INK_SAMPLES = 240;
+/** A glyph counts toward its line's box from this opacity: a line fading out on its exit is not read any more. */
+export const INK_READ = 0.5;
+/**
+ * Where a line's glyphs are really drawn over [from, to] (frame px, the frame's edge clipped), each at its own pose and
+ * transform (a world's drift and swell, a wave's curve, an emphasis scale): the union of its glyph boxes (the layout's
+ * own, else the glyph cores, meshGlyphs) sampled every INK_STEP. The nominal layout box missed glyphs that a layout
+ * moves or curves past it, and everything that keeps clear of the words trusts that box. Undefined when nothing reads.
+ */
+function inkSpan(layer: CueLayer, parent: THREE.Object3D, from: number, to: number, pose?: (t: number) => void): Rect | undefined {
+  const end = Number.isFinite(to) ? to : from + 1;
+  const n = Math.min(INK_SAMPLES, Math.max(2, Math.ceil((end - from) / INK_STEP) + 1));
+  const vis = layer.group.visible;
+  layer.group.visible = true;
+  let r: Rect | undefined;
+  for (let k = 0; k < n; k++) {
+    const t = from + ((end - from) * k) / (n - 1);
+    const at = Math.min(t, end - 0.001);
+    const gs = pose
+      ? (pose(at), parent.updateMatrixWorld(true), layer.glyphBoxes ? layer.glyphBoxes() : meshGlyphs(layer.group))
+      : measureAtRest(() => {
+          layer.update(at, { flash: 0, hit: 0, shake: 0 });
+          parent.updateMatrixWorld(true);
+          return layer.glyphBoxes ? layer.glyphBoxes() : meshGlyphs(layer.group);
+        });
+    // (every glyph shown, faint ones too: a glyph's opacity is settled per frame (its ink tone, the ghost of an unsung
+    // character) after this is measured, and a glyph shown faint in the reading window is read a moment later)
+    for (const g of gs) {
+      if (g.a < 0.05) continue;
+      const c = { x0: Math.max(0, g.x0), y0: Math.max(0, g.y0), x1: Math.min(W, g.x1), y1: Math.min(H, g.y1) };
+      if (c.x1 <= c.x0 || c.y1 <= c.y0) continue;
+      r = r ? { x0: Math.min(r.x0, c.x0), y0: Math.min(r.y0, c.y0), x1: Math.max(r.x1, c.x1), y1: Math.max(r.y1, c.y1) } : c;
+    }
+  }
+  layer.group.visible = vis;
+  return r;
+}
+const unionRect = (a: Rect, b?: Rect): Rect => (b ? { ...a, x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) } : a);
 
 /** Where a sing-along's preview row stands (world px, measured at rest), if the line has one. */
 function previewBox(layer: CueLayer): THREE.Box3 | undefined {
@@ -851,6 +895,8 @@ export class LyricVjEngine {
   private shotLayers = new Map<string, ShotLayer>();
   /** After each frame's lines are updated: the signature moments (render/signature.ts) take their lines off the frame; set only when a treatment has moments. */
   onCues?: (cues: unknown[], calls: unknown[], t: number) => void;
+  /** After a line is built live (buildLive): its show and exit times are known from now on (lineWindows). */
+  onLinesBuilt?: () => void;
   private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; hold?: number; holds?: boolean; kick?: boolean; need?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
   private relays: { h: Handoff; path: RelayPath; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; width: number }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
@@ -1469,6 +1515,7 @@ export class LyricVjEngine {
       };
       if (live) this.cueLayers.splice(this.cueLayers.findIndex((c) => c.index! > i) >>> 0, 0, entry);
       else this.cueLayers.push(entry);
+      const before = this.lyricRects.length;
       if (this.job.treatment.graphics) {
         // where the line sits on screen, so background objects can make room for it
         // beat-cut throws its phrases all over the frame before the line settles: the whole frame is the line's
@@ -1497,6 +1544,9 @@ export class LyricVjEngine {
           }
         }
       }
+      // each box this line just reported also holds every glyph it really draws over the box's stretch (inkSpan; laid
+      // again once every line is settled, inkLines)
+      if (this.job.treatment.graphics && shot.template !== 'beat-cut') this.inkLines([entry], before);
       const onBoard = !!treatment.graphics && sectionAt(treatment.graphics, cue1.start).layers.some((l) => l.kind === 'led' && l.calls);
       if (split.calls.length && !onBoard) this.callLayers.push(this.makeCalls(rt, cue1, split.calls, settledBox(layer, fit)));
       // a call is sung words too: whatever is cut off at the line is cut off at it
@@ -1562,6 +1612,9 @@ export class LyricVjEngine {
         c.guard = { from: worst.from, to: worst.to, rect: worst.rect, share: worst.share, light };
         c.remake();
       }
+    // the lines as they finally stand (a guard's remake, a hold, a handoff laid after each was built): their boxes hold
+    // their glyphs as drawn then
+    if (treatment.graphics) this.inkLines(this.cueLayers.filter((c) => c.rt.shot.template !== 'beat-cut'));
     // a kinetic cut's character stands on the other side from where its lyric actually landed (a layout with no side
     // setting, couplet, sat its lines on the left over the figure the plan had put there)
     this.layRooms();
@@ -1602,6 +1655,125 @@ export class LyricVjEngine {
     }
   }
 
+  /**
+   * Lines a layer drawn over the engine shows elsewhere than the engine lays them (render/signature.ts: a wave moment
+   * set its line along the water at x 60 while its hidden vertical layout reported 215–1819, 世界のつづき 136 s): their
+   * boxes replace the engine's, and the rooms are laid again, so props, figures (f.lines) and the keep-clear see where
+   * the words really are.
+   */
+  replaceLineBoxes(boxes: { id: string; from: number; to: number; rect: Rect }[]) {
+    if (!boxes.length) return;
+    this.lineBoxes = boxes;
+    this.applyLineBoxes();
+    this.roomEvents = undefined;
+    this.layRooms();
+  }
+  /**
+   * QA (linebox-audit --why): a line's glyphs at t three ways: as the line box measured them (at rest, the type layer
+   * unmoved), the line's own motion with the type layer unmoved, and the frame as last drawn; to tell which motion a
+   * glyph past its box comes from.
+   */
+  glyphsWhy(id: string, t: number) {
+    const c = this.cueLayers.find((x) => x.rt.cue.id === id);
+    if (!c) return undefined;
+    const held = { x: this.textRoot.position.x, y: this.textRoot.position.y, s: this.textRoot.scale.x };
+    const boxes = () => (c.layer.glyphBoxes ? c.layer.glyphBoxes() : meshGlyphs(c.layer.group)).filter((g) => g.a >= INK_READ).map((g) => [g.x0, g.y0, g.x1, g.y1].map(Math.round));
+    const drawn = boxes();
+    this.textRoot.position.set(0, 0, 0);
+    this.textRoot.scale.setScalar(1);
+    this.textRoot.updateMatrixWorld(true);
+    const moving = boxes();
+    const rest = measureAtRest(() => { c.layer.update(t, { flash: 0, hit: 0, shake: 0 }); this.textRoot.updateMatrixWorld(true); return boxes(); });
+    this.textRoot.position.set(held.x, held.y, 0);
+    this.textRoot.scale.setScalar(held.s);
+    this.textRoot.updateMatrixWorld(true);
+    return { drawn, moving, rest, root: held };
+  }
+  /**
+   * Each reported box of these lines (from lyricRects[from] on) grown to hold every glyph the line draws over the box's
+   * stretch while it is read (inkSpan over the box's time inside the line's readable window, the engine's own judgement
+   * of when a line is read: a glyph still flying in before it, or left over after it, is not read), `rect` with the type
+   * layer's motion round that ink too (motionPad).
+   */
+  private inkLines(entries: typeof this.cueLayers, from = 0) {
+    for (const c of entries) {
+      const [r0, r1] = c.layer.readable();
+      for (const r of this.lyricRects.slice(from)) {
+        if (r.id !== c.rt.cue.id) continue;
+        const [a, b] = [Math.max(r.from, r0), Math.min(r.to, Number.isFinite(r1) ? r1 : r.to)];
+        if (!(b > a)) continue;
+        const ink = this.inkOf(c, a, b);
+        if (!ink) continue;
+        Object.assign(r, { rect: unionRect(r.rect, motionPad(ink, !!c.kick)), rest: unionRect(r.rest, ink) });
+      }
+    }
+  }
+  /**
+   * Once the page is ready (fonts, textures and every line in place): each line's boxes hold its glyphs as they are
+   * drawn then, and the rooms are laid again. A world line's glyphs measured while init still ran stood short of where
+   * they are drawn (screentone's pair columns, 9 px; linebox-audit.mts).
+   */
+  settleLineBoxes() {
+    if (!this.job.treatment.graphics) return;
+    const held = { x: this.textRoot.position.x, y: this.textRoot.position.y, s: this.textRoot.scale.x };
+    this.textRoot.position.set(0, 0, 0);
+    this.textRoot.scale.setScalar(1);
+    this.textRoot.updateMatrixWorld(true);
+    this.inkLines(this.cueLayers.filter((c) => c.rt.shot.template !== 'beat-cut'));
+    this.textRoot.position.set(held.x, held.y, 0);
+    this.textRoot.scale.setScalar(held.s);
+    this.textRoot.updateMatrixWorld(true);
+    this.applyLineBoxes();
+    this.roomEvents = undefined;
+    this.layRooms();
+  }
+  /**
+   * Where a line's glyphs are drawn over [from, to] (inkSpan's union), each sample posed as the frame poses it
+   * (poseLine: its drift, the world camera, its hold; the line's own motion and beats at the frame's clock), the type
+   * layer itself left where it is (its sway and kick are motionPad's). Measured at rest, a held screentone column
+   * grown by its hold stood 9–30 px past its box.
+   */
+  private inkOf(c: (typeof this.cueLayers)[number], from: number, to: number): Rect | undefined {
+    const fx = { flash: 0, hit: 0, shake: 0 };
+    return inkSpan(c.layer, c.fit ?? c.layer.group, from, to, (t) => {
+      this.poseLine(c, t);
+      c.layer.update(this.koma(t), fx);
+    });
+  }
+  /** QA: the line's ink over its readable window measured now (inkSpan), to compare with what init measured. */
+  inkNow(id: string) {
+    const c = this.cueLayers.find((x) => x.rt.cue.id === id);
+    if (!c) return undefined;
+    const [a, b] = c.layer.readable();
+    const held = { x: this.textRoot.position.x, y: this.textRoot.position.y, s: this.textRoot.scale.x };
+    this.textRoot.position.set(0, 0, 0);
+    this.textRoot.scale.setScalar(1);
+    const ink = inkSpan(c.layer, c.fit ?? c.layer.group, a, Number.isFinite(b) ? b : a + 1);
+    this.textRoot.position.set(held.x, held.y, 0);
+    this.textRoot.scale.setScalar(held.s);
+    this.textRoot.updateMatrixWorld(true);
+    return { readable: [a, b], ink, boxes: this.lyricRects.filter((r) => r.id === id) };
+  }
+  /** Each line's show and exit times as laid out (for layers drawing lines themselves: signature.ts). */
+  lineWindows(): { id: string; show: number; exitAt: number; exitDur: number }[] {
+    return this.cueLayers.map(({ rt }) => ({ id: rt.cue.id, show: rt.showFrom, exitAt: rt.exitAt, exitDur: rt.exitDur }));
+  }
+  /** QA: the line's readable window (the engine's judgement: layer.readable). */
+  readableOf(id: string): [number, number] | undefined {
+    return this.cueLayers.find((c) => c.rt.cue.id === id)?.layer.readable();
+  }
+  /** QA: the boxes reported for the lines up at t (frame px): `rect` with its motion pad, `rest` where it rests. */
+  lineBoxesAt(t: number): { id: string; rect: Rect; rest: Rect }[] {
+    return this.lyricRects.filter((r) => t >= r.from && t <= r.to).map((r) => ({ id: r.id ?? '', rect: r.rect, rest: r.rest }));
+  }
+  /** Boxes a layer over the engine reports for its lines (replaceLineBoxes), kept for a line built again (live). */
+  private lineBoxes: { id: string; from: number; to: number; rect: Rect }[] = [];
+  private applyLineBoxes() {
+    if (!this.lineBoxes.length) return;
+    const ids = new Set(this.lineBoxes.map((b) => b.id));
+    this.lyricRects = [...this.lyricRects.filter((r) => !ids.has(r.id ?? '')), ...this.lineBoxes.map((b) => ({ id: b.id, from: b.from, to: b.to, rect: b.rect, rest: b.rect }))];
+  }
+
   /** The room the lines leave each kinetic cut under them, for what it draws of its own. */
   private layRooms(span: [number, number] = [-Infinity, Infinity]) {
     const treatment = this.job.treatment;
@@ -1614,7 +1786,9 @@ export class LyricVjEngine {
         for (const l of sec.layers as Layer[]) {
           // a director's drawing sees every line read over its section, to place its props clear of them (f.room, f.fit)
           if (l.kind === 'code') {
-            const until = secs[i + 1]?.start ?? Infinity;
+            // (and the lines that come up while the next section's transition still draws it: a cut-out figure stood
+            // whole on 三年後的大雪's next line through the warp, cut out only by the keep-clear)
+            const until = (secs[i + 1]?.start ?? Infinity) + lingerAfter(secs[i + 1]);
             // (a sing-along's preview row too: the drawing composes clear of it)
             l.lines = [...this.lyricRects.map((r) => ({ ...r, rect: r.rest })), ...this.keepOut].filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
             continue;
@@ -2368,8 +2542,24 @@ export class LyricVjEngine {
   private updateCues(t: number, fx: FrameFx, hidden?: string) {
     this.updateHandoffs(t);
     for (const entry of this.cueLayers) {
-      const { rt, layer: main, fit, fitScale, drift, twin, hand, handOut } = entry;
+      const { rt, layer: main, twin } = entry;
       this.openLine(entry, t);
+      this.poseLine(entry, t);
+      const on = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
+      // the dark-ink build on a light cut, the light-ink twin on a dark one
+      const light = !twin || !on || this.groundLight(rt.cue.id, t, twin.text);
+      const layer = light ? main : twin!.layer;
+      main.group.visible = on && light;
+      if (twin) twin.layer.group.visible = on && !light;
+      if (on) layer.update(this.koma(t), fx);
+    }
+    this.updateCalls(t, hidden);
+  }
+
+  /** Where a line's frame group stands at t (its drift, the world camera's move, its hold, a page's squash): as drawn. */
+  private poseLine(entry: (typeof this.cueLayers)[number], t: number) {
+    {
+      const { fit, fitScale, drift, twin, handOut } = entry;
       if (fit && drift && fitScale !== undefined) {
         const { e, c, x, y } = this.frameAt(entry, t);
         for (const f of twin ? [fit, twin.fit] : [fit]) {
@@ -2396,14 +2586,10 @@ export class LyricVjEngine {
           }
         }
       }
-      const on = t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
-      // the dark-ink build on a light cut, the light-ink twin on a dark one
-      const light = !twin || !on || this.groundLight(rt.cue.id, t, twin.text);
-      const layer = light ? main : twin!.layer;
-      main.group.visible = on && light;
-      if (twin) twin.layer.group.visible = on && !light;
-      if (on) layer.update(this.koma(t), fx);
     }
+  }
+
+  private updateCalls(t: number, hidden?: string) {
     for (const { rt, group, units, dropped } of this.callLayers) {
       const k = this.koma(t);
       group.visible = !dropped && t >= rt.showFrom - 0.05 && t <= rt.exitAt + rt.exitDur + 0.05 && rt.cue.id !== hidden;
@@ -2504,9 +2690,13 @@ export class LyricVjEngine {
     this.layFine(c);
     this.settleHold(c);
     for (const call of this.callLayers) if (call.rt.showFrom < c.rt.exitAt + c.rt.exitDur && call.rt.exitAt + call.rt.exitDur > c.rt.showFrom) this.placeCall(call);
+    this.inkLines([c]);
+    this.applyLineBoxes();
     this.layRooms([c.rt.showFrom, c.rt.exitAt + c.rt.exitDur]);
     this.textRoot.position.set(held.x, held.y, 0);
     this.textRoot.scale.setScalar(held.s);
+    // (a layer drawing lines itself measures its boxes on the lines' real windows, known only now in a live build)
+    this.onLinesBuilt?.();
   }
 
   /** A line that has been playing is put back as it was built while a handoff measures it. */

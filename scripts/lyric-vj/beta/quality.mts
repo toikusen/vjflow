@@ -4,8 +4,10 @@
 // pipeline knew about and used to hand over anyway. A missing, broken or older record is a finding too, never a pass,
 // and a finding is the only outcome: the gate itself never fails a job (that would strand a paid video in `failed`).
 //
-// npx tsx scripts/lyric-vj/beta/quality.mts --video <mp4> --metrics <metrics.json> --expected-sec <s> [--plan-check <plan-check.json>] [--fps 30] [--report <quality.json>]
+// npx tsx scripts/lyric-vj/beta/quality.mts --video <mp4> --metrics <metrics.json> --expected-sec <s> [--plan-check <plan-check.json>] [--fps 30] [--render-log <log>] [--report <quality.json>]
 // prints one `quality: <finding>` line each (or `quality: ok`); --report writes { findings, fileOk } for the server's approve
+// --render-log (story jobs): how often the story's figures reached a read line, on record as a note and in the report's
+// `story` (metrics keepClear and the log's `lyric covered` lines), so a placement regression shows on every job
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -19,7 +21,22 @@ export interface Report {
   rerender: boolean;
   /** Lines under the reading-time rule that every renderer fix was already applied to and that miss by under 0.5 s: on record, not a hold. */
   notes: string[];
+  /** Story jobs (--render-log): the figures' brushes with the read lines. */
+  story?: StoryRecord;
 }
+/** What the renderer had to do about the story's figures on the lines: draws cut out of / faded over a line, moved off it, and the worst share any picture hid. */
+export interface StoryRecord { cut: number; faded: number; moved: number; worstCover: number; covers: number }
+
+/**
+ * The story figures' record from metrics.json `keepClear` (absent: nothing reached a line) and the render log's
+ * `lyric covered … hides N%` lines (a figure drawn over a line it was only faded on, while the line's box came in).
+ */
+export function storyRecord(metrics: unknown, log: string): StoryRecord {
+  const k = isObj(metrics) && isObj(metrics['keepClear']) ? metrics['keepClear'] : {};
+  const hides = [...log.matchAll(/lyric covered: .*? hides (\d+)%/g)].map((m) => Number(m[1]));
+  return { cut: num(k['cut']) ?? 0, faded: num(k['faded']) ?? 0, moved: num(k['moved']) ?? 0, worstCover: hides.length ? Math.max(...hides) : 0, covers: hides.length };
+}
+export const storyNote = (r: StoryRecord) => `故事人物碰到歌詞：裁掉 ${r.cut} 次、淡出 ${r.faded} 次、移開 ${r.moved} 次；遮住紀錄 ${r.covers} 筆，最多 ${r.worstCover}%`;
 /** A line that readFix already landed at once (read-cut) and that misses by less than this is as readable as the renderer can make it. */
 const READ_SLACK = 0.5;
 
@@ -123,9 +140,14 @@ const readJson = (f?: string) => { try { return f && existsSync(f) ? JSON.parse(
 
 if (process.argv[1]?.endsWith('quality.mts')) {
   const usage = (): never => { console.error('usage: quality.mts --video <mp4> --metrics <metrics.json> --expected-sec <s> [--plan-check <json>] [--fps 30] [--report <json>]'); process.exit(2); };
-  const a = (() => { try { return parseArgs({ options: { video: { type: 'string' }, metrics: { type: 'string' }, 'plan-check': { type: 'string' }, 'expected-sec': { type: 'string' }, fps: { type: 'string' }, report: { type: 'string' } } }).values; } catch { return usage(); } })();
+  const a = (() => { try { return parseArgs({ options: { 'render-log': { type: 'string' }, video: { type: 'string' }, metrics: { type: 'string' }, 'plan-check': { type: 'string' }, 'expected-sec': { type: 'string' }, fps: { type: 'string' }, report: { type: 'string' } } }).values; } catch { return usage(); } })();
   if (!a.video || !a.metrics || !a['expected-sec']) usage();
   const report = releaseFindings({ metrics: readJson(a.metrics), planCheck: readJson(a['plan-check']), planRan: a['plan-check'] !== undefined, probe: existsSync(a.video) ? probe(a.video) : 'unreadable', expectedSec: Number(a['expected-sec']), fps: a.fps ? Number(a.fps) : undefined });
+  if (a['render-log']) {
+    const story = storyRecord(readJson(a.metrics), existsSync(a['render-log']) ? readFileSync(a['render-log'], 'utf8') : '');
+    report.story = story;
+    report.notes.push(storyNote(story));
+  }
   if (a.report) { try { writeFileSync(a.report, JSON.stringify(report, null, 1)); } catch (e) { console.error(`quality: report not written: ${(e as Error).message}`); } }
   for (const f of report.findings) console.log(`quality: ${f}`);
   for (const n of report.notes) console.log(`quality note: ${n}`);

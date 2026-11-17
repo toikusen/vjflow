@@ -6,7 +6,7 @@ import { ensureInkTones } from './ink-tones';
 import { glyphTexture } from './glyphs';
 import { surfaceKey } from './world-glyph';
 import { isPartTexel, partOf } from './surface-parts';
-import { isSignature, signatureCues, signatureIds, signatureLayer, signatureWindows } from './signature';
+import { isSignature, signatureCues, signatureIds, signatureLayer, signatureLineWindows, signatureWindows } from './signature';
 import { miniMomentLayer, miniMomentsOf } from './mini-moment';
 
 declare global {
@@ -38,11 +38,31 @@ await ensureInkTones();
 if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 (window as unknown as { vjEngine: LyricVjEngine }).vjEngine = engine;
-window.vjReady = engine.init();
+// signature moments (paid tiers): drawn over the engine's frame, their lines taken off it; where they really draw them
+// replaces the engine's boxes for those lines once it has laid them out
+const signatureP = isSignature(job) ? signatureLayer(job) : Promise.resolve(null);
+// (measured on the engine's windows for the moments' lines; a live build lays lines as it goes, so each new window
+// measures the moments again: the boxes are kept only while the windows they were measured on hold)
+let sigWindows = '';
+const signatureBoxes = (s: Awaited<typeof signatureP>) => {
+  if (!s) return;
+  const ids = signatureIds(job);
+  const wins = engine.lineWindows().filter((w) => ids.has(w.id));
+  const key = JSON.stringify(wins);
+  if (key === sigWindows) return;
+  sigWindows = key;
+  signatureLineWindows(wins);
+  engine.replaceLineBoxes(s.boxes());
+};
+window.vjReady = engine.init().then(async () => {
+  engine.settleLineBoxes();
+  const s = await signatureP;
+  signatureBoxes(s);
+  if (s) engine.onLinesBuilt = () => signatureBoxes(s);
+});
 window.renderAt = (t) => engine.renderAt(t);
 const stage = document.getElementById('stage') as HTMLCanvasElement;
-// signature moments (paid tiers): drawn over the engine's frame, their lines taken off it
-const signature = isSignature(job) ? await signatureLayer(job) : null;
+const signature = await signatureP;
 if (signature) engine.onCues = signatureCues as never;
 // mini moments (Q5 phase 2): drawn over the frame round their lines, every line kept (render/mini-moment.ts)
 const mini = miniMomentsOf(job).length ? await miniMomentLayer(job) : null;
@@ -73,6 +93,11 @@ window.vjMetrics = () => {
   return { ...m, cues: [...m.cues.filter((c) => !ids.has(c.id)), ...(signature.metrics() as unknown as typeof m.cues)] };
 };
 window.vjRows = () => engine.rowBreaks();
+// (the boxes the engine reports for the lines up at t: what props, figures and the keep-clear keep off; linebox-audit.mts)
+(window as unknown as { vjLineBoxes: (t: number) => unknown }).vjLineBoxes = (t: number) => engine.lineBoxesAt(t);
+(window as unknown as { vjInkNow: (id: string) => unknown }).vjInkNow = (id: string) => engine.inkNow(id);
+(window as unknown as { vjReadable: (id: string) => unknown }).vjReadable = (id: string) => engine.readableOf(id);
+(window as unknown as { vjGlyphsWhy: (id: string, t: number) => unknown }).vjGlyphsWhy = (id: string, t: number) => engine.glyphsWhy(id, t);
 window.vjSceneQa = () =>
   engine.sceneQa(async (t) => {
     await engine.renderAt(t);

@@ -304,6 +304,11 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   return undefined;
 }
 
+/** The plate a page draws round words printed on it keeps this margin past them at rest, px (screentone caption 34–44). */
+export const PLATE_MARGIN = 30;
+/** How far a block printed on a plate may grow from its anchor and stay inside the plate's margin. */
+export const plateGrow = (r: { x0: number; y0: number; x1: number; y1: number }) => 1 + PLATE_MARGIN / Math.max(1, r.x1 - r.x0, r.y1 - r.y0);
+
 /** The copies behind a blown-up key word, by stress: offsets and sizes in shares of its size, and their opacity. */
 const STRESS: Record<StressKind, { dx: number; dy: number; s: number; a: number }[]> = {
   // a press's extrusion: the block's side, stacked down and to the right
@@ -691,6 +696,9 @@ function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: bool
     const r = restRects(false)[beatPose]?.rect;
     if (!r) return grown;
     grown = growRoom(r, { ...poses[beatPose].spec, clear: sets[beatPose].clear });
+    // (words printed on a plate their page draws round them at rest grow only inside the plate's margin, else not at all:
+    // 大雪's screentone captions grew 12 % from their anchor through the caption box's rule, 2026-11-17)
+    if (sets[beatPose].on?.includes('plate')) { const cap = plateGrow(r); grown = cap >= GROW.least ? Math.min(grown, cap) : 1; }
     return grown;
   };
   const growShare = () => (growTo() - 1) / (GROW.want - 1);

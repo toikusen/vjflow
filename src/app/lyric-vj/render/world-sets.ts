@@ -33,9 +33,14 @@ export const SEAT_SHARE = { across: 0.36, beside: 0.5 };
  */
 export function seatSpec(spec: SetSpec, seat?: LineSeat): SetSpec {
   if (!seat) return spec;
-  if (seat === 'top' || seat === 'bottom') return { ...spec, seated: true, at: [0.5, seat === 'top' ? 0.035 : 0.965], ax: 0, ay: seat === 'top' ? -1 : 1, tall: Math.min(spec.tall, SEAT_SHARE.across) };
-  return { ...spec, seated: true, at: [seat === 'left' ? 0.05 : 0.95, 0.5], ax: seat === 'left' ? -1 : 1, ay: 0, share: Math.min(spec.share, SEAT_SHARE.beside) };
+  // (words a page prints a plate round keep the plate's margin inside the page: at the bare frame edge the caption box,
+  // held inside its panel, cut through the seated words' first strokes, 大雪 「總在喧囂人群」, 2026-11-17)
+  const [ey, ex] = spec.on?.includes('plate') ? [SEAT_EDGE_PLATE.y, SEAT_EDGE_PLATE.x] : [0.035, 0.05];
+  if (seat === 'top' || seat === 'bottom') return { ...spec, seated: true, at: [0.5, seat === 'top' ? ey : 1 - ey], ax: 0, ay: seat === 'top' ? -1 : 1, tall: Math.min(spec.tall, SEAT_SHARE.across) };
+  return { ...spec, seated: true, at: [seat === 'left' ? ex : 1 - ex, 0.5], ax: seat === 'left' ? -1 : 1, ay: 0, share: Math.min(spec.share, SEAT_SHARE.beside) };
 }
+/** How far from the frame's edge a seated line printed on a plate stands: a page's rim (60 px) plus the plate's margin (≈ 44 px) and its rule. */
+export const SEAT_EDGE_PLATE = { x: 0.065, y: 0.11 };
 
 export interface SetSpec {
   /** Moved to a seat beside a subject (seatSpec): a blown-up word keeps to the seat's band and anchor too. */

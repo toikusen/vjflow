@@ -2,9 +2,17 @@
 // seat's band, a running key ink that skips the blown-up word, a figure kept inside the frame, a grid of shots.
 import { inFrameX, panelPictures, PANEL_H } from './kinetic';
 import { keepsBlownInk } from './world-beats';
-import { SEAT_SHARE, seatSpec, SET_SPECS } from './world-sets';
+import { SEAT_EDGE_PLATE, SEAT_SHARE, seatSpec, SET_SPECS } from './world-sets';
 
 describe('a line seated beside its subject', () => {
+  it("keeps words a page prints a plate round inside the plate's margin (大雪 「總在喧囂人群」)", () => {
+    const caption = SET_SPECS['screentone/caption'];
+    expect(caption.on).toContain('plate');
+    expect(seatSpec(caption, 'top').at[1]).toBe(SEAT_EDGE_PLATE.y);
+    expect(seatSpec(caption, 'left').at[0]).toBe(SEAT_EDGE_PLATE.x);
+    expect(seatSpec(caption, 'right').at[0]).toBeCloseTo(1 - SEAT_EDGE_PLATE.x);
+    expect(seatSpec(SET_SPECS['riso/drop-right'], 'top').at[1]).toBe(0.035);
+  });
   const drop = SET_SPECS['riso/drop-right'];
   it('stands the set on the seat it is given and keeps it to the seat band, the rest of the set its own', () => {
     expect(seatSpec(drop)).toBe(drop);

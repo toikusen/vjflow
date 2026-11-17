@@ -140,10 +140,16 @@ if (song) {
 // - the subject stands large (by its framing) and the line takes the part of the frame it leaves: the rows above it for
 //   a long line, a blown-up word or a grid, else the side away from the subject, one seat for the whole line.
 const SUBJECT_H: Record<string, number> = { wide: 0.62, medium: 0.72, close: 0.7 };
+// the sides on which a cut-out's own drawing is cropped (library.json bleed, build-library): a figure cropped at its top
+// is never seated under a line's top band — it would stand cut flat mid-frame (S23's head, v5 review) — it takes a side
+// seat and bleeds off the frame's top (kinetic.ts), or the line takes another shot
+const libraryPath = (() => { const u = Object.entries(assets).find(([k, v]) => k.startsWith('spr:') && v.url)?.[1].url; return u ? join(dirname(u), 'library.json') : undefined; })();
+const bleedOf = new Map<string, string[]>(libraryPath && existsSync(libraryPath) ? (JSON.parse(readFileSync(libraryPath, 'utf8')) as { sprites: { id: string; bleed?: string[] }[] }).sprites.map((x) => [x.id, x.bleed ?? []]) : []);
+const bleedsTop = (id?: string) => !!id && (bleedOf.get(base(id)!) ?? []).includes('top');
 const HELD = 0.5;
 const base = (id?: string) => id?.replace(/_r\d+$/, '');
 const cutOuts = (cue: string) => (script.lines.find((l) => l.cue === cue)?.shots ?? []).filter((id) => shots.get(id)?.frame !== 'scene' && assets[`spr:${id}`]);
-let thirds = 0, grids = 0, seated = 0;
+let thirds = 0, grids = 0, seated = 0, swapped = 0;
 if (song) {
   const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
   const inWin = secs.filter((sec) => sec.start >= from && sec.start < to);
@@ -180,6 +186,12 @@ if (song) {
     const first = kOf(mine[0])!;
     const seat = panels.length >= 2 || c.world['blow'] || n > 12 ? 'top' : first.side === 'left' ? 'right' : 'left';
     c.world['seat'] = seat;
+    if (seat === 'top') for (const sec of mine) {
+      const k = kOf(sec)!;
+      if (k['fx'] === 'grid' || !bleedsTop(k.sprite)) continue;
+      const alt = cutOuts(cue.id).find((x) => !bleedsTop(x)) ?? [...shots.keys()].find((x) => shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`] && !bleedsTop(x));
+      if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); swapped += 1; }
+    }
     // (a seat already keeps the line to its band: the compact share on top of it set a blown-up word at half its size)
     delete c.world['compact'];
     seated += 1;
@@ -211,7 +223,10 @@ if (song && worldId) {
     const wide = [...new Set([...Object.values(world.grounds.levels).flat(), ...world.grounds.quiet])].filter((g) => g !== world.peak.loud && g !== world.peak.calm);
     const pages = new Set(world.layouts.lines.map((l) => l.ground).filter((g): g is string => !!g));
     const sections = [...groups.entries()].sort((x, y) => x[0] - y[0]).map(([, g]) => g);
-    spreadGrounds(sections, { pool: () => wide, fixed: (x) => x.fx === 'grid' || pages.has(x.fx) || !wide.includes(x.fx) });
+    const fixedFx = (x: { fx: string }) => x.fx === 'grid' || pages.has(x.fx) || !wide.includes(x.fx);
+    spreadGrounds(sections, { pool: () => wide, fixed: fixedFx });
+    // (and once over the whole window: a ground back within two cuts across a part's boundary is as much a repeat)
+    spreadGrounds([sections.flat()], { pool: () => wide, fixed: fixedFx });
     // (a ground of the world carries the world's fields, a plain one the sheet's inks: a changed cut takes the right shape)
     // (the world's fields — its level above all — come from the nearest cut before that stands on a world ground)
     const template = (layer: KLayer) => { const i = secs.findIndex((sec) => kOf(sec) === layer); for (let j = i; j >= 0; j--) { const k = kOf(secs[j]); if (k?.world && isWorldGround(k.fx)) return k.world; } return inWin.map(kOf).find((k) => k?.world && isWorldGround(k.fx))?.world; };
@@ -236,7 +251,7 @@ secs.forEach((sec, i) => {
     const shot = shots.get(l.sprite.replace(/_r\d+$/, ''));
     if (!shot) continue;
     // the cast keeps the inks it was drawn in, and a standing figure its ground
-    Object.assign(l, { print: 'own', shadow: shot.size !== 'close' && l['fx'] !== 'grid' });
+    Object.assign(l, { print: 'own', shadow: shot.size !== 'close' && l['fx'] !== 'grid', ...(bleedOf.get(shot.id)?.length ? { bleed: bleedOf.get(shot.id) } : {}) });
     own += 1;
     const run = prev && prev.sprite === shot.id && prev.index === i - 1 ? prev.run : sec.start;
     const frames = join(a.clips!, `${shot.id}_f`, 'frames.json');
@@ -259,4 +274,4 @@ t.graphics!.sections = secs;
 // (the plan stays whole: its moments and word syncs refer to lines beyond a window; a window is rendered with --clip)
 writeFileSync(join(a.out!, 'treatment.json'), JSON.stringify(t));
 writeFileSync(join(a.out!, 'assets.json'), JSON.stringify(assets, null, 1));
-console.log(`video stage: ${secs.length} sections, ${filled} cuts filled from the script, ${thirds} thirds-in-a-row changed, ${grids} held-vowel grids, ${seated} lines seated, ${regrounded} cuts regrounded, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);
+console.log(`video stage: ${secs.length} sections, ${filled} cuts filled from the script, ${thirds} thirds-in-a-row changed, ${grids} held-vowel grids, ${seated} lines seated, ${swapped} top-cropped cut-outs swapped off top seats, ${regrounded} cuts regrounded, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);

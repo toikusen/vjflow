@@ -67,6 +67,11 @@ export interface KineticLayer {
   /** When the cut ends (the next section's start, engine layRooms): drawn past it, the cut is going out under a page move. */
   until?: number;
   /**
+   * The sides on which the sprite's own drawing is cropped (a close-up runs to its picture's edge): that side bleeds off
+   * the frame's edge, never stands cut flat inside it (a figure's head cut by a straight line, 2026-11-17).
+   */
+  bleed?: ('top' | 'bottom' | 'left' | 'right')[];
+  /**
    * Every line's box over the cut with its times (engine layRooms): up from `from` to `to`, read at full strength until
    * `strong` (its exit begins there). The subject is measured against each line's own box, never against the union of
    * two lines (a top line and a right line's union is mostly empty frame, and a figure in it covers no words).
@@ -781,9 +786,14 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       // lines reach that corner, not a full-size one behind the words (Tokyo Drift's line plan: a revolver behind both
       // lines of 134–136 s)
       const corner = (l.under || speck) && l.fx !== 'grid' ? cornerPlace(w, h, l.under ? fit.s : 1, !!l.flip, l.over ?? []) : undefined;
-      const rs = corner ? corner.s : rowsAt ? rowsAt.s : fit.s;
+      // (a drawing cropped at its top stands with that edge just above the frame; cropped top and bottom, it spans the
+      // frame's height where the room beside the words is wide enough for that)
+      const bleedTop = !!l.bleed?.includes('top') && !corner && !rowsAt && !panelArts && size <= 1;
+      const roomW = l.room && l.room[1] > l.room[0] ? l.room[1] - l.room[0] - 48 : W - 48;
+      const rsBleed = bleedTop && l.bleed?.includes('bottom') ? Math.max(fit.s, Math.min((1.04 * H) / h, roomW / w)) : fit.s;
+      const rs = corner ? corner.s : rowsAt ? rowsAt.s : rsBleed;
       // (a panel of a grid of shots stands on the frame's foot at its panel's scale, under the words seated above it)
-      const y = panelArts ? H - (h * Math.min(1, W / cols / w)) / 2 - H * 0.02 : corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
+      const y = panelArts ? H - (h * Math.min(1, W / cols / w)) / 2 - H * 0.02 : corner ? corner.y : rowsAt ? rowsAt.y : bleedTop ? (h * rs) / 2 - H * 0.02 : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
       // a figure on its ground ellipse stands a little above the frame's foot, so its feet and the ellipse stay inside
       // (a figure never pressed past the frame's side: its whole width inside, a margin kept; a grid's copies keep their panels)
       ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));

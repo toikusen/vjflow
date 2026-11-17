@@ -51,3 +51,24 @@ describe('lineShows: a handoff never brings a line in after its first sung chara
     expect(lineShows(t(84.5, 84.8) as never, two as never, 120, []).styled[1].style.handoff).toBeDefined();
   });
 });
+
+describe('lineShows: world events name lines, not the plan', () => {
+  it('sets together a pair no event acts on in a plan that carries a table; keeps a pair an event names', () => {
+    const base = { cues: [style('a', 's1'), style('b', 's2')] as never, shots: [shot('s1', 'stair', 9.8, 12.5), shot('s2', 'stair', 12.5, 15)] };
+    const keepOnly = { ...base, worldEvents: { events: [{ kind: 'keep', lineIds: ['a'] }, { kind: 'keep', lineIds: ['b'] }], holds: [] } };
+    const seated = { ...base, worldEvents: { events: [{ kind: 'layout-seat', lineIds: ['b'] }], holds: [] } };
+    expect(lineShows(keepOnly as never, cues as never, 120, [], undefined, MIN_TAIL).styled.map((x) => x.cue.id)).toEqual(['a']);
+    expect(lineShows(seated as never, cues as never, 120, [], undefined, MIN_TAIL).styled.map((x) => x.cue.id)).toEqual(['a', 'b']);
+  });
+});
+
+describe('lineShows: a duet set together never goes under the reading floor', () => {
+  it('keeps two voices apart (a fault the gate fails) when one of them cannot stand on a row at REST_FLOOR', () => {
+    const long = [
+      { id: 'a', start: 10, end: 13, text: 'あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめも', charStarts: [10, 12.95] },
+      { id: 'b', start: 12.5, end: 15, text: '僕はここにいるよ', charStarts: [12.5, 14.6] },
+    ];
+    const t = { cues: [style('a', 's1'), style('b', 's2')] as never, shots: [shot('s1', 'stair', 9.8, 12.5), shot('s2', 'stair', 12.5, 15)] };
+    expect(lineShows(t, long as never, 120, [], undefined, MIN_TAIL).styled.map((x) => x.cue.id)).toEqual(['a', 'b']);
+  });
+});

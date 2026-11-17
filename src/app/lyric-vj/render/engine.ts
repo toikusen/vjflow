@@ -1,7 +1,8 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
-import { exitAfterSung, exitFloor, MIN_TAIL, PLAN_TAIL, settleExit } from './sung-tail';
+import { exitAfterSung, exitFloor, lastSungChar, MIN_TAIL, PLAN_TAIL, settleExit } from './sung-tail';
+import { namedLines } from './world-named';
 import { requiredReading } from './reading-window';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -1188,9 +1189,10 @@ export class LyricVjEngine {
     // laid on the world's sections: one computation, shared with the plan (line-shows.ts); with the song's one event plan
     // (Q1, world-events.ts) only the page handoffs that plan approved are laid
     // (a plan no world event names is judged at the engine's own tail: its last characters read one character's time)
-    const tail = (treatment as { worldEvents?: unknown }).worldEvents ? PLAN_TAIL : MIN_TAIL;
-    const floorOf = (c: typeof cues[number], show: number) => exitFloor(c, show, EXIT_LEAD, tail);
-    const { styled, repeats, shouts, showAt } = lineShows(treatment, cues, this.job.tempo, treatment.graphics?.sections, approvedOf(treatment), tail, (t) => !!RENDERERS[t]?.persist && RENDERERS[t]?.persist !== 'preview');
+    // (per line: one a world event acts on is read at the composer's tail, PLAN_TAIL; every other at MIN_TAIL)
+    const named = namedLines(treatment as { worldEvents?: unknown });
+    const floorOf = (c: typeof cues[number], show: number) => exitFloor(c, show, EXIT_LEAD, named.has(c.id) ? PLAN_TAIL : MIN_TAIL);
+    const { styled, repeats, shouts, showAt } = lineShows(treatment, cues, this.job.tempo, treatment.graphics?.sections, approvedOf(treatment), MIN_TAIL, (t) => !!RENDERERS[t]?.persist && RENDERERS[t]?.persist !== 'preview');
     for (const [i, { cue, style }] of styled.entries()) this.shotLines.set(style.shot, [...(this.shotLines.get(style.shot) ?? []), { text: cue.text, at: showAt[i] }]);
     // the title as sung gets one fixed treatment every time it appears (accent colour), like a logotype
     // strokes only when the director picked them (older treatments without techniques keep whole glyphs)
@@ -1285,7 +1287,7 @@ export class LyricVjEngine {
       // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
       // (without character times no tail is invented past the line's end: it leaves no earlier than its end, Codex review)
       const timed = !!cue.charStarts?.length;
-      const lastSung = timed ? cue.charStarts![cue.charStarts!.length - 1] : cue.end;
+      const lastSung = timed ? lastSungChar(cue.charStarts!) : cue.end;
       const tailKept = !held && shot.template !== 'world-pair';
       const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung, timed ? undefined : 0) : exitAt0;
       const exitFrom = Math.max(cue.start + 0.25 * pace, exitAt1);
@@ -1447,7 +1449,10 @@ export class LyricVjEngine {
       const planned = !!rt.style.world?.blow;
       let blowReason: string | undefined;
       const floor = inWorld ? floorNeed - 0.5 : REST_FLOOR;
-      if (style.budget && alone && restSize(probe, fitToFrame) < floor) {
+      // (and a line set together of two voices or more, line-shows.ts: its voices take stair rows of their own, at the
+      // stair's least size or more — a template's own fit took an orbit duet to 45 px)
+      const voiced = ((cue0 as { voices?: number }).voices ?? 1) > 1;
+      if (voiced || (style.budget && alone && restSize(probe, fitToFrame) < floor)) {
         drawn = 'stair';
         rt.style = { ...rt.style, enter: 'cut', exit: 'fade' };
         rt.params = { ...rt.params, floor: floorNeed };
@@ -1900,7 +1905,7 @@ export class LyricVjEngine {
         // its own slot: asking more flagged every line of a fast song)
         // (and never under READ_FLOOR: a window of nothing or less fails, it does not pass as ok)
         const requiredSec = requiredReading(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), rt.exitAt + rt.exitDur - rt.showFrom);
-        const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
+        const last = rt.cue.charStarts?.length ? lastSungChar(rt.cue.charStarts) : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
         return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05 && !this.overlaps.some((o) => o.id === rt.cue.id || o.next === rt.cue.id), ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, exitAt: +rt.exitAt.toFixed(3), tail: rt.tail ?? 'exempt', ...(rt.tailWhy ? { tailWhy: rt.tailWhy } : {}), template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
       }),

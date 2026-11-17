@@ -30,7 +30,26 @@ function evenRows(text: string, n: number): string[] {
  * row would set under STAIR_LEAST px (the frame fit took the type of a 50-character line down to 68 px, under the type
  * floor, 2026-11-12). `widestOf`: the widest row's advance at 100 px.
  */
-export function stairRows(text: string, chars: number, widestOf: (rows: string[]) => number, least = STAIR_LEAST): string[] {
+export function stairRows(text: string, chars: number, widestOf: (rows: string[]) => number, least = STAIR_LEAST, breaks?: number[]): string[] {
+  // (a line with breaks — a duet set together, line-shows.ts, one voice to a row — keeps them: each voice on rows of its
+  // own, split further only while its widest row would set under the least size)
+  if (breaks?.length) {
+    const cs = [...text];
+    const cuts = [0, ...breaks.filter((b) => b > 0 && b < cs.length).sort((a, b) => a - b), cs.length];
+    return cuts.slice(1).flatMap((end, k) => {
+      const g = cs.slice(cuts[k], end).join('').replace(/[\s　]+/g, ' ').trim();
+      if (!g) return [];
+      let rs = [g];
+      while (rs.length < 4 && (100 * 0.55 * W) / widestOf(rs) < least) {
+        const n = rs.length + 1;
+        const more = balancedRows(g, n);
+        const next = more.length >= n ? more : evenRows(g, n);
+        if (next.length <= rs.length) break;
+        rs = next;
+      }
+      return rs;
+    });
+  }
   let rows = chars > 22 ? balancedRows(text, 3) : chars > 6 ? balancedRows(text, 2) : [text];
   while (rows.length < 6 && (100 * 0.55 * W) / widestOf(rows) < least) {
     const n = rows.length + 1;
@@ -52,7 +71,8 @@ export const stair: TemplateRenderer = {
     const widestOf = (rs: string[]) => Math.max(...rs.map((r) => [...r].reduce((w, c) => w + advanceOf(c, probe), 0)), 1);
     // (the least type the line must rest at: the floor of the set it was taken from, when it falls back to stair from one)
     const least = Math.max(STAIR_LEAST, Number(p['floor']) || 0);
-    const rows = stairRows(text, chars, widestOf, least);
+    // (the line's own breaks where it has them: a duet set together keeps a voice to a row group)
+    const rows = stairRows(rt.style.rows?.length ? rt.cue.text : text, chars, widestOf, least, rt.style.rows);
     const size = Math.round(Math.max(least, Math.min(180, (100 * 0.55 * W) / widestOf(rows))));
     const style: GlyphStyle = { family: rt.fonts.display, weight: 900, size, shadow: true };
     const accent = readable(rt.palette.accent, rt.palette.background, 7);

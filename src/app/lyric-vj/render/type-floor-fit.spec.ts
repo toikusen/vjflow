@@ -68,6 +68,14 @@ describe('stair rows never set the type under the least size (a 50-character lin
     expect(rows.length).toBeLessThanOrEqual(6);
     expect((100 * 0.55 * 1920) / widest(rows)).toBeGreaterThanOrEqual(STAIR_LEAST - 1e-6);
   });
+  it('keeps a merged duet\'s voices on rows of their own (its breaks), each split further only to stay at the least size', () => {
+    const duet = '君の声がまだ聞こえる 僕はここにいるよ';
+    expect(stairRows(duet, 18, widest, STAIR_LEAST, [11])).toEqual(['君の声がまだ聞こえる', '僕はここにいるよ']);
+    const long = 'あいうえおかきくけこさしすせそたちつてと なにぬね';
+    const rows = stairRows(long, 24, widest, STAIR_LEAST, [21]);
+    expect(rows.at(-1)).toBe('なにぬね');
+    expect((100 * 0.55 * 1920) / widest(rows)).toBeGreaterThanOrEqual(STAIR_LEAST - 1e-6);
+  });
   it('keeps two rows for a short line and three for a long one that fits', () => {
     expect(stairRows('あいう えおか', 6, widest).length).toBeLessThanOrEqual(2);
     const text = 'あいうえおか きくけこさし すせそたちつ';

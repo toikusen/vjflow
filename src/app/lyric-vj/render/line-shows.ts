@@ -7,9 +7,10 @@ import type { CueStyle, Shot } from '../treatment';
 import { pageCutBefore } from './cover';
 import { isLineMotion } from './motion-transition';
 import { pullPictures } from './picture-lead';
-import { readingSec, setTogether } from './reading-window';
+import { readingSec, REST_FLOOR, setTogether } from './reading-window';
 import { foldRepeats } from './repeats';
 import { exitFloor, mustShare, PLAN_TAIL } from './sung-tail';
+import { namedLines } from './world-named';
 import { enterSec as lineEnterSec } from './enter-sec';
 import { lastSungOf, leadOf, showTime } from './show-time';
 import { linkGrounds } from './world-handoff';
@@ -28,6 +29,9 @@ export const threadShot = (s?: { template: string }) => s?.template === 'chat' |
 export const NO_HANDOFF = new Set(['world-set', 'world-pair', 'contrast-split', 'lanes', 'singalong', 'scroll', 'chat', 'reply-thread', 'title-card', 'counterweight', 'panel-route']);
 
 /** The page handoffs a treatment's one event plan approved (world-events.ts), by the line handed into; undefined without a plan. */
+/** The widest a voice of a duet set together may be (width units: a kana or han 1, a Latin letter ½) to stand on one row at REST_FLOOR across the frame's 0.86. */
+export const MERGE_ROW = Math.floor((0.86 * 1920) / REST_FLOOR);
+
 export const approvedOf = (t: { worldEvents?: { events: { kind: string; fixed?: boolean; lineIds: string[] }[] } }) => (t.worldEvents ? new Set(t.worldEvents.events.filter((e) => e.kind === 'page-handoff' && e.fixed).map((e) => e.lineIds[e.lineIds.length - 1])) : undefined);
 
 /**
@@ -56,6 +60,7 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
   const { lines: styled, repeats } = foldRepeats<ShownLine>(sorted, (x) => !!threadShot(shotOf(x.style.shot)));
   // two lines sung back to back faster than either can be read are set together as one two-row line: the first
   // stays up while the second is sung (word reveal follows the voice across both)
+  const named = namedLines(treatment as { worldEvents?: unknown });
   const joined = new Set<number>();
   const size = new Map<number, number>();
   for (let i = 0; i + 1 < styled.length; i++) {
@@ -72,20 +77,26 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     // (a Latin letter counts half: two of them take the width of one kana or han)
     // (however long the two: set together their rows are fitted to the frame, under the type floor in plain stepped rows —
     // never two lines lit on one seat, opus review)
-    const share = mustShare(a, b, onset, tail);
+    // (a line a world event acts on is read at the composer's tail and never set together: world-named.ts, per line)
+    const share = mustShare(a, b, onset, named.has(a.id) ? PLAN_TAIL : tail);
     // (a composer line is paired by the composer itself, planPairs, mustShare included; a plan saved before that rule is
     // set together here — unless world events name its lines, whose table is the plan's)
     // (and never a pair the plan already seated in one shot — stack, couplet, world-pair: each line has its own seat; a
     // composer pair planned by planPairs stands so; a plan saved before that rule left them in two shots)
-    const named = !!(treatment as { worldEvents?: unknown }).worldEvents;
     const seated = styled[i].style.shot === styled[i + 1].style.shot && seats(shotOf(styled[i].style.shot)?.template ?? '');
     // (nor any line a world event names: its table is the plan's)
-    const shared = share && !seated && !named;
+    // (and only where each voice stands on a row of its own at the reading floor, REST_FLOOR: set together, a voice
+    // wider than that was fitted to the frame under it — left apart, the overlap is logged and the gate fails it)
+    const units = (t: string) => [...t.replace(/\s/g, '')].reduce((n, ch) => n + (/[\x21-\x7e]/.test(ch) ? 0.5 : 1), 0);
+    const voices = (joined.has(i) ? [...(styled[i].style.rows ?? []), [...a.text].length].map((end, k, all) => a.text.slice(k ? all[k - 1] : 0, end)) : [a.text]).concat(b.text);
+    const fits = voices.every((v) => units(v) <= MERGE_ROW);
+    const shared = share && fits && !seated && !named.has(a.id) && !named.has(b.id);
     if (inChat || (styled[i].style.budget && !shared) || !(setTogether(a, b) || shared) || repeats.has(a.id) || repeats.has(b.id)) continue;
     const aLen = [...a.text].length;
     styled[i] = {
       style: { ...styled[i].style, rows: joined.has(i) ? [...(styled[i].style.rows ?? []), aLen + 1] : [aLen + 1], reveal: 'word' },
-      cue: { ...a, text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) },
+      // (voices: how many lines it carries, the engine keeps such a line at the reading floor)
+      cue: { ...a, voices: ((a as { voices?: number }).voices ?? 1) + 1, text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) } as TimelineCue & { voices?: number },
     };
     styled.splice(i + 1, 1);
     // (a shared line is checked again against the one after it: a duet's third voice comes into the same frame — three
@@ -115,7 +126,7 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     const read = !!prev && h.from - showAt[i - 1] >= lineEnterSec(prev.style.enter, paceOf(prev.cue)) + readingSec(prev.cue.text, prev.cue.start, prev.cue.end) - 0.05 && (showAt[i + 1] ?? Infinity) - h.to >= readingSec(cue.text, cue.start, cue.end) - 0.05;
     // (nor where it takes the line going out off before its floor — its last character read: sung-tail.ts exitFloor)
     // (at the composer's tail, PLAN_TAIL: the world-event scheduler plans its page handoffs on that, sung-tail.ts)
-    const floorKept = !!prev && (h.kind === 'relay' ? h.from : h.to) >= exitFloor(prev.cue, showAt[i - 1], undefined, tail) - 1e-9;
+    const floorKept = !!prev && (h.kind === 'relay' ? h.from : h.to) >= exitFloor(prev.cue, showAt[i - 1], undefined, named.has(prev.cue.id) ? PLAN_TAIL : tail) - 1e-9;
     // (nor where it brings the line in after its first sung character: a relay shows it part way through)
     const firstSung = style.reveal === 'sung' && style.sung?.length === [...cue.text].length ? style.sung[0] : (cue.charStarts?.[0] ?? cue.start);
     const onTime = (h.kind === 'relay' ? h.from + 0.4 * (h.to - h.from) : h.from) <= firstSung + 1e-9;

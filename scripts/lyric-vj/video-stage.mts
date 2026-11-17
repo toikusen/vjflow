@@ -14,6 +14,8 @@ import type { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
 import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
 import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spread';
 import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
+import { unsungWindows } from '../../src/app/lyric-vj/structure';
+import { planStretches, shotAt } from '../../src/app/lyric-vj/stretch-plan';
 
 const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
   // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
@@ -42,7 +44,19 @@ if (scheme) {
   }
   for (const c of t.cues as (Record<string, unknown> & { world?: Record<string, unknown> })[]) if (c.world) c.world = withScheme(c.world);
 }
-const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { cues: { id: string; start: number; end: number; text?: string }[] }) : undefined;
+const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { duration?: number; cues: { id: string; start: number; end: number; text?: string }[] }) : undefined;
+// the stretches nobody sings (intro, interludes, outro): a planned sequence each — the director's (script.stretches)
+// or by rule (stretch-plan.ts) — held on the director's own cuts, never every shot of the script in turn (run5's outro
+// was a thirty-second montage of all of them, 2026-11-17)
+// (a short intro too, under unsungWindows' four seconds: the subject is there before the first word)
+const windowsOf = (sg: NonNullable<typeof song>) => {
+  const ws = unsungWindows({ cues: sg.cues, duration: sg.duration ?? Math.max(...sg.cues.map((c) => c.end)) } as never);
+  const first = Math.min(...sg.cues.map((c) => c.start));
+  return first > 0.5 && !ws.some((w) => w.kind === 'intro') ? [{ start: 0, end: first, kind: 'intro' as const }, ...ws] : ws;
+};
+const stretches = song ? planStretches(script, song.cues, windowsOf(song), (id) => shots.get(id)?.frame !== 'scene' && !!assets[`spr:${id}`]) : [];
+const inStretch = (time: number) => stretches.some((w) => time >= w.start - 1e-3 && time < w.end);
+for (const w of stretches) console.log(`stretch ${w.kind} ${w.start.toFixed(2)}-${w.end.toFixed(2)} (${w.by}): ${w.shots.map((x, i) => `${x} ${Math.round(w.shares[i] * 100)}%`).join(' → ')} — ${w.why}`);
 // a line beside a subject keeps a share of its set's measure (world-layout compact): short lines give up more, a long
 // line keeps most of its size to stay readable; the rest of the frame is the subject's (v3's rule, the one that let
 // the rider stand at half the frame; without it the plates left him a third)
@@ -74,6 +88,8 @@ if (song) {
     for (let j = 1; j < n; j++) {
       const at = +(sec.start + j * bar).toFixed(3);
       if (end - at < bar * 0.5) break;
+      // (a stretch nobody sings keeps the director's holds: its planned shots are held, not cut at the bar)
+      if (inStretch(at)) continue;
       const layers = (JSON.parse(JSON.stringify(sec.layers)) as KLayer[]).filter((l) => l.kind === 'kinetic').map((l) => { const c: KLayer = { ...l, at, seed: Number(l['seed'] ?? 0) + 50 * j }; delete c.sprite; delete c.subjectAt; return c; });
       out.push({ ...JSON.parse(JSON.stringify({ ...sec, layers: [] })), start: at, layers } as never);
     }
@@ -86,27 +102,20 @@ if (song) {
 const lineAt = (time: number) => song?.cues.find((c) => time >= c.start - 1e-3 && time < c.end) ?? [...(song?.cues ?? [])].reverse().find((c) => c.start <= time);
 const used = new Map<string, number>();
 let filled = 0;
-// a stretch with no line of its own (an interlude, the outro) is not the last line's: it takes the script's cut-outs
-// in script order, none back within four cuts (v5: the outro ran S20/S34 for thirty seconds, 2026-11-17)
-const allCutOuts = script.shots.filter((x) => x.frame !== 'scene' && assets[`spr:${x.id}`]).map((x) => x.id);
-const recent: string[] = [];
-let roam = 0;
 if (song) {
   const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
   for (const sec of secs) {
     if (sec.start < from || sec.start >= to) continue;
     const k = (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic');
-    if (!k || k.sprite) continue;
-    const sung = song.cues.find((c) => sec.start >= c.start - 1e-3 && sec.start < c.end);
-    if (!sung && allCutOuts.length) {
-      const pick = Array.from({ length: allCutOuts.length }, (_, j) => allCutOuts[(roam + j) % allCutOuts.length]).find((id) => !recent.includes(id)) ?? allCutOuts[roam % allCutOuts.length];
-      roam = (allCutOuts.indexOf(pick) + 1) % allCutOuts.length;
-      recent.push(pick); if (recent.length > 4) recent.shift();
-      const sh = shots.get(pick)!;
-      Object.assign(k, { sprite: pick, side: sh.side, size: sh.height, flip: false });
+    // (a planned stretch takes its shot for the time, over whatever the plan bound there)
+    const planned = k ? shotAt(stretches, sec.start) : undefined;
+    if (k && planned) {
+      const sh = shots.get(planned)!;
+      Object.assign(k, { sprite: planned, side: sh.side, size: sh.height, flip: false });
       filled += 1;
       continue;
     }
+    if (!k || k.sprite) continue;
     const cue = lineAt(sec.start);
     const line = cue && script.lines.find((l) => l.cue === cue.id);
     if (!line?.shots.length) continue;
@@ -114,7 +123,6 @@ if (song) {
     used.set(line.cue, n + 1);
     const shot = shots.get(line.shots[n % line.shots.length]);
     if (!shot) continue;
-    recent.push(shot.id); if (recent.length > 4) recent.shift();
     // (a line with a blown-up word keeps its cast large under it: a scene in a small window beside the big word left
     // the frame empty, v4 review)
     if (shot.frame === 'scene' && (t.cues as { cueId: string; world?: { blow?: unknown } }[]).find((x) => x.cueId === line.cue)?.world?.blow) {
@@ -161,7 +169,8 @@ if (song) {
       const k = kOf(sec);
       const id = base(k?.sprite);
       if (!k || !id) { run = []; continue; }
-      if (run.length >= 2 && run.every((r) => r === id)) {
+      // (a planned stretch holds its shots on purpose: counted in the run, never changed)
+      if (run.length >= 2 && run.every((r) => r === id) && !inStretch(sec.start)) {
         const cue = lineAt(sec.start);
         const seatTop = cue && (t.cues as { cueId: string; world?: { seat?: string } }[]).find((x) => x.cueId === cue.id)?.world?.seat === 'top';
         const ok = (x: string) => x !== id && shots.get(x)?.frame !== 'scene' && !!assets[`spr:${x}`] && !(seatTop && bleedsTop(x));
@@ -175,7 +184,8 @@ if (song) {
   for (const c of t.cues as (Record<string, unknown> & { cueId: string; world?: Record<string, unknown> })[]) {
     const cue = song.cues.find((x) => x.id === c.cueId) as ({ id: string; start: number; end: number; text?: string; charStarts?: number[] }) | undefined;
     if (!cue || cue.start < from || cue.start >= to || !c.world) continue;
-    const mine = inWin.filter((sec) => lineAt(sec.start)?.id === cue.id && kOf(sec)?.sprite);
+    // (a planned stretch after the line is not the line's: its subject keeps the stretch's plan)
+    const mine = inWin.filter((sec) => lineAt(sec.start)?.id === cue.id && kOf(sec)?.sprite && !inStretch(sec.start));
     if (!mine.length) continue;
     const chars = [...(cue.text ?? '')];
     const st = cue.charStarts ?? [];

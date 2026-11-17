@@ -103,3 +103,14 @@ test('cast: a decided member missing from the answer is put back', () => {
   assert.deepEqual(s.cast.map((m) => m.id), ['bike']);
   assert.equal(s.candidates.length, 0);
 });
+
+test('the director\'s plan for the unsung stretches keeps only known shots and kinds, at most three shots each', () => {
+  const warned: string[] = [];
+  const s = cleanScript(script({ shots: [shot('S01'), shot('S02')], stretches: [
+    { kind: 'outro', at: 228, shots: ['S01', 'S99', 'S02', 'S01'], why: '背影越騎越遠' },
+    { kind: 'bridge' as never, at: 100, shots: ['S01'], why: '' },
+  ] }), vocab, (m) => warned.push(m));
+  assert.deepEqual(s.stretches, [{ kind: 'outro', at: 228, shots: ['S01', 'S02'], why: '背影越騎越遠' }]);
+  assert.ok(warned.some((m) => /S99/.test(m)) && warned.some((m) => /bridge/.test(m)));
+  assert.equal(cleanScript(script(), vocab).stretches, undefined, 'a script with none keeps none (the stage plans by rule)');
+});

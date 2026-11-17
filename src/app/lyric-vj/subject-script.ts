@@ -1,5 +1,6 @@
 // The subject-video tier's script (scripts/lyric-vj/subject-script.mts): what the director answers for a window of a
 // song, and the check that keeps only what the song and the language really have.
+import { STRETCH_SHOTS, type StretchScript } from './stretch-plan';
 
 export type CastKind = 'person' | 'object' | 'animal' | 'phenomenon';
 /**
@@ -55,8 +56,11 @@ export interface SubjectShot {
 export interface ScriptLine { cue: string; shots: string[]; /** A hold in beats when the line needs other than the rule gives: one for the line, or one per shot in order. */ beats?: number | number[]; ground: string; fx: string; fxWhy: string }
 /** A line's text motion; `word` is the one emphasised (a word of the line), '' when nothing is. */
 export interface LineText { cue: string; template: string; enter: string; exit: string; idle: string; emphasis: string; word: string; why: string }
-/** A design for one undecided main member; `together` says how its combined view shows it with the decided members. */
-export interface Candidate { for: string; letter: string; idea: string; look: string; scheme: string; together: string }
+/**
+ * A design for one undecided main member; `together` says how its combined view shows it with the other mains.
+ * `from: 'earlier'` marks the candidate that redraws the song's earlier cast (another tier's sheet) in this style.
+ */
+export interface Candidate { for: string; letter: string; idea: string; look: string; scheme: string; together: string; from?: 'earlier' }
 export interface SubjectScript {
   cast: CastMember[];
   /** Subjects considered and not taken, and why (3 lines when nothing is added to a decided cast). */
@@ -71,6 +75,12 @@ export interface SubjectScript {
   text: LineText[];
   candidates: Candidate[];
   sameness: string;
+  /**
+   * The subject over the stretches nobody sings (intro, interludes, outro): a few shots in order with a meaning (a
+   * closing image, a callback, a slow ending), never every shot in turn. Optional: the video stage plans a stretch
+   * the script leaves out by rule (stretch-plan.ts).
+   */
+  stretches?: StretchScript[];
 }
 
 /** What the song and the language offer the director: the names a script may use. */
@@ -150,5 +160,11 @@ export function cleanScript(made: SubjectScript, v: ScriptVocabulary, warn: (msg
   })));
   for (const c of made.candidates ?? []) if (!open.includes(c.for)) warn(`candidate for ${c.for}: not an undecided main member; dropped`);
   for (const id of open) if (!candidates.some((c) => c.for === id)) warn(`cast: main member ${id} has no candidates to pick from`);
-  return { ...made, cast, alternatives: made.alternatives ?? '', tradeoffs: made.tradeoffs ?? '', shots, lines, text, candidates };
+  const stretches = (made.stretches ?? []).flatMap((x) => {
+    if (!['intro', 'interlude', 'outro'].includes(x.kind)) return (warn(`stretch: no such kind ${x.kind}, dropped`), []);
+    const known = (x.shots ?? []).filter((id) => byId.has(id) || (warn(`stretch ${x.kind}@${x.at}: unknown shot ${id}, dropped`), false));
+    const kept = known.filter((id, i) => known.indexOf(id) === i).slice(0, STRETCH_SHOTS);
+    return kept.length ? [{ kind: x.kind, at: Number(x.at) || 0, shots: kept, why: x.why ?? '' }] : [];
+  });
+  return { ...made, cast, alternatives: made.alternatives ?? '', tradeoffs: made.tradeoffs ?? '', shots, lines, text, candidates, ...(stretches.length ? { stretches } : { stretches: undefined }) };
 }

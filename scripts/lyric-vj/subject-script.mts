@@ -10,6 +10,7 @@
 //
 // npx tsx scripts/lyric-vj/subject-script.mts --song out/db/<id>/song.json --from 3 --to 63.06 --language risograph \
 //   --out out/research/video-tier/run2 [--fixed <dir>/fixed.json] [--stage prompt|script|sheets|pick|all] [--model claude-opus-5-5] [--image-model gemini-3-pro-image]
+//   [--earlier <cast sheet> --earlier-looks <board.json>]  (an earlier tier's cast of this song: one candidate per such member redraws it)
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
 import { execFileSync } from 'node:child_process';
@@ -21,6 +22,8 @@ import { LANGUAGES, type LanguageId } from '../../src/app/lyric-vj/languages';
 import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
 import { type Candidate, cleanScript, type FixedMember, type SubjectScript } from '../../src/app/lyric-vj/subject-script';
 import { feltTempo } from '../../src/app/lyric-vj/timeline';
+import { unsungWindows } from '../../src/app/lyric-vj/structure';
+import { STRETCH_SHOTS } from '../../src/app/lyric-vj/stretch-plan';
 import { GROUND_HELP } from '../../src/app/lyric-vj/lineplan-core';
 import { PRICES, streamed } from './claude.mts';
 import { EMPH_HELP, ENTER_HELP, EXIT_HELP, FX_HELP, IDLE_HELP, TEMPLATES } from './typehelp.mts';
@@ -31,6 +34,8 @@ const { values: a } = parseArgs({
     // the buyer's direction for this run (who the protagonist is, what to keep), and an earlier script whose shots
     // (stills, clips) exist and may be reused by id
     note: { type: 'string' }, reuse: { type: 'string' },
+    // an earlier tier's cast of this song (the story tier's sheet and its board's people): redrawn as one candidate each
+    earlier: { type: 'string' }, 'earlier-looks': { type: 'string' },
     stage: { type: 'string', default: 'all' }, model: { type: 'string', default: 'claude-opus-5-5' }, 'image-model': { type: 'string', default: 'gemini-3-pro-image' },
   },
 });
@@ -49,6 +54,7 @@ const world = STYLE_WORLDS.find((w) => w.language === a.language);
 if (!world) throw new Error(`no style world for ${a.language}`);
 const fixed: FixedMember[] = a.fixed ? JSON.parse(readFileSync(a.fixed, 'utf8')) : [];
 const reuse: SubjectScript | undefined = a.reuse ? JSON.parse(readFileSync(a.reuse, 'utf8')) : undefined;
+const earlierPeople: { id: string; look: string }[] = a['earlier-looks'] ? JSON.parse(readFileSync(a['earlier-looks'], 'utf8')).people ?? [] : [];
 
 type Cue = { id: string; start: number; end: number; text: string };
 type Song = { title: string; tempo: number; beats: number[]; downbeats: number[]; cues: Cue[]; sections: { start: number; end: number; energy: number; type: string }[] };
@@ -66,18 +72,31 @@ function prompt(): string {
     return `${c.id} ${c.start.toFixed(2)}–${c.end.toFixed(2)} (${((c.end - c.start) / beat).toFixed(1)} 拍, ${sec?.type ?? '?'} 能量 ${sec?.energy.toFixed(2) ?? '?'}) ${c.text}`;
   }).join('\n');
   // the world's own grounds are drawn in world-grounds.ts; their words are not in GROUND_HELP
-  const WORLD_GROUNDS: Record<string, string> = { 'riso/two-drum': '兩滾筒：兩組斜切的淡色色版慢慢橫向滾過紙面（印刷機在跑、前進）', 'riso/grain-block': '顆粒大色塊：左邊一大塊深墨斜版、右下一塊淡墨版，大面留白（安靜、停下來）' };
+  const WORLD_GROUNDS: Record<string, string> = {
+    'riso/two-drum': '兩滾筒：兩組斜切的淡色色版慢慢橫向滾過紙面（印刷機在跑、前進）', 'riso/grain-block': '顆粒大色塊：左邊一大塊深墨斜版、右下一塊淡墨版，大面留白（安靜、停下來）',
+    'silk/pulled-slab': '刮刀拉出的兩塊斜版，一淡一深，滑進紙面', 'silk/second-pull': '第二道版疊上去，微微錯位',
+    'screentone/narration': '旁白方框（直排），大片白與網點夜空，最安靜', 'screentone/caption': '旁白方框，橫排', 'screentone/caption-r': '旁白方框，在右邊',
+    'screentone/balloons': '兩個橢圓對話框', 'screentone/shout': '尖刺爆炸框喊出來', 'screentone/burst': '爆炸框加集中線', 'screentone/burst-r': '爆炸框在右邊', 'screentone/sfx': '大擬聲字穿過分格（最強）',
+  };
   const grounds = [...new Set([...Object.values(world.grounds.levels).flat(), ...world.grounds.quiet])].map((g) => `${g}（${GROUND_HELP[g] ?? WORLD_GROUNDS[g] ?? g}）`);
   const help = (h: Record<string, string>) => Object.entries(h).map(([k, v]) => `${k}: ${v}`).join('\n');
   const decided = fixed.length
     ? `已經定案的演員（使用者挑過 sheet，不可改、不出候選，cast 裡原樣列出，id 照用）：\n${fixed.map((f) => `- ${f.id}（${f.kind}）：${f.what}；role：${f.role}；features：${f.features.join('; ')}；配色 ${f.scheme}；look：${f.look}`).join('\n')}\n你要決定的是：還要加哪些演員和道具（依歌詞和故事，沒有上限）。不加也可以——那就 candidates 給空陣列，alternatives 用三行說清楚為什麼這首不需要第二個主角。加的每個 main 演員都要有 role、features、why，並出 3–4 個候選設計；prop 直接給 look。`
     : `從歌詞和故事決定演員與道具（沒有上限）；每個都要有 role、features、why。不一定要是人：上一版畫高中生騎單車，人物一致性和手腳是最大的弱點；LYKY 那首用物件當主角成功過。非人類主角影片模型也比較穩。但要是歌詞真的在講人、以人才說得通，就選人，並用構圖把手腳藏掉。每個演員出 4–6 個候選設計。`;
+  const earlierText = earlierPeople.length && a.earlier
+    ? `\n## 這首歌之前做過的人物（故事層的 cast sheet，使用者看過）\n${earlierPeople.map((p) => `- ${p.id}：${p.look}`).join('\n')}\n如果你的演員裡有對應的人，就沿用這些人的身份（id 可以改成你的短名），並在那個演員的候選裡放一個 "from": "earlier" 的候選：look 是上面那段英文改寫成這個風格的畫法（同一張臉、髮型、服裝設計，只換畫法和墨色），idea 寫「沿用故事版人物」；其餘候選是新的設計。程式會把舊的 cast sheet 當參考圖。\n`
+    : '';
+  // the stretches nobody sings in the window: the director plans each (stretches), else the video stage does by rule
+  const dur = (song as { duration?: number }).duration ?? Math.max(...song.cues.map((c) => c.end));
+  const unsung = unsungWindows({ cues: song.cues, duration: dur } as never).filter((w) => w.end > from && w.start < to);
+  const KIND = { intro: '前奏', interlude: '間奏', outro: '尾奏' } as const;
+  const stretchRule = unsung.length ? `\n## 沒人唱的段（前奏、間奏、尾奏）\n${unsung.map((w) => `${KIND[w.kind]} ${w.start.toFixed(2)}–${w.end.toFixed(2)}（${(w.end - w.start).toFixed(1)} 秒）`).join('\n')}\n每段在 stretches 給一筆：kind、at（這段開始的秒數）、shots（依序 1–${STRETCH_SHOTS} 個 cutout 鏡頭）、why（這個順序在故事裡的意思）。要有安排：收尾的畫面（尾奏停在故事的最後狀態）、呼應前面的鏡頭（callback）、慢下來的結尾；鏡頭少、每個停得久，不要把所有鏡頭輪一遍（上一版尾奏 30 秒把整份腳本的鏡頭輪播一次，像蒙太奇）。\n` : '';
   const owner = a.note ? `\n## 使用者的指示（最高優先，照做）\n${a.note}\n` : '';
   const existing = reuse ? `\n## 已有的素材（上一版畫好的鏡頭；合用的就沿用同一個 id 和同一段描述，不要改寫，程式會直接拿既有的圖和影片；不合用的就不要列，新的鏡頭用新的 id 從 S${String(reuse.shots.length + 1).padStart(2, '0')} 起）\n${reuse.shots.map((x) => `${x.id} ${x.kind.toUpperCase()} ${x.frame} cast ${x.cast.join('+')} ${x.size} side ${x.side} h ${x.height}: ${x.subject}`).join('\n')}\n` : '';
   return `你是這支歌詞 MV 的導演。這首歌〈${song.title}〉的 ${from}–${to} 秒要做成「主角影像 + 我們自己的動態字體與程式繪製世界」的版本，風格固定為「${lang.name}」（${a.language}）。
 使用者看完上一版（每格都是 AI 整張場景、字只是排在旁邊、沒有轉場、沒有字體動態、沒有程式畫的圖）的評價是「還可以」。這一版要把我們整套系統用滿：風格自己的動態字體（進場、退場、停留、強調）、轉場、程式畫的底與圖形，全部依歌詞意義挑，不要展示、不要關鍵字觸發。
 
-${owner}${existing}
+${owner}${earlierText}${existing}
 ## 這首歌（視窗內的句子，時間、拍數、段落、段落能量 0–1）
 速度 ${felt.tempo.toFixed(1)} bpm（一拍 ${beat.toFixed(3)} 秒）
 ${lines}
@@ -131,8 +150,9 @@ ${help(FX_HELP)}
 強調 emphasis 一定要指定 word（這句歌詞裡實際唱到的那個詞）；idle 用 fill 時字已經照唱的時間填色，不要再加 color 強調（兩者會互相抵銷），要強調就換別的 emphasis。排版要避開演員：scatter 不配滿版 scene 或特寫；ribbon 會橫越整個畫面，只配演員極小的鏡頭；handwrite 不配特寫。
 
 ## 候選設計（candidates，只給還沒定案的演員）
-每個候選是同一個演員的不同設計（造型、服裝或形狀、在這風格的 2–3 色墨裡的配色重點、年齡感或材質感）。for 填演員 id；idea 用繁體中文一句話（≤30 字）說設計想法；look 是給生圖模型的英文描述（具體：形狀、服裝、配件、哪些部位用哪個墨色、表情或姿態的氣質），不要寫風格說明（程式會加）；scheme 填配色方案 id（和定案演員一致）；together 用英文寫這個演員和已定案演員同框的一個合成視角（遵守人的鏡頭規則：背影或側面、手藏好、不遮住對方的 features；沒有定案演員就填空字串）。
+每個候選是同一個演員的不同設計（造型、服裝或形狀、在這風格的 2–3 色墨裡的配色重點、年齡感或材質感）。for 填演員 id；idea 用繁體中文一句話（≤30 字）說設計想法；look 是給生圖模型的英文描述（具體：形狀、服裝、配件、哪些部位用哪個墨色、表情或姿態的氣質），不要寫風格說明（程式會加）；scheme 填配色方案 id（和定案演員一致）；together 用英文寫這個演員和其他 main 演員（已定案的，或同樣還在挑的）同框的一個合成視角（遵守人的鏡頭規則：背影或側面、手藏好、不遮住對方的 features；只有一個 main 演員就填空字串）。
 
+${stretchRule}
 ## 避免每首歌長得一樣
 sameness 寫：這個腳本裡哪些東西是你覺得「換一首歌也會這樣做」的固定做法，提醒我們之後變成規則時要小心。
 
@@ -147,7 +167,8 @@ sameness 寫：這個腳本裡哪些東西是你覺得「換一首歌也會這�
  "shots": [{"id": "S01", "kind": "still|video", "frame": "cutout|scene", "cast": ["bike"], "size": "wide|medium|close", "subject": "英文，姿勢或動作（video 寫會動的是什麼、鏡頭鎖定）", "place": "scene 鏡頭才填：英文，地方；加一句為什麼需要真的地方", "side": "left|right|center", "height": 0.35, "camera": "static|push|pan|parallax", "step": false, "why": "繁中，這個鏡頭對應歌詞的什麼"}],
  "lines": [{"cue": "c001", "shots": ["S01", "S02"], "beats": 4, "ground": "ground id", "fx": "fx id 或空字串", "fxWhy": "繁中，為什麼這句要這個 fx（空字串＝不用）"}],
  "text": [{"cue": "c001", "template": "template id", "enter": "enter id", "exit": "exit id", "idle": "idle id", "emphasis": "emphasis id 或空字串（只在有詞要強調時）", "word": "被強調的那個詞（歌詞裡的原文），沒有就空字串", "why": "繁中，為什麼這句用這組"}],
- "candidates": [{"for": "演員 id", "letter": "A", "idea": "繁中一句", "look": "English", "scheme": "scheme id", "together": "English or empty"}],
+ "candidates": [{"for": "演員 id", "letter": "A", "idea": "繁中一句", "look": "English", "scheme": "scheme id", "together": "English or empty"${earlierPeople.length ? ', "from": "earlier（只有沿用舊人物的那個候選才填）"' : ''}}],
+${unsung.length ? ' "stretches": [{"kind": "intro|interlude|outro", "at": 227.5, "shots": ["S20", "S34"], "why": "繁中，這段的順序在故事裡的意思"}],\n' : ''}
  "sameness": "繁中"
 }`;
 }
@@ -216,10 +237,16 @@ async function drawSheet(c: Candidate) {
   const member = s.cast.find((m) => m.id === c.for);
   const must = member?.features.length ? ` It must show every one of these parts clearly in the views where they are visible: ${member.features.join('; ')}.` : '';
   const refs = fixed.filter((f) => existsSync(f.sheet));
-  const together = refs.length && c.together
-    ? ` Then, at the far right, one combined view: ${c.together} — the ${refs.map((f) => f.what).join(' and the ')} drawn exactly as in the reference sheet (same design, same inks), nothing added to it.`
+  // mains still being picked have no design yet: in the combined view they stand in as a plain flat grey silhouette,
+  // so the sheet shows scale and staging without fixing their look (an earlier-cast candidate keeps its partners' look)
+  const open = s.cast.filter((m) => m.tier === 'main' && !m.fixed && m.id !== c.for);
+  const earlier = c.from === 'earlier' && a.earlier && existsSync(a.earlier) ? a.earlier : '';
+  const standIns = open.length ? ` ${earlier ? `the ${open.map((m) => m.what).join(' and the ')} drawn as in the earlier reference picture, redrawn the same way` : `the ${open.map((m) => m.what).join(' and the ')} only as a plain flat light-grey silhouette stand-in with no inner detail (its design is not chosen yet)`}.` : '';
+  const together = c.together && (refs.length || open.length)
+    ? ` Then, at the far right, one combined view: ${c.together} —${refs.length ? ` the ${refs.map((f) => f.what).join(' and the ')} drawn exactly as in the reference sheet (same design, same inks), nothing added to it;` : ''}${standIns}`
     : '';
-  const text = `Subject reference sheet for a ${lang.name} music video, printed as a ${a.language} print. ${lang.props?.style ?? ''} Inks: ${scheme.what} — use only ink ${scheme.ink}, ink ${scheme.accent} and their overprint, on bare paper ${scheme.ground}; no other colours, no black outlines, no gradients.${refs.length ? ' The reference image is the sheet of another subject of the same video: match its drawing technique, ink handling and halftone exactly.' : ''}\nSubject: ${c.look}${must}\nDraw this same subject four times side by side on the bare paper, clearly separated and not overlapping, all the same size: front view, three-quarter view, side profile facing left, back view. Then one larger close-up of its most characteristic detail (the face or head if it has one, otherwise its key part).${together} The same design, proportions and ink placement in every view. Plain bare paper around every figure: no ground, no shadow on the ground, no scene, no frame, no panel borders, no text, no letters, no labels, no logo.`;
+  const redraw = earlier ? ' The last reference image is this song\'s earlier cast sheet in another style: draw the same person (same face, hair, clothes design and accessories) translated into this style and these inks; copy the design, not that drawing technique or its colours.' : '';
+  const text = `Subject reference sheet for a ${lang.name} music video, printed as a ${a.language} print. ${lang.props?.style ?? ''} Inks: ${scheme.what} — use only ink ${scheme.ink}, ink ${scheme.accent} and their overprint, on bare paper ${scheme.ground}; no other colours, no black outlines, no gradients.${refs.length ? ' The reference image is the sheet of another subject of the same video: match its drawing technique, ink handling and halftone exactly.' : ''}${redraw}\nSubject: ${c.look}${must}\nDraw this same subject four times side by side on the bare paper, clearly separated and not overlapping, all the same size: front view, three-quarter view, side profile facing left, back view. Then one larger close-up of its most characteristic detail (the face or head if it has one, otherwise its key part).${together} The same design, proportions and ink placement in every view. Plain bare paper around every figure: no ground, no shadow on the ground, no scene, no frame, no panel borders, no text, no letters, no labels, no logo.`;
   writeFileSync(file.replace(/\.jpg$/, '.txt'), text);
   for (const f of [join(homedir(), '.config/vjflow/gemini.env')]) if (existsSync(f)) for (const line of readFileSync(f, 'utf8').split('\n')) { const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; }
   const ai = new GoogleGenAI({ apiKey: process.env['GEMINI_API_KEY'] });
@@ -230,7 +257,7 @@ async function drawSheet(c: Candidate) {
   for (let k = 0; k < 3 && !r?.output_image?.data; k++) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      r = await (ai as any).interactions.create({ model, input: [{ type: 'text', text }, ...refs.map((f) => img(f.sheet))], response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '16:9', image_size: '2K' } });
+      r = await (ai as any).interactions.create({ model, input: [{ type: 'text', text }, ...refs.map((f) => img(f.sheet)), ...(earlier ? [img(earlier)] : [])], response_format: { type: 'image', mime_type: 'image/jpeg', aspect_ratio: '16:9', image_size: '2K' } });
     } catch (e) {
       if (k >= 2) throw e;
       await new Promise((ok) => setTimeout(ok, 8000 * 3 ** k));

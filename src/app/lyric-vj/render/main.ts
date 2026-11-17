@@ -6,7 +6,7 @@ import { ensureInkTones } from './ink-tones';
 import { glyphTexture } from './glyphs';
 import { surfaceKey } from './world-glyph';
 import { isPartTexel, partOf } from './surface-parts';
-import { isSignature, signatureCues, signatureIds, signatureLayer, signatureWindows } from './signature';
+import { isSignature, signatureCues, signatureIds, signatureLayer, signatureLineWindows, signatureWindows } from './signature';
 import { miniMomentLayer, miniMomentsOf } from './mini-moment';
 
 declare global {
@@ -42,8 +42,12 @@ const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasE
 // replaces the engine's boxes for those lines once it has laid them out
 const signatureP = isSignature(job) ? signatureLayer(job) : Promise.resolve(null);
 window.vjReady = engine.init().then(async () => {
+  engine.settleLineBoxes();
   const s = await signatureP;
-  if (s) engine.replaceLineBoxes(s.boxes());
+  if (s) {
+    signatureLineWindows(engine.lineWindows());
+    engine.replaceLineBoxes(s.boxes());
+  }
 });
 window.renderAt = (t) => engine.renderAt(t);
 const stage = document.getElementById('stage') as HTMLCanvasElement;
@@ -80,6 +84,9 @@ window.vjMetrics = () => {
 window.vjRows = () => engine.rowBreaks();
 // (the boxes the engine reports for the lines up at t: what props, figures and the keep-clear keep off; linebox-audit.mts)
 (window as unknown as { vjLineBoxes: (t: number) => unknown }).vjLineBoxes = (t: number) => engine.lineBoxesAt(t);
+(window as unknown as { vjInkNow: (id: string) => unknown }).vjInkNow = (id: string) => engine.inkNow(id);
+(window as unknown as { vjReadable: (id: string) => unknown }).vjReadable = (id: string) => engine.readableOf(id);
+(window as unknown as { vjGlyphsWhy: (id: string, t: number) => unknown }).vjGlyphsWhy = (id: string, t: number) => engine.glyphsWhy(id, t);
 window.vjSceneQa = () =>
   engine.sceneQa(async (t) => {
     await engine.renderAt(t);

@@ -39,6 +39,14 @@ export function signatureCues(lines: Line[], calls: { rt: Line['rt']; group: THR
   }
 }
 
+/**
+ * The engine's windows for the moments' lines straight from its laid-out lines, before any frame (a moment's reading
+ * box is measured then, SignatureLayer.boxes: guessed exits ended an echo's box before it left, 0.5 s short).
+ */
+export function signatureLineWindows(lines: { id: string; show: number; exitAt: number; exitDur: number }[]) {
+  for (const l of lines) if (hidden.has(l.id)) windows.set(l.id, { show: l.show, exitAt: l.exitAt, exitDur: l.exitDur });
+}
+
 /** The engine's exits for the moments' lines when no frame was rendered yet (a metrics-only page): from its own metrics. */
 export function signatureWindows(cues: { id: string; goneAt: number; readableFrom: number }[]) {
   for (const c of cues) if (hidden.has(c.id) && !windows.has(c.id)) windows.set(c.id, { show: c.readableFrom, exitAt: c.goneAt - 0.28, exitDur: 0.28 });
@@ -284,8 +292,6 @@ export interface SignatureLayer {
 export interface LineBoxOf { id: string; from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }
 /** How often a moment is sampled for its reading box (s). */
 const BOX_STEP = 0.05;
-/** A frame jolt's reach on a measured box (px). */
-const JOLT_PAD = 12;
 
 export interface Built { /** A freeze: the time the engine's frame is held at, while held. */ stageAt?: (t: number) => number | undefined; from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the text stands: the ground under it is read there for its inks. */ region: [number, number, number, number]; /** Everything the form draws, when wider than the text: what is fitted onto a story page's quiet paper (signature-place.ts); the region padded by default. */ extent?: Box; /** Draws the frame at t in the inks picked for the ground under the text (inkFor). */ draw: (t: number, on: Inks) => void; metrics: () => Record<string, unknown>[] }
 
@@ -905,6 +911,12 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         for (const t of ts) {
           x.save();
           x.setTransform(1, 0, 0, 1, 0, 0);
+          // (the frame's jolt at t, as compose shakes it)
+          const j = joltAt(jolts, t);
+          x.translate(W / 2 + j.dx, H / 2 + j.dy);
+          x.rotate(j.rot * RAD);
+          x.scale(j.zoom, j.zoom);
+          x.translate(-W / 2, -H / 2);
           drawing = b;
           if (p) { x.translate(p.tx, p.ty); x.scale(p.s, p.s); }
           b.draw(t, on);
@@ -916,8 +928,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       const ink = inked;
       inked = undefined;
       if (!ink.length) return [];
-      // (and a frame jolt's push: the whole frame shakes a few px with the beat)
-      const rect = { x0: Math.min(...ink.map((q) => q[0])) - JOLT_PAD, y0: Math.min(...ink.map((q) => q[1])) - JOLT_PAD, x1: Math.max(...ink.map((q) => q[2])) + JOLT_PAD, y1: Math.max(...ink.map((q) => q[3])) + JOLT_PAD };
+      const rect = { x0: Math.min(...ink.map((q) => q[0])), y0: Math.min(...ink.map((q) => q[1])), x1: Math.max(...ink.map((q) => q[2])), y1: Math.max(...ink.map((q) => q[3])) };
       return ownCues(moments[i]).map((id) => ({ id, from, to, rect }));
     }),
   };

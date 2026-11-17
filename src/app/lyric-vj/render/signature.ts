@@ -258,6 +258,8 @@ export type GroundAt = (t: number, x0: number, y0: number, x1: number, y1: numbe
 export interface SignatureGlyph { ch: string; x0: number; y0: number; x1: number; y1: number; a: number; ghost: boolean; /** The moment it was drawn for. */ at?: unknown }
 /** Set while a frame is composed: every character drawn goes in. */
 let drawn: SignatureGlyph[] | undefined;
+/** Set while a moment's reading box is measured (SignatureLayer.boxes): each character's ink, keyline and press included, frame px. */
+let inked: Box[] | undefined;
 let unsung = false;
 /** The moment being drawn (its characters are logged under it). */
 let drawing: unknown;
@@ -271,7 +273,19 @@ export interface SignatureLayer {
   metrics(): Record<string, unknown>[];
   /** The characters drawn on the last frame composed while `__vjInkProbe` was set. */
   glyphs(): SignatureGlyph[];
+  /**
+   * Where each moment's lines are really read (frame px) while it shows them: every character it draws over its time,
+   * sampled, with its keyline and press. The engine's own layout of those lines is hidden, so this replaces their boxes
+   * (engine replaceLineBoxes): what keeps props, figures and the keep-clear off the words.
+   */
+  boxes(): LineBoxOf[];
 }
+/** A line's reading box over a stretch, frame px. */
+export interface LineBoxOf { id: string; from: number; to: number; rect: { x0: number; y0: number; x1: number; y1: number } }
+/** How often a moment is sampled for its reading box (s). */
+const BOX_STEP = 0.05;
+/** A frame jolt's reach on a measured box (px). */
+const JOLT_PAD = 12;
 
 export interface Built { /** A freeze: the time the engine's frame is held at, while held. */ stageAt?: (t: number) => number | undefined; from: number; /** The engine's exits are read as it renders: lazily. */ to: () => number; jolts: Jolt[]; /** Where the text stands: the ground under it is read there for its inks. */ region: [number, number, number, number]; /** Everything the form draws, when wider than the text: what is fitted onto a story page's quiet paper (signature-place.ts); the region padded by default. */ extent?: Box; /** Draws the frame at t in the inks picked for the ground under the text (inkFor). */ draw: (t: number, on: Inks) => void; metrics: () => Record<string, unknown>[] }
 
@@ -310,6 +324,13 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     }
     c.fillStyle = fill;
     c.fillText(ch, a, b);
+    if (inked && ch.trim()) {
+      // (the em square, out by half the keyline and the press's offset, and 2 px for a face that reaches past its em)
+      const pad = (halo ? Math.max(3, size * 0.075) / 2 : 0) + 2;
+      const m = c.getTransform();
+      const pts = [[a - size / 2 - pad, b - size / 2 - pad], [a + size / 2 + pad + press, b - size / 2 - pad], [a - size / 2 - pad, b + size / 2 + pad + press], [a + size / 2 + pad + press, b + size / 2 + pad + press]].map(([px, py]) => m.transformPoint({ x: px, y: py }));
+      inked.push([Math.min(...pts.map((q) => q.x)), Math.min(...pts.map((q) => q.y)), Math.max(...pts.map((q) => q.x)), Math.max(...pts.map((q) => q.y))]);
+    }
     // (the measured ink probe asks where each character went on the frame, style-gate-ink.mts)
     if (drawn && ch.trim()) {
       const m = c.getTransform();
@@ -873,5 +894,31 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     },
     metrics: () => built.flatMap((b) => b.metrics()),
     glyphs: () => last,
+    boxes: () => built.flatMap((b, i) => {
+      const from = startOf.get(b) ?? b.from, to = b.to();
+      const p = placement.get(b);
+      const on = inksAt(job, b.from);
+      inked = [];
+      try {
+        // (the moment's own drawing at every sample: its sung times too, where a stamp kicks largest)
+        const ts = [...Array.from({ length: Math.max(1, Math.ceil((to - from) / BOX_STEP)) + 1 }, (_, k) => Math.min(to, from + k * BOX_STEP)), ...Object.values(moments[i].sung ?? {}).flat().flatMap((at) => [at, at + 0.03])].filter((t) => t >= from && t <= to);
+        for (const t of ts) {
+          x.save();
+          x.setTransform(1, 0, 0, 1, 0, 0);
+          drawing = b;
+          if (p) { x.translate(p.tx, p.ty); x.scale(p.s, p.s); }
+          b.draw(t, on);
+          x.restore();
+        }
+      } finally {
+        drawing = undefined;
+      }
+      const ink = inked;
+      inked = undefined;
+      if (!ink.length) return [];
+      // (and a frame jolt's push: the whole frame shakes a few px with the beat)
+      const rect = { x0: Math.min(...ink.map((q) => q[0])) - JOLT_PAD, y0: Math.min(...ink.map((q) => q[1])) - JOLT_PAD, x1: Math.max(...ink.map((q) => q[2])) + JOLT_PAD, y1: Math.max(...ink.map((q) => q[3])) + JOLT_PAD };
+      return ownCues(moments[i]).map((id) => ({ id, from, to, rect }));
+    }),
   };
 }

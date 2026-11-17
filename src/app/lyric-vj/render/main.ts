@@ -38,11 +38,16 @@ await ensureInkTones();
 if (job.layer === 'text' || job.layer === 'words') document.documentElement.style.background = document.body.style.background = 'transparent';
 const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasElement, job);
 (window as unknown as { vjEngine: LyricVjEngine }).vjEngine = engine;
-window.vjReady = engine.init();
+// signature moments (paid tiers): drawn over the engine's frame, their lines taken off it; where they really draw them
+// replaces the engine's boxes for those lines once it has laid them out
+const signatureP = isSignature(job) ? signatureLayer(job) : Promise.resolve(null);
+window.vjReady = engine.init().then(async () => {
+  const s = await signatureP;
+  if (s) engine.replaceLineBoxes(s.boxes());
+});
 window.renderAt = (t) => engine.renderAt(t);
 const stage = document.getElementById('stage') as HTMLCanvasElement;
-// signature moments (paid tiers): drawn over the engine's frame, their lines taken off it
-const signature = isSignature(job) ? await signatureLayer(job) : null;
+const signature = await signatureP;
 if (signature) engine.onCues = signatureCues as never;
 // mini moments (Q5 phase 2): drawn over the frame round their lines, every line kept (render/mini-moment.ts)
 const mini = miniMomentsOf(job).length ? await miniMomentLayer(job) : null;
@@ -73,6 +78,8 @@ window.vjMetrics = () => {
   return { ...m, cues: [...m.cues.filter((c) => !ids.has(c.id)), ...(signature.metrics() as unknown as typeof m.cues)] };
 };
 window.vjRows = () => engine.rowBreaks();
+// (the boxes the engine reports for the lines up at t: what props, figures and the keep-clear keep off; linebox-audit.mts)
+(window as unknown as { vjLineBoxes: (t: number) => unknown }).vjLineBoxes = (t: number) => engine.lineBoxesAt(t);
 window.vjSceneQa = () =>
   engine.sceneQa(async (t) => {
     await engine.renderAt(t);

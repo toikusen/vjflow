@@ -233,6 +233,42 @@ function placesWhileRead(layer: CueLayer, parent: THREE.Object3D, cuts: number[]
   return out;
 }
 
+/** How often a line's drawn glyphs are sampled over a box's stretch (s), and the most samples a stretch takes. */
+const INK_STEP = 0.1;
+const INK_SAMPLES = 80;
+/** A glyph counts toward its line's box from this opacity: a line fading out on its exit is not read any more. */
+export const INK_READ = 0.5;
+/**
+ * Where a line's glyphs are really drawn over [from, to] (frame px, the frame's edge clipped), each at its own pose and
+ * transform (a world's drift and swell, a wave's curve, an emphasis scale): the union of its glyph boxes (the layout's
+ * own, else the glyph cores, meshGlyphs) sampled every INK_STEP. The nominal layout box missed glyphs that a layout
+ * moves or curves past it, and everything that keeps clear of the words trusts that box. Undefined when nothing reads.
+ */
+function inkSpan(layer: CueLayer, parent: THREE.Object3D, from: number, to: number): Rect | undefined {
+  const end = Number.isFinite(to) ? to : from + 1;
+  const n = Math.min(INK_SAMPLES, Math.max(2, Math.ceil((end - from) / INK_STEP) + 1));
+  const vis = layer.group.visible;
+  layer.group.visible = true;
+  let r: Rect | undefined;
+  for (let k = 0; k < n; k++) {
+    const t = from + ((end - from) * k) / (n - 1);
+    const gs = measureAtRest(() => {
+      layer.update(Math.min(t, end - 0.001), { flash: 0, hit: 0, shake: 0 });
+      parent.updateMatrixWorld(true);
+      return layer.glyphBoxes ? layer.glyphBoxes() : meshGlyphs(layer.group);
+    });
+    for (const g of gs) {
+      if (g.a < INK_READ) continue;
+      const c = { x0: Math.max(0, g.x0), y0: Math.max(0, g.y0), x1: Math.min(W, g.x1), y1: Math.min(H, g.y1) };
+      if (c.x1 <= c.x0 || c.y1 <= c.y0) continue;
+      r = r ? { x0: Math.min(r.x0, c.x0), y0: Math.min(r.y0, c.y0), x1: Math.max(r.x1, c.x1), y1: Math.max(r.y1, c.y1) } : c;
+    }
+  }
+  layer.group.visible = vis;
+  return r;
+}
+const unionRect = (a: Rect, b?: Rect): Rect => (b ? { ...a, x0: Math.min(a.x0, b.x0), y0: Math.min(a.y0, b.y0), x1: Math.max(a.x1, b.x1), y1: Math.max(a.y1, b.y1) } : a);
+
 /** Where a sing-along's preview row stands (world px, measured at rest), if the line has one. */
 function previewBox(layer: CueLayer): THREE.Box3 | undefined {
   const box = new THREE.Box3();
@@ -1469,6 +1505,7 @@ export class LyricVjEngine {
       };
       if (live) this.cueLayers.splice(this.cueLayers.findIndex((c) => c.index! > i) >>> 0, 0, entry);
       else this.cueLayers.push(entry);
+      const before = this.lyricRects.length;
       if (this.job.treatment.graphics) {
         // where the line sits on screen, so background objects can make room for it
         // beat-cut throws its phrases all over the frame before the line settles: the whole frame is the line's
@@ -1497,6 +1534,13 @@ export class LyricVjEngine {
           }
         }
       }
+      // each box this line just reported also holds every glyph it really draws over the box's stretch (inkSpan)
+      if (this.job.treatment.graphics && shot.template !== 'beat-cut')
+        for (const r of this.lyricRects.slice(before)) {
+          if (r.id !== rt.cue.id) continue;
+          const ink = inkSpan(layer, fit ?? layer.group, r.from, r.to);
+          Object.assign(r, { rect: unionRect(r.rect, ink), rest: unionRect(r.rest, ink) });
+        }
       const onBoard = !!treatment.graphics && sectionAt(treatment.graphics, cue1.start).layers.some((l) => l.kind === 'led' && l.calls);
       if (split.calls.length && !onBoard) this.callLayers.push(this.makeCalls(rt, cue1, split.calls, settledBox(layer, fit)));
       // a call is sung words too: whatever is cut off at the line is cut off at it
@@ -1600,6 +1644,31 @@ export class LyricVjEngine {
     } finally {
       setDecidingInk(false);
     }
+  }
+
+  /**
+   * Lines a layer drawn over the engine shows elsewhere than the engine lays them (render/signature.ts: a wave moment
+   * set its line along the water at x 60 while its hidden vertical layout reported 215–1819, 世界のつづき 136 s): their
+   * boxes replace the engine's, and the rooms are laid again, so props, figures (f.lines) and the keep-clear see where
+   * the words really are.
+   */
+  replaceLineBoxes(boxes: { id: string; from: number; to: number; rect: Rect }[]) {
+    if (!boxes.length) return;
+    this.lineBoxes = boxes;
+    this.applyLineBoxes();
+    this.roomEvents = undefined;
+    this.layRooms();
+  }
+  /** QA: the boxes reported for the lines up at t (frame px): `rect` with its motion pad, `rest` where it rests. */
+  lineBoxesAt(t: number): { id: string; rect: Rect; rest: Rect }[] {
+    return this.lyricRects.filter((r) => t >= r.from && t <= r.to).map((r) => ({ id: r.id ?? '', rect: r.rect, rest: r.rest }));
+  }
+  /** Boxes a layer over the engine reports for its lines (replaceLineBoxes), kept for a line built again (live). */
+  private lineBoxes: { id: string; from: number; to: number; rect: Rect }[] = [];
+  private applyLineBoxes() {
+    if (!this.lineBoxes.length) return;
+    const ids = new Set(this.lineBoxes.map((b) => b.id));
+    this.lyricRects = [...this.lyricRects.filter((r) => !ids.has(r.id ?? '')), ...this.lineBoxes.map((b) => ({ id: b.id, from: b.from, to: b.to, rect: b.rect, rest: b.rect }))];
   }
 
   /** The room the lines leave each kinetic cut under them, for what it draws of its own. */
@@ -2506,6 +2575,7 @@ export class LyricVjEngine {
     this.layFine(c);
     this.settleHold(c);
     for (const call of this.callLayers) if (call.rt.showFrom < c.rt.exitAt + c.rt.exitDur && call.rt.exitAt + call.rt.exitDur > c.rt.showFrom) this.placeCall(call);
+    this.applyLineBoxes();
     this.layRooms([c.rt.showFrom, c.rt.exitAt + c.rt.exitDur]);
     this.textRoot.position.set(held.x, held.y, 0);
     this.textRoot.scale.setScalar(held.s);

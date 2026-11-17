@@ -244,7 +244,8 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   if (!key.length) return undefined;
   // (the words round the key keep the spaces between them: only shown glyphs were laid, so a Latin lead-in ran together,
   // "Harajukugirlsknowhowl" for 「Harajuku girls know how I」, Tokyo Drift c071, 2026-11-17; the run's outer spaces go)
-  const run = (ids: number[]) => { const vis = ids.filter((i) => shown[i]); return vis.length ? ids.filter((i) => i >= vis[0] && i <= vis.at(-1)!) : []; };
+  // (a real space only — U+0020, U+3000 — not a hidden punctuation mark's advance: it set a gap the line never had)
+  const run = (ids: number[]) => { const vis = ids.filter((i) => shown[i]); return vis.length ? ids.filter((i) => i >= vis[0] && i <= vis.at(-1)! && (shown[i] || /^[ \u3000]$/.test(gs[i].char))) : []; };
   const pre = run(gs.map((_, i) => i).filter((i) => i < key[0]));
   const post = run(gs.map((_, i) => i).filter((i) => i > key.at(-1)!));
   const adv = (ids: number[]) => ids.reduce((w, i) => w + gs[i].advance, 0) / tex;

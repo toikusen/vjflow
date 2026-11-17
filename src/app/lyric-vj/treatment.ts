@@ -111,7 +111,7 @@ export type ReviseLook = 'caret' | 'tape' | 'scribble' | 'stamp';
 export const REVISE_LOOKS: ReviseLook[] = ['caret', 'tape', 'scribble', 'stamp'];
 
 /** Real words only: the song's title, the part's name, the line's own key phrase. An empty `text` is the rule alone. */
-/** `note`: words the line director wrote for the line (a scene card, a chapter, an echo, a singer), checked by noteRefusal. */
+/** `note`: legacy — words a line director once wrote beside the line; never drawn now (render/fine-shown.ts). */
 export interface FineTier { kind: 'title' | 'section' | 'key' | 'rule' | 'note'; text: string; }
 
 export interface CueStyle {

@@ -6,7 +6,7 @@ import { kn, KNOBS } from '../../src/app/lyric-vj/render/knobs';
 import { ENTER_KINDS, EXIT_KINDS, IDLE_KINDS } from '../../src/app/lyric-vj/treatment';
 import { TEMPLATES } from './typehelp.mts';
 import { Cue, RECIPES } from './lineplan-core.mts';
-import { NOTE_PER_PART, noteRefusal, songScript, checkDirection, Ctx, directedPlan, Direction, directionSchema, directorBase, directorPrompt, EXCLUDED_FX, LineChoice, paidClock, PaidPlan, keyFor, resolveSame, rowsOf, setTogetherLines, SongIn, stackOf, TUNABLE, unsungCuts, usdOf, wordPieces } from './linedirect-core.mts';
+import { checkDirection, Ctx, directedPlan, Direction, directionSchema, directorBase, directorPrompt, EXCLUDED_FX, LineChoice, paidClock, PaidPlan, keyFor, resolveSame, rowsOf, setTogetherLines, SongIn, stackOf, TUNABLE, unsungCuts, usdOf, wordPieces } from './linedirect-core.mts';
 
 const why = { cut: '理由', layout: '理由', enter: '理由', idle: '理由', exit: '理由', decor: '' };
 const line = (cue: string, over: Partial<LineChoice> = {}): LineChoice => ({ cue, sameAs: '', cut: 'hold', pieces: [], layout: 'stair', side: 'left', enter: 'fade', idle: 'still', exit: 'fade', decor: 'none', note: '', noteKind: '', handoff: '', joinNext: '', lineCam: '', hit: '', emphasis: '', method: 'color', ground: '', evidence: '', why, ...over });
@@ -190,18 +190,10 @@ assert.ok(synced.includes('wordSync（逐字同步）') && synced.includes('不�
 assert.ok(synced.includes('絕不把名字或詞拆成單字') && synced.includes('前一個讓位'), 'word sync lands meaning units, and a roll call takes turns');
 
 // the director's own small words: never a part's name, a made-up number, an echo of nothing sung, a stranger singing
-assert.equal(noteRefusal('scene', '凌晨三點・月台', '我等你回來到天亮', [], []), undefined);
-assert.match(noteRefusal('chapter', '副歌', '我等你回來到天亮', [], []) ?? '', /generic/);
-assert.match(noteRefusal('scene', '03:00 月台', '我等你回來到天亮', [], []) ?? '', /numbers/);
-assert.equal(noteRefusal('scene', '第 2 天的車站', '第 2 次說再見', [], []), undefined, 'a number the line sings may stand');
-assert.equal(noteRefusal('echo', '整條街的燈', '你說過的話還留著', ['我等你回來到天亮', '整條街的燈都熄了'], []), undefined);
-assert.match(noteRefusal('echo', '從沒唱過', '你說過的話還留著', ['我等你回來到天亮'], []) ?? '', /sung before/);
-assert.match(noteRefusal('singer', '小明', 'x', [], ['阿花']) ?? '', /singers/);
-assert.match(noteRefusal('scene', '夜晚・橋邊', '夜晚的橋邊在飄雪', [], []) ?? '', /own words/, 'a scene that only repeats the line');
-assert.equal(noteRefusal('chapter', '又一個冬天', '數不盡想你的黑夜', [], []), undefined);
-assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五', 'x', [], []) ?? '', /characters/);
 // no director's small words beside a sung line, of any kind: viewers read unsung text set with the lyric as lyrics
 {
+  const core = await import('./linedirect-core.mts');
+  for (const gone of ['noteRefusal', 'songScript', 'NOTE_KINDS', 'NOTE_MAX', 'NOTE_PER_PART']) assert.ok(!(gone in core), `${gone} is gone with the notes`);
   for (const [noteKind, note] of [['echo', '整條街的燈'], ['scene', '凌晨三點・月台'], ['chapter', '又一個冬天'], ['singer', '阿花']]) {
     const cd = checkDirection(direction(full({ c2: { decor: 'fine-note', noteKind, note } })), ctx);
     assert.equal(cd.accepted.get('c2')?.note, undefined, `a ${noteKind} note is not set`);
@@ -211,7 +203,6 @@ assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五
   assert.ok(!prompt.includes('fine-note') && !prompt.includes('noteKind'), 'the prompt offers no notes');
   const lineProps = (directionSchema().properties as { lines: { items: { properties: Record<string, unknown>; required: string[] } } }).lines.items;
   assert.ok(!('note' in lineProps.properties) && !lineProps.required.includes('noteKind'), 'the schema asks for no note');
-  void NOTE_PER_PART;
 }
 
 // on a style world (paid-world.mts): the director chooses inside the world's closed pool
@@ -289,13 +280,3 @@ assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五
 }
 
 // a note is in the song's language: a Japanese song's chapter in Chinese is refused, the song's own words pass
-assert.equal(songScript(['またおんなじ歌を歌うたび', 'あなたを誘うでしょう']), 'ja');
-assert.equal(songScript(['數不盡想你的黑夜', '三年後的大雪']), 'zh');
-assert.equal(songScript(['사랑해', '너를']), 'ko');
-assert.equal(songScript(['I wanna drift', 'Tokyo night']), 'latin');
-assert.match(noteRefusal('chapter', '海邊童年的疑問', 'あなたを誘うでしょう', [], [], 'ja') ?? '', /language/);
-assert.equal(noteRefusal('chapter', '一・海辺の問い', 'あなたを誘うでしょう', [], [], 'ja'), undefined);
-assert.match(noteRefusal('scene', '夜の橋', '夜晚的橋邊在飄雪', [], [], 'zh') ?? '', /language/);
-assert.equal(noteRefusal('scene', '深夜・石橋', '我再也不在你身邊', [], [], 'zh'), undefined, 'a middle dot is no kana: a Chinese scene note stands');
-assert.match(noteRefusal('scene', '深夜・石橋', 'あなたを誘うでしょう', [], [], 'ja') ?? '', /language/, 'nor does it make Chinese Japanese');
-assert.equal(noteRefusal('echo', 'またおんなじ歌を', 'あなたを誘うでしょう', ['またおんなじ歌を歌うたび'], [], 'ja'), undefined, 'an echo is the song\'s own words');

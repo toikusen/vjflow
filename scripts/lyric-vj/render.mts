@@ -167,6 +167,8 @@ const fault = (msg: string) => { rendererErrors.add(msg); console.error(msg); };
 // watchSubjectCover): legibility is absolute, so the render fails on these — after its outputs are written, so the
 // frames can be looked at — unless --allow-cover
 const subjectCovers = new Set<string>();
+// (what keepClear left of a subject over a read line, on any tier: logged; fatal only with --cover-fatal)
+const subjectLeft = new Set<string>();
 /** Every line kept its sung tail: an exit no earlier than lastSung + SUNG_TAIL (a frame's slack), lines its layout keeps up left out. */
 const sungTailCheck = (cues: { id: string; text: string; lastSung: number; exitAt?: number; tail?: string }[], waits: { id: string; sec: number }[] = []) => {
   const failing = cues.filter((c) => c.tail === 'kept' && c.exitAt !== undefined && c.exitAt < c.lastSung + SUNG_TAIL - 0.034).map((c) => ({ id: c.id, text: c.text, lastSung: c.lastSung, exitAt: c.exitAt }));
@@ -207,7 +209,7 @@ async function openPage(): Promise<Page> {
   // of the code layer's reports a layer that failed to compile, threw, or drew nothing is a fault; its diagnostics
   // (lyric cover shares, slow frames, camera tracks, scene use) stay in the log, judged by their own rules (make.sh's
   // hides > 40 %)
-  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|lyric kept clear:|track |scene-use |room |subject covers:)/.test(m.text()) ? (console.error(m.text()), m.text().startsWith('code layer: subject covers:') && subjectCovers.add(m.text())) : fault(m.text())));
+  page.on('console', (m) => m.type() === 'error' && m.text().startsWith('code layer:') && (/^code layer: (slow:|lyric covered:|lyric kept clear:|track |scene-use |room |subject covers:|subject left over:)/.test(m.text()) ? (console.error(m.text()), m.text().startsWith('code layer: subject covers:') && subjectCovers.add(m.text()), m.text().startsWith('code layer: subject left over:') && subjectLeft.add(m.text())) : fault(m.text())));
   // a busy machine (several songs at once) can miss the ready timeout: one more try with longer patience before the
   // song fails (three style tests started together all timed out, then rendered fine one by one)
   for (let attempt = 0; ; attempt++) {
@@ -395,7 +397,8 @@ try {
     writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, subjectCovers: [...subjectCovers], cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws || keepClear.moved ? { keepClear } : {}) }, null, 1));
     status.outputs(outputs);
     // (fatal only where the seats guarantee room — the video stage's sprite clips — or when asked; other tiers log it)
-    if (subjectCovers.size && !a['allow-cover'] && coverFatal(!!a['cover-fatal'], assets)) {
+    if (!a['allow-cover'] && ((subjectCovers.size && coverFatal(!!a['cover-fatal'], assets)) || (subjectLeft.size && a['cover-fatal']))) {
+      subjectLeft.forEach((x) => subjectCovers.add(x));
       status.stage('render', { state: 'failed', message: `subject covers the lyric: ${[...subjectCovers][0].slice(0, 200)}` });
       throw new Error(`主體遮到正在讀的歌詞，輸出不算通過（${subjectCovers.size} 處）：\n${[...subjectCovers].slice(0, 12).join('\n')}`);
     }

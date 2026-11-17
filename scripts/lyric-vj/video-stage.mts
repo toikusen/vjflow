@@ -284,7 +284,7 @@ secs.forEach((sec, i) => {
     const shot = shots.get(l.sprite.replace(/_r\d+$/, ''));
     if (!shot) continue;
     // the cast keeps the inks it was drawn in, and a standing figure its ground
-    Object.assign(l, { print: 'own', shadow: shot.size !== 'close' && l['fx'] !== 'grid', ...(bleedOf.get(shot.id)?.length ? { bleed: bleedOf.get(shot.id) } : {}) });
+    Object.assign(l, { print: 'own', seated: true, shadow: shot.size !== 'close' && l['fx'] !== 'grid', ...(bleedOf.get(shot.id)?.length ? { bleed: bleedOf.get(shot.id) } : {}) });
     own += 1;
     const run = prev && prev.sprite === shot.id && prev.index === i - 1 ? prev.run : sec.start;
     const frames = join(a.clips!, `${shot.id}_f`, 'frames.json');

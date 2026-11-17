@@ -146,6 +146,8 @@ export interface KineticLayer {
    * (UNDER_ALPHA), instead of leaving the cut (dropping it emptied a minute of プラトニックチョロイン).
    */
   under?: boolean;
+  /** Seated by the video stage, whose seats guarantee the subject room: a reach into a read line is the seat's error. */
+  seated?: boolean;
   /** The song time the character comes up at, after a line going out over the cut's start was read (seatSubject). */
   waitFor?: number;
   /** The boxes (frame px) of the lines sung over a prop's cut: a prop sent to a corner takes one clear of them (layRooms). */
@@ -846,8 +848,13 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
           const reading = now <= b.strong + 1e-3;
           const strength = Math.min(clearStrength(l.lyricWeight ?? 1), reading ? 1 : Math.max(0, 1 - (now - b.strong) / Math.max(0.05, b.to - b.strong)));
           // (what is left over the words once keepClear has cut or faded it, not what reached in before)
-          const left = coverLeft(share, inside, strength, ctx.globalAlpha);
-          if (reading && left > 0 && frame && (l.until === undefined || now < l.until - 1e-3)) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, left, now);
+          // (a seated cut — the video stage's — reports its reach before keepClear: the seat's error, fatal in render.mts;
+          // any other only what keepClear leaves, logged)
+          const rep = coverReport(share, coverLeft(share, inside, strength, ctx.globalAlpha), !!l.seated);
+          if (reading && frame && (l.until === undefined || now < l.until - 1e-3)) {
+            if (rep.seat > 0 && ctx.globalAlpha >= SUBJECT_COVER_ALPHA) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, rep.seat, now);
+            if (rep.left > 0) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}:left`, l.sprite, rep.left, now, undefined, 'subject left over');
+          }
           const inner = draw;
           draw = () => void keepClear(ctx, clearStart, b, share, inside, inner, W, H, strength, true);
         }
@@ -1009,12 +1016,12 @@ export function cropOf(pic: { width: number; height: number }, crop?: [number, n
 export const SUBJECT_COVER_ALPHA = 0.5;
 const subjectCovers = new Map<string, number>();
 /** Reports a subject over a read lyric once per picture and place, again when its share grew: `code layer: subject covers:`. */
-export function watchSubjectCover(key: string, id: string, share: number, t: number, log: (line: string) => void = (x) => console.error(x)): string | undefined {
+export function watchSubjectCover(key: string, id: string, share: number, t: number, log: (line: string) => void = (x) => console.error(x), what = 'subject covers'): string | undefined {
   if ((globalThis as { __vjProbe?: boolean }).__vjProbe) return undefined;
   const seen = subjectCovers.get(key);
   if (seen !== undefined && share < seen + 0.02) return undefined;
   subjectCovers.set(key, share);
-  const line = `code layer: subject covers: ${id} hides ${(share * 100).toFixed(1)}% of the lyric box at ${t.toFixed(2)} s`;
+  const line = `code layer: ${what}: ${id} hides ${(share * 100).toFixed(1)}% of the lyric box at ${t.toFixed(2)} s`;
   log(line);
   return line;
 }
@@ -1028,6 +1035,8 @@ export function coverLeft(share: number, inside: number, strength: number, alpha
   return faded >= SUBJECT_COVER_ALPHA ? share : 0;
 }
 export { coverFatal } from './cover-fatal';
+/** A cut's subject over a read line: on a seated cut its whole reach (the seat's error), else what keepClear left. */
+export const coverReport = (share: number, left: number, seated: boolean) => ({ seat: seated ? Math.max(0, share) : 0, left: seated ? 0 : left });
 /** For tests: forget what was reported. */
 export const resetSubjectCovers = () => subjectCovers.clear();
 

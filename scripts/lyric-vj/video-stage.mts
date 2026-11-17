@@ -16,6 +16,7 @@ import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spre
 import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import { planStretches, realiseStretches, shotAt } from '../../src/app/lyric-vj/stretch-plan';
+import { previousShots } from '../../src/app/lyric-vj/video-cuts';
 
 const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
   // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
@@ -216,7 +217,8 @@ if (song) {
       const k = kOf(sec)!;
       if (k['fx'] === 'grid' || !bleedsTop(k.sprite)) continue;
       const i = inWin.indexOf(sec);
-      const before = [1, 2].map((d) => base(kOf(inWin[i - d])?.sprite)).filter(Boolean);
+      // (the first and second cut have fewer before them: none read past the start, Codex review)
+      const before = previousShots(inWin, i, (x) => base(kOf(x)?.sprite));
       const fresh = (x: string) => !bleedsTop(x) && !before.includes(x);
       const alt = cutOuts(cue.id).find(fresh) ?? [...shots.keys()].find((x) => shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`] && fresh(x)) ?? cutOuts(cue.id).find((x) => !bleedsTop(x));
       if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); swapped += 1; }

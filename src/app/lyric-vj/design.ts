@@ -89,7 +89,7 @@ export interface Design {
   signature?: Signature;
   /**
    * Shots may cut on any beat, not only on downbeats and line starts, and may be as short as MIN_SHOT_BEAT_CUT (the
-   * character video tier cuts its clips on the song's beat grid; char-cuts.ts).
+   * character video tier cuts its clips on the song's beat grid; scripts/lyric-vj/experiments/char-cuts.ts).
    */
   beatCuts?: boolean;
 }

@@ -1,3 +1,4 @@
+// Experiment-only (the character / subject video tiers' first edits): kept for reference, not part of any pipeline.
 // Cut grid for the character video tier: where the cuts fall and which planned shot each one shows.
 // The rhythm is read from the song itself (its beat grid, its energy curve, its line starts), never from fixed seconds:
 // a slow quiet song holds for bars, a loud fast one cuts every beat or two. What is shown is the song's own plan

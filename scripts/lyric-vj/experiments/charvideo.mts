@@ -13,8 +13,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { cutGrid, energyReader, stillShare, type Cut, type CutPlanLine } from '../../src/app/lyric-vj/char-cuts';
-import type { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
+import { cutGrid, energyReader, stillShare, type Cut, type CutPlanLine } from './char-cuts';
+import type { TreatmentV3 } from '../../../src/app/lyric-vj/treatment';
 
 export interface PlanShot {
   id: string;

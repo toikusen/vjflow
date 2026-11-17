@@ -1,7 +1,7 @@
-// npx tsx --test scripts/lyric-vj/char-cuts.test.mts
+// npx tsx --test scripts/lyric-vj/experiments/char-cuts.test.mts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cutGrid, energyReader, holdBeats, stillShare } from '../../src/app/lyric-vj/char-cuts';
+import { cutGrid, energyReader, holdBeats, stillShare } from './char-cuts';
 
 const grid = (bpm: number, from: number, to: number) => {
   const beat = 60 / bpm;

@@ -11,11 +11,11 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { cutGrid, energyReader, stillShare, type Cut, type CutPlanLine } from '../../src/app/lyric-vj/char-cuts';
-import type { SubjectScript, SubjectShot } from '../../src/app/lyric-vj/subject-script';
-import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
-import type { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
-import { NEEDS_ART } from '../../src/app/lyric-vj/render/kinetic';
+import { cutGrid, energyReader, stillShare, type Cut, type CutPlanLine } from './char-cuts';
+import type { SubjectScript, SubjectShot } from '../../../src/app/lyric-vj/subject-script';
+import { STYLE_WORLDS } from '../../../src/app/lyric-vj/style-worlds';
+import type { TreatmentV3 } from '../../../src/app/lyric-vj/treatment';
+import { NEEDS_ART } from '../../../src/app/lyric-vj/render/kinetic';
 
 const { values: a } = parseArgs({
   options: {

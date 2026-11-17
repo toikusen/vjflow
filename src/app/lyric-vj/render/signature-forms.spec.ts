@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from '../contrast';
-import { groundUnder, holdsInks, inkFor, Inks, READS } from './signature';
+import { groundUnder, holdsInks, inkFor, Inks, READS, windowGround, windowTimes } from './signature';
 import { isMore, riseKindOf, rowBreak, SMOKE_READS, smokeTone } from './signature-forms';
 import type { SignatureMoment } from '../signature-moments';
 
@@ -80,6 +80,24 @@ describe('a moment\'s line reads on every part of its ground, as a line does (é»
     expect(holdsInks(held, { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] })).toBe(false);
     const keyed = inkFor(inks('#26489E', '#F5EFE4'), { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] });
     expect(holdsInks(keyed, { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] })).toBe(true);
+  });
+});
+
+describe('a moment\'s inks are decided from its whole reading window, not from the frames drawn before', () => {
+  const white: { mean: string; mixed: boolean } = { mean: '#ffffff', mixed: false };
+  const grey = { mean: '#555555', mixed: false };
+  it('keylines a line whose window crosses a ground its ink fails on, whatever order the frames come in', () => {
+    const a = inkFor(inks('#26489E', '#F5EFE4'), windowGround([white, grey, white]));
+    const b = inkFor(inks('#26489E', '#F5EFE4'), windowGround([grey, white, white]));
+    expect(a).toEqual(b);
+    expect(a.halo).toBeDefined();
+  });
+  it('needs no keyline on a window that is white throughout', () => {
+    expect(inkFor(inks('#26489E', '#F5EFE4'), windowGround([white, white])).halo).toBeUndefined();
+  });
+  it('samples the window evenly, a few times a second, its ends included', () => {
+    expect(windowTimes(10, 12)).toEqual([10, 10.5, 11, 11.5, 11.95]);
+    expect(windowTimes(0, 100).length).toBeLessThanOrEqual(24);
   });
 });
 

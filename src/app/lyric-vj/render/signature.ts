@@ -86,6 +86,25 @@ export function groundUnder(c: Ctx, x0: number, y0: number, x1: number, y1: numb
 }
 /** The grid a moment's ground is read in (groundUnder tiles): a line's width in eighths, its height in halves. */
 const TILE_COLS = 8, TILE_ROWS = 2;
+/**
+ * The ground a moment's line is read on over its whole window: the grounds under it at the window's times (windowTimes)
+ * as one — their mean, mixed if any is, every part of each — so the ink and its keyline are one decision for the line,
+ * whatever frames were drawn before (a seek straight to a white frame had no keyline, one through a grey frame had).
+ */
+export function windowGround(grounds: Ground[]): Ground {
+  const rgb = grounds.map((g) => [1, 3, 5].map((i) => parseInt(g.mean.slice(i, i + 2), 16)));
+  const avg = [0, 1, 2].map((k) => Math.round(rgb.reduce((a, c) => a + c[k], 0) / Math.max(1, rgb.length)).toString(16).padStart(2, '0'));
+  return { mean: `#${avg.join('')}`, mixed: grounds.some((g) => g.mixed), tiles: [...new Set(grounds.flatMap((g) => [g.mean, ...(g.tiles ?? [])]))].sort() };
+}
+/** The times a moment's window [from, to) is read at: every half second (at most 24, spread evenly), its end included. */
+export function windowTimes(from: number, to: number): number[] {
+  const end = to - 0.05;
+  const step = Math.max(0.5, (end - from) / 23);
+  const out: number[] = [];
+  for (let t = from; t < end - 1e-6; t += step) out.push(+t.toFixed(3));
+  out.push(+end.toFixed(3));
+  return out;
+}
 /** The least contrast of a colour on any part of the ground (its mean when it was not read in parts). */
 export const worstOn = (c: string, ground: Ground) => Math.min(contrast(c, ground.mean), ...(ground.tiles ?? []).map((t) => contrast(c, t)));
 /** The colour moved toward black or white (whichever the ground is not) until it reads on the ground at `min`. */
@@ -846,6 +865,18 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   // each moment's inks are picked on the ground under its text as it comes up and held, so the type does not change
   // colour frame to frame; picked again only where the ground moved from under them (a camera's slide)
   const picked = new Map<Built, Inks>();
+  // (with the look behind readable at any time, each moment's inks are decided once from its whole window: windowGround)
+  const decided = new Map<Built, Inks>();
+  const decide = (b: Built, region: Box, behind: GroundAt) => {
+    let on = decided.get(b);
+    if (on) return on;
+    const from = startOf.get(b) ?? b.from;
+    const to = Math.min(b.to(), from + 60);
+    const grounds = windowTimes(from, Number.isFinite(to) ? to : from + 8).map((t) => behind(t, ...region)).filter((g): g is Ground => !!g);
+    on = inkFor(inksAt(job, b.from), grounds.length ? windowGround(grounds) : groundUnder(x, ...region));
+    decided.set(b, on);
+    return on;
+  };
   let last: SignatureGlyph[] = [];
 
   /** The lyric layer rendered on its own (transparent): nothing under the moments on this canvas. */
@@ -884,7 +915,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
         // (a layered output's canvas is cleared under the moment: its inks read the look behind, as the opaque frame's do)
         // (picked once there: the look is drawn again for it, not read off this frame)
-        const regional = () => (layered && behind ? picked.get(b) ?? inksOn(b, behind(t, ...region) ?? groundUnder(x, ...region)) : inksOn(b, groundUnder(x, ...region)));
+        const regional = () => (behind ? decide(b, region, behind) : inksOn(b, groundUnder(x, ...region)));
         const drawB = (on: Inks) => {
           drawing = b;
           if (!p) return b.draw(t, on);

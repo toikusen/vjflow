@@ -3524,10 +3524,11 @@ export class LyricVjEngine {
    * inks must come from here, never from the cleared canvas (phase 4d round 6: the echo picked cream on cream over
    * `--layer back`). Undefined without a look.
    */
-  groundBehind(t: number, x0: number, y0: number, x1: number, y1: number): { mean: string; mixed: boolean } | undefined {
+  groundBehind(t: number, x0: number, y0: number, x1: number, y1: number): { mean: string; mixed: boolean; tiles: string[] } | undefined {
     const box = new THREE.Box3(new THREE.Vector3(x0 - W / 2, H / 2 - y1, 0), new THREE.Vector3(x1 - W / 2, H / 2 - y0, 0));
     const b = this.backdropAt(t, box, true);
-    return b && { mean: b.mean, mixed: b.mixed };
+    // (and its flat grounds, each a fifth of the box or more: a moment's ink is read on every part, signature.ts)
+    return b && { mean: b.mean, mixed: b.mixed, tiles: b.grounds };
   }
 
   /**

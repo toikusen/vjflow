@@ -143,6 +143,12 @@ export function sectionAt(look: GraphicsLook, t: number): LookSection {
 }
 
 /**
+ * How long a section's layers stay on screen past the next section's start: the next one's transition draws them under
+ * it (drawLook), so a line coming up then is read over them too.
+ */
+export const lingerAfter = (next?: { transition?: SectionTransition }) => (next?.transition ? (next.transition.dur ?? TRANSITION_SEC[next.transition.kind] ?? 0) : 0);
+
+/**
  * Draws the look at t; `image(asset)` returns a loaded picture for photo layers. `codeTime` (real time) drives a code
  * layer when t is held to a language's drawings per second: stepping a camera move at 12 fps read as objects
  * teleporting.
@@ -159,7 +165,7 @@ export function drawLook(ctx: CanvasRenderingContext2D, look: GraphicsLook, t: n
   const tr = sec.transition;
   const i = look.sections.indexOf(sec);
   const prev = i > 0 ? look.sections[i - 1] : undefined;
-  const dur = tr ? (tr.dur ?? TRANSITION_SEC[tr.kind]) : 0;
+  const dur = lingerAfter(sec);
   const k = tr && prev && !(globalThis as { __vjProbe?: boolean }).__vjProbe ? (t - sec.start) / dur : 1;
   // a composer transition that moves or scales a picture shows the song's paper past it, never the empty canvas
   const sheet = k < 1 && tr && prev ? (sec.layers.find((l) => l.kind === 'kinetic' && l.yields) as KineticLayer | undefined) : undefined;

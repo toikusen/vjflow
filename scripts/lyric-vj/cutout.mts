@@ -143,6 +143,8 @@ export function arrange(actors: Actor[], aspects: Record<string, number>, side: 
 
 /** The code layer of one cut-out shot: the spec in, a canvas drawing out (graphics.ts runs it as `(ctx, f)`). */
 const PAGE_JS = readFileSync(new URL('./page.js', import.meta.url), 'utf8');
+/** Where the shot's figures stand clear of the lines read over it (clear-place.js, run in the drawing on f.lines). */
+export const CLEAR_JS = readFileSync(new URL('./clear-place.js', import.meta.url), 'utf8');
 
 /** The pose change of a shot moved onto the nearest downbeat (a fraction of the shot), so a fast song's figures move on the beat. */
 export const onBeat = (at: number, start: number, dur: number, downbeats: number[]) => {
@@ -159,6 +161,9 @@ const kick=S.pulse&&f.beat?0.022*f.beat.pulse:0;
 const cam=(k)=>{const zz=(1+(z-1)*k)*(1+kick*k);ctx.translate(W/2,H/2);ctx.scale(zz,zz);ctx.translate(-W/2-S.focus[0]*W/2*(1-1/zz),-H/2+S.focus[1]*H/2*(1-1/zz));};
 const L=S.layout||{shape:'full'},K=S.look||{};
 ${PAGE_JS}
+${CLEAR_JS}
+{const t0=(f.t??a)-a,ls=(f.lines||[]).map(r=>({from:r.from-t0,to:r.to-t0,x0:r.x0,y0:r.y0,x1:r.x1,y1:r.y1})),key=ls.map(r=>[r.from,r.to,r.x0,r.y0,r.x1,r.y1].map(v=>Math.round(v*10)).join()).join(';');
+ const c=f.cache||{};if(!c.place||c.place.key!==key)c.place={key,v:placeClear(S,W,H,ls)};S.actors=c.place.v.actors;S.props=c.place.v.props;}
 drawPage(ctx,W,H,L,K,f.scene(S.set),z,cam,S.actors.length?Math.min(...S.actors.map(q=>q.ground)):0,S.frame);
 ctx.save();cam(1);
 const props=(front)=>S.props.forEach((q,i)=>{if(!!q.front!==front)return;const pic=f.img(q.sprite);if(!pic)return;const hh=q.h*H,ww=hh*(S.aspects[q.sprite]||1);let x=(q.x+1)/2*W+(q.walk||0)*W*p,y=q.y*H,rot=0;

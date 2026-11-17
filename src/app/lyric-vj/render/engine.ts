@@ -64,7 +64,7 @@ import { MEDIA, stepTime } from '../medium';
 import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
-import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
+import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, lingerAfter, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
 import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
@@ -1614,7 +1614,9 @@ export class LyricVjEngine {
         for (const l of sec.layers as Layer[]) {
           // a director's drawing sees every line read over its section, to place its props clear of them (f.room, f.fit)
           if (l.kind === 'code') {
-            const until = secs[i + 1]?.start ?? Infinity;
+            // (and the lines that come up while the next section's transition still draws it: a cut-out figure stood
+            // whole on 三年後的大雪's next line through the warp, cut out only by the keep-clear)
+            const until = (secs[i + 1]?.start ?? Infinity) + lingerAfter(secs[i + 1]);
             // (a sing-along's preview row too: the drawing composes clear of it)
             l.lines = [...this.lyricRects.map((r) => ({ ...r, rect: r.rest })), ...this.keepOut].filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => ({ from: r.from, to: r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
             continue;

@@ -55,7 +55,8 @@ out/research/styles/clips5/dark-glitch-tsuzuki/job.json
 out/research/wordsync-rise/rise/sixth/sig/video4/job.json
 out/research/q1-1109/no-inline/clip5-spy/after/job.json
 out/research/linedirect/_stub/clip/job.json
-out/research/linedirect/yt_hCCskTJwvuc/full2/job.jsonout/research/wordsync-rise/sekai/clip-final/job.json
+out/research/linedirect/yt_hCCskTJwvuc/full2/job.json
+out/research/wordsync-rise/sekai/clip-final/job.json
 out/research/wordsync-rise/snow/clip-final/job.json
 out/research/gaps-1104/try/sig-spy/job.json
 out/research/linebox-audit/synthetic/sekai-slice.json

@@ -12,6 +12,7 @@ import { fontCache } from './font-cache.mts';
 import { parseArgs } from 'node:util';
 import { endAtVoice, silentTail, timingGate } from '../../src/app/lyric-vj/timing-qa';
 import { SUNG_TAIL } from '../../src/app/lyric-vj/render/sung-tail';
+import { coverFatal } from '../../src/app/lyric-vj/render/cover-fatal';
 import { frameStats, visualIssues, type FrameStats } from '../../src/app/lyric-vj/visual-qa';
 import { keyPhrases, splitSongTitle } from '../../src/app/lyric-vj/structure';
 import * as esbuild from 'esbuild';
@@ -44,6 +45,7 @@ const { values: a } = parseArgs({
     'motion-frames': { type: 'string' }, // QA: line ids whose motion check runs on every frame (60 fps), comma-separated
     live: { type: 'boolean', default: false }, // build each line near its time, as the browser preview does (composer plans only)
     'allow-cover': { type: 'boolean', default: false }, // keep a render whose subject covered a read lyric (QA only: the rule is that it never does)
+    'cover-fatal': { type: 'boolean', default: false }, // fail on a subject cover outside the video stage too (it fails there by default: kinetic.ts coverFatal)
   },
 });
 if (!['whole', 'stagger', 'cut'].includes(a.entrance!)) throw new Error(`--entrance 只能是 whole、stagger 或 cut（收到 ${a.entrance}）`);
@@ -392,7 +394,8 @@ try {
     };
     writeFileSync(join(out, 'metrics.json'), JSON.stringify({ version, ...report, subjectCovers: [...subjectCovers], cues: m.cues, textGuard: m.textGuard, links: m.links, rendererErrors: [...rendererErrors], ...(pageChecks.frames || pageChecks.glyphFrames ? { pageChecks } : {}), ...(keepClear.draws || keepClear.moved ? { keepClear } : {}) }, null, 1));
     status.outputs(outputs);
-    if (subjectCovers.size && !a['allow-cover']) {
+    // (fatal only where the seats guarantee room — the video stage's sprite clips — or when asked; other tiers log it)
+    if (subjectCovers.size && !a['allow-cover'] && coverFatal(!!a['cover-fatal'], assets)) {
       status.stage('render', { state: 'failed', message: `subject covers the lyric: ${[...subjectCovers][0].slice(0, 200)}` });
       throw new Error(`主體遮到正在讀的歌詞，輸出不算通過（${subjectCovers.size} 處）：\n${[...subjectCovers].slice(0, 12).join('\n')}`);
     }

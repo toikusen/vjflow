@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cropOf, drawKinetic, resetSubjectCovers, SUBJECT_COVER_ALPHA, watchSubjectCover } from './kinetic';
+import { coverFatal, coverLeft, cropOf, drawKinetic, resetSubjectCovers, SUBJECT_COVER_ALPHA, watchSubjectCover } from './kinetic';
 import { alphaBounds, clipEnvelope } from './sprite-clip';
 
 describe('a subject is seated by its whole motion envelope and the cut\'s camera', () => {
@@ -51,5 +51,21 @@ describe('the subject stands on its own stage, not on the cut\'s camera', () => 
       expect(set, cam).toBeGreaterThan(0);
       expect(set, cam).toBeLessThan(draw);
     }
+  });
+});
+
+describe('a subject cover is what is left of it after keepClear (Codex review: grid + centred lyrics failed whole renders)', () => {
+  it('counts nothing where keepClear cuts the box out at full strength', () => {
+    expect(coverLeft(0.3, 0.4, 1, 1)).toBe(0);
+  });
+  it('counts a cover the clear only fades, while what is left is drawn strongly', () => {
+    expect(coverLeft(0.3, 0.05, 0.4, 1)).toBeCloseTo(0.3, 6);
+    expect(coverLeft(0.3, 0.05, 0.4, 0.3)).toBe(0);
+    expect(coverLeft(0, 0, 0.4, 1)).toBe(0);
+  });
+  it('fails a render on a cover only where the seat design guarantees room (sprite clips of the video stage) or when asked', () => {
+    expect(coverFatal(false, { 'spr:S18': { kind: 'image', url: 'x' } })).toBe(false);
+    expect(coverFatal(false, { 'spr:S18_r0': { kind: 'video', url: 'x', frames: { pattern: 'p', count: 2, fps: 24 } } })).toBe(true);
+    expect(coverFatal(true, {})).toBe(true);
   });
 });

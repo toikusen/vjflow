@@ -4,7 +4,7 @@
 // so nothing here needs to know about the song; `age` is the time since the cut.
 
 import { drawMove, Env, Flow, kn, MORE, MORE_FX } from './kinetic-more';
-import { CLEAR_FROM, clearStrength, coverOf, CoverCrop, CoverRect, keepClear, watchCover } from './cover';
+import { clearAlpha, CLEAR_FROM, clearStrength, coverOf, CoverCrop, CoverRect, keepClear, watchCover } from './cover';
 import { BoardLayer, drawBoard } from './board';
 import { drawStage, StageLayer } from './stage';
 import { halftone, lineArt, lineStage } from './print';
@@ -844,8 +844,10 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
         for (const b of boxes) {
           const [share, inside] = coverOf(sized, m, (-w / 2) * s, (-h / 2) * s, w * s, h * s, b, src);
           const reading = now <= b.strong + 1e-3;
-          if (reading && share > 0 && frame && (l.until === undefined || now < l.until - 1e-3) && ctx.globalAlpha >= SUBJECT_COVER_ALPHA) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, now);
           const strength = Math.min(clearStrength(l.lyricWeight ?? 1), reading ? 1 : Math.max(0, 1 - (now - b.strong) / Math.max(0.05, b.to - b.strong)));
+          // (what is left over the words once keepClear has cut or faded it, not what reached in before)
+          const left = coverLeft(share, inside, strength, ctx.globalAlpha);
+          if (reading && left > 0 && frame && (l.until === undefined || now < l.until - 1e-3)) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, left, now);
           const inner = draw;
           draw = () => void keepClear(ctx, clearStart, b, share, inside, inner, W, H, strength, true);
         }
@@ -1016,6 +1018,16 @@ export function watchSubjectCover(key: string, id: string, share: number, t: num
   log(line);
   return line;
 }
+/**
+ * How much of the lyric box a subject still covers once keepClear has drawn it: nothing where the box is cut out (full
+ * strength), the share it reached where the clear only fades it and it is still drawn at SUBJECT_COVER_ALPHA or more.
+ */
+export function coverLeft(share: number, inside: number, strength: number, alpha: number): number {
+  if (share <= 0 || strength >= 1) return 0;
+  const faded = alpha * (1 - Math.max(0, strength) * (1 - clearAlpha(inside)));
+  return faded >= SUBJECT_COVER_ALPHA ? share : 0;
+}
+export { coverFatal } from './cover-fatal';
 /** For tests: forget what was reported. */
 export const resetSubjectCovers = () => subjectCovers.clear();
 

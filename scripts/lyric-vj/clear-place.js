@@ -43,39 +43,49 @@ function placeClear(S, W, H, lines) {
   // figures, left to right: each keeps its side of the one before (two people facing each other never swap places) and
   // stays apart from it; its width stays on the frame as far as the director had it, but for a close figure, which may
   // step partly out past the frame's side (cropped by the frame reads as framing; cut by a line's hole it reads as a fault)
-  const asp = (q) => Math.max(S.aspects[q.sprite] || 0.4, q.then ? S.aspects[q.then] || 0.4 : 0);
-  const actorBox = (q, x, s) => { const hh = q.h * s * H, half = (hh * asp(q)) / 2 * 1.04, cx = ((x + 1) / 2) * W, foot = q.ground * H; return { x0: cx - half, y0: foot - hh * 1.01, x1: cx + half, y1: foot }; };
+  // (the pose showing at t when given: a wide reaching pose that gives way to a slim one before the line comes up is
+  // placed by the slim one; without t, the wider of the two, as the figures' spacing)
+  const asp = (q, t) => (t === undefined || !q.then ? Math.max(S.aspects[q.sprite] || 0.4, q.then ? S.aspects[q.then] || 0.4 : 0) : S.aspects[t >= q.at * dur ? q.then : q.sprite] || 0.4);
+  const actorBox = (q, x, s, t) => { const hh = q.h * s * H, half = (hh * asp(q, t)) / 2 * 1.04, cx = ((x + 1) / 2) * W, foot = q.ground * H; return { x0: cx - half, y0: foot - hh * 1.01, x1: cx + half, y1: foot }; };
   const inFrame = (q, b) => { const own = actorBox(q, q.x, 1), crop = q.h >= CLOSE ? CROP * (own.x1 - own.x0) : 0; return b.x0 >= Math.min(own.x0, -crop) && b.x1 <= Math.max(own.x1, W + crop); };
   const scalesOf = (q) => SCALES.filter((s) => s === 1 || q.h * s >= Math.min(q.h, MIN_H));
-  const order = S.actors.map((q, i) => i).sort((i, j) => S.actors[i].x - S.actors[j].x);
-  let actors = S.actors.slice();
-  let edge = -Infinity, stuck = 0, moved = 0, shrunk = 0;
-  order.forEach((i, n) => {
-    const q = S.actors[i];
-    // (and short of the next figure as the director had it: that one only ever makes room further on)
-    const next = order[n + 1] === undefined ? Infinity : actorBox(S.actors[order[n + 1]], S.actors[order[n + 1]].x, 1).x0 - GAP;
-    const ok = (x, s) => { const b = actorBox(q, x, s); return inFrame(q, b) && b.x0 >= edge && (b.x1 <= next || x <= q.x); };
-    const keep = hit(() => actorBox(q, q.x, 1)) === 0;
-    const got = keep ? { x: q.x, s: 1 } : search(q.x, scalesOf(q), (x, s) => actorBox(q, x, s), ok);
-    if (!got) stuck++;
-    else if (!keep) { moved++; if (got.s < 1) shrunk++; }
-    actors[i] = got && !keep ? Object.assign({}, q, { x: got.x, h: q.h * got.s }) : q;
-    edge = Math.max(edge, actorBox(actors[i], actors[i].x, 1).x1 + GAP);
-  });
-  // one figure boxed in by its partner: the two (or more) slide together, as the director spaced them, before anyone is
-  // left for the keep-clear
+  // one pass over the figures in a direction (1: left to right): each keeps clear of the lines and on its side of the one
+  // placed before it; `gentle`, it also stops short of the next one as the director had it (only the figures under a line
+  // move), else it may push the next one along (the next one then makes room in turn)
+  const pack = (dir, gentle) => {
+    const order = S.actors.map((q, i) => i).sort((i, j) => dir * (S.actors[i].x - S.actors[j].x));
+    const out = S.actors.slice();
+    let edge = -dir * Infinity, stuck = 0, moved = 0, shrunk = 0, cost = 0;
+    order.forEach((i, n) => {
+      const q = S.actors[i];
+      const nq = S.actors[order[n + 1]];
+      const next = !gentle || !nq ? dir * Infinity : dir > 0 ? actorBox(nq, nq.x, 1).x0 - GAP : actorBox(nq, nq.x, 1).x1 + GAP;
+      const side = (b) => (dir > 0 ? b.x0 >= edge : b.x1 <= edge);
+      const ok = (x, s) => { const b = actorBox(q, x, s); return inFrame(q, b) && side(b) && (dir > 0 ? b.x1 <= next || x <= q.x : b.x0 >= next || x >= q.x); };
+      const keep = side(actorBox(q, q.x, 1)) && hit((t) => actorBox(q, q.x, 1, t)) === 0;
+      const got = keep ? { x: q.x, s: 1 } : search(q.x, scalesOf(q), (x, s, t) => actorBox(q, x, s, t), ok);
+      if (!got) stuck++;
+      else if (!keep) { moved++; if (got.s < 1) shrunk++; cost += Math.abs(got.x - q.x) + (1 - got.s); }
+      out[i] = got && !keep ? Object.assign({}, q, { x: got.x, h: q.h * got.s }) : q;
+      const b = actorBox(out[i], out[i].x, 1);
+      edge = dir > 0 ? Math.max(edge, b.x1 + GAP) : Math.min(edge, b.x0 - GAP);
+    });
+    return { actors: out, stuck, moved, shrunk, cost };
+  };
+  const gentle = pack(1, true);
+  let { actors, stuck, moved, shrunk } = gentle;
+  // one figure boxed in by its partner: the two (or more) slide together at full size, as the director spaced them; else
+  // the one under the line pushes its partner along (or back), each shrinking a little only where it must; else they
+  // slide together a little smaller. Only then is anyone left for the keep-clear
   if (stuck && S.actors.length > 1) {
-    const scales = SCALES.filter((s) => S.actors.every((q) => scalesOf(q).includes(s)));
     const group = (dx, s) => S.actors.map((q) => Object.assign({}, q, { x: q.x + dx, h: q.h * s }));
-    const fits = (dx, s) => group(dx, s).every((g, k) => inFrame(S.actors[k], actorBox(g, g.x, 1)) && hit(() => actorBox(g, g.x, 1)) === 0);
+    const fits = (dx, s) => group(dx, s).every((g, k) => inFrame(S.actors[k], actorBox(g, g.x, 1)) && hit((t) => actorBox(g, g.x, 1, t)) === 0);
     const dxs = Array.from({ length: 401 }, (_, k) => -2 + k * 0.01).sort((a, b) => Math.abs(a) - Math.abs(b));
-    for (const s of scales) {
-      const dx = dxs.find((d) => fits(d, s));
-      if (dx === undefined) continue;
-      actors = group(dx, s);
-      stuck = 0; moved = S.actors.length; shrunk = s < 1 ? S.actors.length : 0;
-      break;
-    }
+    const slide = (s) => { const dx = dxs.find((d) => fits(d, s)); return dx === undefined ? undefined : { actors: group(dx, s), stuck: 0, moved: S.actors.length, shrunk: s < 1 ? S.actors.length : 0 }; };
+    const push = () => [pack(1, false), pack(-1, false)].filter((r) => !r.stuck).sort((a, b) => a.cost - b.cost)[0];
+    const shrunkScales = SCALES.filter((s) => s < 1 && S.actors.every((q) => scalesOf(q).includes(s)));
+    const got = slide(1) || push() || shrunkScales.map(slide).find(Boolean);
+    if (got) ({ actors, stuck, moved, shrunk } = got);
   }
   res.stuck += stuck; res.moved += moved; res.shrunk += shrunk;
 

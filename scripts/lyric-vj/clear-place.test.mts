@@ -146,3 +146,21 @@ test('two figures with no room for one beside the other slide together, keeping 
   assert.ok(Math.abs((pb.x - pa.x) - (b.x - a.x)) < 1e-9, 'same spacing');
   assert.ok(!meets(box(pa), line) && !meets(box(pb), line));
 });
+
+test('lines at both sides and no room for two as spaced: the one under a line pushes its partner along, order kept', () => {
+  // (三年後的大雪 79–84.7 s: he reaches wide, then searches slim as the left line comes in through the next warp; she
+  // stands in the middle; the right side is read the whole shot)
+  const lines: Box[] = [{ from: 0, to: 3.88, x0: 1351, y0: 40, x1: 1714, y1: 953 }, { from: 3.52, to: 5.66, x0: 1507, y0: 40, x1: 1744, y1: 950 }, { from: 5.68, to: 8.06, x0: 134, y0: 40, x1: 566, y1: 948 }];
+  const him = actor(-0.5, { sprite: 'reach', then: 'search', at: 0.5, h: 0.85, ground: 1 }), her = actor(0.05, { sprite: 'she', h: 0.58, ground: 0.86 });
+  const r = placeClear(shot([him, her], [], { dur: 5.68, zoom: [1, 1.02], focus: [-0.25, 0.1], aspects: { reach: 0.63, search: 0.33, she: 0.38 } }), W, H, lines);
+  assert.equal(r.stuck, 0);
+  const [ph, pr] = r.actors;
+  assert.ok(ph.x < pr.x, 'he stays left of her');
+  assert.equal(ph.h, him.h, 'the one under the line keeps his size');
+  assert.ok(pr.h >= her.h * 0.7, 'she shrinks a little at most');
+  assert.ok(!meets(box(ph, 0.33), lines[2]), 'his search pose is clear of the incoming line');
+  assert.ok(!meets(box(ph, 0.63), lines[0]), 'his reach is clear of the line read first');
+  assert.ok(lines.every((l) => !meets(box(pr, 0.38), l)));
+  assert.equal(ph.ground, him.ground);
+  assert.equal(pr.ground, her.ground);
+});

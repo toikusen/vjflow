@@ -797,7 +797,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       // a figure on its ground ellipse stands a little above the frame's foot, so its feet and the ellipse stay inside
       // (a figure never pressed past the frame's side: its whole width inside, a margin kept; a grid's copies keep their panels)
       // (a drawing cropped at its left or right runs off that edge of the frame when it stands on that side)
-      const bleedX = !corner && !panelArts && l.side !== 'center' && l.bleed?.includes(l.side === 'left' || l.flip ? 'left' : 'right') ? (l.side === 'left' || l.flip ? (w * rs) / 2 - W * 0.02 : W - (w * rs) / 2 + W * 0.02) : undefined;
+      // (under a top seat too: a cropped side stands on the frame's edge rather than cut flat mid-frame; both sides cropped
+      // or neither on its own side, the side it stands on)
+      const onLeft = l.side === 'left' || l.flip;
+      const bleedSide = !corner && !panelArts && l.bleed ? (l.bleed.includes('left') && l.bleed.includes('right') ? (onLeft ? 'left' : 'right') : l.bleed.includes('left') ? 'left' : l.bleed.includes('right') ? 'right' : undefined) : undefined;
+      const bleedX = bleedSide === 'left' ? (w * rs) / 2 - W * 0.02 : bleedSide === 'right' ? W - (w * rs) / 2 + W * 0.02 : undefined;
       ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : bleedX ?? inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(rock * (seed % 2 ? 1 : -1));

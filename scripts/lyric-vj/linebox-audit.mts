@@ -48,9 +48,9 @@ if (process.argv[1]?.endsWith('linebox-audit.mts')) {
   let total = 0, failed = 0, loadFailed = 0;
   for (const jobFile of jobFiles) {
     // (a job file that is gone or broken fails the run like one that does not load)
-    let jobText = '';
-    try { jobText = readFileSync(jobFile, 'utf8'); } catch (e) { console.log(`FAIL ${relative(ROOT, jobFile)}: cannot read (${(e as Error).message.split('\n')[0]})`); loadFailed++; continue; }
-    const job = JSON.parse(jobText) as { window?: { start: number; end: number }; cues: { id: string; start: number; end: number }[]; treatment: { shots: { id: string; template: string }[]; cues: { cueId: string; shot: string; world?: { set?: string } }[] } };
+    let jobJson: unknown;
+    try { jobJson = JSON.parse(readFileSync(jobFile, 'utf8')); } catch (e) { console.log(`FAIL ${relative(ROOT, jobFile)}: cannot read (${(e as Error).message.split('\n')[0]})`); loadFailed++; continue; }
+    const job = jobJson as { window?: { start: number; end: number }; cues: { id: string; start: number; end: number }[]; treatment: { shots: { id: string; template: string }[]; cues: { cueId: string; shot: string; world?: { set?: string } }[] } };
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
     const errors: string[] = [];
     page.on('pageerror', (e) => errors.push(e.message));

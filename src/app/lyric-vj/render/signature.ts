@@ -271,10 +271,24 @@ let drawn: SignatureGlyph[] | undefined;
  * and press included, frame px, merged as they come (a long moment's samples run into the tens of thousands).
  */
 let inked: { b?: Box } | undefined;
-/** While measuring: the ink drawn into each offscreen canvas (its own px), carried onto whatever it is drawn into. */
-let offInk: WeakMap<object, Box> | undefined;
-/** While composing: the characters drawn into each offscreen canvas (its own px), carried the same way. */
-let offDrawn: WeakMap<object, SignatureGlyph[]> | undefined;
+/**
+ * What each offscreen canvas holds (its own px): its ink bounds and its characters, carried onto whatever it is drawn
+ * into (carryDraws). Kept with the canvas for as long as it lives, so a canvas a form caches across frames (melt's
+ * glyph pictures) carries its ink however often it is drawn again; a canvas drawn into in a later session (a frame
+ * composed, a moment measured) starts its record afresh, as its content does.
+ */
+const records = new WeakMap<object, { s: number; b?: Box; gs: SignatureGlyph[] }>();
+let session = 0;
+/** A new frame or measure: what is drawn into a canvas from now on replaces what it held before. */
+export const newCanvasSession = () => ++session;
+/** A canvas's record to write into (afresh when it was written in an earlier session). */
+export function canvasRecord(canvas: object) {
+  let r = records.get(canvas);
+  if (!r || r.s !== session) records.set(canvas, (r = { s: session, gs: [] }));
+  return r;
+}
+/** What a canvas holds, whenever it was drawn. */
+export const canvasHolds = (canvas: object) => records.get(canvas);
 /**
  * Runs `fn` with every drawImage carrying what an offscreen canvas holds (its ink bounds, its characters) onto the
  * context it is drawn into, through drawImage's source and destination rects and that context's transform: a wipe's
@@ -286,15 +300,15 @@ function carryDraws<T>(frame: CanvasRenderingContext2D, fn: () => T): T {
   proto.drawImage = function (this: CanvasRenderingContext2D, img: CanvasImageSource, ...args: number[]) {
     const sized = img as { width: number; height: number };
     const m = this.getTransform();
-    const ink = offInk?.get(img as object);
-    const local = ink && inkThroughDraw(ink, sized, args);
-    if (local && inked && offInk) {
+    const held = canvasHolds(img as object);
+    const local = held?.b && inkThroughDraw(held.b, sized, args);
+    if (local) {
       const box = boxThrough(m, local);
-      if (this === frame) inked.b = growBox(inked.b, box);
-      else offInk.set(this.canvas, growBox(offInk.get(this.canvas), box));
+      if (this !== frame) canvasRecord(this.canvas).b = growBox(canvasRecord(this.canvas).b, box);
+      else if (inked) inked.b = growBox(inked.b, box);
     }
-    const gs = offDrawn?.get(img as object);
-    if (gs && offDrawn) {
+    const gs = held?.gs;
+    if (gs?.length) {
       const moved = gs.flatMap((g) => {
         const l = inkThroughDraw([g.x0, g.y0, g.x1, g.y1], sized, args);
         if (!l) return [];
@@ -302,7 +316,7 @@ function carryDraws<T>(frame: CanvasRenderingContext2D, fn: () => T): T {
         return [{ ...g, x0, y0, x1, y1, a: g.a * this.globalAlpha }];
       });
       if (this === frame) drawn?.push(...moved);
-      else offDrawn.set(this.canvas, [...(offDrawn.get(this.canvas) ?? []), ...moved]);
+      else canvasRecord(this.canvas).gs.push(...moved);
     }
     return (plain as (...a: unknown[]) => void).call(this, img, ...args);
   } as typeof proto.drawImage;
@@ -324,7 +338,10 @@ const boxThrough = (m: { a: number; b: number; c: number; d: number; e: number; 
  * source rect misses it.
  */
 export function inkThroughDraw(ink: Box, size: { width: number; height: number }, args: number[]): Box | undefined {
-  const [sx, sy, sw, sh, dx, dy, dw, dh] = args.length >= 8 ? args : args.length >= 4 ? [0, 0, size.width, size.height, ...args.slice(0, 4)] : [0, 0, size.width, size.height, args[0], args[1], size.width, size.height];
+  const raw = args.length >= 8 ? args : args.length >= 4 ? [0, 0, size.width, size.height, ...args.slice(0, 4)] : [0, 0, size.width, size.height, args[0], args[1], size.width, size.height];
+  // (a negative width or height is a rect measured the other way, not a flip: the Canvas spec normalises both rects)
+  const norm = (o: number, l: number) => (l < 0 ? [o + l, -l] : [o, l]);
+  const [[sx, sw], [sy, sh], [dx, dw], [dy, dh]] = [norm(raw[0], raw[2]), norm(raw[1], raw[3]), norm(raw[4], raw[6]), norm(raw[5], raw[7])];
   const [x0, y0, x1, y1] = [Math.max(ink[0], sx), Math.max(ink[1], sy), Math.min(ink[2], sx + sw), Math.min(ink[3], sy + sh)];
   if (x1 <= x0 || y1 <= y0 || !sw || !sh) return undefined;
   const [kx, ky] = [dw / sw, dh / sh];
@@ -393,21 +410,23 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     }
     c.fillStyle = fill;
     c.fillText(ch, a, b);
-    if (inked && ch.trim()) {
+    if (ch.trim() && (c !== x || inked || drawn)) {
       // (the em square, out by half the keyline and the press's offset, and 2 px for a face that reaches past its em)
       const pad = (halo ? Math.max(3, size * 0.075) / 2 : 0) + 2;
-      const box = boxThrough(c.getTransform(), [a - size / 2 - pad, b - size / 2 - pad, a + size / 2 + pad + press, b + size / 2 + pad + press]);
-      // (on the frame: frame px; on an offscreen canvas (a wipe's or slice's row) its own px, carried when it is drawn)
-      if (c === x) inked.b = growBox(inked.b, box);
-      else offInk?.set(c.canvas, growBox(offInk.get(c.canvas), box));
-    }
-    // (the measured ink probe asks where each character went on the frame, style-gate-ink.mts)
-    if (drawn && ch.trim()) {
-      const [x0, y0, x1, y1] = boxThrough(c.getTransform(), [a - size / 2, b - size / 2, a + size / 2, b + size / 2]);
+      const m = c.getTransform();
+      const box = boxThrough(m, [a - size / 2 - pad, b - size / 2 - pad, a + size / 2 + pad + press, b + size / 2 + pad + press]);
+      // (the measured ink probe asks where each character went on the frame, style-gate-ink.mts)
+      const [x0, y0, x1, y1] = boxThrough(m, [a - size / 2, b - size / 2, a + size / 2, b + size / 2]);
       const g = { ch, x0, y0, x1, y1, a: c.globalAlpha, ghost: unsung, at: drawing };
-      // (on an offscreen canvas, its own px: carried onto the frame when the canvas is drawn there, carryDraws)
-      if (c === x) drawn.push(g);
-      else offDrawn?.set(c.canvas, [...(offDrawn.get(c.canvas) ?? []), g]);
+      if (c === x) {
+        if (inked) inked.b = growBox(inked.b, box);
+        drawn?.push(g);
+      } else {
+        // (an offscreen canvas (a wipe's row, melt's cached glyph) keeps both in its own px, carried when it is drawn)
+        const r = canvasRecord(c.canvas);
+        r.b = growBox(r.b, box);
+        r.gs.push(g);
+      }
     }
   };
   /** One sung character: ghost tone until its time, then full ink with a short stamp. */
@@ -944,7 +963,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       x.scale(j.zoom, j.zoom);
       x.translate(-W / 2, -H / 2);
       x.drawImage(stage, 0, 0, W, H);
-      offDrawn = new WeakMap();
+      newCanvasSession();
       carryDraws(x, () => { for (const b of built) {
         if (!text || t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
         const p = placement.get(b);
@@ -963,7 +982,6 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         };
         drawB(regional());
       } });
-      offDrawn = undefined;
       return out;
     },
     metrics: () => built.flatMap((b) => b.metrics()),
@@ -973,7 +991,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       const p = placement.get(b);
       const on = inksAt(job, b.from);
       inked = {};
-      offInk = new WeakMap();
+      newCanvasSession();
       // (the probe's list of the last frame's characters is not this measure's)
       const keepDrawn = drawn;
       drawn = undefined;
@@ -1000,7 +1018,6 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       }
       const ink = inked.b;
       inked = undefined;
-      offInk = undefined;
       if (!ink) return [];
       const rect = { x0: ink[0], y0: ink[1], x1: ink[2], y1: ink[3] };
       return ownCues(moments[i]).map((id) => ({ id, from, to, rect }));

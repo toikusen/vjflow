@@ -1730,8 +1730,9 @@ export class LyricVjEngine {
           if (crop) l.crop = crop;
           // the lines' boxes over the cut: a prop sent to a corner takes the one they leave clear
           if (l.sprite) l.over = allRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
-          // (each with its times, for the draw: the subject is measured and kept clear by each line's own box, kinetic.ts)
-          if (l.sprite) l.boxes = allRects.filter((r) => Math.min(until + 1, r.to) - Math.max(sec.start - 1, r.from) > 0).map((r) => ({ from: r.from, to: r.to, strong: r.strong ?? r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
+          // (each with its times, for the draw: the subject is measured and kept clear by each line's own box at rest — the
+          // box it is seated by; the motion-padded box cut a strip out of a figure as a blown-up line glided in, kinetic.ts)
+          if (l.sprite) l.boxes = allRects.filter((r) => Math.min(until + 1, r.to) - Math.max(sec.start - 1, r.from) > 0).map((r) => ({ from: r.from, to: r.to, strong: r.strong ?? r.to, x0: r.rest.x0, y0: r.rest.y0, x1: r.rest.x1, y1: r.rest.y1 }));
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
           const band = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
           // the side band or the rows above or below the lines: whichever lets the figure stand larger (under a blown-up
@@ -2142,7 +2143,15 @@ export class LyricVjEngine {
       this.textRoot.add(f.group);
       const [from, to] = layer.readable();
       // a phrase set again small is only there while it is being sung
-      this.fines.push({ id: rt.cue.id, layer: f, from: fine.kind === 'key' ? Math.max(from, rt.cue.start) : from, to: fine.kind === 'key' ? Math.min(to, rt.cue.end) : to, rt });
+      const fineFrom = fine.kind === 'key' ? Math.max(from, rt.cue.start) : from, fineTo = fine.kind === 'key' ? Math.min(to, rt.cue.end) : to;
+      this.fines.push({ id: rt.cue.id, layer: f, from: fineFrom, to: fineTo, rt });
+      // (its small words are read too: the subject is seated clear of them and kept clear, as of any line — a fine
+      // note sat on the rider's head under 「眺め」, 2026-11-17)
+      f.group.visible = true;
+      f.group.updateMatrixWorld(true);
+      const b = new THREE.Box3().setFromObject(f.group);
+      f.group.visible = false;
+      if (!b.isEmpty()) this.keepOut.push({ id: `${rt.cue.id}:fine`, from: fineFrom, to: fineTo, rect: { x0: b.min.x + W / 2 - 8, y0: H / 2 - b.max.y - 8, x1: b.max.x + W / 2 + 8, y1: H / 2 - b.min.y + 8 } });
     }
   }
   /** The contrast the chosen build has on its ground, per line, as last read (groundLight). */
@@ -2596,7 +2605,7 @@ export class LyricVjEngine {
     lz.built.add(i);
     setWordSafe(true);
     this.lyricRects = this.lyricRects.filter((r) => r.id !== lz.styled[i].cue.id && r.id !== `${lz.styled[i].cue.id}:call`);
-    this.keepOut = this.keepOut.filter((r) => r.id !== lz.styled[i].cue.id);
+    this.keepOut = this.keepOut.filter((r) => r.id !== lz.styled[i].cue.id && r.id !== `${lz.styled[i].cue.id}:fine`);
     // a line is measured on the frame, not on the type layer as this moment's sway and kick have left it
     const held = { x: this.textRoot.position.x, y: this.textRoot.position.y, s: this.textRoot.scale.x };
     this.textRoot.position.set(0, 0, 0);

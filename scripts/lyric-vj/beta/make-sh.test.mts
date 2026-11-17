@@ -29,6 +29,8 @@ function tree(o: { tier?: 'none' | 'img' | 'hybrid'; plan?: boolean; concept?: {
     // line (after the clear), REACH what reached in before it (keepClear cut it away)
     '  [ -n "$HIDES" ] && echo "code layer: subject left over: p1 hides ${HIDES}.0% of the lyric box at 3.00 s"',
     '  [ -n "$REACH" ] && echo "code layer: lyric covered: p1 hides ${REACH}% of the lyric box (90% of it inside) at 3.0 s (cut 3.0)"',
+    // a director\'s drawing\'s cover, logged after its keep-clear (graphics.ts: share × shown)
+    '  [ -n "$DRAWN" ] && echo "code layer: lyric covered: p1 hides ${DRAWN}% of the lyric box (60% of it inside) at 4.0 s (shot 2)"',
     'fi',
     // the delivery gate: QUALITY_HOLD names the fault, else the video passes
     'if [[ "$2" == *quality.mts ]]; then',
@@ -130,6 +132,9 @@ test('make.sh: a figure keepClear cut off the words does not hold the video; wha
   const held = tree().make({ HIDES: '45' });
   assert.equal(held.status, 10);
   assert.match(held.stdout, /有歌詞被遮住 45%/);
+  const drawn = tree().make({ DRAWN: '52' });
+  assert.equal(drawn.status, 10, 'a director\'s drawing over the words after its keep-clear still holds the video');
+  assert.match(drawn.stdout, /有歌詞被遮住 52%/);
 });
 
 test('make.sh hybrid: the gate reads the plan check from noimg/, where the hybrid plan ran', () => {

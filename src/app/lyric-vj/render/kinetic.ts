@@ -800,8 +800,12 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       // (under a top seat too: a cropped side stands on the frame's edge rather than cut flat mid-frame; both sides cropped
       // or neither on its own side, the side it stands on)
       const onLeft = l.side === 'left' || l.flip;
-      const bleedSide = !corner && !panelArts && l.bleed ? (l.bleed.includes('left') && l.bleed.includes('right') ? (onLeft ? 'left' : 'right') : l.bleed.includes('left') ? 'left' : l.bleed.includes('right') ? 'right' : undefined) : undefined;
-      const bleedX = bleedSide === 'left' ? (w * rs) / 2 - W * 0.02 : bleedSide === 'right' ? W - (w * rs) / 2 + W * 0.02 : undefined;
+      const mine = onLeft ? 'left' : 'right';
+      const bleedSide = !corner && !panelArts && l.bleed ? (l.bleed.includes(mine) ? mine : l.side === 'center' && (l.bleed.includes('left') || l.bleed.includes('right')) ? (l.bleed.includes('left') ? 'left' : 'right') : undefined) : undefined;
+      const bleedX0 = bleedSide === 'left' ? (w * rs) / 2 - W * 0.02 : bleedSide === 'right' ? W - (w * rs) / 2 + W * 0.02 : undefined;
+      // (never onto a line read there: with words on that edge the figure keeps its seat, kept clear below)
+      const onEdge = bleedX0 !== undefined && (l.boxes ?? []).some((b) => now >= b.from - 1e-3 && now <= b.strong + 1e-3 && b.x0 < bleedX0 + (w * rs) / 2 && b.x1 > bleedX0 - (w * rs) / 2 && b.y0 < y + (h * rs) / 2 && b.y1 > y - (h * rs) / 2);
+      const bleedX = onEdge ? undefined : bleedX0;
       ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : bleedX ?? inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(rock * (seed % 2 ? 1 : -1));

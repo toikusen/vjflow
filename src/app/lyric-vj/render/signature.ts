@@ -266,8 +266,71 @@ export type GroundAt = (t: number, x0: number, y0: number, x1: number, y1: numbe
 export interface SignatureGlyph { ch: string; x0: number; y0: number; x1: number; y1: number; a: number; ghost: boolean; /** The moment it was drawn for. */ at?: unknown }
 /** Set while a frame is composed: every character drawn goes in. */
 let drawn: SignatureGlyph[] | undefined;
-/** Set while a moment's reading box is measured (SignatureLayer.boxes): each character's ink, keyline and press included, frame px. */
-let inked: Box[] | undefined;
+/**
+ * Set while a moment's reading box is measured (SignatureLayer.boxes): the bounds of every character's ink, keyline
+ * and press included, frame px, merged as they come (a long moment's samples run into the tens of thousands).
+ */
+let inked: { b?: Box } | undefined;
+/** While measuring: the ink drawn into each offscreen canvas (its own px), carried onto whatever it is drawn into. */
+let offInk: WeakMap<object, Box> | undefined;
+/** While composing: the characters drawn into each offscreen canvas (its own px), carried the same way. */
+let offDrawn: WeakMap<object, SignatureGlyph[]> | undefined;
+/**
+ * Runs `fn` with every drawImage carrying what an offscreen canvas holds (its ink bounds, its characters) onto the
+ * context it is drawn into, through drawImage's source and destination rects and that context's transform: a wipe's
+ * or slice's row is stamped on its own canvas, then drawn onto the frame at y≈520, cut in halves and slid apart.
+ */
+function carryDraws<T>(frame: CanvasRenderingContext2D, fn: () => T): T {
+  const proto = CanvasRenderingContext2D.prototype;
+  const plain = proto.drawImage;
+  proto.drawImage = function (this: CanvasRenderingContext2D, img: CanvasImageSource, ...args: number[]) {
+    const sized = img as { width: number; height: number };
+    const m = this.getTransform();
+    const ink = offInk?.get(img as object);
+    const local = ink && inkThroughDraw(ink, sized, args);
+    if (local && inked && offInk) {
+      const box = boxThrough(m, local);
+      if (this === frame) inked.b = growBox(inked.b, box);
+      else offInk.set(this.canvas, growBox(offInk.get(this.canvas), box));
+    }
+    const gs = offDrawn?.get(img as object);
+    if (gs && offDrawn) {
+      const moved = gs.flatMap((g) => {
+        const l = inkThroughDraw([g.x0, g.y0, g.x1, g.y1], sized, args);
+        if (!l) return [];
+        const [x0, y0, x1, y1] = boxThrough(m, l);
+        return [{ ...g, x0, y0, x1, y1, a: g.a * this.globalAlpha }];
+      });
+      if (this === frame) drawn?.push(...moved);
+      else offDrawn.set(this.canvas, [...(offDrawn.get(this.canvas) ?? []), ...moved]);
+    }
+    return (plain as (...a: unknown[]) => void).call(this, img, ...args);
+  } as typeof proto.drawImage;
+  try {
+    return fn();
+  } finally {
+    proto.drawImage = plain;
+  }
+}
+const growBox = (a: Box | undefined, b: Box): Box => (a ? [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])] : b);
+/** A box through a 2D transform (its four corners' bounds). */
+const boxThrough = (m: { a: number; b: number; c: number; d: number; e: number; f: number }, [x0, y0, x1, y1]: Box): Box => {
+  const pts = [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].map(([px, py]) => [m.a * px + m.c * py + m.e, m.b * px + m.d * py + m.f]);
+  return [Math.min(...pts.map((q) => q[0])), Math.min(...pts.map((q) => q[1])), Math.max(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[1]))];
+};
+/**
+ * Where ink drawn into a canvas lands when that canvas is drawn with drawImage's arguments (`args` after the image):
+ * the source rect's part of it, scaled onto the destination rect, in the drawing context's own px. Undefined when the
+ * source rect misses it.
+ */
+export function inkThroughDraw(ink: Box, size: { width: number; height: number }, args: number[]): Box | undefined {
+  const [sx, sy, sw, sh, dx, dy, dw, dh] = args.length >= 8 ? args : args.length >= 4 ? [0, 0, size.width, size.height, ...args.slice(0, 4)] : [0, 0, size.width, size.height, args[0], args[1], size.width, size.height];
+  const [x0, y0, x1, y1] = [Math.max(ink[0], sx), Math.max(ink[1], sy), Math.min(ink[2], sx + sw), Math.min(ink[3], sy + sh)];
+  if (x1 <= x0 || y1 <= y0 || !sw || !sh) return undefined;
+  const [kx, ky] = [dw / sw, dh / sh];
+  const [ax, ay, bx, by] = [dx + (x0 - sx) * kx, dy + (y0 - sy) * ky, dx + (x1 - sx) * kx, dy + (y1 - sy) * ky];
+  return [Math.min(ax, bx), Math.min(ay, by), Math.max(ax, bx), Math.max(ay, by)];
+}
 let unsung = false;
 /** The moment being drawn (its characters are logged under it). */
 let drawing: unknown;
@@ -333,15 +396,18 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
     if (inked && ch.trim()) {
       // (the em square, out by half the keyline and the press's offset, and 2 px for a face that reaches past its em)
       const pad = (halo ? Math.max(3, size * 0.075) / 2 : 0) + 2;
-      const m = c.getTransform();
-      const pts = [[a - size / 2 - pad, b - size / 2 - pad], [a + size / 2 + pad + press, b - size / 2 - pad], [a - size / 2 - pad, b + size / 2 + pad + press], [a + size / 2 + pad + press, b + size / 2 + pad + press]].map(([px, py]) => m.transformPoint({ x: px, y: py }));
-      inked.push([Math.min(...pts.map((q) => q.x)), Math.min(...pts.map((q) => q.y)), Math.max(...pts.map((q) => q.x)), Math.max(...pts.map((q) => q.y))]);
+      const box = boxThrough(c.getTransform(), [a - size / 2 - pad, b - size / 2 - pad, a + size / 2 + pad + press, b + size / 2 + pad + press]);
+      // (on the frame: frame px; on an offscreen canvas (a wipe's or slice's row) its own px, carried when it is drawn)
+      if (c === x) inked.b = growBox(inked.b, box);
+      else offInk?.set(c.canvas, growBox(offInk.get(c.canvas), box));
     }
     // (the measured ink probe asks where each character went on the frame, style-gate-ink.mts)
     if (drawn && ch.trim()) {
-      const m = c.getTransform();
-      const [p, q] = [m.transformPoint({ x: a - size / 2, y: b - size / 2 }), m.transformPoint({ x: a + size / 2, y: b + size / 2 })];
-      drawn.push({ ch, x0: Math.min(p.x, q.x), y0: Math.min(p.y, q.y), x1: Math.max(p.x, q.x), y1: Math.max(p.y, q.y), a: c.globalAlpha, ghost: unsung, at: drawing });
+      const [x0, y0, x1, y1] = boxThrough(c.getTransform(), [a - size / 2, b - size / 2, a + size / 2, b + size / 2]);
+      const g = { ch, x0, y0, x1, y1, a: c.globalAlpha, ghost: unsung, at: drawing };
+      // (on an offscreen canvas, its own px: carried onto the frame when the canvas is drawn there, carryDraws)
+      if (c === x) drawn.push(g);
+      else offDrawn?.set(c.canvas, [...(offDrawn.get(c.canvas) ?? []), g]);
     }
   };
   /** One sung character: ghost tone until its time, then full ink with a short stamp. */
@@ -878,7 +944,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       x.scale(j.zoom, j.zoom);
       x.translate(-W / 2, -H / 2);
       x.drawImage(stage, 0, 0, W, H);
-      for (const b of built) {
+      offDrawn = new WeakMap();
+      carryDraws(x, () => { for (const b of built) {
         if (!text || t < (startOf.get(b) ?? b.from) || t >= b.to()) continue;
         const p = placement.get(b);
         const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
@@ -895,7 +962,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
           x.restore();
         };
         drawB(regional());
-      }
+      } });
+      offDrawn = undefined;
       return out;
     },
     metrics: () => built.flatMap((b) => b.metrics()),
@@ -904,11 +972,15 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
       const from = startOf.get(b) ?? b.from, to = b.to();
       const p = placement.get(b);
       const on = inksAt(job, b.from);
-      inked = [];
+      inked = {};
+      offInk = new WeakMap();
+      // (the probe's list of the last frame's characters is not this measure's)
+      const keepDrawn = drawn;
+      drawn = undefined;
       try {
         // (the moment's own drawing at every sample: its sung times too, where a stamp kicks largest)
         const ts = [...Array.from({ length: Math.max(1, Math.ceil((to - from) / BOX_STEP)) + 1 }, (_, k) => Math.min(to, from + k * BOX_STEP)), ...Object.values(moments[i].sung ?? {}).flat().flatMap((at) => [at, at + 0.03])].filter((t) => t >= from && t <= to);
-        for (const t of ts) {
+        carryDraws(x, () => { for (const t of ts) {
           x.save();
           x.setTransform(1, 0, 0, 1, 0, 0);
           // (the frame's jolt at t, as compose shakes it)
@@ -921,14 +993,16 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
           if (p) { x.translate(p.tx, p.ty); x.scale(p.s, p.s); }
           b.draw(t, on);
           x.restore();
-        }
+        } });
       } finally {
         drawing = undefined;
+        drawn = keepDrawn;
       }
-      const ink = inked;
+      const ink = inked.b;
       inked = undefined;
-      if (!ink.length) return [];
-      const rect = { x0: Math.min(...ink.map((q) => q[0])), y0: Math.min(...ink.map((q) => q[1])), x1: Math.max(...ink.map((q) => q[2])), y1: Math.max(...ink.map((q) => q[3])) };
+      offInk = undefined;
+      if (!ink) return [];
+      const rect = { x0: ink[0], y0: ink[1], x1: ink[2], y1: ink[3] };
       return ownCues(moments[i]).map((id) => ({ id, from, to, rect }));
     }),
   };

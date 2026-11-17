@@ -41,13 +41,24 @@ const engine = new LyricVjEngine(document.getElementById('stage') as HTMLCanvasE
 // signature moments (paid tiers): drawn over the engine's frame, their lines taken off it; where they really draw them
 // replaces the engine's boxes for those lines once it has laid them out
 const signatureP = isSignature(job) ? signatureLayer(job) : Promise.resolve(null);
+// (measured on the engine's windows for the moments' lines; a live build lays lines as it goes, so each new window
+// measures the moments again: the boxes are kept only while the windows they were measured on hold)
+let sigWindows = '';
+const signatureBoxes = (s: Awaited<typeof signatureP>) => {
+  if (!s) return;
+  const ids = signatureIds(job);
+  const wins = engine.lineWindows().filter((w) => ids.has(w.id));
+  const key = JSON.stringify(wins);
+  if (key === sigWindows) return;
+  sigWindows = key;
+  signatureLineWindows(wins);
+  engine.replaceLineBoxes(s.boxes());
+};
 window.vjReady = engine.init().then(async () => {
   engine.settleLineBoxes();
   const s = await signatureP;
-  if (s) {
-    signatureLineWindows(engine.lineWindows());
-    engine.replaceLineBoxes(s.boxes());
-  }
+  signatureBoxes(s);
+  if (s) engine.onLinesBuilt = () => signatureBoxes(s);
 });
 window.renderAt = (t) => engine.renderAt(t);
 const stage = document.getElementById('stage') as HTMLCanvasElement;

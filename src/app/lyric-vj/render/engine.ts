@@ -895,6 +895,8 @@ export class LyricVjEngine {
   private shotLayers = new Map<string, ShotLayer>();
   /** After each frame's lines are updated: the signature moments (render/signature.ts) take their lines off the frame; set only when a treatment has moments. */
   onCues?: (cues: unknown[], calls: unknown[], t: number) => void;
+  /** After a line is built live (buildLive): its show and exit times are known from now on (lineWindows). */
+  onLinesBuilt?: () => void;
   private cueLayers: { index?: number; rt: CueRuntime; layer: CueLayer; fit?: THREE.Group; fitScale?: number; hold?: number; holds?: boolean; kick?: boolean; need?: number; drift?: [number, number]; mixed?: boolean; remake?: () => void; twin?: { layer: CueLayer; fit: THREE.Group; text: [string, string] }; guard?: { from: number; to: number; rect: Rect; share: number; light: number }; hand?: { h: Handoff; planes: [THREE.Plane, THREE.Plane]; seam?: number }; handOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane }; laidOut?: { h: Handoff; seam: number; side: number; plane?: THREE.Plane } }[] = [];
   private relays: { h: Handoff; path: RelayPath; mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>; width: number }[] = [];
   /** Calls and backing lines (the bracketed part of a line) on a small second track of their own. */
@@ -2693,6 +2695,8 @@ export class LyricVjEngine {
     this.layRooms([c.rt.showFrom, c.rt.exitAt + c.rt.exitDur]);
     this.textRoot.position.set(held.x, held.y, 0);
     this.textRoot.scale.setScalar(held.s);
+    // (a layer drawing lines itself measures its boxes on the lines' real windows, known only now in a live build)
+    this.onLinesBuilt?.();
   }
 
   /** A line that has been playing is put back as it was built while a handoff measures it. */

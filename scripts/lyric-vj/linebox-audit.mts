@@ -14,6 +14,12 @@ import { fontCache } from './font-cache.mts';
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 /** How far a glyph may reach past its line's box (px). */
 export const SLACK = 2;
+/** Jobs known not to load in the audit's page, with why: never audited, never counted as a pass either. */
+export const KNOWN_UNLOADABLE: Record<string, string> = {
+  // (the only saved job with the phone templates chat / input / notify; its 32 assets under phone-story-tenmon and
+  // phone-story2-tenmon were swept, so the page waits on 404s forever: 2026-11-17)
+  'out/research/style-refs/phone/job.json': 'all 32 of its assets were deleted (404), the page never gets ready',
+};
 /** The opacity from which a glyph is read (engine.ts INK_READ). */
 export const INK_READ = 0.5;
 
@@ -25,7 +31,7 @@ export function reachOut(g: Rect, boxes: Rect[]): number {
 
 if (process.argv[1]?.endsWith('linebox-audit.mts')) {
   const { values: a } = parseArgs({ options: { 'debug-id': { type: 'string' }, why: { type: 'boolean', default: false }, job: { type: 'string', multiple: true }, jobs: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, 'per-line': { type: 'string', default: '3' } } });
-  const jobFiles = [...(a.job ?? []), ...(a.jobs ? readFileSync(a.jobs, 'utf8').split('\n').filter(Boolean) : [])].map((f) => resolve(f));
+  const jobFiles = [...(a.job ?? []), ...(a.jobs ? readFileSync(a.jobs, 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('#')) : [])].map((f) => resolve(f));
   const work = resolve('out/research/linebox-audit');
   mkdirSync(work, { recursive: true });
   await esbuild.build({ entryPoints: ['src/app/lyric-vj/render/main.ts'], bundle: true, format: 'esm', target: 'es2022', outfile: join(work, 'render.js'), logLevel: 'warning' });
@@ -39,10 +45,13 @@ if (process.argv[1]?.endsWith('linebox-audit.mts')) {
   const n = Number(a['per-line']);
   const r0 = (b?: Rect) => b && [b.x0, b.y0, b.x1, b.y1].map(Math.round).join(',');
   const byTemplate = new Map<string, { glyphs: number; misses: number; worst: number }>();
-  let total = 0, failed = 0;
+  let total = 0, failed = 0, loadFailed = 0;
   for (const jobFile of jobFiles) {
     const job = JSON.parse(readFileSync(jobFile, 'utf8')) as { window?: { start: number; end: number }; cues: { id: string; start: number; end: number }[]; treatment: { shots: { id: string; template: string }[]; cues: { cueId: string; shot: string; world?: { set?: string } }[] } };
     const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
+    const errors: string[] = [];
+    page.on('pageerror', (e) => errors.push(e.message));
+    page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
     try {
       await page.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, async (route) => { const font = await getFont(route.request().url(), route.request().headers()['user-agent'] ?? ''); return font ? route.fulfill({ body: font.body, contentType: font.type }) : route.continue(); });
       const rel = relative(ROOT, jobFile);
@@ -53,7 +62,10 @@ if (process.argv[1]?.endsWith('linebox-audit.mts')) {
       if (ready !== 'ok') throw new Error(`setup failed: ${ready}`);
       if (a['debug-id']) console.log('debug', JSON.stringify(await page.evaluate(`(() => { const e = window.vjEngine; const c = e.cueLayers.find((x) => x.rt.cue.id === '${a['debug-id']}'); return { template: c.rt.shot.template, readable: c.layer.readable(), boxes: e.lyricRects.filter((r) => r.id === '${a['debug-id']}').map((r) => ({ from: r.from, to: r.to, y0: r.rect.y0, y1: r.rect.y1 })), now: window.vjInkNow('${a['debug-id']}').ink }; })()`)));
     } catch (e) {
-      console.log(`skip ${relative(ROOT, jobFile)}: did not load (${(e as Error).message.split('\n')[0]})`);
+      // a job that does not load is a failure, unless it is a known one (KNOWN_UNLOADABLE, with its reason)
+      const known = KNOWN_UNLOADABLE[relative(ROOT, jobFile)];
+      console.log(`${known ? 'skip (known)' : 'FAIL'} ${relative(ROOT, jobFile)}: did not load (${(e as Error).message.split('\n')[0]})${known ? `: ${known}` : ''}${errors.length ? ` — page errors: ${errors.slice(0, 3).join(' | ').slice(0, 400)}` : ''}`);
+      if (!known) loadFailed++;
       await page.close();
       continue;
     }
@@ -105,8 +117,8 @@ if (process.argv[1]?.endsWith('linebox-audit.mts')) {
     if (misses.length) failed++;
   }
   for (const [k, v] of [...byTemplate].sort()) console.log(`template ${k}: ${v.glyphs} glyphs, ${v.misses} past the box${v.misses ? `, worst ${v.worst === Infinity ? 'no box' : `${Math.round(v.worst)} px`}` : ''}`);
-  console.log(`linebox audit: ${jobFiles.length} jobs, ${failed} with glyphs past their line's box, ${total} glyphs past it by more than ${SLACK} px`);
+  console.log(`linebox audit: ${jobFiles.length} jobs, ${loadFailed} failed to load, ${failed} with glyphs past their line's box, ${total} glyphs past it by more than ${SLACK} px`);
   await browser.close();
   server.close();
-  process.exit(total ? 1 : 0);
+  process.exit(total || loadFailed ? 1 : 0);
 }

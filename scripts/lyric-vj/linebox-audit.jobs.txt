@@ -1,3 +1,6 @@
+# The line-box audit corpus (linebox-audit.mts --jobs): saved render jobs covering every template and world-set family
+# in out/, plus signature forms drawn on offscreen rows (wipe, and synthetic/ copies of it as slice, burn, fly and in
+# live mode, made from wordsync-rise/sekai/clip-final with only the variant or live flag changed).
 out/research/lineplan/review/songs/tenmon/render/job.json
 out/research/instant/audit/gallery/render/job.json
 out/research/lineplan/review/paid2/now-yt_iwYXfOhcsYI/job.json
@@ -52,4 +55,11 @@ out/research/styles/clips5/dark-glitch-tsuzuki/job.json
 out/research/wordsync-rise/rise/sixth/sig/video4/job.json
 out/research/q1-1109/no-inline/clip5-spy/after/job.json
 out/research/linedirect/_stub/clip/job.json
-out/research/linedirect/yt_hCCskTJwvuc/full2/job.json
+out/research/linedirect/yt_hCCskTJwvuc/full2/job.jsonout/research/wordsync-rise/sekai/clip-final/job.json
+out/research/wordsync-rise/snow/clip-final/job.json
+out/research/gaps-1104/try/sig-spy/job.json
+out/research/linebox-audit/synthetic/sekai-slice.json
+out/research/linebox-audit/synthetic/sekai-burn.json
+out/research/linebox-audit/synthetic/sekai-fly.json
+out/research/linebox-audit/synthetic/sekai-wipe-live.json
+out/research/linebox-audit/synthetic/sekai-slice-live.json

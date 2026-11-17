@@ -1253,16 +1253,19 @@ export class LyricVjEngine {
       const exitSec = style.exit === 'cut' || noExit ? 0 : isLineExit(style.exit) ? LINE_EXIT_SEC[style.exit] : style.exit === 'collapse' ? 0.14 : rushedLine ? 0.08 : style.exit === 'fade' ? fadeSec : LONG_EXITS.has(style.exit) ? Math.max(EXIT_SEC * pace, drawnFloor, Math.min(style.exit === 'domino' || style.exit === 'shatter' ? 0.8 : 0.5, nextShow - cue.end - 0.05)) : EXIT_SEC * pace;
       // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
       // lines after this one in the same shot (stack and couplet keep earlier lines up while they arrive)
-      const later = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [plannedShow[j]] : []));
+      // (the settle pass reads the planned shows; a line is built on the settled ones, all settled by then)
+      const shows = settle ? plannedShow : showAt;
+      const laterIdx = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [j] : []));
+      const later = laterIdx.map((j) => shows[j]);
       const laterText = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [x.cue.text] : []));
       const shotText = styled.flatMap((x) => (x.style.shot === style.shot ? [x.cue.text] : []));
       const firstVoice = styled.find((x) => x.style.shot === style.shot)?.style.voice;
       const persist = RENDERERS[shot.template]?.persist;
       const leaveBy = (() => {
         // a composer line is gone before the next one's shot shows it
-        if (style.budget && next && styled[i + 1].style.shot !== style.shot) return nextShow;
+        if (style.budget && next && styled[i + 1].style.shot !== style.shot) return shows[i + 1];
         const other = styled.findIndex((x, j) => j > i && x.style.shot !== style.shot);
-        const shotOver = Math.min(shot.end, other >= 0 ? plannedShow[other] : Infinity);
+        const shotOver = Math.min(shot.end, other >= 0 ? shows[other] : Infinity);
         if (persist === 'shot') return shotOver;
         if (persist === 'next') return Math.min(shotOver, later[1] ?? Infinity);
         return nextShow;
@@ -1270,7 +1273,8 @@ export class LyricVjEngine {
       // (a world's shared shot is gone before the next line shows, however late its own line runs)
       // (a sing-along line stays until the next one shows only while that one follows soon: its preview waits there)
       const held = !!persist && (persist !== 'preview' || (!!next && next.start - cue.end <= PREVIEW_GAP));
-      const exitAt0 = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
+      // (a held line leaves no earlier than its floor where the line after it leaves it that time: exitFloor)
+      const exitAt0 = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD, Math.min(exitFloor(cue, showAt[i]), leaveBy - EXIT_LEAD)) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
       // (a line never starts leaving on its last sung character: the sung tail; where the next line would show before the
       // tail and a blink of exit are over, the next line waits — never an early exit, sung-tail.ts)
       // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
@@ -1286,7 +1290,21 @@ export class LyricVjEngine {
       const ns = styled[i + 1];
       const onset = !ns ? Infinity : ns.style.reveal === 'sung' && ns.style.sung?.length === [...ns.cue.text].length ? ns.style.sung[0] : (ns.cue.charStarts?.[0] ?? ns.cue.start);
       // (never before its floor: its last sung character rung, a glimpse after it shows — opus review)
-      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, exitFloor(cue, showAt[i])) : undefined;
+      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, exitFloor(cue, showAt[i]), exitFloor(cue, showAt[i], EXIT_LEAD, 0)) : undefined;
+      if (settle && held && persist !== 'preview') {
+        // (a held line leaves as the line that takes its place shows: that line waits, up to its own sung onset, for this
+        // one's floor — a stack line was cut before its last character, the timing audit)
+        const other = styled.findIndex((x, j) => j > i && x.style.shot !== style.shot);
+        const by = persist === 'next' && laterIdx[1] !== undefined && (other < 0 || plannedShow[laterIdx[1]] < plannedShow[other]) ? laterIdx[1] : other;
+        const fl = exitFloor(cue, showAt[i]);
+        if (by >= 0 && showAt[by] < fl + EXIT_LEAD) {
+          const nb = styled[by];
+          const on = nb.style.reveal === 'sung' && nb.style.sung?.length === [...nb.cue.text].length ? nb.style.sung[0] : (nb.cue.charStarts?.[0] ?? nb.cue.start);
+          const sh = Math.max(showAt[by], Math.min(fl + EXIT_LEAD, on));
+          if (sh > showAt[by] + 1e-6) { this.waits.push({ id: nb.cue.id, sec: +(sh - showAt[by]).toFixed(3) }); showAt[by] = sh; }
+        }
+        return;
+      }
       if (settle) {
         // (lines that should share the frame and could not be set together stay lit both: logged as a fault)
         if (waited?.overlap) this.overlaps.push({ id: cue.id, next: next!.id, from: +waited.show.toFixed(3), to: +(waited.exitAt + waited.exitDur).toFixed(3) });
@@ -1311,7 +1329,9 @@ export class LyricVjEngine {
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: showAt[i],
         exitAt: waited ? waited.exitAt : exitFrom,
-        exitDur: waited ? Math.max(0.08, waited.exitDur) : Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - exitFrom - 0.02)),
+        // (the settled exit keeps its own length — a cut stays a cut (0.08 s on a cut ran into the next line's show), a
+        // capped exit down to a cut: never past the next line's show)
+        exitDur: waited ? Math.max(0.001, waited.exitDur) : Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - exitFrom - 0.02)),
         tail: !tailKept ? 'exempt' : waited?.capped ? 'capped' : 'kept',
         ...(waited?.capped ? { tailWhy: `gives way to ${next!.id}'s sung onset` } : {}),
         accentTimes: [...(style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined), ...(repeats.get(cue.id) ?? [])].sort((a, b) => a - b),
@@ -1428,13 +1448,17 @@ export class LyricVjEngine {
       // a line not up long enough to read holds into the free time after it, or lands and leaves at once (the
       // templates read their timing when built, so the line is built again with the new timing)
       const need = readingSec(rt.cue.text, rt.cue.start, rt.cue.end);
-      const limit = (persist ? leaveBy : nextShow) - 0.02;
+      // (up to the next line's settled show — where the two could not be set together and stay lit both, up to this one's
+      // own floor-kept exit: a line is never cut before it is read to make room, opus review)
+      const settledNext = next ? showAt[i + 1] : Infinity;
+      const limit = (persist ? leaveBy : waited?.overlap ? Math.max(settledNext, waited.exitAt + waited.exitDur + 0.02) : settledNext) - 0.02;
       // the line composer's lines pay for reading in its order: the exit goes before the entrance does
       if (style.budget && !hOut && rt.style.exit !== 'cut') {
         const [from] = layer.readable();
         const kept = gateMotion({ enter: Math.max(0, from - rt.showFrom), exit: rt.exitDur, extra: 0 }, limit - rt.showFrom, need);
         if (!kept.exit) {
-          Object.assign(rt, { style: { ...rt.style, exit: 'cut' as const }, exitAt: limit - 0.08, exitDur: 0.08 });
+          // (a cut in its last frame, as readFix cuts a composer line: 0.08 s took a fast line off before its last character)
+          Object.assign(rt, { style: { ...rt.style, exit: 'cut' as const }, exitAt: limit - 1 / 30, exitDur: 1 / 30 });
           layer = build();
         }
       }
@@ -1866,7 +1890,7 @@ export class LyricVjEngine {
         const requiredSec = requiredReading(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), rt.exitAt + rt.exitDur - rt.showFrom);
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, exitAt: +rt.exitAt.toFixed(3), tail: rt.tail ?? 'exempt', ...(rt.tailWhy ? { tailWhy: rt.tailWhy } : {}), template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05 && !this.overlaps.some((o) => o.id === rt.cue.id || o.next === rt.cue.id), ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, exitAt: +rt.exitAt.toFixed(3), tail: rt.tail ?? 'exempt', ...(rt.tailWhy ? { tailWhy: rt.tailWhy } : {}), template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };

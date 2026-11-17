@@ -30,6 +30,21 @@ export function leastUsedFamily(pool: string[], used: Map<string, number>, last:
 /** The composer's rule before linked families (lineplan-core.ts, 404d73f): the least used kind, the first of equals. */
 const leastUsedKind = (pool: string[], used: Map<string, number>) => [...pool].sort((a, b) => (used.get(a) ?? 0) - (used.get(b) ?? 0))[0];
 
+/**
+ * The most of a song's lines one entrance family may take (v4 review, 2026-11-17: 22 of 28 lines came in by drum-feed
+ * once the director's choices were honoured one by one). A directed way in past this share yields to the least-used
+ * rule — unless the world's pool offers no other family, in which case the style allows only that.
+ */
+export const ENTER_FAMILY_CAP = 0.4;
+/** Whether taking `kind` now would put its family over the cap among the ways taken so far (`prefix` keys the tally). */
+export function pastEnterCap(used: Map<string, number>, kind: string, pool: string[], prefix = '', byKind = false): boolean {
+  const key = (k: string) => `${prefix}${byKind ? k : familyOf(k)}`;
+  if (new Set(pool.map(key)).size <= 1) return false;
+  const total = [...used.entries()].filter(([k]) => k.startsWith(prefix)).reduce((a, [, n]) => a + n, 0);
+  const mine = used.get(key(kind)) ?? 0;
+  return total >= 2 && (mine + 1) / (total + 1) > ENTER_FAMILY_CAP;
+}
+
 const LINKED = new Set(['edge-relay', 'layer-seat', 'frame-open']);
 export const isLinked = (kind?: string) => !!kind && LINKED.has(familyOf(kind));
 /** The time a page move takes before the words switch and after, s. */
@@ -61,7 +76,7 @@ export function pickWorldMoves(state: MoveState, world: WorldPick, own: { enter:
   const exitBase = [own.exit, ...(world.exits ?? []), ...(world.ownMoves ? [] : SHARED_EXIT_POOL)];
   if (!linked.length) {
     const [ins, outs] = [state.oldIn, state.oldOut];
-    const enter = handedRule ? 'line-open' : said?.enter && enterBase.includes(said.enter) ? said.enter : leastUsedKind(enterBase, ins);
+    const enter = handedRule ? 'line-open' : said?.enter && enterBase.includes(said.enter) && !pastEnterCap(ins, said.enter, enterBase, '', true) ? said.enter : leastUsedKind(enterBase, ins);
     const exit = said?.exit && exitBase.includes(said.exit) ? said.exit : leastUsedKind(exitBase, outs);
     ins.set(enter, (ins.get(enter) ?? 0) + 1);
     outs.set(exit, (outs.get(exit) ?? 0) + 1);
@@ -75,7 +90,7 @@ export function pickWorldMoves(state: MoveState, world: WorldPick, own: { enter:
   const folded = familyOf(state.relay ?? '') === 'frame-open';
   const handed = state.relay && !folded && linked.includes(state.relay) && upLongEnough ? state.relay : undefined;
   const enterPool = [...enterBase, ...(upLongEnough && !folded ? linked.filter((k) => familyOf(k) !== 'frame-open') : [])];
-  const enter = handedRule ? 'line-open' : handed ?? (said?.enter && enterPool.includes(said.enter) ? said.enter : leastUsedFamily(enterPool, state.used, state.lastEnter, `${salt}:in`, 'in:'));
+  const enter = handedRule ? 'line-open' : handed ?? (said?.enter && enterPool.includes(said.enter) && !pastEnterCap(state.used, said.enter, enterPool, 'in:') ? said.enter : leastUsedFamily(enterPool, state.used, state.lastEnter, `${salt}:in`, 'in:'));
   const exitPool = [...exitBase, ...(next && c.end - c.start >= LINK_PREPARE + 0.5 ? linked : [])];
   const exit = said?.exit && exitPool.includes(said.exit) ? said.exit : leastUsedFamily(exitPool, state.used, state.lastExit.kind, `${salt}:out`, 'out:');
   for (const k of [`in:${familyOf(enter)}`, `out:${familyOf(exit)}`]) state.used.set(k, (state.used.get(k) ?? 0) + 1);

@@ -20,6 +20,8 @@ import { type PlanWorld, worldKitPrompt } from './paid-world.mts';
 import type { StyleWorld } from '../../src/app/lyric-vj/style-world';
 import { worldById } from '../../src/app/lyric-vj/style-worlds';
 import { unrepeatGround } from '../../src/app/lyric-vj/free-plan';
+import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spread';
+import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
 import { cutTimes } from './interludes.mts';
 import { ENTER_HELP, EXIT_HELP, IDLE_HELP } from './typehelp.mts';
 
@@ -688,6 +690,18 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
   };
   const parts = (paid.parts ?? []).map((p) => ({ ...p, from: fromOf(p.from) }));
   const plain = parts.filter((p, i) => parts.findLastIndex((x) => x.from === p.from) === i);
+  // the grounds of each part spread (ground-spread.ts): no family past GROUND_FAMILY_CAP of the part's cuts, none back
+  // within two cuts; the composer's cuts give way first, the director's only when the part is still over
+  if (W && pw) {
+    const w = worldById(pw.id)!;
+    const wide = [...new Set(c.calm ? w.grounds.quiet : [...Object.values(w.grounds.levels).flat(), ...w.grounds.quiet])].filter((g) => g !== w.peak.loud && g !== w.peak.calm);
+    const pages = new Set(w.layouts.lines.map((l) => l.ground).filter((g): g is string => !!g));
+    const starts = [...new Set([0, ...plain.map((p) => planned.findIndex((ps) => ps.shot === p.from)).filter((i) => i >= 0)])].sort((a, b) => a - b);
+    const sections = starts.map((s, k) => planned.slice(s, starts[k + 1] ?? planned.length).flatMap((ps) => ps.cuts));
+    const spread = spreadGrounds(sections, { pool: () => wide, fixed: (x) => x.fx === w.peak.loud || x.fx === w.peak.calm || pages.has(x.fx) || !isWorldGround(x.fx) && !wide.includes(x.fx), later: (x) => directed.has(x) });
+    const left = groundVariety(sections.map((cuts, i) => ({ id: `part ${i + 1}`, cuts })));
+    console.log(`grounds spread: ${spread} cuts changed${left.ok ? '' : `; still ${left.failing.map((f) => `${f.section} ${f.family} ${Math.round(f.share * 100)}%`).join(', ')}${left.repeats.length ? ` ${left.repeats.length} repeats` : ''}`}`);
+  }
   return {
     shots,
     decisions,

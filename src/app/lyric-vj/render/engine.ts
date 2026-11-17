@@ -1,7 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
-import { clipFrame } from './sprite-clip';
-import { exitAfterSung } from './sung-tail';
+import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
+import { exitAfterSung, nextShowAfter } from './sung-tail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { textCamAt } from './text-cam';
@@ -585,6 +585,9 @@ export interface CueMetric {
   /** When its last character is sung and when it is gone (equal for a line a template keeps up on purpose). */
   lastSung: number;
   goneAt: number;
+  /** When its exit begins, and whether the sung tail (sung-tail.ts) held it: 'exempt' for a line its layout keeps up. */
+  exitAt: number;
+  tail: 'kept' | 'exempt';
   template: string;
   /** The director's entrance/reveal, what was drawn, why it changed, and whether a planned entrance never played. */
   plannedEnter: string;
@@ -757,7 +760,9 @@ export class LyricVjEngine {
   private textScene = new THREE.Scene();
   private probe?: CanvasRenderingContext2D;
   /** Each line's on-screen rectangle and when it is up (graphic objects move out of its way). */
-  private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string }[] = [];
+  private lyricRects: { from: number; to: number; rect: Rect; rest: Rect; id?: string; /** When the line starts leaving: up at full strength before it (its exit alone after). */ strong?: number }[] = [];
+  /** Lines that showed later than planned so the line before could keep its sung tail (sung-tail.ts nextShowAfter). */
+  readonly waits: { id: string; sec: number }[] = [];
   /**
    * Other words up besides the lines (a sing-along's preview row), frame px: out of the lyric box (its ground is not
    * the line's, the guard reads only the line) but kept clear on their own by props, a move's marks and a drawing.
@@ -864,7 +869,7 @@ export class LyricVjEngine {
   private callLayers: CallLayer[] = [];
   private images = new Map<string, THREE.Texture>();
   /** Sprite clips (AssetSource.frames on a `spr:` asset): every frame as a bitmap, each tagged with its index. */
-  private clips = new Map<string, { frames: ImageBitmap[]; fps: number; start: number; loop: boolean }>();
+  private clips = new Map<string, { frames: ImageBitmap[]; fps: number; start: number; loop: boolean; /** The frames' motion envelope (sprite-clip.ts clipEnvelope), shares of the frame. */ crop?: [number, number, number, number] }>();
   /** Each shot's lines as they show (chat attachments are pushed up by the messages after them). */
   private shotLines = new Map<string, { text: string; at: number }[]>();
   /** The storyboard's scenes (scene.ts): drawn by their parts, their lines never built as caption layers. */
@@ -1017,7 +1022,9 @@ export class LyricVjEngine {
             (bmp as { frameKey?: number }).frameKey = i;
             return bmp;
           }));
-          this.clips.set(id, { frames, fps: a.frames.fps, start: a.frames.start ?? 0, loop: !!a.frames.loop });
+          // (the clip's motion envelope, read off every frame at a coarse size: where the subject ever is)
+          const crop = clipEnvelope(frames.map((f) => { const c = new OffscreenCanvas(96, 96).getContext('2d', { willReadFrequently: true })!; c.drawImage(f, 0, 0, 96, 96); return alphaBounds(c.getImageData(0, 0, 96, 96).data, 96, 96); }));
+          this.clips.set(id, { frames, fps: a.frames.fps, start: a.frames.start ?? 0, loop: !!a.frames.loop, crop });
           const tex = new THREE.Texture(frames[0]);
           tex.needsUpdate = true;
           this.images.set(id, tex);
@@ -1233,9 +1240,19 @@ export class LyricVjEngine {
       // (a sing-along line stays until the next one shows only while that one follows soon: its preview waits there)
       const held = !!persist && (persist !== 'preview' || (!!next && next.start - cue.end <= PREVIEW_GAP));
       const exitAt0 = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
-      // (a line never starts leaving on its last sung character: the sung tail, capped by the next line's showing)
-      const lastSung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : undefined;
-      const exitAt = held || shot.template === 'world-pair' ? exitAt0 : exitAfterSung(exitAt0, lastSung, nextShow - exitSec - EXIT_LEAD);
+      // (a line never starts leaving on its last sung character: the sung tail; where the next line would show before the
+      // tail and a blink of exit are over, the next line waits — never an early exit, sung-tail.ts)
+      // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
+      const lastSung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : cue.end;
+      const tailKept = !held && shot.template !== 'world-pair';
+      const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung) : exitAt0;
+      const exitFrom = Math.max(cue.start + 0.25 * pace, exitAt1);
+      const waited = tailKept && next ? nextShowAfter(exitFrom, exitSec, nextShow, EXIT_LEAD) : undefined;
+      if (waited && waited.show > showAt[i + 1] + 1e-6) {
+        this.waits.push({ id: next!.id, sec: +(waited.show - showAt[i + 1]).toFixed(3) });
+        showAt[i + 1] = waited.show;
+      }
+      const exitAt = exitAt1;
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
@@ -1249,8 +1266,9 @@ export class LyricVjEngine {
         // an English line is set in the paired Latin face (fonts.ts lineFace: the plan's reading of the same choice)
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: showAt[i],
-        exitAt: Math.max(cue.start + 0.25 * pace, exitAt),
-        exitDur: Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - Math.max(cue.start + 0.25 * pace, exitAt) - 0.02)),
+        exitAt: exitFrom,
+        exitDur: waited ? Math.max(0.08, waited.exitDur) : Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - exitFrom - 0.02)),
+        tail: tailKept ? 'kept' : 'exempt',
         accentTimes: [...(style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined), ...(repeats.get(cue.id) ?? [])].sort((a, b) => a - b),
         pace,
         rushed,
@@ -1271,10 +1289,10 @@ export class LyricVjEngine {
         nextStart: styled[i + 1]?.cue.start,
       };
       // (a world line's inks are checked on the ground each glyph really stands on, world-layout measuredInks)
-      if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 });
+      if (hOut) Object.assign(rt, hOut.kind === 'relay' ? { exitAt: hOut.from, exitDur: 0.6 * (hOut.to - hOut.from) } : { exitAt: hOut.to, exitDur: 0.06 }, { tail: 'exempt' });
       // a line its world erases (Q1 phase 3b, an approved event only): the erase is its way out, at the approved time
       const wipe = (style.world as { wipe?: { from: number; sec: number } } | undefined)?.wipe;
-      if (wipe) Object.assign(rt, { exitAt: wipe.from, exitDur: wipe.sec });
+      if (wipe) Object.assign(rt, { exitAt: wipe.from, exitDur: wipe.sec, tail: 'exempt' });
       // small kana only on the impact templates: on every line it read as an algorithm
       setKanaScale(KANA_TEMPLATES.has(shot.template) ? design.kanaScale : 1);
       // dark type on a light field gets a halo of that field's colour: it then reads over a photo inset as well
@@ -1499,8 +1517,8 @@ export class LyricVjEngine {
         const b = settledBox(layer, fit, true);
         const pv = previewBox(layer);
         if (pv) this.keepOut.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: pv.min.x + W / 2, y0: H / 2 - pv.max.y, x1: pv.max.x + W / 2, y1: H / 2 - pv.min.y } });
-        if (layer.poses) for (const p of layer.poses()) this.lyricRects.push({ id: rt.cue.id, from: p.from, to: p.to, rect: p.rect, rest: p.rect });
-        else if (shot.template === 'beat-cut') this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H }, rest: { x0: 0, y0: 0, x1: W, y1: H } });
+        if (layer.poses) for (const p of layer.poses()) this.lyricRects.push({ id: rt.cue.id, strong: rt.exitAt, from: p.from, to: p.to, rect: p.rect, rest: p.rect });
+        else if (shot.template === 'beat-cut') this.lyricRects.push({ id: rt.cue.id, strong: rt.exitAt, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: { x0: 0, y0: 0, x1: W, y1: H }, rest: { x0: 0, y0: 0, x1: W, y1: H } });
         else if (!b.isEmpty()) {
           const px = (x: THREE.Box3): Rect => ({ x0: x.min.x + W / 2, y0: H / 2 - x.max.y, x1: x.max.x + W / 2, y1: H / 2 - x.min.y });
           const places = placesWhileRead(layer, fit, rt.later ?? []);
@@ -1509,14 +1527,14 @@ export class LyricVjEngine {
           // reading time is over (pushed out by the second one) no room at all
           if (places.length < 2) {
             const rest = px(b);
-            this.lyricRects.push({ id: rt.cue.id, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: motionPad(rest, kick), rest });
+            this.lyricRects.push({ id: rt.cue.id, strong: rt.exitAt, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: motionPad(rest, kick), rest });
           } else {
             const readTo = layer.readable()[1];
             places.forEach((p, k) => {
               if (p.box.isEmpty()) return;
               const last = k === places.length - 1;
               const rest = px(p.box);
-              this.lyricRects.push({ id: rt.cue.id, from: k ? p.from : rt.showFrom, to: last && readTo >= rt.exitAt - 0.01 ? rt.exitAt + rt.exitDur : p.to, rect: motionPad(rest, kick), rest });
+              this.lyricRects.push({ id: rt.cue.id, strong: rt.exitAt, from: k ? p.from : rt.showFrom, to: last && readTo >= rt.exitAt - 0.01 ? rt.exitAt + rt.exitDur : p.to, rect: motionPad(rest, kick), rest });
             });
           }
         }
@@ -1526,7 +1544,7 @@ export class LyricVjEngine {
       // a call is sung words too: whatever is cut off at the line is cut off at it
       if (design.composer && this.job.treatment.graphics && split.calls.length && !onBoard) {
         const call = this.callLayers.at(-1)!;
-        if (!call.dropped && call.units.length) this.lyricRects.push({ id: `${rt.cue.id}:call`, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: this.callRect(call), rest: this.callRect(call) });
+        if (!call.dropped && call.units.length) this.lyricRects.push({ id: `${rt.cue.id}:call`, strong: rt.exitAt, from: rt.showFrom, to: rt.exitAt + rt.exitDur, rect: this.callRect(call), rest: this.callRect(call) });
       }
       if (shot.params['echo'] && !this.ownDrawing(cue.start)) {
         const echo = this.makeEcho(rt);
@@ -1631,11 +1649,19 @@ export class LyricVjEngine {
     const treatment = this.job.treatment;
     if (treatment.graphics) {
       const secs = treatment.graphics.sections;
-      const rects = this.lyricRects.map((r) => ({ from: r.from, to: r.to, x0: r.rest.x0, x1: r.rest.x1 }));
+      const rects = this.lyricRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, x0: r.rest.x0, x1: r.rest.x1 }));
       // a line that only brushes a cut (its last frames of fading out as the cut lands) does not decide the room: a
       // figure stood faded in a corner for a whole cut because the line before was still going out
       const brush = (from: number, to: number) => Math.min(0.35, 0.25 * (to - from));
-      const onCut = <T extends { from: number; to: number }>(xs: T[], from: number, to: number) => xs.filter((r) => Math.min(to, r.to) - Math.max(from, r.from) > brush(from, to));
+      // (only a line going out brushes: one coming in over the cut always decides, however late — a figure seated for
+      // the line before stood under the next line's first frames, S22 under 「失う怖さも」 at 52.57 s, 2026-11-17)
+      // (a line up at full strength over any of the cut decides too, however briefly: its sung tail now holds it up
+      // while the next cut lands, 風の匂い under S18 at 11.73 s; only its exit alone may brush)
+      const onCut = <T extends { from: number; to: number; strong?: number }>(xs: T[], from: number, to: number) => xs.filter((r) => {
+        if (r.from > from + 1e-3) return Math.min(to, r.to) - Math.max(from, r.from) > 0;
+        if (Math.min(to, r.strong ?? r.to) - Math.max(from, r.from) > 0) return true;
+        return Math.min(to, r.to) - Math.max(from, r.from) > brush(from, to);
+      });
       secs.forEach((sec, i) => {
         // (a line built on its own touches only the cuts it runs over)
         if ((secs[i + 1]?.start ?? Infinity) < span[0] || sec.start > span[1]) return;
@@ -1649,6 +1675,7 @@ export class LyricVjEngine {
           }
           if (l.kind !== 'kinetic') continue;
           const until = secs[i + 1]?.start ?? Infinity;
+          if (Number.isFinite(until)) l.until = until;
           // a board lays its pieces where this cut's lines leave the most room (board.ts)
           if (l.board) {
             const lines = this.lyricRects.map((r) => ({ from: r.from, to: r.to, ...r.rest }));
@@ -1666,14 +1693,20 @@ export class LyricVjEngine {
           const seen = onCut(rects, sec.start, until);
           const side = oppositeSide(seen, sec.start, until);
           if (side) Object.assign(l, { side, flip: side === 'left' });
+          // a sprite clip is seated by its motion envelope (sprite-clip.ts clipEnvelope), never by its first frame
+          const crop = l.sprite ? this.clips.get(`spr:${l.sprite}`)?.crop : undefined;
+          if (crop) l.crop = crop;
           // the lines' boxes over the cut: a prop sent to a corner takes the one they leave clear
           if (l.sprite) l.over = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
+          // (each with its times, for the draw: the subject is measured and kept clear by each line's own box, kinetic.ts)
+          if (l.sprite) l.boxes = this.lyricRects.filter((r) => Math.min(until + 1, r.to) - Math.max(sec.start - 1, r.from) > 0).map((r) => ({ from: r.from, to: r.to, strong: r.strong ?? r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
           const band = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
           // the side band or the rows above or below the lines: whichever lets the figure stand larger (under a blown-up
           // word the band is a sliver and the figure went to a corner at a third of its size; the rows held it whole)
-          const pic = l.sprite ? (this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined) : undefined;
-          const rowsToo = band && pic?.width && pic.height ? freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until) : undefined;
+          const pic0 = l.sprite ? (this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined) : undefined;
+          const pic = pic0?.width && pic0.height ? { width: pic0.width * (crop ? crop[2] - crop[0] : 1), height: pic0.height * (crop ? crop[3] - crop[1] : 1) } : undefined;
+          const rowsToo = band && pic?.width && pic.height ? freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until) : undefined;
           const room = rowsToo && pickRoom(band!, rowsToo, (pic!.width! / pic!.height!) * H * (l.size ?? 0.85), H * (l.size ?? 0.85)) === 'rows' ? undefined : band;
           if (room) l.room = room;
           // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
@@ -1682,7 +1715,7 @@ export class LyricVjEngine {
           // (centred lines with a band free above or below them first: the line director centres most lines, and every
           // prop of 世界のつづき's picture tier went behind its words, 2026-11-02)
           else if (l.sprite && seen.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
-            const rows = freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until);
+            const rows = freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until);
             if (rows) l.rows = rows;
             else l.under = true;
           }
@@ -1748,9 +1781,10 @@ export class LyricVjEngine {
     return out;
   }
 
-  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number; light: number }[]; links: { start: number; kind: string; dir: number; frames: number; moved: number; drawn: 'link' | 'plain-cut' }[] } {
+  metrics(): { cues: CueMetric[]; accents: { cueId: string; time: number }[]; textGuard: { id: string; text: string; from: number; to: number; rect: number[]; share: number; light: number }[]; links: { start: number; kind: string; dir: number; frames: number; moved: number; drawn: 'link' | 'plain-cut' }[]; waits: { id: string; sec: number }[] } {
     return {
       links: this.linkOutcomes(),
+      waits: this.waits,
       // lines rebuilt light in a dark halo over a photo as played: the place that set it off and its share below 3:1
       // (POOR_SHARE and the median are experimental rules, recorded here to be checked against the picture)
       textGuard: this.cueLayers.flatMap(({ rt, guard: g }) => (g ? [{ id: rt.cue.id, text: rt.cue.text, from: +g.from.toFixed(2), to: +g.to.toFixed(2), rect: [g.rect.x0, g.rect.y0, g.rect.x1, g.rect.y1].map(Math.round), share: +g.share.toFixed(2), light: +g.light.toFixed(2) }] : [])),
@@ -1764,7 +1798,7 @@ export class LyricVjEngine {
         const requiredSec = Math.min(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), 0.95 * (rt.exitAt + rt.exitDur - rt.showFrom));
         const last = rt.cue.charStarts?.length ? rt.cue.charStarts[rt.cue.charStarts.length - 1] : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
-        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
+        return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05, ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, exitAt: +rt.exitAt.toFixed(3), tail: rt.tail ?? 'exempt', template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
       }),
       accents: this.cueLayers.flatMap(({ rt }) => rt.accentTimes.map((time) => ({ cueId: rt.cue.id, time }))),
     };

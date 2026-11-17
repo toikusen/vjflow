@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { groundLink, isLinked, leastUsedFamily, LINK_CLEAR, LINK_PREPARE, linkGrounds, moveState, pickWorldMoves, sectionClock } from './world-handoff';
+import { ENTER_FAMILY_CAP, groundLink, isLinked, leastUsedFamily, LINK_CLEAR, LINK_PREPARE, linkGrounds, moveState, pickWorldMoves, sectionClock } from './world-handoff';
 import { familyOf } from './world-motion';
 import { LINK_MARGIN, LinkFamilyKind, linkLayout, LinkRect } from './motion-transition';
 import { linksOf, WORLD_LINKS } from '../world-shared';
@@ -94,14 +94,29 @@ describe("picking a world line's way in and out", () => {
     const riso = { id: 'riso', enters: ['drum-feed', 'misregister'], exits: ['drum-out', 'ink-slip'] };
     const s = moveState();
     const kinds = lines.map((_, i) => pickWorldMoves(s, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5, said));
-    // (the line before handing its page over still wins the way in: the relay belongs to the pair)
-    kinds.forEach((k, i) => { if (!(i && isLinked(kinds[i - 1].exit))) expect(k.enter).toBe('misregister'); expect(k.exit).toBe('drum-out'); });
+    // (the line before handing its page over still wins the way in: the relay belongs to the pair; a way in said on
+    // every line is kept only up to its family's share of the song, ENTER_FAMILY_CAP)
+    kinds.forEach((k, i) => { if (i < 2 && !(i && isLinked(kinds[i - 1].exit))) expect(k.enter).toBe('misregister'); expect(k.exit).toBe('drum-out'); });
+    expect(kinds.filter((k) => k.enter === 'misregister').length).toBeLessThanOrEqual(Math.ceil(ENTER_FAMILY_CAP * lines.length) + 1);
     // a move the world does not have is not taken: the composer picks as before
     const t = moveState();
     for (const k of lines.map((_, i) => pickWorldMoves(t, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5, { enter: 'razor', exit: 'slash-drop' }))) { expect(k.enter).not.toBe('razor'); expect(k.exit).not.toBe('slash-drop'); }
     // undirected lines spread over the pool as before
     const u = moveState();
     expect(new Set(lines.map((_, i) => pickWorldMoves(u, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5).enter)).size).toBeGreaterThan(1);
+  });
+  it('keep one entrance family under ENTER_FAMILY_CAP of the lines however often the director names it (v4: 22 of 28 drum-feed)', () => {
+    const lines = Array.from({ length: 28 }, (_, i) => cue(i * 4, i * 4 + 3.5));
+    const riso = { id: 'riso', enters: ['drum-feed', 'misregister'], exits: ['drum-out', 'ink-slip'] };
+    const s = moveState();
+    const kinds = lines.map((_, i) => pickWorldMoves(s, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5, { enter: 'drum-feed', exit: 'drum-out' }));
+    const share = kinds.filter((k) => k.enter === 'drum-feed').length / lines.length;
+    expect(share).toBeLessThanOrEqual(ENTER_FAMILY_CAP + 1 / lines.length);
+    expect(new Set(kinds.map((k) => k.enter)).size).toBeGreaterThanOrEqual(3);
+    // a world with one way in of its own and no shared pool keeps it: the style allows only that
+    const one = { id: 'one', ownMoves: true, enters: ['drum-feed'], exits: ['drum-out'] };
+    const t = moveState();
+    for (const k of lines.map((_, i) => pickWorldMoves(t, one, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5, { enter: 'drum-feed', exit: 'drum-out' }))) expect(k.enter).toBe('drum-feed');
   });
   it('offer no linked way in or out on lines too short for a page to come on beside them', () => {
     const short = Array.from({ length: 12 }, (_, i) => cue(i * 0.6, i * 0.6 + 0.6));

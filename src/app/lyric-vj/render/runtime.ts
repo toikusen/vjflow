@@ -29,6 +29,8 @@ export interface CueRuntime {
   /** Exit animation starts here and lasts `exitDur` (ends before the next cue shows). */
   exitAt: number;
   exitDur: number;
+  /** Whether the sung tail held the exit (sung-tail.ts): 'exempt' for a line its layout keeps up for the next. */
+  tail?: 'kept' | 'exempt';
   /** Absolute times of the beats this cue hits. */
   accentTimes: number[];
   /** 0.35..1: motion speed-up for short lines (1 = a line of ≥ 2 s). */

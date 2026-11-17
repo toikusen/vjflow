@@ -109,7 +109,7 @@ const ROTATED = /[ー〜～…―‐]/;
 const HIDDEN_UPRIGHT = /[、。，．,.]/;
 const LAYER = -5;
 
-export interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[] }
+export interface Pose { block: Block; spec: SetSpec; x: number[]; y: number[]; turn: boolean[]; shown: boolean[]; scale: number; /** Each glyph's own scale, where a pose sets type at two sizes. */ sizes?: number[]; object?: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; u: number[]; v: number[]; /** Each glyph's row of the block (world-motion GlyphEnv.row). */ row?: number[] }
 
 /**
  * A pose with its particles held at the type floor as drawn (render/type-floor.ts): the typesetter sets a particle or a
@@ -152,6 +152,7 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   const [x, y] = [gs.map(() => 0), gs.map(() => 0)];
   const shown = gs.map(() => false);
   const turn = gs.map(() => false);
+  const row = gs.map(() => 0);
   let p = 0;
   const take = (r: string) => {
     const out: number[] = [];
@@ -159,6 +160,8 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
       while (p < gs.length && gs[p].char !== ch) p++;
       if (p < gs.length) out.push(p++);
     }
+    const r0 = block.rows.indexOf(r);
+    for (const id of out) row[id] = r0 < 0 ? 0 : r0;
     return out;
   };
   const n = block.rows.length;
@@ -230,7 +233,7 @@ function poseOf(gs: Glyph[], block: Block, spec: SetSpec, tex: number): Pose {
   });
   const u = x.map((v) => clamp01((v + block.w / 2) / Math.max(1, block.w)));
   const v = y.map((w) => clamp01((block.h / 2 - w) / Math.max(1, block.h)));
-  return { block, spec, x, y, turn, shown, scale: k, ...(sizes ? { sizes } : {}), u, v };
+  return { block, spec, x, y, turn, shown, scale: k, ...(sizes ? { sizes } : {}), u, v, row };
 }
 
 /** The key word as big as the frame lets it be, read in its place: the words before it small above its left edge, the words after it small below its right edge. Undefined when the key would not stand clearly bigger. */
@@ -855,7 +858,7 @@ function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: bool
         m.visible = true;
         const qi = synced && !out ? sec(t - landAt[i], glyphIn) : qIn;
         phase[i] = out ? 'exit' : qi < 1 ? 'enter' : 'rest';
-        const env: GlyphEnv = { q: out ? qOut : qi, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0 };
+        const env: GlyphEnv = { q: out ? qOut : qi, i, n, u: p.u[i], v: p.v[i], seed, age, sung: t >= sungTimes[i] ? 1 : 0, row: p.row?.[i] };
         let pose: GlyphPose = (out ? leaving?.glyph?.(env) : qi < 1 ? entering?.glyph?.(env) : undefined) ?? {};
         // a line that locks word by word keeps at it after its entrance has run
         if (!out && wl.enter === 'signal-lock' && enterDur > 0) pose = entering!.glyph!(env);

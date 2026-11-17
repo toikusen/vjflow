@@ -7,11 +7,13 @@
 // npx tsx scripts/lyric-vj/video-stage.mts --treatment <img>/treatment.json --assets <img>/assets.json --script run3/script.json \
 //   --clips run3/clips --out run4/edit [--song song.json --from 3 --to 63.06]  (--song: cuts the plan left without a prop take the script's shots)
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { SubjectScript } from '../../src/app/lyric-vj/subject-script';
 import type { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
 import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
+import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spread';
+import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
 
 const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
   // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
@@ -174,6 +176,41 @@ if (song) {
     }
   }
 }
+// the grounds of the window spread over each part (ground-spread.ts): the bar splits above copied the ground they split
+// and the world's pool is small, so v4 stood two of three cuts on one stripe and one block; no family past its cap of a
+// part's cuts, none back within two cuts (a grid, a peak and a set's own page keep theirs)
+let regrounded = 0;
+if (song && worldId) {
+  const world = STYLE_WORLDS.find((w) => w.id === worldId);
+  const planPath = join(dirname(a.treatment!), 'typeplan.json');
+  const plan = existsSync(planPath) ? (JSON.parse(readFileSync(planPath, 'utf8')) as { parts?: { from: string }[]; shots: { shot: string; cuts: { at: number }[] }[] }) : undefined;
+  if (world) {
+    const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+    const kOf = (sec: (typeof secs)[number]) => (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic') as (KLayer & { fx: string; world?: Record<string, unknown>; sheetInks?: unknown }) | undefined;
+    const bounds = (plan?.parts ?? []).map((p) => plan!.shots.find((s) => s.shot === p.from)?.cuts[0]?.at).filter((x): x is number => x !== undefined);
+    const partOf = (t: number) => bounds.filter((b) => b <= t + 1e-3).length;
+    const inWin = secs.filter((sec) => sec.start >= from && sec.start < to && kOf(sec));
+    const groups = new Map<number, { fx: string; layer: NonNullable<ReturnType<typeof kOf>> }[]>();
+    for (const sec of inWin) { const k = kOf(sec)!; const g = groups.get(partOf(sec.start)) ?? []; g.push({ fx: k.fx, layer: k }); groups.set(partOf(sec.start), g); }
+    const wide = [...new Set([...Object.values(world.grounds.levels).flat(), ...world.grounds.quiet])].filter((g) => g !== world.peak.loud && g !== world.peak.calm);
+    const pages = new Set(world.layouts.lines.map((l) => l.ground).filter((g): g is string => !!g));
+    const sections = [...groups.entries()].sort((x, y) => x[0] - y[0]).map(([, g]) => g);
+    spreadGrounds(sections, { pool: () => wide, fixed: (x) => x.fx === 'grid' || pages.has(x.fx) || !wide.includes(x.fx) });
+    // (a ground of the world carries the world's fields, a plain one the sheet's inks: a changed cut takes the right shape)
+    // (the world's fields — its level above all — come from the nearest cut before that stands on a world ground)
+    const template = (layer: KLayer) => { const i = secs.findIndex((sec) => kOf(sec) === layer); for (let j = i; j >= 0; j--) { const k = kOf(secs[j]); if (k?.world && isWorldGround(k.fx)) return k.world; } return inWin.map(kOf).find((k) => k?.world && isWorldGround(k.fx))?.world; };
+    for (const g of sections) for (const x of g) {
+      if (x.fx === x.layer.fx) continue;
+      const pal = (x.layer.world as { slots?: unknown } | undefined)?.slots ?? x.layer.sheetInks;
+      x.layer.fx = x.fx;
+      if (isWorldGround(x.fx)) { const { bound, piece, words, lines, item, ...base } = (template(x.layer) ?? {}) as Record<string, unknown>; void bound; void piece; void words; void lines; void item; x.layer.world = { ...base, ...(x.layer.world ?? {}), slots: pal }; delete x.layer.sheetInks; }
+      else { x.layer.sheetInks = pal; delete x.layer.world; }
+      regrounded += 1;
+    }
+    const left = groundVariety(sections.map((g, i) => ({ id: `part ${i + 1}`, cuts: g.filter((x) => wide.includes(x.fx)) })));
+    console.log(`grounds: ${regrounded} cuts regrounded; ${left.ok ? 'every part under the cap, no ground back within two cuts' : `still ${left.failing.map((f) => `${f.section} ${f.family} ${Math.round(f.share * 100)}%`).join(', ')} ${left.repeats.length} repeats`}`);
+  }
+}
 // a run: consecutive sections showing one sprite; its clock starts where the run began
 let prev: { sprite: string; run: number; index: number } | undefined;
 let clips = 0, own = 0;
@@ -206,4 +243,4 @@ t.graphics!.sections = secs;
 // (the plan stays whole: its moments and word syncs refer to lines beyond a window; a window is rendered with --clip)
 writeFileSync(join(a.out!, 'treatment.json'), JSON.stringify(t));
 writeFileSync(join(a.out!, 'assets.json'), JSON.stringify(assets, null, 1));
-console.log(`video stage: ${secs.length} sections, ${filled} cuts filled from the script, ${thirds} thirds-in-a-row changed, ${grids} held-vowel grids, ${seated} lines seated, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);
+console.log(`video stage: ${secs.length} sections, ${filled} cuts filled from the script, ${thirds} thirds-in-a-row changed, ${grids} held-vowel grids, ${seated} lines seated, ${regrounded} cuts regrounded, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);

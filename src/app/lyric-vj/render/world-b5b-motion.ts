@@ -29,7 +29,9 @@ export const B5B_ENTERS: Record<string, WorldMove> = {
   // claymation: each letter is squashed down onto the slab and springs up, on twos
   'squash-in': { sec: 0.5, glyph: ({ q, i, n }) => { const k = stepsOf(clamp01(q * (n * 0.2 + 1) - i * 0.2), 6); return { a: k > 0 ? 1 : 0, sy: k < 0.34 ? 0.55 : k < 0.67 ? 1.14 : 1, sx: k < 0.34 ? 1.25 : k < 0.67 ? 0.93 : 1 }; } },
   // the letters roll in from the left a step at a time
-  'roll-in': { sec: 0.5, glyph: ({ q, i, n }) => { const k = stepsOf(clamp01(q * (n * 0.15 + 1) - i * 0.15), 6); return { a: k > 0 ? 1 : 0, dx: -90 * (1 - k), r: -0.6 * (1 - k) }; } },
+  // (each glyph rolls in a step behind the one before: the step closes the two by a sixth of the roll, kept under a
+  // glyph's side bearing so the strokes never meet, world-motion.spec 'no move merges glyphs')
+  'roll-in': { sec: 0.5, glyph: ({ q, i, n }) => { const k = stepsOf(clamp01(q * (n * 0.15 + 1) - i * 0.15), 6); return { a: k > 0 ? 1 : 0, dx: -54 * (1 - k), r: -0.6 * (1 - k) }; } },
 };
 
 export const B5B_EXITS: Record<string, WorldMove> = {

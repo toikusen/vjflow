@@ -4,7 +4,7 @@
 // so nothing here needs to know about the song; `age` is the time since the cut.
 
 import { drawMove, Env, Flow, kn, MORE, MORE_FX } from './kinetic-more';
-import { coverOf, CoverRect, watchCover } from './cover';
+import { CLEAR_FROM, clearStrength, coverOf, CoverCrop, CoverRect, keepClear, watchCover } from './cover';
 import { BoardLayer, drawBoard } from './board';
 import { drawStage, StageLayer } from './stage';
 import { halftone, lineArt, lineStage } from './print';
@@ -58,6 +58,20 @@ export interface KineticLayer {
   /** Other words up besides the line (a sing-along's preview row), each kept clear on its own. */
   keep?: CoverRect[];
   lyricWeight?: number;
+  /**
+   * The part of the sprite's picture that is the subject, as shares of its width and height (x0, y0, x1, y1): for a
+   * sprite clip, the union of every frame's opaque bounds (its motion envelope, engine.ts clipEnvelope), so the figure
+   * is seated and kept in frame by where it moves, not by its first frame. Unset: the whole picture (a trimmed cut-out).
+   */
+  crop?: [number, number, number, number];
+  /** When the cut ends (the next section's start, engine layRooms): drawn past it, the cut is going out under a page move. */
+  until?: number;
+  /**
+   * Every line's box over the cut with its times (engine layRooms): up from `from` to `to`, read at full strength until
+   * `strong` (its exit begins there). The subject is measured against each line's own box, never against the union of
+   * two lines (a top line and a right line's union is mostly empty frame, and a figure in it covers no words).
+   */
+  boxes?: { from: number; to: number; strong: number; x0: number; y0: number; x1: number; y1: number }[];
   /** Where the character stands; the lyric goes on the other side. */
   side?: 'left' | 'right' | 'center';
   /** Character height as a fraction of the frame (1.6 crops to a close-up from the top). */
@@ -401,6 +415,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   const age = camTime(l.cam, clock);
   // the frame's coordinates, for measuring the character against the lyric box while the line is fully up
   const frame = l.lyric && (l.lyricWeight ?? 1) > 0.85 ? ctx.getTransform?.()?.inverse?.() : undefined;
+  // (from the line's box gliding in: the subject is kept clear of it as the code layer's sprites are, cover.ts keepClear)
+  const clearStart = l.lyric && (l.lyricWeight ?? 1) > CLEAR_FROM ? ctx.getTransform?.() : undefined;
+  const clearBase = clearStart?.inverse?.();
   // a graphic laid bare over someone else's picture (a backdrop) takes the ink that reads on what is actually under
   // it: a light title set for its own dark ground vanished on 世界のつづき's cream coast (2026-10-22), and a staff, its
   // notes and the line-art props drawn in the song's dark ink vanished on 終わりじゃない's black album pages (2026-10-30),
@@ -463,7 +480,8 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     ctx.scale(backPush.scale, backPush.scale);
     ctx.translate(-backPush.x, -backPush.y);
   }
-  // the camera on the background (the lyric stays level above it)
+  // the camera on the background (the lyric stays level above it; the subject stands on its own stage, below)
+  const stage = ctx.getTransform?.();
   if (l.cam) {
     ctx.translate(W / 2, H / 2);
     if (l.cam === 'snap') ctx.scale(1 + 0.3 * (1 - ease(age / 0.25)), 1 + 0.3 * (1 - ease(age / 0.25)));
@@ -502,7 +520,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // a sprite clip's frames each carry a frame key (engine.ts picture): each is printed and cached on its own
   const sk = pic ? spriteKey(l.sprite!, pic) : '';
   const look = pic && pic.width ? (l.print === 'line' ? lineArt(pic, sk, ink)?.[lineStage(age)] : l.print === 'halftone' ? halftone(pic, sk, ink, paper) : undefined) : undefined;
-  const printed = pic && pic.width ? { img: look ?? (l.print === 'own' ? pic : duotone(pic, sk, ink, paper)), night: () => duotone(pic, sk, paper, ink), w: (pic.width / pic.height) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2 } : undefined;
+  // (a clip's picture is its motion envelope: the frame's bounds cropped to where the subject ever is, l.crop)
+  const crop = pic && pic.width ? cropOf(pic, l.crop) : undefined;
+  const printed = pic && pic.width && crop ? { img: look ?? (l.print === 'own' ? pic : duotone(pic, sk, ink, paper)), night: () => duotone(pic, sk, paper, ink), w: (crop.sw / crop.sh) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2, crop } : undefined;
   let own = false;
   switch (l.fx) {
     case 'wall': {
@@ -739,6 +759,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   if (printed && !own) {
     const { img: art, w, h } = printed;
     const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
+
     // (a grid of different shots: one cut-out a panel, each printed as the main one is)
     const panelArts = l.fx === 'grid' && l.panels?.length ? panelPictures(l.panels, image, l.print === 'own' ? undefined : [ink, paper]) : undefined;
     const cols = panelArts?.length ? panelArts.length : l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
@@ -752,7 +773,10 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     copies.forEach((cx, ci) => {
       const { img: art, w, h } = panelArts?.[ci] ?? printed;
       ctx.save();
-      if (l.cam === 'vertigo') (ctx.translate(W / 2, H / 2), ctx.scale(1 / zoom, 1 / zoom), ctx.translate(-W / 2, -H / 2));
+      // the cut's camera (a snap zoom, a pan, a dolly, a roll) is the ground's: the subject stands on its own stage, on
+      // its own pose and clock, and is never carried onto the words or out of the frame by it (a 30 % snap put S22's
+      // head into 「夢中だった」 for five frames, a pan cut S18 and S10 at the right edge, 2026-11-17)
+      if (stage && l.cam) ctx.setTransform(stage);
       // no room the whole cut (lines all over it, a rap verse): a small figure in a bottom corner, faded only when the
       // lines reach that corner, not a full-size one behind the words (Tokyo Drift's line plan: a revolver behind both
       // lines of 134–136 s)
@@ -778,12 +802,32 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
         ctx.fill();
         ctx.restore();
       }
-      ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
-      // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
-      if (frame && l.lyric && l.sprite) {
-        const [share, inside] = coverOf(art as CanvasImageSource & { width: number; height: number }, frame.multiply(ctx.getTransform()), (-w / 2) * s, (-h / 2) * s, w * s, h * s, l.lyric);
-        watchCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, inside, now, `cut ${(l.at ?? 0).toFixed(1)}`);
-      }
+      const src = panelArts?.[ci] ? undefined : printed.crop;
+      const drawArt = () => (src ? ctx.drawImage(art, src.sx, src.sy, src.sw, src.sh, (-w / 2) * s, (-h / 2) * s, w * s, h * s) : ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s));
+      if (clearStart && clearBase && l.lyric && l.sprite) {
+        const sized = art as CanvasImageSource & { width: number; height: number };
+        const m = clearBase.multiply(ctx.getTransform());
+        if (frame) {
+          // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
+          const [share, inside] = coverOf(sized, m, (-w / 2) * s, (-h / 2) * s, w * s, h * s, l.lyric, src);
+          watchCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, inside, now, `cut ${(l.at ?? 0).toFixed(1)}`);
+        }
+        // each line up now, by its own box: read at full strength (until `strong`) it is never covered — a subject
+        // reaching into it at strength on its own cut is a fault of the seat (render.mts fails on these lines) — and
+        // what reaches in is cut out of the subject and the subject faded (cover.ts keepClear, the code layer's own last
+        // resort); a line on its way out lets the subject back as it fades; a cut going out under a page move is only kept clear
+        const boxes = (l.boxes ?? [{ from: -Infinity, to: Infinity, strong: Infinity, ...l.lyric }]).filter((b) => now >= b.from - 1e-3 && now <= b.to + 1e-3);
+        let draw = drawArt;
+        for (const b of boxes) {
+          const [share, inside] = coverOf(sized, m, (-w / 2) * s, (-h / 2) * s, w * s, h * s, b, src);
+          const reading = now <= b.strong + 1e-3;
+          if (reading && share > 0 && frame && (l.until === undefined || now < l.until - 1e-3) && ctx.globalAlpha >= SUBJECT_COVER_ALPHA) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, now);
+          const strength = Math.min(clearStrength(l.lyricWeight ?? 1), reading ? 1 : Math.max(0, 1 - (now - b.strong) / Math.max(0.05, b.to - b.strong)));
+          const inner = draw;
+          draw = () => void keepClear(ctx, clearStart, b, share, inside, inner, W, H, strength, true);
+        }
+        draw();
+      } else drawArt();
       ctx.restore();
     });
   }
@@ -929,6 +973,29 @@ export function cornerPlace(w: number, h: number, s: number, left: boolean, over
  * The pictures of a grid of different shots (KineticLayer.panels): each id's cut-out at the frame's height, printed in
  * `inks` (ink, paper) or as drawn; ids with no picture loaded are left out, at most four.
  */
+/** The source rectangle of a picture's subject (KineticLayer.crop as shares), the whole picture when there is none. */
+export function cropOf(pic: { width: number; height: number }, crop?: [number, number, number, number]): CoverCrop {
+  if (!crop) return { sx: 0, sy: 0, sw: pic.width, sh: pic.height };
+  const [x0, y0, x1, y1] = crop;
+  return { sx: Math.floor(x0 * pic.width), sy: Math.floor(y0 * pic.height), sw: Math.max(1, Math.ceil((x1 - x0) * pic.width)), sh: Math.max(1, Math.ceil((y1 - y0) * pic.height)) };
+}
+
+/** A subject drawn at this opacity or more over the words being read is a cover fault (a faded corner figure is not). */
+export const SUBJECT_COVER_ALPHA = 0.5;
+const subjectCovers = new Map<string, number>();
+/** Reports a subject over a read lyric once per picture and place, again when its share grew: `code layer: subject covers:`. */
+export function watchSubjectCover(key: string, id: string, share: number, t: number, log: (line: string) => void = (x) => console.error(x)): string | undefined {
+  if ((globalThis as { __vjProbe?: boolean }).__vjProbe) return undefined;
+  const seen = subjectCovers.get(key);
+  if (seen !== undefined && share < seen + 0.02) return undefined;
+  subjectCovers.set(key, share);
+  const line = `code layer: subject covers: ${id} hides ${(share * 100).toFixed(1)}% of the lyric box at ${t.toFixed(2)} s`;
+  log(line);
+  return line;
+}
+/** For tests: forget what was reported. */
+export const resetSubjectCovers = () => subjectCovers.clear();
+
 /** A figure's centre so its whole width stays inside the frame with `pad` to spare; one wider than that is centred. */
 export function inFrameX(cx: number, half: number, pad = 24): number {
   if (half * 2 >= W - 2 * pad) return W / 2;

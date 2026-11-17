@@ -5,8 +5,8 @@
 // then shrinks a little on its foot; it is never lifted. What still finds no room stays where the director put it and
 // the renderer's keep-clear (cover.ts) is the last resort.
 /* eslint-disable */
-function placeClear(S, W, H, lines) {
-  const PAD = 24, GAP = 0.03 * W, SCALES = [1, 0.9, 0.8, 0.7], MIN_H = 0.4, STEPS = 10, CLOSE = 0.75, CROP = 0.4, RELATE_GROUND = 0.06, RELATE_SIZE = 0.75;
+function placeClear(S, W, H, lines, log) {
+  const PAD = 24, GAP = 0.03 * W, SCALES = [1, 0.9, 0.8, 0.7], MIN_H = 0.4, STEPS = 10, CLOSE = 0.75, CROP = 0.4, RELATE_GROUND = 0.06, RELATE_SIZE = 0.75, SHRINK_W = 2, OCCLUDE = 1, PIC_W = 0.3;
   const E = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
   const dur = Math.max(0.001, S.dur);
   // (the lines read while the page is on screen, f.lines: the engine adds those that come up while the next shot's
@@ -30,7 +30,7 @@ function placeClear(S, W, H, lines) {
     const R = { x0: r.x0 - PAD, y0: r.y0 - PAD, x1: r.x1 + PAD, y1: r.y1 + PAD };
     return sum + Math.max(...times(r).map((t) => meet(onFrame(boxAt(t), t), R))) / Math.max(1, (R.x1 - R.x0) * (R.y1 - R.y0));
   }, 0);
-  const xs = Array.from({ length: 193 }, (_, i) => -0.96 + i * 0.01);
+  const xs = Array.from({ length: 385 }, (_, i) => -0.96 + i * 0.005);
   // How far a spot sits out of the frame: 0 wholly in it (or no further out than the director had the thing), 1 past
   // the side within what a close figure may bleed (CROP of its width), undefined beyond.
   const frameTier = (own, b, close) => {
@@ -38,19 +38,28 @@ function placeClear(S, W, H, lines) {
     const crop = close ? CROP * (own.x1 - own.x0) : 0;
     return crop && b.x0 >= Math.min(own.x0, -crop) && b.x1 <= Math.max(own.x1, W + crop) ? 1 : undefined;
   };
+  const share = (b, r) => (r ? meet(b, r) / Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0)) : 0);
+  // the scene picture's window on the page (cutout.mts windowRect, frame fractions): a backdrop, but what it shows (the
+  // place, a figure standing in it) is not to be hidden; none for a whole-page picture (every spot covers it alike)
+  const pic = S.pic ? { x0: S.pic[0] * W, y0: S.pic[1] * H, x1: S.pic[2] * W, y1: S.pic[3] * H } : undefined;
   // The best spot clear of the lines, scored rather than nearest (三年後的大雪 151.5 s: the nearest spot left him half off
-  // the frame beside a wide free middle): whole and in the frame at full size first, then in the frame a little smaller,
-  // then bleeding past the side (close figures only); within that, not standing over another figure, then the nearest.
-  const search = (q, own, cx, scales, boxAt, ok, occludes) => {
+  // the frame; the next one stood him over the girl in the picture). First how far out of the frame it is; then the
+  // cost: a shrink (SHRINK_W a whole size), standing over another figure (OCCLUDE: worse than a modest shrink), over the
+  // scene picture (PIC_W: moderate), and the way moved. `log` (debug) gets every candidate considered.
+  const search = (q, own, cx, scales, boxAt, ok, others, log) => {
     const cands = [];
-    scales.forEach((s, k) => xs.forEach((x) => {
+    scales.forEach((s) => xs.forEach((x) => {
       if (!ok(x, s)) return;
-      const tier = frameTier(own, boxAt(x, s), q.h >= CLOSE);
+      const b = boxAt(x, s), tier = frameTier(own, b, q.h >= CLOSE);
       if (tier === undefined) return;
-      cands.push({ x, s, key: [tier, k, occludes(boxAt(x, s)) ? 1 : 0, Math.abs(x - cx)] });
+      const occ = Math.max(0, ...others().map((o) => share(b, o)));
+      const cost = SHRINK_W * (1 - s) + (occ > 0 ? OCCLUDE + occ : 0) + PIC_W * share(b, pic) + 0.1 * Math.abs(x - cx);
+      cands.push({ x, s, tier, cost, occ, pic: share(b, pic) });
     }));
-    cands.sort((a, b) => { for (let i = 0; i < 4; i++) if (a.key[i] !== b.key[i]) return a.key[i] - b.key[i]; return 0; });
-    return cands.find((c) => hit((t) => boxAt(c.x, c.s, t)) === 0);
+    cands.sort((a, b) => a.tier - b.tier || a.cost - b.cost);
+    const got = cands.find((c) => (c.clear = hit((t) => boxAt(c.x, c.s, t)) === 0));
+    if (log) log.push({ sprite: q.sprite, from: cx, got, cands });
+    return got;
   };
 
   // (the pose showing at t when given: a wide reaching pose that gives way to a slim one before the line comes up is
@@ -63,7 +72,6 @@ function placeClear(S, W, H, lines) {
   // figure alone, may cross to the other side of a line; the facing (flip) is never changed (a mirrored pose is a new
   // pose the cast sheet may not allow).
   const related = (a, b) => Math.abs(a.ground - b.ground) <= RELATE_GROUND && Math.min(a.h, b.h) / Math.max(a.h, b.h) >= RELATE_SIZE;
-  const overlap = (a, b) => Math.min(a.x1, b.x1) > Math.max(a.x0, b.x0) && Math.min(a.y1, b.y1) > Math.max(a.y0, b.y0);
   // One pass over the figures in a direction (1: left to right); `gentle`, a figure also keeps clear of the related
   // figures not placed yet as the director had them (only the figures under a line move), else it may push them along.
   const pack = (dir, gentle) => {
@@ -76,9 +84,9 @@ function placeClear(S, W, H, lines) {
       const own = actorBox(q, q.x, 1);
       const rel = S.actors.map((o, j) => j).filter((j) => j !== i && related(q, S.actors[j]) && (placed.has(j) || gentle));
       const ok = (x, s) => { const b = actorBox(q, x, s); return rel.every((j) => { const o = actorBox(out[j], out[j].x, 1); return S.actors[j].x < q.x ? b.x0 >= o.x1 + GAP : b.x1 <= o.x0 - GAP; }); };
-      const occludes = (b) => S.actors.some((o, j) => j !== i && !related(q, o) && overlap(b, actorBox(out[j], out[j].x, 1)));
+      const others = () => S.actors.flatMap((o, j) => (j !== i && !related(q, o) ? [actorBox(out[j], out[j].x, 1)] : []));
       const keep = ok(q.x, 1) && hit((t) => actorBox(q, q.x, 1, t)) === 0;
-      const got = keep ? { x: q.x, s: 1 } : search(q, own, q.x, scalesOf(q), (x, s, t) => actorBox(q, x, s, t), ok, occludes);
+      const got = keep ? { x: q.x, s: 1 } : search(q, own, q.x, scalesOf(q), (x, s, t) => actorBox(q, x, s, t), ok, others, log);
       if (!got) stuck++;
       else if (!keep) { moved++; if (got.s < 1) shrunk++; cost += Math.abs(got.x - q.x) + (1 - got.s); }
       out[i] = got && !keep ? Object.assign({}, q, { x: got.x, h: q.h * got.s }) : q;
@@ -114,7 +122,7 @@ function placeClear(S, W, H, lines) {
       return { x0: cx - rx, y0: cy - ry, x1: cx + rx, y1: cy + ry };
     };
     if (hit((t) => boxAt(q.x, 1, t)) === 0) return q;
-    const got = search({ h: 0 }, boxAt(q.x, 1, 0), q.x, SCALES, boxAt, () => true, () => false);
+    const got = search({ h: 0, sprite: q.sprite }, boxAt(q.x, 1, 0), q.x, SCALES, boxAt, () => true, () => [], log);
     if (!got) { res.stuck++; return q; }
     res.moved++;
     if (got.s < 1) res.shrunk++;

@@ -209,3 +209,35 @@ test('lines at both sides and no room for two as spaced: the one under a line pu
   assert.equal(ph.ground, him.ground);
   assert.equal(pr.ground, her.ground);
 });
+
+test('standing over another figure costs more than a modest shrink (三年後的大雪 151.5 s: he covered the girl in the picture)', () => {
+  // the only clear room is the middle; at full size he must overlap her, a little smaller he stands beside her
+  const lines: Box[] = [{ from: 0, to: 12.24, x0: 1324, y0: 40, x1: 1756, y1: 951 }, { from: 12.26, to: 15.88, x0: 174, y0: 40, x1: 567, y1: 954 }];
+  const him = actor(-0.58, { h: 0.9, ground: 1 }), her = actor(-0.05, { sprite: 'she', h: 0.4, ground: 0.8 });
+  const r = placeClear(shot([him, her], [], { dur: 12.26, zoom: [1, 1.03], focus: [-0.1, 0], aspects: { he: 0.321, she: 0.342 }, pic: [294 / W, 140 / H, 1050 / W, 896 / H] }), W, H, lines);
+  const [p] = r.actors;
+  assert.equal(r.stuck, 0);
+  assert.ok(p.h < him.h && p.h >= him.h * 0.8, 'a modest shrink');
+  assert.ok(!meets(box(p, 0.321), { from: 0, to: 0, ...box(her, 0.342) }), 'not over her');
+  assert.equal(p.ground, him.ground, 'feet on his own ground');
+});
+
+test('a moved figure keeps out of the scene picture when a clear spot outside it is there', () => {
+  const line: Box = { from: 0, to: 4, x0: 850, y0: 40, x1: 1150, y1: 950 };
+  const q = actor(0.0);
+  // the picture's window fills the left of the line (the nearer side); the right of it is bare paper
+  const r = placeClear(shot([q], [], { pic: [0.05, 0.1, 0.4, 0.9] }), W, H, [line]);
+  const b = box(r.actors[0]);
+  assert.ok(b.x0 > line.x1, 'beside the line on the bare side, not in front of the picture');
+});
+
+test('a figure is never lifted, sunk or enlarged: its ground stays and its size never grows', () => {
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let k = 0; k < 60; k++) {
+    const qs = [actor(rnd() * 1.6 - 0.8, { h: 0.4 + rnd() * 0.6, ground: 0.8 + rnd() * 0.2 }), actor(rnd() * 1.6 - 0.8, { sprite: 'she', h: 0.4 + rnd() * 0.5, ground: 0.8 + rnd() * 0.15 })];
+    const x0 = rnd() * 1500;
+    const r = placeClear(shot(qs), W, H, [{ from: 0, to: 4, x0, y0: 40, x1: x0 + 200 + rnd() * 500, y1: 950 }]);
+    r.actors.forEach((p, i) => { assert.equal(p.ground, qs[i].ground); assert.ok(p.h <= qs[i].h); });
+  }
+});

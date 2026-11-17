@@ -152,8 +152,18 @@ export const onBeat = (at: number, start: number, dur: number, downbeats: number
   return near == null ? at : (near - start) / dur;
 };
 
+/**
+ * The scene picture's window on the page as frame fractions [x0, y0, x1, y1] (page.js draws it the same size), or
+ * undefined for a whole page or a full-width band: what clear-place.js keeps the moved figures from standing over.
+ */
+export const windowRect = (l?: Layout): [number, number, number, number] | undefined => {
+  if (!l || ['full', 'band', 'doubleband', 'filmstrip', 'split'].includes(l.shape)) return undefined;
+  const w = ((WIDE_K[l.shape] ?? 1) * l.size * 1080) / 1920, cx = (l.x + 1) / 2;
+  return [cx - w / 2, l.y - l.size / 2, cx + w / 2, l.y + l.size / 2];
+};
+
 export function shotCode(s: Shot, dur: number, aspects: Record<string, number>) {
-  const spec = { ...s, dur, aspects };
+  const spec = { ...s, dur, aspects, pic: windowRect(s.layout) };
   return `const S=${JSON.stringify(spec)};
 const W=f.w,H=f.h,a=f.age,E=x=>x<=0?0:x>=1?1:x*x*(3-2*x),p=E(a/S.dur);
 const z=S.zoom[0]+(S.zoom[1]-S.zoom[0])*p;

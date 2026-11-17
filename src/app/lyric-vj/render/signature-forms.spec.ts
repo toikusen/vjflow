@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { contrast } from '../contrast';
-import { groundUnder, inkFor, Inks, READS } from './signature';
+import { groundUnder, holdsInks, inkFor, Inks, READS } from './signature';
 import { isMore, riseKindOf, rowBreak, SMOKE_READS, smokeTone } from './signature-forms';
 import type { SignatureMoment } from '../signature-moments';
 
@@ -50,8 +50,36 @@ describe('inkFor: the moment\'s type on what is really under it', () => {
       return { getImageData: () => ({ data: d }) } as unknown as CanvasRenderingContext2D;
     };
     expect(groundUnder(half(350, 350), 0, 0, 10, 10).mixed).toBe(true);
-    expect(groundUnder(half(700, 0), 0, 0, 10, 10)).toEqual({ mean: '#0a0a0a', mixed: false });
+    expect(groundUnder(half(700, 0), 0, 0, 10, 10)).toMatchObject({ mean: '#0a0a0a', mixed: false });
     expect(groundUnder(half(20, 0), 0, 0, 10, 10).mixed).toBe(false);
+  });
+});
+
+describe('a moment\'s line reads on every part of its ground, as a line does (黄昏サイクル 109.7–113.5 s)', () => {
+  // the cut under 「ああこんなにも君は僕を夢中に…」 turned from a cream page to a cream plate over pink, red and orange
+  const cream = '#efe6d8', pink = '#d86f9c', red = '#c8454a', orange = '#df8a68';
+  it('reads the ground in parts: a region half cream and half red has both in its tiles', () => {
+    const [w, h] = [64, 8];
+    const d = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) d.set(x < w / 2 ? [0xef, 0xe6, 0xd8, 255] : [0xc8, 0x45, 0x4a, 255], (y * w + x) * 4);
+    const g = groundUnder({ getImageData: () => ({ data: d }) } as unknown as CanvasRenderingContext2D, 0, 0, w, h);
+    expect(g.tiles).toContain(cream);
+    expect(g.tiles).toContain(red);
+  });
+  it('keylines a navy ink that reads on the ground\'s mean but not on its red part', () => {
+    const on = inkFor(inks('#26489E', '#F5EFE4', '#FF6B2C'), { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] });
+    expect(on.halo).toBeDefined();
+    expect(contrast(on.ink, '#e2b9a6')).toBeGreaterThanOrEqual(READS);
+  });
+  it('needs no keyline where the ink reads on every part', () => {
+    expect(inkFor(inks('#26489E', '#F5EFE4'), { mean: '#efe6d8', mixed: false, tiles: [cream, '#f3ece0'] }).halo).toBeUndefined();
+  });
+  it('lets go of inks held from a cream page once the ground under them fails 4.5:1 anywhere, unless they carry a keyline', () => {
+    const held = inkFor(inks('#26489E', '#F5EFE4'), { mean: cream, mixed: false, tiles: [cream] });
+    expect(holdsInks(held, { mean: cream, mixed: false, tiles: [cream] })).toBe(true);
+    expect(holdsInks(held, { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] })).toBe(false);
+    const keyed = inkFor(inks('#26489E', '#F5EFE4'), { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] });
+    expect(holdsInks(keyed, { mean: '#e2b9a6', mixed: false, tiles: [cream, pink, red, orange] })).toBe(true);
   });
 });
 

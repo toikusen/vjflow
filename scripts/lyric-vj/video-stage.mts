@@ -6,6 +6,7 @@
 // the bound plan is touched: layouts, entrances, exits, emphasis, moments and transitions are the director's.
 // npx tsx scripts/lyric-vj/video-stage.mts --treatment <img>/treatment.json --assets <img>/assets.json --script run3/script.json \
 //   --clips run3/clips --out run4/edit [--song song.json --from 3 --to 63.06]  (--song: cuts the plan left without a prop take the script's shots)
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -16,7 +17,7 @@ import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spre
 import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
 import { unsungWindows } from '../../src/app/lyric-vj/structure';
 import { planStretches, realiseStretches, shotAt } from '../../src/app/lyric-vj/stretch-plan';
-import { previousShots } from '../../src/app/lyric-vj/video-cuts';
+import { previousShots, sceneTake } from '../../src/app/lyric-vj/video-cuts';
 
 const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
   // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
@@ -114,7 +115,19 @@ if (song) {
 // a scene shot stands in the language's circle window on the side its subject keeps
 const lineAt = (time: number) => song?.cues.find((c) => time >= c.start - 1e-3 && time < c.end) ?? [...(song?.cues ?? [])].reverse().find((c) => c.start <= time);
 const used = new Map<string, number>();
+const scened = new Set<string>();
 let filled = 0;
+const stillOf = (id: string) => resolve(a.clips!, '..', 'stills', `${id}.jpg`);
+/** A scene panel on a cut in the language's round window (the square of the still round the subject's side, made here
+ * when missing: nothing else made it, so no scene shot was ever placed, 大雪 2026-11-17); larger under a blown-up word. */
+const placeScene = (sec: { layers: unknown[] }, shot: { id: string; side: string; place?: string; subject: string }, mode: 'circle' | 'large') => {
+  const url = resolve(a.clips!, '..', 'stills', `${shot.id}_sq.jpg`);
+  if (!existsSync(url)) execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', stillOf(shot.id), '-vf', `crop=ih:ih:${shot.side === 'left' ? '0' : shot.side === 'right' ? 'iw-ih' : '(iw-ih)/2'}:0`, '-q:v', '2', url]);
+  if (!assets[shot.id]) { assets[shot.id] = { kind: 'image', url }; t.assets.push({ id: shot.id, kind: 'image', prompt: shot.place ?? shot.subject }); }
+  // (the window is moved clear of the words like any object, makeRoom; the whole frame instead hid the cut's plates
+  // under it or sank under its ground, 大雪 v2, 2026-11-17)
+  (sec.layers as KLayer[]).push({ kind: 'photo', mode: 'circle', asset: shot.id, x: shot.side === 'left' ? -0.3 : shot.side === 'right' ? 0.3 : 0, y: 0.02, w: mode === 'large' ? 0.52 : 0.4, drift: 0.01 });
+};
 if (song) {
   const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
   for (const sec of secs) {
@@ -128,26 +141,33 @@ if (song) {
       filled += 1;
       continue;
     }
-    if (!k || k.sprite) continue;
+    if (!k) continue;
     const cue = lineAt(sec.start);
     const line = cue && script.lines.find((l) => l.cue === cue.id);
-    if (!line?.shots.length) continue;
+    const blown = !!line && !!(t.cues as { cueId: string; world?: { blow?: unknown } }[]).find((x) => x.cueId === line.cue)?.world?.blow;
+    // a line that names a place shows its scene panel on its first cut, over a prop the binder put there (sceneTake)
+    const take = sceneTake(line, (id) => shots.get(id)?.frame, (id) => existsSync(stillOf(id)), blown, scened);
+    if (take && line) {
+      placeScene(sec, shots.get(take.id)!, take.mode);
+      scened.add(line.cue);
+      delete k.sprite;
+      continue;
+    }
+    if (k.sprite || !line?.shots.length) continue;
     const n = used.get(line.cue) ?? 0;
     used.set(line.cue, n + 1);
     const shot = shots.get(line.shots[n % line.shots.length]);
     if (!shot) continue;
     // (a line with a blown-up word keeps its cast large under it: a scene in a small window beside the big word left
     // the frame empty, v4 review)
-    if (shot.frame === 'scene' && (t.cues as { cueId: string; world?: { blow?: unknown } }[]).find((x) => x.cueId === line.cue)?.world?.blow) {
+    if (shot.frame === 'scene' && blown) {
       const alt = line.shots.find((id) => shots.get(id)?.frame !== 'scene' && assets[`spr:${id}`]);
       if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); filled += 1; }
+      else placeScene(sec, shot, 'large');
       continue;
     }
     if (shot.frame === 'scene') {
-      const sq = resolve(a.clips!, '..', 'stills', `${shot.id}_sq.jpg`);
-      if (!existsSync(sq)) continue;
-      if (!assets[shot.id]) { assets[shot.id] = { kind: 'image', url: sq }; t.assets.push({ id: shot.id, kind: 'image', prompt: shot.place ?? shot.subject }); }
-      (sec.layers as KLayer[]).push({ kind: 'photo', mode: 'circle', asset: shot.id, x: shot.side === 'left' ? -0.3 : shot.side === 'right' ? 0.3 : 0, y: 0.02, w: 0.4, drift: 0.01 });
+      placeScene(sec, shot, 'circle');
       continue;
     }
     if (!assets[`spr:${shot.id}`]) continue;

@@ -1,5 +1,5 @@
 // Subject-video tier, phase 2b: one Veo clip per video shot from its chroma still (the still is the first frame, so the
-// clip stays on green), locked camera, then the cleanest seconds keyed frame by frame (key_frames.py) into a sprite
+// clip stays on its chroma screen), locked camera, then the cleanest seconds keyed frame by frame (key_frames.py) into a sprite
 // clip at the language's frame rate. A clip that exists is kept; delete it to generate again.
 // npx tsx scripts/lyric-vj/subject-clips.mts --script run2/script.json --out run2 [--only S03] [--in 0.5 --len 1.5] [--fps 12]
 //   [--video-model veo-3.1-generate-001]
@@ -10,6 +10,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { SubjectScript } from '../../src/app/lyric-vj/subject-script';
+import { SCREENS, type ScreenName } from './chroma-screen.mts';
 
 const { values: a } = parseArgs({
   options: {
@@ -31,7 +32,11 @@ const spent = () => ledger().reduce((s, x) => s + x.usd, 0);
 for (const f of [join(homedir(), '.config/vjflow/gemini.env'), join(homedir(), '.config/vjflow/vertex.env')]) if (existsSync(f)) for (const line of readFileSync(f, 'utf8').split('\n')) { const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.*?)\s*$/); if (m && !process.env[m[1]]) process.env[m[1]] = m[2]; }
 const videoAi = new GoogleGenAI({ vertexai: true, project: process.env['GOOGLE_CLOUD_PROJECT'], location: process.env['GOOGLE_CLOUD_LOCATION'] ?? 'us-central1' });
 
-const LOCKED = 'Locked-off camera on a tripod: no camera movement at all, no zoom, no pan, no cut. The flat green background stays exactly as it is: nothing enters it, no shadows appear on it, no new objects.';
+// the screen each still was drawn on (subject-stills.mts screens.json; stills from before it are on green)
+const screensPath = join(out, 'screens.json');
+const screenOf = (id: string): ScreenName => (existsSync(screensPath) ? (JSON.parse(readFileSync(screensPath, 'utf8')) as Record<string, ScreenName>)[`${id}.jpg`] : undefined) ?? 'green';
+// (no word for camera gear: "on a tripod" put a tripod under Tokyo Drift's S04 car, 2026-11-17)
+const LOCKED = (screen: ScreenName) => `Static shot: the view does not move at all, no zoom, no pan, no cut. The flat ${screen} background stays exactly as it is: nothing enters it, no shadows appear on it, no new objects.`;
 const NEGATIVE = 'camera movement, zoom, pan, people walking in, extra limbs, extra fingers, deformed hands, morphing, text, letters, logo, shadow on the ground, background change';
 
 /** One Veo clip from the shot's chroma still (first frame), video only, 1080p 16:9. */
@@ -79,15 +84,16 @@ for (const s of script.shots.filter((x) => x.kind === 'video' && (!only || only.
   const still = join(out, 'stills', `${s.id}.jpg`);
   if (!existsSync(still)) throw new Error(`${s.id}: still missing, draw it first`);
   const mp4 = join(out, 'clips', `${s.id}.mp4`);
-  // a close shot's square still is padded to the clip's 16:9 with the same chroma green: sent as is, Veo pillarboxed it in black
+  const screen = SCREENS.find((x) => x.name === screenOf(s.id))!;
+  // a close shot's square still is padded to the clip's 16:9 with the same chroma screen: sent as is, Veo pillarboxed it in black
   const first = join(out, 'clips', `${s.id}_first.jpg`);
-  if (!existsSync(first)) execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', still, '-vf', 'scale=w=1920:h=1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x00B140', '-q:v', '2', first]);
-  await clip(mp4, `${s.subject} ${LOCKED} Keep every subject exactly as in the first frame: same design, same colours, same halftone print look; it is a risograph print that moves, not a photo. Only the described motion, slow and contained.`, first);
+  if (!existsSync(first)) execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', still, '-vf', `scale=w=1920:h=1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x${screen.hex.slice(1)}`, '-q:v', '2', first]);
+  await clip(mp4, `${s.subject} ${LOCKED(screen.name)} Keep every subject exactly as in the first frame: same design, same colours, same halftone print look; it is a risograph print that moves, not a photo. Only the described motion, slow and contained.`, first);
   sheet(mp4);
   // the cleanest seconds, keyed frame by frame at the language's frame rate
   const dir = join(out, 'clips', `${s.id}_f`);
   if (!existsSync(join(dir, 'frames.json'))) {
-    const r = execFileSync('uv', ['run', '--with', 'numpy', '--with', 'pillow', '--with', 'scipy', 'python', 'scripts/lyric-vj/key_frames.py', mp4, dir, '--in', a.in!, '--len', a.len!, '--fps', a.fps!, '--height', a.height!]).toString().trim();
+    const r = execFileSync('uv', ['run', '--with', 'numpy', '--with', 'pillow', '--with', 'scipy', 'python', 'scripts/lyric-vj/key_frames.py', mp4, dir, '--in', a.in!, '--len', a.len!, '--fps', a.fps!, '--height', a.height!, '--screen', screen.name]).toString().trim();
     console.log(`keyed ${s.id}: ${r}`);
   }
 }

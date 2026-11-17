@@ -68,7 +68,7 @@ import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { carrySubjects, freeBand, KineticLayer, oppositeSide, seatSubject, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
+import { carrySubjects, freeBand, isLeadIn, KineticLayer, oppositeSide, seatSubject, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -1710,15 +1710,16 @@ export class LyricVjEngine {
       // a line that only brushes a cut (its last frames of fading out as the cut lands) does not decide the room: a
       // figure stood faded in a corner for a whole cut because the line before was still going out
       const brush = (from: number, to: number) => Math.min(0.35, 0.25 * (to - from));
-      const LEAD = 0.15;
       // (only a line going out brushes: one coming in over the cut always decides, however late — a figure seated for
       // the line before stood under the next line's first frames, S22 under 「失う怖さも」 at 52.57 s, 2026-11-17)
       // (a line up at full strength over any of the cut decides too, however briefly: its sung tail now holds it up
       // while the next cut lands, 風の匂い under S18 at 11.73 s; only its exit alone may brush)
-      // (but a line whose first frames only touch the cut's last LEAD seconds, its lead-in before the next cut lands, is
-      // the next cut's: a moment's line 0.1 s into 大雪's 39.12 cut sent S03 to a corner for all five seconds, 2026-11-17)
+      // (but a line whose first frames only touch the cut's last moments, its lead-in before the next cut lands, is the
+      // next cut's: the subject is seated without it and leaves as it comes in, leaveBy — a moment's line 0.23 s into
+      // 大雪's 39.12 cut sent S03 to a corner for all five seconds, 2026-11-17)
       const onCut = <T extends { from: number; to: number; strong?: number }>(xs: T[], from: number, to: number) => xs.filter((r) => {
-        if (r.from > from + 1e-3) return Math.min(to, r.to) - Math.max(from, r.from) > (r.to > to + LEAD ? LEAD : 0);
+        if (isLeadIn(r, from, to)) return false;
+        if (r.from > from + 1e-3) return Math.min(to, r.to) - Math.max(from, r.from) > 0;
         if (Math.min(to, r.strong ?? r.to) - Math.max(from, r.from) > 0) return true;
         return Math.min(to, r.to) - Math.max(from, r.from) > brush(from, to);
       });
@@ -1767,7 +1768,9 @@ export class LyricVjEngine {
           // under two lines up at once). With no room it stands behind the lines faded (sweet timer's carriage, wand and
           // moon sat on its lines; dropping it instead left プラトニックチョロイン a minute without pictures)
           if (l.sprite) {
-            delete l.room; delete l.rows; delete l.under; delete l.waitFor;
+            delete l.room; delete l.rows; delete l.under; delete l.waitFor; delete l.leaveBy;
+            const leads = allRects.filter((r) => isLeadIn(r, sec.start, until));
+            if (leads.length) l.leaveBy = Math.min(...leads.map((r) => r.from));
             const pic0 = this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined;
             const pic = pic0?.width && pic0.height ? { width: pic0.width * (crop ? crop[2] - crop[0] : 1), height: pic0.height * (crop ? crop[3] - crop[1] : 1) } : { width: 1, height: 1 };
             const fh = H * (l.size ?? 0.85);

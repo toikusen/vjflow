@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, FOOT_PAD, fitClear, fitInRoom, freeBand, freeRows, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, FOOT_PAD, fitClear, fitInRoom, freeBand, freeRows, isLeadIn, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -294,5 +294,19 @@ describe('pickRoom', () => {
   });
   it('keeps the band when the rows would leave a speck', () => {
     expect(pickRoom([0, 300], [900, 1080], 400, 540)).toBe('band');
+  });
+});
+
+describe('isLeadIn: a line coming in over only the last moments of a cut belongs to the next cut', () => {
+  it('a moment line 0.23 s before a five-second cut ends does not seat it (大雪 S03, 39.12–44.13 s)', () => {
+    expect(isLeadIn({ from: 43.9, to: 47.0 }, 39.12, 44.13)).toBe(true);
+  });
+  it('a line coming in earlier, a line that ends with the cut and a line already up do seat it', () => {
+    expect(isLeadIn({ from: 43.0, to: 47.0 }, 39.12, 44.13)).toBe(false);
+    expect(isLeadIn({ from: 43.9, to: 44.2 }, 39.12, 44.13)).toBe(false);
+    expect(isLeadIn({ from: 39.0, to: 47.0 }, 39.12, 44.13)).toBe(false);
+  });
+  it('a cut too short to hold the subject and then lose it keeps the old rule', () => {
+    expect(isLeadIn({ from: 1.4, to: 4 }, 1, 1.6)).toBe(false);
   });
 });

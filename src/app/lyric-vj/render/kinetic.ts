@@ -150,6 +150,8 @@ export interface KineticLayer {
   seated?: boolean;
   /** The song time the character comes up at, after a line going out over the cut's start was read (seatSubject). */
   waitFor?: number;
+  /** The song time the character is gone by: the next cut's line coming in over this cut's last moments (isLeadIn). */
+  leaveBy?: number;
   /** The boxes (frame px) of the lines sung over a prop's cut: a prop sent to a corner takes one clear of them (layRooms). */
   over?: [number, number, number, number][];
   /** What stays through the cut's part of the song (board.ts): evidence filling a board, a place's standing things. */
@@ -766,7 +768,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   veil?.(ctx, 1);
   // the character, printed in the cut's inks: it pops in, then holds still until the next cut
   // (a character waiting for a line going out comes up once it has been read: seatSubject)
-  if (printed && !own && !(l.waitFor !== undefined && now < l.waitFor - 1e-6)) {
+  if (printed && !own && !(l.waitFor !== undefined && now < l.waitFor - 1e-6) && !(l.leaveBy !== undefined && now >= l.leaveBy - 1e-6)) {
     const { img: art, w, h } = printed;
     const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
 
@@ -1082,6 +1084,16 @@ export function pickRoom(band: [number, number], rows: [number, number], w: numb
 export const SUBJECT_MIN_H = 0.45;
 /** The most a subject waits (s, and a fifth of its cut) for a line going out to be read before it comes up. */
 export const WAIT_MAX = 0.6;
+/** The longest lead-in of a line that belongs to the next cut although its first frames fall in this one. */
+export const LEAD_IN_MAX = 0.35;
+
+/**
+ * A line coming in over only the last moments of a cut (≤ LEAD_IN_MAX, and on well past it): its lead-in before the
+ * next cut lands. It does not seat the cut's subject; the subject leaves as it comes in (KineticLayer.leaveBy).
+ */
+export function isLeadIn(r: { from: number; to: number }, from: number, to: number): boolean {
+  return r.from > from + 1e-3 && r.from < to && to - r.from <= LEAD_IN_MAX && r.to > to + LEAD_IN_MAX && to - from > 2 * LEAD_IN_MAX;
+}
 export type SeatLine = { from: number; to: number; strong?: number; x0: number; y0: number; x1: number; y1: number };
 export type Seat = { side?: 'left' | 'right'; room?: [number, number]; rows?: [number, number]; under?: boolean; waitFor?: number; height: number };
 

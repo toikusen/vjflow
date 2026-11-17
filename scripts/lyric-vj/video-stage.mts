@@ -11,8 +11,11 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { SubjectScript } from '../../src/app/lyric-vj/subject-script';
 import type { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
+import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
 
-const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' } } });
+const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
+  // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
+  fixed: { type: 'string' } } });
 const t: TreatmentV3 = JSON.parse(readFileSync(a.treatment!, 'utf8'));
 type Asset = { kind: 'image' | 'video'; url: string; frames?: { pattern: string; count: number; fps: number; start?: number; loop?: boolean } };
 const assets: Record<string, Asset> = JSON.parse(readFileSync(a.assets!, 'utf8'));
@@ -23,6 +26,20 @@ const loops = (subject: string) => /flutter|wave|sway|breeze|spin|turn|pedal|loo
 
 type KLayer = Record<string, unknown> & { kind: string; sprite?: string; at?: number; subjectAt?: number };
 const secs = [...t.graphics!.sections].sort((x, y) => x.start - y.start);
+// the cast was drawn in one scheme of the world: the window's grounds and lines take it (the plan's own pick printed
+// a cobalt-and-vermilion cast into a pink-and-purple world)
+const schemeId = a.fixed && existsSync(a.fixed) ? (JSON.parse(readFileSync(a.fixed, 'utf8')) as { scheme?: string }[]).find((f) => f.scheme)?.scheme : undefined;
+const worldId = (t.design as { world?: { id?: string } } | undefined)?.world?.id;
+const scheme = schemeId && worldId ? STYLE_WORLDS.find((w) => w.id === worldId)?.palette.find((p) => p.id === schemeId) : undefined;
+if (scheme) {
+  const withScheme = <T extends Record<string, unknown>>(x: T): T => ({ ...x, ...(x['slots'] ? { slots: scheme } : {}), ...(x['sheetInks'] ? { sheetInks: scheme } : {}), ...('ink' in x ? { ink: scheme.ink, paper: scheme.ground, accent: scheme.accent } : {}), ...('core' in x ? { core: scheme.ink2 } : {}) });
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  for (const sec of secs) {
+    if (sec.start < from - 1 || sec.start >= to) continue;
+    sec.layers = (sec.layers as KLayer[]).map((l) => { const g = l.kind === 'kinetic' ? withScheme(l) : l; if (g['world']) g['world'] = withScheme(g['world'] as Record<string, unknown>); return g; }) as never;
+  }
+  for (const c of t.cues as (Record<string, unknown> & { world?: Record<string, unknown> })[]) if (c.world) c.world = withScheme(c.world);
+}
 // the subject layer: the picture tier binds a prop to a cut here and there; a subject video keeps its cast in view,
 // so a cut the plan left without one takes the script's shot for its line (the line's shots in order, cycling), and
 // a scene shot stands in the language's circle window on the side its subject keeps
@@ -84,12 +101,7 @@ secs.forEach((sec, i) => {
   }
 });
 t.graphics!.sections = secs;
-if (a.from && a.to) {
-  const from = Number(a.from), to = Number(a.to);
-  const inWindow = new Set(t.cues.filter((c) => { const s = t.shots.find((x) => x.id === c.shot); return s && s.start < to && s.end > from; }).map((c) => c.cueId));
-  t.cues = t.cues.filter((c) => inWindow.has(c.cueId));
-  t.shots = t.shots.filter((s) => s.start < to && s.end > from).map((s) => ({ ...s, start: Math.max(from, s.start), end: Math.min(to, s.end) }));
-}
+// (the plan stays whole: its moments and word syncs refer to lines beyond a window; a window is rendered with --clip)
 writeFileSync(join(a.out!, 'treatment.json'), JSON.stringify(t));
 writeFileSync(join(a.out!, 'assets.json'), JSON.stringify(assets, null, 1));
 console.log(`video stage: ${filled} cuts filled from the script, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);

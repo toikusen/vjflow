@@ -6,7 +6,7 @@
 // the renderer's keep-clear (cover.ts) is the last resort.
 /* eslint-disable */
 function placeClear(S, W, H, lines) {
-  const PAD = 24, GAP = 0.03 * W, SCALES = [1, 0.9, 0.8, 0.7], MIN_H = 0.4, STEPS = 10, CLOSE = 0.75, CROP = 0.4;
+  const PAD = 24, GAP = 0.03 * W, SCALES = [1, 0.9, 0.8, 0.7], MIN_H = 0.4, STEPS = 10, CLOSE = 0.75, CROP = 0.4, RELATE_GROUND = 0.06, RELATE_SIZE = 0.75;
   const E = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
   const dur = Math.max(0.001, S.dur);
   // (the lines read while the page is on screen, f.lines: the engine adds those that come up while the next shot's
@@ -31,55 +31,68 @@ function placeClear(S, W, H, lines) {
     return sum + Math.max(...times(r).map((t) => meet(onFrame(boxAt(t), t), R))) / Math.max(1, (R.x1 - R.x0) * (R.y1 - R.y0));
   }, 0);
   const xs = Array.from({ length: 193 }, (_, i) => -0.96 + i * 0.01);
-  // the nearest place clear of the lines (slide first, then each shrink in turn); none: undefined
-  const search = (cx, scales, boxAt, ok) => {
-    for (const s of scales) {
-      const best = xs.filter((x) => ok(x, s) && hit((t) => boxAt(x, s, t)) === 0).sort((a, b) => Math.abs(a - cx) - Math.abs(b - cx))[0];
-      if (best !== undefined) return { x: best, s };
-    }
-    return undefined;
+  // How far a spot sits out of the frame: 0 wholly in it (or no further out than the director had the thing), 1 past
+  // the side within what a close figure may bleed (CROP of its width), undefined beyond.
+  const frameTier = (own, b, close) => {
+    if (b.x0 >= Math.min(own.x0, 0) && b.x1 <= Math.max(own.x1, W)) return 0;
+    const crop = close ? CROP * (own.x1 - own.x0) : 0;
+    return crop && b.x0 >= Math.min(own.x0, -crop) && b.x1 <= Math.max(own.x1, W + crop) ? 1 : undefined;
+  };
+  // The best spot clear of the lines, scored rather than nearest (三年後的大雪 151.5 s: the nearest spot left him half off
+  // the frame beside a wide free middle): whole and in the frame at full size first, then in the frame a little smaller,
+  // then bleeding past the side (close figures only); within that, not standing over another figure, then the nearest.
+  const search = (q, own, cx, scales, boxAt, ok, occludes) => {
+    const cands = [];
+    scales.forEach((s, k) => xs.forEach((x) => {
+      if (!ok(x, s)) return;
+      const tier = frameTier(own, boxAt(x, s), q.h >= CLOSE);
+      if (tier === undefined) return;
+      cands.push({ x, s, key: [tier, k, occludes(boxAt(x, s)) ? 1 : 0, Math.abs(x - cx)] });
+    }));
+    cands.sort((a, b) => { for (let i = 0; i < 4; i++) if (a.key[i] !== b.key[i]) return a.key[i] - b.key[i]; return 0; });
+    return cands.find((c) => hit((t) => boxAt(c.x, c.s, t)) === 0);
   };
 
-  // figures, left to right: each keeps its side of the one before (two people facing each other never swap places) and
-  // stays apart from it; its width stays on the frame as far as the director had it, but for a close figure, which may
-  // step partly out past the frame's side (cropped by the frame reads as framing; cut by a line's hole it reads as a fault)
   // (the pose showing at t when given: a wide reaching pose that gives way to a slim one before the line comes up is
   // placed by the slim one; without t, the wider of the two, as the figures' spacing)
   const asp = (q, t) => (t === undefined || !q.then ? Math.max(S.aspects[q.sprite] || 0.4, q.then ? S.aspects[q.then] || 0.4 : 0) : S.aspects[t >= q.at * dur ? q.then : q.sprite] || 0.4);
   const actorBox = (q, x, s, t) => { const hh = q.h * s * H, half = (hh * asp(q, t)) / 2 * 1.04, cx = ((x + 1) / 2) * W, foot = q.ground * H; return { x0: cx - half, y0: foot - hh * 1.01, x1: cx + half, y1: foot }; };
-  const inFrame = (q, b) => { const own = actorBox(q, q.x, 1), crop = q.h >= CLOSE ? CROP * (own.x1 - own.x0) : 0; return b.x0 >= Math.min(own.x0, -crop) && b.x1 <= Math.max(own.x1, W + crop); };
   const scalesOf = (q) => SCALES.filter((s) => s === 1 || q.h * s >= Math.min(q.h, MIN_H));
-  // one pass over the figures in a direction (1: left to right): each keeps clear of the lines and on its side of the one
-  // placed before it; `gentle`, it also stops short of the next one as the director had it (only the figures under a line
-  // move), else it may push the next one along (the next one then makes room in turn)
+  // Two figures relate when they stand on the same ground at the same depth (the shots' pairs talking, facing each
+  // other): they keep their left-right order and their distance. A far figure in the picture behind a close one, or a
+  // figure alone, may cross to the other side of a line; the facing (flip) is never changed (a mirrored pose is a new
+  // pose the cast sheet may not allow).
+  const related = (a, b) => Math.abs(a.ground - b.ground) <= RELATE_GROUND && Math.min(a.h, b.h) / Math.max(a.h, b.h) >= RELATE_SIZE;
+  const overlap = (a, b) => Math.min(a.x1, b.x1) > Math.max(a.x0, b.x0) && Math.min(a.y1, b.y1) > Math.max(a.y0, b.y0);
+  // One pass over the figures in a direction (1: left to right); `gentle`, a figure also keeps clear of the related
+  // figures not placed yet as the director had them (only the figures under a line move), else it may push them along.
   const pack = (dir, gentle) => {
     const order = S.actors.map((q, i) => i).sort((i, j) => dir * (S.actors[i].x - S.actors[j].x));
     const out = S.actors.slice();
-    let edge = -dir * Infinity, stuck = 0, moved = 0, shrunk = 0, cost = 0;
-    order.forEach((i, n) => {
+    const placed = new Set();
+    let stuck = 0, moved = 0, shrunk = 0, cost = 0;
+    for (const i of order) {
       const q = S.actors[i];
-      const nq = S.actors[order[n + 1]];
-      const next = !gentle || !nq ? dir * Infinity : dir > 0 ? actorBox(nq, nq.x, 1).x0 - GAP : actorBox(nq, nq.x, 1).x1 + GAP;
-      const side = (b) => (dir > 0 ? b.x0 >= edge : b.x1 <= edge);
-      const ok = (x, s) => { const b = actorBox(q, x, s); return inFrame(q, b) && side(b) && (dir > 0 ? b.x1 <= next || x <= q.x : b.x0 >= next || x >= q.x); };
-      const keep = side(actorBox(q, q.x, 1)) && hit((t) => actorBox(q, q.x, 1, t)) === 0;
-      const got = keep ? { x: q.x, s: 1 } : search(q.x, scalesOf(q), (x, s, t) => actorBox(q, x, s, t), ok);
+      const own = actorBox(q, q.x, 1);
+      const rel = S.actors.map((o, j) => j).filter((j) => j !== i && related(q, S.actors[j]) && (placed.has(j) || gentle));
+      const ok = (x, s) => { const b = actorBox(q, x, s); return rel.every((j) => { const o = actorBox(out[j], out[j].x, 1); return S.actors[j].x < q.x ? b.x0 >= o.x1 + GAP : b.x1 <= o.x0 - GAP; }); };
+      const occludes = (b) => S.actors.some((o, j) => j !== i && !related(q, o) && overlap(b, actorBox(out[j], out[j].x, 1)));
+      const keep = ok(q.x, 1) && hit((t) => actorBox(q, q.x, 1, t)) === 0;
+      const got = keep ? { x: q.x, s: 1 } : search(q, own, q.x, scalesOf(q), (x, s, t) => actorBox(q, x, s, t), ok, occludes);
       if (!got) stuck++;
       else if (!keep) { moved++; if (got.s < 1) shrunk++; cost += Math.abs(got.x - q.x) + (1 - got.s); }
       out[i] = got && !keep ? Object.assign({}, q, { x: got.x, h: q.h * got.s }) : q;
-      const b = actorBox(out[i], out[i].x, 1);
-      edge = dir > 0 ? Math.max(edge, b.x1 + GAP) : Math.min(edge, b.x0 - GAP);
-    });
+      placed.add(i);
+    }
     return { actors: out, stuck, moved, shrunk, cost };
   };
-  const gentle = pack(1, true);
-  let { actors, stuck, moved, shrunk } = gentle;
-  // one figure boxed in by its partner: the two (or more) slide together at full size, as the director spaced them; else
+  let { actors, stuck, moved, shrunk } = pack(1, true);
+  // a figure boxed in by its partner: the related figures slide together at full size, as the director spaced them; else
   // the one under the line pushes its partner along (or back), each shrinking a little only where it must; else they
   // slide together a little smaller. Only then is anyone left for the keep-clear
   if (stuck && S.actors.length > 1) {
     const group = (dx, s) => S.actors.map((q) => Object.assign({}, q, { x: q.x + dx, h: q.h * s }));
-    const fits = (dx, s) => group(dx, s).every((g, k) => inFrame(S.actors[k], actorBox(g, g.x, 1)) && hit((t) => actorBox(g, g.x, 1, t)) === 0);
+    const fits = (dx, s) => group(dx, s).every((g, k) => frameTier(actorBox(S.actors[k], S.actors[k].x, 1), actorBox(g, g.x, 1), g.h >= CLOSE) !== undefined && hit((t) => actorBox(g, g.x, 1, t)) === 0);
     const dxs = Array.from({ length: 401 }, (_, k) => -2 + k * 0.01).sort((a, b) => Math.abs(a) - Math.abs(b));
     const slide = (s) => { const dx = dxs.find((d) => fits(d, s)); return dx === undefined ? undefined : { actors: group(dx, s), stuck: 0, moved: S.actors.length, shrunk: s < 1 ? S.actors.length : 0 }; };
     const push = () => [pack(1, false), pack(-1, false)].filter((r) => !r.stuck).sort((a, b) => a.cost - b.cost)[0];
@@ -93,7 +106,7 @@ function placeClear(S, W, H, lines) {
   // height, then shrunk on their centre
   const props = S.props.map((q, i) => {
     const ar = S.aspects[q.sprite] || 1;
-    const boxAt = (x, s, t) => {
+    const boxAt = (x, s, t = 0) => {
       const hh = q.h * s * H, ww = hh * ar, k = E(t / Math.min(dur, 4));
       let cx = ((x + 1) / 2) * W + (q.walk || 0) * W * E(t / dur), cy = q.y * H, rx = ww / 2, ry = hh / 2;
       if (q.motion === 'fall') { cy -= (1 - k) * H * 0.55; rx = ry = Math.hypot(ww, hh) / 2; rx += 40 * (1 - k); }
@@ -101,7 +114,7 @@ function placeClear(S, W, H, lines) {
       return { x0: cx - rx, y0: cy - ry, x1: cx + rx, y1: cy + ry };
     };
     if (hit((t) => boxAt(q.x, 1, t)) === 0) return q;
-    const got = search(q.x, SCALES, boxAt, () => true);
+    const got = search({ h: 0 }, boxAt(q.x, 1, 0), q.x, SCALES, boxAt, () => true, () => false);
     if (!got) { res.stuck++; return q; }
     res.moved++;
     if (got.s < 1) res.shrunk++;

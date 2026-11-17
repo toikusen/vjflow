@@ -114,18 +114,63 @@ test('the shot code places its figures from f.lines: the sprite is drawn clear o
   assert.ok(foot + half < midLine.x0 || foot - half > midLine.x1, `foot at ${foot} is clear of the line`);
 });
 
-test('a close figure boxed in between two lines steps partly out past the frame side rather than being cut by a line', () => {
-  // (三年後的大雪 9.2–13.9 s: lines at both sides, he_eyes_closed 0.9 high with her standing left of him)
+test('a close figure between two lines takes the room beside the far figure behind him, whole and at full size', () => {
+  // (三年後的大雪 9.2–13.9 s: lines at both sides, he_eyes_closed 0.9 high in front, her small in the picture behind)
   const lines: Box[] = [{ from: 0, to: 4, x0: 190, y0: 40, x1: 488, y1: 951 }, { from: 4, to: 11, x0: 1351, y0: 40, x1: 1714, y1: 956 }];
   const her = actor(0.12, { sprite: 'she', h: 0.4, ground: 0.8 }), him = actor(0.6, { h: 0.9, ground: 1 });
   const r = placeClear(shot([her, him], [], { aspects: { he: 0.29, she: 0.31 } }), W, H, lines);
   assert.equal(r.stuck, 0);
-  const [, p] = r.actors;
+  const [pher, p] = r.actors;
   const b = box(p, 0.29);
   assert.ok(lines.every((l) => !meets(b, l)), 'clear of both lines');
+  assert.equal(p.h, him.h);
   assert.equal(p.ground, him.ground);
-  assert.ok(b.x1 - W < 0.4 * (b.x1 - b.x0) + 1, 'no more than 40 % of him past the frame');
-  assert.ok(r.actors[0].x < p.x, 'she stays on his left');
+  assert.ok(b.x0 >= 0 && b.x1 <= W, 'wholly in the frame');
+  assert.deepEqual(pher, her, 'she is not under a line and stays');
+});
+
+test('a close figure with no room inside the frame steps partly out past its side, no more than 40 %', () => {
+  const lines: Box[] = [{ from: 0, to: 4, x0: 0, y0: 40, x1: 1600, y1: 951 }];
+  const q = actor(0.3, { h: 0.9, ground: 1 });
+  const r = placeClear(shot([q], [], { aspects: { he: 0.45 } }), W, H, lines);
+  const b = box(r.actors[0], 0.45);
+  assert.equal(r.stuck, 0);
+  assert.ok(b.x1 > W && b.x1 - W <= 0.4 * (b.x1 - b.x0) + 1);
+  assert.ok(!meets(b, lines[0]));
+});
+
+test('a wide free spot where the figure stands whole beats a nearer spot that crops it at the frame edge', () => {
+  // (三年後的大雪 151.5 s: he was pushed half off the left edge with the right side free)
+  const line: Box = { from: 0, to: 4, x0: 300, y0: 40, x1: 1100, y1: 950 };
+  const q = actor(-0.6, { h: 0.9, ground: 1 });
+  const r = placeClear(shot([q], [], { aspects: { he: 0.35 } }), W, H, [line]);
+  const b = box(r.actors[0], 0.35);
+  assert.ok(b.x0 >= 0 && b.x1 <= W, 'wholly in the frame');
+  assert.equal(r.actors[0].h, q.h, 'at full size');
+  assert.ok(b.x0 > line.x1, 'across the line, in the free right side');
+});
+
+test('a lone close figure crosses past a far figure in the picture behind to the free side; the far one stays', () => {
+  const line: Box = { from: 0, to: 4, x0: 100, y0: 40, x1: 800, y1: 950 };
+  const him = actor(-0.6, { h: 0.9, ground: 1 }), her = actor(0, { sprite: 'she', h: 0.4, ground: 0.8 });
+  const r = placeClear(shot([him, her], [], { aspects: { he: 0.35, she: 0.4 } }), W, H, [line]);
+  const [p, ph] = r.actors;
+  assert.deepEqual(ph, her);
+  assert.ok(p.x > her.x, 'he crossed to her other side');
+  assert.equal(p.h, him.h);
+  assert.equal(p.flip, him.flip, 'his facing is kept');
+  const b = box(p, 0.35);
+  assert.ok(b.x0 >= 0 && b.x1 <= W && !meets(b, line));
+});
+
+test('two figures talking on the same ground keep their order even when crossing would be nearer and bigger', () => {
+  const line: Box = { from: 0, to: 4, x0: 900, y0: 40, x1: 1700, y1: 950 };
+  const a = actor(-0.25, { sprite: 'she', h: 0.58, ground: 0.88 }), b = actor(0.15, { h: 0.62, ground: 0.88 });
+  const r = placeClear(shot([a, b]), W, H, [line]);
+  const [pa, pb] = r.actors;
+  assert.ok(pa.x < pb.x, 'she stays on his left');
+  assert.ok(!meets(box(pb), line) && !meets(box(pa), line));
+  assert.equal(pb.ground, b.ground);
 });
 
 test('a far figure never steps out of the frame to make room', () => {

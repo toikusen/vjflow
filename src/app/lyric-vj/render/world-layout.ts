@@ -242,8 +242,11 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   const shown = gs.map((g) => g.char.trim() !== '');
   const key = gs.map((g, i) => (isKey(g) ? i : -1)).filter((i) => i >= 0);
   if (!key.length) return undefined;
-  const pre = gs.map((_, i) => i).filter((i) => i < key[0] && shown[i]);
-  const post = gs.map((_, i) => i).filter((i) => i > key.at(-1)! && shown[i]);
+  // (the words round the key keep the spaces between them: only shown glyphs were laid, so a Latin lead-in ran together,
+  // "Harajukugirlsknowhowl" for 「Harajuku girls know how I」, Tokyo Drift c071, 2026-11-17; the run's outer spaces go)
+  const run = (ids: number[]) => { const vis = ids.filter((i) => shown[i]); return vis.length ? ids.filter((i) => i >= vis[0] && i <= vis.at(-1)!) : []; };
+  const pre = run(gs.map((_, i) => i).filter((i) => i < key[0]));
+  const post = run(gs.map((_, i) => i).filter((i) => i > key.at(-1)!));
   const adv = (ids: number[]) => ids.reduce((w, i) => w + gs[i].advance, 0) / tex;
   // (a seated line's blown-up word keeps to the seat's band: the key and the small row above or below it, each about
   // 0.39 of the key's height)

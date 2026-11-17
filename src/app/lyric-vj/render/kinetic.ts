@@ -234,8 +234,9 @@ let backPush: { x: number; y: number; scale: number; dy?: number; blur?: number 
 export const setBackPush = (p?: typeof backPush) => (backPush = p);
 
 /** Moves that frame or repeat the cut's figure: without one they draw an empty window. */
-/** How strongly a character behind the lines shows: enough to read as the picture, faint next to the letters. */
-export const UNDER_ALPHA = 0.65;
+/** How strongly a character behind the lines shows: faint next to the letters, under SUBJECT_COVER_ALPHA (at 0.65 the
+ * faded figure the cover rule spares was itself a cover fault: Tokyo Drift's eight, 2026-11-17). */
+export const UNDER_ALPHA = 0.4;
 /** The height (share of the frame) a figure with no room is kept to, in its bottom corner. */
 export const UNDER_H = 0.36;
 /**
@@ -987,20 +988,36 @@ export function rowsPlace(rows: [number, number], h: number, s: number): { s: nu
   return { s: k, y: floor ? bottom - (h * k) / 2 : (top + bottom) / 2 };
 }
 
+/** The smallest a figure is shrunk to to clear a corner of the lines before it fades behind them: this share of the
+ * frame high, or CORNER_MIN_W of it wide (a wide car reads by its length). */
+export const CORNER_MIN_H = 0.14;
+export const CORNER_MIN_W = 0.22;
 /**
  * A figure sent to a bottom corner (no room, or too little): UNDER_H of the frame at most, on its own side when the lines
- * leave that corner clear, else the other one when that is clear; `clear` false when both are taken (it fades behind).
+ * leave that corner clear, else the other one when that is clear; failing both, smaller (down to CORNER_MIN_H high or CORNER_MIN_W wide) in the first
+ * corner that clears — a wide car at UNDER_H spanned both corners under Tokyo Drift's call line and stood over it, faded,
+ * 2026-11-17; `clear` false only when no corner clears even then (it fades behind, under SUBJECT_COVER_ALPHA).
  */
 export function cornerPlace(w: number, h: number, s: number, left: boolean, over: [number, number, number, number][], pad = 24): { s: number; x: number; y: number; left: boolean; clear: boolean } {
-  const at = (onLeft: boolean) => {
-    const c = underCorner(w, h, s, onLeft, pad);
+  const at = (onLeft: boolean, scale = s) => {
+    const c = underCorner(w, h, scale, onLeft, pad);
     const [x0, y0, x1, y1] = [c.x - (w * c.s) / 2, c.y - (h * c.s) / 2, c.x + (w * c.s) / 2, c.y + (h * c.s) / 2];
     return { ...c, left: onLeft, clear: !over.some(([a, b, c2, d]) => a < x1 + 16 && c2 > x0 - 16 && b < y1 + 16 && d > y0 - 16) };
   };
   const own = at(left);
   if (own.clear) return own;
   const other = at(!left);
-  return other.clear ? other : own;
+  if (other.clear) return other;
+  const floor = Math.min((H * CORNER_MIN_H) / h, (W * CORNER_MIN_W) / w);
+  // (the largest that clears, per corner: a figure anchored in its corner only grows into the lines)
+  const largest = (side: boolean) => {
+    if (floor >= own.s || !at(side, floor).clear) return undefined;
+    let [lo, hi] = [floor, own.s];
+    for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (at(side, mid).clear) lo = mid; else hi = mid; }
+    return at(side, lo);
+  };
+  const shrunk = [largest(left), largest(!left)].filter((c) => !!c).sort((a, b) => b!.s - a!.s)[0];
+  return shrunk ?? own;
 }
 
 /**

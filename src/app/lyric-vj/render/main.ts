@@ -63,7 +63,7 @@ if (signature) {
         box = box ? { x0: Math.min(box.x0, g.x0), y0: Math.min(box.y0, g.y0), x1: Math.max(box.x1, g.x1), y1: Math.max(box.y1, g.y1) } : { x0: g.x0, y0: g.y0, x1: g.x1, y1: g.y1 };
       }
     }
-    return box ? [{ id: `${id}:signature`, from: cue.start - 0.3, to: until, rect: { x0: box.x0 - 12, y0: box.y0 - 12, x1: box.x1 + 12, y1: box.y1 + 12 } }] : [];
+    return box ? [{ id: `${id}:signature`, from: cue.start - 0.3, to: until, rect: { x0: box.x0 - 12, y0: box.y0 - 12, x1: box.x1 + 12, y1: box.y1 + 12 }, replaces: id }] : [];
   });
   if (boxes.length) engine.keepClearOf(boxes);
 }

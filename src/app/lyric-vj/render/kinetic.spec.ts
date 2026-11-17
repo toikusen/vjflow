@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, FOOT_PAD, fitClear, fitInRoom, freeBand, freeRows, isLeadIn, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, CORNER_MIN_H, CORNER_MIN_W, SUBJECT_COVER_ALPHA, UNDER_ALPHA, DOC_KINDS, drawKinetic, EDGE_PAD, FOOT_PAD, fitClear, fitInRoom, freeBand, freeRows, isLeadIn, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -308,5 +308,19 @@ describe('isLeadIn: a line coming in over only the last moments of a cut belongs
   });
   it('a cut too short to hold the subject and then lose it keeps the old rule', () => {
     expect(isLeadIn({ from: 1.4, to: 4 }, 1, 1.6)).toBe(false);
+  });
+});
+
+describe('a figure with no room never stands over the words at cover strength', () => {
+  it('fades behind the lines under the cover threshold', () => {
+    expect(UNDER_ALPHA).toBeLessThan(SUBJECT_COVER_ALPHA);
+  });
+  it('a wide car that spans both corners at full corner size is shrunk into the corner a call line leaves clear', () => {
+    const call: [number, number, number, number][] = [[478, 482, 1470, 917]];
+    const c = cornerPlace(1600, 430, 1, false, call);
+    expect(c.clear).toBe(true);
+    expect(430 * c.s >= 1080 * CORNER_MIN_H - 1 || 1600 * c.s >= 1920 * CORNER_MIN_W - 1).toBe(true);
+    const [x0, y0, x1] = [c.x - (1600 * c.s) / 2, c.y - (430 * c.s) / 2, c.x + (1600 * c.s) / 2];
+    expect(x1 < 478 || x0 > 1470 || y0 > 917).toBe(true);
   });
 });

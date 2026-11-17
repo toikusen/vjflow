@@ -1694,10 +1694,13 @@ export class LyricVjEngine {
    * Words drawn over the frame by another layer (a signature moment's line, render/signature.ts): kept clear of, and
    * seated round, as the engine's own lines are (a moment's line sat on the full-size subject under it, 2026-11-17).
    */
-  keepClearOf(items: { id: string; from: number; to: number; rect: Rect }[]) {
+  keepClearOf(items: { id: string; from: number; to: number; rect: Rect; replaces?: string }[]) {
     this.keepOut.push(...items);
+    for (const i of items) if (i.replaces) this.drawnElsewhere.add(i.replaces);
     this.layRooms();
   }
+  /** The engine's lines another layer draws in their place (a signature moment): laid out, but no ground frames them. */
+  private drawnElsewhere = new Set<string>();
 
   /** The room the lines leave each kinetic cut under them, for what it draws of its own. */
   private layRooms(span: [number, number] = [-Infinity, Infinity]) {
@@ -3352,7 +3355,9 @@ export class LyricVjEngine {
     });
     const words = Math.max(0, ...[...spans.values()].map((r) => Math.min(clamp01((t - r.from + 0.15) / 0.3), clamp01((r.to - t) / 0.3))));
     const ls = all.map((l) => (l.kind === 'frame' && (l.type === 'brackets' || l.type === 'viewfinder') ? ({ ...l, opacity: (l.opacity ?? 1) * words } as Layer) : l));
-    const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to);
+    // (a line a moment draws in its place is not where the words are: a caption ground boxed its hidden layout, an empty
+    // plate beside 大雪's 「飄雪」 moment, 2026-11-17)
+    const at = (x: number) => this.lyricRects.filter((r) => x >= r.from && x <= r.to && !(r.id && this.drawnElsewhere.has(r.id)));
     // (lines that all stand on their own carriers stay carried: the ground leaves them no room of paper, 2026-11-04)
     // (a page built round its words' wall keeps every wall's layout through the union: a call beside the line, or a line
     // sharing the shot, would otherwise leave it the bare box, world-sets FaceLayout)

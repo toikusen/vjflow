@@ -75,6 +75,7 @@ import { mixHex, passTint, patchClear } from './material';
 import { tuneHandoffs } from './lyric-handoff';
 import { apertureAt, gravityPose, isLineExit, LINE_EXIT_SEC, pushFocus, radialShift } from './line-exit';
 import { FineLayer, fineLayer } from './fine-tier';
+import { fineShown } from './fine-shown';
 import { freeZone } from './board';
 import { DIAGRAM_FX } from './kinetic-more';
 import { firstSeen, storyEvents, storyLayers } from './story';
@@ -2133,7 +2134,8 @@ export class LyricVjEngine {
 
   private layFine({ rt, layer }: (typeof this.cueLayers)[number]) {
     {
-      const fine = rt.style.fine;
+      // (no unsung words beside the line: a plan's note, title or part name keeps only its hairline, fineShown)
+      const fine = rt.style.fine && fineShown(rt.style.fine, rt.cue.text);
       const box = this.lyricRects.find((r) => r.id === rt.cue.id);
       if (!fine || !box) return;
       const f = fineLayer(fine, box.rect, rt.fonts.display, songVary(rt, 'fine.reach', 0.45, 0.95), songVary(rt, 'fine.end', 0, 1) > 0.5 ? 1 : -1);

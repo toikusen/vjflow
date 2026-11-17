@@ -200,13 +200,18 @@ assert.match(noteRefusal('singer', '小明', 'x', [], ['阿花']) ?? '', /singer
 assert.match(noteRefusal('scene', '夜晚・橋邊', '夜晚的橋邊在飄雪', [], []) ?? '', /own words/, 'a scene that only repeats the line');
 assert.equal(noteRefusal('chapter', '又一個冬天', '數不盡想你的黑夜', [], []), undefined);
 assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五', 'x', [], []) ?? '', /characters/);
+// no director's small words beside a sung line, of any kind: viewers read unsung text set with the lyric as lyrics
 {
-  const ok = checkDirection(direction(full({ c2: { decor: 'fine-note', noteKind: 'echo', note: '整條街的燈' } })), ctx);
-  assert.equal(ok.accepted.get('c2')?.note, '整條街的燈', 'an echo of c1 stands on c2');
-  const bad = checkDirection(direction(full({ c2: { decor: 'fine-note', noteKind: 'chapter', note: '副歌' } })), ctx);
-  assert.ok(!bad.accepted.get('c2')?.note && bad.fallbacks.some((f) => f.cue === 'c2' && f.field === 'note'), 'a part name is refused and logged');
-  const many = checkDirection(direction(full(Object.fromEntries(cues.map((c) => [c.id, { decor: 'fine-note', noteKind: 'scene', note: '雨夜' }])))), ctx);
-  assert.equal([...many.accepted.values()].filter((a) => a.note).length, NOTE_PER_PART, 'a part carries at most NOTE_PER_PART notes');
+  for (const [noteKind, note] of [['echo', '整條街的燈'], ['scene', '凌晨三點・月台'], ['chapter', '又一個冬天'], ['singer', '阿花']]) {
+    const cd = checkDirection(direction(full({ c2: { decor: 'fine-note', noteKind, note } })), ctx);
+    assert.equal(cd.accepted.get('c2')?.note, undefined, `a ${noteKind} note is not set`);
+    assert.notEqual(cd.accepted.get('c2')?.decor, 'fine-note', `a ${noteKind} note is no decor`);
+    assert.ok(cd.fallbacks.some((f) => f.cue === 'c2' && f.field === 'decor' && /unsung/.test(f.reason)), `a ${noteKind} note is refused and logged`);
+  }
+  assert.ok(!prompt.includes('fine-note') && !prompt.includes('noteKind'), 'the prompt offers no notes');
+  const lineProps = (directionSchema().properties as { lines: { items: { properties: Record<string, unknown>; required: string[] } } }).lines.items;
+  assert.ok(!('note' in lineProps.properties) && !lineProps.required.includes('noteKind'), 'the schema asks for no note');
+  void NOTE_PER_PART;
 }
 
 // on a style world (paid-world.mts): the director chooses inside the world's closed pool
@@ -251,7 +256,7 @@ assert.match(noteRefusal('scene', '一二三四五六七八九十一二三四五
   const cline = (cue: string, over: Partial<LineChoice> = {}) => line(cue, { layout: 'chalkboard/lesson', enter: 'chalk-hand', idle: 'chalk-still', exit: 'eraser-pass', side: 'center', ...over });
   const cd = checkDirection(direction(cues.map((c) => cline(c.id, c.id === 'c1' ? { decor: 'oval' } : c.id === 'c2' ? { decor: 'fine-note', noteKind: 'echo', note: '整條街的燈' } : c.id === 'c3' ? { handoff: 'relay' } : {}))), { ...ctx, world: C });
   assert.ok(cd.fallbacks.some((f) => f.cue === 'c1' && f.field === 'decor'), 'no ring in a world without paper devices');
-  assert.equal(cd.accepted.get('c2')?.note, '整條街的燈', 'the director\'s own words still stand');
+  assert.equal(cd.accepted.get('c2')?.note, undefined, 'no director\'s words on a world either');
   assert.ok(cd.fallbacks.some((f) => f.cue === 'c3' && f.field === 'handoff'), 'no handoff in a world without them');
   // the plan on the world: its lines are world lines, no backdrop or paid finish, the world recorded on the plan
   const pw = planWorldOf(silk, song, false, '理由', 'director');

@@ -29,6 +29,7 @@ import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-ti
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
+import { fineShown } from './render/fine-shown';
 import type { MomentAsk } from './signature-moments';
 import { closingLine } from './song-parts';
 
@@ -1379,7 +1380,8 @@ export function fineFor(c: Cue, key: string, lineNo: number, seed: number, title
   if (beat === 1) return undefined;
   const short = [...key].length >= 2 && [...key].length <= 8 && [...key].length <= whole - 2;
   if (beat === 2 && short) return { kind: 'key', text: key };
-  if (beat === 0 && title && lean !== 2) return { kind: 'title', text: title };
+  // (the title only where the line sings it: unsung words beside a line read as lyrics, fine-shown.ts)
+  if (beat === 0 && title && lean !== 2) return fineShown({ kind: 'title', text: title }, c.text);
   return lean === 1 ? undefined : { kind: 'rule', text: '' };
 }
 

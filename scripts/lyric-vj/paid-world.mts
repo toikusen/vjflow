@@ -88,7 +88,7 @@ ${shared.length ? `共用版面（layout + enter + idle；整首最多 ${Math.ma
 
 【ground】這句站在什麼上，只能選這個世界的，同一個不連用；自帶地面的版面留空。${grounds}。
 
-${pool.devices ? '' : '【裝飾 decor】這個世界不畫紙面裝飾：decor 只能 none 或 fine-note（你寫的小字）。\n'}${pool.handoffs ? '' : '【換手 handoff】這個世界沒有換手：handoff 一律空字串。\n'}${pool.pace.hits.length ? `【hit】只有 ${pool.pace.hits.join('、')}，給段落第一句或最重的落拍。` : '【hit】這個世界沒有 hit：留空。'}`;
+${pool.devices ? '' : '【裝飾 decor】這個世界不畫紙面裝飾：decor 只能 none。\n'}${pool.handoffs ? '' : '【換手 handoff】這個世界沒有換手：handoff 一律空字串。\n'}${pool.pace.hits.length ? `【hit】只有 ${pool.pace.hits.join('、')}，給段落第一句或最重的落拍。` : '【hit】這個世界沒有 hit：留空。'}`;
 }
 
 /**

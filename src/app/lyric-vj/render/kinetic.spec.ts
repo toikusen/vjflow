@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitClear, fitInRoom, freeBand, freeRows, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, FOOT_PAD, fitClear, fitInRoom, freeBand, freeRows, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -123,7 +123,7 @@ describe('the song\'s thread', () => {
     const tall = rowsPlace([0, 600], 1080, 1)!;
     expect(tall.y - (1080 * tall.s) / 2).toBeGreaterThanOrEqual(1080 * EDGE_PAD - 0.01);
     const below = rowsPlace([700, 1080], 300, 1)!;
-    expect(below.y + (300 * below.s) / 2).toBeCloseTo(1080);
+    expect(below.y + (300 * below.s) / 2).toBeCloseTo(1080 * (1 - FOOT_PAD));
     // a band that would leave it a speck: no place there
     expect(rowsPlace([0, 330], 1080, 1)).toBeUndefined();
     expect(1080 * PROP_MIN_H).toBeGreaterThan(250);

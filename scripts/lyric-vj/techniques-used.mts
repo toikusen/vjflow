@@ -8,9 +8,12 @@ import { parseArgs } from 'node:util';
 
 const { values: a } = parseArgs({ options: { render: { type: 'string' }, treatment: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' } } });
 const m = JSON.parse(readFileSync(join(a.render!, 'metrics.json'), 'utf8')) as { cues: { id: string; enter?: string; exit?: string; plannedEnter?: string; plannedExit?: string; template?: string }[]; links?: { kind: string; drawn: string }[] };
-const t = JSON.parse(readFileSync(a.treatment!, 'utf8')) as { cues: { cueId: string; enter?: string; exit?: string; idle?: string; emphasis?: { method: string }[]; world?: { enter?: string; exit?: string; hold?: string; blow?: unknown; beat?: { kind: string } } }[]; graphics?: { sections: { start: number; transition?: { kind: string }; layers: { kind: string; fx?: string; sprite?: string }[] }[] }; moments?: { kind: string; at: number }[] };
+const t = JSON.parse(readFileSync(a.treatment!, 'utf8')) as { cues: { cueId: string; enter?: string; exit?: string; idle?: string; emphasis?: { method: string }[]; world?: { enter?: string; exit?: string; hold?: string; blow?: unknown; beat?: { kind: string }; seat?: string } }[]; graphics?: { sections: { start: number; transition?: { kind: string }; layers: { kind: string; fx?: string; sprite?: string; panels?: string[] }[] }[] }; moments?: { kind: string; at: number }[]; signature?: { form: string; variant: string; at: number }[] };
 const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
 const count = (xs: (string | undefined)[]) => { const c = new Map<string, number>(); for (const x of xs) if (x) c.set(x, (c.get(x) ?? 0) + 1); return [...c].sort((p, q) => q[1] - p[1]).map(([k, n]) => `${k}×${n}`).join(' '); };
+// (a window rendered with --clip has the whole song's metrics: only the lines that show inside the window count)
+type MCue = (typeof m.cues)[number] & { readableFrom?: number };
+m.cues = (m.cues as MCue[]).filter((c) => (c.readableFrom ?? 0) >= from - 0.5 && (c.readableFrom ?? 0) < to);
 const ids = new Set(m.cues.map((c) => c.id));
 const cues = t.cues.filter((c) => ids.has(c.cueId));
 const byId = new Map(m.cues.map((c) => [c.id, c]));
@@ -26,5 +29,6 @@ const secs = (t.graphics?.sections ?? []).filter((s) => s.start >= from && s.sta
 console.log(`sections ${secs.length}; transitions: ${count(secs.map((s) => s.transition?.kind))}; links drawn: ${count((m.links ?? []).map((l) => `${l.kind}/${l.drawn}`))}`);
 console.log(`moves (fx):      ${count(secs.flatMap((s) => s.layers.filter((l) => l.kind === 'kinetic').map((l) => l.fx)))}`);
 console.log(`sprite cuts:     ${secs.filter((s) => s.layers.some((l) => l.kind === 'kinetic' && l.sprite)).length}`);
-console.log(`moments:         ${count((t.moments ?? []).filter((x) => x.at >= from && x.at < to).map((x) => x.kind))}`);
+console.log(`moments:         ${count((t.moments ?? []).filter((x) => x.at >= from && x.at < to).map((x) => x.kind))}   signature: ${count((t.signature ?? []).filter((x) => x.at >= from && x.at < to).map((x) => `${x.form}/${x.variant}`))}${(t.signature ?? []).some((x) => x.at < from || x.at >= to) ? ` (outside: ${(t.signature ?? []).filter((x) => x.at < from || x.at >= to).map((x) => `${x.form}/${x.variant}@${x.at}`).join(' ')})` : ''}`);
+console.log(`seats:           ${count(cues.map((c) => c.world?.seat))}   shot grids: ${secs.filter((s) => s.layers.some((l) => l.kind === 'kinetic' && l.panels?.length)).length}`);
 console.log(`templates:       ${count(m.cues.map((c) => c.template))}`);

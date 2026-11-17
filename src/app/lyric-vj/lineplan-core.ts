@@ -1770,7 +1770,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     if (kept.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !kept.includes(Number(cuts[i - 1]['at']))) cuts.splice(i - 1, 1); }
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
     // (render/world-handoff.ts: the least used family that fits the world and the time the song leaves the line)
-    const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };
+    const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed, isDirected(recipe) ? { enter: recipe.wline.enter, exit: recipe.wline.exit } : undefined) : { enter: undefined, exit: undefined };
     const camHere = W?.camera && cuts[0]?.cam === W.camera;
     const spec = recipe.wline ? SET_SPECS[recipe.wline.set] : undefined;
     const holdLineFor = (spec: SetSpec | undefined, own: boolean): HoldLine => ({

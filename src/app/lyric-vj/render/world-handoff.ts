@@ -46,7 +46,13 @@ export const EXIT_LEAD = 0.02;
  * A line after one pressed into a rule opens out of it; a line after a linked way out comes on by the same family, so the
  * last line's page hands over to the next.
  */
-export function pickWorldMoves(state: MoveState, world: WorldPick, own: { enter: string; exit: string }, cues: TimedCue[], at: number, seed: number) {
+/**
+ * `said`: the line's own way in and out as the director named them (a directed line, linedirect): each is kept where
+ * the pool the composer would pick from allows it there (a legal move, the timing a linked one needs); only a move the
+ * director left to the composer, or one it cannot take here, is picked by the least-used rule. A page handed over by
+ * the line before still comes on as it went off (the relay is the pair's, not one line's).
+ */
+export function pickWorldMoves(state: MoveState, world: WorldPick, own: { enter: string; exit: string }, cues: TimedCue[], at: number, seed: number, said?: { enter?: string; exit?: string }) {
   const [prev, c, next] = [cues[at - 1], cues[at], cues[at + 1]];
   const taste = linksOf(world.id);
   const linked: string[] = world.ownMoves ? [] : taste.families.map((f) => linkKind(f, taste));
@@ -55,8 +61,8 @@ export function pickWorldMoves(state: MoveState, world: WorldPick, own: { enter:
   const exitBase = [own.exit, ...(world.exits ?? []), ...(world.ownMoves ? [] : SHARED_EXIT_POOL)];
   if (!linked.length) {
     const [ins, outs] = [state.oldIn, state.oldOut];
-    const enter = handedRule ? 'line-open' : leastUsedKind(enterBase, ins);
-    const exit = leastUsedKind(exitBase, outs);
+    const enter = handedRule ? 'line-open' : said?.enter && enterBase.includes(said.enter) ? said.enter : leastUsedKind(enterBase, ins);
+    const exit = said?.exit && exitBase.includes(said.exit) ? said.exit : leastUsedKind(exitBase, outs);
     ins.set(enter, (ins.get(enter) ?? 0) + 1);
     outs.set(exit, (outs.get(exit) ?? 0) + 1);
     state.lastEnter = enter;
@@ -69,9 +75,9 @@ export function pickWorldMoves(state: MoveState, world: WorldPick, own: { enter:
   const folded = familyOf(state.relay ?? '') === 'frame-open';
   const handed = state.relay && !folded && linked.includes(state.relay) && upLongEnough ? state.relay : undefined;
   const enterPool = [...enterBase, ...(upLongEnough && !folded ? linked.filter((k) => familyOf(k) !== 'frame-open') : [])];
-  const enter = handedRule ? 'line-open' : handed ?? leastUsedFamily(enterPool, state.used, state.lastEnter, `${salt}:in`, 'in:');
+  const enter = handedRule ? 'line-open' : handed ?? (said?.enter && enterPool.includes(said.enter) ? said.enter : leastUsedFamily(enterPool, state.used, state.lastEnter, `${salt}:in`, 'in:'));
   const exitPool = [...exitBase, ...(next && c.end - c.start >= LINK_PREPARE + 0.5 ? linked : [])];
-  const exit = leastUsedFamily(exitPool, state.used, state.lastExit.kind, `${salt}:out`, 'out:');
+  const exit = said?.exit && exitPool.includes(said.exit) ? said.exit : leastUsedFamily(exitPool, state.used, state.lastExit.kind, `${salt}:out`, 'out:');
   for (const k of [`in:${familyOf(enter)}`, `out:${familyOf(exit)}`]) state.used.set(k, (state.used.get(k) ?? 0) + 1);
   state.lastEnter = enter;
   state.lastExit = { kind: exit, end: c.end };

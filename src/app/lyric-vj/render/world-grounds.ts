@@ -1051,7 +1051,9 @@ export const WORLD_INS: Record<string, { sec: number; draw: (e: WorldEnv, q: num
 Object.assign(WORLD_INS, {
   'squeegee-pass': { sec: 0.3, draw: (e: WorldEnv, q: number) => { const c = e.ctx; c.fillStyle = mixHex(e.paper, e.slots.accent, 0.4); c.fillRect(-W * 0.1 + q * W * 1.2, -H * 0.1, W * (1 - q) * 1.2, H * 1.2); } },
   'fog-rise': { sec: 0.6, draw: (e: WorldEnv, q: number) => full(e, e.paper, 1 - q) },
-  'drum-roll': { sec: 0.28, draw: (e: WorldEnv, q: number) => { const c = e.ctx; c.fillStyle = mixHex(e.paper, e.ink, 0.4); c.fillRect(-W * 0.1, -H * 0.1 + q * H * 1.2, W * 1.2, H * (1 - q)); } },
+  // (the drum's inked band passing down the sheet, in the scheme's spot ink: a whole page of ink-on-paper tint read as a
+  // flat grey block, and a page link caught it as the next page's picture)
+  'drum-roll': { sec: 0.28, draw: (e: WorldEnv, q: number) => { const c = e.ctx; c.fillStyle = mixHex(e.paper, e.slots.accent, 0.55); c.fillRect(-W * 0.1, -H * 0.16 + q * H * 1.3, W * 1.2, H * 0.16); } },
   'slash-cut': { sec: 0.22, draw: (e: WorldEnv, q: number) => { const c = e.ctx; const x = q * (W + 800) - 400; c.fillStyle = e.ink; c.beginPath(); c.moveTo(x, -H * 0.1); c.lineTo(W * 1.3, -H * 0.1); c.lineTo(W * 1.3, H * 1.1); c.lineTo(x - 500, H * 1.1); c.closePath(); c.fill(); } },
 } as Record<string, { sec: number; draw: (e: WorldEnv, q: number) => void }>);
 Object.assign(WORLD_INS, handIns);

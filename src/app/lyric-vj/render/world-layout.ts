@@ -6,12 +6,12 @@ import { advanceOf, clamp01, Glyph, GlyphStyle, glyphTexture, makeGlyphs } from 
 import { nearestWeight } from '../fonts';
 import { color, CueLayer, CueRuntime, emphasisOf, frameFit, FrameFx, givenWay, readingSec, SUNG_LEAD, tagSource, TemplateRenderer } from './runtime';
 import { stair } from './stair';
-import { Block, blockOf, FaceLayout, SAFE_X, SAFE_Y, SET_SPECS, SetSpec, shearedSize } from './world-sets';
+import { Block, blockOf, FaceLayout, LineSeat, SAFE_X, SAFE_Y, seatSpec, SET_SPECS, SetSpec, shearedSize } from './world-sets';
 import { floorOf, layFloorOf, underFloor } from './type-floor';
 import { Clip, GlyphEnv, GlyphPose, hashOf, moveSec, sungAt, WORLD_ENTERS, WORLD_EXITS, WORLD_HOLDS, type WorldMove } from './world-motion';
 import { CARRIERS, objectInk, OBJECT_MARGIN, paintObject, Slots } from './world-objects';
 import { fxKey, SurfaceKind, surfaceKey } from './world-glyph';
-import { beatProgress, GROW, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
+import { beatProgress, GROW, keepsBlownInk, SPREAD, stressInk, WORLD_BEATS } from './world-beats';
 import { bodyInk, drawnInkOf, withGlow, carrierBox, carrierRoom, growRoom, inkChecks, keyFor, standsOn as standsOnOf } from './hold-room';
 import { readableTone } from '../measured-ink';
 import type { FxBox } from '../ink-decide';
@@ -64,6 +64,8 @@ export interface WorldLine {
   swell?: number;
   /** The line set at this share of its set's measure (type size, width, height), leaving the rest of the frame to a picture beside it (the subject tier). */
   compact?: number;
+  /** The part of the frame the line stands in when a subject takes the rest (world-sets seatSpec); it travels a quarter as far. */
+  seat?: LineSeat;
   /** The key word blown up and the rest of the line set small round it (gap 3): its characters, and how it is stressed. */
   blow?: { from: number; to: number; stress: StressKind };
   /**
@@ -240,7 +242,10 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
   const pre = gs.map((_, i) => i).filter((i) => i < key[0] && shown[i]);
   const post = gs.map((_, i) => i).filter((i) => i > key.at(-1)! && shown[i]);
   const adv = (ids: number[]) => ids.reduce((w, i) => w + gs[i].advance, 0) / tex;
-  const big0 = Math.min((0.86 * 1920) / Math.max(0.01, adv(key)), 0.44 * 1080, normal * 4.2);
+  // (a seated line's blown-up word keeps to the seat's band: the key and the small row above or below it, each about
+  // 0.39 of the key's height)
+  const rowsRound = (pre.length ? 1 : 0) + (post.length ? 1 : 0);
+  const big0 = Math.min((0.86 * 1920 * (spec.seated ? spec.share / 0.86 : 1)) / Math.max(0.01, adv(key)), 0.44 * 1080, spec.seated ? (spec.tall * 1080) / (1 + 0.39 * rowsRound) : Infinity, normal * 4.2);
   if (big0 < normal * 1.6) return undefined;
   // (the words round the key are lyrics read at rest: never under the type floor, type-floor.ts; where the frame cannot
   // hold them across at the floor the key is not blown up, and the line stands as its set lays it. They were set down to
@@ -276,7 +281,8 @@ export function blowPose(gs: Glyph[], from: number, to: number, normal: number, 
       y: Math.max(...ids.map((i) => Math.abs(y[i]) + em(i) / 2)),
     };
     // a space inside the key run (a Latin phrase) is placed but not drawn
-    const block: Block = { rows: [], size: big, w, h, cx: 0, cy: 0 };
+    // (a seated pose stands on its seat's anchor as a set's block does, blockOf; else in the middle of the frame)
+    const block: Block = { rows: [], size: big, w, h, cx: spec.seated ? spec.at[0] * 1920 - 960 - (spec.ax * w) / 2 : 0, cy: spec.seated ? 540 - spec.at[1] * 1080 + (spec.ay * h) / 2 : 0 };
     return { reach, block, spec: { ...spec, vertical: false, object: undefined, tilt: 0 }, x, y, turn: gs.map(() => false), shown, scale: small / tex, sizes, u: x.map((v) => clamp01((v + w / 2) / w)), v: y.map((v) => clamp01((h / 2 - v) / h)) };
   };
   let big = big0;
@@ -375,7 +381,7 @@ function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: bool
   // right to left; halving a column's height set a shared vertical sign at a third of its size)
   // (a compact line keeps a share of its set's measure: a subject standing beside it needs the rest of the frame)
   const k = wl0.compact && wl0.compact > 0 && wl0.compact < 1 ? wl0.compact : 1;
-  const specOf = (id: string): SetSpec => { const sp = slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot); return k < 1 ? { ...sp, hi: sp.hi * k, share: sp.share * k, tall: sp.tall * k, ...(sp.lo ? { lo: Math.min(sp.lo, sp.hi * k) } : {}) } : sp; };
+  const specOf = (id: string): SetSpec => { const sp = seatSpec(slotSpec(SET_SPECS[id] ?? Object.values(SET_SPECS)[0], slot), slot.of === 1 ? wl0.seat : undefined); return k < 1 ? { ...sp, hi: sp.hi * k, share: sp.share * k, tall: sp.tall * k, ...(sp.lo ? { lo: Math.min(sp.lo, sp.hi * k) } : {}) } : sp; };
   // (each pose's set id, kept: a seat split, a blow or a scale lays a copy of its spec, and the ink decision reads its
   // world's tone entries and material by the id, never by the spec object; Codex review 2026-11-16 P1)
   const setIds = [wl0.set, ...(wl0.repose ?? []).map((r) => r.set)];
@@ -831,7 +837,8 @@ function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: bool
       // the type floor at its set's least type, silk's top slab at 79 px, 2026-11-12)
       const fit = (d: number, c: number, half: number, frame: number) => Math.sign(d) * Math.min(Math.abs(d), 2 * Math.max(0, frame - driftEdge(frame) - Math.abs(c) - half));
       // (a set laid into its page's composition holds its place: the page is printed round it)
-      const [gx, gy] = p.spec.fixed ? [0, 0] : wl.drift ?? [0, 0];
+      // (a seated line keeps to its band: the subject has the rest of the frame)
+      const [gx, gy] = p.spec.fixed ? [0, 0] : (wl.drift ?? [0, 0]).map((d) => (wl.seat ? d / 4 : d));
       body.position.x += fit(gx, p.block.cx, p.block.w / 2, 960) * along;
       body.position.y += fit(gy, p.block.cy, p.block.h / 2, 540) * along;
       const swell = 1 + (p.spec.fixed ? 0 : wl.swell ?? 0) * (along + 0.5);
@@ -853,7 +860,9 @@ function buildOnce(rt: CueRuntime, slot: { k: number; of: number }, blowOk: bool
         // a line that locks word by word keeps at it after its entrance has run
         if (!out && wl.enter === 'signal-lock' && enterDur > 0) pose = entering!.glyph!(env);
         if (!out && qi >= 1 && holding) pose = { ...holding(env), ...(wl.enter === 'signal-lock' && enterDur > 0 ? pose : {}) };
-        const ev = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq, span: inSpan[i] }) : undefined;
+        const ev0 = bq !== undefined && qi >= 1 ? beatMove!.glyph?.({ ...env, q: bq, span: inSpan[i] }) : undefined;
+        // (a blown-up word keeps its ink while a front of key ink runs through the rest: at its size the run read as a flicker)
+        const ev = ev0 && keepsBlownInk(wl.beat!.kind, k === 0 ? wl.blow : undefined, g.src) ? { ...ev0, key: 0 } : ev0;
         if (ev) pose = { ...pose, dx: (pose.dx ?? 0) + (ev.dx ?? 0), dy: (pose.dy ?? 0) + (ev.dy ?? 0), s: (pose.s ?? 1) * (ev.s ?? 1), sy: (pose.sy ?? 1) * (ev.sy ?? 1), r: (pose.r ?? 0) + (ev.r ?? 0), tone: Math.min(pose.tone ?? 1, ev.tone ?? 1), key: ev.key, ghost: ev.ghost };
         // (a type-only mini moment: the line's own words move, in ems of their own size)
         const lift = wl.moment && g.src !== undefined ? lineMomentLift(wl.moment, t, g.src, [...rt.cue.text].length) * (p.sizes?.[i] ?? p.scale) * tex : 0;

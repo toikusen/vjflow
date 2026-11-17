@@ -53,6 +53,31 @@ if (song) {
     c.world['compact'] = +Math.min(0.85, Math.max(0.68, 0.68 + (n - 10) * 0.012)).toFixed(3);
   }
 }
+// the subject's cuts: a chorus holds a cut for a bar, not two — a long section of a loud part is cut at its bars, each
+// piece a cut of its own that takes the line's next shot (the plan's ground and camera kept), so a long line is not one
+// small figure for 8 s; a quiet part keeps the director's holds
+const SPLIT = { level: 0.5, least: 3.0, beats: 4 };
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  let level = 0;
+  const out: typeof secs = [];
+  secs.forEach((sec, i) => {
+    out.push(sec);
+    const k = (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic') as (KLayer & { world?: { level?: number }; bpm?: number }) | undefined;
+    if (k?.world?.level !== undefined) level = k.world.level;
+    const end = secs[i + 1]?.start ?? sec.start;
+    if (!k || sec.start < from || sec.start >= to || level < SPLIT.level || end - sec.start < SPLIT.least) return;
+    const bar = (SPLIT.beats * 60) / (k.bpm ?? 120);
+    const n = Math.round((end - sec.start) / bar);
+    for (let j = 1; j < n; j++) {
+      const at = +(sec.start + j * bar).toFixed(3);
+      if (end - at < bar * 0.5) break;
+      const layers = (JSON.parse(JSON.stringify(sec.layers)) as KLayer[]).filter((l) => l.kind === 'kinetic').map((l) => { const c: KLayer = { ...l, at, seed: Number(l['seed'] ?? 0) + 50 * j }; delete c.sprite; delete c.subjectAt; return c; });
+      out.push({ ...JSON.parse(JSON.stringify({ ...sec, layers: [] })), start: at, layers } as never);
+    }
+  });
+  secs.splice(0, secs.length, ...out.sort((x, y) => x.start - y.start));
+}
 // the subject layer: the picture tier binds a prop to a cut here and there; a subject video keeps its cast in view,
 // so a cut the plan left without one takes the script's shot for its line (the line's shots in order, cycling), and
 // a scene shot stands in the language's circle window on the side its subject keeps
@@ -76,12 +101,69 @@ if (song) {
       const sq = resolve(a.clips!, '..', 'stills', `${shot.id}_sq.jpg`);
       if (!existsSync(sq)) continue;
       if (!assets[shot.id]) { assets[shot.id] = { kind: 'image', url: sq }; t.assets.push({ id: shot.id, kind: 'image', prompt: shot.place ?? shot.subject }); }
-      (sec.layers as KLayer[]).push({ kind: 'photo', mode: 'circle', asset: shot.id, x: shot.side === 'left' ? -0.42 : shot.side === 'right' ? 0.42 : 0, y: 0.02, w: 0.46, drift: 0.01 });
+      (sec.layers as KLayer[]).push({ kind: 'photo', mode: 'circle', asset: shot.id, x: shot.side === 'left' ? -0.3 : shot.side === 'right' ? 0.3 : 0, y: 0.02, w: 0.4, drift: 0.01 });
       continue;
     }
     if (!assets[`spr:${shot.id}`]) continue;
     Object.assign(k, { sprite: shot.id, side: shot.side, size: shot.height, flip: false });
     filled += 1;
+  }
+}
+// the subject's frame (the video stage's own rules, on top of the director's plan):
+// - no shot more than twice in a row: a third takes the line's next shot (three cuts of one picture read as one cut);
+// - a line opening on a held vowel (one kana sung on, or a long mark) opens on a grid of the line's different shots;
+// - the subject stands large (by its framing) and the line takes the part of the frame it leaves: the rows above it for
+//   a long line, a blown-up word or a grid, else the side away from the subject, one seat for the whole line.
+const SUBJECT_H: Record<string, number> = { wide: 0.62, medium: 0.72, close: 0.7 };
+const HELD = 0.5;
+const base = (id?: string) => id?.replace(/_r\d+$/, '');
+const cutOuts = (cue: string) => (script.lines.find((l) => l.cue === cue)?.shots ?? []).filter((id) => shots.get(id)?.frame !== 'scene' && assets[`spr:${id}`]);
+let thirds = 0, grids = 0, seated = 0;
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  const inWin = secs.filter((sec) => sec.start >= from && sec.start < to);
+  const kOf = (sec: (typeof secs)[number]) => (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic');
+  // no third in a row
+  let run: string[] = [];
+  for (const sec of inWin) {
+    const k = kOf(sec);
+    const id = base(k?.sprite);
+    if (!k || !id) { run = []; continue; }
+    if (run.length >= 2 && run.every((r) => r === id)) {
+      const cue = lineAt(sec.start);
+      const alt = cue ? cutOuts(cue.id).find((x) => x !== id) : undefined;
+      const any = alt ?? [...shots.keys()].find((x) => x !== id && shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`]);
+      if (any) { const sh = shots.get(any)!; Object.assign(k, { sprite: any, side: sh.side, size: sh.height }); thirds += 1; }
+    }
+    run = [...run.slice(-1), base(k.sprite)!];
+  }
+  for (const c of t.cues as (Record<string, unknown> & { cueId: string; world?: Record<string, unknown> })[]) {
+    const cue = song.cues.find((x) => x.id === c.cueId) as ({ id: string; start: number; end: number; text?: string; charStarts?: number[] }) | undefined;
+    if (!cue || cue.start < from || cue.start >= to || !c.world) continue;
+    const mine = inWin.filter((sec) => lineAt(sec.start)?.id === cue.id && kOf(sec)?.sprite);
+    if (!mine.length) continue;
+    const chars = [...(cue.text ?? '')];
+    const st = cue.charStarts ?? [];
+    // (a held vowel: the line's first kana sung again, or drawn out by a long mark, for at least HELD s)
+    const heldOpen = chars.length > 2 && st.length === chars.length && (chars[1] === chars[0] || /[ーぁぃぅぇぉ〜～]/.test(chars[1])) && st[2] - st[0] >= HELD;
+    const panels = heldOpen ? [...new Set(cutOuts(cue.id))].slice(0, 3) : [];
+    if (panels.length >= 2) {
+      Object.assign(kOf(mine[0])!, { fx: 'grid', panels, sprite: panels[0], shadow: false });
+      grids += 1;
+    }
+    const n = chars.filter((x) => !/\s/.test(x)).length;
+    const first = kOf(mine[0])!;
+    const seat = panels.length >= 2 || c.world['blow'] || n > 12 ? 'top' : first.side === 'left' ? 'right' : 'left';
+    c.world['seat'] = seat;
+    // (a seat already keeps the line to its band: the compact share on top of it set a blown-up word at half its size)
+    delete c.world['compact'];
+    seated += 1;
+    for (const sec of mine) {
+      const k = kOf(sec)!;
+      const sh = shots.get(base(k.sprite)!);
+      if (seat !== 'top') k['side'] = seat === 'left' ? 'right' : 'left';
+      if (sh) k['size'] = Math.max(Number(k['size'] ?? 0), SUBJECT_H[sh.size] ?? 0.6);
+    }
   }
 }
 // a run: consecutive sections showing one sprite; its clock starts where the run began
@@ -116,4 +198,4 @@ t.graphics!.sections = secs;
 // (the plan stays whole: its moments and word syncs refer to lines beyond a window; a window is rendered with --clip)
 writeFileSync(join(a.out!, 'treatment.json'), JSON.stringify(t));
 writeFileSync(join(a.out!, 'assets.json'), JSON.stringify(assets, null, 1));
-console.log(`video stage: ${filled} cuts filled from the script, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);
+console.log(`video stage: ${secs.length} sections, ${filled} cuts filled from the script, ${thirds} thirds-in-a-row changed, ${grids} held-vowel grids, ${seated} lines seated, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);

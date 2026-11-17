@@ -40,6 +40,8 @@ export interface KineticLayer {
   ink: Rgb;
   paper: Rgb;
   accent: Rgb;
+  /** On a `grid` cut, a different cut-out in each panel (ids without `spr:`), in this order: the shots of one held moment side by side. */
+  panels?: string[];
   /** A cut-out from the sprite library (id without `spr:`), printed in ink and paper. */
   sprite?: string;
   /**
@@ -635,7 +637,16 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     }
     case 'grid': {
       // panels in alternating inks; the character repeats in them (drawn below)
-      const cols = kn(l, 'grid.cols');
+      const cols = l.panels?.length ? Math.min(4, l.panels.length) : kn(l, 'grid.cols');
+      if (l.panels?.length) {
+        // a grid of shots is printed on the sheet: paper panels parted by ink rules that slide in one by one (an
+        // accent flood under the words took their contrast, a faint ink panel read as grey)
+        for (let i = 1; i < cols; i++) {
+          ctx.fillStyle = ink;
+          ctx.fillRect((i * W) / cols - 4, (1 - k) * H * (i % 2 ? 1 : -1), 8, H);
+        }
+        break;
+      }
       for (let i = 0; i < cols; i++) {
         ctx.fillStyle = i % 2 ? l.accent : ink;
         ctx.globalAlpha = i % 2 ? 1 : 0.12;
@@ -726,7 +737,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   if (printed && !own) {
     const { img: art, w, h } = printed;
     const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
-    const cols = l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
+    // (a grid of different shots: one cut-out a panel, each printed as the main one is)
+    const panelArts = l.fx === 'grid' && l.panels?.length ? panelPictures(l.panels, image, l.print === 'own' ? undefined : [ink, paper]) : undefined;
+    const cols = panelArts?.length ? panelArts.length : l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
     // the floor plan: one character shrinks and slides into the room the lyric leaves it (feet kept on the floor)
     const fit = l.fx !== 'grid' && l.room && l.room[1] > l.room[0] ? fitInRoom(l.room, w, fx) : { s: 1, x: fx };
     const copies = l.fx === 'grid' ? Array.from({ length: cols }, (_, i) => ((i + 0.5) / cols) * W) : [fit.x];
@@ -734,7 +747,8 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     const rowsAt = l.rows && l.fx !== 'grid' ? rowsPlace(l.rows, h, fit.s) : undefined;
     // too small where it was fitted (a narrow side, a thin band) reads as a speck: the corner takes it at a readable size
     const speck = l.fx !== 'grid' && ((!!l.rows && !rowsAt) || (!!l.room && l.room[1] > l.room[0] && h * fit.s < H * PROP_MIN_H));
-    for (const cx of copies) {
+    copies.forEach((cx, ci) => {
+      const { img: art, w, h } = panelArts?.[ci] ?? printed;
       ctx.save();
       if (l.cam === 'vertigo') (ctx.translate(W / 2, H / 2), ctx.scale(1 / zoom, 1 / zoom), ctx.translate(-W / 2, -H / 2));
       // no room the whole cut (lines all over it, a rap verse): a small figure in a bottom corner, faded only when the
@@ -742,9 +756,11 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       // lines of 134–136 s)
       const corner = (l.under || speck) && l.fx !== 'grid' ? cornerPlace(w, h, l.under ? fit.s : 1, !!l.flip, l.over ?? []) : undefined;
       const rs = corner ? corner.s : rowsAt ? rowsAt.s : fit.s;
-      const y = corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
+      // (a panel of a grid of shots stands on the frame's foot at its panel's scale, under the words seated above it)
+      const y = panelArts ? H - (h * Math.min(1, W / cols / w)) / 2 - H * 0.02 : corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
       // a figure on its ground ellipse stands a little above the frame's foot, so its feet and the ellipse stay inside
-      ctx.translate(corner ? corner.x : cx, y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
+      // (a figure never pressed past the frame's side: its whole width inside, a margin kept; a grid's copies keep their panels)
+      ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(rock * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);
@@ -767,7 +783,7 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
         watchCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, inside, now, `cut ${(l.at ?? 0).toFixed(1)}`);
       }
       ctx.restore();
-    }
+    });
   }
   if (printed && !own) veil?.(ctx, 1);
   ctx.restore();
@@ -880,13 +896,15 @@ export function underCorner(w: number, h: number, s: number, left: boolean, pad 
  * centred in the band and kept EDGE_PAD clear of the top (never hung at the very edge). Undefined when the band would
  * fit it under PROP_MIN_H of the frame.
  */
+/** A figure standing on the frame's floor keeps its feet (and its wheels) this share of the frame above the foot. */
+export const FOOT_PAD = 0.025;
 export function rowsPlace(rows: [number, number], h: number, s: number): { s: number; y: number } | undefined {
   const floor = rows[1] >= H - 1;
   const top = Math.max(rows[0] + 16, H * EDGE_PAD);
-  const bottom = floor ? H : rows[1] - 16;
+  const bottom = floor ? H * (1 - FOOT_PAD) : rows[1] - 16;
   const k = Math.min(s, (bottom - top) / h);
   if (h * k < H * PROP_MIN_H) return undefined;
-  return { s: k, y: floor ? H - (h * k) / 2 : (top + bottom) / 2 };
+  return { s: k, y: floor ? bottom - (h * k) / 2 : (top + bottom) / 2 };
 }
 
 /**
@@ -903,6 +921,26 @@ export function cornerPlace(w: number, h: number, s: number, left: boolean, over
   if (own.clear) return own;
   const other = at(!left);
   return other.clear ? other : own;
+}
+
+/**
+ * The pictures of a grid of different shots (KineticLayer.panels): each id's cut-out at the frame's height, printed in
+ * `inks` (ink, paper) or as drawn; ids with no picture loaded are left out, at most four.
+ */
+/** A figure's centre so its whole width stays inside the frame with `pad` to spare; one wider than that is centred. */
+export function inFrameX(cx: number, half: number, pad = 24): number {
+  if (half * 2 >= W - 2 * pad) return W / 2;
+  return Math.min(W - pad - half, Math.max(pad + half, cx));
+}
+
+/** A grid of shots' figures at most this share of the frame high: the words keep the band above them. */
+export const PANEL_H = 0.6;
+export function panelPictures(ids: string[], image: (asset?: string) => CanvasImageSource | undefined, inks?: [string, string]) {
+  return ids.slice(0, 4).flatMap((id) => {
+    const pic = image(`spr:${id}`) as (CanvasImageSource & { width: number; height: number }) | undefined;
+    if (!pic?.width) return [];
+    return [{ img: inks ? duotone(pic, spriteKey(id, pic), inks[0], inks[1]) : (pic as CanvasImageSource), w: (pic.width / pic.height) * H * PANEL_H, h: H * PANEL_H }];
+  });
 }
 
 /** Where a character w px wide stands at fx inside a free band: its scale (≤ 1) and its centre. */

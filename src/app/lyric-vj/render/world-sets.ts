@@ -22,7 +22,24 @@ const H = 1080;
 export const SAFE_X = 64;
 export const SAFE_Y = 48;
 
+/** Where a line beside a subject stands: the part of the frame the subject leaves it (the video stage, the subject tier). */
+export type LineSeat = 'top' | 'bottom' | 'left' | 'right';
+/** The share of the frame a seated line may take across the subject's way: its band, the rest is the subject's. */
+export const SEAT_SHARE = { across: 0.36, beside: 0.5 };
+
+/**
+ * A set moved to a seat: its anchor on that edge of the frame (centred along it), its block no wider or taller than the
+ * seat's band, everything else the set's own (its lean, its stair, its rows). No seat, the set as it is.
+ */
+export function seatSpec(spec: SetSpec, seat?: LineSeat): SetSpec {
+  if (!seat) return spec;
+  if (seat === 'top' || seat === 'bottom') return { ...spec, seated: true, at: [0.5, seat === 'top' ? 0.035 : 0.965], ax: 0, ay: seat === 'top' ? -1 : 1, tall: Math.min(spec.tall, SEAT_SHARE.across) };
+  return { ...spec, seated: true, at: [seat === 'left' ? 0.05 : 0.95, 0.5], ax: seat === 'left' ? -1 : 1, ay: 0, share: Math.min(spec.share, SEAT_SHARE.beside) };
+}
+
 export interface SetSpec {
+  /** Moved to a seat beside a subject (seatSpec): a blown-up word keeps to the seat's band and anchor too. */
+  seated?: boolean;
   /** The anchor in frame fractions, y down. */
   at: [number, number];
   /** Which side of the block sits on the anchor: -1 left or top, 0 centre, 1 right or bottom. */

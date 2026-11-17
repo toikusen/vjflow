@@ -88,6 +88,21 @@ describe("picking a world line's way in and out", () => {
     expect(linked.length).toBeGreaterThan(0);
     for (const i of linked) expect(kinds[i + 1].enter).toBe(kinds[i].exit);
   });
+  it("keep the director's own way in and out where the world allows it there, and pick only the rest", () => {
+    const lines = Array.from({ length: 6 }, (_, i) => cue(i * 3, i * 3 + 3));
+    const said = { enter: 'misregister', exit: 'drum-out' };
+    const riso = { id: 'riso', enters: ['drum-feed', 'misregister'], exits: ['drum-out', 'ink-slip'] };
+    const s = moveState();
+    const kinds = lines.map((_, i) => pickWorldMoves(s, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5, said));
+    // (the line before handing its page over still wins the way in: the relay belongs to the pair)
+    kinds.forEach((k, i) => { if (!(i && isLinked(kinds[i - 1].exit))) expect(k.enter).toBe('misregister'); expect(k.exit).toBe('drum-out'); });
+    // a move the world does not have is not taken: the composer picks as before
+    const t = moveState();
+    for (const k of lines.map((_, i) => pickWorldMoves(t, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5, { enter: 'razor', exit: 'slash-drop' }))) { expect(k.enter).not.toBe('razor'); expect(k.exit).not.toBe('slash-drop'); }
+    // undirected lines spread over the pool as before
+    const u = moveState();
+    expect(new Set(lines.map((_, i) => pickWorldMoves(u, riso, { enter: 'drum-feed', exit: 'drum-out' }, lines, i, 5).enter)).size).toBeGreaterThan(1);
+  });
   it('offer no linked way in or out on lines too short for a page to come on beside them', () => {
     const short = Array.from({ length: 12 }, (_, i) => cue(i * 0.6, i * 0.6 + 0.6));
     const s = moveState();

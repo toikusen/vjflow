@@ -1,7 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
-import { exitAfterSung, nextShowAfter } from './sung-tail';
+import { exitAfterSung, nextShowAfter, showByOnset } from './sung-tail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { textCamAt } from './text-cam';
@@ -1199,7 +1199,11 @@ export class LyricVjEngine {
     setFinish(design.finish);
     setSizeCap(design.language ? (LANGUAGES[design.language].text?.cap ?? 1) : 1);
     const hook = uses(design, 'title-hook') ? titleHook(this.job.meta?.title ?? '') : '';
-    const buildLine = ({ style: style1, cue: cue0 }: (typeof styled)[number], i: number) => {
+    // the show/exit timetable is decided once, before any line is built (settled below): each line reads the planned
+    // shows of the lines after it (planned), and only showFrom takes the settled one — a line built on its own (live,
+    // after a seek) gets the same times as in order (Codex review: buildLine rewrote the next line's show)
+    const plannedShow = [...showAt];
+    const buildLine = ({ style: style1, cue: cue0 }: (typeof styled)[number], i: number, settle = false) => {
       // the paid director's word sync: the server's sung times stand in for the song's own on this line (word-sync.ts
       // let them through), so each character lands on its voice
       const cue1 = style1.reveal === 'sung' && style1.sung?.length === [...cue0.text].length ? { ...cue0, charStarts: style1.sung, charTimed: true } : cue0;
@@ -1225,7 +1229,7 @@ export class LyricVjEngine {
       if (design.composer) this.lastExits.set(cue.id, style0.exit);
       const shot = treatment.shots.find((s) => s.id === style.shot)!;
       const next = styled[i + 1]?.cue;
-      const nextShow = next ? showAt[i + 1] : Infinity;
+      const nextShow = next ? plannedShow[i + 1] : Infinity;
       const len = cue.end - cue.start;
       const pace = Math.min(1, Math.max(0.35, len / 2)); // short lines enter and leave faster so they stay readable
       // a rushed line leaves in a blink: its exit animation would eat the little time it has
@@ -1244,7 +1248,7 @@ export class LyricVjEngine {
       const exitSec = style.exit === 'cut' || noExit ? 0 : isLineExit(style.exit) ? LINE_EXIT_SEC[style.exit] : style.exit === 'collapse' ? 0.14 : rushedLine ? 0.08 : style.exit === 'fade' ? fadeSec : LONG_EXITS.has(style.exit) ? Math.max(EXIT_SEC * pace, drawnFloor, Math.min(style.exit === 'domino' || style.exit === 'shatter' ? 0.8 : 0.5, nextShow - cue.end - 0.05)) : EXIT_SEC * pace;
       // breathing: a line holds up to 1.2 s past its last syllable when nothing follows straight away
       // lines after this one in the same shot (stack and couplet keep earlier lines up while they arrive)
-      const later = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [showAt[j]] : []));
+      const later = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [plannedShow[j]] : []));
       const laterText = styled.flatMap((x, j) => (j > i && x.style.shot === style.shot ? [x.cue.text] : []));
       const shotText = styled.flatMap((x) => (x.style.shot === style.shot ? [x.cue.text] : []));
       const firstVoice = styled.find((x) => x.style.shot === style.shot)?.style.voice;
@@ -1253,7 +1257,7 @@ export class LyricVjEngine {
         // a composer line is gone before the next one's shot shows it
         if (style.budget && next && styled[i + 1].style.shot !== style.shot) return nextShow;
         const other = styled.findIndex((x, j) => j > i && x.style.shot !== style.shot);
-        const shotOver = Math.min(shot.end, other >= 0 ? showAt[other] : Infinity);
+        const shotOver = Math.min(shot.end, other >= 0 ? plannedShow[other] : Infinity);
         if (persist === 'shot') return shotOver;
         if (persist === 'next') return Math.min(shotOver, later[1] ?? Infinity);
         return nextShow;
@@ -1265,14 +1269,23 @@ export class LyricVjEngine {
       // (a line never starts leaving on its last sung character: the sung tail; where the next line would show before the
       // tail and a blink of exit are over, the next line waits — never an early exit, sung-tail.ts)
       // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
-      const lastSung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : cue.end;
+      // (without character times no tail is invented past the line's end: it leaves no earlier than its end, Codex review)
+      const timed = !!cue.charStarts?.length;
+      const lastSung = timed ? cue.charStarts![cue.charStarts!.length - 1] : cue.end;
       const tailKept = !held && shot.template !== 'world-pair';
-      const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung) : exitAt0;
+      const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung, timed ? undefined : 0) : exitAt0;
       const exitFrom = Math.max(cue.start + 0.25 * pace, exitAt1);
       const waited = tailKept && next ? nextShowAfter(exitFrom, exitSec, nextShow, EXIT_LEAD) : undefined;
-      if (waited && waited.show > showAt[i + 1] + 1e-6) {
-        this.waits.push({ id: next!.id, sec: +(waited.show - showAt[i + 1]).toFixed(3) });
-        showAt[i + 1] = waited.show;
+      // (the next line shows by its first sung character however long this one's tail asks: past that, the two are up
+      // together for this one's exit — never a line shown after it has been sung, Codex review)
+      if (settle) {
+        const onset = next ? (styled[i + 1].cue.charStarts?.[0] ?? next.start) : Infinity;
+        const show = waited ? showByOnset(waited.show, plannedShow[i + 1], onset) : plannedShow[i + 1];
+        if (next && show > plannedShow[i + 1] + 1e-6) {
+          this.waits.push({ id: next.id, sec: +(show - plannedShow[i + 1]).toFixed(3) });
+          showAt[i + 1] = show;
+        }
+        return;
       }
       const exitAt = exitAt1;
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
@@ -1573,13 +1586,14 @@ export class LyricVjEngine {
         if (echo) this.echoes.push(echo);
       }
     };
+    styled.forEach((x, i) => buildLine(x, i, true));
     if (live) {
       // what a line needs of its neighbours is settled here for all of them; each is built when it is near
       this.lazy = { styled, showAt, end: this.job.window.end, build: buildLine, built: new Set(), kana: design.kanaScale };
       setKanaScale(design.kanaScale);
       return;
     }
-    styled.forEach(buildLine);
+    styled.forEach((x, i) => buildLine(x, i));
     this.cueLayers.forEach((c, i) => this.layHandoff(c, this.cueLayers[i - 1]));
     this.cueLayers.forEach((c) => this.layFine(c));
     this.cueLayers.forEach((c) => this.settleHold(c));
@@ -2825,7 +2839,7 @@ export class LyricVjEngine {
       this.gfx.tex.needsUpdate = true;
       // the look is the whole background: no full-bleed plates, no generic light motes — unless the cut is bare (no
       // paper of its own) and the shot brings a plate: then the plate is the background the bare cut is laid over
-      // (the character video tier: stills and clip frames under quiet kinetic cuts, charvideo.mts)
+      // (the character video tier: stills and clip frames under quiet kinetic cuts, experiments/charvideo.mts)
       const bareOverPlate = !!shot.asset && sectionAt(this.job.treatment.graphics!, bt).layers.every((l) => l.kind === 'kinetic' && l.bare);
       if (!bareOverPlate) for (const p of this.plates) p.mesh.material.uniforms['opacity'].value = 0;
       this.motes.visible = false;

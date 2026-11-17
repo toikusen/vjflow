@@ -9,9 +9,9 @@ export const SUNG_TAIL = 0.3;
  * line: where the two would meet, the next line waits (nextShowAfter) — a line cut off on its last word was the worse
  * fault in every review (v3's c004, v4's c002/c004/c009, 2026-11-17).
  */
-export function exitAfterSung(exitAt: number, lastSung: number | undefined): number {
+export function exitAfterSung(exitAt: number, lastSung: number | undefined, tail = SUNG_TAIL): number {
   if (lastSung === undefined) return exitAt;
-  return Math.max(exitAt, lastSung + SUNG_TAIL);
+  return Math.max(exitAt, lastSung + tail);
 }
 
 /** The shortest exit a line plays when the next one presses: a blink is still an exit, nothing shorter is. */
@@ -26,4 +26,13 @@ export function nextShowAfter(exitAt: number, exitSec: number, nextShow: number,
   if (exitSec <= 0) return { show: Math.max(nextShow, exitAt + lead), exitDur: 0 };
   const exitDur = Math.max(EXIT_MIN, Math.min(exitSec, nextShow - lead - exitAt));
   return { show: Math.max(nextShow, exitAt + exitDur + lead), exitDur };
+}
+
+/**
+ * When the next line shows, given the wait this one's tail asks (`waited`): never past the next line's sung onset (its
+ * first sung character) — a line shown after it has been sung is the worse fault — and never earlier than planned
+ * (`planned`). Where the cap bites, the two lines are up together for this one's exit.
+ */
+export function showByOnset(waited: number, planned: number, onset: number): number {
+  return Math.max(planned, Math.min(waited, onset));
 }

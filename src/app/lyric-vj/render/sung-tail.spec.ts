@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXIT_MIN, exitAfterSung, nextShowAfter, SUNG_TAIL } from './sung-tail';
+import { EXIT_MIN, exitAfterSung, nextShowAfter, showByOnset, SUNG_TAIL } from './sung-tail';
 
 describe('exitAfterSung', () => {
   it('holds a line that would leave on its last sung character until the tail has passed', () => {
@@ -32,5 +32,22 @@ describe('nextShowAfter', () => {
   });
   it('a cut exit shows the next line as the last one is gone', () => {
     expect(nextShowAfter(22.64, 0, 22.44, 0.02)).toEqual({ show: 22.66, exitDur: 0 });
+  });
+});
+
+describe('the next line shows by its first sung character (Codex: 10.0 s / 10.0–10.25 s was shown at 10.4 s)', () => {
+  it('invents no tail past the end of a line with no character times', () => {
+    expect(exitAfterSung(9.9, 10.0, 0)).toBe(10.0);
+  });
+  it('caps a wait at the next line\'s sung onset: the two are up together for the exit\'s blink', () => {
+    const exitAt = exitAfterSung(9.9, 10.0, 0);
+    const waited = nextShowAfter(exitAt, 0.28, 10.0, 0.02);
+    expect(waited.show).toBeGreaterThan(10.0);
+    expect(showByOnset(waited.show, 10.0, 10.0)).toBe(10.0);
+  });
+  it('still waits where the onset leaves room, and never moves a show earlier than planned', () => {
+    expect(showByOnset(22.74, 22.44, 23.1)).toBe(22.74);
+    expect(showByOnset(22.74, 22.44, 22.6)).toBe(22.6);
+    expect(showByOnset(22.74, 22.44, 22.3)).toBe(22.44);
   });
 });

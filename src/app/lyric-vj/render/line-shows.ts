@@ -67,8 +67,10 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     const onset = ns.reveal === 'sung' && ns.sung?.length === [...b.text].length ? ns.sung[0] : (b.charStarts?.[0] ?? b.start);
     // (a Latin letter counts half: two of them take the width of one kana or han)
     const share = mustShare(a, b, onset) && [...`${a.text}${b.text}`.replace(/\s/g, '')].reduce((n, ch) => n + (/[\x21-\x7e]/.test(ch) ? 0.5 : 1), 0) <= SHARE_CHARS;
-    // (a composer line is paired by the composer itself, planPairs, mustShare included: its world events name its lines)
-    if (inChat || styled[i].style.budget || !(setTogether(a, b) || share) || repeats.has(a.id) || repeats.has(b.id)) continue;
+    // (a composer line is paired by the composer itself, planPairs, mustShare included; a plan saved before that rule is
+    // set together here — unless world events name its lines, whose table is the plan's)
+    const named = !!(treatment as { worldEvents?: unknown }).worldEvents;
+    if (inChat || (styled[i].style.budget && !(share && !named)) || !(setTogether(a, b) || share) || repeats.has(a.id) || repeats.has(b.id)) continue;
     const aLen = [...a.text].length;
     styled[i] = {
       style: { ...styled[i].style, rows: joined.has(i) ? [...(styled[i].style.rows ?? []), aLen + 1] : [aLen + 1], reveal: 'word' },

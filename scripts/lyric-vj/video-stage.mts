@@ -86,12 +86,27 @@ if (song) {
 const lineAt = (time: number) => song?.cues.find((c) => time >= c.start - 1e-3 && time < c.end) ?? [...(song?.cues ?? [])].reverse().find((c) => c.start <= time);
 const used = new Map<string, number>();
 let filled = 0;
+// a stretch with no line of its own (an interlude, the outro) is not the last line's: it takes the script's cut-outs
+// in script order, none back within four cuts (v5: the outro ran S20/S34 for thirty seconds, 2026-11-17)
+const allCutOuts = script.shots.filter((x) => x.frame !== 'scene' && assets[`spr:${x.id}`]).map((x) => x.id);
+const recent: string[] = [];
+let roam = 0;
 if (song) {
   const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
   for (const sec of secs) {
     if (sec.start < from || sec.start >= to) continue;
     const k = (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic');
     if (!k || k.sprite) continue;
+    const sung = song.cues.find((c) => sec.start >= c.start - 1e-3 && sec.start < c.end);
+    if (!sung && allCutOuts.length) {
+      const pick = Array.from({ length: allCutOuts.length }, (_, j) => allCutOuts[(roam + j) % allCutOuts.length]).find((id) => !recent.includes(id)) ?? allCutOuts[roam % allCutOuts.length];
+      roam = (allCutOuts.indexOf(pick) + 1) % allCutOuts.length;
+      recent.push(pick); if (recent.length > 4) recent.shift();
+      const sh = shots.get(pick)!;
+      Object.assign(k, { sprite: pick, side: sh.side, size: sh.height, flip: false });
+      filled += 1;
+      continue;
+    }
     const cue = lineAt(sec.start);
     const line = cue && script.lines.find((l) => l.cue === cue.id);
     if (!line?.shots.length) continue;
@@ -99,6 +114,7 @@ if (song) {
     used.set(line.cue, n + 1);
     const shot = shots.get(line.shots[n % line.shots.length]);
     if (!shot) continue;
+    recent.push(shot.id); if (recent.length > 4) recent.shift();
     // (a line with a blown-up word keeps its cast large under it: a scene in a small window beside the big word left
     // the frame empty, v4 review)
     if (shot.frame === 'scene' && (t.cues as { cueId: string; world?: { blow?: unknown } }[]).find((x) => x.cueId === line.cue)?.world?.blow) {

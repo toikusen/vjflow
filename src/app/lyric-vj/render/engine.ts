@@ -1014,27 +1014,48 @@ export class LyricVjEngine {
     this.accentFont = design.accentFont;
     if (!this.job.facesLater) await this.loadFaces();
     const loader = new THREE.TextureLoader();
-    await Promise.all(
-      Object.entries(this.job.assets).map(async ([id, a]) => {
-        if (a.frames && id.startsWith('spr:')) {
-          const frames = await Promise.all(Array.from({ length: a.frames.count }, async (_, i) => {
-            const bmp = await createImageBitmap(await (await fetch(a.frames!.pattern.replace('%05d', String(i + 1).padStart(5, '0')))).blob());
+    // a clip's frames are fetched once per frame pattern and shared by every run of it (a whole song binds the same
+    // twelve clips to sixty runs), a few clips at a time: fetching every frame of every run at once ran Chrome out of
+    // resources (ERR_INSUFFICIENT_RESOURCES, 黄昏サイクル full song, 2026-11-17)
+    const sheets = new Map<string, Promise<{ frames: ImageBitmap[]; crop?: [number, number, number, number] }>>();
+    const loadFrames = (f: NonNullable<AssetSource['frames']>) => {
+      const key = `${f.pattern}#${f.count}`;
+      let p = sheets.get(key);
+      if (!p) {
+        p = (async () => {
+          const frames: ImageBitmap[] = [];
+          for (let i = 0; i < f.count; i++) {
+            const bmp = await createImageBitmap(await (await fetch(f.pattern.replace('%05d', String(i + 1).padStart(5, '0')))).blob());
             (bmp as { frameKey?: number }).frameKey = i;
-            return bmp;
-          }));
+            frames.push(bmp);
+          }
           // (the clip's motion envelope, read off every frame at a coarse size: where the subject ever is)
-          const crop = clipEnvelope(frames.map((f) => { const c = new OffscreenCanvas(96, 96).getContext('2d', { willReadFrequently: true })!; c.drawImage(f, 0, 0, 96, 96); return alphaBounds(c.getImageData(0, 0, 96, 96).data, 96, 96); }));
+          const crop = clipEnvelope(frames.map((fr) => { const c = new OffscreenCanvas(96, 96).getContext('2d', { willReadFrequently: true })!; c.drawImage(fr, 0, 0, 96, 96); return alphaBounds(c.getImageData(0, 0, 96, 96).data, 96, 96); }));
+          return { frames, crop };
+        })();
+        sheets.set(key, p);
+      }
+      return p;
+    };
+    const entries = Object.entries(this.job.assets);
+    const POOL = 6;
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(POOL, entries.length) }, async () => {
+      while (next < entries.length) {
+        const [id, a] = entries[next++];
+        if (a.frames && id.startsWith('spr:')) {
+          const { frames, crop } = await loadFrames(a.frames);
           this.clips.set(id, { frames, fps: a.frames.fps, start: a.frames.start ?? 0, loop: !!a.frames.loop, crop });
           const tex = new THREE.Texture(frames[0]);
           tex.needsUpdate = true;
           this.images.set(id, tex);
-          return;
+          continue;
         }
         const tex = await loader.loadAsync(a.url);
         tex.colorSpace = THREE.SRGBColorSpace;
         this.images.set(id, tex);
-      }),
-    );
+      }
+    }));
     // story props take their pictures' aspect (their boxes make room for the lyrics); a prop with no picture (the
     // image model dropped it) is taken out instead of drawing nothing where the story expects it
     // a calls board (idol Live's LED marquee) shows the song's calls as they are shouted, apart from the lead's lines
@@ -1644,12 +1665,23 @@ export class LyricVjEngine {
     }
   }
 
+  /**
+   * Words drawn over the frame by another layer (a signature moment's line, render/signature.ts): kept clear of, and
+   * seated round, as the engine's own lines are (a moment's line sat on the full-size subject under it, 2026-11-17).
+   */
+  keepClearOf(items: { id: string; from: number; to: number; rect: Rect }[]) {
+    this.keepOut.push(...items);
+    this.layRooms();
+  }
+
   /** The room the lines leave each kinetic cut under them, for what it draws of its own. */
   private layRooms(span: [number, number] = [-Infinity, Infinity]) {
     const treatment = this.job.treatment;
     if (treatment.graphics) {
       const secs = treatment.graphics.sections;
-      const rects = this.lyricRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, x0: r.rest.x0, x1: r.rest.x1 }));
+      // (the engine's lines and the words other layers keep up, keepOut: a moment's line is read like any other)
+      const allRects = [...this.lyricRects, ...this.keepOut.map((k) => ({ id: k.id, from: k.from, to: k.to, rect: k.rect, rest: k.rect, strong: undefined as number | undefined }))];
+      const rects = allRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, x0: r.rest.x0, x1: r.rest.x1 }));
       // a line that only brushes a cut (its last frames of fading out as the cut lands) does not decide the room: a
       // figure stood faded in a corner for a whole cut because the line before was still going out
       const brush = (from: number, to: number) => Math.min(0.35, 0.25 * (to - from));
@@ -1697,16 +1729,16 @@ export class LyricVjEngine {
           const crop = l.sprite ? this.clips.get(`spr:${l.sprite}`)?.crop : undefined;
           if (crop) l.crop = crop;
           // the lines' boxes over the cut: a prop sent to a corner takes the one they leave clear
-          if (l.sprite) l.over = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
+          if (l.sprite) l.over = allRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
           // (each with its times, for the draw: the subject is measured and kept clear by each line's own box, kinetic.ts)
-          if (l.sprite) l.boxes = this.lyricRects.filter((r) => Math.min(until + 1, r.to) - Math.max(sec.start - 1, r.from) > 0).map((r) => ({ from: r.from, to: r.to, strong: r.strong ?? r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
+          if (l.sprite) l.boxes = allRects.filter((r) => Math.min(until + 1, r.to) - Math.max(sec.start - 1, r.from) > 0).map((r) => ({ from: r.from, to: r.to, strong: r.strong ?? r.to, x0: r.rect.x0, y0: r.rect.y0, x1: r.rect.x1, y1: r.rect.y1 }));
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
           const band = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
           // the side band or the rows above or below the lines: whichever lets the figure stand larger (under a blown-up
           // word the band is a sliver and the figure went to a corner at a third of its size; the rows held it whole)
           const pic0 = l.sprite ? (this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined) : undefined;
           const pic = pic0?.width && pic0.height ? { width: pic0.width * (crop ? crop[2] - crop[0] : 1), height: pic0.height * (crop ? crop[3] - crop[1] : 1) } : undefined;
-          const rowsToo = band && pic?.width && pic.height ? freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until) : undefined;
+          const rowsToo = band && pic?.width && pic.height ? freeRows(onCut(allRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until) : undefined;
           const room = rowsToo && pickRoom(band!, rowsToo, (pic!.width! / pic!.height!) * H * (l.size ?? 0.85), H * (l.size ?? 0.85)) === 'rows' ? undefined : band;
           if (room) l.room = room;
           // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
@@ -1715,12 +1747,12 @@ export class LyricVjEngine {
           // (centred lines with a band free above or below them first: the line director centres most lines, and every
           // prop of 世界のつづき's picture tier went behind its words, 2026-11-02)
           else if (l.sprite && seen.some((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0)) {
-            const rows = freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until);
+            const rows = freeRows(onCut(allRects.map((r) => ({ from: r.from, to: r.to, strong: r.strong, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until);
             if (rows) l.rows = rows;
             else l.under = true;
           }
           // (the floor plan of every sprite cut under --track: which lines it saw and where it was sent)
-          if (l.sprite && this.job.track) console.error(`code layer: track rooms ${l.sprite} @${sec.start.toFixed(2)} side ${side ?? '-'} room ${l.room ? l.room.map(Math.round).join('-') : '-'} rows ${l.rows ? l.rows.map(Math.round).join('-') : '-'} under ${!!l.under} lines ${this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => `${r.id ?? '?'}[${Math.round(r.rest.x0)},${Math.round(r.rest.y0)}-${Math.round(r.rest.x1)},${Math.round(r.rest.y1)}]`).join(' ')}`);
+          if (l.sprite && this.job.track) console.error(`code layer: track rooms ${l.sprite} @${sec.start.toFixed(2)} side ${side ?? '-'} room ${l.room ? l.room.map(Math.round).join('-') : '-'} rows ${l.rows ? l.rows.map(Math.round).join('-') : '-'} under ${!!l.under} lines ${allRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => `${r.id ?? '?'}[${Math.round(r.rest.x0)},${Math.round(r.rest.y0)}-${Math.round(r.rest.x1)},${Math.round(r.rest.y1)}]`).join(' ')}`);
         }
       });
       // a character carries on across a cut only where it stands as before (size, side, room, rows: kinetic.ts)

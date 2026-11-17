@@ -44,6 +44,29 @@ const stage = document.getElementById('stage') as HTMLCanvasElement;
 // signature moments (paid tiers): drawn over the engine's frame, their lines taken off it
 const signature = isSignature(job) ? await signatureLayer(job) : null;
 if (signature) engine.onCues = signatureCues as never;
+// a moment's line is words the subject must keep clear of like any line of the engine's: its box is read off a dry
+// compose of the moment at a few times of its line (the characters drawn while the ink probe is set), and handed to the
+// engine's rooms (keepClearOf) before any frame
+if (signature) {
+  const probe = globalThis as { __vjInkProbe?: boolean };
+  const boxes = [...signatureIds(job)].flatMap((id) => {
+    const cue = job.cues.find((c) => c.id === id);
+    if (!cue) return [];
+    const i = job.cues.findIndex((c) => c.id === id);
+    const until = (job.cues[i + 1]?.start ?? job.window.end) - 0.1;
+    let box: { x0: number; y0: number; x1: number; y1: number } | undefined;
+    for (const t of [cue.start + 0.6, (cue.start + cue.end) / 2, cue.end - 0.3]) {
+      probe.__vjInkProbe = true;
+      try { signature.compose(stage, t, true); } finally { delete probe.__vjInkProbe; }
+      for (const g of signature.glyphs()) {
+        if (!g.ch.trim() || g.a < 0.2) continue;
+        box = box ? { x0: Math.min(box.x0, g.x0), y0: Math.min(box.y0, g.y0), x1: Math.max(box.x1, g.x1), y1: Math.max(box.y1, g.y1) } : { x0: g.x0, y0: g.y0, x1: g.x1, y1: g.y1 };
+      }
+    }
+    return box ? [{ id: `${id}:signature`, from: cue.start - 0.3, to: until, rect: { x0: box.x0 - 12, y0: box.y0 - 12, x1: box.x1 + 12, y1: box.y1 + 12 } }] : [];
+  });
+  if (boxes.length) engine.keepClearOf(boxes);
+}
 // mini moments (Q5 phase 2): drawn over the frame round their lines, every line kept (render/mini-moment.ts)
 const mini = miniMomentsOf(job).length ? await miniMomentLayer(job) : null;
 // (whether the lyrics are shown: the signature layer draws its lines only with them, so a frame without the words has none)

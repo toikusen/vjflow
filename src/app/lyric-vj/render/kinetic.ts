@@ -796,7 +796,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
       const y = panelArts ? H - (h * Math.min(1, W / cols / w)) / 2 - H * 0.02 : corner ? corner.y : rowsAt ? rowsAt.y : bleedTop ? (h * rs) / 2 - H * 0.02 : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
       // a figure on its ground ellipse stands a little above the frame's foot, so its feet and the ellipse stay inside
       // (a figure never pressed past the frame's side: its whole width inside, a margin kept; a grid's copies keep their panels)
-      ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
+      // (a drawing cropped at its left or right runs off that edge of the frame when it stands on that side)
+      const bleedX = !corner && !panelArts && l.side !== 'center' && l.bleed?.includes(l.side === 'left' || l.flip ? 'left' : 'right') ? (l.side === 'left' || l.flip ? (w * rs) / 2 - W * 0.02 : W - (w * rs) / 2 + W * 0.02) : undefined;
+      ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : bleedX ?? inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(rock * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);

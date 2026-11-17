@@ -154,20 +154,24 @@ if (song) {
   const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
   const inWin = secs.filter((sec) => sec.start >= from && sec.start < to);
   const kOf = (sec: (typeof secs)[number]) => (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic');
-  // no third in a row
-  let run: string[] = [];
-  for (const sec of inWin) {
-    const k = kOf(sec);
-    const id = base(k?.sprite);
-    if (!k || !id) { run = []; continue; }
-    if (run.length >= 2 && run.every((r) => r === id)) {
-      const cue = lineAt(sec.start);
-      const alt = cue ? cutOuts(cue.id).find((x) => x !== id) : undefined;
-      const any = alt ?? [...shots.keys()].find((x) => x !== id && shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`]);
-      if (any) { const sh = shots.get(any)!; Object.assign(k, { sprite: any, side: sh.side, size: sh.height }); thirds += 1; }
+  // no third in a row (run again after the seats: a swap off a top seat put one shot on five cuts, v5 review)
+  const noThirds = () => {
+    let run: string[] = [];
+    for (const sec of inWin) {
+      const k = kOf(sec);
+      const id = base(k?.sprite);
+      if (!k || !id) { run = []; continue; }
+      if (run.length >= 2 && run.every((r) => r === id)) {
+        const cue = lineAt(sec.start);
+        const seatTop = cue && (t.cues as { cueId: string; world?: { seat?: string } }[]).find((x) => x.cueId === cue.id)?.world?.seat === 'top';
+        const ok = (x: string) => x !== id && shots.get(x)?.frame !== 'scene' && !!assets[`spr:${x}`] && !(seatTop && bleedsTop(x));
+        const any = (cue ? cutOuts(cue.id).find(ok) : undefined) ?? [...shots.keys()].find(ok);
+        if (any) { const sh = shots.get(any)!; Object.assign(k, { sprite: any, side: sh.side, size: sh.height }); thirds += 1; }
+      }
+      run = [...run.slice(-1), base(k.sprite)!];
     }
-    run = [...run.slice(-1), base(k.sprite)!];
-  }
+  };
+  noThirds();
   for (const c of t.cues as (Record<string, unknown> & { cueId: string; world?: Record<string, unknown> })[]) {
     const cue = song.cues.find((x) => x.id === c.cueId) as ({ id: string; start: number; end: number; text?: string; charStarts?: number[] }) | undefined;
     if (!cue || cue.start < from || cue.start >= to || !c.world) continue;
@@ -189,7 +193,10 @@ if (song) {
     if (seat === 'top') for (const sec of mine) {
       const k = kOf(sec)!;
       if (k['fx'] === 'grid' || !bleedsTop(k.sprite)) continue;
-      const alt = cutOuts(cue.id).find((x) => !bleedsTop(x)) ?? [...shots.keys()].find((x) => shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`] && !bleedsTop(x));
+      const i = inWin.indexOf(sec);
+      const before = [1, 2].map((d) => base(kOf(inWin[i - d])?.sprite)).filter(Boolean);
+      const fresh = (x: string) => !bleedsTop(x) && !before.includes(x);
+      const alt = cutOuts(cue.id).find(fresh) ?? [...shots.keys()].find((x) => shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`] && fresh(x)) ?? cutOuts(cue.id).find((x) => !bleedsTop(x));
       if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); swapped += 1; }
     }
     // (a seat already keeps the line to its band: the compact share on top of it set a blown-up word at half its size)
@@ -203,6 +210,8 @@ if (song) {
       if (sh) k['size'] = Math.max(Number(k['size'] ?? 0), (SUBJECT_H[sh.size] ?? 0.6) + (seat === 'top' && sh.size === 'wide' ? 0.08 : 0));
     }
   }
+  // (the seats' swaps may have put one shot on cuts in a row: the no-third rule runs once more)
+  noThirds();
 }
 // the grounds of the window spread over each part (ground-spread.ts): the bar splits above copied the ground they split
 // and the world's pool is small, so v4 stood two of three cuts on one stripe and one block; no family past its cap of a

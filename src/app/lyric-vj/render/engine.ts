@@ -139,7 +139,10 @@ export function meshGlyphs(group: THREE.Object3D): GlyphBox[] {
     const m = o as THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
     // (a sing-along's preview of the next line is not this line: sing-along.ts)
     if (!m.isMesh || !m.material.map || (m.material.opacity ?? 1) < 0.05 || m.userData['noVeil'] || m.userData['decor'] || m.userData['preview']) return;
-    b.setFromObject(m);
+    // (the glyph's own picture, not what hangs under it: setFromObject took in a stack line's trailing echo, a glyph
+    // 2700 px wide, linebox-audit.mts)
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    b.copy(m.geometry.boundingBox!).applyMatrix4(m.matrixWorld);
     if (b.isEmpty()) return;
     const [cx, cy, hw, hh] = [(b.min.x + b.max.x) / 2 + W / 2, H / 2 - (b.min.y + b.max.y) / 2, ((b.max.x - b.min.x) * GLYPH_CORE) / 2, ((b.max.y - b.min.y) * GLYPH_CORE) / 2];
     out.push({ i: out.length, x0: cx - hw, y0: cy - hh, x1: cx + hw, y1: cy + hh, a: m.material.opacity ?? 1, moving: false, ink: `#${m.material.color.getHexString()}` });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXIT_MIN, exitAfterSung, exitFloor, handsOver, MIN_TAIL, mustShare, nextShowAfter, READ_FLOOR, settleExit, showByOnset, SUNG_TAIL, sungTailCheck } from './sung-tail';
+import { EXIT_MIN, exitAfterSung, exitFloor, handsOver, lastSungChar, MIN_TAIL, mustShare, nextShowAfter, READ_FLOOR, settleExit, showByOnset, SUNG_TAIL, sungTailCheck } from './sung-tail';
 
 describe('exitAfterSung', () => {
   it('holds a line that would leave on its last sung character until the tail has passed', () => {
@@ -106,6 +106,14 @@ describe('settleExit: the last character is read for one character\'s time, neve
     const s = settleExit(125.8, 0.28, 125.4, 125.5 + MIN_TAIL, 0.02, exitFloor(cue, 119.8));
     expect(s.overlap).toBe(false);
     expect(s.exitAt).toBeGreaterThanOrEqual(125.5 + MIN_TAIL - 1e-9);
+  });
+});
+
+describe('a merged duet\'s character times are not in order: its last sung character is the latest', () => {
+  it('exitFloor reads the latest character, not the last listed (a nested duet cut the first voice while it sang)', () => {
+    const merged = { start: 10, end: 15, charStarts: [10, 11, 14.6, 15, 12, 12.5, 13] };
+    expect(lastSungChar(merged.charStarts)).toBe(15);
+    expect(exitFloor(merged, 9.8)).toBeCloseTo(15 + MIN_TAIL, 6);
   });
 });
 

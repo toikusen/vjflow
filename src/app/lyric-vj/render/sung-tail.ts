@@ -1,6 +1,12 @@
 // A line leaves after its last sung character, never on it: an exit that began while the last word was still being
 // sung read as the line being cut off (v3's c004 left 0.12 s before 気 ended).
 
+/**
+ * A line's latest sung character time: the largest of its character times, not the last listed — a duet set together
+ * (line-shows.ts) lists the first voice's characters, then the second's, and the first may be sung later (opus review).
+ */
+export const lastSungChar = (charStarts: number[]) => Math.max(...charStarts);
+
 /** Seconds a line stays up past its last sung character before its exit may begin. */
 export const SUNG_TAIL = 0.3;
 
@@ -52,7 +58,7 @@ const LEAD = 0.02;
  * with no character times may blink out over the last moment of its stated end (nothing says a word is still sung).
  */
 export function exitFloor(cue: { start: number; end: number; charStarts?: number[] }, show: number, lead = LEAD, tail = MIN_TAIL): number {
-  const sung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] + tail : cue.end - EXIT_MIN - lead;
+  const sung = cue.charStarts?.length ? lastSungChar(cue.charStarts) + tail : cue.end - EXIT_MIN - lead;
   return Math.max(show + READ_FLOOR, sung);
 }
 /** Whether a line leaving no earlier than `floor` can be gone (cut, at the least) before a line sung from `onset` shows. */

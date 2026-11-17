@@ -40,10 +40,22 @@ if (scheme) {
   }
   for (const c of t.cues as (Record<string, unknown> & { world?: Record<string, unknown> })[]) if (c.world) c.world = withScheme(c.world);
 }
+// a line beside a subject keeps a share of its set's measure (world-layout compact): short lines give up more, a long
+// line keeps most of its size to stay readable; the rest of the frame is the subject's (v3's rule, the one that let
+// the rider stand at half the frame; without it the plates left him a third)
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  for (const c of t.cues as (Record<string, unknown> & { cueId: string; world?: Record<string, unknown> })[]) {
+    const cue = song.cues.find((x) => x.id === c.cueId);
+    if (!cue || cue.start < from || cue.start >= to || !c.world) continue;
+    const n = [...(cue as { text?: string }).text?.replace(/\s/g, '') ?? ''].length;
+    c.world['compact'] = +Math.min(0.85, Math.max(0.68, 0.68 + (n - 10) * 0.012)).toFixed(3);
+  }
+}
 // the subject layer: the picture tier binds a prop to a cut here and there; a subject video keeps its cast in view,
 // so a cut the plan left without one takes the script's shot for its line (the line's shots in order, cycling), and
 // a scene shot stands in the language's circle window on the side its subject keeps
-const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { cues: { id: string; start: number; end: number }[] }) : undefined;
+const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { cues: { id: string; start: number; end: number; text?: string }[] }) : undefined;
 const lineAt = (time: number) => song?.cues.find((c) => time >= c.start - 1e-3 && time < c.end) ?? [...(song?.cues ?? [])].reverse().find((c) => c.start <= time);
 const used = new Map<string, number>();
 let filled = 0;

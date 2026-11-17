@@ -36,3 +36,18 @@ export function nextShowAfter(exitAt: number, exitSec: number, nextShow: number,
 export function showByOnset(waited: number, planned: number, onset: number): number {
   return Math.max(planned, Math.min(waited, onset));
 }
+
+/**
+ * This line's exit and the next line's show on one seat: the wait the tail asks (nextShowAfter), capped at the next
+ * line's sung onset (showByOnset). Where the cap bites, this line is gone before the next one shows — its exit ends
+ * `lead` before the show, shortened down to a blink and started earlier if it must: the tail gives way to the onset,
+ * never two lines lit on one seat (opus review of 0f350f5). Layouts that seat two lines apart do not ask this.
+ */
+export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number): { show: number; exitAt: number; exitDur: number } {
+  const w = nextShowAfter(exitFrom, exitSec, plannedShow, lead);
+  const show = showByOnset(w.show, plannedShow, onset);
+  if (show >= w.show - 1e-9) return { show: w.show, exitAt: exitFrom, exitDur: w.exitDur };
+  const end = show - lead;
+  if (exitFrom + EXIT_MIN <= end) return { show, exitAt: exitFrom, exitDur: Math.min(Math.max(exitSec, EXIT_MIN), end - exitFrom) };
+  return { show, exitAt: end - EXIT_MIN, exitDur: EXIT_MIN };
+}

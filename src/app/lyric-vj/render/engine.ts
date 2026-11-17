@@ -1,7 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
-import { exitAfterSung, nextShowAfter, showByOnset } from './sung-tail';
+import { exitAfterSung, settleExit } from './sung-tail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { textCamAt } from './text-cam';
@@ -1275,19 +1275,20 @@ export class LyricVjEngine {
       const tailKept = !held && shot.template !== 'world-pair';
       const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung, timed ? undefined : 0) : exitAt0;
       const exitFrom = Math.max(cue.start + 0.25 * pace, exitAt1);
-      const waited = tailKept && next ? nextShowAfter(exitFrom, exitSec, nextShow, EXIT_LEAD) : undefined;
-      // (the next line shows by its first sung character however long this one's tail asks: past that, the two are up
-      // together for this one's exit — never a line shown after it has been sung, Codex review)
+      // (the next line shows by its first sung character, read off the timing it is itself shown by (a paid word sync's
+      // sung times first); where that caps the tail's wait, this line is gone before it shows — on one seat never two
+      // lines lit: settleExit, Codex and opus reviews)
+      const ns = styled[i + 1];
+      const onset = !ns ? Infinity : ns.style.reveal === 'sung' && ns.style.sung?.length === [...ns.cue.text].length ? ns.style.sung[0] : (ns.cue.charStarts?.[0] ?? ns.cue.start);
+      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD) : undefined;
       if (settle) {
-        const onset = next ? (styled[i + 1].cue.charStarts?.[0] ?? next.start) : Infinity;
-        const show = waited ? showByOnset(waited.show, plannedShow[i + 1], onset) : plannedShow[i + 1];
+        const show = waited ? waited.show : plannedShow[i + 1];
         if (next && show > plannedShow[i + 1] + 1e-6) {
           this.waits.push({ id: next.id, sec: +(show - plannedShow[i + 1]).toFixed(3) });
           showAt[i + 1] = show;
         }
         return;
       }
-      const exitAt = exitAt1;
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
@@ -1301,7 +1302,7 @@ export class LyricVjEngine {
         // an English line is set in the paired Latin face (fonts.ts lineFace: the plan's reading of the same choice)
         fonts: isLatinLine(cue.text) ? { display: readingLatin(this.accentFont), body: readingLatin(this.accentFont), script: readingLatin(this.accentFont) } : this.fonts,
         showFrom: showAt[i],
-        exitAt: exitFrom,
+        exitAt: waited ? waited.exitAt : exitFrom,
         exitDur: waited ? Math.max(0.08, waited.exitDur) : Math.max(0.08, Math.min(exitSec, (persist ? leaveBy : nextShow) - exitFrom - 0.02)),
         tail: tailKept ? 'kept' : 'exempt',
         accentTimes: [...(style.accents ?? []).map((k) => inBeats[k]).filter((b) => b !== undefined), ...(repeats.get(cue.id) ?? [])].sort((a, b) => a - b),

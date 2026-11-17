@@ -1,6 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { clipFrame } from './sprite-clip';
+import { exitAfterSung } from './sung-tail';
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { textCamAt } from './text-cam';
@@ -66,7 +67,7 @@ import { MotifLayer } from './motif-layer';
 import { CustomScene } from './custom-scene';
 import { readBack } from './readback';
 import { avoidAll, blendLayer, drawLook, drawNative, drawTransition, Layer, layerRect, Measured, measurable, photoBox, Rect, sectionAt, smoothPlacement } from './graphics';
-import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil } from './kinetic';
+import { carrySubjects, freeBand, freeRows, KineticLayer, oppositeSide, setBackPush, setDecidingInk, setLineVeil, pickRoom } from './kinetic';
 import { setSheet } from './paper-surface';
 import { songKeyOf } from './knobs';
 import { setWordSafe } from '../phrases';
@@ -1231,7 +1232,10 @@ export class LyricVjEngine {
       // (a world's shared shot is gone before the next line shows, however late its own line runs)
       // (a sing-along line stays until the next one shows only while that one follows soon: its preview waits there)
       const held = !!persist && (persist !== 'preview' || (!!next && next.start - cue.end <= PREVIEW_GAP));
-      const exitAt = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
+      const exitAt0 = shot.template === 'world-pair' ? leaveBy - exitSec - EXIT_LEAD : held ? Math.max(cue.end, leaveBy - exitSec - EXIT_LEAD) : Math.min(cue.end + (style.linger ?? HOLD_SEC), nextShow - exitSec - EXIT_LEAD);
+      // (a line never starts leaving on its last sung character: the sung tail, capped by the next line's showing)
+      const lastSung = cue.charStarts?.length ? cue.charStarts[cue.charStarts.length - 1] : undefined;
+      const exitAt = held || shot.template === 'world-pair' ? exitAt0 : exitAfterSung(exitAt0, lastSung, nextShow - exitSec - EXIT_LEAD);
       const inBeats = beatsDuring(this.job.beats, cue.start, cue.end);
 
       // a line sung faster than it can be read appears whole: word reveals and staggered pieces would eat its time
@@ -1665,7 +1669,12 @@ export class LyricVjEngine {
           // the lines' boxes over the cut: a prop sent to a corner takes the one they leave clear
           if (l.sprite) l.over = this.lyricRects.filter((r) => Math.min(until, r.to) - Math.max(sec.start, r.from) > 0).map((r) => [r.rest.x0, r.rest.y0, r.rest.x1, r.rest.y1] as [number, number, number, number]);
           // the floor plan: the room the lines leave it, where the character is fitted (a 1.7 close-up reached under them)
-          const room = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
+          const band = side && l.sprite ? freeBand(seen, sec.start, secs[i + 1]?.start ?? Infinity, side) : undefined;
+          // the side band or the rows above or below the lines: whichever lets the figure stand larger (under a blown-up
+          // word the band is a sliver and the figure went to a corner at a third of its size; the rows held it whole)
+          const pic = l.sprite ? (this.images.get(`spr:${l.sprite}`)?.image as { width?: number; height?: number } | undefined) : undefined;
+          const rowsToo = band && pic?.width && pic.height ? freeRows(onCut(this.lyricRects.map((r) => ({ from: r.from, to: r.to, y0: r.rest.y0, y1: r.rest.y1 })), sec.start, until), sec.start, until) : undefined;
+          const room = rowsToo && pickRoom(band!, rowsToo, (pic!.width! / pic!.height!) * H * (l.size ?? 0.85), H * (l.size ?? 0.85)) === 'rows' ? undefined : band;
           if (room) l.room = room;
           // a thing never sits on a sung line at full strength: with lines centred, or too little room beside them, it
           // stands behind them faded (sweet timer's carriage, wand and moon sat on its lines; dropping it instead left

@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitClear, fitInRoom, freeBand, freeRows, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitClear, fitInRoom, freeBand, freeRows, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -281,5 +281,18 @@ describe('subject clock follows the placement', () => {
     carrySubjects(ls);
     expect(ls.map((l) => l.subjectAt)).toEqual([10, 10, 12, 12, 14, 15]);
     expect(subjectSince({ sprite: 'cat', side: 'left', since: 9.6, place: '0.850|one' }, 'cat', 'left', 10, '1.200|one')).toBe(10);
+  });
+});
+
+describe('pickRoom', () => {
+  it('takes the rows when a blown-up word leaves only a sliver beside it and the rows hold the figure larger', () => {
+    // a 540 px tall figure, 400 wide: a 200 px band fits it at 0.38; rows of 600 px hold it whole
+    expect(pickRoom([0, 200], [480, 1080], 400, 540)).toBe('rows');
+  });
+  it('keeps the band when it holds the figure as well as the rows do', () => {
+    expect(pickRoom([0, 700], [700, 1080], 400, 540)).toBe('band');
+  });
+  it('keeps the band when the rows would leave a speck', () => {
+    expect(pickRoom([0, 300], [900, 1080], 400, 540)).toBe('band');
   });
 });

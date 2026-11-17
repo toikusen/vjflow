@@ -906,6 +906,20 @@ export function cornerPlace(w: number, h: number, s: number, left: boolean, over
 }
 
 /** Where a character w px wide stands at fx inside a free band: its scale (≤ 1) and its centre. */
+/**
+ * Where a figure of w×h px stands larger: the side band the lines leave (fitInRoom's scale) or the rows above or below
+ * them (rowsPlace's); the rows only when they let it stand clearly larger (a sixth more), so a figure does not wander
+ * between the two from cut to cut.
+ */
+export function pickRoom(band: [number, number], rows: [number, number], w: number, h: number, pad = 24): 'band' | 'rows' {
+  const sBand = Math.min(1, (band[1] - band[0] - 2 * pad) / Math.max(1, w));
+  const floor = rows[1] >= H - 1;
+  const top = Math.max(rows[0] + 16, H * EDGE_PAD);
+  const bottom = floor ? H : rows[1] - 16;
+  const sRows = Math.min(1, (bottom - top) / Math.max(1, h));
+  return sRows * h >= H * PROP_MIN_H && sRows > sBand * 1.17 ? 'rows' : 'band';
+}
+
 export function fitInRoom(room: [number, number], w: number, fx: number, pad = 24): { s: number; x: number } {
   const s = Math.min(1, (room[1] - room[0] - 2 * pad) / Math.max(1, w));
   const half = (w * s) / 2;

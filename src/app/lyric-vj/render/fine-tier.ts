@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import type { FineTier } from '../treatment';
 import { advanceOf, GlyphStyle, makeGlyphs } from './glyphs';
 import { Box, finePlace } from './material';
+export { fineShown } from './fine-shown';
 
 const W = 1920;
 const H = 1080;

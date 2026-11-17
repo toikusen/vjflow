@@ -111,7 +111,7 @@ export type ReviseLook = 'caret' | 'tape' | 'scribble' | 'stamp';
 export const REVISE_LOOKS: ReviseLook[] = ['caret', 'tape', 'scribble', 'stamp'];
 
 /** Real words only: the song's title, the part's name, the line's own key phrase. An empty `text` is the rule alone. */
-/** `note`: words the line director wrote for the line (a scene card, a chapter, an echo, a singer), checked by noteRefusal. */
+/** `note`: legacy — words a line director once wrote beside the line; never drawn now (render/fine-shown.ts). */
 export interface FineTier { kind: 'title' | 'section' | 'key' | 'rule' | 'note'; text: string; }
 
 export interface CueStyle {
@@ -240,6 +240,9 @@ export interface ValidationResult {
 
 /** Max distance a shot boundary may sit from a cue start or downbeat before it is snapped. */
 export const SNAP_SEC = 0.15;
+/** The shortest shot: half a second, or a short beat's worth when the design cuts on beats (design.beatCuts). */
+export const MIN_SHOT = 0.5;
+export const MIN_SHOT_BEAT_CUT = 0.3;
 
 /** Validates against the timeline and the template catalog; repairs boundaries, ranges and missing styles. */
 export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: Window, templates0: Record<string, TemplateSpec>): ValidationResult {
@@ -262,7 +265,10 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
   }
 
   // shots: known template, params within schema, boundaries snapped and tiling the window
-  const anchors = [...cues.map((c) => c.start), ...song.downbeats, win.start, win.end];
+  // a design that cuts on beats (the character video tier) may start a shot on any beat
+  const beatCuts = !!input.design?.beatCuts;
+  const minShot = beatCuts ? MIN_SHOT_BEAT_CUT : MIN_SHOT;
+  const anchors = [...cues.map((c) => c.start), ...(beatCuts ? song.beats : song.downbeats), win.start, win.end];
   const snap = (x: number) => anchors.reduce((best, a) => (Math.abs(a - x) < Math.abs(best - x) ? a : best), anchors[0]);
   t.shots.sort((a, b) => a.start - b.start);
   if (!t.shots.length) errors.push('至少要有一個鏡頭');
@@ -291,13 +297,13 @@ export function validateTreatment(input: TreatmentV3, song: SongTimeline, win: W
     if (t.shots[0].start !== win.start) t.shots[0].start = win.start;
     t.shots.forEach((s, i) => (s.end = i + 1 < t.shots.length ? t.shots[i + 1].start : win.end));
     // a shot squeezed under 0.5 s (two shot starts snapped onto lines retimed close together) joins the one before it
-    const empty = t.shots.filter((s, i) => i > 0 && s.end - s.start < 0.5);
+    const empty = t.shots.filter((s, i) => i > 0 && s.end - s.start < minShot);
     if (empty.length) {
       t.shots = t.shots.filter((s) => !empty.includes(s));
       t.shots.forEach((s, i) => (s.end = i + 1 < t.shots.length ? t.shots[i + 1].start : win.end));
-      fixes.push(`鏡頭太短（< 0.5 秒），併入前一個鏡頭：${empty.map((s) => s.id).join(', ')}`);
+      fixes.push(`鏡頭太短（< ${minShot} 秒），併入前一個鏡頭：${empty.map((s) => s.id).join(', ')}`);
     }
-    if (t.shots[0].end - t.shots[0].start < 0.5) errors.push(`鏡頭太短（< 0.5 秒）：${t.shots[0].id}`);
+    if (t.shots[0].end - t.shots[0].start < minShot) errors.push(`鏡頭太短（< ${minShot} 秒）：${t.shots[0].id}`);
   }
   const shotAt = (time: number) => t.shots.find((s) => s.start <= time && time < s.end) ?? t.shots[t.shots.length - 1];
 

@@ -58,24 +58,79 @@ const lum = (c: string) => { const [r, g, b] = hex(c).map((v) => (v <= 0.03928 ?
 const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)]; return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 export const mixHex = (a: string, b: string, k: number) => '#' + hex(a).map((v, i) => Math.round(mix(v, hex(b)[i], k) * 255).toString(16).padStart(2, '0')).join('');
 
-export interface Inks { ink: string; paper: string; accent: string; board: string; boardInk: string; ghost: string; press: string; core: string; /** A keyline round the type where no one ink reads on the ground under it. */ halo?: string }
+export interface Inks { ink: string; paper: string; accent: string; board: string; boardInk: string; ghost: string; press: string; core: string; /** A keyline round the type where no one ink reads on the ground under it. */ halo?: string; /** An echo's ink (echoInk): a memory, not the sung line. */ echo?: string }
 
 /** What is under a moment's text: the mean colour, and whether both dark and light are there in any quantity. */
-export interface Ground { mean: string; mixed: boolean }
+export interface Ground {
+  mean: string;
+  mixed: boolean;
+  /** The mean colour of each part of the region (a grid of tiles): a mean of cream and red reads as neither. */
+  tiles?: string[];
+}
 /** The frame under a region (x0,y0,x1,y1), from a sparse sample of its pixels, as the engine reads a line's backdrop. */
 export function groundUnder(c: Ctx, x0: number, y0: number, x1: number, y1: number): Ground {
   const d = c.getImageData(x0, y0, x1 - x0, y1 - y0).data;
+  const [w, h] = [Math.max(1, x1 - x0), Math.max(1, y1 - y0)];
+  // (and in tiles, a grid of TILE_COLS × TILE_ROWS: a ground of cream, pink and red has a mean navy reads on, and no
+  // part it does)
+  const tiles = Array.from({ length: TILE_COLS * TILE_ROWS }, () => [0, 0, 0, 0]);
   let [r, g, b, n, dark, light] = [0, 0, 0, 0, 0, 0];
   for (let i = 0; i < d.length; i += 4 * 7) {
     r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
     const l = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255;
     if (l < 0.3) dark++;
     else if (l > 0.65) light++;
+    const p = i / 4;
+    const tile = tiles[Math.min(TILE_ROWS - 1, Math.floor(((Math.floor(p / w)) / h) * TILE_ROWS)) * TILE_COLS + Math.min(TILE_COLS - 1, Math.floor(((p % w) / w) * TILE_COLS))];
+    tile[0] += d[i]; tile[1] += d[i + 1]; tile[2] += d[i + 2]; tile[3]++;
   }
   n = Math.max(1, n);
-  const hx = (v: number) => Math.round(v / n).toString(16).padStart(2, '0');
-  return { mean: `#${hx(r)}${hx(g)}${hx(b)}`, mixed: dark / n > 0.06 && light / n > 0.06 };
+  const hex = (v: number, k: number) => Math.round(v / k).toString(16).padStart(2, '0');
+  return {
+    mean: `#${hex(r, n)}${hex(g, n)}${hex(b, n)}`,
+    mixed: dark / n > 0.06 && light / n > 0.06,
+    tiles: [...new Set(tiles.filter((t) => t[3] > 0).map((t) => `#${hex(t[0], t[3])}${hex(t[1], t[3])}${hex(t[2], t[3])}`))],
+  };
 }
+/** The grid a moment's ground is read in (groundUnder tiles): a line's width in eighths, its height in halves. */
+const TILE_COLS = 8, TILE_ROWS = 2;
+/**
+ * The ground a moment's line is read on over its whole window: the grounds under it at the window's times (windowTimes)
+ * as one — their mean, mixed if any is, every part of each — so the ink and its keyline are one decision for the line,
+ * whatever frames were drawn before (a seek straight to a white frame had no keyline, one through a grey frame had).
+ */
+export function windowGround(grounds: Ground[]): Ground {
+  const rgb = grounds.map((g) => [1, 3, 5].map((i) => parseInt(g.mean.slice(i, i + 2), 16)));
+  const avg = [0, 1, 2].map((k) => Math.round(rgb.reduce((a, c) => a + c[k], 0) / Math.max(1, rgb.length)).toString(16).padStart(2, '0'));
+  return { mean: `#${avg.join('')}`, mixed: grounds.some((g) => g.mixed), tiles: [...new Set(grounds.flatMap((g) => [g.mean, ...(g.tiles ?? [])]))].sort() };
+}
+/** The times a moment's window [from, to) is read at: every half second (at most 24, spread evenly), its end included. */
+export function windowTimes(from: number, to: number): number[] {
+  const end = to - 0.05;
+  const step = Math.max(0.5, (end - from) / 23);
+  const out: number[] = [];
+  for (let t = from; t < end - 1e-6; t += step) out.push(+t.toFixed(3));
+  out.push(+end.toFixed(3));
+  return out;
+}
+/** The least an echo (an earlier line shown again as a memory) reads at on any part of its ground. */
+export const ECHO_READS = 3;
+/**
+ * An echo's ink: the line's ink taken toward the ground as far as ECHO_READS on every part of it allows (at most
+ * two thirds of the way), so the memory stays decipherable and well under the sung line; the ink itself where even that
+ * cannot hold 3:1 (its keyline then carries it).
+ */
+export function echoInk(ink: string, ground: Ground): string {
+  let best = ink;
+  for (let k = 0.05; k <= 0.6601; k += 0.05) {
+    const m = mixHex(ink, ground.mean, k);
+    if (worstOn(m, ground) < ECHO_READS) break;
+    best = m;
+  }
+  return best;
+}
+/** The least contrast of a colour on any part of the ground (its mean when it was not read in parts). */
+export const worstOn = (c: string, ground: Ground) => Math.min(contrast(c, ground.mean), ...(ground.tiles ?? []).map((t) => contrast(c, t)));
 /** The colour moved toward black or white (whichever the ground is not) until it reads on the ground at `min`. */
 function toward(c: string, ground: string, min: number): string {
   const pole = contrast(ground, '#000000') > contrast(ground, '#ffffff') ? '#000000' : '#ffffff';
@@ -98,12 +153,19 @@ export function inkFor(inks: Inks, ground: Ground, min = READS): Inks {
   const own = [inks.ink, inks.paper].sort((a, b) => vs(b) - vs(a))[0];
   const moved = vs(own) < min;
   const ink = moved ? toward(own, ground.mean, min) : own;
-  const halo = ground.mixed || moved ? (lum(ink) > 0.35 ? 'rgba(14,12,18,0.85)' : 'rgba(255,250,240,0.9)') : undefined;
+  // (a keyline too where the ink fails on any part of the ground, as a line's does: the mean of a cream plate over pink
+  // and red read navy at 4.7:1, and the words stood unreadable on the red, 黄昏サイクル 109.7 s)
+  const halo = ground.mixed || moved || worstOn(ink, ground) < min ? (lum(ink) > 0.35 ? 'rgba(14,12,18,0.85)' : 'rgba(255,250,240,0.9)') : undefined;
   let ghost = mixHex(ink, ground.mean, 0.5);
   if (contrast(ghost, ground.mean) < 2.5) ghost = mixHex(ink, ground.mean, 0.28);
   const press = contrast(inks.accent, ground.mean) >= 1.5 && inks.accent !== ink ? inks.accent : mixHex(ink, ground.mean, 0.4);
-  return { ...inks, ink, ghost, press, halo };
+  return { ...inks, ink, ghost, press, halo, echo: echoInk(ink, ground) };
 }
+/**
+ * Whether a moment's inks, picked as it came up, still read on the ground under it now: keylined, on its mean at 3:1;
+ * bare, at READS on every part of it (inks held from a cream page stood on the red of the next cut, 黄昏サイクル 109.7 s).
+ */
+export const holdsInks = (held: Inks, ground: Ground) => (held.halo ? contrast(held.ink, ground.mean) >= 3 : !ground.mixed && worstOn(held.ink, ground) >= READS);
 /** The song's inks under t: the kinetic cut's paper and ink, the colour script's accent, else the style anchor's palette. */
 export function inksAt(job: RenderJob, t: number): Inks {
   const tr = job.treatment as RenderJob['treatment'] & { design?: { colorScript?: { start: number; shadow?: string; highlight?: string; accent?: string }[] } };
@@ -392,8 +454,8 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   const song = job.cues.length * 7 + Math.round(job.window.end);
 
   /** A character in `fill`; with `halo`, a thin keyline of it round the strokes first, so the type reads on a mixed ground. */
-  const glyph = (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press = 0, pressInk = '', halo = '') => {
-    c.font = `900 ${size}px "${family}"`;
+  const glyph = (c: Ctx, ch: string, a: number, b: number, size: number, fill: string, press = 0, pressInk = '', halo = '', weight = 900) => {
+    c.font = `${weight} ${size}px "${family}"`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     if (halo) {
@@ -931,13 +993,25 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
   // each moment's inks are picked on the ground under its text as it comes up and held, so the type does not change
   // colour frame to frame; picked again only where the ground moved from under them (a camera's slide)
   const picked = new Map<Built, Inks>();
+  // (with the look behind readable at any time, each moment's inks are decided once from its whole window: windowGround)
+  const decided = new Map<Built, Inks>();
+  const decide = (b: Built, region: Box, behind: GroundAt) => {
+    let on = decided.get(b);
+    if (on) return on;
+    const from = startOf.get(b) ?? b.from;
+    const to = Math.min(b.to(), from + 60);
+    const grounds = windowTimes(from, Number.isFinite(to) ? to : from + 8).map((t) => behind(t, ...region)).filter((g): g is Ground => !!g);
+    on = inkFor(inksAt(job, b.from), grounds.length ? windowGround(grounds) : groundUnder(x, ...region));
+    decided.set(b, on);
+    return on;
+  };
   let last: SignatureGlyph[] = [];
 
   /** The lyric layer rendered on its own (transparent): nothing under the moments on this canvas. */
   const layered = job.layer === 'text' || job.layer === 'words';
   const inksOn = (b: Built, ground: Ground) => {
     const held = picked.get(b);
-    if (held && contrast(held.ink, ground.mean) >= 3 && (held.halo || !ground.mixed)) return held;
+    if (held && holdsInks(held, ground)) return held;
     const on = inkFor(inksAt(job, b.from), ground);
     picked.set(b, on);
     return on;
@@ -970,7 +1044,7 @@ export async function signatureLayer(job: RenderJob): Promise<SignatureLayer> {
         const region = (p ? placedBox(b.region, p) : b.region).map(Math.round) as Box;
         // (a layered output's canvas is cleared under the moment: its inks read the look behind, as the opaque frame's do)
         // (picked once there: the look is drawn again for it, not read off this frame)
-        const regional = () => (layered && behind ? picked.get(b) ?? inksOn(b, behind(t, ...region) ?? groundUnder(x, ...region)) : inksOn(b, groundUnder(x, ...region)));
+        const regional = () => (behind ? decide(b, region, behind) : inksOn(b, groundUnder(x, ...region)));
         const drawB = (on: Inks) => {
           drawing = b;
           if (!p) return b.draw(t, on);

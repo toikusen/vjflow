@@ -77,3 +77,33 @@ describe('world sets', () => {
     }
   });
 });
+
+// legibility is absolute (lyric-vj-legibility-absolute): a move may slide, fade or scale a row, but two characters of one
+// row never cross or close on each other past their side bearings — 「失う怖さも」 read 「失怖」 for 0.1 s while slice-out
+// pulled neighbours of one row opposite ways (v4 review, 2026-11-17)
+describe('no move merges glyphs', () => {
+  const SIZE = 100;
+  const BEARING = 0.1; // the share of a glyph's advance two neighbours may close by before strokes can meet
+  const rows = 2, perRow = 6;
+  const moves = { ...Object.fromEntries(Object.entries(WORLD_ENTERS).map(([k, m]) => [`in:${k}`, m])), ...Object.fromEntries(Object.entries(WORLD_EXITS).map(([k, m]) => [`out:${k}`, m])) };
+  it.each(Object.entries(moves).filter(([, m]) => m.glyph))('%s keeps the characters of a row apart', (id, m) => {
+    for (const seed of [3, 7, 12]) {
+      for (let q = 0; q <= 1.0001; q += 0.04) {
+        for (let r = 0; r < rows; r++) {
+          const poses = Array.from({ length: perRow }, (_, c) => {
+            const i = r * perRow + c;
+            // (a row's glyphs sit at slightly different heights: a stair, a drop, a glyph's own dy)
+            const v = (r + 0.5) / rows + ((c % 3) - 1) * 0.04;
+            return m.glyph!({ q, i, n: rows * perRow, u: (c + 0.5) / perRow, v, seed, age: 1, sung: 1, row: r });
+          });
+          for (let c = 1; c < perRow; c++) {
+            const [a, b] = [poses[c - 1], poses[c]];
+            if ((a.a ?? 1) < 0.05 || (b.a ?? 1) < 0.05) continue;
+            const closed = (a.dx ?? 0) - (b.dx ?? 0);
+            expect(closed, `${id} q=${q.toFixed(2)} row ${r} glyphs ${c - 1},${c} closed by ${closed.toFixed(1)} px`).toBeLessThanOrEqual(SIZE * BEARING);
+          }
+        }
+      }
+    }
+  });
+});

@@ -10,6 +10,14 @@ export const readingSec = (text: string, start: number, end: number) => Math.min
 
 export interface LineSpan { start: number; end: number; text: string }
 
+/** The least a line is up to be read, however little its window: a glimpse, never nothing (a window of zero or less fails). */
+export const READ_FLOOR = 0.4;
+/**
+ * The reading a line's window must give (the readable gate): its reading time, never more than 95 % of the window it
+ * has (a rap line's own slot), and never under READ_FLOOR — a negative or too-short window fails instead of passing.
+ */
+export const requiredReading = (need: number, window: number) => Math.max(Math.min(need, 0.95 * window), Math.min(need, READ_FLOOR));
+
 const chars = (s: string) => [...s.replace(/\s/g, '')].length;
 /** Two lines sung back to back, each faster than it can be read: they are set together as one two-row line. */
 export const setTogether = (a: LineSpan, b: LineSpan) => {

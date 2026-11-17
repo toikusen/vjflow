@@ -47,6 +47,11 @@ export const ROLL_LEAST = 0.6;
 /** Half a turn and back: 0 at both ends, 1 in the middle. */
 const arch = (q: number) => Math.sin(Math.PI * clamp01(q));
 
+/** The beats that run or flash the key ink across a line: a blown-up word sits them out (keepsBlownInk). */
+export const FRONT_KEYS = new Set<string>(['ink-run', 'light-sweep', 'roll', 'beat-punch']);
+/** Whether character `src` is in the line's blown-up word and so keeps its ink through a running beat of `kind`. */
+export const keepsBlownInk = (kind: string, blow: { from: number; to: number } | undefined, src: number | undefined) => !!blow && src !== undefined && src >= blow.from && src < blow.to && FRONT_KEYS.has(kind);
+
 export const WORLD_BEATS: Record<BeatKind, BeatMove> = {
   // the characters take the key ink one after another and give it back behind the front
   'ink-run': { sec: 0.9, glyph: ({ q, u }) => ({ key: Math.abs(u - (q * 1.7 - 0.35)) < 0.3 ? 1 : 0 }) },

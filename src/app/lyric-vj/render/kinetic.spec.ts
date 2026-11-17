@@ -1,5 +1,5 @@
 import { vi } from 'vitest';
-import { camTime, cornerPlace, DOC_KINDS, drawKinetic, EDGE_PAD, fitClear, fitInRoom, freeBand, freeRows, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
+import { camTime, cornerPlace, CORNER_MIN_H, CORNER_MIN_W, SUBJECT_COVER_ALPHA, UNDER_ALPHA, DOC_KINDS, drawKinetic, EDGE_PAD, FOOT_PAD, fitClear, fitInRoom, freeBand, freeRows, isLeadIn, pickRoom, PROP_MIN_H, roomsOf, rowsPlace, underCorner, UNDER_H, KINETIC_CAMS, GROUNDS, KINETIC_FX, KineticLayer, oppositeSide, THREAD_MARKS } from './kinetic';
 import { capEach, capRound, drawMove, Env, FLOWS, MORE, reading, ROUND_FX, turnFor } from './kinetic-more';
 
 describe('kinetic cuts', () => {
@@ -123,7 +123,7 @@ describe('the song\'s thread', () => {
     const tall = rowsPlace([0, 600], 1080, 1)!;
     expect(tall.y - (1080 * tall.s) / 2).toBeGreaterThanOrEqual(1080 * EDGE_PAD - 0.01);
     const below = rowsPlace([700, 1080], 300, 1)!;
-    expect(below.y + (300 * below.s) / 2).toBeCloseTo(1080);
+    expect(below.y + (300 * below.s) / 2).toBeCloseTo(1080 * (1 - FOOT_PAD));
     // a band that would leave it a speck: no place there
     expect(rowsPlace([0, 330], 1080, 1)).toBeUndefined();
     expect(1080 * PROP_MIN_H).toBeGreaterThan(250);
@@ -281,5 +281,46 @@ describe('subject clock follows the placement', () => {
     carrySubjects(ls);
     expect(ls.map((l) => l.subjectAt)).toEqual([10, 10, 12, 12, 14, 15]);
     expect(subjectSince({ sprite: 'cat', side: 'left', since: 9.6, place: '0.850|one' }, 'cat', 'left', 10, '1.200|one')).toBe(10);
+  });
+});
+
+describe('pickRoom', () => {
+  it('takes the rows when a blown-up word leaves only a sliver beside it and the rows hold the figure larger', () => {
+    // a 540 px tall figure, 400 wide: a 200 px band fits it at 0.38; rows of 600 px hold it whole
+    expect(pickRoom([0, 200], [480, 1080], 400, 540)).toBe('rows');
+  });
+  it('keeps the band when it holds the figure as well as the rows do', () => {
+    expect(pickRoom([0, 700], [700, 1080], 400, 540)).toBe('band');
+  });
+  it('keeps the band when the rows would leave a speck', () => {
+    expect(pickRoom([0, 300], [900, 1080], 400, 540)).toBe('band');
+  });
+});
+
+describe('isLeadIn: a line coming in over only the last moments of a cut belongs to the next cut', () => {
+  it('a moment line 0.23 s before a five-second cut ends does not seat it (大雪 S03, 39.12–44.13 s)', () => {
+    expect(isLeadIn({ from: 43.9, to: 47.0 }, 39.12, 44.13)).toBe(true);
+  });
+  it('a line coming in earlier, a line that ends with the cut and a line already up do seat it', () => {
+    expect(isLeadIn({ from: 43.0, to: 47.0 }, 39.12, 44.13)).toBe(false);
+    expect(isLeadIn({ from: 43.9, to: 44.2 }, 39.12, 44.13)).toBe(false);
+    expect(isLeadIn({ from: 39.0, to: 47.0 }, 39.12, 44.13)).toBe(false);
+  });
+  it('a cut too short to hold the subject and then lose it keeps the old rule', () => {
+    expect(isLeadIn({ from: 1.4, to: 4 }, 1, 1.6)).toBe(false);
+  });
+});
+
+describe('a figure with no room never stands over the words at cover strength', () => {
+  it('fades behind the lines under the cover threshold', () => {
+    expect(UNDER_ALPHA).toBeLessThan(SUBJECT_COVER_ALPHA);
+  });
+  it('a wide car that spans both corners at full corner size is shrunk into the corner a call line leaves clear', () => {
+    const call: [number, number, number, number][] = [[478, 482, 1470, 917]];
+    const c = cornerPlace(1600, 430, 1, false, call);
+    expect(c.clear).toBe(true);
+    expect(430 * c.s >= 1080 * CORNER_MIN_H - 1 || 1600 * c.s >= 1920 * CORNER_MIN_W - 1).toBe(true);
+    const [x0, y0, x1] = [c.x - (1600 * c.s) / 2, c.y - (430 * c.s) / 2, c.x + (1600 * c.s) / 2];
+    expect(x1 < 478 || x0 > 1470 || y0 > 917).toBe(true);
   });
 });

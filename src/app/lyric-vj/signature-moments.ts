@@ -165,6 +165,8 @@ export const UNSUNG_HIDDEN = new Set<string>();
 /** Seconds between two moments at least. */
 export const MOMENTS_APART = 30;
 export const MOMENTS_MAX = 3;
+/** At most this many echoes in a song: an earlier line shown again under a sung one is a memory, rare (owner, 2026-11-17). */
+export const ECHOS_MAX = 2;
 /** Frame jolts (a hit landing) a second at most; a hit past this still swings, but does not shake the frame. */
 export const HITS_PER_SEC = 3;
 
@@ -265,6 +267,7 @@ export function checkMoments(asks: MomentAsk[], cues: MomentCue[], sungOf: SungO
     if (called) { drop(`「${called.text}」 has a call beside it`); continue; }
     if (kept.some((k) => Math.abs(k.at - at) < apart)) { drop(`within ${apart} s of another moment`); continue; }
     if (kept.length >= MOMENTS_MAX) { drop(`more than ${MOMENTS_MAX} moments`); continue; }
+    if (echo && kept.filter((k) => k.form === 'echo').length >= ECHOS_MAX) { drop(`more than ${ECHOS_MAX} echoes`); continue; }
     kept.push({ ...ask, form: ask.form as MomentForm, word, at, sung, sungSource, ...(repeat ? { repeat: repeat.id } : {}) });
   }
   return { kept, dropped };

@@ -113,6 +113,15 @@ describe('shared world moves', () => {
     expect(p.y[0]).toBeGreaterThan(p.y[4]);
     expect(p.x[1]).toBeGreaterThan(p.x[0]);
   });
+  it('keeps the spaces between the words round the key (Latin lead-in, Tokyo Drift c071)', () => {
+    const text = 'ab cd XY';
+    const gs = [...text].map((char, i) => ({ char, advance: 100, src: i }) as unknown as Glyph);
+    const p = blowPose(gs, 6, 8, 120, 100, SET_SPECS[Object.keys(SET_SPECS)[0]])!;
+    const size = p.sizes![0] * 100;
+    // b to c: one letter plus one space apart, not one letter
+    expect(p.x[3] - p.x[1]).toBeGreaterThan(1.9 * size);
+    expect(p.shown[2]).toBe(false);
+  });
   it('draws a stress only in an ink the words read on and the ground shows', () => {
     const slots = { ground: '#F2EEE4', ink: '#1A1A1A', ink2: '#C8462E', accent: '#2A6FB0', plate: '#FFFFFF', plateInk: '#111111', faint: '#E8E4DA' };
     for (const kind of ['extrude', 'plate', 'outline'] as const) {

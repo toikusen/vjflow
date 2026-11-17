@@ -15,11 +15,14 @@ import { splitSongTitle } from '../../src/app/lyric-vj/structure';
 import { MomentAsk, MomentForm, MOMENT_FORMS, WORD_LISTS } from '../../src/app/lyric-vj/signature-moments';
 import { SYNC_MAX_CPS, SYNC_MIN_CHARS, SYNC_SHARE, WordSyncAsk } from '../../src/app/lyric-vj/word-sync';
 import type { FineTier, SymbolName } from '../../src/app/lyric-vj/treatment';
+import { fineShown } from '../../src/app/lyric-vj/render/fine-shown';
 import { ARRIVAL_APART, ARRIVAL_SHARE, ARRIVALS_SHARE, BACKGROUNDS, BREATH_MIN, CARRIER_APART, CARRIER_SHARE, CARRIERS, charsPerSec, composePlan, Cue, DEVICE_SHARE, DISTINCT_SHARE, EXIT_LAYOUT, EXIT_PAPER, EXIT_SHARE, fallbackParts, fitsCalm, FIXED_LAYOUT, GROUND_HELP, HANDOFF_APART, KEEPS_EXIT, keyOf, LAYOUT_SHARE, levelOf, MARK_SHARE, Meaning, NOT_CALM_EXIT, OWN_EXIT, PAIR_APART, PAIR_SHARE, PairKind, PAPER_EXITS, QUIET_BACKGROUNDS, Recipe, RECIPES, RING_MAX, SHARED_SHARE, SongPart, SPATIAL, SPATIAL_SHARE, TRACKED, type WorldPool } from './lineplan-core.mts';
 import { type PlanWorld, worldKitPrompt } from './paid-world.mts';
 import type { StyleWorld } from '../../src/app/lyric-vj/style-world';
 import { worldById } from '../../src/app/lyric-vj/style-worlds';
 import { unrepeatGround } from '../../src/app/lyric-vj/free-plan';
+import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spread';
+import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
 import { cutTimes } from './interludes.mts';
 import { ENTER_HELP, EXIT_HELP, IDLE_HELP } from './typehelp.mts';
 
@@ -41,9 +44,9 @@ export interface LineChoice {
   idle: string;
   exit: string;
   decor: string;
-  /** With decor fine-note: the small words the director writes beside the line, and what they are. */
-  note: string;
-  noteKind: string;
+  /** Legacy (decor fine-note, no longer asked for): small words beside the line, refused when given. */
+  note?: string;
+  noteKind?: string;
   handoff: string;
   joinNext: string;
   lineCam: string;
@@ -96,52 +99,8 @@ const OWN_LAYOUT_EXIT: Record<string, string> = { 'box-turn': 'turn-box', 'frame
 const PLAIN_EXITS = ['fade', 'rise', 'cut', 'shrink', 'drop', 'dash', 'collapse', 'slash', 'shatter', 'domino', 'burst', 'melt', 'dust', 'zoom', 'split'];
 const QUIET_EXITS = new Set(['fade', 'rise', 'cut', 'shrink']);
 const METHODS = ['color', 'mark', 'weight', 'scale', 'box', 'shake'];
-const DECORS = ['none', 'fine-title', 'fine-key', 'fine-rule', 'fine-note', 'oval', 'icon', 'breath', 'relay'];
-/** What the director's own small words may be: a story's scene card, the song's own chapter name, an echo of a line sung before, who sings. */
-export const NOTE_KINDS = ['scene', 'chapter', 'echo', 'singer'] as const;
-export const NOTE_MAX = 14;
-/** Notes a part may carry. */
-export const NOTE_PER_PART = 4;
-/** A part's name read as a label stuck on the video (2026-11-02 owner review): never a note. */
-const GENERIC_PART = /主歌|副歌|導歌|橋段|前奏|間奏|尾奏|サビ|Aメロ|Bメロ|verse|chorus|bridge|hook|intro|outro|interlude/i;
-
-/**
- * Why the director's note may not stand beside the line, or undefined when it may: never made-up detail (a number the
- * line does not have, a generic part name), an echo only of words sung before, a singer only of the song's own.
- */
-/** The script a song is sung in, read off its lyrics: what its small words must be written in. */
-export type SongScript = 'ja' | 'ko' | 'zh' | 'latin';
-/** Kana, not counting the katakana middle dot (・), which Chinese scene notes use too (「深夜・石橋」 was refused, 2026-11-03). */
-const KANA = /[\u3040-\u30fa\u30fc-\u30ff]/;
-const KANA_ALL = new RegExp(KANA.source, 'g');
-export function songScript(lines: string[]): SongScript {
-  const all = lines.join('');
-  const n = (re: RegExp) => (all.match(re) ?? []).length;
-  const [kana, hangul, han, latin] = [n(KANA_ALL), n(/[\uac00-\ud7af]/g), n(/[\u4e00-\u9fff]/g), n(/[A-Za-z]/g)];
-  if (hangul >= Math.max(kana, han, latin / 3)) return 'ko';
-  if (kana > 0 && kana >= han * 0.15) return 'ja';
-  if (han >= latin / 3) return 'zh';
-  return 'latin';
-}
-/** Whether a note reads as the song's own language (a Japanese song's note in Chinese read as a translation nobody asked for). */
-const inScript = (t: string, s: SongScript) =>
-  s === 'ja' ? KANA.test(t) : s === 'ko' ? /[\uac00-\ud7af]/.test(t) : s === 'zh' ? /[\u4e00-\u9fff]/.test(t) && !KANA.test(t) && !/[\uac00-\ud7af]/.test(t) : /[A-Za-z]/.test(t) && !/[\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]/.test(t);
-
-export function noteRefusal(kind: string, text: string, line: string, earlier: string[], singers: string[], script?: SongScript): string | undefined {
-  const t = text.trim();
-  if (!(NOTE_KINDS as readonly string[]).includes(kind)) return 'no such kind of note';
-  if (!t || glyphs(t) > NOTE_MAX) return `a note is 1–${NOTE_MAX} characters`;
-  if (GENERIC_PART.test(t)) return 'a generic part name is a label, not a note';
-  if (/\d/.test(t) && !/\d/.test(line)) return 'numbers the song does not sing';
-  if (kind === 'echo' && (!earlier.some((e) => spoken(e).includes(spoken(t))) || spoken(line).includes(spoken(t)))) return 'an echo is words sung before, not this line';
-  if (kind === 'singer' && !singers.includes(t)) return 'not one of the song\'s singers';
-  // the song's own words, a singer's name, pass as they are; a scene or chapter is written in the song's language
-  if (script && (kind === 'scene' || kind === 'chapter') && !inScript(t, script)) return 'not in the song\'s language';
-  // a scene or chapter that only says the line again tells nothing (「夜晚・橋邊」 beside 夜晚的橋邊在飄雪)
-  const own = [...spoken(t).replace(/[\s・·、，。!！?？]/g, '')];
-  if ((kind === 'scene' || kind === 'chapter') && own.every((ch) => line.includes(ch))) return 'only the line\'s own words again';
-  return undefined;
-}
+// (no fine-note: the director's own small words beside a sung line were read as lyrics; policy 2026-11-17, fine-tier.ts)
+const DECORS = ['none', 'fine-title', 'fine-key', 'fine-rule', 'oval', 'icon', 'breath', 'relay'];
 const LINE_CAMS = ['', 'lean', 'phrase-track', 'arc', 'ground'];
 const SYMBOLS: SymbolName[] = ['flower', 'drop', 'flame', 'note', 'star', 'heart', 'sparkle'];
 
@@ -228,7 +187,7 @@ export interface Accepted {
   join?: PairKind;
   exit?: string;
   decor?: string;
-  /** The director's own small words (decor fine-note). */
+  /** Legacy: the director's own small words (decor fine-note); never set now. */
   note?: string;
   hand?: HandoffKind;
   lineCam?: string;
@@ -433,17 +392,9 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
     const decorOk = (() => {
       if (!l.decor || l.decor === 'none') return true;
       if (!DECORS.includes(l.decor)) return false;
-      // a world without paper devices draws none of the small marks; the director's own words it still sets
-      if (W && !W.devices && l.decor !== 'fine-note') return false;
+      // a world without paper devices draws none of the small marks
+      if (W && !W.devices) return false;
       if (l.decor === 'fine-rule' || l.decor === 'fine-title' || l.decor === 'fine-key') return charsPerSec(cue) <= 9;
-      if (l.decor === 'fine-note') {
-        const why = noteRefusal(l.noteKind, l.note ?? '', cue.text, cues.slice(0, i).map((x) => x.text), (c.song.singers ?? []).map((x) => x.name), songScript(cues.map((x) => x.text)));
-        if (why) {
-          refuse(cue.id, 'note', `${l.noteKind}:${l.note}`, why);
-          return false;
-        }
-        return charsPerSec(cue) <= 9 && count(`note:${partKey}`) < NOTE_PER_PART;
-      }
       if (l.decor === 'oval') return glyphs(cue.text) <= RING_MAX && plain && count(`oval:${partKey}`) === 0;
       if (l.decor === 'icon') return SYMBOLS.includes(d.icon as SymbolName) && plain && count('icon') < 3;
       if (l.decor === 'breath') return tail >= BREATH_MIN && plain && count('mark') < caps.mark;
@@ -456,11 +407,7 @@ export function checkDirection(d: Direction, c: Ctx): { accepted: Map<string, Ac
       if (l.decor === 'icon') bump('icon');
       if (l.decor === 'breath') bump('mark');
       if (l.decor === 'relay') bump('relay');
-      if (l.decor === 'fine-note') {
-        bump(`note:${partKey}`);
-        a.note = l.note.trim();
-      }
-    } else refuse(cue.id, 'decor', l.decor, 'its condition does not hold on this line');
+    } else refuse(cue.id, 'decor', l.decor, l.decor === 'fine-note' ? 'unsung words beside a sung line read as lyrics: no director\'s notes' : 'its condition does not hold on this line');
     // the line's own camera (a world set carries its own motion: none on top)
     if (l.lineCam) {
       if (!ws && (l.lineCam === 'lean' ? !isArrival(r.enter) : LINE_CAMS.includes(l.lineCam) && !(c.calm && l.lineCam !== 'phrase-track'))) a.lineCam = l.lineCam;
@@ -635,7 +582,8 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
         if (a.rows) l['rows'] = a.rows;
         if (a.hit) l['hit'] = a.hit;
         const key = keyFor(cue.text, a.emphasis);
-        const fine: FineTier | undefined = a.decor === 'fine-title' && fineTitle ? { kind: 'title', text: fineTitle } : a.decor === 'fine-key' ? { kind: 'key', text: key } : a.decor === 'fine-rule' ? { kind: 'rule', text: '' } : a.decor === 'fine-note' && a.note ? { kind: 'note', text: a.note } : (l['fine'] as FineTier | undefined)?.kind === 'section' ? (l['fine'] as FineTier) : undefined;
+        // (only sung words beside a line: the title where the line sings it, else the hairline alone; no part names)
+        const fine: FineTier | undefined = a.decor === 'fine-title' ? fineShown(fineTitle ? { kind: 'title', text: fineTitle } : { kind: 'rule', text: '' }, cue.text) : a.decor === 'fine-key' ? { kind: 'key', text: key } : a.decor === 'fine-rule' ? { kind: 'rule', text: '' } : undefined;
         if (fine) l['fine'] = fine;
         else delete l['fine'];
         if (a.decor === 'oval') Object.assign(l, { oval: true, method: 'color' });
@@ -688,6 +636,18 @@ export function directedPlan(song: SongIn, d: Direction | undefined, c: Ctx, pai
   };
   const parts = (paid.parts ?? []).map((p) => ({ ...p, from: fromOf(p.from) }));
   const plain = parts.filter((p, i) => parts.findLastIndex((x) => x.from === p.from) === i);
+  // the grounds of each part spread (ground-spread.ts): no family past GROUND_FAMILY_CAP of the part's cuts, none back
+  // within two cuts; the composer's cuts give way first, the director's only when the part is still over
+  if (W && pw) {
+    const w = worldById(pw.id)!;
+    const wide = [...new Set(c.calm ? w.grounds.quiet : [...Object.values(w.grounds.levels).flat(), ...w.grounds.quiet])].filter((g) => g !== w.peak.loud && g !== w.peak.calm);
+    const pages = new Set(w.layouts.lines.map((l) => l.ground).filter((g): g is string => !!g));
+    const starts = [...new Set([0, ...plain.map((p) => planned.findIndex((ps) => ps.shot === p.from)).filter((i) => i >= 0)])].sort((a, b) => a - b);
+    const sections = starts.map((s, k) => planned.slice(s, starts[k + 1] ?? planned.length).flatMap((ps) => ps.cuts));
+    const spread = spreadGrounds(sections, { pool: () => wide, fixed: (x) => x.fx === w.peak.loud || x.fx === w.peak.calm || pages.has(x.fx) || !isWorldGround(x.fx) && !wide.includes(x.fx), later: (x) => directed.has(x) });
+    const left = groundVariety(sections.map((cuts, i) => ({ id: `part ${i + 1}`, cuts })));
+    console.log(`grounds spread: ${spread} cuts changed${left.ok ? '' : `; still ${left.failing.map((f) => `${f.section} ${f.family} ${Math.round(f.share * 100)}%`).join(', ')}${left.repeats.length ? ` ${left.repeats.length} repeats` : ''}`}`);
+  }
   return {
     shots,
     decisions,
@@ -809,8 +769,7 @@ ${facts.world ? '' : `【退場 exit】
 
 【裝飾 decor，一句一個或 none】
 大部分 none。裝飾要有理由，放著沒有意義的東西不准出現。
-- fine-title 歌名小字、fine-key 這句重點詞小字、fine-rule 一條細線：撐出大字、小字、細線三層尺度，用在版面需要平衡的句子。
-- fine-note 你自己寫的小字（note 填字，${NOTE_MAX} 字內；noteKind 填種類）：scene 場景字卡（故事走到哪：時間、地點，例如「凌晨三點・月台」；要是這句歌詞沒說出來的，只把歌詞再說一遍不算），chapter 這首歌自己的章名（你分段時取的名字），echo 回聲（前面唱過的一句或幾個字，原樣照抄，呼應這句），singer 對唱時誰在唱。小字用這首歌歌詞的語言寫（日文歌寫日文、中文歌寫中文），不是說明用的中文。每則都要在 why.decor 說為什麼放；一段最多 ${NOTE_PER_PART} 則，唱得快的句子不放。不准寫：主歌、副歌這類段落名、歌詞沒有的數字或座標、和歌無關的英文標語。沒有要寫就 note 與 noteKind 留空。
+- fine-key 這句重點詞小字、fine-rule 一條細線、fine-title 歌名小字（只有這句唱到歌名才出字，否則只留細線）：撐出大字、小字、細線三層尺度，用在版面需要平衡的句子。字旁不放沒唱的字：觀眾會當成歌詞。
 - oval 手繪圈圈住整句（12 字內，一段最多一次，這段最要留住的那句）。
 - icon 歌的唯一圖示站在字旁（icon 欄要先選；整首最多 3 次，歌詞裡真的有這個東西）。
 - breath 最後一音拉長時，字下畫一條呼吸線（程式會檢查真的有長音）。
@@ -889,9 +848,9 @@ export function directionSchema(moments = false, wordSync = false) {
       techniques: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'where', 'why'], properties: { id: str(), where: str(), why: str() } } },
       parts: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['from', 'tension', 'why'], properties: { from: str(), tension: { type: 'number' }, why: str() } } },
       tune: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['key', 'value', 'cue', 'why'], properties: { key: str(), value: { type: 'number' }, cue: str(), why: str() } } },
-      lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cue', 'sameAs', 'cut', 'pieces', 'layout', 'side', 'enter', 'idle', 'exit', 'decor', 'note', 'noteKind', 'handoff', 'joinNext', 'lineCam', 'hit', 'emphasis', 'method', 'ground', 'evidence', 'why'], properties: {
+      lines: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['cue', 'sameAs', 'cut', 'pieces', 'layout', 'side', 'enter', 'idle', 'exit', 'decor', 'handoff', 'joinNext', 'lineCam', 'hit', 'emphasis', 'method', 'ground', 'evidence', 'why'], properties: {
         cue: str(), sameAs: str(), cut: { type: 'string', enum: ['hold', 'split'] }, pieces: { type: 'array', items: { type: 'string' } },
-        layout: str(), side: { type: 'string', enum: ['center', 'left', 'right'] }, enter: str(), idle: str(), exit: str(), decor: str(), note: str(), noteKind: { type: 'string', enum: ['', ...NOTE_KINDS] }, handoff: str(), joinNext: str(), lineCam: str(), hit: str(), emphasis: str(), method: str(), ground: str(), evidence: str(),
+        layout: str(), side: { type: 'string', enum: ['center', 'left', 'right'] }, enter: str(), idle: str(), exit: str(), decor: str(), handoff: str(), joinNext: str(), lineCam: str(), hit: str(), emphasis: str(), method: str(), ground: str(), evidence: str(),
         why: { type: 'object', additionalProperties: false, required: ['cut', 'layout', 'enter', 'idle', 'exit', 'decor'], properties: whyProps },
       } } },
     },

@@ -1,0 +1,330 @@
+// The video stage of the paid pipeline: after typeplan has bound the song's sprites to its cuts as for any picture
+// tier, the sprites that have a clip (a chroma still turned into a Veo clip and keyed frame by frame, subject-clips.mts)
+// become sprite clips — a frames asset per run of the sprite, on its own clock from the run's start (engine.ts
+// picture / sprite-clip.ts), so the subject keeps moving while the cuts, layouts and words change under it. A cast
+// drawn in the language's own inks is printed as drawn (print own) and stands on a ground ellipse. Nothing else of
+// the bound plan is touched: layouts, entrances, exits, emphasis, moments and transitions are the director's.
+// npx tsx scripts/lyric-vj/video-stage.mts --treatment <img>/treatment.json --assets <img>/assets.json --script run3/script.json \
+//   --clips run3/clips --out run4/edit [--song song.json --from 3 --to 63.06]  (--song: cuts the plan left without a prop take the script's shots)
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { parseArgs } from 'node:util';
+import type { SubjectScript } from '../../src/app/lyric-vj/subject-script';
+import type { TreatmentV3 } from '../../src/app/lyric-vj/treatment';
+import { STYLE_WORLDS } from '../../src/app/lyric-vj/style-worlds';
+import { groundVariety, spreadGrounds } from '../../src/app/lyric-vj/ground-spread';
+import { isWorldGround } from '../../src/app/lyric-vj/render/world-grounds';
+import { unsungWindows } from '../../src/app/lyric-vj/structure';
+import { planStretches, realiseStretches, shotAt } from '../../src/app/lyric-vj/stretch-plan';
+import { previousShots, sceneTake } from '../../src/app/lyric-vj/video-cuts';
+
+const { values: a } = parseArgs({ options: { treatment: { type: 'string' }, assets: { type: 'string' }, script: { type: 'string' }, clips: { type: 'string' }, out: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, song: { type: 'string' },
+  // the decided cast (fixed.json): its scheme is the window's scheme, so the cast's inks and the world's agree
+  fixed: { type: 'string' } } });
+const t: TreatmentV3 = JSON.parse(readFileSync(a.treatment!, 'utf8'));
+type Asset = { kind: 'image' | 'video'; url: string; frames?: { pattern: string; count: number; fps: number; start?: number; loop?: boolean } };
+const assets: Record<string, Asset> = JSON.parse(readFileSync(a.assets!, 'utf8'));
+const script: SubjectScript = JSON.parse(readFileSync(a.script!, 'utf8'));
+mkdirSync(a.out!, { recursive: true });
+const shots = new Map(script.shots.map((s) => [s.id, s]));
+const loops = (subject: string) => /flutter|wave|sway|breeze|spin|turn|pedal|loop/i.test(subject) && !/stops|out of frame|walks|away/i.test(subject);
+
+type KLayer = Record<string, unknown> & { kind: string; sprite?: string; at?: number; subjectAt?: number };
+const secs = [...t.graphics!.sections].sort((x, y) => x.start - y.start);
+// the cast was drawn in one scheme of the world: the window's grounds and lines take it (the plan's own pick printed
+// a cobalt-and-vermilion cast into a pink-and-purple world)
+const schemeId = a.fixed && existsSync(a.fixed) ? (JSON.parse(readFileSync(a.fixed, 'utf8')) as { scheme?: string }[]).find((f) => f.scheme)?.scheme : undefined;
+const worldId = (t.design as { world?: { id?: string } } | undefined)?.world?.id;
+const scheme = schemeId && worldId ? STYLE_WORLDS.find((w) => w.id === worldId)?.palette.find((p) => p.id === schemeId) : undefined;
+if (scheme) {
+  const withScheme = <T extends Record<string, unknown>>(x: T): T => ({ ...x, ...(x['slots'] ? { slots: scheme } : {}), ...(x['sheetInks'] ? { sheetInks: scheme } : {}), ...('ink' in x ? { ink: scheme.ink, paper: scheme.ground, accent: scheme.accent } : {}), ...('core' in x ? { core: scheme.ink2 } : {}) });
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  for (const sec of secs) {
+    if (sec.start < from - 1 || sec.start >= to) continue;
+    sec.layers = (sec.layers as KLayer[]).map((l) => { const g = l.kind === 'kinetic' ? withScheme(l) : l; if (g['world']) g['world'] = withScheme(g['world'] as Record<string, unknown>); return g; }) as never;
+  }
+  for (const c of t.cues as (Record<string, unknown> & { world?: Record<string, unknown> })[]) if (c.world) c.world = withScheme(c.world);
+}
+const song = a.song ? (JSON.parse(readFileSync(a.song, 'utf8')) as { duration?: number; beats?: number[]; cues: { id: string; start: number; end: number; text?: string }[] }) : undefined;
+// the stretches nobody sings (intro, interludes, outro): a planned sequence each — the director's (script.stretches)
+// or by rule (stretch-plan.ts) — held on the director's own cuts, never every shot of the script in turn (run5's outro
+// was a thirty-second montage of all of them, 2026-11-17)
+// (a short intro too, under unsungWindows' four seconds: the subject is there before the first word)
+const windowsOf = (sg: NonNullable<typeof song>) => {
+  const ws = unsungWindows({ cues: sg.cues, duration: sg.duration ?? Math.max(...sg.cues.map((c) => c.end)) } as never);
+  const first = Math.min(...sg.cues.map((c) => c.start));
+  return first > 0.5 && !ws.some((w) => w.kind === 'intro') ? [{ start: 0, end: first, kind: 'intro' as const }, ...ws] : ws;
+};
+let stretches = song ? planStretches(script, song.cues, windowsOf(song), (id) => shots.get(id)?.frame !== 'scene' && !!assets[`spr:${id}`]) : [];
+const inStretch = (time: number) => stretches.some((w) => time >= w.start - 1e-3 && time < w.end);
+for (const w of stretches) console.log(`stretch ${w.kind} ${w.start.toFixed(2)}-${w.end.toFixed(2)} (${w.by}): ${w.shots.map((x, i) => `${x} ${Math.round(w.shares[i] * 100)}%`).join(' → ')} — ${w.why}`);
+// a line beside a subject keeps a share of its set's measure (world-layout compact): short lines give up more, a long
+// line keeps most of its size to stay readable; the rest of the frame is the subject's (v3's rule, the one that let
+// the rider stand at half the frame; without it the plates left him a third)
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  for (const c of t.cues as (Record<string, unknown> & { cueId: string; world?: Record<string, unknown> })[]) {
+    const cue = song.cues.find((x) => x.id === c.cueId);
+    if (!cue || cue.start < from || cue.start >= to || !c.world) continue;
+    const n = [...(cue as { text?: string }).text?.replace(/\s/g, '') ?? ''].length;
+    c.world['compact'] = +Math.min(0.85, Math.max(0.68, 0.68 + (n - 10) * 0.012)).toFixed(3);
+  }
+}
+// the subject's cuts: a chorus holds a cut for a bar, not two — a long section of a loud part is cut at its bars, each
+// piece a cut of its own that takes the line's next shot (the plan's ground and camera kept), so a long line is not one
+// small figure for 8 s; a quiet part keeps the director's holds
+const SPLIT = { level: 0.5, least: 3.0, beats: 4 };
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  let level = 0;
+  const out: typeof secs = [];
+  secs.forEach((sec, i) => {
+    out.push(sec);
+    const k = (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic') as (KLayer & { world?: { level?: number }; bpm?: number }) | undefined;
+    if (k?.world?.level !== undefined) level = k.world.level;
+    const end = secs[i + 1]?.start ?? sec.start;
+    if (!k || sec.start < from || sec.start >= to || level < SPLIT.level || end - sec.start < SPLIT.least) return;
+    const bar = (SPLIT.beats * 60) / (k.bpm ?? 120);
+    const n = Math.round((end - sec.start) / bar);
+    for (let j = 1; j < n; j++) {
+      const at = +(sec.start + j * bar).toFixed(3);
+      if (end - at < bar * 0.5) break;
+      // (a stretch nobody sings keeps the director's holds: its planned shots are held, not cut at the bar)
+      if (inStretch(at)) continue;
+      const layers = (JSON.parse(JSON.stringify(sec.layers)) as KLayer[]).filter((l) => l.kind === 'kinetic').map((l) => { const c: KLayer = { ...l, at, seed: Number(l['seed'] ?? 0) + 50 * j }; delete c.sprite; delete c.subjectAt; return c; });
+      out.push({ ...JSON.parse(JSON.stringify({ ...sec, layers: [] })), start: at, layers } as never);
+    }
+  });
+  secs.splice(0, secs.length, ...out.sort((x, y) => x.start - y.start));
+  // a stretch's planned changes are real cuts: each lands on a section starting near it, else a cut is added on the
+  // beat, a copy of the section it falls in (its ground and camera kept) — one section over a 30 s outro showed its
+  // first shot throughout and never the closing image (Codex review)
+  const real = realiseStretches(stretches, secs.map((x) => x.start), song.beats ?? []);
+  stretches = real.plans;
+  for (const at of real.cuts) {
+    const i = secs.findLastIndex((x) => x.start <= at);
+    if (i < 0) continue;
+    const sec = secs[i];
+    const layers = (JSON.parse(JSON.stringify(sec.layers)) as KLayer[]).filter((l) => l.kind === 'kinetic').map((l) => { const c: KLayer = { ...l, at, seed: Number(l['seed'] ?? 0) + 77 }; delete c.sprite; delete c.subjectAt; return c; });
+    secs.splice(i + 1, 0, { ...JSON.parse(JSON.stringify({ ...sec, layers: [] })), start: at, layers } as never);
+  }
+}
+// the subject layer: the picture tier binds a prop to a cut here and there; a subject video keeps its cast in view,
+// so a cut the plan left without one takes the script's shot for its line (the line's shots in order, cycling), and
+// a scene shot stands in the language's circle window on the side its subject keeps
+const lineAt = (time: number) => song?.cues.find((c) => time >= c.start - 1e-3 && time < c.end) ?? [...(song?.cues ?? [])].reverse().find((c) => c.start <= time);
+const used = new Map<string, number>();
+const scened = new Set<string>();
+let filled = 0;
+const stillOf = (id: string) => resolve(a.clips!, '..', 'stills', `${id}.jpg`);
+/** A scene panel on a cut in the language's round window (the square of the still round the subject's side, made here
+ * when missing: nothing else made it, so no scene shot was ever placed, 大雪 2026-11-17); larger under a blown-up word. */
+const placeScene = (sec: { layers: unknown[] }, shot: { id: string; side: string; place?: string; subject: string }, mode: 'circle' | 'large') => {
+  const url = resolve(a.clips!, '..', 'stills', `${shot.id}_sq.jpg`);
+  if (!existsSync(url)) execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', stillOf(shot.id), '-vf', `crop=ih:ih:${shot.side === 'left' ? '0' : shot.side === 'right' ? 'iw-ih' : '(iw-ih)/2'}:0`, '-q:v', '2', url]);
+  if (!assets[shot.id]) { assets[shot.id] = { kind: 'image', url }; t.assets.push({ id: shot.id, kind: 'image', prompt: shot.place ?? shot.subject }); }
+  // (the window is moved clear of the words like any object, makeRoom; the whole frame instead hid the cut's plates
+  // under it or sank under its ground, 大雪 v2, 2026-11-17)
+  (sec.layers as KLayer[]).push({ kind: 'photo', mode: 'circle', asset: shot.id, x: shot.side === 'left' ? -0.3 : shot.side === 'right' ? 0.3 : 0, y: 0.02, w: mode === 'large' ? 0.52 : 0.4, drift: 0.01 });
+};
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  for (const sec of secs) {
+    if (sec.start < from || sec.start >= to) continue;
+    const k = (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic');
+    // (a planned stretch takes its shot for the time, over whatever the plan bound there)
+    const planned = k ? shotAt(stretches, sec.start) : undefined;
+    if (k && planned) {
+      const sh = shots.get(planned)!;
+      Object.assign(k, { sprite: planned, side: sh.side, size: sh.height, flip: false });
+      filled += 1;
+      continue;
+    }
+    if (!k) continue;
+    const cue = lineAt(sec.start);
+    const line = cue && script.lines.find((l) => l.cue === cue.id);
+    const blown = !!line && !!(t.cues as { cueId: string; world?: { blow?: unknown } }[]).find((x) => x.cueId === line.cue)?.world?.blow;
+    // a line that names a place shows its scene panel on its first cut, over a prop the binder put there (sceneTake)
+    const take = sceneTake(line, (id) => shots.get(id)?.frame, (id) => existsSync(stillOf(id)), blown, scened);
+    if (take && line) {
+      placeScene(sec, shots.get(take.id)!, take.mode);
+      scened.add(line.cue);
+      delete k.sprite;
+      continue;
+    }
+    if (k.sprite || !line?.shots.length) continue;
+    const n = used.get(line.cue) ?? 0;
+    used.set(line.cue, n + 1);
+    const shot = shots.get(line.shots[n % line.shots.length]);
+    if (!shot) continue;
+    // (a line with a blown-up word keeps its cast large under it: a scene in a small window beside the big word left
+    // the frame empty, v4 review)
+    if (shot.frame === 'scene' && blown) {
+      const alt = line.shots.find((id) => shots.get(id)?.frame !== 'scene' && assets[`spr:${id}`]);
+      if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); filled += 1; }
+      else placeScene(sec, shot, 'large');
+      continue;
+    }
+    if (shot.frame === 'scene') {
+      placeScene(sec, shot, 'circle');
+      continue;
+    }
+    if (!assets[`spr:${shot.id}`]) continue;
+    Object.assign(k, { sprite: shot.id, side: shot.side, size: shot.height, flip: false });
+    filled += 1;
+  }
+}
+// the subject's frame (the video stage's own rules, on top of the director's plan):
+// - no shot more than twice in a row: a third takes the line's next shot (three cuts of one picture read as one cut);
+// - a line opening on a held vowel (one kana sung on, or a long mark) opens on a grid of the line's different shots;
+// - the subject stands large (by its framing) and the line takes the part of the frame it leaves: the rows above it for
+//   a long line, a blown-up word or a grid, else the side away from the subject, one seat for the whole line.
+const SUBJECT_H: Record<string, number> = { wide: 0.62, medium: 0.72, close: 0.7 };
+// the sides on which a cut-out's own drawing is cropped (library.json bleed, build-library): a figure cropped at its top
+// is never seated under a line's top band — it would stand cut flat mid-frame (S23's head, v5 review) — it takes a side
+// seat and bleeds off the frame's top (kinetic.ts), or the line takes another shot
+const libraryPath = (() => { const u = Object.entries(assets).find(([k, v]) => k.startsWith('spr:') && v.url)?.[1].url; return u ? join(dirname(u), 'library.json') : undefined; })();
+const bleedOf = new Map<string, string[]>(libraryPath && existsSync(libraryPath) ? (JSON.parse(readFileSync(libraryPath, 'utf8')) as { sprites: { id: string; bleed?: string[] }[] }).sprites.map((x) => [x.id, x.bleed ?? []]) : []);
+const bleedsTop = (id?: string) => !!id && (bleedOf.get(base(id)!) ?? []).includes('top');
+const HELD = 0.5;
+const base = (id?: string) => id?.replace(/_r\d+$/, '');
+const cutOuts = (cue: string) => (script.lines.find((l) => l.cue === cue)?.shots ?? []).filter((id) => shots.get(id)?.frame !== 'scene' && assets[`spr:${id}`]);
+let thirds = 0, grids = 0, seated = 0, swapped = 0;
+if (song) {
+  const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+  const inWin = secs.filter((sec) => sec.start >= from && sec.start < to);
+  const kOf = (sec: (typeof secs)[number]) => (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic');
+  // no third in a row (run again after the seats: a swap off a top seat put one shot on five cuts, v5 review)
+  const noThirds = () => {
+    let run: string[] = [];
+    for (const sec of inWin) {
+      const k = kOf(sec);
+      const id = base(k?.sprite);
+      if (!k || !id) { run = []; continue; }
+      // (a planned stretch holds its shots on purpose: counted in the run, never changed)
+      if (run.length >= 2 && run.every((r) => r === id) && !inStretch(sec.start)) {
+        const cue = lineAt(sec.start);
+        const seatTop = cue && (t.cues as { cueId: string; world?: { seat?: string } }[]).find((x) => x.cueId === cue.id)?.world?.seat === 'top';
+        const ok = (x: string) => x !== id && shots.get(x)?.frame !== 'scene' && !!assets[`spr:${x}`] && !(seatTop && bleedsTop(x));
+        const any = (cue ? cutOuts(cue.id).find(ok) : undefined) ?? [...shots.keys()].find(ok);
+        if (any) { const sh = shots.get(any)!; Object.assign(k, { sprite: any, side: sh.side, size: sh.height }); thirds += 1; }
+      }
+      run = [...run.slice(-1), base(k.sprite)!];
+    }
+  };
+  noThirds();
+  for (const c of t.cues as (Record<string, unknown> & { cueId: string; world?: Record<string, unknown> })[]) {
+    const cue = song.cues.find((x) => x.id === c.cueId) as ({ id: string; start: number; end: number; text?: string; charStarts?: number[] }) | undefined;
+    if (!cue || cue.start < from || cue.start >= to || !c.world) continue;
+    // (a planned stretch after the line is not the line's: its subject keeps the stretch's plan)
+    const mine = inWin.filter((sec) => lineAt(sec.start)?.id === cue.id && kOf(sec)?.sprite && !inStretch(sec.start));
+    if (!mine.length) continue;
+    const chars = [...(cue.text ?? '')];
+    const st = cue.charStarts ?? [];
+    // (a held vowel: the line's first kana sung again, or drawn out by a long mark, for at least HELD s)
+    const heldOpen = chars.length > 2 && st.length === chars.length && (chars[1] === chars[0] || /[ーぁぃぅぇぉ〜～]/.test(chars[1])) && st[2] - st[0] >= HELD;
+    const panels = heldOpen ? [...new Set(cutOuts(cue.id))].slice(0, 3) : [];
+    if (panels.length >= 2) {
+      Object.assign(kOf(mine[0])!, { fx: 'grid', panels, sprite: panels[0], shadow: false });
+      grids += 1;
+    }
+    const n = chars.filter((x) => !/\s/.test(x)).length;
+    const first = kOf(mine[0])!;
+    const seat = panels.length >= 2 || c.world['blow'] || n > 12 ? 'top' : first.side === 'left' ? 'right' : 'left';
+    c.world['seat'] = seat;
+    if (seat === 'top') for (const sec of mine) {
+      const k = kOf(sec)!;
+      if (k['fx'] === 'grid' || !bleedsTop(k.sprite)) continue;
+      const i = inWin.indexOf(sec);
+      // (the first and second cut have fewer before them: none read past the start, Codex review)
+      const before = previousShots(inWin, i, (x) => base(kOf(x)?.sprite));
+      const fresh = (x: string) => !bleedsTop(x) && !before.includes(x);
+      const alt = cutOuts(cue.id).find(fresh) ?? [...shots.keys()].find((x) => shots.get(x)?.frame !== 'scene' && assets[`spr:${x}`] && fresh(x)) ?? cutOuts(cue.id).find((x) => !bleedsTop(x));
+      if (alt) { const sh = shots.get(alt)!; Object.assign(k, { sprite: alt, side: sh.side, size: sh.height }); swapped += 1; }
+    }
+    // (a seat already keeps the line to its band: the compact share on top of it set a blown-up word at half its size)
+    delete c.world['compact'];
+    seated += 1;
+    for (const sec of mine) {
+      const k = kOf(sec)!;
+      const sh = shots.get(base(k.sprite)!);
+      // (under a top seat the figure stands in the middle of the rows, not in their corner; a grid keeps its panels)
+      k['side'] = seat === 'top' ? (k['fx'] === 'grid' ? k['side'] : 'center') : seat === 'left' ? 'right' : 'left';
+      if (sh) k['size'] = Math.max(Number(k['size'] ?? 0), (SUBJECT_H[sh.size] ?? 0.6) + (seat === 'top' && sh.size === 'wide' ? 0.08 : 0));
+    }
+  }
+  // (the seats' swaps may have put one shot on cuts in a row: the no-third rule runs once more)
+  noThirds();
+}
+// the grounds of the window spread over each part (ground-spread.ts): the bar splits above copied the ground they split
+// and the world's pool is small, so v4 stood two of three cuts on one stripe and one block; no family past its cap of a
+// part's cuts, none back within two cuts (a grid, a peak and a set's own page keep theirs)
+let regrounded = 0;
+if (song && worldId) {
+  const world = STYLE_WORLDS.find((w) => w.id === worldId);
+  const planPath = join(dirname(a.treatment!), 'typeplan.json');
+  const plan = existsSync(planPath) ? (JSON.parse(readFileSync(planPath, 'utf8')) as { parts?: { from: string }[]; shots: { shot: string; cuts: { at: number }[] }[] }) : undefined;
+  if (world) {
+    const from = Number(a.from ?? 0), to = Number(a.to ?? 1e9);
+    const kOf = (sec: (typeof secs)[number]) => (sec.layers as KLayer[]).find((x) => x.kind === 'kinetic') as (KLayer & { fx: string; world?: Record<string, unknown>; sheetInks?: unknown }) | undefined;
+    const bounds = (plan?.parts ?? []).map((p) => plan!.shots.find((s) => s.shot === p.from)?.cuts[0]?.at).filter((x): x is number => x !== undefined);
+    const partOf = (t: number) => bounds.filter((b) => b <= t + 1e-3).length;
+    const inWin = secs.filter((sec) => sec.start >= from && sec.start < to && kOf(sec));
+    const groups = new Map<number, { fx: string; layer: NonNullable<ReturnType<typeof kOf>> }[]>();
+    for (const sec of inWin) { const k = kOf(sec)!; const g = groups.get(partOf(sec.start)) ?? []; g.push({ fx: k.fx, layer: k }); groups.set(partOf(sec.start), g); }
+    const wide = [...new Set([...Object.values(world.grounds.levels).flat(), ...world.grounds.quiet])].filter((g) => g !== world.peak.loud && g !== world.peak.calm);
+    const pages = new Set(world.layouts.lines.map((l) => l.ground).filter((g): g is string => !!g));
+    const sections = [...groups.entries()].sort((x, y) => x[0] - y[0]).map(([, g]) => g);
+    const fixedFx = (x: { fx: string }) => x.fx === 'grid' || pages.has(x.fx) || !wide.includes(x.fx);
+    spreadGrounds(sections, { pool: () => wide, fixed: fixedFx });
+    // (and once over the whole window: a ground back within two cuts across a part's boundary is as much a repeat)
+    spreadGrounds([sections.flat()], { pool: () => wide, fixed: fixedFx });
+    // (a ground of the world carries the world's fields, a plain one the sheet's inks: a changed cut takes the right shape)
+    // (the world's fields — its level above all — come from the nearest cut before that stands on a world ground)
+    const template = (layer: KLayer) => { const i = secs.findIndex((sec) => kOf(sec) === layer); for (let j = i; j >= 0; j--) { const k = kOf(secs[j]); if (k?.world && isWorldGround(k.fx)) return k.world; } return inWin.map(kOf).find((k) => k?.world && isWorldGround(k.fx))?.world; };
+    for (const g of sections) for (const x of g) {
+      if (x.fx === x.layer.fx) continue;
+      const pal = (x.layer.world as { slots?: unknown } | undefined)?.slots ?? x.layer.sheetInks;
+      x.layer.fx = x.fx;
+      if (isWorldGround(x.fx)) { const { bound, piece, words, lines, item, ...base } = (template(x.layer) ?? {}) as Record<string, unknown>; void bound; void piece; void words; void lines; void item; x.layer.world = { ...base, ...(x.layer.world ?? {}), slots: pal }; delete x.layer.sheetInks; }
+      else { x.layer.sheetInks = pal; delete x.layer.world; }
+      regrounded += 1;
+    }
+    const left = groundVariety(sections.map((g, i) => ({ id: `part ${i + 1}`, cuts: g.filter((x) => wide.includes(x.fx)) })));
+    console.log(`grounds: ${regrounded} cuts regrounded; ${left.ok ? 'every part under the cap, no ground back within two cuts' : `still ${left.failing.map((f) => `${f.section} ${f.family} ${Math.round(f.share * 100)}%`).join(', ')} ${left.repeats.length} repeats`}`);
+  }
+}
+// a run: consecutive sections showing one sprite; its clock starts where the run began
+let prev: { sprite: string; run: number; index: number } | undefined;
+let clips = 0, own = 0;
+secs.forEach((sec, i) => {
+  for (const l of sec.layers as KLayer[]) {
+    if (l.kind !== 'kinetic' || !l.sprite) { if (l.kind === 'kinetic') prev = undefined; continue; }
+    const shot = shots.get(l.sprite.replace(/_r\d+$/, ''));
+    if (!shot) continue;
+    // the cast keeps the inks it was drawn in, and a standing figure its ground
+    Object.assign(l, { print: 'own', seated: true, shadow: shot.size !== 'close' && l['fx'] !== 'grid', ...(bleedOf.get(shot.id)?.length ? { bleed: bleedOf.get(shot.id) } : {}) });
+    own += 1;
+    const run = prev && prev.sprite === shot.id && prev.index === i - 1 ? prev.run : sec.start;
+    const frames = join(a.clips!, `${shot.id}_f`, 'frames.json');
+    if (shot.kind !== 'video' || !existsSync(frames)) { prev = { sprite: shot.id, run, index: i }; continue; }
+    const info = JSON.parse(readFileSync(frames, 'utf8')) as { count: number; fps: number };
+    const key = `${shot.id}_r${Math.round(run * 100)}`;
+    if (!assets[`spr:${key}`]) {
+      assets[`spr:${key}`] = { kind: 'video', url: assets[`spr:${shot.id}`]?.url ?? resolve(a.clips!, '..', 'spr', `${shot.id}.png`), frames: { pattern: resolve(a.clips!, `${shot.id}_f`, '%05d.png'), count: info.count, fps: info.fps, start: run, loop: loops(shot.subject) } };
+      // (the clip's first frame is the cut-out's picture: the spec the checks ask a video asset to come from)
+      if (!t.assets.some((x) => x.id === `spr:${shot.id}`)) t.assets.push({ id: `spr:${shot.id}`, kind: 'image', prompt: shot.subject });
+      t.assets.push({ id: `spr:${key}`, kind: 'video', prompt: shot.subject, from: `spr:${shot.id}` });
+      clips += 1;
+    }
+    l.sprite = key;
+    l.subjectAt = run;
+    prev = { sprite: shot.id, run, index: i };
+  }
+});
+t.graphics!.sections = secs;
+// (the plan stays whole: its moments and word syncs refer to lines beyond a window; a window is rendered with --clip)
+writeFileSync(join(a.out!, 'treatment.json'), JSON.stringify(t));
+writeFileSync(join(a.out!, 'assets.json'), JSON.stringify(assets, null, 1));
+console.log(`video stage: ${secs.length} sections, ${filled} cuts filled from the script, ${thirds} thirds-in-a-row changed, ${grids} held-vowel grids, ${seated} lines seated, ${swapped} top-cropped cut-outs swapped off top seats, ${regrounded} cuts regrounded, ${own} cast cuts printed own, ${clips} sprite clips → ${join(a.out!, 'treatment.json')}`);

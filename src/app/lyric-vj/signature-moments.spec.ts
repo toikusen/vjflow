@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkMoments, lastSung, MomentAsk, MOMENT_FORMS, MOMENTS_APART, overusedForms, ownCues, recordMoments, thinHits, WORD_LISTS, WORDS_OF } from './signature-moments';
+import { checkMoments, ECHOS_MAX, lastSung, MomentAsk, MOMENT_FORMS, MOMENTS_APART, overusedForms, ownCues, recordMoments, thinHits, WORD_LISTS, WORDS_OF } from './signature-moments';
 
 const cues = [
   { id: 'c018', start: 70.54, end: 73.22, text: '(幹什麼? 幹什麼?) 東亞病夫的招牌' },
@@ -125,6 +125,20 @@ describe('the new forms and variants', () => {
     expect(short.dropped[0].reason).toMatch(/too short/);
     const again = checkMoments([ask({ cues: ['c020', 'c021'], form: 'echo', variant: 'ghost', word: '雙截棍' })], cues, sungOf);
     expect(again.dropped[0].reason).toMatch(/repeat, not an echo/);
+  });
+  it('keeps at most ECHOS_MAX echoes in a song (two), whatever else is free', () => {
+    const lines = [
+      { id: 'e0', start: 0, end: 3, text: '夕方の風が吹いた' },
+      { id: 'e1', start: 40, end: 43, text: 'あの夕方を忘れない' },
+      { id: 'e2', start: 80, end: 83, text: 'また夕方が来るよ' },
+      { id: 'e3', start: 120, end: 123, text: '最後の夕方に君と' },
+    ];
+    const times = (id: string) => { const c = lines.find((x) => x.id === id); return c && { times: [...c.text].map((_, i) => +(c.start + 0.1 * i).toFixed(3)), source: 'vote' }; };
+    const asks = ['e1', 'e2', 'e3'].map((id) => ask({ cues: ['e0', id], form: 'echo', variant: 'ghost', word: '夕方' }));
+    const { kept, dropped } = checkMoments(asks, lines, times);
+    expect(ECHOS_MAX).toBe(2);
+    expect(kept.filter((k) => k.form === 'echo')).toHaveLength(2);
+    expect(dropped.at(-1)?.reason).toMatch(/more than 2 echoes/);
   });
   it('an echo draws only its answering line; the earlier one stays the engine\'s', () => {
     expect(ownCues({ form: 'echo', cues: ['c031', 'c042'] })).toEqual(['c042']);

@@ -4,7 +4,7 @@
 // so nothing here needs to know about the song; `age` is the time since the cut.
 
 import { drawMove, Env, Flow, kn, MORE, MORE_FX } from './kinetic-more';
-import { coverOf, CoverRect, watchCover } from './cover';
+import { clearAlpha, CLEAR_FROM, clearStrength, coverOf, CoverCrop, CoverRect, keepClear, watchCover } from './cover';
 import { BoardLayer, drawBoard } from './board';
 import { drawStage, StageLayer } from './stage';
 import { halftone, lineArt, lineStage } from './print';
@@ -40,6 +40,8 @@ export interface KineticLayer {
   ink: Rgb;
   paper: Rgb;
   accent: Rgb;
+  /** On a `grid` cut, a different cut-out in each panel (ids without `spr:`), in this order: the shots of one held moment side by side. */
+  panels?: string[];
   /** A cut-out from the sprite library (id without `spr:`), printed in ink and paper. */
   sprite?: string;
   /**
@@ -56,6 +58,25 @@ export interface KineticLayer {
   /** Other words up besides the line (a sing-along's preview row), each kept clear on its own. */
   keep?: CoverRect[];
   lyricWeight?: number;
+  /**
+   * The part of the sprite's picture that is the subject, as shares of its width and height (x0, y0, x1, y1): for a
+   * sprite clip, the union of every frame's opaque bounds (its motion envelope, engine.ts clipEnvelope), so the figure
+   * is seated and kept in frame by where it moves, not by its first frame. Unset: the whole picture (a trimmed cut-out).
+   */
+  crop?: [number, number, number, number];
+  /** When the cut ends (the next section's start, engine layRooms): drawn past it, the cut is going out under a page move. */
+  until?: number;
+  /**
+   * The sides on which the sprite's own drawing is cropped (a close-up runs to its picture's edge): that side bleeds off
+   * the frame's edge, never stands cut flat inside it (a figure's head cut by a straight line, 2026-11-17).
+   */
+  bleed?: ('top' | 'bottom' | 'left' | 'right')[];
+  /**
+   * Every line's box over the cut with its times (engine layRooms): up from `from` to `to`, read at full strength until
+   * `strong` (its exit begins there). The subject is measured against each line's own box, never against the union of
+   * two lines (a top line and a right line's union is mostly empty frame, and a figure in it covers no words).
+   */
+  boxes?: { from: number; to: number; strong: number; x0: number; y0: number; x1: number; y1: number }[];
   /** Where the character stands; the lyric goes on the other side. */
   side?: 'left' | 'right' | 'center';
   /** Character height as a fraction of the frame (1.6 crops to a close-up from the top). */
@@ -82,8 +103,10 @@ export interface KineticLayer {
   yields?: boolean;
   /** A two-frame hit as the cut lands: black, white or the whole frame inverted. */
   flash?: 'black' | 'white' | 'invert';
-  /** How the character is printed: two-ink duotone (default), line art drawn on, or a halftone dot screen. */
-  print?: 'duo' | 'line' | 'halftone';
+  /** How the character is printed: two-ink duotone (default), line art drawn on, a halftone dot screen, or as drawn (`own`: a cut-out already printed in the language's inks keeps them). */
+  print?: 'duo' | 'line' | 'halftone' | 'own';
+  /** A printed ground ellipse under the character's feet, so a cut-out stands on a graphic ground instead of floating. */
+  shadow?: boolean;
   /** The song's tempo (the ecg move beats with it). */
   bpm?: number;
   /** No lyric is sung over this cut: its words are only texture (faint, outlined). */
@@ -123,6 +146,12 @@ export interface KineticLayer {
    * (UNDER_ALPHA), instead of leaving the cut (dropping it emptied a minute of プラトニックチョロイン).
    */
   under?: boolean;
+  /** Seated by the video stage, whose seats guarantee the subject room: a reach into a read line is the seat's error. */
+  seated?: boolean;
+  /** The song time the character comes up at, after a line going out over the cut's start was read (seatSubject). */
+  waitFor?: number;
+  /** The song time the character is gone by: the next cut's line coming in over this cut's last moments (isLeadIn). */
+  leaveBy?: number;
   /** The boxes (frame px) of the lines sung over a prop's cut: a prop sent to a corner takes one clear of them (layRooms). */
   over?: [number, number, number, number][];
   /** What stays through the cut's part of the song (board.ts): evidence filling a board, a place's standing things. */
@@ -170,7 +199,7 @@ export function readsDark(ctx: CanvasRenderingContext2D, a: Rgb, b: Rgb): boolea
 
 /** Moves that fill the frame with words: under a sung line they are kept faint. */
 const PAGE_FX = new Set(['wall', 'marquee', 'ascii', 'tunnel', 'corridor', 'lens']);
-export const KINETIC_PRINTS = ['duo', 'line', 'halftone'] as const;
+export const KINETIC_PRINTS = ['duo', 'line', 'halftone', 'own'] as const;
 /**
  * What document the video is, when it is one: a blueprint (FIG. and a ruler, LINE n / total), a film slate (SCENE,
  * TAKE, a clapper stripe), a case file (CASE No., a CONFIDENTIAL box, page n / total), a notebook page (No. and DATE
@@ -205,8 +234,9 @@ let backPush: { x: number; y: number; scale: number; dy?: number; blur?: number 
 export const setBackPush = (p?: typeof backPush) => (backPush = p);
 
 /** Moves that frame or repeat the cut's figure: without one they draw an empty window. */
-/** How strongly a character behind the lines shows: enough to read as the picture, faint next to the letters. */
-export const UNDER_ALPHA = 0.65;
+/** How strongly a character behind the lines shows: faint next to the letters, under SUBJECT_COVER_ALPHA (at 0.65 the
+ * faded figure the cover rule spares was itself a cover fault: Tokyo Drift's eight, 2026-11-17). */
+export const UNDER_ALPHA = 0.4;
 /** The height (share of the frame) a figure with no room is kept to, in its bottom corner. */
 export const UNDER_H = 0.36;
 /**
@@ -312,6 +342,8 @@ function drawThread(ctx: CanvasRenderingContext2D, t: NonNullable<KineticLayer['
   ctx.restore();
 }
 
+/** The print cache key of a sprite picture: a clip frame (engine.ts tags each with its index) is its own entry. */
+export const spriteKey = (id: string, pic: CanvasImageSource) => { const k = (pic as { frameKey?: number }).frameKey; return k === undefined ? id : `${id}#${k}`; };
 /** The sprite in two inks: dark parts in ink, light parts in paper, alpha kept (a full-colour drawing would break the print). */
 const tinted = new Map<string, CanvasImageSource>();
 function duotone(pic: CanvasImageSource & { width: number; height: number }, key: string, ink: Rgb, paper: Rgb): CanvasImageSource {
@@ -382,8 +414,8 @@ export function carrySubjects(layers: KineticLayer[]): void {
     const at = l.at ?? 0;
     l.subjectPlan ??= l.subjectAt;
     const key = placementKey(l);
-    const carries = l.subjectPlan !== undefined && l.subjectPlan < at - 1e-6 && prev?.key === key;
-    l.subjectAt = carries ? prev!.since : at;
+    const carries = l.subjectPlan !== undefined && l.subjectPlan < at - 1e-6 && prev?.key === key && l.waitFor === undefined;
+    l.subjectAt = carries ? prev!.since : Math.max(at, l.waitFor ?? at);
     prev = { key, since: l.subjectAt };
   }
 }
@@ -395,6 +427,9 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   const age = camTime(l.cam, clock);
   // the frame's coordinates, for measuring the character against the lyric box while the line is fully up
   const frame = l.lyric && (l.lyricWeight ?? 1) > 0.85 ? ctx.getTransform?.()?.inverse?.() : undefined;
+  // (from the line's box gliding in: the subject is kept clear of it as the code layer's sprites are, cover.ts keepClear)
+  const clearStart = l.lyric && (l.lyricWeight ?? 1) > CLEAR_FROM ? ctx.getTransform?.() : undefined;
+  const clearBase = clearStart?.inverse?.();
   // a graphic laid bare over someone else's picture (a backdrop) takes the ink that reads on what is actually under
   // it: a light title set for its own dark ground vanished on 世界のつづき's cream coast (2026-10-22), and a staff, its
   // notes and the line-art props drawn in the song's dark ink vanished on 終わりじゃない's black album pages (2026-10-30),
@@ -457,7 +492,8 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     ctx.scale(backPush.scale, backPush.scale);
     ctx.translate(-backPush.x, -backPush.y);
   }
-  // the camera on the background (the lyric stays level above it)
+  // the camera on the background (the lyric stays level above it; the subject stands on its own stage, below)
+  const stage = ctx.getTransform?.();
   if (l.cam) {
     ctx.translate(W / 2, H / 2);
     if (l.cam === 'snap') ctx.scale(1 + 0.3 * (1 - ease(age / 0.25)), 1 + 0.3 * (1 - ease(age / 0.25)));
@@ -493,8 +529,12 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // the character printed in the cut's inks, sized and placed before the move (some moves print it themselves)
   const pic = l.sprite ? (image(`spr:${l.sprite}`) as (CanvasImageSource & { width: number; height: number }) | undefined) : undefined;
   const size = l.size ?? 0.85;
-  const look = pic && pic.width ? (l.print === 'line' ? lineArt(pic, l.sprite!, ink)?.[lineStage(age)] : l.print === 'halftone' ? halftone(pic, l.sprite!, ink, paper) : undefined) : undefined;
-  const printed = pic && pic.width ? { img: look ?? duotone(pic, l.sprite!, ink, paper), night: () => duotone(pic, l.sprite!, paper, ink), w: (pic.width / pic.height) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2 } : undefined;
+  // a sprite clip's frames each carry a frame key (engine.ts picture): each is printed and cached on its own
+  const sk = pic ? spriteKey(l.sprite!, pic) : '';
+  const look = pic && pic.width ? (l.print === 'line' ? lineArt(pic, sk, ink)?.[lineStage(age)] : l.print === 'halftone' ? halftone(pic, sk, ink, paper) : undefined) : undefined;
+  // (a clip's picture is its motion envelope: the frame's bounds cropped to where the subject ever is, l.crop)
+  const crop = pic && pic.width ? cropOf(pic, l.crop) : undefined;
+  const printed = pic && pic.width && crop ? { img: look ?? (l.print === 'own' ? pic : duotone(pic, sk, ink, paper)), night: () => duotone(pic, sk, paper, ink), w: (crop.sw / crop.sh) * H * size, h: H * size, y: size > 1 ? (H * size) / 2 - H * 0.08 : H - (H * size) / 2, crop } : undefined;
   let own = false;
   switch (l.fx) {
     case 'wall': {
@@ -629,7 +669,18 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     }
     case 'grid': {
       // panels in alternating inks; the character repeats in them (drawn below)
-      const cols = kn(l, 'grid.cols');
+      const cols = l.panels?.length ? Math.min(4, l.panels.length) : kn(l, 'grid.cols');
+      if (l.panels?.length) {
+        // a grid of shots is printed on the sheet: paper panels parted by ink rules that slide in one by one (an
+        // accent flood under the words took their contrast, a faint ink panel read as grey)
+        // (the rules part the figures only: they start under the band the words are seated in, never across a line)
+        const top = H * (1 - PANEL_H) - H * 0.04;
+        for (let i = 1; i < cols; i++) {
+          ctx.fillStyle = ink;
+          ctx.fillRect((i * W) / cols - 4, top + (1 - k) * (H - top) * (i % 2 ? 1 : -1), 8, H - top);
+        }
+        break;
+      }
       for (let i = 0; i < cols; i++) {
         ctx.fillStyle = i % 2 ? l.accent : ink;
         ctx.globalAlpha = i % 2 ? 1 : 0.12;
@@ -717,10 +768,14 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
   // sank into a dark figure)
   veil?.(ctx, 1);
   // the character, printed in the cut's inks: it pops in, then holds still until the next cut
-  if (printed && !own) {
+  // (a character waiting for a line going out comes up once it has been read: seatSubject)
+  if (printed && !own && !(l.waitFor !== undefined && now < l.waitFor - 1e-6) && !(l.leaveBy !== undefined && now >= l.leaveBy - 1e-6)) {
     const { img: art, w, h } = printed;
     const { pop, rock } = subjectPose(l.subjectAt, clock, now, age);
-    const cols = l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
+
+    // (a grid of different shots: one cut-out a panel, each printed as the main one is)
+    const panelArts = l.fx === 'grid' && l.panels?.length ? panelPictures(l.panels, image, l.print === 'own' ? undefined : [ink, paper]) : undefined;
+    const cols = panelArts?.length ? panelArts.length : l.fx === 'grid' ? kn(l, 'grid.cols') : 1;
     // the floor plan: one character shrinks and slides into the room the lyric leaves it (feet kept on the floor)
     const fit = l.fx !== 'grid' && l.room && l.room[1] > l.room[0] ? fitInRoom(l.room, w, fx) : { s: 1, x: fx };
     const copies = l.fx === 'grid' ? Array.from({ length: cols }, (_, i) => ((i + 0.5) / cols) * W) : [fit.x];
@@ -728,29 +783,88 @@ export function drawKinetic(ctx: CanvasRenderingContext2D, l: KineticLayer, cloc
     const rowsAt = l.rows && l.fx !== 'grid' ? rowsPlace(l.rows, h, fit.s) : undefined;
     // too small where it was fitted (a narrow side, a thin band) reads as a speck: the corner takes it at a readable size
     const speck = l.fx !== 'grid' && ((!!l.rows && !rowsAt) || (!!l.room && l.room[1] > l.room[0] && h * fit.s < H * PROP_MIN_H));
-    for (const cx of copies) {
+    copies.forEach((cx, ci) => {
+      const { img: art, w, h } = panelArts?.[ci] ?? printed;
       ctx.save();
-      if (l.cam === 'vertigo') (ctx.translate(W / 2, H / 2), ctx.scale(1 / zoom, 1 / zoom), ctx.translate(-W / 2, -H / 2));
+      // the cut's camera (a snap zoom, a pan, a dolly, a roll) is the ground's: the subject stands on its own stage, on
+      // its own pose and clock, and is never carried onto the words or out of the frame by it (a 30 % snap put S22's
+      // head into 「夢中だった」 for five frames, a pan cut S18 and S10 at the right edge, 2026-11-17)
+      if (stage && l.cam) ctx.setTransform(stage);
       // no room the whole cut (lines all over it, a rap verse): a small figure in a bottom corner, faded only when the
       // lines reach that corner, not a full-size one behind the words (Tokyo Drift's line plan: a revolver behind both
       // lines of 134–136 s)
       const corner = (l.under || speck) && l.fx !== 'grid' ? cornerPlace(w, h, l.under ? fit.s : 1, !!l.flip, l.over ?? []) : undefined;
-      const rs = corner ? corner.s : rowsAt ? rowsAt.s : fit.s;
-      const y = corner ? corner.y : rowsAt ? rowsAt.y : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
-      ctx.translate(corner ? corner.x : cx, y);
+      // (a drawing cropped at its top stands with that edge just above the frame; cropped top and bottom, it spans the
+      // frame's height where the room beside the words is wide enough for that)
+      const bleedTop = !!l.bleed?.includes('top') && !corner && !rowsAt && !panelArts && size <= 1;
+      const roomW = l.room && l.room[1] > l.room[0] ? l.room[1] - l.room[0] - 48 : W - 48;
+      const rsBleed = bleedTop && l.bleed?.includes('bottom') ? Math.max(fit.s, Math.min((1.04 * H) / h, roomW / w)) : fit.s;
+      const rs = corner ? corner.s : rowsAt ? rowsAt.s : rsBleed;
+      // (a panel of a grid of shots stands on the frame's foot at its panel's scale, under the words seated above it)
+      const y = panelArts ? H - (h * Math.min(1, W / cols / w)) / 2 - H * 0.02 : corner ? corner.y : rowsAt ? rowsAt.y : bleedTop ? (h * rs) / 2 - H * 0.02 : size > 1 ? (h * fit.s) / 2 - H * 0.08 : H - (h * fit.s) / 2;
+      // a figure on its ground ellipse stands a little above the frame's foot, so its feet and the ellipse stay inside
+      // (a figure never pressed past the frame's side: its whole width inside, a margin kept; a grid's copies keep their panels)
+      // (a drawing cropped at its left or right runs off that edge of the frame when it stands on that side)
+      // (under a top seat too: a cropped side stands on the frame's edge rather than cut flat mid-frame; both sides cropped
+      // or neither on its own side, the side it stands on)
+      const onLeft = l.side === 'left' || l.flip;
+      const mine = onLeft ? 'left' : 'right';
+      const bleedSide = !corner && !panelArts && l.bleed ? (l.bleed.includes(mine) ? mine : l.side === 'center' && (l.bleed.includes('left') || l.bleed.includes('right')) ? (l.bleed.includes('left') ? 'left' : 'right') : undefined) : undefined;
+      const bleedX0 = bleedSide === 'left' ? (w * rs) / 2 - W * 0.02 : bleedSide === 'right' ? W - (w * rs) / 2 + W * 0.02 : undefined;
+      // (never onto a line read there: with words on that edge the figure keeps its seat, kept clear below)
+      const onEdge = bleedX0 !== undefined && (l.boxes ?? []).some((b) => now >= b.from - 1e-3 && now <= b.strong + 1e-3 && b.x0 < bleedX0 + (w * rs) / 2 && b.x1 > bleedX0 - (w * rs) / 2 && b.y0 < y + (h * rs) / 2 && b.y1 > y - (h * rs) / 2);
+      const bleedX = onEdge ? undefined : bleedX0;
+      ctx.translate(corner ? corner.x : l.fx === 'grid' ? cx : bleedX ?? inFrameX(cx, (w * rs * pop) / 2), y - (l.shadow && !corner && !rowsAt && size <= 1 ? h * rs * 0.05 : 0));
       // follow-through (Motion Prompt #122): the figure lands and rocks a little before it settles
       ctx.rotate(rock * (seed % 2 ? 1 : -1));
       ctx.scale(pop * rs * ((corner ? corner.left : l.flip) ? -1 : 1), pop * rs);
       if (corner && !corner.clear) ctx.globalAlpha *= UNDER_ALPHA;
       const s = l.fx === 'grid' ? Math.min(1, W / cols / w) : 1;
-      ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s);
-      // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
-      if (frame && l.lyric && l.sprite) {
-        const [share, inside] = coverOf(art as CanvasImageSource & { width: number; height: number }, frame.multiply(ctx.getTransform()), (-w / 2) * s, (-h / 2) * s, w * s, h * s, l.lyric);
-        watchCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, inside, now, `cut ${(l.at ?? 0).toFixed(1)}`);
+      // the ground under the feet: a flat ink ellipse (a cut-out over a graphic ground floated without one)
+      if (l.shadow) {
+        ctx.save();
+        ctx.globalAlpha *= 0.22;
+        ctx.fillStyle = ink;
+        ctx.beginPath();
+        ctx.ellipse(0, (h / 2) * s - h * s * 0.01, w * s * 0.42, Math.max(6, h * s * 0.035), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       }
+      const src = panelArts?.[ci] ? undefined : printed.crop;
+      const drawArt = () => (src ? ctx.drawImage(art, src.sx, src.sy, src.sw, src.sh, (-w / 2) * s, (-h / 2) * s, w * s, h * s) : ctx.drawImage(art, (-w / 2) * s, (-h / 2) * s, w * s, h * s));
+      if (clearStart && clearBase && l.lyric && l.sprite) {
+        const sized = art as CanvasImageSource & { width: number; height: number };
+        const m = clearBase.multiply(ctx.getTransform());
+        if (frame) {
+          // the character over the lyric: the same measure and the same log line as a code layer's sprites (make.sh holds > 40 %)
+          const [share, inside] = coverOf(sized, m, (-w / 2) * s, (-h / 2) * s, w * s, h * s, l.lyric, src);
+          watchCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, share, inside, now, `cut ${(l.at ?? 0).toFixed(1)}`);
+        }
+        // each line up now, by its own box: read at full strength (until `strong`) it is never covered — a subject
+        // reaching into it at strength on its own cut is a fault of the seat (render.mts fails on these lines) — and
+        // what reaches in is cut out of the subject and the subject faded (cover.ts keepClear, the code layer's own last
+        // resort); a line on its way out lets the subject back as it fades; a cut going out under a page move is only kept clear
+        const boxes = (l.boxes ?? [{ from: -Infinity, to: Infinity, strong: Infinity, ...l.lyric }]).filter((b) => now >= b.from - 1e-3 && now <= b.to + 1e-3);
+        let draw = drawArt;
+        for (const b of boxes) {
+          const [share, inside] = coverOf(sized, m, (-w / 2) * s, (-h / 2) * s, w * s, h * s, b, src);
+          const reading = now <= b.strong + 1e-3;
+          const strength = Math.min(clearStrength(l.lyricWeight ?? 1), reading ? 1 : Math.max(0, 1 - (now - b.strong) / Math.max(0.05, b.to - b.strong)));
+          // (what is left over the words once keepClear has cut or faded it, not what reached in before)
+          // (a seated cut — the video stage's — reports its reach before keepClear: the seat's error, fatal in render.mts;
+          // any other only what keepClear leaves, logged)
+          const rep = coverReport(share, coverLeft(share, inside, strength, ctx.globalAlpha), !!l.seated, inside);
+          if (reading && frame && (l.until === undefined || now < l.until - 1e-3)) {
+            if (rep.seat > 0 && ctx.globalAlpha >= SUBJECT_COVER_ALPHA) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}`, l.sprite, rep.seat, now);
+            if (rep.left > 0) watchSubjectCover(`${l.sprite}@${(l.at ?? 0).toFixed(2)}:left`, l.sprite, rep.left, now, undefined, 'subject left over');
+          }
+          const inner = draw;
+          draw = () => void keepClear(ctx, clearStart, b, share, inside, inner, W, H, strength, true);
+        }
+        draw();
+      } else drawArt();
       ctx.restore();
-    }
+    });
   }
   if (printed && !own) veil?.(ctx, 1);
   ctx.restore();
@@ -863,32 +977,184 @@ export function underCorner(w: number, h: number, s: number, left: boolean, pad 
  * centred in the band and kept EDGE_PAD clear of the top (never hung at the very edge). Undefined when the band would
  * fit it under PROP_MIN_H of the frame.
  */
+/** A figure standing on the frame's floor keeps its feet (and its wheels) this share of the frame above the foot. */
+export const FOOT_PAD = 0.025;
 export function rowsPlace(rows: [number, number], h: number, s: number): { s: number; y: number } | undefined {
   const floor = rows[1] >= H - 1;
   const top = Math.max(rows[0] + 16, H * EDGE_PAD);
-  const bottom = floor ? H : rows[1] - 16;
+  const bottom = floor ? H * (1 - FOOT_PAD) : rows[1] - 16;
   const k = Math.min(s, (bottom - top) / h);
   if (h * k < H * PROP_MIN_H) return undefined;
-  return { s: k, y: floor ? H - (h * k) / 2 : (top + bottom) / 2 };
+  return { s: k, y: floor ? bottom - (h * k) / 2 : (top + bottom) / 2 };
 }
 
+/** The smallest a figure is shrunk to to clear a corner of the lines before it fades behind them: this share of the
+ * frame high, or CORNER_MIN_W of it wide (a wide car reads by its length). */
+export const CORNER_MIN_H = 0.14;
+export const CORNER_MIN_W = 0.22;
 /**
  * A figure sent to a bottom corner (no room, or too little): UNDER_H of the frame at most, on its own side when the lines
- * leave that corner clear, else the other one when that is clear; `clear` false when both are taken (it fades behind).
+ * leave that corner clear, else the other one when that is clear; failing both, smaller (down to CORNER_MIN_H high or CORNER_MIN_W wide) in the first
+ * corner that clears — a wide car at UNDER_H spanned both corners under Tokyo Drift's call line and stood over it, faded,
+ * 2026-11-17; `clear` false only when no corner clears even then (it fades behind, under SUBJECT_COVER_ALPHA).
  */
 export function cornerPlace(w: number, h: number, s: number, left: boolean, over: [number, number, number, number][], pad = 24): { s: number; x: number; y: number; left: boolean; clear: boolean } {
-  const at = (onLeft: boolean) => {
-    const c = underCorner(w, h, s, onLeft, pad);
+  const at = (onLeft: boolean, scale = s) => {
+    const c = underCorner(w, h, scale, onLeft, pad);
     const [x0, y0, x1, y1] = [c.x - (w * c.s) / 2, c.y - (h * c.s) / 2, c.x + (w * c.s) / 2, c.y + (h * c.s) / 2];
     return { ...c, left: onLeft, clear: !over.some(([a, b, c2, d]) => a < x1 + 16 && c2 > x0 - 16 && b < y1 + 16 && d > y0 - 16) };
   };
   const own = at(left);
   if (own.clear) return own;
   const other = at(!left);
-  return other.clear ? other : own;
+  if (other.clear) return other;
+  const floor = Math.min((H * CORNER_MIN_H) / h, (W * CORNER_MIN_W) / w);
+  // (the largest that clears, per corner: a figure anchored in its corner only grows into the lines)
+  const largest = (side: boolean) => {
+    if (floor >= own.s || !at(side, floor).clear) return undefined;
+    let [lo, hi] = [floor, own.s];
+    for (let i = 0; i < 12; i++) { const mid = (lo + hi) / 2; if (at(side, mid).clear) lo = mid; else hi = mid; }
+    return at(side, lo);
+  };
+  const shrunk = [largest(left), largest(!left)].filter((c) => !!c).sort((a, b) => b!.s - a!.s)[0];
+  return shrunk ?? own;
+}
+
+/**
+ * The pictures of a grid of different shots (KineticLayer.panels): each id's cut-out at the frame's height, printed in
+ * `inks` (ink, paper) or as drawn; ids with no picture loaded are left out, at most four.
+ */
+/** The source rectangle of a picture's subject (KineticLayer.crop as shares), the whole picture when there is none. */
+export function cropOf(pic: { width: number; height: number }, crop?: [number, number, number, number]): CoverCrop {
+  if (!crop) return { sx: 0, sy: 0, sw: pic.width, sh: pic.height };
+  const [x0, y0, x1, y1] = crop;
+  return { sx: Math.floor(x0 * pic.width), sy: Math.floor(y0 * pic.height), sw: Math.max(1, Math.ceil((x1 - x0) * pic.width)), sh: Math.max(1, Math.ceil((y1 - y0) * pic.height)) };
+}
+
+/** A subject drawn at this opacity or more over the words being read is a cover fault (a faded corner figure is not). */
+export const SUBJECT_COVER_ALPHA = 0.5;
+const subjectCovers = new Map<string, number>();
+/** Reports a subject over a read lyric once per picture and place, again when its share grew: `code layer: subject covers:`. */
+export function watchSubjectCover(key: string, id: string, share: number, t: number, log: (line: string) => void = (x) => console.error(x), what = 'subject covers'): string | undefined {
+  if ((globalThis as { __vjProbe?: boolean }).__vjProbe) return undefined;
+  const seen = subjectCovers.get(key);
+  if (seen !== undefined && share < seen + 0.02) return undefined;
+  subjectCovers.set(key, share);
+  const line = `code layer: ${what}: ${id} hides ${(share * 100).toFixed(1)}% of the lyric box at ${t.toFixed(2)} s`;
+  log(line);
+  return line;
+}
+/**
+ * How much of the lyric box a subject still covers once keepClear has drawn it: nothing where the box is cut out (full
+ * strength), the share it reached where the clear only fades it and it is still drawn at SUBJECT_COVER_ALPHA or more.
+ */
+export function coverLeft(share: number, inside: number, strength: number, alpha: number): number {
+  if (share <= 0 || strength >= 1) return 0;
+  const faded = alpha * (1 - Math.max(0, strength) * (1 - clearAlpha(inside)));
+  return faded >= SUBJECT_COVER_ALPHA ? share : 0;
+}
+export { coverFatal } from './cover-fatal';
+/**
+ * How far a seated subject may graze a read line's box before it is the seat's error: 3 % of the box and 3 % of the
+ * subject. Its motion envelope's edge brushes a box by a fraction of a percent (anti-aliased limbs, a wheel's swing),
+ * which keepClear cuts unseen; past 3 % either way it is a glyph's corner or more — tighter than the code layer's report
+ * floors (8 %, or 1.5 % when most of a picture is in the box, cover.ts covers), as the video stage's seats promise room.
+ */
+export const SEAT_GRAZE = 0.03;
+/** A cut's subject over a read line: on a seated cut its whole reach past SEAT_GRAZE (the seat's error), else what keepClear left. */
+export const coverReport = (share: number, left: number, seated: boolean, inside: number) => ({ seat: seated && (share > SEAT_GRAZE || inside > SEAT_GRAZE) ? Math.max(0, share) : 0, left: seated ? 0 : left });
+/** For tests: forget what was reported. */
+export const resetSubjectCovers = () => subjectCovers.clear();
+
+/** A figure's centre so its whole width stays inside the frame with `pad` to spare; one wider than that is centred. */
+export function inFrameX(cx: number, half: number, pad = 24): number {
+  if (half * 2 >= W - 2 * pad) return W / 2;
+  return Math.min(W - pad - half, Math.max(pad + half, cx));
+}
+
+/** A grid of shots' figures at most this share of the frame high: the words keep the band above them. */
+export const PANEL_H = 0.6;
+export function panelPictures(ids: string[], image: (asset?: string) => CanvasImageSource | undefined, inks?: [string, string]) {
+  return ids.slice(0, 4).flatMap((id) => {
+    const pic = image(`spr:${id}`) as (CanvasImageSource & { width: number; height: number }) | undefined;
+    if (!pic?.width) return [];
+    return [{ img: inks ? duotone(pic, spriteKey(id, pic), inks[0], inks[1]) : (pic as CanvasImageSource), w: (pic.width / pic.height) * H * PANEL_H, h: H * PANEL_H }];
+  });
 }
 
 /** Where a character w px wide stands at fx inside a free band: its scale (≤ 1) and its centre. */
+/**
+ * Where a figure of w×h px stands larger: the side band the lines leave (fitInRoom's scale) or the rows above or below
+ * them (rowsPlace's); the rows only when they let it stand clearly larger (a sixth more), so a figure does not wander
+ * between the two from cut to cut.
+ */
+export function pickRoom(band: [number, number], rows: [number, number], w: number, h: number, pad = 24): 'band' | 'rows' {
+  const sBand = Math.min(1, (band[1] - band[0] - 2 * pad) / Math.max(1, w));
+  const floor = rows[1] >= H - 1;
+  const top = Math.max(rows[0] + 16, H * EDGE_PAD);
+  const bottom = floor ? H : rows[1] - 16;
+  const sRows = Math.min(1, (bottom - top) / Math.max(1, h));
+  return sRows * h >= H * PROP_MIN_H && sRows > sBand * 1.17 ? 'rows' : 'band';
+}
+
+/** The height (share of the frame) a subject is kept to where any legal room allows it. */
+export const SUBJECT_MIN_H = 0.45;
+/** The most a subject waits (s, and a fifth of its cut) for a line going out to be read before it comes up. */
+export const WAIT_MAX = 0.6;
+/** The longest lead-in of a line that belongs to the next cut although its first frames fall in this one. */
+export const LEAD_IN_MAX = 0.35;
+
+/**
+ * A line coming in over only the last moments of a cut (≤ LEAD_IN_MAX, and on well past it): its lead-in before the
+ * next cut lands. It does not seat the cut's subject; the subject leaves as it comes in (KineticLayer.leaveBy).
+ */
+export function isLeadIn(r: { from: number; to: number }, from: number, to: number): boolean {
+  return r.from > from + 1e-3 && r.from < to && to - r.from <= LEAD_IN_MAX && r.to > to + LEAD_IN_MAX && to - from > 2 * LEAD_IN_MAX;
+}
+export type SeatLine = { from: number; to: number; strong?: number; x0: number; y0: number; x1: number; y1: number };
+export type Seat = { side?: 'left' | 'right'; room?: [number, number]; rows?: [number, number]; under?: boolean; waitFor?: number; height: number };
+
+/**
+ * Where a cut's subject (w×h px at its planned size) stands among the lines `seen` over [from, to]: the legal room —
+ * clear of every line — that holds it largest: either side band (the side away from the lines' weight first), the rows
+ * above or below them, or a bottom corner they leave clear (`under`); a side band beats the rows and the corner unless
+ * they hold it a sixth larger (a figure does not wander from cut to cut). With no legal room it stands in the corner,
+ * faded behind the words (`under`). When that leaves it under SUBJECT_MIN_H of the frame and a line going out is still
+ * read over the cut's first moments (WAIT_MAX), the subject waits for it (`waitFor`) and is seated by the lines that
+ * stay, where that holds it a sixth larger: two lines up at once put 黄昏サイクル's cyclist in the corner at a fifth
+ * of the frame for four seconds (12–16 s, run5).
+ */
+export function seatSubject(seen: SeatLine[], from: number, to: number, w: number, h: number): Seat {
+  const seat = (lines: SeatLine[]): Seat => {
+    if (!lines.length) return { height: h };
+    const away = oppositeSide(lines, from, to);
+    const sides = away ? [away, away === 'left' ? ('right' as const) : ('left' as const)] : (['left', 'right'] as const);
+    const options: (Seat & { score: number })[] = [];
+    for (const side of sides) {
+      const room = freeBand(lines, from, to, side);
+      if (room) { const height = h * fitInRoom(room, w, 0).s; options.push({ side, room, height, score: height * 1.17 }); }
+    }
+    const rows = freeRows(lines, from, to);
+    const atRows = rows && rowsPlace(rows, h, 1);
+    if (rows && atRows) options.push({ ...(away ? { side: away } : {}), rows, height: h * atRows.s, score: h * atRows.s });
+    const corner = cornerPlace(w, h, 1, away === 'left', lines.map((r) => [r.x0, r.y0, r.x1, r.y1] as [number, number, number, number]));
+    if (corner.clear) options.push({ side: corner.left ? 'left' : 'right', under: true, height: h * corner.s, score: h * corner.s });
+    const best = options.reduce<(typeof options)[number] | undefined>((a, b) => (!a || b.score > a.score ? b : a), undefined);
+    if (!best) return { ...(away ? { side: away } : {}), under: true, height: h * corner.s };
+    const { score, ...chosen } = best;
+    void score;
+    return chosen;
+  };
+  const plain = seat(seen);
+  if (plain.height >= H * SUBJECT_MIN_H) return plain;
+  const wait = from + Math.min(WAIT_MAX, 0.2 * (to - from));
+  const going = seen.filter((r) => r.from < from - 1e-3 && (r.strong ?? r.to) <= wait);
+  if (!going.length) return plain;
+  const after = seat(seen.filter((r) => !going.includes(r)));
+  // (it comes up once the line has gone, or at the wait's end while the line is still fading out)
+  return after.height > plain.height * 1.17 ? { ...after, waitFor: Math.max(...going.map((r) => Math.min(r.to, Math.max(r.strong ?? r.to, wait)))) } : plain;
+}
+
 export function fitInRoom(room: [number, number], w: number, fx: number, pad = 24): { s: number; x: number } {
   const s = Math.min(1, (room[1] - room[0] - 2 * pad) / Math.max(1, w));
   const half = (w * s) / 2;

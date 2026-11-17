@@ -318,6 +318,8 @@ describe.skipIf(!have)('phase 4c on real jobs', () => {
 // (and the colour decision on by default, M3 with the paper term, re-pins it on the merge with the type floor: silk's held
 // inks are read through its paper and plan other holds; document and art-deco as the type floor pinned them,
 // hash-pairs/c-q1-m3-floor.json `repinned`)
+// (no unsung words beside a sung line, 2026-11-17: fineFor sets the title only on a line that sings it — nun/silk and five
+// other rows re-pinned, the file's `repinnedFine` lists them with their old values)
 const BASE_Q1 = 'out/research/q1-1109/hash-pairs/c-q1-m3-floor.json';
 describe.skipIf(!have || !existsSync(BASE_Q1))('phase 4c: joint off is the job before it', () => {
   it('scheduler on, joint off: byte for byte the pinned --q1 job; joint asked on a world the scheduler does not take: the default job', () => {

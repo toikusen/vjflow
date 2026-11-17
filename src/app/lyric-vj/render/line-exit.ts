@@ -178,7 +178,7 @@ export const feedLeft = (k: number) => (k >= 1 ? 0 : (1 - clamp01(k)) ** 2.4);
 
 /** Seconds a line's last sound is held, read from its character times; a marked vowel with no times counts as a held one. */
 export function heldTail(text: string, end: number, charStarts?: number[], charTimed?: boolean) {
-  const at = charTimed ? charStarts?.at(-1) : undefined;
+  const at = charTimed && charStarts?.length ? Math.max(...charStarts) : undefined;
   if (at !== undefined) return Math.max(0, end - at);
   return /(?:[啊喔哦嗚唉呀～~ー]|ah|oh)\s*$/i.test(text) ? 1.1 : 0;
 }

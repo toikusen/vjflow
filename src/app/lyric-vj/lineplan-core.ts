@@ -29,6 +29,8 @@ import { lastSungOf, LEAD, leadOf as songLead, showTime } from './render/show-ti
 import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
+import { fineShown } from './render/fine-shown';
+import { mustShare, PLAN_TAIL } from './render/sung-tail';
 import type { MomentAsk } from './signature-moments';
 import { closingLine } from './song-parts';
 
@@ -598,9 +600,16 @@ export function planPairs(cues: Cue[], beats: Map<string, LineBeat>, hands: Map<
     const [a, b, c] = [cues[i], cues[i + 1], cues[i + 2]];
     const forced = force?.get(a.id);
     // two lines sung too fast to read apart share a shot whatever they say: the older stays up while the next is sung
-    if (!forced && !forcedLine(a, b) && setTogether(a, b) && norm(a.text) !== norm(b.text)) {
-      out.set(a.id, { kind: 'list', also: [b.id] });
-      i += 1;
+    // (and two whose handover cannot be clean — same start, a duet's overlap, the next sung before this one may leave:
+    // sung-tail.ts mustShare — each in its own seat of one shot, never one hiding the other)
+    if (!forced && !forcedLine(a, b) && (setTogether(a, b) || mustShare(a, b, undefined, PLAN_TAIL)) && norm(a.text) !== norm(b.text)) {
+      // (a third voice still sung into: the line of the two sung latest shares with it too, three seats at most)
+      const group = [b];
+      const latest = () => [a, ...group].reduce((x, y) => ((y.charStarts?.length ? Math.max(...y.charStarts) : y.end) > (x.charStarts?.length ? Math.max(...x.charStarts) : x.end) ? y : x));
+      const c3 = cues[i + 2];
+      if (c3 && !forcedLine(b, c3) && mustShare(latest(), c3, undefined, PLAN_TAIL) && norm(b.text) !== norm(c3.text)) group.push(c3);
+      out.set(a.id, { kind: 'list', also: group.map((x) => x.id) });
+      i += group.length;
       last = i;
       continue;
     }
@@ -1379,7 +1388,8 @@ export function fineFor(c: Cue, key: string, lineNo: number, seed: number, title
   if (beat === 1) return undefined;
   const short = [...key].length >= 2 && [...key].length <= 8 && [...key].length <= whole - 2;
   if (beat === 2 && short) return { kind: 'key', text: key };
-  if (beat === 0 && title && lean !== 2) return { kind: 'title', text: title };
+  // (the title only where the line sings it: unsung words beside a line read as lyrics, fine-shown.ts)
+  if (beat === 0 && title && lean !== 2) return fineShown({ kind: 'title', text: title }, c.text);
   return lean === 1 ? undefined : { kind: 'rule', text: '' };
 }
 
@@ -1453,7 +1463,8 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
   if (closing !== undefined) for (const [id, p] of pairs) if ([id, ...p.also].includes(closing)) pairs.delete(id);
   const leaderOf = new Map([...pairs].flatMap(([id, p]) => p.also.map((x) => [x, id] as const)));
   // a pair is one shot, running as far as its last line
-  const leaders = cues.filter((c) => !leaderOf.has(c.id)).map((c) => ({ ...c, end: cues.find((x) => x.id === pairs.get(c.id)?.also.at(-1))?.end ?? c.end }));
+  // (a shared shot lasts as long as any of its lines is sung: a duet's first voice may outlast the second)
+  const leaders = cues.filter((c) => !leaderOf.has(c.id)).map((c) => ({ ...c, end: Math.max(c.end, ...(pairs.get(c.id)?.also ?? []).map((id) => cues.find((x) => x.id === id)?.end ?? c.end)) }));
   const shots = shotsOf(leaders, song.duration, (c) => { const h = hands.get(c.id); return h && h.kind !== 'relay' ? h.from : c.start; });
   const handNear = (id: string) => { const i = cues.findIndex((x) => x.id === id); return hands.has(id) || hands.has(cues[i + 1]?.id ?? ''); };
   const deviceCap = Math.max(2, Math.ceil(cues.length * DEVICE_SHARE));
@@ -1770,7 +1781,7 @@ function compose(song: { title: string; duration: number; tempo: number; beats: 
     if (kept.length) { cuts.sort((x, y) => (Number(x['at']) || 0) - (Number(y['at']) || 0)); for (let i = cuts.length - 1; i > 0; i--) if (Number(cuts[i]['at']) - Number(cuts[i - 1]['at']) < 0.45 && !kept.includes(Number(cuts[i - 1]['at']))) cuts.splice(i - 1, 1); }
     const travel = W && recipe.wline ? [(roll('tx', 2) ? 1 : -1) * LINE_TRAVEL[level] / tempoK, (roll('ty', 2) ? 1 : -1) * LINE_TRAVEL[level] * 0.3 / tempoK] : undefined;
     // (render/world-handoff.ts: the least used family that fits the world and the time the song leaves the line)
-    const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed) : { enter: undefined, exit: undefined };
+    const { enter: wEnter, exit: wExit } = recipe.wline && W ? pickWorldMoves(worldMoves, W, recipe.wline, cues, cueAt, seed, isDirected(recipe) ? { enter: recipe.wline.enter, exit: recipe.wline.exit } : undefined) : { enter: undefined, exit: undefined };
     const camHere = W?.camera && cuts[0]?.cam === W.camera;
     const spec = recipe.wline ? SET_SPECS[recipe.wline.set] : undefined;
     const holdLineFor = (spec: SetSpec | undefined, own: boolean): HoldLine => ({

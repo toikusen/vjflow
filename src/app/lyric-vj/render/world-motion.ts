@@ -23,6 +23,8 @@ export interface GlyphEnv {
   age: number;
   /** 0 before this glyph is sung, 1 once it has been. */
   sung: number;
+  /** The row (or column) of the block the glyph stands in, 0 from the top: what a move that parts the rows goes by. */
+  row?: number;
 }
 
 export interface GlyphPose {
@@ -107,7 +109,8 @@ export const WORLD_ENTERS: Record<string, WorldMove> = {
   // ukiyoe: pressed down with the baren, a block laid and lifted
   'baren-press': { sec: 0.5, clip: (q) => ({ axis: 'x', at: easeOut(q, 2) }), glyph: ({ q, u }) => ({ tone: 0.5 + 0.5 * clamp01((q * 1.5 - u) * 2.4) }) },
   'block-lay': { sec: 0.34, block: (q, seed) => ({ dx: (seed % 2 ? 26 : -26) * (1 - easeOut(q, 4)), dy: 40 * (1 - easeOut(q, 4)), a: clamp01(q * 6) }) },
-  'plate-register': { sec: 0.4, glyph: ({ q, i, seed }) => { const k = stepsOf(q, 4); return { dx: (hashOf(i, seed) - 0.5) * 16 * (1 - k), dy: (hashOf(i, seed + 1) - 0.5) * 12 * (1 - k), a: q > 0.04 ? 1 : 0 }; } },
+  // (a plate's misregister stays inside the side bearings: two neighbours jittered 8 px toward each other met, 2026-11-17)
+  'plate-register': { sec: 0.4, glyph: ({ q, i, seed }) => { const k = stepsOf(q, 4); return { dx: (hashOf(i, seed) - 0.5) * 10 * (1 - k), dy: (hashOf(i, seed + 1) - 0.5) * 12 * (1 - k), a: q > 0.04 ? 1 : 0 }; } },
   // papercut: the scissors run along it, or a fold opens
   'snip-along': { sec: 0.42, clip: (q) => ({ axis: 'x', at: stepsOf(q, 12) }) },
   'crease-open': { sec: 0.36, block: (q) => ({ sx: Math.max(0.03, easeOut(q, 3)) }) },
@@ -226,7 +229,9 @@ export const SHARED_ENTERS: Record<string, WorldMove> = {
 export const SHARED_EXITS: Record<string, WorldMove> = {
   'squash-line': { sec: 0.32, block: (q) => ({ sy: Math.max(0.02, 1 - easeIn(q / 0.7, 2)), sx: 1 + 0.25 * easeIn(q, 2), a: q < 0.9 ? 1 : 1 - (q - 0.9) / 0.1 }) },
   // the rows are cut apart and pulled opposite ways; a row moves as one, so no character ever crosses another
-  'slice-out': { sec: 0.34, glyph: ({ q, v }) => ({ dx: (Math.round(v * 6) % 2 ? 1 : -1) * 320 * easeIn(q, 2), a: 1 - easeIn((q - 0.35) / 0.65, 2) }) },
+  // (the row is the block's own row index, never read off a glyph's height: glyphs of one stepped row sat either side
+  // of a rounding line and went opposite ways, 「失う怖さも」 reading 「失怖」, 2026-11-17)
+  'slice-out': { sec: 0.34, glyph: ({ q, v, row }) => ({ dx: ((row ?? (v < 0.5 ? 0 : 1)) % 2 ? 1 : -1) * 320 * easeIn(q, 2), a: 1 - easeIn((q - 0.35) / 0.65, 2) }) },
 };
 /** The shared entrances a planner may give any world's line (line-open only follows a line pressed into a rule). */
 export const SHARED_ENTER_POOL = ['stack-rise', 'roll-in'];

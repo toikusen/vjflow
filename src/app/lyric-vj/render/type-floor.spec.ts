@@ -142,6 +142,17 @@ describe('the words round a blown-up word (blowPose)', () => {
       }
     }
   });
+  it('gives the words round the key a real space only (U+0020, U+3000), never a hidden punctuation mark\'s', () => {
+    const spec = SET_SPECS['popart/balloon'];
+    const hid = (text: string, tex: number) => glyphs(text, tex).map((g) => (g.char === '、' ? ({ ...g, char: '' } as Glyph) : g));
+    const a = blowPose(hid('君と、僕は好き', 200), 5, 7, 100, 200, spec)!;
+    const b = blowPose(glyphs('君と僕は好き', 200), 4, 6, 100, 200, spec)!;
+    // (the lead-in 君と僕は spans the same width with the hidden 、 as without it)
+    const span = (p: typeof a, ids: number[]) => p.x[ids.at(-1)!] - p.x[ids[0]];
+    expect(span(a, [0, 1, 3, 4])).toBeCloseTo(span(b, [0, 1, 2, 3]), 3);
+    const sp = blowPose(glyphs('君と 僕は好き', 200), 5, 7, 100, 200, spec)!;
+    expect(span(sp, [0, 1, 3, 4])).toBeGreaterThan(span(b, [0, 1, 2, 3]));
+  });
   it('a lead-in too long to stand across the frame at the floor leaves the word as set', () => {
     const text = 'あいうえおかきくけこさしすせそたちつてとなにぬね好き';
     expect(blowPose(glyphs(text, 200), 24, 26, 100, 200, SET_SPECS['popart/balloon'])).toBeUndefined();

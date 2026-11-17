@@ -1018,3 +1018,24 @@ console.log('exits ok');
   assert.ok([1, 2, 3, 4, 5, 6].every((n) => rerollPalette('t', 'frost', true, n) !== 'lacquer' && rerollPalette('t', 'frost', true, n) !== 'sugar'), 'a calm song keeps to the quiet palettes');
   assert.deepEqual(rerollPalette('t', 'tea', false, 2, ['tea', 'moss']), rerollPalette('t', 'tea', false, 4, ['tea', 'moss']), 'a style pool wraps round');
 }
+
+// the composer pairs two lines whose handover cannot be clean (same start, a duet's overlap): one shot, a seat each
+{
+  const { planPairs: pp } = await import('./lineplan-core.mts');
+  const duet = [
+    { id: 'd1', start: 10, end: 13, text: '君の声がまだ聞こえる', charStarts: [10, 10.3, 10.6, 10.9, 11.2, 11.5, 11.8, 12.1, 12.4, 12.95] },
+    { id: 'd2', start: 12.5, end: 15, text: '僕はここにいるよ', charStarts: [12.5, 12.8, 13.1, 13.4, 13.7, 14, 14.3, 14.6] },
+    { id: 'd3', start: 20, end: 22, text: 'いつかまた', charStarts: [20, 20.4, 20.8, 21.2, 21.6] },
+    { id: 'd4', start: 20, end: 23, text: 'あの場所で会おう', charStarts: [20, 20.4, 20.8, 21.2, 21.6, 22, 22.4, 22.8] },
+  ] as Cue[];
+  const pairs = pp(duet, new Map(), new Map(), false);
+  assert.deepEqual(pairs.get('d1')?.also, ['d2'], 'a duet\'s overlap shares a shot');
+  assert.deepEqual(pairs.get('d3')?.also, ['d4'], 'a same start shares a shot');
+  // a first voice that outlasts the second and runs into a third: all three share, in one shot
+  const three = [
+    { id: 't1', start: 30, end: 36.5, text: '大丈夫世界はきれいだよ', charStarts: [30, 31, 32, 33, 34, 35, 35.5, 36, 36.2, 36.4] },
+    { id: 't2', start: 30, end: 33, text: 'さあ歌ってごらん', charStarts: [30, 30.5, 31, 31.5, 32, 32.3, 32.6, 32.9] },
+    { id: 't3', start: 33, end: 36, text: '君は頑張れるよ', charStarts: [33, 33.5, 34, 34.5, 35, 35.5, 35.9] },
+  ] as Cue[];
+  assert.deepEqual(pp(three, new Map(), new Map(), false).get('t1')?.also, ['t2', 't3'], 'a third voice sung into shares the shot');
+}

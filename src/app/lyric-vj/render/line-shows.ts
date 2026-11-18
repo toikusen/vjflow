@@ -9,7 +9,7 @@ import { isLineMotion } from './motion-transition';
 import { pullPictures } from './picture-lead';
 import { readingSec, REST_FLOOR, setTogether } from './reading-window';
 import { foldRepeats } from './repeats';
-import { exitFloor, mustShare, PLAN_TAIL } from './sung-tail';
+import { exitFloor, mustShare, PLAN_TAIL, READ_FLOOR, sungOver } from './sung-tail';
 import { namedLines } from './world-named';
 import { enterSec as lineEnterSec } from './enter-sec';
 import { lastSungOf, leadOf, showTime } from './show-time';
@@ -78,7 +78,14 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     // (however long the two: set together their rows are fitted to the frame, under the type floor in plain stepped rows —
     // never two lines lit on one seat, opus review)
     // (a line a world event acts on is read at the composer's tail and never set together: world-named.ts, per line)
-    const share = mustShare(a, b, onset, named.has(a.id) ? PLAN_TAIL : tail);
+    // (a line already set together takes another only where that one is sung over a voice still sounding: read voice by
+    // voice, each by its own sung times — Tokyo Drift's rap lines, read by the merged line's stray latest time, piled six
+    // into one block, 2026-11-18)
+    const voicesOf = (x: TimelineCue) => (x as { voiceCues?: TimelineCue[] }).voiceCues ?? [x];
+    // (only a voice genuinely sung over: sung-tail.ts sungOver; a fast line sung after hands over instead)
+    // (or a line too short to be read before the next is sung over its end — under READ_FLOOR from its start: an
+    // alignment's 0.04 s line, 雙截棍 c049 — goes with it)
+    const share = voicesOf(a).some((v) => sungOver(v, onset) || onset < v.start + READ_FLOOR);
     // (a composer line is paired by the composer itself, planPairs, mustShare included; a plan saved before that rule is
     // set together here — unless world events name its lines, whose table is the plan's)
     // (and never a pair the plan already seated in one shot — stack, couplet, world-pair: each line has its own seat; a
@@ -96,7 +103,7 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     styled[i] = {
       style: { ...styled[i].style, rows: joined.has(i) ? [...(styled[i].style.rows ?? []), aLen + 1] : [aLen + 1], reveal: 'word' },
       // (voices: how many lines it carries, the engine keeps such a line at the reading floor)
-      cue: { ...a, voices: ((a as { voices?: number }).voices ?? 1) + 1, text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) } as TimelineCue & { voices?: number },
+      cue: { ...a, voices: ((a as { voices?: number }).voices ?? 1) + 1, voiceCues: [...voicesOf(a), b], text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) } as TimelineCue & { voices?: number; voiceCues?: TimelineCue[] },
     };
     styled.splice(i + 1, 1);
     // (a shared line is checked again against the one after it: a duet's third voice comes into the same frame — three

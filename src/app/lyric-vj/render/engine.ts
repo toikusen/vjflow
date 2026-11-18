@@ -1,7 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
-import { exitAfterSung, exitFloor, lastSungChar, MIN_TAIL, PLAN_TAIL, settleExit } from './sung-tail';
+import { exitAfterSung, exitFloor, lastSungChar, MIN_TAIL, PLAN_TAIL, READ_FLOOR, settleExit } from './sung-tail';
 import { namedLines } from './world-named';
 import { requiredReading } from './reading-window';
 import * as THREE from 'three';
@@ -1333,7 +1333,7 @@ export class LyricVjEngine {
       // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
       // (without character times no tail is invented past the line's end: it leaves no earlier than its end, Codex review)
       const timed = !!cue.charStarts?.length;
-      const lastSung = timed ? lastSungChar(cue.charStarts!) : cue.end;
+      const lastSung = timed ? lastSungChar(cue.charStarts!, cue.end) : cue.end;
       const tailKept = !held && shot.template !== 'world-pair';
       const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung, timed ? undefined : 0) : exitAt0;
       const exitFrom = Math.max(cue.start + 0.25 * pace, exitAt1);
@@ -1343,7 +1343,7 @@ export class LyricVjEngine {
       const ns = styled[i + 1];
       const onset = !ns ? Infinity : ns.style.reveal === 'sung' && ns.style.sung?.length === [...ns.cue.text].length ? ns.style.sung[0] : (ns.cue.charStarts?.[0] ?? ns.cue.start);
       // (never before its floor: its last sung character rung, a glimpse after it shows — opus review)
-      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, floorOf(cue, showAt[i])) : undefined;
+      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, floorOf(cue, showAt[i]), timed ? Math.max(lastSung, showAt[i] + READ_FLOOR) : floorOf(cue, showAt[i])) : undefined;
       if (settle && held && persist !== 'preview') {
         // (a held line leaves as the line that takes its place shows: that line waits, up to its own sung onset, for this
         // one's floor — a stack line was cut before its last character, the timing audit)
@@ -2078,7 +2078,7 @@ export class LyricVjEngine {
         // its own slot: asking more flagged every line of a fast song)
         // (and never under READ_FLOOR: a window of nothing or less fails, it does not pass as ok)
         const requiredSec = requiredReading(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), rt.exitAt + rt.exitDur - rt.showFrom);
-        const last = rt.cue.charStarts?.length ? lastSungChar(rt.cue.charStarts) : rt.cue.end;
+        const last = rt.cue.charStarts?.length ? lastSungChar(rt.cue.charStarts, rt.cue.end) : rt.cue.end;
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
         return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05 && !this.overlaps.some((o) => o.id === rt.cue.id || o.next === rt.cue.id), ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, exitAt: +rt.exitAt.toFixed(3), tail: rt.tail ?? 'exempt', ...(rt.tailWhy ? { tailWhy: rt.tailWhy } : {}), template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
       }),

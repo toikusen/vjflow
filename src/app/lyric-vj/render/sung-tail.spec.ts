@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXIT_MIN, exitAfterSung, exitFloor, handsOver, lastSungChar, MIN_TAIL, mustShare, nextShowAfter, READ_FLOOR, settleExit, showByOnset, SUNG_TAIL, sungTailCheck } from './sung-tail';
+import { EXIT_MIN, exitAfterSung, exitFloor, handsOver, lastSungChar, sungOver, MIN_TAIL, mustShare, nextShowAfter, READ_FLOOR, settleExit, showByOnset, SUNG_TAIL, sungTailCheck } from './sung-tail';
 
 describe('exitAfterSung', () => {
   it('holds a line that would leave on its last sung character until the tail has passed', () => {
@@ -114,6 +114,36 @@ describe('a merged duet\'s character times are not in order: its last sung chara
     const merged = { start: 10, end: 15, charStarts: [10, 11, 14.6, 15, 12, 12.5, 13] };
     expect(lastSungChar(merged.charStarts)).toBe(15);
     expect(exitFloor(merged, 9.8)).toBeCloseTo(15 + MIN_TAIL, 6);
+  });
+});
+
+describe('a character time after its line\'s end is not a sung time (Tokyo Drift c066: 196.7 s on a line ending 181.6)', () => {
+  it('lastSungChar keeps to the line\'s end', () => {
+    expect(lastSungChar([179.76, 180.2, 196.728], 181.6)).toBe(180.2);
+    expect(lastSungChar([179.76, 196.728], 181.6)).toBe(179.76);
+    expect(lastSungChar([10, 11, 14.6, 15, 12], 15)).toBe(15);
+  });
+  it('a rap line whose stray last time runs past its end does not have to share with the next', () => {
+    const c066 = { start: 179.76, end: 181.6, text: 'ごちゃごちゃの Fast & Furious', charStarts: [179.76, 180.4, 181.3, 196.728] };
+    expect(mustShare(c066, { start: 181.6, charStarts: [181.6] })).toBe(false);
+  });
+});
+
+describe('sungOver and the hand-over cut: a fast line sung after the last character hands over', () => {
+  it('a line 0.05 s after the last character is not sung over it; one before it is', () => {
+    const a = { start: 128.6, end: 130.94, charStarts: [128.6, 130.89] };
+    expect(sungOver(a, 130.94)).toBe(false);
+    expect(sungOver(a, 130.8)).toBe(true);
+  });
+  it('settleExit cuts such a line as the next shows, after its last character, with no overlap', () => {
+    const cue = { start: 128.6, end: 130.94, charStarts: [128.6, 130.89] };
+    const s = settleExit(131.2, 0.28, 130.74, 130.94, 0.02, exitFloor(cue, 128.4), 130.89);
+    expect(s.overlap).toBe(false);
+    expect(s.exitAt).toBeGreaterThanOrEqual(130.89);
+    expect(s.exitAt + s.exitDur).toBeLessThanOrEqual(130.94 + 1e-9);
+  });
+  it('treats times that never move as no timing: the line is sung to its end', () => {
+    expect(lastSungChar([173.131, 173.131, 173.131], 174.84)).toBe(174.84);
   });
 });
 

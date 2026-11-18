@@ -2,6 +2,7 @@
 // never while the line before is still being sung. One computation for the renderer (engine showAt) and the plan
 // (lineplan-core holdEndBy: a hold event is over before the next line shows). Numbers only.
 import { ARRIVAL_SEC } from './arrival';
+import { lastSungChar } from './sung-tail';
 import { CARRIER_SEC } from './carrier-moves';
 
 /** Shown a little before the voice so it is read as it is sung, s. */
@@ -18,7 +19,7 @@ const ENTER_LEAD_ELSE = 0.25;
 /** The lead a song's lines show with. */
 export const leadOf = (tempo?: number) => (tempo !== undefined && tempo < SLOW_TEMPO ? SLOW_LEAD : LEAD);
 /** The time a line's last word is sung, when its words are timed. */
-export const lastSungOf = (c: { charTimed?: boolean; charStarts?: number[] }) => (c.charTimed && c.charStarts?.length ? Math.max(...c.charStarts) : -Infinity);
+export const lastSungOf = (c: { charTimed?: boolean; charStarts?: number[]; end?: number }) => (c.charTimed && c.charStarts?.length ? lastSungChar(c.charStarts, c.end) : -Infinity);
 
 /** When a line shows, before any page it waits for (engine pageCutBefore): its lead or its entrance's, after the line before is sung. */
 export function showTime(cue: { start: number; end: number }, enter: string, lead: number, prevLastSung = -Infinity): number {

@@ -1,6 +1,7 @@
 // How a line leaves, once it has been read: strips pulled away, slats closing on the key word, a press to one dry stroke,
 // the paper cut up, a short single-ink echo, a push from one point, the type shed as crumbs, a slow wave thinning to lines.
 // Numbers only: every pose here is exactly the line at rest at q = 0 and gone at q = 1. q is exit progress, 0..1. y is up.
+import { lastSungChar } from './sung-tail';
 
 export const LINE_EXIT_SEC = { 'band-out': 0.52, 'slat-close': 0.5, 'line-fold': 0.42, 'tile-scatter': 0.66, 'echo-travel': 0.56, 'radial-leave': 0.5, 'glyph-shed': 0.64, 'wave-dissolve': 0.62, 'pore-out': 0.6, 'focus-out': 0.5, 'rail-leave': 0.62, 'gravity-pass': 0.58, 'box-turn': 0.46, 'frame-advance': 0.44, 'display-off': 0.42, 'node-fold': 0.56 } as const;
 export type LineExitKind = keyof typeof LINE_EXIT_SEC;
@@ -178,7 +179,7 @@ export const feedLeft = (k: number) => (k >= 1 ? 0 : (1 - clamp01(k)) ** 2.4);
 
 /** Seconds a line's last sound is held, read from its character times; a marked vowel with no times counts as a held one. */
 export function heldTail(text: string, end: number, charStarts?: number[], charTimed?: boolean) {
-  const at = charTimed && charStarts?.length ? Math.max(...charStarts) : undefined;
+  const at = charTimed && charStarts?.length ? lastSungChar(charStarts, end) : undefined;
   if (at !== undefined) return Math.max(0, end - at);
   return /(?:[啊喔哦嗚唉呀～~ー]|ah|oh)\s*$/i.test(text) ? 1.1 : 0;
 }

@@ -5,7 +5,25 @@
  * A line's latest sung character time: the largest of its character times, not the last listed — a duet set together
  * (line-shows.ts) lists the first voice's characters, then the second's, and the first may be sung later (opus review).
  */
-export const lastSungChar = (charStarts: number[]) => Math.max(...charStarts);
+export function lastSungChar(charStarts: number[], end = Infinity): number {
+  // (a time past the line's end is an alignment stray, not a sung character: Tokyo Drift's c064–c068 carried last times
+  // 10–15 s past their lines, and every rap line after them was set together into one six-line block, 2026-11-18)
+  const sung = charStarts.filter((t) => t <= end + 0.05);
+  // (times that never move — every character on the line's first — are no timing at all: the line is sung to its end)
+  if (charStarts.length > 1 && Math.max(...charStarts) - Math.min(...charStarts) < 1e-6 && Number.isFinite(end)) return end;
+  return sung.length ? Math.max(...sung) : Math.min(...charStarts, end);
+}
+
+/**
+ * Whether the next line, sung from `onset`, is sung over this one — a duet's genuine overlap: its first sung character
+ * before this one's last (an untimed line: before the last moment of its stated end). Only such lines are set together;
+ * a fast line sung after this one's last character hands over, cut as it shows (settleExit), never piled up with it
+ * (Tokyo Drift's rap, set together line after line into one six-line block, 2026-11-18).
+ */
+export function sungOver(a: { start: number; end: number; charStarts?: number[] }, onset: number, lead = LEAD): boolean {
+  const last = a.charStarts?.length ? lastSungChar(a.charStarts, a.end) : a.end - EXIT_MIN - lead;
+  return onset < last - 1e-9;
+}
 
 /** Seconds a line stays up past its last sung character before its exit may begin. */
 export const SUNG_TAIL = 0.3;
@@ -58,7 +76,7 @@ const LEAD = 0.02;
  * with no character times may blink out over the last moment of its stated end (nothing says a word is still sung).
  */
 export function exitFloor(cue: { start: number; end: number; charStarts?: number[] }, show: number, lead = LEAD, tail = MIN_TAIL): number {
-  const sung = cue.charStarts?.length ? lastSungChar(cue.charStarts) + tail : cue.end - EXIT_MIN - lead;
+  const sung = cue.charStarts?.length ? lastSungChar(cue.charStarts, cue.end) + tail : cue.end - EXIT_MIN - lead;
   return Math.max(show + READ_FLOOR, sung);
 }
 /** Whether a line leaving no earlier than `floor` can be gone (cut, at the least) before a line sung from `onset` shows. */
@@ -86,7 +104,7 @@ export const PLAN_TAIL = 0.04;
  * that cannot be (`overlap`: lines that should have been set together and could not), both stay lit — the line is
  * never cut before it is read — and the engine logs it. Layouts that seat two lines apart do not ask this.
  */
-export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number, floor: number): { show: number; exitAt: number; exitDur: number; capped: boolean; overlap: boolean } {
+export function settleExit(exitFrom: number, exitSec: number, plannedShow: number, onset: number, lead: number, floor: number, hard = floor): { show: number; exitAt: number; exitDur: number; capped: boolean; overlap: boolean } {
   const w = nextShowAfter(exitFrom, exitSec, plannedShow, lead);
   const show = showByOnset(w.show, plannedShow, onset);
   if (show >= w.show - 1e-9) return { show: w.show, exitAt: exitFrom, exitDur: w.exitDur, capped: false, overlap: false };
@@ -97,6 +115,9 @@ export function settleExit(exitFrom: number, exitSec: number, plannedShow: numbe
   // where it must be)
   if (end >= floor - 1e-9) return { show, exitAt: floor, exitDur: Math.max(0, end - floor), capped: true, overlap: false };
   if (floor <= show + 1e-9) return { show, exitAt: floor, exitDur: Math.max(0.001, show - floor), capped: true, overlap: false };
+  // (a fast line sung after this one's last character — `hard`, its last sung character — hands over: cut as the next
+  // shows, its last character up as long as the voice gave it; only a line sung over it is a fault)
+  if (hard <= show + 1e-9) return { show, exitAt: Math.max(hard, show - 0.001), exitDur: 0.001, capped: true, overlap: false };
   // (the next is sung before this one's floor: both lit, as briefly as the floor allows — a fault, logged)
   return { show, exitAt: floor, exitDur: EXIT_MIN, capped: true, overlap: true };
 }

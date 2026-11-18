@@ -89,13 +89,26 @@ describe('lineShows: a third line joins two set together only where a voice stil
 });
 
 describe('lineShows: a fast rap line sung after the last one hands over, never set together (Tokyo Drift c066–c073)', () => {
-  it('leaves back-to-back rap lines 0.05 s apart, and a line whose stray last time runs past its end, each on its own', () => {
+  it('leaves rap lines sung MIN_TAIL or more apart, and an untimed line whose interpolated times run past its end, each on its own', () => {
     const rap = [
-      { id: 'a', start: 179.76, end: 181.6, text: 'ごちゃごちゃの Fast & Furious', charStarts: [179.76, 180.4, 181.3, 196.728] },
+      { id: 'a', start: 179.76, end: 181.6, text: 'ごちゃごちゃの Fast & Furious', charTimed: false, charStarts: [179.76, 180.4, 181.3, 196.728] },
       { id: 'b', start: 181.6, end: 183.36, text: "It's gotta be the shoes", charStarts: [181.6, 182.2, 183.31] },
-      { id: 'c', start: 183.36, end: 185, text: "That's why ladies choose me", charStarts: [183.36, 184, 184.95] },
+      { id: 'c', start: 183.45, end: 185, text: "That's why ladies choose me", charStarts: [183.45, 184, 184.95] },
     ];
     const t = { cues: [style('a', 's1'), style('b', 's2'), style('c', 's3')] as never, shots: [shot('s1', 'stair', 179.5, 181.6), shot('s2', 'stair', 181.6, 183.36), shot('s3', 'stair', 183.36, 185)] };
     expect(lineShows(t, rap as never, 120, [], undefined, MIN_TAIL).styled.map((x) => x.cue.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('lineShows: each voice keeps its own times when set together (a stray early time is not the merged line\'s onset)', () => {
+  it('clamps the second voice\'s times into its own line', () => {
+    const two = [
+      { id: 'a', start: 10, end: 12, text: 'あいう', charStarts: [10, 10.5, 11.95] },
+      { id: 'b', start: 11.9, end: 14, text: 'かきく', charStarts: [11.9, 5, 13.5] },
+    ];
+    const t = { cues: [style('a', 's1'), style('b', 's2')] as never, shots: [shot('s1', 'stair', 9.8, 11.9), shot('s2', 'stair', 11.9, 14)] };
+    const merged = lineShows(t, two as never, 120, [], undefined, MIN_TAIL).styled[0].cue;
+    expect(Math.min(...merged.charStarts!)).toBeGreaterThanOrEqual(10 - 0.25);
+    expect(merged.charStarts!.slice(4)).toEqual([11.9, 11.65, 13.5]);
   });
 });

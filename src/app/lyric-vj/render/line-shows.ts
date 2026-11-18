@@ -9,7 +9,7 @@ import { isLineMotion } from './motion-transition';
 import { pullPictures } from './picture-lead';
 import { readingSec, REST_FLOOR, setTogether } from './reading-window';
 import { foldRepeats } from './repeats';
-import { exitFloor, mustShare, PLAN_TAIL, READ_FLOOR, sungOver } from './sung-tail';
+import { exitFloor, firstSung, MIN_TAIL, mustShare, ONSET_SLACK, PLAN_TAIL, READ_FLOOR, sungOver } from './sung-tail';
 import { namedLines } from './world-named';
 import { enterSec as lineEnterSec } from './enter-sec';
 import { lastSungOf, leadOf, showTime } from './show-time';
@@ -60,6 +60,9 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
   const { lines: styled, repeats } = foldRepeats<ShownLine>(sorted, (x) => !!threadShot(shotOf(x.style.shot)));
   // two lines sung back to back faster than either can be read are set together as one two-row line: the first
   // stays up while the second is sung (word reveal follows the voice across both)
+  // (each voice's times kept within its own line before they are set side by side: a stray early time of the second voice
+  // read as the merged line's onset, Tokyo Drift c085)
+  const clampTo = (t: number, v: { start: number; end: number }) => Math.min(v.end, Math.max(v.start - ONSET_SLACK, t));
   const named = namedLines(treatment as { worldEvents?: unknown });
   const joined = new Set<number>();
   const size = new Map<number, number>();
@@ -73,7 +76,8 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     // (and two whose handover cannot be clean — same start, a duet's overlap, the next sung before this one may leave —
     // share the frame in their own rows rather than one hiding the other, sung-tail.ts mustShare)
     const ns = styled[i + 1].style;
-    const onset = ns.reveal === 'sung' && ns.sung?.length === [...b.text].length ? ns.sung[0] : (b.charStarts?.[0] ?? b.start);
+    // (the first sung character by the one helper: clamped to the line's start, charTimed respected, sung-tail.ts)
+    const onset = ns.reveal === 'sung' && ns.sung?.length === [...b.text].length ? firstSung({ ...b, charStarts: ns.sung, charTimed: true }) : firstSung(b);
     // (a Latin letter counts half: two of them take the width of one kana or han)
     // (however long the two: set together their rows are fitted to the frame, under the type floor in plain stepped rows —
     // never two lines lit on one seat, opus review)
@@ -85,7 +89,8 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     // (only a voice genuinely sung over: sung-tail.ts sungOver; a fast line sung after hands over instead)
     // (or a line too short to be read before the next is sung over its end — under READ_FLOOR from its start: an
     // alignment's 0.04 s line, 雙截棍 c049 — goes with it)
-    const share = voicesOf(a).some((v) => sungOver(v, onset) || onset < v.start + READ_FLOOR);
+    // (at the plan's tail: the engine's MIN_TAIL, the planner's view — the world-event scheduler's — at 0)
+    const share = voicesOf(a).some((v) => sungOver(v, onset, undefined, tail === MIN_TAIL ? MIN_TAIL : 0) || onset < v.start + READ_FLOOR);
     // (a composer line is paired by the composer itself, planPairs, mustShare included; a plan saved before that rule is
     // set together here — unless world events name its lines, whose table is the plan's)
     // (and never a pair the plan already seated in one shot — stack, couplet, world-pair: each line has its own seat; a
@@ -103,7 +108,7 @@ export function lineShows(treatment: { cues: CueStyle[]; shots: Shot[]; graphics
     styled[i] = {
       style: { ...styled[i].style, rows: joined.has(i) ? [...(styled[i].style.rows ?? []), aLen + 1] : [aLen + 1], reveal: 'word' },
       // (voices: how many lines it carries, the engine keeps such a line at the reading floor)
-      cue: { ...a, voices: ((a as { voices?: number }).voices ?? 1) + 1, voiceCues: [...voicesOf(a), b], text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts, a.end, ...b.charStarts] : undefined, charTimed: !!(a.charTimed && b.charTimed) } as TimelineCue & { voices?: number; voiceCues?: TimelineCue[] },
+      cue: { ...a, voices: ((a as { voices?: number }).voices ?? 1) + 1, voiceCues: [...voicesOf(a), b], text: `${a.text} ${b.text}`, end: Math.max(a.end, b.end), charStarts: a.charStarts && b.charStarts ? [...a.charStarts.map((t) => clampTo(t, a)), a.end, ...b.charStarts.map((t) => clampTo(t, b))] : undefined, charTimed: !!(a.charTimed && b.charTimed) } as TimelineCue & { voices?: number; voiceCues?: TimelineCue[] },
     };
     styled.splice(i + 1, 1);
     // (a shared line is checked again against the one after it: a duet's third voice comes into the same frame — three

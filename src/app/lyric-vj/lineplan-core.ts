@@ -30,7 +30,7 @@ import { WORLD_CAM_SEC } from './render/world-cam';
 import type { BeatKind, HoldKind, HoldTaste, StressKind } from './world-shared';
 import type { FineTier, SymbolName } from './treatment';
 import { fineShown } from './render/fine-shown';
-import { lastSungChar, mustShare, PLAN_TAIL } from './render/sung-tail';
+import { lastSung, mustShare, PLAN_TAIL } from './render/sung-tail';
 import type { MomentAsk } from './signature-moments';
 import { closingLine } from './song-parts';
 
@@ -605,7 +605,7 @@ export function planPairs(cues: Cue[], beats: Map<string, LineBeat>, hands: Map<
     if (!forced && !forcedLine(a, b) && (setTogether(a, b) || mustShare(a, b, undefined, PLAN_TAIL)) && norm(a.text) !== norm(b.text)) {
       // (a third voice still sung into: the line of the two sung latest shares with it too, three seats at most)
       const group = [b];
-      const latest = () => [a, ...group].reduce((x, y) => ((y.charStarts?.length ? lastSungChar(y.charStarts, y.end) : y.end) > (x.charStarts?.length ? lastSungChar(x.charStarts, x.end) : x.end) ? y : x));
+      const latest = () => [a, ...group].reduce((x, y) => (lastSung(y) > lastSung(x) ? y : x));
       const c3 = cues[i + 2];
       if (c3 && !forcedLine(b, c3) && mustShare(latest(), c3, undefined, PLAN_TAIL) && norm(b.text) !== norm(c3.text)) group.push(c3);
       out.set(a.id, { kind: 'list', also: group.map((x) => x.id) });

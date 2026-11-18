@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EXIT_MIN, exitAfterSung, exitFloor, handsOver, lastSungChar, sungOver, MIN_TAIL, mustShare, nextShowAfter, READ_FLOOR, settleExit, showByOnset, SUNG_TAIL, sungTailCheck } from './sung-tail';
+import { EXIT_MIN, exitAfterSung, exitFloor, firstSung, handsOver, lastSung, lastSungChar, ONSET_SLACK, sungOver, sungTimes, MIN_TAIL, mustShare, nextShowAfter, READ_FLOOR, settleExit, showByOnset, SUNG_TAIL, sungTailCheck } from './sung-tail';
 
 describe('exitAfterSung', () => {
   it('holds a line that would leave on its last sung character until the tail has passed', () => {
@@ -118,32 +118,68 @@ describe('a merged duet\'s character times are not in order: its last sung chara
 });
 
 describe('a character time after its line\'s end is not a sung time (Tokyo Drift c066: 196.7 s on a line ending 181.6)', () => {
-  it('lastSungChar keeps to the line\'s end', () => {
-    expect(lastSungChar([179.76, 180.2, 196.728], 181.6)).toBe(180.2);
-    expect(lastSungChar([179.76, 196.728], 181.6)).toBe(179.76);
+  it('lastSungChar keeps to the line\'s end: a late time is sung at the end, not dropped', () => {
+    expect(lastSungChar([179.76, 180.2, 196.728], 181.6)).toBe(181.6);
+    expect(lastSungChar([179.76, 196.728], 181.6, false)).toBe(181.6);
     expect(lastSungChar([10, 11, 14.6, 15, 12], 15)).toBe(15);
   });
   it('a rap line whose stray last time runs past its end does not have to share with the next', () => {
-    const c066 = { start: 179.76, end: 181.6, text: 'ごちゃごちゃの Fast & Furious', charStarts: [179.76, 180.4, 181.3, 196.728] };
+    const c066 = { start: 179.76, end: 181.6, text: 'ごちゃごちゃの Fast & Furious', charTimed: false, charStarts: [179.76, 180.4, 181.3, 196.728] };
     expect(mustShare(c066, { start: 181.6, charStarts: [181.6] })).toBe(false);
   });
 });
 
 describe('sungOver and the hand-over cut: a fast line sung after the last character hands over', () => {
-  it('a line 0.05 s after the last character is not sung over it; one before it is', () => {
-    const a = { start: 128.6, end: 130.94, charStarts: [128.6, 130.89] };
-    expect(sungOver(a, 130.94)).toBe(false);
-    expect(sungOver(a, 130.8)).toBe(true);
+  it('a line MIN_TAIL or more after the last character is not sung over it; one sooner is', () => {
+    const a = { start: 128.6, end: 131.2, charStarts: [128.6, 130.89] };
+    expect(sungOver(a, 131.0)).toBe(false);
+    expect(sungOver(a, 130.94)).toBe(true);
   });
   it('settleExit cuts such a line as the next shows, after its last character, with no overlap', () => {
-    const cue = { start: 128.6, end: 130.94, charStarts: [128.6, 130.89] };
-    const s = settleExit(131.2, 0.28, 130.74, 130.94, 0.02, exitFloor(cue, 128.4), 130.89);
+    const cue = { start: 128.6, end: 131.2, charStarts: [128.6, 130.89] };
+    const s = settleExit(131.2, 0.28, 130.8, 131.0, 0.02, exitFloor(cue, 128.4), 130.89 + MIN_TAIL);
     expect(s.overlap).toBe(false);
-    expect(s.exitAt).toBeGreaterThanOrEqual(130.89);
-    expect(s.exitAt + s.exitDur).toBeLessThanOrEqual(130.94 + 1e-9);
+    expect(s.exitAt).toBeGreaterThanOrEqual(130.89 + MIN_TAIL - 1e-9);
+    expect(s.exitAt + s.exitDur).toBeLessThanOrEqual(131.0 + 1e-9);
   });
   it('treats times that never move as no timing: the line is sung to its end', () => {
     expect(lastSungChar([173.131, 173.131, 173.131], 174.84)).toBe(174.84);
+  });
+});
+
+describe('a line\'s sung times as the engine reads them (opus review of 0589e8a)', () => {
+  it('an untimed line (charTimed false) uses none of its interpolated times: it is sung to its end', () => {
+    const c066 = { start: 179.76, end: 181.6, charTimed: false, charStarts: [179.76, 180.4, 196.728] };
+    expect(sungTimes(c066)).toBeUndefined();
+    expect(lastSung(c066)).toBe(181.6);
+  });
+  it('a timed line clamps a late time to its end instead of dropping it (チョロイン c068: 8 of 21 characters were lost)', () => {
+    const c068 = { start: 184.02, end: 187.16, charTimed: true, charStarts: [184.76, 186.9, 187.3, 187.56] };
+    expect(sungTimes(c068)).toEqual([184.76, 186.9, 187.16, 187.16]);
+    expect(lastSung(c068)).toBe(187.16);
+  });
+  it('clamps an onset far before the line\'s start, and reads no data from times that are not numbers', () => {
+    expect(firstSung({ start: 10, end: 12, charTimed: true, charStarts: [-40, 10.5, 11] })).toBeCloseTo(10 - ONSET_SLACK, 6);
+    expect(lastSung({ start: 10, end: 12, charTimed: true, charStarts: [NaN, NaN] })).toBe(12);
+    expect(firstSung({ start: 10, end: 12, charStarts: [11, 10.5, 11.5] })).toBe(10.5);
+  });
+  it('the last sung character stays MIN_TAIL: a next line sung within that of it is sung over it (they share the frame)', () => {
+    const a = { start: 128.6, end: 130.94, charStarts: [128.6, 130.89] };
+    expect(sungOver(a, 130.94)).toBe(true);
+    expect(sungOver(a, 130.89 + MIN_TAIL + 0.01)).toBe(false);
+    expect(sungOver({ start: 8, end: 10, charTimed: false, charStarts: [8, 30] }, 10)).toBe(false);
+  });
+});
+
+describe('a line set together reads each voice by its own times', () => {
+  it('an untimed voice\'s floor is the blink at its end, not its end and a tail (rap-tight c043 + c044 held past c045)', () => {
+    const merged = { start: 141.254, end: 154.57, voiceCues: [{ start: 141.254, end: 152.89, charTimed: true, charStarts: [141.254, 152.79] }, { start: 152.25, end: 154.57, charTimed: false, charStarts: [152.89, 154.47] }] };
+    expect(exitFloor(merged, 141.054)).toBeLessThan(154.57);
+  });
+  it('one untimed voice does not make the merged line\'s onset its start (Tokyo Drift c084)', () => {
+    const merged = { start: 230.477, end: 236.4, charTimed: false, voiceCues: [{ start: 230.477, end: 234.2, charTimed: true, charStarts: [230.767, 231] }, { start: 234.2, end: 236.4, charTimed: false, charStarts: [1, 2] }] };
+    expect(firstSung(merged)).toBe(230.767);
+    expect(lastSung(merged)).toBe(236.4);
   });
 });
 

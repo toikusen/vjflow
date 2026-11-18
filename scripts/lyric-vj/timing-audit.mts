@@ -12,7 +12,11 @@
 //      handoff carries one into the next;
 //  (3) no line vanishes: it shows before it leaves, and is up READ_FLOOR at least;
 //  (4) the readable gate agrees: a line failing (1)–(3) is not ok in the engine's metrics;
-//  (5) no readable glyph of a line set together (two voices) is under REST_FLOOR at rest, just before it leaves.
+//  (5) no readable glyph of a line set together (two voices) is under REST_FLOOR at rest, just before it leaves;
+//  (6) a line set together carries at most three voices, each genuinely sung over an earlier one (or two quick lines,
+//      setTogether; or a line too short to read before the next) — never a cascade;
+//  (7) no single-seat line stays up more than LINGER_MAX (1 s, the longest exit) past its last sung character while
+//      another shot's line is sung.
 // A frame (1/30 s) of slack throughout. Exit 1 on any fault or a job that does not load.
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -22,9 +26,18 @@ import * as esbuild from 'esbuild';
 import { chromium } from 'playwright';
 import { fontCache } from './font-cache.mts';
 import { namedLines } from '../../src/app/lyric-vj/render/world-named';
+import { setTogether } from '../../src/app/lyric-vj/render/reading-window';
 
 /** The least a line is up (reading-window.ts READ_FLOOR), and an untimed line's blink at its end (EXIT_MIN + lead). */
 const READ_FLOOR = 0.4, UNTIMED_BLINK = 0.1, FRAME = 1 / 30;
+/** How long a line may stay up past its last sung character while another shot's line is sung: the longest exit, a 1 s fade. */
+const LINGER_MAX = 1.0;
+/** A line's sung times as the engine reads them — the audit's own copy of sung-tail.ts sungTimes, so older commits are judged by the same rule: none where charTimed is false or the times never move; finite times clamped into [start − 0.25, end]. */
+type Sung = { start: number; end: number; charStarts?: number[]; charTimed?: boolean; voices?: Sung[] };
+const sungTimes = (c: Sung) => { if (c.charTimed === false || !c.charStarts?.length) return undefined; const ts = c.charStarts.filter(Number.isFinite).map((t) => Math.min(c.end, Math.max(c.start - 0.25, t))); return !ts.length || (ts.length > 1 && Math.max(...ts) - Math.min(...ts) < 1e-6) ? undefined : ts; };
+const lastSungOf = (c: Sung): number => (c.voices?.length ? Math.max(...c.voices.map(lastSungOf)) : (sungTimes(c) ?? [c.end]).reduce((x, y) => Math.max(x, y), -Infinity));
+const firstSungOf = (c: Sung): number => (c.voices?.length ? Math.min(...c.voices.map(firstSungOf)) : (sungTimes(c) ?? [c.start]).reduce((x, y) => Math.min(x, y), Infinity));
+const isTimed = (c: Sung): boolean => (c.voices?.length ? c.voices.some(isTimed) : !!sungTimes(c));
 /** The least type a line rests at (reading-window.ts REST_FLOOR, px on the 1080 frame). */
 const REST_FLOOR = 52;
 /**
@@ -35,7 +48,7 @@ const LAST_CHAR = 1 / 12, LAST_CHAR_PLANNED = 0.04;
 /** Jobs known not to load in the page (linebox-audit.mts KNOWN_UNLOADABLE): skipped, never counted as a pass. */
 const KNOWN_UNLOADABLE: Record<string, string> = { 'out/research/style-refs/phone/job.json': 'all 32 of its assets were deleted (404)' };
 
-export interface TimedLine { id: string; text: string; start: number; end: number; charStarts?: number[]; showFrom: number; exitAt: number; exitDur: number; tail: string; ok: boolean; how?: string; rest?: number; shot?: string; hand?: boolean; shout?: boolean }
+export interface TimedLine { id: string; text: string; start: number; end: number; charStarts?: number[]; charTimed?: boolean; showFrom: number; exitAt: number; exitDur: number; tail: string; ok: boolean; how?: string; rest?: number; voices?: { id: string; start: number; end: number; text: string; charStarts?: number[]; charTimed?: boolean }[]; shot?: string; hand?: boolean; shout?: boolean }
 
 /** The faults of one job's settled timetable (invariants 1–4 above), lines in show order. */
 export function timingFaults(lines: TimedLine[], lastCharOf: (id: string) => number = () => LAST_CHAR): string[] {
@@ -43,13 +56,18 @@ export function timingFaults(lines: TimedLine[], lastCharOf: (id: string) => num
   const bad = new Set<string>();
   const sorted = [...lines].sort((a, b) => a.showFrom - b.showFrom);
   for (const l of sorted) {
-    const timed = !!l.charStarts?.length;
-    const first = timed ? Math.min(...l.charStarts!) : l.start;
+    const timed = isTimed(l);
+    const first = firstSungOf(l);
     // (the latest sung character: a duet set together lists its voices one after the other, not in time)
-    const last = timed ? Math.max(...l.charStarts!) + lastCharOf(l.id) : l.end - UNTIMED_BLINK;
+    // (a time past the line's end is an alignment stray, not a sung character: sung-tail.ts lastSungChar)
+    // (the last sung character is up one character's time — a line sung sooner after it shares the frame with it, never
+    // a last character shown for no time: opus review of 0589e8a)
+    // (voice by voice: a timed voice's last character and one character's time, an untimed voice's blink at its end)
+    const needOf = (v: Sung): number => (v.voices?.length ? Math.max(...v.voices.map(needOf)) : sungTimes(v) ? lastSungOf(v) + lastCharOf(l.id) : v.end - UNTIMED_BLINK);
+    const last = needOf(l);
     const gone = l.exitAt + l.exitDur;
     if (l.showFrom > first + 1e-3) { out.push(`(1) ${l.id} shows at ${l.showFrom.toFixed(2)}, after its first sung character ${first.toFixed(2)}「${l.text}」`); bad.add(l.id); }
-    if (l.exitAt < Math.max(last, l.showFrom + READ_FLOOR) - 1e-3) { out.push(`(1) ${l.id} leaves at ${l.exitAt.toFixed(2)}, before ${last >= l.showFrom + READ_FLOOR ? `its last sung character ${last.toFixed(2)}` : `its reading floor ${(l.showFrom + READ_FLOOR).toFixed(2)}`}「${l.text}」 (${l.how ?? ''})`); bad.add(l.id); }
+    if (l.exitAt < Math.max(last, l.showFrom + READ_FLOOR) - 2e-3) { out.push(`(1) ${l.id} leaves at ${l.exitAt.toFixed(2)}, before ${last >= l.showFrom + READ_FLOOR ? `its last sung character ${last.toFixed(2)}` : `its reading floor ${(l.showFrom + READ_FLOOR).toFixed(2)}`}「${l.text}」 (${l.how ?? ''})`); bad.add(l.id); }
     if (!(l.showFrom < l.exitAt) || gone - l.showFrom < READ_FLOOR - FRAME) { out.push(`(3) ${l.id} vanishes: shown ${l.showFrom.toFixed(2)}, leaving ${l.exitAt.toFixed(2)}, gone ${gone.toFixed(2)} (${l.how ?? ''})「${l.text}」`); bad.add(l.id); }
   }
   // (every two lines up at once, not only neighbours: allowed only where the plan seats them apart — one shot whose earlier
@@ -64,6 +82,36 @@ export function timingFaults(lines: TimedLine[], lastCharOf: (id: string) => num
       bad.add(a.id);
       bad.add(b.id);
     }
+  }
+  // (6) a line set together carries two voices, three only where they sound at once, and only voices genuinely sung over
+  // one another (or two quick lines too fast to read apart, reading-window.ts setTogether): never a cascade of rap lines
+  // each sung after the last (Tokyo Drift's six-line block, 2026-11-18)
+  const lastOf = lastSungOf;
+  const firstOf = firstSungOf;
+  for (const l of sorted) {
+    const vs = l.voices ?? [];
+    if (vs.length < 2) continue;
+    // (three where a voice is sung over both others in turn — a long first voice over two short ones — never more)
+    if (vs.length > 3) { out.push(`(6) ${l.id} sets ${vs.length} lines together「${l.text}」`); bad.add(l.id); }
+    for (let k = 1; k < vs.length; k++) {
+      const v = vs[k];
+      const over = vs.slice(0, k).some((u) => firstOf(v) < (sungTimes(u) ? lastOf(u) + LAST_CHAR : u.end - UNTIMED_BLINK));
+      // (or the earlier line is too short to be read before the next is sung: under READ_FLOOR from its start)
+      const quick = vs.slice(0, k).some((u) => setTogether(u, v) || firstOf(v) < u.start + READ_FLOOR);
+      if (!over && !quick) { out.push(`(6) ${l.id} sets ${v.id} together with it with no voice sung over another「${l.text}」`); bad.add(l.id); }
+    }
+  }
+  // (7) no line stays up more than LINGER_MAX past its last sung character while a line of another shot is being sung —
+  // the longest exit is a 1 s fade (engine.ts fadeSec), so past that the old line stands over the new one's reading
+  for (const l of sorted) {
+    // (a single-seat line: a layout that holds its earlier lines while the next arrive — stack, couplet, vertical, a
+    // world-pair: 'exempt' — is held by design; its own lingering is docs/backlog/timing-2026-11-17.md item 7)
+    if (l.shout || l.tail === 'exempt') continue;
+    const gone = l.exitAt + l.exitDur;
+    const last = lastSungOf(l);
+    if (gone <= last + LINGER_MAX) continue;
+    const over = sorted.find((m) => m !== l && !m.shout && m.shot !== l.shot && firstOf(m) < gone && lastOf(m) > last + LINGER_MAX);
+    if (over) { out.push(`(7) ${l.id} stays up to ${gone.toFixed(2)}, ${(gone - last).toFixed(2)} s past its last sung character, while ${over.id} is sung (${l.how ?? ''})「${l.text}」`); bad.add(l.id); }
   }
   for (const id of bad) if (lines.find((l) => l.id === id)?.ok) out.push(`(4) ${id} breaks the timing rules but the readable gate passes it`);
   return out;
@@ -106,7 +154,7 @@ if (process.argv[1]?.endsWith('timing-audit.mts')) {
         const lz = e.lazy;
         if (lz) lz.styled.forEach((x, i) => { if (!lz.built.has(i)) { lz.built.add(i); lz.build(x, i); } });
         const ok = new Map(window.vjMetrics().cues.map((c) => [c.id, c.ok]));
-        return e.cueLayers.map(({ rt }) => ({ id: rt.cue.id, text: rt.cue.text, start: rt.cue.start, end: rt.cue.end, charStarts: rt.cue.charStarts, showFrom: rt.showFrom, exitAt: rt.exitAt, exitDur: rt.exitDur, tail: rt.tail ?? 'exempt', ok: ok.get(rt.cue.id) ?? true, rest: e.rests?.get(rt.cue.id), shot: rt.style.shot, hand: !!rt.style.handoff, shout: !!rt.style.shout, how: [rt.shot.template, rt.style.exit, rt.tail, ...(rt.adjust ?? []), rt.style.handoff?.kind ?? '', e.lazy ? 'live' : ''].filter(Boolean).join('/') }));
+        return e.cueLayers.map(({ rt }) => ({ id: rt.cue.id, text: rt.cue.text, start: rt.cue.start, end: rt.cue.end, charStarts: rt.cue.charStarts, charTimed: rt.cue.charTimed, showFrom: rt.showFrom, exitAt: rt.exitAt, exitDur: rt.exitDur, tail: rt.tail ?? 'exempt', ok: ok.get(rt.cue.id) ?? true, voices: rt.cue.voiceCues && rt.cue.voiceCues.map((v) => ({ id: v.id, start: v.start, end: v.end, text: v.text, charStarts: v.charStarts, charTimed: v.charTimed })), rest: e.rests?.get(rt.cue.id), shot: rt.style.shot, hand: !!rt.style.handoff, shout: !!rt.style.shout, how: [rt.shot.template, rt.style.exit, rt.tail, ...(rt.adjust ?? []), rt.style.handoff?.kind ?? '', e.lazy ? 'live' : ''].filter(Boolean).join('/') }));
       })()`)) as TimedLine[];
     } catch (e) {
       const known = KNOWN_UNLOADABLE[rel];
@@ -133,7 +181,7 @@ if (process.argv[1]?.endsWith('timing-audit.mts')) {
       if (own.get(l.id) === undefined || [...l.text.replace(/\s/g, '')].length <= [...own.get(l.id)!.replace(/\s/g, '')].length + 1) { smallOther++; continue; }
       small.push(`(5) ${l.id} reads at ${Math.round(least)} px at ${t.toFixed(2)} s, under REST_FLOOR ${REST_FLOOR} (${l.how ?? ''})「${l.text}」`);
     }
-    if (process.env['TA_DEBUG']) console.log('debug-page', JSON.stringify(await page.evaluate(`(() => { const e = window.vjEngine; return ${JSON.stringify(process.env['TA_DEBUG'].split(','))}.map((id) => { const c = e.cueLayers.find((x) => x.rt.cue.id === id); return c && { id, floored: e.floored.has(id), voices: c.rt.cue.voices, fit: c.fitScale, params: c.rt.params && c.rt.params.floor }; }); })()`)));
+    if (process.env['TA_DEBUG']) console.log('debug-page', JSON.stringify(await page.evaluate(`(() => { const e = window.vjEngine; return ${JSON.stringify(process.env['TA_DEBUG'].split(','))}.map((id) => { const c = e.cueLayers.find((x) => x.rt.cue.id === id); return c && { id, floored: e.floored.has(id), voices: c.rt.cue.voices, fit: c.fitScale, params: c.rt.params && c.rt.params.floor, waits: e.waits.filter((w) => w.id === id), overlaps: e.overlaps.filter((o) => o.id === id || o.next === id), first: c.rt.cue.charStarts && Math.min(...c.rt.cue.charStarts.filter(Number.isFinite)) }; }); })()`)));
     await page.close();
     lineCount += lines.length;
     if (process.env['TA_DEBUG']) for (const id of process.env['TA_DEBUG'].split(',')) console.log('debug', JSON.stringify(lines.find((l) => l.id === id)));

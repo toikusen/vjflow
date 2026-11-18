@@ -1,7 +1,7 @@
 // Lyric-VJ render engine: one frame for any time t (no wall clock). Plates (image / video frames) with camera moves,
 // per-shot decoration, per-cue template layers, then bloom + grain/aberration/vignette/flash.
 import { alphaBounds, clipEnvelope, clipFrame } from './sprite-clip';
-import { exitAfterSung, exitFloor, lastSungChar, MIN_TAIL, PLAN_TAIL, settleExit } from './sung-tail';
+import { exitAfterSung, exitFloor, firstSung, lastSung as lastSungOfLine, MIN_TAIL, PLAN_TAIL, READ_FLOOR, settleExit, isTimed } from './sung-tail';
 import { namedLines } from './world-named';
 import { requiredReading } from './reading-window';
 import * as THREE from 'three';
@@ -1332,8 +1332,9 @@ export class LyricVjEngine {
       // tail and a blink of exit are over, the next line waits — never an early exit, sung-tail.ts)
       // (a line with no character times is sung to its end: 風の匂い and いい天気 had none and left on their last word)
       // (without character times no tail is invented past the line's end: it leaves no earlier than its end, Codex review)
-      const timed = !!cue.charStarts?.length;
-      const lastSung = timed ? lastSungChar(cue.charStarts!) : cue.end;
+      // (timed only where the aligner timed it — charTimed false is interpolated — and by the one helper: sung-tail.ts)
+      const timed = isTimed(cue);
+      const lastSung = lastSungOfLine(cue);
       const tailKept = !held && shot.template !== 'world-pair';
       const exitAt1 = tailKept ? exitAfterSung(exitAt0, lastSung, timed ? undefined : 0) : exitAt0;
       const exitFrom = Math.max(cue.start + 0.25 * pace, exitAt1);
@@ -1341,9 +1342,9 @@ export class LyricVjEngine {
       // sung times first); where that caps the tail's wait, this line is gone before it shows — on one seat never two
       // lines lit: settleExit, Codex and opus reviews)
       const ns = styled[i + 1];
-      const onset = !ns ? Infinity : ns.style.reveal === 'sung' && ns.style.sung?.length === [...ns.cue.text].length ? ns.style.sung[0] : (ns.cue.charStarts?.[0] ?? ns.cue.start);
+      const onset = !ns ? Infinity : ns.style.reveal === 'sung' && ns.style.sung?.length === [...ns.cue.text].length ? firstSung({ ...ns.cue, charStarts: ns.style.sung, charTimed: true }) : firstSung(ns.cue);
       // (never before its floor: its last sung character rung, a glimpse after it shows — opus review)
-      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, floorOf(cue, showAt[i])) : undefined;
+      const waited = tailKept && next ? settleExit(exitFrom, exitSec, nextShow, onset, EXIT_LEAD, floorOf(cue, showAt[i]), floorOf(cue, showAt[i])) : undefined;
       if (settle && held && persist !== 'preview') {
         // (a held line leaves as the line that takes its place shows: that line waits, up to its own sung onset, for this
         // one's floor — a stack line was cut before its last character, the timing audit)
@@ -1352,7 +1353,7 @@ export class LyricVjEngine {
         const fl = floorOf(cue, showAt[i]);
         if (by >= 0 && showAt[by] < fl + EXIT_LEAD) {
           const nb = styled[by];
-          const on = nb.style.reveal === 'sung' && nb.style.sung?.length === [...nb.cue.text].length ? nb.style.sung[0] : (nb.cue.charStarts?.[0] ?? nb.cue.start);
+          const on = nb.style.reveal === 'sung' && nb.style.sung?.length === [...nb.cue.text].length ? firstSung({ ...nb.cue, charStarts: nb.style.sung, charTimed: true }) : firstSung(nb.cue);
           const sh = Math.max(showAt[by], Math.min(fl + EXIT_LEAD, on));
           if (sh > showAt[by] + 1e-6) { this.waits.push({ id: nb.cue.id, sec: +(sh - showAt[by]).toFixed(3) }); showAt[by] = sh; }
           // (the incoming line sung before this one's floor, and not set together with it (line-shows.ts sets such a pair
@@ -2078,7 +2079,7 @@ export class LyricVjEngine {
         // its own slot: asking more flagged every line of a fast song)
         // (and never under READ_FLOOR: a window of nothing or less fails, it does not pass as ok)
         const requiredSec = requiredReading(readingSec(rt.cue.text, rt.cue.start, rt.cue.end), rt.exitAt + rt.exitDur - rt.showFrom);
-        const last = rt.cue.charStarts?.length ? lastSungChar(rt.cue.charStarts) : rt.cue.end;
+        const last = lastSungOfLine(rt.cue);
         const lingerSec = rt.later !== undefined && RENDERERS[rt.shot.template]?.persist ? 0 : +(rt.exitAt + rt.exitDur - last).toFixed(2);
         return { id: rt.cue.id, text: rt.cue.text, readableFrom: from, readableTo: to, readableSec, requiredSec, ok: readableSec >= requiredSec - 0.05 && !this.overlaps.some((o) => o.id === rt.cue.id || o.next === rt.cue.id), ...(this.job.treatment.design?.composer ? { plannedExit: this.lastExits.get(rt.cue.id), exit: rt.style.exit, restSize: Math.round(this.rests.get(rt.cue.id) ?? 0), floored: this.floored.has(rt.cue.id) } : {}), ...(this.blowDropped.has(rt.cue.id) ? { blowDropped: this.blowDropped.get(rt.cue.id) } : {}), ...(this.floorMissed.has(rt.cue.id) ? { floorMissed: true } : {}), lingerSec, lastSung: last, goneAt: last + lingerSec, exitAt: +rt.exitAt.toFixed(3), tail: rt.tail ?? 'exempt', ...(rt.tailWhy ? { tailWhy: rt.tailWhy } : {}), template: rt.shot.template, fitScale: +(fitScale ?? 1).toFixed(4), plannedEnter: rt.planned?.enter ?? rt.style.enter, plannedReveal: rt.planned?.reveal ?? 'line', enter: rt.style.enter, reveal: rt.style.reveal ?? 'line', together: !!rt.together && rt.style.enter !== 'cut', adjust: rt.adjust ?? [], entranceLost: entranceLost(rt.planned ?? rt.style, rt.style), ...(layer.scale ? { scale: layer.scale } : {}) }; // the same 0.05 s readFix lets pass
       }),

@@ -72,3 +72,4 @@ out/research/timing-audit/synthetic/same-start-noev.json
 out/research/timing-audit/synthetic/held-late.json
 out/research/timing-audit/synthetic/long-duet.json
 out/research/timing-audit/synthetic/nested-duet.json
+out/research/video-tier/cmp/drift/render/job.json
